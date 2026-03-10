@@ -18,10 +18,5 @@ export {
 export { SenderKeyManager } from './group/SenderKeyManager'
 export { SenderKeyStore } from './group/SenderKeyStore'
 export { createAndStoreInitialKeys } from './registration/utils'
-export type {
-    CreateAndStoreInitialKeys,
-    RegistrationBundle,
-    RegistrationSignalKeyApi
-} from './registration/types'
 export { SignalProtocol } from './session/SignalProtocol'
 export { WaSignalStore } from './store/WaSignalStore'

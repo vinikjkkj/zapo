@@ -1,17 +1,24 @@
 import type { BinaryNode } from '../../transport/types'
 
-import type {
-    WaIncomingNodeRouterOptions,
-    WaIqSetNodeHandler,
-    WaMessageNodeHandler,
-    WaNotificationNodeHandler
-} from './types'
+type IqSetNodeHandler = (node: BinaryNode) => Promise<boolean>
+type NotificationNodeHandler = (node: BinaryNode) => Promise<boolean>
+type MessageNodeHandler = (node: BinaryNode) => Promise<boolean>
+
+interface WaIncomingNodeRouterOptions {
+    readonly nodeOrchestrator: {
+        tryResolvePending(node: BinaryNode): boolean
+        handleIncomingNode(node: BinaryNode): Promise<boolean>
+    }
+    readonly iqSetHandlers?: readonly IqSetNodeHandler[]
+    readonly notificationHandlers?: readonly NotificationNodeHandler[]
+    readonly messageHandlers?: readonly MessageNodeHandler[]
+}
 
 export class WaIncomingNodeRouter {
     private readonly nodeOrchestrator: WaIncomingNodeRouterOptions['nodeOrchestrator']
-    private readonly iqSetHandlers: readonly WaIqSetNodeHandler[]
-    private readonly notificationHandlers: readonly WaNotificationNodeHandler[]
-    private readonly messageHandlers: readonly WaMessageNodeHandler[]
+    private readonly iqSetHandlers: readonly IqSetNodeHandler[]
+    private readonly notificationHandlers: readonly NotificationNodeHandler[]
+    private readonly messageHandlers: readonly MessageNodeHandler[]
 
     public constructor(options: WaIncomingNodeRouterOptions) {
         this.nodeOrchestrator = options.nodeOrchestrator

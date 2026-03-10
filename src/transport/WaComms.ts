@@ -1,23 +1,26 @@
 import { ConsoleLogger } from '../infra/log/ConsoleLogger'
 import type { Logger } from '../infra/log/types'
+import { WA_DEFAULTS } from '../protocol/constants'
 import { bytesToBase64UrlSafe } from '../util/base64'
-import { toError } from '../util/errors'
+import { toError } from '../util/primitives'
 
-import {
-    DEFAULT_CHAT_SOCKET_URLS,
-    NOISE_RESUME_FAILURES_BEFORE_FULL_HANDSHAKE
-} from './constants'
 import { EMPTY_BYTES } from './noise/constants'
 import { WaNoiseSession } from './noise/WaNoiseSession'
 import type {
-    ConnectionWaiter,
     SocketCloseInfo,
     WaCommsConfig,
-    WaCommsState,
-    WaInflateFrame,
-    WaStanzaHandler
+    WaCommsState
 } from './types'
 import { WaWebSocket } from './WaWebSocket'
+
+interface ConnectionWaiter {
+    readonly resolve: () => void
+    readonly reject: (error: Error) => void
+    readonly timer: NodeJS.Timeout
+}
+
+type StanzaHandler = (payload: Uint8Array) => void | Promise<void>
+type InflateFrame = (compressed: Uint8Array) => Uint8Array | Promise<Uint8Array>
 
 export class WaComms {
     private readonly config: Readonly<
@@ -35,8 +38,8 @@ export class WaComms {
     private reconnectAttempts: number
     private reconnectTimer: NodeJS.Timeout | null
     private waiters: ConnectionWaiter[]
-    private stanzaHandler: WaStanzaHandler | null
-    private inflateFrame: WaInflateFrame | null
+    private stanzaHandler: StanzaHandler | null
+    private inflateFrame: InflateFrame | null
     private pendingFrames: Uint8Array[]
     private resumeInFlight: boolean
     private resumeHandshakeFailures: number
@@ -130,11 +133,11 @@ export class WaComms {
                 ? config.urls.map((entry) => appendEd(entry))
                 : config.url
                   ? undefined
-                  : DEFAULT_CHAT_SOCKET_URLS.map((entry) => appendEd(entry))
+                  : WA_DEFAULTS.CHAT_SOCKET_URLS.map((entry) => appendEd(entry))
         }
     }
 
-    public startComms(handleStanza: WaStanzaHandler, inflateFrame?: WaInflateFrame): void {
+    public startComms(handleStanza: StanzaHandler, inflateFrame?: InflateFrame): void {
         this.logger.info('comms start requested')
         this.stanzaHandler = handleStanza
         this.inflateFrame = inflateFrame ?? null
@@ -360,10 +363,13 @@ export class WaComms {
         } catch (error) {
             if (usedResumeHandshake) {
                 this.resumeHandshakeFailures += 1
-                this.logger.warn('noise resume handshake failed, next attempt may fallback to full', {
-                    failures: this.resumeHandshakeFailures,
-                    threshold: NOISE_RESUME_FAILURES_BEFORE_FULL_HANDSHAKE
-                })
+                this.logger.warn(
+                        'noise resume handshake failed, next attempt may fallback to full',
+                    {
+                        failures: this.resumeHandshakeFailures,
+                        threshold: WA_DEFAULTS.NOISE_RESUME_FAILURES_BEFORE_FULL_HANDSHAKE
+                    }
+                )
             }
             this.noiseSession = null
             throw error
@@ -465,7 +471,8 @@ export class WaComms {
             this.config.noise.serverStaticKey.byteLength === 32
         if (
             hasServerStaticKey &&
-            this.resumeHandshakeFailures < NOISE_RESUME_FAILURES_BEFORE_FULL_HANDSHAKE
+            this.resumeHandshakeFailures <
+                WA_DEFAULTS.NOISE_RESUME_FAILURES_BEFORE_FULL_HANDSHAKE
         ) {
             return {
                 noiseConfig: this.config.noise,

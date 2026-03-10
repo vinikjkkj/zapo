@@ -1,6 +1,8 @@
+import type { Logger } from '../infra/log/types'
+import { WA_DEFAULTS, WA_MESSAGE_TAGS, WA_MESSAGE_TYPES } from '../protocol/constants'
 import type { BinaryNode } from '../transport/types'
 import { delay } from '../util/async'
-import { toError } from '../util/errors'
+import { toError } from '../util/primitives'
 
 import {
     describeAckNode,
@@ -8,22 +10,18 @@ import {
     isNegativeAckNode,
     isRetryableNegativeAck
 } from './ack'
-import {
-    DEFAULT_MESSAGE_ACK_TIMEOUT_MS,
-    DEFAULT_MESSAGE_MAX_ATTEMPTS,
-    DEFAULT_MESSAGE_RETRY_DELAY_MS,
-    MESSAGE_ENC_TAG,
-    MESSAGE_ENC_VERSION,
-    MESSAGE_NODE_TAG,
-    RECEIPT_NODE_TAG
-} from './constants'
 import type {
     WaEncryptedMessageInput,
-    WaMessageClientOptions,
     WaMessagePublishOptions,
     WaMessagePublishResult,
     WaSendReceiptInput
 } from './types'
+
+interface WaMessageClientOptions {
+    readonly logger: Logger
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
+}
 
 class MessagePublishNackError extends Error {
     public readonly retryable: boolean
@@ -50,13 +48,13 @@ export class WaMessageClient {
         node: BinaryNode,
         options: WaMessagePublishOptions = {}
     ): Promise<WaMessagePublishResult> {
-        if (node.tag !== MESSAGE_NODE_TAG) {
+        if (node.tag !== WA_MESSAGE_TAGS.MESSAGE) {
             throw new Error(`invalid node tag for message publish: ${node.tag}`)
         }
 
-        const ackTimeoutMs = options.ackTimeoutMs ?? DEFAULT_MESSAGE_ACK_TIMEOUT_MS
-        const maxAttempts = options.maxAttempts ?? DEFAULT_MESSAGE_MAX_ATTEMPTS
-        const retryDelayMs = options.retryDelayMs ?? DEFAULT_MESSAGE_RETRY_DELAY_MS
+        const ackTimeoutMs = options.ackTimeoutMs ?? WA_DEFAULTS.MESSAGE_ACK_TIMEOUT_MS
+        const maxAttempts = options.maxAttempts ?? WA_DEFAULTS.MESSAGE_MAX_ATTEMPTS
+        const retryDelayMs = options.retryDelayMs ?? WA_DEFAULTS.MESSAGE_RETRY_DELAY_MS
         if (ackTimeoutMs < 1 || maxAttempts < 1 || retryDelayMs < 0) {
             throw new Error('invalid message publish options')
         }
@@ -138,13 +136,13 @@ export class WaMessageClient {
             attrs.device_fanout = input.deviceFanout
         }
         const node: BinaryNode = {
-            tag: MESSAGE_NODE_TAG,
+            tag: WA_MESSAGE_TAGS.MESSAGE,
             attrs,
             content: [
                 {
-                    tag: MESSAGE_ENC_TAG,
+                    tag: WA_MESSAGE_TAGS.ENC,
                     attrs: {
-                        v: MESSAGE_ENC_VERSION,
+                        v: WA_MESSAGE_TYPES.ENC_VERSION,
                         type: input.encType
                     },
                     content: input.ciphertext
@@ -175,7 +173,7 @@ export class WaMessageClient {
             type: attrs.type
         })
         await this.sendNode({
-            tag: RECEIPT_NODE_TAG,
+            tag: WA_MESSAGE_TAGS.RECEIPT,
             attrs
         })
     }
@@ -189,5 +187,4 @@ export class WaMessageClient {
             message.includes('closed')
         )
     }
-
 }

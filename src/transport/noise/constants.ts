@@ -10,4 +10,3 @@ export const EMPTY_BYTES = new Uint8Array(0)
 export const ROOT_CA_SERIAL = 0
 export const ROOT_CA_PUBLIC_KEY_HEX =
     '142375574d0a587166aae71ebe516437c4a28b73e3695c6ce1f7f9545da8ee6b'
-export const CURVE_P = (1n << 255n) - 19n

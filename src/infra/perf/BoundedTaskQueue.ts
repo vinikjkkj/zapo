@@ -1,4 +1,10 @@
-import type { QueueItem, Task } from './types'
+type Task<T> = () => Promise<T>
+
+interface QueueItem<T> {
+    readonly task: Task<T>
+    readonly resolve: (value: unknown) => void
+    readonly reject: (error: unknown) => void
+}
 
 export class BoundedTaskQueue {
     private readonly maxQueueSize: number

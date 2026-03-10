@@ -4,10 +4,22 @@ import { toBytesView } from '../../util/bytes'
 import { assert32, decodeBase64Url } from '../core/encoding'
 
 import { ED25519_PKCS8_PREFIX } from './constants'
-import type { SignalKeyPair, SubtleKeyPair } from './types'
+import type { SignalKeyPair } from './types'
+
+type SubtleKeyPair = {
+    privateKey: webcrypto.CryptoKey
+    publicKey: webcrypto.CryptoKey
+}
+
+function pkcs8FromRawPrivate(raw: Uint8Array): Uint8Array {
+    const out = new Uint8Array(ED25519_PKCS8_PREFIX.length + raw.length)
+    out.set(ED25519_PKCS8_PREFIX, 0)
+    out.set(raw, ED25519_PKCS8_PREFIX.length)
+    return out
+}
 
 export class Ed25519 {
-    public async generateKeyPair(): Promise<SignalKeyPair> {
+    static async generateKeyPair(): Promise<SignalKeyPair> {
         const keys = (await webcrypto.subtle.generateKey({ name: 'Ed25519' }, true, [
             'sign',
             'verify'
@@ -19,11 +31,11 @@ export class Ed25519 {
         }
     }
 
-    public async keyPairFromPrivateKey(privKey: Uint8Array): Promise<SignalKeyPair> {
+    static async keyPairFromPrivateKey(privKey: Uint8Array): Promise<SignalKeyPair> {
         assert32(privKey, 'ed25519 private key')
         const privateKey = await webcrypto.subtle.importKey(
             'pkcs8',
-            this.pkcs8FromRawPrivate(privKey),
+            pkcs8FromRawPrivate(privKey),
             { name: 'Ed25519' },
             true,
             ['sign']
@@ -35,11 +47,11 @@ export class Ed25519 {
         }
     }
 
-    public async sign(message: Uint8Array, privKey: Uint8Array): Promise<Uint8Array> {
+    static async sign(message: Uint8Array, privKey: Uint8Array): Promise<Uint8Array> {
         assert32(privKey, 'ed25519 private key')
         const privateKey = await webcrypto.subtle.importKey(
             'pkcs8',
-            this.pkcs8FromRawPrivate(privKey),
+            pkcs8FromRawPrivate(privKey),
             { name: 'Ed25519' },
             false,
             ['sign']
@@ -48,7 +60,7 @@ export class Ed25519 {
         return toBytesView(signature)
     }
 
-    public async verify(
+    static async verify(
         message: Uint8Array,
         signature: Uint8Array,
         pubKey: Uint8Array
@@ -62,12 +74,5 @@ export class Ed25519 {
             ['verify']
         )
         return webcrypto.subtle.verify('Ed25519', publicKey, signature, message)
-    }
-
-    private pkcs8FromRawPrivate(raw: Uint8Array): Uint8Array {
-        const out = new Uint8Array(ED25519_PKCS8_PREFIX.length + raw.length)
-        out.set(ED25519_PKCS8_PREFIX, 0)
-        out.set(raw, ED25519_PKCS8_PREFIX.length)
-        return out
     }
 }

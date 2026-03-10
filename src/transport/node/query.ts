@@ -1,5 +1,6 @@
 import type { Logger } from '../../infra/log/types'
-import { toError } from '../../util/errors'
+import { WA_IQ_TYPES, WA_NODE_TAGS } from '../../protocol/constants'
+import { toError } from '../../util/primitives'
 import type { BinaryNode } from '../types'
 
 import { findNodeChild } from './helpers'
@@ -12,7 +13,7 @@ export function buildIqNode(
     attrs: Readonly<Record<string, string>> = {}
 ): BinaryNode {
     return {
-        tag: 'iq',
+        tag: WA_NODE_TAGS.IQ,
         attrs: {
             to,
             type,
@@ -28,7 +29,7 @@ export function parseIqError(node: BinaryNode): {
     readonly text: string
     readonly numericCode?: number
 } {
-    const errorNode = findNodeChild(node, 'error')
+    const errorNode = findNodeChild(node, WA_NODE_TAGS.ERROR)
     const code = errorNode?.attrs.code ?? node.attrs.type ?? 'unknown'
     const text = errorNode?.attrs.text ?? errorNode?.attrs.type ?? 'unknown'
     const parsedCode = Number.parseInt(code, 10)
@@ -40,10 +41,10 @@ export function parseIqError(node: BinaryNode): {
 }
 
 export function assertIqResult(node: BinaryNode, context: string): void {
-    if (node.tag !== 'iq') {
+    if (node.tag !== WA_NODE_TAGS.IQ) {
         throw new Error(`${context} returned non-iq node (${node.tag})`)
     }
-    if (node.attrs.type === 'result') {
+    if (node.attrs.type === WA_IQ_TYPES.RESULT) {
         return
     }
     const error = parseIqError(node)

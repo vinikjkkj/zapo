@@ -1,85 +1,142 @@
 import { Readable } from 'node:stream'
 
 import type { Logger } from '../infra/log/types'
-import { toBytesView } from '../util/bytes'
-import { toError } from '../util/errors'
+import { WA_DEFAULTS } from '../protocol/constants'
+import { toBufferChunk } from '../util/bytes'
+import { toError } from '../util/primitives'
 
-import { DEFAULT_MEDIA_HOSTS, DEFAULT_TIMEOUT_MS } from './constants'
-import type {
-    WaAbortContext,
-    WaEncryptedDownloadStream,
-    WaEncryptedDownloadRequest,
-    WaEncryptedUploadRequest,
-    WaEncryptedUploadResult,
-    WaMediaCryptoLike,
-    WaMediaTransferClientOptions,
-    WaStreamDownloadRequest,
-    WaStreamTransferResponse,
-    WaStreamUploadRequest
-} from './types'
+import { DEFAULT_MEDIA_HOSTS } from './constants'
+import type { MediaCryptoType, WaMediaTransferClientOptions } from './types'
 import { WaMediaCrypto } from './WaMediaCrypto'
 
 const EMPTY_BYTES = new Uint8Array(0)
-const TEXT_ENCODER = new TextEncoder()
+
+interface StreamDownloadRequest {
+    readonly url?: string
+    readonly directPath?: string
+    readonly hosts?: readonly string[]
+    readonly headers?: Readonly<Record<string, string>>
+    readonly timeoutMs?: number
+    readonly signal?: AbortSignal
+}
+
+interface StreamUploadRequest extends StreamDownloadRequest {
+    readonly method?: 'POST' | 'PUT'
+    readonly body: Uint8Array | Readable
+    readonly contentLength?: number
+    readonly contentType?: string
+}
+
+interface StreamTransferResponse {
+    readonly url: string
+    readonly status: number
+    readonly ok: boolean
+    readonly headers: Readonly<Record<string, string>>
+    readonly body: Readable | null
+}
+
+interface EncryptedUploadRequest extends StreamDownloadRequest {
+    readonly mediaType: MediaCryptoType
+    readonly method?: 'POST' | 'PUT'
+    readonly plaintext: Uint8Array | Readable
+    readonly mediaKey?: Uint8Array
+    readonly contentLength?: number
+    readonly contentType?: string
+}
+
+interface EncryptedUploadResult {
+    readonly transfer: StreamTransferResponse
+    readonly mediaKey: Uint8Array
+    readonly fileSha256: Uint8Array
+    readonly fileEncSha256: Uint8Array
+}
+
+interface EncryptedDownloadRequest extends StreamDownloadRequest {
+    readonly mediaType: MediaCryptoType
+    readonly mediaKey: Uint8Array
+    readonly fileSha256?: Uint8Array
+    readonly fileEncSha256?: Uint8Array
+}
+
+interface EncryptedDownloadStream {
+    readonly plaintext: Readable
+    readonly metadata: Promise<{
+        readonly fileSha256: Uint8Array
+        readonly fileEncSha256: Uint8Array
+    }>
+}
+
+interface ResolvedTransferRequest {
+    readonly urls: readonly string[]
+    readonly headers: Record<string, string>
+    readonly timeoutMs: number
+}
+
+interface PreparedEncryptedUpload {
+    readonly body: Uint8Array | Readable
+    readonly contentLength: number | undefined
+    readonly metadata: Promise<{
+        readonly fileSha256: Uint8Array
+        readonly fileEncSha256: Uint8Array
+    }>
+    cleanup(error: Error): Promise<void>
+}
+
+interface AbortContext {
+    readonly signal: AbortSignal
+    cleanup(): void
+}
 
 export class WaMediaTransferClient {
     private readonly logger?: Logger
     private readonly defaultHosts: readonly string[]
     private readonly defaultTimeoutMs: number
     private readonly defaultHeaders: Readonly<Record<string, string>>
-    private readonly mediaCrypto: WaMediaCryptoLike
 
     public constructor(options: WaMediaTransferClientOptions = {}) {
         this.logger = options.logger
         this.defaultHosts = options.defaultHosts ?? DEFAULT_MEDIA_HOSTS
-        this.defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS
+        this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.MEDIA_TIMEOUT_MS
         this.defaultHeaders = options.defaultHeaders ?? {}
-        this.mediaCrypto = options.mediaCrypto ?? new WaMediaCrypto()
     }
 
     public async downloadStream(
-        request: WaStreamDownloadRequest
-    ): Promise<WaStreamTransferResponse> {
-        const urls = this.resolveUrls(request.url, request.directPath, request.hosts)
-        const headers = this.mergeHeaders(request.headers)
-        const timeoutMs = request.timeoutMs ?? this.defaultTimeoutMs
+        request: StreamDownloadRequest
+    ): Promise<StreamTransferResponse> {
+        const { urls, headers, timeoutMs } = this.resolveTransferRequest(request)
         this.logger?.debug('media download stream start', {
             urls: urls.length,
             timeoutMs
         })
-        const result = await this.fetchWithFallback(
-            urls,
-            timeoutMs,
-            request.signal,
-            (url, signal) =>
+        return this.executeTransfer(urls, timeoutMs, request.signal, {
+            responseLog: 'media download stream response',
+            send: (url, signal) =>
                 fetch(url, {
                     method: 'GET',
                     headers,
                     signal
                 })
-        )
-        this.logger?.trace('media download stream response', {
-            url: result.url,
-            status: result.response.status
         })
-        return this.toResponse(result.url, result.response)
     }
 
-    public async downloadBytes(request: WaStreamDownloadRequest): Promise<Uint8Array> {
+    public async downloadBytes(request: StreamDownloadRequest): Promise<Uint8Array> {
         const response = await this.downloadStream(request)
-        if (!response.ok) {
-            await this.drainBody(response.body)
-            throw new Error(`download failed with status ${response.status} for ${response.url}`)
-        }
+        await this.assertSuccessfulResponse(response)
         if (!response.body) {
             return EMPTY_BYTES
         }
         return this.readAll(response.body)
     }
 
-    public async uploadStream(request: WaStreamUploadRequest): Promise<WaStreamTransferResponse> {
+    public async uploadStream(request: StreamUploadRequest): Promise<StreamTransferResponse> {
         const bodyIsBytes = request.body instanceof Uint8Array
-        const urls = this.resolveUrls(request.url, request.directPath, request.hosts)
+        const { urls, headers, timeoutMs } = this.resolveTransferRequest(request, {
+            'content-type': request.contentType,
+            'content-length':
+                request.contentLength !== null && request.contentLength !== undefined
+                    ? String(request.contentLength)
+                    : undefined
+        })
         const uploadUrls = bodyIsBytes ? urls : urls.slice(0, 1)
         if (!bodyIsBytes && urls.length > 1) {
             this.logger?.warn('upload stream fallback disabled for non-replayable body', {
@@ -87,26 +144,15 @@ export class WaMediaTransferClient {
             })
         }
 
-        const headers = this.mergeHeaders(request.headers)
-        if (request.contentType) {
-            headers['content-type'] = request.contentType
-        }
-        if (request.contentLength !== null && request.contentLength !== undefined) {
-            headers['content-length'] = String(request.contentLength)
-        }
-
-        const timeoutMs = request.timeoutMs ?? this.defaultTimeoutMs
         const method = request.method ?? 'POST'
         this.logger?.debug('media upload stream start', {
             urls: uploadUrls.length,
             timeoutMs,
             method
         })
-        const result = await this.fetchWithFallback(
-            uploadUrls,
-            timeoutMs,
-            request.signal,
-            async (url, signal) => {
+        return this.executeTransfer(uploadUrls, timeoutMs, request.signal, {
+            responseLog: 'media upload stream response',
+            send: async (url, signal) => {
                 if (bodyIsBytes) {
                     return fetch(url, {
                         method,
@@ -124,58 +170,19 @@ export class WaMediaTransferClient {
                     duplex: 'half'
                 } as RequestInit)
             }
-        )
-        this.logger?.trace('media upload stream response', {
-            url: result.url,
-            status: result.response.status
         })
-        return this.toResponse(result.url, result.response)
     }
 
     public async uploadEncrypted(
-        request: WaEncryptedUploadRequest
-    ): Promise<WaEncryptedUploadResult> {
+        request: EncryptedUploadRequest
+    ): Promise<EncryptedUploadResult> {
         this.logger?.info('media encrypted upload start', {
             mediaType: request.mediaType
         })
-        const mediaKey = request.mediaKey ?? (await this.mediaCrypto.generateMediaKey())
-        if (request.plaintext instanceof Uint8Array) {
-            const encrypted = await this.mediaCrypto.encryptBytes(
-                request.mediaType,
-                mediaKey,
-                request.plaintext
-            )
-            const transfer = await this.uploadStream({
-                url: request.url,
-                directPath: request.directPath,
-                hosts: request.hosts,
-                headers: request.headers,
-                timeoutMs: request.timeoutMs,
-                signal: request.signal,
-                method: request.method,
-                body: encrypted.ciphertextHmac,
-                contentLength: encrypted.ciphertextHmac.byteLength,
-                contentType: request.contentType
-            })
-            return {
-                transfer,
-                mediaKey,
-                fileSha256: encrypted.fileSha256,
-                fileEncSha256: encrypted.fileEncSha256
-            }
-        }
+        const mediaKey = request.mediaKey ?? (await WaMediaCrypto.generateMediaKey())
+        const prepared = await this.prepareEncryptedUpload(request, mediaKey)
 
-        const prepared = await this.mediaCrypto.encryptReadable(
-            request.mediaType,
-            mediaKey,
-            request.plaintext
-        )
-        const encryptedLength =
-            request.contentLength !== null && request.contentLength !== undefined
-                ? this.mediaCrypto.encryptedLength(request.contentLength)
-                : undefined
-
-        let transfer: WaStreamTransferResponse
+        let transfer: StreamTransferResponse
         try {
             transfer = await this.uploadStream({
                 url: request.url,
@@ -185,13 +192,12 @@ export class WaMediaTransferClient {
                 timeoutMs: request.timeoutMs,
                 signal: request.signal,
                 method: request.method,
-                body: prepared.encrypted,
-                contentLength: encryptedLength,
+                body: prepared.body,
+                contentLength: prepared.contentLength,
                 contentType: request.contentType
             })
         } catch (error) {
-            prepared.encrypted.destroy(toError(error))
-            await prepared.metadata.catch(() => undefined)
+            await prepared.cleanup(toError(error))
             throw error
         }
 
@@ -207,7 +213,7 @@ export class WaMediaTransferClient {
         }
     }
 
-    public async downloadAndDecrypt(request: WaEncryptedDownloadRequest): Promise<Uint8Array> {
+    public async downloadAndDecrypt(request: EncryptedDownloadRequest): Promise<Uint8Array> {
         this.logger?.info('media encrypted download start', {
             mediaType: request.mediaType
         })
@@ -226,18 +232,13 @@ export class WaMediaTransferClient {
     }
 
     public async downloadAndDecryptStream(
-        request: WaEncryptedDownloadRequest
-    ): Promise<WaEncryptedDownloadStream> {
+        request: EncryptedDownloadRequest
+    ): Promise<EncryptedDownloadStream> {
         const response = await this.downloadStream(request)
-        if (!response.ok) {
-            await this.drainBody(response.body)
-            throw new Error(`download failed with status ${response.status} for ${response.url}`)
-        }
-        if (!response.body) {
-            throw new Error(`download response body is empty for ${response.url}`)
-        }
+        await this.assertSuccessfulResponse(response)
+        const body = this.requireResponseBody(response)
 
-        const decrypted = await this.mediaCrypto.decryptReadable(response.body, {
+        const decrypted = await WaMediaCrypto.decryptReadable(body, {
             mediaType: request.mediaType,
             mediaKey: request.mediaKey,
             expectedFileSha256: request.fileSha256,
@@ -253,11 +254,104 @@ export class WaMediaTransferClient {
         }
     }
 
-    public async readResponseBytes(response: WaStreamTransferResponse): Promise<Uint8Array> {
+    public async readResponseBytes(response: StreamTransferResponse): Promise<Uint8Array> {
         if (!response.body) {
             return EMPTY_BYTES
         }
         return this.readAll(response.body)
+    }
+
+    private resolveTransferRequest(
+        request: Pick<
+            StreamDownloadRequest,
+            'url' | 'directPath' | 'hosts' | 'headers' | 'timeoutMs'
+        >,
+        extraHeaders?: Readonly<Record<string, string | undefined>>
+    ): ResolvedTransferRequest {
+        const headers = this.mergeHeaders(request.headers)
+        for (const [key, value] of Object.entries(extraHeaders ?? {})) {
+            if (value !== undefined) {
+                headers[key.toLowerCase()] = value
+            }
+        }
+
+        return {
+            urls: this.resolveUrls(request.url, request.directPath, request.hosts),
+            headers,
+            timeoutMs: request.timeoutMs ?? this.defaultTimeoutMs
+        }
+    }
+
+    private async executeTransfer(
+        urls: readonly string[],
+        timeoutMs: number,
+        signal: AbortSignal | undefined,
+        options: {
+            readonly responseLog: string
+            readonly send: (url: string, signal: AbortSignal) => Promise<Response>
+        }
+    ): Promise<StreamTransferResponse> {
+        const result = await this.fetchWithFallback(urls, timeoutMs, signal, options.send)
+        this.logger?.trace(options.responseLog, {
+            url: result.url,
+            status: result.response.status
+        })
+        return this.toResponse(result.url, result.response)
+    }
+
+    private async prepareEncryptedUpload(
+        request: EncryptedUploadRequest,
+        mediaKey: Uint8Array
+    ): Promise<PreparedEncryptedUpload> {
+        if (request.plaintext instanceof Uint8Array) {
+            const encrypted = await WaMediaCrypto.encryptBytes(
+                request.mediaType,
+                mediaKey,
+                request.plaintext
+            )
+            return {
+                body: encrypted.ciphertextHmac,
+                contentLength: encrypted.ciphertextHmac.byteLength,
+                metadata: Promise.resolve({
+                    fileSha256: encrypted.fileSha256,
+                    fileEncSha256: encrypted.fileEncSha256
+                }),
+                cleanup: async () => undefined
+            }
+        }
+
+        const prepared = await WaMediaCrypto.encryptReadable(
+            request.mediaType,
+            mediaKey,
+            request.plaintext
+        )
+        return {
+            body: prepared.encrypted,
+            contentLength:
+                request.contentLength !== null && request.contentLength !== undefined
+                    ? WaMediaCrypto.encryptedLength(request.contentLength)
+                    : undefined,
+            metadata: prepared.metadata,
+            cleanup: async (error) => {
+                prepared.encrypted.destroy(error)
+                await prepared.metadata.catch(() => undefined)
+            }
+        }
+    }
+
+    private async assertSuccessfulResponse(response: StreamTransferResponse): Promise<void> {
+        if (response.ok) {
+            return
+        }
+        await this.drainBody(response.body)
+        throw new Error(`download failed with status ${response.status} for ${response.url}`)
+    }
+
+    private requireResponseBody(response: StreamTransferResponse): Readable {
+        if (response.body) {
+            return response.body
+        }
+        throw new Error(`download response body is empty for ${response.url}`)
     }
 
     private resolveUrls(
@@ -283,7 +377,7 @@ export class WaMediaTransferClient {
             throw new Error('missing transfer url/directPath')
         }
 
-        return this.unique(resolved)
+        return Array.from(new Set(resolved))
     }
 
     private mergeHeaders(
@@ -345,7 +439,7 @@ export class WaMediaTransferClient {
     private createAbortContext(
         timeoutMs: number,
         externalSignal: AbortSignal | undefined
-    ): WaAbortContext {
+    ): AbortContext {
         const controller = new AbortController()
         const timer = setTimeout(() => {
             controller.abort(new Error(`transfer timed out after ${timeoutMs}ms`))
@@ -373,7 +467,7 @@ export class WaMediaTransferClient {
         }
     }
 
-    private toResponse(url: string, response: Response): WaStreamTransferResponse {
+    private toResponse(url: string, response: Response): StreamTransferResponse {
         return {
             url,
             status: response.status,
@@ -421,7 +515,7 @@ export class WaMediaTransferClient {
         const chunks: Uint8Array[] = []
         let total = 0
         for await (const chunk of body) {
-            const bytes = this.toBytes(chunk)
+            const bytes = toBufferChunk(chunk)
             chunks.push(bytes)
             total += bytes.byteLength
         }
@@ -440,23 +534,5 @@ export class WaMediaTransferClient {
         }
         this.logger?.trace('media readAll merged chunks', { total, chunks: chunks.length })
         return merged
-    }
-
-    private toBytes(chunk: unknown): Uint8Array {
-        if (chunk instanceof Uint8Array) {
-            return chunk
-        }
-        if (typeof chunk === 'string') {
-            return TEXT_ENCODER.encode(chunk)
-        }
-        if (chunk instanceof ArrayBuffer) {
-            return toBytesView(chunk)
-        }
-        throw new Error(`unsupported stream chunk type: ${typeof chunk}`)
-    }
-
-    private unique(values: readonly string[]): readonly string[] {
-        const set = new Set(values)
-        return Array.from(set)
     }
 }

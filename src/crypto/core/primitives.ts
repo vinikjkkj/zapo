@@ -2,12 +2,10 @@
  * Low-level crypto primitives using WebCrypto API
  */
 
-import { webcrypto } from 'node:crypto'
+import { createHash, webcrypto } from 'node:crypto'
 
 import { EMPTY_BYTES } from '../../transport/noise/constants'
 import { toBytesView } from '../../util/bytes'
-
-import type { AesGcmUsage } from './types'
 
 // ============================================
 // Hash functions
@@ -21,13 +19,17 @@ export async function sha512(value: Uint8Array): Promise<Uint8Array> {
     return toBytesView(await webcrypto.subtle.digest('SHA-512', value))
 }
 
+export function md5Bytes(input: string): Uint8Array {
+    return toBytesView(createHash('md5').update(input).digest())
+}
+
 // ============================================
 // AES-GCM (for Noise protocol)
 // ============================================
 
 export async function importAesGcmKey(
     raw: Uint8Array,
-    usages: AesGcmUsage[]
+    usages: ('encrypt' | 'decrypt')[]
 ): Promise<webcrypto.CryptoKey> {
     return webcrypto.subtle.importKey('raw', raw, 'AES-GCM', false, usages)
 }

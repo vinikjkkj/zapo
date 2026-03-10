@@ -1,18 +1,12 @@
 import { ConsoleLogger } from '../infra/log/ConsoleLogger'
 import type { Logger } from '../infra/log/types'
+import { WA_DEFAULTS, WA_READY_STATES } from '../protocol/constants'
 import { toBytesView } from '../util/bytes'
-import { toError } from '../util/errors'
+import { toError } from '../util/primitives'
 
-import {
-    DEFAULT_CHAT_SOCKET_URLS,
-    READY_STATE_CLOSED,
-    READY_STATE_CONNECTING,
-    READY_STATE_OPEN
-} from './constants'
 import type {
     RawWebSocket,
     RawWebSocketConstructor,
-    PendingSocket,
     SocketCloseInfo,
     SocketOpenInfo,
     WebSocketEventLike,
@@ -21,6 +15,13 @@ import type {
 } from './types'
 
 const TEXT_ENCODER = new TextEncoder()
+
+interface PendingSocket {
+    readonly url: string
+    readonly socket: RawWebSocket
+    timer: NodeJS.Timeout | null
+    settled: boolean
+}
 
 function resolveWebSocketConstructor(): RawWebSocketConstructor {
     const ctor = (globalThis as typeof globalThis & { WebSocket?: RawWebSocketConstructor })
@@ -39,7 +40,7 @@ function resolveSocketUrls(config: WaSocketConfig): readonly string[] {
     if (config.url) {
         return Object.freeze([config.url])
     }
-    return DEFAULT_CHAT_SOCKET_URLS
+    return WA_DEFAULTS.CHAT_SOCKET_URLS
 }
 
 export class WaWebSocket {
@@ -74,18 +75,21 @@ export class WaWebSocket {
     }
 
     public isOpen(): boolean {
-        return this.socket?.readyState === READY_STATE_OPEN
+        return this.socket?.readyState === WA_READY_STATES.OPEN
     }
 
     public isConnecting(): boolean {
-        return this.socket?.readyState === READY_STATE_CONNECTING || this.connectingSockets.size > 0
+        return (
+            this.socket?.readyState === WA_READY_STATES.CONNECTING ||
+            this.connectingSockets.size > 0
+        )
     }
 
     public getReadyState(): number {
         if (this.connectingSockets.size > 0) {
-            return READY_STATE_CONNECTING
+            return WA_READY_STATES.CONNECTING
         }
-        return this.socket?.readyState ?? READY_STATE_CLOSED
+        return this.socket?.readyState ?? WA_READY_STATES.CLOSED
     }
 
     public async open(): Promise<SocketOpenInfo> {
@@ -121,7 +125,7 @@ export class WaWebSocket {
             }
             return null
         }
-        if (socket.readyState === READY_STATE_CLOSED) {
+        if (socket.readyState === WA_READY_STATES.CLOSED) {
             this.socket = null
             return {
                 code,
@@ -173,7 +177,7 @@ export class WaWebSocket {
 
     public async send(data: string | ArrayBuffer | Uint8Array): Promise<void> {
         const socket = this.socket
-        if (!socket || socket.readyState !== READY_STATE_OPEN) {
+        if (!socket || socket.readyState !== WA_READY_STATES.OPEN) {
             throw new Error('websocket is not connected')
         }
         this.logger.trace('socket send', {
@@ -183,78 +187,31 @@ export class WaWebSocket {
     }
 
     private async openSingle(url: string): Promise<SocketOpenInfo> {
-        const socket = this.createRawSocket(url)
-        socket.binaryType = 'arraybuffer'
-        this.connectingSockets.add(socket)
+        const pending = this.createPendingSocket(url)
 
         return new Promise<SocketOpenInfo>((resolve, reject) => {
-            let settled = false
-            const fail = (error: Error): void => {
-                if (settled) {
-                    return
+            this.bindPendingSocket(pending, {
+                onOpen: () => {
+                    if (!this.settlePendingSocket(pending)) {
+                        return
+                    }
+                    resolve(this.activatePendingSocket(pending, 'socket open success'))
+                },
+                onFail: (error) => {
+                    if (!this.settlePendingSocket(pending)) {
+                        return
+                    }
+                    if (this.socket === pending.socket) {
+                        this.socket = null
+                    }
+                    reject(error)
                 }
-                settled = true
-                clearTimeout(timer)
-                this.connectingSockets.delete(socket)
-                if (this.socket === socket) {
-                    this.socket = null
-                }
-                reject(error)
-            }
-
-            const timer = setTimeout(() => {
-                this.logger.warn('socket connect timeout', { url })
-                this.closeSocketSafe(socket, 4000, 'connect_timeout')
-                fail(new Error(`websocket connect timeout for ${url}`))
-            }, this.config.timeoutIntervalMs)
-
-            socket.onopen = () => {
-                if (settled) {
-                    return
-                }
-                settled = true
-                clearTimeout(timer)
-                this.connectingSockets.delete(socket)
-                this.socket = socket
-                this.bindRuntimeHandlers(socket)
-                this.logger.info('socket open success', { url })
-                void this.handlers.onOpen?.({ openedAt: Date.now() })
-                resolve({ openedAt: Date.now() })
-            }
-
-            socket.onerror = () => {
-                this.logger.warn('socket open error', { url })
-                fail(new Error(`websocket connect error for ${url}`))
-            }
-
-            socket.onclose = (event) => {
-                const info = this.toCloseInfo(event)
-                this.logger.warn('socket closed before open', {
-                    url,
-                    code: info.code,
-                    reason: info.reason
-                })
-                fail(
-                    new Error(
-                        `websocket closed before open (${info.code}:${info.reason}) for ${url}`
-                    )
-                )
-            }
+            })
         })
     }
 
     private async openConcurrently(urls: readonly string[]): Promise<SocketOpenInfo> {
-        const pendingSockets: PendingSocket[] = urls.map((url) => {
-            const socket = this.createRawSocket(url)
-            socket.binaryType = 'arraybuffer'
-            this.connectingSockets.add(socket)
-            return {
-                url,
-                socket,
-                timer: null,
-                settled: false
-            }
-        })
+        const pendingSockets = urls.map((url) => this.createPendingSocket(url))
 
         return new Promise<SocketOpenInfo>((resolve, reject) => {
             let done = false
@@ -262,15 +219,9 @@ export class WaWebSocket {
             let lastError: Error | null = null
 
             const fail = (entry: PendingSocket, error: Error): void => {
-                if (done || entry.settled) {
+                if (done || !this.settlePendingSocket(entry)) {
                     return
                 }
-                entry.settled = true
-                if (entry.timer) {
-                    clearTimeout(entry.timer)
-                    entry.timer = null
-                }
-                this.connectingSockets.delete(entry.socket)
                 failedCount += 1
                 lastError = error
                 if (failedCount === pendingSockets.length) {
@@ -280,73 +231,33 @@ export class WaWebSocket {
             }
 
             const win = (entry: PendingSocket): void => {
-                if (entry.settled) {
+                if (!this.settlePendingSocket(entry)) {
                     return
                 }
-                entry.settled = true
-                if (entry.timer) {
-                    clearTimeout(entry.timer)
-                    entry.timer = null
-                }
-
                 if (done) {
-                    this.connectingSockets.delete(entry.socket)
                     this.closeSocketSafe(entry.socket, 1000, 'loser_socket')
                     return
                 }
 
                 done = true
-                this.connectingSockets.delete(entry.socket)
                 for (const other of pendingSockets) {
                     if (other.socket === entry.socket) {
                         continue
                     }
-                    if (!other.settled) {
-                        other.settled = true
-                        if (other.timer) {
-                            clearTimeout(other.timer)
-                            other.timer = null
-                        }
+                    if (!this.settlePendingSocket(other)) {
+                        continue
                     }
-                    this.connectingSockets.delete(other.socket)
                     this.closeSocketSafe(other.socket, 1000, 'loser_socket')
                 }
 
-                this.socket = entry.socket
-                this.bindRuntimeHandlers(entry.socket)
-                this.logger.info('socket open success (race winner)', { url: entry.url })
-                void this.handlers.onOpen?.({ openedAt: Date.now() })
-                resolve({ openedAt: Date.now() })
+                resolve(this.activatePendingSocket(entry, 'socket open success (race winner)'))
             }
 
             for (const entry of pendingSockets) {
-                entry.timer = setTimeout(() => {
-                    this.logger.warn('socket connect timeout', { url: entry.url })
-                    this.closeSocketSafe(entry.socket, 4000, 'connect_timeout')
-                    fail(entry, new Error(`websocket connect timeout for ${entry.url}`))
-                }, this.config.timeoutIntervalMs)
-
-                entry.socket.onopen = () => {
-                    win(entry)
-                }
-                entry.socket.onerror = () => {
-                    this.logger.warn('socket open error', { url: entry.url })
-                    fail(entry, new Error(`websocket connect error for ${entry.url}`))
-                }
-                entry.socket.onclose = (event) => {
-                    const info = this.toCloseInfo(event)
-                    this.logger.warn('socket closed before open', {
-                        url: entry.url,
-                        code: info.code,
-                        reason: info.reason
-                    })
-                    fail(
-                        entry,
-                        new Error(
-                            `websocket closed before open (${info.code}:${info.reason}) for ${entry.url}`
-                        )
-                    )
-                }
+                this.bindPendingSocket(entry, {
+                    onOpen: () => win(entry),
+                    onFail: (error) => fail(entry, error)
+                })
             }
         })
     }
@@ -356,26 +267,10 @@ export class WaWebSocket {
             void this.handleMessage(event.data)
         }
         socket.onerror = (event) => {
-            void event
-            this.logger.warn('socket runtime error event')
-            void this.handlers.onError?.(new Error('websocket runtime error'))
+            this.handleRuntimeError(event)
         }
         socket.onclose = (event) => {
-            const info = this.toCloseInfo(event)
-            this.logger.info('socket runtime closed', {
-                code: info.code,
-                reason: info.reason,
-                wasClean: info.wasClean
-            })
-            if (this.socket === socket) {
-                this.socket = null
-            }
-            const waiter = this.closeWaiter
-            this.closeWaiter = null
-            if (waiter) {
-                waiter(info)
-            }
-            void this.handlers.onClose?.(info)
+            this.handleRuntimeClose(socket, event)
         }
     }
 
@@ -417,12 +312,109 @@ export class WaWebSocket {
         return null
     }
 
+    private createPendingSocket(url: string): PendingSocket {
+        const socket = this.createRawSocket(url)
+        socket.binaryType = 'arraybuffer'
+        this.connectingSockets.add(socket)
+        return {
+            url,
+            socket,
+            timer: null,
+            settled: false
+        }
+    }
+
+    private bindPendingSocket(
+        entry: PendingSocket,
+        handlers: {
+            readonly onOpen: () => void
+            readonly onFail: (error: Error) => void
+        }
+    ): void {
+        entry.timer = setTimeout(() => {
+            this.logger.warn('socket connect timeout', { url: entry.url })
+            this.closeSocketSafe(entry.socket, 4000, 'connect_timeout')
+            handlers.onFail(new Error(`websocket connect timeout for ${entry.url}`))
+        }, this.config.timeoutIntervalMs)
+
+        entry.socket.onopen = () => {
+            handlers.onOpen()
+        }
+        entry.socket.onerror = () => {
+            this.logger.warn('socket open error', { url: entry.url })
+            handlers.onFail(new Error(`websocket connect error for ${entry.url}`))
+        }
+        entry.socket.onclose = (event) => {
+            const info = this.toCloseInfo(event)
+            this.logger.warn('socket closed before open', {
+                url: entry.url,
+                code: info.code,
+                reason: info.reason
+            })
+            handlers.onFail(
+                new Error(
+                    `websocket closed before open (${info.code}:${info.reason}) for ${entry.url}`
+                )
+            )
+        }
+    }
+
+    private settlePendingSocket(entry: PendingSocket): boolean {
+        if (entry.settled) {
+            return false
+        }
+        entry.settled = true
+        this.releasePendingSocket(entry)
+        return true
+    }
+
+    private releasePendingSocket(entry: PendingSocket): void {
+        if (entry.timer) {
+            clearTimeout(entry.timer)
+            entry.timer = null
+        }
+        this.connectingSockets.delete(entry.socket)
+    }
+
+    private activatePendingSocket(entry: PendingSocket, message: string): SocketOpenInfo {
+        const info = { openedAt: Date.now() }
+        this.socket = entry.socket
+        this.bindRuntimeHandlers(entry.socket)
+        this.logger.info(message, { url: entry.url })
+        void this.handlers.onOpen?.(info)
+        return info
+    }
+
     private toCloseInfo(event: WebSocketEventLike): SocketCloseInfo {
         return {
             code: typeof event.code === 'number' ? event.code : 1000,
             reason: typeof event.reason === 'string' ? event.reason : '',
             wasClean: event.wasClean === true
         }
+    }
+
+    private handleRuntimeError(event: WebSocketEventLike): void {
+        void event
+        this.logger.warn('socket runtime error event')
+        void this.handlers.onError?.(new Error('websocket runtime error'))
+    }
+
+    private handleRuntimeClose(socket: RawWebSocket, event: WebSocketEventLike): void {
+        const info = this.toCloseInfo(event)
+        this.logger.info('socket runtime closed', {
+            code: info.code,
+            reason: info.reason,
+            wasClean: info.wasClean
+        })
+        if (this.socket === socket) {
+            this.socket = null
+        }
+        const waiter = this.closeWaiter
+        this.closeWaiter = null
+        if (waiter) {
+            waiter(info)
+        }
+        void this.handlers.onClose?.(info)
     }
 
     private closeSocketSafe(socket: RawWebSocket, code: number, reason: string): void {

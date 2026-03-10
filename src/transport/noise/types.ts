@@ -1,14 +1,6 @@
 import type { Proto } from '../../proto'
 import type { RegistrationInfo, SignedPreKeyRecord } from '../../signal/types'
 
-export interface ParsedNoiseCertificate {
-    readonly serial: number
-    readonly issuerSerial: number
-    readonly key: Uint8Array
-    readonly details: Uint8Array
-    readonly signature: Uint8Array
-}
-
 export interface WaPayloadCommonConfig {
     readonly passive?: boolean
     readonly pull?: boolean

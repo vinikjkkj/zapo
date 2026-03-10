@@ -3,7 +3,6 @@ export { buildMediaConnIq, parseMediaConnResponse } from './conn'
 export type {
     WaMediaConn,
     WaMediaConnHost,
-    WaMediaCryptoLike,
     WaMediaTransferClientOptions,
     WaMediaDerivedKeys,
     WaMediaEncryptionResult,

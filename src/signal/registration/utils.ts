@@ -1,6 +1,20 @@
 import type { WaSignalStore } from '../store/WaSignalStore'
+import type { PreKeyRecord, RegistrationInfo, SignedPreKeyRecord } from '../types'
 
-import type { RegistrationBundle, RegistrationSignalKeyApi } from './types'
+interface RegistrationBundle {
+    readonly registrationInfo: RegistrationInfo
+    readonly signedPreKey: SignedPreKeyRecord
+    readonly firstPreKey: PreKeyRecord
+}
+
+interface RegistrationSignalKeyApi {
+    readonly generateRegistrationInfo: () => Promise<RegistrationInfo>
+    readonly generatePreKeyPair: (keyId: number) => Promise<PreKeyRecord>
+    readonly generateSignedPreKey: (
+        keyId: number,
+        signingPrivateKey: Uint8Array
+    ) => Promise<SignedPreKeyRecord>
+}
 
 export async function createAndStoreInitialKeys(
     store: WaSignalStore,

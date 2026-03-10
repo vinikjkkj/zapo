@@ -1,44 +1,19 @@
 import { webcrypto } from 'node:crypto'
 
 import { toSerializedPubKey } from '../../crypto/core/keys'
-import { bytesToBigIntLE, bigIntToBytesLE } from '../../crypto/math/le'
-import { modInv } from '../../crypto/math/mod'
+import { montgomeryToEdwardsPubKey } from '../../crypto/curves/X25519'
 import { proto } from '../../proto'
-import { CURVE_P, ROOT_CA_PUBLIC_KEY_HEX, ROOT_CA_SERIAL } from '../../transport/noise/constants'
+import { ROOT_CA_PUBLIC_KEY_HEX, ROOT_CA_SERIAL } from '../../transport/noise/constants'
 import { decodeProtoBytes } from '../../util/base64'
 import { toBytesView, uint8Equal } from '../../util/bytes'
+import { toSafeNumber } from '../../util/primitives'
 
-import type { ParsedNoiseCertificate } from './types'
-
-function toSafeNumber(
-    value: number | { toNumber?: () => number } | null | undefined,
-    field: string
-): number {
-    if (value === null || value === undefined) {
-        throw new Error(`missing ${field}`)
-    }
-    const numeric = typeof value === 'number' ? value : value.toNumber?.()
-    if (
-        typeof numeric !== 'number' ||
-        !Number.isFinite(numeric) ||
-        !Number.isSafeInteger(numeric)
-    ) {
-        throw new Error(`invalid ${field}`)
-    }
-    return numeric
-}
-
-function montgomeryToEdwardsPubKey(montgomeryX: Uint8Array, signBit: number): Uint8Array {
-    if (montgomeryX.length !== 32) {
-        throw new Error('invalid montgomery public key length')
-    }
-    const u = bytesToBigIntLE(montgomeryX) % CURVE_P
-    const numerator = (u - 1n + CURVE_P) % CURVE_P
-    const denominator = (u + 1n) % CURVE_P
-    const y = (numerator * modInv(denominator, CURVE_P)) % CURVE_P
-    const out = bigIntToBytesLE(y, 32)
-    out[31] = (out[31] & 0x7f) | signBit
-    return out
+interface ParsedNoiseCertificate {
+    readonly serial: number
+    readonly issuerSerial: number
+    readonly key: Uint8Array
+    readonly details: Uint8Array
+    readonly signature: Uint8Array
 }
 
 async function verifySignalVariant(

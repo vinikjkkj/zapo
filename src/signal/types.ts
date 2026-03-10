@@ -1,12 +1,4 @@
 import type { SignalKeyPair } from '../crypto/curves/types'
-import type { Proto } from '../proto'
-
-export type ProtoSignalMessage = Proto.ISignalMessage
-export type ProtoPreKeySignalMessage = Proto.IPreKeySignalMessage
-export type ProtoSenderKeyDistributionMessage = Proto.ISenderKeyDistributionMessage
-export type ProtoSessionStructure = Proto.ISessionStructure
-
-export type SignalCiphertextType = 'msg' | 'pkmsg' | 'skmsg'
 
 export interface RegistrationInfo {
     readonly registrationId: number
@@ -83,34 +75,19 @@ export interface SignalSessionRecord extends SignalSessionSnapshot {
     readonly prevSessions: readonly SignalSessionSnapshot[]
 }
 
-export interface SignalPreKey {
-    readonly id: number
-    readonly publicKey: Uint8Array
-}
-
-export interface SignalSignedPreKey {
-    readonly id: number
-    readonly publicKey: Uint8Array
-    readonly signature: Uint8Array
-}
-
 export interface SignalPreKeyBundle {
     readonly regId: number
     readonly identity: Uint8Array
-    readonly signedKey: SignalSignedPreKey
-    readonly oneTimeKey?: SignalPreKey
+    readonly signedKey: {
+        readonly id: number
+        readonly publicKey: Uint8Array
+        readonly signature: Uint8Array
+    }
+    readonly oneTimeKey?: {
+        readonly id: number
+        readonly publicKey: Uint8Array
+    }
     readonly ratchetKey?: Uint8Array
-}
-
-export interface SignalCiphertext {
-    readonly type: 'msg' | 'pkmsg'
-    readonly ciphertext: Uint8Array
-    readonly baseKey: Uint8Array | null
-}
-
-export interface SignalMessageEnvelope {
-    readonly type: SignalCiphertextType
-    readonly ciphertext: Uint8Array
 }
 
 export interface ParsedSignalMessage {
@@ -148,17 +125,4 @@ export interface SenderKeyDistributionRecord {
     readonly sender: SignalAddress
     readonly keyId: number
     readonly timestampMs: number
-}
-
-export interface GroupSenderKeyList {
-    readonly skList: readonly SenderKeyRecord[]
-    readonly skDistribList: readonly SenderKeyDistributionRecord[]
-}
-
-export interface GroupSenderKeyCiphertext {
-    readonly groupId: string
-    readonly sender: SignalAddress
-    readonly keyId: number
-    readonly iteration: number
-    readonly ciphertext: Uint8Array
 }

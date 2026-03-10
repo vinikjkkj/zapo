@@ -1,8 +1,7 @@
 import type { Logger } from '../../infra/log/types'
+import { WA_DEFAULTS } from '../../protocol/constants'
 import { bytesToBase64 } from '../../util/base64'
 import type { WaAuthCredentials } from '../types'
-
-import { QR_INITIAL_TTL_MS, QR_ROTATION_TTL_MS } from './constants'
 
 export class WaQrFlow {
     private readonly logger: Logger
@@ -52,7 +51,10 @@ export class WaQrFlow {
             this.logger.warn('qr flow refresh skipped: missing credentials')
             return false
         }
-        const ttlMs = this.qrRefs.length === 5 ? QR_INITIAL_TTL_MS : QR_ROTATION_TTL_MS
+        const ttlMs =
+            this.qrRefs.length === 5
+                ? WA_DEFAULTS.QR_INITIAL_TTL_MS
+                : WA_DEFAULTS.QR_ROTATION_TTL_MS
         this.logger.debug('qr flow refresh emit', { ttlMs, remainingRefs: this.qrRefs.length })
         this.emitQr(this.buildQr(this.currentRef, credentials), ttlMs)
         return true
@@ -82,7 +84,10 @@ export class WaQrFlow {
         }
         this.currentRef = ref
 
-        const ttlMs = this.qrRefs.length === 5 ? QR_INITIAL_TTL_MS : QR_ROTATION_TTL_MS
+        const ttlMs =
+            this.qrRefs.length === 5
+                ? WA_DEFAULTS.QR_INITIAL_TTL_MS
+                : WA_DEFAULTS.QR_ROTATION_TTL_MS
         this.logger.trace('qr flow emit new code', { ttlMs, remainingRefs: this.qrRefs.length })
         this.emitQr(this.buildQr(ref, credentials), ttlMs)
 

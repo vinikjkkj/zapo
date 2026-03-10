@@ -1,6 +1,3 @@
-export const SIGNAL_FETCH_KEY_BUNDLES_XMLNS = 'encrypt'
-export const SIGNAL_FETCH_KEY_BUNDLES_HOST = 's.whatsapp.net'
-export const SIGNAL_FETCH_KEY_BUNDLES_TIMEOUT_MS = 20_000
 export const SIGNAL_UPLOAD_PREKEYS_COUNT = 812
 export const SIGNAL_KEY_BUNDLE_TYPE_BYTES = new Uint8Array([5])
 

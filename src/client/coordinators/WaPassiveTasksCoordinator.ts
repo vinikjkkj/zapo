@@ -1,26 +1,22 @@
 import type { WaAuthCredentials } from '../../auth/types'
-import type { X25519 } from '../../crypto/curves/X25519'
 import type { Logger } from '../../infra/log/types'
+import { WA_DEFAULTS, WA_XMLNS } from '../../protocol/constants'
 import { SIGNAL_UPLOAD_PREKEYS_COUNT } from '../../signal/api/constants'
 import { buildPreKeyUploadIq, parsePreKeyUploadFailure } from '../../signal/api/prekeys'
 import { generatePreKeyPair } from '../../signal/registration/keygen'
-import { WaSignalStore } from '../../signal/store/WaSignalStore'
-import { USER_SERVER } from '../../transport/constants'
+import type { WaSignalStore } from '../../signal/store/WaSignalStore'
 import { findNodeChild } from '../../transport/node/helpers'
 import { assertIqResult, buildIqNode } from '../../transport/node/query'
 import type { BinaryNode } from '../../transport/types'
-import { toError } from '../../util/errors'
-import { ABPROPS_PROTOCOL_VERSION, ABT_XMLNS, IQ_TIMEOUT_MS } from '../constants'
+import { toError } from '../../util/primitives'
 
-type QueryWithContext = (
-    context: string,
-    node: BinaryNode,
-    timeoutMs?: number,
-    contextData?: Readonly<Record<string, unknown>>
-) => Promise<BinaryNode>
-
-export interface WaPassiveTasksRuntimePort {
-    readonly queryWithContext: QueryWithContext
+interface WaPassiveTasksRuntimePort {
+    readonly queryWithContext: (
+        context: string,
+        node: BinaryNode,
+        timeoutMs?: number,
+        contextData?: Readonly<Record<string, unknown>>
+    ) => Promise<BinaryNode>
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly persistServerHasPreKeys: (serverHasPreKeys: boolean) => Promise<void>
     readonly sendNodeDirect: (node: BinaryNode) => Promise<void>
@@ -29,17 +25,15 @@ export interface WaPassiveTasksRuntimePort {
     readonly shouldQueueDanglingReceipt: (node: BinaryNode, error: Error) => boolean
 }
 
-export interface WaPassiveTasksCoordinatorOptions {
+interface WaPassiveTasksCoordinatorOptions {
     readonly logger: Logger
     readonly signalStore: WaSignalStore
-    readonly x25519: X25519
     readonly runtime: WaPassiveTasksRuntimePort
 }
 
 export class WaPassiveTasksCoordinator {
     private readonly logger: Logger
     private readonly signalStore: WaSignalStore
-    private readonly x25519: X25519
     private readonly runtime: WaPassiveTasksRuntimePort
     private passiveTasksPromise: Promise<void> | null
     private abPropsHash: string | null
@@ -48,7 +42,6 @@ export class WaPassiveTasksCoordinator {
     public constructor(options: WaPassiveTasksCoordinatorOptions) {
         this.logger = options.logger
         this.signalStore = options.signalStore
-        this.x25519 = options.x25519
         this.runtime = options.runtime
         this.passiveTasksPromise = null
         this.abPropsHash = null
@@ -105,7 +98,7 @@ export class WaPassiveTasksCoordinator {
 
         const preKeys = await this.signalStore.getOrGenPreKeys(
             SIGNAL_UPLOAD_PREKEYS_COUNT,
-            async (keyId) => generatePreKeyPair(this.x25519, keyId)
+            async (keyId) => generatePreKeyPair(keyId)
         )
         if (preKeys.length === 0) {
             throw new Error('no prekey available for upload')
@@ -117,7 +110,7 @@ export class WaPassiveTasksCoordinator {
         const response = await this.runtime.queryWithContext(
             'prekeys.upload',
             uploadNode,
-            IQ_TIMEOUT_MS,
+            WA_DEFAULTS.IQ_TIMEOUT_MS,
             {
                 count: preKeys.length,
                 lastPreKeyId
@@ -143,7 +136,7 @@ export class WaPassiveTasksCoordinator {
 
     private async syncAbProps(): Promise<void> {
         const propsAttrs: Record<string, string> = {
-            protocol: ABPROPS_PROTOCOL_VERSION
+            protocol: WA_DEFAULTS.ABPROPS_PROTOCOL_VERSION
         }
         if (this.abPropsHash) {
             propsAttrs.hash = this.abPropsHash
@@ -154,13 +147,13 @@ export class WaPassiveTasksCoordinator {
 
         const response = await this.runtime.queryWithContext(
             'abprops.sync',
-            buildIqNode('get', USER_SERVER, ABT_XMLNS, [
+            buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.ABT, [
                 {
                     tag: 'props',
                     attrs: propsAttrs
                 }
             ]),
-            IQ_TIMEOUT_MS
+            WA_DEFAULTS.IQ_TIMEOUT_MS
         )
         assertIqResult(response, 'abprops')
         const propsNode = findNodeChild(response, 'props')
@@ -201,7 +194,11 @@ export class WaPassiveTasksCoordinator {
             } catch (error) {
                 const normalized = toError(error)
                 if (this.runtime.shouldQueueDanglingReceipt(node, normalized)) {
-                    for (let restoreIndex = index; restoreIndex < pending.length; restoreIndex += 1) {
+                    for (
+                        let restoreIndex = index;
+                        restoreIndex < pending.length;
+                        restoreIndex += 1
+                    ) {
                         this.runtime.requeueDanglingReceipt(pending[restoreIndex])
                     }
                     this.logger.warn('stopped dangling receipt flush due transient send error', {

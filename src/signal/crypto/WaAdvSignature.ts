@@ -1,12 +1,12 @@
 import { webcrypto } from 'node:crypto'
 
 import { importHmacKey, hmacSign, randomBytesAsync, sha512 } from '../../crypto'
+import type { SignalKeyPair } from '../../crypto/curves/types'
 import {
     clampCurvePrivateKey,
     montgomeryToEdwardsPublic,
     rawCurvePublicKey
-} from '../../crypto/curves/curve25519'
-import type { SignalKeyPair } from '../../crypto/curves/types'
+} from '../../crypto/curves/X25519'
 import { encodeExtendedPoint, scalarMultBase } from '../../crypto/math/edwards'
 import { bytesToBigIntLE, bigIntToBytesLE } from '../../crypto/math/le'
 import { modGroup } from '../../crypto/math/mod'
@@ -28,9 +28,7 @@ export {
 } from './constants'
 
 export class WaAdvSignature {
-    public constructor() {}
-
-    public async verifySignalSignature(
+    static async verifySignalSignature(
         publicKey: Uint8Array,
         message: Uint8Array,
         signature: Uint8Array
@@ -59,7 +57,7 @@ export class WaAdvSignature {
         return webcrypto.subtle.verify('Ed25519', cryptoKey, signalSignature, message)
     }
 
-    public async signSignalMessage(
+    static async signSignalMessage(
         privateKey: Uint8Array,
         message: Uint8Array
     ): Promise<Uint8Array> {
@@ -91,7 +89,7 @@ export class WaAdvSignature {
         return concatBytes([encodedR, encodedS])
     }
 
-    public async verifyDeviceIdentityAccountSignature(
+    static async verifyDeviceIdentityAccountSignature(
         details: Uint8Array,
         accountSignature: Uint8Array,
         identityPublicKey: Uint8Array,
@@ -100,10 +98,10 @@ export class WaAdvSignature {
     ): Promise<boolean> {
         const prefix = isHosted ? ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE : ADV_PREFIX_ACCOUNT_SIGNATURE
         const message = concatBytes([prefix, details, identityPublicKey])
-        return this.verifySignalSignature(accountSignatureKey, message, accountSignature)
+        return WaAdvSignature.verifySignalSignature(accountSignatureKey, message, accountSignature)
     }
 
-    public async generateDeviceSignature(
+    static async generateDeviceSignature(
         details: Uint8Array,
         identityKeyPair: SignalKeyPair,
         accountSignatureKey: Uint8Array,
@@ -111,10 +109,10 @@ export class WaAdvSignature {
     ): Promise<Uint8Array> {
         const prefix = isHosted ? ADV_PREFIX_HOSTED_DEVICE_SIGNATURE : ADV_PREFIX_DEVICE_SIGNATURE
         const message = concatBytes([prefix, details, identityKeyPair.pubKey, accountSignatureKey])
-        return this.signSignalMessage(identityKeyPair.privKey, message)
+        return WaAdvSignature.signSignalMessage(identityKeyPair.privKey, message)
     }
 
-    public async computeAdvIdentityHmac(
+    static async computeAdvIdentityHmac(
         secretKey: Uint8Array,
         details: Uint8Array
     ): Promise<Uint8Array> {

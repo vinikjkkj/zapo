@@ -1,8 +1,10 @@
+import { SERIALIZED_PUB_KEY_PREFIX as CORE_SERIALIZED_PUB_KEY_PREFIX } from '../crypto/core/constants'
+
 const textEncoder = new TextEncoder()
 
 export const SIGNAL_VERSION = 3
 export const SIGNAL_GROUP_VERSION = 3
-export const SERIALIZED_PUB_KEY_PREFIX = 5
+export const SERIALIZED_PUB_KEY_PREFIX = CORE_SERIALIZED_PUB_KEY_PREFIX
 export const KEY_TYPE_CURVE25519 = 5
 export const SIGNAL_MAC_SIZE = 8
 export const SIGNATURE_SIZE = 64

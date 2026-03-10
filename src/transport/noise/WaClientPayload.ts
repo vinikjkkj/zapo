@@ -1,5 +1,6 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 
+import { md5Bytes } from '../../crypto/core/primitives'
 import { proto } from '../../proto'
 import { KEY_TYPE_CURVE25519 } from '../../signal/constants'
 import { DEFAULT_VERSION_BASE } from '../../transport/noise/constants'
@@ -50,10 +51,6 @@ function resolveLocale(): { lg: string; lc: string } {
         lg: language.toLowerCase(),
         lc: country.toUpperCase()
     }
-}
-
-function md5Bytes(input: string): Uint8Array {
-    return toBytesView(createHash('md5').update(input).digest())
 }
 
 function defaultWebSubPlatform(): number {
@@ -160,7 +157,9 @@ export async function buildRegistrationPayload(
     const common = buildCommonPayload(config)
     const devicePairingData = {
         buildHash: config.buildHash ? toBytesView(config.buildHash) : md5Bytes(versionBase),
-        deviceProps: config.deviceProps ? toBytesView(config.deviceProps) : defaultDeviceProps(versionBase),
+        deviceProps: config.deviceProps
+            ? toBytesView(config.deviceProps)
+            : defaultDeviceProps(versionBase),
         eRegid: intToBytes(4, registrationId),
         eKeytype: intToBytes(1, KEY_TYPE_CURVE25519),
         eIdent: toBytesView(config.registrationInfo.identityKeyPair.pubKey),

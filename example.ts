@@ -66,11 +66,12 @@ async function main(): Promise<void> {
     })
     await client.connect()
 
-    await client.sendMessage('5511982905991@s.whatsapp.net', {
-        extendedTextMessage: {
-            text: `Hello! This is a message from the example client. Current time is ${new Date().toISOString()}`
-        }
-    })
+    if (client.getState().connected)
+        await client.sendMessage('5511982905991@s.whatsapp.net', {
+            extendedTextMessage: {
+                text: `Hello! This is a message from the example client. Current time is ${new Date().toISOString()}`
+            }
+        })
     const autoExitMs = Number(process.env.EXAMPLE_EXIT_MS ?? '0')
     if (Number.isFinite(autoExitMs) && autoExitMs > 0) {
         setTimeout(() => {

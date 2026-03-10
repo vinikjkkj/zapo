@@ -1,5 +1,9 @@
 import type { WaMediaTransferClient } from '../media/WaMediaTransferClient'
 import type { Proto } from '../proto'
+import {
+    WA_APP_STATE_COLLECTIONS,
+    WA_APP_STATE_KEY_TYPES
+} from '../protocol/constants'
 import { decodeProtoBytes } from '../util/base64'
 import { toBufferView } from '../util/bytes'
 
@@ -9,27 +13,16 @@ export function keyIdToHex(keyId: Uint8Array): string {
     return toBufferView(keyId).toString('hex')
 }
 
-export function longToNumber(value: number | { toNumber(): number } | null | undefined): number {
-    if (value === null || value === undefined) {
-        return 0
-    }
-    if (typeof value === 'number') {
-        return value
-    }
-    return value.toNumber()
-}
-
 export function parseCollectionName(value: string | undefined): AppStateCollectionName | null {
-    switch (value) {
-        case 'regular':
-        case 'regular_low':
-        case 'regular_high':
-        case 'critical_block':
-        case 'critical_unblock_low':
-            return value
-        default:
-            return null
+    if (!value) {
+        return null
     }
+    for (const collection of Object.values(WA_APP_STATE_COLLECTIONS)) {
+        if (collection === value) {
+            return collection
+        }
+    }
+    return null
 }
 
 export function keyDeviceId(keyId: Uint8Array): number {
@@ -66,7 +59,7 @@ export async function downloadExternalBlobReference(
     const fileEncSha256 = decodeProtoBytes(reference.fileEncSha256, 'external blob fileEncSha256')
     return mediaTransfer.downloadAndDecrypt({
         directPath: reference.directPath,
-        mediaType: 'md-app-state',
+        mediaType: WA_APP_STATE_KEY_TYPES.MD_APP_STATE,
         mediaKey,
         fileSha256,
         fileEncSha256

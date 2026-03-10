@@ -1,31 +1,31 @@
 import type { WaSuccessPersistAttributes } from '../../auth/types'
+import { WA_STREAM_SIGNALING } from '../../protocol/constants'
 import { base64ToBytes } from '../../util/base64'
-import {
-    STREAM_ERROR_ACK_TAG,
-    STREAM_ERROR_CONFLICT_TAG,
-    STREAM_ERROR_NODE_TAG,
-    STREAM_ERROR_REPLACED_TYPE,
-    STREAM_ERROR_XML_NOT_WELL_FORMED_TAG,
-    XML_STREAM_END_NODE_TAG
-} from '../constants'
 import { findNodeChild, hasNodeChild } from '../node/helpers'
 import type { BinaryNode } from '../types'
 
-import type { WaStreamControlNodeResult } from './types'
+export type WaStreamControlNodeResult =
+    | { readonly kind: 'xmlstreamend' }
+    | { readonly kind: 'stream_error_code'; readonly code: number }
+    | { readonly kind: 'stream_error_replaced' }
+    | { readonly kind: 'stream_error_device_removed' }
+    | { readonly kind: 'stream_error_ack'; readonly id?: string }
+    | { readonly kind: 'stream_error_xml_not_well_formed' }
+    | { readonly kind: 'stream_error_other' }
 
 export function parseStreamControlNode(node: BinaryNode): WaStreamControlNodeResult | null {
-    if (node.tag === XML_STREAM_END_NODE_TAG) {
+    if (node.tag === WA_STREAM_SIGNALING.XML_STREAM_END_TAG) {
         return {
             kind: 'xmlstreamend'
         }
     }
-    if (node.tag !== STREAM_ERROR_NODE_TAG) {
+    if (node.tag !== WA_STREAM_SIGNALING.STREAM_ERROR_TAG) {
         return null
     }
 
-    const conflictNode = findNodeChild(node, STREAM_ERROR_CONFLICT_TAG)
+    const conflictNode = findNodeChild(node, WA_STREAM_SIGNALING.CONFLICT_TAG)
     if (conflictNode) {
-        if (conflictNode.attrs.type === STREAM_ERROR_REPLACED_TYPE) {
+        if (conflictNode.attrs.type === WA_STREAM_SIGNALING.REPLACED_TYPE) {
             return {
                 kind: 'stream_error_replaced'
             }
@@ -46,7 +46,7 @@ export function parseStreamControlNode(node: BinaryNode): WaStreamControlNodeRes
         }
     }
 
-    const ackNode = findNodeChild(node, STREAM_ERROR_ACK_TAG)
+    const ackNode = findNodeChild(node, WA_STREAM_SIGNALING.ACK_TAG)
     if (ackNode) {
         return {
             kind: 'stream_error_ack',
@@ -54,7 +54,7 @@ export function parseStreamControlNode(node: BinaryNode): WaStreamControlNodeRes
         }
     }
 
-    if (hasNodeChild(node, STREAM_ERROR_XML_NOT_WELL_FORMED_TAG)) {
+    if (hasNodeChild(node, WA_STREAM_SIGNALING.XML_NOT_WELL_FORMED_TAG)) {
         return {
             kind: 'stream_error_xml_not_well_formed'
         }

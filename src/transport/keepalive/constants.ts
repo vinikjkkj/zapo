@@ -1,3 +1,0 @@
-export const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 15_000
-export const DEFAULT_DEAD_SOCKET_TIMEOUT_MS = 20_000
-export const DEFAULT_HOST_DOMAIN = 's.whatsapp.net'

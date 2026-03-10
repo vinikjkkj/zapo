@@ -2,11 +2,9 @@ import type { SignalKeyPair } from '../crypto/curves/types'
 
 import type { WaLoginPayloadConfig, WaRegistrationPayloadConfig } from './noise/types'
 
-export type BinaryAttrs = Readonly<Record<string, string>>
-
 export interface BinaryNode {
     readonly tag: string
-    readonly attrs: BinaryAttrs
+    readonly attrs: Readonly<Record<string, string>>
     readonly content?: Uint8Array | string | readonly BinaryNode[]
 }
 
@@ -35,10 +33,6 @@ export interface WaSocketHandlers {
     readonly onMessage?: (payload: Uint8Array) => void | Promise<void>
 }
 
-export type WaStanzaHandler = (payload: Uint8Array) => void | Promise<void>
-export type WaInflateFrame = (compressed: Uint8Array) => Uint8Array | Promise<Uint8Array>
-export type WaNoisePayloadProvider = Uint8Array | (() => Uint8Array | Promise<Uint8Array>)
-
 export interface WaCommsConfig extends WaSocketConfig {
     readonly connectTimeoutMs?: number
     readonly reconnectIntervalMs?: number
@@ -53,24 +47,11 @@ export interface WaCommsState {
     readonly reconnectAttempts: number
 }
 
-export interface NoiseKeyMaterial {
-    readonly clientEphemeral: Uint8Array
-    readonly clientStatic: Uint8Array
-    readonly serverStatic?: Uint8Array
-}
-
-export interface NoiseState {
-    readonly handshakeHash: Uint8Array
-    readonly chainingKey: Uint8Array
-    readonly writeKey?: Uint8Array
-    readonly readKey?: Uint8Array
-}
-
 export interface WaNoiseConfig {
     readonly clientStaticKeyPair: SignalKeyPair
     readonly isRegistered: boolean
-    readonly loginPayload?: WaNoisePayloadProvider
-    readonly registrationPayload?: WaNoisePayloadProvider
+    readonly loginPayload?: Uint8Array | (() => Uint8Array | Promise<Uint8Array>)
+    readonly registrationPayload?: Uint8Array | (() => Uint8Array | Promise<Uint8Array>)
     readonly loginPayloadConfig?: WaLoginPayloadConfig
     readonly registrationPayloadConfig?: WaRegistrationPayloadConfig
     readonly serverStaticKey?: Uint8Array
@@ -102,16 +83,3 @@ export type RawWebSocketConstructor = new (
     protocols?: string | readonly string[],
     options?: { headers?: Readonly<Record<string, string>> }
 ) => RawWebSocket
-
-export interface ConnectionWaiter {
-    readonly resolve: () => void
-    readonly reject: (error: Error) => void
-    readonly timer: NodeJS.Timeout
-}
-
-export interface PendingSocket {
-    readonly url: string
-    readonly socket: RawWebSocket
-    timer: NodeJS.Timeout | null
-    settled: boolean
-}

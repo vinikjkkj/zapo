@@ -5,34 +5,44 @@ import type {
     WaEncryptedMessageInput,
     WaMessagePublishOptions,
     WaMessagePublishResult,
+    WaSendMessageContent,
     WaSendReceiptInput
 } from '../../message/types'
 import type { WaMessageClient } from '../../message/WaMessageClient'
 import { proto } from '../../proto'
-import type { SignalSessionSyncApi } from '../../signal/api/SignalSessionSyncApi'
-import type { SenderKeyManager } from '../../signal/group/SenderKeyManager'
-import type { SignalProtocol } from '../../signal/session/SignalProtocol'
-import type { SignalAddress } from '../../signal/types'
-import { GROUP_SERVER, USER_SERVER } from '../../transport/constants'
-import type { BinaryNode } from '../../transport/types'
-import { uint8Equal } from '../../util/bytes'
+import type { Proto } from '../../proto'
+import { WA_DEFAULTS } from '../../protocol/constants'
 import {
     isGroupJid,
     normalizeRecipientJid,
     parseSignalAddressFromJid
-} from '../jid'
-import type {
-    WaSendMessageContent,
-    WaSendMessageOptions,
-    WaSignalMessagePublishInput
-} from '../types'
+} from '../../protocol/jid'
+import type { SignalSessionSyncApi } from '../../signal/api/SignalSessionSyncApi'
+import type { SenderKeyManager } from '../../signal/group/SenderKeyManager'
+import type { SignalProtocol } from '../../signal/session/SignalProtocol'
+import type { SignalAddress } from '../../signal/types'
+import type { BinaryNode } from '../../transport/types'
+import { uint8Equal } from '../../util/bytes'
 
-import type { WaMediaMessageCoordinator } from './WaMediaMessageCoordinator'
+interface WaSignalMessagePublishInput {
+    readonly to: string
+    readonly plaintext: Uint8Array
+    readonly expectedIdentity?: Uint8Array
+    readonly id?: string
+    readonly type?: string
+    readonly participant?: string
+    readonly deviceFanout?: string
+}
 
-export interface WaMessageDispatchCoordinatorOptions {
+interface WaSendMessageOptions extends WaMessagePublishOptions {
+    readonly id?: string
+    readonly expectedIdentity?: Uint8Array
+}
+
+interface WaMessageDispatchCoordinatorOptions {
     readonly logger: Logger
     readonly messageClient: WaMessageClient
-    readonly mediaMessage: WaMediaMessageCoordinator
+    readonly buildMessageContent: (content: WaSendMessageContent) => Promise<Proto.IMessage>
     readonly senderKeyManager: SenderKeyManager
     readonly signalProtocol: SignalProtocol
     readonly signalSessionSync: SignalSessionSyncApi
@@ -42,7 +52,9 @@ export interface WaMessageDispatchCoordinatorOptions {
 export class WaMessageDispatchCoordinator {
     private readonly logger: Logger
     private readonly messageClient: WaMessageClient
-    private readonly mediaMessage: WaMediaMessageCoordinator
+    private readonly buildMessageContent: (
+        content: WaSendMessageContent
+    ) => Promise<Proto.IMessage>
     private readonly senderKeyManager: SenderKeyManager
     private readonly signalProtocol: SignalProtocol
     private readonly signalSessionSync: SignalSessionSyncApi
@@ -51,7 +63,7 @@ export class WaMessageDispatchCoordinator {
     public constructor(options: WaMessageDispatchCoordinatorOptions) {
         this.logger = options.logger
         this.messageClient = options.messageClient
-        this.mediaMessage = options.mediaMessage
+        this.buildMessageContent = options.buildMessageContent
         this.senderKeyManager = options.senderKeyManager
         this.signalProtocol = options.signalProtocol
         this.signalSessionSync = options.signalSessionSync
@@ -87,7 +99,7 @@ export class WaMessageDispatchCoordinator {
         options: WaMessagePublishOptions = {}
     ): Promise<WaMessagePublishResult> {
         const address = parseSignalAddressFromJid(input.to)
-        if (address.server === GROUP_SERVER) {
+        if (address.server === WA_DEFAULTS.GROUP_SERVER) {
             throw new Error(
                 'publishSignalMessage currently supports only direct chats; use sender-key flow for groups'
             )
@@ -121,12 +133,16 @@ export class WaMessageDispatchCoordinator {
         content: WaSendMessageContent,
         options: WaSendMessageOptions = {}
     ): Promise<WaMessagePublishResult> {
-        const recipientJid = normalizeRecipientJid(to, USER_SERVER, GROUP_SERVER)
-        const message = await this.mediaMessage.buildMessageContent(content)
+        const recipientJid = normalizeRecipientJid(
+            to,
+            WA_DEFAULTS.HOST_DOMAIN,
+            WA_DEFAULTS.GROUP_SERVER
+        )
+        const message = await this.buildMessageContent(content)
         const plaintext = proto.Message.encode(message).finish()
         const type = resolveMessageTypeAttr(message)
 
-        if (isGroupJid(recipientJid, GROUP_SERVER)) {
+        if (isGroupJid(recipientJid, WA_DEFAULTS.GROUP_SERVER)) {
             const meJid = this.getCurrentMeJid()
             if (!meJid) {
                 throw new Error('group send requires registered meJid')
@@ -163,7 +179,7 @@ export class WaMessageDispatchCoordinator {
 
     public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
         const address = parseSignalAddressFromJid(jid)
-        if (address.server === GROUP_SERVER) {
+        if (address.server === WA_DEFAULTS.GROUP_SERVER) {
             throw new Error('syncSignalSession supports only direct chats')
         }
         await this.ensureSignalSession(address, jid, undefined, reasonIdentity)

@@ -3,16 +3,26 @@ import { webcrypto } from 'node:crypto'
 import { hkdf, randomBytesAsync } from '../../crypto'
 import type { SignalKeyPair } from '../../crypto/curves/types'
 import { X25519 } from '../../crypto/curves/X25519'
+import { WA_PAIRING_KDF_INFO } from '../../protocol/constants'
 import { concatBytes, toBytesView } from '../../util/bytes'
 
 import {
-    ADV_SECRET_INFO,
     CROCKFORD_ALPHABET,
-    LINK_CODE_BUNDLE_INFO,
     PAIRING_TEXT_ENCODER,
     PBKDF2_ITERATIONS
 } from './constants'
-import type { WaCompanionFinishResult, WaCompanionHelloState } from './types'
+
+interface CompanionHelloState {
+    readonly pairingCode: string
+    readonly companionEphemeralKeyPair: SignalKeyPair
+    readonly wrappedCompanionEphemeralPub: Uint8Array
+}
+
+interface CompanionFinishResult {
+    readonly wrappedKeyBundle: Uint8Array
+    readonly companionIdentityPublic: Uint8Array
+    readonly advSecret: Uint8Array
+}
 
 function bytesToCrockford(bytes: Uint8Array): string {
     let bitCount = 0
@@ -72,115 +82,107 @@ function splitWrappedPrimaryPayload(payload: Uint8Array): {
     }
 }
 
-export class WaPairingCodeCrypto {
-    private readonly x25519: X25519
+export async function createCompanionHello(): Promise<CompanionHelloState> {
+    const codeBytes = await randomBytesAsync(5)
+    const pairingCode = bytesToCrockford(codeBytes)
+    const companionEphemeralKeyPair = await X25519.generateKeyPair()
+    const salt = await randomBytesAsync(32)
+    const counter = await randomBytesAsync(16)
+    const cipher = await derivePairingCipher(pairingCode, salt)
+    const encrypted = await webcrypto.subtle.encrypt(
+        {
+            name: 'AES-CTR',
+            counter,
+            length: 64
+        },
+        cipher,
+        companionEphemeralKeyPair.pubKey
+    )
 
-    public constructor(x25519 = new X25519()) {
-        this.x25519 = x25519
+    return {
+        pairingCode,
+        companionEphemeralKeyPair,
+        wrappedCompanionEphemeralPub: concatBytes([salt, counter, toBytesView(encrypted)])
+    }
+}
+
+export async function completeCompanionFinish(args: {
+    readonly pairingCode: string
+    readonly wrappedPrimaryEphemeralPub: Uint8Array
+    readonly primaryIdentityPub: Uint8Array
+    readonly companionEphemeralPrivKey: Uint8Array
+    readonly registrationIdentityKeyPair: SignalKeyPair
+}): Promise<CompanionFinishResult> {
+    const wrapped = splitWrappedPrimaryPayload(args.wrappedPrimaryEphemeralPub)
+    const pairingCipher = await derivePairingCipher(args.pairingCode, wrapped.salt)
+    const decryptedPrimary = await webcrypto.subtle.decrypt(
+        {
+            name: 'AES-CTR',
+            counter: wrapped.counter,
+            length: 64
+        },
+        pairingCipher,
+        wrapped.ciphertext
+    )
+
+    const primaryEphemeralPub = toBytesView(decryptedPrimary)
+    if (primaryEphemeralPub.length === 0) {
+        throw new Error('empty primary ephemeral public key')
     }
 
-    public async createCompanionHello(): Promise<WaCompanionHelloState> {
-        const codeBytes = await randomBytesAsync(5)
-        const pairingCode = bytesToCrockford(codeBytes)
-        const companionEphemeralKeyPair = await this.x25519.generateKeyPair()
-        const salt = await randomBytesAsync(32)
-        const counter = await randomBytesAsync(16)
-        const cipher = await derivePairingCipher(pairingCode, salt)
-        const encrypted = await webcrypto.subtle.encrypt(
-            {
-                name: 'AES-CTR',
-                counter,
-                length: 64
-            },
-            cipher,
-            companionEphemeralKeyPair.pubKey
-        )
+    const sharedEphemeral = await X25519.scalarMult(
+        args.companionEphemeralPrivKey,
+        primaryEphemeralPub
+    )
 
-        return {
-            pairingCode,
-            companionEphemeralKeyPair,
-            wrappedCompanionEphemeralPub: concatBytes([salt, counter, toBytesView(encrypted)])
-        }
-    }
+    const bundleSalt = await randomBytesAsync(32)
+    const bundleSecret = await randomBytesAsync(32)
+    const bundleIv = await randomBytesAsync(12)
 
-    public async completeCompanionFinish(args: {
-        readonly pairingCode: string
-        readonly wrappedPrimaryEphemeralPub: Uint8Array
-        readonly primaryIdentityPub: Uint8Array
-        readonly companionEphemeralPrivKey: Uint8Array
-        readonly registrationIdentityKeyPair: SignalKeyPair
-    }): Promise<WaCompanionFinishResult> {
-        const wrapped = splitWrappedPrimaryPayload(args.wrappedPrimaryEphemeralPub)
-        const pairingCipher = await derivePairingCipher(args.pairingCode, wrapped.salt)
-        const decryptedPrimary = await webcrypto.subtle.decrypt(
-            {
-                name: 'AES-CTR',
-                counter: wrapped.counter,
-                length: 64
-            },
-            pairingCipher,
-            wrapped.ciphertext
-        )
+    const bundleEncryptionKeyRaw = await hkdf(
+        sharedEphemeral,
+        bundleSalt,
+        WA_PAIRING_KDF_INFO.LINK_CODE_BUNDLE,
+        32
+    )
+    const bundleEncryptionKey = await webcrypto.subtle.importKey(
+        'raw',
+        bundleEncryptionKeyRaw,
+        { name: 'AES-GCM' },
+        false,
+        ['encrypt']
+    )
 
-        const primaryEphemeralPub = toBytesView(decryptedPrimary)
-        if (primaryEphemeralPub.length === 0) {
-            throw new Error('empty primary ephemeral public key')
-        }
+    const plaintextBundle = concatBytes([
+        args.registrationIdentityKeyPair.pubKey,
+        args.primaryIdentityPub,
+        bundleSecret
+    ])
+    const encryptedBundle = await webcrypto.subtle.encrypt(
+        {
+            name: 'AES-GCM',
+            iv: bundleIv
+        },
+        bundleEncryptionKey,
+        plaintextBundle
+    )
 
-        const sharedEphemeral = await this.x25519.scalarMult(
-            args.companionEphemeralPrivKey,
-            primaryEphemeralPub
-        )
+    const wrappedKeyBundle = concatBytes([
+        bundleSalt,
+        bundleIv,
+        toBytesView(encryptedBundle)
+    ])
 
-        const bundleSalt = await randomBytesAsync(32)
-        const bundleSecret = await randomBytesAsync(32)
-        const bundleIv = await randomBytesAsync(12)
+    const sharedIdentity = await X25519.scalarMult(
+        args.registrationIdentityKeyPair.privKey,
+        args.primaryIdentityPub
+    )
+    const advMaterial = concatBytes([sharedEphemeral, sharedIdentity, bundleSecret])
+    const advSecret = await hkdf(advMaterial, null, WA_PAIRING_KDF_INFO.ADV_SECRET, 32)
 
-        const bundleEncryptionKeyRaw = await hkdf(
-            sharedEphemeral,
-            bundleSalt,
-            LINK_CODE_BUNDLE_INFO,
-            32
-        )
-        const bundleEncryptionKey = await webcrypto.subtle.importKey(
-            'raw',
-            bundleEncryptionKeyRaw,
-            { name: 'AES-GCM' },
-            false,
-            ['encrypt']
-        )
-
-        const plaintextBundle = concatBytes([
-            args.registrationIdentityKeyPair.pubKey,
-            args.primaryIdentityPub,
-            bundleSecret
-        ])
-        const encryptedBundle = await webcrypto.subtle.encrypt(
-            {
-                name: 'AES-GCM',
-                iv: bundleIv
-            },
-            bundleEncryptionKey,
-            plaintextBundle
-        )
-
-        const wrappedKeyBundle = concatBytes([
-            bundleSalt,
-            bundleIv,
-            toBytesView(encryptedBundle)
-        ])
-
-        const sharedIdentity = await this.x25519.scalarMult(
-            args.registrationIdentityKeyPair.privKey,
-            args.primaryIdentityPub
-        )
-        const advMaterial = concatBytes([sharedEphemeral, sharedIdentity, bundleSecret])
-        const advSecret = await hkdf(advMaterial, null, ADV_SECRET_INFO, 32)
-
-        return {
-            wrappedKeyBundle,
-            companionIdentityPublic: args.registrationIdentityKeyPair.pubKey,
-            advSecret
-        }
+    return {
+        wrappedKeyBundle,
+        companionIdentityPublic: args.registrationIdentityKeyPair.pubKey,
+        advSecret
     }
 }

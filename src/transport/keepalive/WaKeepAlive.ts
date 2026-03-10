@@ -1,14 +1,20 @@
 import type { Logger } from '../../infra/log/types'
+import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '../../protocol/constants'
 import type { BinaryNode } from '../../transport/types'
-import { toError } from '../../util/errors'
+import { toError } from '../../util/primitives'
 import type { WaComms } from '../WaComms'
 
-import {
-    DEFAULT_DEAD_SOCKET_TIMEOUT_MS,
-    DEFAULT_HEALTH_CHECK_INTERVAL_MS,
-    DEFAULT_HOST_DOMAIN
-} from './constants'
-import type { WaKeepAliveOptions } from './types'
+interface WaKeepAliveOptions {
+    readonly logger: Logger
+    readonly nodeOrchestrator: {
+        hasPending(): boolean
+        query(node: BinaryNode, timeoutMs?: number): Promise<BinaryNode>
+    }
+    readonly getComms: () => WaComms | null
+    readonly intervalMs?: number
+    readonly timeoutMs?: number
+    readonly hostDomain?: string
+}
 
 export class WaKeepAlive {
     private readonly logger: Logger
@@ -25,9 +31,9 @@ export class WaKeepAlive {
         this.logger = options.logger
         this.nodeOrchestrator = options.nodeOrchestrator
         this.getCommsFn = options.getComms
-        this.intervalMs = options.intervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS
-        this.timeoutMs = options.timeoutMs ?? DEFAULT_DEAD_SOCKET_TIMEOUT_MS
-        this.hostDomain = options.hostDomain ?? DEFAULT_HOST_DOMAIN
+        this.intervalMs = options.intervalMs ?? WA_DEFAULTS.HEALTH_CHECK_INTERVAL_MS
+        this.timeoutMs = options.timeoutMs ?? WA_DEFAULTS.DEAD_SOCKET_TIMEOUT_MS
+        this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
         this.timer = null
         this.generation = 0
         this.inFlight = false
@@ -97,11 +103,11 @@ export class WaKeepAlive {
         const startedAt = Date.now()
         try {
             const pingNode: BinaryNode = {
-                tag: 'iq',
+                tag: WA_NODE_TAGS.IQ,
                 attrs: {
                     to: this.hostDomain,
-                    type: 'get',
-                    xmlns: 'w:p'
+                    type: WA_IQ_TYPES.GET,
+                    xmlns: WA_XMLNS.WHATSAPP_PING
                 }
             }
             await this.nodeOrchestrator.query(pingNode, this.timeoutMs)

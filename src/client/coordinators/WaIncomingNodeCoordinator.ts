@@ -1,5 +1,6 @@
 import type { WaSuccessPersistAttributes } from '../../auth/types'
 import type { Logger } from '../../infra/log/types'
+import { WA_NODE_TAGS } from '../../protocol/constants'
 import {
     decodeBinaryNodeContent,
     findNodeChild,
@@ -7,21 +8,14 @@ import {
 } from '../../transport/node/helpers'
 import {
     parseStreamControlNode,
-    parseSuccessPersistAttributes
+    parseSuccessPersistAttributes,
+    type WaStreamControlNodeResult
 } from '../../transport/stream/parse'
-import type { WaStreamControlNodeResult } from '../../transport/stream/types'
 import type { BinaryNode } from '../../transport/types'
-import { toError } from '../../util/errors'
-import {
-    INFO_BULLETIN_DIRTY_TAG,
-    INFO_BULLETIN_EDGE_ROUTING_TAG,
-    INFO_BULLETIN_NODE_TAG,
-    INFO_BULLETIN_ROUTING_INFO_TAG,
-    SUCCESS_NODE_TAG
-} from '../constants'
-import type { WaDirtyBit } from '../sync/types'
+import { toError } from '../../util/primitives'
+import type { WaDirtyBit } from '../sync/dirty'
 
-export interface WaIncomingNodeRuntimePort {
+interface WaIncomingNodeRuntimePort {
     readonly handleStreamControlResult: (result: WaStreamControlNodeResult) => Promise<void>
     readonly persistSuccessAttributes: (attributes: WaSuccessPersistAttributes) => Promise<void>
     readonly emitSuccessNode: (node: BinaryNode) => void
@@ -32,12 +26,12 @@ export interface WaIncomingNodeRuntimePort {
     readonly dispatchIncomingNode: (node: BinaryNode) => Promise<unknown>
 }
 
-export interface WaIncomingNodeDirtySyncPort {
+interface WaIncomingNodeDirtySyncPort {
     readonly parseDirtyBits: (nodes: readonly BinaryNode[]) => readonly WaDirtyBit[]
     readonly handleDirtyBits: (dirtyBits: readonly WaDirtyBit[]) => Promise<void>
 }
 
-export interface WaIncomingNodeCoordinatorOptions {
+interface WaIncomingNodeCoordinatorOptions {
     readonly logger: Logger
     readonly runtime: WaIncomingNodeRuntimePort
     readonly dirtySync: WaIncomingNodeDirtySyncPort
@@ -77,7 +71,7 @@ export class WaIncomingNodeCoordinator {
     }
 
     private async handleSuccessNode(node: BinaryNode): Promise<boolean> {
-        if (node.tag !== SUCCESS_NODE_TAG) {
+        if (node.tag !== WA_NODE_TAGS.SUCCESS) {
             return false
         }
 
@@ -130,15 +124,15 @@ export class WaIncomingNodeCoordinator {
     }
 
     private async handleInfoBulletinNode(node: BinaryNode): Promise<boolean> {
-        if (node.tag !== INFO_BULLETIN_NODE_TAG) {
+        if (node.tag !== WA_NODE_TAGS.INFO_BULLETIN) {
             return false
         }
-        const edgeRoutingNode = findNodeChild(node, INFO_BULLETIN_EDGE_ROUTING_TAG)
+        const edgeRoutingNode = findNodeChild(node, WA_NODE_TAGS.EDGE_ROUTING)
         if (edgeRoutingNode) {
             await this.handleEdgeRoutingInfoNode(edgeRoutingNode)
         }
 
-        const dirtyNodes = getNodeChildrenByTag(node, INFO_BULLETIN_DIRTY_TAG)
+        const dirtyNodes = getNodeChildrenByTag(node, WA_NODE_TAGS.DIRTY)
         const dirtyBits = this.dirtySync.parseDirtyBits(dirtyNodes)
         if (dirtyBits.length > 0) {
             await this.dirtySync.handleDirtyBits(dirtyBits)
@@ -147,14 +141,14 @@ export class WaIncomingNodeCoordinator {
     }
 
     private async handleEdgeRoutingInfoNode(edgeRoutingNode: BinaryNode): Promise<void> {
-        const routingInfoNode = findNodeChild(edgeRoutingNode, INFO_BULLETIN_ROUTING_INFO_TAG)
+        const routingInfoNode = findNodeChild(edgeRoutingNode, WA_NODE_TAGS.ROUTING_INFO)
         if (!routingInfoNode) {
             return
         }
         try {
             const routingInfo = decodeBinaryNodeContent(
                 routingInfoNode.content,
-                `ib.${INFO_BULLETIN_EDGE_ROUTING_TAG}.${INFO_BULLETIN_ROUTING_INFO_TAG}`
+                `ib.${WA_NODE_TAGS.EDGE_ROUTING}.${WA_NODE_TAGS.ROUTING_INFO}`
             )
             await this.runtime.persistRoutingInfo(routingInfo)
             this.logger.info('updated routing info from info bulletin', {

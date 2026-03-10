@@ -3,11 +3,17 @@ import { EventEmitter } from 'node:events'
 import { ConsoleLogger } from '../../infra/log/ConsoleLogger'
 import type { Logger } from '../../infra/log/types'
 import type { BinaryNode } from '../../transport/types'
-import { toError } from '../../util/errors'
+import { toError } from '../../util/primitives'
 import { decodeBinaryNodeStanza, encodeBinaryNodeStanza } from '../binary'
 import type { WaComms } from '../WaComms'
 
-import type { WaNodeTransportEventMap } from './types'
+interface NodeTransportEventMap {
+    readonly frame_in: (frame: Uint8Array) => void
+    readonly frame_out: (frame: Uint8Array) => void
+    readonly node_in: (node: BinaryNode, frame: Uint8Array) => void
+    readonly node_out: (node: BinaryNode, frame: Uint8Array) => void
+    readonly decode_error: (error: Error, frame: Uint8Array) => void
+}
 
 export class WaNodeTransport extends EventEmitter {
     private readonly logger: Logger
@@ -19,9 +25,9 @@ export class WaNodeTransport extends EventEmitter {
         this.comms = null
     }
 
-    public override on<K extends keyof WaNodeTransportEventMap>(
+    public override on<K extends keyof NodeTransportEventMap>(
         event: K,
-        listener: WaNodeTransportEventMap[K]
+        listener: NodeTransportEventMap[K]
     ): this {
         return super.on(event, listener as (...args: unknown[]) => void)
     }

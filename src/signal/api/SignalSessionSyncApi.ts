@@ -1,21 +1,33 @@
+import type { Logger } from '../../infra/log/types'
+import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '../../protocol/constants'
 import { findNodeChild, getNodeChildrenByTag, decodeBinaryNodeContent } from '../../transport/node/helpers'
 import type { BinaryNode } from '../../transport/types'
 import type { SignalPreKeyBundle } from '../types'
 
 import {
-    SIGNAL_FETCH_KEY_BUNDLES_HOST,
-    SIGNAL_FETCH_KEY_BUNDLES_TIMEOUT_MS,
-    SIGNAL_FETCH_KEY_BUNDLES_XMLNS,
     SIGNAL_KEY_DATA_LENGTH,
     SIGNAL_KEY_ID_LENGTH,
     SIGNAL_REGISTRATION_ID_LENGTH,
     SIGNAL_SIGNATURE_LENGTH
 } from './constants'
-import type {
-    SignalFetchKeyBundleTarget,
-    SignalFetchedKeyBundle,
-    SignalSessionSyncApiOptions
-} from './types'
+
+interface SignalSessionSyncApiOptions {
+    readonly logger: Logger
+    readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
+    readonly defaultTimeoutMs?: number
+    readonly hostDomain?: string
+}
+
+interface SignalFetchKeyBundleTarget {
+    readonly jid: string
+    readonly reasonIdentity?: boolean
+}
+
+interface SignalFetchedKeyBundle {
+    readonly jid: string
+    readonly bundle: SignalPreKeyBundle
+    readonly deviceIdentity?: Uint8Array
+}
 
 export class SignalSessionSyncApi {
     private readonly logger: SignalSessionSyncApiOptions['logger']
@@ -26,8 +38,9 @@ export class SignalSessionSyncApi {
     public constructor(options: SignalSessionSyncApiOptions) {
         this.logger = options.logger
         this.query = options.query
-        this.defaultTimeoutMs = options.defaultTimeoutMs ?? SIGNAL_FETCH_KEY_BUNDLES_TIMEOUT_MS
-        this.hostDomain = options.hostDomain ?? SIGNAL_FETCH_KEY_BUNDLES_HOST
+        this.defaultTimeoutMs =
+            options.defaultTimeoutMs ?? WA_DEFAULTS.SIGNAL_FETCH_KEY_BUNDLES_TIMEOUT_MS
+        this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
     }
 
     public async fetchKeyBundle(
@@ -53,19 +66,19 @@ export class SignalSessionSyncApi {
 
     private makeFetchKeyBundleRequest(target: SignalFetchKeyBundleTarget): BinaryNode {
         return {
-            tag: 'iq',
+            tag: WA_NODE_TAGS.IQ,
             attrs: {
-                type: 'get',
-                xmlns: SIGNAL_FETCH_KEY_BUNDLES_XMLNS,
+                type: WA_IQ_TYPES.GET,
+                xmlns: WA_XMLNS.SIGNAL,
                 to: this.hostDomain
             },
             content: [
                 {
-                    tag: 'key',
+                    tag: WA_NODE_TAGS.KEY,
                     attrs: {},
                     content: [
                         {
-                            tag: 'user',
+                            tag: WA_NODE_TAGS.USER,
                             attrs: {
                                 jid: target.jid,
                                 ...(target.reasonIdentity ? { reason: 'identity' } : {})
@@ -78,28 +91,28 @@ export class SignalSessionSyncApi {
     }
 
     private parseFetchKeyBundleResponse(node: BinaryNode, expectedJid: string): SignalFetchedKeyBundle {
-        if (node.tag !== 'iq') {
+        if (node.tag !== WA_NODE_TAGS.IQ) {
             throw new Error(`invalid key bundle response tag: ${node.tag}`)
         }
-        if (node.attrs.type === 'error') {
+        if (node.attrs.type === WA_IQ_TYPES.ERROR) {
             throw new Error(this.describeIqError(node))
         }
-        if (node.attrs.type !== 'result') {
+        if (node.attrs.type !== WA_IQ_TYPES.RESULT) {
             throw new Error(`invalid key bundle response type: ${node.attrs.type ?? 'unknown'}`)
         }
 
-        const listNode = findNodeChild(node, 'list')
+        const listNode = findNodeChild(node, WA_NODE_TAGS.LIST)
         if (!listNode) {
             throw new Error('key bundle response missing list node')
         }
-        const userNodes = getNodeChildrenByTag(listNode, 'user')
+        const userNodes = getNodeChildrenByTag(listNode, WA_NODE_TAGS.USER)
         if (userNodes.length === 0) {
             throw new Error('key bundle response list is empty')
         }
 
         const userNode = this.pickUserNode(userNodes, expectedJid)
         const userJid = userNode.attrs.jid ?? expectedJid
-        const userErrorNode = findNodeChild(userNode, 'error')
+        const userErrorNode = findNodeChild(userNode, WA_NODE_TAGS.ERROR)
         if (userErrorNode) {
             const code = userErrorNode.attrs.code ?? 'unknown'
             const text = userErrorNode.attrs.text ?? 'unknown'
@@ -128,15 +141,15 @@ export class SignalSessionSyncApi {
         readonly bundle: SignalPreKeyBundle
         readonly deviceIdentity?: Uint8Array
     } {
-        const registrationNode = findNodeChild(node, 'registration')
+        const registrationNode = findNodeChild(node, WA_NODE_TAGS.REGISTRATION)
         if (!registrationNode) {
             throw new Error('key bundle user missing registration node')
         }
-        const identityNode = findNodeChild(node, 'identity')
+        const identityNode = findNodeChild(node, WA_NODE_TAGS.IDENTITY)
         if (!identityNode) {
             throw new Error('key bundle user missing identity node')
         }
-        const signedPreKeyNode = findNodeChild(node, 'skey')
+        const signedPreKeyNode = findNodeChild(node, WA_NODE_TAGS.SKEY)
         if (!signedPreKeyNode) {
             throw new Error('key bundle user missing signed pre-key node')
         }
@@ -159,9 +172,9 @@ export class SignalSessionSyncApi {
         const identity = decodeBinaryNodeContent(identityNode.content, 'key bundle identity')
         this.assertLength(identity, SIGNAL_KEY_DATA_LENGTH, 'key bundle identity')
 
-        const signedIdNode = findNodeChild(signedPreKeyNode, 'id')
-        const signedValueNode = findNodeChild(signedPreKeyNode, 'value')
-        const signedSignatureNode = findNodeChild(signedPreKeyNode, 'signature')
+        const signedIdNode = findNodeChild(signedPreKeyNode, WA_NODE_TAGS.ID)
+        const signedValueNode = findNodeChild(signedPreKeyNode, WA_NODE_TAGS.VALUE)
+        const signedSignatureNode = findNodeChild(signedPreKeyNode, WA_NODE_TAGS.SIGNATURE)
         if (!signedIdNode || !signedValueNode || !signedSignatureNode) {
             throw new Error('key bundle signed pre-key is incomplete')
         }
@@ -183,11 +196,11 @@ export class SignalSessionSyncApi {
             'key bundle skey.signature'
         )
 
-        const preKeyNode = findNodeChild(node, 'key')
+        const preKeyNode = findNodeChild(node, WA_NODE_TAGS.KEY)
         let oneTimeKey: SignalPreKeyBundle['oneTimeKey']
         if (preKeyNode) {
-            const preKeyIdNode = findNodeChild(preKeyNode, 'id')
-            const preKeyValueNode = findNodeChild(preKeyNode, 'value')
+            const preKeyIdNode = findNodeChild(preKeyNode, WA_NODE_TAGS.ID)
+            const preKeyValueNode = findNodeChild(preKeyNode, WA_NODE_TAGS.VALUE)
             if (!preKeyIdNode || !preKeyValueNode) {
                 throw new Error('key bundle one-time pre-key is incomplete')
             }
@@ -208,7 +221,7 @@ export class SignalSessionSyncApi {
             }
         }
 
-        const deviceIdentityNode = findNodeChild(node, 'device-identity')
+        const deviceIdentityNode = findNodeChild(node, WA_NODE_TAGS.DEVICE_IDENTITY)
         const deviceIdentity = deviceIdentityNode
             ? decodeBinaryNodeContent(deviceIdentityNode.content, 'key bundle device-identity')
             : undefined
@@ -239,7 +252,7 @@ export class SignalSessionSyncApi {
     }
 
     private describeIqError(node: BinaryNode): string {
-        const errorNode = findNodeChild(node, 'error')
+        const errorNode = findNodeChild(node, WA_NODE_TAGS.ERROR)
         if (!errorNode) {
             return `key bundle iq error for ${node.attrs.id ?? 'unknown id'}`
         }
@@ -248,4 +261,3 @@ export class SignalSessionSyncApi {
         return `key bundle iq error (${code} ${text})`
     }
 }
-

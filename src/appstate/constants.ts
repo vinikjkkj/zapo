@@ -1,7 +1,6 @@
-import type { AppStateCollectionName } from './types'
+import { WA_APP_STATE_COLLECTIONS } from '../protocol/constants'
 
-export const APP_STATE_HKDF_INFO = 'WhatsApp Mutation Keys'
-export const APP_STATE_LT_HASH_SALT = 'WhatsApp Patch Integrity'
+import type { AppStateCollectionName } from './types'
 
 export const APP_STATE_DERIVED_KEY_LENGTH = 160
 export const APP_STATE_DERIVED_INDEX_KEY_END = 32
@@ -16,20 +15,15 @@ export const APP_STATE_IV_LENGTH = 16
 export const APP_STATE_LT_HASH_SIZE = 128
 export const APP_STATE_POINT_SIZE = 2
 
-export const APP_STATE_OPERATION_SET = 0
-export const APP_STATE_OPERATION_REMOVE = 1
-
 export const APP_STATE_EMPTY_LT_HASH = new Uint8Array(APP_STATE_LT_HASH_SIZE)
 
 export const APP_STATE_DEFAULT_COLLECTIONS: readonly AppStateCollectionName[] = [
-    'critical_unblock_low',
-    'critical_block',
-    'regular_low',
-    'regular',
-    'regular_high'
+    WA_APP_STATE_COLLECTIONS.CRITICAL_UNBLOCK_LOW,
+    WA_APP_STATE_COLLECTIONS.CRITICAL_BLOCK,
+    WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+    WA_APP_STATE_COLLECTIONS.REGULAR,
+    WA_APP_STATE_COLLECTIONS.REGULAR_HIGH
 ]
 
-export const APP_STATE_DEFAULT_SYNC_TIMEOUT_MS = 30_000
-export const APP_STATE_HOST_DOMAIN = 's.whatsapp.net'
 export const APP_STATE_TEXT_ENCODER = new TextEncoder()
 export const APP_STATE_TEXT_DECODER = new TextDecoder()

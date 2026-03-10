@@ -1,3 +1,4 @@
+import { WA_DEFAULTS } from '../../protocol/constants'
 import type {
     PreKeyRecord,
     RegistrationInfo,
@@ -151,7 +152,7 @@ export class WaSignalStore {
     }
 
     private addressKey(address: SignalAddress): string {
-        const server = address.server ?? 's.whatsapp.net'
+        const server = address.server ?? WA_DEFAULTS.HOST_DOMAIN
         return `${address.user}|${server}|${address.device}`
     }
 }

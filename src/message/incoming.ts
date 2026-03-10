@@ -1,14 +1,12 @@
+import type { Logger } from '../infra/log/types'
+import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES } from '../protocol/constants'
 import type { BinaryNode } from '../transport/types'
 
-import {
-    ACK_CLASS_MESSAGE,
-    ACK_NODE_TAG,
-    MESSAGE_MEDIA_NOTIFY_TYPE,
-    MESSAGE_NODE_TAG,
-    RECEIPT_NODE_TAG,
-    RECEIPT_TYPE_PEER
-} from './constants'
-import type { WaIncomingMessageAckHandlerOptions } from './types'
+interface WaIncomingMessageAckHandlerOptions {
+    readonly logger: Logger
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly getMeJid?: () => string | null | undefined
+}
 
 export function buildInboundMessageAckNode(
     messageNode: BinaryNode,
@@ -19,7 +17,7 @@ export function buildInboundMessageAckNode(
     const attrs: Record<string, string> = {
         id,
         to,
-        class: ACK_CLASS_MESSAGE
+        class: WA_MESSAGE_TYPES.ACK_CLASS_MESSAGE
     }
     if (messageNode.attrs.type) {
         attrs.type = messageNode.attrs.type
@@ -31,7 +29,7 @@ export function buildInboundMessageAckNode(
         attrs.from = meJid
     }
     return {
-        tag: ACK_NODE_TAG,
+        tag: WA_MESSAGE_TAGS.ACK,
         attrs
     }
 }
@@ -49,10 +47,10 @@ export function buildInboundDeliveryReceiptNode(
         attrs.participant = messageNode.attrs.participant
     }
     if (messageNode.attrs.category === 'peer') {
-        attrs.type = RECEIPT_TYPE_PEER
+        attrs.type = WA_MESSAGE_TYPES.RECEIPT_TYPE_PEER
     }
     return {
-        tag: RECEIPT_NODE_TAG,
+        tag: WA_MESSAGE_TAGS.RECEIPT,
         attrs
     }
 }
@@ -61,7 +59,7 @@ export async function handleIncomingMessageAck(
     node: BinaryNode,
     options: WaIncomingMessageAckHandlerOptions
 ): Promise<boolean> {
-    if (node.tag !== MESSAGE_NODE_TAG) {
+    if (node.tag !== WA_MESSAGE_TAGS.MESSAGE) {
         return false
     }
 
@@ -76,7 +74,7 @@ export async function handleIncomingMessageAck(
         return false
     }
 
-    if (node.attrs.type === MESSAGE_MEDIA_NOTIFY_TYPE) {
+    if (node.attrs.type === WA_MESSAGE_TYPES.MEDIA_NOTIFY) {
         const ackNode = buildInboundMessageAckNode(node, id, from, options.getMeJid?.())
         options.logger.debug('sending inbound message ack', {
             id,

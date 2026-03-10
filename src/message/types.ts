@@ -1,29 +1,6 @@
-import type { Logger } from '../infra/log/types'
+import type { MediaKind } from '../media/types'
 import type { Proto } from '../proto'
 import type { BinaryNode } from '../transport/types'
-
-export type ProtoMessage = Proto.IMessage
-export type ProtoWebMessageInfo = Proto.IWebMessageInfo
-export type ProtoMessageKey = Proto.IMessageKey
-
-export type OutgoingMessageKind =
-    | 'text'
-    | 'image'
-    | 'video'
-    | 'audio'
-    | 'document'
-    | 'sticker'
-    | 'reaction'
-    | 'location'
-    | 'contact'
-
-export interface OutgoingMessage {
-    readonly kind: OutgoingMessageKind
-    readonly chatJid: string
-    readonly message: ProtoMessage
-}
-
-export type MessageEncType = 'msg' | 'pkmsg' | 'skmsg'
 
 export interface WaMessagePublishOptions {
     readonly ackTimeoutMs?: number
@@ -37,13 +14,9 @@ export interface WaMessagePublishResult {
     readonly ackNode: BinaryNode
 }
 
-export type WaSendMediaType = 'image' | 'video' | 'audio' | 'document' | 'sticker'
-
-export type WaSendMediaData = Uint8Array | ArrayBuffer
-
 export interface WaSendMediaMessage {
-    readonly type: WaSendMediaType
-    readonly media: WaSendMediaData
+    readonly type: MediaKind
+    readonly media: Uint8Array | ArrayBuffer
     readonly mimetype: string
     readonly caption?: string
     readonly fileName?: string
@@ -58,7 +31,7 @@ export type WaSendMessageContent = string | Proto.IMessage | WaSendMediaMessage
 
 export interface WaEncryptedMessageInput {
     readonly to: string
-    readonly encType: MessageEncType
+    readonly encType: 'msg' | 'pkmsg' | 'skmsg'
     readonly ciphertext: Uint8Array
     readonly id?: string
     readonly type?: string
@@ -73,16 +46,4 @@ export interface WaSendReceiptInput {
     readonly participant?: string
     readonly from?: string
     readonly t?: string
-}
-
-export interface WaMessageClientOptions {
-    readonly logger: Logger
-    readonly sendNode: (node: BinaryNode) => Promise<void>
-    readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
-}
-
-export interface WaIncomingMessageAckHandlerOptions {
-    readonly logger: Logger
-    readonly sendNode: (node: BinaryNode) => Promise<void>
-    readonly getMeJid?: () => string | null | undefined
 }

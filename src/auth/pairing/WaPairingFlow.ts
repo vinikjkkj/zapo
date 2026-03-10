@@ -1,5 +1,12 @@
 import { randomBytesAsync } from '../../crypto'
+import type { SignalKeyPair } from '../../crypto/curves/types'
 import type { Logger } from '../../infra/log/types'
+import { proto } from '../../proto'
+import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_SIGNALING } from '../../protocol/constants'
+import {
+    ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE,
+    WaAdvSignature
+} from '../../signal/crypto/WaAdvSignature'
 import {
     asNodeBytes,
     findNodeChild,
@@ -7,11 +14,11 @@ import {
     hasNodeChild
 } from '../../transport/node/helpers'
 import type { BinaryNode } from '../../transport/types'
-import { uint8Equal } from '../../util/bytes'
+import { decodeProtoBytes } from '../../util/base64'
+import { concatBytes, uint8Equal } from '../../util/bytes'
 import type { WaAuthCredentials } from '../types'
+import { parsePhoneJid } from '../../protocol/jid'
 
-import { IQ_TIMEOUT_MS, PAIRING_CODE_MAX_AGE_SECONDS } from './constants'
-import { parsePhoneJid } from './identity'
 import {
     buildCompanionFinishRequestNode,
     buildCompanionHelloRequestNode,
@@ -20,39 +27,66 @@ import {
     buildNotificationAckNode,
     extractPairDeviceRefs
 } from './nodes'
-import type {
-    ActivePairingSession,
-    WaPairingFlowCallbacks,
-    WaPairingFlowOptions
-} from './types'
-import { WaPairingCodeCrypto } from './WaPairingCodeCrypto'
-import { WaPairingSuccessHandler } from './WaPairingSuccessHandler'
+import {
+    completeCompanionFinish,
+    createCompanionHello
+} from './WaPairingCodeCrypto'
+
+const DEFAULT_BROWSER_DISPLAY_NAME = `${WA_DEFAULTS.DEVICE_BROWSER[0].toUpperCase()}${WA_DEFAULTS.DEVICE_BROWSER.slice(1)}`
+
+interface ActivePairingSession {
+    readonly ref?: Uint8Array
+    readonly createdAtSeconds: number
+    readonly companionEphemeralKeyPair: SignalKeyPair
+    readonly phoneJid: string
+    readonly pairingCode: string
+    attempts: number
+    finished: boolean
+}
+
+interface WaPairingFlowOptions {
+    readonly logger: Logger
+    readonly getCredentials: () => WaAuthCredentials | null
+    readonly updateCredentials: (credentials: WaAuthCredentials) => Promise<void>
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
+    readonly setQrRefs: (refs: readonly string[]) => void
+    readonly clearQr: () => void
+    readonly refreshQr: () => void
+    readonly getDevicePlatform: () => string
+    readonly emitPairingCode: (code: string) => void
+    readonly emitPairingRefresh: (forceManual: boolean) => void
+    readonly emitPaired: (credentials: WaAuthCredentials) => void
+}
 
 export class WaPairingFlow {
     private readonly logger: Logger
-    private readonly pairingCrypto: WaPairingCodeCrypto
-    private readonly auth: WaPairingFlowOptions['auth']
-    private readonly socket: WaPairingFlowOptions['socket']
-    private readonly qr: WaPairingFlowOptions['qr']
-    private readonly callbacks: WaPairingFlowCallbacks
-    private readonly pairingSuccessHandler: WaPairingSuccessHandler
+    private readonly getCredentials: () => WaAuthCredentials | null
+    private readonly updateCredentials: (credentials: WaAuthCredentials) => Promise<void>
+    private readonly sendNode: (node: BinaryNode) => Promise<void>
+    private readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
+    private readonly setQrRefs: (refs: readonly string[]) => void
+    private readonly clearQr: () => void
+    private readonly refreshQr: () => void
+    private readonly getDevicePlatform: () => string
+    private readonly emitPairingCode: (code: string) => void
+    private readonly emitPairingRefresh: (forceManual: boolean) => void
+    private readonly emitPaired: (credentials: WaAuthCredentials) => void
     private pairingSession: ActivePairingSession | null
 
     public constructor(options: WaPairingFlowOptions) {
         this.logger = options.logger
-        this.pairingCrypto = options.pairingCrypto
-        this.auth = options.auth
-        this.socket = options.socket
-        this.qr = options.qr
-        this.callbacks = options.callbacks
-        this.pairingSuccessHandler = new WaPairingSuccessHandler({
-            logger: options.logger,
-            advSignature: options.advSignature,
-            auth: this.auth,
-            socket: this.socket,
-            qr: this.qr,
-            emitPaired: this.callbacks.emitPaired
-        })
+        this.getCredentials = options.getCredentials
+        this.updateCredentials = options.updateCredentials
+        this.sendNode = options.sendNode
+        this.query = options.query
+        this.setQrRefs = options.setQrRefs
+        this.clearQr = options.clearQr
+        this.refreshQr = options.refreshQr
+        this.getDevicePlatform = options.getDevicePlatform
+        this.emitPairingCode = options.emitPairingCode
+        this.emitPairingRefresh = options.emitPairingRefresh
+        this.emitPaired = options.emitPaired
         this.pairingSession = null
     }
 
@@ -74,42 +108,36 @@ export class WaPairingFlow {
         })
         const credentials = this.requireCredentials()
         const phoneJid = parsePhoneJid(phoneNumber)
-        const companionHello = await this.pairingCrypto.createCompanionHello()
+        const companionHello = await createCompanionHello()
+        const refreshedCredentials = await this.rotateAdvSecret(credentials)
 
-        const refreshedCredentials: WaAuthCredentials = {
-            ...credentials,
-            advSecretKey: await randomBytesAsync(32)
-        }
-        await this.auth.updateCredentials(refreshedCredentials)
-
-        const response = await this.socket.query(
+        const response = await this.query(
             buildCompanionHelloRequestNode({
                 phoneJid,
                 shouldShowPushNotification,
                 wrappedCompanionEphemeralPub: companionHello.wrappedCompanionEphemeralPub,
                 companionServerAuthKeyPub: refreshedCredentials.noiseKeyPair.pubKey,
-                companionPlatformId: this.auth.getDevicePlatform(),
-                companionPlatformDisplay: `Firefox (${process.platform})`
+                companionPlatformId: this.getDevicePlatform(),
+                companionPlatformDisplay: `${DEFAULT_BROWSER_DISPLAY_NAME} (${process.platform})`
             }),
-            IQ_TIMEOUT_MS
+            WA_DEFAULTS.IQ_TIMEOUT_MS
         )
         this.logger.debug('pairing code request response received', {
             responseTag: response.tag,
             responseType: response.attrs.type
         })
 
-        const linkCodeNode = findNodeChild(response, 'link_code_companion_reg')
+        const linkCodeNode = findNodeChild(response, WA_NODE_TAGS.LINK_CODE_COMPANION_REG)
         if (!linkCodeNode) {
             throw new Error('companion hello response missing link_code_companion_reg')
         }
-        const refNode = findNodeChild(linkCodeNode, 'link_code_pairing_ref')
+        const refNode = findNodeChild(linkCodeNode, WA_NODE_TAGS.LINK_CODE_PAIRING_REF)
         if (!refNode) {
             throw new Error('companion hello response missing link_code_pairing_ref')
         }
 
         const ref = asNodeBytes(refNode.content, 'link_code_pairing_ref')
         this.pairingSession = {
-            code: companionHello.pairingCode,
             pairingCode: companionHello.pairingCode,
             phoneJid,
             ref,
@@ -118,7 +146,7 @@ export class WaPairingFlow {
             attempts: 0,
             finished: false
         }
-        this.callbacks.emitPairingCode(companionHello.pairingCode)
+        this.emitPairingCode(companionHello.pairingCode)
         this.logger.info('pairing code emitted', {
             phoneJid,
             createdAtSeconds: this.pairingSession.createdAtSeconds
@@ -128,8 +156,8 @@ export class WaPairingFlow {
 
     public async fetchPairingCountryCodeIso(): Promise<string> {
         this.logger.trace('fetching pairing country code ISO')
-        const response = await this.socket.query(buildGetCountryCodeRequestNode(), IQ_TIMEOUT_MS)
-        const countryCodeNode = findNodeChild(response, 'country_code')
+        const response = await this.query(buildGetCountryCodeRequestNode(), WA_DEFAULTS.IQ_TIMEOUT_MS)
+        const countryCodeNode = findNodeChild(response, WA_NODE_TAGS.COUNTRY_CODE)
         const iso = countryCodeNode?.attrs.iso
         if (!iso) {
             throw new Error('country_code response is missing iso')
@@ -147,12 +175,12 @@ export class WaPairingFlow {
         if (!firstChild) {
             return false
         }
-        if (firstChild.tag === 'pair-device') {
+        if (firstChild.tag === WA_NODE_TAGS.PAIR_DEVICE) {
             this.logger.debug('handling pair-device stanza', { id: node.attrs.id })
             await this.handlePairDevice(node, firstChild)
             return true
         }
-        if (firstChild.tag === 'pair-success') {
+        if (firstChild.tag === WA_NODE_TAGS.PAIR_SUCCESS) {
             this.logger.debug('handling pair-success stanza', { id: node.attrs.id })
             await this.handlePairSuccess(node, firstChild)
             return true
@@ -161,7 +189,7 @@ export class WaPairingFlow {
     }
 
     public async handleLinkCodeNotification(node: BinaryNode): Promise<boolean> {
-        const linkCodeNode = findNodeChild(node, 'link_code_companion_reg')
+        const linkCodeNode = findNodeChild(node, WA_NODE_TAGS.LINK_CODE_COMPANION_REG)
         if (!linkCodeNode) {
             return false
         }
@@ -169,11 +197,11 @@ export class WaPairingFlow {
             id: node.attrs.id,
             stage: linkCodeNode.attrs.stage
         })
-        await this.socket.sendNode(buildNotificationAckNode(node))
+        await this.sendNode(buildNotificationAckNode(node))
 
         const stage = linkCodeNode.attrs.stage
-        if (stage === 'refresh_code') {
-            const refNode = findNodeChild(linkCodeNode, 'link_code_pairing_ref')
+        if (stage === WA_SIGNALING.LINK_CODE_STAGE_REFRESH_CODE) {
+            const refNode = findNodeChild(linkCodeNode, WA_NODE_TAGS.LINK_CODE_PAIRING_REF)
             if (!refNode || !this.pairingSession?.ref) {
                 return true
             }
@@ -182,14 +210,12 @@ export class WaPairingFlow {
                 this.logger.info('received pairing refresh notification', {
                     forceManualRefresh: linkCodeNode.attrs.force_manual_refresh === 'true'
                 })
-                this.callbacks.emitPairingRefresh(
-                    linkCodeNode.attrs.force_manual_refresh === 'true'
-                )
+                this.emitPairingRefresh(linkCodeNode.attrs.force_manual_refresh === 'true')
             }
             return true
         }
 
-        if (stage !== 'primary_hello') {
+        if (stage !== WA_SIGNALING.LINK_CODE_STAGE_PRIMARY_HELLO) {
             return true
         }
         await this.handlePrimaryHello(linkCodeNode)
@@ -197,48 +223,155 @@ export class WaPairingFlow {
     }
 
     public async handleCompanionRegRefreshNotification(node: BinaryNode): Promise<boolean> {
-        if (node.tag !== 'notification' || node.attrs.type !== 'companion_reg_refresh') {
+        if (
+            node.tag !== WA_NODE_TAGS.NOTIFICATION ||
+            node.attrs.type !== WA_SIGNALING.COMPANION_REG_REFRESH_NOTIFICATION
+        ) {
             return false
         }
         const hasExpectedChild =
-            hasNodeChild(node, 'companion_reg_refresh') ||
+            hasNodeChild(node, WA_SIGNALING.COMPANION_REG_REFRESH_NOTIFICATION) ||
             hasNodeChild(node, 'pair-device-rotate-qr')
         if (!hasExpectedChild) {
             return false
         }
 
-        await this.socket.sendNode(buildNotificationAckNode(node, 'companion_reg_refresh'))
-
-        const credentials = this.requireCredentials()
-        await this.auth.updateCredentials({
-            ...credentials,
-            advSecretKey: await randomBytesAsync(32)
-        })
+        await this.sendNode(
+            buildNotificationAckNode(node, WA_SIGNALING.COMPANION_REG_REFRESH_NOTIFICATION)
+        )
+        await this.rotateAdvSecret(this.requireCredentials())
         this.logger.info('handled companion_reg_refresh notification')
-        this.qr.refresh()
+        this.refreshQr()
         return true
     }
 
     private async handlePairDevice(iqNode: BinaryNode, pairDeviceNode: BinaryNode): Promise<void> {
-        const credentials = this.requireCredentials()
-
         const refs = extractPairDeviceRefs(pairDeviceNode)
-
-        await this.auth.updateCredentials({
-            ...credentials,
-            advSecretKey: await randomBytesAsync(32)
-        })
-        this.qr.setRefs(refs)
+        await this.rotateAdvSecret(this.requireCredentials())
+        this.setQrRefs(refs)
         this.logger.info('pair-device refs updated', { refsCount: refs.length })
-
-        await this.socket.sendNode(buildIqResultNode(iqNode))
+        await this.sendNode(buildIqResultNode(iqNode))
     }
 
     private async handlePairSuccess(
         iqNode: BinaryNode,
         pairSuccessNode: BinaryNode
     ): Promise<void> {
-        await this.pairingSuccessHandler.handlePairSuccess(iqNode, pairSuccessNode)
+        this.logger.info('processing pair-success node')
+        const credentials = this.requireCredentials()
+
+        const deviceIdentityNode = findNodeChild(pairSuccessNode, WA_NODE_TAGS.DEVICE_IDENTITY)
+        const deviceNode = findNodeChild(pairSuccessNode, 'device')
+        const platformNode = findNodeChild(pairSuccessNode, WA_NODE_TAGS.PLATFORM)
+        if (!deviceIdentityNode || !deviceNode || !platformNode) {
+            this.logger.error('pair-success missing required nodes', {
+                hasDeviceIdentity: !!deviceIdentityNode,
+                hasDevice: !!deviceNode,
+                hasPlatform: !!platformNode
+            })
+            throw new Error('pair-success stanza is missing required nodes')
+        }
+
+        const wrappedIdentity = proto.ADVSignedDeviceIdentityHMAC.decode(
+            asNodeBytes(deviceIdentityNode.content, 'pair-success.device-identity')
+        )
+        const wrappedDetails = decodeProtoBytes(
+            wrappedIdentity.details,
+            'ADVSignedDeviceIdentityHMAC.details'
+        )
+        const wrappedHmac = decodeProtoBytes(
+            wrappedIdentity.hmac,
+            'ADVSignedDeviceIdentityHMAC.hmac'
+        )
+        const accountType = wrappedIdentity.accountType ?? proto.ADVEncryptionType.E2EE
+        const isHosted = accountType === proto.ADVEncryptionType.HOSTED
+        const hmacInput = isHosted
+            ? concatBytes([ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE, wrappedDetails])
+            : wrappedDetails
+        const expectedHmac = await WaAdvSignature.computeAdvIdentityHmac(
+            credentials.advSecretKey,
+            hmacInput
+        )
+        if (!uint8Equal(expectedHmac, wrappedHmac)) {
+            this.logger.error('pair-success hmac mismatch')
+            throw new Error('pair-success HMAC validation failed')
+        }
+
+        const signedIdentity = proto.ADVSignedDeviceIdentity.decode(wrappedDetails)
+        const details = decodeProtoBytes(signedIdentity.details, 'ADVSignedDeviceIdentity.details')
+        const accountSignature = decodeProtoBytes(
+            signedIdentity.accountSignature,
+            'ADVSignedDeviceIdentity.accountSignature'
+        )
+        const accountSignatureKey = decodeProtoBytes(
+            signedIdentity.accountSignatureKey,
+            'ADVSignedDeviceIdentity.accountSignatureKey'
+        )
+        const localIdentity = credentials.registrationInfo.identityKeyPair
+        const validAccountSignature = await WaAdvSignature.verifyDeviceIdentityAccountSignature(
+            details,
+            accountSignature,
+            localIdentity.pubKey,
+            accountSignatureKey,
+            isHosted
+        )
+        if (!validAccountSignature) {
+            this.logger.error('pair-success account signature invalid')
+            throw new Error('pair-success account signature validation failed')
+        }
+
+        signedIdentity.deviceSignature = await WaAdvSignature.generateDeviceSignature(
+            details,
+            localIdentity,
+            accountSignatureKey,
+            isHosted
+        )
+
+        const advDeviceIdentity = proto.ADVDeviceIdentity.decode(details)
+        const responseIdentityBytes = proto.ADVSignedDeviceIdentity.encode({
+            details: signedIdentity.details,
+            accountSignature: signedIdentity.accountSignature,
+            deviceSignature: signedIdentity.deviceSignature
+        }).finish()
+        const nextCredentials: WaAuthCredentials = {
+            ...credentials,
+            signedIdentity,
+            meJid: deviceNode.attrs.jid,
+            meLid: deviceNode.attrs.lid,
+            platform: platformNode.attrs.name
+        }
+        await this.updateCredentials(nextCredentials)
+        this.logger.info('pair-success credentials updated', {
+            meJid: nextCredentials.meJid,
+            meLid: nextCredentials.meLid,
+            platform: nextCredentials.platform
+        })
+        this.clearQr()
+        await this.sendNode({
+            tag: WA_NODE_TAGS.IQ,
+            attrs: {
+                ...(iqNode.attrs.id ? { id: iqNode.attrs.id } : {}),
+                to: iqNode.attrs.from ?? WA_DEFAULTS.HOST_DOMAIN,
+                type: WA_IQ_TYPES.RESULT
+            },
+            content: [
+                {
+                    tag: 'pair-device-sign',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.DEVICE_IDENTITY,
+                            attrs: {
+                                'key-index': String(advDeviceIdentity.keyIndex ?? 0)
+                            },
+                            content: responseIdentityBytes
+                        }
+                    ]
+                }
+            ]
+        })
+        this.emitPaired(nextCredentials)
+        this.logger.debug('pair-success completed and paired event emitted')
     }
 
     private async handlePrimaryHello(linkCodeNode: BinaryNode): Promise<void> {
@@ -257,7 +390,7 @@ export class WaPairingFlow {
             throw new Error('pairing code exceeded maximum primary hello attempts')
         }
 
-        const refNode = findNodeChild(linkCodeNode, 'link_code_pairing_ref')
+        const refNode = findNodeChild(linkCodeNode, WA_NODE_TAGS.LINK_CODE_PAIRING_REF)
         const wrappedPrimaryNode = findNodeChild(
             linkCodeNode,
             'link_code_pairing_wrapped_primary_ephemeral_pub'
@@ -274,11 +407,11 @@ export class WaPairingFlow {
         }
 
         const nowSeconds = Math.floor(Date.now() / 1000)
-        if (nowSeconds - pairingSession.createdAtSeconds > PAIRING_CODE_MAX_AGE_SECONDS) {
+        if (nowSeconds - pairingSession.createdAtSeconds > WA_DEFAULTS.PAIRING_CODE_MAX_AGE_SECONDS) {
             throw new Error('primary_hello received for an expired pairing code')
         }
 
-        const finish = await this.pairingCrypto.completeCompanionFinish({
+        const finish = await completeCompanionFinish({
             pairingCode: pairingSession.pairingCode,
             wrappedPrimaryEphemeralPub: asNodeBytes(
                 wrappedPrimaryNode.content,
@@ -292,29 +425,38 @@ export class WaPairingFlow {
             registrationIdentityKeyPair: credentials.registrationInfo.identityKeyPair
         })
 
-        await this.auth.updateCredentials({
+        await this.updateCredentials({
             ...credentials,
             advSecretKey: finish.advSecret
         })
 
-        const result = await this.socket.query(
+        const result = await this.query(
             buildCompanionFinishRequestNode({
                 phoneJid: pairingSession.phoneJid,
                 wrappedKeyBundle: finish.wrappedKeyBundle,
                 companionIdentityPublic: finish.companionIdentityPublic,
                 ref
             }),
-            IQ_TIMEOUT_MS
+            WA_DEFAULTS.IQ_TIMEOUT_MS
         )
-        if (result.attrs.type === 'error') {
+        if (result.attrs.type === WA_IQ_TYPES.ERROR) {
             throw new Error('companion_finish returned error')
         }
         pairingSession.finished = true
         this.logger.info('primary_hello completed with companion_finish success')
     }
 
+    private async rotateAdvSecret(credentials: WaAuthCredentials): Promise<WaAuthCredentials> {
+        const nextCredentials = {
+            ...credentials,
+            advSecretKey: await randomBytesAsync(32)
+        }
+        await this.updateCredentials(nextCredentials)
+        return nextCredentials
+    }
+
     private requireCredentials(): WaAuthCredentials {
-        const credentials = this.auth.getCredentials()
+        const credentials = this.getCredentials()
         if (!credentials) {
             throw new Error('credentials are not initialized')
         }

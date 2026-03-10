@@ -21,23 +21,41 @@ import {
     WHISPER_GROUP_INFO
 } from '../../signal/constants'
 import type {
-    GroupSenderKeyCiphertext,
     SenderKeyRecord,
     SenderMessageKey,
     SignalAddress
 } from '../../signal/types'
 import { concatBytes, removeAt, toBytesView } from '../../util/bytes'
 
-import { SenderKeyStore } from './SenderKeyStore'
-import type { ParsedDistributionPayload, ParsedSenderKeyMessage } from './types'
+import type { SenderKeyStore } from './SenderKeyStore'
+
+interface ParsedDistributionPayload {
+    readonly keyId: number
+    readonly iteration: number
+    readonly chainKey: Uint8Array
+    readonly signingPublicKey: Uint8Array
+}
+
+interface ParsedSenderKeyMessage {
+    readonly keyId: number
+    readonly iteration: number
+    readonly ciphertext: Uint8Array
+    readonly versionContentMac: Uint8Array
+}
+
+interface GroupSenderKeyCiphertext {
+    readonly groupId: string
+    readonly sender: SignalAddress
+    readonly keyId: number
+    readonly iteration: number
+    readonly ciphertext: Uint8Array
+}
 
 export class SenderKeyManager {
     private readonly store: SenderKeyStore
-    private readonly ed25519: Ed25519
 
-    public constructor(store: SenderKeyStore, ed25519 = new Ed25519()) {
+    public constructor(store: SenderKeyStore) {
         this.store = store
-        this.ed25519 = ed25519
     }
 
     public async createSenderKeyDistributionMessage(
@@ -118,7 +136,7 @@ export class SenderKeyManager {
             ciphertext: messagePayload
         }).finish()
         const versionedContent = prependVersion(senderKeyMessage, SIGNAL_GROUP_VERSION)
-        const signature = await this.ed25519.sign(versionedContent, senderKey.signingPrivateKey)
+        const signature = await Ed25519.sign(versionedContent, senderKey.signingPrivateKey)
         if (signature.length !== SIGNATURE_SIZE) {
             throw new Error(`invalid sender key signature length ${signature.length}`)
         }
@@ -163,7 +181,7 @@ export class SenderKeyManager {
         const signature = parsed.versionContentMac.subarray(
             parsed.versionContentMac.length - SIGNATURE_SIZE
         )
-        const validSignature = await this.ed25519.verify(
+        const validSignature = await Ed25519.verify(
             signedContent,
             signature,
             toRawPubKey(senderKey.signingPublicKey)
@@ -190,7 +208,7 @@ export class SenderKeyManager {
             return existing
         }
 
-        const signingKeyPair = await this.ed25519.generateKeyPair()
+        const signingKeyPair = await Ed25519.generateKeyPair()
         const created: SenderKeyRecord = {
             groupId,
             sender,

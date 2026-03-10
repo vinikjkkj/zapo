@@ -13,7 +13,16 @@ import type {
 import { cloneBytes, concatBytes, uint8Equal } from '../../util/bytes'
 import type { WaSignalStore } from '../store/WaSignalStore'
 
-import type { IncomingRatchetKeys, LocalIdentityContext } from './types'
+interface LocalIdentityContext {
+    readonly regId: number
+    readonly staticKeyPair: SignalSerializedKeyPair
+}
+
+interface IncomingRatchetKeys {
+    readonly signed: SignalSerializedKeyPair
+    readonly oneTime?: SignalSerializedKeyPair
+    readonly ratchet: SignalSerializedKeyPair
+}
 
 export function snapshotToRecord(snapshot: SignalSessionSnapshot): SignalSessionRecord {
     return {
@@ -296,8 +305,8 @@ export async function initiateSessionIncoming(
     )
 }
 
-export async function generateSerializedKeyPair(x25519: X25519): Promise<SignalSerializedKeyPair> {
-    const pair = await x25519.generateKeyPair()
+export async function generateSerializedKeyPair(): Promise<SignalSerializedKeyPair> {
+    const pair = await X25519.generateKeyPair()
     return toSerializedKeyPair(pair)
 }
 
@@ -311,10 +320,6 @@ export function toSerializedKeyPair(pair: {
     }
 }
 
-export async function ecdh(
-    x25519: X25519,
-    privateKey: Uint8Array,
-    publicKey: Uint8Array
-): Promise<Uint8Array> {
-    return x25519.scalarMult(privateKey, toRawPubKey(publicKey))
+export async function ecdh(privateKey: Uint8Array, publicKey: Uint8Array): Promise<Uint8Array> {
+    return X25519.scalarMult(privateKey, toRawPubKey(publicKey))
 }

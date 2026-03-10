@@ -4,29 +4,24 @@ import type { WaAppStateStoreData, WaAppStateSyncResult } from '../appstate/type
 import type { WaAppStateSyncOptions } from '../appstate/types'
 import { downloadExternalBlobReference } from '../appstate/utils'
 import { WaAppStateSyncClient } from '../appstate/WaAppStateSyncClient'
-import { DEFAULT_DEVICE_PLATFORM, HOST_DOMAIN } from '../auth/client.constants'
-import { WaPairingCodeCrypto } from '../auth/pairing/WaPairingCodeCrypto'
-import type { WaAuthCredentials, WaSuccessPersistAttributes } from '../auth/types'
+import type { WaAuthCredentials } from '../auth/types'
 import { WaAuthClient } from '../auth/WaAuthClient'
-import { X25519 } from '../crypto/curves/X25519'
 import { ConsoleLogger } from '../infra/log/ConsoleLogger'
 import type { Logger } from '../infra/log/types'
 import type { WaMediaConn } from '../media/types'
-import { WaMediaCrypto } from '../media/WaMediaCrypto'
 import { WaMediaTransferClient } from '../media/WaMediaTransferClient'
-import { RECEIPT_NODE_TAG } from '../message/constants'
 import { handleIncomingMessageAck } from '../message/incoming'
 import type {
     WaEncryptedMessageInput,
-    WaIncomingMessageAckHandlerOptions,
     WaMessagePublishOptions,
     WaMessagePublishResult,
+    WaSendMessageContent,
     WaSendReceiptInput
 } from '../message/types'
 import { WaMessageClient } from '../message/WaMessageClient'
 import type { Proto } from '../proto'
+import { WA_DEFAULTS, WA_MESSAGE_TAGS } from '../protocol/constants'
 import { SignalSessionSyncApi } from '../signal/api/SignalSessionSyncApi'
-import { WaAdvSignature } from '../signal/crypto/WaAdvSignature'
 import { SenderKeyManager } from '../signal/group/SenderKeyManager'
 import { SenderKeyStore } from '../signal/group/SenderKeyStore'
 import { SignalProtocol } from '../signal/session/SignalProtocol'
@@ -37,49 +32,46 @@ import { WaIncomingNodeRouter } from '../transport/node/WaIncomingNodeRouter'
 import { WaNodeOrchestrator } from '../transport/node/WaNodeOrchestrator'
 import { WaNodeTransport } from '../transport/node/WaNodeTransport'
 import type { BinaryNode } from '../transport/types'
-import type { WaComms } from '../transport/WaComms'
-import { toError } from '../util/errors'
+import { WaComms } from '../transport/WaComms'
+import { toError } from '../util/primitives'
 
-import {
-    IQ_TIMEOUT_MS,
-    MAX_DANGLING_RECEIPTS
-} from './constants'
-import { WaCommsBootstrapCoordinator } from './coordinators/WaCommsBootstrapCoordinator'
-import { WaDirtySyncCoordinator } from './coordinators/WaDirtySyncCoordinator'
 import { WaIncomingNodeCoordinator } from './coordinators/WaIncomingNodeCoordinator'
-import { WaMediaMessageCoordinator } from './coordinators/WaMediaMessageCoordinator'
 import { WaMessageDispatchCoordinator } from './coordinators/WaMessageDispatchCoordinator'
-import { WaPairingReconnectCoordinator } from './coordinators/WaPairingReconnectCoordinator'
 import { WaPassiveTasksCoordinator } from './coordinators/WaPassiveTasksCoordinator'
 import { WaStreamControlCoordinator } from './coordinators/WaStreamControlCoordinator'
-import type {
-    WaClientEventMap,
-    WaClientOptions,
-    WaSendMessageContent,
-    WaSendMessageOptions,
-    WaSignalMessagePublishInput
-} from './types'
+import { buildMediaMessageContent, getMediaConn as getClientMediaConn } from './messages'
+import { handleDirtyBits, parseDirtyBits } from './sync/dirty'
+import type { WaClientEventMap, WaClientOptions } from './types'
+
+interface WaSignalMessagePublishInput {
+    readonly to: string
+    readonly plaintext: Uint8Array
+    readonly expectedIdentity?: Uint8Array
+    readonly id?: string
+    readonly type?: string
+    readonly participant?: string
+    readonly deviceFanout?: string
+}
+
+interface WaSendMessageOptions extends WaMessagePublishOptions {
+    readonly id?: string
+    readonly expectedIdentity?: Uint8Array
+}
 
 export class WaClient extends EventEmitter {
     private readonly options: Readonly<WaClientOptions>
     private readonly logger: Logger
     private readonly signalStore: WaSignalStore
-    private readonly x25519: X25519
     private readonly authClient: WaAuthClient
     private readonly nodeOrchestrator: WaNodeOrchestrator
     private readonly keepAlive: WaKeepAlive
     private readonly incomingNodeRouter: WaIncomingNodeRouter
     private readonly nodeTransport: WaNodeTransport
     private readonly appStateSync: WaAppStateSyncClient
-    private readonly dirtySync: WaDirtySyncCoordinator
     private readonly incomingNode: WaIncomingNodeCoordinator
-    private readonly pairingReconnect: WaPairingReconnectCoordinator
     private readonly passiveTasks: WaPassiveTasksCoordinator
-    private readonly commsBootstrap: WaCommsBootstrapCoordinator
     private readonly streamControl: WaStreamControlCoordinator
-    private readonly mediaCrypto: WaMediaCrypto
     private readonly mediaTransfer: WaMediaTransferClient
-    private readonly mediaMessage: WaMediaMessageCoordinator
     private readonly messageDispatch: WaMessageDispatchCoordinator
     private readonly messageClient: WaMessageClient
     private readonly senderKeyManager: SenderKeyManager
@@ -88,6 +80,7 @@ export class WaClient extends EventEmitter {
     private clockSkewMs: number | null
     private mediaConnCache: WaMediaConn | null
     private comms: WaComms | null
+    private pairingReconnectPromise: Promise<void> | null
     private readonly danglingReceipts: BinaryNode[]
 
     public constructor(
@@ -98,7 +91,7 @@ export class WaClient extends EventEmitter {
         super()
         this.options = Object.freeze({
             ...options,
-            devicePlatform: options.devicePlatform ?? DEFAULT_DEVICE_PLATFORM
+            devicePlatform: options.devicePlatform ?? WA_DEFAULTS.DEVICE_PLATFORM
         })
         this.logger = logger
         this.signalStore = signalStore
@@ -106,26 +99,25 @@ export class WaClient extends EventEmitter {
         this.danglingReceipts = []
         this.clockSkewMs = null
         this.mediaConnCache = null
+        this.pairingReconnectPromise = null
 
         this.nodeTransport = new WaNodeTransport(this.logger)
         this.bindNodeTransportEvents()
         this.nodeOrchestrator = new WaNodeOrchestrator({
             sendNode: async (node) => this.nodeTransport.sendNode(node),
             logger: this.logger,
-            defaultTimeoutMs: IQ_TIMEOUT_MS,
-            hostDomain: HOST_DOMAIN
+            defaultTimeoutMs: WA_DEFAULTS.IQ_TIMEOUT_MS,
+            hostDomain: WA_DEFAULTS.HOST_DOMAIN
         })
         this.keepAlive = new WaKeepAlive({
             logger: this.logger,
             nodeOrchestrator: this.nodeOrchestrator,
             getComms: () => this.comms,
-            hostDomain: HOST_DOMAIN
+            hostDomain: WA_DEFAULTS.HOST_DOMAIN
         })
 
-        this.mediaCrypto = new WaMediaCrypto()
         this.mediaTransfer = new WaMediaTransferClient({
-            logger: this.logger,
-            mediaCrypto: this.mediaCrypto
+            logger: this.logger
         })
         const sendNode = async (node: BinaryNode) => this.sendNode(node)
         const query = async (node: BinaryNode, timeoutMs?: number) => this.query(node, timeoutMs)
@@ -140,21 +132,18 @@ export class WaClient extends EventEmitter {
             sendNode,
             query
         })
-        this.mediaMessage = new WaMediaMessageCoordinator({
+        const mediaMessageOptions = {
             logger: this.logger,
-            mediaCrypto: this.mediaCrypto,
             mediaTransfer: this.mediaTransfer,
             queryWithContext,
             getMediaConnCache: () => this.mediaConnCache,
-            setMediaConnCache: (mediaConn) => {
+            setMediaConnCache: (mediaConn: WaMediaConn | null) => {
                 this.mediaConnCache = mediaConn
             }
-        })
+        }
         this.senderKeyManager = new SenderKeyManager(new SenderKeyStore())
 
-        this.x25519 = new X25519()
-        const advSignature = new WaAdvSignature()
-        this.signalProtocol = new SignalProtocol(signalStore, this.x25519)
+        this.signalProtocol = new SignalProtocol(signalStore)
         this.signalSessionSync = new SignalSessionSyncApi({
             logger: this.logger,
             query
@@ -167,9 +156,6 @@ export class WaClient extends EventEmitter {
             {
                 logger: this.logger,
                 signalStore,
-                x25519: this.x25519,
-                pairingCrypto: new WaPairingCodeCrypto(this.x25519),
-                advSignature,
                 socket: {
                     sendNode,
                     query
@@ -180,40 +166,24 @@ export class WaClient extends EventEmitter {
                     onPairingRefresh: (forceManual) => this.emit('pairing_refresh', forceManual),
                     onPaired: (credentials) => {
                         this.emit('paired', credentials)
-                        this.pairingReconnect.scheduleReconnectAfterPairing()
+                        this.scheduleReconnectAfterPairing()
                     },
                     onError: (error) => this.handleError(error)
                 }
             }
         )
         const getCurrentCredentials = () => this.authClient.getCurrentCredentials()
-        const clearMediaConnCache = () => {
-            this.mediaConnCache = null
-        }
-        const bindComms = (comms: WaComms | null) => this.nodeTransport.bindComms(comms)
-        const authRuntime = {
-            getCurrentCredentials,
-            buildCommsConfig: () => this.authClient.buildCommsConfig(this.options),
-            persistSuccessAttributes: async (attributes: WaSuccessPersistAttributes) =>
-                this.authClient.persistSuccessAttributes(attributes),
-            persistRoutingInfo: async (routingInfo: Uint8Array) =>
-                this.authClient.persistRoutingInfo(routingInfo),
-            persistServerHasPreKeys: async (serverHasPreKeys: boolean) =>
-                this.authClient.persistServerHasPreKeys(serverHasPreKeys),
-            persistServerStaticKey: async (serverStaticKey: Uint8Array) =>
-                this.authClient.persistServerStaticKey(serverStaticKey),
-            clearStoredCredentials: async () => this.authClient.clearStoredCredentials()
-        }
         this.messageDispatch = new WaMessageDispatchCoordinator({
             logger: this.logger,
             messageClient: this.messageClient,
-            mediaMessage: this.mediaMessage,
+            buildMessageContent: async (content) =>
+                buildMediaMessageContent(mediaMessageOptions, content),
             senderKeyManager: this.senderKeyManager,
             signalProtocol: this.signalProtocol,
             signalSessionSync: this.signalSessionSync,
             getCurrentMeJid: () => getCurrentCredentials()?.meJid
         })
-        const incomingMessageAckOptions: WaIncomingMessageAckHandlerOptions = {
+        const incomingMessageAckOptions = {
             logger: this.logger,
             sendNode,
             getMeJid: () => getCurrentCredentials()?.meJid
@@ -236,21 +206,25 @@ export class WaClient extends EventEmitter {
             getPersistedAppState: () => getCurrentCredentials()?.appState,
             persistAppState: async (next) => this.authClient.persistAppState(next)
         })
-        this.dirtySync = new WaDirtySyncCoordinator({
-            logger: this.logger,
-            queryWithContext,
-            getCurrentCredentials,
-            syncAppState: async () => {
-                await this.syncAppState()
-            }
-        })
+        const handleClientDirtyBits = async (dirtyBits: Parameters<typeof handleDirtyBits>[1]) =>
+            handleDirtyBits(
+                {
+                    logger: this.logger,
+                    queryWithContext,
+                    getCurrentCredentials,
+                    syncAppState: async () => {
+                        await this.syncAppState()
+                    }
+                },
+                dirtyBits
+            )
         this.streamControl = new WaStreamControlCoordinator({
             logger: this.logger,
             getComms: () => this.comms,
             clearPendingQueries: (error) => this.nodeOrchestrator.clearPending(error),
-            clearMediaConnCache,
+            clearMediaConnCache: () => this.clearMediaConnCache(),
             disconnect: async () => this.disconnect(),
-            clearStoredCredentials: async () => authRuntime.clearStoredCredentials(),
+            clearStoredCredentials: async () => this.authClient.clearStoredCredentials(),
             connect: async () => this.connect()
         })
         this.incomingNode = new WaIncomingNodeCoordinator({
@@ -259,7 +233,7 @@ export class WaClient extends EventEmitter {
                 handleStreamControlResult: async (result) =>
                     this.streamControl.handleStreamControlResult(result),
                 persistSuccessAttributes: async (attributes) =>
-                    authRuntime.persistSuccessAttributes(attributes),
+                    this.authClient.persistSuccessAttributes(attributes),
                 emitSuccessNode: (node) => this.emit('success', node),
                 updateClockSkewFromSuccess: (serverUnixSeconds) =>
                     this.updateClockSkewFromSuccess(serverUnixSeconds),
@@ -272,72 +246,30 @@ export class WaClient extends EventEmitter {
                     )
                 },
                 warmupMediaConn: async () => {
-                    await this.mediaMessage.getMediaConn(true)
+                    await getClientMediaConn(mediaMessageOptions, true)
                 },
                 persistRoutingInfo: async (routingInfo) =>
-                    authRuntime.persistRoutingInfo(routingInfo),
+                    this.authClient.persistRoutingInfo(routingInfo),
                 dispatchIncomingNode: async (node) => this.incomingNodeRouter.dispatch(node)
             },
             dirtySync: {
-                parseDirtyBits: (nodes) => this.dirtySync.parseDirtyBits(nodes),
-                handleDirtyBits: async (dirtyBits) => this.dirtySync.handleDirtyBits(dirtyBits)
+                parseDirtyBits: (nodes) => parseDirtyBits(nodes, this.logger),
+                handleDirtyBits: async (dirtyBits) => handleClientDirtyBits(dirtyBits)
             }
         })
         this.passiveTasks = new WaPassiveTasksCoordinator({
             logger: this.logger,
             signalStore: this.signalStore,
-            x25519: this.x25519,
             runtime: {
                 queryWithContext,
                 getCurrentCredentials,
                 persistServerHasPreKeys: async (serverHasPreKeys) =>
-                    authRuntime.persistServerHasPreKeys(serverHasPreKeys),
+                    this.authClient.persistServerHasPreKeys(serverHasPreKeys),
                 sendNodeDirect: async (node) => this.nodeOrchestrator.sendNode(node),
                 takeDanglingReceipts: () => this.danglingReceipts.splice(0),
                 requeueDanglingReceipt: (node) => this.enqueueDanglingReceipt(node),
                 shouldQueueDanglingReceipt: (node, error) =>
                     this.shouldQueueDanglingReceipt(node, error)
-            }
-        })
-        this.commsBootstrap = new WaCommsBootstrapCoordinator({
-            logger: this.logger,
-            auth: {
-                buildCommsConfig: authRuntime.buildCommsConfig,
-                persistServerStaticKey: async (serverStaticKey) =>
-                    authRuntime.persistServerStaticKey(serverStaticKey)
-            },
-            runtime: {
-                setComms: (comms) => {
-                    this.comms = comms
-                },
-                clearMediaConnCache,
-                bindComms,
-                onIncomingFrame: async (frame) => this.handleIncomingFrame(frame),
-                syncKeepAlive: (registered) => {
-                    if (registered) {
-                        this.keepAlive.start()
-                        return
-                    }
-                    this.keepAlive.stop()
-                },
-                startPassiveTasksAfterConnect: () =>
-                    this.passiveTasks.startPassiveTasksAfterConnect()
-            }
-        })
-        this.pairingReconnect = new WaPairingReconnectCoordinator({
-            logger: this.logger,
-            runtime: {
-                getCurrentCredentials,
-                getComms: () => this.comms,
-                stopKeepAlive: () => this.keepAlive.stop(),
-                clearPendingQueries: (error) => this.nodeOrchestrator.clearPending(error),
-                clearCommsBinding: () => {
-                    this.comms = null
-                    bindComms(null)
-                },
-                startCommsWithCredentials: async (credentials) =>
-                    this.startCommsWithCredentials(credentials),
-                onError: (error) => this.handleError(error)
             }
         })
     }
@@ -383,7 +315,10 @@ export class WaClient extends EventEmitter {
         }
     }
 
-    public async query(node: BinaryNode, timeoutMs = IQ_TIMEOUT_MS): Promise<BinaryNode> {
+    public async query(
+        node: BinaryNode,
+        timeoutMs: number = WA_DEFAULTS.IQ_TIMEOUT_MS
+    ): Promise<BinaryNode> {
         if (!this.comms || !this.comms.getCommsState().connected) {
             throw new Error('client is not connected')
         }
@@ -405,7 +340,7 @@ export class WaClient extends EventEmitter {
     private async queryWithContext(
         context: string,
         node: BinaryNode,
-        timeoutMs = IQ_TIMEOUT_MS,
+        timeoutMs: number = WA_DEFAULTS.IQ_TIMEOUT_MS,
         contextData: Readonly<Record<string, unknown>> = {}
     ): Promise<BinaryNode> {
         return queryNodeWithContext(
@@ -440,9 +375,12 @@ export class WaClient extends EventEmitter {
             await this.startCommsWithCredentials(credentials)
         } catch (error) {
             if (credentials.routingInfo) {
-                this.logger.warn('connect failed with routing info, retrying without routing info', {
-                    message: toError(error).message
-                })
+                this.logger.warn(
+                    'connect failed with routing info, retrying without routing info',
+                    {
+                        message: toError(error).message
+                    }
+                )
                 await this.disconnect()
                 credentials = await this.authClient.clearRoutingInfo()
                 await this.startCommsWithCredentials(credentials)
@@ -454,18 +392,65 @@ export class WaClient extends EventEmitter {
         this.emit('connected')
     }
 
+    private scheduleReconnectAfterPairing(): void {
+        this.logger.debug('wa client scheduling reconnect after pairing')
+        setTimeout(() => {
+            void this.reconnectAsRegisteredAfterPairing().catch((error) => {
+                this.handleError(toError(error))
+            })
+        }, 0)
+    }
+
+    private async reconnectAsRegisteredAfterPairing(): Promise<void> {
+        if (this.pairingReconnectPromise) {
+            this.logger.trace('pairing reconnect already in-flight')
+            return this.pairingReconnectPromise
+        }
+        this.pairingReconnectPromise = this.reconnectAsRegisteredAfterPairingInternal().finally(
+            () => {
+                this.pairingReconnectPromise = null
+            }
+        )
+        return this.pairingReconnectPromise
+    }
+
+    private async reconnectAsRegisteredAfterPairingInternal(): Promise<void> {
+        const credentials = this.authClient.getCurrentCredentials()
+        if (!credentials?.meJid) {
+            this.logger.trace('pairing reconnect skipped: still unregistered')
+            return
+        }
+        const currentComms = this.comms
+        if (!currentComms) {
+            this.logger.trace('pairing reconnect skipped: no active comms')
+            return
+        }
+
+        this.logger.info('pairing completed, restarting comms as registered')
+        this.keepAlive.stop()
+        this.nodeOrchestrator.clearPending(new Error('restarting comms after pairing'))
+        this.clearCommsBinding()
+        try {
+            await currentComms.stopComms()
+        } catch (error) {
+            this.logger.warn('failed to stop pre-registration comms', {
+                message: toError(error).message
+            })
+        }
+        await this.startCommsWithCredentials(credentials)
+    }
+
     public async disconnect(): Promise<void> {
         this.logger.info('wa client disconnect start')
         this.keepAlive.stop()
         await this.authClient.clearTransientState()
         this.nodeOrchestrator.clearPending(new Error('client disconnected'))
         this.clockSkewMs = null
-        this.mediaConnCache = null
+        this.clearMediaConnCache()
         this.passiveTasks.resetInFlightState()
 
         const comms = this.comms
-        this.comms = null
-        this.nodeTransport.bindComms(null)
+        this.clearCommsBinding()
         if (comms) {
             await comms.stopComms()
             this.logger.info('wa client disconnected')
@@ -565,14 +550,34 @@ export class WaClient extends EventEmitter {
         })
     }
 
-    private async startCommsWithCredentials(
-        credentials: WaAuthCredentials
-    ): Promise<void> {
-        await this.commsBootstrap.startCommsWithCredentials(credentials)
+    private async startCommsWithCredentials(credentials: WaAuthCredentials): Promise<void> {
+        this.logger.debug('starting comms with credentials', {
+            registered: credentials.meJid !== null && credentials.meJid !== undefined
+        })
+        const commsConfig = this.authClient.buildCommsConfig(this.options)
+        const comms = new WaComms(commsConfig, this.logger)
+        this.comms = comms
+        this.clearMediaConnCache()
+        this.bindComms(comms)
+
+        comms.startComms(async (frame) => this.handleIncomingFrame(frame))
+        await comms.waitForConnection(commsConfig.connectTimeoutMs)
+        this.logger.info('comms connected')
+        comms.startHandlingRequests()
+        this.syncKeepAlive(Boolean(credentials.meJid))
+
+        const serverStaticKey = comms.getServerStaticKey()
+        if (!serverStaticKey) {
+            this.logger.trace('no server static key available to persist')
+        } else {
+            await this.authClient.persistServerStaticKey(serverStaticKey)
+            this.logger.debug('persisted server static key after comms connect')
+        }
+        this.passiveTasks.startPassiveTasksAfterConnect()
     }
 
     private shouldQueueDanglingReceipt(node: BinaryNode, error: Error): boolean {
-        if (node.tag !== RECEIPT_NODE_TAG) {
+        if (node.tag !== WA_MESSAGE_TAGS.RECEIPT) {
             return false
         }
         const message = error.message.toLowerCase()
@@ -586,10 +591,10 @@ export class WaClient extends EventEmitter {
     }
 
     private enqueueDanglingReceipt(node: BinaryNode): void {
-        if (node.tag !== RECEIPT_NODE_TAG) {
+        if (node.tag !== WA_MESSAGE_TAGS.RECEIPT) {
             return
         }
-        if (this.danglingReceipts.length >= MAX_DANGLING_RECEIPTS) {
+        if (this.danglingReceipts.length >= WA_DEFAULTS.MAX_DANGLING_RECEIPTS) {
             this.danglingReceipts.shift()
         }
         this.danglingReceipts.push(
@@ -611,6 +616,27 @@ export class WaClient extends EventEmitter {
         this.emit('error', error)
     }
 
+    private clearMediaConnCache(): void {
+        this.mediaConnCache = null
+    }
+
+    private bindComms(comms: WaComms | null): void {
+        this.nodeTransport.bindComms(comms)
+    }
+
+    private clearCommsBinding(): void {
+        this.comms = null
+        this.bindComms(null)
+    }
+
+    private syncKeepAlive(registered: boolean): void {
+        if (registered) {
+            this.keepAlive.start()
+            return
+        }
+        this.keepAlive.stop()
+    }
+
     private updateClockSkewFromSuccess(serverUnixSeconds: number): void {
         const serverMs = serverUnixSeconds * 1000
         const nowMs = Date.now()
@@ -620,5 +646,4 @@ export class WaClient extends EventEmitter {
             clockSkewMs: this.clockSkewMs
         })
     }
-
 }

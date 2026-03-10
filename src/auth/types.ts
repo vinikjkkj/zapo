@@ -3,27 +3,12 @@ import type { SignalKeyPair } from '../crypto/curves/types'
 import type { Proto } from '../proto'
 import type { RegistrationInfo, SignedPreKeyRecord } from '../signal/types'
 
-export type AdvDeviceIdentity = Proto.IADVDeviceIdentity
-export type AdvSignedDeviceIdentity = Proto.IADVSignedDeviceIdentity
-export type AdvKeyIndexList = Proto.IADVKeyIndexList
-export type ClientPayload = Proto.IClientPayload
-export type HandshakeMessage = Proto.IHandshakeMessage
-
-export interface AuthState {
-    readonly noiseKeyPair: SignalKeyPair
-    readonly registrationInfo?: RegistrationInfo
-    readonly signedPreKey?: SignedPreKeyRecord
-    readonly signedIdentity?: AdvSignedDeviceIdentity
-    readonly clientPayload?: ClientPayload
-    readonly advSecretKey?: Uint8Array
-}
-
 export interface WaAuthCredentials {
     readonly noiseKeyPair: SignalKeyPair
     readonly registrationInfo: RegistrationInfo
     readonly signedPreKey: SignedPreKeyRecord
     readonly advSecretKey: Uint8Array
-    readonly signedIdentity?: AdvSignedDeviceIdentity
+    readonly signedIdentity?: Proto.IADVSignedDeviceIdentity
     readonly meJid?: string
     readonly meLid?: string
     readonly meDisplayName?: string
@@ -40,18 +25,19 @@ export interface WaAuthCredentials {
     readonly appState?: WaAppStateStoreData
 }
 
-export interface WaPairingCodeSession {
-    readonly code: string
-    readonly phoneJid: string
-    readonly ref?: Uint8Array
-    readonly createdAtSeconds: number
+export interface WaAuthSocketOptions {
+    readonly url?: string
+    readonly urls?: readonly string[]
+    readonly protocols?: readonly string[]
+    readonly connectTimeoutMs?: number
+    readonly reconnectIntervalMs?: number
+    readonly timeoutIntervalMs?: number
+    readonly maxReconnectAttempts?: number
 }
 
-export interface WaAuthState {
-    readonly connected: boolean
-    readonly registered: boolean
-    readonly hasQr: boolean
-    readonly hasPairingCode: boolean
+export interface WaAuthClientOptions {
+    readonly authPath: string
+    readonly devicePlatform?: string
 }
 
 export interface WaSuccessPersistAttributes {

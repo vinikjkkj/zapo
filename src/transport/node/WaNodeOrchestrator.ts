@@ -1,10 +1,21 @@
 import { randomBytesAsync } from '../../crypto'
 import type { Logger } from '../../infra/log/types'
-import { toError } from '../../util/errors'
+import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '../../protocol/constants'
+import { toError } from '../../util/primitives'
 import type { BinaryNode } from '../types'
 
-import { DEFAULT_NODE_HOST_DOMAIN, DEFAULT_NODE_QUERY_TIMEOUT_MS } from './constants'
-import type { PendingNodeQuery, WaNodeOrchestratorOptions } from './types'
+interface PendingNodeQuery {
+    readonly resolve: (value: BinaryNode) => void
+    readonly reject: (error: Error) => void
+    readonly timer: NodeJS.Timeout
+}
+
+interface WaNodeOrchestratorOptions {
+    readonly logger: Logger
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly defaultTimeoutMs?: number
+    readonly hostDomain?: string
+}
 
 export class WaNodeOrchestrator {
     private readonly logger: Logger
@@ -19,8 +30,8 @@ export class WaNodeOrchestrator {
     public constructor(options: WaNodeOrchestratorOptions) {
         this.logger = options.logger
         this.sendNodeFn = options.sendNode
-        this.defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_NODE_QUERY_TIMEOUT_MS
-        this.hostDomain = options.hostDomain ?? DEFAULT_NODE_HOST_DOMAIN
+        this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.NODE_QUERY_TIMEOUT_MS
+        this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
         this.stanzaPrefix = null
         this.stanzaPrefixPromise = null
         this.stanzaCounter = 0
@@ -54,7 +65,11 @@ export class WaNodeOrchestrator {
         }
         clearTimeout(pending.timer)
         this.pendingQueries.delete(id)
-        this.logger.trace('resolved pending query node', { id, tag: node.tag, type: node.attrs.type })
+        this.logger.trace('resolved pending query node', {
+            id,
+            tag: node.tag,
+            type: node.attrs.type
+        })
         pending.resolve(node)
         return true
     }
@@ -64,24 +79,24 @@ export class WaNodeOrchestrator {
             return true
         }
 
-        if (node.tag !== 'iq' || node.attrs.type !== 'get') {
+        if (node.tag !== WA_NODE_TAGS.IQ || node.attrs.type !== WA_IQ_TYPES.GET) {
             return false
         }
         const xmlns = node.attrs.xmlns
-        if (xmlns !== 'urn:xmpp:ping' && xmlns !== 'w:p') {
+        if (xmlns !== WA_XMLNS.XMPP_PING && xmlns !== WA_XMLNS.WHATSAPP_PING) {
             return false
         }
 
         const attrs: Record<string, string> = {
             to: node.attrs.from ?? this.hostDomain,
-            type: 'result'
+            type: WA_IQ_TYPES.RESULT
         }
         if (node.attrs.id) {
             attrs.id = node.attrs.id
         }
 
         await this.sendNodeFn({
-            tag: 'iq',
+            tag: WA_NODE_TAGS.IQ,
             attrs
         })
         this.logger.debug('auto-responded to ping iq', { id: node.attrs.id, xmlns })

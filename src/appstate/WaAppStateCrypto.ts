@@ -10,6 +10,7 @@ import {
 import { randomBytesAsync } from '../crypto/core/random'
 import { proto } from '../proto'
 import type { Proto } from '../proto'
+import { WA_APP_STATE_KDF_INFO } from '../protocol/constants'
 import { bytesToBase64 } from '../util/base64'
 import { concatBytes, uint8Equal } from '../util/bytes'
 
@@ -21,25 +22,38 @@ import {
     APP_STATE_DERIVED_VALUE_ENCRYPTION_KEY_END,
     APP_STATE_DERIVED_VALUE_MAC_KEY_END,
     APP_STATE_EMPTY_LT_HASH,
-    APP_STATE_HKDF_INFO,
     APP_STATE_IV_LENGTH,
-    APP_STATE_LT_HASH_SALT,
     APP_STATE_MAC_OCTET_LENGTH,
-    APP_STATE_OPERATION_REMOVE,
-    APP_STATE_OPERATION_SET,
     APP_STATE_POINT_SIZE,
     APP_STATE_TEXT_DECODER,
     APP_STATE_TEXT_ENCODER,
     APP_STATE_VALUE_MAC_LENGTH
 } from './constants'
-import type {
-    WaAppStateDecryptedMutation,
-    WaAppStateDerivedKeys,
-    WaAppStateEncryptedMutation
-} from './types'
 import { toNetworkOrder64 } from './utils'
 
 const EMPTY_BYTES = new Uint8Array(0)
+
+interface WaAppStateDerivedKeys {
+    readonly indexKey: Uint8Array
+    readonly valueEncryptionKey: Uint8Array
+    readonly valueMacKey: Uint8Array
+    readonly snapshotMacKey: Uint8Array
+    readonly patchMacKey: Uint8Array
+}
+
+interface WaAppStateEncryptedMutation {
+    readonly indexMac: Uint8Array
+    readonly valueBlob: Uint8Array
+    readonly valueMac: Uint8Array
+}
+
+interface WaAppStateDecryptedMutation {
+    readonly index: string
+    readonly value: Proto.ISyncActionValue | null
+    readonly version: number
+    readonly indexMac: Uint8Array
+    readonly valueMac: Uint8Array
+}
 
 export class WaAppStateCrypto {
     private readonly derivedKeysCache: Map<string, WaAppStateDerivedKeys>
@@ -59,7 +73,12 @@ export class WaAppStateCrypto {
             return cached
         }
 
-        const derived = await hkdf(keyData, null, APP_STATE_HKDF_INFO, APP_STATE_DERIVED_KEY_LENGTH)
+        const derived = await hkdf(
+            keyData,
+            null,
+            WA_APP_STATE_KDF_INFO.MUTATION_KEYS,
+            APP_STATE_DERIVED_KEY_LENGTH
+        )
         const keys: WaAppStateDerivedKeys = {
             indexKey: derived.subarray(0, APP_STATE_DERIVED_INDEX_KEY_END),
             valueEncryptionKey: derived.subarray(
@@ -243,7 +262,7 @@ export class WaAppStateCrypto {
             const expanded = await hkdf(
                 value,
                 null,
-                APP_STATE_LT_HASH_SALT,
+                WA_APP_STATE_KDF_INFO.PATCH_INTEGRITY,
                 APP_STATE_EMPTY_LT_HASH.byteLength
             )
             out = this.pointwiseWithOverflow(out, expanded, (left, right) => left + right)
@@ -260,7 +279,7 @@ export class WaAppStateCrypto {
             const expanded = await hkdf(
                 value,
                 null,
-                APP_STATE_LT_HASH_SALT,
+                WA_APP_STATE_KDF_INFO.PATCH_INTEGRITY,
                 APP_STATE_EMPTY_LT_HASH.byteLength
             )
             out = this.pointwiseWithOverflow(out, expanded, (left, right) => left - right)
@@ -305,10 +324,10 @@ export class WaAppStateCrypto {
 
     private generateAssociatedData(operation: number, keyId: Uint8Array): Uint8Array {
         const opByte =
-            operation === APP_STATE_OPERATION_SET
-                ? APP_STATE_OPERATION_SET
-                : operation === APP_STATE_OPERATION_REMOVE
-                  ? APP_STATE_OPERATION_REMOVE
+            operation === proto.SyncdMutation.SyncdOperation.SET
+                ? proto.SyncdMutation.SyncdOperation.SET
+                : operation === proto.SyncdMutation.SyncdOperation.REMOVE
+                  ? proto.SyncdMutation.SyncdOperation.REMOVE
                   : -1
         if (opByte < 0) {
             throw new Error(`unsupported syncd operation ${operation}`)

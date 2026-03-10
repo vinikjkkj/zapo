@@ -3,16 +3,61 @@ import { dirname } from 'node:path'
 
 import type { AppStateCollectionName, WaAppStateStoreData } from '../../appstate/types'
 import { proto } from '../../proto'
+import type { Proto } from '../../proto'
 import { base64ToBytes, bytesToBase64 } from '../../util/base64'
 import { cloneBytes } from '../../util/bytes'
 import type { WaAuthCredentials } from '../types'
 
-import type {
-    SerializedAppStateCollection,
-    SerializedAppStateStoreData,
-    SerializedAuthCredentials,
-    SerializedSignalKeyPair
-} from './types'
+interface SerializedSignalKeyPair {
+    readonly pubKey: string
+    readonly privKey: string
+}
+
+interface SerializedAuthCredentials {
+    readonly noiseKeyPair: SerializedSignalKeyPair
+    readonly registrationInfo: {
+        readonly registrationId: number
+        readonly identityKeyPair: SerializedSignalKeyPair
+    }
+    readonly signedPreKey: {
+        readonly keyId: number
+        readonly keyPair: SerializedSignalKeyPair
+        readonly signature: string
+        readonly uploaded?: boolean
+    }
+    readonly advSecretKey: string
+    readonly signedIdentity?: string
+    readonly meJid?: string
+    readonly meLid?: string
+    readonly meDisplayName?: string
+    readonly companionEncStatic?: string
+    readonly platform?: string
+    readonly serverStaticKey?: string
+    readonly serverHasPreKeys?: boolean
+    readonly routingInfo?: string
+    readonly lastSuccessTs?: number
+    readonly propsVersion?: number
+    readonly abPropsVersion?: number
+    readonly connectionLocation?: string
+    readonly accountCreationTs?: number
+    readonly appState?: SerializedAppStateStoreData
+}
+
+interface SerializedAppStateCollection {
+    readonly version: number
+    readonly hash: string
+    readonly indexValueMap: Record<string, string>
+}
+
+interface SerializedAppStateStoreData {
+    readonly keys: readonly {
+        readonly keyId: string
+        readonly keyData: string
+        readonly timestamp: number
+        readonly fingerprint?: Proto.Message.IAppStateSyncKeyFingerprint
+    }[]
+    readonly collections: Partial<Record<AppStateCollectionName, SerializedAppStateCollection>>
+}
 
 function encodeKeyPair(pair: {
     readonly pubKey: Uint8Array

@@ -3,12 +3,17 @@ import { cloneBytes, uint8Equal } from '../util/bytes'
 import { APP_STATE_EMPTY_LT_HASH } from './constants'
 import type {
     AppStateCollectionName,
-    MutableCollectionState,
     WaAppStateCollectionVersion,
     WaAppStateStoreData,
     WaAppStateSyncKey
 } from './types'
 import { keyDeviceId, keyEpoch, keyIdToHex } from './utils'
+
+interface MutableCollectionState {
+    version: number
+    hash: Uint8Array
+    indexValueMap: Map<string, Uint8Array>
+}
 
 export class WaAppStateState {
     private readonly keys: Map<string, WaAppStateSyncKey>

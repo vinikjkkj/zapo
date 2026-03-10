@@ -1,5 +1,5 @@
+import { WA_DEFAULTS } from '../../protocol/constants'
 import type {
-    GroupSenderKeyList,
     SenderKeyDistributionRecord,
     SenderKeyRecord,
     SignalAddress
@@ -22,7 +22,10 @@ export class SenderKeyStore {
         this.senderDistributions.set(this.makeKey(record.groupId, record.sender), record)
     }
 
-    public async getGroupSenderKeyList(groupId: string): Promise<GroupSenderKeyList> {
+    public async getGroupSenderKeyList(groupId: string): Promise<{
+        readonly skList: readonly SenderKeyRecord[]
+        readonly skDistribList: readonly SenderKeyDistributionRecord[]
+    }> {
         const skList: SenderKeyRecord[] = []
         const skDistribList: SenderKeyDistributionRecord[] = []
 
@@ -88,7 +91,8 @@ export class SenderKeyStore {
             const sameGroup = groupId ? record.groupId === groupId : true
             const sameUser = record.sender.user === target.user
             const sameServer =
-                (record.sender.server ?? 's.whatsapp.net') === (target.server ?? 's.whatsapp.net')
+                (record.sender.server ?? WA_DEFAULTS.HOST_DOMAIN) ===
+                (target.server ?? WA_DEFAULTS.HOST_DOMAIN)
             const sameDevice = record.sender.device === target.device
             if (sameGroup && sameUser && sameServer && sameDevice) {
                 map.delete(key)
@@ -99,7 +103,7 @@ export class SenderKeyStore {
     }
 
     private makeKey(groupId: string, sender: SignalAddress): string {
-        const server = sender.server ?? 's.whatsapp.net'
+        const server = sender.server ?? WA_DEFAULTS.HOST_DOMAIN
         return `${groupId}|${sender.user}|${server}|${sender.device}`
     }
 }

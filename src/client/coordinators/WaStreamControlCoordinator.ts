@@ -1,10 +1,10 @@
 import type { Logger } from '../../infra/log/types'
 import { handleParsedStreamControl } from '../../transport/stream/handlers'
-import type { WaStreamControlNodeResult } from '../../transport/stream/types'
+import type { WaStreamControlNodeResult } from '../../transport/stream/parse'
 import type { WaComms } from '../../transport/WaComms'
-import { toError } from '../../util/errors'
+import { toError } from '../../util/primitives'
 
-export interface WaStreamControlCoordinatorOptions {
+interface WaStreamControlCoordinatorOptions {
     readonly logger: Logger
     readonly getComms: () => WaComms | null
     readonly clearPendingQueries: (error: Error) => void
@@ -42,7 +42,8 @@ export class WaStreamControlCoordinator {
             logoutDueToStreamError: async (reason, shouldRestartBackend) =>
                 this.logoutDueToStreamError(reason, shouldRestartBackend),
             disconnectDueToStreamError: async (reason) => this.disconnectDueToStreamError(reason),
-            resumeSocketDueToStreamError: async (reason) => this.resumeSocketDueToStreamError(reason)
+            resumeSocketDueToStreamError: async (reason) =>
+                this.resumeSocketDueToStreamError(reason)
         })
     }
 

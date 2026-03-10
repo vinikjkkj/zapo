@@ -1,3 +1,4 @@
+import { WA_DEFAULTS } from '../../protocol/constants'
 import type { BinaryNode } from '../../transport/types'
 
 import {
@@ -161,7 +162,7 @@ function decodeJidU(reader: ByteReader): string {
     const device = reader.readUint8()
     const user = decodeTokenString(reader.readUint8(), reader)
 
-    let domain = 's.whatsapp.net'
+    let domain: string = WA_DEFAULTS.HOST_DOMAIN
     if (domainType === 1) {
         domain = 'lid'
     } else if (domainType === 129) {

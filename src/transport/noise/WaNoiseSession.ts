@@ -10,17 +10,19 @@ import {
     NOISE_XX_NAME,
     WA_PROTO_HEADER
 } from '../../transport/noise/constants'
-import type { WaNoiseConfig, WaNoisePayloadProvider } from '../../transport/types'
+import type { WaNoiseConfig } from '../../transport/types'
 import { concatBytes, toBytesView } from '../../util/bytes'
-import { toError } from '../../util/errors'
+import { toError } from '../../util/primitives'
 
 import { buildLoginPayload, buildRegistrationPayload } from './WaClientPayload'
 import { WaFrameCodec } from './WaFrameCodec'
 import { verifyNoiseCertificateChain } from './WaNoiseCert'
 import { WaNoiseHandshake } from './WaNoiseHandshake'
-import { WaNoiseSocket } from './WaNoiseSocket'
+import type { WaNoiseSocket } from './WaNoiseSocket'
 
-function resolvePayload(payload: WaNoisePayloadProvider): Promise<Uint8Array> {
+function resolvePayload(
+    payload: Uint8Array | (() => Uint8Array | Promise<Uint8Array>)
+): Promise<Uint8Array> {
     if (payload instanceof Uint8Array) {
         return Promise.resolve(payload)
     }
@@ -61,7 +63,6 @@ function buildRoutingInfoPrefix(routingInfo: Uint8Array): Uint8Array {
 export class WaNoiseSession {
     private readonly sendWire: (payload: Uint8Array) => Promise<void>
     private readonly logger: Logger
-    private readonly x25519: X25519
     private readonly writeQueue: BoundedTaskQueue
     private readonly readQueue: BoundedTaskQueue
     private frameCodec: WaFrameCodec | null
@@ -75,12 +76,10 @@ export class WaNoiseSession {
 
     public constructor(
         sendWire: (payload: Uint8Array) => Promise<void>,
-        logger: Logger = new ConsoleLogger('info'),
-        x25519 = new X25519()
+        logger: Logger = new ConsoleLogger('info')
     ) {
         this.sendWire = sendWire
         this.logger = logger
-        this.x25519 = x25519
         this.writeQueue = new BoundedTaskQueue(4096, 1)
         this.readQueue = new BoundedTaskQueue(4096, 1)
         this.frameCodec = null
@@ -108,7 +107,7 @@ export class WaNoiseSession {
                 : protocolHeader
 
         this.frameCodec = new WaFrameCodec(introFrame)
-        const ephemeralKeyPair = await this.x25519.generateKeyPair()
+        const ephemeralKeyPair = await X25519.generateKeyPair()
         const payload = await resolveHandshakePayload(config)
         const verifyCertificates = config.verifyCertificateChain !== false
 
@@ -258,14 +257,11 @@ export class WaNoiseSession {
         await handshake.authenticate(serverStaticKey)
         await handshake.authenticate(ephemeralKeyPair.pubKey)
 
-        const agreement1 = await this.x25519.scalarMult(ephemeralKeyPair.privKey, serverStaticKey)
+        const agreement1 = await X25519.scalarMult(ephemeralKeyPair.privKey, serverStaticKey)
         await handshake.mixIntoKey(agreement1)
         const encryptedClientStatic = await handshake.encrypt(clientStaticKeyPair.pubKey)
 
-        const agreement2 = await this.x25519.scalarMult(
-            clientStaticKeyPair.privKey,
-            serverStaticKey
-        )
+        const agreement2 = await X25519.scalarMult(clientStaticKeyPair.privKey, serverStaticKey)
         await handshake.mixIntoKey(agreement2)
         const encryptedPayload = await handshake.encrypt(payload)
 
@@ -294,10 +290,10 @@ export class WaNoiseSession {
             const serverEphemeral = toBytesView(serverHello.ephemeral)
             await handshake.authenticate(serverEphemeral)
             await handshake.mixIntoKey(
-                await this.x25519.scalarMult(ephemeralKeyPair.privKey, serverEphemeral)
+                await X25519.scalarMult(ephemeralKeyPair.privKey, serverEphemeral)
             )
             await handshake.mixIntoKey(
-                await this.x25519.scalarMult(clientStaticKeyPair.privKey, serverEphemeral)
+                await X25519.scalarMult(clientStaticKeyPair.privKey, serverEphemeral)
             )
 
             await handshake.decrypt(toBytesView(serverHello.payload))
@@ -338,13 +334,11 @@ export class WaNoiseSession {
         const serverEphemeral = toBytesView(serverHello.ephemeral)
         await handshake.authenticate(serverEphemeral)
         await handshake.mixIntoKey(
-            await this.x25519.scalarMult(ephemeralKeyPair.privKey, serverEphemeral)
+            await X25519.scalarMult(ephemeralKeyPair.privKey, serverEphemeral)
         )
 
         const serverStatic = await handshake.decrypt(toBytesView(serverHello.static))
-        await handshake.mixIntoKey(
-            await this.x25519.scalarMult(ephemeralKeyPair.privKey, serverStatic)
-        )
+        await handshake.mixIntoKey(await X25519.scalarMult(ephemeralKeyPair.privKey, serverStatic))
 
         const certificate = await handshake.decrypt(toBytesView(serverHello.payload))
         if (verifyCertificates) {
@@ -355,7 +349,7 @@ export class WaNoiseSession {
 
         const encryptedClientStatic = await handshake.encrypt(clientStaticKeyPair.pubKey)
         await handshake.mixIntoKey(
-            await this.x25519.scalarMult(clientStaticKeyPair.privKey, serverEphemeral)
+            await X25519.scalarMult(clientStaticKeyPair.privKey, serverEphemeral)
         )
         const encryptedPayload = await handshake.encrypt(payload)
 

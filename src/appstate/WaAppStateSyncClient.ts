@@ -2,6 +2,14 @@ import type { Logger } from '../infra/log/types'
 import { proto } from '../proto'
 import type { Proto } from '../proto'
 import {
+    WA_APP_STATE_COLLECTION_STATES,
+    WA_APP_STATE_ERROR_CODES,
+    WA_DEFAULTS,
+    WA_IQ_TYPES,
+    WA_NODE_TAGS,
+    WA_XMLNS
+} from '../protocol/constants'
+import {
     decodeBinaryNodeContent,
     findNodeChild,
     getNodeChildrenByTag
@@ -9,31 +17,24 @@ import {
 import type { BinaryNode } from '../transport/types'
 import { decodeProtoBytes } from '../util/base64'
 import { cloneBytes, uint8Equal } from '../util/bytes'
+import { longToNumber } from '../util/primitives'
 
 import {
     APP_STATE_DEFAULT_COLLECTIONS,
-    APP_STATE_DEFAULT_SYNC_TIMEOUT_MS,
-    APP_STATE_EMPTY_LT_HASH,
-    APP_STATE_HOST_DOMAIN,
-    APP_STATE_OPERATION_REMOVE,
-    APP_STATE_OPERATION_SET
+    APP_STATE_EMPTY_LT_HASH
 } from './constants'
 import type {
     AppStateCollectionName,
     AppStateCollectionState,
-    CollectionResponsePayload,
-    MacMutation,
-    OutgoingPatchContext,
     WaAppStateCollectionSyncResult,
     WaAppStateMutation,
     WaAppStateMutationInput,
-    WaAppStateSyncClientOptions,
     WaAppStateSyncOptions,
     WaAppStateStoreData,
     WaAppStateSyncResult,
     WaAppStateSyncKey
 } from './types'
-import { keyIdToHex, longToNumber, parseCollectionName } from './utils'
+import { keyIdToHex, parseCollectionName } from './utils'
 import { WaAppStateCrypto } from './WaAppStateCrypto'
 import { WaAppStateState } from './WaAppStateState'
 
@@ -42,6 +43,36 @@ class WaAppStateMissingKeyError extends Error {
         super(message)
         this.name = 'WaAppStateMissingKeyError'
     }
+}
+
+interface CollectionResponsePayload {
+    readonly collection: AppStateCollectionName
+    readonly state: AppStateCollectionState
+    readonly version?: number
+    readonly patches: readonly Proto.ISyncdPatch[]
+    readonly snapshotReference?: Proto.IExternalBlobReference
+}
+
+interface OutgoingPatchContext {
+    readonly collection: AppStateCollectionName
+    readonly patchVersion: number
+    readonly nextHash: Uint8Array
+    readonly nextIndexValueMap: Map<string, Uint8Array>
+}
+
+interface MacMutation {
+    readonly operation: number
+    readonly indexMac: Uint8Array
+    readonly valueMac: Uint8Array
+}
+
+interface WaAppStateSyncClientOptions {
+    readonly logger: Logger
+    readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
+    readonly getPersistedAppState: () => WaAppStateStoreData | undefined
+    readonly persistAppState: (next: WaAppStateStoreData) => Promise<void>
+    readonly hostDomain?: string
+    readonly defaultTimeoutMs?: number
 }
 
 export class WaAppStateSyncClient {
@@ -59,8 +90,8 @@ export class WaAppStateSyncClient {
         this.query = options.query
         this.getPersistedAppState = options.getPersistedAppState
         this.persistAppState = options.persistAppState
-        this.hostDomain = options.hostDomain ?? APP_STATE_HOST_DOMAIN
-        this.defaultTimeoutMs = options.defaultTimeoutMs ?? APP_STATE_DEFAULT_SYNC_TIMEOUT_MS
+        this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
+        this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.APP_STATE_SYNC_TIMEOUT_MS
 
         this.state = new WaAppStateState(options.getPersistedAppState())
         this.crypto = new WaAppStateCrypto()
@@ -141,29 +172,29 @@ export class WaAppStateSyncClient {
                 )
                 outgoingContexts.set(collection, outgoing.context)
                 children.push({
-                    tag: 'patch',
+                    tag: WA_NODE_TAGS.PATCH,
                     attrs: {},
                     content: outgoing.encodedPatch
                 })
             }
 
             collectionNodes.push({
-                tag: 'collection',
+                tag: WA_NODE_TAGS.COLLECTION,
                 attrs,
                 content: children.length > 0 ? children : undefined
             })
         }
 
         const iqNode: BinaryNode = {
-            tag: 'iq',
+            tag: WA_NODE_TAGS.IQ,
             attrs: {
                 to: this.hostDomain,
-                type: 'set',
-                xmlns: 'w:sync:app:state'
+                type: WA_IQ_TYPES.SET,
+                xmlns: WA_XMLNS.APP_STATE_SYNC
             },
             content: [
                 {
-                    tag: 'sync',
+                    tag: WA_NODE_TAGS.SYNC,
                     attrs: {},
                     content: collectionNodes
                 }
@@ -182,10 +213,10 @@ export class WaAppStateSyncClient {
 
         for (const payload of payloads) {
             if (
-                payload.state === 'error_fatal' ||
-                payload.state === 'error_retry' ||
-                payload.state === 'conflict' ||
-                payload.state === 'conflict_has_more'
+                payload.state === WA_APP_STATE_COLLECTION_STATES.ERROR_FATAL ||
+                payload.state === WA_APP_STATE_COLLECTION_STATES.ERROR_RETRY ||
+                payload.state === WA_APP_STATE_COLLECTION_STATES.CONFLICT ||
+                payload.state === WA_APP_STATE_COLLECTION_STATES.CONFLICT_HAS_MORE
             ) {
                 results.push({
                     collection: payload.collection,
@@ -271,7 +302,7 @@ export class WaAppStateSyncClient {
                     const outgoingContext = outgoingContexts.get(payload.collection)
                     if (
                         outgoingContext &&
-                        payload.state === 'success' &&
+                        payload.state === WA_APP_STATE_COLLECTION_STATES.SUCCESS &&
                         payload.version === outgoingContext.patchVersion
                     ) {
                         this.state.updateCollectionVersionAndHash(
@@ -304,7 +335,7 @@ export class WaAppStateSyncClient {
                     })
                     results.push({
                         collection: payload.collection,
-                        state: 'blocked',
+                        state: WA_APP_STATE_COLLECTION_STATES.BLOCKED,
                         version: payload.version
                     })
                     continue
@@ -363,7 +394,7 @@ export class WaAppStateSyncClient {
             }
 
             const decrypted = await this.crypto.decryptMutation({
-                operation: APP_STATE_OPERATION_SET,
+                operation: proto.SyncdMutation.SyncdOperation.SET,
                 keyId: recordKeyId,
                 keyData: recordKeyData,
                 indexMac,
@@ -467,7 +498,10 @@ export class WaAppStateSyncClient {
 
             decryptedMutations.push({
                 collection,
-                operation: operationCode === APP_STATE_OPERATION_REMOVE ? 'remove' : 'set',
+                operation:
+                    operationCode === proto.SyncdMutation.SyncdOperation.REMOVE
+                        ? 'remove'
+                        : 'set',
                 operationCode,
                 index: decrypted.index,
                 value: decrypted.value,
@@ -560,8 +594,8 @@ export class WaAppStateSyncClient {
             const value = mutation.operation === 'set' ? mutation.value : mutation.previousValue
             const operationCode =
                 mutation.operation === 'remove'
-                    ? APP_STATE_OPERATION_REMOVE
-                    : APP_STATE_OPERATION_SET
+                    ? proto.SyncdMutation.SyncdOperation.REMOVE
+                    : proto.SyncdMutation.SyncdOperation.SET
             const encrypted = await this.crypto.encryptMutation({
                 operation: operationCode,
                 keyId: activeKey.keyId,
@@ -641,7 +675,7 @@ export class WaAppStateSyncClient {
         for (const mutation of mutations) {
             const indexMacHex = keyIdToHex(mutation.indexMac)
             const existing = indexValueMap.get(indexMacHex)
-            if (mutation.operation === APP_STATE_OPERATION_REMOVE) {
+            if (mutation.operation === proto.SyncdMutation.SyncdOperation.REMOVE) {
                 if (!existing) {
                     throw new Error(
                         `cannot remove missing index MAC ${indexMacHex} in ${collection}`
@@ -667,16 +701,16 @@ export class WaAppStateSyncClient {
     }
 
     private parseSyncResponse(iqNode: BinaryNode): readonly CollectionResponsePayload[] {
-        if (iqNode.tag !== 'iq') {
+        if (iqNode.tag !== WA_NODE_TAGS.IQ) {
             throw new Error(`invalid sync response tag ${iqNode.tag}`)
         }
-        const syncNode = findNodeChild(iqNode, 'sync')
+        const syncNode = findNodeChild(iqNode, WA_NODE_TAGS.SYNC)
         if (!syncNode) {
             throw new Error('sync response is missing <sync> node')
         }
 
         const payloads: CollectionResponsePayload[] = []
-        for (const collectionNode of getNodeChildrenByTag(syncNode, 'collection')) {
+        for (const collectionNode of getNodeChildrenByTag(syncNode, WA_NODE_TAGS.COLLECTION)) {
             const collection = parseCollectionName(collectionNode.attrs.name)
             if (!collection) {
                 this.logger.warn('ignored unknown app-state collection', {
@@ -688,16 +722,16 @@ export class WaAppStateSyncClient {
             const versionAttr = collectionNode.attrs.version
             const version = versionAttr ? Number.parseInt(versionAttr, 10) : undefined
 
-            const patchesNode = findNodeChild(collectionNode, 'patches')
+            const patchesNode = findNodeChild(collectionNode, WA_NODE_TAGS.PATCHES)
             const patches = patchesNode
-                ? getNodeChildrenByTag(patchesNode, 'patch').map((node) =>
+                ? getNodeChildrenByTag(patchesNode, WA_NODE_TAGS.PATCH).map((node) =>
                       proto.SyncdPatch.decode(
                           decodeBinaryNodeContent(node.content, 'collection.patches.patch')
                       )
                   )
                 : []
 
-            const snapshotNode = findNodeChild(collectionNode, 'snapshot')
+            const snapshotNode = findNodeChild(collectionNode, WA_NODE_TAGS.SNAPSHOT)
             const snapshotReference = snapshotNode
                 ? proto.ExternalBlobReference.decode(
                       decodeBinaryNodeContent(snapshotNode.content, 'collection.snapshot')
@@ -718,19 +752,26 @@ export class WaAppStateSyncClient {
     private parseCollectionState(node: BinaryNode): AppStateCollectionState {
         const type = node.attrs.type
         const hasMorePatches = node.attrs.has_more_patches === 'true'
-        if (type !== 'error') {
-            return hasMorePatches ? 'success_has_more' : 'success'
+        if (type !== WA_IQ_TYPES.ERROR) {
+            return hasMorePatches
+                ? WA_APP_STATE_COLLECTION_STATES.SUCCESS_HAS_MORE
+                : WA_APP_STATE_COLLECTION_STATES.SUCCESS
         }
 
-        const errorNode = findNodeChild(node, 'error')
+        const errorNode = findNodeChild(node, WA_NODE_TAGS.ERROR)
         const code = errorNode?.attrs.code
-        if (code === '409') {
-            return hasMorePatches ? 'conflict_has_more' : 'conflict'
+        if (code === WA_APP_STATE_ERROR_CODES.CONFLICT) {
+            return hasMorePatches
+                ? WA_APP_STATE_COLLECTION_STATES.CONFLICT_HAS_MORE
+                : WA_APP_STATE_COLLECTION_STATES.CONFLICT
         }
-        if (code === '400' || code === '404') {
-            return 'error_fatal'
+        if (
+            code === WA_APP_STATE_ERROR_CODES.BAD_REQUEST ||
+            code === WA_APP_STATE_ERROR_CODES.NOT_FOUND
+        ) {
+            return WA_APP_STATE_COLLECTION_STATES.ERROR_FATAL
         }
-        return 'error_retry'
+        return WA_APP_STATE_COLLECTION_STATES.ERROR_RETRY
     }
 
     private validateSnapshot(

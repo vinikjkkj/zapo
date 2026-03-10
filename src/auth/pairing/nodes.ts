@@ -1,9 +1,16 @@
+import {
+    WA_DEFAULTS,
+    WA_IQ_TYPES,
+    WA_NODE_TAGS,
+    WA_SIGNALING,
+    WA_XMLNS
+} from '../../protocol/constants'
 import { asNodeBytes, getNodeChildrenByTag } from '../../transport/node/helpers'
 import type { BinaryNode } from '../../transport/types'
-import { HOST_DOMAIN } from '../client.constants'
 
 const TEXT_DECODER = new TextDecoder()
 const ZERO_BYTE = new Uint8Array([0])
+const NOTIFICATION_CLASS = WA_NODE_TAGS.NOTIFICATION
 
 export function buildCompanionHelloRequestNode(args: {
     readonly phoneJid: string
@@ -14,18 +21,18 @@ export function buildCompanionHelloRequestNode(args: {
     readonly companionPlatformDisplay: string
 }): BinaryNode {
     return {
-        tag: 'iq',
+        tag: WA_NODE_TAGS.IQ,
         attrs: {
-            to: HOST_DOMAIN,
-            type: 'set',
-            xmlns: 'md'
+            to: WA_DEFAULTS.HOST_DOMAIN,
+            type: WA_IQ_TYPES.SET,
+            xmlns: WA_XMLNS.MD
         },
         content: [
             {
-                tag: 'link_code_companion_reg',
+                tag: WA_NODE_TAGS.LINK_CODE_COMPANION_REG,
                 attrs: {
                     jid: args.phoneJid,
-                    stage: 'companion_hello',
+                    stage: WA_SIGNALING.LINK_CODE_STAGE_COMPANION_HELLO,
                     should_show_push_notification: args.shouldShowPushNotification ? 'true' : 'false'
                 },
                 content: [
@@ -62,17 +69,17 @@ export function buildCompanionHelloRequestNode(args: {
 
 export function buildGetCountryCodeRequestNode(): BinaryNode {
     return {
-        tag: 'iq',
+        tag: WA_NODE_TAGS.IQ,
         attrs: {
-            to: HOST_DOMAIN,
-            type: 'get',
-            xmlns: 'md'
+            to: WA_DEFAULTS.HOST_DOMAIN,
+            type: WA_IQ_TYPES.GET,
+            xmlns: WA_XMLNS.MD
         },
         content: [
             {
-                tag: 'link_code_companion_reg',
+                tag: WA_NODE_TAGS.LINK_CODE_COMPANION_REG,
                 attrs: {
-                    stage: 'get_country_code'
+                    stage: WA_SIGNALING.LINK_CODE_STAGE_GET_COUNTRY_CODE
                 }
             }
         ]
@@ -86,18 +93,18 @@ export function buildCompanionFinishRequestNode(args: {
     readonly ref: Uint8Array
 }): BinaryNode {
     return {
-        tag: 'iq',
+        tag: WA_NODE_TAGS.IQ,
         attrs: {
-            to: HOST_DOMAIN,
-            type: 'set',
-            xmlns: 'md'
+            to: WA_DEFAULTS.HOST_DOMAIN,
+            type: WA_IQ_TYPES.SET,
+            xmlns: WA_XMLNS.MD
         },
         content: [
             {
-                tag: 'link_code_companion_reg',
+                tag: WA_NODE_TAGS.LINK_CODE_COMPANION_REG,
                 attrs: {
                     jid: args.phoneJid,
-                    stage: 'companion_finish'
+                    stage: WA_SIGNALING.LINK_CODE_STAGE_COMPANION_FINISH
                 },
                 content: [
                     {
@@ -111,7 +118,7 @@ export function buildCompanionFinishRequestNode(args: {
                         content: args.companionIdentityPublic
                     },
                     {
-                        tag: 'link_code_pairing_ref',
+                        tag: WA_NODE_TAGS.LINK_CODE_PAIRING_REF,
                         attrs: {},
                         content: args.ref
                     }
@@ -126,32 +133,32 @@ export function buildNotificationAckNode(
     typeOverride?: string
 ): BinaryNode {
     const attrs: Record<string, string> = {
-        to: node.attrs.from ?? HOST_DOMAIN,
-        class: 'notification',
-        type: typeOverride ?? node.attrs.type ?? 'notification'
+        to: node.attrs.from ?? WA_DEFAULTS.HOST_DOMAIN,
+        class: NOTIFICATION_CLASS,
+        type: typeOverride ?? node.attrs.type ?? NOTIFICATION_CLASS
     }
     if (node.attrs.id) {
         attrs.id = node.attrs.id
     }
     return {
-        tag: 'ack',
+        tag: WA_NODE_TAGS.ACK,
         attrs
     }
 }
 
 export function buildIqResultNode(iqNode: BinaryNode): BinaryNode {
     return {
-        tag: 'iq',
+        tag: WA_NODE_TAGS.IQ,
         attrs: {
             ...(iqNode.attrs.id ? { id: iqNode.attrs.id } : {}),
-            to: iqNode.attrs.from ?? HOST_DOMAIN,
-            type: 'result'
+            to: iqNode.attrs.from ?? WA_DEFAULTS.HOST_DOMAIN,
+            type: WA_IQ_TYPES.RESULT
         }
     }
 }
 
 export function extractPairDeviceRefs(pairDeviceNode: BinaryNode): readonly string[] {
-    return getNodeChildrenByTag(pairDeviceNode, 'ref')
+    return getNodeChildrenByTag(pairDeviceNode, WA_NODE_TAGS.REF)
         .map((child) => TEXT_DECODER.decode(asNodeBytes(child.content, 'pair-device.ref')))
         .filter((ref) => ref.length > 0)
 }

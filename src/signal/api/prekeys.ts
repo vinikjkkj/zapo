@@ -1,13 +1,10 @@
+import { WA_DEFAULTS, WA_NODE_TAGS, WA_XMLNS } from '../../protocol/constants'
 import { buildIqNode, parseIqError } from '../../transport/node/query'
 import type { BinaryNode } from '../../transport/types'
 import { toBytesView } from '../../util/bytes'
 import type { PreKeyRecord, RegistrationInfo, SignedPreKeyRecord } from '../types'
 
-import {
-    SIGNAL_FETCH_KEY_BUNDLES_HOST,
-    SIGNAL_FETCH_KEY_BUNDLES_XMLNS,
-    SIGNAL_KEY_BUNDLE_TYPE_BYTES
-} from './constants'
+import { SIGNAL_KEY_BUNDLE_TYPE_BYTES } from './constants'
 
 export function intToBigEndianBytes(value: number, byteLength: number): Uint8Array {
     if (!Number.isSafeInteger(value) || value < 0) {
@@ -27,36 +24,36 @@ export function buildPreKeyUploadIq(
     signedPreKey: SignedPreKeyRecord,
     preKeys: readonly PreKeyRecord[]
 ) {
-    return buildIqNode('set', SIGNAL_FETCH_KEY_BUNDLES_HOST, SIGNAL_FETCH_KEY_BUNDLES_XMLNS, [
+    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, [
         {
-            tag: 'registration',
+            tag: WA_NODE_TAGS.REGISTRATION,
             attrs: {},
             content: intToBigEndianBytes(registrationInfo.registrationId, 4)
         },
         {
-            tag: 'type',
+            tag: WA_NODE_TAGS.TYPE,
             attrs: {},
             content: SIGNAL_KEY_BUNDLE_TYPE_BYTES
         },
         {
-            tag: 'identity',
+            tag: WA_NODE_TAGS.IDENTITY,
             attrs: {},
             content: toBytesView(registrationInfo.identityKeyPair.pubKey)
         },
         {
-            tag: 'list',
+            tag: WA_NODE_TAGS.LIST,
             attrs: {},
             content: preKeys.map((record) => ({
-                tag: 'key',
+                tag: WA_NODE_TAGS.KEY,
                 attrs: {},
                 content: [
                     {
-                        tag: 'id',
+                        tag: WA_NODE_TAGS.ID,
                         attrs: {},
                         content: intToBigEndianBytes(record.keyId, 3)
                     },
                     {
-                        tag: 'value',
+                        tag: WA_NODE_TAGS.VALUE,
                         attrs: {},
                         content: toBytesView(record.keyPair.pubKey)
                     }
@@ -64,21 +61,21 @@ export function buildPreKeyUploadIq(
             }))
         },
         {
-            tag: 'skey',
+            tag: WA_NODE_TAGS.SKEY,
             attrs: {},
             content: [
                 {
-                    tag: 'id',
+                    tag: WA_NODE_TAGS.ID,
                     attrs: {},
                     content: intToBigEndianBytes(signedPreKey.keyId, 3)
                 },
                 {
-                    tag: 'value',
+                    tag: WA_NODE_TAGS.VALUE,
                     attrs: {},
                     content: toBytesView(signedPreKey.keyPair.pubKey)
                 },
                 {
-                    tag: 'signature',
+                    tag: WA_NODE_TAGS.SIGNATURE,
                     attrs: {},
                     content: toBytesView(signedPreKey.signature)
                 }

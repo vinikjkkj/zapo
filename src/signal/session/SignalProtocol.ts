@@ -1,11 +1,9 @@
-import { toSerializedPubKey, X25519 } from '../../crypto'
+import { toSerializedPubKey } from '../../crypto'
 import { MAX_PREV_SESSIONS } from '../../signal/constants'
 import type {
     ParsedPreKeySignalMessage,
     ParsedSignalMessage,
     SignalAddress,
-    SignalCiphertext,
-    SignalMessageEnvelope,
     SignalPreKeyBundle,
     SignalSessionRecord
 } from '../../signal/types'
@@ -13,6 +11,7 @@ import { uint8Equal } from '../../util/bytes'
 import type { WaSignalStore } from '../store/WaSignalStore'
 
 import { decryptMsg, decryptMsgFromSession, encryptMsg, calculateRatchet } from './SignalRatchet'
+import type { DecryptOutcome } from './SignalRatchet'
 import {
     deserializeMsg,
     deserializePkMsg,
@@ -30,15 +29,23 @@ import {
     setPrevSessions,
     toSerializedKeyPair
 } from './SignalSession'
-import type { DecryptOutcome } from './types'
+
+interface SignalCiphertext {
+    readonly type: 'msg' | 'pkmsg'
+    readonly ciphertext: Uint8Array
+    readonly baseKey: Uint8Array | null
+}
+
+interface SignalMessageEnvelope {
+    readonly type: 'msg' | 'pkmsg' | 'skmsg'
+    readonly ciphertext: Uint8Array
+}
 
 export class SignalProtocol {
     private readonly store: WaSignalStore
-    private readonly x25519: X25519
 
-    public constructor(store: WaSignalStore, x25519 = new X25519()) {
+    public constructor(store: WaSignalStore) {
         this.store = store
-        this.x25519 = x25519
     }
 
     public async hasSession(address: SignalAddress): Promise<boolean> {
@@ -50,17 +57,14 @@ export class SignalProtocol {
         remoteBundle: SignalPreKeyBundle
     ): Promise<SignalSessionRecord> {
         const local = await requireLocalIdentity(this.store, toSerializedKeyPair)
-        const localOneTimeBase = await generateSerializedKeyPair(this.x25519)
+        const localOneTimeBase = await generateSerializedKeyPair()
         const session = await initiateSessionOutgoing(
             local,
             remoteBundle,
             localOneTimeBase,
-            (priv, pub) => ecdh(this.x25519, priv, pub),
-            () => generateSerializedKeyPair(this.x25519),
-            (rootKey, localRatchet, remoteRatchetPubKey) =>
-                calculateRatchet(rootKey, localRatchet, remoteRatchetPubKey, (priv, pub) =>
-                    ecdh(this.x25519, priv, pub)
-                )
+            ecdh,
+            () => generateSerializedKeyPair(),
+            calculateRatchet
         )
         await this.store.setRemoteIdentity(address, session.remote.pubKey)
         await this.store.setSession(address, session)
@@ -123,12 +127,7 @@ export class SignalProtocol {
         parsed: ParsedSignalMessage
     ): Promise<DecryptOutcome> {
         return decryptMsg(session, parsed, (sess, msg) =>
-            decryptMsgFromSession(
-                sess,
-                msg,
-                (priv, pub) => ecdh(this.x25519, priv, pub),
-                () => generateSerializedKeyPair(this.x25519)
-            )
+            decryptMsgFromSession(sess, msg, () => generateSerializedKeyPair())
         )
     }
 
@@ -141,8 +140,7 @@ export class SignalProtocol {
             const [updatedSession, plaintext] = await decryptMsgFromSession(
                 matchingSession,
                 parsed,
-                (priv, pub) => ecdh(this.x25519, priv, pub),
-                () => generateSerializedKeyPair(this.x25519)
+                () => generateSerializedKeyPair()
             )
             return {
                 updatedSession,
@@ -166,7 +164,7 @@ export class SignalProtocol {
                 oneTime: oneTimePreKey ? toSerializedKeyPair(oneTimePreKey.keyPair) : undefined,
                 ratchet: toSerializedKeyPair(signedPreKey.keyPair)
             },
-            (priv, pub) => ecdh(this.x25519, priv, pub)
+            ecdh
         )
 
         const newIdentity =
@@ -184,8 +182,7 @@ export class SignalProtocol {
         const [updatedSession, plaintext] = await decryptMsgFromSession(
             baseSession,
             parsed,
-            (priv, pub) => ecdh(this.x25519, priv, pub),
-            () => generateSerializedKeyPair(this.x25519)
+            () => generateSerializedKeyPair()
         )
         if (parsed.localOneTimeKeyId !== null && parsed.localOneTimeKeyId !== undefined) {
             await this.store.consumePreKeyById(parsed.localOneTimeKeyId)
