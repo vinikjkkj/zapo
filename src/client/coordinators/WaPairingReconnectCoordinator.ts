@@ -3,8 +3,7 @@ import type { Logger } from '../../infra/log/types'
 import type { WaComms } from '../../transport/WaComms'
 import { toError } from '../../util/errors'
 
-export interface WaPairingReconnectCoordinatorOptions {
-    readonly logger: Logger
+export interface WaPairingReconnectRuntimePort {
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly getComms: () => WaComms | null
     readonly stopKeepAlive: () => void
@@ -14,26 +13,19 @@ export interface WaPairingReconnectCoordinatorOptions {
     readonly onError: (error: Error) => void
 }
 
+export interface WaPairingReconnectCoordinatorOptions {
+    readonly logger: Logger
+    readonly runtime: WaPairingReconnectRuntimePort
+}
+
 export class WaPairingReconnectCoordinator {
     private readonly logger: Logger
-    private readonly getCurrentCredentials: () => WaAuthCredentials | null
-    private readonly getComms: () => WaComms | null
-    private readonly stopKeepAlive: () => void
-    private readonly clearPendingQueries: (error: Error) => void
-    private readonly clearCommsBinding: () => void
-    private readonly startCommsWithCredentials: (credentials: WaAuthCredentials) => Promise<void>
-    private readonly onError: (error: Error) => void
+    private readonly runtime: WaPairingReconnectRuntimePort
     private reconnectPromise: Promise<void> | null
 
     public constructor(options: WaPairingReconnectCoordinatorOptions) {
         this.logger = options.logger
-        this.getCurrentCredentials = options.getCurrentCredentials
-        this.getComms = options.getComms
-        this.stopKeepAlive = options.stopKeepAlive
-        this.clearPendingQueries = options.clearPendingQueries
-        this.clearCommsBinding = options.clearCommsBinding
-        this.startCommsWithCredentials = options.startCommsWithCredentials
-        this.onError = options.onError
+        this.runtime = options.runtime
         this.reconnectPromise = null
     }
 
@@ -41,7 +33,7 @@ export class WaPairingReconnectCoordinator {
         this.logger.debug('wa client scheduling reconnect after pairing')
         setTimeout(() => {
             void this.reconnectAsRegisteredAfterPairing().catch((error) => {
-                this.onError(toError(error))
+                this.runtime.onError(toError(error))
             })
         }, 0)
     }
@@ -58,21 +50,21 @@ export class WaPairingReconnectCoordinator {
     }
 
     private async reconnectAsRegisteredAfterPairingInternal(): Promise<void> {
-        const credentials = this.getCurrentCredentials()
+        const credentials = this.runtime.getCurrentCredentials()
         if (!credentials?.meJid) {
             this.logger.trace('pairing reconnect skipped: still unregistered')
             return
         }
-        const currentComms = this.getComms()
+        const currentComms = this.runtime.getComms()
         if (!currentComms) {
             this.logger.trace('pairing reconnect skipped: no active comms')
             return
         }
 
         this.logger.info('pairing completed, restarting comms as registered')
-        this.stopKeepAlive()
-        this.clearPendingQueries(new Error('restarting comms after pairing'))
-        this.clearCommsBinding()
+        this.runtime.stopKeepAlive()
+        this.runtime.clearPendingQueries(new Error('restarting comms after pairing'))
+        this.runtime.clearCommsBinding()
         try {
             await currentComms.stopComms()
         } catch (error) {
@@ -80,6 +72,6 @@ export class WaPairingReconnectCoordinator {
                 message: toError(error).message
             })
         }
-        await this.startCommsWithCredentials(credentials)
+        await this.runtime.startCommsWithCredentials(credentials)
     }
 }

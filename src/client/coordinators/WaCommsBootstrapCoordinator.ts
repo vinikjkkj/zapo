@@ -3,71 +3,60 @@ import type { Logger } from '../../infra/log/types'
 import type { WaCommsConfig } from '../../transport/types'
 import { WaComms } from '../../transport/WaComms'
 
-export interface WaCommsBootstrapCoordinatorOptions {
-    readonly logger: Logger
+export interface WaCommsBootstrapAuthPort {
     readonly buildCommsConfig: () => WaCommsConfig
+    readonly persistServerStaticKey: (serverStaticKey: Uint8Array) => Promise<void>
+}
+
+export interface WaCommsBootstrapRuntimePort {
     readonly setComms: (comms: WaComms | null) => void
     readonly clearMediaConnCache: () => void
     readonly bindComms: (comms: WaComms | null) => void
     readonly onIncomingFrame: (frame: Uint8Array) => Promise<void>
-    readonly startKeepAlive: () => void
-    readonly stopKeepAlive: () => void
-    readonly persistServerStaticKey: (serverStaticKey: Uint8Array) => Promise<void>
+    readonly syncKeepAlive: (registered: boolean) => void
     readonly startPassiveTasksAfterConnect: () => void
+}
+
+export interface WaCommsBootstrapCoordinatorOptions {
+    readonly logger: Logger
+    readonly auth: WaCommsBootstrapAuthPort
+    readonly runtime: WaCommsBootstrapRuntimePort
 }
 
 export class WaCommsBootstrapCoordinator {
     private readonly logger: Logger
-    private readonly buildCommsConfig: () => WaCommsConfig
-    private readonly setComms: (comms: WaComms | null) => void
-    private readonly clearMediaConnCache: () => void
-    private readonly bindComms: (comms: WaComms | null) => void
-    private readonly onIncomingFrame: (frame: Uint8Array) => Promise<void>
-    private readonly startKeepAlive: () => void
-    private readonly stopKeepAlive: () => void
-    private readonly persistServerStaticKey: (serverStaticKey: Uint8Array) => Promise<void>
-    private readonly startPassiveTasksAfterConnect: () => void
+    private readonly auth: WaCommsBootstrapAuthPort
+    private readonly runtime: WaCommsBootstrapRuntimePort
 
     public constructor(options: WaCommsBootstrapCoordinatorOptions) {
         this.logger = options.logger
-        this.buildCommsConfig = options.buildCommsConfig
-        this.setComms = options.setComms
-        this.clearMediaConnCache = options.clearMediaConnCache
-        this.bindComms = options.bindComms
-        this.onIncomingFrame = options.onIncomingFrame
-        this.startKeepAlive = options.startKeepAlive
-        this.stopKeepAlive = options.stopKeepAlive
-        this.persistServerStaticKey = options.persistServerStaticKey
-        this.startPassiveTasksAfterConnect = options.startPassiveTasksAfterConnect
+        this.auth = options.auth
+        this.runtime = options.runtime
     }
 
     public async startCommsWithCredentials(credentials: WaAuthCredentials): Promise<void> {
         this.logger.debug('starting comms with credentials', {
             registered: credentials.meJid !== null && credentials.meJid !== undefined
         })
-        const commsConfig = this.buildCommsConfig()
+        const commsConfig = this.auth.buildCommsConfig()
         const comms = new WaComms(commsConfig, this.logger)
-        this.setComms(comms)
-        this.clearMediaConnCache()
-        this.bindComms(comms)
+        this.runtime.setComms(comms)
+        this.runtime.clearMediaConnCache()
+        this.runtime.bindComms(comms)
 
-        comms.startComms(async (frame) => this.onIncomingFrame(frame))
+        comms.startComms(async (frame) => this.runtime.onIncomingFrame(frame))
         await comms.waitForConnection(commsConfig.connectTimeoutMs)
         this.logger.info('comms connected')
         comms.startHandlingRequests()
-        if (credentials.meJid) {
-            this.startKeepAlive()
-        } else {
-            this.stopKeepAlive()
-        }
+        this.runtime.syncKeepAlive(Boolean(credentials.meJid))
 
         const serverStaticKey = comms.getServerStaticKey()
         if (!serverStaticKey) {
             this.logger.trace('no server static key available to persist')
         } else {
-            await this.persistServerStaticKey(serverStaticKey)
+            await this.auth.persistServerStaticKey(serverStaticKey)
             this.logger.debug('persisted server static key after comms connect')
         }
-        this.startPassiveTasksAfterConnect()
+        this.runtime.startPassiveTasksAfterConnect()
     }
 }

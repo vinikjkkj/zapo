@@ -30,13 +30,17 @@ export interface WaAuthClientCallbacks {
     readonly onError?: (error: Error) => void
 }
 
+export interface WaAuthTransportPort {
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
+}
+
 export interface WaAuthClientDependencies {
     readonly logger: Logger
     readonly signalStore: WaSignalStore
     readonly x25519: X25519
     readonly pairingCrypto: WaPairingCodeCrypto
     readonly advSignature: WaAdvSignature
-    readonly sendNode: (node: BinaryNode) => Promise<void>
-    readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
+    readonly socket: WaAuthTransportPort
     readonly callbacks?: WaAuthClientCallbacks
 }

@@ -16,19 +16,17 @@ import type { WaPairingSuccessHandlerOptions } from './types'
 export class WaPairingSuccessHandler {
     private readonly logger: Logger
     private readonly advSignature: WaAdvSignature
-    private readonly getCredentials: () => WaAuthCredentials | null
-    private readonly updateCredentials: (credentials: WaAuthCredentials) => Promise<void>
-    private readonly sendNode: (node: BinaryNode) => Promise<void>
-    private readonly clearQr: () => void
+    private readonly auth: WaPairingSuccessHandlerOptions['auth']
+    private readonly socket: WaPairingSuccessHandlerOptions['socket']
+    private readonly qr: WaPairingSuccessHandlerOptions['qr']
     private readonly emitPaired: (credentials: WaAuthCredentials) => void
 
     public constructor(options: WaPairingSuccessHandlerOptions) {
         this.logger = options.logger
         this.advSignature = options.advSignature
-        this.getCredentials = options.getCredentials
-        this.updateCredentials = options.updateCredentials
-        this.sendNode = options.sendNode
-        this.clearQr = options.clearQr
+        this.auth = options.auth
+        this.socket = options.socket
+        this.qr = options.qr
         this.emitPaired = options.emitPaired
     }
 
@@ -121,15 +119,15 @@ export class WaPairingSuccessHandler {
             meLid: deviceNode.attrs.lid,
             platform: platformNode.attrs.name
         }
-        await this.updateCredentials(nextCredentials)
+        await this.auth.updateCredentials(nextCredentials)
         this.logger.info('pair-success credentials updated', {
             meJid: nextCredentials.meJid,
             meLid: nextCredentials.meLid,
             platform: nextCredentials.platform
         })
-        this.clearQr()
+        this.qr.clear()
 
-        await this.sendNode({
+        await this.socket.sendNode({
             tag: 'iq',
             attrs: {
                 ...(iqNode.attrs.id ? { id: iqNode.attrs.id } : {}),
@@ -158,7 +156,7 @@ export class WaPairingSuccessHandler {
     }
 
     private requireCredentials(): WaAuthCredentials {
-        const credentials = this.getCredentials()
+        const credentials = this.auth.getCredentials()
         if (!credentials) {
             throw new Error('credentials are not initialized')
         }

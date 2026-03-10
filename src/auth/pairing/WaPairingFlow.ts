@@ -1,6 +1,5 @@
 import { randomBytesAsync } from '../../crypto'
 import type { Logger } from '../../infra/log/types'
-import { WaAdvSignature } from '../../signal/crypto/WaAdvSignature'
 import {
     asNodeBytes,
     findNodeChild,
@@ -21,62 +20,38 @@ import {
     buildNotificationAckNode,
     extractPairDeviceRefs
 } from './nodes'
-import type { ActivePairingSession } from './types'
+import type {
+    ActivePairingSession,
+    WaPairingFlowCallbacks,
+    WaPairingFlowOptions
+} from './types'
 import { WaPairingCodeCrypto } from './WaPairingCodeCrypto'
 import { WaPairingSuccessHandler } from './WaPairingSuccessHandler'
 
 export class WaPairingFlow {
     private readonly logger: Logger
     private readonly pairingCrypto: WaPairingCodeCrypto
-    private readonly getCredentials: () => WaAuthCredentials | null
-    private readonly updateCredentials: (credentials: WaAuthCredentials) => Promise<void>
-    private readonly sendNode: (node: BinaryNode) => Promise<void>
-    private readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
-    private readonly setQrRefs: (refs: readonly string[]) => void
-    private readonly clearQr: () => void
-    private readonly refreshQr: () => void
-    private readonly getDevicePlatform: () => string
-    private readonly emitPairingCode: (code: string) => void
-    private readonly emitPairingRefresh: (forceManual: boolean) => void
+    private readonly auth: WaPairingFlowOptions['auth']
+    private readonly socket: WaPairingFlowOptions['socket']
+    private readonly qr: WaPairingFlowOptions['qr']
+    private readonly callbacks: WaPairingFlowCallbacks
     private readonly pairingSuccessHandler: WaPairingSuccessHandler
     private pairingSession: ActivePairingSession | null
 
-    public constructor(args: {
-        readonly logger: Logger
-        readonly pairingCrypto: WaPairingCodeCrypto
-        readonly advSignature: WaAdvSignature
-        readonly getCredentials: () => WaAuthCredentials | null
-        readonly updateCredentials: (credentials: WaAuthCredentials) => Promise<void>
-        readonly sendNode: (node: BinaryNode) => Promise<void>
-        readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
-        readonly setQrRefs: (refs: readonly string[]) => void
-        readonly clearQr: () => void
-        readonly refreshQr: () => void
-        readonly getDevicePlatform: () => string
-        readonly emitPairingCode: (code: string) => void
-        readonly emitPairingRefresh: (forceManual: boolean) => void
-        readonly emitPaired: (credentials: WaAuthCredentials) => void
-    }) {
-        this.logger = args.logger
-        this.pairingCrypto = args.pairingCrypto
-        this.getCredentials = args.getCredentials
-        this.updateCredentials = args.updateCredentials
-        this.sendNode = args.sendNode
-        this.query = args.query
-        this.setQrRefs = args.setQrRefs
-        this.clearQr = args.clearQr
-        this.refreshQr = args.refreshQr
-        this.getDevicePlatform = args.getDevicePlatform
-        this.emitPairingCode = args.emitPairingCode
-        this.emitPairingRefresh = args.emitPairingRefresh
+    public constructor(options: WaPairingFlowOptions) {
+        this.logger = options.logger
+        this.pairingCrypto = options.pairingCrypto
+        this.auth = options.auth
+        this.socket = options.socket
+        this.qr = options.qr
+        this.callbacks = options.callbacks
         this.pairingSuccessHandler = new WaPairingSuccessHandler({
-            logger: args.logger,
-            advSignature: args.advSignature,
-            getCredentials: this.getCredentials,
-            updateCredentials: this.updateCredentials,
-            sendNode: this.sendNode,
-            clearQr: this.clearQr,
-            emitPaired: args.emitPaired
+            logger: options.logger,
+            advSignature: options.advSignature,
+            auth: this.auth,
+            socket: this.socket,
+            qr: this.qr,
+            emitPaired: this.callbacks.emitPaired
         })
         this.pairingSession = null
     }
@@ -105,15 +80,15 @@ export class WaPairingFlow {
             ...credentials,
             advSecretKey: await randomBytesAsync(32)
         }
-        await this.updateCredentials(refreshedCredentials)
+        await this.auth.updateCredentials(refreshedCredentials)
 
-        const response = await this.query(
+        const response = await this.socket.query(
             buildCompanionHelloRequestNode({
                 phoneJid,
                 shouldShowPushNotification,
                 wrappedCompanionEphemeralPub: companionHello.wrappedCompanionEphemeralPub,
                 companionServerAuthKeyPub: refreshedCredentials.noiseKeyPair.pubKey,
-                companionPlatformId: this.getDevicePlatform(),
+                companionPlatformId: this.auth.getDevicePlatform(),
                 companionPlatformDisplay: `Firefox (${process.platform})`
             }),
             IQ_TIMEOUT_MS
@@ -143,7 +118,7 @@ export class WaPairingFlow {
             attempts: 0,
             finished: false
         }
-        this.emitPairingCode(companionHello.pairingCode)
+        this.callbacks.emitPairingCode(companionHello.pairingCode)
         this.logger.info('pairing code emitted', {
             phoneJid,
             createdAtSeconds: this.pairingSession.createdAtSeconds
@@ -153,7 +128,7 @@ export class WaPairingFlow {
 
     public async fetchPairingCountryCodeIso(): Promise<string> {
         this.logger.trace('fetching pairing country code ISO')
-        const response = await this.query(buildGetCountryCodeRequestNode(), IQ_TIMEOUT_MS)
+        const response = await this.socket.query(buildGetCountryCodeRequestNode(), IQ_TIMEOUT_MS)
         const countryCodeNode = findNodeChild(response, 'country_code')
         const iso = countryCodeNode?.attrs.iso
         if (!iso) {
@@ -194,7 +169,7 @@ export class WaPairingFlow {
             id: node.attrs.id,
             stage: linkCodeNode.attrs.stage
         })
-        await this.sendNode(buildNotificationAckNode(node))
+        await this.socket.sendNode(buildNotificationAckNode(node))
 
         const stage = linkCodeNode.attrs.stage
         if (stage === 'refresh_code') {
@@ -207,7 +182,9 @@ export class WaPairingFlow {
                 this.logger.info('received pairing refresh notification', {
                     forceManualRefresh: linkCodeNode.attrs.force_manual_refresh === 'true'
                 })
-                this.emitPairingRefresh(linkCodeNode.attrs.force_manual_refresh === 'true')
+                this.callbacks.emitPairingRefresh(
+                    linkCodeNode.attrs.force_manual_refresh === 'true'
+                )
             }
             return true
         }
@@ -230,15 +207,15 @@ export class WaPairingFlow {
             return false
         }
 
-        await this.sendNode(buildNotificationAckNode(node, 'companion_reg_refresh'))
+        await this.socket.sendNode(buildNotificationAckNode(node, 'companion_reg_refresh'))
 
         const credentials = this.requireCredentials()
-        await this.updateCredentials({
+        await this.auth.updateCredentials({
             ...credentials,
             advSecretKey: await randomBytesAsync(32)
         })
         this.logger.info('handled companion_reg_refresh notification')
-        this.refreshQr()
+        this.qr.refresh()
         return true
     }
 
@@ -247,14 +224,14 @@ export class WaPairingFlow {
 
         const refs = extractPairDeviceRefs(pairDeviceNode)
 
-        await this.updateCredentials({
+        await this.auth.updateCredentials({
             ...credentials,
             advSecretKey: await randomBytesAsync(32)
         })
-        this.setQrRefs(refs)
+        this.qr.setRefs(refs)
         this.logger.info('pair-device refs updated', { refsCount: refs.length })
 
-        await this.sendNode(buildIqResultNode(iqNode))
+        await this.socket.sendNode(buildIqResultNode(iqNode))
     }
 
     private async handlePairSuccess(
@@ -315,12 +292,12 @@ export class WaPairingFlow {
             registrationIdentityKeyPair: credentials.registrationInfo.identityKeyPair
         })
 
-        await this.updateCredentials({
+        await this.auth.updateCredentials({
             ...credentials,
             advSecretKey: finish.advSecret
         })
 
-        const result = await this.query(
+        const result = await this.socket.query(
             buildCompanionFinishRequestNode({
                 phoneJid: pairingSession.phoneJid,
                 wrappedKeyBundle: finish.wrappedKeyBundle,
@@ -337,7 +314,7 @@ export class WaPairingFlow {
     }
 
     private requireCredentials(): WaAuthCredentials {
-        const credentials = this.getCredentials()
+        const credentials = this.auth.getCredentials()
         if (!credentials) {
             throw new Error('credentials are not initialized')
         }

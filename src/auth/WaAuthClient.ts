@@ -54,24 +54,31 @@ export class WaAuthClient {
             getDevicePlatform: () => this.getDevicePlatform(),
             emitQr: (qr, ttlMs) => this.callbacks.onQr?.(qr, ttlMs)
         })
+        const pairingAuth = {
+            getCredentials: () => this.credentials,
+            updateCredentials: async (credentials: WaAuthCredentials) =>
+                this.updateCredentials(credentials),
+            getDevicePlatform: () => this.getDevicePlatform()
+        }
+        const pairingQr = {
+            setRefs: (refs: readonly string[]) => this.qrFlow.setRefs(refs),
+            clear: () => this.qrFlow.clear(),
+            refresh: () => this.qrFlow.refreshCurrentQr()
+        }
         this.pairingFlow = new WaPairingFlow({
             logger: this.logger,
             pairingCrypto: deps.pairingCrypto,
             advSignature: deps.advSignature,
-            getCredentials: () => this.credentials,
-            updateCredentials: async (credentials) => this.updateCredentials(credentials),
-            sendNode: deps.sendNode,
-            query: async (node, timeoutMs) => deps.query(node, timeoutMs),
-            setQrRefs: (refs) => this.qrFlow.setRefs(refs),
-            clearQr: () => this.qrFlow.clear(),
-            refreshQr: () => {
-                this.qrFlow.refreshCurrentQr()
-            },
-            getDevicePlatform: () => this.getDevicePlatform(),
-            emitPairingCode: (code) => this.callbacks.onPairingCode?.(code),
-            emitPairingRefresh: (forceManual) => this.callbacks.onPairingRefresh?.(forceManual),
-            emitPaired: (credentials) =>
-                this.callbacks.onPaired?.(this.authStore.clone(credentials))
+            auth: pairingAuth,
+            socket: deps.socket,
+            qr: pairingQr,
+            callbacks: {
+                emitPairingCode: (code) => this.callbacks.onPairingCode?.(code),
+                emitPairingRefresh: (forceManual) =>
+                    this.callbacks.onPairingRefresh?.(forceManual),
+                emitPaired: (credentials) =>
+                    this.callbacks.onPaired?.(this.authStore.clone(credentials))
+            }
         })
     }
 

@@ -21,48 +21,38 @@ import {
 } from '../constants'
 import type { WaDirtyBit } from '../sync/types'
 
-export interface WaIncomingNodeCoordinatorOptions {
-    readonly logger: Logger
+export interface WaIncomingNodeRuntimePort {
     readonly handleStreamControlResult: (result: WaStreamControlNodeResult) => Promise<void>
     readonly persistSuccessAttributes: (attributes: WaSuccessPersistAttributes) => Promise<void>
     readonly emitSuccessNode: (node: BinaryNode) => void
     readonly updateClockSkewFromSuccess: (serverUnixSeconds: number) => void
     readonly shouldWarmupMediaConn: () => boolean
     readonly warmupMediaConn: () => Promise<void>
-    readonly parseDirtyBits: (nodes: readonly BinaryNode[]) => readonly WaDirtyBit[]
-    readonly handleDirtyBits: (dirtyBits: readonly WaDirtyBit[]) => Promise<void>
     readonly persistRoutingInfo: (routingInfo: Uint8Array) => Promise<void>
     readonly dispatchIncomingNode: (node: BinaryNode) => Promise<unknown>
 }
 
+export interface WaIncomingNodeDirtySyncPort {
+    readonly parseDirtyBits: (nodes: readonly BinaryNode[]) => readonly WaDirtyBit[]
+    readonly handleDirtyBits: (dirtyBits: readonly WaDirtyBit[]) => Promise<void>
+}
+
+export interface WaIncomingNodeCoordinatorOptions {
+    readonly logger: Logger
+    readonly runtime: WaIncomingNodeRuntimePort
+    readonly dirtySync: WaIncomingNodeDirtySyncPort
+}
+
 export class WaIncomingNodeCoordinator {
     private readonly logger: Logger
-    private readonly handleStreamControlResult: (result: WaStreamControlNodeResult) => Promise<void>
-    private readonly persistSuccessAttributes: (
-        attributes: WaSuccessPersistAttributes
-    ) => Promise<void>
-    private readonly emitSuccessNode: (node: BinaryNode) => void
-    private readonly updateClockSkewFromSuccess: (serverUnixSeconds: number) => void
-    private readonly shouldWarmupMediaConn: () => boolean
-    private readonly warmupMediaConn: () => Promise<void>
-    private readonly parseDirtyBits: (nodes: readonly BinaryNode[]) => readonly WaDirtyBit[]
-    private readonly handleDirtyBits: (dirtyBits: readonly WaDirtyBit[]) => Promise<void>
-    private readonly persistRoutingInfo: (routingInfo: Uint8Array) => Promise<void>
-    private readonly dispatchIncomingNode: (node: BinaryNode) => Promise<unknown>
+    private readonly runtime: WaIncomingNodeRuntimePort
+    private readonly dirtySync: WaIncomingNodeDirtySyncPort
     private mediaConnWarmupPromise: Promise<void> | null
 
     public constructor(options: WaIncomingNodeCoordinatorOptions) {
         this.logger = options.logger
-        this.handleStreamControlResult = options.handleStreamControlResult
-        this.persistSuccessAttributes = options.persistSuccessAttributes
-        this.emitSuccessNode = options.emitSuccessNode
-        this.updateClockSkewFromSuccess = options.updateClockSkewFromSuccess
-        this.shouldWarmupMediaConn = options.shouldWarmupMediaConn
-        this.warmupMediaConn = options.warmupMediaConn
-        this.parseDirtyBits = options.parseDirtyBits
-        this.handleDirtyBits = options.handleDirtyBits
-        this.persistRoutingInfo = options.persistRoutingInfo
-        this.dispatchIncomingNode = options.dispatchIncomingNode
+        this.runtime = options.runtime
+        this.dirtySync = options.dirtySync
         this.mediaConnWarmupPromise = null
     }
 
@@ -74,7 +64,7 @@ export class WaIncomingNodeCoordinator {
         })
         const streamControlResult = parseStreamControlNode(node)
         if (streamControlResult) {
-            await this.handleStreamControlResult(streamControlResult)
+            await this.runtime.handleStreamControlResult(streamControlResult)
             return
         }
         if (await this.handleSuccessNode(node)) {
@@ -83,7 +73,7 @@ export class WaIncomingNodeCoordinator {
         if (await this.handleInfoBulletinNode(node)) {
             return
         }
-        await this.dispatchIncomingNode(node)
+        await this.runtime.dispatchIncomingNode(node)
     }
 
     private async handleSuccessNode(node: BinaryNode): Promise<boolean> {
@@ -105,11 +95,11 @@ export class WaIncomingNodeCoordinator {
             meLid: persistAttributes.meLid,
             meDisplayName: persistAttributes.meDisplayName
         })
-        this.emitSuccessNode(node)
+        this.runtime.emitSuccessNode(node)
         if (persistAttributes.lastSuccessTs !== undefined) {
-            this.updateClockSkewFromSuccess(persistAttributes.lastSuccessTs)
+            this.runtime.updateClockSkewFromSuccess(persistAttributes.lastSuccessTs)
         }
-        await this.persistSuccessAttributes(persistAttributes)
+        await this.runtime.persistSuccessAttributes(persistAttributes)
         this.scheduleMediaConnWarmup()
         return true
     }
@@ -133,10 +123,10 @@ export class WaIncomingNodeCoordinator {
     }
 
     private async warmupMediaConnAfterSuccess(): Promise<void> {
-        if (!this.shouldWarmupMediaConn()) {
+        if (!this.runtime.shouldWarmupMediaConn()) {
             return
         }
-        await this.warmupMediaConn()
+        await this.runtime.warmupMediaConn()
     }
 
     private async handleInfoBulletinNode(node: BinaryNode): Promise<boolean> {
@@ -149,9 +139,9 @@ export class WaIncomingNodeCoordinator {
         }
 
         const dirtyNodes = getNodeChildrenByTag(node, INFO_BULLETIN_DIRTY_TAG)
-        const dirtyBits = this.parseDirtyBits(dirtyNodes)
+        const dirtyBits = this.dirtySync.parseDirtyBits(dirtyNodes)
         if (dirtyBits.length > 0) {
-            await this.handleDirtyBits(dirtyBits)
+            await this.dirtySync.handleDirtyBits(dirtyBits)
         }
         return edgeRoutingNode !== undefined || dirtyBits.length > 0
     }
@@ -166,7 +156,7 @@ export class WaIncomingNodeCoordinator {
                 routingInfoNode.content,
                 `ib.${INFO_BULLETIN_EDGE_ROUTING_TAG}.${INFO_BULLETIN_ROUTING_INFO_TAG}`
             )
-            await this.persistRoutingInfo(routingInfo)
+            await this.runtime.persistRoutingInfo(routingInfo)
             this.logger.info('updated routing info from info bulletin', {
                 byteLength: routingInfo.byteLength
             })

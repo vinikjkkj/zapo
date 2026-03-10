@@ -19,10 +19,7 @@ type QueryWithContext = (
     contextData?: Readonly<Record<string, unknown>>
 ) => Promise<BinaryNode>
 
-export interface WaPassiveTasksCoordinatorOptions {
-    readonly logger: Logger
-    readonly signalStore: WaSignalStore
-    readonly x25519: X25519
+export interface WaPassiveTasksRuntimePort {
     readonly queryWithContext: QueryWithContext
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly persistServerHasPreKeys: (serverHasPreKeys: boolean) => Promise<void>
@@ -32,17 +29,18 @@ export interface WaPassiveTasksCoordinatorOptions {
     readonly shouldQueueDanglingReceipt: (node: BinaryNode, error: Error) => boolean
 }
 
+export interface WaPassiveTasksCoordinatorOptions {
+    readonly logger: Logger
+    readonly signalStore: WaSignalStore
+    readonly x25519: X25519
+    readonly runtime: WaPassiveTasksRuntimePort
+}
+
 export class WaPassiveTasksCoordinator {
     private readonly logger: Logger
     private readonly signalStore: WaSignalStore
     private readonly x25519: X25519
-    private readonly queryWithContext: QueryWithContext
-    private readonly getCurrentCredentials: () => WaAuthCredentials | null
-    private readonly persistServerHasPreKeys: (serverHasPreKeys: boolean) => Promise<void>
-    private readonly sendNodeDirect: (node: BinaryNode) => Promise<void>
-    private readonly takeDanglingReceipts: () => BinaryNode[]
-    private readonly requeueDanglingReceipt: (node: BinaryNode) => void
-    private readonly shouldQueueDanglingReceipt: (node: BinaryNode, error: Error) => boolean
+    private readonly runtime: WaPassiveTasksRuntimePort
     private passiveTasksPromise: Promise<void> | null
     private abPropsHash: string | null
     private abPropsRefreshId: number | null
@@ -51,13 +49,7 @@ export class WaPassiveTasksCoordinator {
         this.logger = options.logger
         this.signalStore = options.signalStore
         this.x25519 = options.x25519
-        this.queryWithContext = options.queryWithContext
-        this.getCurrentCredentials = options.getCurrentCredentials
-        this.persistServerHasPreKeys = options.persistServerHasPreKeys
-        this.sendNodeDirect = options.sendNodeDirect
-        this.takeDanglingReceipts = options.takeDanglingReceipts
-        this.requeueDanglingReceipt = options.requeueDanglingReceipt
-        this.shouldQueueDanglingReceipt = options.shouldQueueDanglingReceipt
+        this.runtime = options.runtime
         this.passiveTasksPromise = null
         this.abPropsHash = null
         this.abPropsRefreshId = null
@@ -86,7 +78,7 @@ export class WaPassiveTasksCoordinator {
     private async runPassiveTasksAfterConnect(): Promise<void> {
         await this.uploadPreKeysIfMissing()
 
-        const credentials = this.getCurrentCredentials()
+        const credentials = this.runtime.getCurrentCredentials()
         const isRegistered = credentials?.meJid !== null && credentials?.meJid !== undefined
         if (!isRegistered) {
             this.logger.trace('registered passive tasks skipped: session is not registered')
@@ -122,7 +114,7 @@ export class WaPassiveTasksCoordinator {
         const lastPreKeyId = preKeys[preKeys.length - 1].keyId
         await this.signalStore.markKeyAsUploaded(lastPreKeyId)
         const uploadNode = buildPreKeyUploadIq(registrationInfo, signedPreKey, preKeys)
-        const response = await this.queryWithContext(
+        const response = await this.runtime.queryWithContext(
             'prekeys.upload',
             uploadNode,
             IQ_TIMEOUT_MS,
@@ -133,7 +125,7 @@ export class WaPassiveTasksCoordinator {
         )
         if (response.attrs.type === 'result') {
             await this.signalStore.setServerHasPreKeys(true)
-            await this.persistServerHasPreKeys(true)
+            await this.runtime.persistServerHasPreKeys(true)
             this.logger.info('uploaded prekeys to server', {
                 count: preKeys.length,
                 lastPreKeyId
@@ -160,7 +152,7 @@ export class WaPassiveTasksCoordinator {
             propsAttrs.refresh_id = `${this.abPropsRefreshId}`
         }
 
-        const response = await this.queryWithContext(
+        const response = await this.runtime.queryWithContext(
             'abprops.sync',
             buildIqNode('get', USER_SERVER, ABT_XMLNS, [
                 {
@@ -196,7 +188,7 @@ export class WaPassiveTasksCoordinator {
     }
 
     private async flushDanglingReceipts(): Promise<void> {
-        const pending = this.takeDanglingReceipts()
+        const pending = this.runtime.takeDanglingReceipts()
         if (pending.length === 0) {
             return
         }
@@ -205,12 +197,12 @@ export class WaPassiveTasksCoordinator {
         for (let index = 0; index < pending.length; index += 1) {
             const node = pending[index]
             try {
-                await this.sendNodeDirect(node)
+                await this.runtime.sendNodeDirect(node)
             } catch (error) {
                 const normalized = toError(error)
-                if (this.shouldQueueDanglingReceipt(node, normalized)) {
+                if (this.runtime.shouldQueueDanglingReceipt(node, normalized)) {
                     for (let restoreIndex = index; restoreIndex < pending.length; restoreIndex += 1) {
-                        this.requeueDanglingReceipt(pending[restoreIndex])
+                        this.runtime.requeueDanglingReceipt(pending[restoreIndex])
                     }
                     this.logger.warn('stopped dangling receipt flush due transient send error', {
                         remaining: pending.length - index,
