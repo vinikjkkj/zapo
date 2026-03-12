@@ -13,7 +13,7 @@ import {
     buildInboundMessageAckNode,
     buildInboundRetryReceiptNode
 } from '@transport/node/builders/message'
-import { decodeBinaryNodeContent, findNodeChild } from '@transport/node/helpers'
+import { decodeNodeContentBase64OrBytes, findNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
 
@@ -56,6 +56,50 @@ function parseMessageTimestamp(value: string | undefined): number | undefined {
     return parsed
 }
 
+function pickNextRetryCount(node: BinaryNode): number {
+    const retryNode = findNodeChild(node, 'retry')
+    const countRaw = retryNode?.attrs.count
+    if (!countRaw) {
+        return 1
+    }
+    const parsed = Number.parseInt(countRaw, 10)
+    if (!Number.isSafeInteger(parsed) || parsed < 1) {
+        return 1
+    }
+    return parsed + 1
+}
+
+function buildIncomingEventRawNode(node: BinaryNode): BinaryNode {
+    const nodeContent = node.content
+    if (!Array.isArray(nodeContent) || nodeContent.length === 0) {
+        return node
+    }
+
+    let redacted = false
+    const children = nodeContent.map((child) => {
+        if (child.tag !== WA_MESSAGE_TAGS.ENC) {
+            return child
+        }
+        if (typeof child.content === 'string' || child.content instanceof Uint8Array) {
+            redacted = true
+            return {
+                tag: child.tag,
+                attrs: child.attrs
+            }
+        }
+        return child
+    })
+    if (!redacted) {
+        return node
+    }
+    // Strip heavy encrypted payload from event snapshots to reduce retention.
+    return {
+        tag: node.tag,
+        attrs: node.attrs,
+        content: children
+    }
+}
+
 function buildBaseIncomingEvent(node: BinaryNode): {
     readonly rawNode: BinaryNode
     readonly id?: string
@@ -63,7 +107,7 @@ function buildBaseIncomingEvent(node: BinaryNode): {
     readonly type?: string
 } {
     return {
-        rawNode: node,
+        rawNode: buildIncomingEventRawNode(node),
         id: node.attrs.id,
         from: node.attrs.from,
         type: node.attrs.type
@@ -181,7 +225,8 @@ async function sendRetryReceiptForDecryptFailure(
         node,
         stanzaId,
         from,
-        options.getMeJid?.()
+        options.getMeJid?.(),
+        pickNextRetryCount(node)
     )
     try {
         await options.sendNode(retryReceiptNode)
@@ -204,6 +249,47 @@ async function sendRetryReceiptForDecryptFailure(
     }
 }
 
+async function decryptAndProcessMessage(
+    node: BinaryNode,
+    encNode: BinaryNode,
+    encType: string,
+    senderJid: string,
+    options: WaIncomingMessageAckHandlerOptions,
+    decrypt: (ciphertext: Uint8Array) => Promise<Uint8Array>
+): Promise<boolean> {
+    try {
+        const decryptedPayload = await decrypt(
+            decodeNodeContentBase64OrBytes(encNode.content, 'message.enc')
+        )
+        const unpaddedPlaintext = unpadPkcs7(decryptedPayload)
+        const message = normalizeIncomingDecryptedMessage(proto.Message.decode(unpaddedPlaintext))
+        await maybeProcessSenderKeyDistributionMessage(senderJid, message, options, node)
+        options.emitIncomingMessage?.({
+            ...buildBaseIncomingEvent(node),
+            timestamp: parseMessageTimestamp(node.attrs.t),
+            senderJid,
+            encType,
+            plaintext: unpaddedPlaintext,
+            message
+        })
+        return true
+    } catch (error) {
+        options.logger.warn('failed to decrypt incoming message', {
+            id: node.attrs.id,
+            from: node.attrs.from,
+            participant: node.attrs.participant,
+            encType,
+            message: toError(error).message
+        })
+        options.emitUnhandledStanza?.({
+            ...buildBaseIncomingEvent(node),
+            reason: `message.decrypt_failed.${encType}`
+        })
+
+        return !(await sendRetryReceiptForDecryptFailure(node, options, error, encType))
+    }
+}
+
 export async function handleIncomingMessageAck(
     node: BinaryNode,
     options: WaIncomingMessageAckHandlerOptions
@@ -219,49 +305,19 @@ export async function handleIncomingMessageAck(
         const senderJid = pickMessageSenderJid(node)
         const chatJid = pickMessageChatJid(node)
         if (encType === 'skmsg' && senderJid && chatJid && options.senderKeyManager) {
-            try {
-                const ciphertext = decodeBinaryNodeContent(encNode.content, 'message.enc')
-                const plaintext = await options.senderKeyManager.decryptGroupMessage({
-                    groupId: chatJid,
-                    sender: parseSignalAddressFromJid(senderJid),
-                    ciphertext
-                })
-                const unpaddedPlaintext = unpadPkcs7(plaintext)
-                const message = normalizeIncomingDecryptedMessage(
-                    proto.Message.decode(unpaddedPlaintext)
-                )
-                await maybeProcessSenderKeyDistributionMessage(senderJid, message, options, node)
-                options.emitIncomingMessage?.({
-                    ...buildBaseIncomingEvent(node),
-                    timestamp: parseMessageTimestamp(node.attrs.t),
-                    senderJid,
-                    encType,
-                    plaintext: unpaddedPlaintext,
-                    message
-                })
-            } catch (error) {
-                options.logger.warn('failed to decrypt incoming message', {
-                    id: node.attrs.id,
-                    from: node.attrs.from,
-                    participant: node.attrs.participant,
-                    encType,
-                    message: toError(error).message
-                })
-                options.emitUnhandledStanza?.({
-                    ...buildBaseIncomingEvent(node),
-                    reason: `message.decrypt_failed.${encType}`
-                })
-
-                const retrySent = await sendRetryReceiptForDecryptFailure(
-                    node,
-                    options,
-                    error,
-                    encType
-                )
-                if (retrySent) {
-                    shouldSendStandardReceipt = false
-                }
-            }
+            shouldSendStandardReceipt = await decryptAndProcessMessage(
+                node,
+                encNode,
+                encType,
+                senderJid,
+                options,
+                async (ciphertext) =>
+                    options.senderKeyManager!.decryptGroupMessage({
+                        groupId: chatJid,
+                        sender: parseSignalAddressFromJid(senderJid),
+                        ciphertext
+                    })
+            )
         } else if (encType === 'skmsg') {
             options.emitUnhandledStanza?.({
                 ...buildBaseIncomingEvent(node),
@@ -272,51 +328,18 @@ export async function handleIncomingMessageAck(
             senderJid &&
             options.signalProtocol
         ) {
-            try {
-                const ciphertext = decodeBinaryNodeContent(encNode.content, 'message.enc')
-                const plaintext = await options.signalProtocol.decryptMessage(
-                    parseSignalAddressFromJid(senderJid),
-                    {
+            shouldSendStandardReceipt = await decryptAndProcessMessage(
+                node,
+                encNode,
+                encType,
+                senderJid,
+                options,
+                async (ciphertext) =>
+                    options.signalProtocol!.decryptMessage(parseSignalAddressFromJid(senderJid), {
                         type: encType,
                         ciphertext
-                    }
-                )
-                const unpaddedPlaintext = unpadPkcs7(plaintext)
-                const message = normalizeIncomingDecryptedMessage(
-                    proto.Message.decode(unpaddedPlaintext)
-                )
-                await maybeProcessSenderKeyDistributionMessage(senderJid, message, options, node)
-                options.emitIncomingMessage?.({
-                    ...buildBaseIncomingEvent(node),
-                    timestamp: parseMessageTimestamp(node.attrs.t),
-                    senderJid,
-                    encType,
-                    plaintext: unpaddedPlaintext,
-                    message
-                })
-            } catch (error) {
-                options.logger.warn('failed to decrypt incoming message', {
-                    id: node.attrs.id,
-                    from: node.attrs.from,
-                    participant: node.attrs.participant,
-                    encType,
-                    message: toError(error).message
-                })
-                options.emitUnhandledStanza?.({
-                    ...buildBaseIncomingEvent(node),
-                    reason: `message.decrypt_failed.${encType}`
-                })
-
-                const retrySent = await sendRetryReceiptForDecryptFailure(
-                    node,
-                    options,
-                    error,
-                    encType
-                )
-                if (retrySent) {
-                    shouldSendStandardReceipt = false
-                }
-            }
+                    })
+            )
         }
     }
 

@@ -50,11 +50,21 @@ interface WaAppStateDecryptedMutation {
     readonly valueMac: Uint8Array
 }
 
+interface WaAppStateCryptoOptions {
+    readonly derivedKeysCacheMaxSize?: number
+}
+
+const DEFAULT_DERIVED_KEYS_CACHE_MAX_SIZE = 256
+
 export class WaAppStateCrypto {
     private readonly derivedKeysCache: Map<string, WaAppStateDerivedKeys>
+    private readonly derivedKeysCacheMaxSize: number
 
-    public constructor() {
+    public constructor(options: WaAppStateCryptoOptions = {}) {
         this.derivedKeysCache = new Map()
+        this.derivedKeysCacheMaxSize = this.normalizeDerivedKeysCacheMaxSize(
+            options.derivedKeysCacheMaxSize
+        )
     }
 
     public clearCache(): void {
@@ -65,6 +75,7 @@ export class WaAppStateCrypto {
         const cacheKey = bytesToBase64(keyData)
         const cached = this.derivedKeysCache.get(cacheKey)
         if (cached) {
+            this.touchDerivedKeysCacheEntry(cacheKey, cached)
             return cached
         }
 
@@ -93,15 +104,8 @@ export class WaAppStateCrypto {
                 APP_STATE_DERIVED_PATCH_MAC_KEY_END
             )
         }
-        this.derivedKeysCache.set(cacheKey, keys)
+        this.touchDerivedKeysCacheEntry(cacheKey, keys)
         return keys
-    }
-
-    public valueMacFromIndexAndValueCipherText(valueBlob: Uint8Array): Uint8Array {
-        if (valueBlob.byteLength < APP_STATE_VALUE_MAC_LENGTH) {
-            throw new Error('invalid mutation value blob length')
-        }
-        return valueBlob.subarray(valueBlob.byteLength - APP_STATE_VALUE_MAC_LENGTH)
     }
 
     public async generateIndexMac(
@@ -252,34 +256,14 @@ export class WaAppStateCrypto {
         base: Uint8Array,
         addValues: readonly Uint8Array[]
     ): Promise<Uint8Array> {
-        let out = base
-        for (const value of addValues) {
-            const expanded = await hkdf(
-                value,
-                null,
-                WA_APP_STATE_KDF_INFO.PATCH_INTEGRITY,
-                APP_STATE_EMPTY_LT_HASH.byteLength
-            )
-            out = this.pointwiseWithOverflow(out, expanded, (left, right) => left + right)
-        }
-        return out
+        return this.ltHashApply(base, addValues, (left, right) => left + right)
     }
 
     public async ltHashSubtract(
         base: Uint8Array,
         removeValues: readonly Uint8Array[]
     ): Promise<Uint8Array> {
-        let out = base
-        for (const value of removeValues) {
-            const expanded = await hkdf(
-                value,
-                null,
-                WA_APP_STATE_KDF_INFO.PATCH_INTEGRITY,
-                APP_STATE_EMPTY_LT_HASH.byteLength
-            )
-            out = this.pointwiseWithOverflow(out, expanded, (left, right) => left - right)
-        }
-        return out
+        return this.ltHashApply(base, removeValues, (left, right) => left - right)
     }
 
     public async ltHashSubtractThenAdd(
@@ -292,10 +276,32 @@ export class WaAppStateCrypto {
         return { hash, subtractResult }
     }
 
+    private async ltHashApply(
+        base: Uint8Array,
+        values: readonly Uint8Array[],
+        combine: (left: number, right: number) => number
+    ): Promise<Uint8Array> {
+        if (values.length === 0) {
+            return base
+        }
+        const expandedValues = await Promise.all(
+            values.map((value) =>
+                hkdf(value, null, WA_APP_STATE_KDF_INFO.PATCH_INTEGRITY, APP_STATE_EMPTY_LT_HASH.byteLength)
+            )
+        )
+        const out = new Uint8Array(base.byteLength)
+        this.pointwiseWithOverflow(base, expandedValues[0], combine, out)
+        for (let index = 1; index < expandedValues.length; index += 1) {
+            this.pointwiseWithOverflow(out, expandedValues[index], combine, out)
+        }
+        return out
+    }
+
     private pointwiseWithOverflow(
         left: Uint8Array,
         right: Uint8Array,
-        combine: (leftValue: number, rightValue: number) => number
+        combine: (leftValue: number, rightValue: number) => number,
+        out: Uint8Array = new Uint8Array(left.byteLength)
     ): Uint8Array {
         if (left.byteLength !== right.byteLength) {
             throw new Error('lt hash input length mismatch')
@@ -303,10 +309,12 @@ export class WaAppStateCrypto {
         if (left.byteLength % APP_STATE_POINT_SIZE !== 0) {
             throw new Error('lt hash input alignment mismatch')
         }
-        const out = new Uint8Array(left.byteLength)
+        if (out.byteLength !== left.byteLength) {
+            throw new Error('lt hash output length mismatch')
+        }
         const leftView = new DataView(left.buffer, left.byteOffset, left.byteLength)
         const rightView = new DataView(right.buffer, right.byteOffset, right.byteLength)
-        const outView = new DataView(out.buffer)
+        const outView = new DataView(out.buffer, out.byteOffset, out.byteLength)
         for (let offset = 0; offset < left.byteLength; offset += APP_STATE_POINT_SIZE) {
             const value = combine(
                 leftView.getUint16(offset, true),
@@ -342,8 +350,31 @@ export class WaAppStateCrypto {
         octetLength[octetLength.length - 1] = associatedData.byteLength & 0xff
         const key = await importHmacSha512Key(valueMacKey)
         const full = await hmacSign(key, concatBytes([associatedData, cipherWithIv, octetLength]))
-        return APP_STATE_VALUE_MAC_LENGTH >= full.byteLength
-            ? full
-            : full.slice(0, APP_STATE_VALUE_MAC_LENGTH)
+        return full.slice(0, APP_STATE_VALUE_MAC_LENGTH)
+    }
+
+    private normalizeDerivedKeysCacheMaxSize(value: number | undefined): number {
+        if (!Number.isFinite(value)) {
+            return DEFAULT_DERIVED_KEYS_CACHE_MAX_SIZE
+        }
+        return Math.max(0, Math.trunc(value ?? 0))
+    }
+
+    private touchDerivedKeysCacheEntry(cacheKey: string, keys: WaAppStateDerivedKeys): void {
+        if (this.derivedKeysCacheMaxSize <= 0) {
+            return
+        }
+        if (this.derivedKeysCache.has(cacheKey)) {
+            this.derivedKeysCache.delete(cacheKey)
+            this.derivedKeysCache.set(cacheKey, keys)
+            return
+        }
+        if (this.derivedKeysCache.size >= this.derivedKeysCacheMaxSize) {
+            const oldestKey = this.derivedKeysCache.keys().next().value
+            if (oldestKey !== undefined) {
+                this.derivedKeysCache.delete(oldestKey)
+            }
+        }
+        this.derivedKeysCache.set(cacheKey, keys)
     }
 }

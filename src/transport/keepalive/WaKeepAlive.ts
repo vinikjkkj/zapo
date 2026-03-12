@@ -4,6 +4,10 @@ import type { BinaryNode } from '@transport/types'
 import type { WaComms } from '@transport/WaComms'
 import { toError } from '@util/primitives'
 
+const KEEPALIVE_DEFAULT_JITTER_RATIO = 0.1
+const KEEPALIVE_DEFAULT_MIN_JITTER_MS = 250
+const KEEPALIVE_MAX_JITTER_RATIO = 0.5
+
 interface WaKeepAliveOptions {
     readonly logger: Logger
     readonly nodeOrchestrator: {
@@ -14,6 +18,8 @@ interface WaKeepAliveOptions {
     readonly intervalMs?: number
     readonly timeoutMs?: number
     readonly hostDomain?: string
+    readonly jitterRatio?: number
+    readonly minJitterMs?: number
 }
 
 export class WaKeepAlive {
@@ -23,6 +29,8 @@ export class WaKeepAlive {
     private readonly intervalMs: number
     private readonly timeoutMs: number
     private readonly hostDomain: string
+    private readonly jitterRatio: number
+    private readonly minJitterMs: number
     private timer: NodeJS.Timeout | null
     private generation: number
     private inFlight: boolean
@@ -34,6 +42,8 @@ export class WaKeepAlive {
         this.intervalMs = options.intervalMs ?? WA_DEFAULTS.HEALTH_CHECK_INTERVAL_MS
         this.timeoutMs = options.timeoutMs ?? WA_DEFAULTS.DEAD_SOCKET_TIMEOUT_MS
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
+        this.jitterRatio = this.normalizeJitterRatio(options.jitterRatio)
+        this.minJitterMs = this.normalizeMinJitterMs(options.minJitterMs)
         this.timer = null
         this.generation = 0
         this.inFlight = false
@@ -42,7 +52,9 @@ export class WaKeepAlive {
     public start(): void {
         this.logger.info('keepalive start', {
             intervalMs: this.intervalMs,
-            timeoutMs: this.timeoutMs
+            timeoutMs: this.timeoutMs,
+            jitterRatio: this.jitterRatio,
+            minJitterMs: this.minJitterMs
         })
         this.generation += 1
         this.inFlight = false
@@ -71,11 +83,16 @@ export class WaKeepAlive {
         if (this.timer) {
             clearTimeout(this.timer)
         }
+        const nextDelayMs = this.computeNextDelayMs()
         this.timer = setTimeout(() => {
             this.timer = null
             void this.run(generation)
-        }, this.intervalMs)
-        this.logger.trace('keepalive scheduled', { generation, inMs: this.intervalMs })
+        }, nextDelayMs)
+        this.logger.trace('keepalive scheduled', {
+            generation,
+            inMs: nextDelayMs,
+            baseIntervalMs: this.intervalMs
+        })
     }
 
     private async run(generation: number): Promise<void> {
@@ -130,5 +147,35 @@ export class WaKeepAlive {
         }
 
         this.schedule(generation)
+    }
+
+    private normalizeJitterRatio(value: number | undefined): number {
+        if (!Number.isFinite(value)) {
+            return KEEPALIVE_DEFAULT_JITTER_RATIO
+        }
+        return Math.min(Math.max(value ?? 0, 0), KEEPALIVE_MAX_JITTER_RATIO)
+    }
+
+    private normalizeMinJitterMs(value: number | undefined): number {
+        if (!Number.isFinite(value)) {
+            return KEEPALIVE_DEFAULT_MIN_JITTER_MS
+        }
+        return Math.max(0, Math.trunc(value ?? 0))
+    }
+
+    private computeNextDelayMs(): number {
+        if (this.intervalMs <= 0) {
+            return 0
+        }
+        if (this.jitterRatio <= 0 && this.minJitterMs <= 0) {
+            return this.intervalMs
+        }
+        const ratioJitterMs = Math.floor(this.intervalMs * this.jitterRatio)
+        const jitterWindowMs = Math.max(this.minJitterMs, ratioJitterMs)
+        if (jitterWindowMs <= 0) {
+            return this.intervalMs
+        }
+        const offsetMs = Math.floor((Math.random() * (jitterWindowMs * 2 + 1)) - jitterWindowMs)
+        return Math.max(1, this.intervalMs + offsetMs)
     }
 }

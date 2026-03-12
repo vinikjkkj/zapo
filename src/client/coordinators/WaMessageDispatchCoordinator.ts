@@ -246,8 +246,9 @@ export class WaMessageDispatchCoordinator {
         const expiresAtMs = nowMs + RETRY_OUTBOUND_TTL_MS
         const hintedMessageId = args.messageIdHint?.trim()
         const resolvedToJid = this.resolveReplayToJid(args.toJid, args.replayPayload)
+        let hintedPersisted = false
         if (hintedMessageId) {
-            await this.safeUpsertRetryOutboundRecord(
+            hintedPersisted = await this.safeUpsertRetryOutboundRecord(
                 this.createRetryOutboundRecord(
                     hintedMessageId,
                     resolvedToJid,
@@ -263,6 +264,10 @@ export class WaMessageDispatchCoordinator {
         }
 
         const result = await publish()
+        if (hintedPersisted && hintedMessageId && result.id === hintedMessageId) {
+            // Hint and final message id matched; avoid a second equivalent upsert on the hot path.
+            return result
+        }
         const persistedNowMs = Date.now()
         await this.safeUpsertRetryOutboundRecord(
             this.createRetryOutboundRecord(
@@ -321,7 +326,7 @@ export class WaMessageDispatchCoordinator {
 
     private async safeUpsertRetryOutboundRecord(
         record: WaRetryOutboundMessageRecord
-    ): Promise<void> {
+    ): Promise<boolean> {
         try {
             await this.retryStore.upsertOutboundMessage(record)
         } catch (error) {
@@ -331,7 +336,7 @@ export class WaMessageDispatchCoordinator {
                 mode: record.replayMode,
                 message: toError(error).message
             })
-            return
+            return false
         }
 
         try {
@@ -341,6 +346,7 @@ export class WaMessageDispatchCoordinator {
                 message: toError(error).message
             })
         }
+        return true
     }
 
     private async publishGroupSenderKeyMessage(
@@ -410,46 +416,47 @@ export class WaMessageDispatchCoordinator {
             type
         })
 
+        let selfDevicePlaintext: Uint8Array | null = null
+        for (const targetJid of deviceJids) {
+            if (toUserJid(targetJid) !== meUserJid) {
+                continue
+            }
+            const wrapped = wrapDeviceSentMessage(message, recipientUserJid)
+            selfDevicePlaintext = await writeRandomPadMax16(proto.Message.encode(wrapped).finish())
+            break
+        }
+
         const participants: {
             readonly jid: string
             readonly encType: 'msg' | 'pkmsg'
             readonly ciphertext: Uint8Array
-        }[] = []
-        let shouldAttachDeviceIdentity = false
-        let selfDevicePlaintext: Uint8Array | null = null
-
-        for (let index = 0; index < deviceJids.length; index += 1) {
-            const targetJid = deviceJids[index]
-            const address = parseSignalAddressFromJid(targetJid)
-            const targetUserJid = toUserJid(targetJid)
-            let plaintextForTarget = plaintext
-            if (targetUserJid === meUserJid) {
-                if (!selfDevicePlaintext) {
-                    const wrapped = wrapDeviceSentMessage(message, recipientUserJid)
-                    selfDevicePlaintext = await writeRandomPadMax16(
-                        proto.Message.encode(wrapped).finish()
-                    )
+        }[] = await Promise.all(
+            deviceJids.map(async (targetJid) => {
+                const address = parseSignalAddressFromJid(targetJid)
+                const targetUserJid = toUserJid(targetJid)
+                const expectedIdentity =
+                    targetUserJid === recipientUserJid ? options.expectedIdentity : undefined
+                const plaintextForTarget =
+                    selfDevicePlaintext && targetUserJid === meUserJid
+                        ? selfDevicePlaintext
+                        : plaintext
+                await this.ensureSignalSession(address, targetJid, expectedIdentity)
+                const encrypted = await this.signalProtocol.encryptMessage(
+                    address,
+                    plaintextForTarget,
+                    expectedIdentity
+                )
+                return {
+                    jid: targetJid,
+                    encType: encrypted.type,
+                    ciphertext: encrypted.ciphertext
                 }
-                plaintextForTarget = selfDevicePlaintext
-            }
-            const expectedIdentity =
-                targetUserJid === recipientUserJid ? options.expectedIdentity : undefined
-            await this.ensureSignalSession(address, targetJid, expectedIdentity)
-            const encrypted = await this.signalProtocol.encryptMessage(
-                address,
-                plaintextForTarget,
-                expectedIdentity
-            )
-            participants.push({
-                jid: targetJid,
-                encType: encrypted.type,
-                ciphertext: encrypted.ciphertext
             })
-            if (encrypted.type === 'pkmsg') {
-                shouldAttachDeviceIdentity = true
-            }
-        }
+        )
 
+        const shouldAttachDeviceIdentity = participants.some(
+            (participant) => participant.encType === 'pkmsg'
+        )
         const deviceIdentity = shouldAttachDeviceIdentity
             ? this.getEncodedSignedDeviceIdentity()
             : undefined
@@ -513,9 +520,6 @@ export class WaMessageDispatchCoordinator {
                 fanout.add(deviceJid)
             }
 
-            if (fanout.size === 0) {
-                fanout.add(recipientUserJid)
-            }
             return [...fanout]
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error)

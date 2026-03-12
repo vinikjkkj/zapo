@@ -1,5 +1,6 @@
 import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
+import { BoundedTaskQueue, isBoundedTaskQueueFullError } from '@infra/perf/BoundedTaskQueue'
 import { WA_DEFAULTS } from '@protocol/constants'
 import { WaNoiseSession } from '@transport/noise/WaNoiseSession'
 import type { SocketCloseInfo, WaCommsConfig, WaCommsState } from '@transport/types'
@@ -7,6 +8,11 @@ import { WaWebSocket } from '@transport/WaWebSocket'
 import { bytesToBase64UrlSafe } from '@util/base64'
 import { EMPTY_BYTES } from '@util/bytes'
 import { toError } from '@util/primitives'
+
+const WA_FRAME_HANDLER_QUEUE_MAX_SIZE = 4096
+const WA_FRAME_HANDLER_MAX_CONCURRENCY = 8
+const WA_PENDING_FRAMES_MAX_COUNT = 2048
+const WA_PENDING_FRAMES_MAX_BYTES = 16 * 1024 * 1024
 
 interface ConnectionWaiter {
     readonly resolve: () => void
@@ -36,10 +42,16 @@ export class WaComms {
     private stanzaHandler: StanzaHandler | null
     private inflateFrame: InflateFrame | null
     private pendingFrames: Uint8Array[]
+    private pendingFramesByteLength: number
+    private readonly pendingFramesMaxCount: number
+    private readonly pendingFramesMaxBytes: number
+    private pendingFramesOverflowClosing: boolean
     private resumeInFlight: boolean
     private resumeHandshakeFailures: number
     private noiseSession: WaNoiseSession | null
     private lastServerStaticKey: Uint8Array | null
+    private frameProcessingQueue: Promise<void>
+    private readonly frameHandlerQueue: BoundedTaskQueue
 
     public constructor(config: WaCommsConfig, logger: Logger = new ConsoleLogger('info')) {
         if (!config.noise) {
@@ -92,10 +104,19 @@ export class WaComms {
         this.stanzaHandler = null
         this.inflateFrame = null
         this.pendingFrames = []
+        this.pendingFramesByteLength = 0
+        this.pendingFramesMaxCount = WA_PENDING_FRAMES_MAX_COUNT
+        this.pendingFramesMaxBytes = WA_PENDING_FRAMES_MAX_BYTES
+        this.pendingFramesOverflowClosing = false
         this.resumeInFlight = false
         this.resumeHandshakeFailures = 0
         this.noiseSession = null
         this.lastServerStaticKey = null
+        this.frameProcessingQueue = Promise.resolve()
+        this.frameHandlerQueue = new BoundedTaskQueue(
+            WA_FRAME_HANDLER_QUEUE_MAX_SIZE,
+            WA_FRAME_HANDLER_MAX_CONCURRENCY
+        )
     }
 
     private applyRoutingInfoToSocketConfig(config: WaCommsConfig): WaCommsConfig {
@@ -136,11 +157,13 @@ export class WaComms {
         this.logger.info('comms start requested')
         this.stanzaHandler = handleStanza
         this.inflateFrame = inflateFrame ?? null
-        this.pendingFrames = []
+        this.clearPendingFrames()
+        this.pendingFramesOverflowClosing = false
         this.started = true
         this.preventRetry = false
         this.connected = this.socket.isOpen()
         this.handlingRequests = false
+        this.frameProcessingQueue = Promise.resolve()
         this.clearReconnectTimer()
         void this.openSocket(false)
     }
@@ -172,34 +195,35 @@ export class WaComms {
     public startHandlingRequests(): void {
         this.handlingRequests = true
         this.logger.debug('comms request handling enabled')
-        void this.flushPendingFrames()
+        this.frameProcessingQueue = this.frameProcessingQueue
+            .catch(() => undefined)
+            .then(async () => this.flushPendingFrames())
     }
 
     public async stopComms(): Promise<void> {
         this.logger.info('comms stop requested')
-        this.started = false
-        this.connected = false
-        this.handlingRequests = false
-        this.preventRetry = true
-        this.resumeInFlight = false
-        this.resumeHandshakeFailures = 0
-        this.noiseSession = null
-        this.pendingFrames = []
-        this.stanzaHandler = null
-        this.inflateFrame = null
-        this.clearReconnectTimer()
-        this.rejectAllWaiters(new Error('comms stopped'))
+        this.resetConnectionState({
+            started: false,
+            connected: false,
+            handlingRequests: false,
+            preventRetry: true,
+            resumeInFlight: false,
+            clearHandlers: true,
+            rejectWaitersError: new Error('comms stopped')
+        })
         await this.socket.close(1000, 'stop_comms')
     }
 
     public async closeSocketAndResume(): Promise<void> {
         this.logger.info('comms close socket and resume requested')
-        this.started = true
-        this.connected = false
-        this.preventRetry = false
-        this.resumeInFlight = true
-        this.noiseSession = null
-        this.clearReconnectTimer()
+        this.resetConnectionState({
+            started: true,
+            connected: false,
+            handlingRequests: this.handlingRequests,
+            preventRetry: false,
+            resumeInFlight: true,
+            resetResumeHandshakeFailures: false
+        })
         await this.socket.close(1000, 'resume_socket')
         this.resumeInFlight = false
         void this.openSocket(true)
@@ -207,16 +231,14 @@ export class WaComms {
 
     public async closeSocketAndPreventRetry(): Promise<void> {
         this.logger.warn('comms close socket and prevent retry requested')
-        this.preventRetry = true
-        this.started = false
-        this.connected = false
-        this.handlingRequests = false
-        this.resumeInFlight = false
-        this.resumeHandshakeFailures = 0
-        this.noiseSession = null
-        this.pendingFrames = []
-        this.clearReconnectTimer()
-        this.rejectAllWaiters(new Error('socket closed and retry disabled'))
+        this.resetConnectionState({
+            started: false,
+            connected: false,
+            handlingRequests: false,
+            preventRetry: true,
+            resumeInFlight: false,
+            rejectWaitersError: new Error('socket closed and retry disabled')
+        })
         await this.socket.close(1000, 'prevent_retry')
     }
 
@@ -291,7 +313,8 @@ export class WaComms {
         this.connected = false
         this.noiseSession?.onSocketClosed(new Error(`socket closed (${info.code}:${info.reason})`))
         this.noiseSession = null
-        this.pendingFrames = []
+        this.clearPendingFrames()
+        this.pendingFramesOverflowClosing = false
         if (!this.started || this.preventRetry) {
             this.logger.trace('comms socket close ignored for reconnect', {
                 started: this.started,
@@ -313,7 +336,9 @@ export class WaComms {
 
     private onSocketMessage(payload: Uint8Array): void {
         this.logger.trace('comms socket payload received', { byteLength: payload.byteLength })
-        void this.processSocketPayload(payload)
+        this.frameProcessingQueue = this.frameProcessingQueue
+            .catch(() => undefined)
+            .then(async () => this.processSocketPayload(payload))
     }
 
     private async processSocketPayload(payload: Uint8Array): Promise<void> {
@@ -323,9 +348,7 @@ export class WaComms {
         }
         try {
             const frames = await this.noiseSession.pushWireChunk(payload)
-            for (const frame of frames) {
-                void this.onDecodedFrame(frame)
-            }
+            this.routeDecodedFrames(frames)
         } catch (error) {
             const normalized = toError(error)
             this.logger.error('failed to decode noise frame', { message: normalized.message })
@@ -349,7 +372,7 @@ export class WaComms {
             this.logger.trace('comms frame queued until request handling starts', {
                 byteLength: payload.byteLength
             })
-            this.pendingFrames.push(payload)
+            this.tryQueuePendingFrames([payload], 'decoded_frame')
             return
         }
         try {
@@ -384,9 +407,7 @@ export class WaComms {
             throw error
         }
         const buffered = await session.pushWireChunk(EMPTY_BYTES)
-        for (const frame of buffered) {
-            void this.onDecodedFrame(frame)
-        }
+        this.routeDecodedFrames(buffered)
         this.resumeHandshakeFailures = 0
         this.lastServerStaticKey = session.getServerStaticKey()
         this.connected = true
@@ -400,10 +421,96 @@ export class WaComms {
             return
         }
         this.logger.debug('flushing pending comms frames', { count: this.pendingFrames.length })
-        const buffered = this.pendingFrames.splice(0, this.pendingFrames.length)
-        for (const frame of buffered) {
-            void this.onDecodedFrame(frame)
+        const buffered = this.pendingFrames
+        this.pendingFrames = []
+        this.pendingFramesByteLength = 0
+        this.routeDecodedFrames(buffered)
+    }
+
+    private routeDecodedFrames(frames: readonly Uint8Array[]): void {
+        if (frames.length === 0) {
+            return
         }
+        if (!this.handlingRequests || !this.stanzaHandler) {
+            this.logger.trace('comms frame queued until request handling starts', {
+                count: frames.length
+            })
+            this.tryQueuePendingFrames(frames, 'decoded_batch')
+            return
+        }
+        for (const frame of frames) {
+            this.scheduleDecodedFrame(frame)
+        }
+    }
+
+    private clearPendingFrames(): void {
+        this.pendingFrames = []
+        this.pendingFramesByteLength = 0
+    }
+
+    private tryQueuePendingFrames(frames: readonly Uint8Array[], source: string): boolean {
+        if (frames.length === 0) {
+            return true
+        }
+        let incomingBytes = 0
+        for (let index = 0; index < frames.length; index += 1) {
+            incomingBytes += frames[index].byteLength
+        }
+        const nextCount = this.pendingFrames.length + frames.length
+        const nextBytes = this.pendingFramesByteLength + incomingBytes
+        if (nextCount > this.pendingFramesMaxCount || nextBytes > this.pendingFramesMaxBytes) {
+            this.logger.error('pending comms frame buffer overflow', {
+                source,
+                currentCount: this.pendingFrames.length,
+                currentBytes: this.pendingFramesByteLength,
+                incomingCount: frames.length,
+                incomingBytes,
+                maxCount: this.pendingFramesMaxCount,
+                maxBytes: this.pendingFramesMaxBytes
+            })
+            this.clearPendingFrames()
+            this.schedulePendingFramesOverflowClose()
+            return false
+        }
+        this.pendingFrames.push(...frames)
+        this.pendingFramesByteLength = nextBytes
+        return true
+    }
+
+    private schedulePendingFramesOverflowClose(): void {
+        if (this.pendingFramesOverflowClosing || this.preventRetry) {
+            return
+        }
+        this.pendingFramesOverflowClosing = true
+        // Pending frames are intentionally bounded to prevent unbounded memory growth.
+        void this.closeSocketAndPreventRetry()
+            .catch((error) => {
+                this.logger.warn('failed to close socket after pending frame overflow', {
+                    message: toError(error).message
+                })
+            })
+            .finally(() => {
+                this.pendingFramesOverflowClosing = false
+            })
+    }
+
+    private scheduleDecodedFrame(frame: Uint8Array): void {
+        void this.frameHandlerQueue
+            .enqueue(async () => this.onDecodedFrame(frame))
+            .catch((error) => {
+                const normalized = toError(error)
+                this.logger.error('failed to enqueue decoded frame handler', {
+                    message: normalized.message
+                })
+                if (!isBoundedTaskQueueFullError(error)) {
+                    return
+                }
+                this.logger.warn('frame handler queue is full, processing frame inline', {
+                    pending: this.frameHandlerQueue.pending(),
+                    inFlight: this.frameHandlerQueue.inFlight()
+                })
+                void this.onDecodedFrame(frame)
+            })
     }
 
     private scheduleReconnect(): void {
@@ -498,6 +605,37 @@ export class WaComms {
                 serverStaticKey: undefined
             },
             usedResumeHandshake: false
+        }
+    }
+
+    private resetConnectionState(options: {
+        readonly started: boolean
+        readonly connected: boolean
+        readonly handlingRequests: boolean
+        readonly preventRetry: boolean
+        readonly resumeInFlight: boolean
+        readonly clearHandlers?: boolean
+        readonly rejectWaitersError?: Error
+        readonly resetResumeHandshakeFailures?: boolean
+    }): void {
+        this.started = options.started
+        this.connected = options.connected
+        this.handlingRequests = options.handlingRequests
+        this.preventRetry = options.preventRetry
+        this.resumeInFlight = options.resumeInFlight
+        if (options.resetResumeHandshakeFailures !== false) {
+            this.resumeHandshakeFailures = 0
+        }
+        this.noiseSession = null
+        this.clearPendingFrames()
+        this.pendingFramesOverflowClosing = false
+        if (options.clearHandlers) {
+            this.stanzaHandler = null
+            this.inflateFrame = null
+        }
+        this.clearReconnectTimer()
+        if (options.rejectWaitersError) {
+            this.rejectAllWaiters(options.rejectWaitersError)
         }
     }
 }
