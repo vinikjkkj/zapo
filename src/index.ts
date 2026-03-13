@@ -1,5 +1,10 @@
 export { WaClient } from '@client'
-export type { WaClientEventMap, WaClientOptions } from '@client'
+export type {
+    WaClientEventMap,
+    WaClientOptions,
+    WaHistorySyncChunkEvent,
+    WaHistorySyncOptions
+} from '@client'
 export { ConsoleLogger } from '@infra/log/ConsoleLogger'
 export { PinoLogger, createPinoLogger } from '@infra/log/PinoLogger'
 export type { PinoLoggerOptions } from '@infra/log/PinoLogger'
@@ -9,17 +14,23 @@ export type {
     WaAppStateCollectionStoreState,
     WaAppStateStore,
     WaAuthStore,
+    WaContactStore,
     WaCreateStoreCustomProviders,
     WaCreateStoreOptions,
+    WaMessageStore,
     WaRetryStore,
     WaSenderKeyStore,
     WaSignalStore,
     WaSqliteDriver,
     WaSqliteStorageOptions,
+    WaStoredContactRecord,
+    WaStoredMessageRecord,
+    WaStoredThreadRecord,
     WaStore,
     WaStoreDomainValueOrFactory,
     WaStoreProviderSelection,
-    WaStoreSession
+    WaStoreSession,
+    WaThreadStore
 } from '@store'
 export {
     getLoginIdentity,

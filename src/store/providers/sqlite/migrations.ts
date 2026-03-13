@@ -1,6 +1,12 @@
 import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
 
-export type WaSqliteMigrationDomain = 'auth' | 'signal' | 'senderKey' | 'appState' | 'retry'
+export type WaSqliteMigrationDomain =
+    | 'auth'
+    | 'signal'
+    | 'senderKey'
+    | 'appState'
+    | 'retry'
+    | 'mailbox'
 
 interface WaSqliteMigration {
     readonly id: string
@@ -199,6 +205,54 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
 
                 CREATE INDEX IF NOT EXISTS retry_inbound_counters_by_expiry
                     ON retry_inbound_counters (session_id, expires_at_ms);
+            `)
+        }
+    },
+    {
+        id: '0004_mailbox_schema',
+        domain: 'mailbox',
+        up: (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS mailbox_messages (
+                    session_id TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    thread_jid TEXT NOT NULL,
+                    sender_jid TEXT,
+                    participant_jid TEXT,
+                    from_me INTEGER NOT NULL,
+                    timestamp_ms INTEGER,
+                    enc_type TEXT,
+                    plaintext BLOB,
+                    message_bytes BLOB,
+                    PRIMARY KEY (session_id, message_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS mailbox_messages_by_thread_timestamp
+                    ON mailbox_messages (session_id, thread_jid, timestamp_ms DESC);
+
+                CREATE TABLE IF NOT EXISTS mailbox_threads (
+                    session_id TEXT NOT NULL,
+                    jid TEXT NOT NULL,
+                    name TEXT,
+                    unread_count INTEGER,
+                    archived INTEGER,
+                    pinned INTEGER,
+                    mute_end_ms INTEGER,
+                    marked_as_unread INTEGER,
+                    ephemeral_expiration INTEGER,
+                    PRIMARY KEY (session_id, jid)
+                );
+
+                CREATE TABLE IF NOT EXISTS mailbox_contacts (
+                    session_id TEXT NOT NULL,
+                    jid TEXT NOT NULL,
+                    display_name TEXT,
+                    push_name TEXT,
+                    lid TEXT,
+                    phone_number TEXT,
+                    last_updated_ms INTEGER NOT NULL,
+                    PRIMARY KEY (session_id, jid)
+                );
             `)
         }
     }

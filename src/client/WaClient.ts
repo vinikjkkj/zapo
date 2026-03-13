@@ -10,6 +10,8 @@ import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator
 import type { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import type { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
+import { processHistorySyncNotification } from '@client/historysync'
+import { persistIncomingMailboxEntities } from '@client/mailbox'
 import type {
     WaClientEventMap,
     WaClientOptions,
@@ -36,7 +38,10 @@ import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS, WA_MESSAGE_TAGS } from '@protocol/constants'
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
+import type { WaContactStore } from '@store/contracts/contact.store'
+import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
+import type { WaThreadStore } from '@store/contracts/thread.store'
 import type { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 import { queryWithContext as queryNodeWithContext } from '@transport/node/query'
 import type { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
@@ -50,7 +55,6 @@ const WA_RECOMMENDED_UV_THREADPOOL_SIZE = 16
 let waThreadpoolHintLogged = false
 type WaIncomingProtocolType = NonNullable<Proto.Message.IProtocolMessage['type']>
 const SYNC_RELATED_PROTOCOL_TYPES = new Set<WaIncomingProtocolType>([
-    proto.Message.ProtocolMessage.Type.HISTORY_SYNC_NOTIFICATION,
     proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_REQUEST,
     proto.Message.ProtocolMessage.Type.APP_STATE_FATAL_EXCEPTION_NOTIFICATION,
     proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_MESSAGE,
@@ -73,7 +77,10 @@ export class WaClient extends EventEmitter {
     private readonly options!: Readonly<WaClientOptions>
     private readonly logger!: Logger
     private readonly appStateStore!: WaAppStateStore
+    private readonly contactStore!: WaContactStore
+    private readonly messageStore!: WaMessageStore
     private readonly retryStore!: WaRetryStore
+    private readonly threadStore!: WaThreadStore
     private readonly authClient!: WaAuthClient
     private readonly nodeOrchestrator!: WaNodeOrchestrator
     private readonly keepAlive!: WaKeepAlive
@@ -99,7 +106,10 @@ export class WaClient extends EventEmitter {
         this.options = base.options
         this.logger = base.logger
         this.appStateStore = base.sessionStore.appState
+        this.contactStore = base.sessionStore.contacts
+        this.messageStore = base.sessionStore.messages
         this.retryStore = base.sessionStore.retry
+        this.threadStore = base.sessionStore.threads
 
         const host: WaClientDependencyHost = {
             sendNode: (node) => this.sendNode(node),
@@ -246,6 +256,12 @@ export class WaClient extends EventEmitter {
 
     private async handleIncomingMessageEvent(event: WaIncomingMessageEvent): Promise<void> {
         this.emit('incoming_message', event)
+        void persistIncomingMailboxEntities({
+            logger: this.logger,
+            contactStore: this.contactStore,
+            messageStore: this.messageStore,
+            event
+        })
         const protocolMessage = event.message?.protocolMessage
         if (!protocolMessage) {
             return
@@ -267,6 +283,13 @@ export class WaClient extends EventEmitter {
 
         if (protocolType === proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_SHARE) {
             await this.handleIncomingAppStateSyncKeyShare(event, protocolMessage)
+            return
+        }
+
+        if (protocolType === proto.Message.ProtocolMessage.Type.HISTORY_SYNC_NOTIFICATION) {
+            if (this.options.history?.enabled && protocolMessage.historySyncNotification) {
+                await this.handleHistorySyncNotification(protocolMessage.historySyncNotification)
+            }
             return
         }
 
@@ -310,6 +333,32 @@ export class WaClient extends EventEmitter {
             this.logger.warn('failed to import app-state sync key share from protocol message', {
                 id: event.id,
                 from: event.from,
+                message: toError(error).message
+            })
+        }
+    }
+
+    private async handleHistorySyncNotification(
+        notification: Proto.Message.IHistorySyncNotification
+    ): Promise<void> {
+        try {
+            await processHistorySyncNotification(
+                {
+                    logger: this.logger,
+                    mediaTransfer: this.mediaTransfer,
+                    contactStore: this.contactStore,
+                    messageStore: this.messageStore,
+                    threadStore: this.threadStore,
+                    emitEvent: this.emit.bind(this) as Parameters<
+                        typeof processHistorySyncNotification
+                    >[0]['emitEvent']
+                },
+                notification
+            )
+        } catch (error) {
+            this.logger.warn('failed to process history sync notification', {
+                syncType: notification.syncType,
+                chunkOrder: notification.chunkOrder,
                 message: toError(error).message
             })
         }
@@ -582,8 +631,13 @@ export class WaClient extends EventEmitter {
 
     private async clearStoredState(): Promise<void> {
         await this.authClient.clearStoredCredentials()
-        await this.appStateStore.clear()
-        await this.retryStore.clear()
+        await Promise.all([
+            this.appStateStore.clear(),
+            this.contactStore.clear(),
+            this.messageStore.clear(),
+            this.retryStore.clear(),
+            this.threadStore.clear()
+        ])
     }
 
     private handleError(error: Error): void {

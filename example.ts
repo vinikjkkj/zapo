@@ -16,6 +16,28 @@ function resolveLogLevel(value: string | undefined): LogLevel {
     }
 }
 
+const extractIncomingText = (
+    message:
+        | {
+              conversation?: string | null
+              extendedTextMessage?: { text?: string | null } | null
+          }
+        | null
+        | undefined
+): string | undefined => {
+    if (!message) {
+        return undefined
+    }
+    if (typeof message.conversation === 'string' && message.conversation.length > 0) {
+        return message.conversation
+    }
+    const extendedText = message.extendedTextMessage?.text
+    if (typeof extendedText === 'string' && extendedText.length > 0) {
+        return extendedText
+    }
+    return undefined
+}
+
 async function main(): Promise<void> {
     const authPath = resolve(process.cwd(), '.auth', 'state.sqlite')
     await mkdir(dirname(authPath), { recursive: true })
@@ -29,18 +51,39 @@ async function main(): Promise<void> {
         pretty: true
     })
 
-    const sessionId = process.env.EXAMPLE_SESSION_ID ?? 'default'
+    const sessionId_1 = process.env.EXAMPLE_SESSION_ID ?? 'default'
+    const sessionId_2 = process.env.EXAMPLE_SESSION_ID_2 ?? 'default_2'
     const store = createStore({
         sqlite: {
             path: authPath,
             driver: 'auto'
+        },
+        providers: {
+            messages: 'sqlite',
+            threads: 'sqlite',
+            contacts: 'sqlite'
         }
     })
 
-    const client = new WaClient(
+    const client_1 = new WaClient(
         {
             store,
-            sessionId,
+            sessionId: sessionId_1,
+            connectTimeoutMs: 15_000,
+            deviceBrowser: 'Firefox',
+            deviceOsDisplayName: 'Windows',
+            history: {
+                enabled: true,
+                requireFullSync: true
+            }
+        },
+        logger
+    )
+
+    const client_2 = new WaClient(
+        {
+            store,
+            sessionId: sessionId_2,
             connectTimeoutMs: 15_000,
             deviceBrowser: 'Firefox',
             deviceOsDisplayName: 'Windows'
@@ -48,34 +91,35 @@ async function main(): Promise<void> {
         logger
     )
 
-    const extractIncomingText = (
-        message:
-            | {
-                  conversation?: string | null
-                  extendedTextMessage?: { text?: string | null } | null
-              }
-            | null
-            | undefined
-    ): string | undefined => {
-        if (!message) {
-            return undefined
-        }
-        if (typeof message.conversation === 'string' && message.conversation.length > 0) {
-            return message.conversation
-        }
-        const extendedText = message.extendedTextMessage?.text
-        if (typeof extendedText === 'string' && extendedText.length > 0) {
-            return extendedText
-        }
-        return undefined
+    await startSession(client_1)
+    await startSession(client_2)
+
+    const autoExitMs = Number(process.env.EXAMPLE_EXIT_MS ?? '0')
+    if (Number.isFinite(autoExitMs) && autoExitMs > 0) {
+        setTimeout(() => {
+            void shutdown(client_1, 0)
+        }, autoExitMs)
     }
 
-    client.on('connected', async () => {
-        console.log('[connected]')
+    process.on('SIGINT', () => {
+        void shutdown(client_1, 0)
     })
-    client.on('disconnected', () => {
-        console.log('[disconnected]')
+    process.on('SIGTERM', () => {
+        void shutdown(client_1, 0)
     })
+}
+
+async function shutdown(client: WaClient, code: number): Promise<void> {
+    await client.disconnect().catch(() => undefined)
+    process.exit(code)
+}
+
+void main().catch((error) => {
+    console.error(error)
+    process.exit(1)
+})
+
+async function startSession(client: WaClient): Promise<void> {
     client.on('qr', (qr, ttlMs) => {
         console.log(`[qr] ttlMs=${ttlMs} value=${qr}`)
     })
@@ -108,28 +152,4 @@ async function main(): Promise<void> {
         console.log(`[incoming_message] pong enviado para ${to}`)
     })
     await client.connect()
-
-    const autoExitMs = Number(process.env.EXAMPLE_EXIT_MS ?? '0')
-    if (Number.isFinite(autoExitMs) && autoExitMs > 0) {
-        setTimeout(() => {
-            void shutdown(client, 0)
-        }, autoExitMs)
-    }
-
-    process.on('SIGINT', () => {
-        void shutdown(client, 0)
-    })
-    process.on('SIGTERM', () => {
-        void shutdown(client, 0)
-    })
 }
-
-async function shutdown(client: WaClient, code: number): Promise<void> {
-    await client.disconnect().catch(() => undefined)
-    process.exit(code)
-}
-
-void main().catch((error) => {
-    console.error(error)
-    process.exit(1)
-})

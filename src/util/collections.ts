@@ -1,3 +1,13 @@
+export function normalizeQueryLimit(limit: number | undefined, defaultLimit: number): number {
+    if (limit === undefined) {
+        return defaultLimit
+    }
+    if (!Number.isSafeInteger(limit) || limit <= 0) {
+        throw new Error(`invalid query limit: ${limit}`)
+    }
+    return limit
+}
+
 export function setBoundedMapEntry<K, V>(
     map: Map<K, V>,
     key: K,

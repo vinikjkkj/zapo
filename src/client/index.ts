@@ -1,2 +1,7 @@
 export { WaClient } from '@client/WaClient'
-export type { WaClientEventMap, WaClientOptions } from '@client/types'
+export type {
+    WaClientEventMap,
+    WaClientOptions,
+    WaHistorySyncChunkEvent,
+    WaHistorySyncOptions
+} from '@client/types'

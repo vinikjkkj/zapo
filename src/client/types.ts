@@ -18,6 +18,12 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
     readonly messageAckTimeoutMs?: number
     readonly messageMaxAttempts?: number
     readonly messageRetryDelayMs?: number
+    readonly history?: WaHistorySyncOptions
+}
+
+export interface WaHistorySyncOptions {
+    readonly enabled?: boolean
+    readonly requireFullSync?: boolean
 }
 
 export interface WaSignalMessagePublishInput {
@@ -93,6 +99,15 @@ export interface WaIncomingUnhandledStanzaEvent extends WaIncomingBaseEvent {
     readonly reason: string
 }
 
+export interface WaHistorySyncChunkEvent {
+    readonly syncType: number
+    readonly messagesCount: number
+    readonly conversationsCount: number
+    readonly pushnamesCount: number
+    readonly chunkOrder?: number
+    readonly progress?: number
+}
+
 export interface WaClientEventMap {
     readonly qr: (qr: string, ttlMs: number) => void
     readonly pairing_code: (code: string) => void
@@ -117,4 +132,5 @@ export interface WaClientEventMap {
     readonly incoming_failure: (event: WaIncomingFailureEvent) => void
     readonly incoming_error_stanza: (event: WaIncomingBaseEvent) => void
     readonly incoming_unhandled_stanza: (event: WaIncomingUnhandledStanzaEvent) => void
+    readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void
 }
