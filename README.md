@@ -1,4 +1,4 @@
-# zapo
+<h1 align="center">zapo</h1>
 
 <p align="center">
   <strong>High-performance TypeScript implementation of the WhatsApp Web protocol.</strong><br />
@@ -6,10 +6,8 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/zapo-js">
-    <img alt="npm version" src="https://img.shields.io/npm/v/zapo-js?color=CB3837" />
-  </a>
-  <img alt="npm package size" src="https://img.shields.io/npm/unpacked-size/zapo-js?label=package%20size&color=2F855A" />
+  <a href="https://www.npmjs.com/package/zapo-js"><img alt="npm version" src="https://img.shields.io/npm/v/zapo-js?color=CB3837" /></a>
+  <a href="https://www.npmjs.com/package/zapo-js"><img alt="npm package size" src="https://img.shields.io/npm/unpacked-size/zapo-js?label=package%20size&color=2F855A" /></a>
   <img alt="node version" src="https://img.shields.io/badge/node-%3E%3D20.9.0-339933" />
   <img alt="language" src="https://img.shields.io/badge/language-TypeScript-3178C6" />
   <img alt="focus" src="https://img.shields.io/badge/focus-high--scale%20%2B%20multi--session-0A7EA4" />
