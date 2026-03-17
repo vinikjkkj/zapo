@@ -3,6 +3,9 @@ const base = require('@vinikjkkj/eslint-config')
 module.exports = [
     {
         ignores: [
+            'dist/**',
+            'deobfuscated/**',
+            'coverage/**',
             'proto/index.js',
             'proto/index.d.ts',
             'proto/*.tmp.*',
@@ -12,10 +15,19 @@ module.exports = [
     },
     ...base,
     {
-        files: ['examples/**/*.{ts,js}', 'scripts/**/*.{ts,js}', '/src/**/*.{ts,js}'],
+        files: ['scripts/**/*.{ts,js}'],
         languageOptions: {
             parserOptions: {
                 project: false
+            }
+        }
+    },
+    {
+        files: ['src/**/*.ts', 'examples/**/*.ts', 'bench/**/*.ts'],
+        languageOptions: {
+            parserOptions: {
+                tsconfigRootDir: __dirname,
+                project: ['./tsconfig.json', './bench/tsconfig.json', './examples/tsconfig.json']
             }
         }
     }

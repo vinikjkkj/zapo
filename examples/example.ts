@@ -1,5 +1,6 @@
 import { mkdir, rm } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+
 import { createPinoLogger, createStore, WaClient } from '../src'
 import type { LogLevel } from '../src'
 
@@ -51,7 +52,7 @@ async function main(): Promise<void> {
         pretty: true
     })
 
-    const sessionId_1 = process.env.EXAMPLE_SESSION_ID ?? 'default'
+    //const sessionId_1 = process.env.EXAMPLE_SESSION_ID ?? 'default'
     const sessionId_2 = process.env.EXAMPLE_SESSION_ID_2 ?? 'default_2'
     const store = createStore({
         sqlite: {
