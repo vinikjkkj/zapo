@@ -98,7 +98,9 @@ test('usync builder composes query/list nodes with defaults and overrides', () =
     assert.equal(usyncNode.attrs.context, WA_USYNC_CONTEXTS.INTERACTIVE)
     assert.ok(Array.isArray(usyncNode.content))
 
-    const queryNode = usyncNode.content.find((child: BinaryNode) => child.tag === WA_NODE_TAGS.QUERY)
+    const queryNode = usyncNode.content.find(
+        (child: BinaryNode) => child.tag === WA_NODE_TAGS.QUERY
+    )
     assert.ok(queryNode)
     assert.ok(Array.isArray(queryNode.content))
     assert.equal(queryNode.content[0].tag, WA_NODE_TAGS.DEVICES)

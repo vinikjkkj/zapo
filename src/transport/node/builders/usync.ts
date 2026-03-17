@@ -45,33 +45,28 @@ export function buildUsyncIq(input: BuildUsyncIqInput): BinaryNode {
         throw new Error('usync query must include at least one protocol node')
     }
 
-    return buildIqNode(
-        'get',
-        input.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN,
-        WA_XMLNS.USYNC,
-        [
-            {
-                tag: WA_NODE_TAGS.USYNC,
-                attrs: {
-                    sid: input.sid,
-                    index: input.index ?? WA_USYNC_DEFAULTS.INDEX,
-                    last: input.last ?? WA_USYNC_DEFAULTS.LAST,
-                    mode: input.mode ?? WA_USYNC_MODES.QUERY,
-                    context: input.context ?? WA_USYNC_CONTEXTS.INTERACTIVE
+    return buildIqNode('get', input.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.USYNC, [
+        {
+            tag: WA_NODE_TAGS.USYNC,
+            attrs: {
+                sid: input.sid,
+                index: input.index ?? WA_USYNC_DEFAULTS.INDEX,
+                last: input.last ?? WA_USYNC_DEFAULTS.LAST,
+                mode: input.mode ?? WA_USYNC_MODES.QUERY,
+                context: input.context ?? WA_USYNC_CONTEXTS.INTERACTIVE
+            },
+            content: [
+                {
+                    tag: WA_NODE_TAGS.QUERY,
+                    attrs: {},
+                    content: [...input.queryProtocolNodes]
                 },
-                content: [
-                    {
-                        tag: WA_NODE_TAGS.QUERY,
-                        attrs: {},
-                        content: [...input.queryProtocolNodes]
-                    },
-                    {
-                        tag: WA_NODE_TAGS.LIST,
-                        attrs: {},
-                        content: input.users.map((user) => buildUsyncUserNode(user))
-                    }
-                ]
-            }
-        ]
-    )
+                {
+                    tag: WA_NODE_TAGS.LIST,
+                    attrs: {},
+                    content: input.users.map((user) => buildUsyncUserNode(user))
+                }
+            ]
+        }
+    ])
 }
