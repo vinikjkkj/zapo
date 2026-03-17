@@ -20,25 +20,46 @@ jobs:
 
             - name: build release notes from commits
               shell: bash
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   current_tag="${GITHUB_REF_NAME}"
                   previous_tag="$(git describe --tags --abbrev=0 "${current_tag}^" 2>/dev/null || true)"
+
+                  if [ -n "${previous_tag}" ]; then
+                      range="${previous_tag}..${current_tag}"
+                      changelog_url="https://github.com/${GITHUB_REPOSITORY}/compare/${previous_tag}...${current_tag}"
+                  else
+                      range="${current_tag}"
+                      changelog_url="https://github.com/${GITHUB_REPOSITORY}/commits/${current_tag}"
+                  fi
 
                   {
                       echo "## what's changed"
                       echo
 
-                      if [ -n "${previous_tag}" ]; then
-                          git log "${previous_tag}..${current_tag}" --pretty=format:'- %s (%h) by %an'
-                          echo
-                          echo
-                          echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${previous_tag}...${current_tag}"
-                      else
-                          git log "${current_tag}" --pretty=format:'- %s (%h) by %an'
-                          echo
-                          echo
-                          echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/commits/${current_tag}"
-                      fi
+                      git log "${range}" --pretty=format:'%H%x09%s' | while IFS=$'\t' read -r sha subject; do
+                          short_sha="${sha:0:7}"
+                          author_login="$(
+                              curl -fsSL \
+                                  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                                  -H "Accept: application/vnd.github+json" \
+                                  "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${sha}" \
+                              | jq -r '.author.login // empty'
+                          )"
+
+                          if [ -n "${author_login}" ]; then
+                              author_display="[@${author_login}](https://github.com/${author_login})"
+                          else
+                              author_name="$(git show -s --format='%an' "${sha}")"
+                              author_display="${author_name}"
+                          fi
+
+                          echo "- ${subject} (${short_sha}) by ${author_display}"
+                      done
+
+                      echo
+                      echo "**Full Changelog**: ${changelog_url}"
                   } > RELEASE_NOTES.md
 
             - name: create github release
