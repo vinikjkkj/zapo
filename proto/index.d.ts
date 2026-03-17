@@ -1,5 +1,47 @@
-import * as $protobuf from "protobufjs"
-import Long = require("long")
+/** Minimal protobuf Reader interface used by decode methods. */
+interface PbReader {
+	len: number
+	pos: number
+	uint32(): number
+	int32(): number
+	int64(): Long
+	uint64(): Long
+	sint32(): number
+	sint64(): Long
+	bool(): boolean
+	fixed32(): number
+	sfixed32(): number
+	fixed64(): Long
+	sfixed64(): Long
+	float(): number
+	double(): number
+	bytes(): Uint8Array
+	string(): string
+	skipType(wireType: number): this
+}
+/** Minimal protobuf Writer interface used by encode methods. */
+interface PbWriter {
+	uint32(value: number): PbWriter
+	int32(value: number): PbWriter
+	int64(value: number | Long): PbWriter
+	uint64(value: number | Long): PbWriter
+	sint32(value: number): PbWriter
+	sint64(value: number | Long): PbWriter
+	bool(value: boolean): PbWriter
+	fixed32(value: number): PbWriter
+	sfixed32(value: number): PbWriter
+	fixed64(value: number | Long): PbWriter
+	sfixed64(value: number | Long): PbWriter
+	float(value: number): PbWriter
+	double(value: number): PbWriter
+	bytes(value: Uint8Array): PbWriter
+	string(value: string): PbWriter
+	fork(): PbWriter
+	ldelim(): PbWriter
+	finish(): Uint8Array
+}
+/** int64/uint64 value representation. */
+type Long = number | { low: number; high: number; unsigned: boolean; toNumber(): number }
 export namespace waproto {
 	interface IADVDeviceIdentity {
 		rawId?: (number|null)
@@ -15,8 +57,8 @@ export namespace waproto {
 		public keyIndex?: (number|null)
 		public accountType?: (waproto.ADVEncryptionType|null)
 		public deviceType?: (waproto.ADVEncryptionType|null)
-		public static encode(m: waproto.IADVDeviceIdentity, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ADVDeviceIdentity
+		public static encode(m: waproto.IADVDeviceIdentity, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ADVDeviceIdentity
 	}
 	enum ADVEncryptionType {
 		E2EE = 0,
@@ -36,8 +78,8 @@ export namespace waproto {
 		public currentIndex?: (number|null)
 		public validIndexes: number[]
 		public accountType?: (waproto.ADVEncryptionType|null)
-		public static encode(m: waproto.IADVKeyIndexList, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ADVKeyIndexList
+		public static encode(m: waproto.IADVKeyIndexList, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ADVKeyIndexList
 	}
 	interface IADVSignedDeviceIdentity {
 		details?: (Uint8Array|null)
@@ -51,8 +93,8 @@ export namespace waproto {
 		public accountSignatureKey?: (Uint8Array|null)
 		public accountSignature?: (Uint8Array|null)
 		public deviceSignature?: (Uint8Array|null)
-		public static encode(m: waproto.IADVSignedDeviceIdentity, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ADVSignedDeviceIdentity
+		public static encode(m: waproto.IADVSignedDeviceIdentity, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ADVSignedDeviceIdentity
 	}
 	interface IADVSignedDeviceIdentityHMAC {
 		details?: (Uint8Array|null)
@@ -64,8 +106,8 @@ export namespace waproto {
 		public details?: (Uint8Array|null)
 		public hmac?: (Uint8Array|null)
 		public accountType?: (waproto.ADVEncryptionType|null)
-		public static encode(m: waproto.IADVSignedDeviceIdentityHMAC, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ADVSignedDeviceIdentityHMAC
+		public static encode(m: waproto.IADVSignedDeviceIdentityHMAC, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ADVSignedDeviceIdentityHMAC
 	}
 	interface IADVSignedKeyIndexList {
 		details?: (Uint8Array|null)
@@ -77,8 +119,8 @@ export namespace waproto {
 		public details?: (Uint8Array|null)
 		public accountSignature?: (Uint8Array|null)
 		public accountSignatureKey?: (Uint8Array|null)
-		public static encode(m: waproto.IADVSignedKeyIndexList, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ADVSignedKeyIndexList
+		public static encode(m: waproto.IADVSignedKeyIndexList, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ADVSignedKeyIndexList
 	}
 	interface IAIHomeState {
 		lastFetchTime?: (number|Long|null)
@@ -90,8 +132,8 @@ export namespace waproto {
 		public lastFetchTime?: (number|Long|null)
 		public capabilityOptions: waproto.AIHomeState.IAIHomeOption[]
 		public conversationOptions: waproto.AIHomeState.IAIHomeOption[]
-		public static encode(m: waproto.IAIHomeState, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIHomeState
+		public static encode(m: waproto.IAIHomeState, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIHomeState
 	}
 	namespace AIHomeState {
 		interface IAIHomeOption {
@@ -114,8 +156,8 @@ export namespace waproto {
 			public imageTintColor?: (string|null)
 			public imageBackgroundColor?: (string|null)
 			public cardTypeId?: (string|null)
-			public static encode(m: waproto.AIHomeState.IAIHomeOption, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIHomeState.AIHomeOption
+			public static encode(m: waproto.AIHomeState.IAIHomeOption, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIHomeState.AIHomeOption
 		}
 		namespace AIHomeOption {
 			enum AIHomeActionType {
@@ -137,8 +179,8 @@ export namespace waproto {
 		public collectionId?: (string|null)
 		public expectedMediaCount?: (number|null)
 		public hasGlobalCaption?: (boolean|null)
-		public static encode(m: waproto.IAIMediaCollectionMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIMediaCollectionMessage
+		public static encode(m: waproto.IAIMediaCollectionMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIMediaCollectionMessage
 	}
 	interface IAIMediaCollectionMetadata {
 		collectionId?: (string|null)
@@ -148,8 +190,8 @@ export namespace waproto {
 		constructor(p?: waproto.IAIMediaCollectionMetadata)
 		public collectionId?: (string|null)
 		public uploadOrderIndex?: (number|null)
-		public static encode(m: waproto.IAIMediaCollectionMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIMediaCollectionMetadata
+		public static encode(m: waproto.IAIMediaCollectionMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIMediaCollectionMetadata
 	}
 	interface IAIQueryFanout {
 		messageKey?: (waproto.IMessageKey|null)
@@ -161,8 +203,8 @@ export namespace waproto {
 		public messageKey?: (waproto.IMessageKey|null)
 		public message?: (waproto.IMessage|null)
 		public timestamp?: (number|Long|null)
-		public static encode(m: waproto.IAIQueryFanout, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIQueryFanout
+		public static encode(m: waproto.IAIQueryFanout, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIQueryFanout
 	}
 	interface IAIRegenerateMetadata {
 		messageKey?: (waproto.IMessageKey|null)
@@ -172,8 +214,8 @@ export namespace waproto {
 		constructor(p?: waproto.IAIRegenerateMetadata)
 		public messageKey?: (waproto.IMessageKey|null)
 		public responseTimestampMs?: (number|Long|null)
-		public static encode(m: waproto.IAIRegenerateMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRegenerateMetadata
+		public static encode(m: waproto.IAIRegenerateMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRegenerateMetadata
 	}
 	interface IAIRichResponseCodeMetadata {
 		codeLanguage?: (string|null)
@@ -183,8 +225,8 @@ export namespace waproto {
 		constructor(p?: waproto.IAIRichResponseCodeMetadata)
 		public codeLanguage?: (string|null)
 		public codeBlocks: waproto.AIRichResponseCodeMetadata.IAIRichResponseCodeBlock[]
-		public static encode(m: waproto.IAIRichResponseCodeMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseCodeMetadata
+		public static encode(m: waproto.IAIRichResponseCodeMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseCodeMetadata
 	}
 	namespace AIRichResponseCodeMetadata {
 		interface IAIRichResponseCodeBlock {
@@ -195,8 +237,8 @@ export namespace waproto {
 			constructor(p?: waproto.AIRichResponseCodeMetadata.IAIRichResponseCodeBlock)
 			public highlightType?: (waproto.AIRichResponseCodeMetadata.AIRichResponseCodeHighlightType|null)
 			public codeContent?: (string|null)
-			public static encode(m: waproto.AIRichResponseCodeMetadata.IAIRichResponseCodeBlock, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseCodeMetadata.AIRichResponseCodeBlock
+			public static encode(m: waproto.AIRichResponseCodeMetadata.IAIRichResponseCodeBlock, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseCodeMetadata.AIRichResponseCodeBlock
 		}
 		enum AIRichResponseCodeHighlightType {
 			AI_RICH_RESPONSE_CODE_HIGHLIGHT_DEFAULT = 0,
@@ -215,8 +257,8 @@ export namespace waproto {
 		constructor(p?: waproto.IAIRichResponseContentItemsMetadata)
 		public itemsMetadata: waproto.AIRichResponseContentItemsMetadata.IAIRichResponseContentItemMetadata[]
 		public contentType?: (waproto.AIRichResponseContentItemsMetadata.ContentType|null)
-		public static encode(m: waproto.IAIRichResponseContentItemsMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseContentItemsMetadata
+		public static encode(m: waproto.IAIRichResponseContentItemsMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseContentItemsMetadata
 	}
 	namespace AIRichResponseContentItemsMetadata {
 		interface IAIRichResponseContentItemMetadata {
@@ -226,8 +268,8 @@ export namespace waproto {
 			constructor(p?: waproto.AIRichResponseContentItemsMetadata.IAIRichResponseContentItemMetadata)
 			public reelItem?: (waproto.AIRichResponseContentItemsMetadata.IAIRichResponseReelItem|null)
 			public aIRichResponseContentItem?: "reelItem"
-			public static encode(m: waproto.AIRichResponseContentItemsMetadata.IAIRichResponseContentItemMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseContentItemsMetadata.AIRichResponseContentItemMetadata
+			public static encode(m: waproto.AIRichResponseContentItemsMetadata.IAIRichResponseContentItemMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseContentItemsMetadata.AIRichResponseContentItemMetadata
 		}
 		interface IAIRichResponseReelItem {
 			title?: (string|null)
@@ -241,8 +283,8 @@ export namespace waproto {
 			public profileIconUrl?: (string|null)
 			public thumbnailUrl?: (string|null)
 			public videoUrl?: (string|null)
-			public static encode(m: waproto.AIRichResponseContentItemsMetadata.IAIRichResponseReelItem, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseContentItemsMetadata.AIRichResponseReelItem
+			public static encode(m: waproto.AIRichResponseContentItemsMetadata.IAIRichResponseReelItem, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseContentItemsMetadata.AIRichResponseReelItem
 		}
 		enum ContentType {
 			DEFAULT = 0,
@@ -261,8 +303,8 @@ export namespace waproto {
 		public version?: (number|Long|null)
 		public url?: (string|null)
 		public loopCount?: (number|null)
-		public static encode(m: waproto.IAIRichResponseDynamicMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseDynamicMetadata
+		public static encode(m: waproto.IAIRichResponseDynamicMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseDynamicMetadata
 	}
 	namespace AIRichResponseDynamicMetadata {
 		enum AIRichResponseDynamicMetadataType {
@@ -279,8 +321,8 @@ export namespace waproto {
 		constructor(p?: waproto.IAIRichResponseGridImageMetadata)
 		public gridImageUrl?: (waproto.IAIRichResponseImageURL|null)
 		public imageUrls: waproto.IAIRichResponseImageURL[]
-		public static encode(m: waproto.IAIRichResponseGridImageMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseGridImageMetadata
+		public static encode(m: waproto.IAIRichResponseGridImageMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseGridImageMetadata
 	}
 	interface IAIRichResponseImageURL {
 		imagePreviewUrl?: (string|null)
@@ -292,8 +334,8 @@ export namespace waproto {
 		public imagePreviewUrl?: (string|null)
 		public imageHighResUrl?: (string|null)
 		public sourceUrl?: (string|null)
-		public static encode(m: waproto.IAIRichResponseImageURL, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseImageURL
+		public static encode(m: waproto.IAIRichResponseImageURL, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseImageURL
 	}
 	interface IAIRichResponseInlineImageMetadata {
 		imageUrl?: (waproto.IAIRichResponseImageURL|null)
@@ -307,8 +349,8 @@ export namespace waproto {
 		public imageText?: (string|null)
 		public alignment?: (waproto.AIRichResponseInlineImageMetadata.AIRichResponseImageAlignment|null)
 		public tapLinkUrl?: (string|null)
-		public static encode(m: waproto.IAIRichResponseInlineImageMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseInlineImageMetadata
+		public static encode(m: waproto.IAIRichResponseInlineImageMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseInlineImageMetadata
 	}
 	namespace AIRichResponseInlineImageMetadata {
 		enum AIRichResponseImageAlignment {
@@ -325,8 +367,8 @@ export namespace waproto {
 		constructor(p?: waproto.IAIRichResponseLatexMetadata)
 		public text?: (string|null)
 		public expressions: waproto.AIRichResponseLatexMetadata.IAIRichResponseLatexExpression[]
-		public static encode(m: waproto.IAIRichResponseLatexMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseLatexMetadata
+		public static encode(m: waproto.IAIRichResponseLatexMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseLatexMetadata
 	}
 	namespace AIRichResponseLatexMetadata {
 		interface IAIRichResponseLatexExpression {
@@ -351,8 +393,8 @@ export namespace waproto {
 			public imageLeadingPadding?: (number|null)
 			public imageBottomPadding?: (number|null)
 			public imageTrailingPadding?: (number|null)
-			public static encode(m: waproto.AIRichResponseLatexMetadata.IAIRichResponseLatexExpression, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseLatexMetadata.AIRichResponseLatexExpression
+			public static encode(m: waproto.AIRichResponseLatexMetadata.IAIRichResponseLatexExpression, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseLatexMetadata.AIRichResponseLatexExpression
 		}
 	}
 	interface IAIRichResponseMapMetadata {
@@ -371,8 +413,8 @@ export namespace waproto {
 		public longitudeDelta?: (number|null)
 		public annotations: waproto.AIRichResponseMapMetadata.IAIRichResponseMapAnnotation[]
 		public showInfoList?: (boolean|null)
-		public static encode(m: waproto.IAIRichResponseMapMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseMapMetadata
+		public static encode(m: waproto.IAIRichResponseMapMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseMapMetadata
 	}
 	namespace AIRichResponseMapMetadata {
 		interface IAIRichResponseMapAnnotation {
@@ -389,8 +431,8 @@ export namespace waproto {
 			public longitude?: (number|null)
 			public title?: (string|null)
 			public body?: (string|null)
-			public static encode(m: waproto.AIRichResponseMapMetadata.IAIRichResponseMapAnnotation, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseMapMetadata.AIRichResponseMapAnnotation
+			public static encode(m: waproto.AIRichResponseMapMetadata.IAIRichResponseMapAnnotation, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseMapMetadata.AIRichResponseMapAnnotation
 		}
 	}
 	interface IAIRichResponseMessage {
@@ -405,8 +447,8 @@ export namespace waproto {
 		public submessages: waproto.IAIRichResponseSubMessage[]
 		public unifiedResponse?: (waproto.IAIRichResponseUnifiedResponse|null)
 		public contextInfo?: (waproto.IContextInfo|null)
-		public static encode(m: waproto.IAIRichResponseMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseMessage
+		public static encode(m: waproto.IAIRichResponseMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseMessage
 	}
 	enum AIRichResponseMessageType {
 		AI_RICH_RESPONSE_TYPE_UNKNOWN = 0,
@@ -436,8 +478,8 @@ export namespace waproto {
 		public latexMetadata?: (waproto.IAIRichResponseLatexMetadata|null)
 		public mapMetadata?: (waproto.IAIRichResponseMapMetadata|null)
 		public contentItemsMetadata?: (waproto.IAIRichResponseContentItemsMetadata|null)
-		public static encode(m: waproto.IAIRichResponseSubMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseSubMessage
+		public static encode(m: waproto.IAIRichResponseSubMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseSubMessage
 	}
 	enum AIRichResponseSubMessageType {
 		AI_RICH_RESPONSE_UNKNOWN = 0,
@@ -459,8 +501,8 @@ export namespace waproto {
 		constructor(p?: waproto.IAIRichResponseTableMetadata)
 		public rows: waproto.AIRichResponseTableMetadata.IAIRichResponseTableRow[]
 		public title?: (string|null)
-		public static encode(m: waproto.IAIRichResponseTableMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseTableMetadata
+		public static encode(m: waproto.IAIRichResponseTableMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseTableMetadata
 	}
 	namespace AIRichResponseTableMetadata {
 		interface IAIRichResponseTableRow {
@@ -471,8 +513,8 @@ export namespace waproto {
 			constructor(p?: waproto.AIRichResponseTableMetadata.IAIRichResponseTableRow)
 			public items: string[]
 			public isHeading?: (boolean|null)
-			public static encode(m: waproto.AIRichResponseTableMetadata.IAIRichResponseTableRow, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseTableMetadata.AIRichResponseTableRow
+			public static encode(m: waproto.AIRichResponseTableMetadata.IAIRichResponseTableRow, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseTableMetadata.AIRichResponseTableRow
 		}
 	}
 	interface IAIRichResponseUnifiedResponse {
@@ -481,8 +523,8 @@ export namespace waproto {
 	class AIRichResponseUnifiedResponse implements IAIRichResponseUnifiedResponse {
 		constructor(p?: waproto.IAIRichResponseUnifiedResponse)
 		public data?: (Uint8Array|null)
-		public static encode(m: waproto.IAIRichResponseUnifiedResponse, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIRichResponseUnifiedResponse
+		public static encode(m: waproto.IAIRichResponseUnifiedResponse, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseUnifiedResponse
 	}
 	interface IAIThreadInfo {
 		serverInfo?: (waproto.AIThreadInfo.IAIThreadServerInfo|null)
@@ -492,8 +534,8 @@ export namespace waproto {
 		constructor(p?: waproto.IAIThreadInfo)
 		public serverInfo?: (waproto.AIThreadInfo.IAIThreadServerInfo|null)
 		public clientInfo?: (waproto.AIThreadInfo.IAIThreadClientInfo|null)
-		public static encode(m: waproto.IAIThreadInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIThreadInfo
+		public static encode(m: waproto.IAIThreadInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIThreadInfo
 	}
 	namespace AIThreadInfo {
 		interface IAIThreadClientInfo {
@@ -504,8 +546,8 @@ export namespace waproto {
 			constructor(p?: waproto.AIThreadInfo.IAIThreadClientInfo)
 			public type?: (waproto.AIThreadInfo.AIThreadClientInfo.AIThreadType|null)
 			public sourceChatJid?: (string|null)
-			public static encode(m: waproto.AIThreadInfo.IAIThreadClientInfo, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIThreadInfo.AIThreadClientInfo
+			public static encode(m: waproto.AIThreadInfo.IAIThreadClientInfo, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIThreadInfo.AIThreadClientInfo
 		}
 		namespace AIThreadClientInfo {
 			enum AIThreadType {
@@ -521,8 +563,8 @@ export namespace waproto {
 		class AIThreadServerInfo implements IAIThreadServerInfo {
 			constructor(p?: waproto.AIThreadInfo.IAIThreadServerInfo)
 			public title?: (string|null)
-			public static encode(m: waproto.AIThreadInfo.IAIThreadServerInfo, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AIThreadInfo.AIThreadServerInfo
+			public static encode(m: waproto.AIThreadInfo.IAIThreadServerInfo, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIThreadInfo.AIThreadServerInfo
 		}
 	}
 	interface IAccount {
@@ -537,8 +579,8 @@ export namespace waproto {
 		public username?: (string|null)
 		public countryCode?: (string|null)
 		public isUsernameDeleted?: (boolean|null)
-		public static encode(m: waproto.IAccount, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Account
+		public static encode(m: waproto.IAccount, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Account
 	}
 	interface IActionLink {
 		url?: (string|null)
@@ -548,8 +590,8 @@ export namespace waproto {
 		constructor(p?: waproto.IActionLink)
 		public url?: (string|null)
 		public buttonTitle?: (string|null)
-		public static encode(m: waproto.IActionLink, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ActionLink
+		public static encode(m: waproto.IActionLink, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ActionLink
 	}
 	interface IAutoDownloadSettings {
 		downloadImages?: (boolean|null)
@@ -563,8 +605,8 @@ export namespace waproto {
 		public downloadAudio?: (boolean|null)
 		public downloadVideo?: (boolean|null)
 		public downloadDocuments?: (boolean|null)
-		public static encode(m: waproto.IAutoDownloadSettings, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AutoDownloadSettings
+		public static encode(m: waproto.IAutoDownloadSettings, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AutoDownloadSettings
 	}
 	interface IAvatarUserSettings {
 		fbid?: (string|null)
@@ -574,8 +616,8 @@ export namespace waproto {
 		constructor(p?: waproto.IAvatarUserSettings)
 		public fbid?: (string|null)
 		public password?: (string|null)
-		public static encode(m: waproto.IAvatarUserSettings, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.AvatarUserSettings
+		public static encode(m: waproto.IAvatarUserSettings, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AvatarUserSettings
 	}
 	interface IBizAccountLinkInfo {
 		whatsappBizAcctFbid?: (number|Long|null)
@@ -591,8 +633,8 @@ export namespace waproto {
 		public issueTime?: (number|Long|null)
 		public hostStorage?: (waproto.BizAccountLinkInfo.HostStorageType|null)
 		public accountType?: (waproto.BizAccountLinkInfo.AccountType|null)
-		public static encode(m: waproto.IBizAccountLinkInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BizAccountLinkInfo
+		public static encode(m: waproto.IBizAccountLinkInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BizAccountLinkInfo
 	}
 	namespace BizAccountLinkInfo {
 		enum AccountType {
@@ -611,8 +653,8 @@ export namespace waproto {
 		constructor(p?: waproto.IBizAccountPayload)
 		public vnameCert?: (waproto.IVerifiedNameCertificate|null)
 		public bizAcctLinkInfo?: (Uint8Array|null)
-		public static encode(m: waproto.IBizAccountPayload, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BizAccountPayload
+		public static encode(m: waproto.IBizAccountPayload, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BizAccountPayload
 	}
 	interface IBizIdentityInfo {
 		vlevel?: (waproto.BizIdentityInfo.VerifiedLevelValue|null)
@@ -634,8 +676,8 @@ export namespace waproto {
 		public actualActors?: (waproto.BizIdentityInfo.ActualActorsType|null)
 		public privacyModeTs?: (number|Long|null)
 		public featureControls?: (number|Long|null)
-		public static encode(m: waproto.IBizIdentityInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BizIdentityInfo
+		public static encode(m: waproto.IBizIdentityInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BizIdentityInfo
 	}
 	namespace BizIdentityInfo {
 		enum ActualActorsType {
@@ -662,8 +704,8 @@ export namespace waproto {
 		public ageCollectionEligible?: (boolean|null)
 		public shouldTriggerAgeCollectionOnClient?: (boolean|null)
 		public ageCollectionType?: (waproto.BotAgeCollectionMetadata.AgeCollectionType|null)
-		public static encode(m: waproto.IBotAgeCollectionMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotAgeCollectionMetadata
+		public static encode(m: waproto.IBotAgeCollectionMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotAgeCollectionMetadata
 	}
 	namespace BotAgeCollectionMetadata {
 		enum AgeCollectionType {
@@ -677,8 +719,8 @@ export namespace waproto {
 	class BotCapabilityMetadata implements IBotCapabilityMetadata {
 		constructor(p?: waproto.IBotCapabilityMetadata)
 		public capabilities: waproto.BotCapabilityMetadata.BotCapabilityType[]
-		public static encode(m: waproto.IBotCapabilityMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotCapabilityMetadata
+		public static encode(m: waproto.IBotCapabilityMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotCapabilityMetadata
 	}
 	namespace BotCapabilityMetadata {
 		enum BotCapabilityType {
@@ -749,8 +791,8 @@ export namespace waproto {
 	class BotDocumentMessageMetadata implements IBotDocumentMessageMetadata {
 		constructor(p?: waproto.IBotDocumentMessageMetadata)
 		public pluginType?: (waproto.BotDocumentMessageMetadata.DocumentPluginType|null)
-		public static encode(m: waproto.IBotDocumentMessageMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotDocumentMessageMetadata
+		public static encode(m: waproto.IBotDocumentMessageMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotDocumentMessageMetadata
 	}
 	namespace BotDocumentMessageMetadata {
 		enum DocumentPluginType {
@@ -776,8 +818,8 @@ export namespace waproto {
 		public kindPositive?: (number|Long|null)
 		public kindReport?: (waproto.BotFeedbackMessage.ReportKind|null)
 		public sideBySideSurveyMetadata?: (waproto.BotFeedbackMessage.ISideBySideSurveyMetadata|null)
-		public static encode(m: waproto.IBotFeedbackMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotFeedbackMessage
+		public static encode(m: waproto.IBotFeedbackMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotFeedbackMessage
 	}
 	namespace BotFeedbackMessage {
 		enum BotFeedbackKind {
@@ -837,8 +879,8 @@ export namespace waproto {
 			public messageIdToEdit?: (string|null)
 			public analyticsData?: (waproto.BotFeedbackMessage.SideBySideSurveyMetadata.ISideBySideSurveyAnalyticsData|null)
 			public metaAiAnalyticsData?: (waproto.BotFeedbackMessage.SideBySideSurveyMetadata.ISidebySideSurveyMetaAiAnalyticsData|null)
-			public static encode(m: waproto.BotFeedbackMessage.ISideBySideSurveyMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata
+			public static encode(m: waproto.BotFeedbackMessage.ISideBySideSurveyMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata
 		}
 		namespace SideBySideSurveyMetadata {
 			interface ISideBySideSurveyAnalyticsData {
@@ -851,8 +893,8 @@ export namespace waproto {
 				public tessaEvent?: (string|null)
 				public tessaSessionFbid?: (string|null)
 				public simonSessionFbid?: (string|null)
-				public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.ISideBySideSurveyAnalyticsData, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SideBySideSurveyAnalyticsData
+				public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.ISideBySideSurveyAnalyticsData, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SideBySideSurveyAnalyticsData
 			}
 			interface ISidebySideSurveyMetaAiAnalyticsData {
 				surveyId?: (number|null)
@@ -876,8 +918,8 @@ export namespace waproto {
 				public cardImpressionEvent?: (waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyCardImpressionEventData|null)
 				public responseEvent?: (waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyResponseEventData|null)
 				public abandonEvent?: (waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyAbandonEventData|null)
-				public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.ISidebySideSurveyMetaAiAnalyticsData, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData
+				public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.ISidebySideSurveyMetaAiAnalyticsData, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData
 			}
 			namespace SidebySideSurveyMetaAiAnalyticsData {
 				interface ISideBySideSurveyAbandonEventData {
@@ -886,8 +928,8 @@ export namespace waproto {
 				class SideBySideSurveyAbandonEventData implements ISideBySideSurveyAbandonEventData {
 					constructor(p?: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyAbandonEventData)
 					public abandonDwellTimeMsString?: (string|null)
-					public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyAbandonEventData, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.SideBySideSurveyAbandonEventData
+					public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyAbandonEventData, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.SideBySideSurveyAbandonEventData
 				}
 				interface ISideBySideSurveyCTAClickEventData {
 					isSurveyExpired?: (boolean|null)
@@ -897,8 +939,8 @@ export namespace waproto {
 					constructor(p?: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyCTAClickEventData)
 					public isSurveyExpired?: (boolean|null)
 					public clickDwellTimeMsString?: (string|null)
-					public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyCTAClickEventData, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.SideBySideSurveyCTAClickEventData
+					public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyCTAClickEventData, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.SideBySideSurveyCTAClickEventData
 				}
 				interface ISideBySideSurveyCTAImpressionEventData {
 					isSurveyExpired?: (boolean|null)
@@ -906,15 +948,15 @@ export namespace waproto {
 				class SideBySideSurveyCTAImpressionEventData implements ISideBySideSurveyCTAImpressionEventData {
 					constructor(p?: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyCTAImpressionEventData)
 					public isSurveyExpired?: (boolean|null)
-					public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyCTAImpressionEventData, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.SideBySideSurveyCTAImpressionEventData
+					public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyCTAImpressionEventData, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.SideBySideSurveyCTAImpressionEventData
 				}
 				interface ISideBySideSurveyCardImpressionEventData {
 				}
 				class SideBySideSurveyCardImpressionEventData implements ISideBySideSurveyCardImpressionEventData {
 					constructor(p?: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyCardImpressionEventData)
-					public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyCardImpressionEventData, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.SideBySideSurveyCardImpressionEventData
+					public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyCardImpressionEventData, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.SideBySideSurveyCardImpressionEventData
 				}
 				interface ISideBySideSurveyResponseEventData {
 					responseDwellTimeMsString?: (string|null)
@@ -924,8 +966,8 @@ export namespace waproto {
 					constructor(p?: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyResponseEventData)
 					public responseDwellTimeMsString?: (string|null)
 					public selectedResponseId?: (string|null)
-					public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyResponseEventData, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.SideBySideSurveyResponseEventData
+					public static encode(m: waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.ISideBySideSurveyResponseEventData, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotFeedbackMessage.SideBySideSurveyMetadata.SidebySideSurveyMetaAiAnalyticsData.SideBySideSurveyResponseEventData
 				}
 			}
 		}
@@ -936,8 +978,8 @@ export namespace waproto {
 	class BotGroupMetadata implements IBotGroupMetadata {
 		constructor(p?: waproto.IBotGroupMetadata)
 		public participantsMetadata: waproto.IBotGroupParticipantMetadata[]
-		public static encode(m: waproto.IBotGroupMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotGroupMetadata
+		public static encode(m: waproto.IBotGroupMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotGroupMetadata
 	}
 	interface IBotGroupParticipantMetadata {
 		botFbid?: (string|null)
@@ -945,8 +987,8 @@ export namespace waproto {
 	class BotGroupParticipantMetadata implements IBotGroupParticipantMetadata {
 		constructor(p?: waproto.IBotGroupParticipantMetadata)
 		public botFbid?: (string|null)
-		public static encode(m: waproto.IBotGroupParticipantMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotGroupParticipantMetadata
+		public static encode(m: waproto.IBotGroupParticipantMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotGroupParticipantMetadata
 	}
 	interface IBotImagineMetadata {
 		imagineType?: (waproto.BotImagineMetadata.ImagineType|null)
@@ -956,8 +998,8 @@ export namespace waproto {
 		constructor(p?: waproto.IBotImagineMetadata)
 		public imagineType?: (waproto.BotImagineMetadata.ImagineType|null)
 		public shortPrompt?: (string|null)
-		public static encode(m: waproto.IBotImagineMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotImagineMetadata
+		public static encode(m: waproto.IBotImagineMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotImagineMetadata
 	}
 	namespace BotImagineMetadata {
 		enum ImagineType {
@@ -978,8 +1020,8 @@ export namespace waproto {
 		public botBackend?: (waproto.BotInfrastructureDiagnostics.BotBackend|null)
 		public toolsUsed: string[]
 		public isThinking?: (boolean|null)
-		public static encode(m: waproto.IBotInfrastructureDiagnostics, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotInfrastructureDiagnostics
+		public static encode(m: waproto.IBotInfrastructureDiagnostics, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotInfrastructureDiagnostics
 	}
 	namespace BotInfrastructureDiagnostics {
 		enum BotBackend {
@@ -993,8 +1035,8 @@ export namespace waproto {
 	class BotLinkedAccount implements IBotLinkedAccount {
 		constructor(p?: waproto.IBotLinkedAccount)
 		public type?: (waproto.BotLinkedAccount.BotLinkedAccountType|null)
-		public static encode(m: waproto.IBotLinkedAccount, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotLinkedAccount
+		public static encode(m: waproto.IBotLinkedAccount, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotLinkedAccount
 	}
 	namespace BotLinkedAccount {
 		enum BotLinkedAccountType {
@@ -1011,8 +1053,8 @@ export namespace waproto {
 		public accounts: waproto.IBotLinkedAccount[]
 		public acAuthTokens?: (Uint8Array|null)
 		public acErrorCode?: (number|null)
-		public static encode(m: waproto.IBotLinkedAccountsMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotLinkedAccountsMetadata
+		public static encode(m: waproto.IBotLinkedAccountsMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotLinkedAccountsMetadata
 	}
 	interface IBotMediaMetadata {
 		fileSha256?: (string|null)
@@ -1032,8 +1074,8 @@ export namespace waproto {
 		public mediaKeyTimestamp?: (number|Long|null)
 		public mimetype?: (string|null)
 		public orientationType?: (waproto.BotMediaMetadata.OrientationType|null)
-		public static encode(m: waproto.IBotMediaMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotMediaMetadata
+		public static encode(m: waproto.IBotMediaMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMediaMetadata
 	}
 	namespace BotMediaMetadata {
 		enum OrientationType {
@@ -1050,8 +1092,8 @@ export namespace waproto {
 		constructor(p?: waproto.IBotMemoryFact)
 		public fact?: (string|null)
 		public factId?: (string|null)
-		public static encode(m: waproto.IBotMemoryFact, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotMemoryFact
+		public static encode(m: waproto.IBotMemoryFact, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMemoryFact
 	}
 	interface IBotMemoryMetadata {
 		addedFacts?: (waproto.IBotMemoryFact[]|null)
@@ -1063,8 +1105,8 @@ export namespace waproto {
 		public addedFacts: waproto.IBotMemoryFact[]
 		public removedFacts: waproto.IBotMemoryFact[]
 		public disclaimer?: (string|null)
-		public static encode(m: waproto.IBotMemoryMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotMemoryMetadata
+		public static encode(m: waproto.IBotMemoryMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMemoryMetadata
 	}
 	interface IBotMemuMetadata {
 		faceImages?: (waproto.IBotMediaMetadata[]|null)
@@ -1072,8 +1114,8 @@ export namespace waproto {
 	class BotMemuMetadata implements IBotMemuMetadata {
 		constructor(p?: waproto.IBotMemuMetadata)
 		public faceImages: waproto.IBotMediaMetadata[]
-		public static encode(m: waproto.IBotMemuMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotMemuMetadata
+		public static encode(m: waproto.IBotMemuMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMemuMetadata
 	}
 	interface IBotMessageOrigin {
 		type?: (waproto.BotMessageOrigin.BotMessageOriginType|null)
@@ -1081,8 +1123,8 @@ export namespace waproto {
 	class BotMessageOrigin implements IBotMessageOrigin {
 		constructor(p?: waproto.IBotMessageOrigin)
 		public type?: (waproto.BotMessageOrigin.BotMessageOriginType|null)
-		public static encode(m: waproto.IBotMessageOrigin, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotMessageOrigin
+		public static encode(m: waproto.IBotMessageOrigin, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMessageOrigin
 	}
 	namespace BotMessageOrigin {
 		enum BotMessageOriginType {
@@ -1095,8 +1137,8 @@ export namespace waproto {
 	class BotMessageOriginMetadata implements IBotMessageOriginMetadata {
 		constructor(p?: waproto.IBotMessageOriginMetadata)
 		public origins: waproto.IBotMessageOrigin[]
-		public static encode(m: waproto.IBotMessageOriginMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotMessageOriginMetadata
+		public static encode(m: waproto.IBotMessageOriginMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMessageOriginMetadata
 	}
 	interface IBotMessageSharingInfo {
 		botEntryPointOrigin?: (waproto.BotMetricsEntryPoint|null)
@@ -1106,8 +1148,8 @@ export namespace waproto {
 		constructor(p?: waproto.IBotMessageSharingInfo)
 		public botEntryPointOrigin?: (waproto.BotMetricsEntryPoint|null)
 		public forwardScore?: (number|null)
-		public static encode(m: waproto.IBotMessageSharingInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotMessageSharingInfo
+		public static encode(m: waproto.IBotMessageSharingInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMessageSharingInfo
 	}
 	interface IBotMetadata {
 		personaId?: (string|null)
@@ -1189,8 +1231,8 @@ export namespace waproto {
 		public botInfrastructureDiagnostics?: (waproto.IBotInfrastructureDiagnostics|null)
 		public aiMediaCollectionMetadata?: (waproto.IAIMediaCollectionMetadata|null)
 		public internalMetadata?: (Uint8Array|null)
-		public static encode(m: waproto.IBotMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotMetadata
+		public static encode(m: waproto.IBotMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMetadata
 	}
 	enum BotMetricsEntryPoint {
 		UNDEFINED_ENTRY_POINT = 0,
@@ -1251,8 +1293,8 @@ export namespace waproto {
 		public destinationId?: (string|null)
 		public destinationEntryPoint?: (waproto.BotMetricsEntryPoint|null)
 		public threadOrigin?: (waproto.BotMetricsThreadEntryPoint|null)
-		public static encode(m: waproto.IBotMetricsMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotMetricsMetadata
+		public static encode(m: waproto.IBotMetricsMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMetricsMetadata
 	}
 	enum BotMetricsThreadEntryPoint {
 		AI_TAB_THREAD = 1,
@@ -1269,8 +1311,8 @@ export namespace waproto {
 		constructor(p?: waproto.IBotModeSelectionMetadata)
 		public mode: waproto.BotModeSelectionMetadata.BotUserSelectionMode[]
 		public overrideMode: number[]
-		public static encode(m: waproto.IBotModeSelectionMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotModeSelectionMetadata
+		public static encode(m: waproto.IBotModeSelectionMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotModeSelectionMetadata
 	}
 	namespace BotModeSelectionMetadata {
 		enum BotUserSelectionMode {
@@ -1288,8 +1330,8 @@ export namespace waproto {
 		public modelType?: (waproto.BotModelMetadata.ModelType|null)
 		public premiumModelStatus?: (waproto.BotModelMetadata.PremiumModelStatus|null)
 		public modelNameOverride?: (string|null)
-		public static encode(m: waproto.IBotModelMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotModelMetadata
+		public static encode(m: waproto.IBotModelMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotModelMetadata
 	}
 	namespace BotModelMetadata {
 		enum ModelType {
@@ -1331,8 +1373,8 @@ export namespace waproto {
 		public deprecatedField?: (waproto.BotPluginMetadata.PluginType|null)
 		public parentPluginType?: (waproto.BotPluginMetadata.PluginType|null)
 		public faviconCdnUrl?: (string|null)
-		public static encode(m: waproto.IBotPluginMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotPluginMetadata
+		public static encode(m: waproto.IBotPluginMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotPluginMetadata
 	}
 	namespace BotPluginMetadata {
 		enum PluginType {
@@ -1357,8 +1399,8 @@ export namespace waproto {
 		public progressDescription?: (string|null)
 		public stepsMetadata: waproto.BotProgressIndicatorMetadata.IBotPlanningStepMetadata[]
 		public estimatedCompletionTime?: (number|Long|null)
-		public static encode(m: waproto.IBotProgressIndicatorMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotProgressIndicatorMetadata
+		public static encode(m: waproto.IBotProgressIndicatorMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotProgressIndicatorMetadata
 	}
 	namespace BotProgressIndicatorMetadata {
 		interface IBotPlanningStepMetadata {
@@ -1379,8 +1421,8 @@ export namespace waproto {
 			public isReasoning?: (boolean|null)
 			public isEnhancedSearch?: (boolean|null)
 			public sections: waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.IBotPlanningStepSectionMetadata[]
-			public static encode(m: waproto.BotProgressIndicatorMetadata.IBotPlanningStepMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata
+			public static encode(m: waproto.BotProgressIndicatorMetadata.IBotPlanningStepMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata
 		}
 		namespace BotPlanningStepMetadata {
 			interface IBotPlanningSearchSourceMetadata {
@@ -1395,8 +1437,8 @@ export namespace waproto {
 				public provider?: (waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.BotSearchSourceProvider|null)
 				public sourceUrl?: (string|null)
 				public favIconUrl?: (string|null)
-				public static encode(m: waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.IBotPlanningSearchSourceMetadata, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.BotPlanningSearchSourceMetadata
+				public static encode(m: waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.IBotPlanningSearchSourceMetadata, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.BotPlanningSearchSourceMetadata
 			}
 			interface IBotPlanningSearchSourcesMetadata {
 				sourceTitle?: (string|null)
@@ -1408,8 +1450,8 @@ export namespace waproto {
 				public sourceTitle?: (string|null)
 				public provider?: (waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.BotPlanningSearchSourcesMetadata.BotPlanningSearchSourceProvider|null)
 				public sourceUrl?: (string|null)
-				public static encode(m: waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.IBotPlanningSearchSourcesMetadata, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.BotPlanningSearchSourcesMetadata
+				public static encode(m: waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.IBotPlanningSearchSourcesMetadata, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.BotPlanningSearchSourcesMetadata
 			}
 			namespace BotPlanningSearchSourcesMetadata {
 				enum BotPlanningSearchSourceProvider {
@@ -1429,8 +1471,8 @@ export namespace waproto {
 				public sectionTitle?: (string|null)
 				public sectionBody?: (string|null)
 				public sourcesMetadata: waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.IBotPlanningSearchSourceMetadata[]
-				public static encode(m: waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.IBotPlanningStepSectionMetadata, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.BotPlanningStepSectionMetadata
+				public static encode(m: waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.IBotPlanningStepSectionMetadata, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotProgressIndicatorMetadata.BotPlanningStepMetadata.BotPlanningStepSectionMetadata
 			}
 			enum BotSearchSourceProvider {
 				UNKNOWN_PROVIDER = 0,
@@ -1454,8 +1496,8 @@ export namespace waproto {
 		constructor(p?: waproto.IBotPromotionMessageMetadata)
 		public promotionType?: (waproto.BotPromotionMessageMetadata.BotPromotionType|null)
 		public buttonTitle?: (string|null)
-		public static encode(m: waproto.IBotPromotionMessageMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotPromotionMessageMetadata
+		public static encode(m: waproto.IBotPromotionMessageMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotPromotionMessageMetadata
 	}
 	namespace BotPromotionMessageMetadata {
 		enum BotPromotionType {
@@ -1472,8 +1514,8 @@ export namespace waproto {
 		constructor(p?: waproto.IBotPromptSuggestion)
 		public prompt?: (string|null)
 		public promptId?: (string|null)
-		public static encode(m: waproto.IBotPromptSuggestion, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotPromptSuggestion
+		public static encode(m: waproto.IBotPromptSuggestion, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotPromptSuggestion
 	}
 	interface IBotPromptSuggestions {
 		suggestions?: (waproto.IBotPromptSuggestion[]|null)
@@ -1481,8 +1523,8 @@ export namespace waproto {
 	class BotPromptSuggestions implements IBotPromptSuggestions {
 		constructor(p?: waproto.IBotPromptSuggestions)
 		public suggestions: waproto.IBotPromptSuggestion[]
-		public static encode(m: waproto.IBotPromptSuggestions, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotPromptSuggestions
+		public static encode(m: waproto.IBotPromptSuggestions, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotPromptSuggestions
 	}
 	interface IBotQuotaMetadata {
 		botFeatureQuotaMetadata?: (waproto.BotQuotaMetadata.IBotFeatureQuotaMetadata[]|null)
@@ -1490,8 +1532,8 @@ export namespace waproto {
 	class BotQuotaMetadata implements IBotQuotaMetadata {
 		constructor(p?: waproto.IBotQuotaMetadata)
 		public botFeatureQuotaMetadata: waproto.BotQuotaMetadata.IBotFeatureQuotaMetadata[]
-		public static encode(m: waproto.IBotQuotaMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotQuotaMetadata
+		public static encode(m: waproto.IBotQuotaMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotQuotaMetadata
 	}
 	namespace BotQuotaMetadata {
 		interface IBotFeatureQuotaMetadata {
@@ -1504,8 +1546,8 @@ export namespace waproto {
 			public featureType?: (waproto.BotQuotaMetadata.BotFeatureQuotaMetadata.BotFeatureType|null)
 			public remainingQuota?: (number|null)
 			public expirationTimestamp?: (number|Long|null)
-			public static encode(m: waproto.BotQuotaMetadata.IBotFeatureQuotaMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotQuotaMetadata.BotFeatureQuotaMetadata
+			public static encode(m: waproto.BotQuotaMetadata.IBotFeatureQuotaMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotQuotaMetadata.BotFeatureQuotaMetadata
 		}
 		namespace BotFeatureQuotaMetadata {
 			enum BotFeatureType {
@@ -1528,8 +1570,8 @@ export namespace waproto {
 		public name?: (string|null)
 		public nextTriggerTimestamp?: (number|Long|null)
 		public frequency?: (waproto.BotReminderMetadata.ReminderFrequency|null)
-		public static encode(m: waproto.IBotReminderMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotReminderMetadata
+		public static encode(m: waproto.IBotReminderMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotReminderMetadata
 	}
 	namespace BotReminderMetadata {
 		enum ReminderAction {
@@ -1554,8 +1596,8 @@ export namespace waproto {
 		constructor(p?: waproto.IBotRenderingConfigMetadata)
 		public bloksVersioningId?: (string|null)
 		public pixelDensity?: (number|null)
-		public static encode(m: waproto.IBotRenderingConfigMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotRenderingConfigMetadata
+		public static encode(m: waproto.IBotRenderingConfigMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotRenderingConfigMetadata
 	}
 	interface IBotRenderingMetadata {
 		keywords?: (waproto.BotRenderingMetadata.IKeyword[]|null)
@@ -1563,8 +1605,8 @@ export namespace waproto {
 	class BotRenderingMetadata implements IBotRenderingMetadata {
 		constructor(p?: waproto.IBotRenderingMetadata)
 		public keywords: waproto.BotRenderingMetadata.IKeyword[]
-		public static encode(m: waproto.IBotRenderingMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotRenderingMetadata
+		public static encode(m: waproto.IBotRenderingMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotRenderingMetadata
 	}
 	namespace BotRenderingMetadata {
 		interface IKeyword {
@@ -1575,8 +1617,8 @@ export namespace waproto {
 			constructor(p?: waproto.BotRenderingMetadata.IKeyword)
 			public value?: (string|null)
 			public associatedPrompts: string[]
-			public static encode(m: waproto.BotRenderingMetadata.IKeyword, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotRenderingMetadata.Keyword
+			public static encode(m: waproto.BotRenderingMetadata.IKeyword, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotRenderingMetadata.Keyword
 		}
 	}
 	interface IBotSessionMetadata {
@@ -1587,8 +1629,8 @@ export namespace waproto {
 		constructor(p?: waproto.IBotSessionMetadata)
 		public sessionId?: (string|null)
 		public sessionSource?: (waproto.BotSessionSource|null)
-		public static encode(m: waproto.IBotSessionMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotSessionMetadata
+		public static encode(m: waproto.IBotSessionMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotSessionMetadata
 	}
 	enum BotSessionSource {
 		NONE = 0,
@@ -1606,8 +1648,8 @@ export namespace waproto {
 	class BotSignatureVerificationMetadata implements IBotSignatureVerificationMetadata {
 		constructor(p?: waproto.IBotSignatureVerificationMetadata)
 		public proofs: waproto.IBotSignatureVerificationUseCaseProof[]
-		public static encode(m: waproto.IBotSignatureVerificationMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotSignatureVerificationMetadata
+		public static encode(m: waproto.IBotSignatureVerificationMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotSignatureVerificationMetadata
 	}
 	interface IBotSignatureVerificationUseCaseProof {
 		version?: (number|null)
@@ -1621,8 +1663,8 @@ export namespace waproto {
 		public useCase?: (waproto.BotSignatureVerificationUseCaseProof.BotSignatureUseCase|null)
 		public signature?: (Uint8Array|null)
 		public certificateChain: Uint8Array[]
-		public static encode(m: waproto.IBotSignatureVerificationUseCaseProof, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotSignatureVerificationUseCaseProof
+		public static encode(m: waproto.IBotSignatureVerificationUseCaseProof, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotSignatureVerificationUseCaseProof
 	}
 	namespace BotSignatureVerificationUseCaseProof {
 		enum BotSignatureUseCase {
@@ -1637,8 +1679,8 @@ export namespace waproto {
 	class BotSourcesMetadata implements IBotSourcesMetadata {
 		constructor(p?: waproto.IBotSourcesMetadata)
 		public sources: waproto.BotSourcesMetadata.IBotSourceItem[]
-		public static encode(m: waproto.IBotSourcesMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotSourcesMetadata
+		public static encode(m: waproto.IBotSourcesMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotSourcesMetadata
 	}
 	namespace BotSourcesMetadata {
 		interface IBotSourceItem {
@@ -1659,8 +1701,8 @@ export namespace waproto {
 			public faviconCdnUrl?: (string|null)
 			public citationNumber?: (number|null)
 			public sourceTitle?: (string|null)
-			public static encode(m: waproto.BotSourcesMetadata.IBotSourceItem, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotSourcesMetadata.BotSourceItem
+			public static encode(m: waproto.BotSourcesMetadata.IBotSourceItem, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotSourcesMetadata.BotSourceItem
 		}
 		namespace BotSourceItem {
 			enum SourceProvider {
@@ -1684,8 +1726,8 @@ export namespace waproto {
 		public selectedPromptIndex?: (number|null)
 		public promptSuggestions?: (waproto.IBotPromptSuggestions|null)
 		public selectedPromptId?: (string|null)
-		public static encode(m: waproto.IBotSuggestedPromptMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotSuggestedPromptMetadata
+		public static encode(m: waproto.IBotSuggestedPromptMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotSuggestedPromptMetadata
 	}
 	interface IBotUnifiedResponseMutation {
 		sbsMetadata?: (waproto.BotUnifiedResponseMutation.ISideBySideMetadata|null)
@@ -1695,8 +1737,8 @@ export namespace waproto {
 		constructor(p?: waproto.IBotUnifiedResponseMutation)
 		public sbsMetadata?: (waproto.BotUnifiedResponseMutation.ISideBySideMetadata|null)
 		public mediaDetailsMetadataList: waproto.BotUnifiedResponseMutation.IMediaDetailsMetadata[]
-		public static encode(m: waproto.IBotUnifiedResponseMutation, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotUnifiedResponseMutation
+		public static encode(m: waproto.IBotUnifiedResponseMutation, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotUnifiedResponseMutation
 	}
 	namespace BotUnifiedResponseMutation {
 		interface IMediaDetailsMetadata {
@@ -1709,8 +1751,8 @@ export namespace waproto {
 			public id?: (string|null)
 			public highResMedia?: (waproto.IBotMediaMetadata|null)
 			public previewMedia?: (waproto.IBotMediaMetadata|null)
-			public static encode(m: waproto.BotUnifiedResponseMutation.IMediaDetailsMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotUnifiedResponseMutation.MediaDetailsMetadata
+			public static encode(m: waproto.BotUnifiedResponseMutation.IMediaDetailsMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotUnifiedResponseMutation.MediaDetailsMetadata
 		}
 		interface ISideBySideMetadata {
 			primaryResponseId?: (string|null)
@@ -1720,8 +1762,8 @@ export namespace waproto {
 			constructor(p?: waproto.BotUnifiedResponseMutation.ISideBySideMetadata)
 			public primaryResponseId?: (string|null)
 			public surveyCtaHasRendered?: (boolean|null)
-			public static encode(m: waproto.BotUnifiedResponseMutation.ISideBySideMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.BotUnifiedResponseMutation.SideBySideMetadata
+			public static encode(m: waproto.BotUnifiedResponseMutation.ISideBySideMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotUnifiedResponseMutation.SideBySideMetadata
 		}
 	}
 	interface ICallLogRecord {
@@ -1758,8 +1800,8 @@ export namespace waproto {
 		public groupJid?: (string|null)
 		public participants: waproto.CallLogRecord.IParticipantInfo[]
 		public callType?: (waproto.CallLogRecord.CallType|null)
-		public static encode(m: waproto.ICallLogRecord, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.CallLogRecord
+		public static encode(m: waproto.ICallLogRecord, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.CallLogRecord
 	}
 	namespace CallLogRecord {
 		enum CallResult {
@@ -1788,8 +1830,8 @@ export namespace waproto {
 			constructor(p?: waproto.CallLogRecord.IParticipantInfo)
 			public userJid?: (string|null)
 			public callResult?: (waproto.CallLogRecord.CallResult|null)
-			public static encode(m: waproto.CallLogRecord.IParticipantInfo, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.CallLogRecord.ParticipantInfo
+			public static encode(m: waproto.CallLogRecord.IParticipantInfo, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.CallLogRecord.ParticipantInfo
 		}
 		enum SilenceReason {
 			NONE = 0,
@@ -1806,8 +1848,8 @@ export namespace waproto {
 		constructor(p?: waproto.ICertChain)
 		public leaf?: (waproto.CertChain.INoiseCertificate|null)
 		public intermediate?: (waproto.CertChain.INoiseCertificate|null)
-		public static encode(m: waproto.ICertChain, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.CertChain
+		public static encode(m: waproto.ICertChain, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.CertChain
 	}
 	namespace CertChain {
 		interface INoiseCertificate {
@@ -1818,8 +1860,8 @@ export namespace waproto {
 			constructor(p?: waproto.CertChain.INoiseCertificate)
 			public details?: (Uint8Array|null)
 			public signature?: (Uint8Array|null)
-			public static encode(m: waproto.CertChain.INoiseCertificate, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.CertChain.NoiseCertificate
+			public static encode(m: waproto.CertChain.INoiseCertificate, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.CertChain.NoiseCertificate
 		}
 		namespace NoiseCertificate {
 			interface IDetails {
@@ -1836,8 +1878,8 @@ export namespace waproto {
 				public key?: (Uint8Array|null)
 				public notBefore?: (number|Long|null)
 				public notAfter?: (number|Long|null)
-				public static encode(m: waproto.CertChain.NoiseCertificate.IDetails, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.CertChain.NoiseCertificate.Details
+				public static encode(m: waproto.CertChain.NoiseCertificate.IDetails, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.CertChain.NoiseCertificate.Details
 			}
 		}
 	}
@@ -1849,8 +1891,8 @@ export namespace waproto {
 		constructor(p?: waproto.IChatLockSettings)
 		public hideLockedChats?: (boolean|null)
 		public secretCode?: (waproto.IUserPassword|null)
-		public static encode(m: waproto.IChatLockSettings, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ChatLockSettings
+		public static encode(m: waproto.IChatLockSettings, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ChatLockSettings
 	}
 	interface IChatRowOpaqueData {
 		draftMessage?: (waproto.ChatRowOpaqueData.IDraftMessage|null)
@@ -1858,8 +1900,8 @@ export namespace waproto {
 	class ChatRowOpaqueData implements IChatRowOpaqueData {
 		constructor(p?: waproto.IChatRowOpaqueData)
 		public draftMessage?: (waproto.ChatRowOpaqueData.IDraftMessage|null)
-		public static encode(m: waproto.IChatRowOpaqueData, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ChatRowOpaqueData
+		public static encode(m: waproto.IChatRowOpaqueData, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ChatRowOpaqueData
 	}
 	namespace ChatRowOpaqueData {
 		interface IDraftMessage {
@@ -1876,8 +1918,8 @@ export namespace waproto {
 			public ctwaContextLinkData?: (waproto.ChatRowOpaqueData.DraftMessage.ICtwaContextLinkData|null)
 			public ctwaContext?: (waproto.ChatRowOpaqueData.DraftMessage.ICtwaContextData|null)
 			public timestamp?: (number|Long|null)
-			public static encode(m: waproto.ChatRowOpaqueData.IDraftMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ChatRowOpaqueData.DraftMessage
+			public static encode(m: waproto.ChatRowOpaqueData.IDraftMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ChatRowOpaqueData.DraftMessage
 		}
 		namespace DraftMessage {
 			interface ICtwaContextData {
@@ -1908,8 +1950,8 @@ export namespace waproto {
 				public mediaType?: (waproto.ChatRowOpaqueData.DraftMessage.CtwaContextData.ContextInfoExternalAdReplyInfoMediaType|null)
 				public mediaUrl?: (string|null)
 				public isSuspiciousLink?: (boolean|null)
-				public static encode(m: waproto.ChatRowOpaqueData.DraftMessage.ICtwaContextData, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ChatRowOpaqueData.DraftMessage.CtwaContextData
+				public static encode(m: waproto.ChatRowOpaqueData.DraftMessage.ICtwaContextData, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ChatRowOpaqueData.DraftMessage.CtwaContextData
 			}
 			namespace CtwaContextData {
 				enum ContextInfoExternalAdReplyInfoMediaType {
@@ -1930,8 +1972,8 @@ export namespace waproto {
 				public sourceUrl?: (string|null)
 				public icebreaker?: (string|null)
 				public phone?: (string|null)
-				public static encode(m: waproto.ChatRowOpaqueData.DraftMessage.ICtwaContextLinkData, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ChatRowOpaqueData.DraftMessage.CtwaContextLinkData
+				public static encode(m: waproto.ChatRowOpaqueData.DraftMessage.ICtwaContextLinkData, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ChatRowOpaqueData.DraftMessage.CtwaContextLinkData
 			}
 		}
 	}
@@ -1947,8 +1989,8 @@ export namespace waproto {
 		public subtitle?: (string|null)
 		public cmsId?: (string|null)
 		public imageUrl?: (string|null)
-		public static encode(m: waproto.ICitation, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Citation
+		public static encode(m: waproto.ICitation, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Citation
 	}
 	interface IClientPairingProps {
 		isChatDbLidMigrated?: (boolean|null)
@@ -1962,8 +2004,8 @@ export namespace waproto {
 		public isSyncdPureLidSession?: (boolean|null)
 		public isSyncdSnapshotRecoveryEnabled?: (boolean|null)
 		public isHsThumbnailSyncEnabled?: (boolean|null)
-		public static encode(m: waproto.IClientPairingProps, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ClientPairingProps
+		public static encode(m: waproto.IClientPairingProps, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPairingProps
 	}
 	interface IClientPayload {
 		username?: (number|Long|null)
@@ -2039,8 +2081,8 @@ export namespace waproto {
 		public preacksCount?: (number|null)
 		public processingQueueSize?: (number|null)
 		public pairedPeripherals: string[]
-		public static encode(m: waproto.IClientPayload, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ClientPayload
+		public static encode(m: waproto.IClientPayload, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload
 	}
 	namespace ClientPayload {
 		enum AccountType {
@@ -2081,8 +2123,8 @@ export namespace waproto {
 			constructor(p?: waproto.ClientPayload.IDNSSource)
 			public dnsMethod?: (waproto.ClientPayload.DNSSource.DNSResolutionMethod|null)
 			public appCached?: (boolean|null)
-			public static encode(m: waproto.ClientPayload.IDNSSource, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ClientPayload.DNSSource
+			public static encode(m: waproto.ClientPayload.IDNSSource, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload.DNSSource
 		}
 		namespace DNSSource {
 			enum DNSResolutionMethod {
@@ -2116,8 +2158,8 @@ export namespace waproto {
 			public eSkeySig?: (Uint8Array|null)
 			public buildHash?: (Uint8Array|null)
 			public deviceProps?: (Uint8Array|null)
-			public static encode(m: waproto.ClientPayload.IDevicePairingRegistrationData, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ClientPayload.DevicePairingRegistrationData
+			public static encode(m: waproto.ClientPayload.IDevicePairingRegistrationData, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload.DevicePairingRegistrationData
 		}
 		enum IOSAppExtension {
 			SHARE_EXTENSION = 0,
@@ -2134,8 +2176,8 @@ export namespace waproto {
 			public accountId?: (number|Long|null)
 			public token?: (Uint8Array|null)
 			public enableReadReceipts?: (boolean|null)
-			public static encode(m: waproto.ClientPayload.IInteropData, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ClientPayload.InteropData
+			public static encode(m: waproto.ClientPayload.IInteropData, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload.InteropData
 		}
 		enum Product {
 			WHATSAPP = 0,
@@ -2184,8 +2226,8 @@ export namespace waproto {
 			public deviceExpId?: (string|null)
 			public deviceType?: (waproto.ClientPayload.UserAgent.DeviceType|null)
 			public deviceModelType?: (string|null)
-			public static encode(m: waproto.ClientPayload.IUserAgent, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ClientPayload.UserAgent
+			public static encode(m: waproto.ClientPayload.IUserAgent, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload.UserAgent
 		}
 		namespace UserAgent {
 			interface IAppVersion {
@@ -2202,8 +2244,8 @@ export namespace waproto {
 				public tertiary?: (number|null)
 				public quaternary?: (number|null)
 				public quinary?: (number|null)
-				public static encode(m: waproto.ClientPayload.UserAgent.IAppVersion, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ClientPayload.UserAgent.AppVersion
+				public static encode(m: waproto.ClientPayload.UserAgent.IAppVersion, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload.UserAgent.AppVersion
 			}
 			enum DeviceType {
 				PHONE = 0,
@@ -2275,8 +2317,8 @@ export namespace waproto {
 			public webSubPlatform?: (waproto.ClientPayload.WebInfo.WebSubPlatform|null)
 			public browser?: (string|null)
 			public browserVersion?: (string|null)
-			public static encode(m: waproto.ClientPayload.IWebInfo, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ClientPayload.WebInfo
+			public static encode(m: waproto.ClientPayload.IWebInfo, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload.WebInfo
 		}
 		namespace WebInfo {
 			enum WebSubPlatform {
@@ -2313,8 +2355,8 @@ export namespace waproto {
 				public supportsE2EDocument?: (boolean|null)
 				public documentTypes?: (string|null)
 				public features?: (Uint8Array|null)
-				public static encode(m: waproto.ClientPayload.WebInfo.IWebdPayload, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ClientPayload.WebInfo.WebdPayload
+				public static encode(m: waproto.ClientPayload.WebInfo.IWebdPayload, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload.WebInfo.WebdPayload
 			}
 		}
 	}
@@ -2334,8 +2376,8 @@ export namespace waproto {
 		constructor(p?: waproto.ICommentMetadata)
 		public commentParentKey?: (waproto.IMessageKey|null)
 		public replyCount?: (number|null)
-		public static encode(m: waproto.ICommentMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.CommentMetadata
+		public static encode(m: waproto.ICommentMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.CommentMetadata
 	}
 	interface ICompanionCommitment {
 		hash?: (Uint8Array|null)
@@ -2343,8 +2385,8 @@ export namespace waproto {
 	class CompanionCommitment implements ICompanionCommitment {
 		constructor(p?: waproto.ICompanionCommitment)
 		public hash?: (Uint8Array|null)
-		public static encode(m: waproto.ICompanionCommitment, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.CompanionCommitment
+		public static encode(m: waproto.ICompanionCommitment, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.CompanionCommitment
 	}
 	interface ICompanionEphemeralIdentity {
 		publicKey?: (Uint8Array|null)
@@ -2356,8 +2398,8 @@ export namespace waproto {
 		public publicKey?: (Uint8Array|null)
 		public deviceType?: (waproto.DeviceProps.PlatformType|null)
 		public ref?: (string|null)
-		public static encode(m: waproto.ICompanionEphemeralIdentity, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.CompanionEphemeralIdentity
+		public static encode(m: waproto.ICompanionEphemeralIdentity, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.CompanionEphemeralIdentity
 	}
 	interface IConfig {
 		field?: ({ [k: string]: waproto.IField }|null)
@@ -2367,8 +2409,8 @@ export namespace waproto {
 		constructor(p?: waproto.IConfig)
 		public field: { [k: string]: waproto.IField }
 		public version?: (number|null)
-		public static encode(m: waproto.IConfig, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Config
+		public static encode(m: waproto.IConfig, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Config
 	}
 	interface IContextInfo {
 		stanzaId?: (string|null)
@@ -2492,8 +2534,8 @@ export namespace waproto {
 		public mediaDomainInfo?: (waproto.IMediaDomainInfo|null)
 		public partiallySelectedContent?: (waproto.ContextInfo.IPartiallySelectedContent|null)
 		public afterReadDuration?: (number|null)
-		public static encode(m: waproto.IContextInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo
+		public static encode(m: waproto.IContextInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo
 	}
 	namespace ContextInfo {
 		interface IAdReplyInfo {
@@ -2508,8 +2550,8 @@ export namespace waproto {
 			public mediaType?: (waproto.ContextInfo.AdReplyInfo.MediaType|null)
 			public jpegThumbnail?: (Uint8Array|null)
 			public caption?: (string|null)
-			public static encode(m: waproto.ContextInfo.IAdReplyInfo, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.AdReplyInfo
+			public static encode(m: waproto.ContextInfo.IAdReplyInfo, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.AdReplyInfo
 		}
 		namespace AdReplyInfo {
 			enum MediaType {
@@ -2524,8 +2566,8 @@ export namespace waproto {
 		class BusinessMessageForwardInfo implements IBusinessMessageForwardInfo {
 			constructor(p?: waproto.ContextInfo.IBusinessMessageForwardInfo)
 			public businessOwnerJid?: (string|null)
-			public static encode(m: waproto.ContextInfo.IBusinessMessageForwardInfo, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.BusinessMessageForwardInfo
+			public static encode(m: waproto.ContextInfo.IBusinessMessageForwardInfo, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.BusinessMessageForwardInfo
 		}
 		interface IDataSharingContext {
 			showMmDisclosure?: (boolean|null)
@@ -2539,8 +2581,8 @@ export namespace waproto {
 			public encryptedSignalTokenConsented?: (string|null)
 			public parameters: waproto.ContextInfo.DataSharingContext.IParameters[]
 			public dataSharingFlags?: (number|null)
-			public static encode(m: waproto.ContextInfo.IDataSharingContext, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.DataSharingContext
+			public static encode(m: waproto.ContextInfo.IDataSharingContext, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.DataSharingContext
 		}
 		namespace DataSharingContext {
 			enum DataSharingFlags {
@@ -2561,8 +2603,8 @@ export namespace waproto {
 				public intData?: (number|Long|null)
 				public floatData?: (number|null)
 				public contents?: (waproto.ContextInfo.DataSharingContext.IParameters|null)
-				public static encode(m: waproto.ContextInfo.DataSharingContext.IParameters, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.DataSharingContext.Parameters
+				public static encode(m: waproto.ContextInfo.DataSharingContext.IParameters, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.DataSharingContext.Parameters
 			}
 		}
 		interface IExternalAdReplyInfo {
@@ -2623,8 +2665,8 @@ export namespace waproto {
 			public adType?: (waproto.ContextInfo.ExternalAdReplyInfo.AdType|null)
 			public wtwaWebsiteUrl?: (string|null)
 			public adPreviewUrl?: (string|null)
-			public static encode(m: waproto.ContextInfo.IExternalAdReplyInfo, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.ExternalAdReplyInfo
+			public static encode(m: waproto.ContextInfo.IExternalAdReplyInfo, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.ExternalAdReplyInfo
 		}
 		namespace ExternalAdReplyInfo {
 			enum AdType {
@@ -2651,8 +2693,8 @@ export namespace waproto {
 			public canRequestFeedback?: (boolean|null)
 			public canBeReshared?: (boolean|null)
 			public canReceiveMultiReact?: (boolean|null)
-			public static encode(m: waproto.ContextInfo.IFeatureEligibilities, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.FeatureEligibilities
+			public static encode(m: waproto.ContextInfo.IFeatureEligibilities, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.FeatureEligibilities
 		}
 		enum ForwardOrigin {
 			UNKNOWN = 0,
@@ -2678,8 +2720,8 @@ export namespace waproto {
 			public contentType?: (waproto.ContextInfo.ForwardedNewsletterMessageInfo.ContentType|null)
 			public accessibilityText?: (string|null)
 			public profileName?: (string|null)
-			public static encode(m: waproto.ContextInfo.IForwardedNewsletterMessageInfo, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.ForwardedNewsletterMessageInfo
+			public static encode(m: waproto.ContextInfo.IForwardedNewsletterMessageInfo, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.ForwardedNewsletterMessageInfo
 		}
 		namespace ForwardedNewsletterMessageInfo {
 			enum ContentType {
@@ -2705,8 +2747,8 @@ export namespace waproto {
 		class PartiallySelectedContent implements IPartiallySelectedContent {
 			constructor(p?: waproto.ContextInfo.IPartiallySelectedContent)
 			public text?: (string|null)
-			public static encode(m: waproto.ContextInfo.IPartiallySelectedContent, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.PartiallySelectedContent
+			public static encode(m: waproto.ContextInfo.IPartiallySelectedContent, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.PartiallySelectedContent
 		}
 		interface IQuestionReplyQuotedMessage {
 			serverQuestionId?: (number|null)
@@ -2718,8 +2760,8 @@ export namespace waproto {
 			public serverQuestionId?: (number|null)
 			public quotedQuestion?: (waproto.IMessage|null)
 			public quotedResponse?: (waproto.IMessage|null)
-			public static encode(m: waproto.ContextInfo.IQuestionReplyQuotedMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.QuestionReplyQuotedMessage
+			public static encode(m: waproto.ContextInfo.IQuestionReplyQuotedMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.QuestionReplyQuotedMessage
 		}
 		enum QuotedType {
 			EXPLICIT = 0,
@@ -2742,8 +2784,8 @@ export namespace waproto {
 			public audienceType?: (waproto.ContextInfo.StatusAudienceMetadata.AudienceType|null)
 			public listName?: (string|null)
 			public listEmoji?: (string|null)
-			public static encode(m: waproto.ContextInfo.IStatusAudienceMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.StatusAudienceMetadata
+			public static encode(m: waproto.ContextInfo.IStatusAudienceMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.StatusAudienceMetadata
 		}
 		namespace StatusAudienceMetadata {
 			enum AudienceType {
@@ -2767,8 +2809,8 @@ export namespace waproto {
 			constructor(p?: waproto.ContextInfo.IUTMInfo)
 			public utmSource?: (string|null)
 			public utmCampaign?: (string|null)
-			public static encode(m: waproto.ContextInfo.IUTMInfo, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ContextInfo.UTMInfo
+			public static encode(m: waproto.ContextInfo.IUTMInfo, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.UTMInfo
 		}
 	}
 	interface IConversation {
@@ -2885,8 +2927,8 @@ export namespace waproto {
 		public limitSharingInitiatedByMe?: (boolean|null)
 		public maibaAiThreadEnabled?: (boolean|null)
 		public isMarketingMessageThread?: (boolean|null)
-		public static encode(m: waproto.IConversation, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Conversation
+		public static encode(m: waproto.IConversation, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Conversation
 	}
 	namespace Conversation {
 		enum EndOfHistoryTransferType {
@@ -2912,8 +2954,8 @@ export namespace waproto {
 		public userHasAvatar?: (waproto.DeviceCapabilities.IUserHasAvatar|null)
 		public memberNameTagPrimarySupport?: (waproto.DeviceCapabilities.MemberNameTagPrimarySupport|null)
 		public aiThread?: (waproto.DeviceCapabilities.IAiThread|null)
-		public static encode(m: waproto.IDeviceCapabilities, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DeviceCapabilities
+		public static encode(m: waproto.IDeviceCapabilities, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities
 	}
 	namespace DeviceCapabilities {
 		interface IAiThread {
@@ -2922,8 +2964,8 @@ export namespace waproto {
 		class AiThread implements IAiThread {
 			constructor(p?: waproto.DeviceCapabilities.IAiThread)
 			public supportLevel?: (waproto.DeviceCapabilities.AiThread.SupportLevel|null)
-			public static encode(m: waproto.DeviceCapabilities.IAiThread, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DeviceCapabilities.AiThread
+			public static encode(m: waproto.DeviceCapabilities.IAiThread, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.AiThread
 		}
 		namespace AiThread {
 			enum SupportLevel {
@@ -2940,8 +2982,8 @@ export namespace waproto {
 			constructor(p?: waproto.DeviceCapabilities.IBusinessBroadcast)
 			public importListEnabled?: (boolean|null)
 			public companionSupportEnabled?: (boolean|null)
-			public static encode(m: waproto.DeviceCapabilities.IBusinessBroadcast, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DeviceCapabilities.BusinessBroadcast
+			public static encode(m: waproto.DeviceCapabilities.IBusinessBroadcast, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.BusinessBroadcast
 		}
 		enum ChatLockSupportLevel {
 			NONE = 0,
@@ -2954,8 +2996,8 @@ export namespace waproto {
 		class LIDMigration implements ILIDMigration {
 			constructor(p?: waproto.DeviceCapabilities.ILIDMigration)
 			public chatDbMigrationTimestamp?: (number|Long|null)
-			public static encode(m: waproto.DeviceCapabilities.ILIDMigration, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DeviceCapabilities.LIDMigration
+			public static encode(m: waproto.DeviceCapabilities.ILIDMigration, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.LIDMigration
 		}
 		enum MemberNameTagPrimarySupport {
 			DISABLED = 0,
@@ -2968,8 +3010,8 @@ export namespace waproto {
 		class UserHasAvatar implements IUserHasAvatar {
 			constructor(p?: waproto.DeviceCapabilities.IUserHasAvatar)
 			public userHasAvatar?: (boolean|null)
-			public static encode(m: waproto.DeviceCapabilities.IUserHasAvatar, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DeviceCapabilities.UserHasAvatar
+			public static encode(m: waproto.DeviceCapabilities.IUserHasAvatar, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.UserHasAvatar
 		}
 	}
 	interface IDeviceConsistencyCodeMessage {
@@ -2980,8 +3022,8 @@ export namespace waproto {
 		constructor(p?: waproto.IDeviceConsistencyCodeMessage)
 		public generation?: (number|null)
 		public signature?: (Uint8Array|null)
-		public static encode(m: waproto.IDeviceConsistencyCodeMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DeviceConsistencyCodeMessage
+		public static encode(m: waproto.IDeviceConsistencyCodeMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceConsistencyCodeMessage
 	}
 	interface IDeviceListMetadata {
 		senderKeyHash?: (Uint8Array|null)
@@ -3003,8 +3045,8 @@ export namespace waproto {
 		public recipientKeyHash?: (Uint8Array|null)
 		public recipientTimestamp?: (number|Long|null)
 		public recipientKeyIndexes: number[]
-		public static encode(m: waproto.IDeviceListMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DeviceListMetadata
+		public static encode(m: waproto.IDeviceListMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceListMetadata
 	}
 	interface IDeviceProps {
 		os?: (string|null)
@@ -3020,8 +3062,8 @@ export namespace waproto {
 		public platformType?: (waproto.DeviceProps.PlatformType|null)
 		public requireFullSync?: (boolean|null)
 		public historySyncConfig?: (waproto.DeviceProps.IHistorySyncConfig|null)
-		public static encode(m: waproto.IDeviceProps, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DeviceProps
+		public static encode(m: waproto.IDeviceProps, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceProps
 	}
 	namespace DeviceProps {
 		interface IAppVersion {
@@ -3038,8 +3080,8 @@ export namespace waproto {
 			public tertiary?: (number|null)
 			public quaternary?: (number|null)
 			public quinary?: (number|null)
-			public static encode(m: waproto.DeviceProps.IAppVersion, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DeviceProps.AppVersion
+			public static encode(m: waproto.DeviceProps.IAppVersion, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceProps.AppVersion
 		}
 		interface IHistorySyncConfig {
 			fullSyncDaysLimit?: (number|null)
@@ -3089,8 +3131,8 @@ export namespace waproto {
 			public initialSyncMaxMessagesPerChat?: (number|null)
 			public supportManusHistory?: (boolean|null)
 			public supportHatchHistory?: (boolean|null)
-			public static encode(m: waproto.DeviceProps.IHistorySyncConfig, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DeviceProps.HistorySyncConfig
+			public static encode(m: waproto.DeviceProps.IHistorySyncConfig, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceProps.HistorySyncConfig
 		}
 		enum PlatformType {
 			UNKNOWN = 0,
@@ -3132,8 +3174,8 @@ export namespace waproto {
 		public trigger?: (waproto.DisappearingMode.Trigger|null)
 		public initiatorDeviceJid?: (string|null)
 		public initiatedByMe?: (boolean|null)
-		public static encode(m: waproto.IDisappearingMode, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.DisappearingMode
+		public static encode(m: waproto.IDisappearingMode, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DisappearingMode
 	}
 	namespace DisappearingMode {
 		enum Initiator {
@@ -3160,8 +3202,8 @@ export namespace waproto {
 		public embeddedMessage?: (waproto.IEmbeddedMessage|null)
 		public embeddedMusic?: (waproto.IEmbeddedMusic|null)
 		public content?: ("embeddedMessage"|"embeddedMusic")
-		public static encode(m: waproto.IEmbeddedContent, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.EmbeddedContent
+		public static encode(m: waproto.IEmbeddedContent, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.EmbeddedContent
 	}
 	interface IEmbeddedMessage {
 		stanzaId?: (string|null)
@@ -3171,8 +3213,8 @@ export namespace waproto {
 		constructor(p?: waproto.IEmbeddedMessage)
 		public stanzaId?: (string|null)
 		public message?: (waproto.IMessage|null)
-		public static encode(m: waproto.IEmbeddedMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.EmbeddedMessage
+		public static encode(m: waproto.IEmbeddedMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.EmbeddedMessage
 	}
 	interface IEmbeddedMusic {
 		musicContentMediaId?: (string|null)
@@ -3206,8 +3248,8 @@ export namespace waproto {
 		public musicSongStartTimeInMs?: (number|Long|null)
 		public derivedContentStartTimeInMs?: (number|Long|null)
 		public overlapDurationInMs?: (number|Long|null)
-		public static encode(m: waproto.IEmbeddedMusic, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.EmbeddedMusic
+		public static encode(m: waproto.IEmbeddedMusic, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.EmbeddedMusic
 	}
 	interface IEncryptedPairingRequest {
 		encryptedPayload?: (Uint8Array|null)
@@ -3217,8 +3259,8 @@ export namespace waproto {
 		constructor(p?: waproto.IEncryptedPairingRequest)
 		public encryptedPayload?: (Uint8Array|null)
 		public iv?: (Uint8Array|null)
-		public static encode(m: waproto.IEncryptedPairingRequest, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.EncryptedPairingRequest
+		public static encode(m: waproto.IEncryptedPairingRequest, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.EncryptedPairingRequest
 	}
 	interface IEphemeralSetting {
 		duration?: (number|null)
@@ -3228,8 +3270,8 @@ export namespace waproto {
 		constructor(p?: waproto.IEphemeralSetting)
 		public duration?: (number|null)
 		public timestamp?: (number|Long|null)
-		public static encode(m: waproto.IEphemeralSetting, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.EphemeralSetting
+		public static encode(m: waproto.IEphemeralSetting, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.EphemeralSetting
 	}
 	interface IEventAdditionalMetadata {
 		isStale?: (boolean|null)
@@ -3237,8 +3279,8 @@ export namespace waproto {
 	class EventAdditionalMetadata implements IEventAdditionalMetadata {
 		constructor(p?: waproto.IEventAdditionalMetadata)
 		public isStale?: (boolean|null)
-		public static encode(m: waproto.IEventAdditionalMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.EventAdditionalMetadata
+		public static encode(m: waproto.IEventAdditionalMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.EventAdditionalMetadata
 	}
 	interface IEventResponse {
 		eventResponseMessageKey?: (waproto.IMessageKey|null)
@@ -3252,8 +3294,8 @@ export namespace waproto {
 		public timestampMs?: (number|Long|null)
 		public eventResponseMessage?: (waproto.Message.IEventResponseMessage|null)
 		public unread?: (boolean|null)
-		public static encode(m: waproto.IEventResponse, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.EventResponse
+		public static encode(m: waproto.IEventResponse, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.EventResponse
 	}
 	interface IExitCode {
 		code?: (number|Long|null)
@@ -3263,8 +3305,8 @@ export namespace waproto {
 		constructor(p?: waproto.IExitCode)
 		public code?: (number|Long|null)
 		public text?: (string|null)
-		public static encode(m: waproto.IExitCode, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ExitCode
+		public static encode(m: waproto.IExitCode, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ExitCode
 	}
 	interface IExternalBlobReference {
 		mediaKey?: (Uint8Array|null)
@@ -3282,8 +3324,8 @@ export namespace waproto {
 		public fileSizeBytes?: (number|Long|null)
 		public fileSha256?: (Uint8Array|null)
 		public fileEncSha256?: (Uint8Array|null)
-		public static encode(m: waproto.IExternalBlobReference, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ExternalBlobReference
+		public static encode(m: waproto.IExternalBlobReference, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ExternalBlobReference
 	}
 	interface IField {
 		minVersion?: (number|null)
@@ -3299,8 +3341,8 @@ export namespace waproto {
 		public notReportableMinVersion?: (number|null)
 		public isMessage?: (boolean|null)
 		public subfield: { [k: string]: waproto.IField }
-		public static encode(m: waproto.IField, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Field
+		public static encode(m: waproto.IField, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Field
 	}
 	interface IForwardedAIBotMessageInfo {
 		botName?: (string|null)
@@ -3312,8 +3354,8 @@ export namespace waproto {
 		public botName?: (string|null)
 		public botJid?: (string|null)
 		public creatorName?: (string|null)
-		public static encode(m: waproto.IForwardedAIBotMessageInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ForwardedAIBotMessageInfo
+		public static encode(m: waproto.IForwardedAIBotMessageInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ForwardedAIBotMessageInfo
 	}
 	interface IGlobalSettings {
 		lightThemeWallpaper?: (waproto.IWallpaperSettings|null)
@@ -3359,8 +3401,8 @@ export namespace waproto {
 		public groupNotificationSettings?: (waproto.INotificationSettings|null)
 		public chatLockSettings?: (waproto.IChatLockSettings|null)
 		public chatDbLidMigrationTimestamp?: (number|Long|null)
-		public static encode(m: waproto.IGlobalSettings, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.GlobalSettings
+		public static encode(m: waproto.IGlobalSettings, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GlobalSettings
 	}
 	interface IGroupHistoryBundleInfo {
 		deprecatedMessageHistoryBundle?: (waproto.Message.IMessageHistoryBundle|null)
@@ -3370,8 +3412,8 @@ export namespace waproto {
 		constructor(p?: waproto.IGroupHistoryBundleInfo)
 		public deprecatedMessageHistoryBundle?: (waproto.Message.IMessageHistoryBundle|null)
 		public processState?: (waproto.GroupHistoryBundleInfo.ProcessState|null)
-		public static encode(m: waproto.IGroupHistoryBundleInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.GroupHistoryBundleInfo
+		public static encode(m: waproto.IGroupHistoryBundleInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupHistoryBundleInfo
 	}
 	namespace GroupHistoryBundleInfo {
 		enum ProcessState {
@@ -3390,8 +3432,8 @@ export namespace waproto {
 		constructor(p?: waproto.IGroupHistoryIndividualMessageInfo)
 		public bundleMessageKey?: (waproto.IMessageKey|null)
 		public editedAfterReceivedAsHistory?: (boolean|null)
-		public static encode(m: waproto.IGroupHistoryIndividualMessageInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.GroupHistoryIndividualMessageInfo
+		public static encode(m: waproto.IGroupHistoryIndividualMessageInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupHistoryIndividualMessageInfo
 	}
 	interface IGroupMention {
 		groupJid?: (string|null)
@@ -3401,8 +3443,8 @@ export namespace waproto {
 		constructor(p?: waproto.IGroupMention)
 		public groupJid?: (string|null)
 		public groupSubject?: (string|null)
-		public static encode(m: waproto.IGroupMention, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.GroupMention
+		public static encode(m: waproto.IGroupMention, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupMention
 	}
 	interface IGroupParticipant {
 		userJid?: (string|null)
@@ -3414,8 +3456,8 @@ export namespace waproto {
 		public userJid?: (string|null)
 		public rank?: (waproto.GroupParticipant.Rank|null)
 		public memberLabel?: (waproto.IMemberLabel|null)
-		public static encode(m: waproto.IGroupParticipant, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.GroupParticipant
+		public static encode(m: waproto.IGroupParticipant, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupParticipant
 	}
 	namespace GroupParticipant {
 		enum Rank {
@@ -3434,8 +3476,8 @@ export namespace waproto {
 		public clientHello?: (waproto.HandshakeMessage.IClientHello|null)
 		public serverHello?: (waproto.HandshakeMessage.IServerHello|null)
 		public clientFinish?: (waproto.HandshakeMessage.IClientFinish|null)
-		public static encode(m: waproto.IHandshakeMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.HandshakeMessage
+		public static encode(m: waproto.IHandshakeMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HandshakeMessage
 	}
 	namespace HandshakeMessage {
 		interface IClientFinish {
@@ -3448,8 +3490,8 @@ export namespace waproto {
 			public static?: (Uint8Array|null)
 			public payload?: (Uint8Array|null)
 			public extendedCiphertext?: (Uint8Array|null)
-			public static encode(m: waproto.HandshakeMessage.IClientFinish, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.HandshakeMessage.ClientFinish
+			public static encode(m: waproto.HandshakeMessage.IClientFinish, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HandshakeMessage.ClientFinish
 		}
 		interface IClientHello {
 			ephemeral?: (Uint8Array|null)
@@ -3465,8 +3507,8 @@ export namespace waproto {
 			public payload?: (Uint8Array|null)
 			public useExtended?: (boolean|null)
 			public extendedCiphertext?: (Uint8Array|null)
-			public static encode(m: waproto.HandshakeMessage.IClientHello, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.HandshakeMessage.ClientHello
+			public static encode(m: waproto.HandshakeMessage.IClientHello, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HandshakeMessage.ClientHello
 		}
 		interface IServerHello {
 			ephemeral?: (Uint8Array|null)
@@ -3480,8 +3522,8 @@ export namespace waproto {
 			public static?: (Uint8Array|null)
 			public payload?: (Uint8Array|null)
 			public extendedStatic?: (Uint8Array|null)
-			public static encode(m: waproto.HandshakeMessage.IServerHello, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.HandshakeMessage.ServerHello
+			public static encode(m: waproto.HandshakeMessage.IServerHello, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HandshakeMessage.ServerHello
 		}
 	}
 	interface IHistorySync {
@@ -3524,8 +3566,8 @@ export namespace waproto {
 		public shareableChatIdentifierEncryptionKey?: (Uint8Array|null)
 		public accounts: waproto.IAccount[]
 		public nctSalt?: (Uint8Array|null)
-		public static encode(m: waproto.IHistorySync, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.HistorySync
+		public static encode(m: waproto.IHistorySync, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HistorySync
 	}
 	namespace HistorySync {
 		enum BotAIWaitListState {
@@ -3550,8 +3592,8 @@ export namespace waproto {
 		constructor(p?: waproto.IHistorySyncMsg)
 		public message?: (waproto.IWebMessageInfo|null)
 		public msgOrderId?: (number|Long|null)
-		public static encode(m: waproto.IHistorySyncMsg, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.HistorySyncMsg
+		public static encode(m: waproto.IHistorySyncMsg, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HistorySyncMsg
 	}
 	interface IHydratedTemplateButton {
 		index?: (number|null)
@@ -3566,8 +3608,8 @@ export namespace waproto {
 		public urlButton?: (waproto.HydratedTemplateButton.IHydratedURLButton|null)
 		public callButton?: (waproto.HydratedTemplateButton.IHydratedCallButton|null)
 		public hydratedButton?: ("quickReplyButton"|"urlButton"|"callButton")
-		public static encode(m: waproto.IHydratedTemplateButton, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.HydratedTemplateButton
+		public static encode(m: waproto.IHydratedTemplateButton, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HydratedTemplateButton
 	}
 	namespace HydratedTemplateButton {
 		interface IHydratedCallButton {
@@ -3578,8 +3620,8 @@ export namespace waproto {
 			constructor(p?: waproto.HydratedTemplateButton.IHydratedCallButton)
 			public displayText?: (string|null)
 			public phoneNumber?: (string|null)
-			public static encode(m: waproto.HydratedTemplateButton.IHydratedCallButton, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.HydratedTemplateButton.HydratedCallButton
+			public static encode(m: waproto.HydratedTemplateButton.IHydratedCallButton, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HydratedTemplateButton.HydratedCallButton
 		}
 		interface IHydratedQuickReplyButton {
 			displayText?: (string|null)
@@ -3589,8 +3631,8 @@ export namespace waproto {
 			constructor(p?: waproto.HydratedTemplateButton.IHydratedQuickReplyButton)
 			public displayText?: (string|null)
 			public id?: (string|null)
-			public static encode(m: waproto.HydratedTemplateButton.IHydratedQuickReplyButton, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.HydratedTemplateButton.HydratedQuickReplyButton
+			public static encode(m: waproto.HydratedTemplateButton.IHydratedQuickReplyButton, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HydratedTemplateButton.HydratedQuickReplyButton
 		}
 		interface IHydratedURLButton {
 			displayText?: (string|null)
@@ -3604,8 +3646,8 @@ export namespace waproto {
 			public url?: (string|null)
 			public consentedUsersUrl?: (string|null)
 			public webviewPresentation?: (waproto.HydratedTemplateButton.HydratedURLButton.WebviewPresentationType|null)
-			public static encode(m: waproto.HydratedTemplateButton.IHydratedURLButton, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.HydratedTemplateButton.HydratedURLButton
+			public static encode(m: waproto.HydratedTemplateButton.IHydratedURLButton, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HydratedTemplateButton.HydratedURLButton
 		}
 		namespace HydratedURLButton {
 			enum WebviewPresentationType {
@@ -3623,8 +3665,8 @@ export namespace waproto {
 		constructor(p?: waproto.IIdentityKeyPairStructure)
 		public publicKey?: (Uint8Array|null)
 		public privateKey?: (Uint8Array|null)
-		public static encode(m: waproto.IIdentityKeyPairStructure, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.IdentityKeyPairStructure
+		public static encode(m: waproto.IIdentityKeyPairStructure, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.IdentityKeyPairStructure
 	}
 	interface IInThreadSurveyMetadata {
 		tessaSessionId?: (string|null)
@@ -3666,8 +3708,8 @@ export namespace waproto {
 		public privacyStatementParts: waproto.InThreadSurveyMetadata.IInThreadSurveyPrivacyStatementPart[]
 		public feedbackToastText?: (string|null)
 		public startQuestionIndex?: (number|null)
-		public static encode(m: waproto.IInThreadSurveyMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.InThreadSurveyMetadata
+		public static encode(m: waproto.IInThreadSurveyMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.InThreadSurveyMetadata
 	}
 	namespace InThreadSurveyMetadata {
 		interface IInThreadSurveyOption {
@@ -3680,8 +3722,8 @@ export namespace waproto {
 			public stringValue?: (string|null)
 			public numericValue?: (number|null)
 			public textTranslated?: (string|null)
-			public static encode(m: waproto.InThreadSurveyMetadata.IInThreadSurveyOption, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.InThreadSurveyMetadata.InThreadSurveyOption
+			public static encode(m: waproto.InThreadSurveyMetadata.IInThreadSurveyOption, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.InThreadSurveyMetadata.InThreadSurveyOption
 		}
 		interface IInThreadSurveyPrivacyStatementPart {
 			text?: (string|null)
@@ -3691,8 +3733,8 @@ export namespace waproto {
 			constructor(p?: waproto.InThreadSurveyMetadata.IInThreadSurveyPrivacyStatementPart)
 			public text?: (string|null)
 			public url?: (string|null)
-			public static encode(m: waproto.InThreadSurveyMetadata.IInThreadSurveyPrivacyStatementPart, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.InThreadSurveyMetadata.InThreadSurveyPrivacyStatementPart
+			public static encode(m: waproto.InThreadSurveyMetadata.IInThreadSurveyPrivacyStatementPart, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.InThreadSurveyMetadata.InThreadSurveyPrivacyStatementPart
 		}
 		interface IInThreadSurveyQuestion {
 			questionText?: (string|null)
@@ -3704,8 +3746,8 @@ export namespace waproto {
 			public questionText?: (string|null)
 			public questionId?: (string|null)
 			public questionOptions: waproto.InThreadSurveyMetadata.IInThreadSurveyOption[]
-			public static encode(m: waproto.InThreadSurveyMetadata.IInThreadSurveyQuestion, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.InThreadSurveyMetadata.InThreadSurveyQuestion
+			public static encode(m: waproto.InThreadSurveyMetadata.IInThreadSurveyQuestion, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.InThreadSurveyMetadata.InThreadSurveyQuestion
 		}
 	}
 	interface IInteractiveAnnotation {
@@ -3729,8 +3771,8 @@ export namespace waproto {
 		public embeddedAction?: (boolean|null)
 		public tapAction?: (waproto.ITapLinkAction|null)
 		public action?: ("location"|"newsletter"|"embeddedAction"|"tapAction")
-		public static encode(m: waproto.IInteractiveAnnotation, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.InteractiveAnnotation
+		public static encode(m: waproto.IInteractiveAnnotation, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.InteractiveAnnotation
 	}
 	namespace InteractiveAnnotation {
 		enum StatusLinkType {
@@ -3745,8 +3787,8 @@ export namespace waproto {
 	class InteractiveMessageAdditionalMetadata implements IInteractiveMessageAdditionalMetadata {
 		constructor(p?: waproto.IInteractiveMessageAdditionalMetadata)
 		public isGalaxyFlowCompleted?: (boolean|null)
-		public static encode(m: waproto.IInteractiveMessageAdditionalMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.InteractiveMessageAdditionalMetadata
+		public static encode(m: waproto.IInteractiveMessageAdditionalMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.InteractiveMessageAdditionalMetadata
 	}
 	interface IKeepInChat {
 		keepType?: (waproto.KeepType|null)
@@ -3764,8 +3806,8 @@ export namespace waproto {
 		public deviceJid?: (string|null)
 		public clientTimestampMs?: (number|Long|null)
 		public serverTimestampMs?: (number|Long|null)
-		public static encode(m: waproto.IKeepInChat, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.KeepInChat
+		public static encode(m: waproto.IKeepInChat, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.KeepInChat
 	}
 	enum KeepType {
 		UNKNOWN = 0,
@@ -3786,8 +3828,8 @@ export namespace waproto {
 		public ratchetKey?: (Uint8Array|null)
 		public identityKey?: (Uint8Array|null)
 		public baseKeySignature?: (Uint8Array|null)
-		public static encode(m: waproto.IKeyExchangeMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.KeyExchangeMessage
+		public static encode(m: waproto.IKeyExchangeMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.KeyExchangeMessage
 	}
 	interface IKeyId {
 		id?: (Uint8Array|null)
@@ -3795,8 +3837,8 @@ export namespace waproto {
 	class KeyId implements IKeyId {
 		constructor(p?: waproto.IKeyId)
 		public id?: (Uint8Array|null)
-		public static encode(m: waproto.IKeyId, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.KeyId
+		public static encode(m: waproto.IKeyId, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.KeyId
 	}
 	interface ILIDMigrationMapping {
 		pn?: (number|Long|null)
@@ -3808,8 +3850,8 @@ export namespace waproto {
 		public pn?: (number|Long|null)
 		public assignedLid?: (number|Long|null)
 		public latestLid?: (number|Long|null)
-		public static encode(m: waproto.ILIDMigrationMapping, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.LIDMigrationMapping
+		public static encode(m: waproto.ILIDMigrationMapping, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.LIDMigrationMapping
 	}
 	interface ILIDMigrationMappingSyncMessage {
 		encodedMappingPayload?: (Uint8Array|null)
@@ -3817,8 +3859,8 @@ export namespace waproto {
 	class LIDMigrationMappingSyncMessage implements ILIDMigrationMappingSyncMessage {
 		constructor(p?: waproto.ILIDMigrationMappingSyncMessage)
 		public encodedMappingPayload?: (Uint8Array|null)
-		public static encode(m: waproto.ILIDMigrationMappingSyncMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.LIDMigrationMappingSyncMessage
+		public static encode(m: waproto.ILIDMigrationMappingSyncMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.LIDMigrationMappingSyncMessage
 	}
 	interface ILIDMigrationMappingSyncPayload {
 		pnToLidMappings?: (waproto.ILIDMigrationMapping[]|null)
@@ -3828,8 +3870,8 @@ export namespace waproto {
 		constructor(p?: waproto.ILIDMigrationMappingSyncPayload)
 		public pnToLidMappings: waproto.ILIDMigrationMapping[]
 		public chatDbMigrationTimestamp?: (number|Long|null)
-		public static encode(m: waproto.ILIDMigrationMappingSyncPayload, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.LIDMigrationMappingSyncPayload
+		public static encode(m: waproto.ILIDMigrationMappingSyncPayload, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.LIDMigrationMappingSyncPayload
 	}
 	interface ILegacyMessage {
 		eventResponseMessage?: (waproto.Message.IEventResponseMessage|null)
@@ -3839,8 +3881,8 @@ export namespace waproto {
 		constructor(p?: waproto.ILegacyMessage)
 		public eventResponseMessage?: (waproto.Message.IEventResponseMessage|null)
 		public pollVote?: (waproto.Message.IPollVoteMessage|null)
-		public static encode(m: waproto.ILegacyMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.LegacyMessage
+		public static encode(m: waproto.ILegacyMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.LegacyMessage
 	}
 	interface ILimitSharing {
 		sharingLimited?: (boolean|null)
@@ -3854,8 +3896,8 @@ export namespace waproto {
 		public trigger?: (waproto.LimitSharing.TriggerType|null)
 		public limitSharingSettingTimestamp?: (number|Long|null)
 		public initiatedByMe?: (boolean|null)
-		public static encode(m: waproto.ILimitSharing, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.LimitSharing
+		public static encode(m: waproto.ILimitSharing, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.LimitSharing
 	}
 	namespace LimitSharing {
 		enum TriggerType {
@@ -3876,8 +3918,8 @@ export namespace waproto {
 		public lg?: (string|null)
 		public lc?: (string|null)
 		public verifiedName?: (string|null)
-		public static encode(m: waproto.ILocalizedName, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.LocalizedName
+		public static encode(m: waproto.ILocalizedName, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.LocalizedName
 	}
 	interface ILocation {
 		degreesLatitude?: (number|null)
@@ -3889,8 +3931,8 @@ export namespace waproto {
 		public degreesLatitude?: (number|null)
 		public degreesLongitude?: (number|null)
 		public name?: (string|null)
-		public static encode(m: waproto.ILocation, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Location
+		public static encode(m: waproto.ILocation, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Location
 	}
 	interface IMediaData {
 		localPath?: (string|null)
@@ -3898,8 +3940,8 @@ export namespace waproto {
 	class MediaData implements IMediaData {
 		constructor(p?: waproto.IMediaData)
 		public localPath?: (string|null)
-		public static encode(m: waproto.IMediaData, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MediaData
+		public static encode(m: waproto.IMediaData, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaData
 	}
 	interface IMediaDomainInfo {
 		mediaKeyDomain?: (waproto.MediaKeyDomain|null)
@@ -3909,8 +3951,8 @@ export namespace waproto {
 		constructor(p?: waproto.IMediaDomainInfo)
 		public mediaKeyDomain?: (waproto.MediaKeyDomain|null)
 		public e2EeMediaKey?: (Uint8Array|null)
-		public static encode(m: waproto.IMediaDomainInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MediaDomainInfo
+		public static encode(m: waproto.IMediaDomainInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaDomainInfo
 	}
 	enum MediaKeyDomain {
 		MEDIA_KEY_DOMAIN_UNKNOWN = 0,
@@ -3927,8 +3969,8 @@ export namespace waproto {
 		public expressPathUrl?: (string|null)
 		public fileEncSha256?: (Uint8Array|null)
 		public fileLength?: (number|Long|null)
-		public static encode(m: waproto.IMediaNotifyMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MediaNotifyMessage
+		public static encode(m: waproto.IMediaNotifyMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaNotifyMessage
 	}
 	interface IMediaRetryNotification {
 		stanzaId?: (string|null)
@@ -3942,8 +3984,8 @@ export namespace waproto {
 		public directPath?: (string|null)
 		public result?: (waproto.MediaRetryNotification.ResultType|null)
 		public messageSecret?: (Uint8Array|null)
-		public static encode(m: waproto.IMediaRetryNotification, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MediaRetryNotification
+		public static encode(m: waproto.IMediaRetryNotification, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaRetryNotification
 	}
 	namespace MediaRetryNotification {
 		enum ResultType {
@@ -3966,8 +4008,8 @@ export namespace waproto {
 		constructor(p?: waproto.IMemberLabel)
 		public label?: (string|null)
 		public labelTimestamp?: (number|Long|null)
-		public static encode(m: waproto.IMemberLabel, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MemberLabel
+		public static encode(m: waproto.IMemberLabel, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MemberLabel
 	}
 	interface IMessage {
 		conversation?: (string|null)
@@ -4175,8 +4217,8 @@ export namespace waproto {
 		public pollCreationMessageV6?: (waproto.Message.IPollCreationMessage|null)
 		public conditionalRevealMessage?: (waproto.Message.IConditionalRevealMessage|null)
 		public pollAddOptionMessage?: (waproto.Message.IPollAddOptionMessage|null)
-		public static encode(m: waproto.IMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message
+		public static encode(m: waproto.IMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message
 	}
 	namespace Message {
 		interface IAlbumMessage {
@@ -4189,8 +4231,8 @@ export namespace waproto {
 			public expectedImageCount?: (number|null)
 			public expectedVideoCount?: (number|null)
 			public contextInfo?: (waproto.IContextInfo|null)
-			public static encode(m: waproto.Message.IAlbumMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.AlbumMessage
+			public static encode(m: waproto.Message.IAlbumMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.AlbumMessage
 		}
 		interface IAppStateFatalExceptionNotification {
 			collectionNames?: (string[]|null)
@@ -4200,8 +4242,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IAppStateFatalExceptionNotification)
 			public collectionNames: string[]
 			public timestamp?: (number|Long|null)
-			public static encode(m: waproto.Message.IAppStateFatalExceptionNotification, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.AppStateFatalExceptionNotification
+			public static encode(m: waproto.Message.IAppStateFatalExceptionNotification, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.AppStateFatalExceptionNotification
 		}
 		interface IAppStateSyncKey {
 			keyId?: (waproto.Message.IAppStateSyncKeyId|null)
@@ -4211,8 +4253,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IAppStateSyncKey)
 			public keyId?: (waproto.Message.IAppStateSyncKeyId|null)
 			public keyData?: (waproto.Message.IAppStateSyncKeyData|null)
-			public static encode(m: waproto.Message.IAppStateSyncKey, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.AppStateSyncKey
+			public static encode(m: waproto.Message.IAppStateSyncKey, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.AppStateSyncKey
 		}
 		interface IAppStateSyncKeyData {
 			keyData?: (Uint8Array|null)
@@ -4224,8 +4266,8 @@ export namespace waproto {
 			public keyData?: (Uint8Array|null)
 			public fingerprint?: (waproto.Message.IAppStateSyncKeyFingerprint|null)
 			public timestamp?: (number|Long|null)
-			public static encode(m: waproto.Message.IAppStateSyncKeyData, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.AppStateSyncKeyData
+			public static encode(m: waproto.Message.IAppStateSyncKeyData, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.AppStateSyncKeyData
 		}
 		interface IAppStateSyncKeyFingerprint {
 			rawId?: (number|null)
@@ -4237,8 +4279,8 @@ export namespace waproto {
 			public rawId?: (number|null)
 			public currentIndex?: (number|null)
 			public deviceIndexes: number[]
-			public static encode(m: waproto.Message.IAppStateSyncKeyFingerprint, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.AppStateSyncKeyFingerprint
+			public static encode(m: waproto.Message.IAppStateSyncKeyFingerprint, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.AppStateSyncKeyFingerprint
 		}
 		interface IAppStateSyncKeyId {
 			keyId?: (Uint8Array|null)
@@ -4246,8 +4288,8 @@ export namespace waproto {
 		class AppStateSyncKeyId implements IAppStateSyncKeyId {
 			constructor(p?: waproto.Message.IAppStateSyncKeyId)
 			public keyId?: (Uint8Array|null)
-			public static encode(m: waproto.Message.IAppStateSyncKeyId, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.AppStateSyncKeyId
+			public static encode(m: waproto.Message.IAppStateSyncKeyId, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.AppStateSyncKeyId
 		}
 		interface IAppStateSyncKeyRequest {
 			keyIds?: (waproto.Message.IAppStateSyncKeyId[]|null)
@@ -4255,8 +4297,8 @@ export namespace waproto {
 		class AppStateSyncKeyRequest implements IAppStateSyncKeyRequest {
 			constructor(p?: waproto.Message.IAppStateSyncKeyRequest)
 			public keyIds: waproto.Message.IAppStateSyncKeyId[]
-			public static encode(m: waproto.Message.IAppStateSyncKeyRequest, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.AppStateSyncKeyRequest
+			public static encode(m: waproto.Message.IAppStateSyncKeyRequest, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.AppStateSyncKeyRequest
 		}
 		interface IAppStateSyncKeyShare {
 			keys?: (waproto.Message.IAppStateSyncKey[]|null)
@@ -4264,8 +4306,8 @@ export namespace waproto {
 		class AppStateSyncKeyShare implements IAppStateSyncKeyShare {
 			constructor(p?: waproto.Message.IAppStateSyncKeyShare)
 			public keys: waproto.Message.IAppStateSyncKey[]
-			public static encode(m: waproto.Message.IAppStateSyncKeyShare, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.AppStateSyncKeyShare
+			public static encode(m: waproto.Message.IAppStateSyncKeyShare, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.AppStateSyncKeyShare
 		}
 		interface IAudioMessage {
 			url?: (string|null)
@@ -4303,8 +4345,8 @@ export namespace waproto {
 			public backgroundArgb?: (number|null)
 			public viewOnce?: (boolean|null)
 			public accessibilityLabel?: (string|null)
-			public static encode(m: waproto.Message.IAudioMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.AudioMessage
+			public static encode(m: waproto.Message.IAudioMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.AudioMessage
 		}
 		interface IBCallMessage {
 			sessionId?: (string|null)
@@ -4318,8 +4360,8 @@ export namespace waproto {
 			public mediaType?: (waproto.Message.BCallMessage.MediaType|null)
 			public masterKey?: (Uint8Array|null)
 			public caption?: (string|null)
-			public static encode(m: waproto.Message.IBCallMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.BCallMessage
+			public static encode(m: waproto.Message.IBCallMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.BCallMessage
 		}
 		namespace BCallMessage {
 			enum MediaType {
@@ -4353,8 +4395,8 @@ export namespace waproto {
 			public videoMessage?: (waproto.Message.IVideoMessage|null)
 			public locationMessage?: (waproto.Message.ILocationMessage|null)
 			public header?: ("text"|"documentMessage"|"imageMessage"|"videoMessage"|"locationMessage")
-			public static encode(m: waproto.Message.IButtonsMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ButtonsMessage
+			public static encode(m: waproto.Message.IButtonsMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ButtonsMessage
 		}
 		namespace ButtonsMessage {
 			interface IButton {
@@ -4369,8 +4411,8 @@ export namespace waproto {
 				public buttonText?: (waproto.Message.ButtonsMessage.Button.IButtonText|null)
 				public type?: (waproto.Message.ButtonsMessage.Button.Type|null)
 				public nativeFlowInfo?: (waproto.Message.ButtonsMessage.Button.INativeFlowInfo|null)
-				public static encode(m: waproto.Message.ButtonsMessage.IButton, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ButtonsMessage.Button
+				public static encode(m: waproto.Message.ButtonsMessage.IButton, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ButtonsMessage.Button
 			}
 			namespace Button {
 				interface IButtonText {
@@ -4379,8 +4421,8 @@ export namespace waproto {
 				class ButtonText implements IButtonText {
 					constructor(p?: waproto.Message.ButtonsMessage.Button.IButtonText)
 					public displayText?: (string|null)
-					public static encode(m: waproto.Message.ButtonsMessage.Button.IButtonText, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ButtonsMessage.Button.ButtonText
+					public static encode(m: waproto.Message.ButtonsMessage.Button.IButtonText, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ButtonsMessage.Button.ButtonText
 				}
 				interface INativeFlowInfo {
 					name?: (string|null)
@@ -4390,8 +4432,8 @@ export namespace waproto {
 					constructor(p?: waproto.Message.ButtonsMessage.Button.INativeFlowInfo)
 					public name?: (string|null)
 					public paramsJson?: (string|null)
-					public static encode(m: waproto.Message.ButtonsMessage.Button.INativeFlowInfo, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ButtonsMessage.Button.NativeFlowInfo
+					public static encode(m: waproto.Message.ButtonsMessage.Button.INativeFlowInfo, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ButtonsMessage.Button.NativeFlowInfo
 				}
 				enum Type {
 					UNKNOWN = 0,
@@ -4422,8 +4464,8 @@ export namespace waproto {
 			public type?: (waproto.Message.ButtonsResponseMessage.Type|null)
 			public selectedDisplayText?: (string|null)
 			public response?: "selectedDisplayText"
-			public static encode(m: waproto.Message.IButtonsResponseMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ButtonsResponseMessage
+			public static encode(m: waproto.Message.IButtonsResponseMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ButtonsResponseMessage
 		}
 		namespace ButtonsResponseMessage {
 			enum Type {
@@ -4457,8 +4499,8 @@ export namespace waproto {
 			public deeplinkPayload?: (string|null)
 			public messageContextInfo?: (waproto.IMessageContextInfo|null)
 			public callEntryPoint?: (number|null)
-			public static encode(m: waproto.Message.ICall, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.Call
+			public static encode(m: waproto.Message.ICall, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.Call
 		}
 		interface ICallLogMessage {
 			isVideo?: (boolean|null)
@@ -4474,8 +4516,8 @@ export namespace waproto {
 			public durationSecs?: (number|Long|null)
 			public callType?: (waproto.Message.CallLogMessage.CallType|null)
 			public participants: waproto.Message.CallLogMessage.ICallParticipant[]
-			public static encode(m: waproto.Message.ICallLogMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.CallLogMessage
+			public static encode(m: waproto.Message.ICallLogMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.CallLogMessage
 		}
 		namespace CallLogMessage {
 			enum CallOutcome {
@@ -4496,8 +4538,8 @@ export namespace waproto {
 				constructor(p?: waproto.Message.CallLogMessage.ICallParticipant)
 				public jid?: (string|null)
 				public callOutcome?: (waproto.Message.CallLogMessage.CallOutcome|null)
-				public static encode(m: waproto.Message.CallLogMessage.ICallParticipant, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.CallLogMessage.CallParticipant
+				public static encode(m: waproto.Message.CallLogMessage.ICallParticipant, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.CallLogMessage.CallParticipant
 			}
 			enum CallType {
 				REGULAR = 0,
@@ -4511,8 +4553,8 @@ export namespace waproto {
 		class CancelPaymentRequestMessage implements ICancelPaymentRequestMessage {
 			constructor(p?: waproto.Message.ICancelPaymentRequestMessage)
 			public key?: (waproto.IMessageKey|null)
-			public static encode(m: waproto.Message.ICancelPaymentRequestMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.CancelPaymentRequestMessage
+			public static encode(m: waproto.Message.ICancelPaymentRequestMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.CancelPaymentRequestMessage
 		}
 		interface IChat {
 			displayName?: (string|null)
@@ -4522,8 +4564,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IChat)
 			public displayName?: (string|null)
 			public id?: (string|null)
-			public static encode(m: waproto.Message.IChat, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.Chat
+			public static encode(m: waproto.Message.IChat, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.Chat
 		}
 		interface ICloudAPIThreadControlNotification {
 			status?: (waproto.Message.CloudAPIThreadControlNotification.CloudAPIThreadControl|null)
@@ -4541,8 +4583,8 @@ export namespace waproto {
 			public consumerPhoneNumber?: (string|null)
 			public notificationContent?: (waproto.Message.CloudAPIThreadControlNotification.ICloudAPIThreadControlNotificationContent|null)
 			public shouldSuppressNotification?: (boolean|null)
-			public static encode(m: waproto.Message.ICloudAPIThreadControlNotification, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.CloudAPIThreadControlNotification
+			public static encode(m: waproto.Message.ICloudAPIThreadControlNotification, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.CloudAPIThreadControlNotification
 		}
 		namespace CloudAPIThreadControlNotification {
 			enum CloudAPIThreadControl {
@@ -4558,8 +4600,8 @@ export namespace waproto {
 				constructor(p?: waproto.Message.CloudAPIThreadControlNotification.ICloudAPIThreadControlNotificationContent)
 				public handoffNotificationText?: (string|null)
 				public extraJson?: (string|null)
-				public static encode(m: waproto.Message.CloudAPIThreadControlNotification.ICloudAPIThreadControlNotificationContent, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.CloudAPIThreadControlNotification.CloudAPIThreadControlNotificationContent
+				public static encode(m: waproto.Message.CloudAPIThreadControlNotification.ICloudAPIThreadControlNotificationContent, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.CloudAPIThreadControlNotification.CloudAPIThreadControlNotificationContent
 			}
 		}
 		interface ICommentMessage {
@@ -4570,8 +4612,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.ICommentMessage)
 			public message?: (waproto.IMessage|null)
 			public targetMessageKey?: (waproto.IMessageKey|null)
-			public static encode(m: waproto.Message.ICommentMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.CommentMessage
+			public static encode(m: waproto.Message.ICommentMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.CommentMessage
 		}
 		interface IConditionalRevealMessage {
 			encPayload?: (Uint8Array|null)
@@ -4585,8 +4627,8 @@ export namespace waproto {
 			public encIv?: (Uint8Array|null)
 			public conditionalRevealMessageType?: (waproto.Message.ConditionalRevealMessage.ConditionalRevealMessageType|null)
 			public revealKeyId?: (string|null)
-			public static encode(m: waproto.Message.IConditionalRevealMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ConditionalRevealMessage
+			public static encode(m: waproto.Message.IConditionalRevealMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ConditionalRevealMessage
 		}
 		namespace ConditionalRevealMessage {
 			enum ConditionalRevealMessageType {
@@ -4606,8 +4648,8 @@ export namespace waproto {
 			public vcard?: (string|null)
 			public contextInfo?: (waproto.IContextInfo|null)
 			public isSelfContact?: (boolean|null)
-			public static encode(m: waproto.Message.IContactMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ContactMessage
+			public static encode(m: waproto.Message.IContactMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ContactMessage
 		}
 		interface IContactsArrayMessage {
 			displayName?: (string|null)
@@ -4619,8 +4661,8 @@ export namespace waproto {
 			public displayName?: (string|null)
 			public contacts: waproto.Message.IContactMessage[]
 			public contextInfo?: (waproto.IContextInfo|null)
-			public static encode(m: waproto.Message.IContactsArrayMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ContactsArrayMessage
+			public static encode(m: waproto.Message.IContactsArrayMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ContactsArrayMessage
 		}
 		interface IDeclinePaymentRequestMessage {
 			key?: (waproto.IMessageKey|null)
@@ -4628,8 +4670,8 @@ export namespace waproto {
 		class DeclinePaymentRequestMessage implements IDeclinePaymentRequestMessage {
 			constructor(p?: waproto.Message.IDeclinePaymentRequestMessage)
 			public key?: (waproto.IMessageKey|null)
-			public static encode(m: waproto.Message.IDeclinePaymentRequestMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.DeclinePaymentRequestMessage
+			public static encode(m: waproto.Message.IDeclinePaymentRequestMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.DeclinePaymentRequestMessage
 		}
 		interface IDeviceSentMessage {
 			destinationJid?: (string|null)
@@ -4641,8 +4683,8 @@ export namespace waproto {
 			public destinationJid?: (string|null)
 			public message?: (waproto.IMessage|null)
 			public phash?: (string|null)
-			public static encode(m: waproto.Message.IDeviceSentMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.DeviceSentMessage
+			public static encode(m: waproto.Message.IDeviceSentMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.DeviceSentMessage
 		}
 		interface IDocumentMessage {
 			url?: (string|null)
@@ -4690,8 +4732,8 @@ export namespace waproto {
 			public thumbnailWidth?: (number|null)
 			public caption?: (string|null)
 			public accessibilityLabel?: (string|null)
-			public static encode(m: waproto.Message.IDocumentMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.DocumentMessage
+			public static encode(m: waproto.Message.IDocumentMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.DocumentMessage
 		}
 		interface IEncCommentMessage {
 			targetMessageKey?: (waproto.IMessageKey|null)
@@ -4703,8 +4745,8 @@ export namespace waproto {
 			public targetMessageKey?: (waproto.IMessageKey|null)
 			public encPayload?: (Uint8Array|null)
 			public encIv?: (Uint8Array|null)
-			public static encode(m: waproto.Message.IEncCommentMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.EncCommentMessage
+			public static encode(m: waproto.Message.IEncCommentMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.EncCommentMessage
 		}
 		interface IEncEventResponseMessage {
 			eventCreationMessageKey?: (waproto.IMessageKey|null)
@@ -4716,8 +4758,8 @@ export namespace waproto {
 			public eventCreationMessageKey?: (waproto.IMessageKey|null)
 			public encPayload?: (Uint8Array|null)
 			public encIv?: (Uint8Array|null)
-			public static encode(m: waproto.Message.IEncEventResponseMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.EncEventResponseMessage
+			public static encode(m: waproto.Message.IEncEventResponseMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.EncEventResponseMessage
 		}
 		interface IEncReactionMessage {
 			targetMessageKey?: (waproto.IMessageKey|null)
@@ -4729,8 +4771,8 @@ export namespace waproto {
 			public targetMessageKey?: (waproto.IMessageKey|null)
 			public encPayload?: (Uint8Array|null)
 			public encIv?: (Uint8Array|null)
-			public static encode(m: waproto.Message.IEncReactionMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.EncReactionMessage
+			public static encode(m: waproto.Message.IEncReactionMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.EncReactionMessage
 		}
 		interface IEventMessage {
 			contextInfo?: (waproto.IContextInfo|null)
@@ -4760,8 +4802,8 @@ export namespace waproto {
 			public isScheduleCall?: (boolean|null)
 			public hasReminder?: (boolean|null)
 			public reminderOffsetSec?: (number|Long|null)
-			public static encode(m: waproto.Message.IEventMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.EventMessage
+			public static encode(m: waproto.Message.IEventMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.EventMessage
 		}
 		interface IEventResponseMessage {
 			response?: (waproto.Message.EventResponseMessage.EventResponseType|null)
@@ -4773,8 +4815,8 @@ export namespace waproto {
 			public response?: (waproto.Message.EventResponseMessage.EventResponseType|null)
 			public timestampMs?: (number|Long|null)
 			public extraGuestCount?: (number|null)
-			public static encode(m: waproto.Message.IEventResponseMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.EventResponseMessage
+			public static encode(m: waproto.Message.IEventResponseMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.EventResponseMessage
 		}
 		namespace EventResponseMessage {
 			enum EventResponseType {
@@ -4852,8 +4894,8 @@ export namespace waproto {
 			public videoContentUrl?: (string|null)
 			public musicMetadata?: (waproto.IEmbeddedMusic|null)
 			public paymentExtendedMetadata?: (waproto.Message.IPaymentExtendedMetadata|null)
-			public static encode(m: waproto.Message.IExtendedTextMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ExtendedTextMessage
+			public static encode(m: waproto.Message.IExtendedTextMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ExtendedTextMessage
 		}
 		namespace ExtendedTextMessage {
 			enum FontType {
@@ -4889,8 +4931,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IFullHistorySyncOnDemandConfig)
 			public historyFromTimestamp?: (number|Long|null)
 			public historyDurationDays?: (number|null)
-			public static encode(m: waproto.Message.IFullHistorySyncOnDemandConfig, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.FullHistorySyncOnDemandConfig
+			public static encode(m: waproto.Message.IFullHistorySyncOnDemandConfig, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.FullHistorySyncOnDemandConfig
 		}
 		interface IFullHistorySyncOnDemandRequestMetadata {
 			requestId?: (string|null)
@@ -4902,8 +4944,8 @@ export namespace waproto {
 			public requestId?: (string|null)
 			public businessProduct?: (string|null)
 			public opaqueClientData?: (Uint8Array|null)
-			public static encode(m: waproto.Message.IFullHistorySyncOnDemandRequestMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.FullHistorySyncOnDemandRequestMetadata
+			public static encode(m: waproto.Message.IFullHistorySyncOnDemandRequestMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.FullHistorySyncOnDemandRequestMetadata
 		}
 		interface IFutureProofMessage {
 			message?: (waproto.IMessage|null)
@@ -4911,8 +4953,8 @@ export namespace waproto {
 		class FutureProofMessage implements IFutureProofMessage {
 			constructor(p?: waproto.Message.IFutureProofMessage)
 			public message?: (waproto.IMessage|null)
-			public static encode(m: waproto.Message.IFutureProofMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.FutureProofMessage
+			public static encode(m: waproto.Message.IFutureProofMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.FutureProofMessage
 		}
 		interface IGroupInviteMessage {
 			groupJid?: (string|null)
@@ -4934,8 +4976,8 @@ export namespace waproto {
 			public caption?: (string|null)
 			public contextInfo?: (waproto.IContextInfo|null)
 			public groupType?: (waproto.Message.GroupInviteMessage.GroupType|null)
-			public static encode(m: waproto.Message.IGroupInviteMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.GroupInviteMessage
+			public static encode(m: waproto.Message.IGroupInviteMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.GroupInviteMessage
 		}
 		namespace GroupInviteMessage {
 			enum GroupType {
@@ -4965,8 +5007,8 @@ export namespace waproto {
 			public deterministicLg?: (string|null)
 			public deterministicLc?: (string|null)
 			public hydratedHsm?: (waproto.Message.ITemplateMessage|null)
-			public static encode(m: waproto.Message.IHighlyStructuredMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage
+			public static encode(m: waproto.Message.IHighlyStructuredMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage
 		}
 		namespace HighlyStructuredMessage {
 			interface IHSMLocalizableParameter {
@@ -4980,8 +5022,8 @@ export namespace waproto {
 				public currency?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.IHSMCurrency|null)
 				public dateTime?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.IHSMDateTime|null)
 				public paramOneof?: ("currency"|"dateTime")
-				public static encode(m: waproto.Message.HighlyStructuredMessage.IHSMLocalizableParameter, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter
+				public static encode(m: waproto.Message.HighlyStructuredMessage.IHSMLocalizableParameter, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter
 			}
 			namespace HSMLocalizableParameter {
 				interface IHSMCurrency {
@@ -4992,8 +5034,8 @@ export namespace waproto {
 					constructor(p?: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.IHSMCurrency)
 					public currencyCode?: (string|null)
 					public amount1000?: (number|Long|null)
-					public static encode(m: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.IHSMCurrency, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMCurrency
+					public static encode(m: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.IHSMCurrency, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMCurrency
 				}
 				interface IHSMDateTime {
 					component?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.IHSMDateTimeComponent|null)
@@ -5004,8 +5046,8 @@ export namespace waproto {
 					public component?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.IHSMDateTimeComponent|null)
 					public unixEpoch?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.IHSMDateTimeUnixEpoch|null)
 					public datetimeOneof?: ("component"|"unixEpoch")
-					public static encode(m: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.IHSMDateTime, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime
+					public static encode(m: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.IHSMDateTime, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime
 				}
 				namespace HSMDateTime {
 					interface IHSMDateTimeComponent {
@@ -5026,8 +5068,8 @@ export namespace waproto {
 						public hour?: (number|null)
 						public minute?: (number|null)
 						public calendar?: (waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeComponent.CalendarType|null)
-						public static encode(m: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.IHSMDateTimeComponent, w?: $protobuf.Writer): $protobuf.Writer
-						public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeComponent
+						public static encode(m: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.IHSMDateTimeComponent, w?: PbWriter): PbWriter
+						public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeComponent
 					}
 					namespace HSMDateTimeComponent {
 						enum CalendarType {
@@ -5050,8 +5092,8 @@ export namespace waproto {
 					class HSMDateTimeUnixEpoch implements IHSMDateTimeUnixEpoch {
 						constructor(p?: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.IHSMDateTimeUnixEpoch)
 						public timestamp?: (number|Long|null)
-						public static encode(m: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.IHSMDateTimeUnixEpoch, w?: $protobuf.Writer): $protobuf.Writer
-						public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeUnixEpoch
+						public static encode(m: waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.IHSMDateTimeUnixEpoch, w?: PbWriter): PbWriter
+						public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.HighlyStructuredMessage.HSMLocalizableParameter.HSMDateTime.HSMDateTimeUnixEpoch
 					}
 				}
 			}
@@ -5062,8 +5104,8 @@ export namespace waproto {
 		class HistorySyncMessageAccessStatus implements IHistorySyncMessageAccessStatus {
 			constructor(p?: waproto.Message.IHistorySyncMessageAccessStatus)
 			public completeAccessGranted?: (boolean|null)
-			public static encode(m: waproto.Message.IHistorySyncMessageAccessStatus, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.HistorySyncMessageAccessStatus
+			public static encode(m: waproto.Message.IHistorySyncMessageAccessStatus, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.HistorySyncMessageAccessStatus
 		}
 		interface IHistorySyncNotification {
 			fileSha256?: (Uint8Array|null)
@@ -5099,8 +5141,8 @@ export namespace waproto {
 			public fullHistorySyncOnDemandRequestMetadata?: (waproto.Message.IFullHistorySyncOnDemandRequestMetadata|null)
 			public encHandle?: (string|null)
 			public messageAccessStatus?: (waproto.Message.IHistorySyncMessageAccessStatus|null)
-			public static encode(m: waproto.Message.IHistorySyncNotification, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.HistorySyncNotification
+			public static encode(m: waproto.Message.IHistorySyncNotification, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.HistorySyncNotification
 		}
 		enum HistorySyncType {
 			INITIAL_BOOTSTRAP = 0,
@@ -5177,8 +5219,8 @@ export namespace waproto {
 			public imageSourceType?: (waproto.Message.ImageMessage.ImageSourceType|null)
 			public accessibilityLabel?: (string|null)
 			public qrUrl?: (string|null)
-			public static encode(m: waproto.Message.IImageMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ImageMessage
+			public static encode(m: waproto.Message.IImageMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ImageMessage
 		}
 		namespace ImageMessage {
 			enum ImageSourceType {
@@ -5194,8 +5236,8 @@ export namespace waproto {
 		class InitialSecurityNotificationSettingSync implements IInitialSecurityNotificationSettingSync {
 			constructor(p?: waproto.Message.IInitialSecurityNotificationSettingSync)
 			public securityNotificationEnabled?: (boolean|null)
-			public static encode(m: waproto.Message.IInitialSecurityNotificationSettingSync, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InitialSecurityNotificationSettingSync
+			public static encode(m: waproto.Message.IInitialSecurityNotificationSettingSync, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InitialSecurityNotificationSettingSync
 		}
 		enum InsightDeliveryState {
 			SENT = 0,
@@ -5229,8 +5271,8 @@ export namespace waproto {
 			public nativeFlowMessage?: (waproto.Message.InteractiveMessage.INativeFlowMessage|null)
 			public carouselMessage?: (waproto.Message.InteractiveMessage.ICarouselMessage|null)
 			public interactiveMessage?: ("shopStorefrontMessage"|"collectionMessage"|"nativeFlowMessage"|"carouselMessage")
-			public static encode(m: waproto.Message.IInteractiveMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveMessage
+			public static encode(m: waproto.Message.IInteractiveMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage
 		}
 		namespace InteractiveMessage {
 			interface IBloksWidget {
@@ -5243,8 +5285,8 @@ export namespace waproto {
 				public uuid?: (string|null)
 				public data?: (string|null)
 				public type?: (string|null)
-				public static encode(m: waproto.Message.InteractiveMessage.IBloksWidget, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.BloksWidget
+				public static encode(m: waproto.Message.InteractiveMessage.IBloksWidget, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.BloksWidget
 			}
 			interface IBody {
 				text?: (string|null)
@@ -5252,8 +5294,8 @@ export namespace waproto {
 			class Body implements IBody {
 				constructor(p?: waproto.Message.InteractiveMessage.IBody)
 				public text?: (string|null)
-				public static encode(m: waproto.Message.InteractiveMessage.IBody, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.Body
+				public static encode(m: waproto.Message.InteractiveMessage.IBody, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.Body
 			}
 			interface ICarouselMessage {
 				cards?: (waproto.Message.IInteractiveMessage[]|null)
@@ -5265,8 +5307,8 @@ export namespace waproto {
 				public cards: waproto.Message.IInteractiveMessage[]
 				public messageVersion?: (number|null)
 				public carouselCardType?: (waproto.Message.InteractiveMessage.CarouselMessage.CarouselCardType|null)
-				public static encode(m: waproto.Message.InteractiveMessage.ICarouselMessage, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.CarouselMessage
+				public static encode(m: waproto.Message.InteractiveMessage.ICarouselMessage, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.CarouselMessage
 			}
 			namespace CarouselMessage {
 				enum CarouselCardType {
@@ -5285,8 +5327,8 @@ export namespace waproto {
 				public bizJid?: (string|null)
 				public id?: (string|null)
 				public messageVersion?: (number|null)
-				public static encode(m: waproto.Message.InteractiveMessage.ICollectionMessage, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.CollectionMessage
+				public static encode(m: waproto.Message.InteractiveMessage.ICollectionMessage, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.CollectionMessage
 			}
 			interface IFooter {
 				text?: (string|null)
@@ -5299,8 +5341,8 @@ export namespace waproto {
 				public hasMediaAttachment?: (boolean|null)
 				public audioMessage?: (waproto.Message.IAudioMessage|null)
 				public media?: "audioMessage"
-				public static encode(m: waproto.Message.InteractiveMessage.IFooter, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.Footer
+				public static encode(m: waproto.Message.InteractiveMessage.IFooter, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.Footer
 			}
 			interface IHeader {
 				title?: (string|null)
@@ -5327,8 +5369,8 @@ export namespace waproto {
 				public locationMessage?: (waproto.Message.ILocationMessage|null)
 				public productMessage?: (waproto.Message.IProductMessage|null)
 				public media?: ("documentMessage"|"imageMessage"|"jpegThumbnail"|"videoMessage"|"locationMessage"|"productMessage")
-				public static encode(m: waproto.Message.InteractiveMessage.IHeader, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.Header
+				public static encode(m: waproto.Message.InteractiveMessage.IHeader, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.Header
 			}
 			interface INativeFlowMessage {
 				buttons?: (waproto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton[]|null)
@@ -5340,8 +5382,8 @@ export namespace waproto {
 				public buttons: waproto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton[]
 				public messageParamsJson?: (string|null)
 				public messageVersion?: (number|null)
-				public static encode(m: waproto.Message.InteractiveMessage.INativeFlowMessage, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.NativeFlowMessage
+				public static encode(m: waproto.Message.InteractiveMessage.INativeFlowMessage, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.NativeFlowMessage
 			}
 			namespace NativeFlowMessage {
 				interface INativeFlowButton {
@@ -5352,8 +5394,8 @@ export namespace waproto {
 					constructor(p?: waproto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton)
 					public name?: (string|null)
 					public buttonParamsJson?: (string|null)
-					public static encode(m: waproto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.NativeFlowMessage.NativeFlowButton
+					public static encode(m: waproto.Message.InteractiveMessage.NativeFlowMessage.INativeFlowButton, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.NativeFlowMessage.NativeFlowButton
 				}
 			}
 			interface IShopMessage {
@@ -5366,8 +5408,8 @@ export namespace waproto {
 				public id?: (string|null)
 				public surface?: (waproto.Message.InteractiveMessage.ShopMessage.Surface|null)
 				public messageVersion?: (number|null)
-				public static encode(m: waproto.Message.InteractiveMessage.IShopMessage, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.ShopMessage
+				public static encode(m: waproto.Message.InteractiveMessage.IShopMessage, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveMessage.ShopMessage
 			}
 			namespace ShopMessage {
 				enum Surface {
@@ -5389,8 +5431,8 @@ export namespace waproto {
 			public contextInfo?: (waproto.IContextInfo|null)
 			public nativeFlowResponseMessage?: (waproto.Message.InteractiveResponseMessage.INativeFlowResponseMessage|null)
 			public interactiveResponseMessage?: "nativeFlowResponseMessage"
-			public static encode(m: waproto.Message.IInteractiveResponseMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveResponseMessage
+			public static encode(m: waproto.Message.IInteractiveResponseMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveResponseMessage
 		}
 		namespace InteractiveResponseMessage {
 			interface IBody {
@@ -5401,8 +5443,8 @@ export namespace waproto {
 				constructor(p?: waproto.Message.InteractiveResponseMessage.IBody)
 				public text?: (string|null)
 				public format?: (waproto.Message.InteractiveResponseMessage.Body.Format|null)
-				public static encode(m: waproto.Message.InteractiveResponseMessage.IBody, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveResponseMessage.Body
+				public static encode(m: waproto.Message.InteractiveResponseMessage.IBody, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveResponseMessage.Body
 			}
 			namespace Body {
 				enum Format {
@@ -5420,8 +5462,8 @@ export namespace waproto {
 				public name?: (string|null)
 				public paramsJson?: (string|null)
 				public version?: (number|null)
-				public static encode(m: waproto.Message.InteractiveResponseMessage.INativeFlowResponseMessage, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InteractiveResponseMessage.NativeFlowResponseMessage
+				public static encode(m: waproto.Message.InteractiveResponseMessage.INativeFlowResponseMessage, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InteractiveResponseMessage.NativeFlowResponseMessage
 			}
 		}
 		interface IInvoiceMessage {
@@ -5448,8 +5490,8 @@ export namespace waproto {
 			public attachmentFileEncSha256?: (Uint8Array|null)
 			public attachmentDirectPath?: (string|null)
 			public attachmentJpegThumbnail?: (Uint8Array|null)
-			public static encode(m: waproto.Message.IInvoiceMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.InvoiceMessage
+			public static encode(m: waproto.Message.IInvoiceMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.InvoiceMessage
 		}
 		namespace InvoiceMessage {
 			enum AttachmentType {
@@ -5467,8 +5509,8 @@ export namespace waproto {
 			public key?: (waproto.IMessageKey|null)
 			public keepType?: (waproto.KeepType|null)
 			public timestampMs?: (number|Long|null)
-			public static encode(m: waproto.Message.IKeepInChatMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.KeepInChatMessage
+			public static encode(m: waproto.Message.IKeepInChatMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.KeepInChatMessage
 		}
 		interface ILinkPreviewMetadata {
 			paymentLinkMetadata?: (waproto.Message.IPaymentLinkMetadata|null)
@@ -5492,8 +5534,8 @@ export namespace waproto {
 			public videoContentUrl?: (string|null)
 			public musicMetadata?: (waproto.IEmbeddedMusic|null)
 			public videoContentCaption?: (string|null)
-			public static encode(m: waproto.Message.ILinkPreviewMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.LinkPreviewMetadata
+			public static encode(m: waproto.Message.ILinkPreviewMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.LinkPreviewMetadata
 		}
 		namespace LinkPreviewMetadata {
 			enum SocialMediaPostType {
@@ -5525,8 +5567,8 @@ export namespace waproto {
 			public productListInfo?: (waproto.Message.ListMessage.IProductListInfo|null)
 			public footerText?: (string|null)
 			public contextInfo?: (waproto.IContextInfo|null)
-			public static encode(m: waproto.Message.IListMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ListMessage
+			public static encode(m: waproto.Message.IListMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ListMessage
 		}
 		namespace ListMessage {
 			enum ListType {
@@ -5540,8 +5582,8 @@ export namespace waproto {
 			class Product implements IProduct {
 				constructor(p?: waproto.Message.ListMessage.IProduct)
 				public productId?: (string|null)
-				public static encode(m: waproto.Message.ListMessage.IProduct, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ListMessage.Product
+				public static encode(m: waproto.Message.ListMessage.IProduct, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ListMessage.Product
 			}
 			interface IProductListHeaderImage {
 				productId?: (string|null)
@@ -5551,8 +5593,8 @@ export namespace waproto {
 				constructor(p?: waproto.Message.ListMessage.IProductListHeaderImage)
 				public productId?: (string|null)
 				public jpegThumbnail?: (Uint8Array|null)
-				public static encode(m: waproto.Message.ListMessage.IProductListHeaderImage, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ListMessage.ProductListHeaderImage
+				public static encode(m: waproto.Message.ListMessage.IProductListHeaderImage, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ListMessage.ProductListHeaderImage
 			}
 			interface IProductListInfo {
 				productSections?: (waproto.Message.ListMessage.IProductSection[]|null)
@@ -5564,8 +5606,8 @@ export namespace waproto {
 				public productSections: waproto.Message.ListMessage.IProductSection[]
 				public headerImage?: (waproto.Message.ListMessage.IProductListHeaderImage|null)
 				public businessOwnerJid?: (string|null)
-				public static encode(m: waproto.Message.ListMessage.IProductListInfo, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ListMessage.ProductListInfo
+				public static encode(m: waproto.Message.ListMessage.IProductListInfo, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ListMessage.ProductListInfo
 			}
 			interface IProductSection {
 				title?: (string|null)
@@ -5575,8 +5617,8 @@ export namespace waproto {
 				constructor(p?: waproto.Message.ListMessage.IProductSection)
 				public title?: (string|null)
 				public products: waproto.Message.ListMessage.IProduct[]
-				public static encode(m: waproto.Message.ListMessage.IProductSection, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ListMessage.ProductSection
+				public static encode(m: waproto.Message.ListMessage.IProductSection, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ListMessage.ProductSection
 			}
 			interface IRow {
 				title?: (string|null)
@@ -5588,8 +5630,8 @@ export namespace waproto {
 				public title?: (string|null)
 				public description?: (string|null)
 				public rowId?: (string|null)
-				public static encode(m: waproto.Message.ListMessage.IRow, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ListMessage.Row
+				public static encode(m: waproto.Message.ListMessage.IRow, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ListMessage.Row
 			}
 			interface ISection {
 				title?: (string|null)
@@ -5599,8 +5641,8 @@ export namespace waproto {
 				constructor(p?: waproto.Message.ListMessage.ISection)
 				public title?: (string|null)
 				public rows: waproto.Message.ListMessage.IRow[]
-				public static encode(m: waproto.Message.ListMessage.ISection, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ListMessage.Section
+				public static encode(m: waproto.Message.ListMessage.ISection, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ListMessage.Section
 			}
 		}
 		interface IListResponseMessage {
@@ -5617,8 +5659,8 @@ export namespace waproto {
 			public singleSelectReply?: (waproto.Message.ListResponseMessage.ISingleSelectReply|null)
 			public contextInfo?: (waproto.IContextInfo|null)
 			public description?: (string|null)
-			public static encode(m: waproto.Message.IListResponseMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ListResponseMessage
+			public static encode(m: waproto.Message.IListResponseMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ListResponseMessage
 		}
 		namespace ListResponseMessage {
 			enum ListType {
@@ -5631,8 +5673,8 @@ export namespace waproto {
 			class SingleSelectReply implements ISingleSelectReply {
 				constructor(p?: waproto.Message.ListResponseMessage.ISingleSelectReply)
 				public selectedRowId?: (string|null)
-				public static encode(m: waproto.Message.ListResponseMessage.ISingleSelectReply, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ListResponseMessage.SingleSelectReply
+				public static encode(m: waproto.Message.ListResponseMessage.ISingleSelectReply, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ListResponseMessage.SingleSelectReply
 			}
 		}
 		interface ILiveLocationMessage {
@@ -5659,8 +5701,8 @@ export namespace waproto {
 			public timeOffset?: (number|null)
 			public jpegThumbnail?: (Uint8Array|null)
 			public contextInfo?: (waproto.IContextInfo|null)
-			public static encode(m: waproto.Message.ILiveLocationMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.LiveLocationMessage
+			public static encode(m: waproto.Message.ILiveLocationMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.LiveLocationMessage
 		}
 		interface ILocationMessage {
 			degreesLatitude?: (number|null)
@@ -5690,8 +5732,8 @@ export namespace waproto {
 			public comment?: (string|null)
 			public jpegThumbnail?: (Uint8Array|null)
 			public contextInfo?: (waproto.IContextInfo|null)
-			public static encode(m: waproto.Message.ILocationMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.LocationMessage
+			public static encode(m: waproto.Message.ILocationMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.LocationMessage
 		}
 		interface IMMSThumbnailMetadata {
 			thumbnailDirectPath?: (string|null)
@@ -5711,8 +5753,8 @@ export namespace waproto {
 			public mediaKeyTimestamp?: (number|Long|null)
 			public thumbnailHeight?: (number|null)
 			public thumbnailWidth?: (number|null)
-			public static encode(m: waproto.Message.IMMSThumbnailMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.MMSThumbnailMetadata
+			public static encode(m: waproto.Message.IMMSThumbnailMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.MMSThumbnailMetadata
 		}
 		interface IMessageHistoryBundle {
 			mimetype?: (string|null)
@@ -5734,8 +5776,8 @@ export namespace waproto {
 			public mediaKeyTimestamp?: (number|Long|null)
 			public contextInfo?: (waproto.IContextInfo|null)
 			public messageHistoryMetadata?: (waproto.Message.IMessageHistoryMetadata|null)
-			public static encode(m: waproto.Message.IMessageHistoryBundle, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.MessageHistoryBundle
+			public static encode(m: waproto.Message.IMessageHistoryBundle, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.MessageHistoryBundle
 		}
 		interface IMessageHistoryMetadata {
 			historyReceivers?: (string[]|null)
@@ -5749,8 +5791,8 @@ export namespace waproto {
 			public oldestMessageTimestamp?: (number|Long|null)
 			public messageCount?: (number|Long|null)
 			public nonHistoryReceivers: string[]
-			public static encode(m: waproto.Message.IMessageHistoryMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.MessageHistoryMetadata
+			public static encode(m: waproto.Message.IMessageHistoryMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.MessageHistoryMetadata
 		}
 		interface IMessageHistoryNotice {
 			contextInfo?: (waproto.IContextInfo|null)
@@ -5760,8 +5802,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IMessageHistoryNotice)
 			public contextInfo?: (waproto.IContextInfo|null)
 			public messageHistoryMetadata?: (waproto.Message.IMessageHistoryMetadata|null)
-			public static encode(m: waproto.Message.IMessageHistoryNotice, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.MessageHistoryNotice
+			public static encode(m: waproto.Message.IMessageHistoryNotice, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.MessageHistoryNotice
 		}
 		interface INewsletterAdminInviteMessage {
 			newsletterJid?: (string|null)
@@ -5779,8 +5821,8 @@ export namespace waproto {
 			public caption?: (string|null)
 			public inviteExpiration?: (number|Long|null)
 			public contextInfo?: (waproto.IContextInfo|null)
-			public static encode(m: waproto.Message.INewsletterAdminInviteMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.NewsletterAdminInviteMessage
+			public static encode(m: waproto.Message.INewsletterAdminInviteMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.NewsletterAdminInviteMessage
 		}
 		interface INewsletterFollowerInviteMessage {
 			newsletterJid?: (string|null)
@@ -5796,8 +5838,8 @@ export namespace waproto {
 			public jpegThumbnail?: (Uint8Array|null)
 			public caption?: (string|null)
 			public contextInfo?: (waproto.IContextInfo|null)
-			public static encode(m: waproto.Message.INewsletterFollowerInviteMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.NewsletterFollowerInviteMessage
+			public static encode(m: waproto.Message.INewsletterFollowerInviteMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.NewsletterFollowerInviteMessage
 		}
 		interface IOrderMessage {
 			orderId?: (string|null)
@@ -5833,8 +5875,8 @@ export namespace waproto {
 			public messageVersion?: (number|null)
 			public orderRequestMessageId?: (waproto.IMessageKey|null)
 			public catalogType?: (string|null)
-			public static encode(m: waproto.Message.IOrderMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.OrderMessage
+			public static encode(m: waproto.Message.IOrderMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.OrderMessage
 		}
 		namespace OrderMessage {
 			enum OrderStatus {
@@ -5854,8 +5896,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IPaymentExtendedMetadata)
 			public type?: (number|null)
 			public platform?: (string|null)
-			public static encode(m: waproto.Message.IPaymentExtendedMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PaymentExtendedMetadata
+			public static encode(m: waproto.Message.IPaymentExtendedMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PaymentExtendedMetadata
 		}
 		interface IPaymentInviteMessage {
 			serviceType?: (waproto.Message.PaymentInviteMessage.ServiceType|null)
@@ -5869,8 +5911,8 @@ export namespace waproto {
 			public expiryTimestamp?: (number|Long|null)
 			public incentiveEligible?: (boolean|null)
 			public referralId?: (string|null)
-			public static encode(m: waproto.Message.IPaymentInviteMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PaymentInviteMessage
+			public static encode(m: waproto.Message.IPaymentInviteMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PaymentInviteMessage
 		}
 		namespace PaymentInviteMessage {
 			enum ServiceType {
@@ -5890,8 +5932,8 @@ export namespace waproto {
 			public button?: (waproto.Message.PaymentLinkMetadata.IPaymentLinkButton|null)
 			public header?: (waproto.Message.PaymentLinkMetadata.IPaymentLinkHeader|null)
 			public provider?: (waproto.Message.PaymentLinkMetadata.IPaymentLinkProvider|null)
-			public static encode(m: waproto.Message.IPaymentLinkMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PaymentLinkMetadata
+			public static encode(m: waproto.Message.IPaymentLinkMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PaymentLinkMetadata
 		}
 		namespace PaymentLinkMetadata {
 			interface IPaymentLinkButton {
@@ -5900,8 +5942,8 @@ export namespace waproto {
 			class PaymentLinkButton implements IPaymentLinkButton {
 				constructor(p?: waproto.Message.PaymentLinkMetadata.IPaymentLinkButton)
 				public displayText?: (string|null)
-				public static encode(m: waproto.Message.PaymentLinkMetadata.IPaymentLinkButton, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PaymentLinkMetadata.PaymentLinkButton
+				public static encode(m: waproto.Message.PaymentLinkMetadata.IPaymentLinkButton, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PaymentLinkMetadata.PaymentLinkButton
 			}
 			interface IPaymentLinkHeader {
 				headerType?: (waproto.Message.PaymentLinkMetadata.PaymentLinkHeader.PaymentLinkHeaderType|null)
@@ -5909,8 +5951,8 @@ export namespace waproto {
 			class PaymentLinkHeader implements IPaymentLinkHeader {
 				constructor(p?: waproto.Message.PaymentLinkMetadata.IPaymentLinkHeader)
 				public headerType?: (waproto.Message.PaymentLinkMetadata.PaymentLinkHeader.PaymentLinkHeaderType|null)
-				public static encode(m: waproto.Message.PaymentLinkMetadata.IPaymentLinkHeader, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PaymentLinkMetadata.PaymentLinkHeader
+				public static encode(m: waproto.Message.PaymentLinkMetadata.IPaymentLinkHeader, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PaymentLinkMetadata.PaymentLinkHeader
 			}
 			namespace PaymentLinkHeader {
 				enum PaymentLinkHeaderType {
@@ -5924,8 +5966,8 @@ export namespace waproto {
 			class PaymentLinkProvider implements IPaymentLinkProvider {
 				constructor(p?: waproto.Message.PaymentLinkMetadata.IPaymentLinkProvider)
 				public paramsJson?: (string|null)
-				public static encode(m: waproto.Message.PaymentLinkMetadata.IPaymentLinkProvider, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PaymentLinkMetadata.PaymentLinkProvider
+				public static encode(m: waproto.Message.PaymentLinkMetadata.IPaymentLinkProvider, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PaymentLinkMetadata.PaymentLinkProvider
 			}
 		}
 		interface IPeerDataOperationRequestMessage {
@@ -5956,8 +5998,8 @@ export namespace waproto {
 			public companionCanonicalUserNonceFetchRequest?: (waproto.Message.PeerDataOperationRequestMessage.ICompanionCanonicalUserNonceFetchRequest|null)
 			public bizBroadcastInsightsContactListRequest?: (waproto.Message.PeerDataOperationRequestMessage.IBizBroadcastInsightsContactListRequest|null)
 			public bizBroadcastInsightsRefreshRequest?: (waproto.Message.PeerDataOperationRequestMessage.IBizBroadcastInsightsRefreshRequest|null)
-			public static encode(m: waproto.Message.IPeerDataOperationRequestMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage
+			public static encode(m: waproto.Message.IPeerDataOperationRequestMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage
 		}
 		namespace PeerDataOperationRequestMessage {
 			interface IBizBroadcastInsightsContactListRequest {
@@ -5966,8 +6008,8 @@ export namespace waproto {
 			class BizBroadcastInsightsContactListRequest implements IBizBroadcastInsightsContactListRequest {
 				constructor(p?: waproto.Message.PeerDataOperationRequestMessage.IBizBroadcastInsightsContactListRequest)
 				public campaignId?: (string|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IBizBroadcastInsightsContactListRequest, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.BizBroadcastInsightsContactListRequest
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IBizBroadcastInsightsContactListRequest, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.BizBroadcastInsightsContactListRequest
 			}
 			interface IBizBroadcastInsightsRefreshRequest {
 				campaignId?: (string|null)
@@ -5975,8 +6017,8 @@ export namespace waproto {
 			class BizBroadcastInsightsRefreshRequest implements IBizBroadcastInsightsRefreshRequest {
 				constructor(p?: waproto.Message.PeerDataOperationRequestMessage.IBizBroadcastInsightsRefreshRequest)
 				public campaignId?: (string|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IBizBroadcastInsightsRefreshRequest, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.BizBroadcastInsightsRefreshRequest
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IBizBroadcastInsightsRefreshRequest, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.BizBroadcastInsightsRefreshRequest
 			}
 			interface ICompanionCanonicalUserNonceFetchRequest {
 				registrationTraceId?: (string|null)
@@ -5984,8 +6026,8 @@ export namespace waproto {
 			class CompanionCanonicalUserNonceFetchRequest implements ICompanionCanonicalUserNonceFetchRequest {
 				constructor(p?: waproto.Message.PeerDataOperationRequestMessage.ICompanionCanonicalUserNonceFetchRequest)
 				public registrationTraceId?: (string|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.ICompanionCanonicalUserNonceFetchRequest, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.CompanionCanonicalUserNonceFetchRequest
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.ICompanionCanonicalUserNonceFetchRequest, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.CompanionCanonicalUserNonceFetchRequest
 			}
 			interface IFullHistorySyncOnDemandRequest {
 				requestMetadata?: (waproto.Message.IFullHistorySyncOnDemandRequestMetadata|null)
@@ -5997,8 +6039,8 @@ export namespace waproto {
 				public requestMetadata?: (waproto.Message.IFullHistorySyncOnDemandRequestMetadata|null)
 				public historySyncConfig?: (waproto.DeviceProps.IHistorySyncConfig|null)
 				public fullHistorySyncOnDemandConfig?: (waproto.Message.IFullHistorySyncOnDemandConfig|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IFullHistorySyncOnDemandRequest, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.FullHistorySyncOnDemandRequest
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IFullHistorySyncOnDemandRequest, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.FullHistorySyncOnDemandRequest
 			}
 			interface IGalaxyFlowAction {
 				type?: (waproto.Message.PeerDataOperationRequestMessage.GalaxyFlowAction.GalaxyFlowActionType|null)
@@ -6014,8 +6056,8 @@ export namespace waproto {
 				public stanzaId?: (string|null)
 				public galaxyFlowDownloadRequestId?: (string|null)
 				public agmId?: (string|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IGalaxyFlowAction, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.GalaxyFlowAction
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IGalaxyFlowAction, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.GalaxyFlowAction
 			}
 			namespace GalaxyFlowAction {
 				enum GalaxyFlowActionType {
@@ -6035,8 +6077,8 @@ export namespace waproto {
 				public chunkOrder?: (number|null)
 				public chunkNotificationId?: (string|null)
 				public regenerateChunk?: (boolean|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IHistorySyncChunkRetryRequest, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.HistorySyncChunkRetryRequest
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IHistorySyncChunkRetryRequest, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.HistorySyncChunkRetryRequest
 			}
 			interface IHistorySyncOnDemandRequest {
 				chatJid?: (string|null)
@@ -6054,8 +6096,8 @@ export namespace waproto {
 				public onDemandMsgCount?: (number|null)
 				public oldestMsgTimestampMs?: (number|Long|null)
 				public accountLid?: (string|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IHistorySyncOnDemandRequest, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.HistorySyncOnDemandRequest
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IHistorySyncOnDemandRequest, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.HistorySyncOnDemandRequest
 			}
 			interface IPlaceholderMessageResendRequest {
 				messageKey?: (waproto.IMessageKey|null)
@@ -6063,8 +6105,8 @@ export namespace waproto {
 			class PlaceholderMessageResendRequest implements IPlaceholderMessageResendRequest {
 				constructor(p?: waproto.Message.PeerDataOperationRequestMessage.IPlaceholderMessageResendRequest)
 				public messageKey?: (waproto.IMessageKey|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IPlaceholderMessageResendRequest, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.PlaceholderMessageResendRequest
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IPlaceholderMessageResendRequest, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.PlaceholderMessageResendRequest
 			}
 			interface IRequestStickerReupload {
 				fileSha256?: (string|null)
@@ -6072,8 +6114,8 @@ export namespace waproto {
 			class RequestStickerReupload implements IRequestStickerReupload {
 				constructor(p?: waproto.Message.PeerDataOperationRequestMessage.IRequestStickerReupload)
 				public fileSha256?: (string|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IRequestStickerReupload, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.RequestStickerReupload
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IRequestStickerReupload, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.RequestStickerReupload
 			}
 			interface IRequestUrlPreview {
 				url?: (string|null)
@@ -6083,8 +6125,8 @@ export namespace waproto {
 				constructor(p?: waproto.Message.PeerDataOperationRequestMessage.IRequestUrlPreview)
 				public url?: (string|null)
 				public includeHqThumbnail?: (boolean|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IRequestUrlPreview, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.RequestUrlPreview
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IRequestUrlPreview, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.RequestUrlPreview
 			}
 			interface ISyncDCollectionFatalRecoveryRequest {
 				collectionName?: (string|null)
@@ -6094,8 +6136,8 @@ export namespace waproto {
 				constructor(p?: waproto.Message.PeerDataOperationRequestMessage.ISyncDCollectionFatalRecoveryRequest)
 				public collectionName?: (string|null)
 				public timestamp?: (number|Long|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.ISyncDCollectionFatalRecoveryRequest, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.SyncDCollectionFatalRecoveryRequest
+				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.ISyncDCollectionFatalRecoveryRequest, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.SyncDCollectionFatalRecoveryRequest
 			}
 		}
 		interface IPeerDataOperationRequestResponseMessage {
@@ -6108,8 +6150,8 @@ export namespace waproto {
 			public peerDataOperationRequestType?: (waproto.Message.PeerDataOperationRequestType|null)
 			public stanzaId?: (string|null)
 			public peerDataOperationResult: waproto.Message.PeerDataOperationRequestResponseMessage.IPeerDataOperationResult[]
-			public static encode(m: waproto.Message.IPeerDataOperationRequestResponseMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage
+			public static encode(m: waproto.Message.IPeerDataOperationRequestResponseMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage
 		}
 		namespace PeerDataOperationRequestResponseMessage {
 			interface IPeerDataOperationResult {
@@ -6140,8 +6182,8 @@ export namespace waproto {
 				public historySyncChunkRetryResponse?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IHistorySyncChunkRetryResponse|null)
 				public flowResponsesCsvBundle?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IFlowResponsesCsvBundle|null)
 				public bizBroadcastInsightsContactListResponse?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IBizBroadcastInsightsContactListResponse|null)
-				public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.IPeerDataOperationResult, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult
+				public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.IPeerDataOperationResult, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult
 			}
 			namespace PeerDataOperationResult {
 				interface IBizBroadcastInsightsContactListResponse {
@@ -6154,8 +6196,8 @@ export namespace waproto {
 					public campaignId?: (string|null)
 					public timestampMs?: (number|Long|null)
 					public contacts: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IBizBroadcastInsightsContactState[]
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IBizBroadcastInsightsContactListResponse, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.BizBroadcastInsightsContactListResponse
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IBizBroadcastInsightsContactListResponse, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.BizBroadcastInsightsContactListResponse
 				}
 				interface IBizBroadcastInsightsContactState {
 					contactJid?: (string|null)
@@ -6165,8 +6207,8 @@ export namespace waproto {
 					constructor(p?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IBizBroadcastInsightsContactState)
 					public contactJid?: (string|null)
 					public state?: (waproto.Message.InsightDeliveryState|null)
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IBizBroadcastInsightsContactState, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.BizBroadcastInsightsContactState
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IBizBroadcastInsightsContactState, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.BizBroadcastInsightsContactState
 				}
 				interface ICompanionCanonicalUserNonceFetchResponse {
 					nonce?: (string|null)
@@ -6178,8 +6220,8 @@ export namespace waproto {
 					public nonce?: (string|null)
 					public waFbid?: (string|null)
 					public forceRefresh?: (boolean|null)
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ICompanionCanonicalUserNonceFetchResponse, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.CompanionCanonicalUserNonceFetchResponse
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ICompanionCanonicalUserNonceFetchResponse, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.CompanionCanonicalUserNonceFetchResponse
 				}
 				interface ICompanionMetaNonceFetchResponse {
 					nonce?: (string|null)
@@ -6187,8 +6229,8 @@ export namespace waproto {
 				class CompanionMetaNonceFetchResponse implements ICompanionMetaNonceFetchResponse {
 					constructor(p?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ICompanionMetaNonceFetchResponse)
 					public nonce?: (string|null)
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ICompanionMetaNonceFetchResponse, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.CompanionMetaNonceFetchResponse
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ICompanionMetaNonceFetchResponse, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.CompanionMetaNonceFetchResponse
 				}
 				interface IFlowResponsesCsvBundle {
 					flowId?: (string|null)
@@ -6214,8 +6256,8 @@ export namespace waproto {
 					public directPath?: (string|null)
 					public mediaKeyTimestamp?: (number|Long|null)
 					public fileLength?: (number|Long|null)
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IFlowResponsesCsvBundle, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FlowResponsesCsvBundle
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IFlowResponsesCsvBundle, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FlowResponsesCsvBundle
 				}
 				interface IFullHistorySyncOnDemandRequestResponse {
 					requestMetadata?: (waproto.Message.IFullHistorySyncOnDemandRequestMetadata|null)
@@ -6225,8 +6267,8 @@ export namespace waproto {
 					constructor(p?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IFullHistorySyncOnDemandRequestResponse)
 					public requestMetadata?: (waproto.Message.IFullHistorySyncOnDemandRequestMetadata|null)
 					public responseCode?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FullHistorySyncOnDemandResponseCode|null)
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IFullHistorySyncOnDemandRequestResponse, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FullHistorySyncOnDemandRequestResponse
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IFullHistorySyncOnDemandRequestResponse, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.FullHistorySyncOnDemandRequestResponse
 				}
 				enum FullHistorySyncOnDemandResponseCode {
 					REQUEST_SUCCESS = 0,
@@ -6251,8 +6293,8 @@ export namespace waproto {
 					public requestId?: (string|null)
 					public responseCode?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.HistorySyncChunkRetryResponseCode|null)
 					public canRecover?: (boolean|null)
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IHistorySyncChunkRetryResponse, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.HistorySyncChunkRetryResponse
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IHistorySyncChunkRetryResponse, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.HistorySyncChunkRetryResponse
 				}
 				enum HistorySyncChunkRetryResponseCode {
 					GENERATION_ERROR = 1,
@@ -6282,8 +6324,8 @@ export namespace waproto {
 					public previewType?: (string|null)
 					public hqThumbnail?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.ILinkPreviewHighQualityThumbnail|null)
 					public previewMetadata?: (waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.IPaymentLinkPreviewMetadata|null)
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ILinkPreviewResponse, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ILinkPreviewResponse, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse
 				}
 				namespace LinkPreviewResponse {
 					interface ILinkPreviewHighQualityThumbnail {
@@ -6304,8 +6346,8 @@ export namespace waproto {
 						public mediaKeyTimestampMs?: (number|Long|null)
 						public thumbWidth?: (number|null)
 						public thumbHeight?: (number|null)
-						public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.ILinkPreviewHighQualityThumbnail, w?: $protobuf.Writer): $protobuf.Writer
-						public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.LinkPreviewHighQualityThumbnail
+						public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.ILinkPreviewHighQualityThumbnail, w?: PbWriter): PbWriter
+						public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.LinkPreviewHighQualityThumbnail
 					}
 					interface IPaymentLinkPreviewMetadata {
 						isBusinessVerified?: (boolean|null)
@@ -6321,8 +6363,8 @@ export namespace waproto {
 						public amount?: (string|null)
 						public offset?: (string|null)
 						public currency?: (string|null)
-						public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.IPaymentLinkPreviewMetadata, w?: $protobuf.Writer): $protobuf.Writer
-						public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.PaymentLinkPreviewMetadata
+						public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.IPaymentLinkPreviewMetadata, w?: PbWriter): PbWriter
+						public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.LinkPreviewResponse.PaymentLinkPreviewMetadata
 					}
 				}
 				interface IPlaceholderMessageResendResponse {
@@ -6331,8 +6373,8 @@ export namespace waproto {
 				class PlaceholderMessageResendResponse implements IPlaceholderMessageResendResponse {
 					constructor(p?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IPlaceholderMessageResendResponse)
 					public webMessageInfoBytes?: (Uint8Array|null)
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IPlaceholderMessageResendResponse, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.PlaceholderMessageResendResponse
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IPlaceholderMessageResendResponse, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.PlaceholderMessageResendResponse
 				}
 				interface ISyncDSnapshotFatalRecoveryResponse {
 					collectionSnapshot?: (Uint8Array|null)
@@ -6342,8 +6384,8 @@ export namespace waproto {
 					constructor(p?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ISyncDSnapshotFatalRecoveryResponse)
 					public collectionSnapshot?: (Uint8Array|null)
 					public isCompressed?: (boolean|null)
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ISyncDSnapshotFatalRecoveryResponse, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.ISyncDSnapshotFatalRecoveryResponse, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.SyncDSnapshotFatalRecoveryResponse
 				}
 				interface IWaffleNonceFetchResponse {
 					nonce?: (string|null)
@@ -6353,8 +6395,8 @@ export namespace waproto {
 					constructor(p?: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IWaffleNonceFetchResponse)
 					public nonce?: (string|null)
 					public waEntFbid?: (string|null)
-					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IWaffleNonceFetchResponse, w?: $protobuf.Writer): $protobuf.Writer
-					public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.WaffleNonceFetchResponse
+					public static encode(m: waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.IWaffleNonceFetchResponse, w?: PbWriter): PbWriter
+					public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestResponseMessage.PeerDataOperationResult.WaffleNonceFetchResponse
 				}
 			}
 		}
@@ -6384,8 +6426,8 @@ export namespace waproto {
 			public key?: (waproto.IMessageKey|null)
 			public type?: (waproto.Message.PinInChatMessage.Type|null)
 			public senderTimestampMs?: (number|Long|null)
-			public static encode(m: waproto.Message.IPinInChatMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PinInChatMessage
+			public static encode(m: waproto.Message.IPinInChatMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PinInChatMessage
 		}
 		namespace PinInChatMessage {
 			enum Type {
@@ -6400,8 +6442,8 @@ export namespace waproto {
 		class PlaceholderMessage implements IPlaceholderMessage {
 			constructor(p?: waproto.Message.IPlaceholderMessage)
 			public type?: (waproto.Message.PlaceholderMessage.PlaceholderType|null)
-			public static encode(m: waproto.Message.IPlaceholderMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PlaceholderMessage
+			public static encode(m: waproto.Message.IPlaceholderMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PlaceholderMessage
 		}
 		namespace PlaceholderMessage {
 			enum PlaceholderType {
@@ -6416,8 +6458,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IPollAddOptionMessage)
 			public pollCreationMessageKey?: (waproto.IMessageKey|null)
 			public addOption?: (waproto.Message.PollCreationMessage.IOption|null)
-			public static encode(m: waproto.Message.IPollAddOptionMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PollAddOptionMessage
+			public static encode(m: waproto.Message.IPollAddOptionMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PollAddOptionMessage
 		}
 		enum PollContentType {
 			UNKNOWN = 0,
@@ -6450,8 +6492,8 @@ export namespace waproto {
 			public endTime?: (number|Long|null)
 			public hideParticipantName?: (boolean|null)
 			public allowAddOption?: (boolean|null)
-			public static encode(m: waproto.Message.IPollCreationMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PollCreationMessage
+			public static encode(m: waproto.Message.IPollCreationMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PollCreationMessage
 		}
 		namespace PollCreationMessage {
 			interface IOption {
@@ -6462,8 +6504,8 @@ export namespace waproto {
 				constructor(p?: waproto.Message.PollCreationMessage.IOption)
 				public optionName?: (string|null)
 				public optionHash?: (string|null)
-				public static encode(m: waproto.Message.PollCreationMessage.IOption, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PollCreationMessage.Option
+				public static encode(m: waproto.Message.PollCreationMessage.IOption, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PollCreationMessage.Option
 			}
 		}
 		interface IPollEncValue {
@@ -6474,8 +6516,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IPollEncValue)
 			public encPayload?: (Uint8Array|null)
 			public encIv?: (Uint8Array|null)
-			public static encode(m: waproto.Message.IPollEncValue, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PollEncValue
+			public static encode(m: waproto.Message.IPollEncValue, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PollEncValue
 		}
 		interface IPollResultSnapshotMessage {
 			name?: (string|null)
@@ -6489,8 +6531,8 @@ export namespace waproto {
 			public pollVotes: waproto.Message.PollResultSnapshotMessage.IPollVote[]
 			public contextInfo?: (waproto.IContextInfo|null)
 			public pollType?: (waproto.Message.PollType|null)
-			public static encode(m: waproto.Message.IPollResultSnapshotMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PollResultSnapshotMessage
+			public static encode(m: waproto.Message.IPollResultSnapshotMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PollResultSnapshotMessage
 		}
 		namespace PollResultSnapshotMessage {
 			interface IPollVote {
@@ -6501,8 +6543,8 @@ export namespace waproto {
 				constructor(p?: waproto.Message.PollResultSnapshotMessage.IPollVote)
 				public optionName?: (string|null)
 				public optionVoteCount?: (number|Long|null)
-				public static encode(m: waproto.Message.PollResultSnapshotMessage.IPollVote, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PollResultSnapshotMessage.PollVote
+				public static encode(m: waproto.Message.PollResultSnapshotMessage.IPollVote, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PollResultSnapshotMessage.PollVote
 			}
 		}
 		enum PollType {
@@ -6521,15 +6563,15 @@ export namespace waproto {
 			public vote?: (waproto.Message.IPollEncValue|null)
 			public metadata?: (waproto.Message.IPollUpdateMessageMetadata|null)
 			public senderTimestampMs?: (number|Long|null)
-			public static encode(m: waproto.Message.IPollUpdateMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PollUpdateMessage
+			public static encode(m: waproto.Message.IPollUpdateMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PollUpdateMessage
 		}
 		interface IPollUpdateMessageMetadata {
 		}
 		class PollUpdateMessageMetadata implements IPollUpdateMessageMetadata {
 			constructor(p?: waproto.Message.IPollUpdateMessageMetadata)
-			public static encode(m: waproto.Message.IPollUpdateMessageMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PollUpdateMessageMetadata
+			public static encode(m: waproto.Message.IPollUpdateMessageMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PollUpdateMessageMetadata
 		}
 		interface IPollVoteMessage {
 			selectedOptions?: (Uint8Array[]|null)
@@ -6537,8 +6579,8 @@ export namespace waproto {
 		class PollVoteMessage implements IPollVoteMessage {
 			constructor(p?: waproto.Message.IPollVoteMessage)
 			public selectedOptions: Uint8Array[]
-			public static encode(m: waproto.Message.IPollVoteMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.PollVoteMessage
+			public static encode(m: waproto.Message.IPollVoteMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PollVoteMessage
 		}
 		interface IProductMessage {
 			product?: (waproto.Message.ProductMessage.IProductSnapshot|null)
@@ -6556,8 +6598,8 @@ export namespace waproto {
 			public body?: (string|null)
 			public footer?: (string|null)
 			public contextInfo?: (waproto.IContextInfo|null)
-			public static encode(m: waproto.Message.IProductMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ProductMessage
+			public static encode(m: waproto.Message.IProductMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ProductMessage
 		}
 		namespace ProductMessage {
 			interface ICatalogSnapshot {
@@ -6570,8 +6612,8 @@ export namespace waproto {
 				public catalogImage?: (waproto.Message.IImageMessage|null)
 				public title?: (string|null)
 				public description?: (string|null)
-				public static encode(m: waproto.Message.ProductMessage.ICatalogSnapshot, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ProductMessage.CatalogSnapshot
+				public static encode(m: waproto.Message.ProductMessage.ICatalogSnapshot, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ProductMessage.CatalogSnapshot
 			}
 			interface IProductSnapshot {
 				productImage?: (waproto.Message.IImageMessage|null)
@@ -6601,8 +6643,8 @@ export namespace waproto {
 				public firstImageId?: (string|null)
 				public salePriceAmount1000?: (number|Long|null)
 				public signedUrl?: (string|null)
-				public static encode(m: waproto.Message.ProductMessage.IProductSnapshot, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ProductMessage.ProductSnapshot
+				public static encode(m: waproto.Message.ProductMessage.IProductSnapshot, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ProductMessage.ProductSnapshot
 			}
 		}
 		interface IProtocolMessage {
@@ -6661,8 +6703,8 @@ export namespace waproto {
 			public memberLabel?: (waproto.IMemberLabel|null)
 			public aiMediaCollectionMessage?: (waproto.IAIMediaCollectionMessage|null)
 			public afterReadDuration?: (number|null)
-			public static encode(m: waproto.Message.IProtocolMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ProtocolMessage
+			public static encode(m: waproto.Message.IProtocolMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ProtocolMessage
 		}
 		namespace ProtocolMessage {
 			enum Type {
@@ -6704,8 +6746,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IQuestionResponseMessage)
 			public key?: (waproto.IMessageKey|null)
 			public text?: (string|null)
-			public static encode(m: waproto.Message.IQuestionResponseMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.QuestionResponseMessage
+			public static encode(m: waproto.Message.IQuestionResponseMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.QuestionResponseMessage
 		}
 		interface IReactionMessage {
 			key?: (waproto.IMessageKey|null)
@@ -6719,8 +6761,8 @@ export namespace waproto {
 			public text?: (string|null)
 			public groupingKey?: (string|null)
 			public senderTimestampMs?: (number|Long|null)
-			public static encode(m: waproto.Message.IReactionMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ReactionMessage
+			public static encode(m: waproto.Message.IReactionMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ReactionMessage
 		}
 		interface IRequestPaymentMessage {
 			noteMessage?: (waproto.IMessage|null)
@@ -6740,8 +6782,8 @@ export namespace waproto {
 			public expiryTimestamp?: (number|Long|null)
 			public amount?: (waproto.IMoney|null)
 			public background?: (waproto.IPaymentBackground|null)
-			public static encode(m: waproto.Message.IRequestPaymentMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.RequestPaymentMessage
+			public static encode(m: waproto.Message.IRequestPaymentMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.RequestPaymentMessage
 		}
 		interface IRequestPhoneNumberMessage {
 			contextInfo?: (waproto.IContextInfo|null)
@@ -6749,8 +6791,8 @@ export namespace waproto {
 		class RequestPhoneNumberMessage implements IRequestPhoneNumberMessage {
 			constructor(p?: waproto.Message.IRequestPhoneNumberMessage)
 			public contextInfo?: (waproto.IContextInfo|null)
-			public static encode(m: waproto.Message.IRequestPhoneNumberMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.RequestPhoneNumberMessage
+			public static encode(m: waproto.Message.IRequestPhoneNumberMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.RequestPhoneNumberMessage
 		}
 		interface IRequestWelcomeMessageMetadata {
 			localChatState?: (waproto.Message.RequestWelcomeMessageMetadata.LocalChatState|null)
@@ -6760,8 +6802,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IRequestWelcomeMessageMetadata)
 			public localChatState?: (waproto.Message.RequestWelcomeMessageMetadata.LocalChatState|null)
 			public welcomeTrigger?: (waproto.Message.RequestWelcomeMessageMetadata.WelcomeTrigger|null)
-			public static encode(m: waproto.Message.IRequestWelcomeMessageMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.RequestWelcomeMessageMetadata
+			public static encode(m: waproto.Message.IRequestWelcomeMessageMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.RequestWelcomeMessageMetadata
 		}
 		namespace RequestWelcomeMessageMetadata {
 			enum LocalChatState {
@@ -6783,8 +6825,8 @@ export namespace waproto {
 			public scheduledTimestampMs?: (number|Long|null)
 			public callType?: (waproto.Message.ScheduledCallCreationMessage.CallType|null)
 			public title?: (string|null)
-			public static encode(m: waproto.Message.IScheduledCallCreationMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ScheduledCallCreationMessage
+			public static encode(m: waproto.Message.IScheduledCallCreationMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ScheduledCallCreationMessage
 		}
 		namespace ScheduledCallCreationMessage {
 			enum CallType {
@@ -6801,8 +6843,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IScheduledCallEditMessage)
 			public key?: (waproto.IMessageKey|null)
 			public editType?: (waproto.Message.ScheduledCallEditMessage.EditType|null)
-			public static encode(m: waproto.Message.IScheduledCallEditMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.ScheduledCallEditMessage
+			public static encode(m: waproto.Message.IScheduledCallEditMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ScheduledCallEditMessage
 		}
 		namespace ScheduledCallEditMessage {
 			enum EditType {
@@ -6824,8 +6866,8 @@ export namespace waproto {
 			public encIv?: (Uint8Array|null)
 			public secretEncType?: (waproto.Message.SecretEncryptedMessage.SecretEncType|null)
 			public remoteKeyId?: (string|null)
-			public static encode(m: waproto.Message.ISecretEncryptedMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.SecretEncryptedMessage
+			public static encode(m: waproto.Message.ISecretEncryptedMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.SecretEncryptedMessage
 		}
 		namespace SecretEncryptedMessage {
 			enum SecretEncType {
@@ -6849,8 +6891,8 @@ export namespace waproto {
 			public requestMessageKey?: (waproto.IMessageKey|null)
 			public background?: (waproto.IPaymentBackground|null)
 			public transactionData?: (string|null)
-			public static encode(m: waproto.Message.ISendPaymentMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.SendPaymentMessage
+			public static encode(m: waproto.Message.ISendPaymentMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.SendPaymentMessage
 		}
 		interface ISenderKeyDistributionMessage {
 			groupId?: (string|null)
@@ -6860,8 +6902,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.ISenderKeyDistributionMessage)
 			public groupId?: (string|null)
 			public axolotlSenderKeyDistributionMessage?: (Uint8Array|null)
-			public static encode(m: waproto.Message.ISenderKeyDistributionMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.SenderKeyDistributionMessage
+			public static encode(m: waproto.Message.ISenderKeyDistributionMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.SenderKeyDistributionMessage
 		}
 		interface IStatusNotificationMessage {
 			responseMessageKey?: (waproto.IMessageKey|null)
@@ -6873,8 +6915,8 @@ export namespace waproto {
 			public responseMessageKey?: (waproto.IMessageKey|null)
 			public originalMessageKey?: (waproto.IMessageKey|null)
 			public type?: (waproto.Message.StatusNotificationMessage.StatusNotificationType|null)
-			public static encode(m: waproto.Message.IStatusNotificationMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.StatusNotificationMessage
+			public static encode(m: waproto.Message.IStatusNotificationMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StatusNotificationMessage
 		}
 		namespace StatusNotificationMessage {
 			enum StatusNotificationType {
@@ -6892,8 +6934,8 @@ export namespace waproto {
 			constructor(p?: waproto.Message.IStatusQuestionAnswerMessage)
 			public key?: (waproto.IMessageKey|null)
 			public text?: (string|null)
-			public static encode(m: waproto.Message.IStatusQuestionAnswerMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.StatusQuestionAnswerMessage
+			public static encode(m: waproto.Message.IStatusQuestionAnswerMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StatusQuestionAnswerMessage
 		}
 		interface IStatusQuotedMessage {
 			type?: (waproto.Message.StatusQuotedMessage.StatusQuotedMessageType|null)
@@ -6907,8 +6949,8 @@ export namespace waproto {
 			public text?: (string|null)
 			public thumbnail?: (Uint8Array|null)
 			public originalStatusId?: (waproto.IMessageKey|null)
-			public static encode(m: waproto.Message.IStatusQuotedMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.StatusQuotedMessage
+			public static encode(m: waproto.Message.IStatusQuotedMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StatusQuotedMessage
 		}
 		namespace StatusQuotedMessage {
 			enum StatusQuotedMessageType {
@@ -6925,8 +6967,8 @@ export namespace waproto {
 			public key?: (waproto.IMessageKey|null)
 			public stickerKey?: (string|null)
 			public type?: (waproto.Message.StatusStickerInteractionMessage.StatusStickerType|null)
-			public static encode(m: waproto.Message.IStatusStickerInteractionMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.StatusStickerInteractionMessage
+			public static encode(m: waproto.Message.IStatusStickerInteractionMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StatusStickerInteractionMessage
 		}
 		namespace StatusStickerInteractionMessage {
 			enum StatusStickerType {
@@ -6980,8 +7022,8 @@ export namespace waproto {
 			public isLottie?: (boolean|null)
 			public accessibilityLabel?: (string|null)
 			public premium?: (number|null)
-			public static encode(m: waproto.Message.IStickerMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.StickerMessage
+			public static encode(m: waproto.Message.IStickerMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StickerMessage
 		}
 		interface IStickerPackMessage {
 			stickerPackId?: (string|null)
@@ -7031,8 +7073,8 @@ export namespace waproto {
 			public imageDataHash?: (string|null)
 			public stickerPackSize?: (number|Long|null)
 			public stickerPackOrigin?: (waproto.Message.StickerPackMessage.StickerPackOrigin|null)
-			public static encode(m: waproto.Message.IStickerPackMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.StickerPackMessage
+			public static encode(m: waproto.Message.IStickerPackMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StickerPackMessage
 		}
 		namespace StickerPackMessage {
 			interface ISticker {
@@ -7053,8 +7095,8 @@ export namespace waproto {
 				public isLottie?: (boolean|null)
 				public mimetype?: (string|null)
 				public premium?: (number|null)
-				public static encode(m: waproto.Message.StickerPackMessage.ISticker, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.StickerPackMessage.Sticker
+				public static encode(m: waproto.Message.StickerPackMessage.ISticker, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StickerPackMessage.Sticker
 			}
 			enum StickerPackOrigin {
 				FIRST_PARTY = 0,
@@ -7072,8 +7114,8 @@ export namespace waproto {
 			public filehash: string[]
 			public rmrSource?: (string|null)
 			public requestTimestamp?: (number|Long|null)
-			public static encode(m: waproto.Message.IStickerSyncRMRMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.StickerSyncRMRMessage
+			public static encode(m: waproto.Message.IStickerSyncRMRMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StickerSyncRMRMessage
 		}
 		interface ITemplateButtonReplyMessage {
 			selectedId?: (string|null)
@@ -7089,8 +7131,8 @@ export namespace waproto {
 			public contextInfo?: (waproto.IContextInfo|null)
 			public selectedIndex?: (number|null)
 			public selectedCarouselCardIndex?: (number|null)
-			public static encode(m: waproto.Message.ITemplateButtonReplyMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.TemplateButtonReplyMessage
+			public static encode(m: waproto.Message.ITemplateButtonReplyMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.TemplateButtonReplyMessage
 		}
 		interface ITemplateMessage {
 			contextInfo?: (waproto.IContextInfo|null)
@@ -7109,8 +7151,8 @@ export namespace waproto {
 			public hydratedFourRowTemplate?: (waproto.Message.TemplateMessage.IHydratedFourRowTemplate|null)
 			public interactiveMessageTemplate?: (waproto.Message.IInteractiveMessage|null)
 			public format?: ("fourRowTemplate"|"hydratedFourRowTemplate"|"interactiveMessageTemplate")
-			public static encode(m: waproto.Message.ITemplateMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.TemplateMessage
+			public static encode(m: waproto.Message.ITemplateMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.TemplateMessage
 		}
 		namespace TemplateMessage {
 			interface IFourRowTemplate {
@@ -7134,8 +7176,8 @@ export namespace waproto {
 				public videoMessage?: (waproto.Message.IVideoMessage|null)
 				public locationMessage?: (waproto.Message.ILocationMessage|null)
 				public title?: ("documentMessage"|"highlyStructuredMessage"|"imageMessage"|"videoMessage"|"locationMessage")
-				public static encode(m: waproto.Message.TemplateMessage.IFourRowTemplate, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.TemplateMessage.FourRowTemplate
+				public static encode(m: waproto.Message.TemplateMessage.IFourRowTemplate, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.TemplateMessage.FourRowTemplate
 			}
 			interface IHydratedFourRowTemplate {
 				hydratedContentText?: (string|null)
@@ -7162,8 +7204,8 @@ export namespace waproto {
 				public videoMessage?: (waproto.Message.IVideoMessage|null)
 				public locationMessage?: (waproto.Message.ILocationMessage|null)
 				public title?: ("documentMessage"|"hydratedTitleText"|"imageMessage"|"videoMessage"|"locationMessage")
-				public static encode(m: waproto.Message.TemplateMessage.IHydratedFourRowTemplate, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.TemplateMessage.HydratedFourRowTemplate
+				public static encode(m: waproto.Message.TemplateMessage.IHydratedFourRowTemplate, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.TemplateMessage.HydratedFourRowTemplate
 			}
 		}
 		interface IURLMetadata {
@@ -7172,8 +7214,8 @@ export namespace waproto {
 		class URLMetadata implements IURLMetadata {
 			constructor(p?: waproto.Message.IURLMetadata)
 			public fbExperimentId?: (number|null)
-			public static encode(m: waproto.Message.IURLMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.URLMetadata
+			public static encode(m: waproto.Message.IURLMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.URLMetadata
 		}
 		interface IVideoEndCard {
 			username?: (string|null)
@@ -7187,8 +7229,8 @@ export namespace waproto {
 			public caption?: (string|null)
 			public thumbnailImageUrl?: (string|null)
 			public profilePictureUrl?: (string|null)
-			public static encode(m: waproto.Message.IVideoEndCard, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.VideoEndCard
+			public static encode(m: waproto.Message.IVideoEndCard, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.VideoEndCard
 		}
 		interface IVideoMessage {
 			url?: (string|null)
@@ -7254,8 +7296,8 @@ export namespace waproto {
 			public motionPhotoPresentationOffsetMs?: (number|Long|null)
 			public metadataUrl?: (string|null)
 			public videoSourceType?: (waproto.Message.VideoMessage.VideoSourceType|null)
-			public static encode(m: waproto.Message.IVideoMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Message.VideoMessage
+			public static encode(m: waproto.Message.IVideoMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.VideoMessage
 		}
 		namespace VideoMessage {
 			enum Attribution {
@@ -7290,8 +7332,8 @@ export namespace waproto {
 		public addOnContextInfo?: (waproto.IMessageAddOnContextInfo|null)
 		public messageAddOnKey?: (waproto.IMessageKey|null)
 		public legacyMessage?: (waproto.ILegacyMessage|null)
-		public static encode(m: waproto.IMessageAddOn, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MessageAddOn
+		public static encode(m: waproto.IMessageAddOn, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageAddOn
 	}
 	namespace MessageAddOn {
 		enum MessageAddOnType {
@@ -7310,8 +7352,8 @@ export namespace waproto {
 		constructor(p?: waproto.IMessageAddOnContextInfo)
 		public messageAddOnDurationInSecs?: (number|null)
 		public messageAddOnExpiryType?: (waproto.MessageContextInfo.MessageAddonExpiryType|null)
-		public static encode(m: waproto.IMessageAddOnContextInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MessageAddOnContextInfo
+		public static encode(m: waproto.IMessageAddOnContextInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageAddOnContextInfo
 	}
 	interface IMessageAssociation {
 		associationType?: (waproto.MessageAssociation.AssociationType|null)
@@ -7323,8 +7365,8 @@ export namespace waproto {
 		public associationType?: (waproto.MessageAssociation.AssociationType|null)
 		public parentMessageKey?: (waproto.IMessageKey|null)
 		public messageIndex?: (number|null)
-		public static encode(m: waproto.IMessageAssociation, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MessageAssociation
+		public static encode(m: waproto.IMessageAssociation, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageAssociation
 	}
 	namespace MessageAssociation {
 		enum AssociationType {
@@ -7387,8 +7429,8 @@ export namespace waproto {
 		public limitSharingV2?: (waproto.ILimitSharing|null)
 		public threadId: waproto.IThreadID[]
 		public weblinkRenderConfig?: (waproto.WebLinkRenderConfig|null)
-		public static encode(m: waproto.IMessageContextInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MessageContextInfo
+		public static encode(m: waproto.IMessageContextInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageContextInfo
 	}
 	namespace MessageContextInfo {
 		enum MessageAddonExpiryType {
@@ -7408,8 +7450,8 @@ export namespace waproto {
 		public fromMe?: (boolean|null)
 		public id?: (string|null)
 		public participant?: (string|null)
-		public static encode(m: waproto.IMessageKey, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MessageKey
+		public static encode(m: waproto.IMessageKey, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageKey
 	}
 	interface IMessageSecretMessage {
 		version?: (number|null)
@@ -7421,8 +7463,8 @@ export namespace waproto {
 		public version?: (number|null)
 		public encIv?: (Uint8Array|null)
 		public encPayload?: (Uint8Array|null)
-		public static encode(m: waproto.IMessageSecretMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MessageSecretMessage
+		public static encode(m: waproto.IMessageSecretMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageSecretMessage
 	}
 	interface IMoney {
 		value?: (number|Long|null)
@@ -7434,8 +7476,8 @@ export namespace waproto {
 		public value?: (number|Long|null)
 		public offset?: (number|null)
 		public currencyCode?: (string|null)
-		public static encode(m: waproto.IMoney, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Money
+		public static encode(m: waproto.IMoney, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Money
 	}
 	interface IMsgOpaqueData {
 		body?: (string|null)
@@ -7535,8 +7577,8 @@ export namespace waproto {
 		public pollEndTime?: (number|Long|null)
 		public pollHideVoterNames?: (boolean|null)
 		public pollAllowAddOption?: (boolean|null)
-		public static encode(m: waproto.IMsgOpaqueData, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MsgOpaqueData
+		public static encode(m: waproto.IMsgOpaqueData, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgOpaqueData
 	}
 	namespace MsgOpaqueData {
 		interface IEventLocation {
@@ -7555,8 +7597,8 @@ export namespace waproto {
 			public address?: (string|null)
 			public url?: (string|null)
 			public jpegThumbnail?: (Uint8Array|null)
-			public static encode(m: waproto.MsgOpaqueData.IEventLocation, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MsgOpaqueData.EventLocation
+			public static encode(m: waproto.MsgOpaqueData.IEventLocation, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgOpaqueData.EventLocation
 		}
 		enum PollContentType {
 			UNKNOWN = 0,
@@ -7571,8 +7613,8 @@ export namespace waproto {
 			constructor(p?: waproto.MsgOpaqueData.IPollOption)
 			public name?: (string|null)
 			public hash?: (string|null)
-			public static encode(m: waproto.MsgOpaqueData.IPollOption, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MsgOpaqueData.PollOption
+			public static encode(m: waproto.MsgOpaqueData.IPollOption, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgOpaqueData.PollOption
 		}
 		enum PollType {
 			POLL = 0,
@@ -7586,8 +7628,8 @@ export namespace waproto {
 			constructor(p?: waproto.MsgOpaqueData.IPollVoteSnapshot)
 			public option?: (waproto.MsgOpaqueData.IPollOption|null)
 			public optionVoteCount?: (number|null)
-			public static encode(m: waproto.MsgOpaqueData.IPollVoteSnapshot, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MsgOpaqueData.PollVoteSnapshot
+			public static encode(m: waproto.MsgOpaqueData.IPollVoteSnapshot, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgOpaqueData.PollVoteSnapshot
 		}
 		interface IPollVotesSnapshot {
 			pollVotes?: (waproto.MsgOpaqueData.IPollVoteSnapshot[]|null)
@@ -7595,8 +7637,8 @@ export namespace waproto {
 		class PollVotesSnapshot implements IPollVotesSnapshot {
 			constructor(p?: waproto.MsgOpaqueData.IPollVotesSnapshot)
 			public pollVotes: waproto.MsgOpaqueData.IPollVoteSnapshot[]
-			public static encode(m: waproto.MsgOpaqueData.IPollVotesSnapshot, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MsgOpaqueData.PollVotesSnapshot
+			public static encode(m: waproto.MsgOpaqueData.IPollVotesSnapshot, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgOpaqueData.PollVotesSnapshot
 		}
 	}
 	interface IMsgRowOpaqueData {
@@ -7607,8 +7649,8 @@ export namespace waproto {
 		constructor(p?: waproto.IMsgRowOpaqueData)
 		public currentMsg?: (waproto.IMsgOpaqueData|null)
 		public quotedMsg?: (waproto.IMsgOpaqueData|null)
-		public static encode(m: waproto.IMsgRowOpaqueData, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.MsgRowOpaqueData
+		public static encode(m: waproto.IMsgRowOpaqueData, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MsgRowOpaqueData
 	}
 	enum MutationProps {
 		STAR_ACTION = 2,
@@ -7700,8 +7742,8 @@ export namespace waproto {
 		constructor(p?: waproto.INoiseCertificate)
 		public details?: (Uint8Array|null)
 		public signature?: (Uint8Array|null)
-		public static encode(m: waproto.INoiseCertificate, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.NoiseCertificate
+		public static encode(m: waproto.INoiseCertificate, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.NoiseCertificate
 	}
 	namespace NoiseCertificate {
 		interface IDetails {
@@ -7718,8 +7760,8 @@ export namespace waproto {
 			public expires?: (number|Long|null)
 			public subject?: (string|null)
 			public key?: (Uint8Array|null)
-			public static encode(m: waproto.NoiseCertificate.IDetails, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.NoiseCertificate.Details
+			public static encode(m: waproto.NoiseCertificate.IDetails, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.NoiseCertificate.Details
 		}
 	}
 	interface INotificationMessageInfo {
@@ -7734,8 +7776,8 @@ export namespace waproto {
 		public message?: (waproto.IMessage|null)
 		public messageTimestamp?: (number|Long|null)
 		public participant?: (string|null)
-		public static encode(m: waproto.INotificationMessageInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.NotificationMessageInfo
+		public static encode(m: waproto.INotificationMessageInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.NotificationMessageInfo
 	}
 	interface INotificationSettings {
 		messageVibrate?: (string|null)
@@ -7753,8 +7795,8 @@ export namespace waproto {
 		public lowPriorityNotifications?: (boolean|null)
 		public reactionsMuted?: (boolean|null)
 		public callVibrate?: (string|null)
-		public static encode(m: waproto.INotificationSettings, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.NotificationSettings
+		public static encode(m: waproto.INotificationSettings, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.NotificationSettings
 	}
 	interface IPairingRequest {
 		companionPublicKey?: (Uint8Array|null)
@@ -7766,8 +7808,8 @@ export namespace waproto {
 		public companionPublicKey?: (Uint8Array|null)
 		public companionIdentityKey?: (Uint8Array|null)
 		public advSecret?: (Uint8Array|null)
-		public static encode(m: waproto.IPairingRequest, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PairingRequest
+		public static encode(m: waproto.IPairingRequest, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PairingRequest
 	}
 	interface IPastParticipant {
 		userJid?: (string|null)
@@ -7779,8 +7821,8 @@ export namespace waproto {
 		public userJid?: (string|null)
 		public leaveReason?: (waproto.PastParticipant.LeaveReason|null)
 		public leaveTs?: (number|Long|null)
-		public static encode(m: waproto.IPastParticipant, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PastParticipant
+		public static encode(m: waproto.IPastParticipant, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PastParticipant
 	}
 	namespace PastParticipant {
 		enum LeaveReason {
@@ -7796,8 +7838,8 @@ export namespace waproto {
 		constructor(p?: waproto.IPastParticipants)
 		public groupJid?: (string|null)
 		public pastParticipants: waproto.IPastParticipant[]
-		public static encode(m: waproto.IPastParticipants, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PastParticipants
+		public static encode(m: waproto.IPastParticipants, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PastParticipants
 	}
 	interface IPatchDebugData {
 		currentLthash?: (Uint8Array|null)
@@ -7825,8 +7867,8 @@ export namespace waproto {
 		public numberOverride?: (number|null)
 		public senderPlatform?: (waproto.PatchDebugData.Platform|null)
 		public isSenderPrimary?: (boolean|null)
-		public static encode(m: waproto.IPatchDebugData, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PatchDebugData
+		public static encode(m: waproto.IPatchDebugData, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PatchDebugData
 	}
 	namespace PatchDebugData {
 		enum Platform {
@@ -7868,8 +7910,8 @@ export namespace waproto {
 		public subtextArgb?: (number|null)
 		public mediaData?: (waproto.PaymentBackground.IMediaData|null)
 		public type?: (waproto.PaymentBackground.Type|null)
-		public static encode(m: waproto.IPaymentBackground, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PaymentBackground
+		public static encode(m: waproto.IPaymentBackground, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PaymentBackground
 	}
 	namespace PaymentBackground {
 		interface IMediaData {
@@ -7886,8 +7928,8 @@ export namespace waproto {
 			public fileSha256?: (Uint8Array|null)
 			public fileEncSha256?: (Uint8Array|null)
 			public directPath?: (string|null)
-			public static encode(m: waproto.PaymentBackground.IMediaData, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PaymentBackground.MediaData
+			public static encode(m: waproto.PaymentBackground.IMediaData, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PaymentBackground.MediaData
 		}
 		enum Type {
 			UNKNOWN = 0,
@@ -7924,8 +7966,8 @@ export namespace waproto {
 		public useNoviFiatFormat?: (boolean|null)
 		public primaryAmount?: (waproto.IMoney|null)
 		public exchangeAmount?: (waproto.IMoney|null)
-		public static encode(m: waproto.IPaymentInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PaymentInfo
+		public static encode(m: waproto.IPaymentInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PaymentInfo
 	}
 	namespace PaymentInfo {
 		enum Currency {
@@ -7989,8 +8031,8 @@ export namespace waproto {
 		constructor(p?: waproto.IPhoneNumberToLIDMapping)
 		public pnJid?: (string|null)
 		public lidJid?: (string|null)
-		public static encode(m: waproto.IPhoneNumberToLIDMapping, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PhoneNumberToLIDMapping
+		public static encode(m: waproto.IPhoneNumberToLIDMapping, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PhoneNumberToLIDMapping
 	}
 	interface IPhotoChange {
 		oldPhoto?: (Uint8Array|null)
@@ -8002,8 +8044,8 @@ export namespace waproto {
 		public oldPhoto?: (Uint8Array|null)
 		public newPhoto?: (Uint8Array|null)
 		public newPhotoId?: (number|null)
-		public static encode(m: waproto.IPhotoChange, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PhotoChange
+		public static encode(m: waproto.IPhotoChange, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PhotoChange
 	}
 	interface IPinInChat {
 		type?: (waproto.PinInChat.Type|null)
@@ -8019,8 +8061,8 @@ export namespace waproto {
 		public senderTimestampMs?: (number|Long|null)
 		public serverTimestampMs?: (number|Long|null)
 		public messageAddOnContextInfo?: (waproto.IMessageAddOnContextInfo|null)
-		public static encode(m: waproto.IPinInChat, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PinInChat
+		public static encode(m: waproto.IPinInChat, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PinInChat
 	}
 	namespace PinInChat {
 		enum Type {
@@ -8041,8 +8083,8 @@ export namespace waproto {
 		public yDeprecated?: (number|null)
 		public x?: (number|null)
 		public y?: (number|null)
-		public static encode(m: waproto.IPoint, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Point
+		public static encode(m: waproto.IPoint, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Point
 	}
 	interface IPollAdditionalMetadata {
 		pollInvalidated?: (boolean|null)
@@ -8050,8 +8092,8 @@ export namespace waproto {
 	class PollAdditionalMetadata implements IPollAdditionalMetadata {
 		constructor(p?: waproto.IPollAdditionalMetadata)
 		public pollInvalidated?: (boolean|null)
-		public static encode(m: waproto.IPollAdditionalMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PollAdditionalMetadata
+		public static encode(m: waproto.IPollAdditionalMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PollAdditionalMetadata
 	}
 	interface IPollEncValue {
 		encPayload?: (Uint8Array|null)
@@ -8061,8 +8103,8 @@ export namespace waproto {
 		constructor(p?: waproto.IPollEncValue)
 		public encPayload?: (Uint8Array|null)
 		public encIv?: (Uint8Array|null)
-		public static encode(m: waproto.IPollEncValue, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PollEncValue
+		public static encode(m: waproto.IPollEncValue, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PollEncValue
 	}
 	interface IPollUpdate {
 		pollUpdateMessageKey?: (waproto.IMessageKey|null)
@@ -8078,8 +8120,8 @@ export namespace waproto {
 		public senderTimestampMs?: (number|Long|null)
 		public serverTimestampMs?: (number|Long|null)
 		public unread?: (boolean|null)
-		public static encode(m: waproto.IPollUpdate, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PollUpdate
+		public static encode(m: waproto.IPollUpdate, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PollUpdate
 	}
 	interface IPreKeyRecordStructure {
 		id?: (number|null)
@@ -8091,8 +8133,8 @@ export namespace waproto {
 		public id?: (number|null)
 		public publicKey?: (Uint8Array|null)
 		public privateKey?: (Uint8Array|null)
-		public static encode(m: waproto.IPreKeyRecordStructure, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PreKeyRecordStructure
+		public static encode(m: waproto.IPreKeyRecordStructure, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PreKeyRecordStructure
 	}
 	interface IPreKeySignalMessage {
 		registrationId?: (number|null)
@@ -8110,8 +8152,8 @@ export namespace waproto {
 		public baseKey?: (Uint8Array|null)
 		public identityKey?: (Uint8Array|null)
 		public message?: (Uint8Array|null)
-		public static encode(m: waproto.IPreKeySignalMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PreKeySignalMessage
+		public static encode(m: waproto.IPreKeySignalMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PreKeySignalMessage
 	}
 	interface IPremiumMessageInfo {
 		serverCampaignId?: (string|null)
@@ -8119,8 +8161,8 @@ export namespace waproto {
 	class PremiumMessageInfo implements IPremiumMessageInfo {
 		constructor(p?: waproto.IPremiumMessageInfo)
 		public serverCampaignId?: (string|null)
-		public static encode(m: waproto.IPremiumMessageInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PremiumMessageInfo
+		public static encode(m: waproto.IPremiumMessageInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PremiumMessageInfo
 	}
 	interface IPrimaryEphemeralIdentity {
 		publicKey?: (Uint8Array|null)
@@ -8130,8 +8172,8 @@ export namespace waproto {
 		constructor(p?: waproto.IPrimaryEphemeralIdentity)
 		public publicKey?: (Uint8Array|null)
 		public nonce?: (Uint8Array|null)
-		public static encode(m: waproto.IPrimaryEphemeralIdentity, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.PrimaryEphemeralIdentity
+		public static encode(m: waproto.IPrimaryEphemeralIdentity, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.PrimaryEphemeralIdentity
 	}
 	enum PrivacySystemMessage {
 		E2EE_MSG = 1,
@@ -8158,8 +8200,8 @@ export namespace waproto {
 		public bitrate?: (number|null)
 		public quality?: (waproto.ProcessedVideo.VideoQuality|null)
 		public capabilities: string[]
-		public static encode(m: waproto.IProcessedVideo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ProcessedVideo
+		public static encode(m: waproto.IProcessedVideo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ProcessedVideo
 	}
 	namespace ProcessedVideo {
 		enum VideoQuality {
@@ -8177,8 +8219,8 @@ export namespace waproto {
 		constructor(p?: waproto.IProloguePayload)
 		public companionEphemeralIdentity?: (Uint8Array|null)
 		public commitment?: (waproto.ICompanionCommitment|null)
-		public static encode(m: waproto.IProloguePayload, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ProloguePayload
+		public static encode(m: waproto.IProloguePayload, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ProloguePayload
 	}
 	interface IPushname {
 		id?: (string|null)
@@ -8188,8 +8230,8 @@ export namespace waproto {
 		constructor(p?: waproto.IPushname)
 		public id?: (string|null)
 		public pushname?: (string|null)
-		public static encode(m: waproto.IPushname, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Pushname
+		public static encode(m: waproto.IPushname, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Pushname
 	}
 	interface IQuarantinedMessage {
 		originalData?: (Uint8Array|null)
@@ -8199,8 +8241,8 @@ export namespace waproto {
 		constructor(p?: waproto.IQuarantinedMessage)
 		public originalData?: (Uint8Array|null)
 		public extractedText?: (string|null)
-		public static encode(m: waproto.IQuarantinedMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.QuarantinedMessage
+		public static encode(m: waproto.IQuarantinedMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.QuarantinedMessage
 	}
 	interface IReaction {
 		key?: (waproto.IMessageKey|null)
@@ -8216,8 +8258,8 @@ export namespace waproto {
 		public groupingKey?: (string|null)
 		public senderTimestampMs?: (number|Long|null)
 		public unread?: (boolean|null)
-		public static encode(m: waproto.IReaction, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Reaction
+		public static encode(m: waproto.IReaction, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Reaction
 	}
 	interface IRecentEmojiWeight {
 		emoji?: (string|null)
@@ -8227,8 +8269,8 @@ export namespace waproto {
 		constructor(p?: waproto.IRecentEmojiWeight)
 		public emoji?: (string|null)
 		public weight?: (number|null)
-		public static encode(m: waproto.IRecentEmojiWeight, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.RecentEmojiWeight
+		public static encode(m: waproto.IRecentEmojiWeight, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.RecentEmojiWeight
 	}
 	interface IRecordStructure {
 		currentSession?: (waproto.ISessionStructure|null)
@@ -8238,8 +8280,8 @@ export namespace waproto {
 		constructor(p?: waproto.IRecordStructure)
 		public currentSession?: (waproto.ISessionStructure|null)
 		public previousSessions: waproto.ISessionStructure[]
-		public static encode(m: waproto.IRecordStructure, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.RecordStructure
+		public static encode(m: waproto.IRecordStructure, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.RecordStructure
 	}
 	interface IReportable {
 		minVersion?: (number|null)
@@ -8253,8 +8295,8 @@ export namespace waproto {
 		public maxVersion?: (number|null)
 		public notReportableMinVersion?: (number|null)
 		public never?: (boolean|null)
-		public static encode(m: waproto.IReportable, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.Reportable
+		public static encode(m: waproto.IReportable, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Reportable
 	}
 	interface IReportingTokenInfo {
 		reportingTag?: (Uint8Array|null)
@@ -8262,8 +8304,8 @@ export namespace waproto {
 	class ReportingTokenInfo implements IReportingTokenInfo {
 		constructor(p?: waproto.IReportingTokenInfo)
 		public reportingTag?: (Uint8Array|null)
-		public static encode(m: waproto.IReportingTokenInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ReportingTokenInfo
+		public static encode(m: waproto.IReportingTokenInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ReportingTokenInfo
 	}
 	interface ISenderKeyDistributionMessage {
 		id?: (number|null)
@@ -8277,8 +8319,8 @@ export namespace waproto {
 		public iteration?: (number|null)
 		public chainKey?: (Uint8Array|null)
 		public signingKey?: (Uint8Array|null)
-		public static encode(m: waproto.ISenderKeyDistributionMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SenderKeyDistributionMessage
+		public static encode(m: waproto.ISenderKeyDistributionMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SenderKeyDistributionMessage
 	}
 	interface ISenderKeyMessage {
 		id?: (number|null)
@@ -8290,8 +8332,8 @@ export namespace waproto {
 		public id?: (number|null)
 		public iteration?: (number|null)
 		public ciphertext?: (Uint8Array|null)
-		public static encode(m: waproto.ISenderKeyMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SenderKeyMessage
+		public static encode(m: waproto.ISenderKeyMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SenderKeyMessage
 	}
 	interface ISenderKeyRecordStructure {
 		senderKeyStates?: (waproto.ISenderKeyStateStructure[]|null)
@@ -8299,8 +8341,8 @@ export namespace waproto {
 	class SenderKeyRecordStructure implements ISenderKeyRecordStructure {
 		constructor(p?: waproto.ISenderKeyRecordStructure)
 		public senderKeyStates: waproto.ISenderKeyStateStructure[]
-		public static encode(m: waproto.ISenderKeyRecordStructure, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SenderKeyRecordStructure
+		public static encode(m: waproto.ISenderKeyRecordStructure, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SenderKeyRecordStructure
 	}
 	interface ISenderKeyStateStructure {
 		senderKeyId?: (number|null)
@@ -8314,8 +8356,8 @@ export namespace waproto {
 		public senderChainKey?: (waproto.SenderKeyStateStructure.ISenderChainKey|null)
 		public senderSigningKey?: (waproto.SenderKeyStateStructure.ISenderSigningKey|null)
 		public senderMessageKeys: waproto.SenderKeyStateStructure.ISenderMessageKey[]
-		public static encode(m: waproto.ISenderKeyStateStructure, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SenderKeyStateStructure
+		public static encode(m: waproto.ISenderKeyStateStructure, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SenderKeyStateStructure
 	}
 	namespace SenderKeyStateStructure {
 		interface ISenderChainKey {
@@ -8326,8 +8368,8 @@ export namespace waproto {
 			constructor(p?: waproto.SenderKeyStateStructure.ISenderChainKey)
 			public iteration?: (number|null)
 			public seed?: (Uint8Array|null)
-			public static encode(m: waproto.SenderKeyStateStructure.ISenderChainKey, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SenderKeyStateStructure.SenderChainKey
+			public static encode(m: waproto.SenderKeyStateStructure.ISenderChainKey, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SenderKeyStateStructure.SenderChainKey
 		}
 		interface ISenderMessageKey {
 			iteration?: (number|null)
@@ -8337,8 +8379,8 @@ export namespace waproto {
 			constructor(p?: waproto.SenderKeyStateStructure.ISenderMessageKey)
 			public iteration?: (number|null)
 			public seed?: (Uint8Array|null)
-			public static encode(m: waproto.SenderKeyStateStructure.ISenderMessageKey, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SenderKeyStateStructure.SenderMessageKey
+			public static encode(m: waproto.SenderKeyStateStructure.ISenderMessageKey, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SenderKeyStateStructure.SenderMessageKey
 		}
 		interface ISenderSigningKey {
 			"public"?: (Uint8Array|null)
@@ -8348,8 +8390,8 @@ export namespace waproto {
 			constructor(p?: waproto.SenderKeyStateStructure.ISenderSigningKey)
 			public public?: (Uint8Array|null)
 			public private?: (Uint8Array|null)
-			public static encode(m: waproto.SenderKeyStateStructure.ISenderSigningKey, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SenderKeyStateStructure.SenderSigningKey
+			public static encode(m: waproto.SenderKeyStateStructure.ISenderSigningKey, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SenderKeyStateStructure.SenderSigningKey
 		}
 	}
 	interface IServerErrorReceipt {
@@ -8358,8 +8400,8 @@ export namespace waproto {
 	class ServerErrorReceipt implements IServerErrorReceipt {
 		constructor(p?: waproto.IServerErrorReceipt)
 		public stanzaId?: (string|null)
-		public static encode(m: waproto.IServerErrorReceipt, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ServerErrorReceipt
+		public static encode(m: waproto.IServerErrorReceipt, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ServerErrorReceipt
 	}
 	interface ISessionStructure {
 		sessionVersion?: (number|null)
@@ -8391,8 +8433,8 @@ export namespace waproto {
 		public localRegistrationId?: (number|null)
 		public needsRefresh?: (boolean|null)
 		public aliceBaseKey?: (Uint8Array|null)
-		public static encode(m: waproto.ISessionStructure, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SessionStructure
+		public static encode(m: waproto.ISessionStructure, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SessionStructure
 	}
 	namespace SessionStructure {
 		interface IChain {
@@ -8407,8 +8449,8 @@ export namespace waproto {
 			public senderRatchetKeyPrivate?: (Uint8Array|null)
 			public chainKey?: (waproto.SessionStructure.Chain.IChainKey|null)
 			public messageKeys: waproto.SessionStructure.Chain.IMessageKey[]
-			public static encode(m: waproto.SessionStructure.IChain, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SessionStructure.Chain
+			public static encode(m: waproto.SessionStructure.IChain, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SessionStructure.Chain
 		}
 		namespace Chain {
 			interface IChainKey {
@@ -8419,8 +8461,8 @@ export namespace waproto {
 				constructor(p?: waproto.SessionStructure.Chain.IChainKey)
 				public index?: (number|null)
 				public key?: (Uint8Array|null)
-				public static encode(m: waproto.SessionStructure.Chain.IChainKey, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SessionStructure.Chain.ChainKey
+				public static encode(m: waproto.SessionStructure.Chain.IChainKey, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SessionStructure.Chain.ChainKey
 			}
 			interface IMessageKey {
 				index?: (number|null)
@@ -8434,8 +8476,8 @@ export namespace waproto {
 				public cipherKey?: (Uint8Array|null)
 				public macKey?: (Uint8Array|null)
 				public iv?: (Uint8Array|null)
-				public static encode(m: waproto.SessionStructure.Chain.IMessageKey, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SessionStructure.Chain.MessageKey
+				public static encode(m: waproto.SessionStructure.Chain.IMessageKey, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SessionStructure.Chain.MessageKey
 			}
 		}
 		interface IPendingKeyExchange {
@@ -8456,8 +8498,8 @@ export namespace waproto {
 			public localRatchetKeyPrivate?: (Uint8Array|null)
 			public localIdentityKey?: (Uint8Array|null)
 			public localIdentityKeyPrivate?: (Uint8Array|null)
-			public static encode(m: waproto.SessionStructure.IPendingKeyExchange, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SessionStructure.PendingKeyExchange
+			public static encode(m: waproto.SessionStructure.IPendingKeyExchange, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SessionStructure.PendingKeyExchange
 		}
 		interface IPendingPreKey {
 			preKeyId?: (number|null)
@@ -8469,8 +8511,8 @@ export namespace waproto {
 			public preKeyId?: (number|null)
 			public signedPreKeyId?: (number|null)
 			public baseKey?: (Uint8Array|null)
-			public static encode(m: waproto.SessionStructure.IPendingPreKey, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SessionStructure.PendingPreKey
+			public static encode(m: waproto.SessionStructure.IPendingPreKey, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SessionStructure.PendingPreKey
 		}
 	}
 	interface ISessionTransparencyMetadata {
@@ -8483,8 +8525,8 @@ export namespace waproto {
 		public disclaimerText?: (string|null)
 		public hcaId?: (string|null)
 		public sessionTransparencyType?: (waproto.SessionTransparencyType|null)
-		public static encode(m: waproto.ISessionTransparencyMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SessionTransparencyMetadata
+		public static encode(m: waproto.ISessionTransparencyMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SessionTransparencyMetadata
 	}
 	enum SessionTransparencyType {
 		UNKNOWN_TYPE = 0,
@@ -8502,8 +8544,8 @@ export namespace waproto {
 		public counter?: (number|null)
 		public previousCounter?: (number|null)
 		public ciphertext?: (Uint8Array|null)
-		public static encode(m: waproto.ISignalMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SignalMessage
+		public static encode(m: waproto.ISignalMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SignalMessage
 	}
 	interface ISignedPreKeyRecordStructure {
 		id?: (number|null)
@@ -8519,8 +8561,8 @@ export namespace waproto {
 		public privateKey?: (Uint8Array|null)
 		public signature?: (Uint8Array|null)
 		public timestamp?: (number|Long|null)
-		public static encode(m: waproto.ISignedPreKeyRecordStructure, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SignedPreKeyRecordStructure
+		public static encode(m: waproto.ISignedPreKeyRecordStructure, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SignedPreKeyRecordStructure
 	}
 	interface IStatusAttribution {
 		type?: (waproto.StatusAttribution.Type|null)
@@ -8543,8 +8585,8 @@ export namespace waproto {
 		public rlAttribution?: (waproto.StatusAttribution.IRLAttribution|null)
 		public aiCreatedAttribution?: (waproto.StatusAttribution.IAiCreatedAttribution|null)
 		public attributionData?: ("statusReshare"|"externalShare"|"music"|"groupStatus"|"rlAttribution"|"aiCreatedAttribution")
-		public static encode(m: waproto.IStatusAttribution, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StatusAttribution
+		public static encode(m: waproto.IStatusAttribution, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusAttribution
 	}
 	namespace StatusAttribution {
 		interface IAiCreatedAttribution {
@@ -8553,8 +8595,8 @@ export namespace waproto {
 		class AiCreatedAttribution implements IAiCreatedAttribution {
 			constructor(p?: waproto.StatusAttribution.IAiCreatedAttribution)
 			public source?: (waproto.StatusAttribution.AiCreatedAttribution.Source|null)
-			public static encode(m: waproto.StatusAttribution.IAiCreatedAttribution, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StatusAttribution.AiCreatedAttribution
+			public static encode(m: waproto.StatusAttribution.IAiCreatedAttribution, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusAttribution.AiCreatedAttribution
 		}
 		namespace AiCreatedAttribution {
 			enum Source {
@@ -8574,8 +8616,8 @@ export namespace waproto {
 			public source?: (waproto.StatusAttribution.ExternalShare.Source|null)
 			public duration?: (number|null)
 			public actionFallbackUrl?: (string|null)
-			public static encode(m: waproto.StatusAttribution.IExternalShare, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StatusAttribution.ExternalShare
+			public static encode(m: waproto.StatusAttribution.IExternalShare, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusAttribution.ExternalShare
 		}
 		namespace ExternalShare {
 			enum Source {
@@ -8598,8 +8640,8 @@ export namespace waproto {
 		class GroupStatus implements IGroupStatus {
 			constructor(p?: waproto.StatusAttribution.IGroupStatus)
 			public authorJid?: (string|null)
-			public static encode(m: waproto.StatusAttribution.IGroupStatus, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StatusAttribution.GroupStatus
+			public static encode(m: waproto.StatusAttribution.IGroupStatus, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusAttribution.GroupStatus
 		}
 		interface IMusic {
 			authorName?: (string|null)
@@ -8617,8 +8659,8 @@ export namespace waproto {
 			public author?: (string|null)
 			public artistAttribution?: (string|null)
 			public isExplicit?: (boolean|null)
-			public static encode(m: waproto.StatusAttribution.IMusic, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StatusAttribution.Music
+			public static encode(m: waproto.StatusAttribution.IMusic, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusAttribution.Music
 		}
 		interface IRLAttribution {
 			source?: (waproto.StatusAttribution.RLAttribution.Source|null)
@@ -8626,8 +8668,8 @@ export namespace waproto {
 		class RLAttribution implements IRLAttribution {
 			constructor(p?: waproto.StatusAttribution.IRLAttribution)
 			public source?: (waproto.StatusAttribution.RLAttribution.Source|null)
-			public static encode(m: waproto.StatusAttribution.IRLAttribution, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StatusAttribution.RLAttribution
+			public static encode(m: waproto.StatusAttribution.IRLAttribution, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusAttribution.RLAttribution
 		}
 		namespace RLAttribution {
 			enum Source {
@@ -8645,8 +8687,8 @@ export namespace waproto {
 			constructor(p?: waproto.StatusAttribution.IStatusReshare)
 			public source?: (waproto.StatusAttribution.StatusReshare.Source|null)
 			public metadata?: (waproto.StatusAttribution.StatusReshare.IMetadata|null)
-			public static encode(m: waproto.StatusAttribution.IStatusReshare, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StatusAttribution.StatusReshare
+			public static encode(m: waproto.StatusAttribution.IStatusReshare, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusAttribution.StatusReshare
 		}
 		namespace StatusReshare {
 			interface IMetadata {
@@ -8661,8 +8703,8 @@ export namespace waproto {
 				public channelJid?: (string|null)
 				public channelMessageId?: (number|null)
 				public hasMultipleReshares?: (boolean|null)
-				public static encode(m: waproto.StatusAttribution.StatusReshare.IMetadata, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StatusAttribution.StatusReshare.Metadata
+				public static encode(m: waproto.StatusAttribution.StatusReshare.IMetadata, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusAttribution.StatusReshare.Metadata
 			}
 			enum Source {
 				UNKNOWN = 0,
@@ -8692,8 +8734,8 @@ export namespace waproto {
 	class StatusMentionMessage implements IStatusMentionMessage {
 		constructor(p?: waproto.IStatusMentionMessage)
 		public quotedStatus?: (waproto.IMessage|null)
-		public static encode(m: waproto.IStatusMentionMessage, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StatusMentionMessage
+		public static encode(m: waproto.IStatusMentionMessage, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusMentionMessage
 	}
 	interface IStatusPSA {
 		campaignId?: (number|Long|null)
@@ -8703,8 +8745,8 @@ export namespace waproto {
 		constructor(p?: waproto.IStatusPSA)
 		public campaignId?: (number|Long|null)
 		public campaignExpirationTimestamp?: (number|Long|null)
-		public static encode(m: waproto.IStatusPSA, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StatusPSA
+		public static encode(m: waproto.IStatusPSA, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StatusPSA
 	}
 	interface IStickerMetadata {
 		url?: (string|null)
@@ -8738,8 +8780,8 @@ export namespace waproto {
 		public isLottie?: (boolean|null)
 		public imageHash?: (string|null)
 		public isAvatarSticker?: (boolean|null)
-		public static encode(m: waproto.IStickerMetadata, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.StickerMetadata
+		public static encode(m: waproto.IStickerMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StickerMetadata
 	}
 	interface ISyncActionData {
 		index?: (Uint8Array|null)
@@ -8753,8 +8795,8 @@ export namespace waproto {
 		public value?: (waproto.ISyncActionValue|null)
 		public padding?: (Uint8Array|null)
 		public version?: (number|null)
-		public static encode(m: waproto.ISyncActionData, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionData
+		public static encode(m: waproto.ISyncActionData, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionData
 	}
 	interface ISyncActionValue {
 		timestamp?: (number|Long|null)
@@ -8908,8 +8950,8 @@ export namespace waproto {
 		public businessBroadcastCampaignAction?: (waproto.SyncActionValue.IBusinessBroadcastCampaignAction|null)
 		public businessBroadcastInsightsAction?: (waproto.SyncActionValue.IBusinessBroadcastInsightsAction|null)
 		public customerDataAction?: (waproto.SyncActionValue.ICustomerDataAction|null)
-		public static encode(m: waproto.ISyncActionValue, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue
+		public static encode(m: waproto.ISyncActionValue, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue
 	}
 	namespace SyncActionValue {
 		interface IAgentAction {
@@ -8922,8 +8964,8 @@ export namespace waproto {
 			public name?: (string|null)
 			public deviceID?: (number|null)
 			public isDeleted?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IAgentAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.AgentAction
+			public static encode(m: waproto.SyncActionValue.IAgentAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.AgentAction
 		}
 		interface IAiThreadRenameAction {
 			newTitle?: (string|null)
@@ -8931,8 +8973,8 @@ export namespace waproto {
 		class AiThreadRenameAction implements IAiThreadRenameAction {
 			constructor(p?: waproto.SyncActionValue.IAiThreadRenameAction)
 			public newTitle?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IAiThreadRenameAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.AiThreadRenameAction
+			public static encode(m: waproto.SyncActionValue.IAiThreadRenameAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.AiThreadRenameAction
 		}
 		interface IAndroidUnsupportedActions {
 			allowed?: (boolean|null)
@@ -8940,8 +8982,8 @@ export namespace waproto {
 		class AndroidUnsupportedActions implements IAndroidUnsupportedActions {
 			constructor(p?: waproto.SyncActionValue.IAndroidUnsupportedActions)
 			public allowed?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IAndroidUnsupportedActions, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.AndroidUnsupportedActions
+			public static encode(m: waproto.SyncActionValue.IAndroidUnsupportedActions, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.AndroidUnsupportedActions
 		}
 		interface IArchiveChatAction {
 			archived?: (boolean|null)
@@ -8951,8 +8993,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.IArchiveChatAction)
 			public archived?: (boolean|null)
 			public messageRange?: (waproto.SyncActionValue.ISyncActionMessageRange|null)
-			public static encode(m: waproto.SyncActionValue.IArchiveChatAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.ArchiveChatAction
+			public static encode(m: waproto.SyncActionValue.IArchiveChatAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ArchiveChatAction
 		}
 		interface IAvatarUpdatedAction {
 			eventType?: (waproto.SyncActionValue.AvatarUpdatedAction.AvatarEventType|null)
@@ -8962,8 +9004,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.IAvatarUpdatedAction)
 			public eventType?: (waproto.SyncActionValue.AvatarUpdatedAction.AvatarEventType|null)
 			public recentAvatarStickers: waproto.SyncActionValue.IStickerAction[]
-			public static encode(m: waproto.SyncActionValue.IAvatarUpdatedAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.AvatarUpdatedAction
+			public static encode(m: waproto.SyncActionValue.IAvatarUpdatedAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.AvatarUpdatedAction
 		}
 		namespace AvatarUpdatedAction {
 			enum AvatarEventType {
@@ -8978,8 +9020,8 @@ export namespace waproto {
 		class BotWelcomeRequestAction implements IBotWelcomeRequestAction {
 			constructor(p?: waproto.SyncActionValue.IBotWelcomeRequestAction)
 			public isSent?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IBotWelcomeRequestAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.BotWelcomeRequestAction
+			public static encode(m: waproto.SyncActionValue.IBotWelcomeRequestAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BotWelcomeRequestAction
 		}
 		interface IBroadcastListParticipant {
 			lidJid?: (string|null)
@@ -8989,8 +9031,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.IBroadcastListParticipant)
 			public lidJid?: (string|null)
 			public pnJid?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IBroadcastListParticipant, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.BroadcastListParticipant
+			public static encode(m: waproto.SyncActionValue.IBroadcastListParticipant, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BroadcastListParticipant
 		}
 		interface IBusinessBroadcastAssociationAction {
 			deleted?: (boolean|null)
@@ -8998,8 +9040,8 @@ export namespace waproto {
 		class BusinessBroadcastAssociationAction implements IBusinessBroadcastAssociationAction {
 			constructor(p?: waproto.SyncActionValue.IBusinessBroadcastAssociationAction)
 			public deleted?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IBusinessBroadcastAssociationAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessBroadcastAssociationAction
+			public static encode(m: waproto.SyncActionValue.IBusinessBroadcastAssociationAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessBroadcastAssociationAction
 		}
 		interface IBusinessBroadcastCampaignAction {
 			deviceId?: (number|null)
@@ -9023,8 +9065,8 @@ export namespace waproto {
 			public scheduledTimestamp?: (number|Long|null)
 			public createTimestamp?: (number|Long|null)
 			public status?: (waproto.SyncActionValue.BusinessBroadcastCampaignStatus|null)
-			public static encode(m: waproto.SyncActionValue.IBusinessBroadcastCampaignAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessBroadcastCampaignAction
+			public static encode(m: waproto.SyncActionValue.IBusinessBroadcastCampaignAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessBroadcastCampaignAction
 		}
 		enum BusinessBroadcastCampaignStatus {
 			DRAFT = 1,
@@ -9047,8 +9089,8 @@ export namespace waproto {
 			public readCount?: (number|null)
 			public repliedCount?: (number|null)
 			public quickReplyCount?: (number|null)
-			public static encode(m: waproto.SyncActionValue.IBusinessBroadcastInsightsAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessBroadcastInsightsAction
+			public static encode(m: waproto.SyncActionValue.IBusinessBroadcastInsightsAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessBroadcastInsightsAction
 		}
 		interface IBusinessBroadcastListAction {
 			deleted?: (boolean|null)
@@ -9062,8 +9104,8 @@ export namespace waproto {
 			public participants: waproto.SyncActionValue.IBroadcastListParticipant[]
 			public listName?: (string|null)
 			public labelIds: string[]
-			public static encode(m: waproto.SyncActionValue.IBusinessBroadcastListAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessBroadcastListAction
+			public static encode(m: waproto.SyncActionValue.IBusinessBroadcastListAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessBroadcastListAction
 		}
 		interface ICallLogAction {
 			callLogRecord?: (waproto.ICallLogRecord|null)
@@ -9071,8 +9113,8 @@ export namespace waproto {
 		class CallLogAction implements ICallLogAction {
 			constructor(p?: waproto.SyncActionValue.ICallLogAction)
 			public callLogRecord?: (waproto.ICallLogRecord|null)
-			public static encode(m: waproto.SyncActionValue.ICallLogAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.CallLogAction
+			public static encode(m: waproto.SyncActionValue.ICallLogAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.CallLogAction
 		}
 		interface IChatAssignmentAction {
 			deviceAgentID?: (string|null)
@@ -9080,8 +9122,8 @@ export namespace waproto {
 		class ChatAssignmentAction implements IChatAssignmentAction {
 			constructor(p?: waproto.SyncActionValue.IChatAssignmentAction)
 			public deviceAgentID?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IChatAssignmentAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.ChatAssignmentAction
+			public static encode(m: waproto.SyncActionValue.IChatAssignmentAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ChatAssignmentAction
 		}
 		interface IChatAssignmentOpenedStatusAction {
 			chatOpened?: (boolean|null)
@@ -9089,8 +9131,8 @@ export namespace waproto {
 		class ChatAssignmentOpenedStatusAction implements IChatAssignmentOpenedStatusAction {
 			constructor(p?: waproto.SyncActionValue.IChatAssignmentOpenedStatusAction)
 			public chatOpened?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IChatAssignmentOpenedStatusAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.ChatAssignmentOpenedStatusAction
+			public static encode(m: waproto.SyncActionValue.IChatAssignmentOpenedStatusAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ChatAssignmentOpenedStatusAction
 		}
 		interface IClearChatAction {
 			messageRange?: (waproto.SyncActionValue.ISyncActionMessageRange|null)
@@ -9098,8 +9140,8 @@ export namespace waproto {
 		class ClearChatAction implements IClearChatAction {
 			constructor(p?: waproto.SyncActionValue.IClearChatAction)
 			public messageRange?: (waproto.SyncActionValue.ISyncActionMessageRange|null)
-			public static encode(m: waproto.SyncActionValue.IClearChatAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.ClearChatAction
+			public static encode(m: waproto.SyncActionValue.IClearChatAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ClearChatAction
 		}
 		interface IContactAction {
 			fullName?: (string|null)
@@ -9117,8 +9159,8 @@ export namespace waproto {
 			public saveOnPrimaryAddressbook?: (boolean|null)
 			public pnJid?: (string|null)
 			public username?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IContactAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.ContactAction
+			public static encode(m: waproto.SyncActionValue.IContactAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ContactAction
 		}
 		interface ICtwaPerCustomerDataSharingAction {
 			isCtwaPerCustomerDataSharingEnabled?: (boolean|null)
@@ -9126,8 +9168,8 @@ export namespace waproto {
 		class CtwaPerCustomerDataSharingAction implements ICtwaPerCustomerDataSharingAction {
 			constructor(p?: waproto.SyncActionValue.ICtwaPerCustomerDataSharingAction)
 			public isCtwaPerCustomerDataSharingEnabled?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.ICtwaPerCustomerDataSharingAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.CtwaPerCustomerDataSharingAction
+			public static encode(m: waproto.SyncActionValue.ICtwaPerCustomerDataSharingAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.CtwaPerCustomerDataSharingAction
 		}
 		interface ICustomPaymentMethod {
 			credentialId?: (string|null)
@@ -9141,8 +9183,8 @@ export namespace waproto {
 			public country?: (string|null)
 			public type?: (string|null)
 			public metadata: waproto.SyncActionValue.ICustomPaymentMethodMetadata[]
-			public static encode(m: waproto.SyncActionValue.ICustomPaymentMethod, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.CustomPaymentMethod
+			public static encode(m: waproto.SyncActionValue.ICustomPaymentMethod, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.CustomPaymentMethod
 		}
 		interface ICustomPaymentMethodMetadata {
 			key?: (string|null)
@@ -9152,8 +9194,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.ICustomPaymentMethodMetadata)
 			public key?: (string|null)
 			public value?: (string|null)
-			public static encode(m: waproto.SyncActionValue.ICustomPaymentMethodMetadata, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.CustomPaymentMethodMetadata
+			public static encode(m: waproto.SyncActionValue.ICustomPaymentMethodMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.CustomPaymentMethodMetadata
 		}
 		interface ICustomPaymentMethodsAction {
 			customPaymentMethods?: (waproto.SyncActionValue.ICustomPaymentMethod[]|null)
@@ -9161,8 +9203,8 @@ export namespace waproto {
 		class CustomPaymentMethodsAction implements ICustomPaymentMethodsAction {
 			constructor(p?: waproto.SyncActionValue.ICustomPaymentMethodsAction)
 			public customPaymentMethods: waproto.SyncActionValue.ICustomPaymentMethod[]
-			public static encode(m: waproto.SyncActionValue.ICustomPaymentMethodsAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.CustomPaymentMethodsAction
+			public static encode(m: waproto.SyncActionValue.ICustomPaymentMethodsAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.CustomPaymentMethodsAction
 		}
 		interface ICustomerDataAction {
 			chatJid?: (string|null)
@@ -9190,8 +9232,8 @@ export namespace waproto {
 			public lastOrder?: (number|Long|null)
 			public createdAt?: (number|Long|null)
 			public modifiedAt?: (number|Long|null)
-			public static encode(m: waproto.SyncActionValue.ICustomerDataAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.CustomerDataAction
+			public static encode(m: waproto.SyncActionValue.ICustomerDataAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.CustomerDataAction
 		}
 		interface IDeleteChatAction {
 			messageRange?: (waproto.SyncActionValue.ISyncActionMessageRange|null)
@@ -9199,8 +9241,8 @@ export namespace waproto {
 		class DeleteChatAction implements IDeleteChatAction {
 			constructor(p?: waproto.SyncActionValue.IDeleteChatAction)
 			public messageRange?: (waproto.SyncActionValue.ISyncActionMessageRange|null)
-			public static encode(m: waproto.SyncActionValue.IDeleteChatAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.DeleteChatAction
+			public static encode(m: waproto.SyncActionValue.IDeleteChatAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.DeleteChatAction
 		}
 		interface IDeleteIndividualCallLogAction {
 			peerJid?: (string|null)
@@ -9210,8 +9252,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.IDeleteIndividualCallLogAction)
 			public peerJid?: (string|null)
 			public isIncoming?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IDeleteIndividualCallLogAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.DeleteIndividualCallLogAction
+			public static encode(m: waproto.SyncActionValue.IDeleteIndividualCallLogAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.DeleteIndividualCallLogAction
 		}
 		interface IDeleteMessageForMeAction {
 			deleteMedia?: (boolean|null)
@@ -9221,8 +9263,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.IDeleteMessageForMeAction)
 			public deleteMedia?: (boolean|null)
 			public messageTimestamp?: (number|Long|null)
-			public static encode(m: waproto.SyncActionValue.IDeleteMessageForMeAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.DeleteMessageForMeAction
+			public static encode(m: waproto.SyncActionValue.IDeleteMessageForMeAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.DeleteMessageForMeAction
 		}
 		interface IDetectedOutcomesStatusAction {
 			isEnabled?: (boolean|null)
@@ -9230,8 +9272,8 @@ export namespace waproto {
 		class DetectedOutcomesStatusAction implements IDetectedOutcomesStatusAction {
 			constructor(p?: waproto.SyncActionValue.IDetectedOutcomesStatusAction)
 			public isEnabled?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IDetectedOutcomesStatusAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.DetectedOutcomesStatusAction
+			public static encode(m: waproto.SyncActionValue.IDetectedOutcomesStatusAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.DetectedOutcomesStatusAction
 		}
 		interface IExternalWebBetaAction {
 			isOptIn?: (boolean|null)
@@ -9239,8 +9281,8 @@ export namespace waproto {
 		class ExternalWebBetaAction implements IExternalWebBetaAction {
 			constructor(p?: waproto.SyncActionValue.IExternalWebBetaAction)
 			public isOptIn?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IExternalWebBetaAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.ExternalWebBetaAction
+			public static encode(m: waproto.SyncActionValue.IExternalWebBetaAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ExternalWebBetaAction
 		}
 		interface IFavoritesAction {
 			favorites?: (waproto.SyncActionValue.FavoritesAction.IFavorite[]|null)
@@ -9248,8 +9290,8 @@ export namespace waproto {
 		class FavoritesAction implements IFavoritesAction {
 			constructor(p?: waproto.SyncActionValue.IFavoritesAction)
 			public favorites: waproto.SyncActionValue.FavoritesAction.IFavorite[]
-			public static encode(m: waproto.SyncActionValue.IFavoritesAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.FavoritesAction
+			public static encode(m: waproto.SyncActionValue.IFavoritesAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.FavoritesAction
 		}
 		namespace FavoritesAction {
 			interface IFavorite {
@@ -9258,8 +9300,8 @@ export namespace waproto {
 			class Favorite implements IFavorite {
 				constructor(p?: waproto.SyncActionValue.FavoritesAction.IFavorite)
 				public id?: (string|null)
-				public static encode(m: waproto.SyncActionValue.FavoritesAction.IFavorite, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.FavoritesAction.Favorite
+				public static encode(m: waproto.SyncActionValue.FavoritesAction.IFavorite, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.FavoritesAction.Favorite
 			}
 		}
 		interface IInteractiveMessageAction {
@@ -9270,8 +9312,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.IInteractiveMessageAction)
 			public type?: (waproto.SyncActionValue.InteractiveMessageAction.InteractiveMessageActionMode|null)
 			public agmId?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IInteractiveMessageAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.InteractiveMessageAction
+			public static encode(m: waproto.SyncActionValue.IInteractiveMessageAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.InteractiveMessageAction
 		}
 		namespace InteractiveMessageAction {
 			enum InteractiveMessageActionMode {
@@ -9284,8 +9326,8 @@ export namespace waproto {
 		class KeyExpiration implements IKeyExpiration {
 			constructor(p?: waproto.SyncActionValue.IKeyExpiration)
 			public expiredKeyEpoch?: (number|null)
-			public static encode(m: waproto.SyncActionValue.IKeyExpiration, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.KeyExpiration
+			public static encode(m: waproto.SyncActionValue.IKeyExpiration, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.KeyExpiration
 		}
 		interface ILabelAssociationAction {
 			labeled?: (boolean|null)
@@ -9293,8 +9335,8 @@ export namespace waproto {
 		class LabelAssociationAction implements ILabelAssociationAction {
 			constructor(p?: waproto.SyncActionValue.ILabelAssociationAction)
 			public labeled?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.ILabelAssociationAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.LabelAssociationAction
+			public static encode(m: waproto.SyncActionValue.ILabelAssociationAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.LabelAssociationAction
 		}
 		interface ILabelEditAction {
 			name?: (string|null)
@@ -9318,8 +9360,8 @@ export namespace waproto {
 			public type?: (waproto.SyncActionValue.LabelEditAction.ListType|null)
 			public isImmutable?: (boolean|null)
 			public muteEndTimeMs?: (number|Long|null)
-			public static encode(m: waproto.SyncActionValue.ILabelEditAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.LabelEditAction
+			public static encode(m: waproto.SyncActionValue.ILabelEditAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.LabelEditAction
 		}
 		namespace LabelEditAction {
 			enum ListType {
@@ -9342,8 +9384,8 @@ export namespace waproto {
 		class LabelReorderingAction implements ILabelReorderingAction {
 			constructor(p?: waproto.SyncActionValue.ILabelReorderingAction)
 			public sortedLabelIds: number[]
-			public static encode(m: waproto.SyncActionValue.ILabelReorderingAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.LabelReorderingAction
+			public static encode(m: waproto.SyncActionValue.ILabelReorderingAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.LabelReorderingAction
 		}
 		interface ILidContactAction {
 			fullName?: (string|null)
@@ -9355,8 +9397,8 @@ export namespace waproto {
 			public fullName?: (string|null)
 			public firstName?: (string|null)
 			public username?: (string|null)
-			public static encode(m: waproto.SyncActionValue.ILidContactAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.LidContactAction
+			public static encode(m: waproto.SyncActionValue.ILidContactAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.LidContactAction
 		}
 		interface ILocaleSetting {
 			locale?: (string|null)
@@ -9364,8 +9406,8 @@ export namespace waproto {
 		class LocaleSetting implements ILocaleSetting {
 			constructor(p?: waproto.SyncActionValue.ILocaleSetting)
 			public locale?: (string|null)
-			public static encode(m: waproto.SyncActionValue.ILocaleSetting, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.LocaleSetting
+			public static encode(m: waproto.SyncActionValue.ILocaleSetting, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.LocaleSetting
 		}
 		interface ILockChatAction {
 			locked?: (boolean|null)
@@ -9373,8 +9415,8 @@ export namespace waproto {
 		class LockChatAction implements ILockChatAction {
 			constructor(p?: waproto.SyncActionValue.ILockChatAction)
 			public locked?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.ILockChatAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.LockChatAction
+			public static encode(m: waproto.SyncActionValue.ILockChatAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.LockChatAction
 		}
 		interface IMaibaAIFeaturesControlAction {
 			aiFeatureStatus?: (waproto.SyncActionValue.MaibaAIFeaturesControlAction.MaibaAIFeatureStatus|null)
@@ -9382,8 +9424,8 @@ export namespace waproto {
 		class MaibaAIFeaturesControlAction implements IMaibaAIFeaturesControlAction {
 			constructor(p?: waproto.SyncActionValue.IMaibaAIFeaturesControlAction)
 			public aiFeatureStatus?: (waproto.SyncActionValue.MaibaAIFeaturesControlAction.MaibaAIFeatureStatus|null)
-			public static encode(m: waproto.SyncActionValue.IMaibaAIFeaturesControlAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.MaibaAIFeaturesControlAction
+			public static encode(m: waproto.SyncActionValue.IMaibaAIFeaturesControlAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.MaibaAIFeaturesControlAction
 		}
 		namespace MaibaAIFeaturesControlAction {
 			enum MaibaAIFeatureStatus {
@@ -9400,8 +9442,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.IMarkChatAsReadAction)
 			public read?: (boolean|null)
 			public messageRange?: (waproto.SyncActionValue.ISyncActionMessageRange|null)
-			public static encode(m: waproto.SyncActionValue.IMarkChatAsReadAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.MarkChatAsReadAction
+			public static encode(m: waproto.SyncActionValue.IMarkChatAsReadAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.MarkChatAsReadAction
 		}
 		interface IMarketingMessageAction {
 			name?: (string|null)
@@ -9421,8 +9463,8 @@ export namespace waproto {
 			public lastSentAt?: (number|Long|null)
 			public isDeleted?: (boolean|null)
 			public mediaId?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IMarketingMessageAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.MarketingMessageAction
+			public static encode(m: waproto.SyncActionValue.IMarketingMessageAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.MarketingMessageAction
 		}
 		namespace MarketingMessageAction {
 			enum MarketingMessagePrototypeType {
@@ -9435,8 +9477,8 @@ export namespace waproto {
 		class MarketingMessageBroadcastAction implements IMarketingMessageBroadcastAction {
 			constructor(p?: waproto.SyncActionValue.IMarketingMessageBroadcastAction)
 			public repliedCount?: (number|null)
-			public static encode(m: waproto.SyncActionValue.IMarketingMessageBroadcastAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.MarketingMessageBroadcastAction
+			public static encode(m: waproto.SyncActionValue.IMarketingMessageBroadcastAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.MarketingMessageBroadcastAction
 		}
 		interface IMerchantPaymentPartnerAction {
 			status?: (waproto.SyncActionValue.MerchantPaymentPartnerAction.Status|null)
@@ -9450,8 +9492,8 @@ export namespace waproto {
 			public country?: (string|null)
 			public gatewayName?: (string|null)
 			public credentialId?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IMerchantPaymentPartnerAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.MerchantPaymentPartnerAction
+			public static encode(m: waproto.SyncActionValue.IMerchantPaymentPartnerAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.MerchantPaymentPartnerAction
 		}
 		namespace MerchantPaymentPartnerAction {
 			enum Status {
@@ -9467,8 +9509,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.IMusicUserIdAction)
 			public musicUserId?: (string|null)
 			public musicUserIdMap: { [k: string]: string }
-			public static encode(m: waproto.SyncActionValue.IMusicUserIdAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.MusicUserIdAction
+			public static encode(m: waproto.SyncActionValue.IMusicUserIdAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.MusicUserIdAction
 		}
 		interface IMuteAction {
 			muted?: (boolean|null)
@@ -9482,8 +9524,8 @@ export namespace waproto {
 			public muteEndTimestamp?: (number|Long|null)
 			public autoMuted?: (boolean|null)
 			public muteEveryoneMentionEndTimestamp?: (number|Long|null)
-			public static encode(m: waproto.SyncActionValue.IMuteAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.MuteAction
+			public static encode(m: waproto.SyncActionValue.IMuteAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.MuteAction
 		}
 		interface INctSaltSyncAction {
 			salt?: (Uint8Array|null)
@@ -9491,8 +9533,8 @@ export namespace waproto {
 		class NctSaltSyncAction implements INctSaltSyncAction {
 			constructor(p?: waproto.SyncActionValue.INctSaltSyncAction)
 			public salt?: (Uint8Array|null)
-			public static encode(m: waproto.SyncActionValue.INctSaltSyncAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.NctSaltSyncAction
+			public static encode(m: waproto.SyncActionValue.INctSaltSyncAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.NctSaltSyncAction
 		}
 		interface INewsletterSavedInterestsAction {
 			newsletterSavedInterests?: (string|null)
@@ -9500,8 +9542,8 @@ export namespace waproto {
 		class NewsletterSavedInterestsAction implements INewsletterSavedInterestsAction {
 			constructor(p?: waproto.SyncActionValue.INewsletterSavedInterestsAction)
 			public newsletterSavedInterests?: (string|null)
-			public static encode(m: waproto.SyncActionValue.INewsletterSavedInterestsAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.NewsletterSavedInterestsAction
+			public static encode(m: waproto.SyncActionValue.INewsletterSavedInterestsAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.NewsletterSavedInterestsAction
 		}
 		interface INoteEditAction {
 			type?: (waproto.SyncActionValue.NoteEditAction.NoteType|null)
@@ -9517,8 +9559,8 @@ export namespace waproto {
 			public createdAt?: (number|Long|null)
 			public deleted?: (boolean|null)
 			public unstructuredContent?: (string|null)
-			public static encode(m: waproto.SyncActionValue.INoteEditAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.NoteEditAction
+			public static encode(m: waproto.SyncActionValue.INoteEditAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.NoteEditAction
 		}
 		namespace NoteEditAction {
 			enum NoteType {
@@ -9532,8 +9574,8 @@ export namespace waproto {
 		class NotificationActivitySettingAction implements INotificationActivitySettingAction {
 			constructor(p?: waproto.SyncActionValue.INotificationActivitySettingAction)
 			public notificationActivitySetting?: (waproto.SyncActionValue.NotificationActivitySettingAction.NotificationActivitySetting|null)
-			public static encode(m: waproto.SyncActionValue.INotificationActivitySettingAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.NotificationActivitySettingAction
+			public static encode(m: waproto.SyncActionValue.INotificationActivitySettingAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.NotificationActivitySettingAction
 		}
 		namespace NotificationActivitySettingAction {
 			enum NotificationActivitySetting {
@@ -9549,8 +9591,8 @@ export namespace waproto {
 		class NuxAction implements INuxAction {
 			constructor(p?: waproto.SyncActionValue.INuxAction)
 			public acknowledged?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.INuxAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.NuxAction
+			public static encode(m: waproto.SyncActionValue.INuxAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.NuxAction
 		}
 		interface IOutContactAction {
 			fullName?: (string|null)
@@ -9560,8 +9602,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.IOutContactAction)
 			public fullName?: (string|null)
 			public firstName?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IOutContactAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.OutContactAction
+			public static encode(m: waproto.SyncActionValue.IOutContactAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.OutContactAction
 		}
 		interface IPaymentInfoAction {
 			cpi?: (string|null)
@@ -9569,8 +9611,8 @@ export namespace waproto {
 		class PaymentInfoAction implements IPaymentInfoAction {
 			constructor(p?: waproto.SyncActionValue.IPaymentInfoAction)
 			public cpi?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IPaymentInfoAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PaymentInfoAction
+			public static encode(m: waproto.SyncActionValue.IPaymentInfoAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PaymentInfoAction
 		}
 		interface IPaymentTosAction {
 			paymentNotice?: (waproto.SyncActionValue.PaymentTosAction.PaymentNotice|null)
@@ -9580,8 +9622,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.IPaymentTosAction)
 			public paymentNotice?: (waproto.SyncActionValue.PaymentTosAction.PaymentNotice|null)
 			public accepted?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IPaymentTosAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PaymentTosAction
+			public static encode(m: waproto.SyncActionValue.IPaymentTosAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PaymentTosAction
 		}
 		namespace PaymentTosAction {
 			enum PaymentNotice {
@@ -9594,8 +9636,8 @@ export namespace waproto {
 		class PinAction implements IPinAction {
 			constructor(p?: waproto.SyncActionValue.IPinAction)
 			public pinned?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IPinAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PinAction
+			public static encode(m: waproto.SyncActionValue.IPinAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PinAction
 		}
 		interface IPnForLidChatAction {
 			pnJid?: (string|null)
@@ -9603,8 +9645,8 @@ export namespace waproto {
 		class PnForLidChatAction implements IPnForLidChatAction {
 			constructor(p?: waproto.SyncActionValue.IPnForLidChatAction)
 			public pnJid?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IPnForLidChatAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PnForLidChatAction
+			public static encode(m: waproto.SyncActionValue.IPnForLidChatAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PnForLidChatAction
 		}
 		interface IPrimaryFeature {
 			flags?: (string[]|null)
@@ -9612,8 +9654,8 @@ export namespace waproto {
 		class PrimaryFeature implements IPrimaryFeature {
 			constructor(p?: waproto.SyncActionValue.IPrimaryFeature)
 			public flags: string[]
-			public static encode(m: waproto.SyncActionValue.IPrimaryFeature, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PrimaryFeature
+			public static encode(m: waproto.SyncActionValue.IPrimaryFeature, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PrimaryFeature
 		}
 		interface IPrimaryVersionAction {
 			version?: (string|null)
@@ -9621,8 +9663,8 @@ export namespace waproto {
 		class PrimaryVersionAction implements IPrimaryVersionAction {
 			constructor(p?: waproto.SyncActionValue.IPrimaryVersionAction)
 			public version?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IPrimaryVersionAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PrimaryVersionAction
+			public static encode(m: waproto.SyncActionValue.IPrimaryVersionAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PrimaryVersionAction
 		}
 		interface IPrivacySettingChannelsPersonalisedRecommendationAction {
 			isUserOptedOut?: (boolean|null)
@@ -9630,8 +9672,8 @@ export namespace waproto {
 		class PrivacySettingChannelsPersonalisedRecommendationAction implements IPrivacySettingChannelsPersonalisedRecommendationAction {
 			constructor(p?: waproto.SyncActionValue.IPrivacySettingChannelsPersonalisedRecommendationAction)
 			public isUserOptedOut?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IPrivacySettingChannelsPersonalisedRecommendationAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PrivacySettingChannelsPersonalisedRecommendationAction
+			public static encode(m: waproto.SyncActionValue.IPrivacySettingChannelsPersonalisedRecommendationAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PrivacySettingChannelsPersonalisedRecommendationAction
 		}
 		interface IPrivacySettingDisableLinkPreviewsAction {
 			isPreviewsDisabled?: (boolean|null)
@@ -9639,8 +9681,8 @@ export namespace waproto {
 		class PrivacySettingDisableLinkPreviewsAction implements IPrivacySettingDisableLinkPreviewsAction {
 			constructor(p?: waproto.SyncActionValue.IPrivacySettingDisableLinkPreviewsAction)
 			public isPreviewsDisabled?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IPrivacySettingDisableLinkPreviewsAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PrivacySettingDisableLinkPreviewsAction
+			public static encode(m: waproto.SyncActionValue.IPrivacySettingDisableLinkPreviewsAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PrivacySettingDisableLinkPreviewsAction
 		}
 		interface IPrivacySettingRelayAllCalls {
 			isEnabled?: (boolean|null)
@@ -9648,8 +9690,8 @@ export namespace waproto {
 		class PrivacySettingRelayAllCalls implements IPrivacySettingRelayAllCalls {
 			constructor(p?: waproto.SyncActionValue.IPrivacySettingRelayAllCalls)
 			public isEnabled?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IPrivacySettingRelayAllCalls, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PrivacySettingRelayAllCalls
+			public static encode(m: waproto.SyncActionValue.IPrivacySettingRelayAllCalls, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PrivacySettingRelayAllCalls
 		}
 		interface IPrivateProcessingSettingAction {
 			privateProcessingStatus?: (waproto.SyncActionValue.PrivateProcessingSettingAction.PrivateProcessingStatus|null)
@@ -9657,8 +9699,8 @@ export namespace waproto {
 		class PrivateProcessingSettingAction implements IPrivateProcessingSettingAction {
 			constructor(p?: waproto.SyncActionValue.IPrivateProcessingSettingAction)
 			public privateProcessingStatus?: (waproto.SyncActionValue.PrivateProcessingSettingAction.PrivateProcessingStatus|null)
-			public static encode(m: waproto.SyncActionValue.IPrivateProcessingSettingAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PrivateProcessingSettingAction
+			public static encode(m: waproto.SyncActionValue.IPrivateProcessingSettingAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PrivateProcessingSettingAction
 		}
 		namespace PrivateProcessingSettingAction {
 			enum PrivateProcessingStatus {
@@ -9673,8 +9715,8 @@ export namespace waproto {
 		class PushNameSetting implements IPushNameSetting {
 			constructor(p?: waproto.SyncActionValue.IPushNameSetting)
 			public name?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IPushNameSetting, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.PushNameSetting
+			public static encode(m: waproto.SyncActionValue.IPushNameSetting, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.PushNameSetting
 		}
 		interface IQuickReplyAction {
 			shortcut?: (string|null)
@@ -9690,8 +9732,8 @@ export namespace waproto {
 			public keywords: string[]
 			public count?: (number|null)
 			public deleted?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IQuickReplyAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.QuickReplyAction
+			public static encode(m: waproto.SyncActionValue.IQuickReplyAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.QuickReplyAction
 		}
 		interface IRecentEmojiWeightsAction {
 			weights?: (waproto.IRecentEmojiWeight[]|null)
@@ -9699,8 +9741,8 @@ export namespace waproto {
 		class RecentEmojiWeightsAction implements IRecentEmojiWeightsAction {
 			constructor(p?: waproto.SyncActionValue.IRecentEmojiWeightsAction)
 			public weights: waproto.IRecentEmojiWeight[]
-			public static encode(m: waproto.SyncActionValue.IRecentEmojiWeightsAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.RecentEmojiWeightsAction
+			public static encode(m: waproto.SyncActionValue.IRecentEmojiWeightsAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.RecentEmojiWeightsAction
 		}
 		interface IRemoveRecentStickerAction {
 			lastStickerSentTs?: (number|Long|null)
@@ -9708,8 +9750,8 @@ export namespace waproto {
 		class RemoveRecentStickerAction implements IRemoveRecentStickerAction {
 			constructor(p?: waproto.SyncActionValue.IRemoveRecentStickerAction)
 			public lastStickerSentTs?: (number|Long|null)
-			public static encode(m: waproto.SyncActionValue.IRemoveRecentStickerAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.RemoveRecentStickerAction
+			public static encode(m: waproto.SyncActionValue.IRemoveRecentStickerAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.RemoveRecentStickerAction
 		}
 		interface ISettingsSyncAction {
 			startAtLogin?: (boolean|null)
@@ -9777,8 +9819,8 @@ export namespace waproto {
 			public isStatusNotificationEnabled?: (boolean|null)
 			public statusNotificationToneId?: (number|null)
 			public shouldPlaySoundForCallNotification?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.ISettingsSyncAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.SettingsSyncAction
+			public static encode(m: waproto.SyncActionValue.ISettingsSyncAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SettingsSyncAction
 		}
 		namespace SettingsSyncAction {
 			enum DisplayMode {
@@ -9840,8 +9882,8 @@ export namespace waproto {
 		class StarAction implements IStarAction {
 			constructor(p?: waproto.SyncActionValue.IStarAction)
 			public starred?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IStarAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.StarAction
+			public static encode(m: waproto.SyncActionValue.IStarAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.StarAction
 		}
 		interface IStatusPostOptInNotificationPreferencesAction {
 			enabled?: (boolean|null)
@@ -9849,8 +9891,8 @@ export namespace waproto {
 		class StatusPostOptInNotificationPreferencesAction implements IStatusPostOptInNotificationPreferencesAction {
 			constructor(p?: waproto.SyncActionValue.IStatusPostOptInNotificationPreferencesAction)
 			public enabled?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IStatusPostOptInNotificationPreferencesAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.StatusPostOptInNotificationPreferencesAction
+			public static encode(m: waproto.SyncActionValue.IStatusPostOptInNotificationPreferencesAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.StatusPostOptInNotificationPreferencesAction
 		}
 		interface IStatusPrivacyAction {
 			mode?: (waproto.SyncActionValue.StatusPrivacyAction.StatusDistributionMode|null)
@@ -9864,8 +9906,8 @@ export namespace waproto {
 			public userJid: string[]
 			public shareToFB?: (boolean|null)
 			public shareToIG?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IStatusPrivacyAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.StatusPrivacyAction
+			public static encode(m: waproto.SyncActionValue.IStatusPrivacyAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.StatusPrivacyAction
 		}
 		namespace StatusPrivacyAction {
 			enum StatusDistributionMode {
@@ -9905,8 +9947,8 @@ export namespace waproto {
 			public isLottie?: (boolean|null)
 			public imageHash?: (string|null)
 			public isAvatarSticker?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IStickerAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.StickerAction
+			public static encode(m: waproto.SyncActionValue.IStickerAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.StickerAction
 		}
 		interface ISubscriptionAction {
 			isDeactivated?: (boolean|null)
@@ -9918,8 +9960,8 @@ export namespace waproto {
 			public isDeactivated?: (boolean|null)
 			public isAutoRenewing?: (boolean|null)
 			public expirationDate?: (number|Long|null)
-			public static encode(m: waproto.SyncActionValue.ISubscriptionAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.SubscriptionAction
+			public static encode(m: waproto.SyncActionValue.ISubscriptionAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SubscriptionAction
 		}
 		interface ISyncActionMessage {
 			key?: (waproto.IMessageKey|null)
@@ -9929,8 +9971,8 @@ export namespace waproto {
 			constructor(p?: waproto.SyncActionValue.ISyncActionMessage)
 			public key?: (waproto.IMessageKey|null)
 			public timestamp?: (number|Long|null)
-			public static encode(m: waproto.SyncActionValue.ISyncActionMessage, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.SyncActionMessage
+			public static encode(m: waproto.SyncActionValue.ISyncActionMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SyncActionMessage
 		}
 		interface ISyncActionMessageRange {
 			lastMessageTimestamp?: (number|Long|null)
@@ -9942,8 +9984,8 @@ export namespace waproto {
 			public lastMessageTimestamp?: (number|Long|null)
 			public lastSystemMessageTimestamp?: (number|Long|null)
 			public messages: waproto.SyncActionValue.ISyncActionMessage[]
-			public static encode(m: waproto.SyncActionValue.ISyncActionMessageRange, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.SyncActionMessageRange
+			public static encode(m: waproto.SyncActionValue.ISyncActionMessageRange, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SyncActionMessageRange
 		}
 		interface ITimeFormatAction {
 			isTwentyFourHourFormatEnabled?: (boolean|null)
@@ -9951,8 +9993,8 @@ export namespace waproto {
 		class TimeFormatAction implements ITimeFormatAction {
 			constructor(p?: waproto.SyncActionValue.ITimeFormatAction)
 			public isTwentyFourHourFormatEnabled?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.ITimeFormatAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.TimeFormatAction
+			public static encode(m: waproto.SyncActionValue.ITimeFormatAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.TimeFormatAction
 		}
 		interface IUGCBot {
 			definition?: (Uint8Array|null)
@@ -9960,8 +10002,8 @@ export namespace waproto {
 		class UGCBot implements IUGCBot {
 			constructor(p?: waproto.SyncActionValue.IUGCBot)
 			public definition?: (Uint8Array|null)
-			public static encode(m: waproto.SyncActionValue.IUGCBot, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.UGCBot
+			public static encode(m: waproto.SyncActionValue.IUGCBot, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.UGCBot
 		}
 		interface IUnarchiveChatsSetting {
 			unarchiveChats?: (boolean|null)
@@ -9969,8 +10011,8 @@ export namespace waproto {
 		class UnarchiveChatsSetting implements IUnarchiveChatsSetting {
 			constructor(p?: waproto.SyncActionValue.IUnarchiveChatsSetting)
 			public unarchiveChats?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IUnarchiveChatsSetting, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.UnarchiveChatsSetting
+			public static encode(m: waproto.SyncActionValue.IUnarchiveChatsSetting, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.UnarchiveChatsSetting
 		}
 		interface IUserStatusMuteAction {
 			muted?: (boolean|null)
@@ -9978,8 +10020,8 @@ export namespace waproto {
 		class UserStatusMuteAction implements IUserStatusMuteAction {
 			constructor(p?: waproto.SyncActionValue.IUserStatusMuteAction)
 			public muted?: (boolean|null)
-			public static encode(m: waproto.SyncActionValue.IUserStatusMuteAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.UserStatusMuteAction
+			public static encode(m: waproto.SyncActionValue.IUserStatusMuteAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.UserStatusMuteAction
 		}
 		interface IUsernameChatStartModeAction {
 			chatStartMode?: (waproto.SyncActionValue.UsernameChatStartModeAction.ChatStartMode|null)
@@ -9987,8 +10029,8 @@ export namespace waproto {
 		class UsernameChatStartModeAction implements IUsernameChatStartModeAction {
 			constructor(p?: waproto.SyncActionValue.IUsernameChatStartModeAction)
 			public chatStartMode?: (waproto.SyncActionValue.UsernameChatStartModeAction.ChatStartMode|null)
-			public static encode(m: waproto.SyncActionValue.IUsernameChatStartModeAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.UsernameChatStartModeAction
+			public static encode(m: waproto.SyncActionValue.IUsernameChatStartModeAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.UsernameChatStartModeAction
 		}
 		namespace UsernameChatStartModeAction {
 			enum ChatStartMode {
@@ -10002,8 +10044,8 @@ export namespace waproto {
 		class WaffleAccountLinkStateAction implements IWaffleAccountLinkStateAction {
 			constructor(p?: waproto.SyncActionValue.IWaffleAccountLinkStateAction)
 			public linkState?: (waproto.SyncActionValue.WaffleAccountLinkStateAction.AccountLinkState|null)
-			public static encode(m: waproto.SyncActionValue.IWaffleAccountLinkStateAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.WaffleAccountLinkStateAction
+			public static encode(m: waproto.SyncActionValue.IWaffleAccountLinkStateAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.WaffleAccountLinkStateAction
 		}
 		namespace WaffleAccountLinkStateAction {
 			enum AccountLinkState {
@@ -10018,8 +10060,8 @@ export namespace waproto {
 		class WamoUserIdentifierAction implements IWamoUserIdentifierAction {
 			constructor(p?: waproto.SyncActionValue.IWamoUserIdentifierAction)
 			public identifier?: (string|null)
-			public static encode(m: waproto.SyncActionValue.IWamoUserIdentifierAction, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncActionValue.WamoUserIdentifierAction
+			public static encode(m: waproto.SyncActionValue.IWamoUserIdentifierAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.WamoUserIdentifierAction
 		}
 	}
 	interface ISyncdIndex {
@@ -10028,8 +10070,8 @@ export namespace waproto {
 	class SyncdIndex implements ISyncdIndex {
 		constructor(p?: waproto.ISyncdIndex)
 		public blob?: (Uint8Array|null)
-		public static encode(m: waproto.ISyncdIndex, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncdIndex
+		public static encode(m: waproto.ISyncdIndex, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdIndex
 	}
 	interface ISyncdMutation {
 		operation?: (waproto.SyncdMutation.SyncdOperation|null)
@@ -10039,8 +10081,8 @@ export namespace waproto {
 		constructor(p?: waproto.ISyncdMutation)
 		public operation?: (waproto.SyncdMutation.SyncdOperation|null)
 		public record?: (waproto.ISyncdRecord|null)
-		public static encode(m: waproto.ISyncdMutation, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncdMutation
+		public static encode(m: waproto.ISyncdMutation, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdMutation
 	}
 	namespace SyncdMutation {
 		enum SyncdOperation {
@@ -10054,8 +10096,8 @@ export namespace waproto {
 	class SyncdMutations implements ISyncdMutations {
 		constructor(p?: waproto.ISyncdMutations)
 		public mutations: waproto.ISyncdMutation[]
-		public static encode(m: waproto.ISyncdMutations, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncdMutations
+		public static encode(m: waproto.ISyncdMutations, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdMutations
 	}
 	interface ISyncdPatch {
 		version?: (waproto.ISyncdVersion|null)
@@ -10079,8 +10121,8 @@ export namespace waproto {
 		public exitCode?: (waproto.IExitCode|null)
 		public deviceIndex?: (number|null)
 		public clientDebugData?: (Uint8Array|null)
-		public static encode(m: waproto.ISyncdPatch, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncdPatch
+		public static encode(m: waproto.ISyncdPatch, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdPatch
 	}
 	interface ISyncdRecord {
 		index?: (waproto.ISyncdIndex|null)
@@ -10092,8 +10134,8 @@ export namespace waproto {
 		public index?: (waproto.ISyncdIndex|null)
 		public value?: (waproto.ISyncdValue|null)
 		public keyId?: (waproto.IKeyId|null)
-		public static encode(m: waproto.ISyncdRecord, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncdRecord
+		public static encode(m: waproto.ISyncdRecord, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdRecord
 	}
 	interface ISyncdSnapshot {
 		version?: (waproto.ISyncdVersion|null)
@@ -10107,8 +10149,8 @@ export namespace waproto {
 		public records: waproto.ISyncdRecord[]
 		public mac?: (Uint8Array|null)
 		public keyId?: (waproto.IKeyId|null)
-		public static encode(m: waproto.ISyncdSnapshot, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncdSnapshot
+		public static encode(m: waproto.ISyncdSnapshot, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdSnapshot
 	}
 	interface ISyncdValue {
 		blob?: (Uint8Array|null)
@@ -10116,8 +10158,8 @@ export namespace waproto {
 	class SyncdValue implements ISyncdValue {
 		constructor(p?: waproto.ISyncdValue)
 		public blob?: (Uint8Array|null)
-		public static encode(m: waproto.ISyncdValue, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncdValue
+		public static encode(m: waproto.ISyncdValue, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdValue
 	}
 	interface ISyncdVersion {
 		version?: (number|Long|null)
@@ -10125,8 +10167,8 @@ export namespace waproto {
 	class SyncdVersion implements ISyncdVersion {
 		constructor(p?: waproto.ISyncdVersion)
 		public version?: (number|Long|null)
-		public static encode(m: waproto.ISyncdVersion, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.SyncdVersion
+		public static encode(m: waproto.ISyncdVersion, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdVersion
 	}
 	interface ITapLinkAction {
 		title?: (string|null)
@@ -10136,8 +10178,8 @@ export namespace waproto {
 		constructor(p?: waproto.ITapLinkAction)
 		public title?: (string|null)
 		public tapUrl?: (string|null)
-		public static encode(m: waproto.ITapLinkAction, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.TapLinkAction
+		public static encode(m: waproto.ITapLinkAction, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.TapLinkAction
 	}
 	interface ITemplateButton {
 		index?: (number|null)
@@ -10152,8 +10194,8 @@ export namespace waproto {
 		public urlButton?: (waproto.TemplateButton.IURLButton|null)
 		public callButton?: (waproto.TemplateButton.ICallButton|null)
 		public button?: ("quickReplyButton"|"urlButton"|"callButton")
-		public static encode(m: waproto.ITemplateButton, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.TemplateButton
+		public static encode(m: waproto.ITemplateButton, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.TemplateButton
 	}
 	namespace TemplateButton {
 		interface ICallButton {
@@ -10164,8 +10206,8 @@ export namespace waproto {
 			constructor(p?: waproto.TemplateButton.ICallButton)
 			public displayText?: (waproto.Message.IHighlyStructuredMessage|null)
 			public phoneNumber?: (waproto.Message.IHighlyStructuredMessage|null)
-			public static encode(m: waproto.TemplateButton.ICallButton, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.TemplateButton.CallButton
+			public static encode(m: waproto.TemplateButton.ICallButton, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.TemplateButton.CallButton
 		}
 		interface IQuickReplyButton {
 			displayText?: (waproto.Message.IHighlyStructuredMessage|null)
@@ -10175,8 +10217,8 @@ export namespace waproto {
 			constructor(p?: waproto.TemplateButton.IQuickReplyButton)
 			public displayText?: (waproto.Message.IHighlyStructuredMessage|null)
 			public id?: (string|null)
-			public static encode(m: waproto.TemplateButton.IQuickReplyButton, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.TemplateButton.QuickReplyButton
+			public static encode(m: waproto.TemplateButton.IQuickReplyButton, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.TemplateButton.QuickReplyButton
 		}
 		interface IURLButton {
 			displayText?: (waproto.Message.IHighlyStructuredMessage|null)
@@ -10186,8 +10228,8 @@ export namespace waproto {
 			constructor(p?: waproto.TemplateButton.IURLButton)
 			public displayText?: (waproto.Message.IHighlyStructuredMessage|null)
 			public url?: (waproto.Message.IHighlyStructuredMessage|null)
-			public static encode(m: waproto.TemplateButton.IURLButton, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.TemplateButton.URLButton
+			public static encode(m: waproto.TemplateButton.IURLButton, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.TemplateButton.URLButton
 		}
 	}
 	interface IThreadID {
@@ -10198,8 +10240,8 @@ export namespace waproto {
 		constructor(p?: waproto.IThreadID)
 		public threadType?: (waproto.ThreadID.ThreadType|null)
 		public threadKey?: (waproto.IMessageKey|null)
-		public static encode(m: waproto.IThreadID, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.ThreadID
+		public static encode(m: waproto.IThreadID, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ThreadID
 	}
 	namespace ThreadID {
 		enum ThreadType {
@@ -10214,8 +10256,8 @@ export namespace waproto {
 	class UrlTrackingMap implements IUrlTrackingMap {
 		constructor(p?: waproto.IUrlTrackingMap)
 		public urlTrackingMapElements: waproto.UrlTrackingMap.IUrlTrackingMapElement[]
-		public static encode(m: waproto.IUrlTrackingMap, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.UrlTrackingMap
+		public static encode(m: waproto.IUrlTrackingMap, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.UrlTrackingMap
 	}
 	namespace UrlTrackingMap {
 		interface IUrlTrackingMapElement {
@@ -10230,8 +10272,8 @@ export namespace waproto {
 			public unconsentedUsersUrl?: (string|null)
 			public consentedUsersUrl?: (string|null)
 			public cardIndex?: (number|null)
-			public static encode(m: waproto.UrlTrackingMap.IUrlTrackingMapElement, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.UrlTrackingMap.UrlTrackingMapElement
+			public static encode(m: waproto.UrlTrackingMap.IUrlTrackingMapElement, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.UrlTrackingMap.UrlTrackingMapElement
 		}
 	}
 	interface IUserPassword {
@@ -10246,8 +10288,8 @@ export namespace waproto {
 		public transformer?: (waproto.UserPassword.Transformer|null)
 		public transformerArg: waproto.UserPassword.ITransformerArg[]
 		public transformedData?: (Uint8Array|null)
-		public static encode(m: waproto.IUserPassword, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.UserPassword
+		public static encode(m: waproto.IUserPassword, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.UserPassword
 	}
 	namespace UserPassword {
 		enum Encoding {
@@ -10267,8 +10309,8 @@ export namespace waproto {
 			constructor(p?: waproto.UserPassword.ITransformerArg)
 			public key?: (string|null)
 			public value?: (waproto.UserPassword.TransformerArg.IValue|null)
-			public static encode(m: waproto.UserPassword.ITransformerArg, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.UserPassword.TransformerArg
+			public static encode(m: waproto.UserPassword.ITransformerArg, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.UserPassword.TransformerArg
 		}
 		namespace TransformerArg {
 			interface IValue {
@@ -10280,8 +10322,8 @@ export namespace waproto {
 				public asBlob?: (Uint8Array|null)
 				public asUnsignedInteger?: (number|null)
 				public value?: ("asBlob"|"asUnsignedInteger")
-				public static encode(m: waproto.UserPassword.TransformerArg.IValue, w?: $protobuf.Writer): $protobuf.Writer
-				public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.UserPassword.TransformerArg.Value
+				public static encode(m: waproto.UserPassword.TransformerArg.IValue, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.UserPassword.TransformerArg.Value
 			}
 		}
 	}
@@ -10301,8 +10343,8 @@ export namespace waproto {
 		public playedTimestamp?: (number|Long|null)
 		public pendingDeviceJid: string[]
 		public deliveredDeviceJid: string[]
-		public static encode(m: waproto.IUserReceipt, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.UserReceipt
+		public static encode(m: waproto.IUserReceipt, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.UserReceipt
 	}
 	interface IVerifiedNameCertificate {
 		details?: (Uint8Array|null)
@@ -10314,8 +10356,8 @@ export namespace waproto {
 		public details?: (Uint8Array|null)
 		public signature?: (Uint8Array|null)
 		public serverSignature?: (Uint8Array|null)
-		public static encode(m: waproto.IVerifiedNameCertificate, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.VerifiedNameCertificate
+		public static encode(m: waproto.IVerifiedNameCertificate, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.VerifiedNameCertificate
 	}
 	namespace VerifiedNameCertificate {
 		interface IDetails {
@@ -10332,8 +10374,8 @@ export namespace waproto {
 			public verifiedName?: (string|null)
 			public localizedNames: waproto.ILocalizedName[]
 			public issueTime?: (number|Long|null)
-			public static encode(m: waproto.VerifiedNameCertificate.IDetails, w?: $protobuf.Writer): $protobuf.Writer
-			public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.VerifiedNameCertificate.Details
+			public static encode(m: waproto.VerifiedNameCertificate.IDetails, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.VerifiedNameCertificate.Details
 		}
 	}
 	interface IWallpaperSettings {
@@ -10346,8 +10388,8 @@ export namespace waproto {
 		public filename?: (string|null)
 		public opacity?: (number|null)
 		public isGenAi?: (boolean|null)
-		public static encode(m: waproto.IWallpaperSettings, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.WallpaperSettings
+		public static encode(m: waproto.IWallpaperSettings, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.WallpaperSettings
 	}
 	interface IWebFeatures {
 		labelsDisplay?: (waproto.WebFeatures.Flag|null)
@@ -10443,8 +10485,8 @@ export namespace waproto {
 		public disappearingMode?: (waproto.WebFeatures.Flag|null)
 		public externalMdOptInAvailable?: (waproto.WebFeatures.Flag|null)
 		public noDeleteMessageTimeLimit?: (waproto.WebFeatures.Flag|null)
-		public static encode(m: waproto.IWebFeatures, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.WebFeatures
+		public static encode(m: waproto.IWebFeatures, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.WebFeatures
 	}
 	namespace WebFeatures {
 		enum Flag {
@@ -10598,8 +10640,8 @@ export namespace waproto {
 		public quarantinedMessage?: (waproto.IQuarantinedMessage|null)
 		public nonJidMentions?: (number|null)
 		public hsmTag?: (string|null)
-		public static encode(m: waproto.IWebMessageInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.WebMessageInfo
+		public static encode(m: waproto.IWebMessageInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.WebMessageInfo
 	}
 	namespace WebMessageInfo {
 		enum BizPrivacyStatus {
@@ -10855,7 +10897,7 @@ export namespace waproto {
 		public unreadChats?: (number|null)
 		public notifyMessageCount?: (number|null)
 		public notifyMessages: waproto.IWebMessageInfo[]
-		public static encode(m: waproto.IWebNotificationsInfo, w?: $protobuf.Writer): $protobuf.Writer
-		public static decode(r: ($protobuf.Reader|Uint8Array), l?: number): waproto.WebNotificationsInfo
+		public static encode(m: waproto.IWebNotificationsInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.WebNotificationsInfo
 	}
 }

@@ -110,9 +110,7 @@
         "format": "prettier . --write",
         "format:check": "prettier . --check"
     },
-    "dependencies": {
-        "protobufjs": "^7.5.4"
-    },
+    "dependencies": {},
     "peerDependencies": {
         "better-sqlite3": "^11.9.1",
         "pino": "^9.0.0",
