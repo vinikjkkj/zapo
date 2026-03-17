@@ -14,7 +14,7 @@ const missingTestsDirectories = directoriesWithSource.filter(
 )
 
 if (missingTestsDirectories.length > 0) {
-    console.error('[wha.ts] missing __tests__ coverage for source directories:')
+    console.error('[zapo] missing __tests__ coverage for source directories:')
     for (const directory of missingTestsDirectories) {
         console.error(` - ${relative(ROOT_DIR, directory).replaceAll('\\', '/')}`)
     }
@@ -22,7 +22,7 @@ if (missingTestsDirectories.length > 0) {
 }
 
 console.log(
-    `[wha.ts] test structure check passed (${directoriesWithSource.length} source directories validated)`
+    `[zapo] test structure check passed (${directoriesWithSource.length} source directories validated)`
 )
 
 function collectDirectoriesWithSource(rootDirectory) {
@@ -106,3 +106,4 @@ function safeIsDirectory(path) {
         return false
     }
 }
+

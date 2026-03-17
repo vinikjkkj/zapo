@@ -20,7 +20,7 @@ test('console logger honors level gating and exposes level', () => {
 test('pino logger factory creates logger instance with configured level', async () => {
     const logger = await createPinoLogger({
         level: 'debug',
-        name: 'wha.ts-test'
+        name: 'zapo-test'
     })
 
     assert.ok(logger instanceof PinoLogger)
@@ -31,3 +31,4 @@ test('pino logger factory creates logger instance with configured level', async 
         logger.info('test info')
     })
 })
+

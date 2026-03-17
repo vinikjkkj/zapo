@@ -18,7 +18,7 @@ interface Destroyable {
 test('message store contract parity between memory and sqlite providers', async () => {
     await runMessageStoreContract(async () => new WaMessageMemoryStore({ maxMessages: 10 }))
 
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-message-contract-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-message-contract-'))
     try {
         await runMessageStoreContract(async () =>
             new WaMessageSqliteStore({
@@ -36,7 +36,7 @@ test('thread/contact contract parity between memory and sqlite providers', async
     await runThreadStoreContract(async () => new WaThreadMemoryStore({ maxThreads: 10 }))
     await runContactStoreContract(async () => new WaContactMemoryStore({ maxContacts: 10 }))
 
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-mailbox-contract-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-mailbox-contract-'))
     try {
         await runThreadStoreContract(async () =>
             new WaThreadSqliteStore({
@@ -138,3 +138,4 @@ async function runContactStoreContract(
         await store.destroy?.()
     }
 }
+

@@ -94,9 +94,9 @@ function defaultUserAgent(
         mcc: '000',
         mnc: '000',
         osVersion: deviceOsDisplayName ?? process.platform,
-        manufacturer: 'wha.ts',
+        manufacturer: '',
         device: 'Desktop',
-        osBuildNumber: process.version,
+        osBuildNumber: '0.1',
         phoneId: randomUUID(),
         localeLanguageIso6391: locale.lg,
         localeCountryIso31661Alpha2: locale.lc

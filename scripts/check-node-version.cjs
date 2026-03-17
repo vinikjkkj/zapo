@@ -7,13 +7,13 @@ const MIN_NODE_VERSION = Object.freeze({
 const currentVersion = parseNodeVersion(process.versions.node)
 
 if (!currentVersion) {
-    console.error('[wha.ts] failed to parse current node version')
+    console.error('[zapo] failed to parse current node version')
     process.exit(1)
 }
 
 if (compareVersions(currentVersion, MIN_NODE_VERSION) < 0) {
     console.error(
-        `[wha.ts] unsupported node version ${formatVersion(currentVersion)}. minimum required is ${formatVersion(MIN_NODE_VERSION)}`
+        `[zapo] unsupported node version ${formatVersion(currentVersion)}. minimum required is ${formatVersion(MIN_NODE_VERSION)}`
     )
     process.exit(1)
 }
@@ -52,3 +52,4 @@ function compareVersions(left, right) {
 function formatVersion(version) {
     return `${version.major}.${version.minor}.${version.patch}`
 }
+

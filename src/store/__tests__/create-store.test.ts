@@ -9,7 +9,7 @@ import { createStore } from '@store/createStore'
 test('createStore validates sqlite requirements and session lifecycle', async () => {
     assert.throws(() => createStore({}).session('default'), /sqlite.path must be configured/)
 
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-store-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-store-'))
     const sqlitePath = join(dir, 'state.sqlite')
     const store = createStore({
         sqlite: {
@@ -62,3 +62,4 @@ test('createStore validates custom providers resolution', () => {
 
     assert.throws(() => store.session('x'), /custom.auth must resolve to a store instance/)
 })
+

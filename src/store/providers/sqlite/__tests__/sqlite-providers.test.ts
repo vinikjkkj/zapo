@@ -44,7 +44,7 @@ function createCredentials() {
 }
 
 test('sqlite auth store saves, loads and clears credentials', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-sqlite-auth-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-auth-'))
     const store = new WaAuthSqliteStore({
         path: join(dir, 'state.sqlite'),
         sessionId: 'a',
@@ -70,7 +70,7 @@ test('sqlite auth store saves, loads and clears credentials', async () => {
 })
 
 test('sqlite message/thread stores are session-scoped and preserve coalesced fields', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-sqlite-mailbox-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-mailbox-'))
     const sqlitePath = join(dir, 'state.sqlite')
     const storeA = new WaMessageSqliteStore({
         path: sqlitePath,
@@ -117,7 +117,7 @@ test('sqlite message/thread stores are session-scoped and preserve coalesced fie
 })
 
 test('sqlite connection rejects unsupported pragma names', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-sqlite-pragma-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-pragma-'))
     try {
         await assert.rejects(
             () =>
@@ -135,3 +135,4 @@ test('sqlite connection rejects unsupported pragma names', async () => {
         await rm(dir, { recursive: true, force: true })
     }
 })
+

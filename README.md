@@ -1,43 +1,72 @@
-# wha.ts
+# zapo
 
-A high-performance TypeScript implementation of the WhatsApp Web protocol.
+<p align="center">
+  <strong>High-performance TypeScript implementation of the WhatsApp Web protocol.</strong><br />
+  Built for high-scalability workloads, multi-session operation, and full user configurability.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/zapo">
+    <img alt="npm version" src="https://img.shields.io/npm/v/zapo?color=CB3837" />
+  </a>
+  <img alt="npm package size" src="https://img.shields.io/npm/unpacked-size/zapo?label=package%20size&color=2F855A" />
+  <img alt="node version" src="https://img.shields.io/badge/node-%3E%3D20.9.0-339933" />
+  <img alt="language" src="https://img.shields.io/badge/language-TypeScript-3178C6" />
+  <img alt="focus" src="https://img.shields.io/badge/focus-high--scale%20%2B%20multi--session-0A7EA4" />
+</p>
+
+## Table of Contents
+
+- [Stability Notice](#stability-notice)
+- [What Makes This Project Different](#what-makes-this-project-different)
+- [Core Principles](#core-principles)
+- [Architecture at a Glance](#architecture-at-a-glance)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Minimal Usage](#minimal-usage)
+- [Useful Scripts](#useful-scripts)
+- [Versioning and Releases](#versioning-and-releases)
+- [GitHub Release Notes](#github-release-notes)
+- [Protobuf Generation](#protobuf-generation)
+- [Contribution Notes](#contribution-notes)
+- [Disclaimer](#disclaimer)
 
 ## Stability Notice
 
-This project is currently pre-`1.0.0`.
+> Frequent breaking changes are expected until the first major release.
+> If you run `zapo` in long-lived environments, pin exact versions and validate upgrades carefully.
 
-Until the first major release is published, frequent breaking changes are expected, including API and behavior changes between releases.
-If you depend on `wha.ts` in long-lived environments, pin exact versions and validate upgrades carefully.
+## What Makes This Project Different
 
-## Independent by Design
-
-`wha.ts` is not based on any existing WhatsApp library.
+`zapo` is an independent runtime implementation (not a wrapper/fork of an existing WhatsApp library).
 
 - No wrappers around third-party WhatsApp SDKs
 - No forks of existing WhatsApp client libraries
 - No copied protocol abstractions from community libraries
+- `WAProto.proto` is sourced from `wppconnect-team/wa-proto` and compiled locally for runtime/types
 
-The protocol source of truth is the deobfuscated WhatsApp Web. The goal is parity with WhatsApp Web behavior, while still improving internal performance and memory usage.
+The protocol source of truth is the deobfuscated WhatsApp Web.
+The target is behavior parity with WhatsApp Web, while improving internal performance and memory efficiency.
 
-## Core Project Principles
+## Core Principles
 
-These principles come directly from `AGENTS.md` and drive all implementation decisions:
+These principles drive implementation decisions:
 
-- `index-first`: validate protocol behavior against Whatsapp Web before implementing anything
+- `index-first`: validate protocol behavior against WhatsApp Web before implementing anything
 - `performance-first`: optimize for low CPU, low RAM, low allocations, and zero-copy in hot paths
 - `async-first`: I/O, network, and crypto operations are async
 
-## Architecture Patterns
+## Architecture at a Glance
 
-The project follows a few strict patterns:
+### Patterns
 
 - Coordinator-first feature design in `src/client/coordinators/`
 - Pure node builders in `src/transport/node/builders/` for reusable protocol stanzas
-- Incoming parsers/normalizers in `src/client/events/`, with coordinators orchestrating only flow
+- Incoming parsers/normalizers in `src/client/events/`, with coordinators handling orchestration only
 - Typed store contracts in `src/store/contracts/` with `memory` and `sqlite` providers
 - Protocol constants in `src/protocol/` using `Object.freeze({...} as const)`
 
-## Engineering Conventions
+### Engineering conventions
 
 - `Uint8Array` everywhere for binary data (`Buffer` is avoided)
 - Zero-copy (`subarray`, byte views) in critical paths
@@ -53,7 +82,7 @@ The project follows a few strict patterns:
 
 Runtime dependencies:
 
-- Only **one mandatory dependency**: `protobufjs`
+- Mandatory: `protobufjs`
 
 Optional peer dependencies:
 
@@ -62,28 +91,27 @@ Optional peer dependencies:
 
 ## Quick Start
 
-1. Install dependencies:
+1. Install dependencies.
 
 ```bash
 npm install
 ```
 
-2. Run the real flow example:
+2. Run the real-flow example.
 
 ```bash
 npm run example
 ```
 
-3. Scan the QR code printed by the `auth_qr` event.
+3. Scan the QR code emitted by `auth_qr`.
+4. Send `ping` to the connected session, the example replies with `pong`.
 
-4. Send `ping` to your connected session. The example listens for incoming messages and replies with `pong`.
-
-The example persists auth state in `.auth/state.sqlite`.
+Auth state is persisted in `.auth/state.sqlite`.
 
 ## Minimal Usage
 
 ```ts
-import { createPinoLogger, createStore, WaClient } from 'wha.ts'
+import { createPinoLogger, createStore, WaClient } from 'zapo'
 
 const logger = await createPinoLogger({
     level: 'info',
@@ -132,46 +160,29 @@ await client.connect()
 
 ## Useful Scripts
 
-- `npm run build` - Build CJS, ESM, and types
-- `npm run test` - Run unit tests (non-flow)
-- `npm run test:flow` - Run real flow tests
-- `npm run test:coverage` - Run coverage report
-- `npm run typecheck` - Type-check project
-- `npm run lint` - Lint source files
-- `npm run format` - Format codebase
-- `npm run proto:generate` - Regenerate protobuf runtime/types from `proto/WAProto.proto`
-- `npm run changeset` - Create a versioning entry (patch/minor/major)
-- `npm run changeset:status` - Show pending versioning entries
-- `npm run version:packages` - Apply pending versions and update changelog
-- `npm run release:publish` - Build and publish to npm with Changesets
+- `npm run build` - build CJS, ESM, and types
+- `npm run test` - run unit tests (non-flow)
+- `npm run test:flow` - run real-flow tests
+- `npm run test:coverage` - run coverage report
+- `npm run typecheck` - type-check project
+- `npm run lint` - lint source files
+- `npm run format` - format codebase
+- `npm run proto:generate` - regenerate protobuf runtime/types from `proto/WAProto.proto`
+- `npm run changeset` - create a versioning entry (`patch`/`minor`/`major`)
+- `npm run changeset:status` - show pending versioning entries
+- `npm run version:packages` - apply pending versions and update `CHANGELOG.md`
+- `npm run release:publish` - build and publish to npm with Changesets
 
 ## Versioning and Releases
 
-This project now uses [Changesets](https://github.com/changesets/changesets) for semantic versioning and changelog generation.
+Versioning is managed with [Changesets](https://github.com/changesets/changesets).
 
 Release flow:
 
-1. Add a changeset after a change:
-
 ```bash
 npm run changeset
-```
-
-2. Review pending version impact:
-
-```bash
 npm run changeset:status
-```
-
-3. Generate next package version and `CHANGELOG.md`:
-
-```bash
 npm run version:packages
-```
-
-4. Publish:
-
-```bash
 npm run release:publish
 ```
 
@@ -179,29 +190,27 @@ Notes:
 
 - Changesets are stored in `.changeset/*.md`
 - Multiple changesets are merged automatically into the next release
-- Keep using SemVer (`patch`, `minor`, `major`) based on real API impact
+- SemVer is manual and intentional: `patch`, `minor`, `major`
 
-## GitHub Release Notes (Changes + Contributors)
+## GitHub Release Notes
 
-A GitHub Action now creates release notes automatically (including merged changes and contributors) when a version tag is pushed.
+Release notes are generated automatically (including grouped changes and contributors) when a version tag is pushed.
 
-- Workflow file: `.github/workflows/github-release.yml`
-- Release notes config (categories/labels): `.github/release.yml`
+- Workflow: `.github/workflows/github-release.yml`
+- Categories config: `.github/release.yml`
 
-Trigger:
+Trigger example:
 
 ```bash
 git tag v0.1.1
 git push origin v0.1.1
 ```
 
-The release page is generated with:
-
-- grouped PR changes (by labels)
-- automatic contributor list
-- prerelease flag when tag includes `-` (example: `v0.2.0-rc.1`)
+If the tag contains `-` (example: `v0.2.0-rc.1`), the release is marked as prerelease.
 
 ## Protobuf Generation
+
+`WAProto.proto` source: https://github.com/wppconnect-team/wa-proto
 
 `npm run proto:generate` runs `scripts/generate-proto.cjs`, which:
 
@@ -211,14 +220,16 @@ The release page is generated with:
 
 ## Contribution Notes
 
-Before opening a PR, use this checklist:
+Before opening a PR:
 
-- Validate behavior against Whatsapp Web
-- Keep performance/memory constraints in mind
-- Keep protocol node building/parsing organized by project patterns
+- Validate behavior against WhatsApp Web
+- Keep performance and memory constraints in mind
+- Keep node building/parsing aligned with project patterns
 - Avoid API changes that diverge from observed WhatsApp Web behavior
-- Test in real flows when touching auth, transport, app state, retry, or signal paths
+- Test real flows when touching auth, transport, app state, retry, or signal paths
 
 ## Disclaimer
 
-This project is an independent implementation for engineering and interoperability research. It is not affiliated with or endorsed by WhatsApp.
+This project is an independent implementation for engineering and interoperability research.
+It is not affiliated with or endorsed by WhatsApp.
+

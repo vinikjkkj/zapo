@@ -1,5 +1,5 @@
 {
-    "name": "wha.ts",
+    "name": "zapo",
     "version": "0.1.0",
     "description": "High-performance WhatsApp Web TypeScript library",
     "main": "dist/index.js",
@@ -147,3 +147,4 @@
         "typescript-eslint": "^8.56.1"
     }
 }
+

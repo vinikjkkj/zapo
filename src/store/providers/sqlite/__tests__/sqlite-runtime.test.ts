@@ -101,7 +101,7 @@ async function makeSessionRecord(seed = 0): Promise<SignalSessionRecord> {
 }
 
 test('sqlite appstate store handles sync keys, collection state and session scoping', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-sqlite-appstate-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-appstate-'))
     const sqlitePath = join(dir, 'state.sqlite')
     const storeA = new WaAppStateSqliteStore(makeSqliteOptions(sqlitePath, 'session-a'))
     const storeB = new WaAppStateSqliteStore(makeSqliteOptions(sqlitePath, 'session-b'))
@@ -166,7 +166,7 @@ test('sqlite appstate store handles sync keys, collection state and session scop
 })
 
 test('sqlite device-list and participants stores cover batch, expiry, cleanup and invalid payloads', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-sqlite-cache-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-cache-'))
     const sqlitePath = join(dir, 'state.sqlite')
     const deviceStore = new WaDeviceListSqliteStore(
         makeSqliteOptions(sqlitePath, 'session-a'),
@@ -272,7 +272,7 @@ test('sqlite device-list and participants stores cover batch, expiry, cleanup an
 })
 
 test('sqlite retry store tracks outbound state, inbound counters and expiration', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-sqlite-retry-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-retry-'))
     const sqlitePath = join(dir, 'state.sqlite')
     const store = new WaRetrySqliteStore(makeSqliteOptions(sqlitePath, 'session-a'), 500)
 
@@ -319,7 +319,7 @@ test('sqlite retry store tracks outbound state, inbound counters and expiration'
 })
 
 test('sqlite sender-key store handles lists, batching and deletions', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-sqlite-sender-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-sender-'))
     const sqlitePath = join(dir, 'state.sqlite')
     const store = new SenderKeySqliteStore(makeSqliteOptions(sqlitePath, 'session-a'), 1)
     const senderA = makeAddress('5511', 0)
@@ -390,7 +390,7 @@ test('sqlite sender-key store handles lists, batching and deletions', async () =
 })
 
 test('sqlite signal store covers prekeys, sessions, identities and state helpers', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'wha-ts-sqlite-signal-'))
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-signal-'))
     const sqlitePath = join(dir, 'state.sqlite')
     const store = new WaSignalSqliteStore(makeSqliteOptions(sqlitePath, 'session-a'), {
         preKeyBatchSize: 1,
@@ -498,3 +498,4 @@ test('sqlite signal store covers prekeys, sessions, identities and state helpers
         await rm(dir, { recursive: true, force: true })
     }
 })
+
