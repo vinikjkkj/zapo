@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import type { WaAppStateMutationInput, WaAppStateSyncResult } from '@appstate/types'
+import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
 import type { Logger } from '@infra/log/types'
-import { WA_STREAM_SIGNALING } from '@protocol/constants'
+import { WA_APP_STATE_COLLECTION_STATES, WA_STREAM_SIGNALING } from '@protocol/constants'
+import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
 import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
 
 function createLogger(): Logger {
@@ -105,6 +108,19 @@ function createMessageDispatchCoordinator(
         getCurrentMeLid: () => null,
         getCurrentSignedIdentity: () => null
     })
+}
+
+function buildAppStateSyncResult(
+    pendingMutations: readonly WaAppStateMutationInput[],
+    state: WaAppStateSyncResult['collections'][number]['state']
+): WaAppStateSyncResult {
+    const collections = [...new Set(pendingMutations.map((mutation) => mutation.collection))].map(
+        (collection) => ({
+            collection,
+            state
+        })
+    )
+    return { collections }
 }
 
 test('incoming node coordinator supports dynamic handler registration and unregistration', async () => {
@@ -287,4 +303,442 @@ test('message dispatch coordinator handles linked and modify participant cache e
     assert.equal(await participantsStore.getGroupParticipants('uncached@g.us'), null)
 
     await participantsStore.destroy()
+})
+
+test('app-state mutation coordinator flushes queued mutations while sync is in-flight', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    let releaseFirstSync!: () => void
+    let firstSyncStartedResolve: (() => void) | null = null
+    const firstSyncStarted = new Promise<void>((resolve) => {
+        firstSyncStartedResolve = resolve
+    })
+
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            if (syncCalls.length === 1) {
+                firstSyncStartedResolve?.()
+                await new Promise<void>((resolve) => {
+                    releaseFirstSync = () => {
+                        resolve()
+                    }
+                })
+            }
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    const firstMutation = coordinator.setChatMute('551100000000@s.whatsapp.net', false)
+    await firstSyncStarted
+    const secondMutation = coordinator.setChatPin('551100000000@s.whatsapp.net', false)
+    releaseFirstSync()
+    await Promise.all([firstMutation, secondMutation])
+
+    assert.equal(syncCalls.length, 2)
+    assert.equal(syncCalls[0].length, 1)
+    assert.equal(syncCalls[1].length, 1)
+    assert.equal(JSON.parse(syncCalls[0][0].index)[0], 'mute')
+    assert.equal(JSON.parse(syncCalls[1][0].index)[0], 'pin_v1')
+})
+
+test('app-state mutation coordinator emits pin + archive mutations when pinning chat', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    await messageStore.upsert({
+        id: 'm1',
+        threadJid: '551100000000@s.whatsapp.net',
+        fromMe: true,
+        timestampMs: 1_000
+    })
+
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.setChatPin('551100000000@s.whatsapp.net', true)
+
+    assert.equal(syncCalls.length, 1)
+    assert.equal(syncCalls[0].length, 2)
+    const indexActions = syncCalls[0].map((mutation) => JSON.parse(mutation.index)[0])
+    assert.deepEqual(indexActions, ['pin_v1', 'archive'])
+    const archiveMutation = syncCalls[0][1]
+    if (archiveMutation.operation !== 'set') {
+        throw new Error('archive mutation should be set')
+    }
+    assert.equal(archiveMutation.value.archiveChatAction?.archived, false)
+    assert.equal(archiveMutation.value.archiveChatAction?.messageRange?.messages?.length, 1)
+    if (syncCalls[0][0].operation !== 'set' || syncCalls[0][1].operation !== 'set') {
+        throw new Error('pin and archive mutations should be set')
+    }
+    assert.equal(typeof syncCalls[0][0].value.timestamp, 'number')
+    assert.equal(typeof syncCalls[0][1].value.timestamp, 'number')
+})
+
+test('app-state mutation coordinator flushes only targeted collections for queued mutation batch', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    await messageStore.upsert({
+        id: 'm1',
+        threadJid: '551100000000@s.whatsapp.net',
+        fromMe: true,
+        timestampMs: 1_000
+    })
+
+    const syncCalls: { readonly collections: readonly string[]; readonly pending: number }[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            syncCalls.push({
+                collections: options.collections ?? [],
+                pending: options.pendingMutations?.length ?? 0
+            })
+            return buildAppStateSyncResult(
+                options.pendingMutations ?? [],
+                WA_APP_STATE_COLLECTION_STATES.SUCCESS
+            )
+        }
+    })
+
+    await coordinator.setChatPin('551100000000@s.whatsapp.net', true)
+
+    assert.equal(syncCalls.length, 1)
+    assert.equal(syncCalls[0].pending, 2)
+    assert.deepEqual(syncCalls[0].collections, ['regular_low'])
+})
+
+test('app-state mutation coordinator includes message range and auto-unpin on archive', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    await messageStore.upsert({
+        id: 'gm1',
+        threadJid: '120@g.us',
+        fromMe: false,
+        participantJid: '551199999999@s.whatsapp.net',
+        timestampMs: 2_000
+    })
+    await messageStore.upsert({
+        id: 'gm2',
+        threadJid: '120@g.us',
+        fromMe: true,
+        timestampMs: 3_000
+    })
+
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.setChatArchive('120@g.us', true)
+
+    assert.equal(syncCalls.length, 1)
+    assert.equal(syncCalls[0].length, 2)
+    const archiveMutation = syncCalls[0][0]
+    if (archiveMutation.operation !== 'set') {
+        throw new Error('archive mutation should be set')
+    }
+    const messageRange = archiveMutation.value.archiveChatAction?.messageRange
+    assert.equal(messageRange?.messages?.length, 2)
+    const incomingGroupMessage = messageRange?.messages?.find(
+        (message) => message.key?.id === 'gm1'
+    )
+    assert.equal(incomingGroupMessage?.key?.remoteJid, '120@g.us')
+    assert.equal(incomingGroupMessage?.key?.participant, '551199999999@s.whatsapp.net')
+    assert.equal(messageRange?.lastMessageTimestamp, 3)
+
+    const pinMutation = syncCalls[0][1]
+    if (pinMutation.operation !== 'set') {
+        throw new Error('pin mutation should be set')
+    }
+    assert.equal(pinMutation.value.pinAction?.pinned, false)
+})
+
+test('app-state mutation coordinator preserves device participant jid in archive message range', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    await messageStore.upsert({
+        id: 'gm1',
+        threadJid: '120@g.us',
+        fromMe: false,
+        participantJid: '551199999999:1@lid',
+        timestampMs: 2_000
+    })
+
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.setChatArchive('120@g.us', false)
+
+    assert.equal(syncCalls.length, 1)
+    assert.equal(syncCalls[0].length, 1)
+    const archiveMutation = syncCalls[0][0]
+    if (archiveMutation.operation !== 'set') {
+        throw new Error('archive mutation should be set')
+    }
+    const messageRange = archiveMutation.value.archiveChatAction?.messageRange
+    assert.equal(messageRange?.messages?.length, 1)
+    assert.equal(messageRange?.messages?.[0]?.key?.participant, '551199999999:1@lid')
+})
+
+test('app-state mutation coordinator skips incoming group messages without participant in archive range', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    await messageStore.upsert({
+        id: 'gm_missing',
+        threadJid: '120@g.us',
+        fromMe: false,
+        timestampMs: 5_000
+    })
+    await messageStore.upsert({
+        id: 'gm_valid',
+        threadJid: '120@g.us',
+        fromMe: false,
+        participantJid: '551199999999:2@lid',
+        timestampMs: 4_000
+    })
+
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.setChatArchive('120@g.us', false)
+
+    assert.equal(syncCalls.length, 1)
+    assert.equal(syncCalls[0].length, 1)
+    const archiveMutation = syncCalls[0][0]
+    if (archiveMutation.operation !== 'set') {
+        throw new Error('archive mutation should be set')
+    }
+    const messageRange = archiveMutation.value.archiveChatAction?.messageRange
+    assert.equal(messageRange?.messages?.length, 1)
+    assert.equal(messageRange?.messages?.[0]?.key?.id, 'gm_valid')
+    assert.equal(messageRange?.messages?.[0]?.key?.participant, '551199999999:2@lid')
+    assert.equal(messageRange?.lastMessageTimestamp, 4)
+})
+
+test('app-state mutation coordinator keeps pending mutations after blocked flush', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    let flushAttempt = 0
+
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            flushAttempt += 1
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(
+                pendingMutations,
+                flushAttempt === 1
+                    ? WA_APP_STATE_COLLECTION_STATES.BLOCKED
+                    : WA_APP_STATE_COLLECTION_STATES.SUCCESS
+            )
+        }
+    })
+
+    await assert.rejects(coordinator.setChatMute('551100000000@s.whatsapp.net', false))
+    await coordinator.flushMutations()
+
+    assert.equal(syncCalls.length, 2)
+    assert.equal(syncCalls[0].length, 1)
+    assert.equal(syncCalls[1].length, 1)
+    assert.equal(syncCalls[0][0].index, syncCalls[1][0].index)
+})
+
+test('app-state mutation coordinator emits read/clear/delete mutations with expected indexes', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    await messageStore.upsert({
+        id: 'm1',
+        threadJid: '551100000000@s.whatsapp.net',
+        fromMe: true,
+        timestampMs: 1_000
+    })
+
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.setChatRead('551100000000@s.whatsapp.net', true)
+    await coordinator.clearChat('551100000000@s.whatsapp.net', {
+        deleteStarred: true,
+        deleteMedia: false
+    })
+    await coordinator.deleteChat('551100000000@s.whatsapp.net', {
+        deleteMedia: true
+    })
+
+    assert.equal(syncCalls.length, 3)
+    assert.equal(JSON.parse(syncCalls[0][0].index)[0], 'markChatAsRead')
+    assert.deepEqual(JSON.parse(syncCalls[1][0].index), [
+        'clearChat',
+        '551100000000@s.whatsapp.net',
+        '1',
+        '0'
+    ])
+    assert.deepEqual(JSON.parse(syncCalls[2][0].index), [
+        'deleteChat',
+        '551100000000@s.whatsapp.net',
+        '1'
+    ])
+})
+
+test('app-state mutation coordinator emits archive and unpin before lock mutation', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    await messageStore.upsert({
+        id: 'm1',
+        threadJid: '551100000000@s.whatsapp.net',
+        fromMe: true,
+        timestampMs: 1_000
+    })
+
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.setChatLock('551100000000@s.whatsapp.net', true)
+
+    assert.equal(syncCalls.length, 1)
+    assert.equal(syncCalls[0].length, 3)
+    const indexActions = syncCalls[0].map((mutation) => JSON.parse(mutation.index)[0])
+    assert.deepEqual(indexActions, ['archive', 'pin_v1', 'lock'])
+    const lockMutation = syncCalls[0][2]
+    if (lockMutation.operation !== 'set') {
+        throw new Error('lock mutation should be set')
+    }
+    assert.equal(lockMutation.value.lockChatAction?.locked, true)
+})
+
+test('app-state mutation coordinator emits star mutation with message-key index', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.setMessageStar(
+        {
+            chatJid: '120@g.us',
+            id: 'gm1',
+            fromMe: false,
+            participantJid: '551199999999:3@s.whatsapp.net'
+        },
+        true
+    )
+
+    assert.equal(syncCalls.length, 1)
+    assert.equal(syncCalls[0].length, 1)
+    assert.deepEqual(JSON.parse(syncCalls[0][0].index), [
+        'star',
+        '120@g.us',
+        'gm1',
+        '0',
+        '551199999999:3@s.whatsapp.net'
+    ])
+    const starMutation = syncCalls[0][0]
+    if (starMutation.operation !== 'set') {
+        throw new Error('star mutation should be set')
+    }
+    assert.equal(starMutation.value.starAction?.starred, true)
+})
+
+test('app-state mutation coordinator emits delete-message-for-me mutation and validates group participant', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.deleteMessageForMe(
+        {
+            chatJid: '551100000000:9@s.whatsapp.net',
+            id: 'm1',
+            fromMe: true
+        },
+        {
+            deleteMedia: true,
+            messageTimestampMs: 1_500
+        }
+    )
+
+    assert.equal(syncCalls.length, 1)
+    assert.equal(syncCalls[0].length, 1)
+    assert.deepEqual(JSON.parse(syncCalls[0][0].index), [
+        'deleteMessageForMe',
+        '551100000000@s.whatsapp.net',
+        'm1',
+        '1',
+        '0'
+    ])
+    const deleteForMeMutation = syncCalls[0][0]
+    if (deleteForMeMutation.operation !== 'set') {
+        throw new Error('delete-message-for-me mutation should be set')
+    }
+    assert.equal(deleteForMeMutation.value.deleteMessageForMeAction?.deleteMedia, true)
+    assert.equal(deleteForMeMutation.value.deleteMessageForMeAction?.messageTimestamp, 1)
+
+    await assert.rejects(
+        coordinator.setMessageStar(
+            {
+                chatJid: '120@g.us',
+                id: 'missing-participant',
+                fromMe: false
+            },
+            false
+        ),
+        /participantJid is required/
+    )
 })

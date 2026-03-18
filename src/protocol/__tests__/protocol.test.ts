@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+    WA_APP_STATE_CHAT_MUTATION_SPECS,
     getWaCompanionPlatformId,
     WA_COMPANION_PLATFORM_IDS,
     WA_DEFAULTS,
@@ -78,4 +79,8 @@ test('login identity parsing and protocol constants', () => {
 
     assert.equal(getWaMediaHkdfInfo('image'), WA_MEDIA_HKDF_INFO.image)
     assert.equal(typeof WA_DEFAULTS.HOST_DOMAIN, 'string')
+    assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.STAR.action, 'star')
+    assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.MUTE.action, 'mute')
+    assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.DELETE_MESSAGE_FOR_ME.version, 3)
+    assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.LOCK_CHAT.version, 7)
 })

@@ -6,6 +6,7 @@ import { downloadExternalBlobReference } from '@appstate/utils'
 import type { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import type { WaAuthCredentials } from '@auth/types'
 import type { WaAuthClient } from '@auth/WaAuthClient'
+import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator'
 import type { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
@@ -14,8 +15,12 @@ import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { processHistorySyncNotification } from '@client/history-sync'
 import { persistIncomingMailboxEntities } from '@client/mailbox'
 import type {
+    WaAppStateMessageKey,
+    WaClearChatOptions,
     WaClientEventMap,
     WaClientOptions,
+    WaDeleteChatOptions,
+    WaDeleteMessageForMeOptions,
     WaSendMessageOptions,
     WaIncomingProtocolMessageEvent,
     WaIncomingNodeHandlerRegistration,
@@ -87,6 +92,7 @@ export class WaClient extends EventEmitter {
     private readonly nodeTransport!: WaNodeTransport
     private readonly signalDeviceSync!: SignalDeviceSyncApi
     public readonly appStateSync!: WaAppStateSyncClient
+    private readonly appStateMutations!: WaAppStateMutationCoordinator
     private readonly incomingNode!: WaIncomingNodeCoordinator
     private readonly passiveTasks!: WaPassiveTasksCoordinator
     public readonly mediaTransfer!: WaMediaTransferClient
@@ -124,6 +130,7 @@ export class WaClient extends EventEmitter {
             query: (node, timeoutMs) => this.query(node, timeoutMs),
             queryWithContext: this.queryWithContext.bind(this),
             syncAppState: () => this.syncAppState().then(() => {}),
+            syncAppStateWithOptions: (options) => this.syncAppState(options),
             emitEvent: this.emit.bind(this) as WaClientDependencyHost['emitEvent'],
             handleIncomingMessageEvent: this.handleIncomingMessageEvent.bind(this),
             handleError: this.handleError.bind(this),
@@ -690,6 +697,53 @@ export class WaClient extends EventEmitter {
 
     public async sendReceipt(input: WaSendReceiptInput): Promise<void> {
         await this.messageDispatch.sendReceipt(input)
+    }
+
+    public async setChatMute(
+        chatJid: string,
+        muted: boolean,
+        muteEndTimestampMs?: number
+    ): Promise<void> {
+        await this.appStateMutations.setChatMute(chatJid, muted, muteEndTimestampMs)
+    }
+
+    public async setChatRead(chatJid: string, read: boolean): Promise<void> {
+        await this.appStateMutations.setChatRead(chatJid, read)
+    }
+
+    public async setChatPin(chatJid: string, pinned: boolean): Promise<void> {
+        await this.appStateMutations.setChatPin(chatJid, pinned)
+    }
+
+    public async setChatArchive(chatJid: string, archived: boolean): Promise<void> {
+        await this.appStateMutations.setChatArchive(chatJid, archived)
+    }
+
+    public async clearChat(chatJid: string, options: WaClearChatOptions = {}): Promise<void> {
+        await this.appStateMutations.clearChat(chatJid, options)
+    }
+
+    public async deleteChat(chatJid: string, options: WaDeleteChatOptions = {}): Promise<void> {
+        await this.appStateMutations.deleteChat(chatJid, options)
+    }
+
+    public async setChatLock(chatJid: string, locked: boolean): Promise<void> {
+        await this.appStateMutations.setChatLock(chatJid, locked)
+    }
+
+    public async setMessageStar(message: WaAppStateMessageKey, starred: boolean): Promise<void> {
+        await this.appStateMutations.setMessageStar(message, starred)
+    }
+
+    public async deleteMessageForMe(
+        message: WaAppStateMessageKey,
+        options: WaDeleteMessageForMeOptions = {}
+    ): Promise<void> {
+        await this.appStateMutations.deleteMessageForMe(message, options)
+    }
+
+    public async flushAppStateMutations(): Promise<void> {
+        await this.appStateMutations.flushMutations()
     }
 
     public async exportAppState(): Promise<WaAppStateStoreData> {

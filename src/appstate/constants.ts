@@ -15,6 +15,7 @@ export const APP_STATE_LT_HASH_SIZE = 128
 export const APP_STATE_POINT_SIZE = 2
 
 export const APP_STATE_EMPTY_LT_HASH = new Uint8Array(APP_STATE_LT_HASH_SIZE)
+export const APP_STATE_DEFAULT_COLLECTION_VERSION = 0
 
 export const APP_STATE_DEFAULT_COLLECTIONS: readonly AppStateCollectionName[] = Object.freeze([
     WA_APP_STATE_COLLECTIONS.CRITICAL_UNBLOCK_LOW,

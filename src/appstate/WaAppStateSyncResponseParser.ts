@@ -29,6 +29,12 @@ export function parseSyncResponse(iqNode: BinaryNode): readonly CollectionRespon
     }
     const syncNode = findNodeChild(iqNode, WA_NODE_TAGS.SYNC)
     if (!syncNode) {
+        if (iqNode.attrs.type === WA_IQ_TYPES.ERROR) {
+            const errorNode = findNodeChild(iqNode, WA_NODE_TAGS.ERROR)
+            const code = errorNode?.attrs.code ?? 'unknown'
+            const text = errorNode?.attrs.text ?? 'unknown'
+            throw new Error(`sync iq failed (${code}: ${text})`)
+        }
         throw new Error('sync response is missing <sync> node')
     }
 

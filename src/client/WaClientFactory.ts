@@ -1,5 +1,7 @@
+import type { WaAppStateSyncOptions, WaAppStateSyncResult } from '@appstate/types'
 import { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import { WaAuthClient } from '@auth/WaAuthClient'
+import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import {
     createGroupCoordinator,
     type WaGroupCoordinator
@@ -73,6 +75,7 @@ interface WaClientDependencies {
     readonly messageDispatch: WaMessageDispatchCoordinator
     readonly retryCoordinator: WaRetryCoordinator
     readonly appStateSync: WaAppStateSyncClient
+    readonly appStateMutations: WaAppStateMutationCoordinator
     readonly streamControl: WaStreamControlHandler
     readonly incomingNode: WaIncomingNodeCoordinator
     readonly passiveTasks: WaPassiveTasksCoordinator
@@ -118,6 +121,9 @@ export interface WaClientDependencyHost {
         contextData?: Readonly<Record<string, unknown>>
     ) => Promise<BinaryNode>
     readonly syncAppState: () => Promise<void>
+    readonly syncAppStateWithOptions: (
+        options?: WaAppStateSyncOptions
+    ) => Promise<WaAppStateSyncResult>
     readonly emitEvent: <K extends keyof WaClientEventMap>(
         event: K,
         ...args: Parameters<WaClientEventMap[K]>
@@ -269,7 +275,9 @@ function createHandleClientDirtyBits(input: {
                 logger,
                 queryWithContext: host.queryWithContext,
                 getCurrentCredentials,
-                syncAppState: host.syncAppState,
+                syncAppState: async () => {
+                    await host.syncAppState()
+                },
                 generateUsyncSid
             },
             dirtyBits
@@ -505,11 +513,17 @@ export function buildWaClientDependencies(input: {
     const appStateSync = new WaAppStateSyncClient({
         logger,
         query: host.query,
+        getCurrentMeJid,
         defaultTimeoutMs: options.appStateSyncTimeoutMs,
         store: sessionStore.appState,
         onMissingKeys: async ({ keyIds }) => {
             await messageDispatch.requestAppStateSyncKeys(keyIds)
         }
+    })
+    const appStateMutations = new WaAppStateMutationCoordinator({
+        logger,
+        messageStore: sessionStore.messages,
+        syncAppState: host.syncAppStateWithOptions
     })
     const streamControl = createStreamControlHandler({
         logger,
@@ -582,6 +596,7 @@ export function buildWaClientDependencies(input: {
         messageDispatch,
         retryCoordinator,
         appStateSync,
+        appStateMutations,
         streamControl,
         incomingNode,
         passiveTasks,

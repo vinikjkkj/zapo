@@ -143,6 +143,7 @@ async function startSession(client: WaClient): Promise<void> {
                 text: `pong ${deltaSeconds.toFixed(3)}`
             }
         })
+        await client.setChatArchive(to, true)
         console.log(`[incoming_message] pong enviado para ${to}`)
     })
     client.on('group_event', (event) => {

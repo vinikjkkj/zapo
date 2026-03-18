@@ -54,6 +54,27 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
     readonly expectedIdentity?: Uint8Array
 }
 
+export interface WaClearChatOptions {
+    readonly deleteStarred?: boolean
+    readonly deleteMedia?: boolean
+}
+
+export interface WaDeleteChatOptions {
+    readonly deleteMedia?: boolean
+}
+
+export interface WaAppStateMessageKey {
+    readonly chatJid: string
+    readonly id: string
+    readonly fromMe: boolean
+    readonly participantJid?: string
+}
+
+export interface WaDeleteMessageForMeOptions {
+    readonly deleteMedia?: boolean
+    readonly messageTimestampMs?: number
+}
+
 export type WaIncomingNodeHandler = (node: BinaryNode) => Promise<boolean>
 
 export interface WaIncomingNodeHandlerRegistration {

@@ -33,6 +33,7 @@ function toBoundedMap<K, V>(entries: Iterable<readonly [K, V]>, maxEntries: numb
 }
 
 interface MutableCollectionState {
+    initialized: boolean
     version: number
     hash: Uint8Array
     indexValueMap: Map<string, Uint8Array>
@@ -71,6 +72,7 @@ export class WaAppStateMemoryStore implements WaAppStateStore {
                     continue
                 }
                 this.collections.set(collectionName, {
+                    initialized: true,
                     version: collection.version,
                     hash: collection.hash,
                     indexValueMap: toBoundedMap(
@@ -130,6 +132,7 @@ export class WaAppStateMemoryStore implements WaAppStateStore {
         let state = this.collections.get(collection)
         if (!state) {
             state = {
+                initialized: false,
                 version: 0,
                 hash: APP_STATE_EMPTY_LT_HASH,
                 indexValueMap: new Map()
@@ -144,6 +147,7 @@ export class WaAppStateMemoryStore implements WaAppStateStore {
     ): Promise<void> {
         for (const update of updates) {
             this.collections.set(update.collection, {
+                initialized: true,
                 version: update.version,
                 hash: update.hash,
                 indexValueMap: toBoundedMap(

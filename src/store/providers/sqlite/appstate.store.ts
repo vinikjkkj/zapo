@@ -175,6 +175,7 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
         )
         if (!versionRow) {
             return {
+                initialized: false,
                 version: 0,
                 hash: APP_STATE_EMPTY_LT_HASH,
                 indexValueMap: new Map()
@@ -197,6 +198,7 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
         }
 
         return {
+            initialized: true,
             version: asNumber(versionRow.version, 'appstate_collection_versions.version'),
             hash: asBytes(versionRow.hash, 'appstate_collection_versions.hash'),
             indexValueMap

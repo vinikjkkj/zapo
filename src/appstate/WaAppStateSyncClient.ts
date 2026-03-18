@@ -1,4 +1,8 @@
-import { APP_STATE_DEFAULT_COLLECTIONS, APP_STATE_EMPTY_LT_HASH } from '@appstate/constants'
+import {
+    APP_STATE_DEFAULT_COLLECTIONS,
+    APP_STATE_DEFAULT_COLLECTION_VERSION,
+    APP_STATE_EMPTY_LT_HASH
+} from '@appstate/constants'
 import type {
     AppStateCollectionName,
     WaAppStateMissingKeysEvent,
@@ -26,11 +30,13 @@ import {
     WA_NODE_TAGS,
     WA_XMLNS
 } from '@protocol/constants'
+import { parseSignalAddressFromJid } from '@protocol/jid'
 import type {
     WaAppStateCollectionStateUpdate,
     WaAppStateCollectionStoreState,
     WaAppStateStore
 } from '@store/contracts/appstate.store'
+import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { decodeProtoBytes } from '@util/base64'
 import { uint8Equal } from '@util/bytes'
@@ -55,6 +61,7 @@ interface WaAppStateSyncClientOptions {
     readonly logger: Logger
     readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
     readonly store: WaAppStateStore
+    readonly getCurrentMeJid?: () => string | null | undefined
     readonly hostDomain?: string
     readonly defaultTimeoutMs?: number
     readonly onMissingKeys?: (event: WaAppStateMissingKeysEvent) => Promise<void>
@@ -80,6 +87,7 @@ export class WaAppStateSyncClient {
     private readonly logger: Logger
     private readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
     private readonly store: WaAppStateStore
+    private readonly getCurrentMeJid?: () => string | null | undefined
     private readonly hostDomain: string
     private readonly defaultTimeoutMs: number
     private readonly onMissingKeys?: (event: WaAppStateMissingKeysEvent) => Promise<void>
@@ -95,6 +103,7 @@ export class WaAppStateSyncClient {
         this.logger = options.logger
         this.query = options.query
         this.store = options.store
+        this.getCurrentMeJid = options.getCurrentMeJid
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
         this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.APP_STATE_SYNC_TIMEOUT_MS
         this.onMissingKeys = options.onMissingKeys
@@ -351,17 +360,13 @@ export class WaAppStateSyncClient {
         readonly skippedUpload: boolean
     }> {
         const collectionState = await this.getCollectionState(collection)
-        const hasPersistedState =
-            collectionState.version > 0 ||
-            collectionState.indexValueMap.size > 0 ||
-            !uint8Equal(collectionState.hash, APP_STATE_EMPTY_LT_HASH)
+        const hasPersistedState = collectionState.initialized
         const attrs: Record<string, string> = {
-            name: collection
-        }
-        if (hasPersistedState) {
-            attrs.version = String(collectionState.version)
-        } else {
-            attrs.return_snapshot = 'true'
+            name: collection,
+            version: String(
+                hasPersistedState ? collectionState.version : APP_STATE_DEFAULT_COLLECTION_VERSION
+            ),
+            return_snapshot: hasPersistedState ? 'false' : 'true'
         }
 
         const children: BinaryNode[] = []
@@ -432,6 +437,7 @@ export class WaAppStateSyncClient {
             tag: responseNode.tag,
             type: responseNode.attrs.type
         })
+        assertIqResult(responseNode, 'app-state sync')
         const payloads = parseSyncResponse(responseNode)
         this.logger.debug('app-state sync payloads parsed', { count: payloads.length })
         const payloadByCollection = new Map<AppStateCollectionName, CollectionResponsePayload>()
@@ -559,6 +565,20 @@ export class WaAppStateSyncClient {
                     )
                     collectionStateChanged = true
                 }
+            }
+
+            const currentCollectionState = await this.getCollectionState(collection)
+            if (
+                !currentCollectionState.initialized &&
+                payload.state === WA_APP_STATE_COLLECTION_STATES.SUCCESS
+            ) {
+                this.setCollectionState(
+                    collection,
+                    payload.version ?? currentCollectionState.version,
+                    currentCollectionState.hash,
+                    currentCollectionState.indexValueMap
+                )
+                collectionStateChanged = true
             }
 
             if (payload.state === WA_APP_STATE_COLLECTION_STATES.SUCCESS_HAS_MORE) {
@@ -1113,13 +1133,16 @@ export class WaAppStateSyncClient {
             patchVersion,
             collection
         )
+        const deviceIndex = this.resolveDeviceIndex()
+        const clientDebugData = this.buildPatchClientDebugData()
 
         const encodedPatch = proto.SyncdPatch.encode({
-            version: { version: patchVersion },
             mutations: encryptedMutations,
             snapshotMac,
             patchMac,
-            keyId: { id: activeKey.keyId }
+            keyId: { id: activeKey.keyId },
+            ...(deviceIndex === undefined ? {} : { deviceIndex }),
+            clientDebugData
         }).finish()
 
         return {
@@ -1131,6 +1154,29 @@ export class WaAppStateSyncClient {
                 nextIndexValueMap: nextState.indexValueMap
             }
         }
+    }
+
+    private resolveDeviceIndex(): number | undefined {
+        const meJid = this.getCurrentMeJid?.()
+        if (!meJid) {
+            return undefined
+        }
+        try {
+            return parseSignalAddressFromJid(meJid).device
+        } catch (error) {
+            this.logger.debug('app-state could not parse device index from me jid', {
+                meJid
+            })
+            void error
+            return undefined
+        }
+    }
+
+    private buildPatchClientDebugData(): Uint8Array {
+        return proto.PatchDebugData.encode({
+            isSenderPrimary: false,
+            senderPlatform: proto.PatchDebugData.Platform.WEB
+        }).finish()
     }
 
     private async computeNextCollectionState(
@@ -1248,6 +1294,7 @@ export class WaAppStateSyncClient {
     ): void {
         const context = this.requireSyncContext()
         context.collections.set(collection, {
+            initialized: true,
             version,
             hash,
             indexValueMap

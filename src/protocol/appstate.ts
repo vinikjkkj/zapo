@@ -37,3 +37,63 @@ export const WA_APP_STATE_KDF_INFO = Object.freeze({
     MUTATION_KEYS: 'WhatsApp Mutation Keys',
     PATCH_INTEGRITY: 'WhatsApp Patch Integrity'
 } as const)
+
+export const WA_APP_STATE_CHAT_MUTATION_ACTIONS = Object.freeze({
+    STAR: 'star',
+    MUTE: 'mute',
+    PIN: 'pin_v1',
+    ARCHIVE: 'archive',
+    DELETE_MESSAGE_FOR_ME: 'deleteMessageForMe',
+    MARK_CHAT_AS_READ: 'markChatAsRead',
+    CLEAR_CHAT: 'clearChat',
+    DELETE_CHAT: 'deleteChat',
+    LOCK_CHAT: 'lock'
+} as const)
+
+export const WA_APP_STATE_CHAT_MUTATION_SPECS = Object.freeze({
+    STAR: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_HIGH,
+        action: WA_APP_STATE_CHAT_MUTATION_ACTIONS.STAR,
+        version: 2
+    },
+    MUTE: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_HIGH,
+        action: WA_APP_STATE_CHAT_MUTATION_ACTIONS.MUTE,
+        version: 2
+    },
+    PIN: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+        action: WA_APP_STATE_CHAT_MUTATION_ACTIONS.PIN,
+        version: 5
+    },
+    ARCHIVE: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+        action: WA_APP_STATE_CHAT_MUTATION_ACTIONS.ARCHIVE,
+        version: 3
+    },
+    DELETE_MESSAGE_FOR_ME: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_HIGH,
+        action: WA_APP_STATE_CHAT_MUTATION_ACTIONS.DELETE_MESSAGE_FOR_ME,
+        version: 3
+    },
+    MARK_CHAT_AS_READ: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+        action: WA_APP_STATE_CHAT_MUTATION_ACTIONS.MARK_CHAT_AS_READ,
+        version: 3
+    },
+    CLEAR_CHAT: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_HIGH,
+        action: WA_APP_STATE_CHAT_MUTATION_ACTIONS.CLEAR_CHAT,
+        version: 6
+    },
+    DELETE_CHAT: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_HIGH,
+        action: WA_APP_STATE_CHAT_MUTATION_ACTIONS.DELETE_CHAT,
+        version: 6
+    },
+    LOCK_CHAT: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+        action: WA_APP_STATE_CHAT_MUTATION_ACTIONS.LOCK_CHAT,
+        version: 7
+    }
+} as const)

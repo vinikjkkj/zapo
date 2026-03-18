@@ -5,6 +5,7 @@ import type {
 } from '@appstate/types'
 
 export interface WaAppStateCollectionStoreState {
+    readonly initialized: boolean
     readonly version: number
     readonly hash: Uint8Array
     readonly indexValueMap: ReadonlyMap<string, Uint8Array>

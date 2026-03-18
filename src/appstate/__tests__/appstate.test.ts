@@ -10,7 +10,10 @@ import {
     toNetworkOrder64
 } from '@appstate/utils'
 import { WaAppStateCrypto } from '@appstate/WaAppStateCrypto'
+import { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import { parseCollectionState, parseSyncResponse } from '@appstate/WaAppStateSyncResponseParser'
+import type { Logger } from '@infra/log/types'
+import type { Proto } from '@proto'
 import { proto } from '@proto'
 import {
     WA_APP_STATE_COLLECTIONS,
@@ -19,6 +22,9 @@ import {
     WA_IQ_TYPES,
     WA_NODE_TAGS
 } from '@protocol/constants'
+import { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
+import type { BinaryNode } from '@transport/types'
+import { bytesToHex } from '@util/bytes'
 
 test('appstate utils parse collection names, key metadata and active key ordering', () => {
     assert.equal(
@@ -99,6 +105,21 @@ test('appstate sync response parser decodes collection state, patches and refere
         content: [{ tag: WA_NODE_TAGS.ERROR, attrs: { code: WA_APP_STATE_ERROR_CODES.CONFLICT } }]
     }
     assert.equal(parseCollectionState(conflictNode), WA_APP_STATE_COLLECTION_STATES.CONFLICT)
+
+    assert.throws(
+        () =>
+            parseSyncResponse({
+                tag: WA_NODE_TAGS.IQ,
+                attrs: { type: WA_IQ_TYPES.ERROR },
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.ERROR,
+                        attrs: { code: '400', text: 'bad-request' }
+                    }
+                ]
+            }),
+        /sync iq failed \(400: bad-request\)/
+    )
 })
 
 test('appstate crypto encrypts/decrypts mutation and computes hash transitions', async () => {
@@ -150,4 +171,258 @@ test('appstate crypto encrypts/decrypts mutation and computes hash transitions',
         []
     )
     assert.equal(updated.hash.length, APP_STATE_EMPTY_LT_HASH.length)
+})
+
+test('appstate sync client builds outgoing patch without inline version field', async () => {
+    const store = new WaAppStateMemoryStore()
+    const key = {
+        keyId: new Uint8Array([0, 1, 0, 0, 0, 2]),
+        keyData: new Uint8Array(32).fill(9),
+        timestamp: 2
+    }
+    await store.upsertSyncKeys([key])
+    await store.setCollectionStates([
+        {
+            collection: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+            version: 10,
+            hash: APP_STATE_EMPTY_LT_HASH,
+            indexValueMap: new Map()
+        }
+    ])
+
+    let capturedPatch: Proto.ISyncdPatch | null = null
+    const query = async (node: BinaryNode): Promise<BinaryNode> => {
+        const syncNode = (node.content as readonly BinaryNode[])[0]
+        const collectionNode = (syncNode.content as readonly BinaryNode[])[0]
+        const patchNode = (collectionNode.content as readonly BinaryNode[])[0]
+        capturedPatch = proto.SyncdPatch.decode(patchNode.content as Uint8Array)
+        return {
+            tag: WA_NODE_TAGS.IQ,
+            attrs: { type: WA_IQ_TYPES.RESULT },
+            content: [
+                {
+                    tag: WA_NODE_TAGS.SYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.COLLECTION,
+                            attrs: {
+                                name: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+                                version: '11'
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+
+    const logger: Logger = {
+        level: 'trace',
+        trace() {},
+        debug() {},
+        info() {},
+        warn() {},
+        error() {}
+    }
+
+    const client = new WaAppStateSyncClient({
+        logger,
+        query,
+        store,
+        getCurrentMeJid: () => '5511999999999:3@s.whatsapp.net'
+    })
+
+    await client.sync({
+        collections: [WA_APP_STATE_COLLECTIONS.REGULAR_LOW],
+        pendingMutations: [
+            {
+                collection: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+                operation: 'set',
+                index: JSON.stringify(['pin_v1', '120363078720039631@g.us']),
+                value: {
+                    timestamp: 3_000,
+                    pinAction: { pinned: true }
+                },
+                version: 5,
+                timestamp: 3_000
+            }
+        ]
+    })
+
+    assert.ok(capturedPatch !== null)
+    const patch = capturedPatch as Proto.ISyncdPatch
+    assert.equal(patch.version, null)
+    assert.equal(patch.mutations?.length ?? 0, 1)
+    assert.equal(
+        bytesToHex((patch.keyId?.id as Uint8Array) ?? new Uint8Array()),
+        bytesToHex(key.keyId)
+    )
+    assert.equal(patch.deviceIndex, 3)
+    assert.equal((patch.clientDebugData as Uint8Array)?.length > 0, true)
+})
+
+test('appstate sync client uploads mutation for persisted empty version zero state', async () => {
+    const store = new WaAppStateMemoryStore()
+    const key = {
+        keyId: new Uint8Array([0, 1, 0, 0, 0, 3]),
+        keyData: new Uint8Array(32).fill(9),
+        timestamp: 3
+    }
+    await store.upsertSyncKeys([key])
+    await store.setCollectionStates([
+        {
+            collection: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+            version: 0,
+            hash: APP_STATE_EMPTY_LT_HASH,
+            indexValueMap: new Map()
+        }
+    ])
+
+    let queryCalls = 0
+    let sawOutgoingPatch = false
+    const query = async (node: BinaryNode): Promise<BinaryNode> => {
+        queryCalls += 1
+        const syncNode = (node.content as readonly BinaryNode[])[0]
+        const collectionNode = (syncNode.content as readonly BinaryNode[])[0]
+        const content = collectionNode.content as readonly BinaryNode[] | undefined
+        sawOutgoingPatch = content?.some((child) => child.tag === WA_NODE_TAGS.PATCH) ?? false
+        return {
+            tag: WA_NODE_TAGS.IQ,
+            attrs: { type: WA_IQ_TYPES.RESULT },
+            content: [
+                {
+                    tag: WA_NODE_TAGS.SYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.COLLECTION,
+                            attrs: {
+                                name: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+                                version: '1'
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+
+    const logger: Logger = {
+        level: 'trace',
+        trace() {},
+        debug() {},
+        info() {},
+        warn() {},
+        error() {}
+    }
+
+    const client = new WaAppStateSyncClient({
+        logger,
+        query,
+        store,
+        getCurrentMeJid: () => '5511999999999:3@s.whatsapp.net'
+    })
+
+    await client.sync({
+        collections: [WA_APP_STATE_COLLECTIONS.REGULAR_LOW],
+        pendingMutations: [
+            {
+                collection: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+                operation: 'set',
+                index: JSON.stringify(['pin_v1', '120363078720039631@g.us']),
+                value: {
+                    timestamp: 3_000,
+                    pinAction: { pinned: true }
+                },
+                version: 5,
+                timestamp: 3_000
+            }
+        ]
+    })
+
+    assert.equal(queryCalls, 1)
+    assert.equal(sawOutgoingPatch, true)
+})
+
+test('appstate sync client marks empty successful bootstrap as initialized for next round upload', async () => {
+    const store = new WaAppStateMemoryStore()
+    const key = {
+        keyId: new Uint8Array([0, 1, 0, 0, 0, 4]),
+        keyData: new Uint8Array(32).fill(9),
+        timestamp: 4
+    }
+    await store.upsertSyncKeys([key])
+
+    let queryCalls = 0
+    const patchByCall: boolean[] = []
+    const returnSnapshotByCall: string[] = []
+    const versionByCall: string[] = []
+    const query = async (node: BinaryNode): Promise<BinaryNode> => {
+        queryCalls += 1
+        const syncNode = (node.content as readonly BinaryNode[])[0]
+        const collectionNode = (syncNode.content as readonly BinaryNode[])[0]
+        const content = collectionNode.content as readonly BinaryNode[] | undefined
+        patchByCall.push(content?.some((child) => child.tag === WA_NODE_TAGS.PATCH) ?? false)
+        returnSnapshotByCall.push(collectionNode.attrs.return_snapshot)
+        versionByCall.push(collectionNode.attrs.version)
+
+        return {
+            tag: WA_NODE_TAGS.IQ,
+            attrs: { type: WA_IQ_TYPES.RESULT },
+            content: [
+                {
+                    tag: WA_NODE_TAGS.SYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.COLLECTION,
+                            attrs: {
+                                name: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+                                version: queryCalls === 1 ? '0' : '1'
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+
+    const logger: Logger = {
+        level: 'trace',
+        trace() {},
+        debug() {},
+        info() {},
+        warn() {},
+        error() {}
+    }
+
+    const client = new WaAppStateSyncClient({
+        logger,
+        query,
+        store,
+        getCurrentMeJid: () => '5511999999999:3@s.whatsapp.net'
+    })
+
+    await client.sync({
+        collections: [WA_APP_STATE_COLLECTIONS.REGULAR_LOW],
+        pendingMutations: [
+            {
+                collection: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+                operation: 'set',
+                index: JSON.stringify(['pin_v1', '120363078720039631@g.us']),
+                value: {
+                    timestamp: 4_000,
+                    pinAction: { pinned: false }
+                },
+                version: 5,
+                timestamp: 4_000
+            }
+        ]
+    })
+
+    assert.equal(queryCalls, 2)
+    assert.deepEqual(patchByCall, [false, true])
+    assert.deepEqual(returnSnapshotByCall, ['true', 'false'])
+    assert.deepEqual(versionByCall, ['0', '0'])
 })
