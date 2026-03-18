@@ -1,6 +1,7 @@
 import type { SignalKeyPair } from '@crypto/curves/types'
 import type { Proto } from '@proto'
 import type { RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
+import type { WaProxyTransport } from '@transport/types'
 
 export interface WaAuthCredentials {
     readonly noiseKeyPair: SignalKeyPair
@@ -31,6 +32,9 @@ export interface WaAuthSocketOptions {
     readonly reconnectIntervalMs?: number
     readonly timeoutIntervalMs?: number
     readonly maxReconnectAttempts?: number
+    readonly proxy?: {
+        readonly ws?: WaProxyTransport
+    }
 }
 
 export interface WaAuthClientOptions {

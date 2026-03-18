@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import http from 'node:http'
 import test from 'node:test'
 
 import {
@@ -9,6 +10,7 @@ import {
 import type { WaAuthCredentials } from '@auth/types'
 import type { Logger } from '@infra/log/types'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
+import type { WaProxyDispatcher } from '@transport/types'
 
 function createLogger(): Logger {
     return {
@@ -84,6 +86,9 @@ test('auth flow persists and restores existing credentials', async () => {
 test('buildCommsConfig switches between login and registration payloads', () => {
     const logger = createLogger()
     const credentials = createCredentials()
+    const wsDispatcher: WaProxyDispatcher = {
+        dispatch: () => undefined
+    }
 
     const loginConfig = buildCommsConfig(
         logger,
@@ -94,7 +99,10 @@ test('buildCommsConfig switches between login and registration payloads', () => 
             connectTimeoutMs: 10,
             reconnectIntervalMs: 20,
             timeoutIntervalMs: 30,
-            maxReconnectAttempts: 40
+            maxReconnectAttempts: 40,
+            proxy: {
+                ws: wsDispatcher
+            }
         },
         {
             deviceBrowser: 'Chrome',
@@ -106,6 +114,8 @@ test('buildCommsConfig switches between login and registration payloads', () => 
     assert.equal(loginConfig.noise.isRegistered, true)
     assert.ok(loginConfig.noise.loginPayloadConfig)
     assert.equal(loginConfig.noise.registrationPayloadConfig, undefined)
+    assert.equal(loginConfig.dispatcher, wsDispatcher)
+    assert.equal(loginConfig.agent, undefined)
 
     const registrationConfig = buildCommsConfig(
         logger,
@@ -122,4 +132,27 @@ test('buildCommsConfig switches between login and registration payloads', () => 
 
     assert.equal(registrationConfig.noise.isRegistered, false)
     assert.ok(registrationConfig.noise.registrationPayloadConfig)
+})
+
+test('buildCommsConfig maps ws proxy agent when provided', () => {
+    const wsAgent = new http.Agent({ keepAlive: true })
+    const config = buildCommsConfig(
+        createLogger(),
+        createCredentials(),
+        {
+            url: 'wss://web.whatsapp.com/ws/chat',
+            proxy: {
+                ws: wsAgent
+            }
+        },
+        {
+            deviceBrowser: 'Chrome',
+            deviceOsDisplayName: 'Windows',
+            requireFullSync: false
+        }
+    )
+
+    assert.equal(config.dispatcher, undefined)
+    assert.equal(config.agent, wsAgent)
+    wsAgent.destroy()
 })

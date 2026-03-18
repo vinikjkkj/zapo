@@ -71,6 +71,8 @@ export class WaComms {
                 url: this.config.url,
                 urls: this.config.urls,
                 protocols: this.config.protocols,
+                dispatcher: this.config.dispatcher,
+                agent: this.config.agent,
                 timeoutIntervalMs: this.config.timeoutIntervalMs
             },
             logger

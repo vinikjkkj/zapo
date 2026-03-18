@@ -1,6 +1,7 @@
 import type { Readable } from 'node:stream'
 
 import type { Logger } from '@infra/log/types'
+import type { WaProxyAgent, WaProxyDispatcher } from '@transport/types'
 
 export type MediaKind = 'image' | 'video' | 'audio' | 'document' | 'sticker'
 export type MediaCryptoType = MediaKind | 'ptt' | 'gif' | 'ptv' | 'history' | 'md-app-state'
@@ -22,6 +23,10 @@ export interface WaMediaTransferClientOptions {
     readonly defaultTimeoutMs?: number
     readonly defaultMaxReadBytes?: number
     readonly defaultHeaders?: Readonly<Record<string, string>>
+    readonly defaultUploadDispatcher?: WaProxyDispatcher
+    readonly defaultDownloadDispatcher?: WaProxyDispatcher
+    readonly defaultUploadAgent?: WaProxyAgent
+    readonly defaultDownloadAgent?: WaProxyAgent
 }
 
 export interface WaMediaDerivedKeys {

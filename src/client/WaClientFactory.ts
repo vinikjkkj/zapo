@@ -40,6 +40,7 @@ import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 import { createUsyncSidGenerator, type WaUsyncSidGenerator } from '@transport/node/usync'
 import { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import { WaNodeTransport } from '@transport/node/WaNodeTransport'
+import { isProxyTransport, toProxyAgent, toProxyDispatcher } from '@transport/proxy'
 import type { BinaryNode } from '@transport/types'
 import type { WaComms } from '@transport/WaComms'
 import { toError } from '@util/primitives'
@@ -78,6 +79,35 @@ interface WaClientDependencies {
     readonly groupCoordinator: WaGroupCoordinator
 }
 
+function assertProxyTransport(value: unknown, path: string): void {
+    if (value === undefined) {
+        return
+    }
+    if (!isProxyTransport(value)) {
+        throw new Error(
+            `${path} must be a proxy transport instance (dispatcher with dispatch(...) or agent with addRequest(...))`
+        )
+    }
+}
+
+function validateProxyOptions(options: WaClientOptions): void {
+    const rawProxy = options.proxy as unknown
+    if (rawProxy === undefined) {
+        return
+    }
+    if (typeof rawProxy !== 'object' || rawProxy === null || Array.isArray(rawProxy)) {
+        throw new Error('proxy must be an object with optional ws/mediaUpload/mediaDownload')
+    }
+    const proxy = rawProxy as {
+        readonly ws?: unknown
+        readonly mediaUpload?: unknown
+        readonly mediaDownload?: unknown
+    }
+    assertProxyTransport(proxy?.ws, 'proxy.ws')
+    assertProxyTransport(proxy?.mediaUpload, 'proxy.mediaUpload')
+    assertProxyTransport(proxy?.mediaDownload, 'proxy.mediaDownload')
+}
+
 export interface WaClientDependencyHost {
     readonly sendNode: (node: BinaryNode) => Promise<void>
     readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
@@ -108,6 +138,8 @@ export interface WaClientDependencyHost {
 }
 
 export function resolveWaClientBase(options: WaClientOptions, logger: Logger): WaClientBase {
+    validateProxyOptions(options)
+
     const deviceBrowser = options.deviceBrowser ?? WA_DEFAULTS.DEVICE_BROWSER
     const sessionId = options.sessionId.trim()
     if (sessionId.length === 0) {
@@ -368,7 +400,11 @@ export function buildWaClientDependencies(input: {
 
     const mediaTransfer = new WaMediaTransferClient({
         logger,
-        defaultTimeoutMs: options.mediaTimeoutMs
+        defaultTimeoutMs: options.mediaTimeoutMs,
+        defaultUploadDispatcher: toProxyDispatcher(options.proxy?.mediaUpload),
+        defaultDownloadDispatcher: toProxyDispatcher(options.proxy?.mediaDownload),
+        defaultUploadAgent: toProxyAgent(options.proxy?.mediaUpload),
+        defaultDownloadAgent: toProxyAgent(options.proxy?.mediaDownload)
     })
     const mediaMessageBuildOptions: WaMediaMessageBuildOptions = {
         logger,

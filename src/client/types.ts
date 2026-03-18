@@ -3,11 +3,18 @@ import type { WaAuthClientOptions, WaAuthCredentials, WaAuthSocketOptions } from
 import type { WaMessagePublishOptions } from '@message/types'
 import type { Proto } from '@proto'
 import type { WaStore } from '@store/types'
-import type { BinaryNode } from '@transport/types'
+import type { BinaryNode, WaProxyTransport } from '@transport/types'
+
+export interface WaClientProxyOptions {
+    readonly ws?: WaProxyTransport
+    readonly mediaUpload?: WaProxyTransport
+    readonly mediaDownload?: WaProxyTransport
+}
 
 export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOptions {
     readonly store: WaStore
     readonly sessionId: string
+    readonly proxy?: WaClientProxyOptions
     readonly chatSocketUrls?: readonly string[]
     readonly iqTimeoutMs?: number
     readonly nodeQueryTimeoutMs?: number

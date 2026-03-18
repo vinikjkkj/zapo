@@ -1,5 +1,16 @@
+import type { Agent as HttpAgent } from 'node:http'
+import type { Agent as HttpsAgent } from 'node:https'
+
 import type { SignalKeyPair } from '@crypto/curves/types'
 import type { WaLoginPayloadConfig, WaRegistrationPayloadConfig } from '@transport/noise/types'
+
+export interface WaProxyDispatcher {
+    dispatch(...args: readonly unknown[]): unknown
+}
+
+export type WaProxyAgent = HttpAgent | HttpsAgent
+
+export type WaProxyTransport = WaProxyDispatcher | WaProxyAgent
 
 export interface BinaryNode {
     readonly tag: string
@@ -22,6 +33,8 @@ export interface WaSocketConfig {
     readonly urls?: readonly string[]
     readonly protocols?: readonly string[]
     readonly headers?: Readonly<Record<string, string>>
+    readonly dispatcher?: WaProxyDispatcher
+    readonly agent?: WaProxyAgent
     readonly timeoutIntervalMs?: number
 }
 
@@ -77,8 +90,19 @@ export interface RawWebSocket {
     send(data: string | ArrayBuffer | Uint8Array): void
 }
 
+export interface WaRawWebSocketInit {
+    readonly protocols?: string | readonly string[]
+    readonly headers?: Readonly<Record<string, string>>
+    readonly dispatcher?: WaProxyDispatcher
+    readonly agent?: WaProxyAgent
+}
+
 export type RawWebSocketConstructor = new (
     url: string,
-    protocols?: string | readonly string[],
-    options?: { headers?: Readonly<Record<string, string>> }
+    protocols?: string | readonly string[] | WaRawWebSocketInit,
+    options?: {
+        headers?: Readonly<Record<string, string>>
+        dispatcher?: WaProxyDispatcher
+        agent?: WaProxyAgent
+    }
 ) => RawWebSocket

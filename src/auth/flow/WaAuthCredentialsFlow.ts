@@ -8,6 +8,7 @@ import { verifySignalSignature } from '@signal/crypto/WaAdvSignature'
 import { createAndStoreInitialKeys } from '@signal/registration/utils'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
+import { toProxyAgent, toProxyDispatcher } from '@transport/proxy'
 import type { WaCommsConfig } from '@transport/types'
 import { toError } from '@util/primitives'
 
@@ -66,6 +67,7 @@ export function buildCommsConfig(
 ): WaCommsConfig {
     const registered = credentials.meJid !== null && credentials.meJid !== undefined
     const loginIdentity = registered ? getLoginIdentity(credentials.meJid) : null
+    const wsProxy = socketOptions.proxy?.ws
     logger.debug('building comms config from credentials', {
         registered,
         hasServerStaticKey:
@@ -76,6 +78,8 @@ export function buildCommsConfig(
         url: socketOptions.url,
         urls: socketOptions.urls,
         protocols: socketOptions.protocols,
+        dispatcher: toProxyDispatcher(wsProxy),
+        agent: toProxyAgent(wsProxy),
         connectTimeoutMs: socketOptions.connectTimeoutMs,
         reconnectIntervalMs: socketOptions.reconnectIntervalMs,
         timeoutIntervalMs: socketOptions.timeoutIntervalMs,

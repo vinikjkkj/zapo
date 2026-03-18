@@ -5,14 +5,19 @@ import { DEFAULT_MEDIA_HOSTS } from '@media/constants'
 import type { MediaCryptoType, WaMediaTransferClientOptions } from '@media/types'
 import { WaMediaCrypto } from '@media/WaMediaCrypto'
 import { WA_DEFAULTS } from '@protocol/constants'
+import type { WaProxyAgent, WaProxyDispatcher } from '@transport/types'
 import { EMPTY_BYTES, readAllBytes } from '@util/bytes'
 import { toError } from '@util/primitives'
+
+const GOT_OPTIONAL_MODULE = 'got'
 
 interface StreamDownloadRequest {
     readonly url?: string
     readonly directPath?: string
     readonly hosts?: readonly string[]
     readonly headers?: Readonly<Record<string, string>>
+    readonly dispatcher?: WaMediaTransferClientOptions['defaultDownloadDispatcher']
+    readonly agent?: WaMediaTransferClientOptions['defaultDownloadAgent']
     readonly timeoutMs?: number
     readonly signal?: AbortSignal
     readonly maxBytes?: number
@@ -31,6 +36,14 @@ interface StreamTransferResponse {
     readonly ok: boolean
     readonly headers: Readonly<Record<string, string>>
     readonly body: Readable | null
+}
+
+interface InternalTransferResponse {
+    readonly status: number
+    readonly ok: boolean
+    readonly headers: Readonly<Record<string, string>>
+    readonly body: Readable | null
+    cancel(): Promise<void>
 }
 
 interface EncryptedUploadRequest extends StreamDownloadRequest {
@@ -70,6 +83,15 @@ interface ResolvedTransferRequest {
     readonly timeoutMs: number
 }
 
+interface ResolvedProxyTransport {
+    readonly dispatcher?: WaProxyDispatcher
+    readonly agent?: WaProxyAgent
+}
+
+interface OptionalGotModule {
+    readonly stream: (url: string, options?: Readonly<Record<string, unknown>>) => Readable
+}
+
 interface PreparedEncryptedUpload {
     readonly body: Uint8Array | Readable
     readonly contentLength: number | undefined
@@ -85,12 +107,71 @@ interface AbortContext {
     cleanup(): void
 }
 
+function asOptionalGotModule(loaded: unknown): OptionalGotModule | null {
+    if (loaded && typeof loaded === 'object') {
+        const direct = (loaded as { readonly stream?: unknown }).stream
+        if (typeof direct === 'function') {
+            return loaded as OptionalGotModule
+        }
+        const fallback = (loaded as { readonly default?: unknown }).default
+        if (
+            fallback &&
+            typeof fallback === 'object' &&
+            'stream' in fallback &&
+            typeof (fallback as { readonly stream?: unknown }).stream === 'function'
+        ) {
+            return fallback as OptionalGotModule
+        }
+        if (typeof fallback === 'function' && 'stream' in fallback) {
+            const maybeStream = (fallback as { readonly stream?: unknown }).stream
+            if (typeof maybeStream === 'function') {
+                return fallback as unknown as OptionalGotModule
+            }
+        }
+    }
+    if (typeof loaded === 'function' && 'stream' in loaded) {
+        const maybeStream = (loaded as { readonly stream?: unknown }).stream
+        if (typeof maybeStream === 'function') {
+            return loaded as unknown as OptionalGotModule
+        }
+    }
+    return null
+}
+
+async function loadOptionalGotModule(): Promise<OptionalGotModule> {
+    try {
+        const loaded = await import(GOT_OPTIONAL_MODULE)
+        const module = asOptionalGotModule(loaded)
+        if (module) {
+            return module
+        }
+        throw new Error('invalid got module export')
+    } catch (error) {
+        const normalized = toError(error)
+        const code = (normalized as NodeJS.ErrnoException).code
+        const message = normalized.message ?? ''
+        const isModuleNotFound =
+            (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') &&
+            (message.includes(`'${GOT_OPTIONAL_MODULE}'`) ||
+                message.includes(`"${GOT_OPTIONAL_MODULE}"`))
+        if (isModuleNotFound) {
+            throw new Error('optional dependency "got" is not installed. Install with: npm i got')
+        }
+        throw normalized
+    }
+}
+
 export class WaMediaTransferClient {
     private readonly logger?: Logger
     private readonly defaultHosts: readonly string[]
     private readonly defaultTimeoutMs: number
     private readonly defaultMaxReadBytes: number | undefined
     private readonly defaultHeaders: Readonly<Record<string, string>>
+    private readonly defaultUploadDispatcher: WaMediaTransferClientOptions['defaultUploadDispatcher']
+    private readonly defaultDownloadDispatcher: WaMediaTransferClientOptions['defaultDownloadDispatcher']
+    private readonly defaultUploadAgent: WaMediaTransferClientOptions['defaultUploadAgent']
+    private readonly defaultDownloadAgent: WaMediaTransferClientOptions['defaultDownloadAgent']
+    private gotModulePromise: Promise<OptionalGotModule> | null
 
     public constructor(options: WaMediaTransferClientOptions = {}) {
         this.logger = options.logger
@@ -98,10 +179,19 @@ export class WaMediaTransferClient {
         this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.MEDIA_TIMEOUT_MS
         this.defaultMaxReadBytes = options.defaultMaxReadBytes
         this.defaultHeaders = options.defaultHeaders ?? {}
+        this.defaultUploadDispatcher = options.defaultUploadDispatcher
+        this.defaultDownloadDispatcher = options.defaultDownloadDispatcher
+        this.defaultUploadAgent = options.defaultUploadAgent
+        this.defaultDownloadAgent = options.defaultDownloadAgent
+        this.gotModulePromise = null
     }
 
     public async downloadStream(request: StreamDownloadRequest): Promise<StreamTransferResponse> {
         const { urls, headers, timeoutMs } = this.resolveTransferRequest(request)
+        const proxy = this.resolveProxyTransport({
+            dispatcher: request.dispatcher ?? this.defaultDownloadDispatcher,
+            agent: request.agent ?? this.defaultDownloadAgent
+        })
         this.logger?.debug('media download stream start', {
             urls: urls.length,
             timeoutMs
@@ -109,11 +199,15 @@ export class WaMediaTransferClient {
         return this.executeTransfer(urls, timeoutMs, request.signal, {
             responseLog: 'media download stream response',
             send: (url, signal) =>
-                fetch(url, {
-                    method: 'GET',
-                    headers,
-                    signal
-                })
+                this.transferRequest(
+                    url,
+                    {
+                        method: 'GET',
+                        headers,
+                        signal
+                    },
+                    proxy
+                )
         })
     }
 
@@ -135,6 +229,10 @@ export class WaMediaTransferClient {
                     ? String(request.contentLength)
                     : undefined
         })
+        const proxy = this.resolveProxyTransport({
+            dispatcher: request.dispatcher ?? this.defaultUploadDispatcher,
+            agent: request.agent ?? this.defaultUploadAgent
+        })
         const uploadUrls = bodyIsBytes ? urls : urls.slice(0, 1)
         if (!bodyIsBytes && urls.length > 1) {
             this.logger?.warn('upload stream fallback disabled for non-replayable body', {
@@ -152,21 +250,29 @@ export class WaMediaTransferClient {
             responseLog: 'media upload stream response',
             send: async (url, signal) => {
                 if (bodyIsBytes) {
-                    return fetch(url, {
+                    return this.transferRequest(
+                        url,
+                        {
+                            method,
+                            headers,
+                            signal,
+                            body: request.body
+                        },
+                        proxy
+                    )
+                }
+
+                return this.transferRequest(
+                    url,
+                    {
                         method,
                         headers,
                         signal,
-                        body: request.body
-                    })
-                }
-
-                return fetch(url, {
-                    method,
-                    headers,
-                    signal,
-                    body: request.body as unknown as never,
-                    duplex: 'half'
-                } as RequestInit)
+                        body: request.body as unknown as never,
+                        duplex: 'half'
+                    } as RequestInit,
+                    proxy
+                )
             }
         })
     }
@@ -185,6 +291,8 @@ export class WaMediaTransferClient {
                 directPath: request.directPath,
                 hosts: request.hosts,
                 headers: request.headers,
+                dispatcher: request.dispatcher,
+                agent: request.agent,
                 timeoutMs: request.timeoutMs,
                 signal: request.signal,
                 method: request.method,
@@ -262,6 +370,183 @@ export class WaMediaTransferClient {
         return this.readAllBytesWithLimit(response.body, maxBytes)
     }
 
+    private resolveProxyTransport(proxy: ResolvedProxyTransport): ResolvedProxyTransport {
+        if (proxy.agent) {
+            return { agent: proxy.agent }
+        }
+        return { dispatcher: proxy.dispatcher }
+    }
+
+    private async transferRequest(
+        url: string,
+        init: RequestInit,
+        proxy: ResolvedProxyTransport
+    ): Promise<InternalTransferResponse> {
+        if (proxy.agent) {
+            return this.gotWithAgent(url, init, proxy.agent)
+        }
+        return this.fetchWithDispatcher(url, init, proxy.dispatcher)
+    }
+
+    private async fetchWithDispatcher(
+        url: string,
+        init: RequestInit,
+        dispatcher: WaProxyDispatcher | undefined
+    ): Promise<InternalTransferResponse> {
+        const response = !dispatcher
+            ? await fetch(url, init)
+            : await fetch(url, {
+                  ...init,
+                  dispatcher
+              } as RequestInit)
+        return this.toFetchTransferResponse(response)
+    }
+
+    private toFetchTransferResponse(response: Response): InternalTransferResponse {
+        return {
+            status: response.status,
+            ok: response.ok,
+            headers: this.headersToRecord(response.headers),
+            body: response.body
+                ? Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>)
+                : null,
+            cancel: async () => {
+                if (!response.body) {
+                    return
+                }
+                try {
+                    await response.body.cancel()
+                } catch {
+                    // ignore cancel errors from remote resets
+                }
+            }
+        }
+    }
+
+    private async gotWithAgent(
+        url: string,
+        init: RequestInit,
+        agent: WaProxyAgent
+    ): Promise<InternalTransferResponse> {
+        const got = await this.loadGotModule()
+        const gotHeaders = this.normalizeHeadersInit(init.headers)
+        const urlObj = new URL(url)
+        const gotAgent =
+            urlObj.protocol === 'http:'
+                ? { http: agent }
+                : urlObj.protocol === 'https:'
+                  ? { https: agent }
+                  : { http: agent, https: agent }
+        return new Promise<InternalTransferResponse>((resolve, reject) => {
+            const request = got.stream(url, {
+                method: init.method,
+                headers: gotHeaders,
+                body: init.body as unknown,
+                signal: init.signal,
+                throwHttpErrors: false,
+                retry: { limit: 0 },
+                agent: gotAgent
+            })
+            const onError = (error: unknown): void => {
+                request.off('response', onResponse)
+                reject(toError(error))
+            }
+            const onResponse = (incoming: unknown): void => {
+                request.off('error', onError)
+                resolve(this.toGotTransferResponse(incoming))
+            }
+            request.once('error', onError)
+            request.once('response', onResponse)
+        })
+    }
+
+    private async loadGotModule(): Promise<OptionalGotModule> {
+        if (!this.gotModulePromise) {
+            this.gotModulePromise = loadOptionalGotModule().catch((error) => {
+                this.gotModulePromise = null
+                throw error
+            })
+        }
+        return this.gotModulePromise
+    }
+
+    private normalizeHeadersInit(
+        headers: RequestInit['headers'] | undefined
+    ): Record<string, string> {
+        if (!headers) {
+            return {}
+        }
+        if (headers instanceof Headers) {
+            const output: Record<string, string> = {}
+            for (const [key, value] of headers.entries()) {
+                output[key] = value
+            }
+            return output
+        }
+        if (Array.isArray(headers)) {
+            const output: Record<string, string> = {}
+            for (const [key, value] of headers) {
+                output[key] = Array.isArray(value) ? value.join(', ') : value
+            }
+            return output
+        }
+        const output: Record<string, string> = {}
+        for (const [key, value] of Object.entries(
+            headers as Readonly<Record<string, string | readonly string[]>>
+        )) {
+            if (Array.isArray(value)) {
+                output[key] = value.join(', ')
+            } else {
+                output[key] = String(value)
+            }
+        }
+        return output
+    }
+
+    private toGotTransferResponse(incoming: unknown): InternalTransferResponse {
+        if (!incoming || typeof incoming !== 'object') {
+            throw new Error('invalid got response object')
+        }
+        const stream = incoming as Readable & {
+            readonly statusCode?: unknown
+            readonly headers?: unknown
+        }
+        const status =
+            typeof stream.statusCode === 'number' &&
+            Number.isFinite(stream.statusCode) &&
+            stream.statusCode >= 100 &&
+            stream.statusCode <= 599
+                ? stream.statusCode
+                : 500
+        const headers: Record<string, string> = {}
+        if (stream.headers && typeof stream.headers === 'object') {
+            for (const [key, value] of Object.entries(
+                stream.headers as Readonly<Record<string, unknown>>
+            )) {
+                if (typeof value === 'string') {
+                    headers[key] = value
+                    continue
+                }
+                if (Array.isArray(value)) {
+                    headers[key] = value.map((entry) => String(entry)).join(', ')
+                    continue
+                }
+                if (value !== undefined && value !== null) {
+                    headers[key] = String(value)
+                }
+            }
+        }
+        return {
+            status,
+            ok: status >= 200 && status < 300,
+            headers,
+            body: stream,
+            cancel: async () => {
+                stream.destroy()
+            }
+        }
+    }
+
     private resolveTransferRequest(
         request: Pick<
             StreamDownloadRequest,
@@ -289,7 +574,7 @@ export class WaMediaTransferClient {
         signal: AbortSignal | undefined,
         options: {
             readonly responseLog: string
-            readonly send: (url: string, signal: AbortSignal) => Promise<Response>
+            readonly send: (url: string, signal: AbortSignal) => Promise<InternalTransferResponse>
         }
     ): Promise<StreamTransferResponse> {
         const result = await this.fetchWithFallback(urls, timeoutMs, signal, options.send)
@@ -407,8 +692,8 @@ export class WaMediaTransferClient {
         urls: readonly string[],
         timeoutMs: number,
         signal: AbortSignal | undefined,
-        send: (url: string, signal: AbortSignal) => Promise<Response>
-    ): Promise<{ readonly url: string; readonly response: Response }> {
+        send: (url: string, signal: AbortSignal) => Promise<InternalTransferResponse>
+    ): Promise<{ readonly url: string; readonly response: InternalTransferResponse }> {
         let lastError: Error | null = null
 
         for (let index = 0; index < urls.length; index += 1) {
@@ -420,7 +705,7 @@ export class WaMediaTransferClient {
                 if (!shouldFallback) {
                     return { url, response }
                 }
-                await this.cancelWebBody(response.body)
+                await response.cancel()
                 this.logger?.warn('transfer fallback to next host', {
                     url,
                     status: response.status
@@ -477,15 +762,13 @@ export class WaMediaTransferClient {
         }
     }
 
-    private toResponse(url: string, response: Response): StreamTransferResponse {
+    private toResponse(url: string, response: InternalTransferResponse): StreamTransferResponse {
         return {
             url,
             status: response.status,
             ok: response.ok,
-            headers: this.headersToRecord(response.headers),
+            headers: response.headers,
             body: response.body
-                ? Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>)
-                : null
         }
     }
 
@@ -495,17 +778,6 @@ export class WaMediaTransferClient {
             output[key] = value
         }
         return output
-    }
-
-    private async cancelWebBody(body: ReadableStream<Uint8Array> | null): Promise<void> {
-        if (!body) {
-            return
-        }
-        try {
-            await body.cancel()
-        } catch {
-            // ignore cancel errors from remote resets
-        }
     }
 
     private async drainBody(body: Readable | null): Promise<void> {

@@ -2,6 +2,7 @@ export { WaClient } from '@client'
 export type {
     WaClientEventMap,
     WaClientOptions,
+    WaClientProxyOptions,
     WaHistorySyncChunkEvent,
     WaHistorySyncOptions
 } from '@client'

@@ -4,6 +4,7 @@ import { WA_DEFAULTS, WA_READY_STATES } from '@protocol/constants'
 import type {
     RawWebSocket,
     RawWebSocketConstructor,
+    WaRawWebSocketInit,
     SocketCloseInfo,
     SocketOpenInfo,
     WebSocketEventLike,
@@ -21,6 +22,47 @@ interface PendingSocket {
 }
 
 type SocketRuntime = 'browser' | 'node'
+const WS_OPTIONAL_MODULE = 'ws'
+
+function asOptionalNodeWsConstructor(loaded: unknown): RawWebSocketConstructor | null {
+    if (loaded && typeof loaded === 'object') {
+        const direct = (loaded as { readonly WebSocket?: unknown }).WebSocket
+        if (typeof direct === 'function') {
+            return direct as RawWebSocketConstructor
+        }
+        const fallback = (loaded as { readonly default?: unknown }).default
+        if (typeof fallback === 'function') {
+            return fallback as RawWebSocketConstructor
+        }
+    }
+    if (typeof loaded === 'function') {
+        return loaded as RawWebSocketConstructor
+    }
+    return null
+}
+
+async function loadOptionalNodeWsConstructor(): Promise<RawWebSocketConstructor> {
+    try {
+        const loaded = await import(WS_OPTIONAL_MODULE)
+        const constructor = asOptionalNodeWsConstructor(loaded)
+        if (constructor) {
+            return constructor
+        }
+        throw new Error('invalid ws module export')
+    } catch (error) {
+        const normalized = toError(error)
+        const code = (normalized as NodeJS.ErrnoException).code
+        const message = normalized.message ?? ''
+        const isModuleNotFound =
+            (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') &&
+            (message.includes(`'${WS_OPTIONAL_MODULE}'`) ||
+                message.includes(`"${WS_OPTIONAL_MODULE}"`))
+        if (isModuleNotFound) {
+            throw new Error('optional dependency "ws" is not installed. Install with: npm i ws')
+        }
+        throw normalized
+    }
+}
 
 function resolveWebSocketConstructor(): RawWebSocketConstructor {
     const ctor = (globalThis as typeof globalThis & { WebSocket?: RawWebSocketConstructor })
@@ -71,6 +113,7 @@ export class WaWebSocket {
     private handlers: WaSocketHandlers
     private socket: RawWebSocket | null
     private closeWaiter: ((info: SocketCloseInfo) => void) | null
+    private nodeWsCtorPromise: Promise<RawWebSocketConstructor> | null
 
     public constructor(config: WaSocketConfig, logger: Logger = new ConsoleLogger('info')) {
         this.config = Object.freeze({
@@ -85,6 +128,7 @@ export class WaWebSocket {
         this.handlers = {}
         this.socket = null
         this.closeWaiter = null
+        this.nodeWsCtorPromise = null
     }
 
     public setHandlers(handlers: WaSocketHandlers): void {
@@ -201,7 +245,7 @@ export class WaWebSocket {
     }
 
     private async openSingle(url: string): Promise<SocketOpenInfo> {
-        const pending = this.createPendingSocket(url)
+        const pending = await this.createPendingSocket(url)
 
         return new Promise<SocketOpenInfo>((resolve, reject) => {
             this.bindPendingSocket(pending, {
@@ -225,7 +269,22 @@ export class WaWebSocket {
     }
 
     private async openConcurrently(urls: readonly string[]): Promise<SocketOpenInfo> {
-        const pendingSockets = urls.map((url) => this.createPendingSocket(url))
+        const setupResults = await Promise.allSettled(
+            urls.map((url) => this.createPendingSocket(url))
+        )
+        const pendingSockets: PendingSocket[] = []
+        let setupError: Error | null = null
+        for (const result of setupResults) {
+            if (result.status === 'fulfilled') {
+                pendingSockets.push(result.value)
+                continue
+            }
+            setupError = setupError ?? toError(result.reason)
+        }
+        if (setupError) {
+            this.releasePendingSocketsAfterSetupFailure(pendingSockets)
+            throw setupError
+        }
 
         return new Promise<SocketOpenInfo>((resolve, reject) => {
             let done = false
@@ -274,6 +333,15 @@ export class WaWebSocket {
                 })
             }
         })
+    }
+
+    private releasePendingSocketsAfterSetupFailure(entries: readonly PendingSocket[]): void {
+        for (const entry of entries) {
+            if (!this.settlePendingSocket(entry)) {
+                continue
+            }
+            this.closeSocketSafe(entry.socket, 1000, 'connect_setup_failed')
+        }
     }
 
     private bindRuntimeHandlers(socket: RawWebSocket): void {
@@ -325,8 +393,8 @@ export class WaWebSocket {
         return null
     }
 
-    private createPendingSocket(url: string): PendingSocket {
-        const socket = this.createRawSocket(url)
+    private async createPendingSocket(url: string): Promise<PendingSocket> {
+        const socket = await this.createRawSocket(url)
         socket.binaryType = 'arraybuffer'
         this.connectingSockets.add(socket)
         return {
@@ -438,11 +506,52 @@ export class WaWebSocket {
         }
     }
 
-    private createRawSocket(url: string): RawWebSocket {
+    private async createRawSocket(url: string): Promise<RawWebSocket> {
         const headers = this.config.headers
-        if (this.socketRuntime === 'node' && headers && Object.keys(headers).length > 0) {
-            return new this.webSocketCtor(url, this.config.protocols, { headers })
+        const dispatcher = this.config.dispatcher
+        const agent = this.config.agent
+
+        if (this.socketRuntime === 'node' && agent) {
+            const nodeWsCtor = await this.resolveNodeWsConstructor()
+            return new nodeWsCtor(url, this.config.protocols, {
+                headers,
+                agent
+            })
+        }
+
+        if (
+            this.socketRuntime === 'node' &&
+            ((headers && Object.keys(headers).length > 0) || dispatcher || agent)
+        ) {
+            const globalWebSocketCtor = (
+                globalThis as typeof globalThis & { WebSocket?: RawWebSocketConstructor }
+            ).WebSocket
+            if (globalWebSocketCtor && this.webSocketCtor === globalWebSocketCtor) {
+                const init: WaRawWebSocketInit = {
+                    protocols: this.config.protocols,
+                    headers,
+                    dispatcher,
+                    agent
+                }
+                return new this.webSocketCtor(url, init)
+            }
+
+            return new this.webSocketCtor(url, this.config.protocols, {
+                headers,
+                dispatcher,
+                agent
+            })
         }
         return new this.webSocketCtor(url, this.config.protocols)
+    }
+
+    private async resolveNodeWsConstructor(): Promise<RawWebSocketConstructor> {
+        if (!this.nodeWsCtorPromise) {
+            this.nodeWsCtorPromise = loadOptionalNodeWsConstructor().catch((error) => {
+                this.nodeWsCtorPromise = null
+                throw error
+            })
+        }
+        return this.nodeWsCtorPromise
     }
 }

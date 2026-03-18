@@ -1,5 +1,6 @@
 export { WaClient } from '@client/WaClient'
 export type {
+    WaClientProxyOptions,
     WaChatEvent,
     WaChatEventAction,
     WaChatEventSource,

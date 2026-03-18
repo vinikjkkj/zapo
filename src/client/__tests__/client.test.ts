@@ -4,6 +4,8 @@ import { gzipSync } from 'node:zlib'
 
 import { parseDirtyBits } from '@client/dirty'
 import { processHistorySyncNotification } from '@client/history-sync'
+import type { WaClientOptions } from '@client/types'
+import { resolveWaClientBase } from '@client/WaClientFactory'
 import type { Logger } from '@infra/log/types'
 import { proto } from '@proto'
 
@@ -115,4 +117,78 @@ test('history sync processor persists conversations and emits chunk event', asyn
     assert.equal(contacts.length, 1)
     assert.equal(emitted.length, 1)
     assert.equal((emitted[0] as { messagesCount: number }).messagesCount, 1)
+})
+
+test('resolveWaClientBase rejects invalid proxy transport shapes', () => {
+    const minimalStore = {
+        session: () => ({})
+    }
+    const invalidWs = {
+        store: minimalStore,
+        sessionId: 'session',
+        proxy: {
+            ws: {} as never
+        }
+    } as unknown as WaClientOptions
+    const invalidMediaUpload = {
+        store: minimalStore,
+        sessionId: 'session',
+        proxy: {
+            mediaUpload: {} as never
+        }
+    } as unknown as WaClientOptions
+
+    assert.throws(() => resolveWaClientBase(invalidWs, createLogger()), /proxy\.ws/)
+    assert.throws(
+        () => resolveWaClientBase(invalidMediaUpload, createLogger()),
+        /proxy\.mediaUpload/
+    )
+})
+
+test('resolveWaClientBase rejects invalid proxy root shapes', () => {
+    const minimalStore = {
+        session: () => ({})
+    }
+    const invalidProxyPrimitive = {
+        store: minimalStore,
+        sessionId: 'session',
+        proxy: true as never
+    } as unknown as WaClientOptions
+    const invalidProxyArray = {
+        store: minimalStore,
+        sessionId: 'session',
+        proxy: ['http://proxy'] as never
+    } as unknown as WaClientOptions
+
+    assert.throws(
+        () => resolveWaClientBase(invalidProxyPrimitive, createLogger()),
+        /proxy must be an object/
+    )
+    assert.throws(
+        () => resolveWaClientBase(invalidProxyArray, createLogger()),
+        /proxy must be an object/
+    )
+})
+
+test('resolveWaClientBase accepts proxy agent shapes', () => {
+    const minimalStore = {
+        session: () => ({})
+    }
+    const options = {
+        store: minimalStore,
+        sessionId: 'session',
+        proxy: {
+            ws: {
+                addRequest: () => undefined
+            },
+            mediaUpload: {
+                addRequest: () => undefined
+            },
+            mediaDownload: {
+                addRequest: () => undefined
+            }
+        }
+    } as unknown as WaClientOptions
+
+    assert.doesNotThrow(() => resolveWaClientBase(options, createLogger()))
 })
