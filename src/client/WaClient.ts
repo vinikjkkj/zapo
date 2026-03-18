@@ -38,7 +38,8 @@ import type {
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import { WA_APP_STATE_COLLECTION_STATES, WA_DEFAULTS, WA_MESSAGE_TAGS } from '@protocol/constants'
-import { normalizeDeviceJid, toUserJid } from '@protocol/jid'
+import { normalizeDeviceJid, parsePhoneJid, toUserJid } from '@protocol/jid'
+import type { SignalDeviceSyncApi, SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
@@ -84,6 +85,7 @@ export class WaClient extends EventEmitter {
     private readonly nodeOrchestrator!: WaNodeOrchestrator
     private readonly keepAlive!: WaKeepAlive
     private readonly nodeTransport!: WaNodeTransport
+    private readonly signalDeviceSync!: SignalDeviceSyncApi
     public readonly appStateSync!: WaAppStateSyncClient
     private readonly incomingNode!: WaIncomingNodeCoordinator
     private readonly passiveTasks!: WaPassiveTasksCoordinator
@@ -655,6 +657,23 @@ export class WaClient extends EventEmitter {
         }
         this.logger.trace('wa client fetch pairing country code iso')
         return this.authClient.fetchPairingCountryCodeIso()
+    }
+
+    public async getLidsByPhoneNumbers(
+        phoneNumbers: readonly string[]
+    ): Promise<readonly SignalLidSyncResult[]> {
+        if (!this.comms || !this.authClient.getCurrentCredentials()) {
+            throw new Error('client is not connected')
+        }
+        const normalizedPhoneJids = phoneNumbers.map((phoneNumber) => {
+            const atIndex = phoneNumber.indexOf('@')
+            const phonePart = atIndex === -1 ? phoneNumber : phoneNumber.slice(0, atIndex)
+            return parsePhoneJid(phonePart)
+        })
+        this.logger.trace('wa client query lids by phone numbers', {
+            phones: normalizedPhoneJids.length
+        })
+        return this.signalDeviceSync.queryLidsByPhoneJids(normalizedPhoneJids)
     }
 
     public async sendMessage(

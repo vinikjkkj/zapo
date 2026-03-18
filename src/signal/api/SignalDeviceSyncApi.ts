@@ -17,6 +17,12 @@ interface SignalDeviceSyncApiOptions {
     readonly generateSid?: WaUsyncSidGenerator
 }
 
+export interface SignalLidSyncResult {
+    readonly phoneJid: string
+    readonly lidJid: string | null
+    readonly exists: boolean
+}
+
 export class SignalDeviceSyncApi {
     private readonly logger: SignalDeviceSyncApiOptions['logger']
     private readonly query: SignalDeviceSyncApiOptions['query']
@@ -94,6 +100,47 @@ export class SignalDeviceSyncApi {
         return merged
     }
 
+    public async queryLidsByPhoneJids(
+        phoneJids: readonly string[],
+        timeoutMs = this.defaultTimeoutMs
+    ): Promise<readonly SignalLidSyncResult[]> {
+        const normalizedPhoneJids = this.normalizeUsers(phoneJids)
+        if (normalizedPhoneJids.length === 0) {
+            return []
+        }
+        const sid = await this.generateSid()
+        const request = this.makeLidSyncRequest(normalizedPhoneJids, sid)
+        this.logger.debug('signal lid sync request', {
+            users: normalizedPhoneJids.length,
+            timeoutMs
+        })
+        const response = await this.query(request, timeoutMs)
+        const parsed = this.parseLidSyncResponse(response, normalizedPhoneJids)
+        const parsedByPhoneJid = new Map<string, SignalLidSyncResult>(
+            parsed.map((entry) => [
+                entry.phoneJid ?? entry.jid,
+                {
+                    phoneJid: entry.phoneJid ?? entry.jid,
+                    lidJid: entry.lidJid,
+                    exists: entry.exists
+                }
+            ])
+        )
+        const result = normalizedPhoneJids.map(
+            (phoneJid) =>
+                parsedByPhoneJid.get(phoneJid) ?? {
+                    phoneJid,
+                    lidJid: null,
+                    exists: false
+                }
+        )
+        this.logger.debug('signal lid sync success', {
+            users: result.length,
+            found: result.reduce((total, entry) => total + (entry.exists ? 1 : 0), 0)
+        })
+        return result
+    }
+
     private async collectUsersToQuery(
         normalizedUsers: readonly string[],
         nowMs: number,
@@ -133,6 +180,34 @@ export class SignalDeviceSyncApi {
         })
     }
 
+    private makeLidSyncRequest(userJids: readonly string[], sid: string): BinaryNode {
+        return buildUsyncIq({
+            sid,
+            hostDomain: this.hostDomain,
+            context: WA_USYNC_CONTEXTS.INTERACTIVE,
+            queryProtocolNodes: [
+                {
+                    tag: WA_NODE_TAGS.CONTACT,
+                    attrs: {}
+                },
+                {
+                    tag: WA_NODE_TAGS.LID,
+                    attrs: {}
+                }
+            ],
+            users: userJids.map((jid) => ({
+                jid,
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.CONTACT,
+                        attrs: {},
+                        content: splitJid(jid).user
+                    }
+                ]
+            }))
+        })
+    }
+
     private parseDeviceSyncResponse(
         node: BinaryNode,
         requestedUsers: readonly string[]
@@ -165,6 +240,116 @@ export class SignalDeviceSyncApi {
                 }
             ]
         })
+    }
+
+    private parseLidSyncResponse(
+        node: BinaryNode,
+        requestedUsers: readonly string[]
+    ): readonly {
+        readonly jid: string
+        readonly lidJid: string | null
+        readonly phoneJid: string | null
+        readonly exists: boolean
+    }[] {
+        assertIqResult(node, 'signal lid sync')
+        const usyncNode = findNodeChild(node, WA_NODE_TAGS.USYNC)
+        if (!usyncNode) {
+            throw new Error('signal lid sync response missing usync node')
+        }
+        const listNode = findNodeChild(usyncNode, WA_NODE_TAGS.LIST)
+        if (!listNode) {
+            throw new Error('signal lid sync response missing list node')
+        }
+
+        const requestedSet = new Set(requestedUsers)
+        const userNodes = getNodeChildrenByTag(listNode, WA_NODE_TAGS.USER)
+        return userNodes.flatMap((userNode) => {
+            const userJid = userNode.attrs.jid
+            if (!userJid) {
+                return []
+            }
+
+            const normalizedUserJid = this.normalizeUserJid(userJid)
+            const normalizedPhoneJid = userNode.attrs.pn_jid
+                ? this.normalizeUserJid(userNode.attrs.pn_jid)
+                : null
+            const wasRequested =
+                requestedSet.has(normalizedUserJid) ||
+                (normalizedPhoneJid !== null && requestedSet.has(normalizedPhoneJid))
+            if (!wasRequested) {
+                return []
+            }
+
+            const lidNode = findNodeChild(userNode, WA_NODE_TAGS.LID)
+            const contactNode = findNodeChild(userNode, WA_NODE_TAGS.CONTACT)
+            if (!lidNode) {
+                return [
+                    {
+                        jid: normalizedUserJid,
+                        lidJid: null,
+                        phoneJid: normalizedPhoneJid,
+                        exists: this.parseLidSyncContactExists(
+                            contactNode,
+                            normalizedUserJid,
+                            false
+                        )
+                    }
+                ]
+            }
+            const errorNode = findNodeChild(lidNode, WA_NODE_TAGS.ERROR)
+            if (errorNode) {
+                this.logger.warn('signal lid sync user error', {
+                    jid: normalizedUserJid,
+                    code: errorNode.attrs.code,
+                    text: errorNode.attrs.text
+                })
+                return [
+                    {
+                        jid: normalizedUserJid,
+                        lidJid: null,
+                        phoneJid: normalizedPhoneJid,
+                        exists: this.parseLidSyncContactExists(
+                            contactNode,
+                            normalizedUserJid,
+                            false
+                        )
+                    }
+                ]
+            }
+            const lidJid = lidNode.attrs.val ? this.normalizeUserJid(lidNode.attrs.val) : null
+            return [
+                {
+                    jid: normalizedUserJid,
+                    lidJid,
+                    phoneJid: normalizedPhoneJid,
+                    exists: this.parseLidSyncContactExists(
+                        contactNode,
+                        normalizedUserJid,
+                        lidJid !== null
+                    )
+                }
+            ]
+        })
+    }
+
+    private parseLidSyncContactExists(
+        contactNode: BinaryNode | undefined,
+        userJid: string,
+        defaultExists: boolean
+    ): boolean {
+        if (!contactNode) {
+            return defaultExists
+        }
+        const errorNode = findNodeChild(contactNode, WA_NODE_TAGS.ERROR)
+        if (errorNode) {
+            this.logger.warn('signal lid sync contact error', {
+                jid: userJid,
+                code: errorNode.attrs.code,
+                text: errorNode.attrs.text
+            })
+            return false
+        }
+        return contactNode.attrs.type === 'in'
     }
 
     private parseUserDeviceJids(userNode: BinaryNode, userJid: string): readonly string[] {

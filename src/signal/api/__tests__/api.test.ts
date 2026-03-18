@@ -303,6 +303,317 @@ test('signal device sync api preserves requested users omitted by usync response
     ])
 })
 
+test('signal device sync api resolves lids by phone jids via usync and returns exists', async () => {
+    let capturedRequest: BinaryNode | null = null
+    const api = new SignalDeviceSyncApi({
+        logger: createLogger(),
+        query: async (node) => {
+            capturedRequest = node
+            return iqResult([
+                {
+                    tag: WA_NODE_TAGS.USYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.LIST,
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: WA_NODE_TAGS.USER,
+                                    attrs: { jid: '5511999999999@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: WA_NODE_TAGS.CONTACT,
+                                            attrs: {
+                                                type: 'in'
+                                            }
+                                        },
+                                        {
+                                            tag: WA_NODE_TAGS.LID,
+                                            attrs: {
+                                                val: '123456789@lid'
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+        }
+    })
+
+    const result = await api.queryLidsByPhoneJids([
+        '5511999999999@s.whatsapp.net',
+        '5511888888888@s.whatsapp.net'
+    ])
+    assert.deepEqual(result, [
+        {
+            phoneJid: '5511999999999@s.whatsapp.net',
+            lidJid: '123456789@lid',
+            exists: true
+        },
+        {
+            phoneJid: '5511888888888@s.whatsapp.net',
+            lidJid: null,
+            exists: false
+        }
+    ])
+
+    if (!capturedRequest) {
+        throw new Error('expected captured lid sync request content')
+    }
+    const request = capturedRequest as BinaryNode
+    if (!Array.isArray(request.content)) {
+        throw new Error('expected captured lid sync request content')
+    }
+    const requestContent = request.content as readonly BinaryNode[]
+    const usyncNode = requestContent[0]
+    assert.equal(usyncNode.tag, WA_NODE_TAGS.USYNC)
+    if (!Array.isArray(usyncNode.content)) {
+        throw new Error('expected usync node content')
+    }
+    const queryNode = usyncNode.content.find(
+        (entry: BinaryNode) => entry.tag === WA_NODE_TAGS.QUERY
+    )
+    if (!queryNode || !Array.isArray(queryNode.content)) {
+        throw new Error('expected usync query node content')
+    }
+    assert.equal(queryNode.content[0].tag, WA_NODE_TAGS.CONTACT)
+    assert.equal(queryNode.content[1].tag, WA_NODE_TAGS.LID)
+
+    const listNode = usyncNode.content.find((entry: BinaryNode) => entry.tag === WA_NODE_TAGS.LIST)
+    if (!listNode || !Array.isArray(listNode.content)) {
+        throw new Error('expected usync list node content')
+    }
+    assert.equal(listNode.content.length, 2)
+    assert.ok(Array.isArray(listNode.content[0].content))
+    assert.equal(
+        (listNode.content[0].content as readonly BinaryNode[])[0].tag,
+        WA_NODE_TAGS.CONTACT
+    )
+})
+
+test('signal device sync api marks exists=false when contact type is out', async () => {
+    const api = new SignalDeviceSyncApi({
+        logger: createLogger(),
+        query: async () =>
+            iqResult([
+                {
+                    tag: WA_NODE_TAGS.USYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.LIST,
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: WA_NODE_TAGS.USER,
+                                    attrs: { jid: '5511888888888@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: WA_NODE_TAGS.CONTACT,
+                                            attrs: {
+                                                type: 'out'
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+    })
+
+    const result = await api.queryLidsByPhoneJids(['5511888888888@s.whatsapp.net'])
+    assert.deepEqual(result, [
+        {
+            phoneJid: '5511888888888@s.whatsapp.net',
+            lidJid: null,
+            exists: false
+        }
+    ])
+})
+
+test('signal device sync api handles lid node user error and preserves contact existence', async () => {
+    const warnings: {
+        readonly message: string
+        readonly context: Readonly<Record<string, unknown>>
+    }[] = []
+    const api = new SignalDeviceSyncApi({
+        logger: {
+            ...createLogger(),
+            warn: (message, context = {}) => {
+                warnings.push({ message, context })
+            }
+        },
+        query: async () =>
+            iqResult([
+                {
+                    tag: WA_NODE_TAGS.USYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.LIST,
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: WA_NODE_TAGS.USER,
+                                    attrs: { jid: '5511999999999@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: WA_NODE_TAGS.CONTACT,
+                                            attrs: {
+                                                type: 'in'
+                                            }
+                                        },
+                                        {
+                                            tag: WA_NODE_TAGS.LID,
+                                            attrs: {},
+                                            content: [
+                                                {
+                                                    tag: WA_NODE_TAGS.ERROR,
+                                                    attrs: { code: '404', text: 'not-found' }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+    })
+
+    const result = await api.queryLidsByPhoneJids(['5511999999999@s.whatsapp.net'])
+    assert.deepEqual(result, [
+        {
+            phoneJid: '5511999999999@s.whatsapp.net',
+            lidJid: null,
+            exists: true
+        }
+    ])
+    assert.equal(warnings.length, 1)
+    assert.equal(warnings[0].message, 'signal lid sync user error')
+})
+
+test('signal device sync api forces exists=false when contact node has error', async () => {
+    const warnings: {
+        readonly message: string
+        readonly context: Readonly<Record<string, unknown>>
+    }[] = []
+    const api = new SignalDeviceSyncApi({
+        logger: {
+            ...createLogger(),
+            warn: (message, context = {}) => {
+                warnings.push({ message, context })
+            }
+        },
+        query: async () =>
+            iqResult([
+                {
+                    tag: WA_NODE_TAGS.USYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.LIST,
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: WA_NODE_TAGS.USER,
+                                    attrs: { jid: '5511999999999@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: WA_NODE_TAGS.CONTACT,
+                                            attrs: {},
+                                            content: [
+                                                {
+                                                    tag: WA_NODE_TAGS.ERROR,
+                                                    attrs: { code: '500', text: 'lookup-failed' }
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            tag: WA_NODE_TAGS.LID,
+                                            attrs: {
+                                                val: '123456789@lid'
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+    })
+
+    const result = await api.queryLidsByPhoneJids(['5511999999999@s.whatsapp.net'])
+    assert.deepEqual(result, [
+        {
+            phoneJid: '5511999999999@s.whatsapp.net',
+            lidJid: '123456789@lid',
+            exists: false
+        }
+    ])
+    assert.equal(warnings.length, 1)
+    assert.equal(warnings[0].message, 'signal lid sync contact error')
+})
+
+test('signal device sync api maps user response by pn_jid when jid differs', async () => {
+    const api = new SignalDeviceSyncApi({
+        logger: createLogger(),
+        query: async () =>
+            iqResult([
+                {
+                    tag: WA_NODE_TAGS.USYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.LIST,
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: WA_NODE_TAGS.USER,
+                                    attrs: {
+                                        jid: '123456789@lid',
+                                        pn_jid: '5511999999999@s.whatsapp.net'
+                                    },
+                                    content: [
+                                        {
+                                            tag: WA_NODE_TAGS.CONTACT,
+                                            attrs: {
+                                                type: 'in'
+                                            }
+                                        },
+                                        {
+                                            tag: WA_NODE_TAGS.LID,
+                                            attrs: {
+                                                val: '123456789@lid'
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+    })
+
+    const result = await api.queryLidsByPhoneJids(['5511999999999@s.whatsapp.net'])
+    assert.deepEqual(result, [
+        {
+            phoneJid: '5511999999999@s.whatsapp.net',
+            lidJid: '123456789@lid',
+            exists: true
+        }
+    ])
+})
+
 test('signal identity sync api parses result list and stores remote identities', async () => {
     const signalStore = new WaSignalMemoryStore()
     const api = new SignalIdentitySyncApi({

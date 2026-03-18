@@ -23,6 +23,8 @@ export const WA_NODE_TAGS = Object.freeze({
     KEY_FETCH: 'key_fetch',
     LIST: 'list',
     USER: 'user',
+    CONTACT: 'contact',
+    LID: 'lid',
     PICTURE: 'picture',
     PRIVACY: 'privacy',
     PARTICIPATING: 'participating',
