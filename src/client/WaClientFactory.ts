@@ -1,6 +1,9 @@
 import type { WaAppStateSyncOptions, WaAppStateSyncResult } from '@appstate/types'
 import { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import { WaAuthClient } from '@auth/WaAuthClient'
+import { WaConnectionManager } from '@client/connection/WaConnectionManager'
+import { WaKeyShareCoordinator } from '@client/connection/WaKeyShareCoordinator'
+import { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import {
     createGroupCoordinator,
@@ -16,6 +19,9 @@ import {
 } from '@client/coordinators/WaStreamControlCoordinator'
 import { handleDirtyBits, parseDirtyBits } from '@client/dirty'
 import { buildMediaMessageContent, getMediaConn as getClientMediaConn } from '@client/messages'
+import { createDeviceFanoutResolver } from '@client/messaging/fanout'
+import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
+import { createGroupParticipantsCache } from '@client/messaging/participants'
 import type {
     WaClientEventMap,
     WaClientOptions,
@@ -28,6 +34,7 @@ import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { handleIncomingMessageAck } from '@message/incoming'
 import { WaMessageClient } from '@message/WaMessageClient'
 import { getWaCompanionPlatformId, WA_DEFAULTS } from '@protocol/constants'
+import { createOutboundRetryTracker } from '@retry/tracker'
 import type { WaRetryDecryptFailureContext } from '@retry/types'
 import { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
 import { SignalDigestSyncApi } from '@signal/api/SignalDigestSyncApi'
@@ -36,6 +43,7 @@ import { SignalMissingPreKeysSyncApi } from '@signal/api/SignalMissingPreKeysSyn
 import { SignalRotateKeyApi } from '@signal/api/SignalRotateKeyApi'
 import { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
 import { SenderKeyManager } from '@signal/group/SenderKeyManager'
+import { createSignalSessionResolver } from '@signal/session/resolver'
 import { SignalProtocol } from '@signal/session/SignalProtocol'
 import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 import { createUsyncSidGenerator, type WaUsyncSidGenerator } from '@transport/node/usync'
@@ -43,7 +51,6 @@ import { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import { WaNodeTransport } from '@transport/node/WaNodeTransport'
 import { isProxyTransport, toProxyAgent, toProxyDispatcher } from '@transport/proxy'
 import type { BinaryNode } from '@transport/types'
-import type { WaComms } from '@transport/WaComms'
 import { toError } from '@util/primitives'
 import { getRuntimeOsDisplayName } from '@util/runtime'
 
@@ -53,6 +60,29 @@ interface WaClientBase {
     readonly options: Readonly<WaClientOptions>
     readonly logger: Logger
     readonly sessionStore: ReturnType<WaClientOptions['store']['session']>
+}
+
+interface WaClientBuildRuntime {
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
+    readonly queryWithContext: (
+        context: string,
+        node: BinaryNode,
+        timeoutMs?: number,
+        contextData?: Readonly<Record<string, unknown>>
+    ) => Promise<BinaryNode>
+    readonly syncAppState: () => Promise<void>
+    readonly syncAppStateWithOptions: (
+        options?: WaAppStateSyncOptions
+    ) => Promise<WaAppStateSyncResult>
+    readonly emitEvent: <K extends keyof WaClientEventMap>(
+        event: K,
+        ...args: Parameters<WaClientEventMap[K]>
+    ) => void
+    readonly handleIncomingMessageEvent: (event: WaIncomingMessageEvent) => Promise<void>
+    readonly handleError: (error: Error) => void
+    readonly handleIncomingFrame: (frame: Uint8Array) => Promise<void>
+    readonly clearStoredState: () => Promise<void>
 }
 
 interface WaClientDependencies {
@@ -79,6 +109,9 @@ interface WaClientDependencies {
     readonly incomingNode: WaIncomingNodeCoordinator
     readonly passiveTasks: WaPassiveTasksCoordinator
     readonly groupCoordinator: WaGroupCoordinator
+    readonly receiptQueue: WaReceiptQueue
+    readonly keyShareCoordinator: WaKeyShareCoordinator
+    readonly connectionManager: WaConnectionManager
 }
 
 function assertProxyTransport(value: unknown, path: string): void {
@@ -108,38 +141,6 @@ function validateProxyOptions(options: WaClientOptions): void {
     assertProxyTransport(proxy?.ws, 'proxy.ws')
     assertProxyTransport(proxy?.mediaUpload, 'proxy.mediaUpload')
     assertProxyTransport(proxy?.mediaDownload, 'proxy.mediaDownload')
-}
-
-export interface WaClientDependencyHost {
-    readonly sendNode: (node: BinaryNode) => Promise<void>
-    readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
-    readonly queryWithContext: (
-        context: string,
-        node: BinaryNode,
-        timeoutMs?: number,
-        contextData?: Readonly<Record<string, unknown>>
-    ) => Promise<BinaryNode>
-    readonly syncAppState: () => Promise<void>
-    readonly syncAppStateWithOptions: (
-        options?: WaAppStateSyncOptions
-    ) => Promise<WaAppStateSyncResult>
-    readonly emitEvent: <K extends keyof WaClientEventMap>(
-        event: K,
-        ...args: Parameters<WaClientEventMap[K]>
-    ) => void
-    readonly handleIncomingMessageEvent: (event: WaIncomingMessageEvent) => Promise<void>
-    readonly handleError: (error: Error) => void
-    readonly scheduleReconnectAfterPairing: () => void
-    readonly updateClockSkewFromSuccess: (serverUnixSeconds: number) => void
-    readonly getComms: () => WaComms | null
-    readonly getMediaConnCache: () => WaMediaConn | null
-    readonly setMediaConnCache: (mediaConn: WaMediaConn | null) => void
-    readonly disconnect: () => Promise<void>
-    readonly clearStoredState: () => Promise<void>
-    readonly connect: () => Promise<void>
-    readonly shouldQueueDanglingReceipt: (node: BinaryNode, error: Error) => boolean
-    readonly enqueueDanglingReceipt: (node: BinaryNode) => void
-    readonly takeDanglingReceipts: () => BinaryNode[]
 }
 
 export function resolveWaClientBase(options: WaClientOptions, logger: Logger): WaClientBase {
@@ -181,87 +182,70 @@ export function resolveWaClientBase(options: WaClientOptions, logger: Logger): W
     }
 }
 
-function createAuthClient(input: {
-    readonly options: WaClientOptions
-    readonly logger: Logger
-    readonly sessionStore: ReturnType<WaClientOptions['store']['session']>
-    readonly host: WaClientDependencyHost
-}): WaAuthClient {
-    const { options, logger, sessionStore, host } = input
-    return new WaAuthClient(
-        {
-            deviceBrowser: options.deviceBrowser,
-            deviceOsDisplayName: options.deviceOsDisplayName,
-            devicePlatform: options.devicePlatform,
-            requireFullSync: options.requireFullSync
-        },
-        {
-            logger,
-            authStore: sessionStore.auth,
-            signalStore: sessionStore.signal,
-            socket: {
-                sendNode: host.sendNode,
-                query: host.query
-            },
-            callbacks: {
-                onQr: (qr, ttlMs) => host.emitEvent('auth_qr', { qr, ttlMs }),
-                onPairingCode: (code) => host.emitEvent('auth_pairing_code', { code }),
-                onPairingRefresh: (forceManual) =>
-                    host.emitEvent('auth_pairing_refresh', { forceManual }),
-                onPaired: (credentials) => {
-                    host.emitEvent('auth_paired', { credentials })
-                    host.scheduleReconnectAfterPairing()
-                },
-                onError: (error) => host.handleError(error)
-            }
-        }
-    )
-}
-
 function createIncomingMessageAckOptions(input: {
     readonly logger: Logger
-    readonly host: WaClientDependencyHost
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly emitEvent: <K extends keyof WaClientEventMap>(
+        event: K,
+        ...args: Parameters<WaClientEventMap[K]>
+    ) => void
+    readonly handleIncomingMessageEvent: (event: WaIncomingMessageEvent) => Promise<void>
+    readonly handleError: (error: Error) => void
     readonly getCurrentMeJid: () => string | null | undefined
     readonly signalProtocol: SignalProtocol
     readonly senderKeyManager: SenderKeyManager
     readonly retryCoordinator: WaRetryCoordinator
 }): Parameters<typeof handleIncomingMessageAck>[1] {
-    const { logger, host, getCurrentMeJid, signalProtocol, senderKeyManager, retryCoordinator } =
-        input
+    const {
+        logger,
+        sendNode,
+        emitEvent,
+        handleIncomingMessageEvent,
+        handleError,
+        getCurrentMeJid,
+        signalProtocol,
+        senderKeyManager,
+        retryCoordinator
+    } = input
+
     return {
         logger,
-        sendNode: host.sendNode,
+        sendNode,
         getMeJid: getCurrentMeJid,
         signalProtocol,
         senderKeyManager,
         onDecryptFailure: (context: WaRetryDecryptFailureContext, error: unknown) =>
             retryCoordinator.onDecryptFailure(context, error),
         emitIncomingMessage: (event: WaIncomingMessageEvent) => {
-            void host
-                .handleIncomingMessageEvent(event)
-                .catch((err) => host.handleError(toError(err)))
+            void handleIncomingMessageEvent(event).catch((err) => handleError(toError(err)))
         },
         emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) =>
-            host.emitEvent('stanza_unhandled', event)
+            emitEvent('stanza_unhandled', event)
     }
 }
 
 function createHandleClientDirtyBits(input: {
     readonly logger: Logger
-    readonly host: WaClientDependencyHost
+    readonly queryWithContext: (
+        context: string,
+        node: BinaryNode,
+        timeoutMs?: number,
+        contextData?: Readonly<Record<string, unknown>>
+    ) => Promise<BinaryNode>
+    readonly syncAppState: () => Promise<void>
     readonly getCurrentCredentials: () => ReturnType<WaAuthClient['getCurrentCredentials']>
     readonly generateUsyncSid: WaUsyncSidGenerator
 }): (dirtyBits: Parameters<typeof handleDirtyBits>[1]) => Promise<void> {
-    const { logger, host, getCurrentCredentials, generateUsyncSid } = input
+    const { logger, queryWithContext, syncAppState, getCurrentCredentials, generateUsyncSid } =
+        input
+
     return (dirtyBits) =>
         handleDirtyBits(
             {
                 logger,
-                queryWithContext: host.queryWithContext,
+                queryWithContext,
                 getCurrentCredentials,
-                syncAppState: async () => {
-                    await host.syncAppState()
-                },
+                syncAppState,
                 generateUsyncSid
             },
             dirtyBits
@@ -270,13 +254,21 @@ function createHandleClientDirtyBits(input: {
 
 function createIncomingNodeRuntime(input: {
     readonly logger: Logger
-    readonly host: WaClientDependencyHost
+    readonly emitEvent: <K extends keyof WaClientEventMap>(
+        event: K,
+        ...args: Parameters<WaClientEventMap[K]>
+    ) => void
     readonly authClient: WaAuthClient
+    readonly connectionManager: WaConnectionManager
     readonly nodeOrchestrator: WaNodeOrchestrator
     readonly streamControl: WaStreamControlHandler
     readonly mediaMessageBuildOptions: WaMediaMessageBuildOptions
     readonly retryCoordinator: WaRetryCoordinator
     readonly messageDispatch: WaMessageDispatchCoordinator
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly syncAppState: () => Promise<void>
+    readonly disconnect: () => Promise<void>
+    readonly clearStoredCredentials: () => Promise<void>
     readonly getCurrentMeJid: () => string | null | undefined
     readonly handleClientDirtyBits: (
         dirtyBits: Parameters<typeof handleDirtyBits>[1]
@@ -285,13 +277,18 @@ function createIncomingNodeRuntime(input: {
 }): ConstructorParameters<typeof WaIncomingNodeCoordinator>[0]['runtime'] {
     const {
         logger,
-        host,
+        emitEvent,
         authClient,
+        connectionManager,
         nodeOrchestrator,
         streamControl,
         mediaMessageBuildOptions,
         retryCoordinator,
         messageDispatch,
+        sendNode,
+        syncAppState,
+        disconnect,
+        clearStoredCredentials,
         getCurrentMeJid,
         handleClientDirtyBits,
         incomingMessageAckOptions
@@ -300,12 +297,10 @@ function createIncomingNodeRuntime(input: {
     return {
         handleStreamControlResult: streamControl.handleStreamControlResult,
         persistSuccessAttributes: (attributes) => authClient.persistSuccessAttributes(attributes),
-        emitSuccessNode: (node) => host.emitEvent('connection_success', { node }),
-        updateClockSkewFromSuccess: host.updateClockSkewFromSuccess,
-        shouldWarmupMediaConn: () => {
-            const comms = host.getComms()
-            return !!(getCurrentMeJid() && comms && comms.getCommsState().connected)
-        },
+        emitSuccessNode: (node) => emitEvent('connection_success', { node }),
+        updateClockSkewFromSuccess: (serverUnixSeconds) =>
+            connectionManager.updateClockSkewFromSuccess(serverUnixSeconds),
+        shouldWarmupMediaConn: () => !!(getCurrentMeJid() && connectionManager.isConnected()),
         warmupMediaConn: async () => {
             await getClientMediaConn(mediaMessageBuildOptions, true)
         },
@@ -318,18 +313,18 @@ function createIncomingNodeRuntime(input: {
             authClient.handleCompanionRegRefreshNotification(node),
         handleIncomingMessageNode: (node) =>
             handleIncomingMessageAck(node, incomingMessageAckOptions),
-        sendNode: host.sendNode,
+        sendNode,
         handleIncomingRetryReceipt: (node) => retryCoordinator.handleIncomingRetryReceipt(node),
         trackOutboundReceipt: (node) => retryCoordinator.trackOutboundReceipt(node),
-        emitIncomingReceipt: (event) => host.emitEvent('message_receipt', event),
-        emitIncomingPresence: (event) => host.emitEvent('presence', event),
-        emitIncomingChatstate: (event) => host.emitEvent('chatstate', event),
-        emitIncomingCall: (event) => host.emitEvent('call', event),
-        emitIncomingFailure: (event) => host.emitEvent('failure', event),
-        emitIncomingErrorStanza: (event) => host.emitEvent('stanza_error', event),
-        emitIncomingNotification: (event) => host.emitEvent('notification', event),
+        emitIncomingReceipt: (event) => emitEvent('message_receipt', event),
+        emitIncomingPresence: (event) => emitEvent('presence', event),
+        emitIncomingChatstate: (event) => emitEvent('chatstate', event),
+        emitIncomingCall: (event) => emitEvent('call', event),
+        emitIncomingFailure: (event) => emitEvent('failure', event),
+        emitIncomingErrorStanza: (event) => emitEvent('stanza_error', event),
+        emitIncomingNotification: (event) => emitEvent('notification', event),
         emitGroupEvent: (event) => {
-            host.emitEvent('group_event', event)
+            emitEvent('group_event', event)
             void messageDispatch.mutateParticipantsCacheFromGroupEvent(event).catch((error) => {
                 logger.warn('failed to mutate participants cache from group event', {
                     action: event.action,
@@ -339,40 +334,56 @@ function createIncomingNodeRuntime(input: {
                 })
             })
         },
-        emitUnhandledIncomingNode: (event) => host.emitEvent('stanza_unhandled', event),
-        syncAppState: host.syncAppState,
-        disconnect: host.disconnect,
-        clearStoredCredentials: host.clearStoredState,
+        emitUnhandledIncomingNode: (event) => emitEvent('stanza_unhandled', event),
+        syncAppState,
+        disconnect,
+        clearStoredCredentials,
         parseDirtyBits: (nodes) => parseDirtyBits(nodes, logger),
         handleDirtyBits: (dirtyBits) => handleClientDirtyBits(dirtyBits)
     }
 }
 
 function createPassiveTasksRuntime(input: {
-    readonly host: WaClientDependencyHost
+    readonly queryWithContext: (
+        context: string,
+        node: BinaryNode,
+        timeoutMs?: number,
+        contextData?: Readonly<Record<string, unknown>>
+    ) => Promise<BinaryNode>
     readonly authClient: WaAuthClient
     readonly nodeOrchestrator: WaNodeOrchestrator
+    readonly receiptQueue: WaReceiptQueue
     readonly getCurrentCredentials: () => ReturnType<WaAuthClient['getCurrentCredentials']>
 }): ConstructorParameters<typeof WaPassiveTasksCoordinator>[0]['runtime'] {
-    const { host, authClient, nodeOrchestrator, getCurrentCredentials } = input
+    const { queryWithContext, authClient, nodeOrchestrator, receiptQueue, getCurrentCredentials } =
+        input
+
     return {
-        queryWithContext: host.queryWithContext,
+        queryWithContext,
         getCurrentCredentials,
         persistServerHasPreKeys: (serverHasPreKeys) =>
             authClient.persistServerHasPreKeys(serverHasPreKeys),
         sendNodeDirect: (node) => nodeOrchestrator.sendNode(node),
-        takeDanglingReceipts: host.takeDanglingReceipts,
-        requeueDanglingReceipt: host.enqueueDanglingReceipt,
-        shouldQueueDanglingReceipt: host.shouldQueueDanglingReceipt
+        takeDanglingReceipts: () => receiptQueue.take(),
+        requeueDanglingReceipt: (node) => receiptQueue.enqueue(node),
+        shouldQueueDanglingReceipt: (node, error) => receiptQueue.shouldQueue(node, error)
     }
 }
 
 export function buildWaClientDependencies(input: {
     readonly base: WaClientBase
-    readonly host: WaClientDependencyHost
+    readonly runtime: WaClientBuildRuntime
 }): WaClientDependencies {
-    const { base, host } = input
+    const { base, runtime } = input
     const { options, logger, sessionStore } = base
+
+    const receiptQueue = new WaReceiptQueue()
+    const keyShareCoordinator = new WaKeyShareCoordinator()
+
+    let connectionManager: WaConnectionManager | null = null
+    let passiveTasks: WaPassiveTasksCoordinator | null = null
+    let mediaConnCacheFallback: WaMediaConn | null = null
+    let scheduleReconnectAfterPairing: () => void = () => undefined
 
     const nodeTransport = new WaNodeTransport(logger)
     const nodeOrchestrator = new WaNodeOrchestrator({
@@ -384,7 +395,7 @@ export function buildWaClientDependencies(input: {
     const keepAlive = new WaKeepAlive({
         logger,
         nodeOrchestrator,
-        getComms: host.getComms,
+        getComms: () => connectionManager?.getComms() ?? null,
         intervalMs: options.keepAliveIntervalMs,
         timeoutMs: options.deadSocketTimeoutMs,
         hostDomain: WA_DEFAULTS.HOST_DOMAIN
@@ -402,15 +413,23 @@ export function buildWaClientDependencies(input: {
         logger,
         mediaTransfer,
         iqTimeoutMs: options.iqTimeoutMs,
-        queryWithContext: host.queryWithContext,
-        getMediaConnCache: host.getMediaConnCache,
-        setMediaConnCache: host.setMediaConnCache
+        queryWithContext: runtime.queryWithContext,
+        getMediaConnCache: () => {
+            if (connectionManager) {
+                return connectionManager.getMediaConnCache()
+            }
+            return mediaConnCacheFallback
+        },
+        setMediaConnCache: (mediaConn) => {
+            mediaConnCacheFallback = mediaConn
+            connectionManager?.setMediaConnCache(mediaConn)
+        }
     }
 
     const messageClient = new WaMessageClient({
         logger,
-        sendNode: host.sendNode,
-        query: host.query,
+        sendNode: runtime.sendNode,
+        query: runtime.query,
         defaultAckTimeoutMs: options.messageAckTimeoutMs,
         defaultMaxAttempts: options.messageMaxAttempts,
         defaultRetryDelayMs: options.messageRetryDelayMs
@@ -419,69 +438,133 @@ export function buildWaClientDependencies(input: {
     const signalProtocol = new SignalProtocol(sessionStore.signal, logger)
     const signalDigestSync = new SignalDigestSyncApi({
         logger,
-        query: host.query,
+        query: runtime.query,
         signalStore: sessionStore.signal,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
     const generateUsyncSid = createUsyncSidGenerator()
     const signalDeviceSync = new SignalDeviceSyncApi({
         logger,
-        query: host.query,
+        query: runtime.query,
         deviceListStore: sessionStore.deviceList,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs,
         generateSid: generateUsyncSid
     })
     const signalIdentitySync = new SignalIdentitySyncApi({
         logger,
-        query: host.query,
+        query: runtime.query,
         signalStore: sessionStore.signal,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
     const signalMissingPreKeysSync = new SignalMissingPreKeysSyncApi({
         logger,
-        query: host.query,
+        query: runtime.query,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
     const signalRotateKey = new SignalRotateKeyApi({
         logger,
-        query: host.query,
+        query: runtime.query,
         signalStore: sessionStore.signal,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
     const signalSessionSync = new SignalSessionSyncApi({
         logger,
-        query: host.query,
+        query: runtime.query,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
-    const authClient = createAuthClient({ options, logger, sessionStore, host })
+
+    const authClient = new WaAuthClient(
+        {
+            deviceBrowser: options.deviceBrowser,
+            deviceOsDisplayName: options.deviceOsDisplayName,
+            devicePlatform: options.devicePlatform,
+            requireFullSync: options.requireFullSync
+        },
+        {
+            logger,
+            authStore: sessionStore.auth,
+            signalStore: sessionStore.signal,
+            socket: {
+                sendNode: runtime.sendNode,
+                query: runtime.query
+            },
+            callbacks: {
+                onQr: (qr, ttlMs) => runtime.emitEvent('auth_qr', { qr, ttlMs }),
+                onPairingCode: (code) => runtime.emitEvent('auth_pairing_code', { code }),
+                onPairingRefresh: (forceManual) =>
+                    runtime.emitEvent('auth_pairing_refresh', { forceManual }),
+                onPaired: (credentials) => {
+                    runtime.emitEvent('auth_paired', { credentials })
+                    scheduleReconnectAfterPairing()
+                },
+                onError: (error) => runtime.handleError(error)
+            }
+        }
+    )
+
     const getCurrentCredentials = authClient.getCurrentCredentials.bind(authClient)
     const getCurrentMeJid = () => getCurrentCredentials()?.meJid
     const getCurrentMeLid = () => getCurrentCredentials()?.meLid
     const getCurrentSignedIdentity = () => getCurrentCredentials()?.signedIdentity
+
     const groupCoordinator = createGroupCoordinator({
-        queryWithContext: host.queryWithContext
+        queryWithContext: runtime.queryWithContext
     })
-    const messageDispatch = new WaMessageDispatchCoordinator({
-        logger,
-        messageClient,
+
+    const retryTracker = createOutboundRetryTracker({
         retryStore: sessionStore.retry,
+        logger
+    })
+    const sessionResolver = createSignalSessionResolver({
+        signalProtocol,
+        signalStore: sessionStore.signal,
+        signalIdentitySync,
+        signalSessionSync,
+        logger
+    })
+    const fanoutResolver = createDeviceFanoutResolver({
+        signalDeviceSync,
+        getCurrentMeJid,
+        getCurrentMeLid,
+        logger
+    })
+    const participantsCache = createGroupParticipantsCache({
         participantsStore: sessionStore.participants,
-        buildMessageContent: async (content) =>
-            buildMediaMessageContent(mediaMessageBuildOptions, content),
         queryGroupParticipantJids: async (groupJid) =>
             (await groupCoordinator.queryGroupMetadata(groupJid)).participants.map(
                 (participant) => participant.jid
             ),
+        logger
+    })
+
+    let messageDispatch!: WaMessageDispatchCoordinator
+
+    const appStateSyncKeyProtocol = createAppStateSyncKeyProtocol({
+        publishSignalMessage: (signalInput, publishOptions) =>
+            messageDispatch.publishSignalMessage(signalInput, publishOptions),
+        fanoutResolver,
+        getCurrentMeJid,
+        getCurrentMeLid,
+        logger
+    })
+
+    messageDispatch = new WaMessageDispatchCoordinator({
+        logger,
+        messageClient,
+        retryTracker,
+        sessionResolver,
+        fanoutResolver,
+        participantsCache,
+        appStateSyncKeyProtocol,
+        buildMessageContent: async (content) =>
+            buildMediaMessageContent(mediaMessageBuildOptions, content),
         senderKeyManager,
         signalProtocol,
-        signalStore: sessionStore.signal,
-        signalDeviceSync,
-        signalIdentitySync,
-        signalSessionSync,
         getCurrentMeJid,
         getCurrentMeLid,
         getCurrentSignedIdentity
     })
+
     const retryCoordinator = new WaRetryCoordinator({
         logger,
         retryStore: sessionStore.retry,
@@ -491,14 +574,15 @@ export function buildWaClientDependencies(input: {
         signalDeviceSync,
         signalMissingPreKeysSync,
         messageClient,
-        sendNode: host.sendNode,
+        sendNode: runtime.sendNode,
         getCurrentMeJid,
         getCurrentMeLid,
         getCurrentSignedIdentity
     })
+
     const appStateSync = new WaAppStateSyncClient({
         logger,
-        query: host.query,
+        query: runtime.query,
         getCurrentMeJid,
         defaultTimeoutMs: options.appStateSyncTimeoutMs,
         store: sessionStore.appState,
@@ -506,59 +590,109 @@ export function buildWaClientDependencies(input: {
             await messageDispatch.requestAppStateSyncKeys(keyIds)
         }
     })
+
     const appStateMutations = new WaAppStateMutationCoordinator({
         logger,
         messageStore: sessionStore.messages,
-        syncAppState: host.syncAppStateWithOptions
+        syncAppState: runtime.syncAppStateWithOptions
     })
+
+    connectionManager = new WaConnectionManager({
+        logger,
+        options,
+        authClient,
+        keepAlive,
+        nodeOrchestrator,
+        nodeTransport,
+        getPassiveTasks: () => passiveTasks,
+        clearStoredCredentials: runtime.clearStoredState
+    })
+
+    if (mediaConnCacheFallback !== null) {
+        connectionManager.setMediaConnCache(mediaConnCacheFallback)
+    }
+    scheduleReconnectAfterPairing = () => connectionManager?.scheduleReconnectAfterPairing()
+
+    const disconnectWithClientSideEffects = async (): Promise<void> => {
+        keyShareCoordinator.notifyDisconnected()
+        await connectionManager?.disconnect()
+        runtime.emitEvent('connection_close', {})
+    }
+
+    const connectWithClientSideEffects = async (): Promise<void> => {
+        await connectionManager?.connect(runtime.handleIncomingFrame)
+        runtime.emitEvent('connection_open', {})
+    }
+
+    const clearStoredCredentialsWithClientSideEffects = async (): Promise<void> => {
+        await connectionManager?.clearStoredCredentials()
+    }
+
     const streamControl = createStreamControlHandler({
         logger,
-        getComms: host.getComms,
+        getComms: () => connectionManager?.getComms() ?? null,
         clearPendingQueries: (error) => nodeOrchestrator.clearPending(error),
-        clearMediaConnCache: () => host.setMediaConnCache(null),
-        disconnect: host.disconnect,
-        clearStoredCredentials: host.clearStoredState,
-        connect: host.connect
+        clearMediaConnCache: () => {
+            mediaConnCacheFallback = null
+            connectionManager?.setMediaConnCache(null)
+        },
+        disconnect: disconnectWithClientSideEffects,
+        clearStoredCredentials: clearStoredCredentialsWithClientSideEffects,
+        connect: connectWithClientSideEffects
     })
+
     const incomingMessageAckOptions = createIncomingMessageAckOptions({
         logger,
-        host,
+        sendNode: runtime.sendNode,
+        emitEvent: runtime.emitEvent,
+        handleIncomingMessageEvent: runtime.handleIncomingMessageEvent,
+        handleError: runtime.handleError,
         getCurrentMeJid,
         signalProtocol,
         senderKeyManager,
         retryCoordinator
     })
+
     const handleClientDirtyBits = createHandleClientDirtyBits({
         logger,
-        host,
+        queryWithContext: runtime.queryWithContext,
+        syncAppState: runtime.syncAppState,
         getCurrentCredentials,
         generateUsyncSid
     })
+
     const incomingNode = new WaIncomingNodeCoordinator({
         logger,
         runtime: createIncomingNodeRuntime({
             logger,
-            host,
+            emitEvent: runtime.emitEvent,
             authClient,
+            connectionManager,
             nodeOrchestrator,
             streamControl,
             mediaMessageBuildOptions,
             retryCoordinator,
             messageDispatch,
+            sendNode: runtime.sendNode,
+            syncAppState: runtime.syncAppState,
+            disconnect: disconnectWithClientSideEffects,
+            clearStoredCredentials: clearStoredCredentialsWithClientSideEffects,
             getCurrentMeJid,
             handleClientDirtyBits,
             incomingMessageAckOptions
         })
     })
-    const passiveTasks = new WaPassiveTasksCoordinator({
+
+    passiveTasks = new WaPassiveTasksCoordinator({
         logger,
         signalStore: sessionStore.signal,
         signalDigestSync,
         signalRotateKey,
         runtime: createPassiveTasksRuntime({
-            host,
+            queryWithContext: runtime.queryWithContext,
             authClient,
             nodeOrchestrator,
+            receiptQueue,
             getCurrentCredentials
         })
     })
@@ -586,6 +720,9 @@ export function buildWaClientDependencies(input: {
         streamControl,
         incomingNode,
         passiveTasks,
-        groupCoordinator
+        groupCoordinator,
+        receiptQueue,
+        keyShareCoordinator,
+        connectionManager
     }
 }

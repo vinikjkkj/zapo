@@ -6,6 +6,7 @@ import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMu
 import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
+import { createGroupParticipantsCache } from '@client/messaging/participants'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { WA_APP_STATE_COLLECTION_STATES, WA_STREAM_SIGNALING } from '@protocol/constants'
@@ -91,19 +92,23 @@ function createGroupEvent(input: {
 function createMessageDispatchCoordinator(
     participantsStore: WaParticipantsMemoryStore
 ): WaMessageDispatchCoordinator {
+    const participantsCache = createGroupParticipantsCache({
+        participantsStore,
+        queryGroupParticipantJids: async () => [],
+        logger: createLogger()
+    })
+
     return new WaMessageDispatchCoordinator({
         logger: createLogger(),
         messageClient: {} as never,
-        retryStore: {} as never,
-        participantsStore,
+        retryTracker: {} as never,
+        sessionResolver: {} as never,
+        fanoutResolver: {} as never,
+        participantsCache,
+        appStateSyncKeyProtocol: {} as never,
         buildMessageContent: async () => ({}),
-        queryGroupParticipantJids: async () => [],
         senderKeyManager: {} as never,
         signalProtocol: {} as never,
-        signalStore: {} as never,
-        signalDeviceSync: {} as never,
-        signalIdentitySync: {} as never,
-        signalSessionSync: {} as never,
         getCurrentMeJid: () => null,
         getCurrentMeLid: () => null,
         getCurrentSignedIdentity: () => null

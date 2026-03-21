@@ -3,6 +3,7 @@ import { WA_STREAM_SIGNALING } from '@protocol/constants'
 import { findNodeChild, hasNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { base64ToBytesChecked } from '@util/bytes'
+import { parseOptionalInt, parseStrictUnsignedInt } from '@util/primitives'
 
 export type WaStreamControlNodeResult =
     | { readonly kind: 'xmlstreamend' }
@@ -12,17 +13,6 @@ export type WaStreamControlNodeResult =
     | { readonly kind: 'stream_error_ack'; readonly id?: string }
     | { readonly kind: 'stream_error_xml_not_well_formed' }
     | { readonly kind: 'stream_error_other' }
-
-function parseStrictUnsignedInt(value: string): number | undefined {
-    if (!/^\d+$/.test(value)) {
-        return undefined
-    }
-    const parsed = Number(value)
-    if (!Number.isSafeInteger(parsed)) {
-        return undefined
-    }
-    return parsed
-}
 
 export function parseStreamControlNode(node: BinaryNode): WaStreamControlNodeResult | null {
     if (node.tag === WA_STREAM_SIGNALING.XML_STREAM_END_TAG) {
@@ -74,13 +64,6 @@ export function parseStreamControlNode(node: BinaryNode): WaStreamControlNodeRes
     return {
         kind: 'stream_error_other'
     }
-}
-
-export function parseOptionalInt(value: string | undefined): number | undefined {
-    if (!value) {
-        return undefined
-    }
-    return parseStrictUnsignedInt(value)
 }
 
 export function parseCompanionEncStatic(

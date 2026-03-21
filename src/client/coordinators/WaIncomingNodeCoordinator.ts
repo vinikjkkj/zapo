@@ -36,13 +36,12 @@ import {
     getNodeChildrenByTag
 } from '@transport/node/helpers'
 import {
-    parseOptionalInt,
     parseStreamControlNode,
     parseSuccessPersistAttributes,
     type WaStreamControlNodeResult
 } from '@transport/stream/parse'
 import type { BinaryNode } from '@transport/types'
-import { toError } from '@util/primitives'
+import { parseOptionalInt, toError } from '@util/primitives'
 
 interface WaIncomingNodeRuntime {
     readonly handleStreamControlResult: (result: WaStreamControlNodeResult) => Promise<void>

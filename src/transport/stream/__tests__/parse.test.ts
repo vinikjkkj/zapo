@@ -4,12 +4,12 @@ import test from 'node:test'
 import { WA_STREAM_SIGNALING } from '@protocol/constants'
 import {
     parseCompanionEncStatic,
-    parseOptionalInt,
     parseStreamControlNode,
     parseSuccessPersistAttributes
 } from '@transport/stream/parse'
 import type { BinaryNode } from '@transport/types'
 import { bytesToBase64 } from '@util/bytes'
+import { parseOptionalInt } from '@util/primitives'
 
 test('parseOptionalInt parses strict unsigned numbers only', () => {
     assert.equal(parseOptionalInt('123'), 123)

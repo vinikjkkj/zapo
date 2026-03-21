@@ -9,9 +9,9 @@ import type {
 import { WA_GROUP_NOTIFICATION_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import { findNodeChild, getNodeChildren, getNodeChildrenByTag } from '@transport/node/helpers'
-import { parseOptionalInt } from '@transport/stream/parse'
 import type { BinaryNode } from '@transport/types'
 import { TEXT_DECODER } from '@util/bytes'
+import { parseOptionalInt } from '@util/primitives'
 
 export interface WaParseGroupNotificationResult {
     readonly events: readonly WaGroupEvent[]

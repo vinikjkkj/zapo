@@ -7,8 +7,8 @@ import {
     SIGNAL_SIGNATURE_LENGTH
 } from '@signal/api/constants'
 import { decodeNodeContentBase64OrBytes, findNodeChild } from '@transport/node/helpers'
-import { parseOptionalInt } from '@transport/stream/parse'
 import type { BinaryNode } from '@transport/types'
+import { parseOptionalInt } from '@util/primitives'
 
 function parseFixedLengthBytes(
     value: BinaryNode['content'],

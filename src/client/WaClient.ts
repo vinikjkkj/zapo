@@ -4,8 +4,10 @@ import type { WaAppStateStoreData, WaAppStateSyncResult } from '@appstate/types'
 import type { WaAppStateSyncOptions } from '@appstate/types'
 import { downloadExternalBlobReference } from '@appstate/utils'
 import type { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
-import type { WaAuthCredentials } from '@auth/types'
 import type { WaAuthClient } from '@auth/WaAuthClient'
+import type { WaConnectionManager } from '@client/connection/WaConnectionManager'
+import type { WaKeyShareCoordinator } from '@client/connection/WaKeyShareCoordinator'
+import type { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator'
 import type { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
@@ -26,14 +28,9 @@ import type {
     WaIncomingNodeHandlerRegistration,
     WaIncomingMessageEvent
 } from '@client/types'
-import {
-    buildWaClientDependencies,
-    resolveWaClientBase,
-    type WaClientDependencyHost
-} from '@client/WaClientFactory'
+import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClientFactory'
 import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
-import type { WaMediaConn } from '@media/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import type {
     WaMessagePublishResult,
@@ -42,7 +39,7 @@ import type {
 } from '@message/types'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
-import { WA_APP_STATE_COLLECTION_STATES, WA_DEFAULTS, WA_MESSAGE_TAGS } from '@protocol/constants'
+import { WA_APP_STATE_COLLECTION_STATES, WA_DEFAULTS } from '@protocol/constants'
 import { normalizeDeviceJid, parsePhoneJid, toUserJid } from '@protocol/jid'
 import type { SignalDeviceSyncApi, SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
@@ -59,7 +56,6 @@ import { queryWithContext as queryNodeWithContext } from '@transport/node/query'
 import type { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import type { WaNodeTransport } from '@transport/node/WaNodeTransport'
 import type { BinaryNode } from '@transport/types'
-import { WaComms } from '@transport/WaComms'
 import { decodeProtoBytes } from '@util/bytes'
 import { bytesToHex } from '@util/bytes'
 import { toError } from '@util/primitives'
@@ -88,26 +84,21 @@ export class WaClient extends EventEmitter {
     private readonly threadStore!: WaThreadStore
     private readonly authClient!: WaAuthClient
     private readonly nodeOrchestrator!: WaNodeOrchestrator
-    private readonly keepAlive!: WaKeepAlive
     private readonly nodeTransport!: WaNodeTransport
     private readonly signalDeviceSync!: SignalDeviceSyncApi
     public readonly appStateSync!: WaAppStateSyncClient
     private readonly appStateMutations!: WaAppStateMutationCoordinator
     private readonly incomingNode!: WaIncomingNodeCoordinator
-    private readonly passiveTasks!: WaPassiveTasksCoordinator
     public readonly mediaTransfer!: WaMediaTransferClient
     public readonly messageDispatch!: WaMessageDispatchCoordinator
     public readonly messageClient!: WaMessageClient
     public readonly groupCoordinator!: WaGroupCoordinator
-    private clockSkewMs: number | null = null
-    private mediaConnCache: WaMediaConn | null = null
-    private comms: WaComms | null = null
-    private pairingReconnectPromise: Promise<void> | null = null
+    private readonly passiveTasks!: WaPassiveTasksCoordinator
+    private readonly keepAlive!: WaKeepAlive
+    private readonly receiptQueue!: WaReceiptQueue
+    private readonly keyShareCoordinator!: WaKeyShareCoordinator
+    private readonly connectionManager!: WaConnectionManager
     private connectPromise: Promise<void> | null = null
-    private readonly danglingReceipts: BinaryNode[] = []
-    private readonly appStateKeyShareWaiters = new Set<(received: boolean) => void>()
-    private appStateKeyShareVersion = 0
-    private appStateBootstrapKeyShareWaitDone = false
 
     public constructor(options: WaClientOptions, logger: Logger = new ConsoleLogger('info')) {
         super()
@@ -125,33 +116,23 @@ export class WaClient extends EventEmitter {
         this.senderKeyStore = base.sessionStore.senderKey
         this.threadStore = base.sessionStore.threads
 
-        const host: WaClientDependencyHost = {
-            sendNode: (node) => this.sendNode(node),
-            query: (node, timeoutMs) => this.query(node, timeoutMs),
-            queryWithContext: this.queryWithContext.bind(this),
-            syncAppState: () => this.syncAppState().then(() => {}),
-            syncAppStateWithOptions: (options) => this.syncAppState(options),
-            emitEvent: this.emit.bind(this) as WaClientDependencyHost['emitEvent'],
-            handleIncomingMessageEvent: this.handleIncomingMessageEvent.bind(this),
-            handleError: this.handleError.bind(this),
-            scheduleReconnectAfterPairing: this.scheduleReconnectAfterPairing.bind(this),
-            updateClockSkewFromSuccess: this.updateClockSkewFromSuccess.bind(this),
-            getComms: () => this.comms,
-            getMediaConnCache: () => this.mediaConnCache,
-            setMediaConnCache: (mediaConn) => {
-                this.mediaConnCache = mediaConn
-            },
-            disconnect: this.disconnect.bind(this),
-            clearStoredState: this.clearStoredState.bind(this),
-            connect: this.connect.bind(this),
-            shouldQueueDanglingReceipt: (node, error) =>
-                this.shouldQueueDanglingReceipt(node, error),
-            enqueueDanglingReceipt: this.enqueueDanglingReceipt.bind(this),
-            takeDanglingReceipts: () => this.danglingReceipts.splice(0)
-        }
         const dependencies = buildWaClientDependencies({
             base,
-            host
+            runtime: {
+                sendNode: (node) => this.sendNode(node),
+                query: (node, timeoutMs) => this.query(node, timeoutMs),
+                queryWithContext: this.queryWithContext.bind(this),
+                syncAppState: () => this.syncAppState().then(() => {}),
+                syncAppStateWithOptions: (syncOptions) => this.syncAppState(syncOptions),
+                emitEvent: this.emit.bind(this) as <K extends keyof WaClientEventMap>(
+                    event: K,
+                    ...args: Parameters<WaClientEventMap[K]>
+                ) => void,
+                handleIncomingMessageEvent: this.handleIncomingMessageEvent.bind(this),
+                handleError: this.handleError.bind(this),
+                handleIncomingFrame: this.handleIncomingFrame.bind(this),
+                clearStoredState: this.clearStoredState.bind(this)
+            }
         })
         Object.assign(this, dependencies)
 
@@ -186,7 +167,7 @@ export class WaClient extends EventEmitter {
     }
 
     public getState() {
-        const connected = this.comms !== null && this.comms.getCommsState().connected
+        const connected = this.connectionManager.isConnected()
         this.logger.trace('wa client state requested', { connected })
         return this.authClient.getState(connected)
     }
@@ -196,7 +177,7 @@ export class WaClient extends EventEmitter {
     }
 
     public getClockSkewMs(): number | null {
-        return this.clockSkewMs
+        return this.connectionManager.getClockSkewMs()
     }
 
     public async sendNode(node: BinaryNode): Promise<void> {
@@ -204,13 +185,13 @@ export class WaClient extends EventEmitter {
             await this.nodeOrchestrator.sendNode(node)
         } catch (error) {
             const normalized = toError(error)
-            if (this.shouldQueueDanglingReceipt(node, normalized)) {
-                this.enqueueDanglingReceipt(node)
+            if (this.receiptQueue.shouldQueue(node, normalized)) {
+                this.receiptQueue.enqueue(node)
                 this.logger.warn('queued dangling receipt after send failure', {
                     id: node.attrs.id,
                     to: node.attrs.to,
                     message: normalized.message,
-                    queueSize: this.danglingReceipts.length
+                    queueSize: this.receiptQueue.size()
                 })
                 return
             }
@@ -222,7 +203,7 @@ export class WaClient extends EventEmitter {
         node: BinaryNode,
         timeoutMs: number = this.options.iqTimeoutMs ?? WA_DEFAULTS.IQ_TIMEOUT_MS
     ): Promise<BinaryNode> {
-        if (!this.comms || !this.comms.getCommsState().connected) {
+        if (!this.connectionManager.isConnected()) {
             throw new Error('client is not connected')
         }
         this.logger.debug('wa client query', { tag: node.tag, id: node.attrs.id, timeoutMs })
@@ -343,9 +324,8 @@ export class WaClient extends EventEmitter {
                 imported
             })
             if (imported > 0) {
-                const hadWaiters = this.appStateKeyShareWaiters.size > 0
-                this.appStateKeyShareVersion += 1
-                this.notifyAppStateKeyShareWaiters(true)
+                const hadWaiters = this.keyShareCoordinator.hasWaiters()
+                this.keyShareCoordinator.notifyReceived()
                 if (hadWaiters) {
                     this.logger.debug('app-state key share imported and waiters released', {
                         id: event.stanzaId,
@@ -543,122 +523,29 @@ export class WaClient extends EventEmitter {
             this.logger.trace('wa client connect already in-flight')
             return this.connectPromise
         }
-        this.connectPromise = this.connectInternal().finally(() => {
-            this.connectPromise = null
-        })
+
+        this.connectPromise = this.connectionManager
+            .connect((frame) => this.handleIncomingFrame(frame))
+            .then(() => {
+                this.emit('connection_open', {})
+            })
+            .finally(() => {
+                this.connectPromise = null
+            })
         return this.connectPromise
     }
 
-    private async connectInternal(): Promise<void> {
-        if (this.comms) {
-            this.logger.trace('wa client connect skipped: comms already created')
-            return
-        }
-
-        this.logger.info('wa client connect start')
-        let credentials = await this.authClient.loadOrCreateCredentials()
-        try {
-            await this.startCommsWithCredentials(credentials)
-        } catch (error) {
-            if (credentials.routingInfo) {
-                this.logger.warn(
-                    'connect failed with routing info, retrying without routing info',
-                    {
-                        message: toError(error).message
-                    }
-                )
-                await this.disconnect()
-                credentials = await this.authClient.clearRoutingInfo()
-                await this.startCommsWithCredentials(credentials)
-            } else {
-                await this.disconnect()
-                throw error
-            }
-        }
-        this.logger.info('wa client connected')
-        this.emit('connection_open', {})
-    }
-
-    private scheduleReconnectAfterPairing(): void {
-        this.logger.debug('wa client scheduling reconnect after pairing')
-        setTimeout(() => {
-            void this.reconnectAsRegisteredAfterPairing().catch((error) => {
-                this.handleError(toError(error))
-            })
-        }, 0)
-    }
-
-    private async reconnectAsRegisteredAfterPairing(): Promise<void> {
-        if (this.pairingReconnectPromise) {
-            this.logger.trace('pairing reconnect already in-flight')
-            return this.pairingReconnectPromise
-        }
-        this.pairingReconnectPromise = this.reconnectAsRegisteredAfterPairingInternal().finally(
-            () => {
-                this.pairingReconnectPromise = null
-            }
-        )
-        return this.pairingReconnectPromise
-    }
-
-    private async reconnectAsRegisteredAfterPairingInternal(): Promise<void> {
-        const credentials = this.authClient.getCurrentCredentials()
-        if (!credentials?.meJid) {
-            this.logger.trace('pairing reconnect skipped: still unregistered')
-            return
-        }
-        const currentComms = this.comms
-        if (!currentComms) {
-            this.logger.trace('pairing reconnect skipped: no active comms')
-            return
-        }
-
-        this.logger.info('pairing completed, restarting comms as registered')
-        this.keepAlive.stop()
-        this.nodeOrchestrator.clearPending(new Error('restarting comms after pairing'))
-        this.clearCommsBinding()
-        try {
-            await currentComms.stopComms()
-        } catch (error) {
-            this.logger.warn('failed to stop pre-registration comms', {
-                message: toError(error).message
-            })
-        }
-        try {
-            await this.startCommsWithCredentials(credentials)
-        } catch (error) {
-            this.logger.warn('pairing reconnect failed while starting registered comms', {
-                message: toError(error).message
-            })
-            throw error
-        }
-    }
-
     public async disconnect(): Promise<void> {
-        this.logger.info('wa client disconnect start')
-        this.keepAlive.stop()
-        this.notifyAppStateKeyShareWaiters(false)
-        this.appStateBootstrapKeyShareWaitDone = false
-        await this.authClient.clearTransientState()
-        this.nodeOrchestrator.clearPending(new Error('client disconnected'))
-        this.clockSkewMs = null
-        this.mediaConnCache = null
-        this.passiveTasks.resetInFlightState()
-
-        const comms = this.comms
-        this.clearCommsBinding()
-        if (comms) {
-            await comms.stopComms()
-            this.logger.info('wa client disconnected')
-            this.emit('connection_close', {})
-        }
+        this.keyShareCoordinator.notifyDisconnected()
+        await this.connectionManager.disconnect()
+        this.emit('connection_close', {})
     }
 
     public async requestPairingCode(
         phoneNumber: string,
         shouldShowPushNotification = false
     ): Promise<string> {
-        if (!this.comms || !this.authClient.getCurrentCredentials()) {
+        if (!this.connectionManager.isConnected() || !this.authClient.getCurrentCredentials()) {
             throw new Error('client is not connected')
         }
         this.logger.debug('wa client request pairing code')
@@ -666,7 +553,7 @@ export class WaClient extends EventEmitter {
     }
 
     public async fetchPairingCountryCodeIso(): Promise<string> {
-        if (!this.comms || !this.authClient.getCurrentCredentials()) {
+        if (!this.connectionManager.isConnected() || !this.authClient.getCurrentCredentials()) {
             throw new Error('client is not connected')
         }
         this.logger.trace('wa client fetch pairing country code iso')
@@ -676,7 +563,7 @@ export class WaClient extends EventEmitter {
     public async getLidsByPhoneNumbers(
         phoneNumbers: readonly string[]
     ): Promise<readonly SignalLidSyncResult[]> {
-        if (!this.comms || !this.authClient.getCurrentCredentials()) {
+        if (!this.connectionManager.isConnected() || !this.authClient.getCurrentCredentials()) {
             throw new Error('client is not connected')
         }
         const normalizedPhoneJids = phoneNumbers.map(parsePhoneJid)
@@ -754,16 +641,16 @@ export class WaClient extends EventEmitter {
     }
 
     public async syncAppState(options: WaAppStateSyncOptions = {}): Promise<WaAppStateSyncResult> {
-        if (!this.comms) {
+        if (!this.connectionManager.isConnected()) {
             throw new Error('client is not connected')
         }
         const shouldWaitForKeyShare = (await this.appStateStore.getActiveSyncKey()) === null
-        if (shouldWaitForKeyShare && !this.appStateBootstrapKeyShareWaitDone) {
-            this.appStateBootstrapKeyShareWaitDone = true
+        if (shouldWaitForKeyShare && !this.keyShareCoordinator.isBootstrapDone()) {
+            this.keyShareCoordinator.markBootstrapDone()
             this.logger.info('app-state bootstrap pre-sync waiting for key share', {
                 timeoutMs: WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS
             })
-            const received = await this.waitForAppStateKeyShare(
+            const received = await this.keyShareCoordinator.waitForShare(
                 WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS
             )
             if (received) {
@@ -785,16 +672,16 @@ export class WaClient extends EventEmitter {
         }
 
         let retryCount = 0
-        let observedKeyShareVersion = this.appStateKeyShareVersion
+        let observedKeyShareVersion = this.keyShareCoordinator.getVersion()
         while (blockedCollections.length > 0 && retryCount < WA_APP_STATE_KEY_SHARE_MAX_RETRIES) {
-            const hasFreshShare = this.appStateKeyShareVersion !== observedKeyShareVersion
+            const hasFreshShare = this.keyShareCoordinator.getVersion() !== observedKeyShareVersion
             if (!hasFreshShare) {
                 this.logger.info('app-state bootstrap waiting for key share', {
                     blockedCollections: blockedCollections.join(','),
                     timeoutMs: WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS,
                     retryCount: retryCount + 1
                 })
-                const received = await this.waitForAppStateKeyShare(
+                const received = await this.keyShareCoordinator.waitForShare(
                     WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS
                 )
                 if (!received) {
@@ -806,7 +693,7 @@ export class WaClient extends EventEmitter {
                 }
             }
 
-            observedKeyShareVersion = this.appStateKeyShareVersion
+            observedKeyShareVersion = this.keyShareCoordinator.getVersion()
             retryCount += 1
             this.logger.info('app-state bootstrap retrying sync after key share', {
                 retryCount,
@@ -843,42 +730,6 @@ export class WaClient extends EventEmitter {
         return syncResult.collections
             .filter((entry) => entry.state === WA_APP_STATE_COLLECTION_STATES.BLOCKED)
             .map((entry) => entry.collection)
-    }
-
-    private async waitForAppStateKeyShare(timeoutMs: number): Promise<boolean> {
-        return new Promise<boolean>((resolve) => {
-            let settled = false
-            let timeoutHandle: ReturnType<typeof setTimeout> | null = null
-
-            const waiter = (received: boolean) => {
-                if (settled) {
-                    return
-                }
-                settled = true
-                if (timeoutHandle) {
-                    clearTimeout(timeoutHandle)
-                    timeoutHandle = null
-                }
-                this.appStateKeyShareWaiters.delete(waiter)
-                resolve(received)
-            }
-
-            this.appStateKeyShareWaiters.add(waiter)
-            timeoutHandle = setTimeout(() => {
-                waiter(false)
-            }, timeoutMs)
-        })
-    }
-
-    private notifyAppStateKeyShareWaiters(received: boolean): void {
-        if (this.appStateKeyShareWaiters.size === 0) {
-            return
-        }
-        const waiters = [...this.appStateKeyShareWaiters.values()]
-        this.appStateKeyShareWaiters.clear()
-        for (const waiter of waiters) {
-            waiter(received)
-        }
     }
 
     private emitChatEventsFromAppStateSyncResult(syncResult: WaAppStateSyncResult): void {
@@ -924,79 +775,13 @@ export class WaClient extends EventEmitter {
         }
     }
 
-    private async startCommsWithCredentials(credentials: WaAuthCredentials): Promise<void> {
-        this.logger.debug('starting comms with credentials', {
-            registered: credentials.meJid !== null && credentials.meJid !== undefined
-        })
-        const commsConfig = this.authClient.buildCommsConfig(this.options)
-        const comms = new WaComms(commsConfig, this.logger)
-        this.mediaConnCache = null
-        this.nodeTransport.bindComms(comms)
-        try {
-            comms.startComms(async (frame) => this.handleIncomingFrame(frame))
-            await comms.waitForConnection(commsConfig.connectTimeoutMs)
-            this.comms = comms
-            this.logger.info('comms connected')
-            comms.startHandlingRequests()
-            if (credentials.meJid) {
-                this.keepAlive.start()
-            } else {
-                this.keepAlive.stop()
-            }
-
-            const serverStaticKey = comms.getServerStaticKey()
-            if (!serverStaticKey) {
-                this.logger.trace('no server static key available to persist')
-            } else {
-                await this.authClient.persistServerStaticKey(serverStaticKey)
-                this.logger.debug('persisted server static key after comms connect')
-            }
-            this.passiveTasks.startPassiveTasksAfterConnect()
-        } catch (error) {
-            this.clearCommsBinding()
-            try {
-                await comms.stopComms()
-            } catch (stopError) {
-                this.logger.warn('failed to cleanup comms after connection start failure', {
-                    message: toError(stopError).message
-                })
-            }
-            throw error
-        }
-    }
-
-    private shouldQueueDanglingReceipt(node: BinaryNode, error: Error): boolean {
-        if (node.tag !== WA_MESSAGE_TAGS.RECEIPT) {
-            return false
-        }
-        const normalized = error.message.trim().toLowerCase()
-        return (
-            normalized === 'comms is not connected' ||
-            normalized === 'websocket is not connected' ||
-            normalized === 'noise session socket closed' ||
-            normalized.startsWith('socket closed (')
-        )
-    }
-
-    private enqueueDanglingReceipt(node: BinaryNode): void {
-        if (this.danglingReceipts.length >= WA_DEFAULTS.MAX_DANGLING_RECEIPTS) {
-            this.danglingReceipts.shift()
-        }
-        this.danglingReceipts.push(
-            node.content === undefined
-                ? {
-                      tag: node.tag,
-                      attrs: { ...node.attrs }
-                  }
-                : {
-                      tag: node.tag,
-                      attrs: { ...node.attrs },
-                      content: node.content
-                  }
-        )
-    }
-
     private async clearStoredState(): Promise<void> {
+        const danglingReceipts = this.receiptQueue.take()
+        if (danglingReceipts.length > 0) {
+            this.logger.debug('cleared dangling receipts while clearing stored state', {
+                count: danglingReceipts.length
+            })
+        }
         await this.authClient.clearStoredCredentials()
         await this.appStateStore.clear()
         await this.contactStore.clear()
@@ -1012,21 +797,5 @@ export class WaClient extends EventEmitter {
     private handleError(error: Error): void {
         this.logger.error('wa client error', { message: error.message })
         this.emit('client_error', { error })
-    }
-
-    private clearCommsBinding(): void {
-        this.notifyAppStateKeyShareWaiters(false)
-        this.comms = null
-        this.nodeTransport.bindComms(null)
-    }
-
-    private updateClockSkewFromSuccess(serverUnixSeconds: number): void {
-        const serverMs = serverUnixSeconds * 1000
-        const nowMs = Date.now()
-        this.clockSkewMs = serverMs - nowMs
-        this.logger.debug('updated clock skew from success', {
-            serverUnixSeconds,
-            clockSkewMs: this.clockSkewMs
-        })
     }
 }

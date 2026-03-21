@@ -15,9 +15,8 @@ import {
 } from '@transport/node/builders/message'
 import { buildNotificationAckNode } from '@transport/node/builders/pairing'
 import { getFirstNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
-import { parseOptionalInt } from '@transport/stream/parse'
 import type { BinaryNode } from '@transport/types'
-import { toError } from '@util/primitives'
+import { parseOptionalInt, toError } from '@util/primitives'
 
 interface IncomingAckRuntime {
     readonly logger: Logger

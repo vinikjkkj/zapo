@@ -33,3 +33,8 @@ export {
     type WaRetryReplayServiceOptions,
     type WaRetryResendResult
 } from '@retry/replay'
+export {
+    createOutboundRetryTracker,
+    type OutboundRetryTrackHint,
+    type OutboundRetryTracker
+} from '@retry/tracker'
