@@ -56,30 +56,35 @@ export async function selectMessageKey(
     const firstDerived = await deriveSenderKeyMsgKeyFromState(senderKey.iteration, chainState)
     chainState = firstDerived.nextState
     let messageKey = firstDerived.messageKey
-    let nextUnused = currentUnused.slice()
-
-    if (delta > 0) {
-        let overflow = delta + currentUnused.length - MAX_UNUSED_KEYS
-        if (overflow > 0) {
-            nextUnused = nextUnused.slice(overflow)
-            overflow -= currentUnused.length
-        }
-
-        for (
-            let iteration = senderKey.iteration + 1;
-            iteration <= targetIteration;
-            iteration += 1
-        ) {
-            if (overflow > 0) {
-                overflow -= 1
-            } else {
-                nextUnused.push(messageKey)
+    if (delta === 0) {
+        return {
+            messageKey,
+            updatedRecord: {
+                ...senderKey,
+                iteration: targetIteration + 1,
+                chainKey: chainState.chainKey,
+                unusedMessageKeys: currentUnused
             }
-
-            const derived = await deriveSenderKeyMsgKeyFromState(iteration, chainState)
-            chainState = derived.nextState
-            messageKey = derived.messageKey
         }
+    }
+    const nextUnused = currentUnused.slice()
+
+    let overflow = delta + currentUnused.length - MAX_UNUSED_KEYS
+    if (overflow > 0) {
+        nextUnused.splice(0, overflow)
+        overflow -= currentUnused.length
+    }
+
+    for (let iteration = senderKey.iteration + 1; iteration <= targetIteration; iteration += 1) {
+        if (overflow > 0) {
+            overflow -= 1
+        } else {
+            nextUnused.push(messageKey)
+        }
+
+        const derived = await deriveSenderKeyMsgKeyFromState(iteration, chainState)
+        chainState = derived.nextState
+        messageKey = derived.messageKey
     }
 
     return {
@@ -117,11 +122,9 @@ async function deriveSenderKeyMsgKeyFromState(
     iteration: number,
     state: SenderChainState
 ): Promise<{ readonly nextState: SenderChainState; readonly messageKey: SenderMessageKey }> {
-    const nextChainRawPromise = hmacSign(state.hmacKey, CHAIN_KEY_LABEL)
-    const messageInputKeyPromise = hmacSign(state.hmacKey, MESSAGE_KEY_LABEL)
     const [nextChainRaw, messageInputKey] = await Promise.all([
-        nextChainRawPromise,
-        messageInputKeyPromise
+        hmacSign(state.hmacKey, CHAIN_KEY_LABEL),
+        hmacSign(state.hmacKey, MESSAGE_KEY_LABEL)
     ])
     const nextChainKey = nextChainRaw.subarray(0, 32)
     const [nextHmacKey, messageSeed] = await Promise.all([

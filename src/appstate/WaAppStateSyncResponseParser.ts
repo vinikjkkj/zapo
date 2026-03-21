@@ -10,6 +10,7 @@ import {
 } from '@protocol/constants'
 import {
     decodeNodeContentBase64OrBytes,
+    findNodeChildrenByTags,
     findNodeChild,
     getNodeChildrenByTag
 } from '@transport/node/helpers'
@@ -55,16 +56,24 @@ export function parseSyncResponse(iqNode: BinaryNode): readonly CollectionRespon
             version = parsedVersion
         }
 
-        const patchesNode = findNodeChild(collectionNode, WA_NODE_TAGS.PATCHES)
-        const patches = patchesNode
-            ? getNodeChildrenByTag(patchesNode, WA_NODE_TAGS.PATCH).map((node) =>
-                  proto.SyncdPatch.decode(
-                      decodeNodeContentBase64OrBytes(node.content, 'collection.patches.patch')
-                  )
-              )
-            : []
+        const [patchesNode, snapshotNode] = findNodeChildrenByTags(collectionNode, [
+            WA_NODE_TAGS.PATCHES,
+            WA_NODE_TAGS.SNAPSHOT
+        ] as const)
 
-        const snapshotNode = findNodeChild(collectionNode, WA_NODE_TAGS.SNAPSHOT)
+        const patches: Proto.ISyncdPatch[] = []
+        if (patchesNode) {
+            for (const patchNode of getNodeChildrenByTag(patchesNode, WA_NODE_TAGS.PATCH)) {
+                patches.push(
+                    proto.SyncdPatch.decode(
+                        decodeNodeContentBase64OrBytes(
+                            patchNode.content,
+                            'collection.patches.patch'
+                        )
+                    )
+                )
+            }
+        }
         const snapshotReference = snapshotNode
             ? proto.ExternalBlobReference.decode(
                   decodeNodeContentBase64OrBytes(snapshotNode.content, 'collection.snapshot')

@@ -98,7 +98,21 @@ export class SignalSessionSyncApi {
                     (previous?.reasonIdentity ?? false) || target.reasonIdentity === true
             })
         }
-        const mergedTargets = [...targetByJid.values()]
+        const mergedTargets: SignalSessionSyncTarget[] = []
+        for (const target of targetByJid.values()) {
+            mergedTargets.push(target)
+        }
+        const userNodes = new Array<BinaryNode>(mergedTargets.length)
+        for (let index = 0; index < mergedTargets.length; index += 1) {
+            const target = mergedTargets[index]
+            userNodes[index] = {
+                tag: WA_NODE_TAGS.USER,
+                attrs:
+                    target.reasonIdentity === true
+                        ? { jid: target.jid, reason: 'identity' }
+                        : { jid: target.jid }
+            }
+        }
         this.logger.debug('signal fetch key bundles request', {
             targets: mergedTargets.length,
             timeoutMs
@@ -115,13 +129,7 @@ export class SignalSessionSyncApi {
                     {
                         tag: WA_NODE_TAGS.KEY,
                         attrs: {},
-                        content: mergedTargets.map((target) => ({
-                            tag: WA_NODE_TAGS.USER,
-                            attrs: {
-                                jid: target.jid,
-                                ...(target.reasonIdentity === true ? { reason: 'identity' } : {})
-                            }
-                        }))
+                        content: userNodes
                     }
                 ]
             },
@@ -171,16 +179,15 @@ export class SignalSessionSyncApi {
             })
         }
 
-        return requestedTargets.map((target) => {
-            const parsed = parsedByJid.get(target.jid)
-            if (parsed) {
-                return parsed
-            }
-            return {
+        const output: SignalSessionKeyBundleResult[] = new Array(requestedTargets.length)
+        for (let index = 0; index < requestedTargets.length; index += 1) {
+            const target = requestedTargets[index]
+            output[index] = parsedByJid.get(target.jid) ?? {
                 jid: target.jid,
                 errorText: 'missing key bundle user in response'
             }
-        })
+        }
+        return output
     }
 
     private parseUserKeyBundle(node: BinaryNode): {

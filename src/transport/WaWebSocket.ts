@@ -76,12 +76,11 @@ function resolveWebSocketConstructor(): RawWebSocketConstructor {
 function resolveSocketUrls(config: WaSocketConfig): readonly string[] {
     const preferredUrls = config.urls
     if (preferredUrls && preferredUrls.length > 0) {
-        return Object.freeze(Array.from(new Set(preferredUrls)))
+        const unique: string[] = []
+        for (const url of preferredUrls) if (unique.indexOf(url) === -1) unique.push(url)
+        return Object.freeze(unique)
     }
-    if (config.url) {
-        return Object.freeze([config.url])
-    }
-    return WA_DEFAULTS.CHAT_SOCKET_URLS
+    return config.url ? Object.freeze([config.url]) : WA_DEFAULTS.CHAT_SOCKET_URLS
 }
 
 function resolveSocketRuntime(): SocketRuntime {
@@ -510,6 +509,15 @@ export class WaWebSocket {
         const headers = this.config.headers
         const dispatcher = this.config.dispatcher
         const agent = this.config.agent
+        let hasHeaders = false
+        if (headers) {
+            for (const key in headers) {
+                if (Object.prototype.hasOwnProperty.call(headers, key)) {
+                    hasHeaders = true
+                    break
+                }
+            }
+        }
 
         if (this.socketRuntime === 'node' && agent) {
             const nodeWsCtor = await this.resolveNodeWsConstructor()
@@ -519,10 +527,7 @@ export class WaWebSocket {
             })
         }
 
-        if (
-            this.socketRuntime === 'node' &&
-            ((headers && Object.keys(headers).length > 0) || dispatcher || agent)
-        ) {
+        if (this.socketRuntime === 'node' && (hasHeaders || dispatcher || agent)) {
             const globalWebSocketCtor = (
                 globalThis as typeof globalThis & { WebSocket?: RawWebSocketConstructor }
             ).WebSocket

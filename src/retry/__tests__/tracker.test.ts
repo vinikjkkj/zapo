@@ -18,7 +18,6 @@ function createLogger(): Logger {
 
 test('outbound retry tracker skips duplicate final upsert when hinted id matches publish result', async () => {
     const upserts: { readonly messageId: string; readonly toJid: string }[] = []
-    let cleanupCalls = 0
 
     const retryStore = {
         getTtlMs: () => 60_000,
@@ -31,10 +30,7 @@ test('outbound retry tracker skips duplicate final upsert when hinted id matches
                 toJid: record.toJid
             })
         },
-        cleanupExpired: async () => {
-            cleanupCalls += 1
-            return 0
-        }
+        cleanupExpired: async () => 0
     } as unknown as WaRetryStore
 
     const tracker = createOutboundRetryTracker({
@@ -70,7 +66,6 @@ test('outbound retry tracker skips duplicate final upsert when hinted id matches
     assert.equal(result.id, 'hinted-id')
     assert.equal(upserts.length, 1)
     assert.equal(upserts[0].messageId, 'hinted-id')
-    assert.equal(cleanupCalls, 1)
 })
 
 test('outbound retry tracker persists publish result when id hint is not provided', async () => {

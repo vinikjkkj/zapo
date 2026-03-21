@@ -1,13 +1,11 @@
 import {
     decodeSenderKeyDistributionRow,
     decodeSenderKeyRecord,
-    decodeSqliteCount,
     encodeSenderKeyRecord,
     toSignalAddressParts,
     type SenderKeyDistributionRow,
     type SenderKeyRow,
-    type SignalAddressParts,
-    type SqliteCountRow
+    type SignalAddressParts
 } from '@signal/store/sqlite'
 import type { SenderKeyDistributionRecord, SenderKeyRecord, SignalAddress } from '@signal/types'
 import type { WaSenderKeyStore as WaSenderKeyStoreContract } from '@store/contracts/sender-key.store'
@@ -212,14 +210,32 @@ export class SenderKeySqliteStore extends BaseSqliteStore implements WaSenderKey
         if (participants.length === 0) {
             return 0
         }
-        return this.withTransaction(async (db) => {
-            let deleted = 0
-            for (const participant of participants) {
-                const sender = toSignalAddressParts(participant)
-                deleted += this.countDelete(db, 'sender_keys', sender, groupId)
-                deleted += this.countDelete(db, 'sender_key_distribution', sender, groupId)
+        return this.withTransaction((db) => {
+            let filters = ''
+            const params: unknown[] = [this.options.sessionId, groupId]
+            for (let index = 0; index < participants.length; index += 1) {
+                if (index > 0) {
+                    filters += ' OR '
+                }
+                filters += '(sender_user = ? AND sender_server = ? AND sender_device = ?)'
+                const sender = toSignalAddressParts(participants[index])
+                params.push(sender.user, sender.server, sender.device)
             }
-            return deleted
+            const where = `session_id = ? AND group_id = ? AND (${filters})`
+            db.run(`DELETE FROM sender_keys WHERE ${where}`, params)
+            const senderCountRow = db.get<Record<string, unknown>>('SELECT changes() AS total', [])
+            const senderCount = senderCountRow
+                ? asNumber(senderCountRow.total, 'sender_keys.changes')
+                : 0
+            db.run(`DELETE FROM sender_key_distribution WHERE ${where}`, params)
+            const distributionCountRow = db.get<Record<string, unknown>>(
+                'SELECT changes() AS total',
+                []
+            )
+            const distributionCount = distributionCountRow
+                ? asNumber(distributionCountRow.total, 'sender_key_distribution.changes')
+                : 0
+            return senderCount + distributionCount
         })
     }
 
@@ -243,19 +259,6 @@ export class SenderKeySqliteStore extends BaseSqliteStore implements WaSenderKey
         const whereAllGroups =
             'session_id = ? AND sender_user = ? AND sender_server = ? AND sender_device = ?'
 
-        const countRow = db.get<SqliteCountRow>(
-            `SELECT COUNT(*) AS count
-             FROM ${table}
-             WHERE ${groupId ? whereWithGroup : whereAllGroups}`,
-            groupId
-                ? [this.options.sessionId, target.user, target.server, target.device, groupId]
-                : [this.options.sessionId, target.user, target.server, target.device]
-        )
-        const count = decodeSqliteCount(countRow, `${table}.count`)
-        if (count === 0) {
-            return 0
-        }
-
         db.run(
             `DELETE FROM ${table}
              WHERE ${groupId ? whereWithGroup : whereAllGroups}`,
@@ -263,7 +266,8 @@ export class SenderKeySqliteStore extends BaseSqliteStore implements WaSenderKey
                 ? [this.options.sessionId, target.user, target.server, target.device, groupId]
                 : [this.options.sessionId, target.user, target.server, target.device]
         )
-        return count
+        const row = db.get<Record<string, unknown>>('SELECT changes() AS total', [])
+        return row ? asNumber(row.total, `${table}.changes`) : 0
     }
 
     private upsertSenderKeyDistributionRow(

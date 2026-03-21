@@ -2,33 +2,22 @@ import type { AppStateCollectionName, WaAppStateSyncKey } from '@appstate/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import type { Proto } from '@proto'
 import { WA_APP_STATE_COLLECTIONS, WA_APP_STATE_KEY_TYPES } from '@protocol/constants'
-import { decodeProtoBytes } from '@util/bytes'
-import { intToBytes } from '@util/bytes'
+import { decodeProtoBytes, intToBytes } from '@util/bytes'
+
+const APP_STATE_COLLECTION_NAMES = new Set<string>(Object.values(WA_APP_STATE_COLLECTIONS))
 
 export function parseCollectionName(value: string | undefined): AppStateCollectionName | null {
-    if (!value) {
-        return null
-    }
-    for (const collection of Object.values(WA_APP_STATE_COLLECTIONS)) {
-        if (collection === value) {
-            return collection
-        }
-    }
-    return null
+    return value && APP_STATE_COLLECTION_NAMES.has(value) ? (value as AppStateCollectionName) : null
 }
 
 export function keyDeviceId(keyId: Uint8Array): number | null {
-    if (keyId.byteLength < 6) {
-        return null
-    }
-    return (keyId[0] << 8) | keyId[1]
+    return keyId.byteLength < 6 ? null : (keyId[0] << 8) | keyId[1]
 }
 
 export function keyEpoch(keyId: Uint8Array): number {
-    if (keyId.byteLength < 6) {
-        return -1
-    }
-    return new DataView(keyId.buffer, keyId.byteOffset, keyId.byteLength).getUint32(2, false)
+    return keyId.byteLength < 6
+        ? -1
+        : keyId[2] * 16_777_216 + keyId[3] * 65_536 + keyId[4] * 256 + keyId[5]
 }
 
 export function pickActiveSyncKey(keys: Iterable<WaAppStateSyncKey>): WaAppStateSyncKey | null {

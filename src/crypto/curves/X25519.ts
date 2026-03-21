@@ -62,20 +62,16 @@ export class X25519 {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
         assertByteLength(pubKey, 32, 'x25519 public key must be 32 bytes')
 
-        const privateKey = await webcrypto.subtle.importKey(
-            'pkcs8',
-            pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, privKey),
-            { name: 'X25519' },
-            false,
-            ['deriveBits']
-        )
-        const publicKey = await webcrypto.subtle.importKey(
-            'raw',
-            pubKey,
-            { name: 'X25519' },
-            false,
-            []
-        )
+        const [privateKey, publicKey] = await Promise.all([
+            webcrypto.subtle.importKey(
+                'pkcs8',
+                pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, privKey),
+                { name: 'X25519' },
+                false,
+                ['deriveBits']
+            ),
+            webcrypto.subtle.importKey('raw', pubKey, { name: 'X25519' }, false, [])
+        ])
         const sharedBits = await webcrypto.subtle.deriveBits(
             { name: 'X25519', public: publicKey },
             privateKey,

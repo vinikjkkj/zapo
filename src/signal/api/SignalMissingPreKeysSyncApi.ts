@@ -12,6 +12,7 @@ import { buildMissingPreKeysFetchIq } from '@signal/api/prekeys'
 import type { SignalPreKeyBundle } from '@signal/types'
 import {
     decodeNodeContentBase64OrBytes,
+    findNodeChildrenByTags,
     findNodeChild,
     getNodeChildrenByTag
 } from '@transport/node/helpers'
@@ -49,17 +50,6 @@ export type SignalMissingPreKeysUserResult =
           readonly errorCode?: number
           readonly errorText: string
       }
-
-function parseDeviceId(value: string | undefined, field: string): number {
-    if (!value) {
-        throw new Error(`${field} is missing`)
-    }
-    const parsed = Number.parseInt(value, 10)
-    if (!Number.isSafeInteger(parsed) || parsed < 0) {
-        throw new Error(`${field} is invalid`)
-    }
-    return parsed
-}
 
 export class SignalMissingPreKeysSyncApi {
     private readonly logger: SignalMissingPreKeysSyncApiOptions['logger']
@@ -129,14 +119,15 @@ export class SignalMissingPreKeysSyncApi {
             })
         }
 
-        return requestedTargets.map((target) => {
-            return (
-                parsedByJid.get(target.userJid) ?? {
-                    userJid: target.userJid,
-                    errorText: 'missing user in key_fetch response'
-                }
-            )
-        })
+        const results = new Array<SignalMissingPreKeysUserResult>(requestedTargets.length)
+        for (let index = 0; index < requestedTargets.length; index += 1) {
+            const target = requestedTargets[index]
+            results[index] = parsedByJid.get(target.userJid) ?? {
+                userJid: target.userJid,
+                errorText: 'missing user in key_fetch response'
+            }
+        }
+        return results
     }
 
     private parseUserDevices(
@@ -145,38 +136,54 @@ export class SignalMissingPreKeysSyncApi {
     ): readonly SignalMissingPreKeysDeviceBundle[] {
         const { user, server } = splitJid(userJid)
         const devices = getNodeChildrenByTag(node, WA_NODE_TAGS.DEVICE)
-        return devices.map((deviceNode, index) => {
-            const deviceId = parseDeviceId(
-                deviceNode.attrs.id,
-                `missing prekeys user[${userJid}] device[${index}].id`
-            )
-            const registrationNode = findNodeChild(deviceNode, WA_NODE_TAGS.REGISTRATION)
-            const identityNode = findNodeChild(deviceNode, WA_NODE_TAGS.IDENTITY)
-            const signedKeyNode = findNodeChild(deviceNode, WA_NODE_TAGS.SKEY)
+        const bundles = new Array<SignalMissingPreKeysDeviceBundle>(devices.length)
+        for (let index = 0; index < devices.length; index += 1) {
+            const deviceNode = devices[index]
+            const deviceIdValue = deviceNode.attrs.id
+            if (!deviceIdValue) {
+                throw new Error(`missing prekeys device[${index}].id is missing`)
+            }
+            const deviceId = Number.parseInt(deviceIdValue, 10)
+            if (!Number.isSafeInteger(deviceId) || deviceId < 0) {
+                throw new Error(`missing prekeys device[${index}].id is invalid`)
+            }
+            const [registrationNode, identityNode, signedKeyNode, oneTimeNode, deviceIdentityNode] =
+                findNodeChildrenByTags(deviceNode, [
+                    WA_NODE_TAGS.REGISTRATION,
+                    WA_NODE_TAGS.IDENTITY,
+                    WA_NODE_TAGS.SKEY,
+                    WA_NODE_TAGS.KEY,
+                    WA_NODE_TAGS.DEVICE_IDENTITY
+                ] as const)
             if (!registrationNode || !identityNode || !signedKeyNode) {
                 throw new Error(`missing prekeys device payload is incomplete for ${userJid}`)
             }
 
-            const signedKeyIdNode = findNodeChild(signedKeyNode, WA_NODE_TAGS.ID)
-            const signedKeyValueNode = findNodeChild(signedKeyNode, WA_NODE_TAGS.VALUE)
-            const signedKeySignatureNode = findNodeChild(signedKeyNode, WA_NODE_TAGS.SIGNATURE)
+            const [signedKeyIdNode, signedKeyValueNode, signedKeySignatureNode] =
+                findNodeChildrenByTags(signedKeyNode, [
+                    WA_NODE_TAGS.ID,
+                    WA_NODE_TAGS.VALUE,
+                    WA_NODE_TAGS.SIGNATURE
+                ] as const)
             if (!signedKeyIdNode || !signedKeyValueNode || !signedKeySignatureNode) {
                 throw new Error(`missing prekeys signed pre-key is incomplete for ${userJid}`)
             }
 
-            const oneTimeNode = findNodeChild(deviceNode, WA_NODE_TAGS.KEY)
-            const oneTimeIdNode = oneTimeNode
-                ? findNodeChild(oneTimeNode, WA_NODE_TAGS.ID)
-                : undefined
-            const oneTimeValueNode = oneTimeNode
-                ? findNodeChild(oneTimeNode, WA_NODE_TAGS.VALUE)
-                : undefined
+            let oneTimeIdNode: BinaryNode | undefined
+            let oneTimeValueNode: BinaryNode | undefined
+            if (oneTimeNode) {
+                const oneTimeNodes = findNodeChildrenByTags(oneTimeNode, [
+                    WA_NODE_TAGS.ID,
+                    WA_NODE_TAGS.VALUE
+                ] as const)
+                oneTimeIdNode = oneTimeNodes[0]
+                oneTimeValueNode = oneTimeNodes[1]
+            }
             if (oneTimeNode && (!oneTimeIdNode || !oneTimeValueNode)) {
                 throw new Error(`missing prekeys one-time key is incomplete for ${userJid}`)
             }
 
-            const deviceIdentityNode = findNodeChild(deviceNode, WA_NODE_TAGS.DEVICE_IDENTITY)
-            const bundle: SignalPreKeyBundle = {
+            const baseBundle: SignalPreKeyBundle = {
                 regId: parseUint(
                     decodeExactLength(
                         registrationNode.content,
@@ -209,9 +216,12 @@ export class SignalMissingPreKeysSyncApi {
                         'missing prekeys device skey.signature',
                         SIGNAL_SIGNATURE_LENGTH
                     )
-                },
-                ...(oneTimeIdNode && oneTimeValueNode
+                }
+            }
+            const bundle =
+                oneTimeIdNode && oneTimeValueNode
                     ? {
+                          ...baseBundle,
                           oneTimeKey: {
                               id: parseUint(
                                   decodeExactLength(
@@ -228,20 +238,25 @@ export class SignalMissingPreKeysSyncApi {
                               )
                           }
                       }
-                    : {})
+                    : baseBundle
+            let deviceIdentity: Uint8Array | undefined
+            if (deviceIdentityNode) {
+                deviceIdentity = decodeNodeContentBase64OrBytes(
+                    deviceIdentityNode.content,
+                    'missing prekeys device device-identity'
+                )
             }
-            return {
-                deviceJid: deviceId === 0 ? userJid : `${user}:${deviceId}@${server}`,
-                bundle,
-                ...(deviceIdentityNode
-                    ? {
-                          deviceIdentity: decodeNodeContentBase64OrBytes(
-                              deviceIdentityNode.content,
-                              'missing prekeys device device-identity'
-                          )
-                      }
-                    : {})
-            }
-        })
+            bundles[index] = deviceIdentity
+                ? {
+                      deviceJid: deviceId === 0 ? userJid : `${user}:${deviceId}@${server}`,
+                      bundle,
+                      deviceIdentity
+                  }
+                : {
+                      deviceJid: deviceId === 0 ? userJid : `${user}:${deviceId}@${server}`,
+                      bundle
+                  }
+        }
+        return bundles
     }
 }

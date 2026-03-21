@@ -14,7 +14,7 @@ import {
     buildInboundRetryReceiptAckNode
 } from '@transport/node/builders/message'
 import { buildNotificationAckNode } from '@transport/node/builders/pairing'
-import { getFirstNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
+import { getFirstNodeChild, getNodeChildrenNonEmptyAttrValuesByTag } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt, toError } from '@util/primitives'
 
@@ -217,54 +217,57 @@ export function createIncomingNotificationHandler(
         const notificationType = node.attrs.type ?? ''
         const classification = classifyNotificationType(notificationType)
         const firstChildTag = getFirstNodeChild(node)?.tag
+        const baseEvent = createIncomingBaseEvent(node)
         const serverSyncCollections =
             notificationType === 'server_sync'
-                ? getNodeChildrenByTag(node, WA_NODE_TAGS.COLLECTION)
-                      .map((collectionNode) => collectionNode.attrs.name)
-                      .filter((name): name is string => typeof name === 'string' && name.length > 0)
+                ? getNodeChildrenNonEmptyAttrValuesByTag(node, WA_NODE_TAGS.COLLECTION, 'name')
                 : []
 
+        let details: Record<string, unknown> | undefined
+        if (firstChildTag || serverSyncCollections.length > 0) {
+            details = {}
+            if (firstChildTag) {
+                details.firstChildTag = firstChildTag
+            }
+            if (serverSyncCollections.length > 0) {
+                details.collections = serverSyncCollections
+            }
+        }
+
         options.emitIncomingNotification({
-            ...createIncomingBaseEvent(node),
+            ...baseEvent,
             notificationType,
             classification,
-            details:
-                firstChildTag || serverSyncCollections.length > 0
-                    ? {
-                          ...(firstChildTag ? { firstChildTag } : {}),
-                          ...(serverSyncCollections.length > 0
-                              ? { collections: serverSyncCollections }
-                              : {})
-                      }
-                    : undefined
+            details
         })
 
         if (classification === 'out_of_scope') {
             options.emitUnhandledStanza({
-                ...createIncomingBaseEvent(node),
+                ...baseEvent,
                 reason: `notification.${notificationType}.out_of_scope`
             })
         } else if (classification === 'unknown') {
             options.emitUnhandledStanza({
-                ...createIncomingBaseEvent(node),
+                ...baseEvent,
                 reason: `notification.${notificationType || 'unknown'}.not_supported`
             })
         }
 
         await sendSafeAck(options.logger, options.sendNode, buildNotificationAckNode(node))
         if (notificationType === 'server_sync' && serverSyncCollections.length > 0) {
+            const collectionsCsv = serverSyncCollections.join(',')
             if (!options.syncAppState) {
                 options.logger.warn(
                     'received server_sync notification without app-state sync runtime',
                     {
-                        collections: serverSyncCollections.join(',')
+                        collections: collectionsCsv
                     }
                 )
                 return true
             }
             void options.syncAppState().catch((error) => {
                 options.logger.warn('failed to sync app-state after server_sync notification', {
-                    collections: serverSyncCollections.join(','),
+                    collections: collectionsCsv,
                     message: toError(error).message
                 })
             })
@@ -281,6 +284,7 @@ export function createIncomingGroupNotificationHandler(
             return false
         }
 
+        const baseEvent = createIncomingBaseEvent(node)
         const parsed = parseGroupNotificationEvents(node)
         for (const event of parsed.events) {
             options.emitGroupEvent(event)
@@ -290,7 +294,7 @@ export function createIncomingGroupNotificationHandler(
         }
         if (parsed.events.length === 0 && parsed.unhandled.length === 0) {
             options.emitUnhandledStanza({
-                ...createIncomingBaseEvent(node),
+                ...baseEvent,
                 reason: `notification.${WA_NOTIFICATION_TYPES.GROUP}.empty`
             })
         }

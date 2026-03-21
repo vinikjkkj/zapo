@@ -100,24 +100,16 @@ export function base64ToBytes(value: string): Uint8Array {
         out[j++] = ((c & 0x03) << 6) | d
     }
 
-    if (padding === 0) {
-        const a = lookupBase64(value.charCodeAt(i))
-        const b = lookupBase64(value.charCodeAt(i + 1))
+    const a = lookupBase64(value.charCodeAt(i))
+    const b = lookupBase64(value.charCodeAt(i + 1))
+    out[j++] = (a << 2) | (b >> 4)
+    if (j < outLen) {
         const c = lookupBase64(value.charCodeAt(i + 2))
-        const d = lookupBase64(value.charCodeAt(i + 3))
-        out[j++] = (a << 2) | (b >> 4)
         out[j++] = ((b & 0x0f) << 4) | (c >> 2)
-        out[j++] = ((c & 0x03) << 6) | d
-    } else if (padding === 1) {
-        const a = lookupBase64(value.charCodeAt(i))
-        const b = lookupBase64(value.charCodeAt(i + 1))
-        const c = lookupBase64(value.charCodeAt(i + 2))
-        out[j++] = (a << 2) | (b >> 4)
-        out[j++] = ((b & 0x0f) << 4) | (c >> 2)
-    } else {
-        const a = lookupBase64(value.charCodeAt(i))
-        const b = lookupBase64(value.charCodeAt(i + 1))
-        out[j++] = (a << 2) | (b >> 4)
+        if (j < outLen) {
+            const d = lookupBase64(value.charCodeAt(i + 3))
+            out[j++] = ((c & 0x03) << 6) | d
+        }
     }
 
     return out
@@ -128,11 +120,10 @@ export function base64ToBytesChecked(
     field: string,
     requireNonEmpty = true
 ): Uint8Array {
-    const out = base64ToBytes(value)
-    if (requireNonEmpty && out.length === 0) {
+    if (requireNonEmpty && value.length === 0) {
         throw new Error(`invalid base64 payload for ${field}`)
     }
-    return out
+    return base64ToBytes(value)
 }
 
 export function decodeBase64Url(value: string | undefined, field: string): Uint8Array {
@@ -246,29 +237,22 @@ export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
 
 export function toBytesView(value: Uint8Array | ArrayBuffer | ArrayBufferView): Uint8Array {
     if (value instanceof Uint8Array) {
-        if (value.constructor === Uint8Array) {
-            return value
-        }
-        return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+        return value.constructor === Uint8Array
+            ? value
+            : new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
     }
-    if (ArrayBuffer.isView(value)) {
-        return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+    if (value instanceof ArrayBuffer) {
+        return new Uint8Array(value)
     }
-    return new Uint8Array(value)
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
 }
 
 export function toChunkBytes(chunk: unknown): Uint8Array {
-    if (chunk instanceof Uint8Array) {
-        return chunk
-    }
-    if (chunk instanceof ArrayBuffer) {
-        return new Uint8Array(chunk)
-    }
     if (typeof chunk === 'string') {
         return TEXT_ENCODER.encode(chunk)
     }
-    if (ArrayBuffer.isView(chunk)) {
-        return new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+    if (chunk instanceof Uint8Array || chunk instanceof ArrayBuffer || ArrayBuffer.isView(chunk)) {
+        return toBytesView(chunk)
     }
     throw new Error(`unsupported stream chunk type: ${typeof chunk}`)
 }

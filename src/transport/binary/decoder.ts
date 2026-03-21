@@ -299,10 +299,11 @@ function decodeNodeInternal(reader: ByteReader): BinaryNode {
         }
     }
 
-    if (content === null || content === undefined) {
-        return { tag: tagValue, attrs }
-    }
-    return { tag: tagValue, attrs, content }
+    const node =
+        content === null || content === undefined
+            ? { tag: tagValue, attrs }
+            : { tag: tagValue, attrs, content }
+    return node
 }
 
 export function decodeBinaryNode(data: Uint8Array): BinaryNode {

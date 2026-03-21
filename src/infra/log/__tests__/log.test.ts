@@ -31,3 +31,30 @@ test('pino logger factory creates logger instance with configured level', async 
         logger.info('test info')
     })
 })
+
+test('pino logger writes bare message for empty context objects', () => {
+    const captured: unknown[][] = []
+    const fake = {
+        level: 'info',
+        trace: (...args: unknown[]) => {
+            captured.push(args)
+        },
+        debug: (...args: unknown[]) => {
+            captured.push(args)
+        },
+        info: (...args: unknown[]) => {
+            captured.push(args)
+        },
+        warn: (...args: unknown[]) => {
+            captured.push(args)
+        },
+        error: (...args: unknown[]) => {
+            captured.push(args)
+        }
+    }
+    const logger = new PinoLogger(fake, 'info')
+    logger.info('hello', {})
+    logger.info('world', { scope: 'log' })
+    assert.deepEqual(captured[0], ['hello'])
+    assert.deepEqual(captured[1], [{ scope: 'log' }, 'world'])
+})

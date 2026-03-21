@@ -106,24 +106,33 @@ export async function selectMessageKey(
     const first = await deriveMsgKeyFromState(chain.nextMsgIndex, chainState)
     let currentMessageKey = first.messageKey
     chainState = first.nextState
-    let nextUnused = unused.slice()
-
-    if (delta > 0) {
-        let overflow = delta + unused.length - MAX_UNUSED_KEYS
-        if (overflow > 0) {
-            nextUnused = nextUnused.slice(overflow)
-            overflow -= unused.length
-        }
-        for (let counter = chain.nextMsgIndex + 1; counter <= targetCounter; counter += 1) {
-            if (overflow > 0) {
-                overflow -= 1
-            } else {
-                nextUnused.push(currentMessageKey)
+    if (delta === 0) {
+        return {
+            messageKey: currentMessageKey,
+            updatedChain: {
+                ratchetPubKey: chain.ratchetPubKey,
+                nextMsgIndex: targetCounter + 1,
+                chainKey: chainState.chainKey,
+                unusedMsgKeys: unused
             }
-            const derived = await deriveMsgKeyFromState(counter, chainState)
-            currentMessageKey = derived.messageKey
-            chainState = derived.nextState
         }
+    }
+    const nextUnused = unused.slice()
+
+    let overflow = delta + unused.length - MAX_UNUSED_KEYS
+    if (overflow > 0) {
+        nextUnused.splice(0, overflow)
+        overflow -= unused.length
+    }
+    for (let counter = chain.nextMsgIndex + 1; counter <= targetCounter; counter += 1) {
+        if (overflow > 0) {
+            overflow -= 1
+        } else {
+            nextUnused.push(currentMessageKey)
+        }
+        const derived = await deriveMsgKeyFromState(counter, chainState)
+        currentMessageKey = derived.messageKey
+        chainState = derived.nextState
     }
 
     return {

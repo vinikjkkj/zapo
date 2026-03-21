@@ -1,7 +1,6 @@
 import type { WaRetryOutboundMessageRecord, WaRetryOutboundState } from '@retry/types'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
 import type { WaSqliteStorageOptions } from '@store/types'
 import { asBytes, asNumber, asOptionalString, asString } from '@util/coercion'
 
@@ -178,18 +177,27 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
 
     public async cleanupExpired(nowMs: number): Promise<number> {
         return this.withTransaction(async (db) => {
-            const outboundCount = this.countRows(db, 'retry_outbound_messages', nowMs)
-            const inboundCount = this.countRows(db, 'retry_inbound_counters', nowMs)
             db.run(
                 `DELETE FROM retry_outbound_messages
                  WHERE session_id = ? AND expires_at_ms <= ?`,
                 [this.options.sessionId, nowMs]
             )
+            const outboundCountRow = db.get<Record<string, unknown>>(
+                'SELECT changes() AS total',
+                []
+            )
+            const outboundCount = outboundCountRow
+                ? asNumber(outboundCountRow.total, 'retry_outbound_messages.changes')
+                : 0
             db.run(
                 `DELETE FROM retry_inbound_counters
                  WHERE session_id = ? AND expires_at_ms <= ?`,
                 [this.options.sessionId, nowMs]
             )
+            const inboundCountRow = db.get<Record<string, unknown>>('SELECT changes() AS total', [])
+            const inboundCount = inboundCountRow
+                ? asNumber(inboundCountRow.total, 'retry_inbound_counters.changes')
+                : 0
             return outboundCount + inboundCount
         })
     }
@@ -203,18 +211,5 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
                 this.options.sessionId
             ])
         })
-    }
-
-    private countRows(db: WaSqliteConnection, table: string, nowMs: number): number {
-        const row = db.get<Record<string, unknown>>(
-            `SELECT COUNT(*) AS total
-             FROM ${table}
-             WHERE session_id = ? AND expires_at_ms <= ?`,
-            [this.options.sessionId, nowMs]
-        )
-        if (!row) {
-            return 0
-        }
-        return asNumber(row.total, `${table}.count`)
     }
 }

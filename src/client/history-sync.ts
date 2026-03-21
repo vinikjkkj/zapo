@@ -7,10 +7,8 @@ import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { proto, type Proto } from '@proto'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
-import type { WaStoredMessageRecord } from '@store/contracts/message.store'
 import type { WaThreadStore } from '@store/contracts/thread.store'
-import { decodeProtoBytes } from '@util/bytes'
-import { toBytesView } from '@util/bytes'
+import { decodeProtoBytes, toBytesView } from '@util/bytes'
 import { longToNumber } from '@util/primitives'
 
 const unzipAsync = promisify(unzip)
@@ -57,15 +55,70 @@ export async function processHistorySyncNotification(
     })
 
     const nowMs = Date.now()
-    const [messageCounts] = await Promise.all([
+    const pushnameUpserts: Promise<void>[] = []
+    for (const pn of historySync.pushnames) {
+        if (!pn.id) {
+            continue
+        }
+        pushnameUpserts.push(
+            deps.contactStore.upsert({
+                jid: pn.id,
+                pushName: pn.pushname ?? undefined,
+                lastUpdatedMs: nowMs
+            })
+        )
+    }
+
+    let messagesCount = 0
+    await Promise.all([
         Promise.all(
-            historySync.conversations.map((conversation) =>
-                persistConversation(deps, conversation, nowMs)
-            )
+            historySync.conversations.map(async (conversation) => {
+                const threadJid = conversation.id
+                if (!threadJid) {
+                    deps.logger.debug('skipping history sync conversation without thread jid')
+                    return
+                }
+
+                const upserts: Promise<void>[] = [
+                    deps.threadStore.upsert({
+                        jid: threadJid,
+                        name: conversation.name ?? undefined,
+                        unreadCount: conversation.unreadCount ?? undefined,
+                        archived: conversation.archived ?? undefined,
+                        pinned: conversation.pinned ?? undefined,
+                        muteEndMs: longToNumber(conversation.muteEndTime) || undefined,
+                        markedAsUnread: conversation.markedAsUnread ?? undefined,
+                        ephemeralExpiration: conversation.ephemeralExpiration ?? undefined
+                    })
+                ]
+                let conversationMessagesCount = 0
+                for (const histMsg of conversation.messages ?? []) {
+                    const webMsg = histMsg.message
+                    if (!webMsg?.key?.id) {
+                        continue
+                    }
+                    const timestampMs = longToNumber(webMsg.messageTimestamp) * 1000
+                    upserts.push(
+                        deps.messageStore.upsert({
+                            id: webMsg.key.id,
+                            threadJid,
+                            senderJid: webMsg.key.participant ?? undefined,
+                            fromMe: webMsg.key.fromMe === true,
+                            timestampMs: timestampMs || undefined,
+                            messageBytes: webMsg.message
+                                ? proto.Message.encode(webMsg.message).finish()
+                                : undefined
+                        })
+                    )
+                    conversationMessagesCount += 1
+                }
+
+                await Promise.all(upserts)
+                messagesCount += conversationMessagesCount
+            })
         ),
-        persistPushnames(deps, historySync.pushnames, nowMs)
+        Promise.all(pushnameUpserts)
     ])
-    const messagesCount = messageCounts.reduce((acc, count) => acc + count, 0)
 
     const event: WaHistorySyncChunkEvent = {
         syncType,
@@ -101,76 +154,4 @@ async function downloadHistorySyncBlob(
         fileSha256,
         fileEncSha256
     })
-}
-
-async function persistConversation(
-    deps: WaHistorySyncDeps,
-    conversation: Proto.IConversation,
-    _nowMs: number
-): Promise<number> {
-    const threadJid = conversation.id
-    if (!threadJid) {
-        deps.logger.debug('skipping history sync conversation without thread jid')
-        return 0
-    }
-    const messages = conversation.messages ?? []
-
-    const messageRecords: WaStoredMessageRecord[] = []
-
-    for (const histMsg of messages) {
-        const webMsg = histMsg.message
-        if (!webMsg?.key?.id) {
-            continue
-        }
-        const timestampMs = longToNumber(webMsg.messageTimestamp) * 1000
-        const messageBytes = webMsg.message
-            ? proto.Message.encode(webMsg.message).finish()
-            : undefined
-
-        messageRecords.push({
-            id: webMsg.key.id,
-            threadJid,
-            senderJid: webMsg.key.participant ?? undefined,
-            fromMe: webMsg.key.fromMe === true,
-            timestampMs: timestampMs || undefined,
-            messageBytes
-        })
-    }
-
-    const threadPromise = deps.threadStore.upsert({
-        jid: threadJid,
-        name: conversation.name ?? undefined,
-        unreadCount: conversation.unreadCount ?? undefined,
-        archived: conversation.archived ?? undefined,
-        pinned: conversation.pinned ?? undefined,
-        muteEndMs: longToNumber(conversation.muteEndTime) || undefined,
-        markedAsUnread: conversation.markedAsUnread ?? undefined,
-        ephemeralExpiration: conversation.ephemeralExpiration ?? undefined
-    })
-
-    const messagePromises = messageRecords.map((record) => deps.messageStore.upsert(record))
-
-    await Promise.all([threadPromise, ...messagePromises])
-    return messageRecords.length
-}
-
-async function persistPushnames(
-    deps: WaHistorySyncDeps,
-    pushnames: readonly Proto.IPushname[],
-    nowMs: number
-): Promise<void> {
-    if (pushnames.length === 0) {
-        return
-    }
-    await Promise.all(
-        pushnames
-            .filter((pn): pn is Proto.IPushname & { id: string } => !!pn.id)
-            .map((pn) =>
-                deps.contactStore.upsert({
-                    jid: pn.id,
-                    pushName: pn.pushname ?? undefined,
-                    lastUpdatedMs: nowMs
-                })
-            )
-    )
 }

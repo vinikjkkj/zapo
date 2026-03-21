@@ -74,11 +74,17 @@ export class PinoLogger implements Logger {
         message: string,
         context?: Readonly<Record<string, unknown>>
     ): void {
-        if (!context || Object.keys(context).length === 0) {
+        if (context === null || context === undefined) {
             this.logger[level](message)
             return
         }
-        this.logger[level](context, message)
+        for (const key in context) {
+            if (Object.prototype.hasOwnProperty.call(context, key)) {
+                this.logger[level](context, message)
+                return
+            }
+        }
+        this.logger[level](message)
     }
 }
 

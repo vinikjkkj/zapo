@@ -100,7 +100,7 @@ export class WaDeviceListSqliteStore extends BaseSqliteStore implements WaDevice
             for (let start = 0; start < uniqueUserJids.length; start += this.batchSize) {
                 const end = Math.min(start + this.batchSize, uniqueUserJids.length)
                 const batchLength = end - start
-                const placeholders = new Array(batchLength).fill('?').join(', ')
+                const placeholders = '?, '.repeat(batchLength).slice(0, -2)
                 const params: unknown[] = [this.options.sessionId]
                 for (let index = start; index < end; index += 1) {
                     params.push(uniqueUserJids[index])
@@ -192,7 +192,7 @@ export class WaDeviceListSqliteStore extends BaseSqliteStore implements WaDevice
         for (let start = 0; start < userJids.length; start += this.batchSize) {
             const end = Math.min(start + this.batchSize, userJids.length)
             const batchLength = end - start
-            const placeholders = new Array(batchLength).fill('?').join(', ')
+            const placeholders = '?, '.repeat(batchLength).slice(0, -2)
             const params: unknown[] = [this.options.sessionId]
             for (let index = start; index < end; index += 1) {
                 params.push(userJids[index])
@@ -212,5 +212,9 @@ function decodeDeviceJids(raw: unknown): readonly string[] {
     if (!Array.isArray(parsed)) {
         throw new Error('device_list_cache.device_jids_json must be an array')
     }
-    return parsed.map((entry) => asString(entry, 'device_list_cache.device_jids_json entry'))
+    const deviceJids = new Array<string>(parsed.length)
+    for (let index = 0; index < parsed.length; index += 1) {
+        deviceJids[index] = asString(parsed[index], 'device_list_cache.device_jids_json entry')
+    }
+    return deviceJids
 }

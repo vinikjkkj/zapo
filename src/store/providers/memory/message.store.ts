@@ -3,8 +3,7 @@ import type {
     WaStoredMessageRecord
 } from '@store/contracts/message.store'
 import { resolvePositive } from '@util/coercion'
-import { normalizeQueryLimit } from '@util/collections'
-import { setBoundedMapEntry } from '@util/collections'
+import { normalizeQueryLimit, setBoundedMapEntry } from '@util/collections'
 
 const DEFAULT_MESSAGE_MEMORY_STORE_LIMITS = Object.freeze({
     messages: 50_000
@@ -42,9 +41,7 @@ export class WaMessageMemoryStore implements Contract {
         const normalizedLimit = normalizeQueryLimit(limit, 50)
         const records: WaStoredMessageRecord[] = []
         for (const record of this.messages.values()) {
-            if (record.threadJid !== threadJid) {
-                continue
-            }
+            if (record.threadJid !== threadJid) continue
             if (
                 beforeTimestampMs !== undefined &&
                 (record.timestampMs === undefined || record.timestampMs >= beforeTimestampMs)
@@ -54,7 +51,10 @@ export class WaMessageMemoryStore implements Contract {
             records.push(record)
         }
         records.sort((left, right) => (right.timestampMs ?? 0) - (left.timestampMs ?? 0))
-        return records.length <= normalizedLimit ? records : records.slice(0, normalizedLimit)
+        if (records.length > normalizedLimit) {
+            records.length = normalizedLimit
+        }
+        return records
     }
 
     public async deleteById(id: string): Promise<number> {

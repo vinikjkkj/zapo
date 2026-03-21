@@ -6,3 +6,4 @@ AGENTS.md
 logs.txt
 deobfuscated
 coverage
+*.heapprofile

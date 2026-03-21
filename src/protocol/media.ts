@@ -15,8 +15,7 @@ export const WA_MEDIA_HKDF_INFO = Object.freeze({
 export const WA_PREVIEW_MEDIA_HKDF_INFO = 'Messenger Preview Keys'
 
 export function getWaMediaHkdfInfo(mediaType: string): string {
-    if (mediaType in WA_MEDIA_HKDF_INFO) {
-        return WA_MEDIA_HKDF_INFO[mediaType as keyof typeof WA_MEDIA_HKDF_INFO]
-    }
+    const info = WA_MEDIA_HKDF_INFO[mediaType as keyof typeof WA_MEDIA_HKDF_INFO]
+    if (info !== undefined) return info
     throw new Error(`unsupported media type: ${mediaType}`)
 }

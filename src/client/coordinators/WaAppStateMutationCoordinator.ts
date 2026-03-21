@@ -74,7 +74,15 @@ export class WaAppStateMutationCoordinator {
     ): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
         const timestamp = Date.now()
-        const normalizedMuteEnd = this.normalizeMuteEndTimestampMs(muteEndTimestampMs)
+        const normalizedMuteEnd = muteEndTimestampMs
+        if (
+            normalizedMuteEnd !== undefined &&
+            (!Number.isFinite(normalizedMuteEnd) ||
+                !Number.isSafeInteger(normalizedMuteEnd) ||
+                normalizedMuteEnd < 0)
+        ) {
+            throw new Error(`invalid muteEndTimestampMs: ${muteEndTimestampMs}`)
+        }
         if (muted && normalizedMuteEnd === undefined) {
             throw new Error('setChatMute requires muteEndTimestampMs when muted is true')
         }
@@ -193,10 +201,7 @@ export class WaAppStateMutationCoordinator {
                 }
             },
             timestamp,
-            indexPartsTail: [
-                this.toMutationBoolFlag(deleteStarred),
-                this.toMutationBoolFlag(deleteMedia)
-            ]
+            indexPartsTail: [deleteStarred ? '1' : '0', deleteMedia ? '1' : '0']
         })
         await this.enqueueAndFlush([mutation])
     }
@@ -215,7 +220,7 @@ export class WaAppStateMutationCoordinator {
                 }
             },
             timestamp,
-            indexPartsTail: [this.toMutationBoolFlag(deleteMedia)]
+            indexPartsTail: [deleteMedia ? '1' : '0']
         })
         await this.enqueueAndFlush([mutation])
     }
@@ -227,9 +232,18 @@ export class WaAppStateMutationCoordinator {
         const messageIndex = this.buildMessageMutationIndex(message)
         const timestamp = Date.now()
         const deleteMedia = options.deleteMedia === true
-        const messageTimestamp = this.normalizeOptionalMutationTimestampSeconds(
-            options.messageTimestampMs
-        )
+        const messageTimestampMs = options.messageTimestampMs
+        let messageTimestamp: number | undefined
+        if (messageTimestampMs !== undefined) {
+            if (
+                !Number.isFinite(messageTimestampMs) ||
+                !Number.isSafeInteger(messageTimestampMs) ||
+                messageTimestampMs < 0
+            ) {
+                throw new Error(`invalid messageTimestampMs: ${messageTimestampMs}`)
+            }
+            messageTimestamp = Math.floor(messageTimestampMs / 1_000)
+        }
         const mutation = this.createSetMutation({
             spec: WA_APP_STATE_CHAT_MUTATION_SPECS.DELETE_MESSAGE_FOR_ME,
             chatIndexJid: messageIndex.chatIndexJid,
@@ -298,18 +312,14 @@ export class WaAppStateMutationCoordinator {
     }
 
     private async enqueueAndFlush(mutations: readonly WaAppStateMutationInput[]): Promise<void> {
-        this.enqueueMutations(mutations)
-        await this.flushMutations()
-    }
-
-    private enqueueMutations(mutations: readonly WaAppStateMutationInput[]): void {
         for (const mutation of mutations) {
             this.enqueueMutation(mutation)
         }
+        await this.flushMutations()
     }
 
     private enqueueMutation(mutation: WaAppStateMutationInput): void {
-        const key = this.toPendingMutationKey(mutation.collection, mutation.index)
+        const key = `${mutation.collection}\u0001${mutation.index}`
         if (this.pendingMutations.has(key)) {
             this.pendingMutations.delete(key)
         }
@@ -337,9 +347,17 @@ export class WaAppStateMutationCoordinator {
                 actions: this.describeMutationActions(batch)
             })
 
+            const collections: AppStateCollectionName[] = []
             let syncResult: WaAppStateSyncResult
             try {
-                const collections = [...new Set(batch.map((mutation) => mutation.collection))]
+                const seenCollections = new Set<AppStateCollectionName>()
+                for (const mutation of batch) {
+                    if (seenCollections.has(mutation.collection)) {
+                        continue
+                    }
+                    seenCollections.add(mutation.collection)
+                    collections.push(mutation.collection)
+                }
                 syncResult = await this.syncAppState({
                     collections,
                     pendingMutations: batch
@@ -354,7 +372,14 @@ export class WaAppStateMutationCoordinator {
                 throw toError(error)
             }
 
-            const failedCollections = this.getFailedCollections(batch, syncResult)
+            const stateByCollection = new Map<string, string>()
+            for (const entry of syncResult.collections) {
+                stateByCollection.set(entry.collection, entry.state)
+            }
+            const failedCollections = collections.filter((collection) => {
+                const state = stateByCollection.get(collection)
+                return !state || !WA_APP_STATE_MUTATION_FLUSH_SUCCESS_STATES.has(state)
+            })
             if (failedCollections.length === 0) {
                 this.logger.debug('app-state mutation flush completed', {
                     pending: batch.length
@@ -391,23 +416,6 @@ export class WaAppStateMutationCoordinator {
         for (const mutation of existing) {
             this.enqueueMutation(mutation)
         }
-    }
-
-    private getFailedCollections(
-        batch: readonly WaAppStateMutationInput[],
-        syncResult: WaAppStateSyncResult
-    ): readonly string[] {
-        const targetedCollections = [...new Set(batch.map((mutation) => mutation.collection))]
-        const stateByCollection = new Map(
-            syncResult.collections.map((entry) => [entry.collection, entry.state] as const)
-        )
-        return targetedCollections.filter((collection) => {
-            const state = stateByCollection.get(collection)
-            if (!state) {
-                return true
-            }
-            return !WA_APP_STATE_MUTATION_FLUSH_SUCCESS_STATES.has(state)
-        })
     }
 
     private createSetMutation(input: {
@@ -545,28 +553,15 @@ export class WaAppStateMutationCoordinator {
         return toUserJid(normalized)
     }
 
-    private normalizeMuteEndTimestampMs(
-        muteEndTimestampMs: number | undefined
-    ): number | undefined {
-        if (muteEndTimestampMs === undefined) {
-            return undefined
-        }
-        if (
-            !Number.isFinite(muteEndTimestampMs) ||
-            !Number.isSafeInteger(muteEndTimestampMs) ||
-            muteEndTimestampMs < 0
-        ) {
-            throw new Error(`invalid muteEndTimestampMs: ${muteEndTimestampMs}`)
-        }
-        return muteEndTimestampMs
-    }
-
     private buildMessageMutationIndex(message: WaAppStateMessageKey): {
         readonly chatIndexJid: string
         readonly indexPartsTail: readonly [string, '0' | '1', string]
     } {
         const chatIndexJid = this.normalizeChatMutationJid(message.chatJid)
-        const messageId = this.normalizeMessageMutationId(message.id)
+        const messageId = message.id.trim()
+        if (messageId.length === 0) {
+            throw new Error('message id cannot be empty')
+        }
         const fromMe = message.fromMe === true
         const participant = this.resolveMessageMutationParticipant(
             chatIndexJid,
@@ -577,14 +572,6 @@ export class WaAppStateMutationCoordinator {
             chatIndexJid,
             indexPartsTail: [messageId, fromMe ? '1' : '0', participant]
         }
-    }
-
-    private normalizeMessageMutationId(messageId: string): string {
-        const normalized = messageId.trim()
-        if (normalized.length === 0) {
-            throw new Error('message id cannot be empty')
-        }
-        return normalized
     }
 
     private resolveMessageMutationParticipant(
@@ -607,36 +594,12 @@ export class WaAppStateMutationCoordinator {
         return normalizeDeviceJid(normalized)
     }
 
-    private normalizeOptionalMutationTimestampSeconds(
-        timestampMs: number | undefined
-    ): number | undefined {
-        if (timestampMs === undefined) {
-            return undefined
-        }
-        if (
-            !Number.isFinite(timestampMs) ||
-            !Number.isSafeInteger(timestampMs) ||
-            timestampMs < 0
-        ) {
-            throw new Error(`invalid messageTimestampMs: ${timestampMs}`)
-        }
-        return Math.floor(timestampMs / 1_000)
-    }
-
     private buildMutationIndex(
         action: string,
         chatIndexJid: string,
         indexPartsTail: readonly string[]
     ): string {
         return JSON.stringify([action, chatIndexJid, ...indexPartsTail])
-    }
-
-    private toMutationBoolFlag(value: boolean): '0' | '1' {
-        return value ? '1' : '0'
-    }
-
-    private toPendingMutationKey(collection: AppStateCollectionName, index: string): string {
-        return `${collection}\u0001${index}`
     }
 
     private describeMutationActions(mutations: readonly WaAppStateMutationInput[]): string {

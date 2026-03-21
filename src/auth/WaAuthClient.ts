@@ -209,53 +209,54 @@ export class WaAuthClient {
     }
 
     public async persistSuccessAttributes(attributes: WaSuccessPersistAttributes): Promise<void> {
-        let changes: Record<string, boolean> = {}
         await this.patchCredentials(
             (credentials) => {
-                const nextMeLid = attributes.meLid ?? credentials.meLid
-                const nextMeDisplayName = attributes.meDisplayName ?? credentials.meDisplayName
-                const nextCompanionEncStatic =
-                    attributes.companionEncStatic ?? credentials.companionEncStatic
-                const nextLastSuccessTs = attributes.lastSuccessTs ?? credentials.lastSuccessTs
-                const nextPropsVersion = attributes.propsVersion ?? credentials.propsVersion
-                const nextAbPropsVersion = attributes.abPropsVersion ?? credentials.abPropsVersion
-                const nextConnectionLocation =
-                    attributes.connectionLocation ?? credentials.connectionLocation
-                const nextAccountCreationTs =
-                    attributes.accountCreationTs ?? credentials.accountCreationTs
-                changes = {
-                    lidChanged: nextMeLid !== credentials.meLid,
-                    displayNameChanged: nextMeDisplayName !== credentials.meDisplayName,
-                    companionChanged:
-                        (credentials.companionEncStatic === undefined) !==
-                            (nextCompanionEncStatic === undefined) ||
-                        (credentials.companionEncStatic !== undefined &&
-                            nextCompanionEncStatic !== undefined &&
-                            !uint8Equal(credentials.companionEncStatic, nextCompanionEncStatic)),
-                    lastSuccessTsChanged: nextLastSuccessTs !== credentials.lastSuccessTs,
-                    propsVersionChanged: nextPropsVersion !== credentials.propsVersion,
-                    abPropsVersionChanged: nextAbPropsVersion !== credentials.abPropsVersion,
-                    connectionLocationChanged:
-                        nextConnectionLocation !== credentials.connectionLocation,
-                    accountCreationTsChanged:
-                        nextAccountCreationTs !== credentials.accountCreationTs
-                }
                 return {
                     ...credentials,
-                    meLid: nextMeLid,
-                    meDisplayName: nextMeDisplayName,
-                    companionEncStatic: nextCompanionEncStatic,
-                    lastSuccessTs: nextLastSuccessTs,
-                    propsVersion: nextPropsVersion,
-                    abPropsVersion: nextAbPropsVersion,
-                    connectionLocation: nextConnectionLocation,
-                    accountCreationTs: nextAccountCreationTs
+                    meLid: attributes.meLid ?? credentials.meLid,
+                    meDisplayName: attributes.meDisplayName ?? credentials.meDisplayName,
+                    companionEncStatic:
+                        attributes.companionEncStatic ?? credentials.companionEncStatic,
+                    lastSuccessTs: attributes.lastSuccessTs ?? credentials.lastSuccessTs,
+                    propsVersion: attributes.propsVersion ?? credentials.propsVersion,
+                    abPropsVersion: attributes.abPropsVersion ?? credentials.abPropsVersion,
+                    connectionLocation:
+                        attributes.connectionLocation ?? credentials.connectionLocation,
+                    accountCreationTs: attributes.accountCreationTs ?? credentials.accountCreationTs
                 }
             },
             {
-                shouldPersist: () => Object.values(changes).some(Boolean),
-                onPersist: () => {
-                    this.logger.debug('persisting success attributes', changes)
+                shouldPersist: (current, next) =>
+                    next.meLid !== current.meLid ||
+                    next.meDisplayName !== current.meDisplayName ||
+                    (current.companionEncStatic === undefined) !==
+                        (next.companionEncStatic === undefined) ||
+                    (current.companionEncStatic !== undefined &&
+                        next.companionEncStatic !== undefined &&
+                        !uint8Equal(current.companionEncStatic, next.companionEncStatic)) ||
+                    next.lastSuccessTs !== current.lastSuccessTs ||
+                    next.propsVersion !== current.propsVersion ||
+                    next.abPropsVersion !== current.abPropsVersion ||
+                    next.connectionLocation !== current.connectionLocation ||
+                    next.accountCreationTs !== current.accountCreationTs,
+                onPersist: (current, next) => {
+                    this.logger.debug('persisting success attributes', {
+                        lidChanged: next.meLid !== current.meLid,
+                        displayNameChanged: next.meDisplayName !== current.meDisplayName,
+                        companionChanged:
+                            (current.companionEncStatic === undefined) !==
+                                (next.companionEncStatic === undefined) ||
+                            (current.companionEncStatic !== undefined &&
+                                next.companionEncStatic !== undefined &&
+                                !uint8Equal(current.companionEncStatic, next.companionEncStatic)),
+                        lastSuccessTsChanged: next.lastSuccessTs !== current.lastSuccessTs,
+                        propsVersionChanged: next.propsVersion !== current.propsVersion,
+                        abPropsVersionChanged: next.abPropsVersion !== current.abPropsVersion,
+                        connectionLocationChanged:
+                            next.connectionLocation !== current.connectionLocation,
+                        accountCreationTsChanged:
+                            next.accountCreationTs !== current.accountCreationTs
+                    })
                 }
             }
         )

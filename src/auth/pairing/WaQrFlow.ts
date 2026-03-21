@@ -8,8 +8,8 @@ export class WaQrFlow {
     private readonly getCredentials: () => WaAuthCredentials | null
     private readonly getDevicePlatform: () => string
     private readonly emitQr: (qr: string, ttlMs: number) => void
-    private qrRefs: string[]
-    private currentRef: string | null
+    private qrRefs: readonly string[]
+    private qrRefIndex: number
     private currentQrTimer: NodeJS.Timeout | null
 
     public constructor(args: {
@@ -23,12 +23,12 @@ export class WaQrFlow {
         this.getDevicePlatform = args.getDevicePlatform
         this.emitQr = args.emitQr
         this.qrRefs = []
-        this.currentRef = null
+        this.qrRefIndex = 0
         this.currentQrTimer = null
     }
 
     public hasQr(): boolean {
-        return this.qrRefs.length > 0 || this.currentQrTimer !== null
+        return this.qrRefIndex < this.qrRefs.length || this.currentQrTimer !== null
     }
 
     public clear(): void {
@@ -38,31 +38,35 @@ export class WaQrFlow {
             this.currentQrTimer = null
         }
         this.qrRefs = []
-        this.currentRef = null
+        this.qrRefIndex = 0
     }
 
     public refreshCurrentQr(): boolean {
-        if (!this.currentRef) {
+        if (this.qrRefIndex === 0) {
             this.logger.trace('qr flow refresh skipped: no active ref')
             return false
         }
+        const ref = this.qrRefs[this.qrRefIndex - 1]
         const credentials = this.getCredentials()
         if (!credentials) {
             this.logger.warn('qr flow refresh skipped: missing credentials')
             return false
         }
         const ttlMs =
-            this.qrRefs.length === 5
+            this.qrRefs.length - this.qrRefIndex === 5
                 ? WA_DEFAULTS.QR_INITIAL_TTL_MS
                 : WA_DEFAULTS.QR_ROTATION_TTL_MS
-        this.logger.debug('qr flow refresh emit', { ttlMs, remainingRefs: this.qrRefs.length })
-        this.emitQr(this.buildQr(this.currentRef, credentials), ttlMs)
+        this.logger.debug('qr flow refresh emit', {
+            ttlMs,
+            remainingRefs: this.qrRefs.length - this.qrRefIndex
+        })
+        this.emitQr(this.buildQr(ref, credentials), ttlMs)
         return true
     }
 
     public setRefs(refs: readonly string[]): void {
         this.clear()
-        this.qrRefs = [...refs]
+        this.qrRefs = refs
         this.logger.info('qr refs updated', { count: this.qrRefs.length })
         if (this.qrRefs.length === 0) {
             return
@@ -76,34 +80,42 @@ export class WaQrFlow {
             this.clear()
             return
         }
-
-        const ref = this.qrRefs.shift()
-        if (!ref) {
+        if (this.qrRefIndex >= this.qrRefs.length) {
             this.clear()
             return
         }
-        this.currentRef = ref
+        const ref = this.qrRefs[this.qrRefIndex++]
 
+        const remainingRefs = this.qrRefs.length - this.qrRefIndex
         const ttlMs =
-            this.qrRefs.length === 5
-                ? WA_DEFAULTS.QR_INITIAL_TTL_MS
-                : WA_DEFAULTS.QR_ROTATION_TTL_MS
-        this.logger.trace('qr flow emit new code', { ttlMs, remainingRefs: this.qrRefs.length })
-        this.emitQr(this.buildQr(ref, credentials), ttlMs)
-
+            remainingRefs === 5 ? WA_DEFAULTS.QR_INITIAL_TTL_MS : WA_DEFAULTS.QR_ROTATION_TTL_MS
+        this.logger.trace('qr flow emit new code', { ttlMs, remainingRefs })
         this.currentQrTimer = setTimeout(() => {
             this.currentQrTimer = null
             this.rotateRef()
         }, ttlMs)
+        try {
+            this.emitQr(this.buildQr(ref, credentials), ttlMs)
+        } catch (error) {
+            if (this.currentQrTimer) {
+                clearTimeout(this.currentQrTimer)
+                this.currentQrTimer = null
+            }
+            throw error
+        }
     }
 
     private buildQr(ref: string, credentials: WaAuthCredentials): string {
-        return [
-            ref,
-            bytesToBase64(credentials.noiseKeyPair.pubKey),
-            bytesToBase64(credentials.registrationInfo.identityKeyPair.pubKey),
-            bytesToBase64(credentials.advSecretKey),
+        return (
+            ref +
+            ',' +
+            bytesToBase64(credentials.noiseKeyPair.pubKey) +
+            ',' +
+            bytesToBase64(credentials.registrationInfo.identityKeyPair.pubKey) +
+            ',' +
+            bytesToBase64(credentials.advSecretKey) +
+            ',' +
             this.getDevicePlatform()
-        ].join(',')
+        )
     }
 }

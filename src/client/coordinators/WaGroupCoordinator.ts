@@ -9,8 +9,7 @@ import {
 } from '@transport/node/builders/group'
 import {
     findNodeChild,
-    getNodeChildren,
-    getNodeChildrenByTag,
+    getNodeChildrenByTagFromChildren,
     hasNodeChild
 } from '@transport/node/helpers'
 import { assertIqResult, buildIqNode } from '@transport/node/query'
@@ -97,22 +96,23 @@ export interface WaGroupCoordinator {
 type WaGroupParticipantChangeAction = 'add' | 'remove' | 'promote' | 'demote'
 
 function parseGroupParticipants(node: BinaryNode): readonly WaGroupParticipant[] {
-    return parseGroupEventParticipants(node)
-        .filter(
-            (participant): participant is typeof participant & { readonly jid: string } =>
-                !!participant.jid
-        )
-        .map((participant) => {
-            const type = participant.role ?? WA_GROUP_PARTICIPANT_TYPES.REGULAR
-            return {
-                jid: participant.jid,
-                type,
-                isAdmin:
-                    type === WA_GROUP_PARTICIPANT_TYPES.ADMIN ||
-                    type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN,
-                isSuperAdmin: type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN
-            }
+    const parsed = parseGroupEventParticipants(node)
+    const participants: WaGroupParticipant[] = []
+    for (const participant of parsed) {
+        if (!participant.jid) {
+            continue
+        }
+        const type = participant.role ?? WA_GROUP_PARTICIPANT_TYPES.REGULAR
+        participants.push({
+            jid: participant.jid,
+            type,
+            isAdmin:
+                type === WA_GROUP_PARTICIPANT_TYPES.ADMIN ||
+                type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN,
+            isSuperAdmin: type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN
         })
+    }
+    return participants
 }
 
 function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
@@ -207,10 +207,12 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             ])
             const result = await queryWithContext('group.list', node)
             assertIqResult(result, 'group.list')
-            const groupNodes = getNodeChildren(result).flatMap((child) =>
-                getNodeChildrenByTag(child, WA_NODE_TAGS.GROUP)
-            )
-            return groupNodes.map(parseGroupMetadata)
+            const groupNodes = getNodeChildrenByTagFromChildren(result, WA_NODE_TAGS.GROUP)
+            const metadata: WaGroupMetadata[] = []
+            for (const groupNode of groupNodes) {
+                metadata.push(parseGroupMetadata(groupNode))
+            }
+            return metadata
         },
 
         queryGroupInviteInfo: async (code) => {

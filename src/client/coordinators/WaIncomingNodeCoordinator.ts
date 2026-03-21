@@ -169,14 +169,21 @@ export class WaIncomingNodeCoordinator {
     }
 
     private async dispatchIncomingNode(node: BinaryNode): Promise<boolean> {
+        const handlersByTag = this.nodeHandlerRegistry.get(node.tag)
+        const nodeSubtype = node.attrs.type
+
         if (node.tag === WA_MESSAGE_TAGS.RECEIPT) {
-            const handlers = this.getHandlersForNode(node)
-            for (const handler of handlers) {
-                if (await handler(node)) {
-                    if (!this.isRetryReceiptType(node.attrs.type)) {
-                        this.runtime.tryResolvePendingNode(node)
+            if (handlersByTag && handlersByTag.length > 0) {
+                for (const entry of handlersByTag) {
+                    if (entry.subtype !== undefined && entry.subtype !== nodeSubtype) {
+                        continue
                     }
-                    return true
+                    if (await entry.handler(node)) {
+                        if (!this.isRetryReceiptType(nodeSubtype)) {
+                            this.runtime.tryResolvePendingNode(node)
+                        }
+                        return true
+                    }
                 }
             }
             return this.runtime.tryResolvePendingNode(node)
@@ -191,13 +198,15 @@ export class WaIncomingNodeCoordinator {
             return true
         }
 
-        const handlers = this.getHandlersForNode(node)
-        if (handlers.length === 0) {
+        if (!handlersByTag || handlersByTag.length === 0) {
             return false
         }
 
-        for (const handler of handlers) {
-            if (await handler(node)) {
+        for (const entry of handlersByTag) {
+            if (entry.subtype !== undefined && entry.subtype !== nodeSubtype) {
+                continue
+            }
+            if (await entry.handler(node)) {
                 return true
             }
         }
@@ -206,22 +215,6 @@ export class WaIncomingNodeCoordinator {
 
     private isRetryReceiptType(type: string | undefined): boolean {
         return type === 'retry' || type === 'enc_rekey_retry'
-    }
-
-    private getHandlersForNode(node: BinaryNode): readonly WaIncomingNodeHandler[] {
-        const handlersByTag = this.nodeHandlerRegistry.get(node.tag)
-        if (!handlersByTag || handlersByTag.length === 0) {
-            return []
-        }
-        const nodeSubtype = node.attrs.type
-        const handlers: WaIncomingNodeHandler[] = []
-        for (const entry of handlersByTag) {
-            if (entry.subtype !== undefined && entry.subtype !== nodeSubtype) {
-                continue
-            }
-            handlers.push(entry.handler)
-        }
-        return handlers
     }
 
     private registerDefaultIncomingHandlers(): void {

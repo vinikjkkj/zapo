@@ -29,30 +29,6 @@ export function createOutboundRetryTracker(options: {
     const { retryStore, logger } = options
     const retryTtlMs = retryStore.getTtlMs?.() ?? RETRY_OUTBOUND_TTL_MS
 
-    const createRetryOutboundRecord = (input: {
-        readonly messageId: string
-        readonly toJid: string
-        readonly participantJid?: string
-        readonly recipientJid?: string
-        readonly messageType: string
-        readonly replayPayload: WaRetryReplayPayload
-        readonly createdAtMs: number
-        readonly updatedAtMs: number
-        readonly expiresAtMs: number
-    }): WaRetryOutboundMessageRecord => ({
-        messageId: input.messageId,
-        toJid: input.toJid,
-        participantJid: input.participantJid,
-        recipientJid: input.recipientJid,
-        messageType: input.messageType,
-        replayMode: input.replayPayload.mode,
-        replayPayload: encodeRetryReplayPayload(input.replayPayload),
-        state: 'pending',
-        createdAtMs: input.createdAtMs,
-        updatedAtMs: input.updatedAtMs,
-        expiresAtMs: input.expiresAtMs
-    })
-
     const safeUpsertRetryOutboundRecord = async (
         record: WaRetryOutboundMessageRecord
     ): Promise<boolean> => {
@@ -68,14 +44,6 @@ export function createOutboundRetryTracker(options: {
             return false
         }
 
-        try {
-            await retryStore.cleanupExpired(Date.now())
-        } catch (error) {
-            logger.warn('failed to cleanup retry records after outbound persist', {
-                message: toError(error).message
-            })
-        }
-
         return true
     }
 
@@ -84,24 +52,33 @@ export function createOutboundRetryTracker(options: {
             const nowMs = Date.now()
             const expiresAtMs = nowMs + retryTtlMs
             const hintedMessageId = hint.messageIdHint?.trim()
+            const replayMode = hint.replayPayload.mode
             const resolvedToJid =
-                hint.toJid ??
-                (hint.replayPayload.mode === 'opaque_node' ? '' : hint.replayPayload.to)
+                hint.toJid ?? (replayMode === 'opaque_node' ? '' : hint.replayPayload.to)
+            const replayPayload = encodeRetryReplayPayload(hint.replayPayload)
             let hintedPersisted = false
+            const createRetryOutboundRecord = (
+                messageId: string,
+                createdAtMs: number,
+                updatedAtMs: number,
+                expiresAtMs: number
+            ): WaRetryOutboundMessageRecord => ({
+                messageId,
+                toJid: resolvedToJid,
+                participantJid: hint.participantJid,
+                recipientJid: hint.recipientJid,
+                messageType: hint.type,
+                replayMode,
+                replayPayload,
+                state: 'pending',
+                createdAtMs,
+                updatedAtMs,
+                expiresAtMs
+            })
 
             if (hintedMessageId) {
                 hintedPersisted = await safeUpsertRetryOutboundRecord(
-                    createRetryOutboundRecord({
-                        messageId: hintedMessageId,
-                        toJid: resolvedToJid,
-                        participantJid: hint.participantJid,
-                        recipientJid: hint.recipientJid,
-                        messageType: hint.type,
-                        replayPayload: hint.replayPayload,
-                        createdAtMs: nowMs,
-                        updatedAtMs: nowMs,
-                        expiresAtMs
-                    })
+                    createRetryOutboundRecord(hintedMessageId, nowMs, nowMs, expiresAtMs)
                 )
             }
 
@@ -112,17 +89,12 @@ export function createOutboundRetryTracker(options: {
 
             const persistedNowMs = Date.now()
             await safeUpsertRetryOutboundRecord(
-                createRetryOutboundRecord({
-                    messageId: result.id,
-                    toJid: resolvedToJid,
-                    participantJid: hint.participantJid,
-                    recipientJid: hint.recipientJid,
-                    messageType: hint.type,
-                    replayPayload: hint.replayPayload,
-                    createdAtMs: hintedMessageId ? nowMs : persistedNowMs,
-                    updatedAtMs: persistedNowMs,
-                    expiresAtMs: persistedNowMs + retryTtlMs
-                })
+                createRetryOutboundRecord(
+                    result.id,
+                    hintedMessageId ? nowMs : persistedNowMs,
+                    persistedNowMs,
+                    persistedNowMs + retryTtlMs
+                )
             )
 
             return result

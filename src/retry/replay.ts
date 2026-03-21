@@ -7,7 +7,6 @@ import {
     isGroupOrBroadcastJid,
     normalizeDeviceJid,
     parseSignalAddressFromJid,
-    splitJid,
     toUserJid
 } from '@protocol/jid'
 import { decodeRetryReplayPayload } from '@retry/outbound'
@@ -20,7 +19,7 @@ import type {
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import { decodeBinaryNode } from '@transport/binary'
 import { buildGroupRetryMessageNode } from '@transport/node/builders/message'
-import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
+import { findNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
 
@@ -48,23 +47,43 @@ export class WaRetryReplayService {
         retryCount: number
     ): Promise<WaRetryResendResult> {
         const payload = decodeRetryReplayPayload(outbound.replayPayload)
+        const requesterAddress = parseSignalAddressFromJid(requesterJid)
+        const normalizedRequesterJid = normalizeDeviceJid(requesterJid)
         if (payload.mode === 'plaintext') {
-            return this.resendPlaintextPayload(outbound, payload, requesterJid, retryCount)
+            return this.resendPlaintextPayload(
+                outbound,
+                payload,
+                requesterJid,
+                requesterAddress,
+                retryCount
+            )
         }
         if (payload.mode === 'encrypted') {
-            return this.resendEncryptedPayload(outbound, payload, requesterJid, retryCount)
+            return this.resendEncryptedPayload(
+                outbound,
+                payload,
+                requesterJid,
+                normalizedRequesterJid,
+                retryCount
+            )
         }
-        return this.resendOpaquePayload(outbound, payload, requesterJid)
+        return this.resendOpaquePayload(outbound, payload, normalizedRequesterJid)
     }
 
     private async resendPlaintextPayload(
         outbound: WaRetryOutboundMessageRecord,
         payload: WaRetryPlaintextReplayPayload,
         requesterJid: string,
+        requesterAddress: ReturnType<typeof parseSignalAddressFromJid>,
         retryCount: number
     ): Promise<WaRetryResendResult> {
         if (isGroupOrBroadcastJid(payload.to)) {
-            return this.resendGroupPlaintextPayload(outbound, payload, requesterJid)
+            return this.resendGroupPlaintextPayload(
+                outbound,
+                payload,
+                requesterJid,
+                requesterAddress
+            )
         }
         let payloadUserJid: string
         let requesterUserJid: string
@@ -79,7 +98,7 @@ export class WaRetryReplayService {
         }
 
         const encrypted = await this.options.signalProtocol.encryptMessage(
-            parseSignalAddressFromJid(requesterJid),
+            requesterAddress,
             payload.plaintext
         )
         await this.options.messageClient.sendEncrypted({
@@ -96,13 +115,14 @@ export class WaRetryReplayService {
     private async resendGroupPlaintextPayload(
         outbound: WaRetryOutboundMessageRecord,
         payload: WaRetryPlaintextReplayPayload,
-        requesterJid: string
+        requesterJid: string,
+        requesterAddress: ReturnType<typeof parseSignalAddressFromJid>
     ): Promise<WaRetryResendResult> {
         const plaintext =
             (await this.maybeWrapGroupRetryPlaintextForSelfDevice(payload, requesterJid)) ??
             payload.plaintext
         const encrypted = await this.options.signalProtocol.encryptMessage(
-            parseSignalAddressFromJid(requesterJid),
+            requesterAddress,
             plaintext
         )
         let deviceIdentity: Uint8Array | undefined
@@ -123,7 +143,7 @@ export class WaRetryReplayService {
             type: payload.type,
             id: outbound.messageId,
             requesterJid,
-            addressingMode: splitJid(requesterJid).server === 'lid' ? 'lid' : 'pn',
+            addressingMode: requesterAddress.server === 'lid' ? 'lid' : 'pn',
             encType: encrypted.type,
             ciphertext: encrypted.ciphertext,
             deviceIdentity
@@ -137,12 +157,13 @@ export class WaRetryReplayService {
         outbound: WaRetryOutboundMessageRecord,
         payload: WaRetryEncryptedReplayPayload,
         requesterJid: string,
+        normalizedRequesterJid: string,
         retryCount: number
     ): Promise<WaRetryResendResult> {
         if (payload.encType === 'skmsg') {
             return 'ineligible'
         }
-        if (normalizeDeviceJid(payload.to) !== normalizeDeviceJid(requesterJid)) {
+        if (normalizeDeviceJid(payload.to) !== normalizedRequesterJid) {
             return 'ineligible'
         }
         await this.options.messageClient.sendEncrypted({
@@ -160,9 +181,12 @@ export class WaRetryReplayService {
     private async resendOpaquePayload(
         outbound: WaRetryOutboundMessageRecord,
         payload: WaRetryOpaqueNodeReplayPayload,
-        requesterJid: string
+        normalizedRequesterJid: string
     ): Promise<WaRetryResendResult> {
         const decoded = decodeBinaryNode(payload.node)
+        if (!this.isOpaqueReplayCompatible(decoded, normalizedRequesterJid)) {
+            return 'ineligible'
+        }
         const replayNode =
             decoded.attrs.id === outbound.messageId
                 ? decoded
@@ -173,9 +197,6 @@ export class WaRetryReplayService {
                           id: outbound.messageId
                       }
                   }
-        if (!this.isOpaqueReplayCompatible(replayNode, requesterJid)) {
-            return 'ineligible'
-        }
         await this.options.messageClient.sendMessageNode(replayNode)
         return 'resent'
     }
@@ -218,26 +239,32 @@ export class WaRetryReplayService {
         return false
     }
 
-    private isOpaqueReplayCompatible(node: BinaryNode, requesterJid: string): boolean {
-        const requester = normalizeDeviceJid(requesterJid)
+    private isOpaqueReplayCompatible(node: BinaryNode, normalizedRequesterJid: string): boolean {
         const participantsNode = findNodeChild(node, 'participants')
         if (participantsNode) {
-            const toNodes = getNodeChildrenByTag(participantsNode, 'to')
-            if (toNodes.length !== 1) {
-                return false
+            const participantsContent = Array.isArray(participantsNode.content)
+                ? participantsNode.content
+                : []
+            let participantNode: BinaryNode | undefined
+            let participantCount = 0
+
+            for (let index = 0; index < participantsContent.length; index++) {
+                const child = participantsContent[index]
+                if (child.tag !== 'to') continue
+                participantCount++
+                if (participantCount > 1) return false
+                participantNode = child
             }
-            const participantJid = toNodes[0].attrs.jid
-            if (!participantJid) {
-                return false
-            }
-            return normalizeDeviceJid(participantJid) === requester
+
+            if (participantCount !== 1 || !participantNode) return false
+            const participantJid = participantNode.attrs.jid
+            if (!participantJid) return false
+            return normalizeDeviceJid(participantJid) === normalizedRequesterJid
         }
         if (node.attrs.participant) {
-            return normalizeDeviceJid(node.attrs.participant) === requester
+            return normalizeDeviceJid(node.attrs.participant) === normalizedRequesterJid
         }
-        if (node.attrs.to) {
-            return normalizeDeviceJid(node.attrs.to) === requester
-        }
+        if (node.attrs.to) return normalizeDeviceJid(node.attrs.to) === normalizedRequesterJid
         return false
     }
 }

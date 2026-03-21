@@ -31,6 +31,14 @@ test('parseStreamControlNode handles stream error variants', () => {
         content: [{ tag: WA_STREAM_SIGNALING.CONFLICT_TAG, attrs: { type: 'replaced' } }]
     }
     assert.deepEqual(parseStreamControlNode(replacedError), { kind: 'stream_error_replaced' })
+    const conflictWithoutType: BinaryNode = {
+        tag: WA_STREAM_SIGNALING.STREAM_ERROR_TAG,
+        attrs: {},
+        content: [{ tag: WA_STREAM_SIGNALING.CONFLICT_TAG, attrs: {} }]
+    }
+    assert.deepEqual(parseStreamControlNode(conflictWithoutType), {
+        kind: 'stream_error_device_removed'
+    })
 
     const codeError: BinaryNode = {
         tag: WA_STREAM_SIGNALING.STREAM_ERROR_TAG,
@@ -44,6 +52,15 @@ test('parseStreamControlNode handles stream error variants', () => {
         content: [{ tag: WA_STREAM_SIGNALING.ACK_TAG, attrs: { id: 'abc' } }]
     }
     assert.deepEqual(parseStreamControlNode(ackError), { kind: 'stream_error_ack', id: 'abc' })
+    const ackWithoutId: BinaryNode = {
+        tag: WA_STREAM_SIGNALING.STREAM_ERROR_TAG,
+        attrs: {},
+        content: [{ tag: WA_STREAM_SIGNALING.ACK_TAG, attrs: {} }]
+    }
+    assert.deepEqual(parseStreamControlNode(ackWithoutId), {
+        kind: 'stream_error_ack',
+        id: undefined
+    })
 })
 
 test('success attribute parser decodes numbers and companion bytes', () => {

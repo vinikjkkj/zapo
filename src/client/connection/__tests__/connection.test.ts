@@ -42,6 +42,15 @@ test('receipt queue enforces max size and drains in insertion order', () => {
     )
 })
 
+test('receipt queue ignores enqueues when max size is zero', () => {
+    const queue = new WaReceiptQueue({ maxSize: 0 })
+    for (let index = 0; index < 70; index += 1) {
+        queue.enqueue({ tag: 'receipt', attrs: { id: `r${index}` } })
+    }
+    assert.equal(queue.size(), 0)
+    assert.deepEqual(queue.take(), [])
+})
+
 test('key share coordinator releases waiters and tracks version', async () => {
     const coordinator = new WaKeyShareCoordinator()
 

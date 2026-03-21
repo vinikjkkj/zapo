@@ -32,22 +32,22 @@ export function isRetryableNegativeAck(node: BinaryNode): boolean {
 }
 
 export function describeAckNode(node: BinaryNode): string {
-    const parts = [`tag=${node.tag}`]
+    let description = `tag=${node.tag}`
     const id = node.attrs.id
     const type = node.attrs.type
     const ackClass = node.attrs.class
     const code = node.attrs.code
     if (id) {
-        parts.push(`id=${id}`)
+        description += ` id=${id}`
     }
     if (type) {
-        parts.push(`type=${type}`)
+        description += ` type=${type}`
     }
     if (ackClass) {
-        parts.push(`class=${ackClass}`)
+        description += ` class=${ackClass}`
     }
     if (code) {
-        parts.push(`code=${code}`)
+        description += ` code=${code}`
     }
-    return parts.join(' ')
+    return description
 }

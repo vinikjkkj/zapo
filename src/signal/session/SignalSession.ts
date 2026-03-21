@@ -44,18 +44,25 @@ export function findMatchingSession(
     if (session.aliceBaseKey && uint8Equal(session.aliceBaseKey, serializedBaseKey)) {
         return session
     }
-    const previousSessionIndex = session.prevSessions.findIndex(
-        (prev) => !!prev.aliceBaseKey && uint8Equal(prev.aliceBaseKey, serializedBaseKey)
-    )
-    if (previousSessionIndex !== -1) {
-        const promoted = snapshotToRecord(session.prevSessions[previousSessionIndex])
+    for (let index = 0; index < session.prevSessions.length; index += 1) {
+        const previousSession = session.prevSessions[index]
+        if (
+            !previousSession.aliceBaseKey ||
+            !uint8Equal(previousSession.aliceBaseKey, serializedBaseKey)
+        ) {
+            continue
+        }
+
+        const prevSessions: SignalSessionSnapshot[] = [detachSession(session)]
+        for (let i = 0; i < session.prevSessions.length; i += 1) {
+            if (i !== index) {
+                prevSessions.push(session.prevSessions[i])
+            }
+        }
+
         return {
-            ...promoted,
-            prevSessions: [
-                detachSession(session),
-                ...session.prevSessions.slice(0, previousSessionIndex),
-                ...session.prevSessions.slice(previousSessionIndex + 1)
-            ]
+            ...previousSession,
+            prevSessions
         }
     }
     return null

@@ -250,10 +250,12 @@ function extractChatJid(parts: readonly string[]): string | undefined {
 function findPresentSyncActionValueKey(
     value: NonNullable<WaAppStateMutation['value']>
 ): string | null {
-    for (const [key, keyValue] of Object.entries(value as Record<string, unknown>)) {
+    const valueRecord = value as Record<string, unknown>
+    for (const key in valueRecord) {
         if (key === 'timestamp') {
             continue
         }
+        const keyValue = valueRecord[key]
         if (keyValue === null || keyValue === undefined) {
             continue
         }

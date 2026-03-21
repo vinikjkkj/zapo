@@ -1,12 +1,12 @@
 import { WA_MESSAGE_TAGS, WA_NODE_TAGS } from '@protocol/constants'
-import type { WaParsedRetryRequest, WaRetryKeyBundle, WaRetryReceiptType } from '@retry/types'
+import type { WaParsedRetryRequest, WaRetryKeyBundle } from '@retry/types'
 import {
     SIGNAL_KEY_DATA_LENGTH,
     SIGNAL_KEY_ID_LENGTH,
     SIGNAL_REGISTRATION_ID_LENGTH,
     SIGNAL_SIGNATURE_LENGTH
 } from '@signal/api/constants'
-import { decodeNodeContentBase64OrBytes, findNodeChild } from '@transport/node/helpers'
+import { decodeNodeContentBase64OrBytes, findNodeChildrenByTags } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt } from '@util/primitives'
 
@@ -23,66 +23,63 @@ function parseFixedLengthBytes(
 }
 
 function parseBigEndianUint(bytes: Uint8Array, field: string): number {
-    if (bytes.byteLength === 0 || bytes.byteLength > 4) {
-        throw new Error(`${field} has invalid byte length`)
+    switch (bytes.byteLength) {
+        case 1:
+            return bytes[0]
+        case 2:
+            return (bytes[0] << 8) | bytes[1]
+        case 3:
+            return ((bytes[0] << 16) | (bytes[1] << 8) | bytes[2]) >>> 0
+        case 4:
+            return ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0
+        default:
+            throw new Error(`${field} has invalid byte length`)
     }
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    if (bytes.byteLength === 1) {
-        return view.getUint8(0)
-    }
-    if (bytes.byteLength === 2) {
-        return view.getUint16(0)
-    }
-    return bytes.byteLength === 3 ? (view.getUint16(0) << 8) | view.getUint8(2) : view.getUint32(0)
 }
 
-function parseRetryType(value: string | undefined): WaRetryReceiptType | null {
-    if (value === 'retry' || value === 'enc_rekey_retry') {
-        return value
+function requireNode(node: BinaryNode | undefined, message: string): BinaryNode {
+    if (!node) {
+        throw new Error(message)
     }
-    return null
-}
-
-function parseRetryOptionalInt(value: string | undefined): number | undefined {
-    return parseOptionalInt(value)
-}
-
-function parseRetryCount(value: string | undefined): number {
-    return parseRetryOptionalInt(value) ?? 0
-}
-
-function parseRetryReason(value: string | undefined): number | undefined {
-    return parseRetryOptionalInt(value)
+    return node
 }
 
 function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | undefined {
     if (!node) {
         return undefined
     }
-    const identityNode = findNodeChild(node, WA_NODE_TAGS.IDENTITY)
-    const signedKeyNode = findNodeChild(node, WA_NODE_TAGS.SKEY)
-    if (!identityNode || !signedKeyNode) {
-        throw new Error('retry keys section missing identity or skey')
-    }
+    const [identityNode, signedKeyNode, keyNode, deviceIdentityNode] = findNodeChildrenByTags(
+        node,
+        [WA_NODE_TAGS.IDENTITY, WA_NODE_TAGS.SKEY, WA_NODE_TAGS.KEY, WA_NODE_TAGS.DEVICE_IDENTITY]
+    )
 
-    const signedKeyIdNode = findNodeChild(signedKeyNode, WA_NODE_TAGS.ID)
-    const signedKeyValueNode = findNodeChild(signedKeyNode, WA_NODE_TAGS.VALUE)
-    const signedKeySignatureNode = findNodeChild(signedKeyNode, WA_NODE_TAGS.SIGNATURE)
-    if (!signedKeyIdNode || !signedKeyValueNode || !signedKeySignatureNode) {
-        throw new Error('retry keys section has incomplete skey')
-    }
+    const identity = requireNode(identityNode, 'retry keys section missing identity or skey')
+    const signedKey = requireNode(signedKeyNode, 'retry keys section missing identity or skey')
+    const [signedKeyIdNode, signedKeyValueNode, signedKeySignatureNode] = findNodeChildrenByTags(
+        signedKey,
+        [WA_NODE_TAGS.ID, WA_NODE_TAGS.VALUE, WA_NODE_TAGS.SIGNATURE]
+    )
+    const signedKeyId = requireNode(signedKeyIdNode, 'retry keys section has incomplete skey')
+    const signedKeyValue = requireNode(signedKeyValueNode, 'retry keys section has incomplete skey')
+    const signedKeySignature = requireNode(
+        signedKeySignatureNode,
+        'retry keys section has incomplete skey'
+    )
 
-    const keyNode = findNodeChild(node, WA_NODE_TAGS.KEY)
-    const keyIdNode = keyNode ? findNodeChild(keyNode, WA_NODE_TAGS.ID) : undefined
-    const keyValueNode = keyNode ? findNodeChild(keyNode, WA_NODE_TAGS.VALUE) : undefined
-    if (keyNode && (!keyIdNode || !keyValueNode)) {
-        throw new Error('retry keys section has incomplete key')
+    let keyIdNode: BinaryNode | undefined
+    let keyValueNode: BinaryNode | undefined
+    if (keyNode) {
+        const keyNodes = findNodeChildrenByTags(keyNode, [WA_NODE_TAGS.ID, WA_NODE_TAGS.VALUE])
+        keyIdNode = keyNodes[0]
+        keyValueNode = keyNodes[1]
     }
-
-    const deviceIdentityNode = findNodeChild(node, WA_NODE_TAGS.DEVICE_IDENTITY)
+    const keyId = keyNode ? requireNode(keyIdNode, 'retry keys section has incomplete key') : null
+    const keyValue = keyNode
+        ? requireNode(keyValueNode, 'retry keys section has incomplete key')
+        : null
     return {
         identity: parseFixedLengthBytes(
-            identityNode.content,
+            identity.content,
             SIGNAL_KEY_DATA_LENGTH,
             'retry.keys.identity'
         ),
@@ -93,18 +90,18 @@ function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | u
               )
             : undefined,
         key:
-            keyIdNode && keyValueNode
+            keyId && keyValue
                 ? {
                       id: parseBigEndianUint(
                           parseFixedLengthBytes(
-                              keyIdNode.content,
+                              keyId.content,
                               SIGNAL_KEY_ID_LENGTH,
                               'retry.keys.key.id'
                           ),
                           'retry.keys.key.id'
                       ),
                       publicKey: parseFixedLengthBytes(
-                          keyValueNode.content,
+                          keyValue.content,
                           SIGNAL_KEY_DATA_LENGTH,
                           'retry.keys.key.value'
                       )
@@ -113,19 +110,19 @@ function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | u
         skey: {
             id: parseBigEndianUint(
                 parseFixedLengthBytes(
-                    signedKeyIdNode.content,
+                    signedKeyId.content,
                     SIGNAL_KEY_ID_LENGTH,
                     'retry.keys.skey.id'
                 ),
                 'retry.keys.skey.id'
             ),
             publicKey: parseFixedLengthBytes(
-                signedKeyValueNode.content,
+                signedKeyValue.content,
                 SIGNAL_KEY_DATA_LENGTH,
                 'retry.keys.skey.value'
             ),
             signature: parseFixedLengthBytes(
-                signedKeySignatureNode.content,
+                signedKeySignature.content,
                 SIGNAL_SIGNATURE_LENGTH,
                 'retry.keys.skey.signature'
             )
@@ -137,7 +134,10 @@ export function parseRetryReceiptRequest(node: BinaryNode): WaParsedRetryRequest
     if (node.tag !== WA_MESSAGE_TAGS.RECEIPT) {
         return null
     }
-    const receiptType = parseRetryType(node.attrs.type)
+    const receiptType =
+        node.attrs.type === 'retry' || node.attrs.type === 'enc_rekey_retry'
+            ? node.attrs.type
+            : null
     if (!receiptType) {
         return null
     }
@@ -147,21 +147,24 @@ export function parseRetryReceiptRequest(node: BinaryNode): WaParsedRetryRequest
         throw new Error('retry receipt is missing id/from attrs')
     }
 
-    const retryNode = findNodeChild(node, 'retry')
-    if (!retryNode) {
-        throw new Error('retry receipt is missing retry child')
-    }
-    const registrationNode = findNodeChild(node, WA_NODE_TAGS.REGISTRATION)
-    if (!registrationNode) {
-        throw new Error('retry receipt is missing registration child')
-    }
-    const originalMsgId = retryNode.attrs.id
+    const [retryNode, registrationNode, keysNode] = findNodeChildrenByTags(node, [
+        'retry',
+        WA_NODE_TAGS.REGISTRATION,
+        'keys'
+    ])
+
+    const retry = requireNode(retryNode, 'retry receipt is missing retry child')
+    const registrationNodeValue = requireNode(
+        registrationNode,
+        'retry receipt is missing registration child'
+    )
+    const originalMsgId = retry.attrs.id
     if (!originalMsgId) {
         throw new Error('retry receipt is missing retry.id')
     }
 
     const registration = parseFixedLengthBytes(
-        registrationNode.content,
+        registrationNodeValue.content,
         SIGNAL_REGISTRATION_ID_LENGTH,
         'retry.registration'
     )
@@ -173,10 +176,10 @@ export function parseRetryReceiptRequest(node: BinaryNode): WaParsedRetryRequest
         participant: node.attrs.participant,
         recipient: node.attrs.recipient,
         originalMsgId,
-        retryCount: parseRetryCount(retryNode.attrs.count),
-        retryReason: parseRetryReason(retryNode.attrs.error ?? node.attrs.error),
-        t: retryNode.attrs.t ?? node.attrs.t,
+        retryCount: parseOptionalInt(retry.attrs.count) ?? 0,
+        retryReason: parseOptionalInt(retry.attrs.error ?? node.attrs.error),
+        t: retry.attrs.t ?? node.attrs.t,
         regId: parseBigEndianUint(registration, 'retry.registration'),
-        keyBundle: parseRetryKeyBundle(findNodeChild(node, 'keys'))
+        keyBundle: parseRetryKeyBundle(keysNode)
     }
 }

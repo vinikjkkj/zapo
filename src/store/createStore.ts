@@ -362,8 +362,7 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
         },
 
         async destroyCaches(): Promise<void> {
-            const activeSessions = [...sessions.values()]
-            for (const session of activeSessions) {
+            for (const session of sessions.values()) {
                 await session.destroyCaches()
             }
         },
@@ -373,9 +372,8 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                 return
             }
             storeDestroyed = true
-            const activeSessions = [...sessions.values()]
-            sessions.clear()
-            for (const session of activeSessions) {
+            for (const [sessionId, session] of sessions) {
+                sessions.delete(sessionId)
                 await session.destroy()
             }
         }

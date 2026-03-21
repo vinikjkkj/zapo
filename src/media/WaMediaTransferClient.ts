@@ -81,6 +81,19 @@ interface OptionalGotModule {
     readonly stream: (url: string, options?: Readonly<Record<string, unknown>>) => Readable
 }
 
+function normalizeHeaderRecord(
+    headers: Readonly<Record<string, string>> | undefined
+): Readonly<Record<string, string>> {
+    if (!headers) {
+        return {}
+    }
+    const normalized: Record<string, string> = {}
+    for (const key in headers) {
+        normalized[key.toLowerCase()] = headers[key]
+    }
+    return normalized
+}
+
 function asOptionalGotModule(loaded: unknown): OptionalGotModule | null {
     if (loaded && typeof loaded === 'object') {
         const direct = (loaded as { readonly stream?: unknown }).stream
@@ -152,7 +165,7 @@ export class WaMediaTransferClient {
         this.defaultHosts = options.defaultHosts ?? DEFAULT_MEDIA_HOSTS
         this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.MEDIA_TIMEOUT_MS
         this.defaultMaxReadBytes = options.defaultMaxReadBytes
-        this.defaultHeaders = options.defaultHeaders ?? {}
+        this.defaultHeaders = normalizeHeaderRecord(options.defaultHeaders)
         this.defaultUploadDispatcher = options.defaultUploadDispatcher
         this.defaultDownloadDispatcher = options.defaultDownloadDispatcher
         this.defaultUploadAgent = options.defaultUploadAgent
@@ -162,10 +175,8 @@ export class WaMediaTransferClient {
 
     public async downloadStream(request: StreamDownloadRequest): Promise<StreamTransferResponse> {
         const { urls, headers, timeoutMs } = this.resolveTransferRequest(request)
-        const proxy = this.resolveProxyTransport({
-            dispatcher: request.dispatcher ?? this.defaultDownloadDispatcher,
-            agent: request.agent ?? this.defaultDownloadAgent
-        })
+        const dispatcher = request.dispatcher ?? this.defaultDownloadDispatcher
+        const agent = request.agent ?? this.defaultDownloadAgent
         this.logger?.debug('media download stream start', {
             urls: urls.length,
             timeoutMs
@@ -180,7 +191,8 @@ export class WaMediaTransferClient {
                         headers,
                         signal
                     },
-                    proxy
+                    dispatcher,
+                    agent
                 )
         })
     }
@@ -203,10 +215,8 @@ export class WaMediaTransferClient {
                     ? String(request.contentLength)
                     : undefined
         })
-        const proxy = this.resolveProxyTransport({
-            dispatcher: request.dispatcher ?? this.defaultUploadDispatcher,
-            agent: request.agent ?? this.defaultUploadAgent
-        })
+        const dispatcher = request.dispatcher ?? this.defaultUploadDispatcher
+        const agent = request.agent ?? this.defaultUploadAgent
         const uploadUrls = bodyIsBytes ? urls : urls.slice(0, 1)
         if (!bodyIsBytes && urls.length > 1) {
             this.logger?.warn('upload stream fallback disabled for non-replayable body', {
@@ -232,7 +242,8 @@ export class WaMediaTransferClient {
                             signal,
                             body: request.body
                         },
-                        proxy
+                        dispatcher,
+                        agent
                     )
                 }
 
@@ -245,7 +256,8 @@ export class WaMediaTransferClient {
                         body: request.body as unknown as never,
                         duplex: 'half'
                     } as RequestInit,
-                    proxy
+                    dispatcher,
+                    agent
                 )
             }
         })
@@ -297,10 +309,11 @@ export class WaMediaTransferClient {
         })
         const decrypted = await this.downloadAndDecryptStream(request)
         try {
-            const [plaintext] = await Promise.all([
-                this.readAllBytesWithLimit(decrypted.plaintext, request.maxBytes),
-                decrypted.metadata
-            ])
+            const plaintext = await this.readAllBytesWithLimit(
+                decrypted.plaintext,
+                request.maxBytes
+            )
+            await decrypted.metadata
             this.logger?.info('media encrypted download completed', {
                 byteLength: plaintext.byteLength
             })
@@ -317,7 +330,6 @@ export class WaMediaTransferClient {
         const response = await this.downloadStream(request)
         await this.assertSuccessfulResponse(response)
         const body = this.requireResponseBody(response)
-
         const decrypted = await WaMediaCrypto.decryptReadable(body, {
             mediaType: request.mediaType,
             mediaKey: request.mediaKey,
@@ -344,31 +356,16 @@ export class WaMediaTransferClient {
         return this.readAllBytesWithLimit(response.body, maxBytes)
     }
 
-    private resolveProxyTransport(proxy: {
-        readonly dispatcher?: WaProxyDispatcher
-        readonly agent?: WaProxyAgent
-    }): {
-        readonly dispatcher?: WaProxyDispatcher
-        readonly agent?: WaProxyAgent
-    } {
-        if (proxy.agent) {
-            return { agent: proxy.agent }
-        }
-        return { dispatcher: proxy.dispatcher }
-    }
-
     private async transferRequest(
         url: string,
         init: RequestInit,
-        proxy: {
-            readonly dispatcher?: WaProxyDispatcher
-            readonly agent?: WaProxyAgent
-        }
+        dispatcher: WaProxyDispatcher | undefined,
+        agent: WaProxyAgent | undefined
     ): Promise<InternalTransferResponse> {
-        if (proxy.agent) {
-            return this.gotWithAgent(url, init, proxy.agent)
+        if (agent) {
+            return this.gotWithAgent(url, init, agent)
         }
-        return this.fetchWithDispatcher(url, init, proxy.dispatcher)
+        return this.fetchWithDispatcher(url, init, dispatcher)
     }
 
     private async fetchWithDispatcher(
@@ -412,7 +409,6 @@ export class WaMediaTransferClient {
         agent: WaProxyAgent
     ): Promise<InternalTransferResponse> {
         const got = await this.loadGotModule()
-        const gotHeaders = this.normalizeHeadersInit(init.headers)
         const urlObj = new URL(url)
         const gotAgent =
             urlObj.protocol === 'http:'
@@ -423,7 +419,7 @@ export class WaMediaTransferClient {
         return new Promise<InternalTransferResponse>((resolve, reject) => {
             const request = got.stream(url, {
                 method: init.method,
-                headers: gotHeaders,
+                headers: (init.headers ?? {}) as Readonly<Record<string, string>>,
                 body: init.body as unknown,
                 signal: init.signal,
                 throwHttpErrors: false,
@@ -453,39 +449,6 @@ export class WaMediaTransferClient {
         return this.gotModulePromise
     }
 
-    private normalizeHeadersInit(
-        headers: RequestInit['headers'] | undefined
-    ): Record<string, string> {
-        if (!headers) {
-            return {}
-        }
-        if (headers instanceof Headers) {
-            const output: Record<string, string> = {}
-            for (const [key, value] of headers.entries()) {
-                output[key] = value
-            }
-            return output
-        }
-        if (Array.isArray(headers)) {
-            const output: Record<string, string> = {}
-            for (const [key, value] of headers) {
-                output[key] = Array.isArray(value) ? value.join(', ') : value
-            }
-            return output
-        }
-        const output: Record<string, string> = {}
-        for (const [key, value] of Object.entries(
-            headers as Readonly<Record<string, string | readonly string[]>>
-        )) {
-            if (Array.isArray(value)) {
-                output[key] = value.join(', ')
-            } else {
-                output[key] = String(value)
-            }
-        }
-        return output
-    }
-
     private toGotTransferResponse(incoming: unknown): InternalTransferResponse {
         if (!incoming || typeof incoming !== 'object') {
             throw new Error('invalid got response object')
@@ -503,15 +466,15 @@ export class WaMediaTransferClient {
                 : 500
         const headers: Record<string, string> = {}
         if (stream.headers && typeof stream.headers === 'object') {
-            for (const [key, value] of Object.entries(
-                stream.headers as Readonly<Record<string, unknown>>
-            )) {
+            const input = stream.headers as Readonly<Record<string, unknown>>
+            for (const key in input) {
+                const value = input[key]
                 if (typeof value === 'string') {
                     headers[key] = value
                     continue
                 }
                 if (Array.isArray(value)) {
-                    headers[key] = value.map((entry) => String(entry)).join(', ')
+                    headers[key] = value.join(', ')
                     continue
                 }
                 if (value !== undefined && value !== null) {
@@ -541,10 +504,18 @@ export class WaMediaTransferClient {
         readonly headers: Record<string, string>
         readonly timeoutMs: number
     } {
-        const headers = this.mergeHeaders(request.headers)
-        for (const [key, value] of Object.entries(extraHeaders ?? {})) {
-            if (value !== undefined) {
-                headers[key.toLowerCase()] = value
+        const headers: Record<string, string> = { ...this.defaultHeaders }
+        if (request.headers) {
+            for (const key in request.headers) {
+                headers[key.toLowerCase()] = request.headers[key]
+            }
+        }
+        if (extraHeaders) {
+            for (const key in extraHeaders) {
+                const value = extraHeaders[key]
+                if (value !== undefined) {
+                    headers[key.toLowerCase()] = value
+                }
             }
         }
 
@@ -567,9 +538,9 @@ export class WaMediaTransferClient {
         const result = await this.fetchWithFallback(urls, timeoutMs, signal, options.send)
         this.logger?.trace(options.responseLog, {
             url: result.url,
-            status: result.response.status
+            status: result.status
         })
-        return this.toResponse(result.url, result.response)
+        return result
     }
 
     private async prepareEncryptedUpload(
@@ -641,16 +612,15 @@ export class WaMediaTransferClient {
         hosts: readonly string[] | undefined
     ): readonly string[] {
         const resolved: string[] = []
-        if (url) {
-            resolved.push(url)
-        }
+        if (url && resolved.indexOf(url) === -1) resolved.push(url)
         if (directPath) {
             if (directPath.startsWith('https://') || directPath.startsWith('http://')) {
-                resolved.push(directPath)
+                if (resolved.indexOf(directPath) === -1) resolved.push(directPath)
             } else {
                 const normalizedPath = directPath.startsWith('/') ? directPath : `/${directPath}`
                 for (const host of hosts ?? this.defaultHosts) {
-                    resolved.push(`https://${host}${normalizedPath}`)
+                    const candidate = `https://${host}${normalizedPath}`
+                    if (resolved.indexOf(candidate) === -1) resolved.push(candidate)
                 }
             }
         }
@@ -658,20 +628,7 @@ export class WaMediaTransferClient {
             throw new Error('missing transfer url/directPath')
         }
 
-        return Array.from(new Set(resolved))
-    }
-
-    private mergeHeaders(
-        headers: Readonly<Record<string, string>> | undefined
-    ): Record<string, string> {
-        const merged: Record<string, string> = {}
-        for (const [key, value] of Object.entries(this.defaultHeaders)) {
-            merged[key.toLowerCase()] = value
-        }
-        for (const [key, value] of Object.entries(headers ?? {})) {
-            merged[key.toLowerCase()] = value
-        }
-        return merged
+        return resolved
     }
 
     private readAllBytesWithLimit(
@@ -688,7 +645,7 @@ export class WaMediaTransferClient {
         timeoutMs: number,
         signal: AbortSignal | undefined,
         send: (url: string, signal: AbortSignal) => Promise<InternalTransferResponse>
-    ): Promise<{ readonly url: string; readonly response: InternalTransferResponse }> {
+    ): Promise<StreamTransferResponse> {
         let lastError: Error | null = null
 
         for (let index = 0; index < urls.length; index += 1) {
@@ -698,7 +655,13 @@ export class WaMediaTransferClient {
                 const response = await send(url, abort.signal)
                 const shouldFallback = response.status >= 500 && index < urls.length - 1
                 if (!shouldFallback) {
-                    return { url, response }
+                    return {
+                        url,
+                        status: response.status,
+                        ok: response.ok,
+                        headers: response.headers,
+                        body: response.body
+                    }
                 }
                 await response.cancel()
                 this.logger?.warn('transfer fallback to next host', {
@@ -760,21 +723,11 @@ export class WaMediaTransferClient {
         }
     }
 
-    private toResponse(url: string, response: InternalTransferResponse): StreamTransferResponse {
-        return {
-            url,
-            status: response.status,
-            ok: response.ok,
-            headers: response.headers,
-            body: response.body
-        }
-    }
-
     private headersToRecord(headers: Headers): Readonly<Record<string, string>> {
         const output: Record<string, string> = {}
-        for (const [key, value] of headers.entries()) {
+        headers.forEach((value, key) => {
             output[key] = value
-        }
+        })
         return output
     }
 

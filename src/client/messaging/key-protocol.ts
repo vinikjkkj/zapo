@@ -4,6 +4,7 @@ import type { WaSignalMessagePublishInput } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { writeRandomPadMax16 } from '@message/padding'
 import type { WaMessagePublishOptions, WaMessagePublishResult } from '@message/types'
+import type { Proto } from '@proto'
 import { proto } from '@proto'
 import { normalizeDeviceJid } from '@protocol/jid'
 import { bytesToHex } from '@util/bytes'
@@ -41,21 +42,6 @@ export function createAppStateSyncKeyProtocol(options: {
         throw new Error(`${context} requires registered identity`)
     }
 
-    const normalizeKeyIds = (keyIds: readonly Uint8Array[]): readonly Uint8Array[] => {
-        const deduped = new Map<string, Uint8Array>()
-        for (const keyId of keyIds) {
-            if (keyId.byteLength === 0) {
-                continue
-            }
-            const keyHex = bytesToHex(keyId)
-            if (deduped.has(keyHex)) {
-                continue
-            }
-            deduped.set(keyHex, keyId)
-        }
-        return [...deduped.values()]
-    }
-
     const publishProtocolMessageToDevice = async (
         deviceJid: string,
         protocolMessage: proto.Message.IProtocolMessage
@@ -77,7 +63,19 @@ export function createAppStateSyncKeyProtocol(options: {
     const requestKeys = async (keyIds: readonly Uint8Array[]): Promise<readonly string[]> => {
         requireCurrentIdentity('requestKeys')
 
-        const normalizedKeyIds = normalizeKeyIds(keyIds)
+        const normalizedKeyIds: Uint8Array[] = []
+        const seenKeyIds = new Set<string>()
+        for (const keyId of keyIds) {
+            if (keyId.byteLength === 0) {
+                continue
+            }
+            const keyHex = bytesToHex(keyId)
+            if (seenKeyIds.has(keyHex)) {
+                continue
+            }
+            seenKeyIds.add(keyHex)
+            normalizedKeyIds.push(keyId)
+        }
         if (normalizedKeyIds.length === 0) {
             return []
         }
@@ -131,29 +129,38 @@ export function createAppStateSyncKeyProtocol(options: {
         requireCurrentIdentity('sendKeyShare')
 
         const normalizedTo = normalizeDeviceJid(toDeviceJid)
-        const dedupedKeysById = new Map<string, WaAppStateSyncKey>()
+        const seenKeyIds = new Set<string>()
+        const keyShareEntries: Proto.Message.IAppStateSyncKey[] = []
+        let sharedKeyCount = 0
         for (const key of keys) {
-            dedupedKeysById.set(bytesToHex(key.keyId), key)
-        }
-
-        const dedupedKeys = [...dedupedKeysById.values()]
-        const dedupedMissingKeyIds = normalizeKeyIds(missingKeyIds).filter(
-            (keyId) => !dedupedKeysById.has(bytesToHex(keyId))
-        )
-
-        const keyShareEntries = [
-            ...dedupedKeys.map((key) => ({
+            const keyHex = bytesToHex(key.keyId)
+            if (seenKeyIds.has(keyHex)) {
+                continue
+            }
+            seenKeyIds.add(keyHex)
+            sharedKeyCount += 1
+            keyShareEntries.push({
                 keyId: { keyId: key.keyId },
                 keyData: {
                     keyData: key.keyData,
                     timestamp: key.timestamp,
                     ...(key.fingerprint ? { fingerprint: key.fingerprint } : {})
                 }
-            })),
-            ...dedupedMissingKeyIds.map((keyId) => ({
+            })
+        }
+        for (const keyId of missingKeyIds) {
+            if (keyId.byteLength === 0) {
+                continue
+            }
+            const keyHex = bytesToHex(keyId)
+            if (seenKeyIds.has(keyHex)) {
+                continue
+            }
+            seenKeyIds.add(keyHex)
+            keyShareEntries.push({
                 keyId: { keyId }
-            }))
-        ]
+            })
+        }
 
         const protocolMessage: proto.Message.IProtocolMessage = {
             type: proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_SHARE,
@@ -166,8 +173,8 @@ export function createAppStateSyncKeyProtocol(options: {
 
         logger.info('app-state sync key share sent', {
             to: normalizedTo,
-            keys: dedupedKeys.length,
-            orphanKeys: dedupedMissingKeyIds.length
+            keys: sharedKeyCount,
+            orphanKeys: keyShareEntries.length - sharedKeyCount
         })
     }
 

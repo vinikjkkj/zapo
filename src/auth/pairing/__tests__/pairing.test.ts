@@ -94,3 +94,45 @@ test('qr flow emits rotating QR values and can be refreshed', async (t) => {
         qrFlow.clear()
     })
 })
+
+test('qr flow keeps hasQr true while emitting last ref', async (t) => {
+    const credentials = {
+        noiseKeyPair: {
+            pubKey: new Uint8Array(32).fill(1),
+            privKey: new Uint8Array(32).fill(2)
+        },
+        registrationInfo: {
+            registrationId: 1,
+            identityKeyPair: {
+                pubKey: new Uint8Array(32).fill(3),
+                privKey: new Uint8Array(32).fill(4)
+            }
+        },
+        signedPreKey: {
+            keyId: 1,
+            keyPair: {
+                pubKey: new Uint8Array(32).fill(5),
+                privKey: new Uint8Array(32).fill(6)
+            },
+            signature: new Uint8Array(64).fill(7),
+            uploaded: false
+        },
+        advSecretKey: new Uint8Array(32).fill(8)
+    }
+    let qrFlow: WaQrFlow | null = null
+    const hasQrSnapshots: boolean[] = []
+    qrFlow = new WaQrFlow({
+        logger: createLogger(),
+        getCredentials: () => credentials,
+        getDevicePlatform: () => '1',
+        emitQr: () => {
+            hasQrSnapshots.push(qrFlow!.hasQr())
+        }
+    })
+    qrFlow.setRefs(['ref-last'])
+    assert.deepEqual(hasQrSnapshots, [true])
+
+    t.after(() => {
+        qrFlow?.clear()
+    })
+})

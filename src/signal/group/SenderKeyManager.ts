@@ -112,14 +112,16 @@ export class SenderKeyManager {
         }
         const senderKey = await this.ensureSenderKey(groupId, sender)
         const timestampMs = Date.now()
-        await this.store.upsertSenderKeyDistributions(
-            participants.map((participant) => ({
+        const distributions = new Array(participants.length)
+        for (let index = 0; index < participants.length; index += 1) {
+            distributions[index] = {
                 groupId,
-                sender: participant,
+                sender: participants[index],
                 keyId: senderKey.keyId,
                 timestampMs
-            }))
-        )
+            }
+        }
+        await this.store.upsertSenderKeyDistributions(distributions)
     }
 
     public async processSenderKeyDistributionPayload(
@@ -141,13 +143,15 @@ export class SenderKeyManager {
             signingPublicKey: parsed.signingPublicKey,
             unusedMessageKeys: []
         }
-        await this.store.upsertSenderKey(record)
-        await this.store.upsertSenderKeyDistribution({
-            groupId,
-            sender,
-            keyId: parsed.keyId,
-            timestampMs: Date.now()
-        })
+        await Promise.all([
+            this.store.upsertSenderKey(record),
+            this.store.upsertSenderKeyDistribution({
+                groupId,
+                sender,
+                keyId: parsed.keyId,
+                timestampMs: Date.now()
+            })
+        ])
         return record
     }
 
@@ -247,13 +251,17 @@ export class SenderKeyManager {
             return existing
         }
 
-        const signingKeyPair = await X25519.generateKeyPair()
+        const [signingKeyPair, keyId, chainKey] = await Promise.all([
+            X25519.generateKeyPair(),
+            randomIntAsync(1, 2_147_483_647),
+            randomBytesAsync(32)
+        ])
         const created: SenderKeyRecord = {
             groupId,
             sender,
-            keyId: await randomIntAsync(1, 2_147_483_647),
+            keyId,
             iteration: 0,
-            chainKey: await randomBytesAsync(32),
+            chainKey,
             signingPublicKey: toSerializedPubKey(signingKeyPair.pubKey),
             signingPrivateKey: signingKeyPair.privKey,
             unusedMessageKeys: []

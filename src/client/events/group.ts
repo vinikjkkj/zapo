@@ -32,32 +32,44 @@ function readNodeTextContent(node: BinaryNode | undefined): string | undefined {
 }
 
 export function parseParticipants(node: BinaryNode): readonly WaGroupEventParticipant[] {
-    return getNodeChildrenByTag(node, WA_NODE_TAGS.PARTICIPANT).map((participantNode) => ({
-        jid: participantNode.attrs.jid,
-        role: participantNode.attrs.type,
-        lidJid: participantNode.attrs.lid,
-        phoneJid: participantNode.attrs.phone_number,
-        displayName: participantNode.attrs.display_name,
-        username: participantNode.attrs.username,
-        expirationSeconds: parseOptionalInt(participantNode.attrs.expiration)
-    }))
+    const participants: WaGroupEventParticipant[] = []
+    for (const participantNode of getNodeChildrenByTag(node, WA_NODE_TAGS.PARTICIPANT)) {
+        participants.push({
+            jid: participantNode.attrs.jid,
+            role: participantNode.attrs.type,
+            lidJid: participantNode.attrs.lid,
+            phoneJid: participantNode.attrs.phone_number,
+            displayName: participantNode.attrs.display_name,
+            username: participantNode.attrs.username,
+            expirationSeconds: parseOptionalInt(participantNode.attrs.expiration)
+        })
+    }
+    return participants
 }
 
 function parseLinkedGroups(node: BinaryNode): readonly WaGroupEventLinkedGroup[] {
-    return getNodeChildrenByTag(node, WA_NODE_TAGS.GROUP).map((groupNode) => ({
-        jid: groupNode.attrs.jid,
-        subject: groupNode.attrs.subject,
-        subjectTimestampSeconds: parseOptionalInt(groupNode.attrs.s_t),
-        hiddenSubgroup: findNodeChild(groupNode, 'hidden_group') !== undefined
-    }))
+    const groups: WaGroupEventLinkedGroup[] = []
+    for (const groupNode of getNodeChildrenByTag(node, WA_NODE_TAGS.GROUP)) {
+        groups.push({
+            jid: groupNode.attrs.jid,
+            subject: groupNode.attrs.subject,
+            subjectTimestampSeconds: parseOptionalInt(groupNode.attrs.s_t),
+            hiddenSubgroup: findNodeChild(groupNode, 'hidden_group') !== undefined
+        })
+    }
+    return groups
 }
 
 function parseMembershipRequests(node: BinaryNode): readonly WaGroupEventMembershipRequest[] {
-    return getNodeChildrenByTag(node, 'requested_user').map((requestNode) => ({
-        jid: requestNode.attrs.jid,
-        username: requestNode.attrs.username,
-        phoneJid: requestNode.attrs.phone_number
-    }))
+    const requests: WaGroupEventMembershipRequest[] = []
+    for (const requestNode of getNodeChildrenByTag(node, 'requested_user')) {
+        requests.push({
+            jid: requestNode.attrs.jid,
+            username: requestNode.attrs.username,
+            phoneJid: requestNode.attrs.phone_number
+        })
+    }
+    return requests
 }
 
 function parseSubgroupSuggestion(node: BinaryNode): WaGroupEventSubgroupSuggestion | null {
@@ -87,9 +99,15 @@ function parseSubgroupSuggestion(node: BinaryNode): WaGroupEventSubgroupSuggesti
 }
 
 function parseSubgroupSuggestions(node: BinaryNode): readonly WaGroupEventSubgroupSuggestion[] {
-    return getNodeChildrenByTag(node, 'sub_group_suggestion')
-        .map(parseSubgroupSuggestion)
-        .filter((suggestion): suggestion is WaGroupEventSubgroupSuggestion => suggestion !== null)
+    const suggestions: WaGroupEventSubgroupSuggestion[] = []
+    for (const suggestionNode of getNodeChildrenByTag(node, 'sub_group_suggestion')) {
+        const suggestion = parseSubgroupSuggestion(suggestionNode)
+        if (!suggestion) {
+            continue
+        }
+        suggestions.push(suggestion)
+    }
+    return suggestions
 }
 
 function createBaseGroupEvent(

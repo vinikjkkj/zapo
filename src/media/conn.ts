@@ -1,4 +1,4 @@
-import type { WaMediaConn } from '@media/types'
+import type { WaMediaConn, WaMediaConnHost } from '@media/types'
 import { WA_NODE_TAGS } from '@protocol/constants'
 import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
@@ -22,12 +22,16 @@ export function parseMediaConnResponse(node: BinaryNode, nowMs: number): WaMedia
     }
 
     const expiresAtMs = ttlRaw >= 1_000_000_000 ? ttlRaw * 1000 : nowMs + ttlRaw * 1000
-    const hosts = getNodeChildrenByTag(mediaConnNode, WA_NODE_TAGS.HOST)
-        .map((host) => ({
-            hostname: host.attrs.hostname ?? '',
-            isFallback: host.attrs.type === 'fallback'
-        }))
-        .filter((host) => host.hostname.length > 0)
+    const hosts: WaMediaConnHost[] = []
+    for (const host of getNodeChildrenByTag(mediaConnNode, WA_NODE_TAGS.HOST)) {
+        const hostname = host.attrs.hostname
+        if (hostname) {
+            hosts.push({
+                hostname,
+                isFallback: host.attrs.type === 'fallback'
+            })
+        }
+    }
     if (hosts.length === 0) {
         throw new Error('media_conn response contains no hosts')
     }

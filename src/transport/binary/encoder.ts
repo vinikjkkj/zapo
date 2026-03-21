@@ -205,16 +205,24 @@ function writeListSize(size: number, writer: ByteWriter): void {
 }
 
 function writeNodeInternal(node: BinaryNode, writer: ByteWriter): void {
-    const attrs = Object.entries(node.attrs)
+    let attrsLen = 0
+    for (const key in node.attrs) {
+        if (Object.prototype.hasOwnProperty.call(node.attrs, key)) {
+            attrsLen += 1
+        }
+    }
     const hasContent = node.content !== null && node.content !== undefined
-    const listSize = 1 + attrs.length * 2 + (hasContent ? 1 : 0)
+    const listSize = 1 + attrsLen * 2 + (hasContent ? 1 : 0)
 
     writeListSize(listSize, writer)
     writeString(node.tag, writer)
 
-    for (const [key, value] of attrs) {
+    for (const key in node.attrs) {
+        if (!Object.prototype.hasOwnProperty.call(node.attrs, key)) {
+            continue
+        }
         writeString(key, writer)
-        writeString(value, writer)
+        writeString(node.attrs[key], writer)
     }
 
     if (!hasContent) {

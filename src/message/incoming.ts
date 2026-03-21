@@ -8,16 +8,13 @@ import { isBroadcastJid, isGroupJid, parseSignalAddressFromJid } from '@protocol
 import type { WaRetryDecryptFailureContext } from '@retry/types'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
+import type { SignalAddress } from '@signal/types'
 import {
     buildInboundDeliveryReceiptNode,
     buildInboundMessageAckNode,
     buildInboundRetryReceiptNode
 } from '@transport/node/builders/message'
-import {
-    decodeNodeContentBase64OrBytes,
-    findNodeChild,
-    getNodeChildrenByTag
-} from '@transport/node/helpers'
+import { decodeNodeContentBase64OrBytes, findNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt, toError } from '@util/primitives'
 
@@ -54,21 +51,27 @@ function buildIncomingEventRawNode(node: BinaryNode): BinaryNode {
         return node
     }
 
-    let redacted = false
-    const children = nodeContent.map((child) => {
-        if (child.tag !== WA_MESSAGE_TAGS.ENC) {
-            return child
-        }
-        if (typeof child.content === 'string' || child.content instanceof Uint8Array) {
-            redacted = true
-            return {
-                tag: child.tag,
-                attrs: child.attrs
+    let children: BinaryNode[] | null = null
+    for (let index = 0; index < nodeContent.length; index += 1) {
+        const child = nodeContent[index]
+        const shouldRedact =
+            child.tag === WA_MESSAGE_TAGS.ENC &&
+            (typeof child.content === 'string' || child.content instanceof Uint8Array)
+        if (!shouldRedact) {
+            if (children) {
+                children.push(child)
             }
+            continue
         }
-        return child
-    })
-    if (!redacted) {
+        if (!children) {
+            children = nodeContent.slice(0, index)
+        }
+        children.push({
+            tag: child.tag,
+            attrs: child.attrs
+        })
+    }
+    if (!children) {
         return node
     }
     // Strip heavy encrypted payload from event snapshots to reduce retention.
@@ -141,10 +144,8 @@ function shouldEmitIncomingMessage(message: proto.IMessage): boolean {
     if (!pickDirectSenderKeyDistributionPayload(message)) {
         return true
     }
-    for (const [field, value] of Object.entries(message as Record<string, unknown>)) {
-        if (value === null || value === undefined) {
-            continue
-        }
+    const messageRecord = message as Record<string, unknown>
+    for (const field in messageRecord) {
         if (
             field === 'senderKeyDistributionMessage' ||
             field === 'fastRatchetKeySenderKeyDistributionMessage' ||
@@ -152,47 +153,13 @@ function shouldEmitIncomingMessage(message: proto.IMessage): boolean {
         ) {
             continue
         }
+        const value = messageRecord[field]
+        if (value === null || value === undefined) {
+            continue
+        }
         return true
     }
     return false
-}
-
-async function maybeProcessSenderKeyDistributionMessage(
-    senderJid: string | undefined,
-    message: proto.IMessage,
-    options: WaIncomingMessageAckHandlerOptions,
-    node: BinaryNode
-): Promise<void> {
-    if (!senderJid || !options.senderKeyManager) {
-        return
-    }
-
-    const senderKeyDistribution = pickSenderKeyDistributionPayload(message)
-    if (!senderKeyDistribution) {
-        return
-    }
-
-    try {
-        await options.senderKeyManager.processSenderKeyDistributionPayload(
-            senderKeyDistribution.groupId,
-            parseSignalAddressFromJid(senderJid),
-            senderKeyDistribution.payload
-        )
-        options.logger.debug('processed incoming sender key distribution', {
-            id: node.attrs.id,
-            from: node.attrs.from,
-            participant: node.attrs.participant,
-            groupId: senderKeyDistribution.groupId
-        })
-    } catch (error) {
-        options.logger.warn('failed to process incoming sender key distribution', {
-            id: node.attrs.id,
-            from: node.attrs.from,
-            participant: node.attrs.participant,
-            groupId: senderKeyDistribution.groupId,
-            message: toError(error).message
-        })
-    }
 }
 
 async function sendRetryReceiptForDecryptFailure(
@@ -260,15 +227,40 @@ async function decryptAndProcessEncNode(
     encType: string,
     senderJid: string,
     options: WaIncomingMessageAckHandlerOptions,
-    decrypt: (ciphertext: Uint8Array) => Promise<Uint8Array>
+    decrypt: (ciphertext: Uint8Array, senderAddress: SignalAddress) => Promise<Uint8Array>
 ): Promise<DecryptEncNodeResult> {
     try {
+        const senderAddress = parseSignalAddressFromJid(senderJid)
         const decryptedPayload = await decrypt(
-            decodeNodeContentBase64OrBytes(encNode.content, 'message.enc')
+            decodeNodeContentBase64OrBytes(encNode.content, 'message.enc'),
+            senderAddress
         )
         const unpaddedPlaintext = unpadPkcs7(decryptedPayload)
         const message = normalizeIncomingDecryptedMessage(proto.Message.decode(unpaddedPlaintext))
-        await maybeProcessSenderKeyDistributionMessage(senderJid, message, options, node)
+        const senderKeyDistribution = pickSenderKeyDistributionPayload(message)
+        if (senderKeyDistribution && options.senderKeyManager) {
+            try {
+                await options.senderKeyManager.processSenderKeyDistributionPayload(
+                    senderKeyDistribution.groupId,
+                    senderAddress,
+                    senderKeyDistribution.payload
+                )
+                options.logger.debug('processed incoming sender key distribution', {
+                    id: node.attrs.id,
+                    from: node.attrs.from,
+                    participant: node.attrs.participant,
+                    groupId: senderKeyDistribution.groupId
+                })
+            } catch (error) {
+                options.logger.warn('failed to process incoming sender key distribution', {
+                    id: node.attrs.id,
+                    from: node.attrs.from,
+                    participant: node.attrs.participant,
+                    groupId: senderKeyDistribution.groupId,
+                    message: toError(error).message
+                })
+            }
+        }
         if (shouldEmitIncomingMessage(message)) {
             const chatJid = node.attrs.from
             options.emitIncomingMessage?.({
@@ -308,76 +300,84 @@ export async function handleIncomingMessageAck(
     }
 
     let shouldSendStandardReceipt = true
-    const encNodes = getNodeChildrenByTag(node, WA_MESSAGE_TAGS.ENC)
-    if (encNodes.length > 1 && encNodes[0]?.attrs.type === 'skmsg') {
-        options.logger.warn('incoming message enc order is unexpected: skmsg first', {
-            id: node.attrs.id,
-            from: node.attrs.from,
-            participant: node.attrs.participant,
-            encCount: encNodes.length
-        })
-    }
-    if (encNodes.length > 0) {
+    const nodeContent = node.content
+    if (Array.isArray(nodeContent) && nodeContent.length > 0) {
         const senderJid = node.attrs.participant ?? node.attrs.from
-        const chatJid = node.attrs.from
         let hasSuccessfulDecrypt = false
         let firstDecryptFailure: DecryptEncNodeResult | null = null
+        let encCount = 0
+        let firstEncType: string | undefined
 
-        for (const encNode of encNodes) {
-            const encType = encNode.attrs.type
-            if (!encType) {
+        for (const child of nodeContent) {
+            if (child.tag !== WA_MESSAGE_TAGS.ENC) {
                 continue
             }
-            if (encType === 'skmsg') {
-                if (!senderJid || !chatJid || !options.senderKeyManager) {
-                    options.emitUnhandledStanza?.({
-                        ...buildBaseIncomingEvent(node),
-                        reason: 'message.skmsg.missing_group_context'
-                    })
-                    continue
-                }
-                const result = await decryptAndProcessEncNode(
-                    node,
-                    encNode,
-                    encType,
-                    senderJid,
-                    options,
-                    (ciphertext) =>
-                        options.senderKeyManager!.decryptGroupMessage({
-                            groupId: chatJid,
-                            sender: parseSignalAddressFromJid(senderJid),
-                            ciphertext
+            encCount += 1
+            if (firstEncType === undefined) {
+                firstEncType = child.attrs.type
+            }
+            let result: DecryptEncNodeResult | null = null
+            switch (child.attrs.type) {
+                case 'skmsg': {
+                    if (!senderJid || !node.attrs.from || !options.senderKeyManager) {
+                        options.emitUnhandledStanza?.({
+                            ...buildBaseIncomingEvent(node),
+                            reason: 'message.skmsg.missing_group_context'
                         })
-                )
-                if (result.success) {
-                    hasSuccessfulDecrypt = true
-                } else if (!firstDecryptFailure) {
-                    firstDecryptFailure = result
+                        continue
+                    }
+                    const groupId = node.attrs.from
+                    result = await decryptAndProcessEncNode(
+                        node,
+                        child,
+                        'skmsg',
+                        senderJid,
+                        options,
+                        (ciphertext, senderAddress) =>
+                            options.senderKeyManager!.decryptGroupMessage({
+                                groupId,
+                                sender: senderAddress,
+                                ciphertext
+                            })
+                    )
+                    break
                 }
-                continue
-            }
-            if ((encType === 'msg' || encType === 'pkmsg') && senderJid && options.signalProtocol) {
-                const result = await decryptAndProcessEncNode(
-                    node,
-                    encNode,
-                    encType,
-                    senderJid,
-                    options,
-                    (ciphertext) =>
-                        options.signalProtocol!.decryptMessage(
-                            parseSignalAddressFromJid(senderJid),
-                            { type: encType, ciphertext }
-                        )
-                )
-                if (result.success) {
-                    hasSuccessfulDecrypt = true
-                } else if (!firstDecryptFailure) {
-                    firstDecryptFailure = result
+                case 'msg':
+                case 'pkmsg': {
+                    if (!senderJid || !options.signalProtocol) {
+                        continue
+                    }
+                    const encType: 'msg' | 'pkmsg' = child.attrs.type === 'msg' ? 'msg' : 'pkmsg'
+                    result = await decryptAndProcessEncNode(
+                        node,
+                        child,
+                        encType,
+                        senderJid,
+                        options,
+                        (ciphertext, senderAddress) =>
+                            options.signalProtocol!.decryptMessage(senderAddress, {
+                                type: encType,
+                                ciphertext
+                            })
+                    )
+                    break
                 }
+                default:
+                    continue
             }
+            if (result.success) hasSuccessfulDecrypt = true
+            else if (!firstDecryptFailure) firstDecryptFailure = result
         }
 
-        if (!hasSuccessfulDecrypt && firstDecryptFailure) {
+        if (encCount > 1 && firstEncType === 'skmsg') {
+            options.logger.warn('incoming message enc order is unexpected: skmsg first', {
+                id: node.attrs.id,
+                from: node.attrs.from,
+                participant: node.attrs.participant,
+                encCount
+            })
+        }
+        if (encCount > 0 && !hasSuccessfulDecrypt && firstDecryptFailure) {
             shouldSendStandardReceipt = !(await sendRetryReceiptForDecryptFailure(
                 node,
                 options,

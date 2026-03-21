@@ -1,6 +1,6 @@
 import { hkdf, randomBytesAsync } from '@crypto'
 import type { Proto } from '@proto'
-import { concatBytes, TEXT_ENCODER, toBytesView } from '@util/bytes'
+import { TEXT_ENCODER, toBytesView } from '@util/bytes'
 
 export const WA_MESSAGE_SECRET_BYTES = 32
 
@@ -60,11 +60,11 @@ export async function createUseCaseSecret(input: {
         throw new Error('modification sender must be a non-empty string')
     }
 
-    const secretInfo = concatBytes([
-        TEXT_ENCODER.encode(input.stanzaId),
-        TEXT_ENCODER.encode(input.parentMsgOriginalSender),
-        TEXT_ENCODER.encode(input.modificationSender),
-        TEXT_ENCODER.encode(input.modificationType)
-    ])
+    const secretInfo = TEXT_ENCODER.encode(
+        input.stanzaId +
+            input.parentMsgOriginalSender +
+            input.modificationSender +
+            input.modificationType
+    )
     return hkdf(assertMessageSecret(input.messageSecret), null, secretInfo, WA_MESSAGE_SECRET_BYTES)
 }

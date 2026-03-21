@@ -12,9 +12,7 @@ export function asNumber(value: unknown, field: string): number {
 }
 
 export function asOptionalNumber(value: unknown, field = 'optional number'): number | undefined {
-    if (value === null || value === undefined) {
-        return undefined
-    }
+    if (value === null || value === undefined) return undefined
     return asNumber(value, field)
 }
 
@@ -26,9 +24,7 @@ export function asString(value: unknown, field: string): string {
 }
 
 export function asOptionalString(value: unknown, field = 'optional string'): string | undefined {
-    if (value === null || value === undefined) {
-        return undefined
-    }
+    if (value === null || value === undefined) return undefined
     return asString(value, field)
 }
 
@@ -40,25 +36,16 @@ export function asBytes(value: unknown, field: string): Uint8Array {
 }
 
 export function asOptionalBytes(value: unknown, field = 'optional bytes'): Uint8Array | undefined {
-    if (value === null || value === undefined) {
-        return undefined
-    }
+    if (value === null || value === undefined) return undefined
     return asBytes(value, field)
 }
 
 export function toBoolOrUndef(value: unknown): boolean | undefined {
-    if (value === null || value === undefined) {
-        return undefined
-    }
-    return Boolean(value)
+    return value === null || value === undefined ? undefined : Boolean(value)
 }
 
 export function resolvePositive(value: number | undefined, fallback: number, name: string): number {
-    if (value === undefined) {
-        return fallback
-    }
-    if (Number.isSafeInteger(value) && value > 0) {
-        return value
-    }
+    if (value === undefined) return fallback
+    if (Number.isSafeInteger(value) && value > 0) return value
     throw new Error(`${name} must be a positive safe integer`)
 }

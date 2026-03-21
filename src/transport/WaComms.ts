@@ -199,9 +199,10 @@ export class WaComms {
     public startHandlingRequests(): void {
         this.handlingRequests = true
         this.logger.debug('comms request handling enabled')
-        this.frameProcessingQueue = this.frameProcessingQueue
-            .catch(() => undefined)
-            .then(async () => this.flushPendingFrames())
+        this.frameProcessingQueue = this.frameProcessingQueue.then(
+            () => this.flushPendingFrames(),
+            () => this.flushPendingFrames()
+        )
     }
 
     public async stopComms(): Promise<void> {
@@ -340,9 +341,10 @@ export class WaComms {
     }
 
     private onSocketMessage(payload: Uint8Array): void {
-        this.frameProcessingQueue = this.frameProcessingQueue
-            .catch(() => undefined)
-            .then(async () => this.processSocketPayload(payload))
+        this.frameProcessingQueue = this.frameProcessingQueue.then(
+            () => this.processSocketPayload(payload),
+            () => this.processSocketPayload(payload)
+        )
     }
 
     private async processSocketPayload(payload: Uint8Array): Promise<void> {
@@ -500,20 +502,22 @@ export class WaComms {
 
     private scheduleDecodedFrame(frame: Uint8Array): void {
         void this.frameHandlerQueue
-            .enqueue(async () => this.onDecodedFrame(frame))
+            .enqueue(() => this.onDecodedFrame(frame))
             .catch((error) => {
-                const normalized = toError(error)
-                this.logger.error('failed to enqueue decoded frame handler', {
-                    message: normalized.message
-                })
-                if (!(error instanceof BoundedTaskQueueFullError)) {
+                if (error instanceof BoundedTaskQueueFullError) {
+                    this.logger.warn(
+                        'frame handler queue is full, resuming socket to preserve bounds',
+                        {
+                            pending: this.frameHandlerQueue.pending(),
+                            inFlight: this.frameHandlerQueue.inFlight()
+                        }
+                    )
+                    void this.closeSocketAndResume()
                     return
                 }
-                this.logger.warn('frame handler queue is full, processing frame inline', {
-                    pending: this.frameHandlerQueue.pending(),
-                    inFlight: this.frameHandlerQueue.inFlight()
+                this.logger.error('failed to enqueue decoded frame handler', {
+                    message: toError(error).message
                 })
-                void this.onDecodedFrame(frame)
             })
     }
 
@@ -540,12 +544,16 @@ export class WaComms {
     }
 
     private removeWaiter(reject: ConnectionWaiter['reject']): void {
-        const index = this.waiters.findIndex((entry) => entry.reject === reject)
-        if (index === -1) {
+        for (let index = 0; index < this.waiters.length; index += 1) {
+            const waiter = this.waiters[index]
+            if (waiter.reject !== reject) {
+                continue
+            }
+            clearTimeout(waiter.timer)
+            this.waiters[index] = this.waiters[this.waiters.length - 1]
+            this.waiters.pop()
             return
         }
-        const [waiter] = this.waiters.splice(index, 1)
-        clearTimeout(waiter.timer)
     }
 
     private withStickyRoutingCookie(
@@ -615,10 +623,11 @@ export class WaComms {
     }
 
     private drainWaiters(drain: (waiter: ConnectionWaiter) => void): void {
-        const waiters = this.waiters.splice(0, this.waiters.length)
-        for (const waiter of waiters) {
+        for (let index = this.waiters.length - 1; index >= 0; index -= 1) {
+            const waiter = this.waiters[index]
             clearTimeout(waiter.timer)
             drain(waiter)
         }
+        this.waiters.length = 0
     }
 }

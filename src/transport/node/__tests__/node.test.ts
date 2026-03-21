@@ -7,9 +7,14 @@ import { encodeBinaryNodeStanza } from '@transport/binary'
 import {
     decodeNodeContentBase64OrBytes,
     decodeNodeContentUtf8OrBytes,
+    findNodeChildrenByTags,
     findNodeChild,
     getNodeChildren,
+    getNodeChildrenByTagFromChildren,
     getNodeChildrenByTag,
+    getNodeChildrenNonEmptyAttrValuesByTag,
+    getNodeChildrenNonEmptyUtf8ByTag,
+    getNodeChildrenTags,
     hasNodeChild
 } from '@transport/node/helpers'
 import { assertIqResult, buildIqNode, parseIqError, queryWithContext } from '@transport/node/query'
@@ -37,14 +42,31 @@ test('node helpers parse child collections and binary payloads', () => {
         attrs: {},
         content: [
             { tag: 'a', attrs: {}, content: 'hello' },
-            { tag: 'b', attrs: {}, content: new Uint8Array([1, 2]) }
+            { tag: 'b', attrs: {}, content: new Uint8Array([1, 2]) },
+            {
+                tag: 'parent',
+                attrs: {},
+                content: [{ tag: 'b', attrs: { name: 'child-value' }, content: 'child' }]
+            }
         ]
     }
 
-    assert.equal(getNodeChildren(node).length, 2)
+    assert.equal(getNodeChildren(node).length, 3)
     assert.equal(findNodeChild(node, 'a')?.tag, 'a')
     assert.equal(getNodeChildrenByTag(node, 'b').length, 1)
     assert.equal(hasNodeChild(node, 'x'), false)
+    assert.deepEqual(findNodeChildrenByTags(node, ['a', 'b', 'x'] as const), [
+        getNodeChildren(node)[0],
+        getNodeChildren(node)[1],
+        undefined
+    ])
+    assert.deepEqual(getNodeChildrenByTag(node, 'b'), [getNodeChildren(node)[1]])
+    assert.deepEqual(getNodeChildrenTags(node), ['a', 'b', 'parent'])
+    assert.deepEqual(getNodeChildrenNonEmptyUtf8ByTag(node, 'a', 'root.a'), ['hello'])
+    assert.deepEqual(getNodeChildrenNonEmptyUtf8ByTag(node, 'missing', 'root.missing'), [])
+    assert.deepEqual(getNodeChildrenNonEmptyAttrValuesByTag(node, 'b', 'name'), [])
+    assert.deepEqual(getNodeChildrenByTagFromChildren(node, 'b').length, 1)
+    assert.deepEqual(getNodeChildrenByTagFromChildren(node, 'b')[0].attrs.name, 'child-value')
 
     assert.deepEqual(
         decodeNodeContentUtf8OrBytes(findNodeChild(node, 'a')?.content, 'a.content'),

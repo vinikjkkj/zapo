@@ -38,23 +38,21 @@ export function createSignalSessionResolver(options: {
         expectedIdentity?: Uint8Array,
         reasonIdentity = false
     ): Promise<void> => {
+        const expectedSerializedIdentity = expectedIdentity
+            ? toSerializedPubKey(expectedIdentity)
+            : null
         if (reasonIdentity) {
             await signalIdentitySync.syncIdentityKeys([jid])
         }
-
         if (await signalProtocol.hasSession(address)) {
-            if (expectedIdentity) {
+            if (expectedSerializedIdentity) {
                 const storedIdentity = await signalStore.getRemoteIdentity(address)
-                if (
-                    !storedIdentity ||
-                    !uint8Equal(storedIdentity, toSerializedPubKey(expectedIdentity))
-                ) {
+                if (!storedIdentity || !uint8Equal(storedIdentity, expectedSerializedIdentity)) {
                     throw new Error('identity mismatch')
                 }
             }
             return
         }
-
         logger.info('signal session missing, fetching remote key bundle', { jid })
         const fetched = await signalSessionSync.fetchKeyBundle({
             jid,
@@ -67,10 +65,9 @@ export function createSignalSessionResolver(options: {
                 throw new Error('identity mismatch')
             }
         }
-        if (expectedIdentity && !uint8Equal(remoteIdentity, toSerializedPubKey(expectedIdentity))) {
+        if (expectedSerializedIdentity && !uint8Equal(remoteIdentity, expectedSerializedIdentity)) {
             throw new Error('identity mismatch')
         }
-
         await signalProtocol.establishOutgoingSession(address, fetched.bundle)
         logger.info('signal session synchronized', {
             jid,
@@ -81,89 +78,89 @@ export function createSignalSessionResolver(options: {
 
     const ensureSessionsBatch = async (
         targetJids: readonly string[],
-        expectedIdentityByJid: ReadonlyMap<string, Uint8Array> = new Map()
+        expectedIdentityByJid?: ReadonlyMap<string, Uint8Array>
     ): Promise<void> => {
-        const normalizedTargetJids = [...new Set(targetJids.map((jid) => normalizeDeviceJid(jid)))]
+        const seenTargetJids = new Set<string>()
+        const normalizedTargetJids: string[] = []
+        const normalizedTargetAddresses: SignalAddress[] = []
+        for (let index = 0; index < targetJids.length; index += 1) {
+            const jid = normalizeDeviceJid(targetJids[index])
+            if (seenTargetJids.has(jid)) {
+                continue
+            }
+            seenTargetJids.add(jid)
+            normalizedTargetJids.push(jid)
+            normalizedTargetAddresses.push(parseSignalAddressFromJid(jid))
+        }
         if (normalizedTargetJids.length === 0) {
             return
         }
-
-        const normalizedExpectedIdentityByJid = new Map<string, Uint8Array>()
-        for (const [jid, identity] of expectedIdentityByJid.entries()) {
-            try {
-                normalizedExpectedIdentityByJid.set(normalizeDeviceJid(jid), identity)
-            } catch (error) {
-                logger.trace(
-                    'ignoring malformed expected identity jid during batch normalization',
-                    {
-                        jid,
-                        message: toError(error).message
-                    }
-                )
+        const normalizedExpectedIdentityByJid =
+            expectedIdentityByJid && expectedIdentityByJid.size > 0
+                ? new Map<string, Uint8Array>()
+                : undefined
+        if (normalizedExpectedIdentityByJid && expectedIdentityByJid) {
+            for (const [jid, identity] of expectedIdentityByJid.entries()) {
+                try {
+                    normalizedExpectedIdentityByJid.set(normalizeDeviceJid(jid), identity)
+                } catch (error) {
+                    logger.trace(
+                        'ignoring malformed expected identity jid during batch normalization',
+                        { jid, message: toError(error).message }
+                    )
+                }
             }
         }
-
-        const normalizedTargets = normalizedTargetJids.map((jid) => ({
-            jid,
-            address: parseSignalAddressFromJid(jid)
-        }))
-        const hasSessions = await signalProtocol.hasSessions(
-            normalizedTargets.map((target) => target.address)
-        )
-
-        if (normalizedExpectedIdentityByJid.size > 0) {
-            const existingSessionIdentityChecks: Promise<void>[] = []
-            for (let index = 0; index < normalizedTargets.length; index += 1) {
+        const hasSessions = await signalProtocol.hasSessions(normalizedTargetAddresses)
+        if (normalizedExpectedIdentityByJid) {
+            for (let index = 0; index < normalizedTargetJids.length; index += 1) {
                 if (!hasSessions[index]) {
                     continue
                 }
-                const target = normalizedTargets[index]
-                const expectedIdentity = normalizedExpectedIdentityByJid.get(target.jid)
+                const expectedIdentity = normalizedExpectedIdentityByJid.get(
+                    normalizedTargetJids[index]
+                )
                 if (!expectedIdentity) {
                     continue
                 }
-
-                existingSessionIdentityChecks.push(
-                    signalStore.getRemoteIdentity(target.address).then((storedIdentity) => {
-                        if (
-                            !storedIdentity ||
-                            !uint8Equal(storedIdentity, toSerializedPubKey(expectedIdentity))
-                        ) {
-                            throw new Error('identity mismatch')
-                        }
-                    })
+                const storedIdentity = await signalStore.getRemoteIdentity(
+                    normalizedTargetAddresses[index]
                 )
+                if (
+                    !storedIdentity ||
+                    !uint8Equal(storedIdentity, toSerializedPubKey(expectedIdentity))
+                ) {
+                    throw new Error('identity mismatch')
+                }
             }
-            await Promise.all(existingSessionIdentityChecks)
         }
-
-        const missingTargets = normalizedTargets.filter((_, index) => !hasSessions[index])
-        if (missingTargets.length === 0) {
+        const missingIndices: number[] = []
+        for (let index = 0; index < normalizedTargetJids.length; index += 1) {
+            if (!hasSessions[index]) {
+                missingIndices.push(index)
+            }
+        }
+        if (missingIndices.length === 0) {
             return
         }
-
         try {
-            const batchResults = await signalSessionSync.fetchKeyBundles(
-                missingTargets.map((target) => ({ jid: target.jid }))
-            )
-            const resultByJid = new Map(
-                batchResults.map((result) => [normalizeDeviceJid(result.jid), result] as const)
-            )
-            const fallbackJids = new Set<string>()
-            const establishTasks: {
-                readonly jid: string
-                readonly promise: Promise<void>
-            }[] = []
-
-            for (let index = 0; index < missingTargets.length; index += 1) {
-                const target = missingTargets[index]
-                const result = resultByJid.get(target.jid)
+            const batchRequest: { readonly jid: string }[] = []
+            for (let index = 0; index < missingIndices.length; index += 1) {
+                batchRequest.push({ jid: normalizedTargetJids[missingIndices[index]] })
+            }
+            const batchResults = await signalSessionSync.fetchKeyBundles(batchRequest)
+            const fallbackIndices: number[] = []
+            const establishedIndices: number[] = []
+            const establishPromises: Promise<void>[] = []
+            for (let index = 0; index < missingIndices.length; index += 1) {
+                const targetIndex = missingIndices[index]
+                const result = batchResults[index]
                 if (!result || !('bundle' in result)) {
-                    fallbackJids.add(target.jid)
+                    fallbackIndices.push(targetIndex)
                     continue
                 }
-
-                const expectedIdentity = normalizedExpectedIdentityByJid.get(target.jid)
+                const targetJid = normalizedTargetJids[targetIndex]
+                const expectedIdentity = normalizedExpectedIdentityByJid?.get(targetJid)
                 const remoteIdentity = toSerializedPubKey(result.bundle.identity)
                 if (
                     expectedIdentity &&
@@ -171,24 +168,23 @@ export function createSignalSessionResolver(options: {
                 ) {
                     throw new Error('identity mismatch')
                 }
-
-                establishTasks.push({
-                    jid: target.jid,
-                    promise: signalProtocol
-                        .establishOutgoingSession(target.address, result.bundle)
+                establishedIndices.push(targetIndex)
+                establishPromises.push(
+                    signalProtocol
+                        .establishOutgoingSession(
+                            normalizedTargetAddresses[targetIndex],
+                            result.bundle
+                        )
                         .then(() => {
                             logger.debug('signal session synchronized from batch key fetch', {
-                                jid: target.jid,
+                                jid: targetJid,
                                 regId: result.bundle.regId,
                                 hasOneTimeKey: result.bundle.oneTimeKey !== undefined
                             })
                         })
-                })
+                )
             }
-
-            const establishmentResults = await Promise.allSettled(
-                establishTasks.map((task) => task.promise)
-            )
+            const establishmentResults = await Promise.allSettled(establishPromises)
             for (let index = 0; index < establishmentResults.length; index += 1) {
                 const result = establishmentResults[index]
                 if (result.status === 'fulfilled') {
@@ -198,47 +194,47 @@ export function createSignalSessionResolver(options: {
                 if (error.message === 'identity mismatch') {
                     throw error
                 }
-                fallbackJids.add(establishTasks[index].jid)
+                fallbackIndices.push(establishedIndices[index])
             }
-
-            if (fallbackJids.size === 0) {
+            if (fallbackIndices.length === 0) {
                 return
             }
-
             logger.warn(
                 'signal batch key fetch returned partial errors, falling back to single requests',
                 {
-                    requested: missingTargets.length,
-                    fallbackTargets: fallbackJids.size
+                    requested: missingIndices.length,
+                    fallbackTargets: fallbackIndices.length
                 }
             )
-
-            for (const jid of fallbackJids) {
-                const address = parseSignalAddressFromJid(jid)
-                await ensureSession(address, jid, normalizedExpectedIdentityByJid.get(jid))
+            for (let index = 0; index < fallbackIndices.length; index += 1) {
+                const targetIndex = fallbackIndices[index]
+                const jid = normalizedTargetJids[targetIndex]
+                await ensureSession(
+                    normalizedTargetAddresses[targetIndex],
+                    jid,
+                    normalizedExpectedIdentityByJid?.get(jid)
+                )
             }
         } catch (error) {
             const normalized = toError(error)
             if (normalized.message === 'identity mismatch') {
                 throw normalized
             }
-
             logger.warn('signal batch key fetch failed, falling back to single requests', {
-                requested: missingTargets.length,
+                requested: missingIndices.length,
                 message: normalized.message
             })
-
-            for (let index = 0; index < missingTargets.length; index += 1) {
-                const target = missingTargets[index]
+            for (let index = 0; index < missingIndices.length; index += 1) {
+                const targetIndex = missingIndices[index]
+                const jid = normalizedTargetJids[targetIndex]
                 await ensureSession(
-                    target.address,
-                    target.jid,
-                    normalizedExpectedIdentityByJid.get(target.jid)
+                    normalizedTargetAddresses[targetIndex],
+                    jid,
+                    normalizedExpectedIdentityByJid?.get(jid)
                 )
             }
         }
     }
-
     return {
         ensureSession,
         ensureSessionsBatch

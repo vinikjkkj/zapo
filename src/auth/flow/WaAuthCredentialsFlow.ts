@@ -164,9 +164,11 @@ async function restoreSignalStore(
     signalStore: WaSignalStore,
     credentials: WaAuthCredentials
 ): Promise<void> {
-    await signalStore.setRegistrationInfo(credentials.registrationInfo)
-    await signalStore.setSignedPreKey(credentials.signedPreKey)
-    await signalStore.setServerHasPreKeys(credentials.serverHasPreKeys === true)
+    await Promise.all([
+        signalStore.setRegistrationInfo(credentials.registrationInfo),
+        signalStore.setSignedPreKey(credentials.signedPreKey),
+        signalStore.setServerHasPreKeys(credentials.serverHasPreKeys === true)
+    ])
 }
 
 function isRegistered(credentials: WaAuthCredentials): boolean {

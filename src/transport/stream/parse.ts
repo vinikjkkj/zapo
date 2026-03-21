@@ -16,9 +16,7 @@ export type WaStreamControlNodeResult =
 
 export function parseStreamControlNode(node: BinaryNode): WaStreamControlNodeResult | null {
     if (node.tag === WA_STREAM_SIGNALING.XML_STREAM_END_TAG) {
-        return {
-            kind: 'xmlstreamend'
-        }
+        return { kind: 'xmlstreamend' }
     }
     if (node.tag !== WA_STREAM_SIGNALING.STREAM_ERROR_TAG) {
         return null
@@ -26,44 +24,26 @@ export function parseStreamControlNode(node: BinaryNode): WaStreamControlNodeRes
 
     const conflictNode = findNodeChild(node, WA_STREAM_SIGNALING.CONFLICT_TAG)
     if (conflictNode) {
-        if (conflictNode.attrs.type === WA_STREAM_SIGNALING.REPLACED_TYPE) {
-            return {
-                kind: 'stream_error_replaced'
-            }
-        }
-        return {
-            kind: 'stream_error_device_removed'
-        }
+        return conflictNode.attrs.type === WA_STREAM_SIGNALING.REPLACED_TYPE
+            ? { kind: 'stream_error_replaced' }
+            : { kind: 'stream_error_device_removed' }
     }
 
-    const codeRaw = node.attrs.code
-    if (codeRaw) {
-        const code = parseStrictUnsignedInt(codeRaw)
-        if (code !== undefined) {
-            return {
-                kind: 'stream_error_code',
-                code
-            }
-        }
+    const code = node.attrs.code ? parseStrictUnsignedInt(node.attrs.code) : undefined
+    if (code !== undefined) {
+        return { kind: 'stream_error_code', code }
     }
 
     const ackNode = findNodeChild(node, WA_STREAM_SIGNALING.ACK_TAG)
     if (ackNode) {
-        return {
-            kind: 'stream_error_ack',
-            id: ackNode.attrs.id
-        }
+        return { kind: 'stream_error_ack', id: ackNode.attrs.id }
     }
 
     if (hasNodeChild(node, WA_STREAM_SIGNALING.XML_NOT_WELL_FORMED_TAG)) {
-        return {
-            kind: 'stream_error_xml_not_well_formed'
-        }
+        return { kind: 'stream_error_xml_not_well_formed' }
     }
 
-    return {
-        kind: 'stream_error_other'
-    }
+    return { kind: 'stream_error_other' }
 }
 
 export function parseCompanionEncStatic(

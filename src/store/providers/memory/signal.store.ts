@@ -1,3 +1,4 @@
+import { signalAddressKey } from '@protocol/jid'
 import type {
     PreKeyRecord,
     RegistrationInfo,
@@ -8,7 +9,6 @@ import type {
 import type { WaSignalStore as WaSignalStoreContract } from '@store/contracts/signal.store'
 import { resolvePositive } from '@util/coercion'
 import { setBoundedMapEntry } from '@util/collections'
-import { signalAddressKey } from '@util/signal-address'
 
 const DEFAULT_SIGNAL_STORE_LIMITS = Object.freeze({
     preKeys: 4_096,

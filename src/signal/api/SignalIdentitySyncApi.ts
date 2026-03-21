@@ -43,9 +43,31 @@ export class SignalIdentitySyncApi {
         targetJids: readonly string[],
         timeoutMs = this.defaultTimeoutMs
     ): Promise<readonly SignalIdentitySyncEntry[]> {
-        const normalizedTargets = [...new Set(targetJids.map((jid) => normalizeDeviceJid(jid)))]
+        const normalizedTargets: string[] = []
+        const dedup = new Set<string>()
+        for (let index = 0; index < targetJids.length; index += 1) {
+            const normalized = normalizeDeviceJid(targetJids[index])
+            if (dedup.has(normalized)) {
+                continue
+            }
+            dedup.add(normalized)
+            normalizedTargets.push(normalized)
+        }
         if (normalizedTargets.length === 0) {
             return []
+        }
+
+        const users = new Array<{
+            readonly tag: string
+            readonly attrs: Readonly<Record<string, string>>
+        }>(normalizedTargets.length)
+        for (let index = 0; index < normalizedTargets.length; index += 1) {
+            users[index] = {
+                tag: WA_NODE_TAGS.USER,
+                attrs: {
+                    jid: normalizedTargets[index]
+                }
+            }
         }
 
         this.logger.debug('signal identity sync request', {
@@ -64,10 +86,7 @@ export class SignalIdentitySyncApi {
                     {
                         tag: WA_NODE_TAGS.IDENTITY,
                         attrs: {},
-                        content: normalizedTargets.map((jid) => ({
-                            tag: WA_NODE_TAGS.USER,
-                            attrs: { jid }
-                        }))
+                        content: users
                     }
                 ]
             },
@@ -77,12 +96,18 @@ export class SignalIdentitySyncApi {
         const entries = this.parseIdentitySyncResponse(response, normalizedTargets)
         const { signalStore } = this
         if (signalStore && entries.length > 0) {
-            await signalStore.setRemoteIdentities(
-                entries.map((entry) => ({
+            const identities = new Array<{
+                readonly address: ReturnType<typeof parseSignalAddressFromJid>
+                readonly identityKey: Uint8Array
+            }>(entries.length)
+            for (let index = 0; index < entries.length; index += 1) {
+                const entry = entries[index]
+                identities[index] = {
                     address: parseSignalAddressFromJid(entry.jid),
                     identityKey: toSerializedPubKey(entry.identity)
-                }))
-            )
+                }
+            }
+            await signalStore.setRemoteIdentities(identities)
         }
         this.logger.debug('signal identity sync success', {
             requested: normalizedTargets.length,
@@ -104,10 +129,12 @@ export class SignalIdentitySyncApi {
 
         const requested = new Set(requestedJids)
         const userNodes = getNodeChildrenByTag(listNode, WA_NODE_TAGS.USER)
-        return userNodes.flatMap((userNode): readonly SignalIdentitySyncEntry[] => {
+        const parsed: SignalIdentitySyncEntry[] = []
+        for (let index = 0; index < userNodes.length; index += 1) {
+            const userNode = userNodes[index]
             const jid = userNode.attrs.jid ? normalizeDeviceJid(userNode.attrs.jid) : ''
             if (!jid || !requested.has(jid)) {
-                return []
+                continue
             }
             const errorNode = findNodeChild(userNode, WA_NODE_TAGS.ERROR)
             if (errorNode) {
@@ -116,7 +143,7 @@ export class SignalIdentitySyncApi {
                     code: errorNode.attrs.code,
                     text: errorNode.attrs.text
                 })
-                return []
+                continue
             }
 
             const identityNode = findNodeChild(userNode, WA_NODE_TAGS.IDENTITY)
@@ -141,13 +168,19 @@ export class SignalIdentitySyncApi {
                   )
                 : undefined
 
-            return [
-                {
+            if (parsedType === undefined) {
+                parsed.push({
                     jid,
-                    identity,
-                    ...(parsedType !== undefined ? { type: parsedType } : {})
-                }
-            ]
-        })
+                    identity
+                })
+                continue
+            }
+            parsed.push({
+                jid,
+                identity,
+                type: parsedType
+            })
+        }
+        return parsed
     }
 }

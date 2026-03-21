@@ -1,27 +1,13 @@
 import { randomBytes, randomInt } from 'node:crypto'
+import { promisify } from 'node:util'
 
 import { toBytesView } from '@util/bytes'
 
-/**
- * Generates cryptographically secure random bytes
- */
-export function randomBytesAsync(size: number): Promise<Uint8Array> {
-    return new Promise<Uint8Array>((resolve, reject) => {
-        randomBytes(size, (error, buffer) => {
-            if (error) reject(error)
-            else resolve(toBytesView(buffer))
-        })
-    })
+const randomBytesAsyncImpl = promisify(randomBytes) as (size: number) => Promise<Uint8Array>
+const randomIntAsyncImpl = promisify(randomInt) as (min: number, max: number) => Promise<number>
+
+export async function randomBytesAsync(size: number): Promise<Uint8Array> {
+    return toBytesView(await randomBytesAsyncImpl(size))
 }
 
-/**
- * Generates a cryptographically secure random integer in the range [min, max)
- */
-export function randomIntAsync(min: number, max: number): Promise<number> {
-    return new Promise<number>((resolve, reject) => {
-        randomInt(min, max, (error, value) => {
-            if (error) reject(error)
-            else resolve(value)
-        })
-    })
-}
+export const randomIntAsync = randomIntAsyncImpl

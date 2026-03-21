@@ -18,7 +18,7 @@ import {
     buildGroupsDirtySyncIq,
     buildNewsletterMetadataSyncIq
 } from '@transport/node/builders/account-sync'
-import { getNodeChildren } from '@transport/node/helpers'
+import { getNodeChildrenTags } from '@transport/node/helpers'
 import { assertIqResult, parseIqError } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
@@ -55,21 +55,11 @@ function parseDirtyBitNode(node: BinaryNode, logger: Logger): WaDirtyBit | null 
         })
         return null
     }
-    const protocols = getNodeChildren(node).map((child) => child.tag)
+    const protocols = getNodeChildrenTags(node)
     return {
         type,
         timestamp,
         protocols
-    }
-}
-
-function splitDirtyBitsBySupport(dirtyBits: readonly WaDirtyBit[]): {
-    readonly supported: WaDirtyBit[]
-    readonly unsupported: WaDirtyBit[]
-} {
-    return {
-        supported: dirtyBits.filter((dirtyBit) => SUPPORTED_DIRTY_TYPES.has(dirtyBit.type)),
-        unsupported: dirtyBits.filter((dirtyBit) => !SUPPORTED_DIRTY_TYPES.has(dirtyBit.type))
     }
 }
 
@@ -85,9 +75,15 @@ export function parseDirtyBits(
     nodes: readonly BinaryNode[],
     logger: Logger
 ): readonly WaDirtyBit[] {
-    return nodes
-        .map((node) => parseDirtyBitNode(node, logger))
-        .filter((dirtyBit): dirtyBit is WaDirtyBit => dirtyBit !== null)
+    const parsed: WaDirtyBit[] = []
+    for (const node of nodes) {
+        const dirtyBit = parseDirtyBitNode(node, logger)
+        if (!dirtyBit) {
+            continue
+        }
+        parsed.push(dirtyBit)
+    }
+    return parsed
 }
 
 export async function handleDirtyBits(
@@ -100,29 +96,38 @@ export async function handleDirtyBits(
         return
     }
 
-    const { supported, unsupported } = splitDirtyBitsBySupport(dirtyBits)
+    const supported: WaDirtyBit[] = []
+    const unsupported: WaDirtyBit[] = []
+    for (const dirtyBit of dirtyBits) {
+        if (SUPPORTED_DIRTY_TYPES.has(dirtyBit.type)) {
+            supported.push(dirtyBit)
+            continue
+        }
+        unsupported.push(dirtyBit)
+    }
 
     runtime.logger.info('handling dirty bits from info bulletin', {
         supported: supported.map((entry) => entry.type).join(','),
         unsupported: unsupported.map((entry) => entry.type).join(',')
     })
 
-    const handledSupported = (
-        await Promise.allSettled(
-            supported.map(async (dirtyBit) => handleDirtyBit(runtime, dirtyBit))
-        )
-    ).flatMap((result, index) => {
+    const clearableDirtyBits = [...unsupported]
+    const settledSupported = await Promise.allSettled(
+        supported.map(async (dirtyBit) => handleDirtyBit(runtime, dirtyBit))
+    )
+    for (let index = 0; index < settledSupported.length; index += 1) {
+        const result = settledSupported[index]
         if (result.status === 'fulfilled') {
-            return [supported[index]]
+            clearableDirtyBits.push(supported[index])
+            continue
         }
         runtime.logger.warn('failed handling dirty bit', {
             type: supported[index].type,
             message: toError(result.reason).message
         })
-        return []
-    })
+    }
 
-    await clearDirtyBits(runtime, unsupported.concat(handledSupported))
+    await clearDirtyBits(runtime, clearableDirtyBits)
 }
 
 async function handleDirtyBit(runtime: WaDirtySyncRuntime, dirtyBit: WaDirtyBit): Promise<void> {

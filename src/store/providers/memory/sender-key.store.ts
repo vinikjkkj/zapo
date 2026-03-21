@@ -1,8 +1,8 @@
+import { signalAddressKey } from '@protocol/jid'
 import type { SenderKeyDistributionRecord, SenderKeyRecord, SignalAddress } from '@signal/types'
 import type { WaSenderKeyStore as WaSenderKeyStoreContract } from '@store/contracts/sender-key.store'
 import { resolvePositive } from '@util/coercion'
 import { setBoundedMapEntry } from '@util/collections'
-import { signalAddressKey } from '@util/signal-address'
 
 const DEFAULT_SENDER_KEY_STORE_LIMITS = Object.freeze({
     senderKeys: 8_192,

@@ -18,9 +18,11 @@ const CONSOLE_WRITERS: Readonly<Record<LogLevel, (...args: unknown[]) => void>> 
 
 export class ConsoleLogger implements Logger {
     public readonly level: LogLevel
+    private readonly minLevelPriority: number
 
     public constructor(level: LogLevel = 'info') {
         this.level = level
+        this.minLevelPriority = LOG_LEVEL_PRIORITY[level]
     }
 
     public trace(message: string, context?: Record<string, unknown>): void {
@@ -43,12 +45,8 @@ export class ConsoleLogger implements Logger {
         this.write('error', message, context)
     }
 
-    private canLog(level: LogLevel): boolean {
-        return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[this.level]
-    }
-
     private write(level: LogLevel, message: string, context?: Record<string, unknown>): void {
-        if (!this.canLog(level)) {
+        if (LOG_LEVEL_PRIORITY[level] < this.minLevelPriority) {
             return
         }
         CONSOLE_WRITERS[level](message, context)

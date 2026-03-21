@@ -37,6 +37,17 @@ export class BoundedTaskQueue {
         this.running = 0
     }
 
+    private readonly settleTask = (): void => {
+        this.running--
+        if (this.head >= 1024 && this.head * 2 >= this.queue.length) {
+            const remaining = this.queue.length - this.head
+            this.queue.copyWithin(0, this.head)
+            this.queue.length = remaining
+            this.head = 0
+        }
+        this.drain()
+    }
+
     public enqueue<T>(task: Task<T>): Promise<T> {
         if (this.pending() >= this.maxQueueSize) {
             return Promise.reject(new BoundedTaskQueueFullError())
@@ -45,7 +56,7 @@ export class BoundedTaskQueue {
         return new Promise<T>((resolve, reject) => {
             this.queue.push({
                 task: task as Task<unknown>,
-                resolve: (value) => resolve(value as T),
+                resolve: resolve as (value: unknown) => void,
                 reject
             })
             this.drain()
@@ -64,24 +75,7 @@ export class BoundedTaskQueue {
         while (this.running < this.maxConcurrency && this.head < this.queue.length) {
             const item = this.queue[this.head++]
             this.running++
-
-            item.task()
-                .then(item.resolve)
-                .catch(item.reject)
-                .finally(() => {
-                    this.running--
-                    this.compactIfNeeded()
-                    this.drain()
-                })
+            void item.task().then(item.resolve, item.reject).finally(this.settleTask)
         }
-    }
-
-    private compactIfNeeded(): void {
-        if (this.head < 1024 || this.head * 2 < this.queue.length) {
-            return
-        }
-
-        this.queue.splice(0, this.head)
-        this.head = 0
     }
 }

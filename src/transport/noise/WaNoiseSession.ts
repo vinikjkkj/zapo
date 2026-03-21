@@ -67,15 +67,16 @@ export class WaNoiseSession {
     private readonly logger: Logger
     private readonly writeQueue: BoundedTaskQueue
     private readonly readQueue: BoundedTaskQueue
-    private frameCodec: WaFrameCodec | null
-    private handshakeInbox: Uint8Array[]
-    private handshakeWaiter: ((frame: Uint8Array) => void) | null
-    private handshakeRejecter: ((error: Error) => void) | null
-    private pendingDecryptedFrames: Uint8Array[]
-    private closedError: Error | null
-    private noiseSocket: WaNoiseSocket | null
-    private serverStaticKey: Uint8Array | null
-    private readonly handshakeFrameTimeoutMs: number
+    private frameCodec: WaFrameCodec | null = null
+    private handshakeInbox: Uint8Array[] = []
+    private handshakeInboxHead = 0
+    private handshakeWaiter: ((frame: Uint8Array) => void) | null = null
+    private handshakeRejecter: ((error: Error) => void) | null = null
+    private pendingDecryptedFrames: Uint8Array[] = []
+    private closedError: Error | null = null
+    private noiseSocket: WaNoiseSocket | null = null
+    private serverStaticKey: Uint8Array | null = null
+    private readonly handshakeFrameTimeoutMs = WA_DEFAULTS.CONNECT_TIMEOUT_MS
 
     public constructor(
         sendWire: (payload: Uint8Array) => Promise<void>,
@@ -85,15 +86,6 @@ export class WaNoiseSession {
         this.logger = logger
         this.writeQueue = new BoundedTaskQueue(4096, 1)
         this.readQueue = new BoundedTaskQueue(4096, 1)
-        this.frameCodec = null
-        this.handshakeInbox = []
-        this.handshakeWaiter = null
-        this.handshakeRejecter = null
-        this.pendingDecryptedFrames = []
-        this.closedError = null
-        this.noiseSocket = null
-        this.serverStaticKey = null
-        this.handshakeFrameTimeoutMs = WA_DEFAULTS.CONNECT_TIMEOUT_MS
     }
 
     public async start(config: WaNoiseConfig): Promise<void> {
@@ -202,7 +194,7 @@ export class WaNoiseSession {
     public reset(): void {
         this.logger.trace('noise session reset')
         this.frameCodec = null
-        this.handshakeInbox = []
+        this.handshakeInbox.length = this.handshakeInboxHead = 0
         this.handshakeWaiter = null
         this.handshakeRejecter = null
         this.pendingDecryptedFrames = []
@@ -426,8 +418,14 @@ export class WaNoiseSession {
         if (this.closedError) {
             throw this.closedError
         }
-        const queued = this.handshakeInbox.shift()
+        const queued =
+            this.handshakeInboxHead < this.handshakeInbox.length
+                ? this.handshakeInbox[this.handshakeInboxHead++]
+                : undefined
         if (queued) {
+            if (this.handshakeInboxHead === this.handshakeInbox.length) {
+                this.handshakeInbox.length = this.handshakeInboxHead = 0
+            }
             this.logger.trace('noise handshake frame consumed from queue')
             return queued
         }
@@ -463,16 +461,17 @@ export class WaNoiseSession {
     }
 
     private async decodeBufferedPostHandshakeFrames(): Promise<void> {
-        if (!this.noiseSocket || this.handshakeInbox.length === 0) {
+        if (!this.noiseSocket || this.handshakeInboxHead >= this.handshakeInbox.length) {
             return
         }
         this.logger.debug('decoding buffered post-handshake frames', {
-            count: this.handshakeInbox.length
+            count: this.handshakeInbox.length - this.handshakeInboxHead
         })
-        const buffered = this.handshakeInbox.splice(0, this.handshakeInbox.length)
-        for (const frame of buffered) {
+        for (let index = this.handshakeInboxHead; index < this.handshakeInbox.length; index += 1) {
+            const frame = this.handshakeInbox[index]
             const decrypted = await this.readQueue.enqueue(() => this.noiseSocket!.decrypt(frame))
             this.pendingDecryptedFrames.push(decrypted)
         }
+        this.handshakeInbox.length = this.handshakeInboxHead = 0
     }
 }

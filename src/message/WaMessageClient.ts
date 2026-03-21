@@ -17,6 +17,8 @@ import type { BinaryNode } from '@transport/types'
 import { delay } from '@util/async'
 import { parseOptionalInt, toError } from '@util/primitives'
 
+const WA_RETRYABLE_PUBLISH_ERROR_RE = /timeout|socket|connection|closed/i
+
 interface WaMessageClientOptions {
     readonly logger: Logger
     readonly sendNode: (node: BinaryNode) => Promise<void>
@@ -234,13 +236,7 @@ export class WaMessageClient {
     }
 
     private isRetryablePublishError(error: Error): boolean {
-        const message = error.message.toLowerCase()
-        return (
-            message.includes('timeout') ||
-            message.includes('socket') ||
-            message.includes('connection') ||
-            message.includes('closed')
-        )
+        return WA_RETRYABLE_PUBLISH_ERROR_RE.test(error.message)
     }
 
     private extractAckMetadata(ackNode: BinaryNode): WaMessageAckMetadata {

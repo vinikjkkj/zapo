@@ -1,3 +1,4 @@
+import { signalAddressKey } from '@protocol/jid'
 import {
     decodeSignalPreKeyRow,
     decodeSignalRegistrationRow,
@@ -31,7 +32,6 @@ import {
     toBoolOrUndef,
     resolvePositive
 } from '@util/coercion'
-import { signalAddressKey } from '@util/signal-address'
 
 interface SignalSessionExistsRow extends Record<string, unknown> {
     readonly user: unknown
@@ -43,6 +43,17 @@ const DEFAULTS = Object.freeze({
     preKeyBatchSize: 500,
     hasSessionBatchSize: 250
 } as const)
+
+function repeatSqlToken(token: string, count: number, separator: string): string {
+    if (count <= 1) {
+        return token
+    }
+    let out = token
+    for (let index = 1; index < count; index += 1) {
+        out += separator + token
+    }
+    return out
+}
 
 interface WaSignalSqliteStoreOptions {
     readonly preKeyBatchSize?: number
@@ -245,7 +256,7 @@ export class WaSignalSqliteStore extends BaseSqliteStore implements WaSignalStor
         for (let start = 0; start < uniqueKeyIds.length; start += this.preKeyBatchSize) {
             const end = Math.min(start + this.preKeyBatchSize, uniqueKeyIds.length)
             const batchLength = end - start
-            const placeholders = new Array(batchLength).fill('?').join(', ')
+            const placeholders = repeatSqlToken('?', batchLength, ', ')
             const params: unknown[] = [this.options.sessionId]
             for (let index = start; index < end; index += 1) {
                 params.push(uniqueKeyIds[index])
@@ -346,9 +357,11 @@ export class WaSignalSqliteStore extends BaseSqliteStore implements WaSignalStor
         for (let start = 0; start < targets.length; start += this.hasSessionBatchSize) {
             const end = Math.min(start + this.hasSessionBatchSize, targets.length)
             const batchLength = end - start
-            const filters = new Array(batchLength)
-                .fill('(user = ? AND server = ? AND device = ?)')
-                .join(' OR ')
+            const filters = repeatSqlToken(
+                '(user = ? AND server = ? AND device = ?)',
+                batchLength,
+                ' OR '
+            )
             const params: unknown[] = [this.options.sessionId]
             for (let index = start; index < end; index += 1) {
                 const target = targets[index]
@@ -370,7 +383,7 @@ export class WaSignalSqliteStore extends BaseSqliteStore implements WaSignalStor
                 )
             }
         }
-        return addresses.map((address) => existingKeys.has(signalAddressKey(address)))
+        return targets.map((target) => existingKeys.has(signalAddressKey(target)))
     }
 
     public async getSession(address: SignalAddress): Promise<SignalSessionRecord | null> {

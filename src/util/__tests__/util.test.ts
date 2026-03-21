@@ -39,7 +39,6 @@ import {
 } from '@util/collections'
 import { toError, longToNumber, toSafeNumber } from '@util/primitives'
 import { getRuntimeOsDisplayName } from '@util/runtime'
-import { signalAddressKey } from '@util/signal-address'
 
 test('bytes hex/base64 round-trip and validation', () => {
     const raw = new Uint8Array([0, 1, 2, 253, 254, 255])
@@ -157,7 +156,9 @@ test('base64 wrappers enforce required field semantics', () => {
 test('primitives helpers normalize errors and long/safe numbers', () => {
     assert.equal(toError('oops').message, 'oops')
     assert.equal(toError(new Error('x')).message, 'x')
-    assert.equal(toError(1).message, 'unknown error')
+    assert.equal(toError(1).message, '1')
+    assert.equal(toError({ message: 'from object' }).message, 'from object')
+    assert.equal(toError({ code: 'EFAIL' }).message, 'unknown error (EFAIL)')
 
     assert.equal(toSafeNumber(12, 'field'), 12)
     assert.equal(toSafeNumber({ toNumber: () => 33 }, 'field'), 33)
@@ -168,15 +169,10 @@ test('primitives helpers normalize errors and long/safe numbers', () => {
     assert.throws(() => longToNumber(Number.MAX_SAFE_INTEGER + 1), /invalid long numeric value/)
 })
 
-test('runtime and signal-address helpers return deterministic outputs', async (t) => {
+test('runtime return deterministic outputs', async (t) => {
     const os = getRuntimeOsDisplayName()
     assert.equal(typeof os, 'string')
     assert.ok(os.length > 0)
-
-    assert.equal(
-        signalAddressKey({ user: '123', server: 's.whatsapp.net', device: 0 }),
-        '123|s.whatsapp.net|0'
-    )
 
     t.mock.timers.enable({ apis: ['setTimeout'] })
     let resolved = false

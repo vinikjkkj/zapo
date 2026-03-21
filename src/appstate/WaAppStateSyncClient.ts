@@ -284,8 +284,25 @@ export class WaAppStateSyncClient {
         readonly missingKeyIds: readonly Uint8Array[]
         readonly blockedCollections: readonly AppStateCollectionName[]
     }> {
-        const prepared = await this.prepareSyncRoundRequest(collections, pendingByCollection)
-        const iqNode = this.buildSyncIqNode(prepared.collectionNodes)
+        const requests = await Promise.all(
+            collections.map((collection) =>
+                this.buildCollectionSyncRequest(collection, pendingByCollection)
+            )
+        )
+        const collectionNodes: BinaryNode[] = new Array(requests.length)
+        const outgoingContexts = new Map<AppStateCollectionName, OutgoingPatchContext>()
+        const skippedUploadCollections = new Set<AppStateCollectionName>()
+        for (let index = 0; index < requests.length; index += 1) {
+            const request = requests[index]
+            collectionNodes[index] = request.node
+            if (request.outgoingContext) {
+                outgoingContexts.set(request.collection, request.outgoingContext)
+            }
+            if (request.skippedUpload) {
+                skippedUploadCollections.add(request.collection)
+            }
+        }
+        const iqNode = this.buildSyncIqNode(collectionNodes)
         const payloadByCollection = await this.fetchSyncPayloadByCollection(
             iqNode,
             options.timeoutMs ?? this.defaultTimeoutMs
@@ -297,55 +314,42 @@ export class WaAppStateSyncClient {
                     payloadByCollection,
                     pendingByCollection,
                     options,
-                    outgoingContexts: prepared.outgoingContexts,
-                    skippedUploadCollections: prepared.skippedUploadCollections
+                    outgoingContexts,
+                    skippedUploadCollections
                 })
             )
         )
-        return {
-            results: collectionOutcomes.map((entry) => entry.result),
-            collectionsToRefetch: collectionOutcomes
-                .filter((entry) => entry.shouldRefetch)
-                .map((entry) => entry.collection),
-            stateChanged: collectionOutcomes.some((entry) => entry.stateChanged),
-            missingKeyIds: this.collectDistinctMissingKeyIds(
-                collectionOutcomes
-                    .map((entry) => entry.missingKeyId)
-                    .filter((value): value is Uint8Array => value !== null)
-            ),
-            blockedCollections: collectionOutcomes
-                .filter((entry) => entry.result.state === WA_APP_STATE_COLLECTION_STATES.BLOCKED)
-                .map((entry) => entry.collection)
-        }
-    }
-
-    private async prepareSyncRoundRequest(
-        collections: readonly AppStateCollectionName[],
-        pendingByCollection: ReadonlyMap<AppStateCollectionName, readonly WaAppStateMutationInput[]>
-    ): Promise<{
-        readonly collectionNodes: readonly BinaryNode[]
-        readonly outgoingContexts: ReadonlyMap<AppStateCollectionName, OutgoingPatchContext>
-        readonly skippedUploadCollections: ReadonlySet<AppStateCollectionName>
-    }> {
-        const requests = await Promise.all(
-            collections.map((collection) =>
-                this.buildCollectionSyncRequest(collection, pendingByCollection)
-            )
-        )
-        const outgoingContexts = new Map<AppStateCollectionName, OutgoingPatchContext>()
-        const skippedUploadCollections = new Set<AppStateCollectionName>()
-        for (const request of requests) {
-            if (request.outgoingContext) {
-                outgoingContexts.set(request.collection, request.outgoingContext)
+        const results: WaAppStateCollectionSyncResult[] = []
+        const collectionsToRefetch: AppStateCollectionName[] = []
+        const blockedCollections: AppStateCollectionName[] = []
+        const missingKeyIds: Uint8Array[] = []
+        const missingKeyIdHexes = new Set<string>()
+        let stateChanged = false
+        for (const entry of collectionOutcomes) {
+            results.push(entry.result)
+            if (entry.shouldRefetch) {
+                collectionsToRefetch.push(entry.collection)
             }
-            if (request.skippedUpload) {
-                skippedUploadCollections.add(request.collection)
+            if (entry.stateChanged) {
+                stateChanged = true
+            }
+            if (entry.result.state === WA_APP_STATE_COLLECTION_STATES.BLOCKED) {
+                blockedCollections.push(entry.collection)
+            }
+            if (entry.missingKeyId) {
+                const keyHex = bytesToHex(entry.missingKeyId)
+                if (!missingKeyIdHexes.has(keyHex)) {
+                    missingKeyIdHexes.add(keyHex)
+                    missingKeyIds.push(entry.missingKeyId)
+                }
             }
         }
         return {
-            collectionNodes: requests.map((request) => request.node),
-            outgoingContexts,
-            skippedUploadCollections
+            results,
+            collectionsToRefetch,
+            stateChanged,
+            missingKeyIds,
+            blockedCollections
         }
     }
 
@@ -650,25 +654,13 @@ export class WaAppStateSyncClient {
         }
     }
 
-    private collectDistinctMissingKeyIds(keyIds: readonly Uint8Array[]): readonly Uint8Array[] {
-        const byHex = new Map<string, Uint8Array>()
-        for (const keyId of keyIds) {
-            const keyHex = bytesToHex(keyId)
-            if (byHex.has(keyHex)) {
-                continue
-            }
-            byHex.set(keyHex, keyId)
-        }
-        return [...byHex.values()]
-    }
-
     private async notifyMissingKeys(input: {
         readonly onMissingKeys: (event: WaAppStateMissingKeysEvent) => Promise<void>
         readonly keyIds: readonly Uint8Array[]
         readonly collections: readonly AppStateCollectionName[]
     }): Promise<void> {
-        const keyIds = this.collectDistinctMissingKeyIds(input.keyIds)
-        const collections = [...new Set(input.collections)]
+        const keyIds = input.keyIds
+        const collections = input.collections
         if (keyIds.length === 0 || collections.length === 0) {
             return
         }
@@ -880,14 +872,21 @@ export class WaAppStateSyncClient {
         }
 
         const decryptedMutations = await this.decryptPatchMutations(collection, patch)
-        const nextState = await this.computeNextCollectionState(
-            current.hash,
-            current.indexValueMap,
-            decryptedMutations.map((mutation) => ({
+        const macMutations: MacMutation[] = new Array(decryptedMutations.length)
+        const valueMacs: Uint8Array[] = new Array(decryptedMutations.length)
+        for (let index = 0; index < decryptedMutations.length; index += 1) {
+            const mutation = decryptedMutations[index]
+            valueMacs[index] = mutation.valueMac
+            macMutations[index] = {
                 operation: mutation.operationCode,
                 indexMac: mutation.indexMac,
                 valueMac: mutation.valueMac
-            })),
+            }
+        }
+        const nextState = await this.computeNextCollectionState(
+            current.hash,
+            current.indexValueMap,
+            macMutations,
             collection
         )
         await this.assertPatchMacsMatch(
@@ -896,13 +895,10 @@ export class WaAppStateSyncClient {
             patchKeyData,
             patchVersion,
             nextState.hash,
-            decryptedMutations
+            valueMacs
         )
         this.setCollectionState(collection, patchVersion, nextState.hash, nextState.indexValueMap)
-        return decryptedMutations.map(({ operationCode, ...mutation }) => {
-            void operationCode
-            return mutation
-        })
+        return decryptedMutations.slice()
     }
 
     private async decryptSnapshotRecords(
@@ -1021,7 +1017,7 @@ export class WaAppStateSyncClient {
         patchKeyData: Uint8Array,
         patchVersion: number,
         nextHash: Uint8Array,
-        decryptedMutations: readonly DecryptedPatchMutation[]
+        valueMacs: readonly Uint8Array[]
     ): Promise<void> {
         const snapshotMac = decodeProtoBytes(patch.snapshotMac, `patch.snapshotMac (${collection})`)
         const expectedSnapshotMac = await this.crypto.generateSnapshotMac(
@@ -1038,7 +1034,7 @@ export class WaAppStateSyncClient {
         const expectedPatchMac = await this.crypto.generatePatchMac(
             patchKeyData,
             snapshotMac,
-            decryptedMutations.map((mutation) => mutation.valueMac),
+            valueMacs,
             patchVersion,
             collection
         )

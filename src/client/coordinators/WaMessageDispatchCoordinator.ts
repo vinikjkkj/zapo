@@ -33,6 +33,7 @@ import {
     splitJid,
     toUserJid
 } from '@protocol/jid'
+import { signalAddressKey } from '@protocol/jid'
 import type { OutboundRetryTracker } from '@retry/tracker'
 import type { WaRetryReplayPayload } from '@retry/types'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
@@ -48,7 +49,6 @@ import {
 import type { BinaryNode } from '@transport/types'
 import { bytesToHex, concatBytes, TEXT_ENCODER } from '@util/bytes'
 import { toError } from '@util/primitives'
-import { signalAddressKey } from '@util/signal-address'
 
 interface WaMessageDispatchCoordinatorOptions {
     readonly logger: Logger
@@ -331,7 +331,6 @@ export class WaMessageDispatchCoordinator {
         const participants = await Promise.all(
             fanoutDeviceJids.map(async (targetJid) => {
                 const address = parseSignalAddressFromJid(targetJid)
-                await this.sessionResolver.ensureSession(address, targetJid)
                 const encrypted = await this.signalProtocol.encryptMessage(address, plaintext)
                 return {
                     jid: targetJid,
@@ -615,14 +614,24 @@ export class WaMessageDispatchCoordinator {
                 distributionParticipants: []
             }
         }
-        const fanoutTargets = fanoutDeviceJids.map((jid) => ({
-            jid,
-            address: parseSignalAddressFromJid(jid)
-        }))
+        const fanoutTargetsByAddressKey = new Map<
+            string,
+            {
+                readonly jid: string
+                readonly address: SignalAddress
+            }
+        >()
+        const fanoutAddresses: SignalAddress[] = new Array(fanoutDeviceJids.length)
+        for (let index = 0; index < fanoutDeviceJids.length; index += 1) {
+            const jid = fanoutDeviceJids[index]
+            const address = parseSignalAddressFromJid(jid)
+            fanoutAddresses[index] = address
+            fanoutTargetsByAddressKey.set(signalAddressKey(address), { jid, address })
+        }
         const pendingAddresses = await this.senderKeyManager.filterParticipantsNeedingDistribution(
             groupJid,
             sender,
-            fanoutTargets.map((target) => target.address)
+            fanoutAddresses
         )
         if (pendingAddresses.length === 0) {
             return {
@@ -630,20 +639,35 @@ export class WaMessageDispatchCoordinator {
                 distributionParticipants: []
             }
         }
-        const pendingAddressKeys = new Set(pendingAddresses.map(signalAddressKey))
-        const pendingTargets = fanoutTargets.filter((target) =>
-            pendingAddressKeys.has(signalAddressKey(target.address))
-        )
+        const pendingAddressKeys = new Set<string>()
+        const pendingTargets: {
+            readonly jid: string
+            readonly address: SignalAddress
+        }[] = []
+        for (let index = 0; index < pendingAddresses.length; index += 1) {
+            const key = signalAddressKey(pendingAddresses[index])
+            if (pendingAddressKeys.has(key)) {
+                continue
+            }
+            pendingAddressKeys.add(key)
+            const target = fanoutTargetsByAddressKey.get(key)
+            if (target) {
+                pendingTargets.push(target)
+            }
+        }
         if (pendingTargets.length === 0) {
             return {
                 fanoutDeviceJids,
                 distributionParticipants: []
             }
         }
-        await this.sessionResolver.ensureSessionsBatch(pendingTargets.map((target) => target.jid))
+        const pendingTargetJids = new Array<string>(pendingTargets.length)
+        for (let index = 0; index < pendingTargets.length; index += 1) {
+            pendingTargetJids[index] = pendingTargets[index].jid
+        }
+        await this.sessionResolver.ensureSessionsBatch(pendingTargetJids)
         const distributionParticipants = await Promise.all(
             pendingTargets.map(async (target) => {
-                await this.sessionResolver.ensureSession(target.address, target.jid)
                 const encrypted = await this.signalProtocol.encryptMessage(
                     target.address,
                     distributionPayload
@@ -681,6 +705,11 @@ export class WaMessageDispatchCoordinator {
             recipientJid,
             selfDeviceJidForRecipient
         )
+        const targets = deviceJids.map((jid) => ({
+            jid,
+            normalizedJid: normalizeDeviceJid(jid),
+            userJid: toUserJid(jid)
+        }))
         const recipientUserJid = toUserJid(recipientJid)
         const meUserJid = toUserJid(selfDeviceJidForRecipient)
 
@@ -691,21 +720,16 @@ export class WaMessageDispatchCoordinator {
         })
         const expectedIdentityByJid = new Map<string, Uint8Array>()
         if (sendOptions.expectedIdentity) {
-            for (let index = 0; index < deviceJids.length; index += 1) {
-                const targetJid = deviceJids[index]
-                if (toUserJid(targetJid) === recipientUserJid) {
-                    expectedIdentityByJid.set(
-                        normalizeDeviceJid(targetJid),
-                        sendOptions.expectedIdentity
-                    )
+            for (let index = 0; index < targets.length; index += 1) {
+                const target = targets[index]
+                if (target.userJid === recipientUserJid) {
+                    expectedIdentityByJid.set(target.normalizedJid, sendOptions.expectedIdentity)
                 }
             }
         }
         await this.sessionResolver.ensureSessionsBatch(deviceJids, expectedIdentityByJid)
 
-        const hasSelfDeviceFanout = deviceJids.some(
-            (targetJid) => toUserJid(targetJid) === meUserJid
-        )
+        const hasSelfDeviceFanout = targets.some((target) => target.userJid === meUserJid)
         const selfDevicePlaintext = hasSelfDeviceFanout
             ? await writeRandomPadMax16(
                   proto.Message.encode(wrapDeviceSentMessage(message, recipientUserJid)).finish()
@@ -717,23 +741,21 @@ export class WaMessageDispatchCoordinator {
             readonly encType: 'msg' | 'pkmsg'
             readonly ciphertext: Uint8Array
         }[] = await Promise.all(
-            deviceJids.map(async (targetJid) => {
-                const address = parseSignalAddressFromJid(targetJid)
-                const targetUserJid = toUserJid(targetJid)
+            targets.map(async (target) => {
+                const address = parseSignalAddressFromJid(target.jid)
                 const expectedIdentity =
-                    targetUserJid === recipientUserJid ? sendOptions.expectedIdentity : undefined
+                    target.userJid === recipientUserJid ? sendOptions.expectedIdentity : undefined
                 const plaintextForTarget =
-                    selfDevicePlaintext && targetUserJid === meUserJid
+                    selfDevicePlaintext && target.userJid === meUserJid
                         ? selfDevicePlaintext
                         : plaintext
-                await this.sessionResolver.ensureSession(address, targetJid, expectedIdentity)
                 const encrypted = await this.signalProtocol.encryptMessage(
                     address,
                     plaintextForTarget,
                     expectedIdentity
                 )
                 return {
-                    jid: targetJid,
+                    jid: target.jid,
                     encType: encrypted.type,
                     ciphertext: encrypted.ciphertext
                 }
