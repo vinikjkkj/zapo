@@ -19,6 +19,7 @@ export async function createAndStoreInitialKeys(store: WaSignalStore): Promise<R
     ])
     const signedPreKey = await generateSignedPreKey(1, registrationInfo.identityKeyPair.privKey)
 
+    // Keep writes ordered so partial commit failures don't leave split registration bootstrap state.
     await store.setRegistrationInfo(registrationInfo)
     await store.setSignedPreKey(signedPreKey)
     await store.getOrGenSinglePreKey(async () => firstPreKey)

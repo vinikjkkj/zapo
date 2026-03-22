@@ -249,16 +249,17 @@ export class WaConnectionManager {
 
         await this.authClient.clearTransientState()
 
-        if (pendingComms) {
-            await this.stopCommsQuietly(
-                pendingComms,
-                'failed to stop pending comms during disconnect'
-            )
-        }
-
-        if (currentComms) {
-            await this.stopCommsQuietly(currentComms, 'failed to stop comms during disconnect')
-        }
+        await Promise.all([
+            pendingComms && pendingComms !== currentComms
+                ? this.stopCommsQuietly(
+                      pendingComms,
+                      'failed to stop pending comms during disconnect'
+                  )
+                : Promise.resolve(),
+            currentComms
+                ? this.stopCommsQuietly(currentComms, 'failed to stop comms during disconnect')
+                : Promise.resolve()
+        ])
 
         if (this.isLifecycleCurrent(lifecycleGeneration)) {
             this.logger.info('wa client disconnected')

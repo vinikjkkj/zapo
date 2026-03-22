@@ -107,9 +107,11 @@ export async function processHistorySyncNotification(
         }
     }
 
-    await deps.contactStore.upsertBatch(contacts)
-    await deps.threadStore.upsertBatch(threads)
-    await deps.messageStore.upsertBatch(messages)
+    await Promise.all([
+        deps.contactStore.upsertBatch(contacts),
+        deps.threadStore.upsertBatch(threads),
+        deps.messageStore.upsertBatch(messages)
+    ])
 
     const event: WaHistorySyncChunkEvent = {
         syncType,

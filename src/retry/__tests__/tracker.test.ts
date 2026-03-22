@@ -18,6 +18,7 @@ function createLogger(): Logger {
 
 test('outbound retry tracker skips duplicate final upsert when hinted id matches publish result', async () => {
     const upserts: { readonly messageId: string; readonly toJid: string }[] = []
+    const deletes: string[] = []
 
     const retryStore = {
         getTtlMs: () => 60_000,
@@ -29,6 +30,10 @@ test('outbound retry tracker skips duplicate final upsert when hinted id matches
                 messageId: record.messageId,
                 toJid: record.toJid
             })
+        },
+        deleteOutboundMessage: async (messageId: string) => {
+            deletes.push(messageId)
+            return 1
         },
         cleanupExpired: async () => 0
     } as unknown as WaRetryStore
@@ -66,10 +71,12 @@ test('outbound retry tracker skips duplicate final upsert when hinted id matches
     assert.equal(result.id, 'hinted-id')
     assert.equal(upserts.length, 1)
     assert.equal(upserts[0].messageId, 'hinted-id')
+    assert.equal(deletes.length, 0)
 })
 
 test('outbound retry tracker persists publish result when id hint is not provided', async () => {
     const upserts: { readonly messageId: string; readonly toJid: string }[] = []
+    const deletes: string[] = []
 
     const retryStore = {
         getTtlMs: () => 60_000,
@@ -81,6 +88,10 @@ test('outbound retry tracker persists publish result when id hint is not provide
                 messageId: record.messageId,
                 toJid: record.toJid
             })
+        },
+        deleteOutboundMessage: async (messageId: string) => {
+            deletes.push(messageId)
+            return 1
         },
         cleanupExpired: async () => 0
     } as unknown as WaRetryStore
@@ -117,4 +128,55 @@ test('outbound retry tracker persists publish result when id hint is not provide
     assert.equal(upserts.length, 1)
     assert.equal(upserts[0].messageId, 'published-id')
     assert.equal(upserts[0].toJid, '551100000000@s.whatsapp.net')
+    assert.equal(deletes.length, 0)
+})
+
+test('outbound retry tracker deletes hinted record when publish returns different id', async () => {
+    const upserts: string[] = []
+    const deletes: string[] = []
+
+    const retryStore = {
+        getTtlMs: () => 60_000,
+        upsertOutboundMessage: async (record: { readonly messageId: string }) => {
+            upserts.push(record.messageId)
+        },
+        deleteOutboundMessage: async (messageId: string) => {
+            deletes.push(messageId)
+            return 1
+        },
+        cleanupExpired: async () => 0
+    } as unknown as WaRetryStore
+
+    const tracker = createOutboundRetryTracker({
+        retryStore,
+        logger: createLogger()
+    })
+
+    await tracker.track(
+        {
+            messageIdHint: 'hinted-id',
+            toJid: '551100000000@s.whatsapp.net',
+            type: 'text',
+            replayPayload: {
+                mode: 'plaintext',
+                to: '551100000000@s.whatsapp.net',
+                type: 'text',
+                plaintext: new Uint8Array([7])
+            }
+        },
+        async () => ({
+            id: 'server-id',
+            attempts: 1,
+            ackNode: {
+                tag: 'ack',
+                attrs: {}
+            },
+            ack: {
+                refreshLid: false
+            }
+        })
+    )
+
+    assert.deepEqual(upserts, ['hinted-id', 'server-id'])
+    assert.deepEqual(deletes, ['hinted-id'])
 })

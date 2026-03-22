@@ -6,6 +6,13 @@ import type {
     SignedPreKeyRecord
 } from '@signal/types'
 
+export interface WaSignalMetaSnapshot {
+    readonly serverHasPreKeys: boolean
+    readonly signedPreKeyRotationTs: number | null
+    readonly registrationInfo: RegistrationInfo | null
+    readonly signedPreKey: SignedPreKeyRecord | null
+}
+
 export interface WaSignalStore {
     getRegistrationInfo(): Promise<RegistrationInfo | null>
     setRegistrationInfo(info: RegistrationInfo): Promise<void>
@@ -28,6 +35,7 @@ export interface WaSignalStore {
     markKeyAsUploaded(keyId: number): Promise<void>
     setServerHasPreKeys(value: boolean): Promise<void>
     getServerHasPreKeys(): Promise<boolean>
+    getSignalMeta(): Promise<WaSignalMetaSnapshot>
     hasSession(address: SignalAddress): Promise<boolean>
     hasSessions(addresses: readonly SignalAddress[]): Promise<readonly boolean[]>
     getSession(address: SignalAddress): Promise<SignalSessionRecord | null>

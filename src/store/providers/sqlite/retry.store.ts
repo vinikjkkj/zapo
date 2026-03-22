@@ -77,6 +77,17 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
         )
     }
 
+    public async deleteOutboundMessage(messageId: string): Promise<number> {
+        const db = await this.getConnection()
+        db.run(
+            `DELETE FROM retry_outbound_messages
+             WHERE session_id = ? AND message_id = ?`,
+            [this.options.sessionId, messageId]
+        )
+        const row = db.get<Record<string, unknown>>('SELECT changes() AS total', [])
+        return row ? Number(row.total) : 0
+    }
+
     public async getOutboundMessage(
         messageId: string
     ): Promise<WaRetryOutboundMessageRecord | null> {
@@ -147,7 +158,7 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
         expiresAtMs: number
     ): Promise<number> {
         const db = await this.getConnection()
-        db.run(
+        const row = db.get<Record<string, unknown>>(
             `INSERT INTO retry_inbound_counters (
                 session_id,
                 message_id,
@@ -159,15 +170,9 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
             ON CONFLICT(session_id, message_id, requester_jid) DO UPDATE SET
                 retry_count=retry_inbound_counters.retry_count + 1,
                 updated_at_ms=excluded.updated_at_ms,
-                expires_at_ms=excluded.expires_at_ms`,
+                expires_at_ms=excluded.expires_at_ms
+            RETURNING retry_count`,
             [this.options.sessionId, messageId, requesterJid, updatedAtMs, expiresAtMs]
-        )
-
-        const row = db.get<Record<string, unknown>>(
-            `SELECT retry_count
-             FROM retry_inbound_counters
-             WHERE session_id = ? AND message_id = ? AND requester_jid = ?`,
-            [this.options.sessionId, messageId, requesterJid]
         )
         if (!row) {
             return 1

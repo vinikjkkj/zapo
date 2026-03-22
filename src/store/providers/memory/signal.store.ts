@@ -6,7 +6,10 @@ import type {
     SignalSessionRecord,
     SignedPreKeyRecord
 } from '@signal/types'
-import type { WaSignalStore as WaSignalStoreContract } from '@store/contracts/signal.store'
+import type {
+    WaSignalMetaSnapshot,
+    WaSignalStore as WaSignalStoreContract
+} from '@store/contracts/signal.store'
 import { resolvePositive } from '@util/coercion'
 import { setBoundedMapEntry } from '@util/collections'
 
@@ -182,6 +185,15 @@ export class WaSignalMemoryStore implements WaSignalStoreContract {
 
     public async getServerHasPreKeys(): Promise<boolean> {
         return this.serverHasPreKeys
+    }
+
+    public async getSignalMeta(): Promise<WaSignalMetaSnapshot> {
+        return {
+            serverHasPreKeys: this.serverHasPreKeys,
+            signedPreKeyRotationTs: this.signedPreKeyRotationTs,
+            registrationInfo: this.registrationInfo,
+            signedPreKey: this.signedPreKey
+        }
     }
 
     public async hasSession(address: SignalAddress): Promise<boolean> {

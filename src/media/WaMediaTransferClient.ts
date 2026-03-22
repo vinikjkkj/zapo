@@ -309,11 +309,10 @@ export class WaMediaTransferClient {
         })
         const decrypted = await this.downloadAndDecryptStream(request)
         try {
-            const plaintext = await this.readAllBytesWithLimit(
-                decrypted.plaintext,
-                request.maxBytes
-            )
-            await decrypted.metadata
+            const [plaintext] = await Promise.all([
+                this.readAllBytesWithLimit(decrypted.plaintext, request.maxBytes),
+                decrypted.metadata
+            ])
             this.logger?.info('media encrypted download completed', {
                 byteLength: plaintext.byteLength
             })

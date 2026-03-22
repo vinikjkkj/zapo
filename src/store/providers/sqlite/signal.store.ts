@@ -21,12 +21,16 @@ import type {
     SignalSessionRecord,
     SignedPreKeyRecord
 } from '@signal/types'
-import type { WaSignalStore as WaSignalStoreContract } from '@store/contracts/signal.store'
+import type {
+    WaSignalMetaSnapshot,
+    WaSignalStore as WaSignalStoreContract
+} from '@store/contracts/signal.store'
 import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
 import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
 import type { WaSqliteStorageOptions } from '@store/types'
 import {
     asNumber,
+    asOptionalBytes,
     asOptionalNumber,
     asString,
     toBoolOrUndef,
@@ -51,6 +55,19 @@ interface SignalIdentityBatchRow extends Record<string, unknown> {
     readonly server: unknown
     readonly device: unknown
     readonly identity_key: unknown
+}
+
+interface SignalMetaSnapshotRow extends Record<string, unknown> {
+    readonly server_has_prekeys: unknown
+    readonly signed_prekey_rotation_ts: unknown
+    readonly registration_id: unknown
+    readonly identity_pub_key: unknown
+    readonly identity_priv_key: unknown
+    readonly signed_key_id: unknown
+    readonly signed_pub_key: unknown
+    readonly signed_priv_key: unknown
+    readonly signed_signature: unknown
+    readonly signed_uploaded: unknown
 }
 
 const DEFAULTS = Object.freeze({
@@ -345,6 +362,83 @@ export class WaSignalSqliteStore extends BaseSqliteStore implements WaSignalStor
         const db = await this.getConnection()
         const meta = this.getMeta(db)
         return meta.serverHasPreKeys
+    }
+
+    public async getSignalMeta(): Promise<WaSignalMetaSnapshot> {
+        const db = await this.getConnection()
+        this.ensureMetaRow(db)
+        const row = db.get<SignalMetaSnapshotRow>(
+            `SELECT
+                m.server_has_prekeys AS server_has_prekeys,
+                m.signed_prekey_rotation_ts AS signed_prekey_rotation_ts,
+                r.registration_id AS registration_id,
+                r.identity_pub_key AS identity_pub_key,
+                r.identity_priv_key AS identity_priv_key,
+                s.key_id AS signed_key_id,
+                s.pub_key AS signed_pub_key,
+                s.priv_key AS signed_priv_key,
+                s.signature AS signed_signature,
+                s.uploaded AS signed_uploaded
+             FROM signal_meta AS m
+             LEFT JOIN signal_registration AS r
+                ON r.session_id = m.session_id
+             LEFT JOIN signal_signed_prekey AS s
+                ON s.session_id = m.session_id
+             WHERE m.session_id = ?`,
+            [this.options.sessionId]
+        )
+        if (!row) {
+            throw new Error('signal meta row not found')
+        }
+
+        const registrationId = asOptionalNumber(
+            row.registration_id,
+            'signal_registration.registration_id'
+        )
+        const registrationPubKey = asOptionalBytes(
+            row.identity_pub_key,
+            'signal_registration.identity_pub_key'
+        )
+        const registrationPrivKey = asOptionalBytes(
+            row.identity_priv_key,
+            'signal_registration.identity_priv_key'
+        )
+        const registrationInfo =
+            registrationId !== undefined && registrationPubKey && registrationPrivKey
+                ? decodeSignalRegistrationRow({
+                      registration_id: row.registration_id,
+                      identity_pub_key: row.identity_pub_key,
+                      identity_priv_key: row.identity_priv_key
+                  })
+                : null
+        const signedKeyId = asOptionalNumber(row.signed_key_id, 'signal_signed_prekey.key_id')
+        const signedPubKey = asOptionalBytes(row.signed_pub_key, 'signal_signed_prekey.pub_key')
+        const signedPrivKey = asOptionalBytes(row.signed_priv_key, 'signal_signed_prekey.priv_key')
+        const signedSignature = asOptionalBytes(
+            row.signed_signature,
+            'signal_signed_prekey.signature'
+        )
+        const signedPreKey =
+            signedKeyId !== undefined && signedPubKey && signedPrivKey && signedSignature
+                ? decodeSignalSignedPreKeyRow({
+                      key_id: row.signed_key_id,
+                      pub_key: row.signed_pub_key,
+                      priv_key: row.signed_priv_key,
+                      signature: row.signed_signature,
+                      uploaded: row.signed_uploaded
+                  })
+                : null
+
+        return {
+            serverHasPreKeys: toBoolOrUndef(row.server_has_prekeys) === true,
+            signedPreKeyRotationTs:
+                asOptionalNumber(
+                    row.signed_prekey_rotation_ts,
+                    'signal_meta.signed_prekey_rotation_ts'
+                ) ?? null,
+            registrationInfo,
+            signedPreKey
+        }
     }
 
     public async hasSession(address: SignalAddress): Promise<boolean> {

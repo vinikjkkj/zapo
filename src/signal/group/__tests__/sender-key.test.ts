@@ -118,24 +118,22 @@ test('sender key manager handles distribution, encryption/decryption and validat
     const groupId = '120363000000000000@g.us'
     const sender = makeAddress('5511888888888', 0)
     const participants = [makeAddress('5511000000001', 0), makeAddress('5511000000002', 1)]
+    const plaintext = makeBytes(42, 5)
 
-    const distributionMessage = await senderManager.createSenderKeyDistributionMessage(
-        groupId,
-        sender
-    )
-    assert.ok(distributionMessage.axolotlSenderKeyDistributionMessage)
+    const prepared = await senderManager.prepareGroupEncryption(groupId, sender, plaintext)
+    assert.ok(prepared.distributionMessage.axolotlSenderKeyDistributionMessage)
 
     const beforeMark = await senderManager.filterParticipantsNeedingDistribution(
         groupId,
-        sender,
+        prepared.keyId,
         participants
     )
     assert.equal(beforeMark.length, 2)
 
-    await senderManager.markSenderKeyDistributed(groupId, sender, participants.slice(0, 1))
+    await senderManager.markSenderKeyDistributed(groupId, prepared.keyId, participants.slice(0, 1))
     const afterMark = await senderManager.filterParticipantsNeedingDistribution(
         groupId,
-        sender,
+        prepared.keyId,
         participants
     )
     assert.deepEqual(afterMark, [participants[1]])
@@ -143,17 +141,15 @@ test('sender key manager handles distribution, encryption/decryption and validat
     await receiverManager.processSenderKeyDistributionPayload(
         groupId,
         sender,
-        distributionMessage.axolotlSenderKeyDistributionMessage
+        prepared.distributionMessage.axolotlSenderKeyDistributionMessage
     )
 
-    const plaintext = makeBytes(42, 5)
-    const encrypted = await senderManager.encryptGroupMessage(groupId, sender, plaintext)
     const decrypted = await receiverManager.decryptGroupMessage({
         groupId,
         sender,
-        keyId: encrypted.keyId,
-        iteration: encrypted.iteration,
-        ciphertext: encrypted.ciphertext
+        keyId: prepared.keyId,
+        iteration: prepared.ciphertext.iteration,
+        ciphertext: prepared.ciphertext.ciphertext
     })
     assert.deepEqual(decrypted, plaintext)
 
@@ -162,14 +158,14 @@ test('sender key manager handles distribution, encryption/decryption and validat
             receiverManager.decryptGroupMessage({
                 groupId,
                 sender,
-                keyId: (encrypted.keyId ?? 0) + 1,
-                iteration: encrypted.iteration,
-                ciphertext: encrypted.ciphertext
+                keyId: prepared.keyId + 1,
+                iteration: prepared.ciphertext.iteration,
+                ciphertext: prepared.ciphertext.ciphertext
             }),
         /sender key id mismatch/
     )
 
-    const tamperedCiphertext = new Uint8Array(encrypted.ciphertext)
+    const tamperedCiphertext = new Uint8Array(prepared.ciphertext.ciphertext)
     tamperedCiphertext[tamperedCiphertext.length - 1] ^= 0x01
     await assert.rejects(
         () =>

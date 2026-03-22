@@ -134,6 +134,7 @@ async function createFreshAndPersistCredentials(
     args: WaAuthCredentialsFlowArgs
 ): Promise<WaAuthCredentials> {
     const credentials = await createFreshCredentials(args.signalStore, args.logger)
+    // Persist credentials first so signal restore never commits state for credentials that failed to save.
     await args.authStore.save(credentials)
     await restoreSignalStore(args.signalStore, credentials)
     return credentials

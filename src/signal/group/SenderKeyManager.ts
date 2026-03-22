@@ -60,10 +60,15 @@ export class SenderKeyManager {
         this.store = store
     }
 
-    public async createSenderKeyDistributionMessage(
+    public async prepareGroupEncryption(
         groupId: string,
-        sender: SignalAddress
-    ): Promise<Proto.Message.ISenderKeyDistributionMessage> {
+        sender: SignalAddress,
+        plaintext: Uint8Array
+    ): Promise<{
+        readonly distributionMessage: Proto.Message.ISenderKeyDistributionMessage
+        readonly ciphertext: GroupSenderKeyCiphertext
+        readonly keyId: number
+    }> {
         const senderKey = await this.ensureSenderKey(groupId, sender)
         const distributionProto = proto.SenderKeyDistributionMessage.encode({
             id: senderKey.keyId,
@@ -71,53 +76,95 @@ export class SenderKeyManager {
             chainKey: senderKey.chainKey,
             signingKey: senderKey.signingPublicKey
         }).finish()
-        const payload = prependVersion(distributionProto, SIGNAL_GROUP_VERSION)
+        const distributionMessage = {
+            groupId,
+            axolotlSenderKeyDistributionMessage: prependVersion(
+                distributionProto,
+                SIGNAL_GROUP_VERSION
+            )
+        }
+        if (!senderKey.signingPrivateKey) {
+            throw new Error('sender private signing key is missing')
+        }
 
-        await this.store.upsertSenderKeyDistribution({
+        const derived = await deriveSenderKeyMsgKey(senderKey.iteration, senderKey.chainKey)
+        const messagePayload = await aesCbcEncryptFromSeed(derived.messageKey.seed, plaintext)
+        const senderKeyMessage = proto.SenderKeyMessage.encode({
+            id: senderKey.keyId,
+            iteration: derived.messageKey.iteration,
+            ciphertext: messagePayload
+        }).finish()
+        const versionedContent = prependVersion(senderKeyMessage, SIGNAL_GROUP_VERSION)
+        const signature = await signSignalMessage(senderKey.signingPrivateKey, versionedContent)
+        if (signature.length !== SIGNATURE_SIZE) {
+            throw new Error(`invalid sender key signature length ${signature.length}`)
+        }
+        const ciphertext: GroupSenderKeyCiphertext = {
             groupId,
             sender,
             keyId: senderKey.keyId,
-            timestampMs: Date.now()
-        })
+            iteration: derived.messageKey.iteration,
+            ciphertext: concatBytes([versionedContent, signature])
+        }
+
+        await Promise.all([
+            this.store.upsertSenderKeyDistribution({
+                groupId,
+                sender,
+                keyId: senderKey.keyId,
+                timestampMs: Date.now()
+            }),
+            this.store.upsertSenderKey({
+                ...senderKey,
+                chainKey: derived.nextChainKey,
+                iteration: derived.messageKey.iteration + 1
+            })
+        ])
 
         return {
-            groupId,
-            axolotlSenderKeyDistributionMessage: payload
+            distributionMessage,
+            ciphertext,
+            keyId: senderKey.keyId
         }
     }
 
     public async filterParticipantsNeedingDistribution(
         groupId: string,
-        sender: SignalAddress,
+        senderKeyId: number,
         participants: readonly SignalAddress[]
     ): Promise<readonly SignalAddress[]> {
         if (participants.length === 0) {
             return []
         }
-        const senderKey = await this.ensureSenderKey(groupId, sender)
         const distributed = await this.store.getDeviceSenderKeyDistributions(groupId, participants)
-        return participants.filter((_, index) => {
+        const pendingParticipants = new Array<SignalAddress>(participants.length)
+        let pendingCount = 0
+        for (let index = 0; index < participants.length; index += 1) {
             const record = distributed[index]
-            return !record || record.keyId !== senderKey.keyId
-        })
+            if (!record || record.keyId !== senderKeyId) {
+                pendingParticipants[pendingCount] = participants[index]
+                pendingCount += 1
+            }
+        }
+        pendingParticipants.length = pendingCount
+        return pendingParticipants
     }
 
     public async markSenderKeyDistributed(
         groupId: string,
-        sender: SignalAddress,
+        senderKeyId: number,
         participants: readonly SignalAddress[]
     ): Promise<void> {
         if (participants.length === 0) {
             return
         }
-        const senderKey = await this.ensureSenderKey(groupId, sender)
         const timestampMs = Date.now()
         const distributions = new Array(participants.length)
         for (let index = 0; index < participants.length; index += 1) {
             distributions[index] = {
                 groupId,
                 sender: participants[index],
-                keyId: senderKey.keyId,
+                keyId: senderKeyId,
                 timestampMs
             }
         }
@@ -153,45 +200,6 @@ export class SenderKeyManager {
             })
         ])
         return record
-    }
-
-    public async encryptGroupMessage(
-        groupId: string,
-        sender: SignalAddress,
-        plaintext: Uint8Array
-    ): Promise<GroupSenderKeyCiphertext> {
-        const senderKey = await this.ensureSenderKey(groupId, sender)
-        if (!senderKey.signingPrivateKey) {
-            throw new Error('sender private signing key is missing')
-        }
-
-        const derived = await deriveSenderKeyMsgKey(senderKey.iteration, senderKey.chainKey)
-        const messagePayload = await aesCbcEncryptFromSeed(derived.messageKey.seed, plaintext)
-        const senderKeyMessage = proto.SenderKeyMessage.encode({
-            id: senderKey.keyId,
-            iteration: derived.messageKey.iteration,
-            ciphertext: messagePayload
-        }).finish()
-        const versionedContent = prependVersion(senderKeyMessage, SIGNAL_GROUP_VERSION)
-        const signature = await signSignalMessage(senderKey.signingPrivateKey, versionedContent)
-        if (signature.length !== SIGNATURE_SIZE) {
-            throw new Error(`invalid sender key signature length ${signature.length}`)
-        }
-        const ciphertext = concatBytes([versionedContent, signature])
-
-        await this.store.upsertSenderKey({
-            ...senderKey,
-            chainKey: derived.nextChainKey,
-            iteration: derived.messageKey.iteration + 1
-        })
-
-        return {
-            groupId,
-            sender,
-            keyId: senderKey.keyId,
-            iteration: derived.messageKey.iteration,
-            ciphertext
-        }
     }
 
     public async decryptGroupMessage(payload: GroupSenderKeyCiphertext): Promise<Uint8Array> {
@@ -237,6 +245,7 @@ export class SenderKeyManager {
         }
 
         const selected = await selectMessageKey(senderKey, parsed.iteration)
+        // Keep decrypt + persist ordered: failed decrypt must not advance sender-key state.
         const plaintext = await aesCbcDecryptFromSeed(selected.messageKey.seed, parsed.ciphertext)
         await this.store.upsertSenderKey(selected.updatedRecord)
         return plaintext

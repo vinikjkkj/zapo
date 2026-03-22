@@ -79,7 +79,6 @@ test('signal session resolver batch falls back to single fetch for partial failu
 
     const resolver = createSignalSessionResolver({
         signalProtocol: {
-            hasSessions: async () => [false, false],
             hasSession: async () => false,
             establishOutgoingSession: async (address: {
                 readonly user: string
@@ -90,6 +89,7 @@ test('signal session resolver batch falls back to single fetch for partial failu
             }
         } as never,
         signalStore: {
+            getSessionsBatch: async () => [null, null],
             getRemoteIdentity: async () => null
         } as never,
         signalIdentitySync: {
@@ -114,10 +114,14 @@ test('signal session resolver batch falls back to single fetch for partial failu
         logger: createLogger()
     })
 
-    await resolver.ensureSessionsBatch([
+    const resolvedTargets = await resolver.ensureSessionsBatch([
         '5511888888888:1@s.whatsapp.net',
         '5511777777777:2@s.whatsapp.net'
     ])
 
     assert.deepEqual(established.sort(), ['5511777777777:2', '5511888888888:1'])
+    assert.deepEqual([...resolvedTargets.map((target) => target.jid)].sort(), [
+        '5511777777777:2@s.whatsapp.net',
+        '5511888888888:1@s.whatsapp.net'
+    ])
 })

@@ -7,10 +7,13 @@ import {
     SIGNAL_UPLOAD_PREKEYS_COUNT
 } from '@signal/api/constants'
 import { buildPreKeyUploadIq, parsePreKeyUploadFailure } from '@signal/api/prekeys'
-import type { SignalDigestSyncApi } from '@signal/api/SignalDigestSyncApi'
+import type {
+    SignalDigestPrefetchedLocalKeyBundle,
+    SignalDigestSyncApi
+} from '@signal/api/SignalDigestSyncApi'
 import type { SignalRotateKeyApi } from '@signal/api/SignalRotateKeyApi'
 import { generatePreKeyPair } from '@signal/registration/keygen'
-import type { WaSignalStore } from '@store/contracts/signal.store'
+import type { WaSignalMetaSnapshot, WaSignalStore } from '@store/contracts/signal.store'
 import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
 
@@ -91,15 +94,21 @@ export class WaPassiveTasksCoordinator {
             return
         }
 
-        await this.uploadPreKeysIfMissing()
-        await this.validateDigestAndRecoverPreKeys()
-        await this.rotateSignedPreKeyIfDue()
+        const signalMeta = await this.signalStore.getSignalMeta()
+        const prefetchedLocalKeyBundle = this.resolveLocalKeyBundle(signalMeta)
+        await this.uploadPreKeysIfMissing(signalMeta.serverHasPreKeys, prefetchedLocalKeyBundle)
+        await this.validateDigestAndRecoverPreKeys(prefetchedLocalKeyBundle)
+        await this.rotateSignedPreKeyIfDue(signalMeta.signedPreKeyRotationTs)
         await this.flushDanglingReceipts()
     }
 
-    private async validateDigestAndRecoverPreKeys(): Promise<void> {
+    private async validateDigestAndRecoverPreKeys(
+        prefetchedLocalKeyBundle?: SignalDigestPrefetchedLocalKeyBundle | null
+    ): Promise<void> {
         try {
-            const validation = await this.signalDigestSync.validateLocalKeyBundle()
+            const validation = prefetchedLocalKeyBundle
+                ? await this.signalDigestSync.validateLocalKeyBundle(prefetchedLocalKeyBundle)
+                : await this.signalDigestSync.validateLocalKeyBundle()
             if (validation.valid) {
                 this.logger.debug('signal digest validated', {
                     preKeyCount: validation.preKeyCount
@@ -119,7 +128,7 @@ export class WaPassiveTasksCoordinator {
                 this.signalStore.setServerHasPreKeys(false),
                 this.runtime.persistServerHasPreKeys(false)
             ])
-            await this.uploadPreKeysIfMissing()
+            await this.uploadPreKeysIfMissing(false, prefetchedLocalKeyBundle)
         } catch (error) {
             this.logger.warn('signal digest validation failed with exception', {
                 message: toError(error).message
@@ -127,21 +136,24 @@ export class WaPassiveTasksCoordinator {
         }
     }
 
-    private async uploadPreKeysIfMissing(): Promise<void> {
-        const serverHasPreKeys = await this.signalStore.getServerHasPreKeys()
+    private async uploadPreKeysIfMissing(
+        serverHasPreKeysHint?: boolean,
+        prefetchedLocalKeyBundle?: SignalDigestPrefetchedLocalKeyBundle | null
+    ): Promise<void> {
+        const serverHasPreKeys =
+            serverHasPreKeysHint ?? (await this.signalStore.getServerHasPreKeys())
         if (serverHasPreKeys) {
             this.logger.trace('prekey upload skipped: server already has prekeys')
             return
         }
 
-        const [registrationInfo, signedPreKey] = await Promise.all([
-            this.signalStore.getRegistrationInfo(),
-            this.signalStore.getSignedPreKey()
-        ])
-        if (!registrationInfo || !signedPreKey) {
+        const resolvedLocalKeyBundle =
+            prefetchedLocalKeyBundle ?? (await this.resolveLocalKeyBundleFromStore())
+        if (!resolvedLocalKeyBundle) {
             this.logger.warn('prekey upload skipped: registration info is missing')
             return
         }
+        const { registrationInfo, signedPreKey } = resolvedLocalKeyBundle
 
         const preKeys = await this.signalStore.getOrGenPreKeys(
             SIGNAL_UPLOAD_PREKEYS_COUNT,
@@ -163,6 +175,7 @@ export class WaPassiveTasksCoordinator {
             }
         )
         if (response.attrs.type === 'result') {
+            // Mark uploaded key first so the serverHasPreKeys flag never commits ahead of local key progress.
             await this.signalStore.markKeyAsUploaded(lastPreKeyId)
             await Promise.all([
                 this.signalStore.setServerHasPreKeys(true),
@@ -183,10 +196,15 @@ export class WaPassiveTasksCoordinator {
         })
     }
 
-    private async rotateSignedPreKeyIfDue(): Promise<void> {
+    private async rotateSignedPreKeyIfDue(
+        signedPreKeyRotationTsHint?: number | null
+    ): Promise<void> {
         try {
             const nowMs = Date.now()
-            const lastRotationTs = await this.signalStore.getSignedPreKeyRotationTs()
+            const lastRotationTs =
+                signedPreKeyRotationTsHint === undefined
+                    ? await this.signalStore.getSignedPreKeyRotationTs()
+                    : signedPreKeyRotationTsHint
             if (lastRotationTs === null) {
                 await this.signalStore.setSignedPreKeyRotationTs(nowMs)
                 this.logger.trace('signal rotate key skipped on first run')
@@ -213,6 +231,23 @@ export class WaPassiveTasksCoordinator {
                 message: toError(error).message
             })
         }
+    }
+
+    private resolveLocalKeyBundle(
+        signalMeta: WaSignalMetaSnapshot
+    ): SignalDigestPrefetchedLocalKeyBundle | null {
+        const { registrationInfo, signedPreKey } = signalMeta
+        if (!registrationInfo || !signedPreKey) {
+            return null
+        }
+        return {
+            registrationInfo,
+            signedPreKey
+        }
+    }
+
+    private async resolveLocalKeyBundleFromStore(): Promise<SignalDigestPrefetchedLocalKeyBundle | null> {
+        return this.resolveLocalKeyBundle(await this.signalStore.getSignalMeta())
     }
 
     private resolveRotationTimestamp(nowMs: number, errorCode: number | undefined): number {

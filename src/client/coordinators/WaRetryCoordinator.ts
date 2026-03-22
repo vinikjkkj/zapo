@@ -485,9 +485,13 @@ export class WaRetryCoordinator {
         requesterAddress: ReturnType<typeof parseSignalAddressFromJid>,
         requesterNormalizedDeviceJid: string
     ): Promise<boolean> {
-        await this.markRetryRequesterSenderKeyAsStale(request, requesterJid, requesterAddress)
-        const currentSession = await this.signalStore.getSession(requesterAddress)
-        if (currentSession && request.regId > 0 && currentSession.remote.regId !== request.regId) {
+        const [, currentSession] = await Promise.all([
+            this.markRetryRequesterSenderKeyAsStale(request, requesterJid, requesterAddress),
+            this.signalStore.getSession(requesterAddress)
+        ])
+        const regIdMismatch =
+            !!currentSession && request.regId > 0 && currentSession.remote.regId !== request.regId
+        if (regIdMismatch) {
             await this.signalStore.deleteSession(requesterAddress)
         }
         if (request.keyBundle) {
@@ -510,8 +514,8 @@ export class WaRetryCoordinator {
             return true
         }
 
-        const hasSession = await this.signalProtocol.hasSession(requesterAddress)
-        if (hasSession) {
+        const sessionStillExists = currentSession !== null && !regIdMismatch
+        if (sessionStillExists) {
             return true
         }
 

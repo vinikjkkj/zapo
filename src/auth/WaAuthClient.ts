@@ -140,9 +140,8 @@ export class WaAuthClient {
 
     public async clearStoredCredentials(): Promise<void> {
         this.logger.warn('auth client clearing stored credentials')
-        await this.authStore.clear()
         this.credentials = null
-        await this.clearTransientState()
+        await Promise.all([this.authStore.clear(), this.clearTransientState()])
     }
 
     public async persistServerStaticKey(serverStaticKey: Uint8Array): Promise<void> {

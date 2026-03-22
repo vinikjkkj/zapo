@@ -54,8 +54,8 @@ export class WaParticipantsSqliteStore extends BaseSqliteStore implements WaPart
         const db = await this.getConnection()
         const row = db.get<ParticipantsRow>(
             `SELECT group_jid, participants_json, updated_at_ms, expires_at_ms
-             FROM group_participants_cache
-             WHERE session_id = ? AND group_jid = ?`,
+            FROM group_participants_cache
+            WHERE session_id = ? AND group_jid = ?`,
             [this.options.sessionId, groupJid]
         )
         if (!row) {
@@ -66,8 +66,8 @@ export class WaParticipantsSqliteStore extends BaseSqliteStore implements WaPart
         if (expiresAtMs <= nowMs) {
             db.run(
                 `DELETE FROM group_participants_cache
-                 WHERE session_id = ? AND group_jid = ?`,
-                [this.options.sessionId, groupJid]
+                 WHERE session_id = ? AND group_jid = ? AND expires_at_ms <= ?`,
+                [this.options.sessionId, groupJid, nowMs]
             )
             return null
         }

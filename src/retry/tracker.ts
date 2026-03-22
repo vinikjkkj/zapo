@@ -47,6 +47,20 @@ export function createOutboundRetryTracker(options: {
         return true
     }
 
+    const safeDeleteRetryOutboundRecord = async (messageId: string): Promise<boolean> => {
+        try {
+            await retryStore.deleteOutboundMessage(messageId)
+        } catch (error) {
+            logger.warn('failed to delete retry outbound message record', {
+                messageId,
+                message: toError(error).message
+            })
+            return false
+        }
+
+        return true
+    }
+
     return {
         track: async (hint, publish) => {
             const nowMs = Date.now()
@@ -88,7 +102,7 @@ export function createOutboundRetryTracker(options: {
             }
 
             const persistedNowMs = Date.now()
-            await safeUpsertRetryOutboundRecord(
+            const persistedFinal = await safeUpsertRetryOutboundRecord(
                 createRetryOutboundRecord(
                     result.id,
                     hintedMessageId ? nowMs : persistedNowMs,
@@ -96,6 +110,14 @@ export function createOutboundRetryTracker(options: {
                     persistedNowMs + retryTtlMs
                 )
             )
+            if (
+                persistedFinal &&
+                hintedPersisted &&
+                hintedMessageId &&
+                result.id !== hintedMessageId
+            ) {
+                await safeDeleteRetryOutboundRecord(hintedMessageId)
+            }
 
             return result
         }

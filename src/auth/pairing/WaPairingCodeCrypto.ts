@@ -85,12 +85,8 @@ export async function completeCompanionFinish(args: {
         throw new Error('empty primary ephemeral public key')
     }
 
-    const sharedEphemeral = await X25519.scalarMult(
-        args.companionEphemeralPrivKey,
-        primaryEphemeralPub
-    )
-
-    const [bundleSalt, bundleSecret, bundleIv] = await Promise.all([
+    const [sharedEphemeral, bundleSalt, bundleSecret, bundleIv] = await Promise.all([
+        X25519.scalarMult(args.companionEphemeralPrivKey, primaryEphemeralPub),
         randomBytesAsync(32),
         randomBytesAsync(32),
         randomBytesAsync(12)
@@ -109,14 +105,11 @@ export async function completeCompanionFinish(args: {
         args.primaryIdentityPub,
         bundleSecret
     ])
-    const encryptedBundle = await aesGcmEncrypt(bundleEncryptionKey, bundleIv, plaintextBundle)
-
+    const [encryptedBundle, sharedIdentity] = await Promise.all([
+        aesGcmEncrypt(bundleEncryptionKey, bundleIv, plaintextBundle),
+        X25519.scalarMult(args.registrationIdentityKeyPair.privKey, args.primaryIdentityPub)
+    ])
     const wrappedKeyBundle = concatBytes([bundleSalt, bundleIv, encryptedBundle])
-
-    const sharedIdentity = await X25519.scalarMult(
-        args.registrationIdentityKeyPair.privKey,
-        args.primaryIdentityPub
-    )
     const advMaterial = concatBytes([sharedEphemeral, sharedIdentity, bundleSecret])
     const advSecret = await hkdf(advMaterial, null, WA_PAIRING_KDF_INFO.ADV_SECRET, 32)
 

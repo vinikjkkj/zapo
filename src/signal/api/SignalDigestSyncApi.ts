@@ -10,6 +10,7 @@ import {
     SIGNAL_REGISTRATION_ID_LENGTH,
     SIGNAL_SIGNATURE_LENGTH
 } from '@signal/api/constants'
+import type { RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import {
     decodeNodeContentBase64OrBytes,
@@ -57,6 +58,11 @@ export interface SignalDigestValidationResult {
     readonly preKeyCount: number
 }
 
+export interface SignalDigestPrefetchedLocalKeyBundle {
+    readonly registrationInfo: RegistrationInfo
+    readonly signedPreKey: SignedPreKeyRecord
+}
+
 export class SignalDigestSyncApi {
     private readonly logger: SignalDigestSyncApiOptions['logger']
     private readonly query: SignalDigestSyncApiOptions['query']
@@ -73,10 +79,19 @@ export class SignalDigestSyncApi {
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
     }
 
+    public async validateLocalKeyBundle(timeoutMs?: number): Promise<SignalDigestValidationResult>
     public async validateLocalKeyBundle(
+        prefetched?: SignalDigestPrefetchedLocalKeyBundle,
+        timeoutMs?: number
+    ): Promise<SignalDigestValidationResult>
+    public async validateLocalKeyBundle(
+        prefetchedOrTimeout?: SignalDigestPrefetchedLocalKeyBundle | number,
         timeoutMs = this.defaultTimeoutMs
     ): Promise<SignalDigestValidationResult> {
-        this.logger.debug('signal digest query request', { timeoutMs })
+        const prefetched = typeof prefetchedOrTimeout === 'number' ? undefined : prefetchedOrTimeout
+        const effectiveTimeoutMs =
+            typeof prefetchedOrTimeout === 'number' ? prefetchedOrTimeout : timeoutMs
+        this.logger.debug('signal digest query request', { timeoutMs: effectiveTimeoutMs })
         const response = await this.query(
             {
                 tag: WA_NODE_TAGS.IQ,
@@ -92,7 +107,7 @@ export class SignalDigestSyncApi {
                     }
                 ]
             },
-            timeoutMs
+            effectiveTimeoutMs
         )
 
         if (response.tag !== WA_NODE_TAGS.IQ) {
@@ -127,10 +142,12 @@ export class SignalDigestSyncApi {
             }
         }
 
-        const [registrationInfo, signedPreKey] = await Promise.all([
-            this.signalStore.getRegistrationInfo(),
-            this.signalStore.getSignedPreKey()
-        ])
+        const [registrationInfo, signedPreKey] = prefetched
+            ? [prefetched.registrationInfo, prefetched.signedPreKey]
+            : await Promise.all([
+                  this.signalStore.getRegistrationInfo(),
+                  this.signalStore.getSignedPreKey()
+              ])
         if (!registrationInfo || !signedPreKey) {
             return {
                 valid: false,

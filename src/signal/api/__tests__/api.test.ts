@@ -186,6 +186,108 @@ test('signal digest api validates key bundle hash and maps digest mismatch reaso
     assert.equal(mismatch.reason, 'registration_mismatch')
 })
 
+test('signal digest api accepts prefetched local key bundle context', async () => {
+    const registration = await generateRegistrationInfo()
+    const signedPreKey = await generateSignedPreKey(6, registration.identityKeyPair.privKey)
+    const preKey = await generatePreKeyPair(21)
+    const digestHash = (
+        await sha1(
+            concatBytes([
+                registration.identityKeyPair.pubKey,
+                signedPreKey.keyPair.pubKey,
+                signedPreKey.signature,
+                preKey.keyPair.pubKey
+            ])
+        )
+    ).subarray(0, 20)
+
+    const digestNode: BinaryNode = {
+        tag: WA_NODE_TAGS.DIGEST,
+        attrs: {},
+        content: [
+            {
+                tag: WA_NODE_TAGS.REGISTRATION,
+                attrs: {},
+                content: intToBytes(SIGNAL_REGISTRATION_ID_LENGTH, registration.registrationId)
+            },
+            {
+                tag: WA_NODE_TAGS.TYPE,
+                attrs: {},
+                content: SIGNAL_KEY_BUNDLE_TYPE_BYTES
+            },
+            {
+                tag: WA_NODE_TAGS.IDENTITY,
+                attrs: {},
+                content: registration.identityKeyPair.pubKey
+            },
+            {
+                tag: WA_NODE_TAGS.SKEY,
+                attrs: {},
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.ID,
+                        attrs: {},
+                        content: intToBytes(SIGNAL_KEY_ID_LENGTH, signedPreKey.keyId)
+                    },
+                    {
+                        tag: WA_NODE_TAGS.VALUE,
+                        attrs: {},
+                        content: signedPreKey.keyPair.pubKey
+                    },
+                    {
+                        tag: WA_NODE_TAGS.SIGNATURE,
+                        attrs: {},
+                        content: signedPreKey.signature
+                    }
+                ]
+            },
+            {
+                tag: WA_NODE_TAGS.LIST,
+                attrs: {},
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.ID,
+                        attrs: {},
+                        content: intToBytes(SIGNAL_KEY_ID_LENGTH, preKey.keyId)
+                    }
+                ]
+            },
+            {
+                tag: WA_NODE_TAGS.HASH,
+                attrs: {},
+                content: digestHash
+            }
+        ]
+    }
+
+    let getRegistrationInfoCalls = 0
+    let getSignedPreKeyCalls = 0
+    const digestApi = new SignalDigestSyncApi({
+        logger: createLogger(),
+        query: async () => iqResult([digestNode]),
+        signalStore: {
+            getRegistrationInfo: async () => {
+                getRegistrationInfoCalls += 1
+                throw new Error('getRegistrationInfo should not be called with prefetched context')
+            },
+            getSignedPreKey: async () => {
+                getSignedPreKeyCalls += 1
+                throw new Error('getSignedPreKey should not be called with prefetched context')
+            },
+            getPreKeysById: async (preKeyIds: readonly number[]) =>
+                preKeyIds.map((preKeyId) => (preKeyId === preKey.keyId ? preKey : null))
+        } as never
+    })
+
+    const valid = await digestApi.validateLocalKeyBundle({
+        registrationInfo: registration,
+        signedPreKey
+    })
+    assert.equal(valid.valid, true)
+    assert.equal(getRegistrationInfoCalls, 0)
+    assert.equal(getSignedPreKeyCalls, 0)
+})
+
 test('signal device sync api parses users/devices and reuses cache when still fresh', async () => {
     const deviceListStore = new WaDeviceListMemoryStore(60_000)
     let queryCalls = 0

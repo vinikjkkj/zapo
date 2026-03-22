@@ -289,11 +289,18 @@ export class WaAppStateSyncClient {
         readonly missingKeyIds: readonly Uint8Array[]
         readonly blockedCollections: readonly AppStateCollectionName[]
     }> {
-        const requests = await Promise.all(
-            collections.map((collection) =>
-                this.buildCollectionSyncRequest(collection, pendingByCollection)
-            )
+        const activeSyncKey = await this.store.getActiveSyncKey()
+        const requestPromises: ReturnType<typeof this.buildCollectionSyncRequest>[] = new Array(
+            collections.length
         )
+        for (let index = 0; index < collections.length; index += 1) {
+            requestPromises[index] = this.buildCollectionSyncRequest(
+                collections[index],
+                pendingByCollection,
+                activeSyncKey
+            )
+        }
+        const requests = await Promise.all(requestPromises)
         const collectionNodes: BinaryNode[] = new Array(requests.length)
         const outgoingContexts = new Map<AppStateCollectionName, OutgoingPatchContext>()
         const skippedUploadCollections = new Set<AppStateCollectionName>()
@@ -312,25 +319,27 @@ export class WaAppStateSyncClient {
             iqNode,
             options.timeoutMs ?? this.defaultTimeoutMs
         )
-        const collectionOutcomes = await Promise.all(
-            collections.map((collection) =>
-                this.processCollectionRound({
-                    collection,
-                    payloadByCollection,
-                    pendingByCollection,
-                    options,
-                    outgoingContexts,
-                    skippedUploadCollections
-                })
-            )
-        )
+        const collectionOutcomePromises: ReturnType<typeof this.processCollectionRound>[] =
+            new Array(collections.length)
+        for (let index = 0; index < collections.length; index += 1) {
+            collectionOutcomePromises[index] = this.processCollectionRound({
+                collection: collections[index],
+                payloadByCollection,
+                pendingByCollection,
+                options,
+                outgoingContexts,
+                skippedUploadCollections
+            })
+        }
+        const collectionOutcomes = await Promise.all(collectionOutcomePromises)
         const results: WaAppStateCollectionSyncResult[] = []
         const collectionsToRefetch: AppStateCollectionName[] = []
         const blockedCollections: AppStateCollectionName[] = []
         const missingKeyIds: Uint8Array[] = []
         const missingKeyIdHexes = new Set<string>()
         let stateChanged = false
-        for (const entry of collectionOutcomes) {
+        for (let index = 0; index < collectionOutcomes.length; index += 1) {
+            const entry = collectionOutcomes[index]
             results.push(entry.result)
             if (entry.shouldRefetch) {
                 collectionsToRefetch.push(entry.collection)
@@ -360,7 +369,11 @@ export class WaAppStateSyncClient {
 
     private async buildCollectionSyncRequest(
         collection: AppStateCollectionName,
-        pendingByCollection: ReadonlyMap<AppStateCollectionName, readonly WaAppStateMutationInput[]>
+        pendingByCollection: ReadonlyMap<
+            AppStateCollectionName,
+            readonly WaAppStateMutationInput[]
+        >,
+        activeSyncKey: WaAppStateSyncKey | null
     ): Promise<{
         readonly collection: AppStateCollectionName
         readonly node: BinaryNode
@@ -395,7 +408,8 @@ export class WaAppStateSyncClient {
                 const outgoing = await this.buildOutgoingPatch(
                     collection,
                     collectionState,
-                    pendingMutations
+                    pendingMutations,
+                    activeSyncKey
                 )
                 outgoingContext = outgoing.context
                 children.push({
@@ -1062,9 +1076,9 @@ export class WaAppStateSyncClient {
     private async buildOutgoingPatch(
         collection: AppStateCollectionName,
         snapshot: WaAppStateCollectionStoreState,
-        pendingMutations: readonly WaAppStateMutationInput[]
+        pendingMutations: readonly WaAppStateMutationInput[],
+        activeKey: WaAppStateSyncKey | null
     ): Promise<{ readonly encodedPatch: Uint8Array; readonly context: OutgoingPatchContext }> {
-        const activeKey = await this.store.getActiveSyncKey()
         if (!activeKey) {
             throw new WaAppStateMissingKeyError(
                 `no sync key available to upload ${collection}`,

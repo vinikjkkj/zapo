@@ -33,6 +33,11 @@ export class WaRetryMemoryStore implements WaRetryStore {
         this.outboundMessages.set(record.messageId, record)
     }
 
+    public async deleteOutboundMessage(messageId: string): Promise<number> {
+        const existed = this.outboundMessages.delete(messageId)
+        return existed ? 1 : 0
+    }
+
     public async getOutboundMessage(
         messageId: string
     ): Promise<WaRetryOutboundMessageRecord | null> {

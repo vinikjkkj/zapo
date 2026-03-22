@@ -238,10 +238,11 @@ export class WaPairingFlow {
             return false
         }
 
+        // Rotate first so we don't ack success before local credential state is durably updated.
+        await this.rotateAdvSecret(this.requireCredentials())
         await this.opts.socket.sendNode(
             buildNotificationAckNode(node, WA_SIGNALING.COMPANION_REG_REFRESH_NOTIFICATION)
         )
-        await this.rotateAdvSecret(this.requireCredentials())
         this.opts.logger.info('handled companion_reg_refresh notification')
         this.opts.qrFlow.refreshCurrentQr()
         return true
@@ -253,10 +254,11 @@ export class WaPairingFlow {
             WA_NODE_TAGS.REF,
             'pair-device.ref'
         )
+        // Commit adv-secret rotation before sending IQ success to avoid protocol/state divergence.
         await this.rotateAdvSecret(this.requireCredentials())
+        await this.opts.socket.sendNode(buildIqResultNode(iqNode))
         this.opts.qrFlow.setRefs(refs)
         this.opts.logger.info('pair-device refs updated', { refsCount: refs.length })
-        await this.opts.socket.sendNode(buildIqResultNode(iqNode))
     }
 
     private async handlePairSuccess(

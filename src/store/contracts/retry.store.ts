@@ -4,6 +4,7 @@ export interface WaRetryStore {
     getTtlMs?(): number
     destroy?(): Promise<void>
     upsertOutboundMessage(record: WaRetryOutboundMessageRecord): Promise<void>
+    deleteOutboundMessage(messageId: string): Promise<number>
     getOutboundMessage(messageId: string): Promise<WaRetryOutboundMessageRecord | null>
     updateOutboundMessageState(
         messageId: string,

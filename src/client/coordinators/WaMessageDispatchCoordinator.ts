@@ -37,7 +37,7 @@ import { signalAddressKey } from '@protocol/jid'
 import type { OutboundRetryTracker } from '@retry/tracker'
 import type { WaRetryReplayPayload } from '@retry/types'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
-import type { SignalSessionResolver } from '@signal/session/resolver'
+import type { SignalResolvedSessionTarget, SignalSessionResolver } from '@signal/session/resolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress } from '@signal/types'
 import { encodeBinaryNode } from '@transport/binary'
@@ -329,32 +329,65 @@ export class WaMessageDispatchCoordinator {
         if (fanoutDeviceJids.length === 0) {
             throw new Error('group direct send resolved no target devices')
         }
-        await this.sessionResolver.ensureSessionsBatch(fanoutDeviceJids)
-        const participantAddresses = fanoutDeviceJids.map((targetJid) =>
-            parseSignalAddressFromJid(targetJid)
-        )
-        const encryptedParticipants = await this.signalProtocol.encryptMessagesBatch(
-            participantAddresses.map((address) => ({
-                address,
+        const resolvedFanoutTargets =
+            await this.sessionResolver.ensureSessionsBatch(fanoutDeviceJids)
+        const uniqueNormalizedFanoutJids = new Set<string>()
+        for (let index = 0; index < fanoutDeviceJids.length; index += 1) {
+            uniqueNormalizedFanoutJids.add(normalizeDeviceJid(fanoutDeviceJids[index]))
+        }
+        if (resolvedFanoutTargets.length !== uniqueNormalizedFanoutJids.size) {
+            throw new Error('group direct send resolved incomplete signal sessions')
+        }
+        const participantEncryptRequests: {
+            readonly address: SignalAddress
+            readonly plaintext: Uint8Array
+        }[] = new Array(resolvedFanoutTargets.length)
+        for (let index = 0; index < resolvedFanoutTargets.length; index += 1) {
+            const target = resolvedFanoutTargets[index]
+            participantEncryptRequests[index] = {
+                address: target.address,
                 plaintext
-            }))
+            }
+        }
+        const encryptedParticipants = await this.signalProtocol.encryptMessagesBatch(
+            participantEncryptRequests,
+            resolvedFanoutTargets
         )
-        const participants = fanoutDeviceJids.map((targetJid, index) => ({
-            jid: targetJid,
-            encType: encryptedParticipants[index].type,
-            ciphertext: encryptedParticipants[index].ciphertext
-        }))
-        const shouldAttachDeviceIdentity = participants.some(
-            (participant) => participant.encType === 'pkmsg'
-        )
-        const localPhash = await computePhashV2([...fanoutDeviceJids, senderForPhash])
-        const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
-            message,
-            stanzaId: sendOptions.id,
-            senderUserJid: toUserJid(senderForPhash),
-            remoteJid: groupJid,
-            context: 'group_direct'
-        })
+        const participants: {
+            readonly jid: string
+            readonly encType: 'msg' | 'pkmsg'
+            readonly ciphertext: Uint8Array
+        }[] = new Array(resolvedFanoutTargets.length)
+        for (let index = 0; index < resolvedFanoutTargets.length; index += 1) {
+            const target = resolvedFanoutTargets[index]
+            participants[index] = {
+                jid: target.jid,
+                encType: encryptedParticipants[index].type,
+                ciphertext: encryptedParticipants[index].ciphertext
+            }
+        }
+        let shouldAttachDeviceIdentity = false
+        for (let index = 0; index < participants.length; index += 1) {
+            if (participants[index].encType === 'pkmsg') {
+                shouldAttachDeviceIdentity = true
+                break
+            }
+        }
+        const phashTargets = new Array<string>(resolvedFanoutTargets.length + 1)
+        for (let index = 0; index < resolvedFanoutTargets.length; index += 1) {
+            phashTargets[index] = resolvedFanoutTargets[index].jid
+        }
+        phashTargets[resolvedFanoutTargets.length] = senderForPhash
+        const [localPhash, reportingArtifacts] = await Promise.all([
+            computePhashV2(phashTargets),
+            this.tryBuildReportingTokenArtifacts({
+                message,
+                stanzaId: sendOptions.id,
+                senderUserJid: toUserJid(senderForPhash),
+                remoteJid: groupJid,
+                context: 'group_direct'
+            })
+        ])
         const messageNode = buildGroupDirectMessageNode({
             to: groupJid,
             type,
@@ -439,31 +472,40 @@ export class WaMessageDispatchCoordinator {
             this.resolveGroupAddressingMode(participantUserJids, groupJid)
         const senderJid = this.resolveSenderForAddressingMode(addressingMode, meJid)
         const sender = parseSignalAddressFromJid(senderJid)
-        const senderKeyDistributionMessage =
-            await this.senderKeyManager.createSenderKeyDistributionMessage(groupJid, sender)
-        const groupCiphertext = await this.senderKeyManager.encryptGroupMessage(
-            groupJid,
-            sender,
-            plaintext
-        )
+        const {
+            distributionMessage: senderKeyDistributionMessage,
+            ciphertext: groupCiphertext,
+            keyId: senderKeyId
+        } = await this.senderKeyManager.prepareGroupEncryption(groupJid, sender, plaintext)
         const distributionData = await this.encryptGroupDistributionParticipants(
             groupJid,
-            sender,
+            senderKeyId,
             senderKeyDistributionMessage,
             participantUserJids
         )
         const { fanoutDeviceJids, distributionParticipants } = distributionData
-        const shouldAttachDeviceIdentity = distributionParticipants.some(
-            (participant) => participant.encType === 'pkmsg'
-        )
-        const localPhash = await computePhashV2([...fanoutDeviceJids, senderJid])
-        const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
-            message,
-            stanzaId: sendOptions.id,
-            senderUserJid: toUserJid(senderJid),
-            remoteJid: groupJid,
-            context: 'group_sender_key'
-        })
+        let shouldAttachDeviceIdentity = false
+        for (let index = 0; index < distributionParticipants.length; index += 1) {
+            if (distributionParticipants[index].encType === 'pkmsg') {
+                shouldAttachDeviceIdentity = true
+                break
+            }
+        }
+        const phashTargets = new Array<string>(fanoutDeviceJids.length + 1)
+        for (let index = 0; index < fanoutDeviceJids.length; index += 1) {
+            phashTargets[index] = fanoutDeviceJids[index]
+        }
+        phashTargets[fanoutDeviceJids.length] = senderJid
+        const [localPhash, reportingArtifacts] = await Promise.all([
+            computePhashV2(phashTargets),
+            this.tryBuildReportingTokenArtifacts({
+                message,
+                stanzaId: sendOptions.id,
+                senderUserJid: toUserJid(senderJid),
+                remoteJid: groupJid,
+                context: 'group_sender_key'
+            })
+        ])
         const messageNode = buildGroupSenderKeyMessageNode({
             to: groupJid,
             type,
@@ -493,13 +535,14 @@ export class WaMessageDispatchCoordinator {
             },
             async () => this.messageClient.publishNode(messageNode, sendOptions)
         )
-        const distributedAddresses = distributionParticipants.map(
-            (participant) => participant.address
-        )
+        const distributedAddresses = new Array<SignalAddress>(distributionParticipants.length)
+        for (let index = 0; index < distributionParticipants.length; index += 1) {
+            distributedAddresses[index] = distributionParticipants[index].address
+        }
         try {
             await this.senderKeyManager.markSenderKeyDistributed(
                 groupJid,
-                sender,
+                senderKeyId,
                 distributedAddresses
             )
         } catch (error) {
@@ -552,7 +595,8 @@ export class WaMessageDispatchCoordinator {
         participantUserJids: readonly string[],
         groupJid: string
     ): GroupAddressingMode {
-        for (const participantJid of participantUserJids) {
+        for (let index = 0; index < participantUserJids.length; index += 1) {
+            const participantJid = participantUserJids[index]
             try {
                 if (splitJid(participantJid).server === 'lid') {
                     return 'lid'
@@ -594,7 +638,7 @@ export class WaMessageDispatchCoordinator {
 
     private async encryptGroupDistributionParticipants(
         groupJid: string,
-        sender: SignalAddress,
+        senderKeyId: number,
         senderKeyDistributionMessage: Proto.Message.ISenderKeyDistributionMessage,
         participantUserJids: readonly string[]
     ): Promise<{
@@ -635,7 +679,7 @@ export class WaMessageDispatchCoordinator {
         }
         const pendingAddresses = await this.senderKeyManager.filterParticipantsNeedingDistribution(
             groupJid,
-            sender,
+            senderKeyId,
             fanoutAddresses
         )
         if (pendingAddresses.length === 0) {
@@ -670,25 +714,45 @@ export class WaMessageDispatchCoordinator {
         for (let index = 0; index < pendingTargets.length; index += 1) {
             pendingTargetJids[index] = pendingTargets[index].jid
         }
+        let availableTargets: readonly {
+            readonly jid: string
+            readonly address: SignalAddress
+        }[] = []
+        let prefetchedAvailableTargets: readonly SignalResolvedSessionTarget[] | undefined
         try {
-            await this.sessionResolver.ensureSessionsBatch(pendingTargetJids)
+            const resolvedTargets =
+                await this.sessionResolver.ensureSessionsBatch(pendingTargetJids)
+            availableTargets = resolvedTargets
+            prefetchedAvailableTargets = resolvedTargets
         } catch (error) {
+            const normalized = toError(error)
+            if (normalized.message === 'identity mismatch') {
+                throw normalized
+            }
             this.logger.warn(
                 'group sender-key distribution session sync failed, continuing with available sessions',
                 {
                     groupJid,
                     requested: pendingTargetJids.length,
-                    message: toError(error).message
+                    message: normalized.message
                 }
             )
+            const pendingTargetAddresses = new Array<SignalAddress>(pendingTargets.length)
+            for (let index = 0; index < pendingTargets.length; index += 1) {
+                pendingTargetAddresses[index] = pendingTargets[index].address
+            }
+            const hasPendingSessions = await this.signalProtocol.hasSessions(pendingTargetAddresses)
+            const nextAvailableTargets: {
+                readonly jid: string
+                readonly address: SignalAddress
+            }[] = []
+            for (let index = 0; index < pendingTargets.length; index += 1) {
+                if (hasPendingSessions[index]) {
+                    nextAvailableTargets.push(pendingTargets[index])
+                }
+            }
+            availableTargets = nextAvailableTargets
         }
-
-        const hasPendingSessions = await this.signalProtocol.hasSessions(
-            pendingTargets.map((target) => target.address)
-        )
-        const availableTargets = pendingTargets.filter(
-            (_target, index) => hasPendingSessions[index]
-        )
         if (availableTargets.length === 0) {
             return {
                 fanoutDeviceJids,
@@ -696,18 +760,36 @@ export class WaMessageDispatchCoordinator {
             }
         }
 
-        const encryptedDistributionParticipants = await this.signalProtocol.encryptMessagesBatch(
-            availableTargets.map((target) => ({
+        const distributionEncryptRequests: {
+            readonly address: SignalAddress
+            readonly plaintext: Uint8Array
+        }[] = new Array(availableTargets.length)
+        for (let index = 0; index < availableTargets.length; index += 1) {
+            const target = availableTargets[index]
+            distributionEncryptRequests[index] = {
                 address: target.address,
                 plaintext: distributionPayload
-            }))
+            }
+        }
+        const encryptedDistributionParticipants = await this.signalProtocol.encryptMessagesBatch(
+            distributionEncryptRequests,
+            prefetchedAvailableTargets
         )
-        const distributionParticipants = availableTargets.map((target, index) => ({
-            jid: target.jid,
-            address: target.address,
-            encType: encryptedDistributionParticipants[index].type,
-            ciphertext: encryptedDistributionParticipants[index].ciphertext
-        }))
+        const distributionParticipants: {
+            readonly jid: string
+            readonly address: SignalAddress
+            readonly encType: 'msg' | 'pkmsg'
+            readonly ciphertext: Uint8Array
+        }[] = new Array(availableTargets.length)
+        for (let index = 0; index < availableTargets.length; index += 1) {
+            const target = availableTargets[index]
+            distributionParticipants[index] = {
+                jid: target.jid,
+                address: target.address,
+                encType: encryptedDistributionParticipants[index].type,
+                ciphertext: encryptedDistributionParticipants[index].ciphertext
+            }
+        }
         return {
             fanoutDeviceJids,
             distributionParticipants
@@ -733,11 +815,19 @@ export class WaMessageDispatchCoordinator {
             recipientJid,
             selfDeviceJidForRecipient
         )
-        const targets = deviceJids.map((jid) => ({
-            jid,
-            normalizedJid: normalizeDeviceJid(jid),
-            userJid: toUserJid(jid)
-        }))
+        const targets: {
+            readonly jid: string
+            readonly normalizedJid: string
+            readonly userJid: string
+        }[] = new Array(deviceJids.length)
+        for (let index = 0; index < deviceJids.length; index += 1) {
+            const jid = deviceJids[index]
+            targets[index] = {
+                jid,
+                normalizedJid: normalizeDeviceJid(jid),
+                userJid: toUserJid(jid)
+            }
+        }
         const recipientUserJid = toUserJid(recipientJid)
         const meUserJid = toUserJid(selfDeviceJidForRecipient)
 
@@ -755,45 +845,105 @@ export class WaMessageDispatchCoordinator {
                 }
             }
         }
-        await this.sessionResolver.ensureSessionsBatch(deviceJids, expectedIdentityByJid)
+        const resolvedFanoutTargets = await this.sessionResolver.ensureSessionsBatch(
+            deviceJids,
+            expectedIdentityByJid
+        )
+        const resolvedFanoutTargetsByJid = new Map<string, SignalResolvedSessionTarget>()
+        for (let index = 0; index < resolvedFanoutTargets.length; index += 1) {
+            const target = resolvedFanoutTargets[index]
+            resolvedFanoutTargetsByJid.set(normalizeDeviceJid(target.jid), target)
+        }
+        for (let index = 0; index < targets.length; index += 1) {
+            if (!resolvedFanoutTargetsByJid.has(targets[index].normalizedJid)) {
+                throw new Error('direct fanout missing signal sessions for one or more targets')
+            }
+        }
 
-        const hasSelfDeviceFanout = targets.some((target) => target.userJid === meUserJid)
+        let hasSelfDeviceFanout = false
+        for (let index = 0; index < targets.length; index += 1) {
+            if (targets[index].userJid === meUserJid) {
+                hasSelfDeviceFanout = true
+                break
+            }
+        }
         const selfDevicePlaintext = hasSelfDeviceFanout
             ? await writeRandomPadMax16(
                   proto.Message.encode(wrapDeviceSentMessage(message, recipientUserJid)).finish()
               )
             : null
 
-        const participantRequests = targets.map((target) => ({
-            target,
-            address: parseSignalAddressFromJid(target.jid),
-            expectedIdentity:
-                target.userJid === recipientUserJid ? sendOptions.expectedIdentity : undefined,
-            plaintext:
-                selfDevicePlaintext && target.userJid === meUserJid
-                    ? selfDevicePlaintext
-                    : plaintext
-        }))
-        const encryptedParticipants = await this.signalProtocol.encryptMessagesBatch(
-            participantRequests.map((request) => ({
+        const participantRequests: {
+            readonly target: (typeof targets)[number]
+            readonly address: SignalAddress
+            readonly session: SignalResolvedSessionTarget['session']
+            readonly expectedIdentity?: Uint8Array
+            readonly plaintext: Uint8Array
+        }[] = new Array(targets.length)
+        for (let index = 0; index < targets.length; index += 1) {
+            const target = targets[index]
+            const resolvedTarget = resolvedFanoutTargetsByJid.get(target.normalizedJid)
+            if (!resolvedTarget) {
+                throw new Error('direct fanout missing signal session for target')
+            }
+            participantRequests[index] = {
+                target,
+                address: resolvedTarget.address,
+                session: resolvedTarget.session,
+                expectedIdentity:
+                    target.userJid === recipientUserJid ? sendOptions.expectedIdentity : undefined,
+                plaintext:
+                    selfDevicePlaintext && target.userJid === meUserJid
+                        ? selfDevicePlaintext
+                        : plaintext
+            }
+        }
+        const encryptRequests: {
+            readonly address: SignalAddress
+            readonly plaintext: Uint8Array
+            readonly expectedIdentity?: Uint8Array
+        }[] = new Array(participantRequests.length)
+        const prefetchedSessions: {
+            readonly address: SignalAddress
+            readonly session: SignalResolvedSessionTarget['session']
+        }[] = new Array(participantRequests.length)
+        for (let index = 0; index < participantRequests.length; index += 1) {
+            const request = participantRequests[index]
+            encryptRequests[index] = {
                 address: request.address,
                 plaintext: request.plaintext,
                 expectedIdentity: request.expectedIdentity
-            }))
+            }
+            prefetchedSessions[index] = {
+                address: request.address,
+                session: request.session
+            }
+        }
+        const encryptedParticipants = await this.signalProtocol.encryptMessagesBatch(
+            encryptRequests,
+            prefetchedSessions
         )
         const participants: {
             readonly jid: string
             readonly encType: 'msg' | 'pkmsg'
             readonly ciphertext: Uint8Array
-        }[] = participantRequests.map((request, index) => ({
-            jid: request.target.jid,
-            encType: encryptedParticipants[index].type,
-            ciphertext: encryptedParticipants[index].ciphertext
-        }))
+        }[] = new Array(participantRequests.length)
+        for (let index = 0; index < participantRequests.length; index += 1) {
+            const request = participantRequests[index]
+            participants[index] = {
+                jid: request.target.jid,
+                encType: encryptedParticipants[index].type,
+                ciphertext: encryptedParticipants[index].ciphertext
+            }
+        }
 
-        const shouldAttachDeviceIdentity = participants.some(
-            (participant) => participant.encType === 'pkmsg'
-        )
+        let shouldAttachDeviceIdentity = false
+        for (let index = 0; index < participants.length; index += 1) {
+            if (participants[index].encType === 'pkmsg') {
+                shouldAttachDeviceIdentity = true
+                break
+            }
+        }
         const deviceIdentity = shouldAttachDeviceIdentity
             ? this.getEncodedSignedDeviceIdentity()
             : undefined

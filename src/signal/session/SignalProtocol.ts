@@ -59,6 +59,7 @@ export class SignalProtocol {
             generateSerializedKeyPair()
         ])
         const session = await initiateSessionOutgoing(local, remoteBundle, localOneTimeBase)
+        // Keep writes ordered: a stored session without matching remote identity causes false mismatch checks.
         await this.store.setRemoteIdentity(address, session.remote.pubKey)
         await this.store.setSession(address, session)
         return session
@@ -84,6 +85,10 @@ export class SignalProtocol {
             readonly address: SignalAddress
             readonly plaintext: Uint8Array
             readonly expectedIdentity?: Uint8Array
+        }[],
+        prefetchedSessions?: readonly {
+            readonly address: SignalAddress
+            readonly session: SignalSessionRecord
         }[]
     ): Promise<
         readonly {
@@ -96,9 +101,37 @@ export class SignalProtocol {
             return []
         }
 
-        const addresses = requests.map((request) => request.address)
-        const storedSessions = await this.store.getSessionsBatch(addresses)
         const latestSessionByAddress = new Map<string, SignalSessionRecord>()
+        if (prefetchedSessions && prefetchedSessions.length > 0) {
+            for (let index = 0; index < prefetchedSessions.length; index += 1) {
+                const entry = prefetchedSessions[index]
+                latestSessionByAddress.set(signalAddressMapKey(entry.address), entry.session)
+            }
+        }
+        const seenMissingAddressKeys = new Set<string>()
+        const missingAddresses: SignalAddress[] = []
+        for (let index = 0; index < requests.length; index += 1) {
+            const address = requests[index].address
+            const addressKey = signalAddressMapKey(address)
+            if (latestSessionByAddress.has(addressKey)) {
+                continue
+            }
+            if (seenMissingAddressKeys.has(addressKey)) {
+                continue
+            }
+            seenMissingAddressKeys.add(addressKey)
+            missingAddresses.push(address)
+        }
+        if (missingAddresses.length > 0) {
+            const missingSessions = await this.store.getSessionsBatch(missingAddresses)
+            for (let index = 0; index < missingAddresses.length; index += 1) {
+                const session = missingSessions[index]
+                if (!session) {
+                    continue
+                }
+                latestSessionByAddress.set(signalAddressMapKey(missingAddresses[index]), session)
+            }
+        }
         const sessionUpdatesByAddress = new Map<
             string,
             { readonly address: SignalAddress; readonly session: SignalSessionRecord }
@@ -117,7 +150,7 @@ export class SignalProtocol {
             const request = requests[index]
             const address = request.address
             const addressKey = signalAddressMapKey(address)
-            const session = latestSessionByAddress.get(addressKey) ?? storedSessions[index]
+            const session = latestSessionByAddress.get(addressKey)
             if (!session) {
                 throw new Error('signal session not found')
             }
@@ -146,10 +179,29 @@ export class SignalProtocol {
             }
         }
 
-        await this.store.setSessionsBatch([...sessionUpdatesByAddress.values()])
+        // Persist remote identities first when needed so session writes never commit ahead of identity data.
         if (identityUpdatesByAddress.size > 0) {
-            await this.store.setRemoteIdentities([...identityUpdatesByAddress.values()])
+            const identityUpdates = new Array<{
+                readonly address: SignalAddress
+                readonly identityKey: Uint8Array
+            }>(identityUpdatesByAddress.size)
+            let identityIndex = 0
+            for (const update of identityUpdatesByAddress.values()) {
+                identityUpdates[identityIndex] = update
+                identityIndex += 1
+            }
+            await this.store.setRemoteIdentities(identityUpdates)
         }
+        const sessionUpdates = new Array<{
+            readonly address: SignalAddress
+            readonly session: SignalSessionRecord
+        }>(sessionUpdatesByAddress.size)
+        let sessionIndex = 0
+        for (const update of sessionUpdatesByAddress.values()) {
+            sessionUpdates[sessionIndex] = update
+            sessionIndex += 1
+        }
+        await this.store.setSessionsBatch(sessionUpdates)
         return results
     }
 
@@ -173,7 +225,10 @@ export class SignalProtocol {
 
         const nextRemoteIdentity =
             outcome.newSessionInfo?.newIdentity ?? outcome.updatedSession.remote.pubKey
-        if (!currentSession || !uint8Equal(currentSession.remote.pubKey, nextRemoteIdentity)) {
+        const identityChanged =
+            !currentSession || !uint8Equal(currentSession.remote.pubKey, nextRemoteIdentity)
+        // Keep writes ordered for consistency with resolver identity checks.
+        if (identityChanged) {
             await this.store.setRemoteIdentity(address, nextRemoteIdentity)
         }
         await this.store.setSession(address, outcome.updatedSession)
@@ -239,6 +294,7 @@ export class SignalProtocol {
             : incoming
 
         const [updatedSession, plaintext] = await decryptMsgFromSession(baseSession, parsed)
+        // Only consume one-time prekeys after successful decrypt/session materialization.
         if (parsed.localOneTimeKeyId !== null && parsed.localOneTimeKeyId !== undefined) {
             await this.store.consumePreKeyById(parsed.localOneTimeKeyId)
         }

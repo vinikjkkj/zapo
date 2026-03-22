@@ -5,9 +5,13 @@ import { signSignalMessage } from '@signal/crypto/WaAdvSignature'
 import type { PreKeyRecord, RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
 
 export async function generateRegistrationInfo(): Promise<RegistrationInfo> {
+    const [registrationId, identityKeyPair] = await Promise.all([
+        generateRegistrationId(),
+        X25519.generateKeyPair()
+    ])
     return {
-        registrationId: await generateRegistrationId(),
-        identityKeyPair: await X25519.generateKeyPair()
+        registrationId,
+        identityKeyPair
     }
 }
 
