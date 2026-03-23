@@ -4,6 +4,7 @@ import { withContactLock } from '@store/locks/contact.lock'
 import { withDeviceListLock } from '@store/locks/device-list.lock'
 import { withMessageLock } from '@store/locks/message.lock'
 import { withParticipantsLock } from '@store/locks/participants.lock'
+import { withPrivacyTokenLock } from '@store/locks/privacy-token.lock'
 import { withRetryLock } from '@store/locks/retry.lock'
 import { withSenderKeyLock } from '@store/locks/sender-key.lock'
 import { withSignalLock } from '@store/locks/signal.lock'
@@ -20,6 +21,7 @@ import { WaContactMemoryStore } from '@store/providers/memory/contact.store'
 import { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
 import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
+import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
 import { WaRetryMemoryStore } from '@store/providers/memory/retry.store'
 import { SenderKeyMemoryStore } from '@store/providers/memory/sender-key.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
@@ -30,6 +32,7 @@ import { WaContactSqliteStore } from '@store/providers/sqlite/contact.store'
 import { WaDeviceListSqliteStore } from '@store/providers/sqlite/device-list.store'
 import { WaMessageSqliteStore } from '@store/providers/sqlite/message.store'
 import { WaParticipantsSqliteStore } from '@store/providers/sqlite/participants.store'
+import { WaPrivacyTokenSqliteStore } from '@store/providers/sqlite/privacy-token.store'
 import { WaRetrySqliteStore } from '@store/providers/sqlite/retry.store'
 import { SenderKeySqliteStore } from '@store/providers/sqlite/sender-key.store'
 import { WaSignalSqliteStore } from '@store/providers/sqlite/signal.store'
@@ -58,7 +61,8 @@ const DEFAULT_PROVIDERS: Required<WaStoreProviderSelection> = {
     appState: 'sqlite',
     messages: 'none',
     threads: 'none',
-    contacts: 'none'
+    contacts: 'none',
+    privacyToken: 'sqlite'
 }
 
 const DEFAULT_CACHE_PROVIDERS: Required<WaStoreCacheProviderSelection> = {
@@ -198,6 +202,10 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
             const customMessages = resolveCustom(options.custom?.messages, 'custom.messages')
             const customThreads = resolveCustom(options.custom?.threads, 'custom.threads')
             const customContacts = resolveCustom(options.custom?.contacts, 'custom.contacts')
+            const customPrivacyToken = resolveCustom(
+                options.custom?.privacyToken,
+                'custom.privacyToken'
+            )
             const memoryLimits: WaStoreMemoryLimitSelection = options.memory?.limits ?? {}
 
             const requiresSqlite =
@@ -210,7 +218,8 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                 (!customDeviceList && cacheProviders.deviceList === 'sqlite') ||
                 (!customMessages && providers.messages === 'sqlite') ||
                 (!customThreads && providers.threads === 'sqlite') ||
-                (!customContacts && providers.contacts === 'sqlite')
+                (!customContacts && providers.contacts === 'sqlite') ||
+                (!customPrivacyToken && providers.privacyToken === 'sqlite')
 
             const sqlite = options.sqlite
             if (requiresSqlite && (!sqlite?.path || sqlite.path.trim().length === 0)) {
@@ -314,6 +323,11 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                             maxContacts: memoryLimits.contacts
                         })
                       : NOOP_CONTACT_STORE)
+            const rawPrivacyTokenStore =
+                customPrivacyToken ??
+                (providers.privacyToken === 'memory'
+                    ? new WaPrivacyTokenMemoryStore(memoryLimits.privacyTokens)
+                    : new WaPrivacyTokenSqliteStore(sqliteOptions!))
 
             const authStore = withAuthLock(rawAuthStore)
             const signalStore = withSignalLock(rawSignalStore)
@@ -325,6 +339,7 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
             const messageStore = withMessageLock(rawMessageStore)
             const threadStore = withThreadLock(rawThreadStore)
             const contactStore = withContactLock(rawContactStore)
+            const privacyTokenStore = withPrivacyTokenLock(rawPrivacyTokenStore)
 
             let cachesDestroyed = false
             let sessionDestroyed = false
@@ -359,7 +374,8 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                     destroyIfSupported(appStateStore),
                     destroyIfSupported(messageStore),
                     destroyIfSupported(threadStore),
-                    destroyIfSupported(contactStore)
+                    destroyIfSupported(contactStore),
+                    destroyIfSupported(privacyTokenStore)
                 ])
             }
 
@@ -374,6 +390,7 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                 messages: messageStore,
                 threads: threadStore,
                 contacts: contactStore,
+                privacyToken: privacyTokenStore,
                 destroyCaches,
                 destroy
             }

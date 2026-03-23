@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { WA_DEFAULTS, WA_NODE_TAGS, WA_USYNC_CONTEXTS, WA_USYNC_MODES } from '@protocol/constants'
+import {
+    WA_DEFAULTS,
+    WA_NODE_TAGS,
+    WA_PRIVACY_TOKEN_TAGS,
+    WA_PRIVACY_TOKEN_TYPES,
+    WA_USYNC_CONTEXTS,
+    WA_USYNC_MODES
+} from '@protocol/constants'
 import {
     buildAccountBlocklistSyncIq,
     buildAccountDevicesSyncIq,
@@ -29,6 +36,11 @@ import {
     buildGroupRetryMessageNode
 } from '@transport/node/builders/message'
 import { buildMissingPreKeysFetchIq, buildPreKeyUploadIq } from '@transport/node/builders/prekeys'
+import {
+    buildCsTokenMessageNode,
+    buildPrivacyTokenIqNode,
+    buildTcTokenMessageNode
+} from '@transport/node/builders/privacy-token'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
 import type { BinaryNode } from '@transport/types'
 
@@ -240,6 +252,11 @@ test('message builders create fanout nodes and validate participant requirements
                     content: new Uint8Array([9])
                 }
             ]
+        },
+        privacyTokenNode: {
+            tag: WA_PRIVACY_TOKEN_TAGS.TC_TOKEN,
+            attrs: {},
+            content: new Uint8Array([4])
         }
     })
 
@@ -253,6 +270,10 @@ test('message builders create fanout nodes and validate participant requirements
         ? node.content.find((child) => child.tag === 'reporting')
         : null
     assert.ok(reportingNode)
+    const tcTokenNode = Array.isArray(node.content)
+        ? node.content.find((child) => child.tag === WA_PRIVACY_TOKEN_TAGS.TC_TOKEN)
+        : null
+    assert.ok(tcTokenNode)
 
     assert.throws(
         () =>
@@ -296,6 +317,49 @@ test('message builders create fanout nodes and validate participant requirements
         throw new Error('expected retry receipt content array')
     }
     assert.equal(inboundRetry.content[0].attrs.t, '10')
+})
+
+test('privacy token builders create iq and message token nodes', () => {
+    const iq = buildPrivacyTokenIqNode({
+        jid: '5511999999999@s.whatsapp.net',
+        timestampS: 123
+    })
+    assert.equal(iq.tag, WA_NODE_TAGS.IQ)
+    assert.equal(iq.attrs.type, 'set')
+    assert.ok(Array.isArray(iq.content))
+    if (!Array.isArray(iq.content)) {
+        throw new Error('expected privacy token iq content array')
+    }
+    assert.equal(iq.content[0].tag, WA_PRIVACY_TOKEN_TAGS.TOKENS)
+    assert.ok(Array.isArray(iq.content[0].content))
+    if (!Array.isArray(iq.content[0].content)) {
+        throw new Error('expected privacy token list content array')
+    }
+    assert.equal(iq.content[0].content[0].attrs.type, WA_PRIVACY_TOKEN_TYPES.TRUSTED_CONTACT)
+    assert.equal(iq.content[0].content[0].attrs.t, '123')
+
+    const customTypeIq = buildPrivacyTokenIqNode({
+        jid: '5511888888888@s.whatsapp.net',
+        timestampS: 456,
+        type: 'custom_type'
+    })
+    assert.ok(Array.isArray(customTypeIq.content))
+    if (!Array.isArray(customTypeIq.content)) {
+        throw new Error('expected custom privacy token iq content array')
+    }
+    assert.ok(Array.isArray(customTypeIq.content[0].content))
+    if (!Array.isArray(customTypeIq.content[0].content)) {
+        throw new Error('expected custom privacy token list content array')
+    }
+    assert.equal(customTypeIq.content[0].content[0].attrs.type, 'custom_type')
+
+    const tcNode = buildTcTokenMessageNode(new Uint8Array([7]))
+    assert.equal(tcNode.tag, WA_PRIVACY_TOKEN_TAGS.TC_TOKEN)
+    assert.ok(tcNode.content instanceof Uint8Array)
+
+    const csNode = buildCsTokenMessageNode(new Uint8Array([8]))
+    assert.equal(csNode.tag, WA_PRIVACY_TOKEN_TAGS.CS_TOKEN)
+    assert.ok(csNode.content instanceof Uint8Array)
 })
 
 test('message builders cover group and inbound receipt branches', () => {

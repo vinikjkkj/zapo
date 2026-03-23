@@ -113,7 +113,9 @@ function createMessageDispatchCoordinator(
         signalProtocol: {} as never,
         getCurrentMeJid: () => null,
         getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null
+        getCurrentSignedIdentity: () => null,
+        resolvePrivacyTokenNode: async () => null,
+        onDirectMessageSent: () => undefined
     })
 }
 

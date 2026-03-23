@@ -13,6 +13,7 @@ import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator
 import type { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import type { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
+import type { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { processHistorySyncNotification } from '@client/history-sync'
 import { persistIncomingMailboxEntities } from '@client/mailbox'
@@ -49,6 +50,7 @@ import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaParticipantsStore } from '@store/contracts/participants.store'
+import type { WaPrivacyTokenStore } from '@store/contracts/privacy-token.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
@@ -79,6 +81,7 @@ export class WaClient extends EventEmitter {
     private readonly contactStore!: WaContactStore
     private readonly messageStore!: WaMessageStore
     private readonly participantsStore!: WaParticipantsStore
+    private readonly privacyTokenStore!: WaPrivacyTokenStore
     private readonly deviceListStore!: WaDeviceListStore
     private readonly retryStore!: WaRetryStore
     private readonly signalStore!: WaSignalStore
@@ -100,6 +103,7 @@ export class WaClient extends EventEmitter {
     private readonly receiptQueue!: WaReceiptQueue
     private readonly keyShareCoordinator!: WaKeyShareCoordinator
     private readonly connectionManager!: WaConnectionManager
+    private readonly trustedContactToken!: WaTrustedContactTokenCoordinator
     private readonly writeBehind!: WriteBehindPersistence
     private connectPromise: Promise<void> | null = null
     private acceptingIncomingEvents = true
@@ -116,6 +120,7 @@ export class WaClient extends EventEmitter {
         this.contactStore = base.sessionStore.contacts
         this.messageStore = base.sessionStore.messages
         this.participantsStore = base.sessionStore.participants
+        this.privacyTokenStore = base.sessionStore.privacyToken
         this.deviceListStore = base.sessionStore.deviceList
         this.retryStore = base.sessionStore.retry
         this.signalStore = base.sessionStore.signal
@@ -492,7 +497,11 @@ export class WaClient extends EventEmitter {
                     writeBehind: this.writeBehind,
                     emitEvent: this.emit.bind(this) as Parameters<
                         typeof processHistorySyncNotification
-                    >[0]['emitEvent']
+                    >[0]['emitEvent'],
+                    onPrivacyTokens: (conversations) =>
+                        this.trustedContactToken.hydrateFromHistorySync(conversations),
+                    onNctSalt: (salt) =>
+                        this.trustedContactToken.hydrateNctSaltFromHistorySync(salt)
                 },
                 notification
             )
@@ -604,8 +613,16 @@ export class WaClient extends EventEmitter {
         return this.messageDispatch.sendMessage(to, content, options)
     }
 
-    public syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
-        return this.messageDispatch.syncSignalSession(jid, reasonIdentity)
+    public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
+        await this.messageDispatch.syncSignalSession(jid, reasonIdentity)
+        if (reasonIdentity) {
+            this.trustedContactToken.reissueOnIdentityChange(jid).catch((err) =>
+                this.logger.warn('tc token reissue on identity change failed', {
+                    jid,
+                    message: toError(err).message
+                })
+            )
+        }
     }
 
     public sendReceipt(input: WaSendReceiptInput): Promise<void> {
@@ -785,6 +802,7 @@ export class WaClient extends EventEmitter {
                     continue
                 }
                 try {
+                    this.handleNctSaltMutation(mutation)
                     const event = parseChatEventFromAppStateMutation(mutation)
                     if (!event) {
                         continue
@@ -799,6 +817,31 @@ export class WaClient extends EventEmitter {
                     })
                 }
             }
+        }
+    }
+
+    private handleNctSaltMutation(mutation: {
+        readonly operation: 'set' | 'remove'
+        readonly value: {
+            readonly nctSaltSyncAction?: { readonly salt?: Uint8Array | null } | null
+        } | null
+    }): void {
+        const nctAction = mutation.value?.nctSaltSyncAction
+        if (!nctAction) {
+            return
+        }
+        if (mutation.operation === 'set' && nctAction.salt) {
+            this.trustedContactToken.handleNctSaltSync(nctAction.salt).catch((err) =>
+                this.logger.warn('nct salt sync set failed', {
+                    message: toError(err).message
+                })
+            )
+        } else if (mutation.operation === 'remove') {
+            this.trustedContactToken.handleNctSaltSync(null).catch((err) =>
+                this.logger.warn('nct salt sync remove failed', {
+                    message: toError(err).message
+                })
+            )
         }
     }
 
@@ -828,6 +871,7 @@ export class WaClient extends EventEmitter {
         await this.signalStore.clear()
         await this.senderKeyStore.clear()
         await this.threadStore.clear()
+        await this.privacyTokenStore.clear()
     }
 
     private tryEnterIncomingHandler(): boolean {

@@ -14,6 +14,7 @@ type DirectMessageFanoutInput = {
     readonly participants: readonly EncryptedParticipant[]
     readonly deviceIdentity?: Uint8Array
     readonly reportingNode?: BinaryNode
+    readonly privacyTokenNode?: BinaryNode
 }
 
 type GroupMessageFanoutInput = DirectMessageFanoutInput & {
@@ -87,6 +88,9 @@ export function buildDirectMessageFanoutNode(input: GroupMessageFanoutInput): Bi
     }
     if (input.reportingNode) {
         content.push(input.reportingNode)
+    }
+    if (input.privacyTokenNode) {
+        content.push(input.privacyTokenNode)
     }
 
     return {

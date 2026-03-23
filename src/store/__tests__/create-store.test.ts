@@ -41,6 +41,12 @@ test('createStore validates sqlite requirements and session lifecycle', async ()
             fromMe: true
         })
         assert.ok(await session1.messages.getById('m1'))
+        await session1.privacyToken.upsert({
+            jid: '5511@s.whatsapp.net',
+            tcToken: new Uint8Array([1, 2]),
+            updatedAtMs: Date.now()
+        })
+        assert.ok(await session1.privacyToken.getByJid('5511@s.whatsapp.net'))
 
         await store.destroyCaches()
         await store.destroy()

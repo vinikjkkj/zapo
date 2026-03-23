@@ -4,6 +4,7 @@ import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaParticipantsStore } from '@store/contracts/participants.store'
+import type { WaPrivacyTokenStore } from '@store/contracts/privacy-token.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
@@ -34,6 +35,7 @@ export type WaSqliteTableName =
     | 'mailbox_contacts'
     | 'group_participants_cache'
     | 'device_list_cache'
+    | 'privacy_tokens'
 
 export type WaSqliteTableNameOverrides = Readonly<Partial<Record<WaSqliteTableName, string>>>
 
@@ -56,6 +58,7 @@ export interface WaStoreSession {
     readonly messages: WaMessageStore
     readonly threads: WaThreadStore
     readonly contacts: WaContactStore
+    readonly privacyToken: WaPrivacyTokenStore
     destroyCaches(): Promise<void>
     destroy(): Promise<void>
 }
@@ -74,6 +77,7 @@ export interface WaStoreProviderSelection {
     readonly messages?: 'none' | 'sqlite' | 'memory'
     readonly threads?: 'none' | 'sqlite' | 'memory'
     readonly contacts?: 'none' | 'sqlite' | 'memory'
+    readonly privacyToken?: 'sqlite' | 'memory'
 }
 
 export interface WaStoreCacheProviderSelection {
@@ -108,6 +112,7 @@ export interface WaStoreMemoryLimitSelection {
     readonly messages?: number
     readonly threads?: number
     readonly contacts?: number
+    readonly privacyTokens?: number
 }
 
 export type WaStoreDomainValueOrFactory<T> = T | ((sessionId: string) => T)
@@ -120,6 +125,7 @@ export interface WaCreateStoreCustomProviders {
     readonly messages?: WaStoreDomainValueOrFactory<WaMessageStore>
     readonly threads?: WaStoreDomainValueOrFactory<WaThreadStore>
     readonly contacts?: WaStoreDomainValueOrFactory<WaContactStore>
+    readonly privacyToken?: WaStoreDomainValueOrFactory<WaPrivacyTokenStore>
 }
 
 export interface WaCreateStoreCustomCacheProviders {

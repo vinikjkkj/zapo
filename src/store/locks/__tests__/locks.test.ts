@@ -2,7 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
+import type {
+    WaPrivacyTokenStore,
+    WaStoredPrivacyTokenRecord
+} from '@store/contracts/privacy-token.store'
 import { withMessageLock } from '@store/locks/message.lock'
+import { withPrivacyTokenLock } from '@store/locks/privacy-token.lock'
 import { delay } from '@util/async'
 
 async function flushMicrotasks(turns = 3): Promise<void> {
@@ -63,6 +68,30 @@ function createMessageStore(
         listByThread: async (threadJid) =>
             [...records.values()].filter((record) => record.threadJid === threadJid),
         deleteById: async (id) => (records.delete(id) ? 1 : 0),
+        clear: async () => {
+            records.clear()
+        }
+    }
+}
+
+function createPrivacyTokenStore(
+    onUpsert: (record: WaStoredPrivacyTokenRecord) => Promise<void>
+): WaPrivacyTokenStore {
+    const records = new Map<string, WaStoredPrivacyTokenRecord>()
+
+    return {
+        upsert: async (record) => {
+            await onUpsert(record)
+            records.set(record.jid, record)
+        },
+        upsertBatch: async (batch) => {
+            for (const record of batch) {
+                await onUpsert(record)
+                records.set(record.jid, record)
+            }
+        },
+        getByJid: async (jid) => records.get(jid) ?? null,
+        deleteByJid: async (jid) => (records.delete(jid) ? 1 : 0),
         clear: async () => {
             records.clear()
         }
@@ -135,4 +164,58 @@ test('message lock keeps reads as passthrough', async () => {
 
     await store.getById('x')
     assert.equal(reads, 1)
+})
+
+test('privacy token lock serializes writes on the same jid', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+
+    let inFlight = 0
+    let maxInFlightForSameKey = 0
+
+    const store = withPrivacyTokenLock(
+        createPrivacyTokenStore(async (record) => {
+            if (record.jid !== 'same@s.whatsapp.net') {
+                return
+            }
+            inFlight += 1
+            maxInFlightForSameKey = Math.max(maxInFlightForSameKey, inFlight)
+            await delay(20)
+            inFlight -= 1
+        })
+    )
+
+    const done = Promise.all([
+        store.upsert({ jid: 'same@s.whatsapp.net', updatedAtMs: 1 }),
+        store.upsert({ jid: 'same@s.whatsapp.net', updatedAtMs: 2 }),
+        store.upsert({ jid: 'same@s.whatsapp.net', updatedAtMs: 3 })
+    ])
+    await settleWithMockTimers(t, done, 10, 20)
+    await done
+
+    assert.equal(maxInFlightForSameKey, 1)
+})
+
+test('privacy token lock allows parallel writes for different jids', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+
+    let inFlight = 0
+    let maxInFlight = 0
+
+    const store = withPrivacyTokenLock(
+        createPrivacyTokenStore(async () => {
+            inFlight += 1
+            maxInFlight = Math.max(maxInFlight, inFlight)
+            await delay(20)
+            inFlight -= 1
+        })
+    )
+
+    const done = Promise.all([
+        store.upsert({ jid: 'a@s.whatsapp.net', updatedAtMs: 1 }),
+        store.upsert({ jid: 'b@s.whatsapp.net', updatedAtMs: 2 })
+    ])
+    await settleWithMockTimers(t, done, 10, 10)
+    await done
+
+    assert.equal(maxInFlight, 2)
 })

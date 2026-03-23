@@ -5,6 +5,7 @@ import { WA_APP_STATE_COLLECTIONS } from '@protocol/constants'
 import { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
 import { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
+import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
 import { WaRetryMemoryStore } from '@store/providers/memory/retry.store'
 import { SenderKeyMemoryStore } from '@store/providers/memory/sender-key.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
@@ -203,4 +204,38 @@ test('memory signal/sender-key/appstate stores cover key workflows', async () =>
     assert.equal(states.length, 2)
     assert.equal(states[0].version, 2)
     assert.equal(states[1].initialized, false)
+})
+
+test('memory privacy token store merges partial updates and enforces bounds', async () => {
+    const store = new WaPrivacyTokenMemoryStore(1)
+
+    await store.upsert({
+        jid: 'a@s.whatsapp.net',
+        tcToken: new Uint8Array([1, 2, 3]),
+        tcTokenTimestamp: 11,
+        updatedAtMs: 1
+    })
+    await store.upsert({
+        jid: 'a@s.whatsapp.net',
+        tcTokenSenderTimestamp: 22,
+        updatedAtMs: 2
+    })
+
+    const merged = await store.getByJid('a@s.whatsapp.net')
+    assert.ok(merged)
+    assert.deepEqual(merged?.tcToken, new Uint8Array([1, 2, 3]))
+    assert.equal(merged?.tcTokenTimestamp, 11)
+    assert.equal(merged?.tcTokenSenderTimestamp, 22)
+
+    await store.upsert({
+        jid: 'b@s.whatsapp.net',
+        nctSalt: new Uint8Array([9, 9]),
+        updatedAtMs: 3
+    })
+
+    assert.equal(await store.getByJid('a@s.whatsapp.net'), null)
+    assert.ok(await store.getByJid('b@s.whatsapp.net'))
+    assert.equal(await store.deleteByJid('b@s.whatsapp.net'), 1)
+    assert.equal(await store.deleteByJid('missing@s.whatsapp.net'), 0)
+    await store.destroy()
 })

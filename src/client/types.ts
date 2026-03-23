@@ -31,6 +31,15 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
     readonly chatEvents?: {
         readonly emitSnapshotMutations?: boolean
     }
+    readonly privacyToken?: WaPrivacyTokenOptions
+}
+
+export interface WaPrivacyTokenOptions {
+    readonly tcTokenDurationS?: number
+    readonly tcTokenNumBuckets?: number
+    readonly tcTokenSenderDurationS?: number
+    readonly tcTokenSenderNumBuckets?: number
+    readonly tcTokenMaxDurationS?: number
 }
 
 export interface WaWriteBehindOptions {
@@ -323,4 +332,12 @@ export interface WaClientEventMap {
     readonly group_event: (event: WaGroupEvent) => void
     readonly chat_event: (event: WaChatEvent) => void
     readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void
+    readonly privacy_token_update: (event: WaPrivacyTokenUpdateEvent) => void
+}
+
+export interface WaPrivacyTokenUpdateEvent {
+    readonly jid: string
+    readonly timestampS: number
+    readonly type: string
+    readonly source: 'notification' | 'history_sync'
 }

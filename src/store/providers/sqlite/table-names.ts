@@ -22,7 +22,8 @@ const WA_SQLITE_TABLE_NAME_ORDER = Object.freeze([
     'mailbox_threads',
     'mailbox_contacts',
     'group_participants_cache',
-    'device_list_cache'
+    'device_list_cache',
+    'privacy_tokens'
 ] as const satisfies readonly WaSqliteTableName[])
 const WA_SQLITE_ALLOWED_TABLE_NAME_SET = new Set<string>(WA_SQLITE_TABLE_NAME_ORDER)
 const WA_SQLITE_ALLOWED_TABLE_NAME_LIST = WA_SQLITE_TABLE_NAME_ORDER.join(', ')
@@ -48,7 +49,8 @@ export const WA_SQLITE_DEFAULT_TABLE_NAMES: Readonly<Record<WaSqliteTableName, s
         mailbox_threads: 'mailbox_threads',
         mailbox_contacts: 'mailbox_contacts',
         group_participants_cache: 'group_participants_cache',
-        device_list_cache: 'device_list_cache'
+        device_list_cache: 'device_list_cache',
+        privacy_tokens: 'privacy_tokens'
     })
 
 const DEFAULT_SQLITE_TABLE_NAME_SERIALIZATION = serializeSqliteTableNames(

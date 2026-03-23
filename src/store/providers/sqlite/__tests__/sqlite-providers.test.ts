@@ -7,6 +7,7 @@ import test from 'node:test'
 import { WaAuthSqliteStore } from '@store/providers/sqlite/auth.store'
 import { openSqliteConnection } from '@store/providers/sqlite/connection'
 import { WaMessageSqliteStore } from '@store/providers/sqlite/message.store'
+import { WaPrivacyTokenSqliteStore } from '@store/providers/sqlite/privacy-token.store'
 import { WaThreadSqliteStore } from '@store/providers/sqlite/thread.store'
 
 interface Destroyable {
@@ -115,6 +116,77 @@ test('sqlite message/thread stores are session-scoped and preserve coalesced fie
             (storeB as unknown as Destroyable).destroy(),
             (threadStore as unknown as Destroyable).destroy()
         ])
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+test('sqlite privacy token store is session-scoped and preserves coalesced fields', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-privacy-token-'))
+    const sqlitePath = join(dir, 'state.sqlite')
+    const storeA = new WaPrivacyTokenSqliteStore({
+        path: sqlitePath,
+        sessionId: 'session-a',
+        driver: 'better-sqlite3'
+    })
+    const storeB = new WaPrivacyTokenSqliteStore({
+        path: sqlitePath,
+        sessionId: 'session-b',
+        driver: 'better-sqlite3'
+    })
+
+    try {
+        await storeA.upsert({
+            jid: '5511@s.whatsapp.net',
+            tcToken: new Uint8Array([1, 2, 3]),
+            tcTokenTimestamp: 100,
+            updatedAtMs: 1000
+        })
+        await storeA.upsert({
+            jid: '5511@s.whatsapp.net',
+            tcTokenSenderTimestamp: 200,
+            updatedAtMs: 2000
+        })
+        await storeB.upsert({
+            jid: '5511@s.whatsapp.net',
+            nctSalt: new Uint8Array([9, 9]),
+            updatedAtMs: 3000
+        })
+
+        const sessionARecord = await storeA.getByJid('5511@s.whatsapp.net')
+        assert.ok(sessionARecord)
+        assert.deepEqual(sessionARecord?.tcToken, new Uint8Array([1, 2, 3]))
+        assert.equal(sessionARecord?.tcTokenTimestamp, 100)
+        assert.equal(sessionARecord?.tcTokenSenderTimestamp, 200)
+        assert.equal(sessionARecord?.nctSalt, undefined)
+
+        const sessionBRecord = await storeB.getByJid('5511@s.whatsapp.net')
+        assert.ok(sessionBRecord)
+        assert.deepEqual(sessionBRecord?.nctSalt, new Uint8Array([9, 9]))
+        assert.equal(sessionBRecord?.tcToken, undefined)
+
+        await storeA.upsertBatch([
+            {
+                jid: 'a@s.whatsapp.net',
+                tcToken: new Uint8Array([4]),
+                updatedAtMs: 4000
+            },
+            {
+                jid: 'b@s.whatsapp.net',
+                nctSalt: new Uint8Array([5]),
+                updatedAtMs: 4001
+            }
+        ])
+
+        assert.ok(await storeA.getByJid('a@s.whatsapp.net'))
+        assert.ok(await storeA.getByJid('b@s.whatsapp.net'))
+        assert.equal(await storeA.deleteByJid('a@s.whatsapp.net'), 1)
+        assert.equal(await storeA.deleteByJid('a@s.whatsapp.net'), 0)
+
+        await storeA.clear()
+        assert.equal(await storeA.getByJid('5511@s.whatsapp.net'), null)
+        assert.ok(await storeB.getByJid('5511@s.whatsapp.net'))
+    } finally {
+        await Promise.all([storeA.destroy(), storeB.destroy()])
         await rm(dir, { recursive: true, force: true })
     }
 })

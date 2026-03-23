@@ -182,6 +182,67 @@ test('history sync processor does not emit chunk event when chunk persistence fa
     assert.equal(emitted.length, 0)
 })
 
+test('history sync processor forwards privacy token payloads and nct salt hooks', async () => {
+    const historySyncBytes = proto.HistorySync.encode({
+        chunkOrder: 3,
+        progress: 20,
+        conversations: [
+            {
+                id: '551100000000@s.whatsapp.net',
+                tcToken: new Uint8Array([7, 8]),
+                tcTokenTimestamp: 123,
+                tcTokenSenderTimestamp: 456
+            },
+            {
+                id: 'ignored@s.whatsapp.net'
+            }
+        ],
+        nctSalt: new Uint8Array([9, 9, 9])
+    }).finish()
+    const zipped = gzipSync(historySyncBytes)
+
+    const privacyTokenPayloads: unknown[] = []
+    const nctSalts: Uint8Array[] = []
+
+    await processHistorySyncNotification(
+        {
+            logger: createLogger(),
+            mediaTransfer: {
+                downloadAndDecrypt: async () => {
+                    throw new Error('should not be called for inline payload')
+                }
+            } as never,
+            writeBehind: {
+                persistMessageAsync: async () => undefined,
+                persistThreadAsync: async () => undefined,
+                persistContactAsync: async () => undefined
+            } as never,
+            emitEvent: () => undefined,
+            onPrivacyTokens: async (conversations) => {
+                privacyTokenPayloads.push(conversations)
+            },
+            onNctSalt: async (salt) => {
+                nctSalts.push(salt)
+            }
+        },
+        {
+            syncType: proto.Message.HistorySyncType.RECENT,
+            initialHistBootstrapInlinePayload: zipped
+        }
+    )
+
+    assert.equal(privacyTokenPayloads.length, 1)
+    assert.deepEqual(privacyTokenPayloads[0], [
+        {
+            jid: '551100000000@s.whatsapp.net',
+            tcToken: new Uint8Array([7, 8]),
+            tcTokenTimestamp: 123,
+            tcTokenSenderTimestamp: 456
+        }
+    ])
+    assert.deepEqual(nctSalts, [new Uint8Array([9, 9, 9])])
+})
+
 test('resolveWaClientBase rejects invalid proxy transport shapes', () => {
     const minimalStore = {
         session: () => ({})

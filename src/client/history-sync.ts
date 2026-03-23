@@ -27,6 +27,15 @@ interface WaHistorySyncDeps {
         event: K,
         ...args: Parameters<WaClientEventMap[K]>
     ) => void
+    readonly onPrivacyTokens?: (
+        conversations: readonly {
+            readonly jid: string
+            readonly tcToken?: Uint8Array | null
+            readonly tcTokenTimestamp?: number | null
+            readonly tcTokenSenderTimestamp?: number | null
+        }[]
+    ) => Promise<void>
+    readonly onNctSalt?: (salt: Uint8Array) => Promise<void>
 }
 
 export async function processHistorySyncNotification(
@@ -109,6 +118,37 @@ export async function processHistorySyncNotification(
             }
             messagesCount += 1
         }
+    }
+
+    if (deps.onPrivacyTokens) {
+        const tokenConversations: {
+            readonly jid: string
+            readonly tcToken?: Uint8Array | null
+            readonly tcTokenTimestamp?: number | null
+            readonly tcTokenSenderTimestamp?: number | null
+        }[] = []
+        for (const conversation of historySync.conversations) {
+            if (!conversation.id) continue
+            if (
+                conversation.tcToken ||
+                conversation.tcTokenTimestamp ||
+                conversation.tcTokenSenderTimestamp
+            ) {
+                tokenConversations[tokenConversations.length] = {
+                    jid: conversation.id,
+                    tcToken: conversation.tcToken,
+                    tcTokenTimestamp: longToNumber(conversation.tcTokenTimestamp) || undefined,
+                    tcTokenSenderTimestamp:
+                        longToNumber(conversation.tcTokenSenderTimestamp) || undefined
+                }
+            }
+        }
+        if (tokenConversations.length > 0) {
+            pendingWrites[pendingWrites.length] = deps.onPrivacyTokens(tokenConversations)
+        }
+    }
+    if (deps.onNctSalt && historySync.nctSalt) {
+        pendingWrites[pendingWrites.length] = deps.onNctSalt(historySync.nctSalt)
     }
 
     const event: WaHistorySyncChunkEvent = {

@@ -6,9 +6,11 @@ import test from 'node:test'
 
 import { WaContactMemoryStore } from '@store/providers/memory/contact.store'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
+import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
 import { WaThreadMemoryStore } from '@store/providers/memory/thread.store'
 import { WaContactSqliteStore } from '@store/providers/sqlite/contact.store'
 import { WaMessageSqliteStore } from '@store/providers/sqlite/message.store'
+import { WaPrivacyTokenSqliteStore } from '@store/providers/sqlite/privacy-token.store'
 import { WaThreadSqliteStore } from '@store/providers/sqlite/thread.store'
 
 interface Destroyable {
@@ -52,6 +54,24 @@ test('thread/contact contract parity between memory and sqlite providers', async
                 new WaContactSqliteStore({
                     path: join(dir, 'state.sqlite'),
                     sessionId: 'session-b',
+                    driver: 'better-sqlite3'
+                })
+        )
+    } finally {
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+test('privacy token store contract parity between memory and sqlite providers', async () => {
+    await runPrivacyTokenStoreContract(async () => new WaPrivacyTokenMemoryStore(10))
+
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-privacy-token-contract-'))
+    try {
+        await runPrivacyTokenStoreContract(
+            async () =>
+                new WaPrivacyTokenSqliteStore({
+                    path: join(dir, 'state.sqlite'),
+                    sessionId: 'session-c',
                     driver: 'better-sqlite3'
                 })
         )
@@ -165,6 +185,77 @@ async function runContactStoreContract(
         assert.ok(await store.getByJid('5511@s.whatsapp.net'))
         assert.equal(await store.deleteByJid('5511@s.whatsapp.net'), 1)
         await store.clear()
+    } finally {
+        await store.destroy?.()
+    }
+}
+
+async function runPrivacyTokenStoreContract(
+    factory: () => Promise<
+        {
+            upsert: (record: {
+                jid: string
+                tcToken?: Uint8Array
+                tcTokenTimestamp?: number
+                tcTokenSenderTimestamp?: number
+                nctSalt?: Uint8Array
+                updatedAtMs: number
+            }) => Promise<void>
+            upsertBatch: (
+                records: readonly {
+                    jid: string
+                    tcToken?: Uint8Array
+                    tcTokenTimestamp?: number
+                    tcTokenSenderTimestamp?: number
+                    nctSalt?: Uint8Array
+                    updatedAtMs: number
+                }[]
+            ) => Promise<void>
+            getByJid: (jid: string) => Promise<{
+                jid: string
+                tcToken?: Uint8Array
+                tcTokenTimestamp?: number
+                tcTokenSenderTimestamp?: number
+                nctSalt?: Uint8Array
+                updatedAtMs: number
+            } | null>
+            deleteByJid: (jid: string) => Promise<number>
+            clear: () => Promise<void>
+        } & Destroyable
+    >
+): Promise<void> {
+    const store = await factory()
+    try {
+        await store.upsert({
+            jid: '5511@s.whatsapp.net',
+            tcToken: new Uint8Array([1]),
+            tcTokenTimestamp: 10,
+            updatedAtMs: 100
+        })
+        await store.upsert({
+            jid: '5511@s.whatsapp.net',
+            tcTokenSenderTimestamp: 11,
+            updatedAtMs: 101
+        })
+        await store.upsertBatch([
+            {
+                jid: 'salt@internal',
+                nctSalt: new Uint8Array([9, 9]),
+                updatedAtMs: 102
+            }
+        ])
+
+        const first = await store.getByJid('5511@s.whatsapp.net')
+        assert.ok(first)
+        assert.deepEqual(first?.tcToken, new Uint8Array([1]))
+        assert.equal(first?.tcTokenTimestamp, 10)
+        assert.equal(first?.tcTokenSenderTimestamp, 11)
+        assert.ok(await store.getByJid('salt@internal'))
+        assert.equal(await store.deleteByJid('salt@internal'), 1)
+        assert.equal(await store.deleteByJid('missing@internal'), 0)
+
+        await store.clear()
+        assert.equal(await store.getByJid('5511@s.whatsapp.net'), null)
     } finally {
         await store.destroy?.()
     }

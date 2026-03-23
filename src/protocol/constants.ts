@@ -25,6 +25,12 @@ export {
     WA_SUPPORTED_DIRTY_TYPES
 } from '@protocol/dirty'
 export { WA_GROUP_NOTIFICATION_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/notification'
+export {
+    WA_PRIVACY_TOKEN_NOTIFICATION_TYPE,
+    WA_PRIVACY_TOKEN_TAGS,
+    WA_PRIVACY_TOKEN_TYPES,
+    WA_TC_TOKEN_DEFAULTS
+} from '@protocol/privacy-token'
 export { WA_DEFAULTS } from '@protocol/defaults'
 export { WA_GROUP_PARTICIPANT_TYPES, type WaGroupSetting } from '@protocol/group'
 export { WA_USYNC_CONTEXTS, WA_USYNC_DEFAULTS, WA_USYNC_MODES } from '@protocol/usync'

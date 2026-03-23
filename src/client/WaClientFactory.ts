@@ -17,7 +17,9 @@ import {
     createStreamControlHandler,
     type WaStreamControlHandler
 } from '@client/coordinators/WaStreamControlCoordinator'
+import { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
 import { handleDirtyBits, parseDirtyBits } from '@client/dirty'
+import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
 import {
     buildMediaMessageContent,
     getMediaConn as getClientMediaConn,
@@ -37,7 +39,12 @@ import type { WaMediaConn } from '@media/types'
 import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { handleIncomingMessageAck } from '@message/incoming'
 import { WaMessageClient } from '@message/WaMessageClient'
-import { getWaCompanionPlatformId, WA_DEFAULTS } from '@protocol/constants'
+import {
+    getWaCompanionPlatformId,
+    WA_DEFAULTS,
+    WA_NODE_TAGS,
+    WA_PRIVACY_TOKEN_NOTIFICATION_TYPE
+} from '@protocol/constants'
 import { createOutboundRetryTracker } from '@retry/tracker'
 import type { WaRetryDecryptFailureContext } from '@retry/types'
 import { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
@@ -50,6 +57,7 @@ import { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import { createSignalSessionResolver } from '@signal/session/resolver'
 import { SignalProtocol } from '@signal/session/SignalProtocol'
 import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
+import { buildAckNode } from '@transport/node/builders/global'
 import { createUsyncSidGenerator } from '@transport/node/usync'
 import { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import { WaNodeTransport } from '@transport/node/WaNodeTransport'
@@ -116,6 +124,7 @@ interface WaClientDependencies {
     readonly receiptQueue: WaReceiptQueue
     readonly keyShareCoordinator: WaKeyShareCoordinator
     readonly connectionManager: WaConnectionManager
+    readonly trustedContactToken: WaTrustedContactTokenCoordinator
 }
 
 function assertProxyTransport(value: unknown, path: string): void {
@@ -471,6 +480,21 @@ export function buildWaClientDependencies(input: {
         logger
     })
 
+    const trustedContactToken = new WaTrustedContactTokenCoordinator({
+        logger,
+        store: sessionStore.privacyToken,
+        runtime: {
+            queryWithContext: runtime.queryWithContext,
+            emitEvent: runtime.emitEvent,
+            getCurrentMeLid: () => getCurrentMeLid() ?? null
+        },
+        durationS: options.privacyToken?.tcTokenDurationS,
+        numBuckets: options.privacyToken?.tcTokenNumBuckets,
+        senderDurationS: options.privacyToken?.tcTokenSenderDurationS,
+        senderNumBuckets: options.privacyToken?.tcTokenSenderNumBuckets,
+        maxDurationS: options.privacyToken?.tcTokenMaxDurationS
+    })
+
     let messageDispatch!: WaMessageDispatchCoordinator
 
     const appStateSyncKeyProtocol = createAppStateSyncKeyProtocol({
@@ -496,7 +520,17 @@ export function buildWaClientDependencies(input: {
         signalProtocol,
         getCurrentMeJid,
         getCurrentMeLid,
-        getCurrentSignedIdentity
+        getCurrentSignedIdentity,
+        resolvePrivacyTokenNode: (recipientJid) =>
+            trustedContactToken.resolveTokenForMessage(recipientJid),
+        onDirectMessageSent: (recipientJid) => {
+            trustedContactToken.maybeIssueSenderToken(recipientJid).catch((err) =>
+                logger.warn('sender token issue failed', {
+                    to: recipientJid,
+                    message: toError(err).message
+                })
+            )
+        }
     })
 
     const retryCoordinator = new WaRetryCoordinator({
@@ -626,6 +660,30 @@ export function buildWaClientDependencies(input: {
         })
     })
 
+    incomingNode.registerIncomingHandler({
+        tag: WA_NODE_TAGS.NOTIFICATION,
+        subtype: WA_PRIVACY_TOKEN_NOTIFICATION_TYPE,
+        prepend: true,
+        handler: async (node) => {
+            const fromJid = node.attrs.from ?? node.attrs.sender_lid
+            if (!fromJid) {
+                return false
+            }
+            const tokens = parsePrivacyTokenNotification(node)
+            if (tokens.length === 0) {
+                return false
+            }
+            await trustedContactToken.handleIncomingToken(fromJid, tokens)
+            const ackNode = buildAckNode({
+                kind: 'notification',
+                node,
+                typeOverride: WA_PRIVACY_TOKEN_NOTIFICATION_TYPE
+            })
+            await runtime.sendNode(ackNode)
+            return true
+        }
+    })
+
     passiveTasks = new WaPassiveTasksCoordinator({
         logger,
         signalStore: sessionStore.signal,
@@ -666,6 +724,7 @@ export function buildWaClientDependencies(input: {
         groupCoordinator,
         receiptQueue,
         keyShareCoordinator,
-        connectionManager
+        connectionManager,
+        trustedContactToken
     }
 }

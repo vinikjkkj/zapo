@@ -9,6 +9,7 @@ export type WaSqliteMigrationDomain =
     | 'participants'
     | 'deviceList'
     | 'mailbox'
+    | 'privacyToken'
 
 interface WaSqliteMigration {
     readonly id: string
@@ -304,6 +305,24 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
             db.exec(`
                 ALTER TABLE signal_meta
                 ADD COLUMN signed_prekey_rotation_ts INTEGER;
+            `)
+        }
+    },
+    {
+        id: '0008_privacy_token_schema',
+        domain: 'privacyToken',
+        up: (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS privacy_tokens (
+                    session_id TEXT NOT NULL,
+                    jid TEXT NOT NULL,
+                    tc_token BLOB,
+                    tc_token_timestamp INTEGER,
+                    tc_token_sender_timestamp INTEGER,
+                    nct_salt BLOB,
+                    updated_at_ms INTEGER NOT NULL,
+                    PRIMARY KEY (session_id, jid)
+                );
             `)
         }
     }

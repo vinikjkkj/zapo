@@ -63,6 +63,8 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly getCurrentMeJid: () => string | null | undefined
     readonly getCurrentMeLid: () => string | null | undefined
     readonly getCurrentSignedIdentity: () => Proto.IADVSignedDeviceIdentity | null | undefined
+    readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
+    readonly onDirectMessageSent: (recipientJid: string) => void
 }
 
 type GroupAddressingMode = 'pn' | 'lid'
@@ -90,6 +92,8 @@ export class WaMessageDispatchCoordinator {
         | Proto.IADVSignedDeviceIdentity
         | null
         | undefined
+    private readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
+    private readonly onDirectMessageSent: (recipientJid: string) => void
 
     public constructor(options: WaMessageDispatchCoordinatorOptions) {
         this.logger = options.logger
@@ -105,6 +109,8 @@ export class WaMessageDispatchCoordinator {
         this.getCurrentMeJid = options.getCurrentMeJid
         this.getCurrentMeLid = options.getCurrentMeLid
         this.getCurrentSignedIdentity = options.getCurrentSignedIdentity
+        this.resolvePrivacyTokenNode = options.resolvePrivacyTokenNode
+        this.onDirectMessageSent = options.onDirectMessageSent
     }
 
     public async publishMessageNode(
@@ -957,13 +963,23 @@ export class WaMessageDispatchCoordinator {
             remoteJid: recipientUserJid,
             context: 'direct_fanout'
         })
+        let privacyTokenNode: BinaryNode | undefined
+        try {
+            privacyTokenNode = (await this.resolvePrivacyTokenNode(recipientUserJid)) ?? undefined
+        } catch (error) {
+            this.logger.warn('privacy token resolution failed', {
+                to: recipientUserJid,
+                message: toError(error).message
+            })
+        }
         const messageNode = buildDirectMessageFanoutNode({
             to: recipientJid,
             type,
             id: sendOptions.id,
             participants,
             deviceIdentity,
-            reportingNode: reportingArtifacts?.node ?? undefined
+            reportingNode: reportingArtifacts?.node ?? undefined,
+            privacyTokenNode
         })
 
         const replayPayload: WaRetryReplayPayload = {
@@ -972,7 +988,7 @@ export class WaMessageDispatchCoordinator {
             type,
             plaintext
         }
-        return this.retryTracker.track(
+        const result = await this.retryTracker.track(
             {
                 messageIdHint: sendOptions.id ?? messageNode.attrs.id,
                 toJid: recipientJid,
@@ -982,6 +998,8 @@ export class WaMessageDispatchCoordinator {
             },
             async () => this.messageClient.publishNode(messageNode, sendOptions)
         )
+        this.onDirectMessageSent(recipientUserJid)
+        return result
     }
 
     private async withResolvedMessageId(
