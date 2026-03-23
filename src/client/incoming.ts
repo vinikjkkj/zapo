@@ -9,11 +9,7 @@ import type {
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { WA_NODE_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
-import {
-    buildNotificationAckNode,
-    buildReceiptAckNode,
-    buildRetryReceiptAckNode
-} from '@transport/node/builders/global'
+import { buildAckNode } from '@transport/node/builders/global'
 import { getFirstNodeChild, getNodeChildrenNonEmptyAttrValuesByTag } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt, toError } from '@util/primitives'
@@ -172,12 +168,28 @@ export function createIncomingReceiptHandler(
             if (options.handleIncomingRetryReceipt) {
                 await options.handleIncomingRetryReceipt(node)
             } else {
-                await sendSafeAck(options.logger, options.sendNode, buildRetryReceiptAckNode(node))
+                await sendSafeAck(
+                    options.logger,
+                    options.sendNode,
+                    buildAckNode({
+                        kind: 'receipt',
+                        node,
+                        retryType: true
+                    })
+                )
             }
             return true
         }
 
-        await sendSafeAck(options.logger, options.sendNode, buildReceiptAckNode(node))
+        await sendSafeAck(
+            options.logger,
+            options.sendNode,
+            buildAckNode({
+                kind: 'receipt',
+                node,
+                includeParticipant: receiptType !== 'server-error'
+            })
+        )
         return true
     }
 }
@@ -258,7 +270,12 @@ export function createIncomingNotificationHandler(
         await sendSafeAck(
             options.logger,
             options.sendNode,
-            buildNotificationAckNode(node, undefined, includeParticipantInAck, includeTypeInAck)
+            buildAckNode({
+                kind: 'notification',
+                node,
+                includeParticipant: includeParticipantInAck,
+                includeType: includeTypeInAck
+            })
         )
         if (notificationType === 'server_sync' && serverSyncCollections.length > 0) {
             const collectionsCsv = serverSyncCollections.join(',')
@@ -307,7 +324,11 @@ export function createIncomingGroupNotificationHandler(
         await sendSafeAck(
             options.logger,
             options.sendNode,
-            buildNotificationAckNode(node, undefined, true)
+            buildAckNode({
+                kind: 'notification',
+                node,
+                includeParticipant: true
+            })
         )
         return true
     }

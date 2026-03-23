@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createIncomingNotificationHandler } from '@client/incoming'
+import { createIncomingNotificationHandler, createIncomingReceiptHandler } from '@client/incoming'
 import type { Logger } from '@infra/log/types'
 import type { BinaryNode } from '@transport/types'
 
@@ -108,4 +108,30 @@ test('notification ack omits type only for encrypt and devices types', async () 
     })
     assert.equal(sent.length, 3)
     assert.equal(sent[2].attrs.type, 'server_sync')
+})
+
+test('receipt ack omits participant for server-error receipts', async () => {
+    const sent: BinaryNode[] = []
+    const handler = createIncomingReceiptHandler({
+        logger: createLogger(),
+        sendNode: async (node) => {
+            sent.push(node)
+        },
+        emitIncomingReceipt: () => undefined
+    })
+
+    await handler({
+        tag: 'receipt',
+        attrs: {
+            id: 'server-error-1',
+            from: '5511999999999@s.whatsapp.net',
+            type: 'server-error',
+            participant: '5511999999999:2@s.whatsapp.net'
+        }
+    })
+
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].tag, 'ack')
+    assert.equal(sent[0].attrs.type, 'server-error')
+    assert.equal('participant' in sent[0].attrs, false)
 })

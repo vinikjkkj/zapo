@@ -12,21 +12,13 @@ export {
     buildCompanionHelloRequestNode,
     buildGetCountryCodeRequestNode
 } from '@transport/node/builders/pairing'
-export {
-    buildNotificationAckNode,
-    buildReceiptAckNode,
-    buildRetryReceiptAckNode,
-    buildIqResultNode
-} from '@transport/node/builders/global'
+export { buildAckNode, buildReceiptNode, buildIqResultNode } from '@transport/node/builders/global'
 export { buildMediaConnIq } from '@transport/node/builders/media'
 export {
     buildDirectMessageFanoutNode,
     buildGroupDirectMessageNode,
     buildGroupRetryMessageNode,
-    buildGroupSenderKeyMessageNode,
-    buildInboundDeliveryReceiptNode,
-    buildInboundMessageAckNode,
-    buildInboundRetryReceiptNode
+    buildGroupSenderKeyMessageNode
 } from '@transport/node/builders/message'
 export { buildRetryReceiptNode } from '@transport/node/builders/retry'
 export {

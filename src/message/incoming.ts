@@ -9,11 +9,7 @@ import type { WaRetryDecryptFailureContext } from '@retry/types'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress } from '@signal/types'
-import {
-    buildInboundDeliveryReceiptNode,
-    buildInboundMessageAckNode,
-    buildInboundRetryReceiptNode
-} from '@transport/node/builders/message'
+import { buildAckNode, buildReceiptNode } from '@transport/node/builders/global'
 import { decodeNodeContentBase64OrBytes, findNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt, toError } from '@util/primitives'
@@ -187,13 +183,13 @@ async function sendRetryReceiptForDecryptFailure(
         return options.onDecryptFailure(retryContext, error)
     }
 
-    const retryReceiptNode = buildInboundRetryReceiptNode(
+    const retryReceiptNode = buildReceiptNode({
+        kind: 'retry',
         node,
-        stanzaId,
-        from,
-        options.getMeJid?.(),
-        pickNextRetryCount(node)
-    )
+        id: stanzaId,
+        to: from,
+        retryCount: pickNextRetryCount(node)
+    })
     try {
         await options.sendNode(retryReceiptNode)
         options.logger.debug('sent retry receipt for undecryptable incoming message', {
@@ -399,7 +395,13 @@ export async function handleIncomingMessageAck(
     }
 
     if (node.attrs.type === WA_MESSAGE_TYPES.MEDIA_NOTIFY) {
-        const ackNode = buildInboundMessageAckNode(node, id, from, options.getMeJid?.())
+        const ackNode = buildAckNode({
+            kind: 'message',
+            node,
+            id,
+            to: from,
+            from: options.getMeJid?.()
+        })
         options.logger.debug('sending inbound message ack', {
             id,
             to: from,
@@ -414,7 +416,12 @@ export async function handleIncomingMessageAck(
         return true
     }
 
-    const receiptNode = buildInboundDeliveryReceiptNode(node, id, from)
+    const receiptNode = buildReceiptNode({
+        kind: 'delivery',
+        node,
+        id,
+        to: from
+    })
     options.logger.debug('sending inbound message receipt', {
         id,
         to: from,

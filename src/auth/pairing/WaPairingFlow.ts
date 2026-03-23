@@ -12,7 +12,7 @@ import {
     generateDeviceSignature,
     verifyDeviceIdentityAccountSignature
 } from '@signal/crypto/WaAdvSignature'
-import { buildIqResultNode, buildNotificationAckNode } from '@transport/node/builders/global'
+import { buildAckNode, buildIqResultNode } from '@transport/node/builders/global'
 import {
     buildCompanionFinishRequestNode,
     buildCompanionHelloRequestNode,
@@ -199,7 +199,12 @@ export class WaPairingFlow {
             id: node.attrs.id,
             stage: linkCodeNode.attrs.stage
         })
-        await this.opts.socket.sendNode(buildNotificationAckNode(node))
+        await this.opts.socket.sendNode(
+            buildAckNode({
+                kind: 'notification',
+                node
+            })
+        )
 
         const stage = linkCodeNode.attrs.stage
         if (stage === WA_SIGNALING.LINK_CODE_STAGE_REFRESH_CODE) {
@@ -240,7 +245,11 @@ export class WaPairingFlow {
         // Rotate first so we don't ack success before local credential state is durably updated.
         await this.rotateAdvSecret(this.requireCredentials())
         await this.opts.socket.sendNode(
-            buildNotificationAckNode(node, WA_SIGNALING.COMPANION_REG_REFRESH_NOTIFICATION)
+            buildAckNode({
+                kind: 'notification',
+                node,
+                typeOverride: WA_SIGNALING.COMPANION_REG_REFRESH_NOTIFICATION
+            })
         )
         this.opts.logger.info('handled companion_reg_refresh notification')
         this.opts.qrFlow.refreshCurrentQr()

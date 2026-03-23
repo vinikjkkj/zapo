@@ -6,6 +6,7 @@ import {
     buildAccountBlocklistSyncIq,
     buildAccountDevicesSyncIq,
     buildAccountPictureSyncIq,
+    buildAckNode,
     buildAccountPrivacySyncIq,
     buildClearDirtyBitsIq,
     buildCompanionFinishRequestNode,
@@ -15,14 +16,10 @@ import {
     buildGroupParticipantChangeIq,
     buildGroupSenderKeyMessageNode,
     buildGroupsDirtySyncIq,
-    buildInboundDeliveryReceiptNode,
-    buildInboundMessageAckNode,
-    buildReceiptAckNode,
-    buildRetryReceiptAckNode,
     buildIqResultNode,
     buildLeaveGroupIq,
     buildNewsletterMetadataSyncIq,
-    buildNotificationAckNode,
+    buildReceiptNode,
     buildSignedPreKeyRotateIq,
     buildUsyncIq,
     buildUsyncUserNode
@@ -30,8 +27,7 @@ import {
 import {
     buildDirectMessageFanoutNode,
     buildGroupDirectMessageNode,
-    buildGroupRetryMessageNode,
-    buildInboundRetryReceiptNode
+    buildGroupRetryMessageNode
 } from '@transport/node/builders/message'
 import { buildMissingPreKeysFetchIq, buildPreKeyUploadIq } from '@transport/node/builders/prekeys'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
@@ -285,18 +281,22 @@ test('message builders create fanout nodes and validate participant requirements
     assert.equal(retryNode.content[0].attrs.type, 'msg')
     assert.equal(retryNode.content[0].attrs.count, '2')
 
-    const inboundRetry = buildInboundRetryReceiptNode(
-        {
+    const inboundRetry = buildReceiptNode({
+        kind: 'retry',
+        node: {
             tag: 'message',
             attrs: { t: '10', participant: '5511:2@s.whatsapp.net' }
         },
-        'msg-1',
-        '5511@s.whatsapp.net',
-        'me@s.whatsapp.net',
-        2
-    )
+        id: 'msg-1',
+        to: '5511@s.whatsapp.net',
+        retryCount: 2
+    })
     assert.equal(inboundRetry.attrs.type, 'retry')
-    assert.equal(inboundRetry.attrs.t, '10')
+    assert.ok(Array.isArray(inboundRetry.content))
+    if (!Array.isArray(inboundRetry.content)) {
+        throw new Error('expected retry receipt content array')
+    }
+    assert.equal(inboundRetry.content[0].attrs.t, '10')
 })
 
 test('message builders cover group and inbound receipt branches', () => {
@@ -372,76 +372,128 @@ test('message builders cover group and inbound receipt branches', () => {
         /requires at least one participant/
     )
 
-    const messageAck = buildInboundMessageAckNode(
-        {
+    const messageAck = buildAckNode({
+        kind: 'message',
+        node: {
             tag: 'message',
             attrs: { type: 'text', participant: '5511:2@s.whatsapp.net' }
         },
-        'm1',
-        '5511@s.whatsapp.net',
-        'me@s.whatsapp.net'
-    )
+        id: 'm1',
+        to: '5511@s.whatsapp.net',
+        from: 'me@s.whatsapp.net'
+    })
     assert.equal(messageAck.tag, 'ack')
     assert.equal(messageAck.attrs.type, 'text')
     assert.equal(messageAck.attrs.participant, '5511:2@s.whatsapp.net')
     assert.equal(messageAck.attrs.from, 'me@s.whatsapp.net')
 
-    const delivery = buildInboundDeliveryReceiptNode(
-        {
+    const delivery = buildReceiptNode({
+        kind: 'delivery',
+        node: {
             tag: 'message',
             attrs: { participant: '5511:2@s.whatsapp.net', category: 'peer' }
         },
-        'm1',
-        '5511@s.whatsapp.net'
-    )
+        id: 'm1',
+        to: '5511@s.whatsapp.net'
+    })
     assert.equal(delivery.tag, 'receipt')
     assert.equal(delivery.attrs.type, 'peer_msg')
+    assert.equal('participant' in delivery.attrs, false)
 
-    const retryNoTimestamp = buildInboundRetryReceiptNode(
-        {
+    const groupDelivery = buildReceiptNode({
+        kind: 'delivery',
+        node: {
+            tag: 'message',
+            attrs: { participant: '5511:2@s.whatsapp.net' }
+        },
+        id: 'm1',
+        to: '12345@g.us'
+    })
+    assert.equal(groupDelivery.attrs.participant, '5511:2@s.whatsapp.net')
+
+    const retryNoTimestamp = buildReceiptNode({
+        kind: 'retry',
+        node: {
             tag: 'message',
             attrs: {}
         },
-        'm2',
-        '5511@s.whatsapp.net',
-        null,
-        0
-    )
+        id: 'm2',
+        to: '5511@s.whatsapp.net',
+        retryCount: 0
+    })
     assert.equal(retryNoTimestamp.attrs.type, 'retry')
     assert.ok(Array.isArray(retryNoTimestamp.content))
     assert.equal(retryNoTimestamp.content[0].attrs.count, '1')
+    assert.equal('from' in retryNoTimestamp.attrs, false)
 
-    const retryAck = buildRetryReceiptAckNode({
-        tag: 'receipt',
-        attrs: {
-            id: 'r1',
-            from: '5511@s.whatsapp.net',
-            participant: '5511:2@s.whatsapp.net'
+    const retryPeer = buildReceiptNode({
+        kind: 'retry',
+        node: {
+            tag: 'message',
+            attrs: { category: 'peer' }
+        },
+        id: 'm3',
+        to: '5511@s.whatsapp.net',
+        retryCount: 1
+    })
+    assert.equal(retryPeer.attrs.category, 'peer')
+
+    const retryAck = buildAckNode({
+        kind: 'receipt',
+        retryType: true,
+        node: {
+            tag: 'receipt',
+            attrs: {
+                id: 'r1',
+                from: '5511@s.whatsapp.net',
+                participant: '5511:2@s.whatsapp.net'
+            }
         }
     })
     assert.equal(retryAck.attrs.type, 'retry')
     assert.equal(retryAck.attrs.to, '5511@s.whatsapp.net')
 
-    const receiptAckWithParticipant = buildReceiptAckNode({
-        tag: 'receipt',
-        attrs: {
-            id: 'r2',
-            from: '5511@s.whatsapp.net',
-            type: 'sender',
-            participant: '5511:3@s.whatsapp.net'
+    const receiptAckWithParticipant = buildAckNode({
+        kind: 'receipt',
+        node: {
+            tag: 'receipt',
+            attrs: {
+                id: 'r2',
+                from: '5511@s.whatsapp.net',
+                type: 'sender',
+                participant: '5511:3@s.whatsapp.net'
+            }
         }
     })
     assert.equal(receiptAckWithParticipant.attrs.participant, '5511:3@s.whatsapp.net')
 
-    const receiptAckWithoutParticipant = buildReceiptAckNode({
-        tag: 'receipt',
-        attrs: {
-            id: 'r3',
-            from: '5511@s.whatsapp.net',
-            participant: '5511@s.whatsapp.net'
+    const receiptAckWithoutParticipant = buildAckNode({
+        kind: 'receipt',
+        node: {
+            tag: 'receipt',
+            attrs: {
+                id: 'r3',
+                from: '5511@s.whatsapp.net',
+                participant: '5511@s.whatsapp.net'
+            }
         }
     })
     assert.equal('participant' in receiptAckWithoutParticipant.attrs, false)
+
+    const serverErrorAckWithoutParticipant = buildAckNode({
+        kind: 'receipt',
+        includeParticipant: false,
+        node: {
+            tag: 'receipt',
+            attrs: {
+                id: 'r4',
+                from: '5511@s.whatsapp.net',
+                type: 'server-error',
+                participant: '5511:9@s.whatsapp.net'
+            }
+        }
+    })
+    assert.equal('participant' in serverErrorAckWithoutParticipant.attrs, false)
 })
 
 test('pairing builders generate link-code nodes and ack helpers', () => {
@@ -474,52 +526,60 @@ test('pairing builders generate link-code nodes and ack helpers', () => {
     assert.ok(Array.isArray(finish.content))
     assert.equal(finish.content[0].attrs.stage, 'companion_finish')
 
-    const ackDefault = buildNotificationAckNode({
-        tag: 'notification',
-        attrs: { from: 's.whatsapp.net', type: 'encrypt', id: 'ack-1' }
+    const ackDefault = buildAckNode({
+        kind: 'notification',
+        node: {
+            tag: 'notification',
+            attrs: { from: 's.whatsapp.net', type: 'encrypt', id: 'ack-1' }
+        }
     })
     assert.equal(ackDefault.tag, 'ack')
     assert.equal(ackDefault.attrs.to, 's.whatsapp.net')
     assert.equal(ackDefault.attrs.type, 'encrypt')
     assert.equal(ackDefault.attrs.id, 'ack-1')
 
-    const ackOverridden = buildNotificationAckNode(
-        {
+    const ackOverridden = buildAckNode({
+        kind: 'notification',
+        node: {
             tag: 'notification',
             attrs: {}
         },
-        'custom'
-    )
+        typeOverride: 'custom'
+    })
     assert.equal(ackOverridden.attrs.to, WA_DEFAULTS.HOST_DOMAIN)
     assert.equal(ackOverridden.attrs.type, 'custom')
     assert.equal('id' in ackOverridden.attrs, false)
 
-    const ackWithoutType = buildNotificationAckNode(
-        {
+    const ackWithoutType = buildAckNode({
+        kind: 'notification',
+        node: {
             tag: 'notification',
             attrs: { from: 's.whatsapp.net', type: 'encrypt', id: 'ack-1b' }
         },
-        undefined,
-        false,
-        false
-    )
+        includeParticipant: false,
+        includeType: false
+    })
     assert.equal(ackWithoutType.attrs.to, 's.whatsapp.net')
     assert.equal('type' in ackWithoutType.attrs, false)
     assert.equal(ackWithoutType.attrs.id, 'ack-1b')
 
-    const groupAckWithoutParticipant = buildNotificationAckNode({
-        tag: 'notification',
-        attrs: {
-            from: '12345@g.us',
-            type: 'w:gp2',
-            id: 'ack-2',
-            participant: '5511999999999@s.whatsapp.net'
+    const groupAckWithoutParticipant = buildAckNode({
+        kind: 'notification',
+        node: {
+            tag: 'notification',
+            attrs: {
+                from: '12345@g.us',
+                type: 'w:gp2',
+                id: 'ack-2',
+                participant: '5511999999999@s.whatsapp.net'
+            }
         }
     })
     assert.equal('participant' in groupAckWithoutParticipant.attrs, false)
 
-    const groupAckWithParticipant = buildNotificationAckNode(
-        {
+    const groupAckWithParticipant = buildAckNode({
+        kind: 'notification',
+        node: {
             tag: 'notification',
             attrs: {
                 from: '12345@g.us',
@@ -528,9 +588,8 @@ test('pairing builders generate link-code nodes and ack helpers', () => {
                 participant: '5511999999999@s.whatsapp.net'
             }
         },
-        undefined,
-        true
-    )
+        includeParticipant: true
+    })
     assert.equal(groupAckWithParticipant.attrs.participant, '5511999999999@s.whatsapp.net')
 
     const iqResultWithId = buildIqResultNode({

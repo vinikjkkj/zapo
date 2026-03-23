@@ -1,7 +1,8 @@
-import { WA_MESSAGE_TAGS, WA_NODE_TAGS } from '@protocol/constants'
+import { WA_NODE_TAGS } from '@protocol/constants'
 import { RETRY_RECEIPT_VERSION } from '@retry/constants'
 import type { WaRetryKeyBundle } from '@retry/types'
 import { SIGNAL_KEY_BUNDLE_TYPE_BYTES } from '@signal/api/constants'
+import { buildReceiptNode } from '@transport/node/builders/global'
 import type { BinaryNode } from '@transport/types'
 import { intToBytes } from '@util/bytes'
 
@@ -84,21 +85,6 @@ export function buildRetryReceiptNode(input: {
     readonly categoryPeer?: boolean
     readonly keys?: WaRetryKeyBundle
 }): BinaryNode {
-    const attrs: Record<string, string> = {
-        id: input.stanzaId,
-        to: input.to,
-        type: 'retry'
-    }
-    if (input.participant) {
-        attrs.participant = input.participant
-    }
-    if (input.recipient) {
-        attrs.recipient = input.recipient
-    }
-    if (input.categoryPeer) {
-        attrs.category = 'peer'
-    }
-
     const retryAttrs: Record<string, string> = {
         v: RETRY_RECEIPT_VERSION,
         count: String(input.retryCount),
@@ -124,9 +110,13 @@ export function buildRetryReceiptNode(input: {
         content.push(buildRetryKeysNode(input.keys))
     }
 
-    return {
-        tag: WA_MESSAGE_TAGS.RECEIPT,
-        attrs,
+    return buildReceiptNode({
+        kind: 'retry_custom',
+        id: input.stanzaId,
+        to: input.to,
+        participant: input.participant,
+        recipient: input.recipient,
+        categoryPeer: input.categoryPeer,
         content
-    }
+    })
 }
