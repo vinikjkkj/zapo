@@ -5,6 +5,8 @@ import {
 } from '@store/providers/sqlite/migrations'
 import type { WaSqliteStorageOptions } from '@store/types'
 
+type NonPromise<T> = T extends PromiseLike<unknown> ? never : T
+
 export abstract class BaseSqliteStore {
     protected readonly options: WaSqliteStorageOptions
     private readonly migrationDomains: readonly WaSqliteMigrationDomain[]
@@ -29,18 +31,10 @@ export abstract class BaseSqliteStore {
     }
 
     protected async withTransaction<T>(
-        run: (connection: WaSqliteConnection) => Promise<T> | T
-    ): Promise<T> {
+        run: (connection: WaSqliteConnection) => NonPromise<T>
+    ): Promise<NonPromise<T>> {
         const db = await this.getConnection()
-        db.exec('BEGIN')
-        try {
-            const result = await run(db)
-            db.exec('COMMIT')
-            return result
-        } catch (error) {
-            db.exec('ROLLBACK')
-            throw error
-        }
+        return db.runInTransaction(() => run(db))
     }
 
     public async destroy(): Promise<void> {

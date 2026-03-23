@@ -100,7 +100,7 @@ export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
     }
 
     public async save(credentials: WaAuthCredentials): Promise<void> {
-        await this.withTransaction(async (db) => {
+        await this.withTransaction((db) => {
             db.run(
                 `INSERT INTO auth_credentials (
                     session_id,
@@ -194,7 +194,7 @@ export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
     }
 
     public async clear(): Promise<void> {
-        await this.withTransaction(async (db) => {
+        await this.withTransaction((db) => {
             db.run('DELETE FROM auth_credentials WHERE session_id = ?', [this.options.sessionId])
         })
     }

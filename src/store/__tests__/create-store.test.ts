@@ -102,20 +102,24 @@ test('createStore forwards sqlite.tableNames to sqlite providers', async () => {
             driver: 'better-sqlite3',
             tableNames
         })
-        const customAuth = db.get<{ readonly name: string }>(
-            `SELECT name
-             FROM sqlite_master
-             WHERE type = 'table' AND name = ?`,
-            ['store_custom_auth_credentials']
-        )
-        const defaultAuth = db.get<{ readonly name: string }>(
-            `SELECT name
-             FROM sqlite_master
-             WHERE type = 'table' AND name = ?`,
-            ['auth_credentials']
-        )
-        assert.equal(customAuth?.name, 'store_custom_auth_credentials')
-        assert.equal(defaultAuth, null)
+        try {
+            const customAuth = db.get<{ readonly name: string }>(
+                `SELECT name
+                 FROM sqlite_master
+                 WHERE type = 'table' AND name = ?`,
+                ['store_custom_auth_credentials']
+            )
+            const defaultAuth = db.get<{ readonly name: string }>(
+                `SELECT name
+                 FROM sqlite_master
+                 WHERE type = 'table' AND name = ?`,
+                ['auth_credentials']
+            )
+            assert.equal(customAuth?.name, 'store_custom_auth_credentials')
+            assert.equal(defaultAuth, null)
+        } finally {
+            db.close()
+        }
     } finally {
         await store.destroy()
         await rm(dir, { recursive: true, force: true })

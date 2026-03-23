@@ -363,22 +363,19 @@ export async function ensureSqliteMigrations(
         if (hasMigration(db, migration.id)) {
             continue
         }
-
-        db.exec('BEGIN')
         try {
-            if (hasMigration(db, migration.id)) {
-                db.exec('COMMIT')
-                continue
-            }
-            db.run(
-                `INSERT INTO wa_migrations (id, applied_at)
-                 VALUES (?, ?)`,
-                [migration.id, Date.now()]
-            )
-            migration.up(db)
-            db.exec('COMMIT')
+            await db.runInTransaction(() => {
+                if (hasMigration(db, migration.id)) {
+                    return
+                }
+                db.run(
+                    `INSERT INTO wa_migrations (id, applied_at)
+                     VALUES (?, ?)`,
+                    [migration.id, Date.now()]
+                )
+                migration.up(db)
+            })
         } catch (error) {
-            db.exec('ROLLBACK')
             if (isMigrationAlreadyAppliedRace(error)) {
                 continue
             }

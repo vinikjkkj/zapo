@@ -158,28 +158,32 @@ test('sqlite auth store supports custom table names', async () => {
         assert.equal((await store.load())?.meJid, credentials.meJid)
 
         const db = await openSqliteConnection(options)
-        const customAuthTable = db.get<{ readonly name: string }>(
-            `SELECT name
-             FROM sqlite_master
-             WHERE type = 'table' AND name = ?`,
-            ['custom_auth_credentials']
-        )
-        const defaultAuthTable = db.get<{ readonly name: string }>(
-            `SELECT name
-             FROM sqlite_master
-             WHERE type = 'table' AND name = ?`,
-            ['auth_credentials']
-        )
-        const customMigrationsTable = db.get<{ readonly name: string }>(
-            `SELECT name
-             FROM sqlite_master
-             WHERE type = 'table' AND name = ?`,
-            ['custom_wa_migrations']
-        )
+        try {
+            const customAuthTable = db.get<{ readonly name: string }>(
+                `SELECT name
+                 FROM sqlite_master
+                 WHERE type = 'table' AND name = ?`,
+                ['custom_auth_credentials']
+            )
+            const defaultAuthTable = db.get<{ readonly name: string }>(
+                `SELECT name
+                 FROM sqlite_master
+                 WHERE type = 'table' AND name = ?`,
+                ['auth_credentials']
+            )
+            const customMigrationsTable = db.get<{ readonly name: string }>(
+                `SELECT name
+                 FROM sqlite_master
+                 WHERE type = 'table' AND name = ?`,
+                ['custom_wa_migrations']
+            )
 
-        assert.equal(customAuthTable?.name, 'custom_auth_credentials')
-        assert.equal(defaultAuthTable, null)
-        assert.equal(customMigrationsTable?.name, 'custom_wa_migrations')
+            assert.equal(customAuthTable?.name, 'custom_auth_credentials')
+            assert.equal(defaultAuthTable, null)
+            assert.equal(customMigrationsTable?.name, 'custom_wa_migrations')
+        } finally {
+            db.close()
+        }
     } finally {
         await store.destroy()
         await rm(dir, { recursive: true, force: true })
@@ -229,6 +233,31 @@ test('sqlite connection rejects invalid custom table names', async () => {
             /unsupported sqlite tableNames key/
         )
     } finally {
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+test('sqlite connection keeps pending open references alive until handle acquisition', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-open-race-'))
+    const options = {
+        path: join(dir, 'state.sqlite'),
+        sessionId: 'race',
+        driver: 'better-sqlite3'
+    } as const
+    const first = await openSqliteConnection(options)
+
+    try {
+        const secondPromise = openSqliteConnection(options)
+        first.close()
+        const second = await secondPromise
+        try {
+            const row = second.get<{ readonly value: number }>('SELECT 1 AS value')
+            assert.equal(row?.value, 1)
+        } finally {
+            second.close()
+        }
+    } finally {
+        first.close()
         await rm(dir, { recursive: true, force: true })
     }
 })

@@ -330,7 +330,7 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
     }
 
     public async cleanupExpired(nowMs: number): Promise<number> {
-        return this.withTransaction(async (db) => {
+        return this.withTransaction((db) => {
             db.run(
                 `DELETE FROM retry_outbound_messages
                  WHERE session_id = ? AND expires_at_ms <= ?`,

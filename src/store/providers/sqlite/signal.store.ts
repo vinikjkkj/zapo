@@ -231,37 +231,70 @@ export class WaSignalSqliteStore extends BaseSqliteStore implements WaSignalStor
         if (!Number.isSafeInteger(count) || count <= 0) {
             throw new Error(`invalid prekey count: ${count}`)
         }
-        return this.withTransaction(async (db) => {
-            this.ensureMetaRow(db)
-            const available = db
-                .all<SignalPreKeyRow>(
-                    `SELECT key_id, pub_key, priv_key, uploaded
-                     FROM signal_prekey
-                     WHERE session_id = ? AND uploaded = 0
-                     ORDER BY key_id ASC
-                     LIMIT ?`,
-                    [this.options.sessionId, count]
-                )
-                .map((row) => decodeSignalPreKeyRow(row))
-
-            if (available.length < count) {
-                let nextPreKeyId = this.getMeta(db).nextPreKeyId
-                while (available.length < count) {
-                    const requestedKeyId = nextPreKeyId
-                    const generated = await generator(requestedKeyId)
-                    this.upsertPreKey(db, generated)
-                    available.push(generated)
-                    nextPreKeyId = Math.max(requestedKeyId + 1, generated.keyId + 1)
+        while (true) {
+            const reservation = await this.withTransaction((db) => {
+                this.ensureMetaRow(db)
+                const available = this.selectAvailablePreKeys(db, count)
+                const missing = count - available.length
+                if (missing <= 0) {
+                    return {
+                        available,
+                        reservedKeyIds: [] as readonly number[]
+                    }
+                }
+                const nextPreKeyId = this.getMeta(db).nextPreKeyId
+                const reservedKeyIds = new Array<number>(missing)
+                for (let index = 0; index < missing; index += 1) {
+                    reservedKeyIds[index] = nextPreKeyId + index
                 }
                 db.run(
                     `UPDATE signal_meta
-                     SET next_prekey_id = ?
+                     SET next_prekey_id = MAX(next_prekey_id, ?)
                      WHERE session_id = ?`,
-                    [nextPreKeyId, this.options.sessionId]
+                    [nextPreKeyId + missing, this.options.sessionId]
                 )
+                return {
+                    available,
+                    reservedKeyIds
+                }
+            })
+
+            if (reservation.reservedKeyIds.length === 0) {
+                return reservation.available
             }
-            return available
-        })
+
+            const generated = new Array<PreKeyRecord>(reservation.reservedKeyIds.length)
+            let maxGeneratedKeyId =
+                reservation.reservedKeyIds[reservation.reservedKeyIds.length - 1]
+            for (let index = 0; index < reservation.reservedKeyIds.length; index += 1) {
+                const requestedKeyId = reservation.reservedKeyIds[index]
+                const generatedRecord = await generator(requestedKeyId)
+                generated[index] = generatedRecord
+                if (generatedRecord.keyId > maxGeneratedKeyId) {
+                    maxGeneratedKeyId = generatedRecord.keyId
+                }
+            }
+
+            await this.withTransaction((db) => {
+                this.ensureMetaRow(db)
+                for (const record of generated) {
+                    this.insertPreKeyIfMissing(db, record)
+                }
+                db.run(
+                    `UPDATE signal_meta
+                     SET next_prekey_id = MAX(next_prekey_id, ?)
+                     WHERE session_id = ?`,
+                    [maxGeneratedKeyId + 1, this.options.sessionId]
+                )
+            })
+
+            const available = await this.withTransaction((db) =>
+                this.selectAvailablePreKeys(db, count)
+            )
+            if (available.length >= count) {
+                return available
+            }
+        }
     }
 
     public async getPreKeyById(keyId: number): Promise<PreKeyRecord | null> {
@@ -671,6 +704,19 @@ export class WaSignalSqliteStore extends BaseSqliteStore implements WaSignalStor
         })
     }
 
+    private selectAvailablePreKeys(db: WaSqliteConnection, limit: number): readonly PreKeyRecord[] {
+        return db
+            .all<SignalPreKeyRow>(
+                `SELECT key_id, pub_key, priv_key, uploaded
+                 FROM signal_prekey
+                 WHERE session_id = ? AND uploaded = 0
+                 ORDER BY key_id ASC
+                 LIMIT ?`,
+                [this.options.sessionId, limit]
+            )
+            .map((row) => decodeSignalPreKeyRow(row))
+    }
+
     private upsertPreKey(db: WaSqliteConnection, record: PreKeyRecord): void {
         db.run(
             `INSERT INTO signal_prekey (
@@ -684,6 +730,26 @@ export class WaSignalSqliteStore extends BaseSqliteStore implements WaSignalStor
                 pub_key=excluded.pub_key,
                 priv_key=excluded.priv_key,
                 uploaded=excluded.uploaded`,
+            [
+                this.options.sessionId,
+                record.keyId,
+                record.keyPair.pubKey,
+                record.keyPair.privKey,
+                record.uploaded === true ? 1 : 0
+            ]
+        )
+    }
+
+    private insertPreKeyIfMissing(db: WaSqliteConnection, record: PreKeyRecord): void {
+        db.run(
+            `INSERT INTO signal_prekey (
+                session_id,
+                key_id,
+                pub_key,
+                priv_key,
+                uploaded
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(session_id, key_id) DO NOTHING`,
             [
                 this.options.sessionId,
                 record.keyId,

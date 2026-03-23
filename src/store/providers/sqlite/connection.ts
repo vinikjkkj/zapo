@@ -21,12 +21,23 @@ type SqliteDatabaseLike = {
     readonly query?: (sql: string) => SqliteStatementLike
 }
 
+type NonPromise<T> = T extends PromiseLike<unknown> ? never : T
+type SqliteTransactionTask<T> = () => NonPromise<T>
+type NormalizedSqlitePragmas = Readonly<Record<string, string>>
+
+interface SqliteConnectionCacheEntry {
+    connection: WaSqliteConnection | null
+    connectionPromise: Promise<WaSqliteConnection>
+    refs: number
+}
+
 export interface WaSqliteConnection {
     readonly driver: Exclude<WaSqliteDriver, 'auto'>
     exec(sql: string): void
     run(sql: string, params?: readonly unknown[]): void
     get<T extends Record<string, unknown>>(sql: string, params?: readonly unknown[]): T | null
     all<T extends Record<string, unknown>>(sql: string, params?: readonly unknown[]): readonly T[]
+    runInTransaction<T>(run: SqliteTransactionTask<T>): Promise<NonPromise<T>>
     close(): void
 }
 
@@ -87,14 +98,37 @@ function statementFor(db: SqliteDatabaseLike, sql: string): SqliteStatementLike 
     return statement
 }
 
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+    return (
+        !!value &&
+        (typeof value === 'object' || typeof value === 'function') &&
+        typeof (value as { readonly then?: unknown }).then === 'function'
+    )
+}
+
+function rollbackSafely(db: SqliteDatabaseLike): void {
+    try {
+        db.exec('ROLLBACK')
+    } catch {
+        return
+    }
+}
+
 function wrapConnection(
     db: SqliteDatabaseLike,
     driver: Exclude<WaSqliteDriver, 'auto'>,
-    resolveSql: (sql: string) => string,
-    onClose?: () => void
+    resolveSql: (sql: string) => string
 ): WaSqliteConnection {
     const statementCache = new Map<string, SqliteStatementLike>()
+    let closed = false
+    let transactionTail: Promise<void> = Promise.resolve()
+    const ensureOpen = (): void => {
+        if (closed) {
+            throw new Error('sqlite connection is closed')
+        }
+    }
     const cachedStatementFor = (sql: string): SqliteStatementLike => {
+        ensureOpen()
         const resolvedSql = resolveSql(sql)
         const cached = statementCache.get(resolvedSql)
         if (cached) {
@@ -108,6 +142,7 @@ function wrapConnection(
     return {
         driver,
         exec(sql) {
+            ensureOpen()
             db.exec(resolveSql(sql))
         },
         run(sql, params) {
@@ -131,19 +166,48 @@ function wrapConnection(
             const rows = !params || params.length === 0 ? statement.all() : statement.all(...params)
             return Array.isArray(rows) ? (rows as readonly T[]) : []
         },
+        runInTransaction<T>(run: SqliteTransactionTask<T>): Promise<NonPromise<T>> {
+            ensureOpen()
+            const previous = transactionTail
+            let release: (() => void) | null = null
+            transactionTail = new Promise<void>((resolve) => {
+                release = resolve
+            })
+            const queued = previous.then(() => {
+                ensureOpen()
+                try {
+                    db.exec('BEGIN')
+                    let result: NonPromise<T> | PromiseLike<NonPromise<T>>
+                    try {
+                        result = run()
+                    } catch (error) {
+                        rollbackSafely(db)
+                        throw error
+                    }
+                    if (isPromiseLike<NonPromise<T>>(result)) {
+                        rollbackSafely(db)
+                        throw new Error('sqlite transaction callback must be synchronous')
+                    }
+                    db.exec('COMMIT')
+                    return result
+                } catch (error) {
+                    rollbackSafely(db)
+                    throw error
+                }
+            })
+            return queued.finally(() => {
+                release?.()
+            })
+        },
         close() {
-            statementCache.clear()
-            try {
-                db.close()
-            } finally {
-                onClose?.()
+            if (closed) {
+                return
             }
+            closed = true
+            statementCache.clear()
+            db.close()
         }
     }
-}
-
-function pragmaEntries(options: WaSqliteStorageOptions): readonly [string, string | number][] {
-    return Object.entries(mergePragmas(options.pragmas))
 }
 
 function mergePragmas(
@@ -200,10 +264,17 @@ function normalizePragmaValue(key: string, rawValue: string | number): string {
     return normalizePragmaToken(key, rawValue)
 }
 
-function applyPragmas(db: SqliteDatabaseLike, options: WaSqliteStorageOptions): void {
-    for (const [rawKey, rawValue] of pragmaEntries(options)) {
+function normalizePragmas(pragmas: WaSqliteStorageOptions['pragmas']): NormalizedSqlitePragmas {
+    const normalized: Record<string, string> = {}
+    for (const [rawKey, rawValue] of Object.entries(mergePragmas(pragmas))) {
         const key = normalizePragmaKey(rawKey)
-        const value = normalizePragmaValue(key, rawValue)
+        normalized[key] = normalizePragmaValue(key, rawValue)
+    }
+    return normalized
+}
+
+function applyPragmas(db: SqliteDatabaseLike, pragmas: NormalizedSqlitePragmas): void {
+    for (const [key, value] of Object.entries(pragmas)) {
         const statement = `${key}=${value}`
         if (db.pragma) {
             db.pragma(statement)
@@ -224,7 +295,7 @@ function closeDatabaseSafely(db: SqliteDatabaseLike): void {
 async function openBetterSqlite(
     options: WaSqliteStorageOptions,
     resolveSql: (sql: string) => string,
-    onClose: () => void
+    pragmas: NormalizedSqlitePragmas
 ): Promise<WaSqliteConnection> {
     let loaded: unknown
     try {
@@ -238,19 +309,19 @@ async function openBetterSqlite(
     const Database = asConstructor(loaded)
     const db = new Database(options.path)
     try {
-        applyPragmas(db, options)
+        applyPragmas(db, pragmas)
     } catch (error) {
         closeDatabaseSafely(db)
         throw error
     }
 
-    return wrapConnection(db, 'better-sqlite3', resolveSql, onClose)
+    return wrapConnection(db, 'better-sqlite3', resolveSql)
 }
 
 async function openBunSqlite(
     options: WaSqliteStorageOptions,
     resolveSql: (sql: string) => string,
-    onClose: () => void
+    pragmas: NormalizedSqlitePragmas
 ): Promise<WaSqliteConnection> {
     let loaded: unknown
     try {
@@ -271,13 +342,13 @@ async function openBunSqlite(
 
     const db = new (ctor as new (path: string) => SqliteDatabaseLike)(options.path)
     try {
-        applyPragmas(db, options)
+        applyPragmas(db, pragmas)
     } catch (error) {
         closeDatabaseSafely(db)
         throw error
     }
 
-    return wrapConnection(db, 'bun', resolveSql, onClose)
+    return wrapConnection(db, 'bun', resolveSql)
 }
 
 function resolveDriver(requested: WaSqliteDriver | undefined): WaSqliteDriver {
@@ -287,40 +358,127 @@ function resolveDriver(requested: WaSqliteDriver | undefined): WaSqliteDriver {
     return isBunRuntime() ? 'bun' : 'better-sqlite3'
 }
 
+function requireConnection(entry: SqliteConnectionCacheEntry): WaSqliteConnection {
+    const connection = entry.connection
+    if (!connection) {
+        throw new Error('sqlite connection is not open')
+    }
+    return connection
+}
+
+function createConnectionHandle(
+    entry: SqliteConnectionCacheEntry,
+    cacheKey: string
+): WaSqliteConnection {
+    let closed = false
+    const ensureOpen = (): void => {
+        if (closed) {
+            throw new Error('sqlite connection handle is closed')
+        }
+    }
+    return {
+        driver: requireConnection(entry).driver,
+        exec(sql) {
+            ensureOpen()
+            requireConnection(entry).exec(sql)
+        },
+        run(sql, params) {
+            ensureOpen()
+            requireConnection(entry).run(sql, params)
+        },
+        get<T extends Record<string, unknown>>(sql: string, params?: readonly unknown[]): T | null {
+            ensureOpen()
+            return requireConnection(entry).get<T>(sql, params)
+        },
+        all<T extends Record<string, unknown>>(
+            sql: string,
+            params?: readonly unknown[]
+        ): readonly T[] {
+            ensureOpen()
+            return requireConnection(entry).all<T>(sql, params)
+        },
+        runInTransaction<T>(run: SqliteTransactionTask<T>): Promise<NonPromise<T>> {
+            ensureOpen()
+            return requireConnection(entry).runInTransaction(run)
+        },
+        close() {
+            if (closed) {
+                return
+            }
+            closed = true
+            if (entry.refs <= 0) {
+                return
+            }
+            entry.refs -= 1
+            if (entry.refs > 0) {
+                return
+            }
+            if (SQLITE_CONNECTION_CACHE.get(cacheKey) === entry) {
+                SQLITE_CONNECTION_CACHE.delete(cacheKey)
+            }
+            const connection = entry.connection
+            entry.connection = null
+            connection?.close()
+        }
+    }
+}
+
 export async function openSqliteConnection(
     options: WaSqliteStorageOptions
 ): Promise<WaSqliteConnection> {
     const driver = resolveDriver(options.driver)
     const resolvedTableNames = resolveSqliteTableNames(options.tableNames)
     const resolveSql = createSqliteTableNameSqlResolver(resolvedTableNames)
+    const normalizedPragmas = normalizePragmas(options.pragmas)
     const normalizedOptions: WaSqliteStorageOptions = {
         ...options,
         driver,
-        pragmas: mergePragmas(options.pragmas),
+        pragmas: normalizedPragmas,
         tableNames: resolvedTableNames
     }
-    const cacheKey = `${driver}|${options.path}|${Object.entries(normalizedOptions.pragmas ?? {})
+    const cacheKey = `${driver}|${options.path}|${Object.entries(normalizedPragmas)
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([key, value]) => `${key}=${String(value)}`)
         .join(';')}|${serializeSqliteTableNames(resolvedTableNames)}`
-    const cached = SQLITE_CONNECTION_CACHE.get(cacheKey)
-    if (cached) {
-        return cached
+    let entry = SQLITE_CONNECTION_CACHE.get(cacheKey)
+    if (!entry) {
+        const createdConnection =
+            driver === 'bun'
+                ? openBunSqlite(normalizedOptions, resolveSql, normalizedPragmas)
+                : openBetterSqlite(normalizedOptions, resolveSql, normalizedPragmas)
+        const createdEntry: SqliteConnectionCacheEntry = {
+            connection: null,
+            connectionPromise: Promise.resolve(null as never),
+            refs: 0
+        }
+        createdEntry.connectionPromise = createdConnection
+            .then((connection) => {
+                createdEntry.connection = connection
+                return connection
+            })
+            .catch((error) => {
+                if (SQLITE_CONNECTION_CACHE.get(cacheKey) === createdEntry) {
+                    SQLITE_CONNECTION_CACHE.delete(cacheKey)
+                }
+                throw error
+            })
+        SQLITE_CONNECTION_CACHE.set(cacheKey, createdEntry)
+        entry = createdEntry
     }
-
-    const onClose = (): void => {
-        SQLITE_CONNECTION_CACHE.delete(cacheKey)
+    if (!entry) {
+        throw new Error('sqlite connection cache entry was not initialized')
     }
-    const created =
-        driver === 'bun'
-            ? openBunSqlite(normalizedOptions, resolveSql, onClose)
-            : openBetterSqlite(normalizedOptions, resolveSql, onClose)
-    const guarded = created.catch((error) => {
-        SQLITE_CONNECTION_CACHE.delete(cacheKey)
+    entry.refs += 1
+    try {
+        await entry.connectionPromise
+    } catch (error) {
+        entry.refs = Math.max(0, entry.refs - 1)
+        if (entry.refs === 0 && SQLITE_CONNECTION_CACHE.get(cacheKey) === entry) {
+            SQLITE_CONNECTION_CACHE.delete(cacheKey)
+        }
         throw error
-    })
-    SQLITE_CONNECTION_CACHE.set(cacheKey, guarded)
-    return guarded
+    }
+    return createConnectionHandle(entry, cacheKey)
 }
 
-const SQLITE_CONNECTION_CACHE = new Map<string, Promise<WaSqliteConnection>>()
+const SQLITE_CONNECTION_CACHE = new Map<string, SqliteConnectionCacheEntry>()

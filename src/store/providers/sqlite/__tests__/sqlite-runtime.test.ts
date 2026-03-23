@@ -554,3 +554,94 @@ test('sqlite signal store covers prekeys, sessions, identities and state helpers
         await rm(dir, { recursive: true, force: true })
     }
 })
+
+test('sqlite signal prekey generation is safe across concurrent sessions', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-signal-concurrency-'))
+    const sqlitePath = join(dir, 'state.sqlite')
+    const storeA = new WaSignalSqliteStore(makeSqliteOptions(sqlitePath, 'session-a'))
+    const storeB = new WaSignalSqliteStore(makeSqliteOptions(sqlitePath, 'session-b'))
+
+    try {
+        const generator = async (keyId: number) => {
+            await new Promise<void>((resolve) => setTimeout(resolve, 15))
+            const keyPair = await X25519.generateKeyPair()
+            return {
+                keyId,
+                keyPair,
+                uploaded: false
+            }
+        }
+        const [keysA, keysB] = await Promise.all([
+            storeA.getOrGenPreKeys(2, generator),
+            storeB.getOrGenPreKeys(2, generator)
+        ])
+        assert.equal(keysA.length, 2)
+        assert.equal(keysB.length, 2)
+        assert.equal((await storeA.getPreKeyById(keysA[0].keyId))?.keyId, keysA[0].keyId)
+        assert.equal((await storeB.getPreKeyById(keysB[0].keyId))?.keyId, keysB[0].keyId)
+    } finally {
+        await Promise.all([storeA.destroy(), storeB.destroy()])
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+test('sqlite shared connection keeps other session alive after one destroy', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-destroy-lifecycle-'))
+    const sqlitePath = join(dir, 'state.sqlite')
+    const storeA = new WaDeviceListSqliteStore(makeSqliteOptions(sqlitePath, 'session-a'), 1_000, 1)
+    const storeB = new WaDeviceListSqliteStore(makeSqliteOptions(sqlitePath, 'session-b'), 1_000, 1)
+
+    try {
+        await storeA.upsertUserDevicesBatch([
+            {
+                userJid: '5511@s.whatsapp.net',
+                deviceJids: ['5511@s.whatsapp.net'],
+                updatedAtMs: 100
+            }
+        ])
+        await storeB.upsertUserDevicesBatch([
+            {
+                userJid: '5522@s.whatsapp.net',
+                deviceJids: ['5522@s.whatsapp.net'],
+                updatedAtMs: 100
+            }
+        ])
+        await storeA.destroy()
+        const [snapshot] = await storeB.getUserDevicesBatch(['5522@s.whatsapp.net'], 150)
+        assert.ok(snapshot)
+        assert.equal(snapshot?.userJid, '5522@s.whatsapp.net')
+    } finally {
+        await Promise.allSettled([storeA.destroy(), storeB.destroy()])
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+test('sqlite signal prekey generation keeps monotonic progress for overlapping same-session calls', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-signal-same-session-concurrency-'))
+    const sqlitePath = join(dir, 'state.sqlite')
+    const store = new WaSignalSqliteStore(makeSqliteOptions(sqlitePath, 'session-a'))
+
+    try {
+        const generator = async (keyId: number) => {
+            await new Promise<void>((resolve) => setTimeout(resolve, 10))
+            const keyPair = await X25519.generateKeyPair()
+            return {
+                keyId,
+                keyPair,
+                uploaded: false
+            }
+        }
+        await Promise.all([
+            store.getOrGenPreKeys(3, generator),
+            store.getOrGenPreKeys(3, generator)
+        ])
+
+        const sixKeys = await store.getOrGenPreKeys(6, generator)
+        assert.equal(sixKeys.length, 6)
+        const keyIds = sixKeys.map((record) => record.keyId).sort((left, right) => left - right)
+        assert.deepEqual(keyIds, [1, 2, 3, 4, 5, 6])
+    } finally {
+        await store.destroy()
+        await rm(dir, { recursive: true, force: true })
+    }
+})
