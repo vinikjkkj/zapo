@@ -272,33 +272,49 @@ export class WaPassiveTasksCoordinator {
         }
 
         this.logger.info('flushing dangling receipts', { count: pending.length })
-        for (let index = 0; index < pending.length; index += 1) {
-            const node = pending[index]
-            try {
-                await this.runtime.sendNodeDirect(node)
-            } catch (error) {
-                const normalized = toError(error)
+
+        let cursor = 0
+        while (cursor < pending.length) {
+            const batchEnd = Math.min(cursor + 4, pending.length)
+            const promises: Promise<void>[] = []
+            for (let i = cursor; i < batchEnd; i += 1) {
+                promises.push(this.runtime.sendNodeDirect(pending[i]))
+            }
+            const results = await Promise.allSettled(promises)
+
+            let transientCount = 0
+            for (let i = 0; i < results.length; i += 1) {
+                const result = results[i]
+                if (result.status === 'fulfilled') {
+                    continue
+                }
+                const node = pending[cursor + i]
+                const normalized = toError(result.reason)
                 if (this.runtime.shouldQueueDanglingReceipt(node, normalized)) {
-                    for (
-                        let restoreIndex = index;
-                        restoreIndex < pending.length;
-                        restoreIndex += 1
-                    ) {
-                        this.runtime.requeueDanglingReceipt(pending[restoreIndex])
-                    }
-                    this.logger.warn('stopped dangling receipt flush due transient send error', {
-                        remaining: pending.length - index,
+                    this.runtime.requeueDanglingReceipt(node)
+                    transientCount += 1
+                } else {
+                    this.logger.warn('dropping dangling receipt due non-retryable send error', {
+                        id: node.attrs.id,
+                        to: node.attrs.to,
                         message: normalized.message
                     })
-                    return
                 }
-                this.logger.warn('dropping dangling receipt due non-retryable send error', {
-                    id: node.attrs.id,
-                    to: node.attrs.to,
-                    message: normalized.message
-                })
             }
+
+            if (transientCount > 0) {
+                for (let i = batchEnd; i < pending.length; i += 1) {
+                    this.runtime.requeueDanglingReceipt(pending[i])
+                }
+                this.logger.warn('stopped dangling receipt flush due transient send error', {
+                    remaining: transientCount + (pending.length - batchEnd)
+                })
+                return
+            }
+
+            cursor = batchEnd
         }
+
         this.logger.info('dangling receipts flushed')
     }
 }

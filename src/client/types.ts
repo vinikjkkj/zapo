@@ -35,6 +35,7 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
 
 export interface WaWriteBehindOptions {
     readonly maxPendingKeys?: number
+    readonly maxWriteConcurrency?: number
     readonly flushTimeoutMs?: number
 }
 

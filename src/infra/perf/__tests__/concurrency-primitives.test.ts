@@ -450,10 +450,96 @@ test('background queue retries do not block unrelated keys', async (t) => {
     assert.deepEqual(writes, ['good', 'bad'])
 })
 
+test('background queue drains keys concurrently with maxWriteConcurrency', async () => {
+    let running = 0
+    let maxRunning = 0
+    const writes: string[] = []
+    let releaseBlocker!: () => void
+    const blockerGate = new Promise<void>((resolve) => {
+        releaseBlocker = resolve
+    })
+
+    const queue = new BackgroundQueue<string, { readonly value: number }>(
+        async (key) => {
+            if (key === 'blocker') {
+                await blockerGate
+                writes.push(key)
+                return
+            }
+            running += 1
+            maxRunning = Math.max(maxRunning, running)
+            await Promise.resolve()
+            writes.push(key)
+            running -= 1
+        },
+        { maxWriteConcurrency: 3 }
+    )
+
+    queue.enqueue('blocker', { value: 0 })
+    await flushMicrotasks(4)
+
+    queue.enqueue('a', { value: 1 })
+    queue.enqueue('b', { value: 2 })
+    queue.enqueue('c', { value: 3 })
+
+    releaseBlocker()
+    await flushMicrotasks(8)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await flushMicrotasks(8)
+
+    assert.equal(writes.length, 4)
+    assert.ok(maxRunning === 3, `expected 3 concurrent writes but got ${maxRunning}`)
+})
+
+test('background queue with maxWriteConcurrency=1 stays serial', async () => {
+    let running = 0
+    let maxRunning = 0
+    const writes: string[] = []
+    let releaseBlocker!: () => void
+    const blockerGate = new Promise<void>((resolve) => {
+        releaseBlocker = resolve
+    })
+
+    const queue = new BackgroundQueue<string, { readonly value: number }>(
+        async (key) => {
+            if (key === 'blocker') {
+                await blockerGate
+                writes.push(key)
+                return
+            }
+            running += 1
+            maxRunning = Math.max(maxRunning, running)
+            await Promise.resolve()
+            writes.push(key)
+            running -= 1
+        },
+        { maxWriteConcurrency: 1 }
+    )
+
+    queue.enqueue('blocker', { value: 0 })
+    await flushMicrotasks(4)
+
+    queue.enqueue('a', { value: 1 })
+    queue.enqueue('b', { value: 2 })
+    queue.enqueue('c', { value: 3 })
+
+    releaseBlocker()
+    await flushMicrotasks(8)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await flushMicrotasks(8)
+
+    assert.equal(writes.length, 4)
+    assert.equal(maxRunning, 1)
+})
+
 test('background queue validates constructor limits', () => {
     assert.throws(
         () => new BackgroundQueue(async () => undefined, { maxPendingKeys: 0 }),
         /maxPendingKeys/
+    )
+    assert.throws(
+        () => new BackgroundQueue(async () => undefined, { maxWriteConcurrency: 0 }),
+        /maxWriteConcurrency/
     )
     assert.throws(
         () => new BackgroundQueue(async () => undefined, { flushTimeoutMs: 0 }),

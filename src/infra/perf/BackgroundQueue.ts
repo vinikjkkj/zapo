@@ -22,6 +22,7 @@ interface StateWaiterEntry {
 export interface BackgroundQueueOptions<K extends string, V> {
     readonly coalesce?: (previous: V, incoming: V, key: K) => V
     readonly maxPendingKeys?: number
+    readonly maxWriteConcurrency?: number
     readonly flushTimeoutMs?: number
     readonly onError?: (key: K, error: unknown, attempt: number) => void
     readonly onPressure?: (pendingKeys: number) => void
@@ -46,6 +47,7 @@ export class BackgroundQueue<K extends string, V> {
     private readonly writer: (key: K, value: V) => Promise<void>
     private readonly coalesce: (previous: V, incoming: V, key: K) => V
     private readonly maxPendingKeys: number
+    private readonly maxWriteConcurrency: number
     private readonly flushTimeoutMs: number
     private readonly onError?: (key: K, error: unknown, attempt: number) => void
     private readonly onPressure?: (pendingKeys: number) => void
@@ -70,6 +72,11 @@ export class BackgroundQueue<K extends string, V> {
             throw new Error('BackgroundQueue maxPendingKeys must be a positive integer')
         }
         this.maxPendingKeys = maxPendingKeys
+        const maxWriteConcurrency = options.maxWriteConcurrency ?? 1
+        if (!Number.isSafeInteger(maxWriteConcurrency) || maxWriteConcurrency < 1) {
+            throw new Error('BackgroundQueue maxWriteConcurrency must be a positive integer')
+        }
+        this.maxWriteConcurrency = maxWriteConcurrency
         const flushTimeoutMs = options.flushTimeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS
         if (!Number.isFinite(flushTimeoutMs) || flushTimeoutMs < 1) {
             throw new Error('BackgroundQueue flushTimeoutMs must be a positive finite number')
@@ -301,30 +308,53 @@ export class BackgroundQueue<K extends string, V> {
 
     private async drainLoop(): Promise<void> {
         while (true) {
-            const next = this.takeNext()
-            if (!next) {
+            const batch = this.takeBatch()
+            if (batch.length === 0) {
                 return
             }
-            const { key, entry } = next
-            this.inFlight += 1
-            try {
-                await this.writer(key, entry.value)
-                this.flushedCount += 1
-                this.resolveEntry(entry)
-            } catch (error) {
-                if (this.retryDisabled) {
-                    this.discardEntry(key, entry)
-                } else {
-                    const merged = this.mergeForRetry(key, entry)
-                    const attempt = merged.attempt + 1
-                    merged.attempt = attempt
-                    this.invokeOnError(key, error, attempt)
-                    this.scheduleRetry(key, merged, this.retryDelayMs(attempt))
-                }
-            } finally {
-                this.inFlight -= 1
-                this.notifyStateChange()
+            if (batch.length === 1) {
+                await this.processEntry(batch[0].key, batch[0].entry)
+                continue
             }
+            const tasks = new Array<Promise<void>>(batch.length)
+            for (let i = 0; i < batch.length; i += 1) {
+                tasks[i] = this.processEntry(batch[i].key, batch[i].entry)
+            }
+            await Promise.all(tasks)
+        }
+    }
+
+    private takeBatch(): { readonly key: K; readonly entry: QueueEntry<V> }[] {
+        const batch: { readonly key: K; readonly entry: QueueEntry<V> }[] = []
+        for (let i = 0; i < this.maxWriteConcurrency; i += 1) {
+            const next = this.takeNext()
+            if (!next) {
+                break
+            }
+            batch.push(next)
+        }
+        return batch
+    }
+
+    private async processEntry(key: K, entry: QueueEntry<V>): Promise<void> {
+        this.inFlight += 1
+        try {
+            await this.writer(key, entry.value)
+            this.flushedCount += 1
+            this.resolveEntry(entry)
+        } catch (error) {
+            if (this.retryDisabled) {
+                this.discardEntry(key, entry)
+            } else {
+                const merged = this.mergeForRetry(key, entry)
+                const attempt = merged.attempt + 1
+                merged.attempt = attempt
+                this.invokeOnError(key, error, attempt)
+                this.scheduleRetry(key, merged, this.retryDelayMs(attempt))
+            }
+        } finally {
+            this.inFlight -= 1
+            this.notifyStateChange()
         }
     }
 

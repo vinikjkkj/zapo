@@ -5,6 +5,7 @@ import type { WaAppStateMutationInput, WaAppStateSyncResult } from '@appstate/ty
 import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
+import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
 import { createGroupParticipantsCache } from '@client/messaging/participants'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
@@ -12,6 +13,7 @@ import type { Logger } from '@infra/log/types'
 import { WA_APP_STATE_COLLECTION_STATES, WA_STREAM_SIGNALING } from '@protocol/constants'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
 import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
+import type { BinaryNode } from '@transport/types'
 
 function createLogger(): Logger {
     return {
@@ -746,4 +748,135 @@ test('app-state mutation coordinator emits delete-message-for-me mutation and va
         ),
         /participantJid is required/
     )
+})
+
+function createPassiveTasksCoordinator(overrides: {
+    readonly takeDanglingReceipts: () => BinaryNode[]
+    readonly sendNodeDirect: (node: BinaryNode) => Promise<void>
+    readonly shouldQueueDanglingReceipt?: (node: BinaryNode, error: Error) => boolean
+    readonly requeueDanglingReceipt?: (node: BinaryNode) => void
+}): WaPassiveTasksCoordinator {
+    const requeued: BinaryNode[] = []
+    return new WaPassiveTasksCoordinator({
+        logger: createLogger(),
+        signalStore: {
+            getSignalMeta: async () => ({
+                serverHasPreKeys: true,
+                signedPreKeyRotationTs: Date.now()
+            }),
+            getServerHasPreKeys: async () => true,
+            setServerHasPreKeys: async () => undefined,
+            getSignedPreKeyRotationTs: async () => Date.now(),
+            setSignedPreKeyRotationTs: async () => undefined,
+            getIdentityKeyPair: async () => null,
+            getRegistrationId: async () => null,
+            getPreKeys: async () => [],
+            getPreKeyCount: async () => 0,
+            getSignedPreKey: async () => null,
+            storePreKeys: async () => undefined,
+            removePreKeys: async () => undefined,
+            storeSignedPreKey: async () => undefined,
+            getSession: async () => null,
+            storeSession: async () => undefined,
+            removeSession: async () => undefined,
+            removeSessionsByAddress: async () => undefined,
+            removeAllSessions: async () => undefined,
+            clear: async () => undefined,
+            destroy: async () => undefined
+        } as never,
+        signalDigestSync: {
+            validateLocalKeyBundle: async () => ({ valid: true, preKeyCount: 10 })
+        } as never,
+        signalRotateKey: {
+            rotateSignedPreKey: async () => undefined
+        } as never,
+        runtime: {
+            queryWithContext: async () => ({ tag: 'iq', attrs: {} }),
+            getCurrentCredentials: () => ({ meJid: '551100000000@s.whatsapp.net' }) as never,
+            persistServerHasPreKeys: async () => undefined,
+            sendNodeDirect: overrides.sendNodeDirect,
+            takeDanglingReceipts: overrides.takeDanglingReceipts,
+            requeueDanglingReceipt:
+                overrides.requeueDanglingReceipt ?? ((node) => requeued.push(node)),
+            shouldQueueDanglingReceipt: overrides.shouldQueueDanglingReceipt ?? (() => true)
+        }
+    })
+}
+
+function makeReceiptNode(id: string): BinaryNode {
+    return { tag: 'receipt', attrs: { id, to: `${id}@s.whatsapp.net` } }
+}
+
+test('passive tasks coordinator flushes dangling receipts concurrently in batches', async () => {
+    let concurrency = 0
+    let maxConcurrency = 0
+    const sent: string[] = []
+
+    const nodes = Array.from({ length: 6 }, (_, i) => makeReceiptNode(`r${i}`))
+
+    const coordinator = createPassiveTasksCoordinator({
+        takeDanglingReceipts: () => nodes,
+        sendNodeDirect: async (node) => {
+            concurrency += 1
+            maxConcurrency = Math.max(maxConcurrency, concurrency)
+            await new Promise<void>((resolve) => setImmediate(resolve))
+            sent.push(node.attrs.id)
+            concurrency -= 1
+        }
+    })
+
+    coordinator.startPassiveTasksAfterConnect()
+    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+
+    assert.equal(sent.length, 6)
+    assert.ok(
+        maxConcurrency > 1,
+        `expected concurrent sends but maxConcurrency was ${maxConcurrency}`
+    )
+    assert.ok(maxConcurrency <= 4, `expected at most 4 concurrent sends but got ${maxConcurrency}`)
+})
+
+test('passive tasks coordinator requeues remaining receipts on transient error', async () => {
+    const requeued: BinaryNode[] = []
+    const nodes = Array.from({ length: 6 }, (_, i) => makeReceiptNode(`r${i}`))
+
+    const coordinator = createPassiveTasksCoordinator({
+        takeDanglingReceipts: () => nodes,
+        sendNodeDirect: async (node) => {
+            if (node.attrs.id === 'r1') {
+                throw new Error('transient')
+            }
+        },
+        shouldQueueDanglingReceipt: () => true,
+        requeueDanglingReceipt: (node) => requeued.push(node)
+    })
+
+    coordinator.startPassiveTasksAfterConnect()
+    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+
+    const requeuedIds = requeued.map((node) => node.attrs.id)
+    assert.ok(requeuedIds.includes('r1'), 'transient-failed receipt should be requeued')
+    assert.ok(requeuedIds.includes('r4'), 'unsent receipts from next batch should be requeued')
+    assert.ok(requeuedIds.includes('r5'), 'unsent receipts from next batch should be requeued')
+})
+
+test('passive tasks coordinator drops non-retryable receipt errors without stopping', async () => {
+    const sent: string[] = []
+    const nodes = Array.from({ length: 3 }, (_, i) => makeReceiptNode(`r${i}`))
+
+    const coordinator = createPassiveTasksCoordinator({
+        takeDanglingReceipts: () => nodes,
+        sendNodeDirect: async (node) => {
+            if (node.attrs.id === 'r1') {
+                throw new Error('permanent')
+            }
+            sent.push(node.attrs.id)
+        },
+        shouldQueueDanglingReceipt: () => false
+    })
+
+    coordinator.startPassiveTasksAfterConnect()
+    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+
+    assert.deepEqual(sent, ['r0', 'r2'])
 })

@@ -69,6 +69,7 @@ export class WriteBehindPersistence {
         this.flushTimeoutMs = options.flushTimeoutMs ?? 5_000
         const queueOptions = (domain: string) => ({
             maxPendingKeys: options.maxPendingKeys ?? 4_096,
+            maxWriteConcurrency: options.maxWriteConcurrency ?? 4,
             flushTimeoutMs: this.flushTimeoutMs,
             onError: (key: string, error: unknown, attempt: number) => {
                 this.logger.warn('write-behind error', {
