@@ -276,9 +276,14 @@ test('message builders create fanout nodes and validate participant requirements
         requesterJid: '5511:3@s.whatsapp.net',
         addressingMode: 'pn',
         encType: 'msg',
-        ciphertext: new Uint8Array([9])
+        ciphertext: new Uint8Array([9]),
+        retryCount: 2
     })
-    assert.equal(retryNode.attrs.device_fanout, 'false')
+    assert.equal(retryNode.attrs.participant, '5511:3@s.whatsapp.net')
+    assert.ok(Array.isArray(retryNode.content))
+    assert.equal(retryNode.content[0].tag, 'enc')
+    assert.equal(retryNode.content[0].attrs.type, 'msg')
+    assert.equal(retryNode.content[0].attrs.count, '2')
 
     const inboundRetry = buildInboundRetryReceiptNode(
         {
@@ -542,13 +547,11 @@ test('retry builder emits registration and key bundle payload', () => {
         registrationId: 777,
         participant: '5511:2@s.whatsapp.net',
         recipient: '5511:3@s.whatsapp.net',
-        from: 'me@s.whatsapp.net',
         error: 409,
         categoryPeer: true
     })
     assert.equal(nodeWithoutKeys.attrs.participant, '5511:2@s.whatsapp.net')
     assert.equal(nodeWithoutKeys.attrs.recipient, '5511:3@s.whatsapp.net')
-    assert.equal(nodeWithoutKeys.attrs.from, 'me@s.whatsapp.net')
     assert.equal(nodeWithoutKeys.attrs.category, 'peer')
     assert.ok(Array.isArray(nodeWithoutKeys.content))
     assert.equal(

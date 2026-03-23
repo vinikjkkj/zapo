@@ -58,7 +58,7 @@ const DEFAULT_CACHE_PROVIDERS: Required<WaStoreCacheProviderSelection> = {
 }
 
 const DEFAULT_CACHE_TTLS_MS: Required<WaStoreCacheTtlSelection> = {
-    retryMs: 7 * 24 * 60 * 60 * 1000,
+    retryMs: 60 * 1000,
     participantsMs: 5 * 60 * 1000,
     deviceListMs: 5 * 60 * 1000
 }

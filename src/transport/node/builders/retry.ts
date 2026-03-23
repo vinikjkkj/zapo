@@ -76,7 +76,6 @@ export function buildRetryReceiptNode(input: {
     readonly to: string
     readonly participant?: string
     readonly recipient?: string
-    readonly from?: string
     readonly originalMsgId: string
     readonly retryCount: number
     readonly t: string
@@ -95,9 +94,6 @@ export function buildRetryReceiptNode(input: {
     }
     if (input.recipient) {
         attrs.recipient = input.recipient
-    }
-    if (input.from) {
-        attrs.from = input.from
     }
     if (input.categoryPeer) {
         attrs.category = 'peer'

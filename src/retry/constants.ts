@@ -1,6 +1,6 @@
 export const MAX_RETRY_ATTEMPTS = 5
 export const RETRY_KEYS_MIN_COUNT = 2
-export const RETRY_OUTBOUND_TTL_MS = 7 * 24 * 60 * 60 * 1000
+export const RETRY_OUTBOUND_TTL_MS = 60 * 1000
 export const RETRY_RECEIPT_VERSION = '1'
 
 export const RETRY_REASON = Object.freeze({

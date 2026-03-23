@@ -7,7 +7,7 @@ interface RetryInboundCounterRecord {
     expiresAtMs: number
 }
 
-const DEFAULT_RETRY_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const DEFAULT_RETRY_TTL_MS = 60 * 1000
 
 export class WaRetryMemoryStore implements WaRetryStore {
     private readonly outboundMessages: Map<string, WaRetryOutboundMessageRecord>
@@ -29,8 +29,69 @@ export class WaRetryMemoryStore implements WaRetryStore {
         return this.ttlMs
     }
 
+    public supportsRawReplayPayload(): boolean {
+        return true
+    }
+
+    public async getOutboundRequesterStatus(
+        messageId: string,
+        requesterDeviceJid: string
+    ): Promise<{
+        readonly eligible: boolean
+        readonly delivered: boolean
+    } | null> {
+        const current = this.outboundMessages.get(messageId)
+        if (!current) {
+            return null
+        }
+        const eligible = current.eligibleRequesterDeviceJids
+        if (!eligible || eligible.length === 0) {
+            return null
+        }
+        let isEligible = false
+        for (let index = 0; index < eligible.length; index += 1) {
+            if (eligible[index] === requesterDeviceJid) {
+                isEligible = true
+                break
+            }
+        }
+        if (!isEligible) {
+            return {
+                eligible: false,
+                delivered: false
+            }
+        }
+        const delivered = current.deliveredRequesterDeviceJids
+        if (!delivered || delivered.length === 0) {
+            return {
+                eligible: true,
+                delivered: false
+            }
+        }
+        for (let index = 0; index < delivered.length; index += 1) {
+            if (delivered[index] === requesterDeviceJid) {
+                return {
+                    eligible: true,
+                    delivered: true
+                }
+            }
+        }
+        return {
+            eligible: true,
+            delivered: false
+        }
+    }
+
     public async upsertOutboundMessage(record: WaRetryOutboundMessageRecord): Promise<void> {
-        this.outboundMessages.set(record.messageId, record)
+        this.outboundMessages.set(record.messageId, {
+            ...record,
+            eligibleRequesterDeviceJids: record.eligibleRequesterDeviceJids
+                ? [...record.eligibleRequesterDeviceJids]
+                : undefined,
+            deliveredRequesterDeviceJids: record.deliveredRequesterDeviceJids
+                ? [...record.deliveredRequesterDeviceJids]
+                : undefined
+        })
     }
 
     public async deleteOutboundMessage(messageId: string): Promise<number> {
@@ -57,6 +118,26 @@ export class WaRetryMemoryStore implements WaRetryStore {
         this.outboundMessages.set(messageId, {
             ...current,
             state,
+            updatedAtMs,
+            expiresAtMs
+        })
+    }
+
+    public async markOutboundRequesterDelivered(
+        messageId: string,
+        requesterDeviceJid: string,
+        updatedAtMs: number,
+        expiresAtMs: number
+    ): Promise<void> {
+        const current = this.outboundMessages.get(messageId)
+        if (!current) {
+            return
+        }
+        const delivered = new Set(current.deliveredRequesterDeviceJids ?? [])
+        delivered.add(requesterDeviceJid)
+        this.outboundMessages.set(messageId, {
+            ...current,
+            deliveredRequesterDeviceJids: Array.from(delivered),
             updatedAtMs,
             expiresAtMs
         })

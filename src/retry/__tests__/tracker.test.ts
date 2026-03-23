@@ -16,24 +16,25 @@ function createLogger(): Logger {
     }
 }
 
-test('outbound retry tracker skips duplicate final upsert when hinted id matches publish result', async () => {
-    const upserts: { readonly messageId: string; readonly toJid: string }[] = []
-    const deletes: string[] = []
+test('outbound retry tracker persists once when hinted id matches publish result', async () => {
+    const upserts: {
+        readonly messageId: string
+        readonly toJid: string
+        readonly replayPayload: unknown
+    }[] = []
 
     const retryStore = {
         getTtlMs: () => 60_000,
         upsertOutboundMessage: async (record: {
             readonly messageId: string
             readonly toJid: string
+            readonly replayPayload: unknown
         }) => {
             upserts.push({
                 messageId: record.messageId,
-                toJid: record.toJid
+                toJid: record.toJid,
+                replayPayload: record.replayPayload
             })
-        },
-        deleteOutboundMessage: async (messageId: string) => {
-            deletes.push(messageId)
-            return 1
         },
         cleanupExpired: async () => 0
     } as unknown as WaRetryStore
@@ -71,12 +72,57 @@ test('outbound retry tracker skips duplicate final upsert when hinted id matches
     assert.equal(result.id, 'hinted-id')
     assert.equal(upserts.length, 1)
     assert.equal(upserts[0].messageId, 'hinted-id')
-    assert.equal(deletes.length, 0)
+    assert.equal(upserts[0].replayPayload instanceof Uint8Array, true)
+})
+
+test('outbound retry tracker skips codec when store supports raw replay payloads', async () => {
+    let persistedReplayPayload: unknown
+
+    const retryStore = {
+        getTtlMs: () => 60_000,
+        supportsRawReplayPayload: () => true,
+        upsertOutboundMessage: async (record: { readonly replayPayload: unknown }) => {
+            persistedReplayPayload = record.replayPayload
+        },
+        cleanupExpired: async () => 0
+    } as unknown as WaRetryStore
+
+    const tracker = createOutboundRetryTracker({
+        retryStore,
+        logger: createLogger()
+    })
+
+    const replayPayload = {
+        mode: 'plaintext' as const,
+        to: '551100000000@s.whatsapp.net',
+        type: 'text',
+        plaintext: new Uint8Array([6, 7, 8])
+    }
+    await tracker.track(
+        {
+            toJid: replayPayload.to,
+            type: replayPayload.type,
+            replayPayload
+        },
+        async () => ({
+            id: 'raw-id',
+            attempts: 1,
+            ackNode: {
+                tag: 'ack',
+                attrs: {}
+            },
+            ack: {
+                refreshLid: false
+            }
+        })
+    )
+
+    assert.equal(persistedReplayPayload instanceof Uint8Array, false)
+    assert.deepEqual(persistedReplayPayload, replayPayload)
 })
 
 test('outbound retry tracker persists publish result when id hint is not provided', async () => {
     const upserts: { readonly messageId: string; readonly toJid: string }[] = []
-    const deletes: string[] = []
 
     const retryStore = {
         getTtlMs: () => 60_000,
@@ -88,10 +134,6 @@ test('outbound retry tracker persists publish result when id hint is not provide
                 messageId: record.messageId,
                 toJid: record.toJid
             })
-        },
-        deleteOutboundMessage: async (messageId: string) => {
-            deletes.push(messageId)
-            return 1
         },
         cleanupExpired: async () => 0
     } as unknown as WaRetryStore
@@ -128,21 +170,15 @@ test('outbound retry tracker persists publish result when id hint is not provide
     assert.equal(upserts.length, 1)
     assert.equal(upserts[0].messageId, 'published-id')
     assert.equal(upserts[0].toJid, '551100000000@s.whatsapp.net')
-    assert.equal(deletes.length, 0)
 })
 
-test('outbound retry tracker deletes hinted record when publish returns different id', async () => {
+test('outbound retry tracker persists only publish result when server rewrites id', async () => {
     const upserts: string[] = []
-    const deletes: string[] = []
 
     const retryStore = {
         getTtlMs: () => 60_000,
         upsertOutboundMessage: async (record: { readonly messageId: string }) => {
             upserts.push(record.messageId)
-        },
-        deleteOutboundMessage: async (messageId: string) => {
-            deletes.push(messageId)
-            return 1
         },
         cleanupExpired: async () => 0
     } as unknown as WaRetryStore
@@ -177,6 +213,50 @@ test('outbound retry tracker deletes hinted record when publish returns differen
         })
     )
 
-    assert.deepEqual(upserts, ['hinted-id', 'server-id'])
-    assert.deepEqual(deletes, ['hinted-id'])
+    assert.deepEqual(upserts, ['server-id'])
+})
+
+test('outbound retry tracker does not default eligible requester list for group destination', async () => {
+    let persistedEligibleRequesterDeviceJids: readonly string[] | undefined
+
+    const retryStore = {
+        getTtlMs: () => 60_000,
+        upsertOutboundMessage: async (record: {
+            readonly eligibleRequesterDeviceJids?: readonly string[]
+        }) => {
+            persistedEligibleRequesterDeviceJids = record.eligibleRequesterDeviceJids
+        },
+        cleanupExpired: async () => 0
+    } as unknown as WaRetryStore
+
+    const tracker = createOutboundRetryTracker({
+        retryStore,
+        logger: createLogger()
+    })
+
+    await tracker.track(
+        {
+            toJid: '123456@g.us',
+            type: 'text',
+            replayPayload: {
+                mode: 'plaintext',
+                to: '123456@g.us',
+                type: 'text',
+                plaintext: new Uint8Array([1])
+            }
+        },
+        async () => ({
+            id: 'group-id',
+            attempts: 1,
+            ackNode: {
+                tag: 'ack',
+                attrs: {}
+            },
+            ack: {
+                refreshLid: false
+            }
+        })
+    )
+
+    assert.equal(persistedEligibleRequesterDeviceJids, undefined)
 })

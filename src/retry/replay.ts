@@ -9,7 +9,7 @@ import {
     parseSignalAddressFromJid,
     toUserJid
 } from '@protocol/jid'
-import { decodeRetryReplayPayload } from '@retry/outbound'
+import { decodeRetryReplayPayload } from '@retry/codec'
 import type {
     WaRetryEncryptedReplayPayload,
     WaRetryOutboundMessageRecord,
@@ -46,7 +46,10 @@ export class WaRetryReplayService {
         requesterJid: string,
         retryCount: number
     ): Promise<WaRetryResendResult> {
-        const payload = decodeRetryReplayPayload(outbound.replayPayload)
+        const payload =
+            outbound.replayPayload instanceof Uint8Array
+                ? decodeRetryReplayPayload(outbound.replayPayload)
+                : outbound.replayPayload
         const requesterAddress = parseSignalAddressFromJid(requesterJid)
         const normalizedRequesterJid = normalizeDeviceJid(requesterJid)
         if (payload.mode === 'plaintext') {
@@ -82,7 +85,8 @@ export class WaRetryReplayService {
                 outbound,
                 payload,
                 requesterJid,
-                requesterAddress
+                requesterAddress,
+                retryCount
             )
         }
         let payloadUserJid: string
@@ -116,7 +120,8 @@ export class WaRetryReplayService {
         outbound: WaRetryOutboundMessageRecord,
         payload: WaRetryPlaintextReplayPayload,
         requesterJid: string,
-        requesterAddress: ReturnType<typeof parseSignalAddressFromJid>
+        requesterAddress: ReturnType<typeof parseSignalAddressFromJid>,
+        retryCount: number
     ): Promise<WaRetryResendResult> {
         const plaintext =
             (await this.maybeWrapGroupRetryPlaintextForSelfDevice(payload, requesterJid)) ??
@@ -146,6 +151,7 @@ export class WaRetryReplayService {
             addressingMode: requesterAddress.server === 'lid' ? 'lid' : 'pn',
             encType: encrypted.type,
             ciphertext: encrypted.ciphertext,
+            retryCount,
             deviceIdentity
         })
 

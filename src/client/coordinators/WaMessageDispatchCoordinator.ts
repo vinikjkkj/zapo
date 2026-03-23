@@ -158,7 +158,8 @@ export class WaMessageDispatchCoordinator {
                 toJid: input.to,
                 type: input.type ?? 'text',
                 replayPayload,
-                participantJid: input.participant
+                participantJid: input.participant,
+                eligibleRequesterDeviceJids: [input.to]
             },
             async () => this.messageClient.publishEncrypted(input, options)
         )
@@ -201,7 +202,8 @@ export class WaMessageDispatchCoordinator {
                 toJid: input.to,
                 type: messageType,
                 replayPayload,
-                participantJid: input.participant
+                participantJid: input.participant,
+                eligibleRequesterDeviceJids: [input.to]
             },
             async () =>
                 this.messageClient.publishEncrypted(
@@ -411,7 +413,8 @@ export class WaMessageDispatchCoordinator {
                 messageIdHint: sendOptions.id ?? messageNode.attrs.id,
                 toJid: groupJid,
                 type,
-                replayPayload
+                replayPayload,
+                eligibleRequesterDeviceJids: fanoutDeviceJids
             },
             async () => this.messageClient.publishNode(messageNode, sendOptions)
         )
@@ -531,7 +534,8 @@ export class WaMessageDispatchCoordinator {
                 messageIdHint: sendOptions.id ?? messageNode.attrs.id,
                 toJid: groupJid,
                 type,
-                replayPayload
+                replayPayload,
+                eligibleRequesterDeviceJids: fanoutDeviceJids
             },
             async () => this.messageClient.publishNode(messageNode, sendOptions)
         )
@@ -974,7 +978,8 @@ export class WaMessageDispatchCoordinator {
                 messageIdHint: sendOptions.id ?? messageNode.attrs.id,
                 toJid: recipientJid,
                 type,
-                replayPayload
+                replayPayload,
+                eligibleRequesterDeviceJids: deviceJids
             },
             async () => this.messageClient.publishNode(messageNode, sendOptions)
         )

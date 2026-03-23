@@ -9,8 +9,7 @@ import {
     RETRY_OUTBOUND_TTL_MS,
     RETRY_REASON
 } from '@retry/constants'
-import { pickRetryStateMax } from '@retry/outbound'
-import { parseRetryReceiptRequest } from '@retry/parse'
+import { parseRetryReceiptRequest, pickRetryStateMax } from '@retry/parse'
 import { mapRetryReasonFromError } from '@retry/reason'
 import { WaRetryReplayService } from '@retry/replay'
 import type {
@@ -31,6 +30,8 @@ import type { WaSignalStore } from '@store/contracts/signal.store'
 import { buildInboundRetryReceiptAckNode } from '@transport/node/builders/message'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
 import type { BinaryNode } from '@transport/types'
+import { uint8Equal } from '@util/bytes'
+import { setBoundedMapEntry } from '@util/collections'
 import { toError } from '@util/primitives'
 
 interface WaRetryCoordinatorOptions {
@@ -68,6 +69,12 @@ interface RetryResendPreparation {
 }
 
 const RETRY_CLEANUP_INTERVAL_MS = 30_000
+const RETRY_SESSION_BASE_KEY_CACHE_MAX_ENTRIES = 8_192
+
+interface RetrySessionBaseKeySnapshot {
+    readonly baseKey: Uint8Array
+    readonly expiresAtMs: number
+}
 
 function getRetryReasonName(code: number | undefined): string | undefined {
     if (code === undefined) {
@@ -109,6 +116,7 @@ export class WaRetryCoordinator {
         | null
         | undefined
     private readonly retryProcessingByMessageId: Map<string, Promise<void>>
+    private readonly retrySessionBaseKeys: Map<string, RetrySessionBaseKeySnapshot>
     private nextRetryCleanupAtMs = 0
 
     public constructor(options: WaRetryCoordinatorOptions) {
@@ -133,6 +141,7 @@ export class WaRetryCoordinator {
             getCurrentSignedIdentity: this.getCurrentSignedIdentity
         })
         this.retryProcessingByMessageId = new Map()
+        this.retrySessionBaseKeys = new Map()
     }
 
     public async onDecryptFailure(
@@ -162,12 +171,26 @@ export class WaRetryCoordinator {
             return
         }
 
+        let shouldAck = false
         try {
             await this.maybeCleanupRetryStore(Date.now())
-            const request = parseRetryReceiptRequest(receiptNode)
+            const expectedToJids: string[] = []
+            const meJid = this.getCurrentMeJid()?.trim()
+            const meLid = this.getCurrentMeLid()?.trim()
+            if (meJid) {
+                expectedToJids.push(meJid)
+            }
+            if (meLid) {
+                expectedToJids.push(meLid)
+            }
+            const request = parseRetryReceiptRequest(
+                receiptNode,
+                expectedToJids.length > 0 ? { expectedToJids } : undefined
+            )
             if (!request) {
                 return
             }
+            shouldAck = true
             await this.handleParsedRetryRequest(receiptNode, request)
         } catch (error) {
             this.logger.warn('failed handling incoming retry request', {
@@ -177,7 +200,9 @@ export class WaRetryCoordinator {
                 message: toError(error).message
             })
         } finally {
-            await this.sendRetryAckSafe(receiptNode)
+            if (shouldAck) {
+                await this.sendRetryAckSafe(receiptNode)
+            }
         }
     }
 
@@ -231,7 +256,6 @@ export class WaRetryCoordinator {
             to: context.from,
             participant: context.participant,
             recipient: context.recipient,
-            from: this.getCurrentMeJid() ?? undefined,
             originalMsgId: context.stanzaId,
             retryCount: prepared.retryCount,
             t: prepared.timestamp,
@@ -414,17 +438,30 @@ export class WaRetryCoordinator {
         if (!current) {
             return
         }
+        const nowMs = Date.now()
+        const expiresAtMs = nowMs + this.retryTtlMs
         const merged = pickRetryStateMax(current.state, nextState)
-        if (merged === current.state) {
+        if (merged !== current.state) {
+            await this.retryStore.updateOutboundMessageState(messageId, merged, nowMs, expiresAtMs)
+        }
+        const requesterJid = receiptNode.attrs.participant ?? receiptNode.attrs.from
+        if (!requesterJid) {
             return
         }
-        const nowMs = Date.now()
-        await this.retryStore.updateOutboundMessageState(
-            messageId,
-            merged,
-            nowMs,
-            nowMs + this.retryTtlMs
-        )
+        try {
+            await this.retryStore.markOutboundRequesterDelivered(
+                messageId,
+                normalizeDeviceJid(requesterJid),
+                nowMs,
+                expiresAtMs
+            )
+        } catch (error) {
+            this.logger.warn('failed to update outbound requester delivery state', {
+                id: messageId,
+                requester: requesterJid,
+                message: toError(error).message
+            })
+        }
     }
 
     private async runRetryTaskSerialized(
@@ -491,12 +528,44 @@ export class WaRetryCoordinator {
         ])
         const regIdMismatch =
             !!currentSession && request.regId > 0 && currentSession.remote.regId !== request.regId
-        if (regIdMismatch) {
+        if (regIdMismatch && !request.keyBundle) {
             await this.signalStore.deleteSession(requesterAddress)
         }
         if (request.keyBundle) {
             if (!request.keyBundle.key || !request.keyBundle.skey.signature) {
                 return false
+            }
+            if (request.offline) {
+                if (!currentSession) {
+                    this.logger.info(
+                        'retry request rejected: offline retry missing existing session',
+                        {
+                            id: request.stanzaId,
+                            originalMsgId: request.originalMsgId,
+                            requester: requesterJid,
+                            remoteRetryCount: request.retryCount,
+                            ...getRemoteRetryReasonLogFields(request.retryReason)
+                        }
+                    )
+                    await this.signalStore.deleteSession(requesterAddress)
+                    return false
+                }
+                if (regIdMismatch) {
+                    this.logger.info(
+                        'retry request rejected: offline retry registration id mismatch',
+                        {
+                            id: request.stanzaId,
+                            originalMsgId: request.originalMsgId,
+                            requester: requesterJid,
+                            remoteRetryCount: request.retryCount,
+                            ...getRemoteRetryReasonLogFields(request.retryReason)
+                        }
+                    )
+                    await this.signalStore.deleteSession(requesterAddress)
+                    return false
+                }
+            } else if (regIdMismatch) {
+                await this.signalStore.deleteSession(requesterAddress)
             }
             await this.signalProtocol.establishOutgoingSession(requesterAddress, {
                 regId: request.regId,
@@ -511,14 +580,83 @@ export class WaRetryCoordinator {
                     publicKey: request.keyBundle.key.publicKey
                 }
             })
-            return true
+            return this.applySessionBaseKeyPolicy(
+                request,
+                requesterJid,
+                requesterAddress,
+                requesterNormalizedDeviceJid
+            )
         }
 
         const sessionStillExists = currentSession !== null && !regIdMismatch
         if (sessionStillExists) {
+            return this.applySessionBaseKeyPolicy(
+                request,
+                requesterJid,
+                requesterAddress,
+                requesterNormalizedDeviceJid
+            )
+        }
+
+        const fetched = await this.fetchMissingPreKeysSession(
+            requesterJid,
+            requesterAddress,
+            requesterNormalizedDeviceJid,
+            request.regId
+        )
+        if (!fetched) {
+            return false
+        }
+        await this.signalProtocol.establishOutgoingSession(requesterAddress, fetched)
+        return this.applySessionBaseKeyPolicy(
+            request,
+            requesterJid,
+            requesterAddress,
+            requesterNormalizedDeviceJid
+        )
+    }
+
+    private async applySessionBaseKeyPolicy(
+        request: WaParsedRetryRequest,
+        requesterJid: string,
+        requesterAddress: ReturnType<typeof parseSignalAddressFromJid>,
+        requesterNormalizedDeviceJid: string
+    ): Promise<boolean> {
+        if (request.retryCount < 2) {
+            return true
+        }
+        const currentSession = await this.signalStore.getSession(requesterAddress)
+        const sessionBaseKey = currentSession?.aliceBaseKey ?? null
+        if (!sessionBaseKey) {
+            return true
+        }
+        const expiresAtMs = Date.now() + this.retryTtlMs
+        if (request.retryCount === 2) {
+            this.setRetrySessionBaseKey(
+                request.originalMsgId,
+                requesterNormalizedDeviceJid,
+                sessionBaseKey,
+                expiresAtMs
+            )
             return true
         }
 
+        const saved = this.getRetrySessionBaseKey(
+            request.originalMsgId,
+            requesterNormalizedDeviceJid
+        )
+        if (!saved || !uint8Equal(saved.baseKey, sessionBaseKey)) {
+            return true
+        }
+
+        await this.signalStore.deleteSession(requesterAddress)
+        this.logger.info('retry request forcing session refresh due to repeated base key', {
+            id: request.stanzaId,
+            originalMsgId: request.originalMsgId,
+            requester: requesterJid,
+            remoteRetryCount: request.retryCount,
+            ...getRemoteRetryReasonLogFields(request.retryReason)
+        })
         const fetched = await this.fetchMissingPreKeysSession(
             requesterJid,
             requesterAddress,
@@ -615,17 +753,44 @@ export class WaRetryCoordinator {
         if (outbound.state === 'ineligible') {
             return { authorized: false, reason: `state_${outbound.state}` }
         }
+        let requesterStatus: {
+            readonly eligible: boolean
+            readonly delivered: boolean
+        } | null = null
+        try {
+            requesterStatus = await this.retryStore.getOutboundRequesterStatus(
+                outbound.messageId,
+                requesterNormalizedDeviceJid
+            )
+        } catch (error) {
+            this.logger.warn('failed to resolve outbound requester status from retry store', {
+                id: request.stanzaId,
+                originalMsgId: request.originalMsgId,
+                requester: requesterJid,
+                message: toError(error).message
+            })
+        }
+        if (requesterStatus) {
+            if (!requesterStatus.eligible) {
+                return { authorized: false, reason: 'requester_device_not_eligible' }
+            }
+            if (requesterStatus.delivered) {
+                return { authorized: false, reason: 'requester_already_delivered' }
+            }
+        }
         const isGroupOutbound = isGroupOrBroadcastJid(outbound.toJid)
         if (!isGroupOutbound && (outbound.state === 'read' || outbound.state === 'played')) {
             return { authorized: false, reason: `state_${outbound.state}` }
         }
-        const requesterAuthorized = await this.isRequesterAuthorizedDevice(
-            requesterJid,
-            requesterAddress,
-            requesterNormalizedDeviceJid
-        )
-        if (!requesterAuthorized) {
-            return { authorized: false, reason: 'requester_device_not_authorized' }
+        if (!requesterStatus) {
+            const requesterAuthorized = await this.isRequesterAuthorizedDevice(
+                requesterJid,
+                requesterAddress,
+                requesterNormalizedDeviceJid
+            )
+            if (!requesterAuthorized) {
+                return { authorized: false, reason: 'requester_device_not_authorized' }
+            }
         }
         return { authorized: true }
     }
@@ -707,12 +872,63 @@ export class WaRetryCoordinator {
             return
         }
         this.nextRetryCleanupAtMs = nowMs + RETRY_CLEANUP_INTERVAL_MS
+        this.cleanupRetrySessionBaseKeys(nowMs)
         try {
             await this.retryStore.cleanupExpired(nowMs)
         } catch (error) {
             this.logger.warn('retry store cleanup failed', {
                 message: toError(error).message
             })
+        }
+    }
+
+    private retrySessionBaseKeyMapKey(
+        originalMsgId: string,
+        requesterNormalizedDeviceJid: string
+    ): string {
+        return `${originalMsgId}|${requesterNormalizedDeviceJid}`
+    }
+
+    private setRetrySessionBaseKey(
+        originalMsgId: string,
+        requesterNormalizedDeviceJid: string,
+        baseKey: Uint8Array,
+        expiresAtMs: number
+    ): void {
+        const key = this.retrySessionBaseKeyMapKey(originalMsgId, requesterNormalizedDeviceJid)
+        setBoundedMapEntry(
+            this.retrySessionBaseKeys,
+            key,
+            {
+                baseKey: Uint8Array.from(baseKey),
+                expiresAtMs
+            },
+            RETRY_SESSION_BASE_KEY_CACHE_MAX_ENTRIES
+        )
+    }
+
+    private getRetrySessionBaseKey(
+        originalMsgId: string,
+        requesterNormalizedDeviceJid: string
+    ): RetrySessionBaseKeySnapshot | null {
+        const key = this.retrySessionBaseKeyMapKey(originalMsgId, requesterNormalizedDeviceJid)
+        const entry = this.retrySessionBaseKeys.get(key)
+        if (!entry) {
+            return null
+        }
+        if (entry.expiresAtMs <= Date.now()) {
+            this.retrySessionBaseKeys.delete(key)
+            return null
+        }
+        return entry
+    }
+
+    private cleanupRetrySessionBaseKeys(nowMs: number): void {
+        for (const [key, entry] of this.retrySessionBaseKeys) {
+            if (entry.expiresAtMs > nowMs) {
+                continue
+            }
+            this.retrySessionBaseKeys.delete(key)
         }
     }
 }

@@ -25,6 +25,8 @@ export interface WaParsedRetryRequest {
     readonly from: string
     readonly participant?: string
     readonly recipient?: string
+    readonly offline: boolean
+    readonly isLid: boolean
     readonly originalMsgId: string
     readonly retryCount: number
     readonly retryReason?: number
@@ -68,14 +70,18 @@ export type WaRetryReplayPayload =
     | WaRetryEncryptedReplayPayload
     | WaRetryOpaqueNodeReplayPayload
 
+export type WaRetryStoredReplayPayload = Uint8Array | WaRetryReplayPayload
+
 export interface WaRetryOutboundMessageRecord {
     readonly messageId: string
     readonly toJid: string
     readonly participantJid?: string
     readonly recipientJid?: string
+    readonly eligibleRequesterDeviceJids?: readonly string[]
+    readonly deliveredRequesterDeviceJids?: readonly string[]
     readonly messageType: string
     readonly replayMode: WaRetryOutboundMode
-    readonly replayPayload: Uint8Array
+    readonly replayPayload: WaRetryStoredReplayPayload
     readonly state: WaRetryOutboundState
     readonly createdAtMs: number
     readonly updatedAtMs: number

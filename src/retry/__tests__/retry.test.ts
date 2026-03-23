@@ -3,13 +3,9 @@ import test from 'node:test'
 
 import type { Logger } from '@infra/log/types'
 import type { WaMessageClient } from '@message/WaMessageClient'
+import { decodeRetryReplayPayload, encodeRetryReplayPayload } from '@retry/codec'
 import { RETRY_REASON } from '@retry/constants'
-import {
-    decodeRetryReplayPayload,
-    encodeRetryReplayPayload,
-    pickRetryStateMax
-} from '@retry/outbound'
-import { parseRetryReceiptRequest } from '@retry/parse'
+import { parseRetryReceiptRequest, pickRetryStateMax } from '@retry/parse'
 import { mapRetryReasonFromError } from '@retry/reason'
 import { WaRetryReplayService } from '@retry/replay'
 import type { WaRetryOutboundMessageRecord, WaRetryReplayPayload } from '@retry/types'
@@ -17,6 +13,7 @@ import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import { encodeBinaryNode } from '@transport/binary'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
 import type { BinaryNode } from '@transport/types'
+import { TEXT_ENCODER } from '@util/bytes'
 
 function buildOutboundRecord(
     messageId: string,
@@ -84,6 +81,18 @@ test('retry replay payload codec round-trips supported modes', () => {
     )
 })
 
+test('retry replay payload rejects legacy json format', () => {
+    const legacyEncoded = TEXT_ENCODER.encode(
+        JSON.stringify({
+            mode: 'plaintext',
+            to: '5511@s.whatsapp.net',
+            type: 'text',
+            plaintext: 'AQID'
+        })
+    )
+    assert.throws(() => decodeRetryReplayPayload(legacyEncoded), /unsupported codec version/)
+})
+
 test('retry state ranking and reason mapping favor higher-priority states', () => {
     assert.equal(pickRetryStateMax('pending', 'read'), 'read')
     assert.equal(pickRetryStateMax('played', 'delivered'), 'played')
@@ -106,7 +115,6 @@ test('retry receipt parser validates and decodes built retry nodes', () => {
     const node = buildRetryReceiptNode({
         stanzaId: 'stanza-1',
         to: 'me@s.whatsapp.net',
-        from: 'peer@s.whatsapp.net',
         participant: 'peer:2@s.whatsapp.net',
         originalMsgId: 'm1',
         retryCount: 2,
@@ -127,13 +135,43 @@ test('retry receipt parser validates and decodes built retry nodes', () => {
             deviceIdentity: new Uint8Array([7])
         }
     })
+    const nodeWithInboundAttrs: BinaryNode = {
+        ...node,
+        attrs: {
+            ...node.attrs,
+            from: 'peer@s.whatsapp.net',
+            offline: '1',
+            is_lid: 'true'
+        }
+    }
 
-    const parsed = parseRetryReceiptRequest(node)
+    const parsed = parseRetryReceiptRequest(nodeWithInboundAttrs, {
+        expectedToJids: ['me@s.whatsapp.net']
+    })
     assert.ok(parsed)
     assert.equal(parsed?.stanzaId, 'stanza-1')
     assert.equal(parsed?.retryCount, 2)
     assert.equal(parsed?.regId, 321)
     assert.equal(parsed?.keyBundle?.skey.id, 10)
+    assert.equal(parsed?.offline, true)
+    assert.equal(parsed?.isLid, true)
+
+    assert.throws(
+        () =>
+            parseRetryReceiptRequest(
+                {
+                    ...nodeWithInboundAttrs,
+                    attrs: {
+                        ...nodeWithInboundAttrs.attrs,
+                        to: 'other@s.whatsapp.net'
+                    }
+                },
+                {
+                    expectedToJids: ['me@s.whatsapp.net']
+                }
+            ),
+        /does not match local device/
+    )
 
     assert.throws(
         () =>
@@ -185,6 +223,55 @@ test('retry replay service resends plaintext when requester matches destination 
     assert.equal(sendEncryptedCalls.length, 1)
     assert.equal(sendNodeCalls.length, 0)
     assert.equal(sendEncryptedCalls[0].encCount, 2)
+})
+
+test('retry replay service accepts raw replay payloads from memory store', async () => {
+    const sendEncryptedCalls: Array<Record<string, unknown>> = []
+    const service = new WaRetryReplayService({
+        logger: createLogger(),
+        messageClient: {
+            sendEncrypted: async (input: unknown) => {
+                sendEncryptedCalls.push(input as Record<string, unknown>)
+            },
+            sendMessageNode: async () => undefined
+        } as unknown as WaMessageClient,
+        signalProtocol: {
+            encryptMessage: async () => ({
+                type: 'msg' as const,
+                ciphertext: new Uint8Array([4, 4])
+            })
+        } as unknown as SignalProtocol,
+        getCurrentMeJid: () => null,
+        getCurrentMeLid: () => null,
+        getCurrentSignedIdentity: () => null
+    })
+
+    const now = Date.now()
+    const outbound: WaRetryOutboundMessageRecord = {
+        messageId: 'm-plain-raw',
+        toJid: '5511999999999@s.whatsapp.net',
+        messageType: 'text',
+        replayMode: 'plaintext',
+        replayPayload: {
+            mode: 'plaintext',
+            to: '5511999999999@s.whatsapp.net',
+            type: 'text',
+            plaintext: new Uint8Array([1, 2, 3])
+        },
+        state: 'pending',
+        createdAtMs: now,
+        updatedAtMs: now,
+        expiresAtMs: now + 60_000
+    }
+    const result = await service.resendOutboundMessage(
+        outbound,
+        '5511999999999:2@s.whatsapp.net',
+        1
+    )
+
+    assert.equal(result, 'resent')
+    assert.equal(sendEncryptedCalls.length, 1)
+    assert.equal(sendEncryptedCalls[0].encCount, 1)
 })
 
 test('retry replay service returns ineligible on plaintext destination mismatch', async () => {
@@ -266,7 +353,12 @@ test('retry replay service handles group plaintext retries and pkmsg identity gu
     assert.equal(msgResult, 'resent')
     assert.equal(sendNodeCalls.length, 1)
     assert.equal(sendNodeCalls[0].attrs.id, 'm-group-1')
-    assert.equal(sendNodeCalls[0].attrs.device_fanout, 'false')
+    assert.equal(sendNodeCalls[0].attrs.participant, '5511999999999:2@s.whatsapp.net')
+    assert.equal('device_fanout' in sendNodeCalls[0].attrs, false)
+    assert.ok(Array.isArray(sendNodeCalls[0].content))
+    assert.equal(sendNodeCalls[0].content[0].tag, 'enc')
+    assert.equal(sendNodeCalls[0].content[0].attrs.type, 'msg')
+    assert.equal(sendNodeCalls[0].content[0].attrs.count, '1')
 })
 
 test('retry replay service handles encrypted mode eligibility', async () => {

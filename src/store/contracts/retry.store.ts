@@ -1,7 +1,15 @@
 import type { WaRetryOutboundMessageRecord, WaRetryOutboundState } from '@retry/types'
 
 export interface WaRetryStore {
+    getOutboundRequesterStatus(
+        messageId: string,
+        requesterDeviceJid: string
+    ): Promise<{
+        readonly eligible: boolean
+        readonly delivered: boolean
+    } | null>
     getTtlMs?(): number
+    supportsRawReplayPayload?(): boolean
     destroy?(): Promise<void>
     upsertOutboundMessage(record: WaRetryOutboundMessageRecord): Promise<void>
     deleteOutboundMessage(messageId: string): Promise<number>
@@ -9,6 +17,12 @@ export interface WaRetryStore {
     updateOutboundMessageState(
         messageId: string,
         state: WaRetryOutboundState,
+        updatedAtMs: number,
+        expiresAtMs: number
+    ): Promise<void>
+    markOutboundRequesterDelivered(
+        messageId: string,
+        requesterDeviceJid: string,
         updatedAtMs: number,
         expiresAtMs: number
     ): Promise<void>

@@ -1,5 +1,6 @@
 import { WA_MESSAGE_TAGS, WA_NODE_TAGS } from '@protocol/constants'
-import type { WaParsedRetryRequest, WaRetryKeyBundle } from '@retry/types'
+import { normalizeDeviceJid } from '@protocol/jid'
+import type { WaParsedRetryRequest, WaRetryKeyBundle, WaRetryOutboundState } from '@retry/types'
 import {
     SIGNAL_KEY_DATA_LENGTH,
     SIGNAL_KEY_ID_LENGTH,
@@ -9,6 +10,18 @@ import {
 import { decodeNodeContentBase64OrBytes, findNodeChildrenByTags } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt } from '@util/primitives'
+
+export interface ParseRetryReceiptRequestOptions {
+    readonly expectedToJids?: readonly string[]
+}
+
+const RETRY_STATE_RANK: Readonly<Record<WaRetryOutboundState, number>> = {
+    pending: 0,
+    delivered: 1,
+    read: 2,
+    played: 3,
+    ineligible: 4
+}
 
 function parseFixedLengthBytes(
     value: BinaryNode['content'],
@@ -42,6 +55,33 @@ function requireNode(node: BinaryNode | undefined, message: string): BinaryNode 
         throw new Error(message)
     }
     return node
+}
+
+function validateRetryReceiptToAttr(
+    to: string | undefined,
+    expectedToJids: readonly string[] | undefined
+): void {
+    if (!to || !expectedToJids || expectedToJids.length === 0) {
+        return
+    }
+    let normalizedTo: string
+    try {
+        normalizedTo = normalizeDeviceJid(to)
+    } catch {
+        throw new Error('retry receipt has invalid to attr')
+    }
+    for (let index = 0; index < expectedToJids.length; index += 1) {
+        const expected = expectedToJids[index]?.trim()
+        if (!expected) continue
+        try {
+            if (normalizeDeviceJid(expected) === normalizedTo) {
+                return
+            }
+        } catch {
+            continue
+        }
+    }
+    throw new Error('retry receipt to attr does not match local device')
 }
 
 function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | undefined {
@@ -130,7 +170,10 @@ function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | u
     }
 }
 
-export function parseRetryReceiptRequest(node: BinaryNode): WaParsedRetryRequest | null {
+export function parseRetryReceiptRequest(
+    node: BinaryNode,
+    options?: ParseRetryReceiptRequestOptions
+): WaParsedRetryRequest | null {
     if (node.tag !== WA_MESSAGE_TAGS.RECEIPT) {
         return null
     }
@@ -146,6 +189,7 @@ export function parseRetryReceiptRequest(node: BinaryNode): WaParsedRetryRequest
     if (!stanzaId || !from) {
         throw new Error('retry receipt is missing id/from attrs')
     }
+    validateRetryReceiptToAttr(node.attrs.to, options?.expectedToJids)
 
     const [retryNode, registrationNode, keysNode] = findNodeChildrenByTags(node, [
         'retry',
@@ -175,6 +219,8 @@ export function parseRetryReceiptRequest(node: BinaryNode): WaParsedRetryRequest
         from,
         participant: node.attrs.participant,
         recipient: node.attrs.recipient,
+        offline: node.attrs.offline !== undefined,
+        isLid: node.attrs.is_lid === 'true',
         originalMsgId,
         retryCount: parseOptionalInt(retry.attrs.count) ?? 0,
         retryReason: parseOptionalInt(retry.attrs.error ?? node.attrs.error),
@@ -182,4 +228,11 @@ export function parseRetryReceiptRequest(node: BinaryNode): WaParsedRetryRequest
         regId: parseBigEndianUint(registration, 'retry.registration'),
         keyBundle: parseRetryKeyBundle(keysNode)
     }
+}
+
+export function pickRetryStateMax(
+    left: WaRetryOutboundState,
+    right: WaRetryOutboundState
+): WaRetryOutboundState {
+    return RETRY_STATE_RANK[left] >= RETRY_STATE_RANK[right] ? left : right
 }

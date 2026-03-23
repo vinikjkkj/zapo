@@ -291,12 +291,14 @@ test('sqlite retry store tracks outbound state, inbound counters and expiration'
 
     try {
         assert.equal(store.getTtlMs(), 500)
+        assert.equal(store.supportsRawReplayPayload(), false)
 
         const outbound: WaRetryOutboundMessageRecord = {
             messageId: 'm1',
             toJid: '5511@s.whatsapp.net',
             participantJid: '5512@s.whatsapp.net',
             recipientJid: '5513@s.whatsapp.net',
+            eligibleRequesterDeviceJids: ['5511@s.whatsapp.net', '5511:1@s.whatsapp.net'],
             messageType: 'text',
             replayMode: 'encrypted',
             replayPayload: makeBytes(12, 1),
@@ -311,13 +313,38 @@ test('sqlite retry store tracks outbound state, inbound counters and expiration'
         assert.ok(loaded)
         assert.equal(loaded?.state, 'pending')
         assert.deepEqual(loaded?.replayPayload, outbound.replayPayload)
+        assert.deepEqual(loaded?.eligibleRequesterDeviceJids, [
+            '5511@s.whatsapp.net',
+            '5511:1@s.whatsapp.net'
+        ])
+        const eligibleStatus = await store.getOutboundRequesterStatus?.(
+            'm1',
+            '5511:1@s.whatsapp.net'
+        )
+        assert.deepEqual(eligibleStatus, { eligible: true, delivered: false })
+        const ineligibleStatus = await store.getOutboundRequesterStatus?.(
+            'm1',
+            '5599@s.whatsapp.net'
+        )
+        assert.deepEqual(ineligibleStatus, { eligible: false, delivered: false })
         assert.equal(await store.getOutboundMessage('missing'), null)
 
         await store.updateOutboundMessageState('m1', 'delivered', 1100, 1600)
+        await store.markOutboundRequesterDelivered?.('m1', '5511:1@s.whatsapp.net', 1150, 1700)
         const updated = await store.getOutboundMessage('m1')
         assert.equal(updated?.state, 'delivered')
-        assert.equal(updated?.updatedAtMs, 1100)
-        assert.equal(updated?.expiresAtMs, 1600)
+        assert.equal(updated?.updatedAtMs, 1150)
+        assert.equal(updated?.expiresAtMs, 1700)
+        assert.deepEqual(updated?.deliveredRequesterDeviceJids, ['5511:1@s.whatsapp.net'])
+        const deliveredStatus = await store.getOutboundRequesterStatus?.(
+            'm1',
+            '5511:1@s.whatsapp.net'
+        )
+        assert.deepEqual(deliveredStatus, { eligible: true, delivered: true })
+        await store.markOutboundRequesterDelivered?.('m1', '5511:1@s.whatsapp.net', 1300, 1800)
+        const duplicateDelivered = await store.getOutboundMessage('m1')
+        assert.equal(duplicateDelivered?.updatedAtMs, 1150)
+        assert.equal(duplicateDelivered?.expiresAtMs, 1700)
 
         assert.equal(await store.incrementInboundCounter('m1', 'req@s.whatsapp.net', 1200, 1300), 1)
         assert.equal(await store.incrementInboundCounter('m1', 'req@s.whatsapp.net', 1250, 1300), 2)

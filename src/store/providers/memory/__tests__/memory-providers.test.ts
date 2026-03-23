@@ -32,16 +32,36 @@ test('memory message/thread stores enforce limits and ordering', async () => {
 
 test('memory retry/device-list stores expire entries and support cleanup', async () => {
     const retryStore = new WaRetryMemoryStore(50)
+    const replayPayload = {
+        mode: 'plaintext' as const,
+        to: 'to',
+        type: 'text',
+        plaintext: new Uint8Array([1])
+    }
     await retryStore.upsertOutboundMessage({
         messageId: 'id-1',
         toJid: 'to',
+        eligibleRequesterDeviceJids: ['5511@s.whatsapp.net'],
         messageType: 'text',
         replayMode: 'plaintext',
-        replayPayload: new Uint8Array([1]),
+        replayPayload,
         state: 'pending',
         createdAtMs: 1,
         updatedAtMs: 1,
         expiresAtMs: 5
+    })
+    await retryStore.markOutboundRequesterDelivered?.('id-1', '5511@s.whatsapp.net', 2, 5)
+    const tracked = await retryStore.getOutboundMessage('id-1')
+    assert.deepEqual(tracked?.deliveredRequesterDeviceJids, ['5511@s.whatsapp.net'])
+    assert.deepEqual(tracked?.replayPayload, replayPayload)
+    assert.equal(retryStore.supportsRawReplayPayload?.(), true)
+    assert.deepEqual(await retryStore.getOutboundRequesterStatus?.('id-1', '5511@s.whatsapp.net'), {
+        eligible: true,
+        delivered: true
+    })
+    assert.deepEqual(await retryStore.getOutboundRequesterStatus?.('id-1', '5522@s.whatsapp.net'), {
+        eligible: false,
+        delivered: false
     })
     const count = await retryStore.incrementInboundCounter('id-1', 'requester', 0, 5)
     assert.equal(count, 1)

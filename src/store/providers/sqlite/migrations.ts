@@ -183,6 +183,7 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
                     message_type TEXT NOT NULL,
                     replay_mode TEXT NOT NULL,
                     replay_payload BLOB NOT NULL,
+                    requesters_json TEXT,
                     state TEXT NOT NULL,
                     created_at_ms INTEGER NOT NULL,
                     updated_at_ms INTEGER NOT NULL,

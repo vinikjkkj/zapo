@@ -7,7 +7,7 @@ export {
 } from '@retry/constants'
 export type { WaRetryReasonCode } from '@retry/constants'
 export { mapRetryReasonFromError } from '@retry/reason'
-export { parseRetryReceiptRequest } from '@retry/parse'
+export { parseRetryReceiptRequest, pickRetryStateMax } from '@retry/parse'
 export type {
     WaParsedRetryRequest,
     WaRetryDecryptFailureContext,
@@ -21,13 +21,10 @@ export type {
     WaRetryPlaintextReplayPayload,
     WaRetryReceiptType,
     WaRetryReplayPayload,
+    WaRetryStoredReplayPayload,
     WaRetrySignedKey
 } from '@retry/types'
-export {
-    decodeRetryReplayPayload,
-    encodeRetryReplayPayload,
-    pickRetryStateMax
-} from '@retry/outbound'
+export { decodeRetryReplayPayload, encodeRetryReplayPayload } from '@retry/codec'
 export {
     WaRetryReplayService,
     type WaRetryReplayServiceOptions,

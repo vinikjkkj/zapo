@@ -33,6 +33,7 @@ type GroupRetryMessageInput = {
     readonly addressingMode: 'pn' | 'lid'
     readonly encType: 'msg' | 'pkmsg'
     readonly ciphertext: Uint8Array
+    readonly retryCount: number
     readonly deviceIdentity?: Uint8Array
 }
 
@@ -345,34 +346,18 @@ export function buildInboundReceiptAckNode(receiptNode: BinaryNode): BinaryNode 
 }
 
 export function buildGroupRetryMessageNode(input: GroupRetryMessageInput): BinaryNode {
+    const encAttrs: Record<string, string> = {
+        v: WA_MESSAGE_TYPES.ENC_VERSION,
+        type: input.encType
+    }
+    if (input.retryCount > 0) {
+        encAttrs.count = String(Math.trunc(input.retryCount))
+    }
     const content: BinaryNode[] = [
         {
-            tag: WA_NODE_TAGS.PARTICIPANTS,
-            attrs: {},
-            content: [
-                {
-                    tag: 'to',
-                    attrs: { jid: input.requesterJid },
-                    content: [
-                        {
-                            tag: WA_MESSAGE_TAGS.ENC,
-                            attrs: {
-                                v: WA_MESSAGE_TYPES.ENC_VERSION,
-                                type: input.encType
-                            },
-                            content: input.ciphertext
-                        }
-                    ]
-                }
-            ]
-        },
-        {
             tag: WA_MESSAGE_TAGS.ENC,
-            attrs: {
-                v: WA_MESSAGE_TYPES.ENC_VERSION,
-                type: 'skmsg'
-            },
-            content: undefined
+            attrs: encAttrs,
+            content: input.ciphertext
         }
     ]
     if (input.deviceIdentity) {
@@ -389,7 +374,7 @@ export function buildGroupRetryMessageNode(input: GroupRetryMessageInput): Binar
             to: input.to,
             type: input.type,
             id: input.id,
-            device_fanout: 'false',
+            participant: input.requesterJid,
             addressing_mode: input.addressingMode
         },
         content
