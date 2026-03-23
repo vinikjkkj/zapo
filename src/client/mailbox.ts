@@ -1,22 +1,20 @@
+import type { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type { WaIncomingMessageEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { proto } from '@proto'
-import type { WaContactStore } from '@store/contracts/contact.store'
-import type { WaMessageStore } from '@store/contracts/message.store'
 import { toError } from '@util/primitives'
 
 interface WaPersistIncomingMailboxOptions {
     readonly logger: Logger
-    readonly contactStore: WaContactStore
-    readonly messageStore: WaMessageStore
+    readonly writeBehind: WriteBehindPersistence
     readonly event: WaIncomingMessageEvent
 }
 
-async function persistContacts(
-    contactStore: WaContactStore,
+function persistContacts(
+    writeBehind: WriteBehindPersistence,
     event: WaIncomingMessageEvent,
     nowMs: number
-): Promise<void> {
+): void {
     const candidateJids = [event.senderJid, event.rawNode.attrs.participant].filter(
         (jid): jid is string => !!jid
     )
@@ -24,14 +22,13 @@ async function persistContacts(
         return
     }
 
-    const contacts = [...new Set(candidateJids)].map((jid) => ({ jid, lastUpdatedMs: nowMs }))
-    await contactStore.upsertBatch(contacts)
+    for (const jid of [...new Set(candidateJids)]) {
+        writeBehind.persistContact({ jid, lastUpdatedMs: nowMs })
+    }
 }
 
-export async function persistIncomingMailboxEntities(
-    options: WaPersistIncomingMailboxOptions
-): Promise<void> {
-    const { logger, contactStore, messageStore, event } = options
+export function persistIncomingMailboxEntities(options: WaPersistIncomingMailboxOptions): void {
+    const { logger, writeBehind, event } = options
     const { stanzaId, chatJid } = event
     if (!stanzaId || !chatJid) {
         return
@@ -42,23 +39,19 @@ export async function persistIncomingMailboxEntities(
         const messageBytes = event.message
             ? proto.Message.encode(event.message).finish()
             : undefined
-        await Promise.all([
-            messageStore.upsert({
-                id: stanzaId,
-                threadJid: chatJid,
-                senderJid: event.senderJid,
-                participantJid: event.rawNode.attrs.participant,
-                fromMe: false,
-                timestampMs:
-                    event.timestampSeconds === undefined
-                        ? undefined
-                        : event.timestampSeconds * 1_000,
-                encType: event.encryptionType,
-                plaintext: event.plaintext,
-                messageBytes
-            }),
-            persistContacts(contactStore, event, nowMs)
-        ])
+        writeBehind.persistMessage({
+            id: stanzaId,
+            threadJid: chatJid,
+            senderJid: event.senderJid,
+            participantJid: event.rawNode.attrs.participant,
+            fromMe: false,
+            timestampMs:
+                event.timestampSeconds === undefined ? undefined : event.timestampSeconds * 1_000,
+            encType: event.encryptionType,
+            plaintext: event.plaintext,
+            messageBytes
+        })
+        persistContacts(writeBehind, event, nowMs)
     } catch (error) {
         logger.warn('failed to persist incoming mailbox entities', {
             id: stanzaId,

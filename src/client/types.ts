@@ -26,10 +26,16 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
     readonly messageAckTimeoutMs?: number
     readonly messageMaxAttempts?: number
     readonly messageRetryDelayMs?: number
+    readonly writeBehind?: WaWriteBehindOptions
     readonly history?: WaHistorySyncOptions
     readonly chatEvents?: {
         readonly emitSnapshotMutations?: boolean
     }
+}
+
+export interface WaWriteBehindOptions {
+    readonly maxPendingKeys?: number
+    readonly flushTimeoutMs?: number
 }
 
 export interface WaHistorySyncOptions {

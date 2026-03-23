@@ -16,6 +16,8 @@ import type { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTa
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { processHistorySyncNotification } from '@client/history-sync'
 import { persistIncomingMailboxEntities } from '@client/mailbox'
+import type { WriteBehindDrainResult } from '@client/persistence/WriteBehindPersistence'
+import { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type {
     WaAppStateMessageKey,
     WaClearChatOptions,
@@ -98,7 +100,11 @@ export class WaClient extends EventEmitter {
     private readonly receiptQueue!: WaReceiptQueue
     private readonly keyShareCoordinator!: WaKeyShareCoordinator
     private readonly connectionManager!: WaConnectionManager
+    private readonly writeBehind!: WriteBehindPersistence
     private connectPromise: Promise<void> | null = null
+    private acceptingIncomingEvents = true
+    private activeIncomingHandlers = 0
+    private readonly incomingHandlersDrainedWaiters: Array<() => void> = []
 
     public constructor(options: WaClientOptions, logger: Logger = new ConsoleLogger('info')) {
         super()
@@ -115,6 +121,15 @@ export class WaClient extends EventEmitter {
         this.signalStore = base.sessionStore.signal
         this.senderKeyStore = base.sessionStore.senderKey
         this.threadStore = base.sessionStore.threads
+        this.writeBehind = new WriteBehindPersistence(
+            {
+                messageStore: this.messageStore,
+                threadStore: this.threadStore,
+                contactStore: this.contactStore
+            },
+            this.logger,
+            this.options.writeBehind
+        )
 
         const dependencies = buildWaClientDependencies({
             base,
@@ -235,72 +250,79 @@ export class WaClient extends EventEmitter {
 
     private getMailboxPersistenceDeps(): {
         readonly logger: Logger
-        readonly contactStore: WaContactStore
-        readonly messageStore: WaMessageStore
+        readonly writeBehind: WriteBehindPersistence
     } {
         return {
             logger: this.logger,
-            contactStore: this.contactStore,
-            messageStore: this.messageStore
+            writeBehind: this.writeBehind
         }
     }
 
     private async handleIncomingMessageEvent(event: WaIncomingMessageEvent): Promise<void> {
-        this.emit('message', event)
-        void persistIncomingMailboxEntities({
-            ...this.getMailboxPersistenceDeps(),
-            event
-        })
-        const protocolMessage = event.message?.protocolMessage
-        if (!protocolMessage) {
+        if (!this.tryEnterIncomingHandler()) {
             return
         }
-        const protocolEvent: WaIncomingProtocolMessageEvent = {
-            ...event,
-            protocolMessage
-        }
-        this.emit('message_protocol', protocolEvent)
-
-        const protocolType = protocolMessage.type
-        if (protocolType === null || protocolType === undefined) {
-            this.logger.debug('incoming protocol message without type', {
-                id: event.stanzaId,
-                from: event.chatJid
+        try {
+            this.emit('message', event)
+            void persistIncomingMailboxEntities({
+                ...this.getMailboxPersistenceDeps(),
+                event
             })
-            return
-        }
-
-        if (protocolType === proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_REQUEST) {
-            await this.handleIncomingAppStateSyncKeyRequest(event, protocolMessage)
-            return
-        }
-
-        if (protocolType === proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_SHARE) {
-            await this.handleIncomingAppStateSyncKeyShare(event, protocolMessage)
-            return
-        }
-
-        if (protocolType === proto.Message.ProtocolMessage.Type.HISTORY_SYNC_NOTIFICATION) {
-            if (this.options.history?.enabled && protocolMessage.historySyncNotification) {
-                await this.handleHistorySyncNotification(protocolMessage.historySyncNotification)
+            const protocolMessage = event.message?.protocolMessage
+            if (!protocolMessage) {
+                return
             }
-            return
-        }
+            const protocolEvent: WaIncomingProtocolMessageEvent = {
+                ...event,
+                protocolMessage
+            }
+            this.emit('message_protocol', protocolEvent)
 
-        if (SYNC_RELATED_PROTOCOL_TYPES.has(protocolType)) {
-            this.logger.info('incoming sync-related protocol message', {
+            const protocolType = protocolMessage.type
+            if (protocolType === null || protocolType === undefined) {
+                this.logger.debug('incoming protocol message without type', {
+                    id: event.stanzaId,
+                    from: event.chatJid
+                })
+                return
+            }
+
+            if (protocolType === proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_REQUEST) {
+                await this.handleIncomingAppStateSyncKeyRequest(event, protocolMessage)
+                return
+            }
+
+            if (protocolType === proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_SHARE) {
+                await this.handleIncomingAppStateSyncKeyShare(event, protocolMessage)
+                return
+            }
+
+            if (protocolType === proto.Message.ProtocolMessage.Type.HISTORY_SYNC_NOTIFICATION) {
+                if (this.options.history?.enabled && protocolMessage.historySyncNotification) {
+                    await this.handleHistorySyncNotification(
+                        protocolMessage.historySyncNotification
+                    )
+                }
+                return
+            }
+
+            if (SYNC_RELATED_PROTOCOL_TYPES.has(protocolType)) {
+                this.logger.info('incoming sync-related protocol message', {
+                    id: event.stanzaId,
+                    from: event.chatJid,
+                    protocolType
+                })
+                return
+            }
+
+            this.logger.debug('incoming protocol message received', {
                 id: event.stanzaId,
                 from: event.chatJid,
                 protocolType
             })
-            return
+        } finally {
+            this.leaveIncomingHandler()
         }
-
-        this.logger.debug('incoming protocol message received', {
-            id: event.stanzaId,
-            from: event.chatJid,
-            protocolType
-        })
     }
 
     private async handleIncomingAppStateSyncKeyShare(
@@ -474,9 +496,9 @@ export class WaClient extends EventEmitter {
         try {
             await processHistorySyncNotification(
                 {
-                    ...this.getMailboxPersistenceDeps(),
+                    logger: this.logger,
                     mediaTransfer: this.mediaTransfer,
-                    threadStore: this.threadStore,
+                    writeBehind: this.writeBehind,
                     emitEvent: this.emit.bind(this) as Parameters<
                         typeof processHistorySyncNotification
                     >[0]['emitEvent']
@@ -524,6 +546,7 @@ export class WaClient extends EventEmitter {
             return this.connectPromise
         }
 
+        this.acceptingIncomingEvents = true
         this.connectPromise = this.connectionManager
             .connect((frame) => this.handleIncomingFrame(frame))
             .then(() => {
@@ -536,6 +559,15 @@ export class WaClient extends EventEmitter {
     }
 
     public async disconnect(): Promise<void> {
+        await this.pauseIncomingEventsAndWaitDrain()
+        const writeBehindFlush = await this.writeBehind.flush(
+            this.options.writeBehind?.flushTimeoutMs
+        )
+        if (writeBehindFlush.remaining > 0) {
+            this.logger.warn('disconnect continuing with pending write-behind entries', {
+                remaining: writeBehindFlush.remaining
+            })
+        }
         this.keyShareCoordinator.notifyDisconnected()
         await this.connectionManager.disconnect()
         this.emit('connection_close', {})
@@ -634,6 +666,10 @@ export class WaClient extends EventEmitter {
 
     public flushAppStateMutations(): Promise<void> {
         return this.appStateMutations.flushMutations()
+    }
+
+    public flushWriteBehind(timeoutMs?: number): Promise<WriteBehindDrainResult> {
+        return this.writeBehind.flush(timeoutMs)
     }
 
     public async exportAppState(): Promise<WaAppStateStoreData> {
@@ -776,6 +812,15 @@ export class WaClient extends EventEmitter {
     }
 
     private async clearStoredState(): Promise<void> {
+        await this.pauseIncomingEventsAndWaitDrain()
+        const writeBehindDestroy = await this.writeBehind.destroy(
+            this.options.writeBehind?.flushTimeoutMs
+        )
+        if (writeBehindDestroy.remaining > 0) {
+            throw new Error(
+                `clear stored state aborted: write-behind did not fully drain (remaining=${writeBehindDestroy.remaining})`
+            )
+        }
         const danglingReceipts = this.receiptQueue.take()
         if (danglingReceipts.length > 0) {
             this.logger.debug('cleared dangling receipts while clearing stored state', {
@@ -792,6 +837,50 @@ export class WaClient extends EventEmitter {
         await this.signalStore.clear()
         await this.senderKeyStore.clear()
         await this.threadStore.clear()
+    }
+
+    private tryEnterIncomingHandler(): boolean {
+        if (!this.acceptingIncomingEvents) {
+            return false
+        }
+        this.activeIncomingHandlers += 1
+        if (this.acceptingIncomingEvents) {
+            return true
+        }
+        this.leaveIncomingHandler()
+        return false
+    }
+
+    private leaveIncomingHandler(): void {
+        if (this.activeIncomingHandlers <= 0) {
+            return
+        }
+        this.activeIncomingHandlers -= 1
+        if (this.activeIncomingHandlers === 0) {
+            this.notifyIncomingHandlersDrained()
+        }
+    }
+
+    private async pauseIncomingEventsAndWaitDrain(): Promise<void> {
+        this.acceptingIncomingEvents = false
+        if (this.activeIncomingHandlers === 0) {
+            return
+        }
+        await new Promise<void>((resolve) => {
+            this.incomingHandlersDrainedWaiters[this.incomingHandlersDrainedWaiters.length] =
+                resolve
+        })
+    }
+
+    private notifyIncomingHandlersDrained(): void {
+        if (this.incomingHandlersDrainedWaiters.length === 0) {
+            return
+        }
+        const waitersLength = this.incomingHandlersDrainedWaiters.length
+        for (let index = 0; index < waitersLength; index += 1) {
+            this.incomingHandlersDrainedWaiters[index]()
+        }
+        this.incomingHandlersDrainedWaiters.length = 0
     }
 
     private handleError(error: Error): void {

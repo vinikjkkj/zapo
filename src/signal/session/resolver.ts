@@ -1,12 +1,13 @@
 import { toSerializedPubKey } from '@crypto/core/keys'
 import type { Logger } from '@infra/log/types'
-import { normalizeDeviceJid, parseSignalAddressFromJid } from '@protocol/jid'
+import { PromiseDedup } from '@infra/perf/PromiseDedup'
+import { normalizeDeviceJid, parseSignalAddressFromJid, signalAddressKey } from '@protocol/jid'
 import type { SignalIdentitySyncApi } from '@signal/api/SignalIdentitySyncApi'
 import type { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
-import type { SignalAddress, SignalSessionRecord } from '@signal/types'
+import type { SignalAddress, SignalPreKeyBundle, SignalSessionRecord } from '@signal/types'
 import type { WaSignalStore } from '@store/contracts/signal.store'
-import { uint8Equal } from '@util/bytes'
+import { bytesToHex, uint8Equal } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 export interface SignalResolvedSessionTarget {
@@ -37,12 +38,14 @@ export function createSignalSessionResolver(options: {
     readonly logger: Logger
 }): SignalSessionResolver {
     const { signalProtocol, signalStore, signalIdentitySync, signalSessionSync, logger } = options
+    const dedup = new PromiseDedup()
 
-    const ensureSession = async (
+    const ensureSessionInternal = async (
         address: SignalAddress,
         jid: string,
         expectedIdentity?: Uint8Array,
-        reasonIdentity = false
+        reasonIdentity = false,
+        prefetchedBundle?: SignalPreKeyBundle
     ): Promise<void> => {
         const expectedSerializedIdentity = expectedIdentity
             ? toSerializedPubKey(expectedIdentity)
@@ -59,11 +62,19 @@ export function createSignalSessionResolver(options: {
             }
             return
         }
-        logger.info('signal session missing, fetching remote key bundle', { jid })
-        const fetched = await signalSessionSync.fetchKeyBundle({
-            jid,
-            reasonIdentity
-        })
+        let fetched: { readonly jid: string; readonly bundle: SignalPreKeyBundle }
+        if (prefetchedBundle) {
+            fetched = {
+                jid,
+                bundle: prefetchedBundle
+            }
+        } else {
+            logger.info('signal session missing, fetching remote key bundle', { jid })
+            fetched = await signalSessionSync.fetchKeyBundle({
+                jid,
+                reasonIdentity
+            })
+        }
         const remoteIdentity = toSerializedPubKey(fetched.bundle.identity)
         if (reasonIdentity) {
             const storedIdentity = await signalStore.getRemoteIdentity(address)
@@ -74,13 +85,36 @@ export function createSignalSessionResolver(options: {
         if (expectedSerializedIdentity && !uint8Equal(remoteIdentity, expectedSerializedIdentity)) {
             throw new Error('identity mismatch')
         }
-        await signalProtocol.establishOutgoingSession(address, fetched.bundle)
+        await signalProtocol.establishOutgoingSession(address, fetched.bundle, {
+            reuseExisting: true
+        })
         logger.info('signal session synchronized', {
             jid,
             regId: fetched.bundle.regId,
             hasOneTimeKey: fetched.bundle.oneTimeKey !== undefined
         })
     }
+
+    const ensureSessionWithDedup = (
+        address: SignalAddress,
+        jid: string,
+        expectedIdentity?: Uint8Array,
+        reasonIdentity = false,
+        prefetchedBundle?: SignalPreKeyBundle
+    ): Promise<void> => {
+        const expectedIdentityKey = expectedIdentity ? bytesToHex(expectedIdentity) : 'none'
+        const dedupKey = `signalSession:${signalAddressKey(address)}:${reasonIdentity ? '1' : '0'}:${expectedIdentityKey}`
+        return dedup.run(dedupKey, () =>
+            ensureSessionInternal(address, jid, expectedIdentity, reasonIdentity, prefetchedBundle)
+        )
+    }
+
+    const ensureSession = (
+        address: SignalAddress,
+        jid: string,
+        expectedIdentity?: Uint8Array,
+        reasonIdentity = false
+    ): Promise<void> => ensureSessionWithDedup(address, jid, expectedIdentity, reasonIdentity)
 
     const ensureSessionsBatch = async (
         targetJids: readonly string[],
@@ -113,10 +147,8 @@ export function createSignalSessionResolver(options: {
         if (normalizedExpectedIdentityByJid && expectedIdentityByJid) {
             for (const [jid, identity] of expectedIdentityByJid.entries()) {
                 try {
-                    normalizedExpectedIdentityByJid.set(
-                        normalizeDeviceJid(jid),
-                        toSerializedPubKey(identity)
-                    )
+                    toSerializedPubKey(identity)
+                    normalizedExpectedIdentityByJid.set(normalizeDeviceJid(jid), identity)
                 } catch (error) {
                     logger.trace(
                         'ignoring malformed expected identity jid during batch normalization',
@@ -149,41 +181,15 @@ export function createSignalSessionResolver(options: {
             resolvedTargets.length = resolvedTargetCount
             return resolvedTargets
         }
-        const synchronizeMissingTarget = async (
-            targetIndex: number
-        ): Promise<SignalSessionRecord> => {
-            const targetJid = normalizedTargetJids[targetIndex]
-            const targetAddress = normalizedTargetAddresses[targetIndex]
-            const fetched = await signalSessionSync.fetchKeyBundle({
-                jid: targetJid
-            })
-            const expectedSerializedIdentity = normalizedExpectedIdentityByJid?.get(targetJid)
-            if (
-                expectedSerializedIdentity &&
-                !uint8Equal(toSerializedPubKey(fetched.bundle.identity), expectedSerializedIdentity)
-            ) {
-                throw new Error('identity mismatch')
-            }
-            const session = await signalProtocol.establishOutgoingSession(
-                targetAddress,
-                fetched.bundle
-            )
-            logger.debug('signal session synchronized from single key fetch', {
-                jid: targetJid,
-                regId: fetched.bundle.regId,
-                hasOneTimeKey: fetched.bundle.oneTimeKey !== undefined
-            })
-            return session
-        }
 
         const missingIndices: number[] = []
         for (let index = 0; index < normalizedTargetJids.length; index += 1) {
             const session = resolvedByIndex[index]
-            const expectedSerializedIdentity = normalizedExpectedIdentityByJid?.get(
+            const expectedIdentity = normalizedExpectedIdentityByJid?.get(
                 normalizedTargetJids[index]
             )
-            if (session && expectedSerializedIdentity) {
-                if (!uint8Equal(session.remote.pubKey, expectedSerializedIdentity)) {
+            if (session && expectedIdentity) {
+                if (!uint8Equal(session.remote.pubKey, toSerializedPubKey(expectedIdentity))) {
                     throw new Error('identity mismatch')
                 }
             }
@@ -194,130 +200,84 @@ export function createSignalSessionResolver(options: {
         if (missingIndices.length === 0) {
             return collectResolvedTargets()
         }
+        const batchRequest = new Array<{ readonly jid: string }>(missingIndices.length)
+        for (let index = 0; index < missingIndices.length; index += 1) {
+            batchRequest[index] = { jid: normalizedTargetJids[missingIndices[index]] }
+        }
 
+        let batchResults: readonly unknown[]
         try {
-            const batchRequest = new Array<{ readonly jid: string }>(missingIndices.length)
-            for (let index = 0; index < missingIndices.length; index += 1) {
-                batchRequest[index] = { jid: normalizedTargetJids[missingIndices[index]] }
-            }
-            const batchResults = await signalSessionSync.fetchKeyBundles(batchRequest)
-            const fallbackIndices: number[] = []
-            const establishedIndices = new Array<number>(missingIndices.length)
-            const establishedBundles = new Array<{
-                readonly regId: number
-                readonly hasOneTimeKey: boolean
-            }>(missingIndices.length)
-            const establishPromises = new Array<Promise<SignalSessionRecord>>(missingIndices.length)
-            let establishedCount = 0
-            for (let index = 0; index < missingIndices.length; index += 1) {
-                const targetIndex = missingIndices[index]
-                const result = batchResults[index]
-                if (!result || !('bundle' in result)) {
-                    fallbackIndices.push(targetIndex)
-                    continue
-                }
-                const targetJid = normalizedTargetJids[targetIndex]
-                const expectedSerializedIdentity = normalizedExpectedIdentityByJid?.get(targetJid)
-                if (
-                    expectedSerializedIdentity &&
-                    !uint8Equal(
-                        toSerializedPubKey(result.bundle.identity),
-                        expectedSerializedIdentity
-                    )
-                ) {
-                    throw new Error('identity mismatch')
-                }
-                establishedIndices[establishedCount] = targetIndex
-                establishedBundles[establishedCount] = {
-                    regId: result.bundle.regId,
-                    hasOneTimeKey: result.bundle.oneTimeKey !== undefined
-                }
-                establishPromises[establishedCount] = signalProtocol.establishOutgoingSession(
-                    normalizedTargetAddresses[targetIndex],
-                    result.bundle
-                )
-                establishedCount += 1
-            }
-
-            establishedIndices.length = establishedCount
-            establishedBundles.length = establishedCount
-            establishPromises.length = establishedCount
-            const establishmentResults = await Promise.allSettled(establishPromises)
-            for (let index = 0; index < establishmentResults.length; index += 1) {
-                const result = establishmentResults[index]
-                const targetIndex = establishedIndices[index]
-                if (result.status === 'fulfilled') {
-                    resolvedByIndex[targetIndex] = result.value
-                    logger.debug('signal session synchronized from batch key fetch', {
-                        jid: normalizedTargetJids[targetIndex],
-                        regId: establishedBundles[index].regId,
-                        hasOneTimeKey: establishedBundles[index].hasOneTimeKey
-                    })
-                    continue
-                }
-                const error = toError(result.reason)
-                if (error.message === 'identity mismatch') {
-                    throw error
-                }
-                fallbackIndices.push(targetIndex)
-            }
-
-            if (fallbackIndices.length === 0) {
-                return collectResolvedTargets()
-            }
-
-            logger.warn(
-                'signal batch key fetch returned partial errors, falling back to single requests',
-                {
-                    requested: missingIndices.length,
-                    fallbackTargets: fallbackIndices.length
-                }
-            )
-            for (let index = 0; index < fallbackIndices.length; index += 1) {
-                const targetIndex = fallbackIndices[index]
-                if (resolvedByIndex[targetIndex]) {
-                    continue
-                }
-                try {
-                    resolvedByIndex[targetIndex] = await synchronizeMissingTarget(targetIndex)
-                } catch (error) {
-                    const normalized = toError(error)
-                    if (normalized.message === 'identity mismatch') {
-                        throw normalized
-                    }
-                    logger.warn('signal single key fetch failed after batch fallback', {
-                        jid: normalizedTargetJids[targetIndex],
-                        message: normalized.message
-                    })
-                }
-            }
+            batchResults = await signalSessionSync.fetchKeyBundles(batchRequest)
         } catch (error) {
-            const normalized = toError(error)
-            if (normalized.message === 'identity mismatch') {
-                throw normalized
-            }
-            logger.warn('signal batch key fetch failed, falling back to single requests', {
+            logger.warn('signal batch key fetch failed', {
                 requested: missingIndices.length,
-                message: normalized.message
+                message: toError(error).message
             })
-            for (let index = 0; index < missingIndices.length; index += 1) {
-                const targetIndex = missingIndices[index]
-                if (resolvedByIndex[targetIndex]) {
-                    continue
-                }
-                try {
-                    resolvedByIndex[targetIndex] = await synchronizeMissingTarget(targetIndex)
-                } catch (fallbackError) {
-                    const fallbackNormalized = toError(fallbackError)
-                    if (fallbackNormalized.message === 'identity mismatch') {
-                        throw fallbackNormalized
-                    }
-                    logger.warn('signal single key fetch failed', {
-                        jid: normalizedTargetJids[targetIndex],
-                        message: fallbackNormalized.message
-                    })
-                }
+            return collectResolvedTargets()
+        }
+
+        const ensuredTargetIndices = new Array<number>(missingIndices.length)
+        const ensurePromises = new Array<Promise<void>>(missingIndices.length)
+        let ensureCount = 0
+        for (let index = 0; index < missingIndices.length; index += 1) {
+            const targetIndex = missingIndices[index]
+            const targetJid = normalizedTargetJids[targetIndex]
+            const batchResult = batchResults[index] as
+                | { readonly bundle?: SignalPreKeyBundle; readonly errorText?: string }
+                | undefined
+            if (!batchResult?.bundle) {
+                logger.warn('signal batch key fetch returned target without bundle', {
+                    jid: targetJid,
+                    message: batchResult?.errorText ?? 'missing key bundle user in response'
+                })
+                continue
             }
+            const expectedIdentity = normalizedExpectedIdentityByJid?.get(targetJid)
+            ensuredTargetIndices[ensureCount] = targetIndex
+            ensurePromises[ensureCount] = ensureSessionWithDedup(
+                normalizedTargetAddresses[targetIndex],
+                targetJid,
+                expectedIdentity,
+                false,
+                batchResult.bundle
+            )
+            ensureCount += 1
+        }
+        if (ensureCount === 0) {
+            return collectResolvedTargets()
+        }
+        ensuredTargetIndices.length = ensureCount
+        ensurePromises.length = ensureCount
+        const ensureResults = await Promise.allSettled(ensurePromises)
+
+        const ensuredAddresses = new Array<SignalAddress>(ensuredTargetIndices.length)
+        for (let index = 0; index < ensuredTargetIndices.length; index += 1) {
+            ensuredAddresses[index] = normalizedTargetAddresses[ensuredTargetIndices[index]]
+        }
+        const synchronizedSessions = await signalStore.getSessionsBatch(ensuredAddresses)
+
+        for (let index = 0; index < ensuredTargetIndices.length; index += 1) {
+            const targetIndex = ensuredTargetIndices[index]
+            const ensureResult = ensureResults[index]
+            if (ensureResult.status === 'rejected') {
+                const normalized = toError(ensureResult.reason)
+                if (normalized.message === 'identity mismatch') {
+                    throw normalized
+                }
+                logger.warn('signal session ensure failed during batch resolution', {
+                    jid: normalizedTargetJids[targetIndex],
+                    message: normalized.message
+                })
+                continue
+            }
+            const synchronizedSession = synchronizedSessions[index]
+            if (!synchronizedSession) {
+                logger.warn('signal session ensure completed without persisted session', {
+                    jid: normalizedTargetJids[targetIndex]
+                })
+                continue
+            }
+            resolvedByIndex[targetIndex] = synchronizedSession
         }
 
         return collectResolvedTargets()

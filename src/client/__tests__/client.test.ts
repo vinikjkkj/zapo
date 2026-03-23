@@ -78,9 +78,9 @@ test('history sync processor persists conversations and emits chunk event', asyn
     const threads: unknown[] = []
     const contacts: unknown[] = []
     const emitted: unknown[] = []
-    let messageBatchCalls = 0
-    let threadBatchCalls = 0
-    let contactBatchCalls = 0
+    let messageCalls = 0
+    let threadCalls = 0
+    let contactCalls = 0
 
     await processHistorySyncNotification(
         {
@@ -90,22 +90,18 @@ test('history sync processor persists conversations and emits chunk event', asyn
                     throw new Error('should not be called for inline payload')
                 }
             } as never,
-            messageStore: {
-                upsertBatch: async (records: readonly unknown[]) => {
-                    messageBatchCalls += 1
-                    messages.push(...records)
-                }
-            } as never,
-            threadStore: {
-                upsertBatch: async (records: readonly unknown[]) => {
-                    threadBatchCalls += 1
-                    threads.push(...records)
-                }
-            } as never,
-            contactStore: {
-                upsertBatch: async (records: readonly unknown[]) => {
-                    contactBatchCalls += 1
-                    contacts.push(...records)
+            writeBehind: {
+                persistMessageAsync: async (record: unknown) => {
+                    messageCalls += 1
+                    messages.push(record)
+                },
+                persistThreadAsync: async (record: unknown) => {
+                    threadCalls += 1
+                    threads.push(record)
+                },
+                persistContactAsync: async (record: unknown) => {
+                    contactCalls += 1
+                    contacts.push(record)
                 }
             } as never,
             emitEvent: (_event, payload) => {
@@ -121,11 +117,69 @@ test('history sync processor persists conversations and emits chunk event', asyn
     assert.equal(messages.length, 1)
     assert.equal(threads.length, 1)
     assert.equal(contacts.length, 1)
-    assert.equal(messageBatchCalls, 1)
-    assert.equal(threadBatchCalls, 1)
-    assert.equal(contactBatchCalls, 1)
+    assert.equal(messageCalls, 1)
+    assert.equal(threadCalls, 1)
+    assert.equal(contactCalls, 1)
     assert.equal(emitted.length, 1)
     assert.equal((emitted[0] as { messagesCount: number }).messagesCount, 1)
+})
+
+test('history sync processor does not emit chunk event when chunk persistence fails', async () => {
+    const historySyncBytes = proto.HistorySync.encode({
+        chunkOrder: 2,
+        progress: 10,
+        conversations: [
+            {
+                id: 'thread@s.whatsapp.net',
+                messages: [
+                    {
+                        message: {
+                            key: {
+                                id: 'm-error',
+                                fromMe: false
+                            },
+                            message: {
+                                conversation: 'hello'
+                            }
+                        }
+                    }
+                ]
+            }
+        ]
+    }).finish()
+    const zipped = gzipSync(historySyncBytes)
+    const emitted: unknown[] = []
+
+    await assert.rejects(
+        () =>
+            processHistorySyncNotification(
+                {
+                    logger: createLogger(),
+                    mediaTransfer: {
+                        downloadAndDecrypt: async () => {
+                            throw new Error('should not be called for inline payload')
+                        }
+                    } as never,
+                    writeBehind: {
+                        persistMessageAsync: async () => {
+                            throw new Error('persist failed')
+                        },
+                        persistThreadAsync: async () => undefined,
+                        persistContactAsync: async () => undefined
+                    } as never,
+                    emitEvent: (_event, payload) => {
+                        emitted.push(payload)
+                    }
+                },
+                {
+                    syncType: proto.Message.HistorySyncType.RECENT,
+                    initialHistBootstrapInlinePayload: zipped
+                }
+            ),
+        /persist failed/
+    )
+
+    assert.equal(emitted.length, 0)
 })
 
 test('resolveWaClientBase rejects invalid proxy transport shapes', () => {

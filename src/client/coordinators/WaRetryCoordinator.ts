@@ -434,34 +434,41 @@ export class WaRetryCoordinator {
             return
         }
 
-        const current = await this.retryStore.getOutboundMessage(messageId)
-        if (!current) {
-            return
-        }
-        const nowMs = Date.now()
-        const expiresAtMs = nowMs + this.retryTtlMs
-        const merged = pickRetryStateMax(current.state, nextState)
-        if (merged !== current.state) {
-            await this.retryStore.updateOutboundMessageState(messageId, merged, nowMs, expiresAtMs)
-        }
-        const requesterJid = receiptNode.attrs.participant ?? receiptNode.attrs.from
-        if (!requesterJid) {
-            return
-        }
-        try {
-            await this.retryStore.markOutboundRequesterDelivered(
-                messageId,
-                normalizeDeviceJid(requesterJid),
-                nowMs,
-                expiresAtMs
-            )
-        } catch (error) {
-            this.logger.warn('failed to update outbound requester delivery state', {
-                id: messageId,
-                requester: requesterJid,
-                message: toError(error).message
-            })
-        }
+        await this.runRetryTaskSerialized(messageId, async () => {
+            const current = await this.retryStore.getOutboundMessage(messageId)
+            if (!current) {
+                return
+            }
+            const nowMs = Date.now()
+            const expiresAtMs = nowMs + this.retryTtlMs
+            const merged = pickRetryStateMax(current.state, nextState)
+            if (merged !== current.state) {
+                await this.retryStore.updateOutboundMessageState(
+                    messageId,
+                    merged,
+                    nowMs,
+                    expiresAtMs
+                )
+            }
+            const requesterJid = receiptNode.attrs.participant ?? receiptNode.attrs.from
+            if (!requesterJid) {
+                return
+            }
+            try {
+                await this.retryStore.markOutboundRequesterDelivered(
+                    messageId,
+                    normalizeDeviceJid(requesterJid),
+                    nowMs,
+                    expiresAtMs
+                )
+            } catch (error) {
+                this.logger.warn('failed to update outbound requester delivery state', {
+                    id: messageId,
+                    requester: requesterJid,
+                    message: toError(error).message
+                })
+            }
+        })
     }
 
     private async runRetryTaskSerialized(
@@ -469,7 +476,7 @@ export class WaRetryCoordinator {
         task: () => Promise<void>
     ): Promise<void> {
         const previous = this.retryProcessingByMessageId.get(messageId) ?? Promise.resolve()
-        const current = previous.then(task, task)
+        const current = previous.then(task)
         const tracker = current.then(
             () => undefined,
             () => undefined

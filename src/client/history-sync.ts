@@ -1,13 +1,11 @@
 import { promisify } from 'node:util'
 import { unzip } from 'node:zlib'
 
+import type { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type { WaClientEventMap, WaHistorySyncChunkEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { proto, type Proto } from '@proto'
-import type { WaContactStore, WaStoredContactRecord } from '@store/contracts/contact.store'
-import type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
-import type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/thread.store'
 import { decodeProtoBytes, toBytesView } from '@util/bytes'
 import { longToNumber } from '@util/primitives'
 
@@ -19,13 +17,12 @@ const HANDLED_SYNC_TYPES = new Set([
     proto.Message.HistorySyncType.FULL,
     proto.Message.HistorySyncType.PUSH_NAME
 ])
+const HISTORY_SYNC_MAX_PENDING_WRITES = 1_024
 
 interface WaHistorySyncDeps {
     readonly logger: Logger
     readonly mediaTransfer: WaMediaTransferClient
-    readonly contactStore: WaContactStore
-    readonly messageStore: WaMessageStore
-    readonly threadStore: WaThreadStore
+    readonly writeBehind: WriteBehindPersistence
     readonly emitEvent: <K extends keyof WaClientEventMap>(
         event: K,
         ...args: Parameters<WaClientEventMap[K]>
@@ -55,20 +52,21 @@ export async function processHistorySyncNotification(
     })
 
     const nowMs = Date.now()
-    const contacts: WaStoredContactRecord[] = []
+    const pendingWrites: Promise<void>[] = []
     for (const pn of historySync.pushnames) {
         if (!pn.id) {
             continue
         }
-        contacts.push({
+        pendingWrites[pendingWrites.length] = deps.writeBehind.persistContactAsync({
             jid: pn.id,
             pushName: pn.pushname ?? undefined,
             lastUpdatedMs: nowMs
         })
+        if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
+            await flushPendingWrites(pendingWrites)
+        }
     }
 
-    const threads: WaStoredThreadRecord[] = []
-    const messages: WaStoredMessageRecord[] = []
     let messagesCount = 0
     for (const conversation of historySync.conversations) {
         const threadJid = conversation.id
@@ -77,7 +75,7 @@ export async function processHistorySyncNotification(
             continue
         }
 
-        threads.push({
+        pendingWrites[pendingWrites.length] = deps.writeBehind.persistThreadAsync({
             jid: threadJid,
             name: conversation.name ?? undefined,
             unreadCount: conversation.unreadCount ?? undefined,
@@ -87,13 +85,16 @@ export async function processHistorySyncNotification(
             markedAsUnread: conversation.markedAsUnread ?? undefined,
             ephemeralExpiration: conversation.ephemeralExpiration ?? undefined
         })
+        if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
+            await flushPendingWrites(pendingWrites)
+        }
         for (const histMsg of conversation.messages ?? []) {
             const webMsg = histMsg.message
             if (!webMsg?.key?.id) {
                 continue
             }
             const timestampMs = longToNumber(webMsg.messageTimestamp) * 1000
-            messages.push({
+            pendingWrites[pendingWrites.length] = deps.writeBehind.persistMessageAsync({
                 id: webMsg.key.id,
                 threadJid,
                 senderJid: webMsg.key.participant ?? undefined,
@@ -103,15 +104,12 @@ export async function processHistorySyncNotification(
                     ? proto.Message.encode(webMsg.message).finish()
                     : undefined
             })
+            if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
+                await flushPendingWrites(pendingWrites)
+            }
             messagesCount += 1
         }
     }
-
-    await Promise.all([
-        deps.contactStore.upsertBatch(contacts),
-        deps.threadStore.upsertBatch(threads),
-        deps.messageStore.upsertBatch(messages)
-    ])
 
     const event: WaHistorySyncChunkEvent = {
         syncType,
@@ -121,7 +119,21 @@ export async function processHistorySyncNotification(
         chunkOrder: historySync.chunkOrder ?? undefined,
         progress: historySync.progress ?? undefined
     }
+    await flushPendingWrites(pendingWrites)
     deps.emitEvent('history_sync_chunk', event)
+}
+
+async function flushPendingWrites(pendingWrites: Promise<void>[]): Promise<void> {
+    if (pendingWrites.length === 0) {
+        return
+    }
+    const pendingCount = pendingWrites.length
+    const batch = new Array<Promise<void>>(pendingCount)
+    for (let index = 0; index < pendingCount; index += 1) {
+        batch[index] = pendingWrites[index]
+    }
+    pendingWrites.length = 0
+    await Promise.all(batch)
 }
 
 async function downloadHistorySyncBlob(

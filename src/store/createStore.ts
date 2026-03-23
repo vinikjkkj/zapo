@@ -1,3 +1,13 @@
+import { withAppStateLock } from '@store/locks/appstate.lock'
+import { withAuthLock } from '@store/locks/auth.lock'
+import { withContactLock } from '@store/locks/contact.lock'
+import { withDeviceListLock } from '@store/locks/device-list.lock'
+import { withMessageLock } from '@store/locks/message.lock'
+import { withParticipantsLock } from '@store/locks/participants.lock'
+import { withRetryLock } from '@store/locks/retry.lock'
+import { withSenderKeyLock } from '@store/locks/sender-key.lock'
+import { withSignalLock } from '@store/locks/signal.lock'
+import { withThreadLock } from '@store/locks/thread.lock'
 import {
     NOOP_CONTACT_STORE,
     NOOP_DEVICE_LIST_STORE,
@@ -218,8 +228,8 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                       } as const)
                     : null
 
-            const authStore = customAuth ?? new WaAuthSqliteStore(sqliteOptions!)
-            const signalStore =
+            const rawAuthStore = customAuth ?? new WaAuthSqliteStore(sqliteOptions!)
+            const rawSignalStore =
                 customSignal ??
                 (providers.signal === 'memory'
                     ? new WaSignalMemoryStore({
@@ -231,7 +241,7 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                           preKeyBatchSize: sqliteBatchSizes.signalPreKey,
                           hasSessionBatchSize: sqliteBatchSizes.signalHasSession
                       }))
-            const senderKeyStore =
+            const rawSenderKeyStore =
                 customSenderKey ??
                 (providers.senderKey === 'memory'
                     ? new SenderKeyMemoryStore({
@@ -242,7 +252,7 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                           sqliteOptions!,
                           sqliteBatchSizes.senderKeyDistribution
                       ))
-            const appStateStore =
+            const rawAppStateStore =
                 customAppState ??
                 (providers.appState === 'memory'
                     ? new WaAppStateMemoryStore(undefined, {
@@ -250,12 +260,12 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                           maxCollectionEntries: memoryLimits.appStateCollectionEntries
                       })
                     : new WaAppStateSqliteStore(sqliteOptions!))
-            const retryStore =
+            const rawRetryStore =
                 customRetry ??
                 (cacheProviders.retry === 'memory'
                     ? new WaRetryMemoryStore(cacheTtlsMs.retry)
                     : new WaRetrySqliteStore(sqliteOptions!, cacheTtlsMs.retry))
-            const participantsStore =
+            const rawParticipantsStore =
                 customParticipants ??
                 (cacheProviders.participants === 'sqlite'
                     ? new WaParticipantsSqliteStore(sqliteOptions!, cacheTtlsMs.participants)
@@ -264,7 +274,7 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                             maxGroups: memoryLimits.participantsGroups
                         })
                       : NOOP_PARTICIPANTS_STORE)
-            const deviceListStore =
+            const rawDeviceListStore =
                 customDeviceList ??
                 (cacheProviders.deviceList === 'sqlite'
                     ? new WaDeviceListSqliteStore(
@@ -277,7 +287,7 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                             maxUsers: memoryLimits.deviceListUsers
                         })
                       : NOOP_DEVICE_LIST_STORE)
-            const messageStore =
+            const rawMessageStore =
                 customMessages ??
                 (providers.messages === 'sqlite'
                     ? new WaMessageSqliteStore(sqliteOptions!)
@@ -286,7 +296,7 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                             maxMessages: memoryLimits.messages
                         })
                       : NOOP_MESSAGE_STORE)
-            const threadStore =
+            const rawThreadStore =
                 customThreads ??
                 (providers.threads === 'sqlite'
                     ? new WaThreadSqliteStore(sqliteOptions!)
@@ -295,7 +305,7 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                             maxThreads: memoryLimits.threads
                         })
                       : NOOP_THREAD_STORE)
-            const contactStore =
+            const rawContactStore =
                 customContacts ??
                 (providers.contacts === 'sqlite'
                     ? new WaContactSqliteStore(sqliteOptions!)
@@ -304,6 +314,17 @@ export function createStore(options: WaCreateStoreOptions): WaStore {
                             maxContacts: memoryLimits.contacts
                         })
                       : NOOP_CONTACT_STORE)
+
+            const authStore = withAuthLock(rawAuthStore)
+            const signalStore = withSignalLock(rawSignalStore)
+            const senderKeyStore = withSenderKeyLock(rawSenderKeyStore)
+            const appStateStore = withAppStateLock(rawAppStateStore)
+            const retryStore = withRetryLock(rawRetryStore)
+            const participantsStore = withParticipantsLock(rawParticipantsStore)
+            const deviceListStore = withDeviceListLock(rawDeviceListStore)
+            const messageStore = withMessageLock(rawMessageStore)
+            const threadStore = withThreadLock(rawThreadStore)
+            const contactStore = withContactLock(rawContactStore)
 
             let cachesDestroyed = false
             let sessionDestroyed = false

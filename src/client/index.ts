@@ -11,5 +11,6 @@ export type {
     WaDeleteChatOptions,
     WaDeleteMessageForMeOptions,
     WaHistorySyncChunkEvent,
-    WaHistorySyncOptions
+    WaHistorySyncOptions,
+    WaWriteBehindOptions
 } from '@client/types'
