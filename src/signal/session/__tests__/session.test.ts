@@ -18,7 +18,7 @@ import {
     requirePreKey,
     requireSignedPreKey
 } from '@signal/session/SignalSerializer'
-import type { SignalAddress, SignalRecvChain } from '@signal/types'
+import type { SignalAddress, SignalRecvChain, SignalSessionRecord } from '@signal/types'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 import { concatBytes } from '@util/bytes'
 
@@ -46,6 +46,57 @@ function makeAddress(user: string): SignalAddress {
         user,
         server: 's.whatsapp.net',
         device: 0
+    }
+}
+
+class DelayFirstSetSessionStore extends WaSignalMemoryStore {
+    private blockFirstSetSession = true
+    private readonly firstSetSessionStartedPromise: Promise<void>
+    private resolveFirstSetSessionStarted: (() => void) | null = null
+    private readonly firstSetSessionReleasePromise: Promise<void>
+    private resolveFirstSetSessionRelease: (() => void) | null = null
+
+    public constructor() {
+        super()
+        this.firstSetSessionStartedPromise = new Promise<void>((resolve) => {
+            this.resolveFirstSetSessionStarted = resolve
+        })
+        this.firstSetSessionReleasePromise = new Promise<void>((resolve) => {
+            this.resolveFirstSetSessionRelease = resolve
+        })
+    }
+
+    public waitFirstSetSessionStarted(): Promise<void> {
+        return this.firstSetSessionStartedPromise
+    }
+
+    public releaseFirstSetSession(): void {
+        this.resolveFirstSetSessionRelease?.()
+        this.resolveFirstSetSessionRelease = null
+    }
+
+    public override async setSession(
+        address: SignalAddress,
+        session: SignalSessionRecord
+    ): Promise<void> {
+        if (this.blockFirstSetSession) {
+            this.blockFirstSetSession = false
+            this.resolveFirstSetSessionStarted?.()
+            this.resolveFirstSetSessionStarted = null
+            await this.firstSetSessionReleasePromise
+        }
+        await super.setSession(address, session)
+    }
+}
+
+class CountingGetSessionsBatchStore extends WaSignalMemoryStore {
+    public getSessionsBatchCalls = 0
+
+    public override async getSessionsBatch(
+        addresses: readonly SignalAddress[]
+    ): Promise<readonly (SignalSessionRecord | null)[]> {
+        this.getSessionsBatchCalls += 1
+        return super.getSessionsBatch(addresses)
     }
 }
 
@@ -199,4 +250,129 @@ test('signal protocol throws when decrypting msg without an existing session', a
             }),
         /signal session not found/
     )
+})
+
+test('signal protocol serializes decrypt updates for the same address', async () => {
+    const logger = createLogger()
+    const aliceStore = new WaSignalMemoryStore()
+    const bobStore = new DelayFirstSetSessionStore()
+
+    const [aliceRegistration, bobRegistration] = await Promise.all([
+        generateRegistrationInfo(),
+        generateRegistrationInfo()
+    ])
+    await aliceStore.setRegistrationInfo(aliceRegistration)
+    await bobStore.setRegistrationInfo(bobRegistration)
+
+    const bobSignedPreKey = await generateSignedPreKey(1, bobRegistration.identityKeyPair.privKey)
+    const bobOneTimePreKey = await generatePreKeyPair(9)
+    await bobStore.setSignedPreKey(bobSignedPreKey)
+    await bobStore.putPreKey(bobOneTimePreKey)
+
+    const aliceProtocol = new SignalProtocol(aliceStore, logger)
+    const bobProtocol = new SignalProtocol(bobStore, logger)
+    const aliceAddress = makeAddress('5511000000011')
+    const bobAddress = makeAddress('5511000000022')
+
+    await aliceProtocol.establishOutgoingSession(bobAddress, {
+        regId: bobRegistration.registrationId,
+        identity: bobRegistration.identityKeyPair.pubKey,
+        signedKey: {
+            id: bobSignedPreKey.keyId,
+            publicKey: bobSignedPreKey.keyPair.pubKey,
+            signature: bobSignedPreKey.signature
+        },
+        oneTimeKey: {
+            id: bobOneTimePreKey.keyId,
+            publicKey: bobOneTimePreKey.keyPair.pubKey
+        }
+    })
+
+    const firstPlaintext = makeBytes(24, 31)
+    const secondPlaintext = makeBytes(24, 63)
+    const firstEncrypted = await aliceProtocol.encryptMessage(
+        bobAddress,
+        firstPlaintext,
+        bobRegistration.identityKeyPair.pubKey
+    )
+    const secondEncrypted = await aliceProtocol.encryptMessage(
+        bobAddress,
+        secondPlaintext,
+        bobRegistration.identityKeyPair.pubKey
+    )
+    assert.equal(firstEncrypted.type, 'pkmsg')
+
+    const firstDecrypt = bobProtocol.decryptMessage(aliceAddress, {
+        type: firstEncrypted.type,
+        ciphertext: firstEncrypted.ciphertext
+    })
+    await bobStore.waitFirstSetSessionStarted()
+
+    const secondDecrypt = bobProtocol.decryptMessage(aliceAddress, {
+        type: secondEncrypted.type,
+        ciphertext: secondEncrypted.ciphertext
+    })
+
+    bobStore.releaseFirstSetSession()
+    const [decryptedFirst, decryptedSecond] = await Promise.all([firstDecrypt, secondDecrypt])
+    assert.deepEqual(decryptedFirst, firstPlaintext)
+    assert.deepEqual(decryptedSecond, secondPlaintext)
+})
+
+test('signal protocol reloads sessions from store even when prefetched sessions are provided', async () => {
+    const logger = createLogger()
+    const aliceStore = new CountingGetSessionsBatchStore()
+    const bobStore = new WaSignalMemoryStore()
+
+    const [aliceRegistration, bobRegistration] = await Promise.all([
+        generateRegistrationInfo(),
+        generateRegistrationInfo()
+    ])
+    await aliceStore.setRegistrationInfo(aliceRegistration)
+    await bobStore.setRegistrationInfo(bobRegistration)
+
+    const bobSignedPreKey = await generateSignedPreKey(1, bobRegistration.identityKeyPair.privKey)
+    const bobOneTimePreKey = await generatePreKeyPair(9)
+    await bobStore.setSignedPreKey(bobSignedPreKey)
+    await bobStore.putPreKey(bobOneTimePreKey)
+
+    const aliceProtocol = new SignalProtocol(aliceStore, logger)
+    const bobAddress = makeAddress('5511000000055')
+
+    await aliceProtocol.establishOutgoingSession(bobAddress, {
+        regId: bobRegistration.registrationId,
+        identity: bobRegistration.identityKeyPair.pubKey,
+        signedKey: {
+            id: bobSignedPreKey.keyId,
+            publicKey: bobSignedPreKey.keyPair.pubKey,
+            signature: bobSignedPreKey.signature
+        },
+        oneTimeKey: {
+            id: bobOneTimePreKey.keyId,
+            publicKey: bobOneTimePreKey.keyPair.pubKey
+        }
+    })
+
+    const prefetched = await aliceStore.getSession(bobAddress)
+    if (!prefetched) {
+        throw new Error('expected established session for prefetch test')
+    }
+
+    const plaintext = makeBytes(18, 91)
+    await aliceProtocol.encryptMessagesBatch(
+        [
+            {
+                address: bobAddress,
+                plaintext
+            }
+        ],
+        [
+            {
+                address: bobAddress,
+                session: prefetched
+            }
+        ]
+    )
+
+    assert.equal(aliceStore.getSessionsBatchCalls > 0, true)
 })

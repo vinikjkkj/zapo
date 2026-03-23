@@ -4,7 +4,8 @@ export type {
     WaClientOptions,
     WaClientProxyOptions,
     WaHistorySyncChunkEvent,
-    WaHistorySyncOptions
+    WaHistorySyncOptions,
+    WaWriteBehindOptions
 } from '@client'
 export { ConsoleLogger } from '@infra/log/ConsoleLogger'
 export { PinoLogger, createPinoLogger } from '@infra/log/PinoLogger'
