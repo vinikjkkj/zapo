@@ -300,51 +300,6 @@ export function buildInboundRetryReceiptNode(
     }
 }
 
-export function buildInboundRetryReceiptAckNode(receiptNode: BinaryNode): BinaryNode {
-    const attrs: Record<string, string> = {
-        class: 'receipt',
-        type: 'retry'
-    }
-    if (receiptNode.attrs.id) {
-        attrs.id = receiptNode.attrs.id
-    }
-    if (receiptNode.attrs.from) {
-        attrs.to = receiptNode.attrs.from
-    }
-    if (receiptNode.attrs.participant) {
-        attrs.participant = receiptNode.attrs.participant
-    }
-    return {
-        tag: WA_MESSAGE_TAGS.ACK,
-        attrs
-    }
-}
-
-export function buildInboundReceiptAckNode(receiptNode: BinaryNode): BinaryNode {
-    const attrs: Record<string, string> = {
-        class: 'receipt'
-    }
-    if (receiptNode.attrs.id) {
-        attrs.id = receiptNode.attrs.id
-    }
-    if (receiptNode.attrs.from) {
-        attrs.to = receiptNode.attrs.from
-    }
-    if (receiptNode.attrs.type) {
-        attrs.type = receiptNode.attrs.type
-    }
-    if (
-        receiptNode.attrs.participant &&
-        (!receiptNode.attrs.from || receiptNode.attrs.participant !== receiptNode.attrs.from)
-    ) {
-        attrs.participant = receiptNode.attrs.participant
-    }
-    return {
-        tag: WA_MESSAGE_TAGS.ACK,
-        attrs
-    }
-}
-
 export function buildGroupRetryMessageNode(input: GroupRetryMessageInput): BinaryNode {
     const encAttrs: Record<string, string> = {
         v: WA_MESSAGE_TYPES.ENC_VERSION,

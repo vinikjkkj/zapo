@@ -17,8 +17,8 @@ import {
     buildGroupsDirtySyncIq,
     buildInboundDeliveryReceiptNode,
     buildInboundMessageAckNode,
-    buildInboundReceiptAckNode,
-    buildInboundRetryReceiptAckNode,
+    buildReceiptAckNode,
+    buildRetryReceiptAckNode,
     buildIqResultNode,
     buildLeaveGroupIq,
     buildNewsletterMetadataSyncIq,
@@ -411,7 +411,7 @@ test('message builders cover group and inbound receipt branches', () => {
     assert.ok(Array.isArray(retryNoTimestamp.content))
     assert.equal(retryNoTimestamp.content[0].attrs.count, '1')
 
-    const retryAck = buildInboundRetryReceiptAckNode({
+    const retryAck = buildRetryReceiptAckNode({
         tag: 'receipt',
         attrs: {
             id: 'r1',
@@ -422,7 +422,7 @@ test('message builders cover group and inbound receipt branches', () => {
     assert.equal(retryAck.attrs.type, 'retry')
     assert.equal(retryAck.attrs.to, '5511@s.whatsapp.net')
 
-    const receiptAckWithParticipant = buildInboundReceiptAckNode({
+    const receiptAckWithParticipant = buildReceiptAckNode({
         tag: 'receipt',
         attrs: {
             id: 'r2',
@@ -433,7 +433,7 @@ test('message builders cover group and inbound receipt branches', () => {
     })
     assert.equal(receiptAckWithParticipant.attrs.participant, '5511:3@s.whatsapp.net')
 
-    const receiptAckWithoutParticipant = buildInboundReceiptAckNode({
+    const receiptAckWithoutParticipant = buildReceiptAckNode({
         tag: 'receipt',
         attrs: {
             id: 'r3',
@@ -493,6 +493,19 @@ test('pairing builders generate link-code nodes and ack helpers', () => {
     assert.equal(ackOverridden.attrs.to, WA_DEFAULTS.HOST_DOMAIN)
     assert.equal(ackOverridden.attrs.type, 'custom')
     assert.equal('id' in ackOverridden.attrs, false)
+
+    const ackWithoutType = buildNotificationAckNode(
+        {
+            tag: 'notification',
+            attrs: { from: 's.whatsapp.net', type: 'encrypt', id: 'ack-1b' }
+        },
+        undefined,
+        false,
+        false
+    )
+    assert.equal(ackWithoutType.attrs.to, 's.whatsapp.net')
+    assert.equal('type' in ackWithoutType.attrs, false)
+    assert.equal(ackWithoutType.attrs.id, 'ack-1b')
 
     const groupAckWithoutParticipant = buildNotificationAckNode({
         tag: 'notification',

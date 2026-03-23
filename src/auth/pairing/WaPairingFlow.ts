@@ -12,12 +12,11 @@ import {
     generateDeviceSignature,
     verifyDeviceIdentityAccountSignature
 } from '@signal/crypto/WaAdvSignature'
+import { buildIqResultNode, buildNotificationAckNode } from '@transport/node/builders/global'
 import {
     buildCompanionFinishRequestNode,
     buildCompanionHelloRequestNode,
-    buildGetCountryCodeRequestNode,
-    buildIqResultNode,
-    buildNotificationAckNode
+    buildGetCountryCodeRequestNode
 } from '@transport/node/builders/pairing'
 import {
     decodeNodeContentUtf8OrBytes,

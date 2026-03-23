@@ -27,7 +27,7 @@ import type { SignalPreKeyBundle } from '@signal/types'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
-import { buildInboundRetryReceiptAckNode } from '@transport/node/builders/message'
+import { buildRetryReceiptAckNode } from '@transport/node/builders/global'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
 import type { BinaryNode } from '@transport/types'
 import { uint8Equal } from '@util/bytes'
@@ -863,7 +863,7 @@ export class WaRetryCoordinator {
             return
         }
         try {
-            await this.sendNode(buildInboundRetryReceiptAckNode(receiptNode))
+            await this.sendNode(buildRetryReceiptAckNode(receiptNode))
         } catch (error) {
             this.logger.warn('failed to send retry ack', {
                 id: receiptNode.attrs.id,

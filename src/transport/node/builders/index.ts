@@ -10,10 +10,14 @@ export {
 export {
     buildCompanionFinishRequestNode,
     buildCompanionHelloRequestNode,
-    buildGetCountryCodeRequestNode,
-    buildIqResultNode,
-    buildNotificationAckNode
+    buildGetCountryCodeRequestNode
 } from '@transport/node/builders/pairing'
+export {
+    buildNotificationAckNode,
+    buildReceiptAckNode,
+    buildRetryReceiptAckNode,
+    buildIqResultNode
+} from '@transport/node/builders/global'
 export { buildMediaConnIq } from '@transport/node/builders/media'
 export {
     buildDirectMessageFanoutNode,
@@ -22,9 +26,7 @@ export {
     buildGroupSenderKeyMessageNode,
     buildInboundDeliveryReceiptNode,
     buildInboundMessageAckNode,
-    buildInboundReceiptAckNode,
-    buildInboundRetryReceiptNode,
-    buildInboundRetryReceiptAckNode
+    buildInboundRetryReceiptNode
 } from '@transport/node/builders/message'
 export { buildRetryReceiptNode } from '@transport/node/builders/retry'
 export {
