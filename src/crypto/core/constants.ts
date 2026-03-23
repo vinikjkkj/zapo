@@ -1,1 +1,0 @@
-export const SERIALIZED_PUB_KEY_PREFIX = 5

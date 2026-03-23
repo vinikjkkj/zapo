@@ -1,12 +1,8 @@
-import { SERIALIZED_PUB_KEY_PREFIX as CORE_SERIALIZED_PUB_KEY_PREFIX } from '@crypto/core/constants'
 import { TEXT_ENCODER } from '@util/bytes'
 
 export const SIGNAL_VERSION = 3
 export const SIGNAL_GROUP_VERSION = 3
-export const SERIALIZED_PUB_KEY_PREFIX = CORE_SERIALIZED_PUB_KEY_PREFIX
-export const KEY_TYPE_CURVE25519 = 5
 export const SIGNAL_MAC_SIZE = 8
-export const SIGNATURE_SIZE = 64
 export const MAX_PREV_SESSIONS = 40
 export const MAX_UNUSED_KEYS = 2_000
 export const FUTURE_MESSAGES_MAX = 2_000

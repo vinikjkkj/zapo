@@ -12,7 +12,8 @@ import { StoreLock } from '@infra/perf/StoreLock'
 import type { Proto } from '@proto'
 import { proto } from '@proto'
 import { signalAddressKey } from '@protocol/jid'
-import { SIGNAL_GROUP_VERSION, SIGNATURE_SIZE } from '@signal/constants'
+import { SIGNAL_SIGNATURE_LENGTH } from '@signal/api/constants'
+import { SIGNAL_GROUP_VERSION } from '@signal/constants'
 import { signSignalMessage, verifySignalSignature } from '@signal/crypto/WaAdvSignature'
 import { deriveSenderKeyMsgKey, selectMessageKey } from '@signal/group/SenderKeyChain'
 import { parseDistributionPayload, parseSenderKeyMessage } from '@signal/group/SenderKeyCodec'
@@ -100,7 +101,7 @@ export class SenderKeyManager {
             }).finish()
             const versionedContent = prependVersion(senderKeyMessage, SIGNAL_GROUP_VERSION)
             const signature = await signSignalMessage(senderKey.signingPrivateKey, versionedContent)
-            if (signature.length !== SIGNATURE_SIZE) {
+            if (signature.length !== SIGNAL_SIGNATURE_LENGTH) {
                 throw new Error(`invalid sender key signature length ${signature.length}`)
             }
             const ciphertext: GroupSenderKeyCiphertext = {
@@ -238,10 +239,10 @@ export class SenderKeyManager {
 
             const signedContent = parsed.versionContentMac.subarray(
                 0,
-                parsed.versionContentMac.length - SIGNATURE_SIZE
+                parsed.versionContentMac.length - SIGNAL_SIGNATURE_LENGTH
             )
             const signature = parsed.versionContentMac.subarray(
-                parsed.versionContentMac.length - SIGNATURE_SIZE
+                parsed.versionContentMac.length - SIGNAL_SIGNATURE_LENGTH
             )
             const validSignature = await verifySignalSignature(
                 senderKey.signingPublicKey,

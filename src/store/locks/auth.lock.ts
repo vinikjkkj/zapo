@@ -1,13 +1,10 @@
 import { StoreLock } from '@infra/perf/StoreLock'
 import type { WaAuthStore } from '@store/contracts/auth.store'
+import type { WithDestroyLifecycle } from '@store/types'
 
 const WA_AUTH_KEY = 'credentials'
 
-type WaAuthStoreWithLockLifecycle = WaAuthStore & {
-    readonly destroy?: () => Promise<void>
-}
-
-export function withAuthLock(store: WaAuthStore): WaAuthStoreWithLockLifecycle {
+export function withAuthLock(store: WaAuthStore): WithDestroyLifecycle<WaAuthStore> {
     const lock = new StoreLock()
     const destroyStore = store as { destroy?: () => Promise<void> }
     return {

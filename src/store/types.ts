@@ -9,6 +9,8 @@ import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { WaThreadStore } from '@store/contracts/thread.store'
 
+export type WithDestroyLifecycle<T> = T & { readonly destroy?: () => Promise<void> }
+
 export type WaSqliteDriver = 'auto' | 'better-sqlite3' | 'bun'
 
 export type WaSqliteTableName =

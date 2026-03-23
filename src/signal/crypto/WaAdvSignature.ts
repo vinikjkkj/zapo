@@ -1,11 +1,4 @@
-import {
-    ed25519VerifyRaw,
-    importHmacKey,
-    hmacSign,
-    randomBytesAsync,
-    sha512,
-    toRawPubKey
-} from '@crypto'
+import { Ed25519, importHmacKey, hmacSign, randomBytesAsync, sha512, toRawPubKey } from '@crypto'
 import type { SignalKeyPair } from '@crypto/curves/types'
 import { clampCurvePrivateKeyInPlace, montgomeryToEdwardsPublic } from '@crypto/curves/X25519'
 import { encodeExtendedPoint, scalarMultBase } from '@crypto/math/edwards'
@@ -32,7 +25,7 @@ export async function verifySignalSignature(
     message: Uint8Array,
     signature: Uint8Array
 ): Promise<boolean> {
-    if (!assertByteLength(signature, 64, 'invalid signal signature length', false)) {
+    if (signature.length !== 64) {
         return false
     }
     if ((signature[63] & 0x60) !== 0) {
@@ -46,7 +39,7 @@ export async function verifySignalSignature(
     const curvePublic = toRawPubKey(publicKey)
     const edPublic = montgomeryToEdwardsPublic(curvePublic, signBit)
 
-    return ed25519VerifyRaw(edPublic, signalSignature, message)
+    return Ed25519.verify(message, signalSignature, edPublic)
 }
 
 export async function signSignalMessage(

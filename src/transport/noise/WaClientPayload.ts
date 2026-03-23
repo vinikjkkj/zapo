@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 
 import { md5Bytes } from '@crypto/core/primitives'
 import { proto } from '@proto'
-import { KEY_TYPE_CURVE25519 } from '@signal/constants'
 import { DEFAULT_VERSION_BASE } from '@transport/noise/constants'
 import type {
     WaLoginPayloadConfig,
@@ -77,11 +76,14 @@ function resolveDevicePropsPlatformType(deviceBrowser?: string): number {
     }
 }
 
+type ParsedVersion = { primary: number; secondary: number; tertiary: number }
+
 function defaultUserAgent(
     versionBase: string,
-    deviceOsDisplayName?: string
+    deviceOsDisplayName?: string,
+    version?: ParsedVersion
 ): typeof proto.ClientPayload.prototype.userAgent {
-    const { primary, secondary, tertiary } = parseVersion(versionBase)
+    const { primary, secondary, tertiary } = version ?? parseVersion(versionBase)
     const locale = resolveLocale()
     return {
         platform: proto.ClientPayload.UserAgent.Platform.WEB,
@@ -108,9 +110,10 @@ function defaultDeviceProps(
     config: Pick<
         WaRegistrationPayloadConfig,
         'deviceBrowser' | 'deviceOsDisplayName' | 'requireFullSync'
-    >
+    >,
+    version?: ParsedVersion
 ): Uint8Array {
-    const { primary, secondary, tertiary } = parseVersion(versionBase)
+    const { primary, secondary, tertiary } = version ?? parseVersion(versionBase)
     return proto.DeviceProps.encode({
         os: config.deviceOsDisplayName ?? process.platform,
         version: {
@@ -133,7 +136,10 @@ function defaultDeviceProps(
     }).finish()
 }
 
-function buildCommonPayload(config: WaPayloadCommonConfig): {
+function buildCommonPayload(
+    config: WaPayloadCommonConfig,
+    version?: ParsedVersion
+): {
     readonly passive: boolean
     readonly pull: boolean
     readonly connectType: number
@@ -148,7 +154,8 @@ function buildCommonPayload(config: WaPayloadCommonConfig): {
         pull,
         connectType: proto.ClientPayload.ConnectType.WIFI_UNKNOWN,
         connectReason: proto.ClientPayload.ConnectReason.USER_ACTIVATED,
-        userAgent: config.userAgent ?? defaultUserAgent(versionBase, config.deviceOsDisplayName),
+        userAgent:
+            config.userAgent ?? defaultUserAgent(versionBase, config.deviceOsDisplayName, version),
         webInfo:
             config.webInfo ??
             ({
@@ -181,14 +188,15 @@ export function buildRegistrationPayload(config: WaRegistrationPayloadConfig): U
     }
 
     const versionBase = config.versionBase ?? DEFAULT_VERSION_BASE
-    const common = buildCommonPayload(config)
+    const version = parseVersion(versionBase)
+    const common = buildCommonPayload(config, version)
     const devicePairingData = {
         buildHash: config.buildHash ? toBytesView(config.buildHash) : md5Bytes(versionBase),
         deviceProps: config.deviceProps
             ? toBytesView(config.deviceProps)
-            : defaultDeviceProps(versionBase, config),
+            : defaultDeviceProps(versionBase, config, version),
         eRegid: intToBytes(4, registrationId),
-        eKeytype: intToBytes(1, KEY_TYPE_CURVE25519),
+        eKeytype: intToBytes(1, 5),
         eIdent: toBytesView(config.registrationInfo.identityKeyPair.pubKey),
         eSkeyId: intToBytes(3, signedPreKeyId),
         eSkeyVal: toBytesView(config.signedPreKey.keyPair.pubKey),

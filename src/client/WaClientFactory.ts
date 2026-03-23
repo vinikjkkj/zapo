@@ -18,7 +18,11 @@ import {
     type WaStreamControlHandler
 } from '@client/coordinators/WaStreamControlCoordinator'
 import { handleDirtyBits, parseDirtyBits } from '@client/dirty'
-import { buildMediaMessageContent, getMediaConn as getClientMediaConn } from '@client/messages'
+import {
+    buildMediaMessageContent,
+    getMediaConn as getClientMediaConn,
+    type WaMediaMessageOptions
+} from '@client/messages'
 import { createDeviceFanoutResolver } from '@client/messaging/fanout'
 import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
 import { createGroupParticipantsCache } from '@client/messaging/participants'
@@ -46,7 +50,7 @@ import { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import { createSignalSessionResolver } from '@signal/session/resolver'
 import { SignalProtocol } from '@signal/session/SignalProtocol'
 import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
-import { createUsyncSidGenerator, type WaUsyncSidGenerator } from '@transport/node/usync'
+import { createUsyncSidGenerator } from '@transport/node/usync'
 import { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import { WaNodeTransport } from '@transport/node/WaNodeTransport'
 import { isProxyTransport, toProxyAgent, toProxyDispatcher } from '@transport/proxy'
@@ -54,7 +58,7 @@ import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
 import { getRuntimeOsDisplayName } from '@util/runtime'
 
-type WaMediaMessageBuildOptions = Parameters<typeof buildMediaMessageContent>[0]
+type WaMediaMessageBuildOptions = WaMediaMessageOptions
 
 interface WaClientBase {
     readonly options: Readonly<WaClientOptions>
@@ -180,76 +184,6 @@ export function resolveWaClientBase(options: WaClientOptions, logger: Logger): W
         logger,
         sessionStore
     }
-}
-
-function createIncomingMessageAckOptions(input: {
-    readonly logger: Logger
-    readonly sendNode: (node: BinaryNode) => Promise<void>
-    readonly emitEvent: <K extends keyof WaClientEventMap>(
-        event: K,
-        ...args: Parameters<WaClientEventMap[K]>
-    ) => void
-    readonly handleIncomingMessageEvent: (event: WaIncomingMessageEvent) => Promise<void>
-    readonly handleError: (error: Error) => void
-    readonly getCurrentMeJid: () => string | null | undefined
-    readonly signalProtocol: SignalProtocol
-    readonly senderKeyManager: SenderKeyManager
-    readonly retryCoordinator: WaRetryCoordinator
-}): Parameters<typeof handleIncomingMessageAck>[1] {
-    const {
-        logger,
-        sendNode,
-        emitEvent,
-        handleIncomingMessageEvent,
-        handleError,
-        getCurrentMeJid,
-        signalProtocol,
-        senderKeyManager,
-        retryCoordinator
-    } = input
-
-    return {
-        logger,
-        sendNode,
-        getMeJid: getCurrentMeJid,
-        signalProtocol,
-        senderKeyManager,
-        onDecryptFailure: (context: WaRetryDecryptFailureContext, error: unknown) =>
-            retryCoordinator.onDecryptFailure(context, error),
-        emitIncomingMessage: (event: WaIncomingMessageEvent) => {
-            void handleIncomingMessageEvent(event).catch((err) => handleError(toError(err)))
-        },
-        emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) =>
-            emitEvent('stanza_unhandled', event)
-    }
-}
-
-function createHandleClientDirtyBits(input: {
-    readonly logger: Logger
-    readonly queryWithContext: (
-        context: string,
-        node: BinaryNode,
-        timeoutMs?: number,
-        contextData?: Readonly<Record<string, unknown>>
-    ) => Promise<BinaryNode>
-    readonly syncAppState: () => Promise<void>
-    readonly getCurrentCredentials: () => ReturnType<WaAuthClient['getCurrentCredentials']>
-    readonly generateUsyncSid: WaUsyncSidGenerator
-}): (dirtyBits: Parameters<typeof handleDirtyBits>[1]) => Promise<void> {
-    const { logger, queryWithContext, syncAppState, getCurrentCredentials, generateUsyncSid } =
-        input
-
-    return (dirtyBits) =>
-        handleDirtyBits(
-            {
-                logger,
-                queryWithContext,
-                getCurrentCredentials,
-                syncAppState,
-                generateUsyncSid
-            },
-            dirtyBits
-        )
 }
 
 function createIncomingNodeRuntime(input: {
@@ -641,25 +575,34 @@ export function buildWaClientDependencies(input: {
         connect: connectWithClientSideEffects
     })
 
-    const incomingMessageAckOptions = createIncomingMessageAckOptions({
+    const incomingMessageAckOptions: Parameters<typeof handleIncomingMessageAck>[1] = {
         logger,
         sendNode: runtime.sendNode,
-        emitEvent: runtime.emitEvent,
-        handleIncomingMessageEvent: runtime.handleIncomingMessageEvent,
-        handleError: runtime.handleError,
-        getCurrentMeJid,
+        getMeJid: getCurrentMeJid,
         signalProtocol,
         senderKeyManager,
-        retryCoordinator
-    })
+        onDecryptFailure: (context: WaRetryDecryptFailureContext, error: unknown) =>
+            retryCoordinator.onDecryptFailure(context, error),
+        emitIncomingMessage: (event: WaIncomingMessageEvent) => {
+            void runtime
+                .handleIncomingMessageEvent(event)
+                .catch((err) => runtime.handleError(toError(err)))
+        },
+        emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) =>
+            runtime.emitEvent('stanza_unhandled', event)
+    }
 
-    const handleClientDirtyBits = createHandleClientDirtyBits({
-        logger,
-        queryWithContext: runtime.queryWithContext,
-        syncAppState: runtime.syncAppState,
-        getCurrentCredentials,
-        generateUsyncSid
-    })
+    const handleClientDirtyBits = (dirtyBits: Parameters<typeof handleDirtyBits>[1]) =>
+        handleDirtyBits(
+            {
+                logger,
+                queryWithContext: runtime.queryWithContext,
+                getCurrentCredentials,
+                syncAppState: runtime.syncAppState,
+                generateUsyncSid
+            },
+            dirtyBits
+        )
 
     const incomingNode = new WaIncomingNodeCoordinator({
         logger,

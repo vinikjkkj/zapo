@@ -47,7 +47,7 @@ export function normalizeNonNegativeInteger(value: number | undefined, fallback:
     return Math.max(0, Math.trunc(value))
 }
 
-export function parseStrictUnsignedInt(value: string): number | undefined {
+function parseStrictUnsignedInt(value: string): number | undefined {
     if (!/^\d+$/.test(value)) return undefined
     const parsed = Number(value)
     if (!Number.isSafeInteger(parsed)) return undefined

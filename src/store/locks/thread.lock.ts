@@ -1,14 +1,11 @@
 import { SharedExclusiveGate } from '@infra/perf/SharedExclusiveGate'
 import { StoreLock } from '@infra/perf/StoreLock'
 import type { WaThreadStore } from '@store/contracts/thread.store'
+import type { WithDestroyLifecycle } from '@store/types'
 
 const WA_THREAD_CLEAR_KEY = 'thread:clear'
 
-type WaThreadStoreWithLockLifecycle = WaThreadStore & {
-    readonly destroy?: () => Promise<void>
-}
-
-export function withThreadLock(store: WaThreadStore): WaThreadStoreWithLockLifecycle {
+export function withThreadLock(store: WaThreadStore): WithDestroyLifecycle<WaThreadStore> {
     const lock = new StoreLock()
     const gate = new SharedExclusiveGate()
     const destroyStore = store as { destroy?: () => Promise<void> }

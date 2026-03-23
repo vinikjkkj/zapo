@@ -28,10 +28,6 @@ interface WaIncomingMessageAckHandlerOptions {
     readonly emitUnhandledStanza?: (event: WaIncomingUnhandledStanzaEvent) => void
 }
 
-function parseMessageTimestamp(value: string | undefined): number | undefined {
-    return parseOptionalInt(value)
-}
-
 function pickNextRetryCount(node: BinaryNode): number {
     const retryNode = findNodeChild(node, 'retry')
     const parsed = parseOptionalInt(retryNode?.attrs.count)
@@ -232,7 +228,8 @@ async function decryptAndProcessEncNode(
             senderAddress
         )
         const unpaddedPlaintext = unpadPkcs7(decryptedPayload)
-        const message = normalizeIncomingDecryptedMessage(proto.Message.decode(unpaddedPlaintext))
+        const decodedMessage = proto.Message.decode(unpaddedPlaintext)
+        const message = unwrapDeviceSentMessage(decodedMessage) ?? decodedMessage
         const senderKeyDistribution = pickSenderKeyDistributionPayload(message)
         if (senderKeyDistribution && options.senderKeyManager) {
             try {
@@ -261,7 +258,7 @@ async function decryptAndProcessEncNode(
             const chatJid = node.attrs.from
             options.emitIncomingMessage?.({
                 ...buildBaseIncomingEvent(node),
-                timestampSeconds: parseMessageTimestamp(node.attrs.t),
+                timestampSeconds: parseOptionalInt(node.attrs.t),
                 senderJid,
                 encryptionType: encType,
                 isGroupChat: chatJid ? isGroupJid(chatJid) : false,
@@ -430,8 +427,4 @@ export async function handleIncomingMessageAck(
     })
     await options.sendNode(receiptNode)
     return true
-}
-
-function normalizeIncomingDecryptedMessage(message: proto.IMessage): proto.IMessage {
-    return unwrapDeviceSentMessage(message) ?? message
 }

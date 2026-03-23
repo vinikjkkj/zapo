@@ -21,7 +21,7 @@ type SqliteDatabaseLike = {
     readonly query?: (sql: string) => SqliteStatementLike
 }
 
-type NonPromise<T> = T extends PromiseLike<unknown> ? never : T
+export type NonPromise<T> = T extends PromiseLike<unknown> ? never : T
 type SqliteTransactionTask<T> = () => NonPromise<T>
 type NormalizedSqlitePragmas = Readonly<Record<string, string>>
 

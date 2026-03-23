@@ -1,5 +1,6 @@
-import { SERIALIZED_PUB_KEY_PREFIX } from '@crypto/core/constants'
 import { assertByteLength } from '@util/bytes'
+
+const SERIALIZED_PUB_KEY_PREFIX = 5
 
 /**
  * Converts a 32-byte raw public key to 33-byte serialized format (with 0x05 prefix)

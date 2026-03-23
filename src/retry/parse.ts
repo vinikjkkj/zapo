@@ -1,6 +1,7 @@
 import { WA_MESSAGE_TAGS, WA_NODE_TAGS } from '@protocol/constants'
 import { normalizeDeviceJid } from '@protocol/jid'
 import type { WaParsedRetryRequest, WaRetryKeyBundle, WaRetryOutboundState } from '@retry/types'
+import { decodeExactLength, parseUint } from '@signal/api/codec'
 import {
     SIGNAL_KEY_DATA_LENGTH,
     SIGNAL_KEY_ID_LENGTH,
@@ -11,43 +12,12 @@ import { decodeNodeContentBase64OrBytes, findNodeChildrenByTags } from '@transpo
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt } from '@util/primitives'
 
-export interface ParseRetryReceiptRequestOptions {
-    readonly expectedToJids?: readonly string[]
-}
-
 const RETRY_STATE_RANK: Readonly<Record<WaRetryOutboundState, number>> = {
     pending: 0,
     delivered: 1,
     read: 2,
     played: 3,
     ineligible: 4
-}
-
-function parseFixedLengthBytes(
-    value: BinaryNode['content'],
-    byteLength: number,
-    field: string
-): Uint8Array {
-    const out = decodeNodeContentBase64OrBytes(value, field)
-    if (out.byteLength !== byteLength) {
-        throw new Error(`${field} must be ${byteLength} bytes`)
-    }
-    return out
-}
-
-function parseBigEndianUint(bytes: Uint8Array, field: string): number {
-    switch (bytes.byteLength) {
-        case 1:
-            return bytes[0]
-        case 2:
-            return (bytes[0] << 8) | bytes[1]
-        case 3:
-            return ((bytes[0] << 16) | (bytes[1] << 8) | bytes[2]) >>> 0
-        case 4:
-            return ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0
-        default:
-            throw new Error(`${field} has invalid byte length`)
-    }
 }
 
 function requireNode(node: BinaryNode | undefined, message: string): BinaryNode {
@@ -118,10 +88,10 @@ function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | u
         ? requireNode(keyValueNode, 'retry keys section has incomplete key')
         : null
     return {
-        identity: parseFixedLengthBytes(
+        identity: decodeExactLength(
             identity.content,
-            SIGNAL_KEY_DATA_LENGTH,
-            'retry.keys.identity'
+            'retry.keys.identity',
+            SIGNAL_KEY_DATA_LENGTH
         ),
         deviceIdentity: deviceIdentityNode
             ? decodeNodeContentBase64OrBytes(
@@ -132,39 +102,35 @@ function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | u
         key:
             keyId && keyValue
                 ? {
-                      id: parseBigEndianUint(
-                          parseFixedLengthBytes(
+                      id: parseUint(
+                          decodeExactLength(
                               keyId.content,
-                              SIGNAL_KEY_ID_LENGTH,
-                              'retry.keys.key.id'
+                              'retry.keys.key.id',
+                              SIGNAL_KEY_ID_LENGTH
                           ),
                           'retry.keys.key.id'
                       ),
-                      publicKey: parseFixedLengthBytes(
+                      publicKey: decodeExactLength(
                           keyValue.content,
-                          SIGNAL_KEY_DATA_LENGTH,
-                          'retry.keys.key.value'
+                          'retry.keys.key.value',
+                          SIGNAL_KEY_DATA_LENGTH
                       )
                   }
                 : undefined,
         skey: {
-            id: parseBigEndianUint(
-                parseFixedLengthBytes(
-                    signedKeyId.content,
-                    SIGNAL_KEY_ID_LENGTH,
-                    'retry.keys.skey.id'
-                ),
+            id: parseUint(
+                decodeExactLength(signedKeyId.content, 'retry.keys.skey.id', SIGNAL_KEY_ID_LENGTH),
                 'retry.keys.skey.id'
             ),
-            publicKey: parseFixedLengthBytes(
+            publicKey: decodeExactLength(
                 signedKeyValue.content,
-                SIGNAL_KEY_DATA_LENGTH,
-                'retry.keys.skey.value'
+                'retry.keys.skey.value',
+                SIGNAL_KEY_DATA_LENGTH
             ),
-            signature: parseFixedLengthBytes(
+            signature: decodeExactLength(
                 signedKeySignature.content,
-                SIGNAL_SIGNATURE_LENGTH,
-                'retry.keys.skey.signature'
+                'retry.keys.skey.signature',
+                SIGNAL_SIGNATURE_LENGTH
             )
         }
     }
@@ -172,7 +138,7 @@ function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | u
 
 export function parseRetryReceiptRequest(
     node: BinaryNode,
-    options?: ParseRetryReceiptRequestOptions
+    options?: { readonly expectedToJids?: readonly string[] }
 ): WaParsedRetryRequest | null {
     if (node.tag !== WA_MESSAGE_TAGS.RECEIPT) {
         return null
@@ -207,10 +173,10 @@ export function parseRetryReceiptRequest(
         throw new Error('retry receipt is missing retry.id')
     }
 
-    const registration = parseFixedLengthBytes(
+    const registration = decodeExactLength(
         registrationNodeValue.content,
-        SIGNAL_REGISTRATION_ID_LENGTH,
-        'retry.registration'
+        'retry.registration',
+        SIGNAL_REGISTRATION_ID_LENGTH
     )
 
     return {
@@ -225,7 +191,7 @@ export function parseRetryReceiptRequest(
         retryCount: parseOptionalInt(retry.attrs.count) ?? 0,
         retryReason: parseOptionalInt(retry.attrs.error ?? node.attrs.error),
         t: retry.attrs.t ?? node.attrs.t,
-        regId: parseBigEndianUint(registration, 'retry.registration'),
+        regId: parseUint(registration, 'retry.registration'),
         keyBundle: parseRetryKeyBundle(keysNode)
     }
 }

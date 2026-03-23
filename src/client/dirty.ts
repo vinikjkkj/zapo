@@ -196,7 +196,9 @@ async function runAccountSyncProtocol(
             await syncAccountBlocklistDirtyBit(runtime)
             return
         case WA_DIRTY_PROTOCOLS.NOTICE:
-            await syncAccountNoticeDirtyBit(runtime)
+            runtime.logger.info(
+                'account_sync notice protocol received (no GraphQL/MEX job configured)'
+            )
             return
         default:
             runtime.logger.debug('unsupported account_sync protocol', {
@@ -286,10 +288,6 @@ async function syncAccountBlocklistDirtyBit(runtime: WaDirtySyncRuntime): Promis
         node: buildAccountBlocklistSyncIq(),
         logMessage: 'account_sync blocklist synchronized'
     })
-}
-
-async function syncAccountNoticeDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {
-    runtime.logger.info('account_sync notice protocol received (no GraphQL/MEX job configured)')
 }
 
 async function syncGroupsDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {

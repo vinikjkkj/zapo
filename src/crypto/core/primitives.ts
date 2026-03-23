@@ -177,22 +177,3 @@ export async function aesCtrDecrypt(
         await webcrypto.subtle.decrypt({ name: 'AES-CTR', counter, length: 64 }, key, ciphertext)
     )
 }
-
-// ============================================
-// Ed25519 raw verify (for Signal variant sigs)
-// ============================================
-
-export async function ed25519VerifyRaw(
-    publicKey: Uint8Array,
-    signature: Uint8Array,
-    message: Uint8Array
-): Promise<boolean> {
-    const cryptoKey = await webcrypto.subtle.importKey(
-        'raw',
-        publicKey,
-        { name: 'Ed25519' },
-        false,
-        ['verify']
-    )
-    return webcrypto.subtle.verify('Ed25519', cryptoKey, signature, message)
-}

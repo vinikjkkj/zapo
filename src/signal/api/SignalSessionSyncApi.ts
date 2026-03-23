@@ -25,11 +25,6 @@ interface SignalSessionSyncApiOptions {
     readonly hostDomain?: string
 }
 
-interface SignalSessionSyncTarget {
-    readonly jid: string
-    readonly reasonIdentity?: boolean
-}
-
 export type SignalSessionKeyBundleResult =
     | {
           readonly jid: string
@@ -61,7 +56,7 @@ export class SignalSessionSyncApi {
     }
 
     public async fetchKeyBundle(
-        target: SignalSessionSyncTarget,
+        target: { readonly jid: string; readonly reasonIdentity?: boolean },
         timeoutMs = this.defaultTimeoutMs
     ): Promise<{
         readonly jid: string
@@ -88,13 +83,16 @@ export class SignalSessionSyncApi {
     }
 
     public async fetchKeyBundles(
-        targets: readonly SignalSessionSyncTarget[],
+        targets: readonly { readonly jid: string; readonly reasonIdentity?: boolean }[],
         timeoutMs = this.defaultTimeoutMs
     ): Promise<readonly SignalSessionKeyBundleResult[]> {
         if (targets.length === 0) {
             return []
         }
-        const targetByJid = new Map<string, SignalSessionSyncTarget>()
+        const targetByJid = new Map<
+            string,
+            { readonly jid: string; readonly reasonIdentity?: boolean }
+        >()
         for (let index = 0; index < targets.length; index += 1) {
             const target = targets[index]
             const previous = targetByJid.get(target.jid)
@@ -104,7 +102,7 @@ export class SignalSessionSyncApi {
                     (previous?.reasonIdentity ?? false) || target.reasonIdentity === true
             })
         }
-        const mergedTargets: SignalSessionSyncTarget[] = []
+        const mergedTargets: { readonly jid: string; readonly reasonIdentity?: boolean }[] = []
         for (const target of targetByJid.values()) {
             mergedTargets.push(target)
         }
@@ -146,7 +144,7 @@ export class SignalSessionSyncApi {
 
     private parseFetchKeyBundleResponse(
         node: BinaryNode,
-        requestedTargets: readonly SignalSessionSyncTarget[]
+        requestedTargets: readonly { readonly jid: string; readonly reasonIdentity?: boolean }[]
     ): readonly SignalSessionKeyBundleResult[] {
         assertIqResult(node, 'key bundle')
 

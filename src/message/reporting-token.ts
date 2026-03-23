@@ -86,13 +86,6 @@ export interface BuildReportingTokenArtifactsResult {
 let reportingTokenConfigSpec: ReportingTokenConfigSpec | null = null
 const reportingTokenConfigCache = new Map<number, ReportingTokenConfig>()
 
-export async function buildReportingTokenNode(
-    input: BuildReportingTokenNodeInput
-): Promise<BinaryNode | null> {
-    const artifacts = await buildReportingTokenArtifacts(input)
-    return artifacts?.node ?? null
-}
-
 export async function buildReportingTokenArtifacts(
     input: BuildReportingTokenNodeInput
 ): Promise<BuildReportingTokenArtifactsResult | null> {
@@ -176,13 +169,7 @@ function computeReportingTokenContent(messageBytes: Uint8Array, version: number)
         return EMPTY_BYTES
     }
 
-    const output = new Uint8Array(extracted.totalSize)
-    let offset = 0
-    for (const part of extracted.parts) {
-        output.set(part.bytes, offset)
-        offset += part.bytes.length
-    }
-    return output
+    return concatBytes(extracted.parts.map((p) => p.bytes))
 }
 
 function getReportingTokenConfig(version: number): ReportingTokenConfig {

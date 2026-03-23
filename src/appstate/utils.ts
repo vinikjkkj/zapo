@@ -2,7 +2,7 @@ import type { AppStateCollectionName, WaAppStateSyncKey } from '@appstate/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import type { Proto } from '@proto'
 import { WA_APP_STATE_COLLECTIONS, WA_APP_STATE_KEY_TYPES } from '@protocol/constants'
-import { decodeProtoBytes, intToBytes } from '@util/bytes'
+import { decodeProtoBytes } from '@util/bytes'
 
 const APP_STATE_COLLECTION_NAMES = new Set<string>(Object.values(WA_APP_STATE_COLLECTIONS))
 
@@ -10,7 +10,7 @@ export function parseCollectionName(value: string | undefined): AppStateCollecti
     return value && APP_STATE_COLLECTION_NAMES.has(value) ? (value as AppStateCollectionName) : null
 }
 
-export function keyDeviceId(keyId: Uint8Array): number | null {
+function keyDeviceId(keyId: Uint8Array): number | null {
     return keyId.byteLength < 6 ? null : (keyId[0] << 8) | keyId[1]
 }
 
@@ -43,10 +43,6 @@ export function pickActiveSyncKey(keys: Iterable<WaAppStateSyncKey>): WaAppState
         }
     }
     return active
-}
-
-export function toNetworkOrder64(value: number): Uint8Array {
-    return intToBytes(8, value)
 }
 
 export async function downloadExternalBlobReference(

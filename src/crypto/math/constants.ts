@@ -32,7 +32,7 @@ function modInvField(value: bigint): bigint {
 const BASE_X = 15112221349535400772501151409588531511454012693041857206046113283949847762202n
 const BASE_Y = 46316835694926478169428394003475163141307993866256225615783033603165251855960n
 
-export const EDWARDS_D = modField(-121665n * modInvField(121666n))
+const EDWARDS_D = modField(-121665n * modInvField(121666n))
 export const TWO_D = modField(2n * EDWARDS_D)
 export const BASE_POINT: ExtendedPoint = Object.freeze({
     x: BASE_X,

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { FIELD_P, GROUP_L } from '@crypto/math/constants'
 import { encodeExtendedPoint, scalarMultBase } from '@crypto/math/edwards'
 import { bigIntToBytesLE, bytesToBigIntLE } from '@crypto/math/le'
-import { FIELD_P, GROUP_L } from '@crypto/math/mod'
 import { mod, modGroup, modInv } from '@crypto/math/mod'
 
 test('little-endian bigint conversion round-trips', () => {

@@ -17,22 +17,10 @@ import type {
     WaAppStateStore
 } from '@store/contracts/appstate.store'
 import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
+import { repeatSqlToken } from '@store/providers/sqlite/sql-utils'
 import type { WaSqliteStorageOptions } from '@store/types'
 import { bytesToHex, uint8Equal } from '@util/bytes'
 import { asBytes, asNumber, asString } from '@util/coercion'
-
-type SqliteRow = Readonly<Record<string, unknown>>
-
-function repeatSqlToken(token: string, count: number, separator: string): string {
-    if (count <= 1) {
-        return token
-    }
-    let out = token
-    for (let index = 1; index < count; index += 1) {
-        out += separator + token
-    }
-    return out
-}
 
 export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppStateStore {
     public constructor(options: WaSqliteStorageOptions) {
@@ -41,19 +29,19 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
 
     public async exportData(): Promise<WaAppStateStoreData> {
         const db = await this.getConnection()
-        const keyRows = db.all<SqliteRow>(
+        const keyRows = db.all<Readonly<Record<string, unknown>>>(
             `SELECT key_id, key_data, timestamp, fingerprint
              FROM appstate_sync_keys
              WHERE session_id = ?`,
             [this.options.sessionId]
         )
-        const versionRows = db.all<SqliteRow>(
+        const versionRows = db.all<Readonly<Record<string, unknown>>>(
             `SELECT collection, version, hash
              FROM appstate_collection_versions
              WHERE session_id = ?`,
             [this.options.sessionId]
         )
-        const valueRows = db.all<SqliteRow>(
+        const valueRows = db.all<Readonly<Record<string, unknown>>>(
             `SELECT collection, index_mac_hex, value_mac
              FROM appstate_collection_index_values
              WHERE session_id = ?`,
@@ -70,7 +58,7 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
         let inserted = 0
         await this.withTransaction((db) => {
             for (const key of keys) {
-                const existing = db.get<SqliteRow>(
+                const existing = db.get<Readonly<Record<string, unknown>>>(
                     `SELECT key_data
                      FROM appstate_sync_keys
                      WHERE session_id = ? AND key_id = ?`,
@@ -117,7 +105,7 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
 
     public async getSyncKey(keyId: Uint8Array): Promise<WaAppStateSyncKey | null> {
         const db = await this.getConnection()
-        const row = db.get<SqliteRow>(
+        const row = db.get<Readonly<Record<string, unknown>>>(
             `SELECT key_id, key_data, timestamp, fingerprint
              FROM appstate_sync_keys
              WHERE session_id = ? AND key_id = ?`,
@@ -136,7 +124,7 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
 
     public async getSyncKeyData(keyId: Uint8Array): Promise<Uint8Array | null> {
         const db = await this.getConnection()
-        const row = db.get<SqliteRow>(
+        const row = db.get<Readonly<Record<string, unknown>>>(
             `SELECT key_data
              FROM appstate_sync_keys
              WHERE session_id = ? AND key_id = ?`,
@@ -160,7 +148,7 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
         ]
         const placeholders = repeatSqlToken('?', uniqueKeyIds.length, ', ')
         const params: unknown[] = [this.options.sessionId, ...uniqueKeyIds]
-        const rows = db.all<SqliteRow>(
+        const rows = db.all<Readonly<Record<string, unknown>>>(
             `SELECT key_id, key_data
              FROM appstate_sync_keys
              WHERE session_id = ? AND key_id IN (${placeholders})`,
@@ -178,7 +166,7 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
 
     public async getActiveSyncKey(): Promise<WaAppStateSyncKey | null> {
         const db = await this.getConnection()
-        const rows = db.all<SqliteRow>(
+        const rows = db.all<Readonly<Record<string, unknown>>>(
             `SELECT key_id, key_data, timestamp, fingerprint
              FROM appstate_sync_keys
              WHERE session_id = ?`,
@@ -201,7 +189,7 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
         collection: AppStateCollectionName
     ): Promise<WaAppStateCollectionStoreState> {
         const db = await this.getConnection()
-        const versionRow = db.get<SqliteRow>(
+        const versionRow = db.get<Readonly<Record<string, unknown>>>(
             `SELECT version, hash
              FROM appstate_collection_versions
              WHERE session_id = ? AND collection = ?`,
@@ -216,7 +204,7 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
             }
         }
 
-        const valueRows = db.all<SqliteRow>(
+        const valueRows = db.all<Readonly<Record<string, unknown>>>(
             `SELECT index_mac_hex, value_mac
              FROM appstate_collection_index_values
              WHERE session_id = ? AND collection = ?`,
@@ -249,13 +237,13 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
         const uniqueCollections = [...new Set(collections)]
         const placeholders = repeatSqlToken('?', uniqueCollections.length, ', ')
         const params: unknown[] = [this.options.sessionId, ...uniqueCollections]
-        const versionRows = db.all<SqliteRow>(
+        const versionRows = db.all<Readonly<Record<string, unknown>>>(
             `SELECT collection, version, hash
              FROM appstate_collection_versions
              WHERE session_id = ? AND collection IN (${placeholders})`,
             params
         )
-        const valueRows = db.all<SqliteRow>(
+        const valueRows = db.all<Readonly<Record<string, unknown>>>(
             `SELECT collection, index_mac_hex, value_mac
              FROM appstate_collection_index_values
              WHERE session_id = ? AND collection IN (${placeholders})`,

@@ -13,11 +13,6 @@ interface SignalRotateKeyApiOptions {
     readonly defaultTimeoutMs?: number
 }
 
-export interface SignalRotateKeyResult {
-    readonly shouldDigestKey: boolean
-    readonly errorCode?: number
-}
-
 export class SignalRotateKeyApi {
     private readonly logger: SignalRotateKeyApiOptions['logger']
     private readonly query: SignalRotateKeyApiOptions['query']
@@ -33,7 +28,7 @@ export class SignalRotateKeyApi {
 
     public async rotateSignedPreKey(
         timeoutMs = this.defaultTimeoutMs
-    ): Promise<SignalRotateKeyResult> {
+    ): Promise<{ shouldDigestKey: boolean; errorCode?: number }> {
         const registrationInfo = await this.signalStore.getRegistrationInfo()
         if (!registrationInfo) {
             throw new Error('signal rotate key requires registration info')

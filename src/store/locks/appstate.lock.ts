@@ -1,15 +1,12 @@
 import { SharedExclusiveGate } from '@infra/perf/SharedExclusiveGate'
 import { StoreLock } from '@infra/perf/StoreLock'
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
+import type { WithDestroyLifecycle } from '@store/types'
 import { bytesToHex } from '@util/bytes'
 
 const WA_APPSTATE_CLEAR_KEY = 'appstate:clear'
 
-type WaAppStateStoreWithLockLifecycle = WaAppStateStore & {
-    readonly destroy?: () => Promise<void>
-}
-
-export function withAppStateLock(store: WaAppStateStore): WaAppStateStoreWithLockLifecycle {
+export function withAppStateLock(store: WaAppStateStore): WithDestroyLifecycle<WaAppStateStore> {
     const lock = new StoreLock()
     const gate = new SharedExclusiveGate()
     const destroyStore = store as { destroy?: () => Promise<void> }

@@ -248,16 +248,6 @@ export class WaClient extends EventEmitter {
         })
     }
 
-    private getMailboxPersistenceDeps(): {
-        readonly logger: Logger
-        readonly writeBehind: WriteBehindPersistence
-    } {
-        return {
-            logger: this.logger,
-            writeBehind: this.writeBehind
-        }
-    }
-
     private async handleIncomingMessageEvent(event: WaIncomingMessageEvent): Promise<void> {
         if (!this.tryEnterIncomingHandler()) {
             return
@@ -265,7 +255,8 @@ export class WaClient extends EventEmitter {
         try {
             this.emit('message', event)
             void persistIncomingMailboxEntities({
-                ...this.getMailboxPersistenceDeps(),
+                logger: this.logger,
+                writeBehind: this.writeBehind,
                 event
             })
             const protocolMessage = event.message?.protocolMessage

@@ -14,7 +14,7 @@ import { bytesToBase64UrlSafe } from '@util/bytes'
 import { TEXT_DECODER, toBytesView } from '@util/bytes'
 import { toError } from '@util/primitives'
 
-interface WaMediaMessageOptions {
+export interface WaMediaMessageOptions {
     readonly logger: Logger
     readonly mediaTransfer: WaMediaTransferClient
     readonly iqTimeoutMs?: number

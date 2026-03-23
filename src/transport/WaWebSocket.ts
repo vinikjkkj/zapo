@@ -145,13 +145,6 @@ export class WaWebSocket {
         )
     }
 
-    public getReadyState(): number {
-        if (this.connectingSockets.size > 0) {
-            return WA_READY_STATES.CONNECTING
-        }
-        return this.socket?.readyState ?? WA_READY_STATES.CLOSED
-    }
-
     public async open(): Promise<SocketOpenInfo> {
         if (this.isOpen()) {
             this.logger.trace('socket open skipped: already open')

@@ -2,13 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { APP_STATE_EMPTY_LT_HASH } from '@appstate/constants'
-import {
-    keyDeviceId,
-    keyEpoch,
-    parseCollectionName,
-    pickActiveSyncKey,
-    toNetworkOrder64
-} from '@appstate/utils'
+import { keyEpoch, parseCollectionName, pickActiveSyncKey } from '@appstate/utils'
 import { WaAppStateCrypto } from '@appstate/WaAppStateCrypto'
 import { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import { parseCollectionState, parseSyncResponse } from '@appstate/WaAppStateSyncResponseParser'
@@ -24,7 +18,7 @@ import {
 } from '@protocol/constants'
 import { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
 import type { BinaryNode } from '@transport/types'
-import { bytesToHex } from '@util/bytes'
+import { bytesToHex, intToBytes } from '@util/bytes'
 
 test('appstate utils parse collection names, key metadata and active key ordering', () => {
     assert.equal(
@@ -36,7 +30,6 @@ test('appstate utils parse collection names, key metadata and active key orderin
     const keyA = new Uint8Array([0, 2, 0, 0, 0, 1])
     const keyB = new Uint8Array([0, 1, 0, 0, 0, 2])
 
-    assert.equal(keyDeviceId(keyA), 2)
     assert.equal(keyEpoch(keyA), 1)
 
     const active = pickActiveSyncKey([
@@ -45,7 +38,7 @@ test('appstate utils parse collection names, key metadata and active key orderin
     ])
     assert.deepEqual(active?.keyId, keyB)
 
-    assert.deepEqual(toNetworkOrder64(0x1_0000_0002), new Uint8Array([0, 0, 0, 1, 0, 0, 0, 2]))
+    assert.deepEqual(intToBytes(8, 0x1_0000_0002), new Uint8Array([0, 0, 0, 1, 0, 0, 0, 2]))
 })
 
 test('appstate sync response parser decodes collection state, patches and references', () => {

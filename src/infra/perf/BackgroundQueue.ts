@@ -38,36 +38,8 @@ const DEFAULT_FLUSH_TIMEOUT_MS = 5_000
 const RETRY_BACKOFF_BASE_MS = 100
 const RETRY_BACKOFF_MAX_MS = 2_000
 
-function defaultCoalesce<V>(_previous: V, incoming: V): V {
-    return incoming
-}
-
 function toQueueError(error: unknown, fallbackMessage: string): Error {
     return error instanceof Error ? error : new Error(fallbackMessage)
-}
-
-function validateMaxPendingKeys(value: number): number {
-    if (!Number.isSafeInteger(value) || value < 1) {
-        throw new Error('BackgroundQueue maxPendingKeys must be a positive integer')
-    }
-    return value
-}
-
-function validateFlushTimeoutMs(value: number): number {
-    if (!Number.isFinite(value) || value < 1) {
-        throw new Error('BackgroundQueue flushTimeoutMs must be a positive finite number')
-    }
-    return value
-}
-
-function normalizePublicTimeoutMs(value: number, fallback: number): number {
-    if (!Number.isFinite(value)) {
-        return fallback
-    }
-    if (value < 0) {
-        return 0
-    }
-    return value
 }
 
 export class BackgroundQueue<K extends string, V> {
@@ -92,13 +64,17 @@ export class BackgroundQueue<K extends string, V> {
         options: BackgroundQueueOptions<K, V> = {}
     ) {
         this.writer = writer
-        this.coalesce = options.coalesce ?? defaultCoalesce
-        this.maxPendingKeys = validateMaxPendingKeys(
-            options.maxPendingKeys ?? DEFAULT_MAX_PENDING_KEYS
-        )
-        this.flushTimeoutMs = validateFlushTimeoutMs(
-            options.flushTimeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS
-        )
+        this.coalesce = options.coalesce ?? ((_p, i) => i)
+        const maxPendingKeys = options.maxPendingKeys ?? DEFAULT_MAX_PENDING_KEYS
+        if (!Number.isSafeInteger(maxPendingKeys) || maxPendingKeys < 1) {
+            throw new Error('BackgroundQueue maxPendingKeys must be a positive integer')
+        }
+        this.maxPendingKeys = maxPendingKeys
+        const flushTimeoutMs = options.flushTimeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS
+        if (!Number.isFinite(flushTimeoutMs) || flushTimeoutMs < 1) {
+            throw new Error('BackgroundQueue flushTimeoutMs must be a positive finite number')
+        }
+        this.flushTimeoutMs = flushTimeoutMs
         this.onError = options.onError
         this.onPressure = options.onPressure
         this.onDiscard = options.onDiscard
@@ -197,13 +173,11 @@ export class BackgroundQueue<K extends string, V> {
                         scheduledRetry.waiters.length + existing.waiters.length
                     )
                     let writeIndex = 0
-                    for (let index = 0; index < scheduledRetry.waiters.length; index += 1) {
-                        mergedWaiters[writeIndex] = scheduledRetry.waiters[index]
-                        writeIndex += 1
+                    for (let i = 0; i < scheduledRetry.waiters.length; i += 1) {
+                        mergedWaiters[writeIndex++] = scheduledRetry.waiters[i]
                     }
-                    for (let index = 0; index < existing.waiters.length; index += 1) {
-                        mergedWaiters[writeIndex] = existing.waiters[index]
-                        writeIndex += 1
+                    for (let i = 0; i < existing.waiters.length; i += 1) {
+                        mergedWaiters[writeIndex++] = existing.waiters[i]
                     }
                     existing.waiters = mergedWaiters
                 }
@@ -232,8 +206,8 @@ export class BackgroundQueue<K extends string, V> {
             this.detachRetryEntry(key, scheduledRetryTimer)
             const scheduledWaiterCount = scheduledRetry.waiters.length
             const waiters = new Array<QueueWaiter>(scheduledWaiterCount + (waiter ? 1 : 0))
-            for (let index = 0; index < scheduledWaiterCount; index += 1) {
-                waiters[index] = scheduledRetry.waiters[index]
+            for (let i = 0; i < scheduledWaiterCount; i += 1) {
+                waiters[i] = scheduledRetry.waiters[i]
             }
             if (waiter) {
                 waiters[scheduledWaiterCount] = waiter
@@ -267,7 +241,10 @@ export class BackgroundQueue<K extends string, V> {
     public async flush(
         timeoutMs: number = this.flushTimeoutMs
     ): Promise<BackgroundQueueFlushResult> {
-        const normalizedTimeoutMs = normalizePublicTimeoutMs(timeoutMs, this.flushTimeoutMs)
+        const normalizedTimeoutMs = Math.max(
+            0,
+            Number.isFinite(timeoutMs) ? timeoutMs : this.flushTimeoutMs
+        )
         const startFlushed = this.flushedCount
         const deadline = Date.now() + normalizedTimeoutMs
         while (true) {
@@ -292,7 +269,10 @@ export class BackgroundQueue<K extends string, V> {
     public async destroy(
         timeoutMs: number = this.flushTimeoutMs
     ): Promise<BackgroundQueueFlushResult> {
-        const normalizedTimeoutMs = normalizePublicTimeoutMs(timeoutMs, this.flushTimeoutMs)
+        const normalizedTimeoutMs = Math.max(
+            0,
+            Number.isFinite(timeoutMs) ? timeoutMs : this.flushTimeoutMs
+        )
         this.shutdownRequested = true
         this.notifyStateChange()
         const flushed = await this.flush(normalizedTimeoutMs)
@@ -366,14 +346,12 @@ export class BackgroundQueue<K extends string, V> {
         const mergedWaiters = new Array<QueueWaiter>(
             failedEntry.waiters.length + pending.waiters.length
         )
-        let mergedWaitersIndex = 0
-        for (let index = 0; index < failedEntry.waiters.length; index += 1) {
-            mergedWaiters[mergedWaitersIndex] = failedEntry.waiters[index]
-            mergedWaitersIndex += 1
+        let mergedIndex = 0
+        for (let i = 0; i < failedEntry.waiters.length; i += 1) {
+            mergedWaiters[mergedIndex++] = failedEntry.waiters[i]
         }
-        for (let index = 0; index < pending.waiters.length; index += 1) {
-            mergedWaiters[mergedWaitersIndex] = pending.waiters[index]
-            mergedWaitersIndex += 1
+        for (let i = 0; i < pending.waiters.length; i += 1) {
+            mergedWaiters[mergedIndex++] = pending.waiters[i]
         }
         let mergedValue: V
         try {

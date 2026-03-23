@@ -1,4 +1,4 @@
-export function mergePreferredParsedResult<T>(
+function mergePreferredParsedResult<T>(
     target: Map<string, T>,
     key: string,
     next: T,

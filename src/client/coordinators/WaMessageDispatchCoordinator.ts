@@ -43,7 +43,6 @@ import type { SignalAddress } from '@signal/types'
 import { encodeBinaryNode } from '@transport/binary'
 import {
     buildDirectMessageFanoutNode,
-    buildGroupDirectMessageNode,
     buildGroupSenderKeyMessageNode
 } from '@transport/node/builders/message'
 import type { BinaryNode } from '@transport/types'
@@ -390,7 +389,7 @@ export class WaMessageDispatchCoordinator {
                 context: 'group_direct'
             })
         ])
-        const messageNode = buildGroupDirectMessageNode({
+        const messageNode = buildDirectMessageFanoutNode({
             to: groupJid,
             type,
             id: sendOptions.id,

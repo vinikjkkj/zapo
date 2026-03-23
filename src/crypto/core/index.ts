@@ -29,6 +29,5 @@ export {
     hmacSign,
     pbkdf2DeriveAesCtrKey,
     aesCtrEncrypt,
-    aesCtrDecrypt,
-    ed25519VerifyRaw
+    aesCtrDecrypt
 } from '@crypto/core/primitives'

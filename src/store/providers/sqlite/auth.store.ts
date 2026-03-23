@@ -12,8 +12,6 @@ import {
     toBoolOrUndef
 } from '@util/coercion'
 
-type Row = Record<string, unknown>
-
 export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
     public constructor(options: WaSqliteStorageOptions) {
         super(options, ['auth'])
@@ -21,7 +19,7 @@ export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
 
     public async load(): Promise<WaAuthCredentials | null> {
         const db = await this.getConnection()
-        const row = db.get<Row>(
+        const row = db.get<Record<string, unknown>>(
             `SELECT
                 noise_pub_key,
                 noise_priv_key,

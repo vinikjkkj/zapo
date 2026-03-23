@@ -26,7 +26,6 @@ import {
 } from '@transport/node/builders'
 import {
     buildDirectMessageFanoutNode,
-    buildGroupDirectMessageNode,
     buildGroupRetryMessageNode
 } from '@transport/node/builders/message'
 import { buildMissingPreKeysFetchIq, buildPreKeyUploadIq } from '@transport/node/builders/prekeys'
@@ -344,7 +343,7 @@ test('message builders cover group and inbound receipt branches', () => {
     assert.ok(Array.isArray(groupWithoutParticipants.content))
     assert.equal(groupWithoutParticipants.content[0].tag, 'enc')
 
-    const groupDirect = buildGroupDirectMessageNode({
+    const groupDirect = buildDirectMessageFanoutNode({
         to: '123@g.us',
         type: 'text',
         id: 'gd-1',
@@ -364,7 +363,7 @@ test('message builders cover group and inbound receipt branches', () => {
     assert.equal(groupDirect.content.length, 2)
     assert.throws(
         () =>
-            buildGroupDirectMessageNode({
+            buildDirectMessageFanoutNode({
                 to: '123@g.us',
                 type: 'text',
                 participants: []

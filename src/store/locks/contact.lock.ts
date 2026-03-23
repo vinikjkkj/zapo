@@ -1,14 +1,11 @@
 import { SharedExclusiveGate } from '@infra/perf/SharedExclusiveGate'
 import { StoreLock } from '@infra/perf/StoreLock'
 import type { WaContactStore } from '@store/contracts/contact.store'
+import type { WithDestroyLifecycle } from '@store/types'
 
 const WA_CONTACT_CLEAR_KEY = 'contact:clear'
 
-type WaContactStoreWithLockLifecycle = WaContactStore & {
-    readonly destroy?: () => Promise<void>
-}
-
-export function withContactLock(store: WaContactStore): WaContactStoreWithLockLifecycle {
+export function withContactLock(store: WaContactStore): WithDestroyLifecycle<WaContactStore> {
     const lock = new StoreLock()
     const gate = new SharedExclusiveGate()
     const destroyStore = store as { destroy?: () => Promise<void> }

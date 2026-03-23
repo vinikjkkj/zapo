@@ -21,23 +21,18 @@ export const WA_COMPANION_PLATFORM_IDS = Object.freeze({
     OTHER_WEB_CLIENT: '9'
 } as const)
 
+const BROWSER_TO_PLATFORM_ID: Record<string, string> = {
+    [WA_BROWSERS.CHROME]: WA_COMPANION_PLATFORM_IDS.CHROME,
+    [WA_BROWSERS.FIREFOX]: WA_COMPANION_PLATFORM_IDS.FIREFOX,
+    [WA_BROWSERS.IE]: WA_COMPANION_PLATFORM_IDS.IE,
+    [WA_BROWSERS.OPERA]: WA_COMPANION_PLATFORM_IDS.OPERA,
+    [WA_BROWSERS.SAFARI]: WA_COMPANION_PLATFORM_IDS.SAFARI,
+    [WA_BROWSERS.EDGE]: WA_COMPANION_PLATFORM_IDS.EDGE
+}
+
 export function getWaCompanionPlatformId(browser: string): string {
-    const normalized = browser.trim().toLowerCase()
-    switch (normalized) {
-        case WA_BROWSERS.CHROME:
-            return WA_COMPANION_PLATFORM_IDS.CHROME
-        case WA_BROWSERS.FIREFOX:
-            return WA_COMPANION_PLATFORM_IDS.FIREFOX
-        case WA_BROWSERS.IE:
-            return WA_COMPANION_PLATFORM_IDS.IE
-        case WA_BROWSERS.OPERA:
-            return WA_COMPANION_PLATFORM_IDS.OPERA
-        case WA_BROWSERS.SAFARI:
-            return WA_COMPANION_PLATFORM_IDS.SAFARI
-        case WA_BROWSERS.EDGE:
-            return WA_COMPANION_PLATFORM_IDS.EDGE
-        case WA_BROWSERS.CHROMIUM:
-        default:
-            return WA_COMPANION_PLATFORM_IDS.OTHER_WEB_CLIENT
-    }
+    return (
+        BROWSER_TO_PLATFORM_ID[browser.trim().toLowerCase()] ??
+        WA_COMPANION_PLATFORM_IDS.OTHER_WEB_CLIENT
+    )
 }

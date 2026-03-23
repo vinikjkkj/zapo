@@ -51,7 +51,7 @@ export function normalizeRecipientJid(to: string): string {
     return `${digits}@${WA_DEFAULTS.HOST_DOMAIN}`
 }
 
-export function isJidType(jid: string, type: string): boolean {
+function isJidType(jid: string, type: string): boolean {
     const atIndex = jid.length - type.length - 1
     return atIndex >= 1 && jid.charCodeAt(atIndex) === 64 && jid.endsWith(type)
 }

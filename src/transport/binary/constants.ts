@@ -70,35 +70,3 @@ export const DICTIONARY_TOKEN_MAPS: readonly ReadonlyMap<string, number>[] = DIC
         return map
     }
 )
-
-export const WAP_ENCODE_CONSTANTS = Object.freeze({
-    LIST_EMPTY,
-    LIST_8,
-    LIST_16,
-    JID_PAIR,
-    HEX_8,
-    BINARY_8,
-    BINARY_20,
-    BINARY_32,
-    NIBBLE_8,
-    DICTIONARY_0,
-    DICTIONARY_3
-})
-
-export const WAP_DECODE_CONSTANTS = Object.freeze({
-    LIST_EMPTY,
-    LIST_8,
-    LIST_16,
-    JID_PAIR,
-    JID_FB,
-    JID_INTEROP,
-    JID_U,
-    HEX_8,
-    BINARY_8,
-    BINARY_20,
-    BINARY_32,
-    NIBBLE_8,
-    DICTIONARY_0,
-    DICTIONARY_3,
-    STREAM_END
-})

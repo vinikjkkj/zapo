@@ -140,16 +140,11 @@ export function decodeBase64Url(value: string | undefined, field: string): Uint8
 export function assertByteLength(
     value: Uint8Array,
     expectedLength: number,
-    errorMessage: string,
-    throwOnMismatch = true
-): boolean {
+    errorMessage: string
+): void {
     if (value.length !== expectedLength) {
-        if (!throwOnMismatch) {
-            return false
-        }
         throw new Error(errorMessage)
     }
-    return true
 }
 
 export function decodeProtoBytes(
@@ -326,11 +321,5 @@ export async function readAllBytes(
         return chunks[0]
     }
 
-    const merged = new Uint8Array(total)
-    let offset = 0
-    for (const chunk of chunks) {
-        merged.set(chunk, offset)
-        offset += chunk.byteLength
-    }
-    return merged
+    return concatBytes(chunks)
 }

@@ -13,6 +13,11 @@ const RETRY_PAYLOAD_ENC_TYPE = Object.freeze({
     pkmsg: 2,
     skmsg: 3
 } as const)
+const RETRY_PAYLOAD_ENC_TYPE_REVERSE = Object.freeze({
+    1: 'msg',
+    2: 'pkmsg',
+    3: 'skmsg'
+} as const satisfies Record<number, keyof typeof RETRY_PAYLOAD_ENC_TYPE>)
 
 export function encodeRetryReplayPayload(payload: WaRetryReplayPayload): Uint8Array {
     const chunks: Uint8Array[] = [
@@ -54,26 +59,16 @@ export function decodeRetryReplayPayload(raw: Uint8Array): WaRetryReplayPayload 
 }
 
 function encodeEncryptedType(encType: 'msg' | 'pkmsg' | 'skmsg'): number {
-    if (encType === 'msg') {
-        return RETRY_PAYLOAD_ENC_TYPE.msg
-    }
-    if (encType === 'pkmsg') {
-        return RETRY_PAYLOAD_ENC_TYPE.pkmsg
-    }
-    return RETRY_PAYLOAD_ENC_TYPE.skmsg
+    return RETRY_PAYLOAD_ENC_TYPE[encType]
 }
 
 function decodeEncryptedType(value: number): 'msg' | 'pkmsg' | 'skmsg' {
-    if (value === RETRY_PAYLOAD_ENC_TYPE.msg) {
-        return 'msg'
+    const result =
+        RETRY_PAYLOAD_ENC_TYPE_REVERSE[value as keyof typeof RETRY_PAYLOAD_ENC_TYPE_REVERSE]
+    if (!result) {
+        throw new Error(`invalid retry encrypted encType code: ${value}`)
     }
-    if (value === RETRY_PAYLOAD_ENC_TYPE.pkmsg) {
-        return 'pkmsg'
-    }
-    if (value === RETRY_PAYLOAD_ENC_TYPE.skmsg) {
-        return 'skmsg'
-    }
-    throw new Error(`invalid retry encrypted encType code: ${value}`)
+    return result
 }
 
 function pushUint16(chunks: Uint8Array[], value: number, field: string): void {

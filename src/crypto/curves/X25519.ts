@@ -2,8 +2,9 @@ import { webcrypto } from 'node:crypto'
 
 import { X25519_PKCS8_PREFIX } from '@crypto/curves/constants'
 import { pkcs8FromRawPrivate, type SignalKeyPair, type SubtleKeyPair } from '@crypto/curves/types'
+import { FIELD_P } from '@crypto/math/constants'
 import { bigIntToBytesLE, bytesToBigIntLE } from '@crypto/math/le'
-import { FIELD_P, mod, modInv } from '@crypto/math/mod'
+import { mod, modInv } from '@crypto/math/mod'
 import { assertByteLength, decodeBase64Url, toBytesView } from '@util/bytes'
 
 export function clampCurvePrivateKeyInPlace(privateKey: Uint8Array): Uint8Array {

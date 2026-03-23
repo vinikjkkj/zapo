@@ -12,7 +12,7 @@ import { isSendMediaMessage, resolveMessageTypeAttr } from '@message/content'
 import { unwrapDeviceSentMessage, wrapDeviceSentMessage } from '@message/device-sent'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/padding'
 import { computePhashV2 } from '@message/phash'
-import { buildReportingTokenNode } from '@message/reporting-token'
+import { buildReportingTokenArtifacts } from '@message/reporting-token'
 import {
     assertMessageSecret,
     createUseCaseSecret,
@@ -87,13 +87,13 @@ test('reporting token helpers cover secret injection and deterministic token gen
             messageSecret: new Uint8Array(32).fill(7)
         }
     }
-    const first = await buildReportingTokenNode({
+    const first = await buildReportingTokenArtifacts({
         message: baseMessage,
         stanzaId: 'msg-1',
         senderUserJid: '551100000000@s.whatsapp.net',
         remoteJid: '551188888888@s.whatsapp.net'
     })
-    const second = await buildReportingTokenNode({
+    const second = await buildReportingTokenArtifacts({
         message: baseMessage,
         stanzaId: 'msg-1',
         senderUserJid: '551100000000@s.whatsapp.net',
@@ -101,25 +101,27 @@ test('reporting token helpers cover secret injection and deterministic token gen
     })
     assert.ok(first)
     assert.ok(second)
-    assert.equal(first?.tag, 'reporting')
-    const firstTokenNode = Array.isArray(first?.content) ? first.content[0] : null
-    const secondTokenNode = Array.isArray(second?.content) ? second.content[0] : null
+    assert.equal(first?.node.tag, 'reporting')
+    const firstTokenNode = Array.isArray(first?.node.content) ? first.node.content[0] : null
+    const secondTokenNode = Array.isArray(second?.node.content) ? second.node.content[0] : null
     assert.equal(firstTokenNode?.tag, 'reporting_token')
     assert.equal(firstTokenNode?.attrs.v, '2')
     assert.ok(firstTokenNode?.content instanceof Uint8Array)
     assert.equal((firstTokenNode?.content as Uint8Array).byteLength, 16)
     assert.deepEqual(firstTokenNode?.content, secondTokenNode?.content)
 
-    const changedStanza = await buildReportingTokenNode({
+    const changedResult = await buildReportingTokenArtifacts({
         message: baseMessage,
         stanzaId: 'msg-2',
         senderUserJid: '551100000000@s.whatsapp.net',
         remoteJid: '551188888888@s.whatsapp.net'
     })
-    const changedTokenNode = Array.isArray(changedStanza?.content) ? changedStanza.content[0] : null
+    const changedTokenNode = Array.isArray(changedResult?.node.content)
+        ? changedResult.node.content[0]
+        : null
     assert.notDeepEqual(firstTokenNode?.content, changedTokenNode?.content)
 
-    const incompatible = await buildReportingTokenNode({
+    const incompatible = await buildReportingTokenArtifacts({
         message: {
             reactionMessage: {},
             messageContextInfo: {

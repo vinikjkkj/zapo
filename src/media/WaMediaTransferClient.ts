@@ -2,7 +2,11 @@ import { Readable } from 'node:stream'
 
 import type { Logger } from '@infra/log/types'
 import { DEFAULT_MEDIA_HOSTS } from '@media/constants'
-import type { MediaCryptoType, WaMediaTransferClientOptions } from '@media/types'
+import type {
+    MediaCryptoType,
+    WaMediaReadableDecryptionResult,
+    WaMediaTransferClientOptions
+} from '@media/types'
 import { WaMediaCrypto } from '@media/WaMediaCrypto'
 import { WA_DEFAULTS } from '@protocol/constants'
 import type { WaProxyAgent, WaProxyDispatcher } from '@transport/types'
@@ -67,14 +71,6 @@ interface EncryptedDownloadRequest extends StreamDownloadRequest {
     readonly mediaKey: Uint8Array
     readonly fileSha256?: Uint8Array
     readonly fileEncSha256?: Uint8Array
-}
-
-interface EncryptedDownloadStream {
-    readonly plaintext: Readable
-    readonly metadata: Promise<{
-        readonly fileSha256: Uint8Array
-        readonly fileEncSha256: Uint8Array
-    }>
 }
 
 interface OptionalGotModule {
@@ -181,9 +177,11 @@ export class WaMediaTransferClient {
             urls: urls.length,
             timeoutMs
         })
-        return this.executeTransfer(urls, timeoutMs, request.signal, {
-            responseLog: 'media download stream response',
-            send: (url, signal) =>
+        const result = await this.fetchWithFallback(
+            urls,
+            timeoutMs,
+            request.signal,
+            (url, signal) =>
                 this.transferRequest(
                     url,
                     {
@@ -194,7 +192,12 @@ export class WaMediaTransferClient {
                     dispatcher,
                     agent
                 )
+        )
+        this.logger?.trace('media download stream response', {
+            url: result.url,
+            status: result.status
         })
+        return result
     }
 
     public async downloadBytes(request: StreamDownloadRequest): Promise<Uint8Array> {
@@ -203,7 +206,9 @@ export class WaMediaTransferClient {
         if (!response.body) {
             return EMPTY_BYTES
         }
-        return this.readAllBytesWithLimit(response.body, request.maxBytes)
+        return readAllBytes(response.body, {
+            maxBytes: request.maxBytes ?? this.defaultMaxReadBytes
+        })
     }
 
     public async uploadStream(request: StreamUploadRequest): Promise<StreamTransferResponse> {
@@ -230,9 +235,11 @@ export class WaMediaTransferClient {
             timeoutMs,
             method
         })
-        return this.executeTransfer(uploadUrls, timeoutMs, request.signal, {
-            responseLog: 'media upload stream response',
-            send: async (url, signal) => {
+        const result = await this.fetchWithFallback(
+            uploadUrls,
+            timeoutMs,
+            request.signal,
+            async (url, signal) => {
                 if (bodyIsBytes) {
                     return this.transferRequest(
                         url,
@@ -260,7 +267,12 @@ export class WaMediaTransferClient {
                     agent
                 )
             }
+        )
+        this.logger?.trace('media upload stream response', {
+            url: result.url,
+            status: result.status
         })
+        return result
     }
 
     public async uploadEncrypted(request: EncryptedUploadRequest): Promise<EncryptedUploadResult> {
@@ -310,7 +322,9 @@ export class WaMediaTransferClient {
         const decrypted = await this.downloadAndDecryptStream(request)
         try {
             const [plaintext] = await Promise.all([
-                this.readAllBytesWithLimit(decrypted.plaintext, request.maxBytes),
+                readAllBytes(decrypted.plaintext, {
+                    maxBytes: request.maxBytes ?? this.defaultMaxReadBytes
+                }),
                 decrypted.metadata
             ])
             this.logger?.info('media encrypted download completed', {
@@ -325,7 +339,7 @@ export class WaMediaTransferClient {
 
     public async downloadAndDecryptStream(
         request: EncryptedDownloadRequest
-    ): Promise<EncryptedDownloadStream> {
+    ): Promise<WaMediaReadableDecryptionResult> {
         const response = await this.downloadStream(request)
         await this.assertSuccessfulResponse(response)
         const body = this.requireResponseBody(response)
@@ -352,7 +366,7 @@ export class WaMediaTransferClient {
         if (!response.body) {
             return EMPTY_BYTES
         }
-        return this.readAllBytesWithLimit(response.body, maxBytes)
+        return readAllBytes(response.body, { maxBytes: maxBytes ?? this.defaultMaxReadBytes })
     }
 
     private async transferRequest(
@@ -385,7 +399,7 @@ export class WaMediaTransferClient {
         return {
             status: response.status,
             ok: response.ok,
-            headers: this.headersToRecord(response.headers),
+            headers: Object.fromEntries(response.headers.entries()),
             body: response.body
                 ? Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>)
                 : null,
@@ -525,23 +539,6 @@ export class WaMediaTransferClient {
         }
     }
 
-    private async executeTransfer(
-        urls: readonly string[],
-        timeoutMs: number,
-        signal: AbortSignal | undefined,
-        options: {
-            readonly responseLog: string
-            readonly send: (url: string, signal: AbortSignal) => Promise<InternalTransferResponse>
-        }
-    ): Promise<StreamTransferResponse> {
-        const result = await this.fetchWithFallback(urls, timeoutMs, signal, options.send)
-        this.logger?.trace(options.responseLog, {
-            url: result.url,
-            status: result.status
-        })
-        return result
-    }
-
     private async prepareEncryptedUpload(
         request: EncryptedUploadRequest,
         mediaKey: Uint8Array
@@ -630,15 +627,6 @@ export class WaMediaTransferClient {
         return resolved
     }
 
-    private readAllBytesWithLimit(
-        stream: Readable,
-        maxBytes: number | undefined
-    ): Promise<Uint8Array> {
-        return readAllBytes(stream, {
-            maxBytes: maxBytes ?? this.defaultMaxReadBytes
-        })
-    }
-
     private async fetchWithFallback(
         urls: readonly string[],
         timeoutMs: number,
@@ -720,14 +708,6 @@ export class WaMediaTransferClient {
                 }
             }
         }
-    }
-
-    private headersToRecord(headers: Headers): Readonly<Record<string, string>> {
-        const output: Record<string, string> = {}
-        headers.forEach((value, key) => {
-            output[key] = value
-        })
-        return output
     }
 
     private async drainBody(body: Readable | null): Promise<void> {

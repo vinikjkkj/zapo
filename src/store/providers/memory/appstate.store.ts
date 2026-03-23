@@ -24,14 +24,6 @@ export interface WaAppStateMemoryStoreOptions {
     readonly maxCollectionEntries?: number
 }
 
-function toBoundedMap<K, V>(entries: Iterable<readonly [K, V]>, maxEntries: number): Map<K, V> {
-    const map = new Map<K, V>()
-    for (const [key, value] of entries) {
-        setBoundedMapEntry(map, key, value, maxEntries)
-    }
-    return map
-}
-
 interface MutableCollectionState {
     initialized: boolean
     version: number
@@ -71,14 +63,15 @@ export class WaAppStateMemoryStore implements WaAppStateStore {
                 if (!collection) {
                     continue
                 }
+                const indexValueMap = new Map<string, Uint8Array>()
+                for (const [key, value] of Object.entries(collection.indexValueMap)) {
+                    setBoundedMapEntry(indexValueMap, key, value, this.maxCollectionEntries)
+                }
                 this.collections.set(collectionName, {
                     initialized: true,
                     version: collection.version,
                     hash: collection.hash,
-                    indexValueMap: toBoundedMap(
-                        Object.entries(collection.indexValueMap),
-                        this.maxCollectionEntries
-                    )
+                    indexValueMap
                 })
             }
         }
@@ -153,18 +146,7 @@ export class WaAppStateMemoryStore implements WaAppStateStore {
     ): Promise<readonly WaAppStateCollectionStoreState[]> {
         const result = new Array<WaAppStateCollectionStoreState>(collections.length)
         for (let index = 0; index < collections.length; index += 1) {
-            const collection = collections[index]
-            let state = this.collections.get(collection)
-            if (!state) {
-                state = {
-                    initialized: false,
-                    version: 0,
-                    hash: APP_STATE_EMPTY_LT_HASH,
-                    indexValueMap: new Map()
-                }
-                this.collections.set(collection, state)
-            }
-            result[index] = state
+            result[index] = await this.getCollectionState(collections[index])
         }
         return result
     }
@@ -173,14 +155,15 @@ export class WaAppStateMemoryStore implements WaAppStateStore {
         updates: readonly WaAppStateCollectionStateUpdate[]
     ): Promise<void> {
         for (const update of updates) {
+            const indexValueMap = new Map<string, Uint8Array>()
+            for (const [key, value] of update.indexValueMap.entries()) {
+                setBoundedMapEntry(indexValueMap, key, value, this.maxCollectionEntries)
+            }
             this.collections.set(update.collection, {
                 initialized: true,
                 version: update.version,
                 hash: update.hash,
-                indexValueMap: toBoundedMap(
-                    update.indexValueMap.entries(),
-                    this.maxCollectionEntries
-                )
+                indexValueMap
             })
         }
     }

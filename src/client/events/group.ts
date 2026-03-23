@@ -1,3 +1,4 @@
+import { createUnhandledIncomingNodeEvent } from '@client/incoming'
 import type {
     WaGroupEvent,
     WaGroupEventLinkedGroup,
@@ -123,19 +124,6 @@ function createBaseGroupEvent(
         groupJid: notificationNode.attrs.from,
         authorJid: notificationNode.attrs.participant,
         timestampSeconds: parseOptionalInt(notificationNode.attrs.t)
-    }
-}
-
-function createUnhandledStanzaEvent(
-    notificationNode: BinaryNode,
-    reason: string
-): WaIncomingUnhandledStanzaEvent {
-    return {
-        rawNode: notificationNode,
-        stanzaId: notificationNode.attrs.id,
-        chatJid: notificationNode.attrs.from,
-        stanzaType: notificationNode.attrs.type,
-        reason
     }
 }
 
@@ -471,7 +459,7 @@ export function parseGroupNotificationEvents(
             const parsedEvent = parseGroupActionNode(notificationNode, actionNode)
             if (!parsedEvent) {
                 unhandled.push(
-                    createUnhandledStanzaEvent(
+                    createUnhandledIncomingNodeEvent(
                         notificationNode,
                         `notification.${WA_NOTIFICATION_TYPES.GROUP}.${actionNode.tag}.not_supported`
                     )
@@ -481,7 +469,7 @@ export function parseGroupNotificationEvents(
             events.push(parsedEvent)
         } catch {
             unhandled.push(
-                createUnhandledStanzaEvent(
+                createUnhandledIncomingNodeEvent(
                     notificationNode,
                     `notification.${WA_NOTIFICATION_TYPES.GROUP}.${actionNode.tag}.parse_failed`
                 )

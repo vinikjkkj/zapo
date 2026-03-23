@@ -1,6 +1,7 @@
 import { SharedExclusiveGate } from '@infra/perf/SharedExclusiveGate'
 import { StoreLock } from '@infra/perf/StoreLock'
 import type { WaSignalStore } from '@store/contracts/signal.store'
+import type { WithDestroyLifecycle } from '@store/types'
 
 const WA_SIGNAL_REGISTRATION_KEY = 'signal:registration'
 const WA_SIGNAL_SIGNED_PREKEY_KEY = 'signal:signedPreKey'
@@ -8,11 +9,7 @@ const WA_SIGNAL_PREKEYS_KEY = 'signal:prekeys'
 const WA_SIGNAL_SERVER_HAS_PREKEYS_KEY = 'signal:serverHasPreKeys'
 const WA_SIGNAL_CLEAR_KEY = 'signal:clear'
 
-type WaSignalStoreWithLockLifecycle = WaSignalStore & {
-    readonly destroy?: () => Promise<void>
-}
-
-export function withSignalLock(store: WaSignalStore): WaSignalStoreWithLockLifecycle {
+export function withSignalLock(store: WaSignalStore): WithDestroyLifecycle<WaSignalStore> {
     const lock = new StoreLock()
     const gate = new SharedExclusiveGate()
     const destroyStore = store as { destroy?: () => Promise<void> }

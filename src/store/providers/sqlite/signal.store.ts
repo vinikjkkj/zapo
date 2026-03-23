@@ -27,6 +27,7 @@ import type {
 } from '@store/contracts/signal.store'
 import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
 import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
+import { repeatSqlToken } from '@store/providers/sqlite/sql-utils'
 import type { WaSqliteStorageOptions } from '@store/types'
 import {
     asNumber,
@@ -74,17 +75,6 @@ const DEFAULTS = Object.freeze({
     preKeyBatchSize: 500,
     hasSessionBatchSize: 250
 } as const)
-
-function repeatSqlToken(token: string, count: number, separator: string): string {
-    if (count <= 1) {
-        return token
-    }
-    let out = token
-    for (let index = 1; index < count; index += 1) {
-        out += separator + token
-    }
-    return out
-}
 
 interface WaSignalSqliteStoreOptions {
     readonly preKeyBatchSize?: number

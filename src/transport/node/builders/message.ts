@@ -37,7 +37,7 @@ type GroupRetryMessageInput = {
     readonly deviceIdentity?: Uint8Array
 }
 
-export function buildDirectMessageFanoutNode(input: DirectMessageFanoutInput): BinaryNode {
+export function buildDirectMessageFanoutNode(input: GroupMessageFanoutInput): BinaryNode {
     if (input.participants.length === 0) {
         throw new Error('direct message fanout requires at least one participant')
     }
@@ -48,6 +48,12 @@ export function buildDirectMessageFanoutNode(input: DirectMessageFanoutInput): B
     }
     if (input.id) {
         attrs.id = input.id
+    }
+    if (input.phash) {
+        attrs.phash = input.phash
+    }
+    if (input.addressingMode) {
+        attrs.addressing_mode = input.addressingMode
     }
 
     const content: BinaryNode[] = [
@@ -136,65 +142,6 @@ export function buildGroupSenderKeyMessageNode(input: GroupSenderKeyMessageInput
         },
         content: input.groupCiphertext
     })
-    if (input.deviceIdentity) {
-        content.push({
-            tag: WA_NODE_TAGS.DEVICE_IDENTITY,
-            attrs: {},
-            content: input.deviceIdentity
-        })
-    }
-    if (input.reportingNode) {
-        content.push(input.reportingNode)
-    }
-
-    return {
-        tag: WA_MESSAGE_TAGS.MESSAGE,
-        attrs,
-        content
-    }
-}
-
-export function buildGroupDirectMessageNode(input: GroupMessageFanoutInput): BinaryNode {
-    if (input.participants.length === 0) {
-        throw new Error('group direct message requires at least one participant')
-    }
-
-    const attrs: Record<string, string> = {
-        to: input.to,
-        type: input.type
-    }
-    if (input.id) {
-        attrs.id = input.id
-    }
-    if (input.phash) {
-        attrs.phash = input.phash
-    }
-    if (input.addressingMode) {
-        attrs.addressing_mode = input.addressingMode
-    }
-
-    const content: BinaryNode[] = [
-        {
-            tag: WA_NODE_TAGS.PARTICIPANTS,
-            attrs: {},
-            content: input.participants.map((participant) => ({
-                tag: 'to',
-                attrs: {
-                    jid: participant.jid
-                },
-                content: [
-                    {
-                        tag: WA_MESSAGE_TAGS.ENC,
-                        attrs: {
-                            v: WA_MESSAGE_TYPES.ENC_VERSION,
-                            type: participant.encType
-                        },
-                        content: participant.ciphertext
-                    }
-                ]
-            }))
-        }
-    ]
     if (input.deviceIdentity) {
         content.push({
             tag: WA_NODE_TAGS.DEVICE_IDENTITY,

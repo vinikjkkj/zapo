@@ -20,11 +20,6 @@ import { uint8Equal } from '@util/bytes'
 import { toError } from '@util/primitives'
 import { getRuntimeOsDisplayName } from '@util/runtime'
 
-interface CredentialsPatchOptions {
-    readonly shouldPersist?: (current: WaAuthCredentials, next: WaAuthCredentials) => boolean
-    readonly onPersist?: (current: WaAuthCredentials, next: WaAuthCredentials) => void
-}
-
 type WaAuthClientDeps = Readonly<{
     readonly logger: Logger
     readonly authStore: WaAuthStore
@@ -208,54 +203,41 @@ export class WaAuthClient {
     }
 
     public async persistSuccessAttributes(attributes: WaSuccessPersistAttributes): Promise<void> {
+        let persistDiff: Record<string, boolean> | undefined
+        const computeDiff = (current: WaAuthCredentials, next: WaAuthCredentials) => ({
+            lidChanged: next.meLid !== current.meLid,
+            displayNameChanged: next.meDisplayName !== current.meDisplayName,
+            companionChanged:
+                (current.companionEncStatic === undefined) !==
+                    (next.companionEncStatic === undefined) ||
+                (current.companionEncStatic !== undefined &&
+                    next.companionEncStatic !== undefined &&
+                    !uint8Equal(current.companionEncStatic, next.companionEncStatic)),
+            lastSuccessTsChanged: next.lastSuccessTs !== current.lastSuccessTs,
+            propsVersionChanged: next.propsVersion !== current.propsVersion,
+            abPropsVersionChanged: next.abPropsVersion !== current.abPropsVersion,
+            connectionLocationChanged: next.connectionLocation !== current.connectionLocation,
+            accountCreationTsChanged: next.accountCreationTs !== current.accountCreationTs
+        })
         await this.patchCredentials(
-            (credentials) => {
-                return {
-                    ...credentials,
-                    meLid: attributes.meLid ?? credentials.meLid,
-                    meDisplayName: attributes.meDisplayName ?? credentials.meDisplayName,
-                    companionEncStatic:
-                        attributes.companionEncStatic ?? credentials.companionEncStatic,
-                    lastSuccessTs: attributes.lastSuccessTs ?? credentials.lastSuccessTs,
-                    propsVersion: attributes.propsVersion ?? credentials.propsVersion,
-                    abPropsVersion: attributes.abPropsVersion ?? credentials.abPropsVersion,
-                    connectionLocation:
-                        attributes.connectionLocation ?? credentials.connectionLocation,
-                    accountCreationTs: attributes.accountCreationTs ?? credentials.accountCreationTs
-                }
-            },
+            (credentials) => ({
+                ...credentials,
+                meLid: attributes.meLid ?? credentials.meLid,
+                meDisplayName: attributes.meDisplayName ?? credentials.meDisplayName,
+                companionEncStatic: attributes.companionEncStatic ?? credentials.companionEncStatic,
+                lastSuccessTs: attributes.lastSuccessTs ?? credentials.lastSuccessTs,
+                propsVersion: attributes.propsVersion ?? credentials.propsVersion,
+                abPropsVersion: attributes.abPropsVersion ?? credentials.abPropsVersion,
+                connectionLocation: attributes.connectionLocation ?? credentials.connectionLocation,
+                accountCreationTs: attributes.accountCreationTs ?? credentials.accountCreationTs
+            }),
             {
-                shouldPersist: (current, next) =>
-                    next.meLid !== current.meLid ||
-                    next.meDisplayName !== current.meDisplayName ||
-                    (current.companionEncStatic === undefined) !==
-                        (next.companionEncStatic === undefined) ||
-                    (current.companionEncStatic !== undefined &&
-                        next.companionEncStatic !== undefined &&
-                        !uint8Equal(current.companionEncStatic, next.companionEncStatic)) ||
-                    next.lastSuccessTs !== current.lastSuccessTs ||
-                    next.propsVersion !== current.propsVersion ||
-                    next.abPropsVersion !== current.abPropsVersion ||
-                    next.connectionLocation !== current.connectionLocation ||
-                    next.accountCreationTs !== current.accountCreationTs,
-                onPersist: (current, next) => {
-                    this.logger.debug('persisting success attributes', {
-                        lidChanged: next.meLid !== current.meLid,
-                        displayNameChanged: next.meDisplayName !== current.meDisplayName,
-                        companionChanged:
-                            (current.companionEncStatic === undefined) !==
-                                (next.companionEncStatic === undefined) ||
-                            (current.companionEncStatic !== undefined &&
-                                next.companionEncStatic !== undefined &&
-                                !uint8Equal(current.companionEncStatic, next.companionEncStatic)),
-                        lastSuccessTsChanged: next.lastSuccessTs !== current.lastSuccessTs,
-                        propsVersionChanged: next.propsVersion !== current.propsVersion,
-                        abPropsVersionChanged: next.abPropsVersion !== current.abPropsVersion,
-                        connectionLocationChanged:
-                            next.connectionLocation !== current.connectionLocation,
-                        accountCreationTsChanged:
-                            next.accountCreationTs !== current.accountCreationTs
-                    })
+                shouldPersist: (current, next) => {
+                    persistDiff = computeDiff(current, next)
+                    return Object.values(persistDiff).some(Boolean)
+                },
+                onPersist: () => {
+                    this.logger.debug('persisting success attributes', persistDiff)
                 }
             }
         )
@@ -297,7 +279,13 @@ export class WaAuthClient {
 
     private async patchCredentials(
         buildNext: (current: WaAuthCredentials) => WaAuthCredentials,
-        options: CredentialsPatchOptions = {}
+        options: {
+            readonly shouldPersist?: (
+                current: WaAuthCredentials,
+                next: WaAuthCredentials
+            ) => boolean
+            readonly onPersist?: (current: WaAuthCredentials, next: WaAuthCredentials) => void
+        } = {}
     ): Promise<WaAuthCredentials> {
         const current = this.requireCredentials()
         const next = buildNext(current)

@@ -36,7 +36,6 @@ import {
     assertByteLength,
     concatBytes,
     EMPTY_BYTES,
-    readAllBytes,
     toChunkBytes,
     toBytesView,
     uint8Equal,
@@ -147,22 +146,6 @@ export class WaMediaCrypto {
         const encrypted = new PassThrough()
         const metadata = pumpEncryption(plaintext, encrypted, keys)
         return { encrypted, metadata }
-    }
-
-    static async decryptReadableToBytes(
-        encrypted: Readable,
-        options: WaMediaDecryptReadableOptions
-    ): Promise<WaMediaDecryptionResult> {
-        const decrypted = await WaMediaCrypto.decryptReadable(encrypted, options)
-        const [plaintext, metadata] = await Promise.all([
-            readAllBytes(decrypted.plaintext),
-            decrypted.metadata
-        ])
-        return {
-            plaintext,
-            fileSha256: metadata.fileSha256,
-            fileEncSha256: metadata.fileEncSha256
-        }
     }
 
     static async decryptReadable(

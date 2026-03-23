@@ -1,6 +1,7 @@
 import { readVersionedContent, toSerializedPubKey } from '@crypto'
 import { proto } from '@proto'
-import { SIGNATURE_SIZE, SIGNAL_GROUP_VERSION } from '@signal/constants'
+import { SIGNAL_SIGNATURE_LENGTH } from '@signal/api/constants'
+import { SIGNAL_GROUP_VERSION } from '@signal/constants'
 import { assertByteLength, toBytesView } from '@util/bytes'
 
 export function parseDistributionPayload(payload: Uint8Array): {
@@ -41,7 +42,11 @@ export function parseSenderKeyMessage(versionContentMac: Uint8Array): {
     readonly ciphertext: Uint8Array
     readonly versionContentMac: Uint8Array
 } {
-    const body = readVersionedContent(versionContentMac, SIGNAL_GROUP_VERSION, SIGNATURE_SIZE)
+    const body = readVersionedContent(
+        versionContentMac,
+        SIGNAL_GROUP_VERSION,
+        SIGNAL_SIGNATURE_LENGTH
+    )
     const decoded = proto.SenderKeyMessage.decode(body)
     if (
         decoded.id === null ||

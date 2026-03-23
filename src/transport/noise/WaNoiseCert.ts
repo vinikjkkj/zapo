@@ -1,4 +1,4 @@
-import { ed25519VerifyRaw, toSerializedPubKey } from '@crypto'
+import { Ed25519, toSerializedPubKey } from '@crypto'
 import { montgomeryToEdwardsPublic } from '@crypto/curves/X25519'
 import { proto } from '@proto'
 import { ROOT_CA_PUBLIC_KEY_HEX, ROOT_CA_SERIAL } from '@transport/noise/constants'
@@ -19,7 +19,7 @@ async function verifySignalVariant(
     signatureInput: Uint8Array
 ): Promise<boolean> {
     const publicKey = toSerializedPubKey(serializedPublicKey)
-    if (!assertByteLength(signatureInput, 64, 'invalid certificate signature size', false)) {
+    if (signatureInput.length !== 64) {
         return false
     }
     const signature = new Uint8Array(signatureInput)
@@ -31,7 +31,7 @@ async function verifySignalVariant(
     signature[63] = lastByte & 0x7f
 
     const edwardsPublicKey = montgomeryToEdwardsPublic(publicKey.subarray(1), signBit)
-    return ed25519VerifyRaw(edwardsPublicKey, signature, message)
+    return Ed25519.verify(message, signature, edwardsPublicKey)
 }
 
 function parseNoiseCertificate(

@@ -3,7 +3,8 @@ import test from 'node:test'
 
 import { prependVersion } from '@crypto'
 import { proto } from '@proto'
-import { SIGNAL_GROUP_VERSION, SIGNATURE_SIZE } from '@signal/constants'
+import { SIGNAL_SIGNATURE_LENGTH } from '@signal/api/constants'
+import { SIGNAL_GROUP_VERSION } from '@signal/constants'
 import { deriveSenderKeyMsgKey, selectMessageKey } from '@signal/group/SenderKeyChain'
 import { parseDistributionPayload, parseSenderKeyMessage } from '@signal/group/SenderKeyCodec'
 import { SenderKeyManager } from '@signal/group/SenderKeyManager'
@@ -91,7 +92,7 @@ test('sender key codec parses distribution and sender-key messages', () => {
         ciphertext: makeBytes(24, 9)
     }).finish()
     const versioned = prependVersion(senderKeyBody, SIGNAL_GROUP_VERSION)
-    const versionContentMac = concatBytes([versioned, makeBytes(SIGNATURE_SIZE, 10)])
+    const versionContentMac = concatBytes([versioned, makeBytes(SIGNAL_SIGNATURE_LENGTH, 10)])
     const parsedSenderKeyMessage = parseSenderKeyMessage(versionContentMac)
     assert.equal(parsedSenderKeyMessage.keyId, 7)
     assert.equal(parsedSenderKeyMessage.iteration, 5)

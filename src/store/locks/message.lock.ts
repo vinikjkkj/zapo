@@ -1,14 +1,11 @@
 import { SharedExclusiveGate } from '@infra/perf/SharedExclusiveGate'
 import { StoreLock } from '@infra/perf/StoreLock'
 import type { WaMessageStore } from '@store/contracts/message.store'
+import type { WithDestroyLifecycle } from '@store/types'
 
 const WA_MESSAGE_CLEAR_KEY = 'message:clear'
 
-type WaMessageStoreWithLockLifecycle = WaMessageStore & {
-    readonly destroy?: () => Promise<void>
-}
-
-export function withMessageLock(store: WaMessageStore): WaMessageStoreWithLockLifecycle {
+export function withMessageLock(store: WaMessageStore): WithDestroyLifecycle<WaMessageStore> {
     const lock = new StoreLock()
     const gate = new SharedExclusiveGate()
     const destroyStore = store as { destroy?: () => Promise<void> }

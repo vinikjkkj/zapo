@@ -3,7 +3,7 @@ import { WA_STREAM_SIGNALING } from '@protocol/constants'
 import { findNodeChild, hasNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { base64ToBytesChecked } from '@util/bytes'
-import { parseOptionalInt, parseStrictUnsignedInt } from '@util/primitives'
+import { parseOptionalInt } from '@util/primitives'
 
 export type WaStreamControlNodeResult =
     | { readonly kind: 'xmlstreamend' }
@@ -29,9 +29,12 @@ export function parseStreamControlNode(node: BinaryNode): WaStreamControlNodeRes
             : { kind: 'stream_error_device_removed' }
     }
 
-    const code = node.attrs.code ? parseStrictUnsignedInt(node.attrs.code) : undefined
-    if (code !== undefined) {
-        return { kind: 'stream_error_code', code }
+    const codeStr = node.attrs.code
+    if (codeStr && /^\d+$/.test(codeStr)) {
+        const code = Number(codeStr)
+        if (Number.isSafeInteger(code)) {
+            return { kind: 'stream_error_code', code }
+        }
     }
 
     const ackNode = findNodeChild(node, WA_STREAM_SIGNALING.ACK_TAG)

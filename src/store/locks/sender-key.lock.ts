@@ -3,6 +3,7 @@ import { StoreLock } from '@infra/perf/StoreLock'
 import { signalAddressKey } from '@protocol/jid'
 import type { SignalAddress } from '@signal/types'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
+import type { WithDestroyLifecycle } from '@store/types'
 
 const WA_SENDER_KEY_CLEAR_KEY = 'senderKey:clear'
 
@@ -18,11 +19,7 @@ function senderAnyLockKey(sender: SignalAddress): string {
     return `senderKey:any:${signalAddressKey(sender)}`
 }
 
-type WaSenderKeyStoreWithLockLifecycle = WaSenderKeyStore & {
-    readonly destroy?: () => Promise<void>
-}
-
-export function withSenderKeyLock(store: WaSenderKeyStore): WaSenderKeyStoreWithLockLifecycle {
+export function withSenderKeyLock(store: WaSenderKeyStore): WithDestroyLifecycle<WaSenderKeyStore> {
     const lock = new StoreLock()
     const gate = new SharedExclusiveGate()
     const destroyStore = store as { destroy?: () => Promise<void> }
