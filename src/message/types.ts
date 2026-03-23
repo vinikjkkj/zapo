@@ -60,6 +60,11 @@ export interface WaSendReceiptInput {
     readonly id: string
     readonly type?: string
     readonly participant?: string
+    readonly recipient?: string
+    readonly category?: string
     readonly from?: string
     readonly t?: string
+    readonly peerParticipantPn?: string
+    readonly listIds?: readonly string[]
+    readonly content?: readonly BinaryNode[]
 }

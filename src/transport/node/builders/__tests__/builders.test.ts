@@ -452,6 +452,7 @@ test('message builders cover group and inbound receipt branches', () => {
     })
     assert.equal(retryAck.attrs.type, 'retry')
     assert.equal(retryAck.attrs.to, '5511@s.whatsapp.net')
+    assert.equal(retryAck.attrs.participant, '5511:2@s.whatsapp.net')
 
     const receiptAckWithParticipant = buildAckNode({
         kind: 'receipt',
@@ -494,6 +495,47 @@ test('message builders cover group and inbound receipt branches', () => {
         }
     })
     assert.equal('participant' in serverErrorAckWithoutParticipant.attrs, false)
+
+    const aggregateAck = buildAckNode({
+        kind: 'aggregate_message',
+        to: '5511@s.whatsapp.net',
+        ids: ['m1', 'm2', 'm3'],
+        type: 'text',
+        recipient: '5511@s.whatsapp.net',
+        participant: '5511:2@s.whatsapp.net'
+    })
+    assert.equal(aggregateAck.attrs.class, 'message')
+    assert.equal(aggregateAck.attrs.id, 'm1')
+    assert.equal(aggregateAck.attrs.type, 'text')
+    assert.equal(aggregateAck.attrs.recipient, '5511@s.whatsapp.net')
+    assert.equal(aggregateAck.attrs.participant, '5511:2@s.whatsapp.net')
+    assert.ok(Array.isArray(aggregateAck.content))
+    if (!Array.isArray(aggregateAck.content)) {
+        throw new Error('expected aggregate ack content array')
+    }
+    assert.equal(aggregateAck.content[0].tag, WA_NODE_TAGS.LIST)
+    assert.ok(Array.isArray(aggregateAck.content[0].content))
+    assert.equal(aggregateAck.content[0].content.length, 2)
+    assert.equal(aggregateAck.content[0].content[0].attrs.id, 'm2')
+
+    const nack = buildAckNode({
+        kind: 'nack',
+        stanzaTag: 'message',
+        id: 'msg-nack-1',
+        to: '5511@s.whatsapp.net',
+        type: 'text',
+        participant: '5511:2@s.whatsapp.net',
+        error: 491,
+        failureReason: 12
+    })
+    assert.equal(nack.attrs.class, 'message')
+    assert.equal(nack.attrs.error, '491')
+    assert.ok(Array.isArray(nack.content))
+    if (!Array.isArray(nack.content)) {
+        throw new Error('expected nack content array')
+    }
+    assert.equal(nack.content[0].tag, 'meta')
+    assert.equal(nack.content[0].attrs.failure_reason, '12')
 })
 
 test('pairing builders generate link-code nodes and ack helpers', () => {
@@ -657,6 +699,55 @@ test('retry builder emits registration and key bundle payload', () => {
         false
     )
     assert.equal(nodeWithoutKeys.content[0].attrs.error, '409')
+})
+
+test('receipt builders support outbound list and server-error payloads', () => {
+    const aggregate = buildReceiptNode({
+        kind: 'outbound',
+        id: 'r-1',
+        to: '5511@s.whatsapp.net',
+        type: 'read',
+        participant: '5511:2@s.whatsapp.net',
+        recipient: '5511@s.whatsapp.net',
+        t: '1000',
+        peerParticipantPn: '5511888888888@s.whatsapp.net',
+        listIds: ['r-1', 'r-2', 'r-3']
+    })
+    assert.equal(aggregate.attrs.type, 'read')
+    assert.equal(aggregate.attrs.participant, '5511:2@s.whatsapp.net')
+    assert.equal(aggregate.attrs.recipient, '5511@s.whatsapp.net')
+    assert.equal(aggregate.attrs.t, '1000')
+    assert.equal(aggregate.attrs.peer_participant_pn, '5511888888888@s.whatsapp.net')
+    assert.ok(Array.isArray(aggregate.content))
+    if (!Array.isArray(aggregate.content)) {
+        throw new Error('expected aggregate receipt content array')
+    }
+    assert.equal(aggregate.content[0].tag, WA_NODE_TAGS.LIST)
+    assert.ok(Array.isArray(aggregate.content[0].content))
+    assert.equal(aggregate.content[0].content.length, 2)
+    assert.equal(aggregate.content[0].content[1].attrs.id, 'r-3')
+
+    const serverError = buildReceiptNode({
+        kind: 'server_error',
+        id: 'srv-1',
+        to: '5511@s.whatsapp.net',
+        categoryPeer: true,
+        encryptCiphertext: new Uint8Array([1, 2]),
+        encryptIv: new Uint8Array([3, 4]),
+        rmrJid: '5511999999999@s.whatsapp.net',
+        rmrFromMe: true,
+        rmrParticipant: '5511:2@s.whatsapp.net'
+    })
+    assert.equal(serverError.attrs.type, 'server-error')
+    assert.equal(serverError.attrs.category, 'peer')
+    assert.ok(Array.isArray(serverError.content))
+    if (!Array.isArray(serverError.content)) {
+        throw new Error('expected server-error receipt content array')
+    }
+    assert.equal(serverError.content[0].tag, 'encrypt')
+    assert.equal(serverError.content[1].tag, 'rmr')
+    assert.equal(serverError.content[1].attrs.from_me, 'true')
+    assert.equal(serverError.content[1].attrs.jid, '5511999999999@s.whatsapp.net')
 })
 
 test('prekeys builders include expected key material and targets', () => {

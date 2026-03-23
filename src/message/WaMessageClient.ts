@@ -13,6 +13,7 @@ import type {
     WaSendReceiptInput
 } from '@message/types'
 import { WA_DEFAULTS, WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NODE_TAGS } from '@protocol/constants'
+import { buildReceiptNode } from '@transport/node/builders/global'
 import type { BinaryNode } from '@transport/types'
 import { delay } from '@util/async'
 import { parseOptionalInt, toError } from '@util/primitives'
@@ -210,29 +211,26 @@ export class WaMessageClient {
     }
 
     public async sendReceipt(input: WaSendReceiptInput): Promise<void> {
-        const attrs: Record<string, string> = {
+        const node = buildReceiptNode({
+            kind: 'outbound',
             to: input.to,
             id: input.id,
-            type: input.type ?? 'read'
-        }
-        if (input.participant) {
-            attrs.participant = input.participant
-        }
-        if (input.from) {
-            attrs.from = input.from
-        }
-        if (input.t) {
-            attrs.t = input.t
-        }
+            type: input.type ?? 'read',
+            participant: input.participant,
+            recipient: input.recipient,
+            category: input.category,
+            from: input.from,
+            t: input.t,
+            peerParticipantPn: input.peerParticipantPn,
+            listIds: input.listIds,
+            content: input.content ? [...input.content] : undefined
+        })
         this.logger.debug('sending receipt node', {
-            to: attrs.to,
-            id: attrs.id,
-            type: attrs.type
+            to: node.attrs.to,
+            id: node.attrs.id,
+            type: node.attrs.type
         })
-        await this.sendNode({
-            tag: WA_MESSAGE_TAGS.RECEIPT,
-            attrs
-        })
+        await this.sendNode(node)
     }
 
     private isRetryablePublishError(error: Error): boolean {
