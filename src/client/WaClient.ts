@@ -151,7 +151,10 @@ export class WaClient extends EventEmitter {
                 handleIncomingMessageEvent: this.handleIncomingMessageEvent.bind(this),
                 handleError: this.handleError.bind(this),
                 handleIncomingFrame: this.handleIncomingFrame.bind(this),
-                clearStoredState: this.clearStoredState.bind(this)
+                clearStoredState: this.clearStoredState.bind(this),
+                resumeIncomingEvents: () => {
+                    this.acceptingIncomingEvents = true
+                }
             }
         })
         Object.assign(this, dependencies)
@@ -554,7 +557,13 @@ export class WaClient extends EventEmitter {
         this.connectPromise = this.connectionManager
             .connect((frame) => this.handleIncomingFrame(frame))
             .then(() => {
-                this.emit('connection_open', {})
+                this.emit('connection', {
+                    status: 'open',
+                    reason: 'connected',
+                    code: null,
+                    isLogout: false,
+                    isNewLogin: this.connectionManager.wasNewLogin()
+                })
             })
             .finally(() => {
                 this.connectPromise = null
@@ -574,7 +583,13 @@ export class WaClient extends EventEmitter {
         }
         this.keyShareCoordinator.notifyDisconnected()
         await this.connectionManager.disconnect()
-        this.emit('connection_close', {})
+        this.emit('connection', {
+            status: 'close',
+            reason: 'client_disconnected',
+            code: null,
+            isLogout: false,
+            isNewLogin: false
+        })
     }
 
     public async requestPairingCode(
@@ -873,17 +888,21 @@ export class WaClient extends EventEmitter {
             })
         }
 
-        ;(await this.authClient.clearStoredCredentials(),
-            await this.appStateStore.clear(),
-            await this.contactStore.clear(),
-            await this.messageStore.clear(),
-            await this.participantsStore.clear(),
-            await this.deviceListStore.clear(),
-            await this.retryStore.clear(),
-            await this.signalStore.clear(),
-            await this.senderKeyStore.clear(),
-            await this.threadStore.clear(),
-            await this.privacyTokenStore.clear())
+        const s = this.options.logoutStoreClear
+        const shouldClear = (key: keyof NonNullable<typeof s>): boolean =>
+            s === undefined || s[key] !== false
+
+        if (shouldClear('auth')) await this.authClient.clearStoredCredentials()
+        if (shouldClear('appState')) await this.appStateStore.clear()
+        if (shouldClear('contacts')) await this.contactStore.clear()
+        if (shouldClear('messages')) await this.messageStore.clear()
+        if (shouldClear('participants')) await this.participantsStore.clear()
+        if (shouldClear('deviceList')) await this.deviceListStore.clear()
+        if (shouldClear('retry')) await this.retryStore.clear()
+        if (shouldClear('signal')) await this.signalStore.clear()
+        if (shouldClear('senderKey')) await this.senderKeyStore.clear()
+        if (shouldClear('threads')) await this.threadStore.clear()
+        if (shouldClear('privacyToken')) await this.privacyTokenStore.clear()
     }
 
     private tryEnterIncomingHandler(): boolean {

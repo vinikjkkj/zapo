@@ -1,10 +1,19 @@
 export { getWaCompanionPlatformId, WA_BROWSERS, WA_COMPANION_PLATFORM_IDS } from '@protocol/browser'
 export { WA_SIGNALING, WA_PAIRING_KDF_INFO } from '@protocol/auth'
 export {
+    WA_CONNECTION_REASONS,
     WA_DISCONNECT_REASONS,
+    WA_FAILURE_REASONS,
     WA_LOGOUT_REASONS,
     WA_READY_STATES,
     WA_STREAM_SIGNALING
+} from '@protocol/stream'
+export type {
+    WaConnectionCode,
+    WaConnectionOpenReason,
+    WaDisconnectReason,
+    WaFailureReasonCode,
+    WaStreamErrorCode
 } from '@protocol/stream'
 export { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
 export { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_RETRYABLE_ACK_CODES } from '@protocol/message'

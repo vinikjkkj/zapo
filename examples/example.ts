@@ -111,6 +111,9 @@ void main().catch((error) => {
 })
 
 async function startSession(client: WaClient): Promise<void> {
+    client.on('connection', (event) => {
+        console.log(event)
+    })
     client.on('auth_qr', ({ qr, ttlMs }) => {
         console.log(`[qr] ttlMs=${ttlMs} value=${qr}`)
     })

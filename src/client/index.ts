@@ -8,9 +8,11 @@ export type {
     WaChatEventSource,
     WaClientEventMap,
     WaClientOptions,
+    WaConnectionEvent,
     WaDeleteChatOptions,
     WaDeleteMessageForMeOptions,
     WaHistorySyncChunkEvent,
     WaHistorySyncOptions,
+    WaLogoutStoreClearOptions,
     WaWriteBehindOptions
 } from '@client/types'

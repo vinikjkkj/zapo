@@ -170,15 +170,19 @@ test(
             await harness.cleanup()
         })
 
-        await t.test('connects and emits connection_open', async () => {
+        await t.test('connects and emits connection open', async () => {
             const openEvent = waitForClientEvent(
                 harness.client,
-                'connection_open',
+                'connection',
                 connectTimeoutMs + CONNECTION_EVENT_GRACE_MS
             )
 
             await harness.client.connect()
-            await openEvent
+            const event = await openEvent
+            assert.equal(event.status, 'open')
+            assert.equal(event.reason, 'connected')
+            assert.equal(event.isLogout, false)
+            assert.equal(typeof event.isNewLogin, 'boolean')
             assert.equal(harness.client.getState().connected, true)
         })
 
@@ -221,7 +225,7 @@ test(
 
             const reopenEvent = waitForClientEvent(
                 harness.client,
-                'connection_open',
+                'connection',
                 connectTimeoutMs + CONNECTION_EVENT_GRACE_MS
             )
             await harness.client.connect()

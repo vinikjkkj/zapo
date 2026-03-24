@@ -8,7 +8,8 @@ import type {
     WaGroupEvent
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
-import { WA_NODE_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
+import { WA_DISCONNECT_REASONS, WA_NODE_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
+import type { WaConnectionCode, WaDisconnectReason } from '@protocol/stream'
 import { buildAckNode } from '@transport/node/builders/global'
 import { getFirstNodeChild, getNodeChildrenNonEmptyAttrValuesByTag } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
@@ -28,7 +29,12 @@ type IncomingReceiptHandlerOptions = IncomingAckRuntime & {
 type IncomingFailureHandlerOptions = {
     readonly logger: Logger
     readonly emitIncomingFailure: (event: WaIncomingFailureEvent) => void
-    readonly disconnect: () => Promise<void>
+    readonly stopComms: () => void
+    readonly disconnect: (
+        reason: WaDisconnectReason,
+        isLogout: boolean,
+        code: WaConnectionCode | null
+    ) => Promise<void>
     readonly clearStoredCredentials: () => Promise<void>
 }
 
@@ -43,6 +49,14 @@ type IncomingGroupNotificationHandlerOptions = IncomingAckRuntime & {
     readonly emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) => void
 }
 
+const FAILURE_REASON_TO_DISCONNECT: Readonly<Record<number, WaDisconnectReason>> = {
+    401: WA_DISCONNECT_REASONS.FAILURE_NOT_AUTHORIZED,
+    403: WA_DISCONNECT_REASONS.FAILURE_LOCKED,
+    406: WA_DISCONNECT_REASONS.FAILURE_BANNED,
+    405: WA_DISCONNECT_REASONS.FAILURE_CLIENT_TOO_OLD,
+    409: WA_DISCONNECT_REASONS.FAILURE_BAD_USER_AGENT,
+    503: WA_DISCONNECT_REASONS.FAILURE_SERVICE_UNAVAILABLE
+}
 const LOGOUT_FAILURE_REASONS = new Set<number>([401, 403, 406])
 const DISCONNECT_FAILURE_REASONS = new Set<number>([405, 409, 503])
 
@@ -120,7 +134,14 @@ async function applyFailureAction(
     clearStoredCredentials: boolean
 ): Promise<void> {
     try {
-        await options.disconnect()
+        options.stopComms()
+        const disconnectReason =
+            FAILURE_REASON_TO_DISCONNECT[reason] ?? WA_DISCONNECT_REASONS.STREAM_ERROR_OTHER
+        await options.disconnect(
+            disconnectReason,
+            clearStoredCredentials,
+            reason as WaConnectionCode
+        )
         if (clearStoredCredentials) {
             await options.clearStoredCredentials()
         }

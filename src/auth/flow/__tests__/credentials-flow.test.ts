@@ -86,6 +86,7 @@ test('auth flow persists and restores existing credentials', async () => {
 test('buildCommsConfig switches between login and registration payloads', () => {
     const logger = createLogger()
     const credentials = createCredentials()
+    const version = '2.3000.1020607560'
     const wsDispatcher: WaProxyDispatcher = {
         dispatch: () => undefined
     }
@@ -107,13 +108,15 @@ test('buildCommsConfig switches between login and registration payloads', () => 
         {
             deviceBrowser: 'Chrome',
             deviceOsDisplayName: 'Windows',
-            requireFullSync: false
+            requireFullSync: false,
+            version
         }
     )
 
     assert.equal(loginConfig.noise.isRegistered, true)
     assert.ok(loginConfig.noise.loginPayloadConfig)
     assert.equal(loginConfig.noise.registrationPayloadConfig, undefined)
+    assert.equal(loginConfig.noise.loginPayloadConfig?.versionBase, version)
     assert.equal(loginConfig.dispatcher, wsDispatcher)
     assert.equal(loginConfig.agent, undefined)
 
@@ -126,12 +129,14 @@ test('buildCommsConfig switches between login and registration payloads', () => 
         {
             deviceBrowser: 'Chrome',
             deviceOsDisplayName: 'Windows',
-            requireFullSync: true
+            requireFullSync: true,
+            version
         }
     )
 
     assert.equal(registrationConfig.noise.isRegistered, false)
     assert.ok(registrationConfig.noise.registrationPayloadConfig)
+    assert.equal(registrationConfig.noise.registrationPayloadConfig?.versionBase, version)
 })
 
 test('buildCommsConfig maps ws proxy agent when provided', () => {

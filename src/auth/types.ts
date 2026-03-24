@@ -44,6 +44,7 @@ export interface WaAuthClientOptions {
     readonly devicePlatform?: string
     readonly deviceOsDisplayName?: string
     readonly requireFullSync?: boolean
+    readonly version?: string
 }
 
 export interface WaSuccessPersistAttributes {

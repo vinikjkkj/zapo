@@ -39,6 +39,7 @@ export class WaConnectionManager {
     private pendingComms: WaComms | null
     private lifecycleGeneration: number
     private lifecycleQueue: Promise<void>
+    private lastConnectWasNewLogin = false
 
     public constructor(options: WaConnectionManagerOptions) {
         this.logger = options.logger
@@ -71,11 +72,12 @@ export class WaConnectionManager {
         const operation = this.runLifecycleOperation(async () => {
             await this.connectInternal(frameHandler, lifecycleGeneration)
         })
-        this.connectPromise = operation.finally(() => {
-            if (this.connectPromise === operation) {
+        const promise = operation.finally(() => {
+            if (this.connectPromise === promise) {
                 this.connectPromise = null
             }
         })
+        this.connectPromise = promise
         return this.connectPromise
     }
 
@@ -108,6 +110,10 @@ export class WaConnectionManager {
 
     public isConnected(): boolean {
         return !!(this.comms && this.comms.getCommsState().connected)
+    }
+
+    public wasNewLogin(): boolean {
+        return this.lastConnectWasNewLogin
     }
 
     public getComms(): WaComms | null {
@@ -149,6 +155,7 @@ export class WaConnectionManager {
 
         this.logger.info('wa client connect start')
         let credentials = await this.authClient.loadOrCreateCredentials()
+        this.lastConnectWasNewLogin = !credentials.meJid
         this.assertLifecycleCurrent(lifecycleGeneration, 'connect')
 
         try {
@@ -189,11 +196,12 @@ export class WaConnectionManager {
         const operation = this.runLifecycleOperation(async () => {
             await this.reconnectAsRegisteredAfterPairingInternal()
         })
-        this.pairingReconnectPromise = operation.finally(() => {
-            if (this.pairingReconnectPromise === operation) {
+        const promise = operation.finally(() => {
+            if (this.pairingReconnectPromise === promise) {
                 this.pairingReconnectPromise = null
             }
         })
+        this.pairingReconnectPromise = promise
         return this.pairingReconnectPromise
     }
 

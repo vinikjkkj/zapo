@@ -5,6 +5,7 @@ import { gzipSync } from 'node:zlib'
 import { parseDirtyBits } from '@client/dirty'
 import { processHistorySyncNotification } from '@client/history-sync'
 import type { WaClientOptions } from '@client/types'
+import { WaClient } from '@client/WaClient'
 import { resolveWaClientBase } from '@client/WaClientFactory'
 import type { Logger } from '@infra/log/types'
 import { proto } from '@proto'
@@ -315,4 +316,136 @@ test('resolveWaClientBase accepts proxy agent shapes', () => {
     } as unknown as WaClientOptions
 
     assert.doesNotThrow(() => resolveWaClientBase(options, createLogger()))
+})
+
+function getClearStoredStateMethod() {
+    return (
+        WaClient.prototype as unknown as {
+            readonly clearStoredState: (this: unknown) => Promise<void>
+        }
+    ).clearStoredState
+}
+
+function createClearStoredStateHarness(logoutStoreClear?: {
+    readonly auth?: boolean
+    readonly signal?: boolean
+    readonly senderKey?: boolean
+    readonly appState?: boolean
+    readonly retry?: boolean
+    readonly participants?: boolean
+    readonly deviceList?: boolean
+    readonly messages?: boolean
+    readonly threads?: boolean
+    readonly contacts?: boolean
+    readonly privacyToken?: boolean
+}) {
+    const cleared: string[] = []
+    const fakeClient = {
+        options: {
+            logoutStoreClear
+        },
+        pauseIncomingEventsAndWaitDrain: async () => undefined,
+        writeBehind: {
+            destroy: async () => ({ remaining: 0 })
+        },
+        receiptQueue: {
+            take: () => []
+        },
+        logger: createLogger(),
+        authClient: {
+            clearStoredCredentials: async () => {
+                cleared.push('auth')
+            }
+        },
+        appStateStore: {
+            clear: async () => {
+                cleared.push('appState')
+            }
+        },
+        contactStore: {
+            clear: async () => {
+                cleared.push('contacts')
+            }
+        },
+        messageStore: {
+            clear: async () => {
+                cleared.push('messages')
+            }
+        },
+        participantsStore: {
+            clear: async () => {
+                cleared.push('participants')
+            }
+        },
+        deviceListStore: {
+            clear: async () => {
+                cleared.push('deviceList')
+            }
+        },
+        retryStore: {
+            clear: async () => {
+                cleared.push('retry')
+            }
+        },
+        signalStore: {
+            clear: async () => {
+                cleared.push('signal')
+            }
+        },
+        senderKeyStore: {
+            clear: async () => {
+                cleared.push('senderKey')
+            }
+        },
+        threadStore: {
+            clear: async () => {
+                cleared.push('threads')
+            }
+        },
+        privacyTokenStore: {
+            clear: async () => {
+                cleared.push('privacyToken')
+            }
+        }
+    }
+    return { fakeClient, cleared }
+}
+
+test('clearStoredState clears every store domain by default', async () => {
+    const { fakeClient, cleared } = createClearStoredStateHarness()
+    await getClearStoredStateMethod().call(fakeClient)
+
+    assert.deepEqual(cleared, [
+        'auth',
+        'appState',
+        'contacts',
+        'messages',
+        'participants',
+        'deviceList',
+        'retry',
+        'signal',
+        'senderKey',
+        'threads',
+        'privacyToken'
+    ])
+})
+
+test('clearStoredState respects logoutStoreClear domain toggles', async () => {
+    const { fakeClient, cleared } = createClearStoredStateHarness({
+        auth: false,
+        appState: false,
+        retry: false,
+        privacyToken: false
+    })
+    await getClearStoredStateMethod().call(fakeClient)
+
+    assert.deepEqual(cleared, [
+        'contacts',
+        'messages',
+        'participants',
+        'deviceList',
+        'signal',
+        'senderKey',
+        'threads'
+    ])
 })

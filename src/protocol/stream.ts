@@ -54,6 +54,19 @@ export const WA_STREAM_SIGNALING = Object.freeze({
     FORCE_LOGOUT_CODE: 516
 } as const)
 
+export const WA_FAILURE_REASONS = Object.freeze({
+    GENERIC_FAILURE: 400,
+    NOT_AUTHORIZED: 401,
+    TEMP_BANNED: 402,
+    LOCKED: 403,
+    CLIENT_TOO_OLD: 405,
+    BANNED: 406,
+    BAD_USER_AGENT: 409,
+    INTERNAL_SERVER_ERROR: 500,
+    EXPERIMENTAL: 501,
+    SERVICE_UNAVAILABLE: 503
+} as const)
+
 export const WA_DISCONNECT_REASONS = Object.freeze({
     CLIENT_DISCONNECTED: 'client_disconnected',
     COMMS_STOPPED: 'comms_stopped',
@@ -61,5 +74,32 @@ export const WA_DISCONNECT_REASONS = Object.freeze({
     STREAM_ERROR_DEVICE_REMOVED: 'stream_error_device_removed',
     STREAM_ERROR_ACK: 'stream_error_ack',
     STREAM_ERROR_XML_NOT_WELL_FORMED: 'stream_error_xml_not_well_formed',
-    STREAM_ERROR_OTHER: 'stream_error_other'
+    STREAM_ERROR_OTHER: 'stream_error_other',
+    STREAM_ERROR_FORCE_LOGIN: 'stream_error_force_login',
+    STREAM_ERROR_FORCE_LOGOUT: 'stream_error_force_logout',
+    FAILURE_LOCKED: 'failure_locked',
+    FAILURE_NOT_AUTHORIZED: 'failure_not_authorized',
+    FAILURE_BANNED: 'failure_banned',
+    FAILURE_CLIENT_TOO_OLD: 'failure_client_too_old',
+    FAILURE_BAD_USER_AGENT: 'failure_bad_user_agent',
+    FAILURE_SERVICE_UNAVAILABLE: 'failure_service_unavailable',
+    PRIMARY_IDENTITY_KEY_CHANGE: 'primary_identity_key_change'
 } as const)
+
+export const WA_CONNECTION_REASONS = Object.freeze({
+    CONNECTED: 'connected',
+    RECONNECTED: 'reconnected'
+} as const)
+
+export type WaFailureReasonCode = (typeof WA_FAILURE_REASONS)[keyof typeof WA_FAILURE_REASONS]
+
+export type WaStreamErrorCode =
+    | typeof WA_STREAM_SIGNALING.FORCE_LOGIN_CODE
+    | typeof WA_STREAM_SIGNALING.FORCE_LOGOUT_CODE
+
+export type WaConnectionCode = WaFailureReasonCode | WaStreamErrorCode
+
+export type WaDisconnectReason = (typeof WA_DISCONNECT_REASONS)[keyof typeof WA_DISCONNECT_REASONS]
+
+export type WaConnectionOpenReason =
+    (typeof WA_CONNECTION_REASONS)[keyof typeof WA_CONNECTION_REASONS]

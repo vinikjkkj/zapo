@@ -2,6 +2,7 @@ import type { AppStateCollectionName } from '@appstate/types'
 import type { WaAuthClientOptions, WaAuthCredentials, WaAuthSocketOptions } from '@auth/types'
 import type { WaMessagePublishOptions } from '@message/types'
 import type { Proto } from '@proto'
+import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
 import type { WaStore } from '@store/types'
 import type { BinaryNode, WaProxyTransport } from '@transport/types'
 
@@ -9,6 +10,20 @@ export interface WaClientProxyOptions {
     readonly ws?: WaProxyTransport
     readonly mediaUpload?: WaProxyTransport
     readonly mediaDownload?: WaProxyTransport
+}
+
+export interface WaLogoutStoreClearOptions {
+    readonly auth?: boolean
+    readonly signal?: boolean
+    readonly senderKey?: boolean
+    readonly appState?: boolean
+    readonly retry?: boolean
+    readonly participants?: boolean
+    readonly deviceList?: boolean
+    readonly messages?: boolean
+    readonly threads?: boolean
+    readonly contacts?: boolean
+    readonly privacyToken?: boolean
 }
 
 export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOptions {
@@ -32,6 +47,7 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
         readonly emitSnapshotMutations?: boolean
     }
     readonly privacyToken?: WaPrivacyTokenOptions
+    readonly logoutStoreClear?: WaLogoutStoreClearOptions
 }
 
 export interface WaPrivacyTokenOptions {
@@ -294,7 +310,21 @@ export interface WaChatEvent {
     readonly deviceAgentId?: string
 }
 
-export type WaEmptyEvent = Readonly<Record<string, never>>
+export type WaConnectionEvent =
+    | {
+          readonly status: 'open'
+          readonly reason: WaConnectionOpenReason
+          readonly code: null
+          readonly isLogout: false
+          readonly isNewLogin: boolean
+      }
+    | {
+          readonly status: 'close'
+          readonly reason: WaDisconnectReason
+          readonly code: WaConnectionCode | null
+          readonly isLogout: boolean
+          readonly isNewLogin: false
+      }
 
 export interface WaClientEventMap {
     readonly auth_qr: (event: { readonly qr: string; readonly ttlMs: number }) => void
@@ -303,8 +333,7 @@ export interface WaClientEventMap {
     readonly auth_paired: (event: { readonly credentials: WaAuthCredentials }) => void
     readonly connection_success: (event: { readonly node: BinaryNode }) => void
     readonly client_error: (event: { readonly error: Error }) => void
-    readonly connection_open: (event: WaEmptyEvent) => void
-    readonly connection_close: (event: WaEmptyEvent) => void
+    readonly connection: (event: WaConnectionEvent) => void
     readonly transport_frame_in: (event: { readonly frame: Uint8Array }) => void
     readonly transport_frame_out: (event: { readonly frame: Uint8Array }) => void
     readonly transport_node_in: (event: {

@@ -30,6 +30,7 @@ import {
     WA_NOTIFICATION_TYPES,
     WA_SIGNALING
 } from '@protocol/constants'
+import type { WaConnectionCode, WaDisconnectReason } from '@protocol/stream'
 import {
     decodeNodeContentBase64OrBytes,
     findNodeChild,
@@ -70,7 +71,12 @@ interface WaIncomingNodeRuntime {
     readonly emitGroupEvent: (event: WaGroupEvent) => void
     readonly emitUnhandledIncomingNode: (event: WaIncomingUnhandledStanzaEvent) => void
     readonly syncAppState: () => Promise<void>
-    readonly disconnect: () => Promise<void>
+    readonly stopComms: () => void
+    readonly disconnect: (
+        reason: WaDisconnectReason,
+        isLogout: boolean,
+        code: WaConnectionCode | null
+    ) => Promise<void>
     readonly clearStoredCredentials: () => Promise<void>
     readonly parseDirtyBits: (nodes: readonly BinaryNode[]) => readonly WaDirtyBit[]
     readonly handleDirtyBits: (dirtyBits: readonly WaDirtyBit[]) => Promise<void>
@@ -297,6 +303,7 @@ export class WaIncomingNodeCoordinator {
             handler: createIncomingFailureHandler({
                 logger: this.logger,
                 emitIncomingFailure: runtime.emitIncomingFailure,
+                stopComms: runtime.stopComms,
                 disconnect: runtime.disconnect,
                 clearStoredCredentials: runtime.clearStoredCredentials
             })

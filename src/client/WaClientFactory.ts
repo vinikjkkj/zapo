@@ -44,11 +44,13 @@ import { WaMessageClient } from '@message/WaMessageClient'
 import {
     getWaCompanionPlatformId,
     WA_DEFAULTS,
+    WA_DISCONNECT_REASONS,
     WA_NODE_TAGS,
     WA_NOTIFICATION_TYPES,
     WA_PRIVACY_TOKEN_NOTIFICATION_TYPE
 } from '@protocol/constants'
 import { parseSignalAddressFromJid, toUserJid } from '@protocol/jid'
+import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
 import { createOutboundRetryTracker } from '@retry/tracker'
 import type { WaRetryDecryptFailureContext } from '@retry/types'
 import { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
@@ -98,6 +100,7 @@ interface WaClientBuildRuntime {
     readonly handleError: (error: Error) => void
     readonly handleIncomingFrame: (frame: Uint8Array) => Promise<void>
     readonly clearStoredState: () => Promise<void>
+    readonly resumeIncomingEvents: () => void
 }
 
 interface WaClientDependencies {
@@ -213,7 +216,11 @@ function createIncomingNodeRuntime(input: {
     readonly messageDispatch: WaMessageDispatchCoordinator
     readonly sendNode: (node: BinaryNode) => Promise<void>
     readonly syncAppState: () => Promise<void>
-    readonly disconnect: () => Promise<void>
+    readonly disconnect: (
+        reason: WaDisconnectReason,
+        isLogout: boolean,
+        code: WaConnectionCode | null
+    ) => Promise<void>
     readonly clearStoredCredentials: () => Promise<void>
     readonly getCurrentMeJid: () => string | null | undefined
     readonly handleClientDirtyBits: (
@@ -282,6 +289,9 @@ function createIncomingNodeRuntime(input: {
         },
         emitUnhandledIncomingNode: (event) => emitEvent('stanza_unhandled', event),
         syncAppState,
+        stopComms: () => {
+            void connectionManager.getComms()?.stopComms()
+        },
         disconnect,
         clearStoredCredentials,
         parseDirtyBits: (nodes) => parseDirtyBits(nodes, logger),
@@ -424,7 +434,8 @@ export function buildWaClientDependencies(input: {
             deviceBrowser: options.deviceBrowser,
             deviceOsDisplayName: options.deviceOsDisplayName,
             devicePlatform: options.devicePlatform,
-            requireFullSync: options.requireFullSync
+            requireFullSync: options.requireFullSync,
+            version: options.version
         },
         {
             logger,
@@ -589,15 +600,32 @@ export function buildWaClientDependencies(input: {
     }
     scheduleReconnectAfterPairing = () => connectionManager?.scheduleReconnectAfterPairing()
 
-    const disconnectWithClientSideEffects = async (): Promise<void> => {
+    const disconnectWithClientSideEffects = async (
+        reason: WaDisconnectReason,
+        isLogout: boolean,
+        code: WaConnectionCode | null
+    ): Promise<void> => {
         keyShareCoordinator.notifyDisconnected()
         await connectionManager?.disconnect()
-        runtime.emitEvent('connection_close', {})
+        runtime.emitEvent('connection', {
+            status: 'close',
+            reason,
+            code,
+            isLogout,
+            isNewLogin: false
+        })
     }
 
-    const connectWithClientSideEffects = async (): Promise<void> => {
+    const connectWithClientSideEffects = async (reason: WaConnectionOpenReason): Promise<void> => {
+        runtime.resumeIncomingEvents()
         await connectionManager?.connect(runtime.handleIncomingFrame)
-        runtime.emitEvent('connection_open', {})
+        runtime.emitEvent('connection', {
+            status: 'open',
+            reason,
+            code: null,
+            isLogout: false,
+            isNewLogin: connectionManager?.wasNewLogin() ?? false
+        })
     }
 
     const clearStoredCredentialsWithClientSideEffects = async (): Promise<void> => {
@@ -755,7 +783,13 @@ export function buildWaClientDependencies(input: {
                     const fromUser = toUserJid(parsed.fromJid)
                     if (meUser === fromUser) {
                         logger.error('self primary identity changed, disconnecting')
-                        await disconnectWithClientSideEffects()
+                        void connectionManager?.getComms()?.stopComms()
+                        await disconnectWithClientSideEffects(
+                            WA_DISCONNECT_REASONS.PRIMARY_IDENTITY_KEY_CHANGE,
+                            true,
+                            null
+                        )
+                        await clearStoredCredentialsWithClientSideEffects()
                         return true
                     }
                 }

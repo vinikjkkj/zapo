@@ -62,7 +62,7 @@ export function buildCommsConfig(
     socketOptions: WaAuthSocketOptions,
     clientOptions: Pick<
         WaAuthClientOptions,
-        'deviceBrowser' | 'deviceOsDisplayName' | 'requireFullSync'
+        'deviceBrowser' | 'deviceOsDisplayName' | 'requireFullSync' | 'version'
     >
 ): WaCommsConfig {
     const meJid = credentials.meJid
@@ -95,7 +95,8 @@ export function buildCommsConfig(
                       username: loginIdentity.username,
                       device: loginIdentity.device,
                       deviceBrowser: clientOptions.deviceBrowser,
-                      deviceOsDisplayName: clientOptions.deviceOsDisplayName
+                      deviceOsDisplayName: clientOptions.deviceOsDisplayName,
+                      versionBase: clientOptions.version
                   }
                 : undefined,
             registrationPayloadConfig: !loginIdentity
@@ -104,7 +105,8 @@ export function buildCommsConfig(
                       signedPreKey: credentials.signedPreKey,
                       deviceBrowser: clientOptions.deviceBrowser,
                       deviceOsDisplayName: clientOptions.deviceOsDisplayName,
-                      requireFullSync: clientOptions.requireFullSync
+                      requireFullSync: clientOptions.requireFullSync,
+                      versionBase: clientOptions.version
                   }
                 : undefined
         }

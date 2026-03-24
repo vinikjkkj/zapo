@@ -124,7 +124,8 @@ export class WaAuthClient {
         return buildCommsConfig(this.logger, this.requireCredentials(), socketOptions, {
             deviceBrowser: this.options.deviceBrowser,
             deviceOsDisplayName: this.options.deviceOsDisplayName,
-            requireFullSync: this.options.requireFullSync
+            requireFullSync: this.options.requireFullSync,
+            version: this.options.version
         })
     }
 

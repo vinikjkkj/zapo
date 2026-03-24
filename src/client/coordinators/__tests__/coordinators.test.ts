@@ -10,7 +10,12 @@ import { createStreamControlHandler } from '@client/coordinators/WaStreamControl
 import { createGroupParticipantsCache } from '@client/messaging/participants'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
 import type { Logger } from '@infra/log/types'
-import { WA_APP_STATE_COLLECTION_STATES, WA_STREAM_SIGNALING } from '@protocol/constants'
+import {
+    WA_APP_STATE_COLLECTION_STATES,
+    WA_CONNECTION_REASONS,
+    WA_DISCONNECT_REASONS,
+    WA_STREAM_SIGNALING
+} from '@protocol/constants'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
 import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
 import type { BinaryNode } from '@transport/types'
@@ -58,6 +63,7 @@ function createIncomingRuntime() {
                 unhandled.push(event)
             },
             syncAppState: async () => undefined,
+            stopComms: () => undefined,
             disconnect: async () => undefined,
             clearStoredCredentials: async () => undefined,
             parseDirtyBits: () => [],
@@ -162,10 +168,19 @@ test('incoming node coordinator supports dynamic handler registration and unregi
 
 test('stream control handler runs force-login and resume flows', async () => {
     const calls: string[] = []
+    const disconnectCalls: Array<{
+        readonly reason: string
+        readonly isLogout: boolean
+        readonly code: number | null
+    }> = []
+    const connectCalls: string[] = []
     const handler = createStreamControlHandler({
         logger: createLogger(),
         getComms: () =>
             ({
+                stopComms: async () => {
+                    calls.push('stopComms')
+                },
                 closeSocketAndResume: async () => {
                     calls.push('resume')
                 }
@@ -176,14 +191,16 @@ test('stream control handler runs force-login and resume flows', async () => {
         clearMediaConnCache: () => {
             calls.push('clear_media')
         },
-        disconnect: async () => {
+        disconnect: async (reason, isLogout, code) => {
             calls.push('disconnect')
+            disconnectCalls.push({ reason, isLogout, code })
         },
         clearStoredCredentials: async () => {
             calls.push('clear_credentials')
         },
-        connect: async () => {
+        connect: async (reason) => {
             calls.push('connect')
+            connectCalls.push(reason)
         }
     })
 
@@ -192,15 +209,119 @@ test('stream control handler runs force-login and resume flows', async () => {
         code: WA_STREAM_SIGNALING.FORCE_LOGIN_CODE
     })
 
-    assert.deepEqual(calls, ['disconnect', 'clear_credentials', 'connect'])
+    assert.deepEqual(calls, ['stopComms', 'disconnect', 'clear_credentials', 'connect'])
+    assert.deepEqual(disconnectCalls, [
+        {
+            reason: WA_DISCONNECT_REASONS.STREAM_ERROR_FORCE_LOGIN,
+            isLogout: true,
+            code: WA_STREAM_SIGNALING.FORCE_LOGIN_CODE
+        }
+    ])
+    assert.deepEqual(connectCalls, [WA_CONNECTION_REASONS.RECONNECTED])
 
     calls.length = 0
+    disconnectCalls.length = 0
+    connectCalls.length = 0
     await handler.handleStreamControlResult({
         kind: 'stream_error_code',
         code: 500
     })
 
     assert.deepEqual(calls, ['clear_pending', 'clear_media', 'resume'])
+    assert.deepEqual(disconnectCalls, [])
+    assert.deepEqual(connectCalls, [])
+})
+
+test('stream control handler handles force-logout, replaced and device-removed flows', async () => {
+    const calls: string[] = []
+    const disconnectCalls: Array<{
+        readonly reason: string
+        readonly isLogout: boolean
+        readonly code: number | null
+    }> = []
+    const connectCalls: string[] = []
+    let clearCredentialsCalls = 0
+    const handler = createStreamControlHandler({
+        logger: createLogger(),
+        getComms: () =>
+            ({
+                stopComms: async () => {
+                    calls.push('stopComms')
+                },
+                closeSocketAndResume: async () => {
+                    calls.push('resume')
+                }
+            }) as never,
+        clearPendingQueries: () => {
+            calls.push('clear_pending')
+        },
+        clearMediaConnCache: () => {
+            calls.push('clear_media')
+        },
+        disconnect: async (reason, isLogout, code) => {
+            calls.push('disconnect')
+            disconnectCalls.push({ reason, isLogout, code })
+        },
+        clearStoredCredentials: async () => {
+            calls.push('clear_credentials')
+            clearCredentialsCalls += 1
+        },
+        connect: async (reason) => {
+            calls.push('connect')
+            connectCalls.push(reason)
+        }
+    })
+
+    await handler.handleStreamControlResult({
+        kind: 'stream_error_code',
+        code: WA_STREAM_SIGNALING.FORCE_LOGOUT_CODE
+    })
+    assert.deepEqual(calls, ['stopComms', 'disconnect', 'clear_credentials', 'connect'])
+    assert.deepEqual(disconnectCalls, [
+        {
+            reason: WA_DISCONNECT_REASONS.STREAM_ERROR_FORCE_LOGOUT,
+            isLogout: true,
+            code: WA_STREAM_SIGNALING.FORCE_LOGOUT_CODE
+        }
+    ])
+    assert.deepEqual(connectCalls, [WA_CONNECTION_REASONS.RECONNECTED])
+    assert.equal(clearCredentialsCalls, 1)
+
+    calls.length = 0
+    disconnectCalls.length = 0
+    connectCalls.length = 0
+    clearCredentialsCalls = 0
+    await handler.handleStreamControlResult({
+        kind: 'stream_error_replaced'
+    })
+    assert.deepEqual(calls, ['stopComms', 'disconnect'])
+    assert.deepEqual(disconnectCalls, [
+        {
+            reason: WA_DISCONNECT_REASONS.STREAM_ERROR_REPLACED,
+            isLogout: false,
+            code: null
+        }
+    ])
+    assert.deepEqual(connectCalls, [])
+    assert.equal(clearCredentialsCalls, 0)
+
+    calls.length = 0
+    disconnectCalls.length = 0
+    connectCalls.length = 0
+    clearCredentialsCalls = 0
+    await handler.handleStreamControlResult({
+        kind: 'stream_error_device_removed'
+    })
+    assert.deepEqual(calls, ['stopComms', 'disconnect', 'clear_credentials'])
+    assert.deepEqual(disconnectCalls, [
+        {
+            reason: WA_DISCONNECT_REASONS.STREAM_ERROR_DEVICE_REMOVED,
+            isLogout: true,
+            code: null
+        }
+    ])
+    assert.deepEqual(connectCalls, [])
+    assert.equal(clearCredentialsCalls, 1)
 })
 
 test('message dispatch coordinator mutates participants cache from group events', async () => {
