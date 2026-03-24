@@ -6,9 +6,10 @@ import { parseDirtyBits } from '@client/dirty'
 import { processHistorySyncNotification } from '@client/history-sync'
 import type { WaClientOptions } from '@client/types'
 import { WaClient } from '@client/WaClient'
-import { resolveWaClientBase } from '@client/WaClientFactory'
+import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClientFactory'
 import type { Logger } from '@infra/log/types'
 import { proto } from '@proto'
+import type { BinaryNode } from '@transport/types'
 
 function createLogger(): Logger {
     return {
@@ -318,12 +319,62 @@ test('resolveWaClientBase accepts proxy agent shapes', () => {
     assert.doesNotThrow(() => resolveWaClientBase(options, createLogger()))
 })
 
+test('buildWaClientDependencies wires privacy coordinator', () => {
+    const sessionStore = {
+        auth: {} as never,
+        signal: {} as never,
+        senderKey: {} as never,
+        appState: {} as never,
+        messages: {} as never,
+        threads: {} as never,
+        contacts: {} as never,
+        retry: {} as never,
+        participants: {} as never,
+        deviceList: {} as never,
+        privacyToken: {} as never
+    }
+    const options = {
+        store: {
+            session: () => sessionStore
+        },
+        sessionId: 'session'
+    } as unknown as WaClientOptions
+
+    const base = resolveWaClientBase(options, createLogger())
+    const runtime = {
+        sendNode: async (_node: BinaryNode) => undefined,
+        query: async (_node: BinaryNode) =>
+            ({ tag: 'iq', attrs: { type: 'result' } }) as BinaryNode,
+        queryWithContext: async (_context: string, _node: BinaryNode) =>
+            ({ tag: 'iq', attrs: { type: 'result' } }) as BinaryNode,
+        syncAppState: async () => undefined,
+        syncAppStateWithOptions: async () => ({ collections: [] }) as never,
+        emitEvent: (() => undefined) as never,
+        handleIncomingMessageEvent: async () => undefined,
+        handleError: (_error: Error) => undefined,
+        handleIncomingFrame: async (_frame: Uint8Array) => undefined,
+        clearStoredState: async () => undefined,
+        resumeIncomingEvents: () => undefined
+    }
+
+    const dependencies = buildWaClientDependencies({ base, runtime })
+    assert.equal(typeof dependencies.privacyCoordinator.getPrivacySettings, 'function')
+})
+
 function getClearStoredStateMethod() {
     return (
         WaClient.prototype as unknown as {
             readonly clearStoredState: (this: unknown) => Promise<void>
         }
     ).clearStoredState
+}
+
+function getCoordinatorGetterMethod(name: 'chat' | 'group' | 'privacy') {
+    const descriptor = Object.getOwnPropertyDescriptor(WaClient.prototype, name)
+    if (!descriptor?.get) {
+        throw new Error(`expected WaClient.${name} getter`)
+    }
+    return descriptor.get as (this: unknown) => unknown
 }
 
 function createClearStoredStateHarness(logoutStoreClear?: {
@@ -428,6 +479,21 @@ test('clearStoredState clears every store domain by default', async () => {
         'threads',
         'privacyToken'
     ])
+})
+
+test('WaClient exposes chat/group/privacy coordinator getters', () => {
+    const chatCoordinator = { flushMutations: async () => undefined }
+    const groupCoordinator = { queryGroupMetadata: async () => ({}) }
+    const privacyCoordinator = { getPrivacySettings: async () => ({}) }
+    const fakeClient = {
+        chatCoordinator,
+        groupCoordinator,
+        privacyCoordinator
+    }
+
+    assert.equal(getCoordinatorGetterMethod('chat').call(fakeClient), chatCoordinator)
+    assert.equal(getCoordinatorGetterMethod('group').call(fakeClient), groupCoordinator)
+    assert.equal(getCoordinatorGetterMethod('privacy').call(fakeClient), privacyCoordinator)
 })
 
 test('clearStoredState respects logoutStoreClear domain toggles', async () => {

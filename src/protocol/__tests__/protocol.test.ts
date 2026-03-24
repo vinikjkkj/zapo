@@ -6,6 +6,11 @@ import {
     getWaCompanionPlatformId,
     WA_COMPANION_PLATFORM_IDS,
     WA_DEFAULTS,
+    WA_PRIVACY_CATEGORIES,
+    WA_PRIVACY_CATEGORY_TO_SETTING,
+    WA_PRIVACY_DISALLOWED_LIST_CATEGORIES,
+    WA_PRIVACY_SETTING_TO_CATEGORY,
+    WA_PRIVACY_VALUES,
     WA_MEDIA_HKDF_INFO,
     getWaMediaHkdfInfo
 } from '@protocol/constants'
@@ -27,6 +32,10 @@ import {
     splitJid,
     toUserJid
 } from '@protocol/jid'
+import type {
+    WaPrivacyDisallowedListSettingName,
+    WaPrivacySettingValueMap
+} from '@protocol/privacy'
 
 test('jid split and normalization helpers', () => {
     assert.deepEqual(splitJid('123@s.whatsapp.net'), {
@@ -119,4 +128,25 @@ test('login identity parsing and protocol constants', () => {
     assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.MUTE.action, 'mute')
     assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.DELETE_MESSAGE_FOR_ME.version, 3)
     assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.LOCK_CHAT.version, 7)
+})
+
+test('privacy protocol constants keep mapping invariants', () => {
+    const disallowedSettingsTypeCheck: Record<WaPrivacyDisallowedListSettingName, true> = {
+        about: true,
+        groupAdd: true,
+        lastSeen: true,
+        profilePicture: true
+    }
+    const validGroupAddValue: WaPrivacySettingValueMap['groupAdd'] = 'contact_blacklist'
+    void disallowedSettingsTypeCheck
+    void validGroupAddValue
+
+    assert.equal(WA_PRIVACY_VALUES.ERROR, 'error')
+    assert.equal(WA_PRIVACY_SETTING_TO_CATEGORY.groupAdd, WA_PRIVACY_CATEGORIES.GROUP_ADD)
+    assert.equal(WA_PRIVACY_CATEGORY_TO_SETTING[WA_PRIVACY_CATEGORIES.GROUP_ADD], 'groupAdd')
+
+    const disallowedSettings = Object.values(WA_PRIVACY_DISALLOWED_LIST_CATEGORIES).map(
+        (category) => WA_PRIVACY_CATEGORY_TO_SETTING[category]
+    )
+    assert.deepEqual(disallowedSettings.sort(), ['about', 'groupAdd', 'lastSeen', 'profilePicture'])
 })

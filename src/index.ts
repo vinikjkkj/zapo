@@ -7,6 +7,12 @@ export type {
     WaHistorySyncOptions,
     WaWriteBehindOptions
 } from '@client'
+export type {
+    WaBlocklistResult,
+    WaPrivacyCoordinator,
+    WaPrivacyDisallowedListResult,
+    WaPrivacySettings
+} from '@client/coordinators/WaPrivacyCoordinator'
 export { ConsoleLogger } from '@infra/log/ConsoleLogger'
 export { PinoLogger, createPinoLogger } from '@infra/log/PinoLogger'
 export type { PinoLoggerOptions } from '@infra/log/PinoLogger'
@@ -78,6 +84,13 @@ export {
     WA_SIGNALING,
     WA_STREAM_SIGNALING,
     WA_SUPPORTED_DIRTY_TYPES,
+    WA_PRIVACY_CATEGORIES,
+    WA_PRIVACY_CATEGORY_TO_SETTING,
+    WA_PRIVACY_DISALLOWED_LIST_CATEGORIES,
+    WA_PRIVACY_SETTING_TO_CATEGORY,
+    WA_PRIVACY_TAGS,
+    WA_PRIVACY_VALUES,
     WA_XMLNS
 } from '@protocol'
+export type { WaPrivacyCategory, WaPrivacySettingName, WaPrivacyValue } from '@protocol'
 export { proto } from '@proto'

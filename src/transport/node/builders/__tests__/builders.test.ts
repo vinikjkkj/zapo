@@ -4,8 +4,11 @@ import test from 'node:test'
 import {
     WA_DEFAULTS,
     WA_NODE_TAGS,
+    WA_PRIVACY_CATEGORIES,
+    WA_PRIVACY_TAGS,
     WA_PRIVACY_TOKEN_TAGS,
     WA_PRIVACY_TOKEN_TYPES,
+    WA_XMLNS,
     WA_USYNC_CONTEXTS,
     WA_USYNC_MODES
 } from '@protocol/constants'
@@ -36,6 +39,13 @@ import {
     buildGroupRetryMessageNode
 } from '@transport/node/builders/message'
 import { buildMissingPreKeysFetchIq, buildPreKeyUploadIq } from '@transport/node/builders/prekeys'
+import {
+    buildBlocklistChangeIq,
+    buildGetBlocklistIq,
+    buildGetPrivacyDisallowedListIq,
+    buildGetPrivacySettingsIq,
+    buildSetPrivacyCategoryIq
+} from '@transport/node/builders/privacy'
 import {
     buildCsTokenMessageNode,
     buildPrivacyTokenIqNode,
@@ -360,6 +370,65 @@ test('privacy token builders create iq and message token nodes', () => {
     const csNode = buildCsTokenMessageNode(new Uint8Array([8]))
     assert.equal(csNode.tag, WA_PRIVACY_TOKEN_TAGS.CS_TOKEN)
     assert.ok(csNode.content instanceof Uint8Array)
+})
+
+test('privacy builders generate expected iq payloads', () => {
+    const getSettings = buildGetPrivacySettingsIq()
+    assert.equal(getSettings.attrs.type, 'get')
+    assert.equal(getSettings.attrs.xmlns, WA_XMLNS.PRIVACY)
+    assert.ok(Array.isArray(getSettings.content))
+    if (!Array.isArray(getSettings.content)) {
+        throw new Error('expected get privacy settings content array')
+    }
+    assert.equal(getSettings.content[0].tag, WA_NODE_TAGS.PRIVACY)
+
+    const setCategory = buildSetPrivacyCategoryIq(WA_PRIVACY_CATEGORIES.ONLINE, 'match_last_seen')
+    assert.equal(setCategory.attrs.type, 'set')
+    assert.equal(setCategory.attrs.xmlns, WA_XMLNS.PRIVACY)
+    assert.ok(Array.isArray(setCategory.content))
+    if (!Array.isArray(setCategory.content)) {
+        throw new Error('expected set privacy category content array')
+    }
+    assert.equal(setCategory.content[0].tag, WA_NODE_TAGS.PRIVACY)
+    assert.ok(Array.isArray(setCategory.content[0].content))
+    if (!Array.isArray(setCategory.content[0].content)) {
+        throw new Error('expected set privacy category payload array')
+    }
+    assert.equal(setCategory.content[0].content[0].tag, WA_PRIVACY_TAGS.CATEGORY)
+    assert.equal(setCategory.content[0].content[0].attrs.name, WA_PRIVACY_CATEGORIES.ONLINE)
+    assert.equal(setCategory.content[0].content[0].attrs.value, 'match_last_seen')
+
+    const disallowed = buildGetPrivacyDisallowedListIq(WA_PRIVACY_CATEGORIES.ABOUT)
+    assert.equal(disallowed.attrs.type, 'get')
+    assert.equal(disallowed.attrs.xmlns, WA_XMLNS.PRIVACY)
+    assert.ok(Array.isArray(disallowed.content))
+    if (!Array.isArray(disallowed.content)) {
+        throw new Error('expected get disallowed list content array')
+    }
+    assert.equal(disallowed.content[0].tag, WA_NODE_TAGS.PRIVACY)
+    assert.ok(Array.isArray(disallowed.content[0].content))
+    if (!Array.isArray(disallowed.content[0].content)) {
+        throw new Error('expected get disallowed list payload array')
+    }
+    assert.equal(disallowed.content[0].content[0].tag, WA_PRIVACY_TAGS.LIST)
+    assert.equal(disallowed.content[0].content[0].attrs.name, WA_PRIVACY_CATEGORIES.ABOUT)
+    assert.equal(disallowed.content[0].content[0].attrs.value, 'contact_blacklist')
+
+    const blocklist = buildGetBlocklistIq()
+    assert.equal(blocklist.attrs.type, 'get')
+    assert.equal(blocklist.attrs.xmlns, WA_XMLNS.BLOCKLIST)
+    assert.equal(blocklist.content, undefined)
+
+    const block = buildBlocklistChangeIq('5511999999999@s.whatsapp.net', 'block')
+    assert.equal(block.attrs.type, 'set')
+    assert.equal(block.attrs.xmlns, WA_XMLNS.BLOCKLIST)
+    assert.ok(Array.isArray(block.content))
+    if (!Array.isArray(block.content)) {
+        throw new Error('expected blocklist change content array')
+    }
+    assert.equal(block.content[0].tag, 'item')
+    assert.equal(block.content[0].attrs.jid, '5511999999999@s.whatsapp.net')
+    assert.equal(block.content[0].attrs.action, 'block')
 })
 
 test('message builders cover group and inbound receipt branches', () => {

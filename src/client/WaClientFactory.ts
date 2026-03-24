@@ -12,6 +12,10 @@ import {
 import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
+import {
+    createPrivacyCoordinator,
+    type WaPrivacyCoordinator
+} from '@client/coordinators/WaPrivacyCoordinator'
 import { WaRetryCoordinator } from '@client/coordinators/WaRetryCoordinator'
 import {
     createStreamControlHandler,
@@ -122,11 +126,12 @@ interface WaClientDependencies {
     readonly messageDispatch: WaMessageDispatchCoordinator
     readonly retryCoordinator: WaRetryCoordinator
     readonly appStateSync: WaAppStateSyncClient
-    readonly appStateMutations: WaAppStateMutationCoordinator
+    readonly chatCoordinator: WaAppStateMutationCoordinator
     readonly streamControl: WaStreamControlHandler
     readonly incomingNode: WaIncomingNodeCoordinator
     readonly passiveTasks: WaPassiveTasksCoordinator
     readonly groupCoordinator: WaGroupCoordinator
+    readonly privacyCoordinator: WaPrivacyCoordinator
     readonly receiptQueue: WaReceiptQueue
     readonly keyShareCoordinator: WaKeyShareCoordinator
     readonly connectionManager: WaConnectionManager
@@ -465,6 +470,10 @@ export function buildWaClientDependencies(input: {
     const getCurrentSignedIdentity = () => getCurrentCredentials()?.signedIdentity
 
     const groupCoordinator = createGroupCoordinator({
+        queryWithContext: runtime.queryWithContext
+    })
+
+    const privacyCoordinator = createPrivacyCoordinator({
         queryWithContext: runtime.queryWithContext
     })
 
@@ -960,11 +969,12 @@ export function buildWaClientDependencies(input: {
         messageDispatch,
         retryCoordinator,
         appStateSync,
-        appStateMutations,
+        chatCoordinator: appStateMutations,
         streamControl,
         incomingNode,
         passiveTasks,
         groupCoordinator,
+        privacyCoordinator,
         receiptQueue,
         keyShareCoordinator,
         connectionManager,

@@ -13,6 +13,7 @@ import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator
 import type { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import type { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
+import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordinator'
 import type { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { processHistorySyncNotification } from '@client/history-sync'
@@ -20,11 +21,7 @@ import { persistIncomingMailboxEntities } from '@client/mailbox'
 import type { WriteBehindDrainResult } from '@client/persistence/WriteBehindPersistence'
 import { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type {
-    WaAppStateMessageKey,
-    WaClearChatOptions,
     WaClientOptions,
-    WaDeleteChatOptions,
-    WaDeleteMessageForMeOptions,
     WaSendMessageOptions,
     WaClientEventMap,
     WaIncomingProtocolMessageEvent,
@@ -92,12 +89,13 @@ export class WaClient extends EventEmitter {
     private readonly nodeTransport!: WaNodeTransport
     private readonly signalDeviceSync!: SignalDeviceSyncApi
     public readonly appStateSync!: WaAppStateSyncClient
-    private readonly appStateMutations!: WaAppStateMutationCoordinator
+    public readonly chatCoordinator!: WaAppStateMutationCoordinator
     private readonly incomingNode!: WaIncomingNodeCoordinator
     public readonly mediaTransfer!: WaMediaTransferClient
     public readonly messageDispatch!: WaMessageDispatchCoordinator
     public readonly messageClient!: WaMessageClient
     public readonly groupCoordinator!: WaGroupCoordinator
+    public readonly privacyCoordinator!: WaPrivacyCoordinator
     private readonly passiveTasks!: WaPassiveTasksCoordinator
     private readonly keepAlive!: WaKeepAlive
     private readonly receiptQueue!: WaReceiptQueue
@@ -647,55 +645,22 @@ export class WaClient extends EventEmitter {
         }
     }
 
+    public get chat(): WaAppStateMutationCoordinator {
+        return this.chatCoordinator
+    }
+    public get group(): WaGroupCoordinator {
+        return this.groupCoordinator
+    }
+    public get privacy(): WaPrivacyCoordinator {
+        return this.privacyCoordinator
+    }
+
     public sendReceipt(input: WaSendReceiptInput): Promise<void> {
         return this.messageDispatch.sendReceipt(input)
     }
 
-    public setChatMute(
-        chatJid: string,
-        muted: boolean,
-        muteEndTimestampMs?: number
-    ): Promise<void> {
-        return this.appStateMutations.setChatMute(chatJid, muted, muteEndTimestampMs)
-    }
-
-    public setChatRead(chatJid: string, read: boolean): Promise<void> {
-        return this.appStateMutations.setChatRead(chatJid, read)
-    }
-
-    public setChatPin(chatJid: string, pinned: boolean): Promise<void> {
-        return this.appStateMutations.setChatPin(chatJid, pinned)
-    }
-
-    public setChatArchive(chatJid: string, archived: boolean): Promise<void> {
-        return this.appStateMutations.setChatArchive(chatJid, archived)
-    }
-
-    public clearChat(chatJid: string, options: WaClearChatOptions = {}): Promise<void> {
-        return this.appStateMutations.clearChat(chatJid, options)
-    }
-
-    public deleteChat(chatJid: string, options: WaDeleteChatOptions = {}): Promise<void> {
-        return this.appStateMutations.deleteChat(chatJid, options)
-    }
-
-    public setChatLock(chatJid: string, locked: boolean): Promise<void> {
-        return this.appStateMutations.setChatLock(chatJid, locked)
-    }
-
-    public setMessageStar(message: WaAppStateMessageKey, starred: boolean): Promise<void> {
-        return this.appStateMutations.setMessageStar(message, starred)
-    }
-
-    public deleteMessageForMe(
-        message: WaAppStateMessageKey,
-        options: WaDeleteMessageForMeOptions = {}
-    ): Promise<void> {
-        return this.appStateMutations.deleteMessageForMe(message, options)
-    }
-
     public flushAppStateMutations(): Promise<void> {
-        return this.appStateMutations.flushMutations()
+        return this.chatCoordinator.flushMutations()
     }
 
     public flushWriteBehind(timeoutMs?: number): Promise<WriteBehindDrainResult> {

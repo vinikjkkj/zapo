@@ -40,6 +40,15 @@ export {
     WA_PRIVACY_TOKEN_TYPES,
     WA_TC_TOKEN_DEFAULTS
 } from '@protocol/privacy-token'
+export {
+    WA_PRIVACY_CATEGORIES,
+    WA_PRIVACY_CATEGORY_TO_SETTING,
+    WA_PRIVACY_DISALLOWED_LIST_CATEGORIES,
+    WA_PRIVACY_SETTING_TO_CATEGORY,
+    WA_PRIVACY_TAGS,
+    WA_PRIVACY_VALUES
+} from '@protocol/privacy'
+export type { WaPrivacyCategory, WaPrivacySettingName, WaPrivacyValue } from '@protocol/privacy'
 export { WA_DEFAULTS } from '@protocol/defaults'
 export { WA_GROUP_PARTICIPANT_TYPES, type WaGroupSetting } from '@protocol/group'
 export { WA_USYNC_CONTEXTS, WA_USYNC_DEFAULTS, WA_USYNC_MODES } from '@protocol/usync'
