@@ -3,8 +3,8 @@ import type { Readable } from 'node:stream'
 import type { Logger } from '@infra/log/types'
 import type { WaProxyAgent, WaProxyDispatcher } from '@transport/types'
 
-export type MediaKind = 'image' | 'video' | 'audio' | 'document' | 'sticker'
-export type MediaCryptoType = MediaKind | 'ptt' | 'gif' | 'ptv' | 'history' | 'md-app-state'
+export type MediaKind = 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'ptv'
+export type MediaCryptoType = MediaKind | 'ptt' | 'gif' | 'history' | 'md-app-state'
 
 export interface WaMediaConnHost {
     readonly hostname: string
@@ -53,6 +53,7 @@ export interface WaMediaReadableEncryptionResult {
     readonly metadata: Promise<{
         readonly fileSha256: Uint8Array
         readonly fileEncSha256: Uint8Array
+        readonly plaintextLength: number
     }>
 }
 
@@ -62,6 +63,14 @@ export interface WaMediaReadableDecryptionResult {
         readonly fileSha256: Uint8Array
         readonly fileEncSha256: Uint8Array
     }>
+}
+
+export interface WaMediaFileEncryptionResult {
+    readonly filePath: string
+    readonly fileSize: number
+    readonly fileSha256: Uint8Array
+    readonly fileEncSha256: Uint8Array
+    readonly plaintextLength: number
 }
 
 export interface WaMediaDecryptReadableOptions {

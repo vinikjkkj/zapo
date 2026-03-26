@@ -1,7 +1,10 @@
+import { createReadStream } from 'node:fs'
+import type { Readable } from 'node:stream'
+
 import type { Logger } from '@infra/log/types'
 import { parseMediaConnResponse } from '@media/conn'
 import { MEDIA_CONN_CACHE_GRACE_MS, MEDIA_UPLOAD_PATHS } from '@media/constants'
-import type { WaMediaConn } from '@media/types'
+import type { MediaCryptoType, WaMediaConn } from '@media/types'
 import { WaMediaCrypto } from '@media/WaMediaCrypto'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { isSendMediaMessage } from '@message/content'
@@ -10,8 +13,7 @@ import type { Proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
 import { buildMediaConnIq } from '@transport/node/builders/media'
 import type { BinaryNode } from '@transport/types'
-import { bytesToBase64UrlSafe } from '@util/bytes'
-import { TEXT_DECODER, toBytesView } from '@util/bytes'
+import { bytesToBase64UrlSafe, TEXT_DECODER, toBytesView } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 export interface WaMediaMessageOptions {
@@ -65,18 +67,34 @@ export async function getMediaConn(
     return mediaConn
 }
 
+function resolveUploadType(content: WaSendMediaMessage): MediaCryptoType {
+    if (content.type === 'video' && content.gifPlayback) return 'gif'
+    if (content.type === 'audio' && content.ptt) return 'ptt'
+    return content.type as MediaCryptoType
+}
+
+function isReadableStream(value: unknown): value is Readable {
+    return (
+        !!value &&
+        typeof value === 'object' &&
+        'pipe' in value &&
+        typeof (value as Readable).pipe === 'function'
+    )
+}
+
 async function buildMediaMessage(
     options: WaMediaMessageOptions,
     content: WaSendMediaMessage
 ): Promise<Proto.IMessage> {
-    const mediaBytes = toBytesView(content.media)
-    const uploaded = await uploadMedia(options, content, mediaBytes)
+    const uploaded = isReadableStream(content.media)
+        ? await uploadMediaStream(options, content, content.media)
+        : await uploadMediaBytes(options, content, toBytesView(content.media))
     const mediaKeyTimestamp = Math.floor(Date.now() / 1000)
     const common = {
         url: uploaded.url,
         mimetype: content.mimetype,
         fileSha256: uploaded.fileSha256,
-        fileLength: mediaBytes.byteLength,
+        fileLength: uploaded.fileLength,
         mediaKey: uploaded.mediaKey,
         fileEncSha256: uploaded.fileEncSha256,
         directPath: uploaded.directPath,
@@ -105,6 +123,15 @@ async function buildMediaMessage(
                     metadataUrl: uploaded.metadataUrl
                 }
             }
+        case 'ptv':
+            return {
+                ptvMessage: {
+                    ...common,
+                    seconds: content.seconds,
+                    width: content.width,
+                    height: content.height
+                }
+            }
         case 'audio':
             return {
                 audioMessage: {
@@ -131,38 +158,86 @@ async function buildMediaMessage(
                 }
             }
         default:
-            throw new Error(`unsupported media type: ${(content as { type: string }).type}`)
+            throw new Error(
+                `unsupported media message type: ${String((content as Record<string, unknown>).type)}`
+            )
     }
 }
 
-async function uploadMedia(
-    options: WaMediaMessageOptions,
-    content: WaSendMediaMessage,
-    mediaBytes: Uint8Array
-): Promise<{
+interface UploadResult {
     readonly url: string
     readonly directPath: string
     readonly mediaKey: Uint8Array
     readonly fileSha256: Uint8Array
     readonly fileEncSha256: Uint8Array
+    readonly fileLength: number
     readonly metadataUrl?: string
-}> {
+}
+
+function buildUploadUrl(
+    host: string,
+    uploadType: MediaCryptoType,
+    auth: string,
+    fileEncSha256: Uint8Array
+): string {
+    const hashToken = bytesToBase64UrlSafe(fileEncSha256)
+    const uploadPath = MEDIA_UPLOAD_PATHS[uploadType as keyof typeof MEDIA_UPLOAD_PATHS]
+    if (!uploadPath) {
+        throw new Error(`unknown media upload type: ${String(uploadType)}`)
+    }
+    return `https://${host}${uploadPath}/${hashToken}?auth=${encodeURIComponent(auth)}&token=${encodeURIComponent(hashToken)}`
+}
+
+function parseUploadResponse(
+    body: Uint8Array,
+    status: number
+): {
+    readonly url: string
+    readonly directPath: string
+    readonly metadataUrl?: string
+} {
+    if (status < 200 || status >= 300) {
+        throw new Error(`media upload failed with status ${status}`)
+    }
+    let parsed: {
+        readonly url?: string
+        readonly direct_path?: string
+        readonly metadata_url?: string
+    }
+    try {
+        parsed = JSON.parse(TEXT_DECODER.decode(body)) as typeof parsed
+    } catch (error) {
+        throw new Error(`media upload returned invalid json: ${toError(error).message}`)
+    }
+    if (!parsed.url || !parsed.direct_path) {
+        throw new Error('media upload response missing url/direct_path')
+    }
+    return {
+        url: parsed.url,
+        directPath: parsed.direct_path,
+        ...(parsed.metadata_url ? { metadataUrl: parsed.metadata_url } : {})
+    }
+}
+
+async function uploadMediaBytes(
+    options: WaMediaMessageOptions,
+    content: WaSendMediaMessage,
+    mediaBytes: Uint8Array
+): Promise<UploadResult> {
+    const uploadType = resolveUploadType(content)
     const mediaKey = await WaMediaCrypto.generateMediaKey()
-    const uploadType =
-        content.type === 'video' && content.gifPlayback
-            ? 'gif'
-            : content.type === 'audio' && content.ptt
-              ? 'ptt'
-              : content.type
     const [encrypted, mediaConn] = await Promise.all([
         WaMediaCrypto.encryptBytes(uploadType, mediaKey, mediaBytes),
         getMediaConn(options)
     ])
     const selectedHost =
         mediaConn.hosts.find((host) => !host.isFallback)?.hostname ?? mediaConn.hosts[0].hostname
-    const uploadPath = MEDIA_UPLOAD_PATHS[uploadType]
-    const hashToken = bytesToBase64UrlSafe(encrypted.fileEncSha256)
-    const uploadUrl = `https://${selectedHost}${uploadPath}/${hashToken}?auth=${encodeURIComponent(mediaConn.auth)}&token=${encodeURIComponent(hashToken)}`
+    const uploadUrl = buildUploadUrl(
+        selectedHost,
+        uploadType,
+        mediaConn.auth,
+        encrypted.fileEncSha256
+    )
 
     options.logger.debug('sending media upload request', {
         mediaType: content.type,
@@ -176,36 +251,68 @@ async function uploadMedia(
         contentLength: encrypted.ciphertextHmac.byteLength,
         contentType: content.mimetype
     })
-    const uploadBody = await options.mediaTransfer.readResponseBytes(uploadResponse)
-    if (!uploadResponse.ok) {
-        throw new Error(`media upload failed with status ${uploadResponse.status}`)
-    }
-
-    let parsedBody: {
-        readonly url?: string
-        readonly direct_path?: string
-        readonly metadata_url?: string
-    }
-    try {
-        parsedBody = JSON.parse(TEXT_DECODER.decode(uploadBody)) as {
-            readonly url?: string
-            readonly direct_path?: string
-            readonly metadata_url?: string
-        }
-    } catch (error) {
-        throw new Error(`media upload returned invalid json: ${toError(error).message}`)
-    }
-
-    if (!parsedBody.url || !parsedBody.direct_path) {
-        throw new Error('media upload response missing url/direct_path')
-    }
-
+    const responseBody = await options.mediaTransfer.readResponseBytes(uploadResponse)
+    const parsed = parseUploadResponse(responseBody, uploadResponse.status)
     return {
-        url: parsedBody.url,
-        directPath: parsedBody.direct_path,
+        ...parsed,
         mediaKey,
         fileSha256: encrypted.fileSha256,
         fileEncSha256: encrypted.fileEncSha256,
-        ...(parsedBody.metadata_url ? { metadataUrl: parsedBody.metadata_url } : {})
+        fileLength: mediaBytes.byteLength
+    }
+}
+
+async function uploadMediaStream(
+    options: WaMediaMessageOptions,
+    content: WaSendMediaMessage,
+    stream: Readable
+): Promise<UploadResult> {
+    const uploadType = resolveUploadType(content)
+    const mediaKey = await WaMediaCrypto.generateMediaKey()
+    const encResult = await WaMediaCrypto.encryptToFile(uploadType, mediaKey, stream)
+    let readStream: ReturnType<typeof createReadStream> | undefined
+    try {
+        const mediaConn = await getMediaConn(options)
+        const selectedHost =
+            mediaConn.hosts.find((host) => !host.isFallback)?.hostname ??
+            mediaConn.hosts[0].hostname
+        const uploadUrl = buildUploadUrl(
+            selectedHost,
+            uploadType,
+            mediaConn.auth,
+            encResult.fileEncSha256
+        )
+
+        options.logger.debug('sending media stream upload request', {
+            mediaType: content.type,
+            uploadType,
+            host: selectedHost,
+            encryptedSize: encResult.fileSize
+        })
+        readStream = createReadStream(encResult.filePath)
+        const uploadResponse = await options.mediaTransfer.uploadStream({
+            url: uploadUrl,
+            method: 'POST',
+            body: readStream,
+            contentLength: encResult.fileSize,
+            contentType: content.mimetype
+        })
+        const responseBody = await options.mediaTransfer.readResponseBytes(uploadResponse)
+        const parsed = parseUploadResponse(responseBody, uploadResponse.status)
+        return {
+            ...parsed,
+            mediaKey,
+            fileSha256: encResult.fileSha256,
+            fileEncSha256: encResult.fileEncSha256,
+            fileLength: encResult.plaintextLength
+        }
+    } finally {
+        if (readStream && !readStream.closed) {
+            await new Promise<void>((resolve) => {
+                readStream!.once('close', resolve)
+                readStream!.destroy()
+            })
+        }
+        await WaMediaCrypto.cleanupEncryptedFile(encResult.filePath)
     }
 }

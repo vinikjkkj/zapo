@@ -36,7 +36,8 @@ import {
 } from '@transport/node/builders'
 import {
     buildDirectMessageFanoutNode,
-    buildGroupRetryMessageNode
+    buildGroupRetryMessageNode,
+    buildMetaNode
 } from '@transport/node/builders/message'
 import { buildMissingPreKeysFetchIq, buildPreKeyUploadIq } from '@transport/node/builders/prekeys'
 import {
@@ -932,4 +933,66 @@ test('prekeys builders include expected key material and targets', () => {
     assert.equal(rotate.attrs.type, 'set')
     assert.ok(Array.isArray(rotate.content))
     assert.equal(rotate.content[0].tag, WA_NODE_TAGS.ROTATE)
+})
+
+test('message builders include edit mediatype and meta node when provided', () => {
+    const participant = {
+        jid: '5511:0@s.whatsapp.net',
+        encType: 'msg' as const,
+        ciphertext: new Uint8Array([1])
+    }
+    const meta = buildMetaNode({ polltype: 'creation' })
+    assert.equal(meta.tag, 'meta')
+    assert.equal(meta.attrs.polltype, 'creation')
+
+    const direct = buildDirectMessageFanoutNode({
+        to: '5511@s.whatsapp.net',
+        type: 'poll',
+        id: 'p1',
+        edit: '7',
+        participants: [participant],
+        metaNode: meta,
+        mediatype: 'image'
+    })
+    assert.equal(direct.attrs.edit, '7')
+    assert.ok(Array.isArray(direct.content))
+    const metaChild = direct.content.find((c) => c.tag === 'meta')
+    assert.ok(metaChild)
+    assert.equal(metaChild?.attrs.polltype, 'creation')
+    const encChild = Array.isArray(direct.content[0].content)
+        ? direct.content[0].content[0].content?.[0]
+        : null
+    assert.equal(encChild?.attrs.mediatype, 'image')
+
+    const group = buildGroupSenderKeyMessageNode({
+        to: '123@g.us',
+        type: 'media',
+        id: 'g1',
+        edit: '1',
+        groupCiphertext: new Uint8Array([2]),
+        participants: [participant],
+        metaNode: buildMetaNode({ event_type: 'creation' }),
+        mediatype: 'video'
+    })
+    assert.equal(group.attrs.edit, '1')
+    assert.ok(Array.isArray(group.content))
+    const groupMeta = group.content.find((c) => c.tag === 'meta')
+    assert.ok(groupMeta)
+    assert.equal(groupMeta?.attrs.event_type, 'creation')
+    const skmsgEnc = group.content.find((c) => c.tag === 'enc' && c.attrs.type === 'skmsg')
+    assert.equal(skmsgEnc?.attrs.mediatype, 'video')
+
+    const retry = buildGroupRetryMessageNode({
+        to: '123@g.us',
+        type: 'media',
+        id: 'r1',
+        requesterJid: '5511:0@s.whatsapp.net',
+        addressingMode: 'pn',
+        encType: 'msg',
+        ciphertext: new Uint8Array([3]),
+        retryCount: 1,
+        mediatype: 'document'
+    })
+    assert.ok(Array.isArray(retry.content))
+    assert.equal(retry.content[0].attrs.mediatype, 'document')
 })

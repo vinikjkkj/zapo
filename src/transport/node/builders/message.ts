@@ -11,10 +11,13 @@ type DirectMessageFanoutInput = {
     readonly to: string
     readonly type: string
     readonly id?: string
+    readonly edit?: string
     readonly participants: readonly EncryptedParticipant[]
     readonly deviceIdentity?: Uint8Array
     readonly reportingNode?: BinaryNode
     readonly privacyTokenNode?: BinaryNode
+    readonly metaNode?: BinaryNode
+    readonly mediatype?: string
 }
 
 type GroupMessageFanoutInput = DirectMessageFanoutInput & {
@@ -36,13 +39,35 @@ type GroupRetryMessageInput = {
     readonly ciphertext: Uint8Array
     readonly retryCount: number
     readonly deviceIdentity?: Uint8Array
+    readonly mediatype?: string
 }
 
-export function buildDirectMessageFanoutNode(input: GroupMessageFanoutInput): BinaryNode {
-    if (input.participants.length === 0) {
-        throw new Error('direct message fanout requires at least one participant')
+function buildEncAttrs(
+    encType: string,
+    mediatype?: string,
+    retryCount?: number
+): Record<string, string> {
+    const attrs: Record<string, string> = {
+        v: WA_MESSAGE_TYPES.ENC_VERSION,
+        type: encType
     }
+    if (mediatype) {
+        attrs.mediatype = mediatype
+    }
+    if (retryCount !== undefined && retryCount > 0) {
+        attrs.count = String(Math.trunc(retryCount))
+    }
+    return attrs
+}
 
+function buildMessageAttrs(input: {
+    readonly to: string
+    readonly type: string
+    readonly id?: string
+    readonly edit?: string
+    readonly phash?: string
+    readonly addressingMode?: string
+}): Record<string, string> {
     const attrs: Record<string, string> = {
         to: input.to,
         type: input.type
@@ -50,13 +75,51 @@ export function buildDirectMessageFanoutNode(input: GroupMessageFanoutInput): Bi
     if (input.id) {
         attrs.id = input.id
     }
+    if (input.edit) {
+        attrs.edit = input.edit
+    }
     if (input.phash) {
         attrs.phash = input.phash
     }
     if (input.addressingMode) {
         attrs.addressing_mode = input.addressingMode
     }
+    return attrs
+}
 
+function pushOptionalNodes(
+    content: BinaryNode[],
+    input: {
+        readonly deviceIdentity?: Uint8Array
+        readonly reportingNode?: BinaryNode
+        readonly privacyTokenNode?: BinaryNode
+        readonly metaNode?: BinaryNode
+    }
+): void {
+    if (input.deviceIdentity) {
+        content.push({
+            tag: WA_NODE_TAGS.DEVICE_IDENTITY,
+            attrs: {},
+            content: input.deviceIdentity
+        })
+    }
+    if (input.metaNode) {
+        content.push(input.metaNode)
+    }
+    if (input.reportingNode) {
+        content.push(input.reportingNode)
+    }
+    if (input.privacyTokenNode) {
+        content.push(input.privacyTokenNode)
+    }
+}
+
+export function buildDirectMessageFanoutNode(input: GroupMessageFanoutInput): BinaryNode {
+    if (input.participants.length === 0) {
+        throw new Error('direct message fanout requires at least one participant')
+    }
+
+    const attrs = buildMessageAttrs(input)
     const content: BinaryNode[] = [
         {
             tag: WA_NODE_TAGS.PARTICIPANTS,
@@ -69,29 +132,14 @@ export function buildDirectMessageFanoutNode(input: GroupMessageFanoutInput): Bi
                 content: [
                     {
                         tag: WA_MESSAGE_TAGS.ENC,
-                        attrs: {
-                            v: WA_MESSAGE_TYPES.ENC_VERSION,
-                            type: participant.encType
-                        },
+                        attrs: buildEncAttrs(participant.encType, input.mediatype),
                         content: participant.ciphertext
                     }
                 ]
             }))
         }
     ]
-    if (input.deviceIdentity) {
-        content.push({
-            tag: WA_NODE_TAGS.DEVICE_IDENTITY,
-            attrs: {},
-            content: input.deviceIdentity
-        })
-    }
-    if (input.reportingNode) {
-        content.push(input.reportingNode)
-    }
-    if (input.privacyTokenNode) {
-        content.push(input.privacyTokenNode)
-    }
+    pushOptionalNodes(content, input)
 
     return {
         tag: WA_MESSAGE_TAGS.MESSAGE,
@@ -101,21 +149,9 @@ export function buildDirectMessageFanoutNode(input: GroupMessageFanoutInput): Bi
 }
 
 export function buildGroupSenderKeyMessageNode(input: GroupSenderKeyMessageInput): BinaryNode {
-    const attrs: Record<string, string> = {
-        to: input.to,
-        type: input.type
-    }
-    if (input.id) {
-        attrs.id = input.id
-    }
-    if (input.phash) {
-        attrs.phash = input.phash
-    }
-    if (input.addressingMode) {
-        attrs.addressing_mode = input.addressingMode
-    }
-
+    const attrs = buildMessageAttrs(input)
     const content: BinaryNode[] = []
+
     if (input.participants.length > 0) {
         content.push({
             tag: WA_NODE_TAGS.PARTICIPANTS,
@@ -128,10 +164,7 @@ export function buildGroupSenderKeyMessageNode(input: GroupSenderKeyMessageInput
                 content: [
                     {
                         tag: WA_MESSAGE_TAGS.ENC,
-                        attrs: {
-                            v: WA_MESSAGE_TYPES.ENC_VERSION,
-                            type: participant.encType
-                        },
+                        attrs: buildEncAttrs(participant.encType, input.mediatype),
                         content: participant.ciphertext
                     }
                 ]
@@ -140,22 +173,10 @@ export function buildGroupSenderKeyMessageNode(input: GroupSenderKeyMessageInput
     }
     content.push({
         tag: WA_MESSAGE_TAGS.ENC,
-        attrs: {
-            v: WA_MESSAGE_TYPES.ENC_VERSION,
-            type: 'skmsg'
-        },
+        attrs: buildEncAttrs('skmsg', input.mediatype),
         content: input.groupCiphertext
     })
-    if (input.deviceIdentity) {
-        content.push({
-            tag: WA_NODE_TAGS.DEVICE_IDENTITY,
-            attrs: {},
-            content: input.deviceIdentity
-        })
-    }
-    if (input.reportingNode) {
-        content.push(input.reportingNode)
-    }
+    pushOptionalNodes(content, input)
 
     return {
         tag: WA_MESSAGE_TAGS.MESSAGE,
@@ -165,17 +186,10 @@ export function buildGroupSenderKeyMessageNode(input: GroupSenderKeyMessageInput
 }
 
 export function buildGroupRetryMessageNode(input: GroupRetryMessageInput): BinaryNode {
-    const encAttrs: Record<string, string> = {
-        v: WA_MESSAGE_TYPES.ENC_VERSION,
-        type: input.encType
-    }
-    if (input.retryCount > 0) {
-        encAttrs.count = String(Math.trunc(input.retryCount))
-    }
     const content: BinaryNode[] = [
         {
             tag: WA_MESSAGE_TAGS.ENC,
-            attrs: encAttrs,
+            attrs: buildEncAttrs(input.encType, input.mediatype, input.retryCount),
             content: input.ciphertext
         }
     ]
@@ -197,5 +211,13 @@ export function buildGroupRetryMessageNode(input: GroupRetryMessageInput): Binar
             addressing_mode: input.addressingMode
         },
         content
+    }
+}
+
+export function buildMetaNode(attrs: Record<string, string>): BinaryNode {
+    return {
+        tag: 'meta',
+        attrs,
+        content: undefined
     }
 }

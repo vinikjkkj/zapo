@@ -8,8 +8,15 @@ import {
     isRetryableNegativeAck
 } from '@message/ack'
 import { decryptAddonPayload, encryptAddonPayload } from '@message/addon-crypto'
-import { isSendMediaMessage, resolveMessageTypeAttr } from '@message/content'
+import {
+    isSendMediaMessage,
+    resolveEditAttr,
+    resolveEncMediaType,
+    resolveMessageTypeAttr,
+    resolveMetaAttrs
+} from '@message/content'
 import { unwrapDeviceSentMessage, wrapDeviceSentMessage } from '@message/device-sent'
+import { computeDeviceKeyHash, injectDeviceListMetadata } from '@message/icdc'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/padding'
 import { computePhashV2 } from '@message/phash'
 import { buildReportingTokenArtifacts } from '@message/reporting-token'
@@ -39,8 +46,135 @@ test('content helpers detect media payload and resolve message type', () => {
     assert.equal(isSendMediaMessage({}), false)
 
     assert.equal(resolveMessageTypeAttr({ reactionMessage: {} }), 'reaction')
+    assert.equal(resolveMessageTypeAttr({ encReactionMessage: {} }), 'reaction')
     assert.equal(resolveMessageTypeAttr({ imageMessage: {} }), 'media')
+    assert.equal(resolveMessageTypeAttr({ videoMessage: {} }), 'media')
+    assert.equal(resolveMessageTypeAttr({ audioMessage: {} }), 'media')
+    assert.equal(resolveMessageTypeAttr({ documentMessage: {} }), 'media')
+    assert.equal(resolveMessageTypeAttr({ stickerMessage: {} }), 'media')
     assert.equal(resolveMessageTypeAttr({ conversation: 'text' }), 'text')
+    assert.equal(resolveMessageTypeAttr({ protocolMessage: {} }), 'text')
+    assert.equal(resolveMessageTypeAttr({ keepInChatMessage: {} }), 'text')
+    assert.equal(resolveMessageTypeAttr({ pinInChatMessage: {} }), 'text')
+    assert.equal(resolveMessageTypeAttr({ pollCreationMessage: {} }), 'poll')
+    assert.equal(resolveMessageTypeAttr({ pollCreationMessageV2: {} }), 'poll')
+    assert.equal(resolveMessageTypeAttr({ pollUpdateMessage: {} }), 'poll')
+    assert.equal(resolveMessageTypeAttr({ eventMessage: {} }), 'event')
+    assert.equal(resolveMessageTypeAttr({ encEventResponseMessage: {} }), 'event')
+    assert.equal(
+        resolveMessageTypeAttr({ extendedTextMessage: { matchedText: 'https://example.com' } }),
+        'media'
+    )
+    assert.equal(resolveMessageTypeAttr({ extendedTextMessage: { text: 'hello' } }), 'text')
+    assert.equal(
+        resolveMessageTypeAttr({ ephemeralMessage: { message: { imageMessage: {} } } }),
+        'media'
+    )
+    assert.equal(
+        resolveMessageTypeAttr({ deviceSentMessage: { message: { reactionMessage: {} } } }),
+        'reaction'
+    )
+    assert.equal(resolveMessageTypeAttr({ contactMessage: {} }), 'media')
+    assert.equal(resolveMessageTypeAttr({ locationMessage: {} }), 'media')
+    assert.equal(resolveMessageTypeAttr({ messageHistoryBundle: {} }), 'media')
+    assert.equal(resolveMessageTypeAttr({ messageHistoryNotice: {} }), 'text')
+    assert.equal(resolveMessageTypeAttr({ pollResultSnapshotMessage: {} }), 'text')
+    assert.equal(resolveMessageTypeAttr({ pollResultSnapshotMessageV3: {} }), 'text')
+    assert.equal(
+        resolveMessageTypeAttr({
+            ephemeralMessage: { message: { viewOnceMessage: { message: { imageMessage: {} } } } }
+        }),
+        'media'
+    )
+})
+
+test('content helpers unwrap deeply nested wrappers for edit and media attrs', () => {
+    assert.equal(
+        resolveEditAttr({
+            ephemeralMessage: {
+                message: {
+                    viewOnceMessage: {
+                        message: {
+                            protocolMessage: { type: 14 }
+                        }
+                    }
+                }
+            }
+        }),
+        '1'
+    )
+    assert.equal(
+        resolveEncMediaType({
+            deviceSentMessage: {
+                message: {
+                    ephemeralMessage: {
+                        message: {
+                            videoMessage: { gifPlayback: true }
+                        }
+                    }
+                }
+            }
+        }),
+        'gif'
+    )
+})
+
+test('resolveEditAttr maps protobuf to correct edit attribute values', () => {
+    assert.equal(resolveEditAttr({ conversation: 'hello' }), null)
+    assert.equal(resolveEditAttr({ protocolMessage: { type: 0 } }), '7')
+    assert.equal(resolveEditAttr({ protocolMessage: { type: 0 } }, 'admin_revoke'), '8')
+    assert.equal(resolveEditAttr({ protocolMessage: { type: 14 } }), '1')
+    assert.equal(resolveEditAttr({ reactionMessage: { text: '' } }), '7')
+    assert.equal(resolveEditAttr({ reactionMessage: { text: '\u{1F44D}' } }), null)
+    assert.equal(resolveEditAttr({ pinInChatMessage: {} }), '2')
+    assert.equal(
+        resolveEditAttr({
+            keepInChatMessage: { key: { fromMe: true }, keepType: 2 }
+        }),
+        '7'
+    )
+    assert.equal(
+        resolveEditAttr({ keepInChatMessage: { key: { fromMe: true }, keepType: 1 } }),
+        null
+    )
+})
+
+test('resolveEncMediaType maps protobuf to correct media type string', () => {
+    assert.equal(resolveEncMediaType({ conversation: 'hello' }), null)
+    assert.equal(resolveEncMediaType({ imageMessage: {} }), 'image')
+    assert.equal(resolveEncMediaType({ videoMessage: {} }), 'video')
+    assert.equal(resolveEncMediaType({ videoMessage: { gifPlayback: true } }), 'gif')
+    assert.equal(resolveEncMediaType({ audioMessage: {} }), 'audio')
+    assert.equal(resolveEncMediaType({ audioMessage: { ptt: true } }), 'ptt')
+    assert.equal(resolveEncMediaType({ documentMessage: {} }), 'document')
+    assert.equal(resolveEncMediaType({ stickerMessage: {} }), 'sticker')
+    assert.equal(resolveEncMediaType({ contactMessage: {} }), 'vcard')
+    assert.equal(resolveEncMediaType({ contactsArrayMessage: {} }), 'contact_array')
+    assert.equal(resolveEncMediaType({ locationMessage: {} }), 'location')
+    assert.equal(resolveEncMediaType({ locationMessage: { isLive: true } }), 'livelocation')
+    assert.equal(resolveEncMediaType({ groupInviteMessage: {} }), 'url')
+    assert.equal(
+        resolveEncMediaType({ extendedTextMessage: { matchedText: 'https://example.com' } }),
+        'url'
+    )
+    assert.equal(
+        resolveEncMediaType({ ephemeralMessage: { message: { imageMessage: {} } } }),
+        'image'
+    )
+})
+
+test('resolveMetaAttrs returns attrs for polls events and view-once', () => {
+    assert.equal(resolveMetaAttrs({ conversation: 'hello' }), null)
+    assert.deepEqual(resolveMetaAttrs({ pollCreationMessage: {} }), { polltype: 'creation' })
+    assert.deepEqual(resolveMetaAttrs({ pollUpdateMessage: {} }), { polltype: 'vote' })
+    assert.equal(resolveMetaAttrs({ pollResultSnapshotMessage: {} }), null)
+    assert.equal(resolveMetaAttrs({ pollResultSnapshotMessageV3: {} }), null)
+    assert.deepEqual(resolveMetaAttrs({ eventMessage: {} }), { event_type: 'creation' })
+    assert.deepEqual(resolveMetaAttrs({ encEventResponseMessage: {} }), { event_type: 'response' })
+    assert.deepEqual(resolveMetaAttrs({ viewOnceMessage: { message: {} } }), { view_once: 'true' })
+    assert.deepEqual(resolveMetaAttrs({ viewOnceMessageV2: { message: {} } }), {
+        view_once: 'true'
+    })
 })
 
 test('device-sent wrapping preserves context and unwrap restores nested payload', () => {
@@ -209,4 +343,47 @@ test('addon crypto helpers encrypt/decrypt payloads and validate aad', async () 
             }),
         /addon iv must be 12 bytes/
     )
+})
+
+test('computeDeviceKeyHash produces deterministic 8-byte hash from identity keys', async () => {
+    const key1 = new Uint8Array(33).fill(1)
+    key1[0] = 5
+    const key2 = new Uint8Array(33).fill(2)
+    key2[0] = 5
+
+    const hash1 = await computeDeviceKeyHash([key1, key2])
+    const hash2 = await computeDeviceKeyHash([key1, key2])
+    assert.equal(hash1.byteLength, 8)
+    assert.deepEqual(hash1, hash2)
+
+    const hashDiff = await computeDeviceKeyHash([key2, key1])
+    assert.notDeepEqual(hash1, hashDiff)
+
+    const emptyHash = await computeDeviceKeyHash([])
+    assert.equal(emptyHash.byteLength, 8)
+    assert.deepEqual(emptyHash, new Uint8Array(8))
+})
+
+test('injectDeviceListMetadata sets sender and recipient fields', () => {
+    const msg = { conversation: 'hi', messageContextInfo: { messageSecret: new Uint8Array(32) } }
+    const sender = { keyHash: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), timestamp: 1000 }
+    const recipient = {
+        keyHash: new Uint8Array([9, 10, 11, 12, 13, 14, 15, 16]),
+        timestamp: undefined
+    }
+
+    const result = injectDeviceListMetadata(msg, sender, recipient)
+    assert.ok(result.messageContextInfo?.deviceListMetadata)
+    assert.deepEqual(result.messageContextInfo?.deviceListMetadata?.senderKeyHash, sender.keyHash)
+    assert.equal(result.messageContextInfo?.deviceListMetadata?.senderTimestamp, 1000)
+    assert.deepEqual(
+        result.messageContextInfo?.deviceListMetadata?.recipientKeyHash,
+        recipient.keyHash
+    )
+    assert.equal(result.messageContextInfo?.deviceListMetadata?.recipientTimestamp, undefined)
+    assert.equal(result.messageContextInfo?.deviceListMetadataVersion, 2)
+    assert.deepEqual(result.messageContextInfo?.messageSecret, new Uint8Array(32))
+
+    const unchanged = injectDeviceListMetadata(msg, null, null)
+    assert.equal(unchanged, msg)
 })

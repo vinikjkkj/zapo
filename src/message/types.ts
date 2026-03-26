@@ -1,4 +1,5 @@
-import type { MediaKind } from '@media/types'
+import type { Readable } from 'node:stream'
+
 import type { Proto } from '@proto'
 import type { BinaryNode } from '@transport/types'
 
@@ -25,18 +26,62 @@ export interface WaMessagePublishResult {
     readonly ack: WaMessageAckMetadata
 }
 
-export interface WaSendMediaMessage {
-    readonly type: MediaKind
-    readonly media: Uint8Array | ArrayBuffer
+type MediaInput = Uint8Array | ArrayBuffer | Readable
+
+interface WaSendMediaBase {
+    readonly media: MediaInput
     readonly mimetype: string
+    readonly fileLength?: number
+}
+
+interface WaSendImageMessage extends WaSendMediaBase {
+    readonly type: 'image'
     readonly caption?: string
-    readonly fileName?: string
-    readonly ptt?: boolean
+    readonly width?: number
+    readonly height?: number
+}
+
+interface WaSendVideoMessage extends WaSendMediaBase {
+    readonly type: 'video'
+    readonly caption?: string
     readonly gifPlayback?: boolean
     readonly seconds?: number
     readonly width?: number
     readonly height?: number
 }
+
+interface WaSendPtvMessage extends WaSendMediaBase {
+    readonly type: 'ptv'
+    readonly seconds?: number
+    readonly width?: number
+    readonly height?: number
+}
+
+interface WaSendAudioMessage extends WaSendMediaBase {
+    readonly type: 'audio'
+    readonly ptt?: boolean
+    readonly seconds?: number
+}
+
+interface WaSendDocumentMessage extends WaSendMediaBase {
+    readonly type: 'document'
+    readonly caption?: string
+    readonly fileName?: string
+}
+
+interface WaSendStickerMessage extends WaSendMediaBase {
+    readonly type: 'sticker'
+    readonly width?: number
+    readonly height?: number
+}
+
+export type WaSendMediaMessage =
+    | WaSendImageMessage
+    | WaSendVideoMessage
+    | WaSendPtvMessage
+    | WaSendAudioMessage
+    | WaSendDocumentMessage
+    | WaSendStickerMessage
 
 export type WaSendMessageContent = string | Proto.IMessage | WaSendMediaMessage
 
@@ -49,10 +94,13 @@ export interface WaEncryptedMessageInput {
     readonly encCount?: number
     readonly id?: string
     readonly type?: string
+    readonly edit?: string
+    readonly mediatype?: string
     readonly category?: string
     readonly pushPriority?: string
     readonly participant?: string
     readonly deviceFanout?: string
+    readonly metaNode?: BinaryNode
 }
 
 export interface WaSendReceiptInput {

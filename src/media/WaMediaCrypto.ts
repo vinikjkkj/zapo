@@ -1,7 +1,11 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac } from 'node:crypto'
 import { once } from 'node:events'
+import { createWriteStream } from 'node:fs'
+import { stat, unlink } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
-import type { Readable } from 'node:stream'
+import type { Readable, Writable } from 'node:stream'
 
 import { hkdf } from '@crypto/core/hkdf'
 import {
@@ -28,6 +32,7 @@ import type {
     WaMediaDecryptionResult,
     WaMediaDerivedKeys,
     WaMediaEncryptionResult,
+    WaMediaFileEncryptionResult,
     WaMediaReadableDecryptionResult,
     WaMediaReadableEncryptionResult
 } from '@media/types'
@@ -148,6 +153,31 @@ export class WaMediaCrypto {
         return { encrypted, metadata }
     }
 
+    static async encryptToFile(
+        mediaType: MediaCryptoType,
+        mediaKey: Uint8Array,
+        plaintext: Readable
+    ): Promise<WaMediaFileEncryptionResult> {
+        const keys = await WaMediaCrypto.deriveKeys(mediaType, mediaKey)
+        const filePath = join(
+            tmpdir(),
+            `zapo-enc-${Date.now()}-${Math.random().toString(36).slice(2)}`
+        )
+        const output = createWriteStream(filePath)
+        try {
+            const metadata = await pumpEncryptionToWritable(plaintext, output, keys)
+            const fileSize = (await stat(filePath)).size
+            return { filePath, fileSize, ...metadata }
+        } catch (error) {
+            await unlink(filePath).catch(() => undefined)
+            throw error
+        }
+    }
+
+    static async cleanupEncryptedFile(filePath: string): Promise<void> {
+        await unlink(filePath).catch(() => undefined)
+    }
+
     static async decryptReadable(
         encrypted: Readable,
         options: WaMediaDecryptReadableOptions
@@ -171,11 +201,16 @@ async function pumpEncryption(
     plaintext: Readable,
     encrypted: PassThrough,
     keys: WaMediaDerivedKeys
-): Promise<{ readonly fileSha256: Uint8Array; readonly fileEncSha256: Uint8Array }> {
+): Promise<{
+    readonly fileSha256: Uint8Array
+    readonly fileEncSha256: Uint8Array
+    readonly plaintextLength: number
+}> {
     const plainHash = createHash('sha256')
     const encHash = createHash('sha256')
     const hmac = createHmac('sha256', keys.macKey)
     const cipher = createCipheriv('aes-256-cbc', keys.encKey, keys.iv)
+    let plaintextLength = 0
 
     hmac.update(keys.iv)
     try {
@@ -184,6 +219,7 @@ async function pumpEncryption(
             if (plainChunk.byteLength === 0) {
                 continue
             }
+            plaintextLength += plainChunk.byteLength
             plainHash.update(plainChunk)
             const encryptedChunk = cipher.update(plainChunk)
             if (encryptedChunk.byteLength > 0) {
@@ -207,11 +243,96 @@ async function pumpEncryption(
 
         return {
             fileSha256: toBytesView(plainHash.digest()),
-            fileEncSha256: toBytesView(encHash.digest())
+            fileEncSha256: toBytesView(encHash.digest()),
+            plaintextLength
         }
     } catch (error) {
         const normalized = toError(error)
         encrypted.destroy(normalized)
+        throw normalized
+    }
+}
+
+async function writeChunkToWritable(stream: Writable, chunk: Uint8Array): Promise<void> {
+    if (chunk.byteLength === 0) {
+        return
+    }
+    if (stream.write(chunk)) {
+        return
+    }
+    await new Promise<void>((resolve, reject) => {
+        const onDrain = (): void => {
+            stream.off('error', onError)
+            resolve()
+        }
+        const onError = (err: Error): void => {
+            stream.off('drain', onDrain)
+            reject(err)
+        }
+        stream.once('drain', onDrain)
+        stream.once('error', onError)
+    })
+}
+
+async function endWritable(stream: Writable): Promise<void> {
+    return new Promise((resolve, reject) => {
+        stream.on('error', reject)
+        stream.end(() => resolve())
+    })
+}
+
+async function pumpEncryptionToWritable(
+    plaintext: Readable,
+    output: Writable,
+    keys: WaMediaDerivedKeys
+): Promise<{
+    readonly fileSha256: Uint8Array
+    readonly fileEncSha256: Uint8Array
+    readonly plaintextLength: number
+}> {
+    const plainHash = createHash('sha256')
+    const encHash = createHash('sha256')
+    const hmac = createHmac('sha256', keys.macKey)
+    const cipher = createCipheriv('aes-256-cbc', keys.encKey, keys.iv)
+    let plaintextLength = 0
+
+    hmac.update(keys.iv)
+    try {
+        for await (const chunk of plaintext) {
+            const plainChunk = toChunkBytes(chunk)
+            if (plainChunk.byteLength === 0) {
+                continue
+            }
+            plaintextLength += plainChunk.byteLength
+            plainHash.update(plainChunk)
+            const encryptedChunk = cipher.update(plainChunk)
+            if (encryptedChunk.byteLength > 0) {
+                hmac.update(encryptedChunk)
+                encHash.update(encryptedChunk)
+                await writeChunkToWritable(output, encryptedChunk)
+            }
+        }
+
+        const encryptedFinal = cipher.final()
+        if (encryptedFinal.byteLength > 0) {
+            hmac.update(encryptedFinal)
+            encHash.update(encryptedFinal)
+            await writeChunkToWritable(output, encryptedFinal)
+        }
+
+        const signature = hmac.digest().subarray(0, HMAC_TRUNCATED_SIZE)
+        encHash.update(signature)
+        await writeChunkToWritable(output, signature)
+        await endWritable(output)
+
+        return {
+            fileSha256: toBytesView(plainHash.digest()),
+            fileEncSha256: toBytesView(encHash.digest()),
+            plaintextLength
+        }
+    } catch (error) {
+        const normalized = toError(error)
+        output.destroy(normalized)
         throw normalized
     }
 }

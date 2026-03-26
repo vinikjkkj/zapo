@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { stat } from 'node:fs/promises'
 import http from 'node:http'
 import { Readable } from 'node:stream'
 import test from 'node:test'
@@ -18,6 +19,20 @@ function createLogger(): Logger {
         info: () => undefined,
         warn: () => undefined,
         error: () => undefined
+    }
+}
+
+function buildMediaConnNode(auth = 'token', ttl = '120'): BinaryNode {
+    return {
+        tag: 'iq',
+        attrs: { type: 'result' },
+        content: [
+            {
+                tag: 'media_conn',
+                attrs: { auth, ttl },
+                content: [{ tag: 'host', attrs: { hostname: 'mmg.whatsapp.net' } }]
+            }
+        ]
     }
 }
 
@@ -151,6 +166,171 @@ test('media message builder supports text passthrough and conn caching', async (
 
     assert.equal(cached.auth, 'token')
     assert.equal(queryCount, 1)
+})
+
+test('media message builder uploads ptv bytes and maps upload response fields', async () => {
+    const logger = createLogger()
+    const encoder = new TextEncoder()
+    const uploadedRequests: {
+        readonly url: string
+        readonly contentLength?: number
+    }[] = []
+
+    const message = await buildMediaMessageContent(
+        {
+            logger,
+            mediaTransfer: {
+                uploadStream: async (request: {
+                    readonly url: string
+                    readonly contentLength?: number
+                }) => {
+                    uploadedRequests.push({
+                        url: request.url,
+                        contentLength: request.contentLength
+                    })
+                    return { status: 200 } as Response
+                },
+                readResponseBytes: async () =>
+                    encoder.encode(
+                        JSON.stringify({
+                            url: 'https://mmg.whatsapp.net/mms/video/ok',
+                            direct_path: '/mms/video/ok'
+                        })
+                    )
+            } as never,
+            queryWithContext: async () => buildMediaConnNode('auth-token', '120'),
+            getMediaConnCache: () => null,
+            setMediaConnCache: () => undefined
+        },
+        {
+            type: 'ptv',
+            media: new Uint8Array([1, 2, 3, 4]),
+            mimetype: 'video/mp4',
+            seconds: 7
+        }
+    )
+
+    assert.ok(message.ptvMessage)
+    assert.equal(message.ptvMessage?.fileLength, 4)
+    assert.equal(message.ptvMessage?.seconds, 7)
+    assert.equal(uploadedRequests.length, 1)
+    assert.match(uploadedRequests[0].url, /\/mms\/video\//)
+    assert.match(uploadedRequests[0].url, /auth=auth-token/)
+    assert.match(uploadedRequests[0].url, /token=/)
+    assert.ok((uploadedRequests[0].contentLength ?? 0) > 0)
+})
+
+test('media message builder propagates upload response errors for byte uploads', async () => {
+    const logger = createLogger()
+    const content = {
+        type: 'image' as const,
+        media: new Uint8Array([1, 2, 3]),
+        mimetype: 'image/jpeg'
+    }
+
+    await assert.rejects(
+        () =>
+            buildMediaMessageContent(
+                {
+                    logger,
+                    mediaTransfer: {
+                        uploadStream: async () => ({ status: 500 }) as Response,
+                        readResponseBytes: async () => new TextEncoder().encode('{}')
+                    } as never,
+                    queryWithContext: async () => buildMediaConnNode(),
+                    getMediaConnCache: () => null,
+                    setMediaConnCache: () => undefined
+                },
+                content
+            ),
+        /media upload failed with status 500/
+    )
+
+    await assert.rejects(
+        () =>
+            buildMediaMessageContent(
+                {
+                    logger,
+                    mediaTransfer: {
+                        uploadStream: async () => ({ status: 200 }) as Response,
+                        readResponseBytes: async () => new TextEncoder().encode('not-json')
+                    } as never,
+                    queryWithContext: async () => buildMediaConnNode(),
+                    getMediaConnCache: () => null,
+                    setMediaConnCache: () => undefined
+                },
+                content
+            ),
+        /media upload returned invalid json/
+    )
+
+    await assert.rejects(
+        () =>
+            buildMediaMessageContent(
+                {
+                    logger,
+                    mediaTransfer: {
+                        uploadStream: async () => ({ status: 200 }) as Response,
+                        readResponseBytes: async () =>
+                            new TextEncoder().encode(JSON.stringify({ url: 'https://mmg/a' }))
+                    } as never,
+                    queryWithContext: async () => buildMediaConnNode(),
+                    getMediaConnCache: () => null,
+                    setMediaConnCache: () => undefined
+                },
+                content
+            ),
+        /media upload response missing url\/direct_path/
+    )
+})
+
+test('media message builder cleans encrypted temp file when stream upload fails', async () => {
+    const logger = createLogger()
+    const originalCleanup = WaMediaCrypto.cleanupEncryptedFile
+    const cleanupPaths: string[] = []
+    ;(
+        WaMediaCrypto as unknown as {
+            cleanupEncryptedFile: (filePath: string) => Promise<void>
+        }
+    ).cleanupEncryptedFile = async (filePath: string) => {
+        cleanupPaths.push(filePath)
+        await originalCleanup(filePath)
+    }
+
+    try {
+        await assert.rejects(
+            () =>
+                buildMediaMessageContent(
+                    {
+                        logger,
+                        mediaTransfer: {
+                            uploadStream: async (request: { readonly body?: Readable }) => {
+                                request.body?.on('error', () => undefined)
+                                throw new Error('forced stream upload failure')
+                            },
+                            readResponseBytes: async () => new Uint8Array([])
+                        } as never,
+                        queryWithContext: async () => buildMediaConnNode(),
+                        getMediaConnCache: () => null,
+                        setMediaConnCache: () => undefined
+                    },
+                    {
+                        type: 'audio',
+                        media: Readable.from([new Uint8Array([1, 2, 3, 4])]),
+                        mimetype: 'audio/ogg'
+                    }
+                ),
+            /forced stream upload failure/
+        )
+        assert.equal(cleanupPaths.length, 1)
+        await assert.rejects(() => stat(cleanupPaths[0]), /ENOENT|no such file/i)
+    } finally {
+        ;(
+            WaMediaCrypto as unknown as {
+                cleanupEncryptedFile: (filePath: string) => Promise<void>
+            }
+        ).cleanupEncryptedFile = originalCleanup
+    }
 })
 
 test('media transfer client applies separate upload/download dispatchers', async () => {

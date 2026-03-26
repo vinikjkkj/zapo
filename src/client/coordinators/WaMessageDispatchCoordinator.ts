@@ -6,8 +6,15 @@ import type { WaGroupEvent, WaSignalMessagePublishInput, WaSendMessageOptions } 
 import { randomBytesAsync, sha256 } from '@crypto'
 import type { Logger } from '@infra/log/types'
 import { ensureMessageSecret } from '@message'
-import { resolveMessageTypeAttr } from '@message/content'
+import {
+    resolveEditAttr,
+    resolveEncMediaType,
+    resolveMessageTypeAttr,
+    resolveMetaAttrs
+} from '@message/content'
 import { wrapDeviceSentMessage } from '@message/device-sent'
+import { injectDeviceListMetadata, resolveIcdcMeta } from '@message/icdc'
+import type { IcdcMeta } from '@message/icdc'
 import { writeRandomPadMax16 } from '@message/padding'
 import { computePhashV2 } from '@message/phash'
 import {
@@ -40,11 +47,13 @@ import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import type { SignalResolvedSessionTarget, SignalSessionResolver } from '@signal/session/resolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress } from '@signal/types'
+import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { encodeBinaryNode } from '@transport/binary'
 import {
     buildDirectMessageFanoutNode,
-    buildGroupSenderKeyMessageNode
+    buildGroupSenderKeyMessageNode,
+    buildMetaNode
 } from '@transport/node/builders/message'
 import type { BinaryNode } from '@transport/types'
 import { bytesToHex, concatBytes, TEXT_ENCODER } from '@util/bytes'
@@ -62,6 +71,7 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly senderKeyManager: SenderKeyManager
     readonly signalProtocol: SignalProtocol
     readonly signalStore: WaSignalStore
+    readonly deviceListStore: WaDeviceListStore
     readonly getCurrentMeJid: () => string | null | undefined
     readonly getCurrentMeLid: () => string | null | undefined
     readonly getCurrentSignedIdentity: () => Proto.IADVSignedDeviceIdentity | null | undefined
@@ -89,6 +99,7 @@ export class WaMessageDispatchCoordinator {
     private readonly senderKeyManager: SenderKeyManager
     private readonly signalProtocol: SignalProtocol
     private readonly signalStore: WaSignalStore
+    private readonly deviceListStore: WaDeviceListStore
     private readonly getCurrentMeJid: () => string | null | undefined
     private readonly getCurrentMeLid: () => string | null | undefined
     private readonly getCurrentSignedIdentity: () =>
@@ -110,6 +121,7 @@ export class WaMessageDispatchCoordinator {
         this.senderKeyManager = options.senderKeyManager
         this.signalProtocol = options.signalProtocol
         this.signalStore = options.signalStore
+        this.deviceListStore = options.deviceListStore
         this.getCurrentMeJid = options.getCurrentMeJid
         this.getCurrentMeLid = options.getCurrentMeLid
         this.getCurrentSignedIdentity = options.getCurrentSignedIdentity
@@ -243,37 +255,71 @@ export class WaMessageDispatchCoordinator {
             this.withResolvedMessageId(options)
         ])
         const messageWithSecret = await ensureMessageSecret(message)
-        const plaintext = await writeRandomPadMax16(
-            proto.Message.encode(messageWithSecret).finish()
-        )
-        const type = resolveMessageTypeAttr(messageWithSecret)
 
-        if (isGroupJid(recipientJid)) {
-            if (this.shouldUseGroupDirectPath(messageWithSecret)) {
+        const meJid = this.getCurrentMeJid()
+        const regInfo = meJid ? await this.signalStore.getRegistrationInfo() : null
+        const localPubKey = regInfo?.identityKeyPair.pubKey
+        const meUserJid = meJid ? toUserJid(meJid) : undefined
+        const localIdentity =
+            meJid && localPubKey
+                ? { address: parseSignalAddressFromJid(meJid), pubKey: localPubKey }
+                : undefined
+        const isGroup = isGroupJid(recipientJid)
+
+        const [senderIcdc, recipientIcdc] = await Promise.all([
+            meUserJid ? this.resolveUserIcdc(meUserJid, localIdentity) : null,
+            !isGroup ? this.resolveUserIcdc(toUserJid(recipientJid)) : null
+        ])
+        const messageWithIcdc = injectDeviceListMetadata(
+            messageWithSecret,
+            senderIcdc,
+            recipientIcdc
+        )
+
+        const plaintext = await writeRandomPadMax16(proto.Message.encode(messageWithIcdc).finish())
+        const type = resolveMessageTypeAttr(messageWithIcdc)
+        const edit = resolveEditAttr(messageWithIcdc, sendOptions.subtype) ?? undefined
+        const mediatype = resolveEncMediaType(messageWithIcdc) ?? undefined
+        const metaAttrs = resolveMetaAttrs(messageWithIcdc)
+        const metaNode = metaAttrs ? buildMetaNode(metaAttrs as Record<string, string>) : undefined
+
+        if (isGroup) {
+            if (this.shouldUseGroupDirectPath(messageWithIcdc)) {
                 return this.publishGroupDirectMessage(
                     recipientJid,
-                    messageWithSecret,
+                    messageWithIcdc,
                     plaintext,
                     type,
-                    sendOptions
+                    sendOptions,
+                    {},
+                    edit,
+                    mediatype,
+                    metaNode
                 )
             }
             return this.publishGroupSenderKeyMessage(
                 recipientJid,
-                messageWithSecret,
+                messageWithIcdc,
                 plaintext,
                 type,
-                sendOptions
+                sendOptions,
+                {},
+                edit,
+                mediatype,
+                metaNode
             )
         }
 
         const directRecipientJid = toUserJid(recipientJid)
         return this.publishDirectSignalMessageWithFanout(
             directRecipientJid,
-            messageWithSecret,
+            messageWithIcdc,
             plaintext,
             type,
-            sendOptions
+            sendOptions,
+            edit,
+            mediatype,
+            metaNode
         )
     }
 
@@ -324,7 +370,10 @@ export class WaMessageDispatchCoordinator {
         plaintext: Uint8Array,
         type: string,
         options: WaSendMessageOptions,
-        retryContext: GroupSendRetryContext = {}
+        retryContext: GroupSendRetryContext = {},
+        edit?: string,
+        mediatype?: string,
+        metaNode?: BinaryNode
     ): Promise<WaMessagePublishResult> {
         const sendOptions = await this.withResolvedMessageId(options)
         const meJid = this.requireCurrentMeJid('sendMessage')
@@ -403,13 +452,16 @@ export class WaMessageDispatchCoordinator {
             to: groupJid,
             type,
             id: sendOptions.id,
+            edit,
             phash: localPhash,
             addressingMode,
             participants,
             deviceIdentity: shouldAttachDeviceIdentity
                 ? this.getEncodedSignedDeviceIdentity()
                 : undefined,
-            reportingNode: reportingArtifacts?.node ?? undefined
+            reportingNode: reportingArtifacts?.node ?? undefined,
+            metaNode,
+            mediatype
         })
         const replayPayload: WaRetryReplayPayload = {
             mode: 'plaintext',
@@ -460,7 +512,10 @@ export class WaMessageDispatchCoordinator {
                     retried: true,
                     forceRefreshParticipants: true,
                     forceAddressingMode: serverAddressingMode
-                }
+                },
+                edit,
+                mediatype,
+                metaNode
             )
         }
         return result
@@ -472,7 +527,10 @@ export class WaMessageDispatchCoordinator {
         plaintext: Uint8Array,
         type: string,
         options: WaSendMessageOptions,
-        retryContext: GroupSendRetryContext = {}
+        retryContext: GroupSendRetryContext = {},
+        edit?: string,
+        mediatype?: string,
+        metaNode?: BinaryNode
     ): Promise<WaMessagePublishResult> {
         const sendOptions = await this.withResolvedMessageId(options)
         const meJid = this.requireCurrentMeJid('sendMessage')
@@ -522,6 +580,7 @@ export class WaMessageDispatchCoordinator {
             to: groupJid,
             type,
             id: sendOptions.id,
+            edit,
             phash: localPhash,
             addressingMode,
             groupCiphertext: groupCiphertext.ciphertext,
@@ -529,7 +588,9 @@ export class WaMessageDispatchCoordinator {
             deviceIdentity: shouldAttachDeviceIdentity
                 ? this.getEncodedSignedDeviceIdentity()
                 : undefined,
-            reportingNode: reportingArtifacts?.node ?? undefined
+            reportingNode: reportingArtifacts?.node ?? undefined,
+            metaNode,
+            mediatype
         })
 
         const replayPayload: WaRetryReplayPayload = {
@@ -598,7 +659,10 @@ export class WaMessageDispatchCoordinator {
                     retried: true,
                     forceRefreshParticipants: true,
                     forceAddressingMode: serverAddressingMode
-                }
+                },
+                edit,
+                mediatype,
+                metaNode
             )
         }
         return result
@@ -814,7 +878,10 @@ export class WaMessageDispatchCoordinator {
         message: Proto.IMessage,
         plaintext: Uint8Array,
         type: string,
-        options: WaSendMessageOptions
+        options: WaSendMessageOptions,
+        edit?: string,
+        mediatype?: string,
+        metaNode?: BinaryNode
     ): Promise<WaMessagePublishResult> {
         const sendOptions = await this.withResolvedMessageId(options)
         const meJid = this.requireCurrentMeJid('sendMessage')
@@ -980,10 +1047,13 @@ export class WaMessageDispatchCoordinator {
             to: recipientJid,
             type,
             id: sendOptions.id,
+            edit,
             participants,
             deviceIdentity,
             reportingNode: reportingArtifacts?.node ?? undefined,
-            privacyTokenNode
+            privacyTokenNode,
+            metaNode,
+            mediatype
         })
 
         const replayPayload: WaRetryReplayPayload = {
@@ -1087,6 +1157,31 @@ export class WaMessageDispatchCoordinator {
             throw new Error('missing signed identity for pkmsg fanout')
         }
         return proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
+    }
+
+    private async resolveUserIcdc(
+        userJid: string,
+        localIdentity?: { readonly address: SignalAddress; readonly pubKey: Uint8Array }
+    ): Promise<IcdcMeta | null> {
+        try {
+            const snapshots = await this.deviceListStore.getUserDevicesBatch([userJid])
+            const snapshot = snapshots[0]
+            if (!snapshot || snapshot.deviceJids.length === 0) {
+                return null
+            }
+            return resolveIcdcMeta(
+                snapshot.deviceJids,
+                this.signalStore,
+                snapshot.updatedAtMs,
+                localIdentity
+            )
+        } catch (error) {
+            this.logger.trace('icdc resolution failed', {
+                userJid,
+                message: toError(error).message
+            })
+            return null
+        }
     }
 
     private requireCurrentMeJid(context: string): string {

@@ -17,7 +17,8 @@ export { buildMediaConnIq } from '@transport/node/builders/media'
 export {
     buildDirectMessageFanoutNode,
     buildGroupRetryMessageNode,
-    buildGroupSenderKeyMessageNode
+    buildGroupSenderKeyMessageNode,
+    buildMetaNode
 } from '@transport/node/builders/message'
 export { buildRetryReceiptNode } from '@transport/node/builders/retry'
 export {

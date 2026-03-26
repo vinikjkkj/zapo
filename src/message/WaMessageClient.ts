@@ -166,6 +166,9 @@ export class WaMessageClient {
         if (input.id) {
             attrs.id = input.id
         }
+        if (input.edit) {
+            attrs.edit = input.edit
+        }
         if (input.category) {
             attrs.category = input.category
         }
@@ -185,6 +188,9 @@ export class WaMessageClient {
             v: WA_MESSAGE_TYPES.ENC_VERSION,
             type: input.encType
         }
+        if (input.mediatype) {
+            encAttrs.mediatype = input.mediatype
+        }
         if (input.encCount !== undefined && input.encCount > 0) {
             encAttrs.count = String(Math.trunc(input.encCount))
         }
@@ -201,6 +207,9 @@ export class WaMessageClient {
                 attrs: {},
                 content: input.deviceIdentity
             })
+        }
+        if (input.metaNode) {
+            content.push(input.metaNode)
         }
         const node: BinaryNode = {
             tag: WA_MESSAGE_TAGS.MESSAGE,

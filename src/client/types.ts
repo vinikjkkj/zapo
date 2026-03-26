@@ -84,6 +84,7 @@ export interface WaSignalMessagePublishInput {
 export interface WaSendMessageOptions extends WaMessagePublishOptions {
     readonly id?: string
     readonly expectedIdentity?: Uint8Array
+    readonly subtype?: string
 }
 
 export interface WaClearChatOptions {

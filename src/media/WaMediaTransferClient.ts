@@ -64,6 +64,7 @@ interface EncryptedUploadResult {
     readonly mediaKey: Uint8Array
     readonly fileSha256: Uint8Array
     readonly fileEncSha256: Uint8Array
+    readonly plaintextLength: number
 }
 
 interface EncryptedDownloadRequest extends StreamDownloadRequest {
@@ -311,7 +312,8 @@ export class WaMediaTransferClient {
             transfer,
             mediaKey,
             fileSha256: metadata.fileSha256,
-            fileEncSha256: metadata.fileEncSha256
+            fileEncSha256: metadata.fileEncSha256,
+            plaintextLength: metadata.plaintextLength
         }
     }
 
@@ -548,6 +550,7 @@ export class WaMediaTransferClient {
         readonly metadata: Promise<{
             readonly fileSha256: Uint8Array
             readonly fileEncSha256: Uint8Array
+            readonly plaintextLength: number
         }>
         cleanup(error: Error): Promise<void>
     }> {
@@ -562,7 +565,8 @@ export class WaMediaTransferClient {
                 contentLength: encrypted.ciphertextHmac.byteLength,
                 metadata: Promise.resolve({
                     fileSha256: encrypted.fileSha256,
-                    fileEncSha256: encrypted.fileEncSha256
+                    fileEncSha256: encrypted.fileEncSha256,
+                    plaintextLength: request.plaintext.byteLength
                 }),
                 cleanup: async () => undefined
             }

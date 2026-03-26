@@ -16,7 +16,16 @@ export type {
     WaStreamErrorCode
 } from '@protocol/stream'
 export { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
-export { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_RETRYABLE_ACK_CODES } from '@protocol/message'
+export {
+    WA_EDIT_ATTRS,
+    WA_ENC_MEDIA_TYPES,
+    WA_EVENT_META_TYPES,
+    WA_MESSAGE_TAGS,
+    WA_MESSAGE_TYPES,
+    WA_POLL_META_TYPES,
+    WA_RETRYABLE_ACK_CODES,
+    WA_STANZA_MSG_TYPES
+} from '@protocol/message'
 export {
     WA_APP_STATE_COLLECTIONS,
     WA_APP_STATE_COLLECTION_STATES,

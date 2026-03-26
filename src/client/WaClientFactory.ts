@@ -565,6 +565,7 @@ export function buildWaClientDependencies(input: {
         senderKeyManager,
         signalProtocol,
         signalStore: sessionStore.signal,
+        deviceListStore: sessionStore.deviceList,
         getCurrentMeJid,
         getCurrentMeLid,
         getCurrentSignedIdentity,
