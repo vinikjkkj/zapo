@@ -38,3 +38,19 @@ export {
     type WaUsyncContext,
     type WaUsyncMode
 } from '@transport/node/builders/usync'
+export {
+    buildDeleteProfilePictureIq,
+    buildGetProfilePictureIq,
+    buildGetStatusUsyncQueryNodes,
+    buildSetProfilePictureIq,
+    type WaProfilePictureType
+} from '@transport/node/builders/profile'
+export {
+    buildDeleteCoverPhotoIq,
+    buildEditBusinessProfileIq,
+    buildGetBusinessProfileIq,
+    buildGetVerifiedNameIq,
+    buildUpdateCoverPhotoIq,
+    WA_BUSINESS_PROFILE_VERSION,
+    type WaEditBusinessProfileInput
+} from '@transport/node/builders/business'

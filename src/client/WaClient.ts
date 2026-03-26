@@ -9,11 +9,13 @@ import type { WaConnectionManager } from '@client/connection/WaConnectionManager
 import type { WaKeyShareCoordinator } from '@client/connection/WaKeyShareCoordinator'
 import type { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
+import type { WaBusinessCoordinator } from '@client/coordinators/WaBusinessCoordinator'
 import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator'
 import type { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import type { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordinator'
+import type { WaProfileCoordinator } from '@client/coordinators/WaProfileCoordinator'
 import type { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { processHistorySyncNotification } from '@client/history-sync'
@@ -96,6 +98,8 @@ export class WaClient extends EventEmitter {
     public readonly messageClient!: WaMessageClient
     public readonly groupCoordinator!: WaGroupCoordinator
     public readonly privacyCoordinator!: WaPrivacyCoordinator
+    public readonly profileCoordinator!: WaProfileCoordinator
+    public readonly businessCoordinator!: WaBusinessCoordinator
     private readonly passiveTasks!: WaPassiveTasksCoordinator
     private readonly keepAlive!: WaKeepAlive
     private readonly receiptQueue!: WaReceiptQueue
@@ -653,6 +657,12 @@ export class WaClient extends EventEmitter {
     }
     public get privacy(): WaPrivacyCoordinator {
         return this.privacyCoordinator
+    }
+    public get profile(): WaProfileCoordinator {
+        return this.profileCoordinator
+    }
+    public get business(): WaBusinessCoordinator {
+        return this.businessCoordinator
     }
 
     public sendReceipt(input: WaSendReceiptInput): Promise<void> {

@@ -80,6 +80,8 @@ export const WA_XMLNS = Object.freeze({
     PRIVACY: 'privacy',
     BLOCKLIST: 'blocklist',
     USYNC: 'usync',
+    BUSINESS: 'w:biz',
+    STATUS: 'status',
     GROUPS: 'w:g2',
     NEWSLETTER: 'newsletter',
     XMPP_PING: 'urn:xmpp:ping',

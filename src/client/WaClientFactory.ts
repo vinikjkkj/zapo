@@ -6,6 +6,10 @@ import { WaKeyShareCoordinator } from '@client/connection/WaKeyShareCoordinator'
 import { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import {
+    createBusinessCoordinator,
+    type WaBusinessCoordinator
+} from '@client/coordinators/WaBusinessCoordinator'
+import {
     createGroupCoordinator,
     type WaGroupCoordinator
 } from '@client/coordinators/WaGroupCoordinator'
@@ -16,6 +20,10 @@ import {
     createPrivacyCoordinator,
     type WaPrivacyCoordinator
 } from '@client/coordinators/WaPrivacyCoordinator'
+import {
+    createProfileCoordinator,
+    type WaProfileCoordinator
+} from '@client/coordinators/WaProfileCoordinator'
 import { WaRetryCoordinator } from '@client/coordinators/WaRetryCoordinator'
 import {
     createStreamControlHandler,
@@ -132,6 +140,8 @@ interface WaClientDependencies {
     readonly passiveTasks: WaPassiveTasksCoordinator
     readonly groupCoordinator: WaGroupCoordinator
     readonly privacyCoordinator: WaPrivacyCoordinator
+    readonly profileCoordinator: WaProfileCoordinator
+    readonly businessCoordinator: WaBusinessCoordinator
     readonly receiptQueue: WaReceiptQueue
     readonly keyShareCoordinator: WaKeyShareCoordinator
     readonly connectionManager: WaConnectionManager
@@ -474,6 +484,15 @@ export function buildWaClientDependencies(input: {
     })
 
     const privacyCoordinator = createPrivacyCoordinator({
+        queryWithContext: runtime.queryWithContext
+    })
+
+    const profileCoordinator = createProfileCoordinator({
+        queryWithContext: runtime.queryWithContext,
+        generateSid: generateUsyncSid
+    })
+
+    const businessCoordinator = createBusinessCoordinator({
         queryWithContext: runtime.queryWithContext
     })
 
@@ -975,6 +994,8 @@ export function buildWaClientDependencies(input: {
         passiveTasks,
         groupCoordinator,
         privacyCoordinator,
+        profileCoordinator,
+        businessCoordinator,
         receiptQueue,
         keyShareCoordinator,
         connectionManager,
