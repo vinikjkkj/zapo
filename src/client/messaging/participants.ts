@@ -1,5 +1,6 @@
 import type { WaGroupEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { toUserJid } from '@protocol/jid'
 import type { WaParticipantsStore } from '@store/contracts/participants.store'
 import { toError } from '@util/primitives'
@@ -16,6 +17,7 @@ export function createGroupParticipantsCache(options: {
     readonly logger: Logger
 }): GroupParticipantsCache {
     const { participantsStore, queryGroupParticipantJids, logger } = options
+    const dedup = new PromiseDedup()
 
     const sanitizeParticipantUsers = (participants: readonly string[]): readonly string[] => {
         const deduped = new Set<string>()
@@ -167,24 +169,26 @@ export function createGroupParticipantsCache(options: {
         return sanitizeParticipantUsers(candidates)
     }
 
-    const refreshParticipantUsers = async (groupJid: string): Promise<readonly string[]> => {
-        const queried = await queryGroupParticipantJids(groupJid)
-        const participants = sanitizeParticipantUsers(queried)
-        await participantsStore.upsertGroupParticipants({
-            groupJid,
-            participants,
-            updatedAtMs: Date.now()
+    const refreshParticipantUsers = (groupJid: string): Promise<readonly string[]> =>
+        dedup.run(`refresh:${groupJid}`, async () => {
+            const queried = await queryGroupParticipantJids(groupJid)
+            const participants = sanitizeParticipantUsers(queried)
+            await participantsStore.upsertGroupParticipants({
+                groupJid,
+                participants,
+                updatedAtMs: Date.now()
+            })
+            return participants
         })
-        return participants
-    }
 
-    const resolveParticipantUsers = async (groupJid: string): Promise<readonly string[]> => {
-        const cached = await participantsStore.getGroupParticipants(groupJid)
-        if (cached && cached.participants.length > 0) {
-            return sanitizeParticipantUsers(cached.participants)
-        }
-        return refreshParticipantUsers(groupJid)
-    }
+    const resolveParticipantUsers = (groupJid: string): Promise<readonly string[]> =>
+        dedup.run(`resolve:${groupJid}`, async () => {
+            const cached = await participantsStore.getGroupParticipants(groupJid)
+            if (cached && cached.participants.length > 0) {
+                return sanitizeParticipantUsers(cached.participants)
+            }
+            return refreshParticipantUsers(groupJid)
+        })
 
     const mutateFromGroupEvent = async (event: WaGroupEvent): Promise<void> => {
         const groupJid = resolveGroupJidForParticipantCacheEvent(event)

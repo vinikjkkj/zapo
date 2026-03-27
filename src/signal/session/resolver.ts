@@ -46,7 +46,7 @@ export function createSignalSessionResolver(options: {
         expectedIdentity?: Uint8Array,
         reasonIdentity = false,
         prefetchedBundle?: SignalPreKeyBundle
-    ): Promise<void> => {
+    ): Promise<SignalSessionRecord | null> => {
         const expectedSerializedIdentity = expectedIdentity
             ? toSerializedPubKey(expectedIdentity)
             : null
@@ -60,7 +60,7 @@ export function createSignalSessionResolver(options: {
                     throw new Error('identity mismatch')
                 }
             }
-            return
+            return null
         }
         let fetched: { readonly jid: string; readonly bundle: SignalPreKeyBundle }
         if (prefetchedBundle) {
@@ -85,7 +85,7 @@ export function createSignalSessionResolver(options: {
         if (expectedSerializedIdentity && !uint8Equal(remoteIdentity, expectedSerializedIdentity)) {
             throw new Error('identity mismatch')
         }
-        await signalProtocol.establishOutgoingSession(address, fetched.bundle, {
+        const session = await signalProtocol.establishOutgoingSession(address, fetched.bundle, {
             reuseExisting: true
         })
         logger.info('signal session synchronized', {
@@ -93,6 +93,7 @@ export function createSignalSessionResolver(options: {
             regId: fetched.bundle.regId,
             hasOneTimeKey: fetched.bundle.oneTimeKey !== undefined
         })
+        return session
     }
 
     const ensureSessionWithDedup = (
@@ -101,7 +102,7 @@ export function createSignalSessionResolver(options: {
         expectedIdentity?: Uint8Array,
         reasonIdentity = false,
         prefetchedBundle?: SignalPreKeyBundle
-    ): Promise<void> => {
+    ): Promise<SignalSessionRecord | null> => {
         const expectedIdentityKey = expectedIdentity ? bytesToHex(expectedIdentity) : 'none'
         const dedupKey = `signalSession:${signalAddressKey(address)}:${reasonIdentity ? '1' : '0'}:${expectedIdentityKey}`
         return dedup.run(dedupKey, () =>
@@ -114,7 +115,8 @@ export function createSignalSessionResolver(options: {
         jid: string,
         expectedIdentity?: Uint8Array,
         reasonIdentity = false
-    ): Promise<void> => ensureSessionWithDedup(address, jid, expectedIdentity, reasonIdentity)
+    ): Promise<void> =>
+        ensureSessionWithDedup(address, jid, expectedIdentity, reasonIdentity).then(() => {})
 
     const ensureSessionsBatch = async (
         targetJids: readonly string[],
@@ -217,7 +219,7 @@ export function createSignalSessionResolver(options: {
         }
 
         const ensuredTargetIndices = new Array<number>(missingIndices.length)
-        const ensurePromises = new Array<Promise<void>>(missingIndices.length)
+        const ensurePromises = new Array<Promise<SignalSessionRecord | null>>(missingIndices.length)
         let ensureCount = 0
         for (let index = 0; index < missingIndices.length; index += 1) {
             const targetIndex = missingIndices[index]
@@ -250,12 +252,7 @@ export function createSignalSessionResolver(options: {
         ensurePromises.length = ensureCount
         const ensureResults = await Promise.allSettled(ensurePromises)
 
-        const ensuredAddresses = new Array<SignalAddress>(ensuredTargetIndices.length)
-        for (let index = 0; index < ensuredTargetIndices.length; index += 1) {
-            ensuredAddresses[index] = normalizedTargetAddresses[ensuredTargetIndices[index]]
-        }
-        const synchronizedSessions = await signalStore.getSessionsBatch(ensuredAddresses)
-
+        const fallbackIndices: number[] = []
         for (let index = 0; index < ensuredTargetIndices.length; index += 1) {
             const targetIndex = ensuredTargetIndices[index]
             const ensureResult = ensureResults[index]
@@ -270,14 +267,29 @@ export function createSignalSessionResolver(options: {
                 })
                 continue
             }
-            const synchronizedSession = synchronizedSessions[index]
-            if (!synchronizedSession) {
-                logger.warn('signal session ensure completed without persisted session', {
-                    jid: normalizedTargetJids[targetIndex]
-                })
-                continue
+            const session = ensureResult.value
+            if (session) {
+                resolvedByIndex[targetIndex] = session
+            } else {
+                fallbackIndices.push(targetIndex)
             }
-            resolvedByIndex[targetIndex] = synchronizedSession
+        }
+        if (fallbackIndices.length > 0) {
+            const fallbackAddresses = new Array<SignalAddress>(fallbackIndices.length)
+            for (let i = 0; i < fallbackIndices.length; i++) {
+                fallbackAddresses[i] = normalizedTargetAddresses[fallbackIndices[i]]
+            }
+            const fallbackSessions = await signalStore.getSessionsBatch(fallbackAddresses)
+            for (let i = 0; i < fallbackIndices.length; i++) {
+                const session = fallbackSessions[i]
+                if (session) {
+                    resolvedByIndex[fallbackIndices[i]] = session
+                } else {
+                    logger.warn('signal session ensure completed without persisted session', {
+                        jid: normalizedTargetJids[fallbackIndices[i]]
+                    })
+                }
+            }
         }
 
         return collectResolvedTargets()

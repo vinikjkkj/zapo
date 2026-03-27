@@ -11,12 +11,14 @@ const DEFAULT_RETRY_TTL_MS = 60 * 1000
 
 export class WaRetryMemoryStore implements WaRetryStore {
     private readonly outboundMessages: Map<string, WaRetryOutboundMessageRecord>
+    private readonly eligibleSets: Map<string, Set<string>>
     private readonly inboundCounters: Map<string, RetryInboundCounterRecord>
     private readonly ttlMs: number
     private readonly cleanupTimer: NodeJS.Timeout
 
     public constructor(ttlMs = DEFAULT_RETRY_TTL_MS) {
         this.outboundMessages = new Map()
+        this.eligibleSets = new Map()
         this.inboundCounters = new Map()
         this.ttlMs = ttlMs
         this.cleanupTimer = setInterval(() => {
@@ -48,38 +50,31 @@ export class WaRetryMemoryStore implements WaRetryStore {
         if (!eligible || eligible.length === 0) {
             return null
         }
+        const eligibleSet = this.eligibleSets.get(current.messageId)
         let isEligible = false
-        for (let index = 0; index < eligible.length; index += 1) {
-            if (eligible[index] === requesterDeviceJid) {
-                isEligible = true
-                break
-            }
-        }
-        if (!isEligible) {
-            return {
-                eligible: false,
-                delivered: false
-            }
-        }
-        const delivered = current.deliveredRequesterDeviceJids
-        if (!delivered || delivered.length === 0) {
-            return {
-                eligible: true,
-                delivered: false
-            }
-        }
-        for (let index = 0; index < delivered.length; index += 1) {
-            if (delivered[index] === requesterDeviceJid) {
-                return {
-                    eligible: true,
-                    delivered: true
+        if (eligibleSet) {
+            isEligible = eligibleSet.has(requesterDeviceJid)
+        } else {
+            for (let index = 0; index < eligible.length; index += 1) {
+                if (eligible[index] === requesterDeviceJid) {
+                    isEligible = true
+                    break
                 }
             }
         }
-        return {
-            eligible: true,
-            delivered: false
+        if (!isEligible) {
+            return { eligible: false, delivered: false }
         }
+        const delivered = current.deliveredRequesterDeviceJids
+        if (!delivered || delivered.length === 0) {
+            return { eligible: true, delivered: false }
+        }
+        for (let index = 0; index < delivered.length; index += 1) {
+            if (delivered[index] === requesterDeviceJid) {
+                return { eligible: true, delivered: true }
+            }
+        }
+        return { eligible: true, delivered: false }
     }
 
     public async upsertOutboundMessage(record: WaRetryOutboundMessageRecord): Promise<void> {
@@ -92,10 +87,16 @@ export class WaRetryMemoryStore implements WaRetryStore {
                 ? [...record.deliveredRequesterDeviceJids]
                 : undefined
         })
+        if (record.eligibleRequesterDeviceJids && record.eligibleRequesterDeviceJids.length > 0) {
+            this.eligibleSets.set(record.messageId, new Set(record.eligibleRequesterDeviceJids))
+        } else {
+            this.eligibleSets.delete(record.messageId)
+        }
     }
 
     public async deleteOutboundMessage(messageId: string): Promise<number> {
         const existed = this.outboundMessages.delete(messageId)
+        this.eligibleSets.delete(messageId)
         return existed ? 1 : 0
     }
 
@@ -165,6 +166,7 @@ export class WaRetryMemoryStore implements WaRetryStore {
         for (const [messageId, record] of this.outboundMessages) {
             if (record.expiresAtMs > nowMs) continue
             this.outboundMessages.delete(messageId)
+            this.eligibleSets.delete(messageId)
             removed += 1
         }
         for (const [key, record] of this.inboundCounters) {
@@ -177,6 +179,7 @@ export class WaRetryMemoryStore implements WaRetryStore {
 
     public async clear(): Promise<void> {
         this.outboundMessages.clear()
+        this.eligibleSets.clear()
         this.inboundCounters.clear()
     }
 

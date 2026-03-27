@@ -1,3 +1,5 @@
+const DIGITS_ONLY_RE = /^\d+$/
+
 export function toError(value: unknown): Error {
     if (value instanceof Error) return value
     if (typeof value === 'string') return new Error(value)
@@ -48,7 +50,7 @@ export function normalizeNonNegativeInteger(value: number | undefined, fallback:
 }
 
 function parseStrictUnsignedInt(value: string): number | undefined {
-    if (!/^\d+$/.test(value)) return undefined
+    if (!DIGITS_ONLY_RE.test(value)) return undefined
     const parsed = Number(value)
     if (!Number.isSafeInteger(parsed)) return undefined
     return parsed

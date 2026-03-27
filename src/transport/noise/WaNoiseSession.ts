@@ -2,7 +2,6 @@ import { X25519 } from '@crypto'
 import type { SignalKeyPair } from '@crypto/curves/types'
 import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
-import { BoundedTaskQueue } from '@infra/perf/BoundedTaskQueue'
 import { proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
 import {
@@ -65,8 +64,8 @@ function buildRoutingInfoPrefix(routingInfo: Uint8Array): Uint8Array {
 export class WaNoiseSession {
     private readonly sendWire: (payload: Uint8Array) => Promise<void>
     private readonly logger: Logger
-    private readonly writeQueue: BoundedTaskQueue
-    private readonly readQueue: BoundedTaskQueue
+    private writeChain: Promise<void> = Promise.resolve()
+    private readChain: Promise<void> = Promise.resolve()
     private frameCodec: WaFrameCodec | null = null
     private handshakeInbox: Uint8Array[] = []
     private handshakeInboxHead = 0
@@ -84,8 +83,6 @@ export class WaNoiseSession {
     ) {
         this.sendWire = sendWire
         this.logger = logger
-        this.writeQueue = new BoundedTaskQueue(4096, 1)
-        this.readQueue = new BoundedTaskQueue(4096, 1)
     }
 
     public async start(config: WaNoiseConfig): Promise<void> {
@@ -136,12 +133,26 @@ export class WaNoiseSession {
         this.logger.info('noise session established via full handshake')
     }
 
-    public async encryptFrame(frame: Uint8Array): Promise<Uint8Array> {
-        if (!this.noiseSocket || !this.frameCodec) {
-            throw new Error('noise session is not established')
+    public encryptFrame(frame: Uint8Array): Promise<Uint8Array> {
+        const socket = this.noiseSocket
+        const codec = this.frameCodec
+        if (!socket || !codec) {
+            return Promise.reject(new Error('noise session is not established'))
         }
-        const encrypted = await this.writeQueue.enqueue(() => this.noiseSocket!.encrypt(frame))
-        return this.frameCodec.encodeFrame(encrypted)
+        let encryptPromise: Promise<Uint8Array>
+        try {
+            encryptPromise = socket.encrypt(socket.reserveWriteNonce(), frame)
+        } catch (error) {
+            return Promise.reject(error)
+        }
+        const result = this.writeChain
+            .then(() => encryptPromise)
+            .then((encrypted) => codec.encodeFrame(encrypted))
+        this.writeChain = result.then(
+            () => {},
+            () => {}
+        )
+        return result
     }
 
     public async pushWireChunk(chunk: Uint8Array): Promise<readonly Uint8Array[]> {
@@ -174,9 +185,18 @@ export class WaNoiseSession {
             return out
         }
 
-        for (const frame of frames) {
-            const decrypted = await this.readQueue.enqueue(() => this.noiseSocket!.decrypt(frame))
-            out.push(decrypted)
+        if (frames.length > 0) {
+            const decryptBatch = this.decryptFramesBatch(this.noiseSocket, frames)
+            this.readChain = this.readChain
+                .then(() => decryptBatch)
+                .then(
+                    () => {},
+                    () => {}
+                )
+            const decrypted = await decryptBatch
+            for (let i = 0; i < decrypted.length; i++) {
+                out.push(decrypted[i])
+            }
         }
         return out
     }
@@ -193,6 +213,20 @@ export class WaNoiseSession {
         }
     }
 
+    private async decryptFramesBatch(
+        socket: WaNoiseSocket,
+        frames: readonly Uint8Array[]
+    ): Promise<readonly Uint8Array[]> {
+        if (frames.length === 1) {
+            return [await socket.decrypt(socket.reserveReadNonce(), frames[0])]
+        }
+        const pending = new Array<Promise<Uint8Array>>(frames.length)
+        for (let i = 0; i < frames.length; i++) {
+            pending[i] = socket.decrypt(socket.reserveReadNonce(), frames[i])
+        }
+        return Promise.all(pending)
+    }
+
     public reset(): void {
         this.logger.trace('noise session reset')
         this.frameCodec = null
@@ -203,6 +237,8 @@ export class WaNoiseSession {
         this.closedError = null
         this.noiseSocket = null
         this.serverStaticKey = null
+        this.writeChain = Promise.resolve()
+        this.readChain = Promise.resolve()
     }
 
     public getServerStaticKey(): Uint8Array | null {
@@ -283,11 +319,14 @@ export class WaNoiseSession {
         await handshake.authenticate(serverStaticKey)
         await handshake.authenticate(ephemeralKeyPair.pubKey)
 
-        const agreement1 = await X25519.scalarMult(ephemeralKeyPair.privKey, serverStaticKey)
+        const [agreement1, agreement2] = await Promise.all([
+            X25519.scalarMult(ephemeralKeyPair.privKey, serverStaticKey),
+            X25519.scalarMult(clientStaticKeyPair.privKey, serverStaticKey)
+        ])
+
         await handshake.mixIntoKey(agreement1)
         const encryptedClientStatic = await handshake.encrypt(clientStaticKeyPair.pubKey)
 
-        const agreement2 = await X25519.scalarMult(clientStaticKeyPair.privKey, serverStaticKey)
         await handshake.mixIntoKey(agreement2)
         const encryptedPayload = await handshake.encrypt(payload)
 
@@ -317,12 +356,14 @@ export class WaNoiseSession {
         }
         const serverEphemeral = toBytesView(serverHello.ephemeral)
         await handshake.authenticate(serverEphemeral)
-        await handshake.mixIntoKey(
-            await X25519.scalarMult(ephemeralKeyPair.privKey, serverEphemeral)
-        )
-        await handshake.mixIntoKey(
-            await X25519.scalarMult(clientStaticKeyPair.privKey, serverEphemeral)
-        )
+
+        const [dh1, dh2] = await Promise.all([
+            X25519.scalarMult(ephemeralKeyPair.privKey, serverEphemeral),
+            X25519.scalarMult(clientStaticKeyPair.privKey, serverEphemeral)
+        ])
+
+        await handshake.mixIntoKey(dh1)
+        await handshake.mixIntoKey(dh2)
 
         await handshake.decrypt(toBytesView(serverHello.payload))
         this.serverStaticKey = serverStaticKey
@@ -466,10 +507,20 @@ export class WaNoiseSession {
         this.logger.debug('decoding buffered post-handshake frames', {
             count: this.handshakeInbox.length - this.handshakeInboxHead
         })
-        for (let index = this.handshakeInboxHead; index < this.handshakeInbox.length; index += 1) {
-            const frame = this.handshakeInbox[index]
-            const decrypted = await this.readQueue.enqueue(() => this.noiseSocket!.decrypt(frame))
-            this.pendingDecryptedFrames.push(decrypted)
+        const start = this.handshakeInboxHead
+        const frames = this.handshakeInbox.slice(start)
+        if (frames.length > 0) {
+            const decryptBatch = this.decryptFramesBatch(this.noiseSocket, frames)
+            this.readChain = this.readChain
+                .then(() => decryptBatch)
+                .then(
+                    () => {},
+                    () => {}
+                )
+            const decrypted = await decryptBatch
+            for (let i = 0; i < decrypted.length; i++) {
+                this.pendingDecryptedFrames.push(decrypted[i])
+            }
         }
         this.handshakeInbox.length = this.handshakeInboxHead = 0
     }

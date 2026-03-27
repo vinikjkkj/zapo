@@ -3,12 +3,8 @@ import { wrapDeviceSentMessage } from '@message/device-sent'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/padding'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
-import {
-    isGroupOrBroadcastJid,
-    normalizeDeviceJid,
-    parseSignalAddressFromJid,
-    toUserJid
-} from '@protocol/jid'
+import type { parseSignalAddressFromJid } from '@protocol/jid'
+import { isGroupOrBroadcastJid, normalizeDeviceJid, parseJidFull, toUserJid } from '@protocol/jid'
 import { decodeRetryReplayPayload } from '@retry/codec'
 import type {
     WaRetryEncryptedReplayPayload,
@@ -50,8 +46,9 @@ export class WaRetryReplayService {
             outbound.replayPayload instanceof Uint8Array
                 ? decodeRetryReplayPayload(outbound.replayPayload)
                 : outbound.replayPayload
-        const requesterAddress = parseSignalAddressFromJid(requesterJid)
-        const normalizedRequesterJid = normalizeDeviceJid(requesterJid)
+        const requesterParsed = parseJidFull(requesterJid)
+        const requesterAddress = requesterParsed.address
+        const normalizedRequesterJid = requesterParsed.normalizedJid
         if (payload.mode === 'plaintext') {
             return this.resendPlaintextPayload(
                 outbound,

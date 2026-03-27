@@ -2,10 +2,23 @@ import { webcrypto } from 'node:crypto'
 
 import { X25519_PKCS8_PREFIX } from '@crypto/curves/constants'
 import { pkcs8FromRawPrivate, type SignalKeyPair, type SubtleKeyPair } from '@crypto/curves/types'
-import { FIELD_P } from '@crypto/math/constants'
-import { bigIntToBytesLE, bytesToBigIntLE } from '@crypto/math/le'
-import { mod, modInv } from '@crypto/math/mod'
+import { FE_ONE } from '@crypto/math/constants'
+import { fe, feAdd, feFromBytes, feInv, feMul, fePack, feSub } from '@crypto/math/fe'
 import { assertByteLength, decodeBase64Url, toBytesView } from '@util/bytes'
+
+// Pre-allocated temps for montgomeryToEdwardsPublic (safe: single-threaded)
+const _mx = fe()
+const _m1 = fe()
+const _m2 = fe()
+const _m3 = fe()
+
+// p-1 = 2^255-20 in LE bytes: 0xEC, 0xFF×30, 0x7F
+// Mask bit 255 before comparing (non-canonical inputs may have it set)
+function isFieldPMinus1(b: Uint8Array): boolean {
+    if (b[0] !== 0xec || (b[31] & 0x7f) !== 0x7f) return false
+    for (let i = 1; i < 31; i++) if (b[i] !== 0xff) return false
+    return true
+}
 
 export function clampCurvePrivateKeyInPlace(privateKey: Uint8Array): Uint8Array {
     assertByteLength(privateKey, 32, `invalid curve25519 private key length ${privateKey.length}`)
@@ -21,12 +34,16 @@ export function montgomeryToEdwardsPublic(curvePublicKey: Uint8Array, signBit: n
         32,
         `invalid curve25519 public key length ${curvePublicKey.length}`
     )
-    const x = bytesToBigIntLE(curvePublicKey)
-    if (x === FIELD_P - 1n) {
+    if (isFieldPMinus1(curvePublicKey)) {
         throw new Error('invalid curve25519 low-order public key')
     }
-    const y = mod((x - 1n) * modInv(x + 1n))
-    const encoded = bigIntToBytesLE(y, 32)
+    feFromBytes(_mx, curvePublicKey)
+    feSub(_m1, _mx, FE_ONE)
+    feAdd(_m2, _mx, FE_ONE)
+    feInv(_m3, _m2)
+    feMul(_m1, _m1, _m3)
+    const encoded = new Uint8Array(32)
+    fePack(encoded, _m1)
     encoded[31] = (encoded[31] & 0x7f) | (signBit & 0x80)
     return encoded
 }

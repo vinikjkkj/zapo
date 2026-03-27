@@ -5,6 +5,7 @@ import type { GroupParticipantsCache } from '@client/messaging/participants'
 import type { WaGroupEvent, WaSignalMessagePublishInput, WaSendMessageOptions } from '@client/types'
 import { randomBytesAsync, sha256 } from '@crypto'
 import type { Logger } from '@infra/log/types'
+import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { ensureMessageSecret } from '@message'
 import {
     resolveEditAttr,
@@ -36,6 +37,7 @@ import {
     isGroupJid,
     normalizeDeviceJid,
     normalizeRecipientJid,
+    parseJidFull,
     parseSignalAddressFromJid,
     splitJid,
     toUserJid
@@ -108,6 +110,9 @@ export class WaMessageDispatchCoordinator {
         | undefined
     private readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
     private readonly onDirectMessageSent: (recipientJid: string) => void
+    private readonly icdcDedup = new PromiseDedup()
+    private readonly privacyTokenDedup = new PromiseDedup()
+    private readonly distributionDedup = new PromiseDedup()
 
     public constructor(options: WaMessageDispatchCoordinatorOptions) {
         this.logger = options.logger
@@ -259,11 +264,10 @@ export class WaMessageDispatchCoordinator {
         const meJid = this.getCurrentMeJid()
         const regInfo = meJid ? await this.signalStore.getRegistrationInfo() : null
         const localPubKey = regInfo?.identityKeyPair.pubKey
-        const meUserJid = meJid ? toUserJid(meJid) : undefined
+        const meParsed = meJid ? parseJidFull(meJid) : undefined
+        const meUserJid = meParsed?.userJid
         const localIdentity =
-            meJid && localPubKey
-                ? { address: parseSignalAddressFromJid(meJid), pubKey: localPubKey }
-                : undefined
+            meParsed && localPubKey ? { address: meParsed.address, pubKey: localPubKey } : undefined
         const isGroup = isGroupJid(recipientJid)
 
         const [senderIcdc, recipientIcdc] = await Promise.all([
@@ -475,7 +479,7 @@ export class WaMessageDispatchCoordinator {
                 toJid: groupJid,
                 type,
                 replayPayload,
-                eligibleRequesterDeviceJids: fanoutDeviceJids
+                eligibleRequesterDeviceJids: undefined
             },
             async () => this.messageClient.publishNode(messageNode, sendOptions)
         )
@@ -547,11 +551,15 @@ export class WaMessageDispatchCoordinator {
             ciphertext: groupCiphertext,
             keyId: senderKeyId
         } = await this.senderKeyManager.prepareGroupEncryption(groupJid, sender, plaintext)
-        const distributionData = await this.encryptGroupDistributionParticipants(
-            groupJid,
-            senderKeyId,
-            senderKeyDistributionMessage,
-            participantUserJids
+        const distributionData = await this.distributionDedup.run(
+            `dist:${groupJid}:${senderKeyId}`,
+            () =>
+                this.encryptGroupDistributionParticipants(
+                    groupJid,
+                    senderKeyId,
+                    senderKeyDistributionMessage,
+                    participantUserJids
+                )
         )
         const { fanoutDeviceJids, distributionParticipants } = distributionData
         let shouldAttachDeviceIdentity = false
@@ -605,7 +613,7 @@ export class WaMessageDispatchCoordinator {
                 toJid: groupJid,
                 type,
                 replayPayload,
-                eligibleRequesterDeviceJids: fanoutDeviceJids
+                eligibleRequesterDeviceJids: undefined
             },
             async () => this.messageClient.publishNode(messageNode, sendOptions)
         )
@@ -902,10 +910,11 @@ export class WaMessageDispatchCoordinator {
         }[] = new Array(deviceJids.length)
         for (let index = 0; index < deviceJids.length; index += 1) {
             const jid = deviceJids[index]
+            const parsed = parseJidFull(jid)
             targets[index] = {
                 jid,
-                normalizedJid: normalizeDeviceJid(jid),
-                userJid: toUserJid(jid)
+                normalizedJid: parsed.normalizedJid,
+                userJid: parsed.userJid
             }
         }
         const recipientUserJid = toUserJid(recipientJid)
@@ -1036,7 +1045,10 @@ export class WaMessageDispatchCoordinator {
         })
         let privacyTokenNode: BinaryNode | undefined
         try {
-            privacyTokenNode = (await this.resolvePrivacyTokenNode(recipientUserJid)) ?? undefined
+            privacyTokenNode =
+                (await this.privacyTokenDedup.run(`pt:${recipientUserJid}`, () =>
+                    this.resolvePrivacyTokenNode(recipientUserJid)
+                )) ?? undefined
         } catch (error) {
             this.logger.warn('privacy token resolution failed', {
                 to: recipientUserJid,
@@ -1159,29 +1171,31 @@ export class WaMessageDispatchCoordinator {
         return proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
     }
 
-    private async resolveUserIcdc(
+    private resolveUserIcdc(
         userJid: string,
         localIdentity?: { readonly address: SignalAddress; readonly pubKey: Uint8Array }
     ): Promise<IcdcMeta | null> {
-        try {
-            const snapshots = await this.deviceListStore.getUserDevicesBatch([userJid])
-            const snapshot = snapshots[0]
-            if (!snapshot || snapshot.deviceJids.length === 0) {
+        return this.icdcDedup.run(`icdc:${userJid}:${localIdentity ? '1' : '0'}`, async () => {
+            try {
+                const snapshots = await this.deviceListStore.getUserDevicesBatch([userJid])
+                const snapshot = snapshots[0]
+                if (!snapshot || snapshot.deviceJids.length === 0) {
+                    return null
+                }
+                return resolveIcdcMeta(
+                    snapshot.deviceJids,
+                    this.signalStore,
+                    snapshot.updatedAtMs,
+                    localIdentity
+                )
+            } catch (error) {
+                this.logger.trace('icdc resolution failed', {
+                    userJid,
+                    message: toError(error).message
+                })
                 return null
             }
-            return resolveIcdcMeta(
-                snapshot.deviceJids,
-                this.signalStore,
-                snapshot.updatedAtMs,
-                localIdentity
-            )
-        } catch (error) {
-            this.logger.trace('icdc resolution failed', {
-                userJid,
-                message: toError(error).message
-            })
-            return null
-        }
+        })
     }
 
     private requireCurrentMeJid(context: string): string {

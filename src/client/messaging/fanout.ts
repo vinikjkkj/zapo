@@ -1,4 +1,5 @@
 import type { Logger } from '@infra/log/types'
+import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { isHostedDeviceJid, normalizeDeviceJid, splitJid, toUserJid } from '@protocol/jid'
 import type { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
 import { toError } from '@util/primitives'
@@ -29,6 +30,7 @@ export function createDeviceFanoutResolver(options: {
     readonly logger: Logger
 }): DeviceFanoutResolver {
     const { signalDeviceSync, getCurrentMeJid, getCurrentMeLid, logger } = options
+    const dedup = new PromiseDedup()
 
     const resolveDirectFanoutDeviceJids = async (
         recipientJid: string,
@@ -77,7 +79,7 @@ export function createDeviceFanoutResolver(options: {
         }
     }
 
-    const resolveGroupParticipantDeviceJids = async (
+    const resolveGroupParticipantDeviceJidsInternal = async (
         participantUserJids: readonly string[]
     ): Promise<readonly string[]> => {
         const meDeviceJids = new Set<string>()
@@ -235,6 +237,13 @@ export function createDeviceFanoutResolver(options: {
         }
         return meLid
     }
+
+    const resolveGroupParticipantDeviceJids = (
+        participantUserJids: readonly string[]
+    ): Promise<readonly string[]> =>
+        dedup.run(`group:${participantUserJids.join(',')}`, () =>
+            resolveGroupParticipantDeviceJidsInternal(participantUserJids)
+        )
 
     return {
         resolveDirectFanoutDeviceJids,

@@ -2,7 +2,8 @@ import type { Logger } from '@infra/log/types'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import { WA_MESSAGE_TAGS } from '@protocol/constants'
-import { isGroupOrBroadcastJid, normalizeDeviceJid, parseSignalAddressFromJid } from '@protocol/jid'
+import type { parseSignalAddressFromJid } from '@protocol/jid'
+import { isGroupOrBroadcastJid, normalizeDeviceJid, parseJidFull } from '@protocol/jid'
 import {
     MAX_RETRY_ATTEMPTS,
     RETRY_KEYS_MIN_COUNT,
@@ -340,8 +341,9 @@ export class WaRetryCoordinator {
         let requesterAddress: ReturnType<typeof parseSignalAddressFromJid>
         let requesterNormalizedDeviceJid: string
         try {
-            requesterAddress = parseSignalAddressFromJid(requesterJid)
-            requesterNormalizedDeviceJid = normalizeDeviceJid(requesterJid)
+            const requesterParsed = parseJidFull(requesterJid)
+            requesterAddress = requesterParsed.address
+            requesterNormalizedDeviceJid = requesterParsed.normalizedJid
         } catch (error) {
             this.logger.info('retry request rejected: invalid requester jid', {
                 id: request.stanzaId,

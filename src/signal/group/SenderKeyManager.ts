@@ -75,6 +75,16 @@ export class SenderKeyManager {
     }> {
         return this.runWithSenderLock(groupId, sender, async () => {
             const senderKey = await this.ensureSenderKeyInternal(groupId, sender)
+            if (!senderKey.signingPrivateKey) {
+                throw new Error('sender private signing key is missing')
+            }
+            const derived = await deriveSenderKeyMsgKey(senderKey.iteration, senderKey.chainKey)
+            await this.store.upsertSenderKey({
+                ...senderKey,
+                chainKey: derived.nextChainKey,
+                iteration: derived.messageKey.iteration + 1
+            })
+
             const distributionProto = proto.SenderKeyDistributionMessage.encode({
                 id: senderKey.keyId,
                 iteration: senderKey.iteration,
@@ -88,11 +98,7 @@ export class SenderKeyManager {
                     SIGNAL_GROUP_VERSION
                 )
             }
-            if (!senderKey.signingPrivateKey) {
-                throw new Error('sender private signing key is missing')
-            }
 
-            const derived = await deriveSenderKeyMsgKey(senderKey.iteration, senderKey.chainKey)
             const messagePayload = await aesCbcEncryptFromSeed(derived.messageKey.seed, plaintext)
             const senderKeyMessage = proto.SenderKeyMessage.encode({
                 id: senderKey.keyId,
@@ -112,19 +118,12 @@ export class SenderKeyManager {
                 ciphertext: concatBytes([versionedContent, signature])
             }
 
-            await Promise.all([
-                this.store.upsertSenderKeyDistribution({
-                    groupId,
-                    sender,
-                    keyId: senderKey.keyId,
-                    timestampMs: Date.now()
-                }),
-                this.store.upsertSenderKey({
-                    ...senderKey,
-                    chainKey: derived.nextChainKey,
-                    iteration: derived.messageKey.iteration + 1
-                })
-            ])
+            await this.store.upsertSenderKeyDistribution({
+                groupId,
+                sender,
+                keyId: senderKey.keyId,
+                timestampMs: Date.now()
+            })
 
             return {
                 distributionMessage,

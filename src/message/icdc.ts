@@ -8,6 +8,7 @@ import { concatBytes } from '@util/bytes'
 const ICDC_HASH_LENGTH = 8
 const ICDC_FRESHNESS_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1_000
 const DEVICE_LIST_METADATA_VERSION = 2
+const EMPTY_KEY_HASH = new Uint8Array(ICDC_HASH_LENGTH)
 
 export interface IcdcMeta {
     readonly keyHash: Uint8Array
@@ -18,7 +19,7 @@ export async function computeDeviceKeyHash(
     identityKeys: readonly Uint8Array[]
 ): Promise<Uint8Array> {
     if (identityKeys.length === 0) {
-        return new Uint8Array(ICDC_HASH_LENGTH)
+        return EMPTY_KEY_HASH
     }
     const rawKeys: Uint8Array[] = new Array(identityKeys.length)
     for (let i = 0; i < identityKeys.length; i += 1) {

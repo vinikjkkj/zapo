@@ -1,5 +1,6 @@
 import { toSerializedPubKey } from '@crypto/core/keys'
 import type { Logger } from '@infra/log/types'
+import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
 import { canonicalizeSignalJid, parseSignalAddressFromJid } from '@protocol/jid'
 import { decodeExactLength, parseUint } from '@signal/api/codec'
@@ -29,6 +30,7 @@ export class SignalIdentitySyncApi {
     private readonly signalStore?: WaSignalStore
     private readonly defaultTimeoutMs: number
     private readonly hostDomain: string
+    private readonly syncDedup = new PromiseDedup()
 
     public constructor(options: SignalIdentitySyncApiOptions) {
         this.logger = options.logger
@@ -39,9 +41,19 @@ export class SignalIdentitySyncApi {
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
     }
 
-    public async syncIdentityKeys(
+    public syncIdentityKeys(
         targetJids: readonly string[],
         timeoutMs = this.defaultTimeoutMs
+    ): Promise<readonly SignalIdentitySyncEntry[]> {
+        const dedupKey = `${timeoutMs}:${targetJids.join(',')}`
+        return this.syncDedup.run(dedupKey, () =>
+            this.syncIdentityKeysInternal(targetJids, timeoutMs)
+        )
+    }
+
+    private async syncIdentityKeysInternal(
+        targetJids: readonly string[],
+        timeoutMs: number
     ): Promise<readonly SignalIdentitySyncEntry[]> {
         const normalizedTargets = new Array<string>(targetJids.length)
         let normalizedTargetsCount = 0

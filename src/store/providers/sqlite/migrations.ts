@@ -1,5 +1,7 @@
 import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
 
+const UNIQUE_CONSTRAINT_ID_RE = /UNIQUE constraint failed: [A-Za-z_][A-Za-z0-9_]*\.id/
+
 export type WaSqliteMigrationDomain =
     | 'auth'
     | 'signal'
@@ -336,7 +338,7 @@ function isMigrationAlreadyAppliedRace(error: unknown): boolean {
     if (!(error instanceof Error)) {
         return false
     }
-    return /UNIQUE constraint failed: [A-Za-z_][A-Za-z0-9_]*\.id/.test(error.message)
+    return UNIQUE_CONSTRAINT_ID_RE.test(error.message)
 }
 
 function ensureMigrationTable(db: WaSqliteConnection): void {

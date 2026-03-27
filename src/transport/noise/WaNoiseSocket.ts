@@ -13,13 +13,27 @@ export class WaNoiseSocket {
         this.readCounter = 0
     }
 
-    public async encrypt(frame: Uint8Array, additionalData?: Uint8Array): Promise<Uint8Array> {
-        const nonce = buildNonce(this.writeCounter++)
+    public reserveWriteNonce(): Uint8Array {
+        return buildNonce(this.writeCounter++)
+    }
+
+    public encrypt(
+        nonce: Uint8Array,
+        frame: Uint8Array,
+        additionalData?: Uint8Array
+    ): Promise<Uint8Array> {
         return aesGcmEncrypt(this.encryptKey, nonce, frame, additionalData)
     }
 
-    public async decrypt(frame: Uint8Array, additionalData?: Uint8Array): Promise<Uint8Array> {
-        const nonce = buildNonce(this.readCounter++)
+    public reserveReadNonce(): Uint8Array {
+        return buildNonce(this.readCounter++)
+    }
+
+    public decrypt(
+        nonce: Uint8Array,
+        frame: Uint8Array,
+        additionalData?: Uint8Array
+    ): Promise<Uint8Array> {
         return aesGcmDecrypt(this.decryptKey, nonce, frame, additionalData)
     }
 }

@@ -1,5 +1,7 @@
 /**
  * Builds a 12-byte nonce for AES-GCM encryption with counter in the last 4 bytes.
+ * Allocates a new buffer per call because concurrent Noise encrypt/decrypt operations
+ * may hold references to different nonces simultaneously.
  * Throws if counter exceeds uint32 range to prevent nonce reuse.
  */
 export function buildNonce(counter: number): Uint8Array {

@@ -1,10 +1,25 @@
 import { WA_DEFAULTS } from '@protocol/constants'
 import type { SignalAddress } from '@signal/types'
 
-const JID_HOSTED_DEVICE_ID = 99
-const JID_SERVER_HOSTED = 'hosted'
-const JID_SERVER_HOSTED_LID = 'hosted.lid'
-const JID_SERVER_LID = 'lid'
+const KNOWN_SERVERS: Record<string, string> = {
+    [WA_DEFAULTS.HOST_DOMAIN]: WA_DEFAULTS.HOST_DOMAIN,
+    [WA_DEFAULTS.GROUP_SERVER]: WA_DEFAULTS.GROUP_SERVER,
+    [WA_DEFAULTS.BROADCAST_SERVER]: WA_DEFAULTS.BROADCAST_SERVER,
+    [WA_DEFAULTS.LID_SERVER]: WA_DEFAULTS.LID_SERVER,
+    [WA_DEFAULTS.HOSTED_SERVER]: WA_DEFAULTS.HOSTED_SERVER,
+    [WA_DEFAULTS.HOSTED_LID_SERVER]: WA_DEFAULTS.HOSTED_LID_SERVER,
+    [WA_DEFAULTS.MSGR_SERVER]: WA_DEFAULTS.MSGR_SERVER,
+    [WA_DEFAULTS.INTEROP_SERVER]: WA_DEFAULTS.INTEROP_SERVER
+}
+
+/**
+ * Returns the canonical reference for known server strings, avoiding
+ * thousands of duplicate sliced copies (e.g. "lid", "s.whatsapp.net")
+ * that would otherwise be created by repeated JID parsing.
+ */
+function internServer(server: string): string {
+    return KNOWN_SERVERS[server] ?? server
+}
 
 function extractDigits(input: string): string {
     let digits = ''
@@ -23,7 +38,7 @@ function findAtIndex(jid: string): number {
 
 export function splitJid(jid: string): { readonly user: string; readonly server: string } {
     const atIndex = findAtIndex(jid)
-    return { user: jid.slice(0, atIndex), server: jid.slice(atIndex + 1) }
+    return { user: jid.slice(0, atIndex), server: internServer(jid.slice(atIndex + 1)) }
 }
 
 export function normalizeRecipientJid(to: string): string {
@@ -60,10 +75,16 @@ export function isGroupOrBroadcastJid(jid: string): boolean {
     return isGroupJid(jid) || isBroadcastJid(jid)
 }
 
+export interface ParsedJid {
+    readonly address: SignalAddress
+    readonly userJid: string
+    readonly normalizedJid: string
+}
+
 export function parseSignalAddressFromJid(jid: string): SignalAddress {
     const atIndex = findAtIndex(jid)
     const colonIndex = jid.indexOf(':', 0)
-    const server = jid.slice(atIndex + 1)
+    const server = internServer(jid.slice(atIndex + 1))
     if (colonIndex === -1 || colonIndex > atIndex) {
         return { user: jid.slice(0, atIndex), server, device: 0 }
     }
@@ -72,12 +93,20 @@ export function parseSignalAddressFromJid(jid: string): SignalAddress {
     return { user: jid.slice(0, colonIndex), server, device }
 }
 
+export function parseJidFull(jid: string): ParsedJid {
+    const address = parseSignalAddressFromJid(jid)
+    const userJid = `${address.user}@${address.server}`
+    const normalizedJid =
+        address.device === 0 ? userJid : `${address.user}:${address.device}@${address.server}`
+    return { address, userJid, normalizedJid }
+}
+
 export function canonicalizeSignalServer(
     server: string,
     hostDomain: string = WA_DEFAULTS.HOST_DOMAIN
 ): string {
-    if (server === JID_SERVER_HOSTED) return hostDomain
-    if (server === JID_SERVER_HOSTED_LID) return JID_SERVER_LID
+    if (server === WA_DEFAULTS.HOSTED_SERVER) return hostDomain
+    if (server === WA_DEFAULTS.HOSTED_LID_SERVER) return WA_DEFAULTS.LID_SERVER
     return server
 }
 
@@ -116,11 +145,11 @@ export function normalizeDeviceJid(jid: string): string {
 }
 
 export function isHostedDeviceId(deviceId: number): boolean {
-    return deviceId === JID_HOSTED_DEVICE_ID
+    return deviceId === WA_DEFAULTS.HOSTED_DEVICE_ID
 }
 
 export function isHostedServer(server: string): boolean {
-    return server === JID_SERVER_HOSTED || server === JID_SERVER_HOSTED_LID
+    return server === WA_DEFAULTS.HOSTED_SERVER || server === WA_DEFAULTS.HOSTED_LID_SERVER
 }
 
 export function isHostedDeviceJid(jid: string): boolean {
@@ -150,10 +179,11 @@ export function buildDeviceJid(
             return `${user}:${deviceId}@${normalizedServer}`
         }
         const hostedServer =
-            options.rawServer === JID_SERVER_HOSTED_LID || normalizedServer === JID_SERVER_LID
-                ? JID_SERVER_HOSTED_LID
-                : JID_SERVER_HOSTED
-        return `${user}:${JID_HOSTED_DEVICE_ID}@${hostedServer}`
+            options.rawServer === WA_DEFAULTS.HOSTED_LID_SERVER ||
+            normalizedServer === WA_DEFAULTS.LID_SERVER
+                ? WA_DEFAULTS.HOSTED_LID_SERVER
+                : WA_DEFAULTS.HOSTED_SERVER
+        return `${user}:${WA_DEFAULTS.HOSTED_DEVICE_ID}@${hostedServer}`
     }
     if (deviceId === 0) {
         return `${user}@${normalizedServer}`

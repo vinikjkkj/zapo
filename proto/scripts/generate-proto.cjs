@@ -57,7 +57,12 @@ async function main() {
 
         originalJsBytes = Buffer.byteLength(jsOutput, 'utf8')
 
-        writeFileSync(tempBundleInputPath, jsOutput, 'utf8')
+        const jsWithWriterReuse = jsOutput.replace(
+            /\$Writer\.create\(\)/g,
+            '($Writer._shared || ($Writer._shared = $Writer.create())).reset()'
+        )
+
+        writeFileSync(tempBundleInputPath, jsWithWriterReuse, 'utf8')
 
         const bundleResult = await esbuild.build({
             entryPoints: [tempBundleInputPath],
@@ -128,6 +133,7 @@ async function main() {
 
     console.log(
         [
+            '---------------------------',
             'proto generation completed',
             `required fields normalized: ${requiredFieldMatches.length}`,
             'protobufjs-cli: proto/package.json',
@@ -136,8 +142,9 @@ async function main() {
             `d.ts compacted: yes`,
             `d.ts size: ${formatBytes(originalDtsBytes)} -> ${formatBytes(compactDtsBytes)}`,
             `js output: ${path.relative(rootDir, outputJsPath)}`,
-            `types output: ${path.relative(rootDir, outputDtsPath)}`
-        ].join(' | ')
+            `types output: ${path.relative(rootDir, outputDtsPath)}`,
+            '---------------------------'
+        ].join('\n')
     )
 }
 

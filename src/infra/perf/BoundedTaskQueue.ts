@@ -73,7 +73,9 @@ export class BoundedTaskQueue {
 
     private drain(): void {
         while (this.running < this.maxConcurrency && this.head < this.queue.length) {
-            const item = this.queue[this.head++]
+            const item = this.queue[this.head]
+            this.queue[this.head] = null as unknown as QueueItem
+            this.head++
             this.running++
             void item.task().then(item.resolve, item.reject).finally(this.settleTask)
         }
