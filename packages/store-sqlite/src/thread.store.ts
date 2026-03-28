@@ -1,9 +1,15 @@
-import type { WaStoredThreadRecord, WaThreadStore as Contract } from '@store/contracts/thread.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
-import type { WaSqliteStorageOptions } from '@store/types'
-import { asOptionalNumber, asOptionalString, asString, toBoolOrUndef } from '@util/coercion'
-import { normalizeQueryLimit } from '@util/collections'
+import type { WaStoredThreadRecord, WaThreadStore as Contract } from 'zapo-js/store'
+import {
+    asOptionalNumber,
+    asOptionalString,
+    asString,
+    toBoolOrUndef,
+    normalizeQueryLimit
+} from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteConnection } from './connection'
+import type { WaSqliteStorageOptions } from './types'
 
 const THREAD_COLUMNS =
     'jid, name, unread_count, archived, pinned, mute_end_ms, marked_as_unread, ephemeral_expiration'

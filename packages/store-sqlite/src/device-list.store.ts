@@ -1,9 +1,10 @@
-import type { WaDeviceListSnapshot, WaDeviceListStore } from '@store/contracts/device-list.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
-import { repeatSqlToken } from '@store/providers/sqlite/sql-utils'
-import type { WaSqliteStorageOptions } from '@store/types'
-import { asNumber, asString, resolvePositive } from '@util/coercion'
+import type { WaDeviceListSnapshot, WaDeviceListStore } from 'zapo-js/store'
+import { asNumber, asString, resolvePositive } from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteConnection } from './connection'
+import { repeatSqlToken } from './sql-utils'
+import type { WaSqliteStorageOptions } from './types'
 
 interface DeviceListRow extends Record<string, unknown> {
     readonly user_jid: unknown

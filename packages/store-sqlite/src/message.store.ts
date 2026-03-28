@@ -1,12 +1,15 @@
-import type {
-    WaMessageStore as Contract,
-    WaStoredMessageRecord
-} from '@store/contracts/message.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
-import type { WaSqliteStorageOptions } from '@store/types'
-import { asOptionalBytes, asOptionalNumber, asOptionalString, asString } from '@util/coercion'
-import { normalizeQueryLimit } from '@util/collections'
+import type { WaMessageStore as Contract, WaStoredMessageRecord } from 'zapo-js/store'
+import {
+    asOptionalBytes,
+    asOptionalNumber,
+    asOptionalString,
+    asString,
+    normalizeQueryLimit
+} from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteConnection } from './connection'
+import type { WaSqliteStorageOptions } from './types'
 
 interface MessageRow extends Record<string, unknown> {
     readonly message_id: unknown

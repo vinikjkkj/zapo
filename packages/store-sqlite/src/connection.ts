@@ -1,11 +1,11 @@
+import { toSafeNumber, isBunRuntime } from 'zapo-js/util'
+
 import {
     createSqliteTableNameSqlResolver,
     resolveSqliteTableNames,
     serializeSqliteTableNames
-} from '@store/providers/sqlite/table-names'
-import type { WaSqliteDriver, WaSqliteStorageOptions } from '@store/types'
-import { toSafeNumber } from '@util/primitives'
-import { isBunRuntime } from '@util/runtime'
+} from './table-names'
+import type { WaSqliteDriver, WaSqliteStorageOptions } from './types'
 
 type SqliteStatementLike = {
     readonly run: (...args: unknown[]) => unknown

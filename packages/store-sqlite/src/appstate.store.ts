@@ -1,27 +1,27 @@
-import { APP_STATE_EMPTY_LT_HASH } from '@appstate/constants'
-import {
-    decodeAppStateCollections,
-    decodeAppStateFingerprint,
-    decodeAppStateSyncKeys,
-    encodeAppStateFingerprint
-} from '@appstate/encoding'
 import type {
     AppStateCollectionName,
     WaAppStateSyncKey,
     WaAppStateStoreData
-} from '@appstate/types'
-import { keyEpoch } from '@appstate/utils'
+} from 'zapo-js/appstate'
+import {
+    APP_STATE_EMPTY_LT_HASH,
+    decodeAppStateCollections,
+    decodeAppStateFingerprint,
+    decodeAppStateSyncKeys,
+    encodeAppStateFingerprint,
+    keyEpoch
+} from 'zapo-js/appstate'
 import type {
     WaAppStateCollectionStateUpdate,
     WaAppStateCollectionStoreState,
     WaAppStateStore
-} from '@store/contracts/appstate.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
-import { repeatSqlToken } from '@store/providers/sqlite/sql-utils'
-import type { WaSqliteStorageOptions } from '@store/types'
-import { bytesToHex, uint8Equal } from '@util/bytes'
-import { asBytes, asNumber, asString } from '@util/coercion'
+} from 'zapo-js/store'
+import { bytesToHex, uint8Equal, asBytes, asNumber, asString } from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteConnection } from './connection'
+import { repeatSqlToken } from './sql-utils'
+import type { WaSqliteStorageOptions } from './types'
 
 const APP_STATE_SYNC_KEY_BATCH_SIZE = 500
 

@@ -1,8 +1,6 @@
-import type { WaAuthCredentials } from '@auth/types'
-import { proto } from '@proto'
-import type { WaAuthStore } from '@store/contracts/auth.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteStorageOptions } from '@store/types'
+import type { WaAuthCredentials } from 'zapo-js/auth'
+import { proto } from 'zapo-js/proto'
+import type { WaAuthStore } from 'zapo-js/store'
 import {
     asBytes,
     asNumber,
@@ -10,7 +8,10 @@ import {
     asOptionalNumber,
     asOptionalString,
     toBoolOrUndef
-} from '@util/coercion'
+} from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteStorageOptions } from './types'
 
 export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
     public constructor(options: WaSqliteStorageOptions) {

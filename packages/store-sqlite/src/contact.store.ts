@@ -1,11 +1,9 @@
-import type {
-    WaContactStore as Contract,
-    WaStoredContactRecord
-} from '@store/contracts/contact.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
-import type { WaSqliteStorageOptions } from '@store/types'
-import { asNumber, asOptionalString, asString } from '@util/coercion'
+import type { WaContactStore as Contract, WaStoredContactRecord } from 'zapo-js/store'
+import { asNumber, asOptionalString, asString } from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteConnection } from './connection'
+import type { WaSqliteStorageOptions } from './types'
 
 interface ContactRow extends Record<string, unknown> {
     readonly jid: unknown

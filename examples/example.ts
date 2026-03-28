@@ -1,6 +1,8 @@
 import { mkdir, rm } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
+import { createSqliteStore } from '@zapo-js/store-sqlite'
+
 import { createPinoLogger, createStore, WaClient } from '../src'
 import type { LogLevel } from '../src'
 
@@ -55,14 +57,21 @@ async function main(): Promise<void> {
     //const sessionId_1 = process.env.EXAMPLE_SESSION_ID ?? 'default'
     const sessionId_2 = process.env.EXAMPLE_SESSION_ID_2 ?? 'default_2'
     const store = createStore({
-        sqlite: {
-            path: authPath,
-            driver: 'auto'
+        backends: {
+            sqlite: createSqliteStore({
+                path: authPath,
+                driver: 'auto'
+            })
         },
         providers: {
+            auth: 'sqlite',
+            signal: 'sqlite',
+            senderKey: 'sqlite',
+            appState: 'sqlite',
             messages: 'sqlite',
             threads: 'sqlite',
-            contacts: 'sqlite'
+            contacts: 'sqlite',
+            privacyToken: 'sqlite'
         }
     })
 

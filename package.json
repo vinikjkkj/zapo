@@ -132,6 +132,7 @@
         "bench:comment": "node ./scripts/build-bench-comment.cjs",
         "test:structure": "node ./scripts/check-tests-structure.cjs",
         "test": "npm run test:structure && node --import tsx --test --test-skip-pattern \"\\\\[flow\\\\]\" \"src/**/__tests__/**/*.test.ts\"",
+        "test:packages": "turbo run test",
         "test:watch": "node --import tsx --test --watch --test-skip-pattern \"\\\\[flow\\\\]\" \"src/**/__tests__/**/*.test.ts\"",
         "test:flow": "node --import tsx --test --test-concurrency=1 \"src/**/__tests__/**/*.flow.test.ts\"",
         "test:flow:watch": "node --import tsx --test --watch --test-concurrency=1 \"src/**/__tests__/**/*.flow.test.ts\"",
@@ -144,16 +145,12 @@
         "format:check": "prettier . --check"
     },
     "peerDependencies": {
-        "better-sqlite3": "^11.9.1",
         "got": "14.6.4",
         "pino": "^9.0.0",
         "pino-pretty": "^13.0.0",
         "ws": "^8.18.3"
     },
     "peerDependenciesMeta": {
-        "better-sqlite3": {
-            "optional": true
-        },
         "got": {
             "optional": true
         },

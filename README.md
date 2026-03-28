@@ -112,6 +112,7 @@ Auth state is persisted in `.auth/state.sqlite`.
 
 ```ts
 import { createPinoLogger, createStore, WaClient } from 'zapo-js'
+import { createSqliteStore } from '@zapo-js/store-sqlite'
 
 const logger = await createPinoLogger({
     level: 'info',
@@ -119,14 +120,21 @@ const logger = await createPinoLogger({
 })
 
 const store = createStore({
-    sqlite: {
-        path: '.auth/state.sqlite',
-        driver: 'auto'
+    backends: {
+        sqlite: createSqliteStore({
+            path: '.auth/state.sqlite',
+            driver: 'auto'
+        })
     },
     providers: {
+        auth: 'sqlite',
+        signal: 'sqlite',
+        senderKey: 'sqlite',
+        appState: 'sqlite',
         messages: 'sqlite',
         threads: 'sqlite',
-        contacts: 'sqlite'
+        contacts: 'sqlite',
+        privacyToken: 'sqlite'
     }
 })
 

@@ -1,4 +1,17 @@
-import { signalAddressKey } from '@protocol/jid'
+import { signalAddressKey } from 'zapo-js/protocol'
+import type {
+    SignalIdentityRow,
+    SignalMetaRow,
+    SignalPreKeyRow,
+    SignalRegistrationRow,
+    SignalSessionRow,
+    SignalSignedPreKeyRow,
+    PreKeyRecord,
+    RegistrationInfo,
+    SignalAddress,
+    SignalSessionRecord,
+    SignedPreKeyRecord
+} from 'zapo-js/signal'
 import {
     decodeSignalPreKeyRow,
     decodeSignalRegistrationRow,
@@ -6,29 +19,9 @@ import {
     decodeSignalSessionRecord,
     decodeSignalSignedPreKeyRow,
     encodeSignalSessionRecord,
-    toSignalAddressParts,
-    type SignalIdentityRow,
-    type SignalMetaRow,
-    type SignalPreKeyRow,
-    type SignalRegistrationRow,
-    type SignalSessionRow,
-    type SignalSignedPreKeyRow
-} from '@signal/encoding'
-import type {
-    PreKeyRecord,
-    RegistrationInfo,
-    SignalAddress,
-    SignalSessionRecord,
-    SignedPreKeyRecord
-} from '@signal/types'
-import type {
-    WaSignalMetaSnapshot,
-    WaSignalStore as WaSignalStoreContract
-} from '@store/contracts/signal.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
-import { repeatSqlToken } from '@store/providers/sqlite/sql-utils'
-import type { WaSqliteStorageOptions } from '@store/types'
+    toSignalAddressParts
+} from 'zapo-js/signal'
+import type { WaSignalMetaSnapshot, WaSignalStore as WaSignalStoreContract } from 'zapo-js/store'
 import {
     asNumber,
     asOptionalBytes,
@@ -36,7 +29,12 @@ import {
     asString,
     toBoolOrUndef,
     resolvePositive
-} from '@util/coercion'
+} from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteConnection } from './connection'
+import { repeatSqlToken } from './sql-utils'
+import type { WaSqliteStorageOptions } from './types'
 
 interface SignalSessionExistsRow extends Record<string, unknown> {
     readonly user: unknown

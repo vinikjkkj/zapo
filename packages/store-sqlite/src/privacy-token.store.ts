@@ -1,11 +1,9 @@
-import type {
-    WaPrivacyTokenStore,
-    WaStoredPrivacyTokenRecord
-} from '@store/contracts/privacy-token.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
-import type { WaSqliteStorageOptions } from '@store/types'
-import { asNumber, asOptionalBytes, asOptionalNumber, asString } from '@util/coercion'
+import type { WaPrivacyTokenStore, WaStoredPrivacyTokenRecord } from 'zapo-js/store'
+import { asNumber, asOptionalBytes, asOptionalNumber, asString } from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteConnection } from './connection'
+import type { WaSqliteStorageOptions } from './types'
 
 interface PrivacyTokenRow extends Record<string, unknown> {
     readonly jid: unknown

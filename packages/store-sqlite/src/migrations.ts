@@ -1,4 +1,4 @@
-import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
+import type { WaSqliteConnection } from './connection'
 
 const UNIQUE_CONSTRAINT_ID_RE = /UNIQUE constraint failed: [A-Za-z_][A-Za-z0-9_]*\.id/
 

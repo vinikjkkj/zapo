@@ -37,7 +37,10 @@ module.exports = [
         languageOptions: {
             parserOptions: {
                 tsconfigRootDir: __dirname,
-                project: ['./packages/store-mysql/tsconfig.json']
+                project: [
+                    './packages/store-mysql/tsconfig.json',
+                    './packages/store-sqlite/tsconfig.json'
+                ]
             }
         }
     }

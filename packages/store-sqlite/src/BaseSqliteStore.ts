@@ -1,13 +1,6 @@
-import {
-    openSqliteConnection,
-    type NonPromise,
-    type WaSqliteConnection
-} from '@store/providers/sqlite/connection'
-import {
-    ensureSqliteMigrations,
-    type WaSqliteMigrationDomain
-} from '@store/providers/sqlite/migrations'
-import type { WaSqliteStorageOptions } from '@store/types'
+import { openSqliteConnection, type NonPromise, type WaSqliteConnection } from './connection'
+import { ensureSqliteMigrations, type WaSqliteMigrationDomain } from './migrations'
+import type { WaSqliteStorageOptions } from './types'
 
 export abstract class BaseSqliteStore {
     protected readonly options: WaSqliteStorageOptions

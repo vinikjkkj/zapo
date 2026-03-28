@@ -89,8 +89,14 @@ jobs:
             - name: install dependencies
               run: npm ci
 
-            - name: run tests
+            - name: build core
+              run: npm run build
+
+            - name: run core tests
               run: npm test
+
+            - name: run package tests
+              run: npm run test:packages
 
     benchmarks_pr_comment:
         if: github.event_name == 'pull_request'

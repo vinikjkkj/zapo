@@ -1,4 +1,4 @@
-import type { WaSqliteTableName, WaSqliteTableNameOverrides } from '@store/types'
+import type { WaSqliteTableName, WaSqliteTableNameOverrides } from './types'
 
 const SQLITE_TABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 

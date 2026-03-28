@@ -1,22 +1,12 @@
 export type {
-    WaCreateStoreCustomCacheProviders,
-    WaCreateStoreCustomProviders,
     WaCreateStoreOptions,
-    WaSqliteDriver,
-    WaSqliteTableName,
-    WaSqliteTableNameOverrides,
-    WaSqliteStorageOptions,
-    WaStoreSqliteBatchSizeSelection,
-    WaStoreMemoryLimitSelection,
-    WaStoreCacheProviderSelection,
-    WaStoreCacheTtlSelection,
     WaStore,
-    WaStoreDomainValueOrFactory,
-    WaStoreProviderSelection,
+    WaStoreBackend,
+    WaCacheDomain,
+    WaStoreDomain,
+    WaStoreMemoryLimitSelection,
     WaStoreSession
 } from '@store/types'
-export { WaAuthSqliteStore } from '@store/providers/sqlite/auth.store'
-export { WaAppStateSqliteStore } from '@store/providers/sqlite/appstate.store'
 export { createStore } from '@store/createStore'
 export type { WaAuthStore } from '@store/contracts/auth.store'
 export type { WaContactStore, WaStoredContactRecord } from '@store/contracts/contact.store'
@@ -39,11 +29,6 @@ export type {
     WaPrivacyTokenStore,
     WaStoredPrivacyTokenRecord
 } from '@store/contracts/privacy-token.store'
-export { WaSignalSqliteStore } from '@store/providers/sqlite/signal.store'
-export { SenderKeySqliteStore } from '@store/providers/sqlite/sender-key.store'
-export { WaRetrySqliteStore } from '@store/providers/sqlite/retry.store'
-export { WaParticipantsSqliteStore } from '@store/providers/sqlite/participants.store'
-export { WaDeviceListSqliteStore } from '@store/providers/sqlite/device-list.store'
 export { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
 export { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 export { SenderKeyMemoryStore } from '@store/providers/memory/sender-key.store'
@@ -53,6 +38,4 @@ export { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.sto
 export { WaContactMemoryStore } from '@store/providers/memory/contact.store'
 export { WaMessageMemoryStore } from '@store/providers/memory/message.store'
 export { WaThreadMemoryStore } from '@store/providers/memory/thread.store'
-export { WaContactSqliteStore } from '@store/providers/sqlite/contact.store'
-export { WaMessageSqliteStore } from '@store/providers/sqlite/message.store'
-export { WaThreadSqliteStore } from '@store/providers/sqlite/thread.store'
+export { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'

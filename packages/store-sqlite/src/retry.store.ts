@@ -1,8 +1,9 @@
-import type { WaRetryOutboundMessageRecord, WaRetryOutboundState } from '@retry/types'
-import type { WaRetryStore } from '@store/contracts/retry.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteStorageOptions } from '@store/types'
-import { asBytes, asNumber, asOptionalString, asString } from '@util/coercion'
+import type { WaRetryOutboundMessageRecord, WaRetryOutboundState } from 'zapo-js/retry'
+import type { WaRetryStore } from 'zapo-js/store'
+import { asBytes, asNumber, asOptionalString, asString } from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteStorageOptions } from './types'
 
 interface RetryOutboundRow extends Record<string, unknown> {
     readonly message_id: unknown

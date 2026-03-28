@@ -1,7 +1,7 @@
 {
-    "name": "@zapo-js/store-mysql",
+    "name": "@zapo-js/store-sqlite",
     "version": "0.1.0",
-    "description": "MySQL store provider for zapo-js",
+    "description": "SQLite store provider for zapo-js",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "exports": {
@@ -24,7 +24,7 @@
     },
     "peerDependencies": {
         "zapo-js": ">=0.1.0",
-        "mysql2": ">=3.0.0"
+        "better-sqlite3": ">=11.0.0"
     },
     "peerDependenciesMeta": {
         "zapo-js": {
@@ -32,7 +32,7 @@
         }
     },
     "devDependencies": {
-        "mysql2": "^3.14.0",
+        "better-sqlite3": "^12.6.2",
         "zapo-js": "file:../.."
     },
     "engines": {

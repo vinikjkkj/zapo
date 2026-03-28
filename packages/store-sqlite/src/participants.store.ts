@@ -1,10 +1,8 @@
-import type {
-    WaParticipantsSnapshot,
-    WaParticipantsStore
-} from '@store/contracts/participants.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteStorageOptions } from '@store/types'
-import { asNumber, asString } from '@util/coercion'
+import type { WaParticipantsSnapshot, WaParticipantsStore } from 'zapo-js/store'
+import { asNumber, asString } from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteStorageOptions } from './types'
 
 interface ParticipantsRow extends Record<string, unknown> {
     readonly group_jid: unknown

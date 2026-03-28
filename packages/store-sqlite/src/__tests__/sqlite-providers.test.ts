@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { WaAuthSqliteStore } from '@store/providers/sqlite/auth.store'
-import { openSqliteConnection } from '@store/providers/sqlite/connection'
-import { WaMessageSqliteStore } from '@store/providers/sqlite/message.store'
-import { WaPrivacyTokenSqliteStore } from '@store/providers/sqlite/privacy-token.store'
-import { WaThreadSqliteStore } from '@store/providers/sqlite/thread.store'
+import { WaAuthSqliteStore } from '../auth.store'
+import { openSqliteConnection } from '../connection'
+import { WaMessageSqliteStore } from '../message.store'
+import { WaPrivacyTokenSqliteStore } from '../privacy-token.store'
+import { WaThreadSqliteStore } from '../thread.store'
 
 interface Destroyable {
     destroy: () => Promise<void>

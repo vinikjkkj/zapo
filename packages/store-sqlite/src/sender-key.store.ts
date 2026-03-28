@@ -1,19 +1,24 @@
+import type {
+    SenderKeyDistributionRow,
+    SenderKeyRow,
+    SignalAddressParts,
+    SenderKeyDistributionRecord,
+    SenderKeyRecord,
+    SignalAddress
+} from 'zapo-js/signal'
 import {
     decodeSenderKeyDistributionRow,
     decodeSenderKeyRecord,
     encodeSenderKeyRecord,
-    toSignalAddressParts,
-    type SenderKeyDistributionRow,
-    type SenderKeyRow,
-    type SignalAddressParts
-} from '@signal/encoding'
-import type { SenderKeyDistributionRecord, SenderKeyRecord, SignalAddress } from '@signal/types'
-import type { WaSenderKeyStore as WaSenderKeyStoreContract } from '@store/contracts/sender-key.store'
-import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'
-import type { WaSqliteConnection } from '@store/providers/sqlite/connection'
-import { repeatSqlToken } from '@store/providers/sqlite/sql-utils'
-import type { WaSqliteStorageOptions } from '@store/types'
-import { asNumber, asString, resolvePositive } from '@util/coercion'
+    toSignalAddressParts
+} from 'zapo-js/signal'
+import type { WaSenderKeyStore as WaSenderKeyStoreContract } from 'zapo-js/store'
+import { asNumber, asString, resolvePositive } from 'zapo-js/util'
+
+import { BaseSqliteStore } from './BaseSqliteStore'
+import type { WaSqliteConnection } from './connection'
+import { repeatSqlToken } from './sql-utils'
+import type { WaSqliteStorageOptions } from './types'
 
 const DEFAULTS = Object.freeze({
     distributionBatchSize: 250
