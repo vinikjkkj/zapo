@@ -40,7 +40,8 @@ module.exports = [
                 project: [
                     './packages/store-mysql/tsconfig.json',
                     './packages/store-sqlite/tsconfig.json',
-                    './packages/store-postgres/tsconfig.json'
+                    './packages/store-postgres/tsconfig.json',
+                    './packages/store-redis/tsconfig.json'
                 ]
             }
         }

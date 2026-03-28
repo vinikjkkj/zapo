@@ -1,4 +1,4 @@
-export { bytesToHex, toBytesView, uint8Equal } from '@util/bytes'
+export { bytesToHex, hexToBytes, toBytesView, uint8Equal } from '@util/bytes'
 export {
     asBytes,
     asNumber,
