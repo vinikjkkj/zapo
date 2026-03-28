@@ -21,6 +21,10 @@ import { queryFirst, queryRows, toBytes, toBytesOrNull, bytesToHex, uint8Equal }
 import type { MysqlParam, WaMysqlStorageOptions } from './types'
 
 const BATCH_SIZE = 500
+const FIXED_IN_PLACEHOLDERS = Array.from({ length: BATCH_SIZE }, () => '?').join(', ')
+const COLLECTION_BATCH = 8
+const FIXED_COLLECTION_PLACEHOLDERS = Array.from({ length: COLLECTION_BATCH }, () => '?').join(', ')
+const EMPTY_KEY_PAD = new Uint8Array(0)
 
 export class WaAppStateMysqlStore extends BaseMysqlStore implements WaAppStateStore {
     public constructor(options: WaMysqlStorageOptions) {
@@ -221,15 +225,15 @@ export class WaAppStateMysqlStore extends BaseMysqlStore implements WaAppStateSt
     ): Promise<readonly WaAppStateCollectionStoreState[]> {
         if (collections.length === 0) return []
         return this.withTransaction(async (conn) => {
-            const uniqueCollections = [...new Set(collections)]
-            const placeholders = uniqueCollections.map(() => '?').join(', ')
+            const uniqueCollections: string[] = [...new Set(collections)]
+            while (uniqueCollections.length < COLLECTION_BATCH) uniqueCollections.push('')
             const params: MysqlParam[] = [this.sessionId, ...uniqueCollections]
 
             const versionRows = queryRows(
                 await conn.execute(
                     `SELECT collection, version, hash
                      FROM ${this.t('appstate_collection_versions')}
-                     WHERE session_id = ? AND collection IN (${placeholders})`,
+                     WHERE session_id = ? AND collection IN (${FIXED_COLLECTION_PLACEHOLDERS})`,
                     params
                 )
             )
@@ -237,7 +241,7 @@ export class WaAppStateMysqlStore extends BaseMysqlStore implements WaAppStateSt
                 await conn.execute(
                     `SELECT collection, index_mac_hex, value_mac
                      FROM ${this.t('appstate_collection_index_values')}
-                     WHERE session_id = ? AND collection IN (${placeholders})`,
+                     WHERE session_id = ? AND collection IN (${FIXED_COLLECTION_PLACEHOLDERS})`,
                     params
                 )
             )
@@ -350,13 +354,13 @@ export class WaAppStateMysqlStore extends BaseMysqlStore implements WaAppStateSt
         const byHex = new Map<string, Uint8Array>()
         for (let start = 0; start < uniqueKeyIds.length; start += BATCH_SIZE) {
             const batch = uniqueKeyIds.slice(start, start + BATCH_SIZE)
-            const placeholders = batch.map(() => '?').join(', ')
+            while (batch.length < BATCH_SIZE) batch.push(EMPTY_KEY_PAD)
             const params: MysqlParam[] = [this.sessionId, ...batch]
             const rows = queryRows(
                 await executor.execute(
                     `SELECT key_id, key_data
                  FROM ${this.t('appstate_sync_keys')}
-                 WHERE session_id = ? AND key_id IN (${placeholders})`,
+                 WHERE session_id = ? AND key_id IN (${FIXED_IN_PLACEHOLDERS})`,
                     params
                 )
             )
@@ -379,13 +383,13 @@ export class WaAppStateMysqlStore extends BaseMysqlStore implements WaAppStateSt
         const byHex = new Map<string, WaAppStateSyncKey>()
         for (let start = 0; start < uniqueKeyIds.length; start += BATCH_SIZE) {
             const batch = uniqueKeyIds.slice(start, start + BATCH_SIZE)
-            const placeholders = batch.map(() => '?').join(', ')
+            while (batch.length < BATCH_SIZE) batch.push(EMPTY_KEY_PAD)
             const params: MysqlParam[] = [this.sessionId, ...batch]
             const rows = queryRows(
                 await this.pool.execute(
                     `SELECT key_id, key_data, timestamp, fingerprint
                  FROM ${this.t('appstate_sync_keys')}
-                 WHERE session_id = ? AND key_id IN (${placeholders})`,
+                 WHERE session_id = ? AND key_id IN (${FIXED_IN_PLACEHOLDERS})`,
                     params
                 )
             )

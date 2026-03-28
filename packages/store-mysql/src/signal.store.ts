@@ -20,6 +20,12 @@ import { queryFirst, queryRows, safeLimit, toBytes, toBytesOrNull, type MysqlRow
 import type { MysqlParam, WaMysqlStorageOptions } from './types'
 
 const BATCH_SIZE = 250
+const FIXED_IN_PLACEHOLDERS = Array.from({ length: BATCH_SIZE }, () => '?').join(', ')
+const FIXED_ADDR_PLACEHOLDERS = Array.from(
+    { length: BATCH_SIZE },
+    () => '(user = ? AND server = ? AND device = ?)'
+).join(' OR ')
+const NO_MATCH_ADDRESS: SignalAddressParts = { user: '', server: '', device: -1 }
 
 export class WaSignalMysqlStore extends BaseMysqlStore implements WaSignalStore {
     public constructor(options: WaMysqlStorageOptions) {
@@ -252,13 +258,13 @@ export class WaSignalMysqlStore extends BaseMysqlStore implements WaSignalStore 
         const byId = new Map<number, PreKeyRecord>()
         for (let start = 0; start < uniqueKeyIds.length; start += BATCH_SIZE) {
             const batch = uniqueKeyIds.slice(start, start + BATCH_SIZE)
-            const placeholders = batch.map(() => '?').join(', ')
+            while (batch.length < BATCH_SIZE) batch.push(-1)
             const params: MysqlParam[] = [this.sessionId, ...batch]
             const rows = queryRows(
                 await this.pool.execute(
                     `SELECT key_id, pub_key, priv_key, uploaded
                  FROM ${this.t('signal_prekey')}
-                 WHERE session_id = ? AND key_id IN (${placeholders})`,
+                 WHERE session_id = ? AND key_id IN (${FIXED_IN_PLACEHOLDERS})`,
                     params
                 )
             )
@@ -431,9 +437,7 @@ export class WaSignalMysqlStore extends BaseMysqlStore implements WaSignalStore 
         const existingKeys = new Set<string>()
         for (let start = 0; start < targets.length; start += BATCH_SIZE) {
             const batch = targets.slice(start, start + BATCH_SIZE)
-            const placeholders = batch
-                .map(() => '(user = ? AND server = ? AND device = ?)')
-                .join(' OR ')
+            while (batch.length < BATCH_SIZE) batch.push(NO_MATCH_ADDRESS)
             const params: MysqlParam[] = [
                 this.sessionId,
                 ...batch.flatMap((t) => [t.user, t.server, t.device])
@@ -442,7 +446,7 @@ export class WaSignalMysqlStore extends BaseMysqlStore implements WaSignalStore 
                 await this.pool.execute(
                     `SELECT user, server, device
                  FROM ${this.t('signal_session')}
-                 WHERE session_id = ? AND (${placeholders})`,
+                 WHERE session_id = ? AND (${FIXED_ADDR_PLACEHOLDERS})`,
                     params
                 )
             )
@@ -483,9 +487,7 @@ export class WaSignalMysqlStore extends BaseMysqlStore implements WaSignalStore 
         const byKey = new Map<string, SignalSessionRecord>()
         for (let start = 0; start < targets.length; start += BATCH_SIZE) {
             const batch = targets.slice(start, start + BATCH_SIZE)
-            const placeholders = batch
-                .map(() => '(user = ? AND server = ? AND device = ?)')
-                .join(' OR ')
+            while (batch.length < BATCH_SIZE) batch.push(NO_MATCH_ADDRESS)
             const params: MysqlParam[] = [
                 this.sessionId,
                 ...batch.flatMap((t) => [t.user, t.server, t.device])
@@ -494,7 +496,7 @@ export class WaSignalMysqlStore extends BaseMysqlStore implements WaSignalStore 
                 await this.pool.execute(
                     `SELECT user, server, device, record
                  FROM ${this.t('signal_session')}
-                 WHERE session_id = ? AND (${placeholders})`,
+                 WHERE session_id = ? AND (${FIXED_ADDR_PLACEHOLDERS})`,
                     params
                 )
             )
@@ -569,9 +571,7 @@ export class WaSignalMysqlStore extends BaseMysqlStore implements WaSignalStore 
         const byKey = new Map<string, Uint8Array>()
         for (let start = 0; start < targets.length; start += BATCH_SIZE) {
             const batch = targets.slice(start, start + BATCH_SIZE)
-            const placeholders = batch
-                .map(() => '(user = ? AND server = ? AND device = ?)')
-                .join(' OR ')
+            while (batch.length < BATCH_SIZE) batch.push(NO_MATCH_ADDRESS)
             const params: MysqlParam[] = [
                 this.sessionId,
                 ...batch.flatMap((t) => [t.user, t.server, t.device])
@@ -580,7 +580,7 @@ export class WaSignalMysqlStore extends BaseMysqlStore implements WaSignalStore 
                 await this.pool.execute(
                     `SELECT user, server, device, identity_key
                  FROM ${this.t('signal_identity')}
-                 WHERE session_id = ? AND (${placeholders})`,
+                 WHERE session_id = ? AND (${FIXED_ADDR_PLACEHOLDERS})`,
                     params
                 )
             )

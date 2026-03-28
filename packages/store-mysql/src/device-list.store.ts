@@ -6,6 +6,7 @@ import type { WaMysqlStorageOptions } from './types'
 
 const DEFAULT_DEVICE_LIST_TTL_MS = 5 * 60 * 1000
 const BATCH_SIZE = 500
+const FIXED_IN_PLACEHOLDERS = Array.from({ length: BATCH_SIZE }, () => '?').join(', ')
 
 export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceListStore {
     private readonly ttlMs: number
@@ -55,12 +56,12 @@ export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceLi
 
         for (let start = 0; start < uniqueUserJids.length; start += BATCH_SIZE) {
             const batch = uniqueUserJids.slice(start, start + BATCH_SIZE)
-            const placeholders = batch.map(() => '?').join(', ')
+            while (batch.length < BATCH_SIZE) batch.push('')
             const rows = queryRows(
                 await this.pool.execute(
                     `SELECT user_jid, device_jids_json, updated_at_ms, expires_at_ms
                      FROM ${this.t('device_list_cache')}
-                     WHERE session_id = ? AND user_jid IN (${placeholders})`,
+                     WHERE session_id = ? AND user_jid IN (${FIXED_IN_PLACEHOLDERS})`,
                     [this.sessionId, ...batch]
                 )
             )
@@ -86,10 +87,10 @@ export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceLi
         if (expiredUserJids.length > 0) {
             for (let start = 0; start < expiredUserJids.length; start += BATCH_SIZE) {
                 const batch = expiredUserJids.slice(start, start + BATCH_SIZE)
-                const placeholders = batch.map(() => '?').join(', ')
+                while (batch.length < BATCH_SIZE) batch.push('')
                 await this.pool.execute(
                     `DELETE FROM ${this.t('device_list_cache')}
-                     WHERE session_id = ? AND expires_at_ms <= ? AND user_jid IN (${placeholders})`,
+                     WHERE session_id = ? AND expires_at_ms <= ? AND user_jid IN (${FIXED_IN_PLACEHOLDERS})`,
                     [this.sessionId, nowMs, ...batch]
                 )
             }

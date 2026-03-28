@@ -14,6 +14,11 @@ import type { MysqlParam } from './types'
 import type { WaMysqlStorageOptions } from './types'
 
 const BATCH_SIZE = 250
+const FIXED_SENDER_PLACEHOLDERS = Array.from(
+    { length: BATCH_SIZE },
+    () => '(sender_user = ? AND sender_server = ? AND sender_device = ?)'
+).join(' OR ')
+const NO_MATCH_SENDER: SignalAddressParts = { user: '', server: '', device: -1 }
 
 export class WaSenderKeyMysqlStore extends BaseMysqlStore implements WaSenderKeyStore {
     public constructor(options: WaMysqlStorageOptions) {
@@ -138,9 +143,7 @@ export class WaSenderKeyMysqlStore extends BaseMysqlStore implements WaSenderKey
         const byKey = new Map<string, SenderKeyDistributionRecord>()
         for (let start = 0; start < targets.length; start += BATCH_SIZE) {
             const batch = targets.slice(start, start + BATCH_SIZE)
-            const placeholders = batch
-                .map(() => '(sender_user = ? AND sender_server = ? AND sender_device = ?)')
-                .join(' OR ')
+            while (batch.length < BATCH_SIZE) batch.push(NO_MATCH_SENDER)
             const params: MysqlParam[] = [
                 this.sessionId,
                 groupId,
@@ -150,7 +153,7 @@ export class WaSenderKeyMysqlStore extends BaseMysqlStore implements WaSenderKey
                 await this.pool.execute(
                     `SELECT group_id, sender_user, sender_server, sender_device, key_id, timestamp_ms
                      FROM ${this.t('sender_key_distribution')}
-                     WHERE session_id = ? AND group_id = ? AND (${placeholders})`,
+                     WHERE session_id = ? AND group_id = ? AND (${FIXED_SENDER_PLACEHOLDERS})`,
                     params
                 )
             )
@@ -200,14 +203,20 @@ export class WaSenderKeyMysqlStore extends BaseMysqlStore implements WaSenderKey
             let total = 0
             for (let start = 0; start < participants.length; start += BATCH_SIZE) {
                 const batch = participants.slice(start, start + BATCH_SIZE)
-                const filters: string[] = []
                 const senderParams: MysqlParam[] = []
                 for (const participant of batch) {
                     const sender = toSignalAddressParts(participant)
-                    filters.push('(sender_user = ? AND sender_server = ? AND sender_device = ?)')
                     senderParams.push(sender.user, sender.server, sender.device)
                 }
-                const where = `session_id = ? AND group_id = ? AND (${filters.join(' OR ')})`
+                const remaining = BATCH_SIZE - batch.length
+                for (let i = 0; i < remaining; i++) {
+                    senderParams.push(
+                        NO_MATCH_SENDER.user,
+                        NO_MATCH_SENDER.server,
+                        NO_MATCH_SENDER.device
+                    )
+                }
+                const where = `session_id = ? AND group_id = ? AND (${FIXED_SENDER_PLACEHOLDERS})`
                 const params: MysqlParam[] = [this.sessionId, groupId, ...senderParams]
                 total += affectedRows(
                     await conn.execute(
