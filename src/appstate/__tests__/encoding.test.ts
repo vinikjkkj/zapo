@@ -6,7 +6,7 @@ import {
     decodeAppStateFingerprint,
     decodeAppStateSyncKeys,
     encodeAppStateFingerprint
-} from '@appstate/store/sqlite'
+} from '@appstate/encoding'
 
 test('appstate sqlite helper encodes/decodes sync key fingerprints', () => {
     const fingerprint = {

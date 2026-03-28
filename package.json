@@ -6,6 +6,7 @@
         "type": "github",
         "url": "https://github.com/sponsors/vinikjkkj"
     },
+    "packageManager": "npm@10.0.0",
     "main": "dist/index.js",
     "module": "dist/esm/index.js",
     "types": "dist/types/index.d.ts",
@@ -70,6 +71,24 @@
             "import": "./dist/esm/transport/index.js",
             "default": "./dist/transport/index.js"
         },
+        "./protocol": {
+            "types": "./dist/types/protocol/index.d.ts",
+            "require": "./dist/protocol/index.js",
+            "import": "./dist/esm/protocol/index.js",
+            "default": "./dist/protocol/index.js"
+        },
+        "./retry": {
+            "types": "./dist/types/retry/index.d.ts",
+            "require": "./dist/retry/index.js",
+            "import": "./dist/esm/retry/index.js",
+            "default": "./dist/retry/index.js"
+        },
+        "./util": {
+            "types": "./dist/types/util/index.d.ts",
+            "require": "./dist/util/index.js",
+            "import": "./dist/esm/util/index.js",
+            "default": "./dist/util/index.js"
+        },
         "./proto": {
             "types": "./dist/types/proto.d.ts",
             "require": "./dist/proto.js",
@@ -84,6 +103,9 @@
         "proto/index.d.ts",
         "scripts/check-node-version.cjs"
     ],
+    "workspaces": [
+        "packages/*"
+    ],
     "engines": {
         "node": ">=20.9.0"
     },
@@ -92,13 +114,14 @@
         "changeset": "changeset",
         "changeset:status": "changeset status --verbose",
         "version:packages": "changeset version",
-        "release:publish": "npm run build && changeset publish",
+        "release:publish": "npm run build && npm run build:packages && changeset publish",
         "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
         "build:cjs": "tsc -p tsconfig.build.cjs.json && tsc-alias -p tsconfig.build.cjs.json",
         "build:esm": "tsc -p tsconfig.build.esm.json && tsc-alias -p tsconfig.build.esm.json",
         "build:types": "tsc -p tsconfig.build.types.json && tsc-alias -p tsconfig.build.types.json",
         "build:esm:finalize": "node ./scripts/finalize-esm-build.cjs",
         "build": "npm run clean && npm run build:cjs && npm run build:esm && npm run build:types && npm run build:esm:finalize",
+        "build:packages": "turbo run build",
         "proto:generate": "node ./scripts/generate-proto.cjs",
         "example": "tsx examples/example.ts",
         "bench:media": "node --expose-gc --import tsx bench/media-streaming.bench.ts",
@@ -120,7 +143,6 @@
         "format": "prettier . --write",
         "format:check": "prettier . --check"
     },
-    "dependencies": {},
     "peerDependencies": {
         "better-sqlite3": "^11.9.1",
         "got": "14.6.4",
@@ -161,6 +183,7 @@
         "prettier": "^3.8.1",
         "tsc-alias": "^1.8.16",
         "tsx": "^4.20.6",
+        "turbo": "^2.8.20",
         "typescript": "^5.7.3",
         "typescript-eslint": "^8.56.1",
         "ws": "^8.18.3"

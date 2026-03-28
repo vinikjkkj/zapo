@@ -1,4 +1,6 @@
 dist
+packages/*/dist
+.turbo
 node_modules
 .auth
 example.js

@@ -4,6 +4,7 @@ module.exports = [
     {
         ignores: [
             'dist/**',
+            'packages/*/dist/**',
             'deobfuscated/**',
             'coverage/**',
             'proto/index.js',
@@ -28,6 +29,15 @@ module.exports = [
             parserOptions: {
                 tsconfigRootDir: __dirname,
                 project: ['./tsconfig.json', './bench/tsconfig.json', './examples/tsconfig.json']
+            }
+        }
+    },
+    {
+        files: ['packages/*/src/**/*.ts'],
+        languageOptions: {
+            parserOptions: {
+                tsconfigRootDir: __dirname,
+                project: ['./packages/store-mysql/tsconfig.json']
             }
         }
     }

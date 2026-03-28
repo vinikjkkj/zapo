@@ -7,6 +7,16 @@ export {
     SignalPreKeyBundle,
     SignedPreKeyRecord
 } from '@signal/types'
+export type { SignalSessionRecord } from '@signal/types'
+export {
+    encodeSignalSessionRecord,
+    decodeSignalSessionRecord,
+    encodeSenderKeyRecord,
+    decodeSenderKeyRecord,
+    decodeSenderKeyDistributionRow,
+    toSignalAddressParts,
+    type SignalAddressParts
+} from '@signal/encoding'
 export {
     generatePreKeyPair,
     generateRegistrationId,

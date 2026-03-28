@@ -13,5 +13,6 @@ export {
     parsePhoneJid,
     parseSignalAddressFromJid,
     splitJid,
+    signalAddressKey,
     toUserJid
 } from '@protocol/jid'

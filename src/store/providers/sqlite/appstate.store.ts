@@ -4,7 +4,7 @@ import {
     decodeAppStateFingerprint,
     decodeAppStateSyncKeys,
     encodeAppStateFingerprint
-} from '@appstate/store/sqlite'
+} from '@appstate/encoding'
 import type {
     AppStateCollectionName,
     WaAppStateSyncKey,

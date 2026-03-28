@@ -6,7 +6,7 @@ import type {
 import { proto } from '@proto'
 import { asBytes, asNumber, asOptionalBytes, asString } from '@util/coercion'
 
-type SqliteRow = Readonly<Record<string, unknown>>
+type StoreRow = Readonly<Record<string, unknown>>
 
 export function encodeAppStateFingerprint(
     fingerprint: WaAppStateSyncKey['fingerprint']
@@ -32,7 +32,7 @@ export function decodeAppStateFingerprint(
     }
 }
 
-export function decodeAppStateSyncKeys(rows: readonly SqliteRow[]): readonly WaAppStateSyncKey[] {
+export function decodeAppStateSyncKeys(rows: readonly StoreRow[]): readonly WaAppStateSyncKey[] {
     const decoded = new Array<WaAppStateSyncKey>(rows.length)
     for (let i = 0; i < rows.length; i += 1) {
         const row = rows[i]
@@ -47,8 +47,8 @@ export function decodeAppStateSyncKeys(rows: readonly SqliteRow[]): readonly WaA
 }
 
 export function decodeAppStateCollections(
-    versionRows: readonly SqliteRow[],
-    valueRows: readonly SqliteRow[]
+    versionRows: readonly StoreRow[],
+    valueRows: readonly StoreRow[]
 ): WaAppStateStoreData['collections'] {
     const valueMapByCollection = new Map<string, Record<string, Uint8Array>>()
     for (const row of valueRows) {

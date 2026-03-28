@@ -1,0 +1,40 @@
+{
+    "name": "@zapo-js/store-mysql",
+    "version": "0.1.0",
+    "description": "MySQL store provider for zapo-js",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.build.cjs.json",
+        "typecheck": "tsc --noEmit"
+    },
+    "peerDependencies": {
+        "zapo-js": ">=0.1.0",
+        "mysql2": ">=3.0.0"
+    },
+    "peerDependenciesMeta": {
+        "zapo-js": {
+            "optional": true
+        }
+    },
+    "devDependencies": {
+        "mysql2": "^3.14.0",
+        "zapo-js": "file:../.."
+    },
+    "engines": {
+        "node": ">=20.9.0"
+    }
+}

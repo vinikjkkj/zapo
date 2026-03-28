@@ -85,7 +85,7 @@ export interface SenderKeyDistributionRow extends Record<string, unknown> {
     readonly timestamp_ms: unknown
 }
 
-export interface SqliteCountRow extends Record<string, unknown> {
+export interface StoreCountRow extends Record<string, unknown> {
     readonly count: unknown
 }
 
@@ -536,7 +536,7 @@ export function decodeSenderKeyDistributionRow(
     }
 }
 
-export function decodeSqliteCount(row: SqliteCountRow | null, field: string): number {
+export function decodeStoreCount(row: StoreCountRow | null, field: string): number {
     return row ? asNumber(row.count, field) : 0
 }
 

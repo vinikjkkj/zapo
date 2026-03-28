@@ -1,0 +1,26 @@
+{
+    "extends": "../../tsconfig.packages.json",
+    "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist",
+        "noEmit": false,
+        "types": ["node"],
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "baseUrl": "../..",
+        "paths": {
+            "zapo-js": ["dist/types/index.d.ts"],
+            "zapo-js/store": ["dist/types/store/index.d.ts"],
+            "zapo-js/signal": ["dist/types/signal/index.d.ts"],
+            "zapo-js/auth": ["dist/types/auth/index.d.ts"],
+            "zapo-js/appstate": ["dist/types/appstate/index.d.ts"],
+            "zapo-js/retry": ["dist/types/retry/index.d.ts"],
+            "zapo-js/proto": ["dist/types/proto.d.ts"],
+            "zapo-js/protocol": ["dist/types/protocol/index.d.ts"],
+            "zapo-js/util": ["dist/types/util/index.d.ts"]
+        }
+    },
+    "include": ["src"],
+    "exclude": ["src/**/__tests__/**"]
+}

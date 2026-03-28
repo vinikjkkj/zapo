@@ -27,13 +27,18 @@ export type {
     WaParticipantsStore
 } from '@store/contracts/participants.store'
 export type {
+    WaAppStateCollectionStateUpdate,
     WaAppStateCollectionStoreState,
     WaAppStateStore
 } from '@store/contracts/appstate.store'
 export type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
-export type { WaSignalStore } from '@store/contracts/signal.store'
+export type { WaSignalMetaSnapshot, WaSignalStore } from '@store/contracts/signal.store'
 export type { WaRetryStore } from '@store/contracts/retry.store'
 export type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/thread.store'
+export type {
+    WaPrivacyTokenStore,
+    WaStoredPrivacyTokenRecord
+} from '@store/contracts/privacy-token.store'
 export { WaSignalSqliteStore } from '@store/providers/sqlite/signal.store'
 export { SenderKeySqliteStore } from '@store/providers/sqlite/sender-key.store'
 export { WaRetrySqliteStore } from '@store/providers/sqlite/retry.store'

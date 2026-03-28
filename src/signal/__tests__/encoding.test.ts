@@ -12,11 +12,11 @@ import {
     decodeSignalRegistrationRow,
     decodeSignalSessionRecord,
     decodeSignalSignedPreKeyRow,
-    decodeSqliteCount,
+    decodeStoreCount,
     encodeSenderKeyRecord,
     encodeSignalSessionRecord,
     toSignalAddressParts
-} from '@signal/store/sqlite'
+} from '@signal/encoding'
 import type { SignalAddress, SignalSessionRecord } from '@signal/types'
 import { toBytesView } from '@util/bytes'
 
@@ -217,6 +217,6 @@ test('sqlite signal helpers encode/decode sender key records and distribution ro
 })
 
 test('sqlite signal helpers decode count rows safely', () => {
-    assert.equal(decodeSqliteCount(null, 'count.field'), 0)
-    assert.equal(decodeSqliteCount({ count: 12 }, 'count.field'), 12)
+    assert.equal(decodeStoreCount(null, 'count.field'), 0)
+    assert.equal(decodeStoreCount({ count: 12 }, 'count.field'), 12)
 })

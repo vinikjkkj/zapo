@@ -13,7 +13,7 @@ import {
     type SignalRegistrationRow,
     type SignalSessionRow,
     type SignalSignedPreKeyRow
-} from '@signal/store/sqlite'
+} from '@signal/encoding'
 import type {
     PreKeyRecord,
     RegistrationInfo,

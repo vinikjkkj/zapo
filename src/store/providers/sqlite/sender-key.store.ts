@@ -6,7 +6,7 @@ import {
     type SenderKeyDistributionRow,
     type SenderKeyRow,
     type SignalAddressParts
-} from '@signal/store/sqlite'
+} from '@signal/encoding'
 import type { SenderKeyDistributionRecord, SenderKeyRecord, SignalAddress } from '@signal/types'
 import type { WaSenderKeyStore as WaSenderKeyStoreContract } from '@store/contracts/sender-key.store'
 import { BaseSqliteStore } from '@store/providers/sqlite/BaseSqliteStore'

@@ -2,7 +2,37 @@
     "extends": "../tsconfig.json",
     "compilerOptions": {
         "noEmit": true,
-        "rootDir": ".."
+        "rootDir": "..",
+        "paths": {
+            "@appstate": ["src/appstate/index.ts"],
+            "@appstate/*": ["src/appstate/*"],
+            "@auth": ["src/auth/index.ts"],
+            "@auth/*": ["src/auth/*"],
+            "@client": ["src/client/index.ts"],
+            "@client/*": ["src/client/*"],
+            "@crypto": ["src/crypto/index.ts"],
+            "@crypto/*": ["src/crypto/*"],
+            "@infra/*": ["src/infra/*"],
+            "@media": ["src/media/index.ts"],
+            "@media/*": ["src/media/*"],
+            "@message": ["src/message/index.ts"],
+            "@message/*": ["src/message/*"],
+            "@protocol": ["src/protocol/index.ts"],
+            "@protocol/*": ["src/protocol/*"],
+            "@proto": ["src/proto.ts"],
+            "@retry": ["src/retry/index.ts"],
+            "@retry/*": ["src/retry/*"],
+            "@signal": ["src/signal/index.ts"],
+            "@signal/*": ["src/signal/*"],
+            "@store": ["src/store/index.ts"],
+            "@store/*": ["src/store/*"],
+            "@transport": ["src/transport/index.ts"],
+            "@transport/*": ["src/transport/*"],
+            "@util/*": ["src/util/*"],
+            "zapo-js": ["src/index.ts"],
+            "zapo-js/*": ["src/*/index.ts"],
+            "@zapo-js/*": ["packages/*/src"]
+        }
     },
-    "include": ["./**/*", "../src/**/*"]
+    "include": ["./**/*", "../src/**/*", "../packages/*/src/**/*"]
 }

@@ -1,5 +1,11 @@
 export * from '@appstate/constants'
-export type { WaAppStateSyncOptions } from '@appstate/types'
+export type {
+    AppStateCollectionName,
+    WaAppStateStoreData,
+    WaAppStateSyncKey,
+    WaAppStateSyncOptions
+} from '@appstate/types'
+export { encodeAppStateFingerprint, decodeAppStateFingerprint } from '@appstate/encoding'
 export * from '@appstate/utils'
 export { WaAppStateCrypto } from '@appstate/WaAppStateCrypto'
 export { parseSyncResponse } from '@appstate/WaAppStateSyncResponseParser'
