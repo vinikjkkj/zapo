@@ -39,7 +39,8 @@ module.exports = [
                 tsconfigRootDir: __dirname,
                 project: [
                     './packages/store-mysql/tsconfig.json',
-                    './packages/store-sqlite/tsconfig.json'
+                    './packages/store-sqlite/tsconfig.json',
+                    './packages/store-postgres/tsconfig.json'
                 ]
             }
         }

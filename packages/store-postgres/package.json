@@ -1,7 +1,7 @@
 {
-    "name": "@zapo-js/store-mysql",
+    "name": "@zapo-js/store-postgres",
     "version": "0.1.0",
-    "description": "MySQL/MariaDB store provider for zapo-js",
+    "description": "PostgreSQL store provider for zapo-js",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "exports": {
@@ -24,7 +24,7 @@
     },
     "peerDependencies": {
         "zapo-js": ">=0.1.0",
-        "mysql2": ">=3.0.0"
+        "pg": ">=8.0.0"
     },
     "peerDependenciesMeta": {
         "zapo-js": {
@@ -32,7 +32,8 @@
         }
     },
     "devDependencies": {
-        "mysql2": "^3.14.0",
+        "@types/pg": "^8.11.0",
+        "pg": "^8.14.1",
         "zapo-js": "file:../.."
     },
     "engines": {
