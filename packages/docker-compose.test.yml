@@ -1,0 +1,43 @@
+services:
+    mysql:
+        image: mysql:8
+        environment:
+            MYSQL_ROOT_PASSWORD: test
+            MYSQL_DATABASE: zapo_test
+        ports:
+            - '3306'
+        healthcheck:
+            test: mysqladmin ping -h localhost -u root -ptest
+            interval: 3s
+            retries: 10
+
+    postgres:
+        image: postgres:16-alpine
+        environment:
+            POSTGRES_PASSWORD: test
+            POSTGRES_DB: zapo_test
+        ports:
+            - '5432'
+        healthcheck:
+            test: pg_isready -U postgres
+            interval: 3s
+            retries: 10
+
+    redis:
+        image: redis:7-alpine
+        ports:
+            - '6379'
+        healthcheck:
+            test: redis-cli ping
+            interval: 3s
+            retries: 10
+
+    mongo:
+        image: mongo:7
+        command: mongod --replSet rs0
+        ports:
+            - '27017'
+        healthcheck:
+            test: mongosh --eval "try{rs.status().ok}catch(e){rs.initiate().ok}" --quiet
+            interval: 3s
+            retries: 15

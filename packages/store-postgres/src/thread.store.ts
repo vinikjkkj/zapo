@@ -23,23 +23,18 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
         super(options, ['mailbox'])
     }
 
+    private upsertQuery(values: unknown[]) {
+        return {
+            name: this.stmtName('thread_upsert'),
+            text: `INSERT INTO ${this.t('mailbox_threads')} (session_id, jid, name, unread_count, archived, pinned, mute_end_ms, marked_as_unread, ephemeral_expiration) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (session_id, jid) DO UPDATE SET name = COALESCE(EXCLUDED.name, ${this.t('mailbox_threads')}.name), unread_count = COALESCE(EXCLUDED.unread_count, ${this.t('mailbox_threads')}.unread_count), archived = COALESCE(EXCLUDED.archived, ${this.t('mailbox_threads')}.archived), pinned = COALESCE(EXCLUDED.pinned, ${this.t('mailbox_threads')}.pinned), mute_end_ms = COALESCE(EXCLUDED.mute_end_ms, ${this.t('mailbox_threads')}.mute_end_ms), marked_as_unread = COALESCE(EXCLUDED.marked_as_unread, ${this.t('mailbox_threads')}.marked_as_unread), ephemeral_expiration = COALESCE(EXCLUDED.ephemeral_expiration, ${this.t('mailbox_threads')}.ephemeral_expiration)`,
+            values
+        }
+    }
+
     public async upsert(record: WaStoredThreadRecord): Promise<void> {
         await this.ensureReady()
-        await this.pool.query({
-            name: this.stmtName('thread_upsert'),
-            text: `INSERT INTO ${this.t('mailbox_threads')} (
-                session_id, jid, name, unread_count, archived, pinned,
-                mute_end_ms, marked_as_unread, ephemeral_expiration
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            ON CONFLICT (session_id, jid) DO UPDATE SET
-                name = COALESCE(EXCLUDED.name, ${this.t('mailbox_threads')}.name),
-                unread_count = COALESCE(EXCLUDED.unread_count, ${this.t('mailbox_threads')}.unread_count),
-                archived = COALESCE(EXCLUDED.archived, ${this.t('mailbox_threads')}.archived),
-                pinned = COALESCE(EXCLUDED.pinned, ${this.t('mailbox_threads')}.pinned),
-                mute_end_ms = COALESCE(EXCLUDED.mute_end_ms, ${this.t('mailbox_threads')}.mute_end_ms),
-                marked_as_unread = COALESCE(EXCLUDED.marked_as_unread, ${this.t('mailbox_threads')}.marked_as_unread),
-                ephemeral_expiration = COALESCE(EXCLUDED.ephemeral_expiration, ${this.t('mailbox_threads')}.ephemeral_expiration)`,
-            values: [
+        await this.pool.query(
+            this.upsertQuery([
                 this.sessionId,
                 record.jid,
                 record.name ?? null,
@@ -49,8 +44,8 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
                 record.muteEndMs ?? null,
                 record.markedAsUnread ?? null,
                 record.ephemeralExpiration ?? null
-            ]
-        })
+            ])
+        )
     }
 
     public async upsertBatch(records: readonly WaStoredThreadRecord[]): Promise<void> {
@@ -58,21 +53,8 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
 
         await this.withTransaction(async (client) => {
             for (const record of records) {
-                await client.query({
-                    name: this.stmtName('thread_upsert'),
-                    text: `INSERT INTO ${this.t('mailbox_threads')} (
-                        session_id, jid, name, unread_count, archived, pinned,
-                        mute_end_ms, marked_as_unread, ephemeral_expiration
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                    ON CONFLICT (session_id, jid) DO UPDATE SET
-                        name = COALESCE(EXCLUDED.name, ${this.t('mailbox_threads')}.name),
-                        unread_count = COALESCE(EXCLUDED.unread_count, ${this.t('mailbox_threads')}.unread_count),
-                        archived = COALESCE(EXCLUDED.archived, ${this.t('mailbox_threads')}.archived),
-                        pinned = COALESCE(EXCLUDED.pinned, ${this.t('mailbox_threads')}.pinned),
-                        mute_end_ms = COALESCE(EXCLUDED.mute_end_ms, ${this.t('mailbox_threads')}.mute_end_ms),
-                        marked_as_unread = COALESCE(EXCLUDED.marked_as_unread, ${this.t('mailbox_threads')}.marked_as_unread),
-                        ephemeral_expiration = COALESCE(EXCLUDED.ephemeral_expiration, ${this.t('mailbox_threads')}.ephemeral_expiration)`,
-                    values: [
+                await client.query(
+                    this.upsertQuery([
                         this.sessionId,
                         record.jid,
                         record.name ?? null,
@@ -82,8 +64,8 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
                         record.muteEndMs ?? null,
                         record.markedAsUnread ?? null,
                         record.ephemeralExpiration ?? null
-                    ]
-                })
+                    ])
+                )
             }
         })
     }

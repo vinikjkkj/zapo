@@ -55,7 +55,12 @@ export class WaRetryMysqlStore extends BaseMysqlStore implements WaRetryStore {
         if (!row) {
             return null
         }
-        const requestersJson = row.requesters_json !== null ? String(row.requesters_json) : null
+        const requestersJson =
+            row.requesters_json !== null && row.requesters_json !== undefined
+                ? row.requesters_json instanceof Uint8Array
+                    ? new TextDecoder().decode(row.requesters_json)
+                    : String(row.requesters_json)
+                : null
         if (!requestersJson) {
             return null
         }
@@ -184,7 +189,12 @@ export class WaRetryMysqlStore extends BaseMysqlStore implements WaRetryStore {
         if (!row) {
             return null
         }
-        const requestersJson = row.requesters_json !== null ? String(row.requesters_json) : null
+        const requestersJson =
+            row.requesters_json !== null && row.requesters_json !== undefined
+                ? row.requesters_json instanceof Uint8Array
+                    ? new TextDecoder().decode(row.requesters_json)
+                    : String(row.requesters_json)
+                : null
         const requesters = requestersJson
             ? this.parseRequesterStatusPayload(requestersJson)
             : {
@@ -244,7 +254,12 @@ export class WaRetryMysqlStore extends BaseMysqlStore implements WaRetryStore {
             if (!row) {
                 return
             }
-            const requestersJson = row.requesters_json !== null ? String(row.requesters_json) : null
+            const requestersJson =
+                row.requesters_json !== null && row.requesters_json !== undefined
+                    ? row.requesters_json instanceof Uint8Array
+                        ? new TextDecoder().decode(row.requesters_json)
+                        : String(row.requesters_json)
+                    : null
             if (!requestersJson) {
                 return
             }

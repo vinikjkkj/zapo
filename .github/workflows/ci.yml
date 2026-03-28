@@ -73,7 +73,29 @@ jobs:
             - name: run typecheck
               run: npm run typecheck
 
-    tests:
+    typecheck-packages:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: checkout repository
+              uses: actions/checkout@v4
+
+            - name: setup node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: install dependencies
+              run: npm ci
+
+            - name: build core
+              run: npm run build
+
+            - name: run package typecheck
+              run: npm run typecheck:packages
+
+    test-core:
         runs-on: ubuntu-latest
 
         steps:
@@ -95,18 +117,9 @@ jobs:
             - name: run core tests
               run: npm test
 
-            - name: run package tests
-              run: npm run test:packages
-
-    benchmarks_pr_comment:
-        if: github.event_name == 'pull_request'
+    test-sqlite:
         runs-on: ubuntu-latest
-        needs:
-            - tests
-        permissions:
-            contents: read
-            issues: write
-            pull-requests: write
+        needs: test-core
 
         steps:
             - name: checkout repository
@@ -121,103 +134,161 @@ jobs:
             - name: install dependencies
               run: npm ci
 
-            - name: run benchmarks
-              id: bench_pr
-              env:
-                  WA_BENCH_OUTPUT_MODE: compact
-                  WA_BENCH_OUTPUT_FORMAT: human
-                  WA_BENCH_JSON_DIR: bench-results/pr
-                  WA_BENCH_JSON_PRETTY: 'true'
-                  WA_BENCH_FAIL_ON_FAIL: 'false'
-              run: |
-                  set +e
-                  npm run bench:all 2>&1 | tee bench-output-pr.txt
-                  BENCH_EXIT_CODE=$?
-                  echo "exit_code=${BENCH_EXIT_CODE}" >> "$GITHUB_OUTPUT"
-                  exit 0
+            - name: build
+              run: npm run build && npx turbo run build --filter=@zapo-js/store-sqlite
 
-            - name: checkout base branch
-              if: always()
-              continue-on-error: true
+            - name: run sqlite tests
+              run: npm test -w packages/store-sqlite
+
+    test-mysql:
+        runs-on: ubuntu-latest
+        needs: test-core
+
+        services:
+            mysql:
+                image: mysql:8
+                env:
+                    MYSQL_ROOT_PASSWORD: test
+                    MYSQL_DATABASE: zapo_test
+                ports:
+                    - 3306:3306
+                options: >-
+                    --health-cmd="mysqladmin ping -h localhost -u root -ptest"
+                    --health-interval=3s
+                    --health-retries=10
+
+        steps:
+            - name: checkout repository
               uses: actions/checkout@v4
-              with:
-                  ref: ${{ github.event.pull_request.base.sha }}
-                  path: baseline
 
-            - name: install base dependencies
-              if: always()
-              continue-on-error: true
-              working-directory: baseline
+            - name: setup node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: install dependencies
               run: npm ci
 
-            - name: run base benchmarks
-              if: always()
-              continue-on-error: true
-              id: bench_base
-              working-directory: baseline
-              env:
-                  WA_BENCH_OUTPUT_MODE: compact
-                  WA_BENCH_OUTPUT_FORMAT: human
-                  WA_BENCH_JSON_DIR: ../bench-results/base
-                  WA_BENCH_JSON_PRETTY: 'true'
-                  WA_BENCH_FAIL_ON_FAIL: 'false'
-              run: |
-                  set +e
-                  npm run bench:all 2>&1 | tee ../bench-output-base.txt
-                  BENCH_EXIT_CODE=$?
-                  echo "exit_code=${BENCH_EXIT_CODE}" >> "$GITHUB_OUTPUT"
-                  exit 0
+            - name: build
+              run: npm run build && npx turbo run build --filter=@zapo-js/store-mysql
 
-            - name: assemble benchmark logs
-              if: always()
+            - name: run mysql tests
+              run: npm test -w packages/store-mysql
               env:
-                  BASE_REF: ${{ github.event.pull_request.base.ref }}
-                  BASE_SHA: ${{ github.event.pull_request.base.sha }}
-              run: |
-                  {
-                      echo "=== PR benchmark run ==="
-                      if [ -f bench-output-pr.txt ]; then
-                          cat bench-output-pr.txt
-                      else
-                          echo "pr benchmark log not found"
-                      fi
-                      echo ""
-                      echo "=== base benchmark run (${BASE_REF} @ ${BASE_SHA}) ==="
-                      if [ -f bench-output-base.txt ]; then
-                          cat bench-output-base.txt
-                      else
-                          echo "base benchmark log not found"
-                      fi
-                  } > bench-output.txt
+                  ZAPO_TEST_MYSQL_HOST: localhost
+                  ZAPO_TEST_MYSQL_PORT: '3306'
+                  ZAPO_TEST_MYSQL_USER: root
+                  ZAPO_TEST_MYSQL_PASSWORD: test
+                  ZAPO_TEST_MYSQL_DATABASE: zapo_test
 
-            - name: build benchmark comment
-              if: always()
-              env:
-                  WA_BENCH_COMMENT_DIR: bench-results/pr
-                  WA_BENCH_COMMENT_BASE_DIR: bench-results/base
-                  WA_BENCH_COMMENT_OUTPUT: bench-comment.md
-                  WA_BENCH_LOG_PATH: bench-output.txt
-                  WA_BENCH_EXIT_CODE: ${{ steps.bench_pr.outputs.exit_code }}
-                  WA_BENCH_BASE_EXIT_CODE: ${{ steps.bench_base.outputs.exit_code }}
-              run: npm run bench:comment
+    test-postgres:
+        runs-on: ubuntu-latest
+        needs: test-core
 
-            - name: upload benchmark artifacts
-              if: always()
-              uses: actions/upload-artifact@v4
+        services:
+            postgres:
+                image: postgres:16-alpine
+                env:
+                    POSTGRES_PASSWORD: test
+                    POSTGRES_DB: zapo_test
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd="pg_isready -U postgres"
+                    --health-interval=3s
+                    --health-retries=10
+
+        steps:
+            - name: checkout repository
+              uses: actions/checkout@v4
+
+            - name: setup node
+              uses: actions/setup-node@v4
               with:
-                  name: benchmark-pr-report
-                  path: |
-                      bench-output-pr.txt
-                      bench-output-base.txt
-                      bench-output.txt
-                      bench-comment.md
-                      bench-results
-                  if-no-files-found: ignore
-                  retention-days: 7
+                  node-version: 22
+                  cache: npm
 
-            - name: publish benchmark comment
-              if: always()
-              uses: marocchino/sticky-pull-request-comment@v2
+            - name: install dependencies
+              run: npm ci
+
+            - name: build
+              run: npm run build && npx turbo run build --filter=@zapo-js/store-postgres
+
+            - name: run postgres tests
+              run: npm test -w packages/store-postgres
+              env:
+                  ZAPO_TEST_PG_HOST: localhost
+                  ZAPO_TEST_PG_PORT: '5432'
+                  ZAPO_TEST_PG_USER: postgres
+                  ZAPO_TEST_PG_PASSWORD: test
+                  ZAPO_TEST_PG_DATABASE: zapo_test
+
+    test-redis:
+        runs-on: ubuntu-latest
+        needs: test-core
+
+        services:
+            redis:
+                image: redis:7-alpine
+                ports:
+                    - 6379:6379
+                options: >-
+                    --health-cmd="redis-cli ping"
+                    --health-interval=3s
+                    --health-retries=10
+
+        steps:
+            - name: checkout repository
+              uses: actions/checkout@v4
+
+            - name: setup node
+              uses: actions/setup-node@v4
               with:
-                  header: benchmark-report
-                  path: bench-comment.md
+                  node-version: 22
+                  cache: npm
+
+            - name: install dependencies
+              run: npm ci
+
+            - name: build
+              run: npm run build && npx turbo run build --filter=@zapo-js/store-redis
+
+            - name: run redis tests
+              run: npm test -w packages/store-redis
+              env:
+                  ZAPO_TEST_REDIS_HOST: localhost
+                  ZAPO_TEST_REDIS_PORT: '6379'
+
+    test-mongo:
+        runs-on: ubuntu-latest
+        needs: test-core
+
+        steps:
+            - name: start mongo replica set
+              run: |
+                  docker run -d --name mongo -p 27017:27017 mongo:7 mongod --replSet rs0
+                  until docker exec mongo mongosh --eval "rs.initiate()" --quiet 2>/dev/null; do
+                    sleep 1
+                  done
+
+            - name: checkout repository
+              uses: actions/checkout@v4
+
+            - name: setup node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: install dependencies
+              run: npm ci
+
+            - name: build
+              run: npm run build && npx turbo run build --filter=@zapo-js/store-mongo
+
+            - name: run mongo tests
+              run: npm test -w packages/store-mongo
+              env:
+                  ZAPO_TEST_MONGO_HOST: localhost
+                  ZAPO_TEST_MONGO_PORT: '27017'

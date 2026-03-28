@@ -149,13 +149,7 @@ export class WaSignalPgStore extends BasePgStore implements WaSignalStore {
         await this.withTransaction(async (client) => {
             await this.ensureMetaRow(client)
             await this.upsertPreKey(client, record)
-            await client.query({
-                name: this.stmtName('signal_update_next_prekey_id'),
-                text: `UPDATE ${this.t('signal_meta')}
-                 SET next_prekey_id = GREATEST(next_prekey_id, $1)
-                 WHERE session_id = $2`,
-                values: [record.keyId + 1, this.sessionId]
-            })
+            await this.updateNextPreKeyId(client, record.keyId + 1)
         })
     }
 
@@ -180,13 +174,7 @@ export class WaSignalPgStore extends BasePgStore implements WaSignalStore {
                     { length: missing },
                     (_, i) => meta.nextPreKeyId + i
                 )
-                await client.query({
-                    name: this.stmtName('signal_update_next_prekey_id'),
-                    text: `UPDATE ${this.t('signal_meta')}
-                     SET next_prekey_id = GREATEST(next_prekey_id, $1)
-                     WHERE session_id = $2`,
-                    values: [meta.nextPreKeyId + missing, this.sessionId]
-                })
+                await this.updateNextPreKeyId(client, meta.nextPreKeyId + missing)
                 return { available, reservedKeyIds }
             })
 
@@ -222,13 +210,7 @@ export class WaSignalPgStore extends BasePgStore implements WaSignalStore {
                         ]
                     })
                 }
-                await client.query({
-                    name: this.stmtName('signal_update_next_prekey_id'),
-                    text: `UPDATE ${this.t('signal_meta')}
-                     SET next_prekey_id = GREATEST(next_prekey_id, $1)
-                     WHERE session_id = $2`,
-                    values: [maxId + 1, this.sessionId]
-                })
+                await this.updateNextPreKeyId(client, maxId + 1)
             })
 
             const available = await this.withTransaction(async (client) =>
@@ -322,7 +304,7 @@ export class WaSignalPgStore extends BasePgStore implements WaSignalStore {
         await this.pool.query({
             name: this.stmtName('signal_mark_key_uploaded'),
             text: `UPDATE ${this.t('signal_prekey')}
-             SET uploaded = 1
+             SET uploaded = true
              WHERE session_id = $1 AND key_id <= $2`,
             values: [this.sessionId, keyId]
         })
@@ -338,7 +320,7 @@ export class WaSignalPgStore extends BasePgStore implements WaSignalStore {
                 text: `UPDATE ${this.t('signal_meta')}
                  SET server_has_prekeys = $1
                  WHERE session_id = $2`,
-                values: [value ? 1 : 0, this.sessionId]
+                values: [value, this.sessionId]
             })
         })
     }
@@ -700,7 +682,7 @@ export class WaSignalPgStore extends BasePgStore implements WaSignalStore {
             name: this.stmtName('signal_ensure_meta'),
             text: `INSERT INTO ${this.t('signal_meta')} (
                 session_id, server_has_prekeys, next_prekey_id
-            ) VALUES ($1, 0, 1)
+            ) VALUES ($1, false, 1)
             ON CONFLICT (session_id) DO NOTHING`,
             values: [this.sessionId]
         })
@@ -742,7 +724,7 @@ export class WaSignalPgStore extends BasePgStore implements WaSignalStore {
                 name: this.stmtName('signal_select_available_prekeys'),
                 text: `SELECT key_id, pub_key, priv_key, uploaded
                  FROM ${this.t('signal_prekey')}
-                 WHERE session_id = $1 AND uploaded = 0
+                 WHERE session_id = $1 AND uploaded = false
                  ORDER BY key_id ASC
                  LIMIT $2`,
                 values: [this.sessionId, resolved]
@@ -767,6 +749,14 @@ export class WaSignalPgStore extends BasePgStore implements WaSignalStore {
                 record.keyPair.privKey,
                 record.uploaded === true ? 1 : 0
             ]
+        })
+    }
+
+    private async updateNextPreKeyId(client: PoolClient, minNextId: number): Promise<void> {
+        await client.query({
+            name: this.stmtName('signal_update_next_prekey_id'),
+            text: `UPDATE ${this.t('signal_meta')} SET next_prekey_id = GREATEST(next_prekey_id, $1) WHERE session_id = $2`,
+            values: [minNextId, this.sessionId]
         })
     }
 
