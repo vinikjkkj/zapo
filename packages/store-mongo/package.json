@@ -1,0 +1,41 @@
+{
+    "name": "@zapo-js/store-mongo",
+    "version": "0.1.0",
+    "description": "MongoDB store provider for zapo-js",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.build.cjs.json",
+        "typecheck": "tsc --noEmit",
+        "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\""
+    },
+    "peerDependencies": {
+        "zapo-js": ">=0.1.0",
+        "mongodb": ">=6.0.0"
+    },
+    "peerDependenciesMeta": {
+        "zapo-js": {
+            "optional": true
+        }
+    },
+    "devDependencies": {
+        "mongodb": "^6.16.0",
+        "zapo-js": "file:../.."
+    },
+    "engines": {
+        "node": ">=20.9.0"
+    }
+}
