@@ -72,7 +72,11 @@ export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceLi
                     expiredUserJids.push(userJid)
                     continue
                 }
-                const parsed: unknown = JSON.parse(row.device_jids_json as string)
+                const rawJson =
+                    row.device_jids_json instanceof Uint8Array
+                        ? new TextDecoder().decode(row.device_jids_json)
+                        : String(row.device_jids_json)
+                const parsed: unknown = JSON.parse(rawJson)
                 if (!Array.isArray(parsed)) {
                     throw new Error('device_list_cache.device_jids_json must be an array')
                 }

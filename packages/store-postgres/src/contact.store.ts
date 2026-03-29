@@ -9,21 +9,18 @@ export class WaContactPgStore extends BasePgStore implements WaContactStore {
         super(options, ['mailbox'])
     }
 
+    private upsertQuery(values: unknown[]) {
+        return {
+            name: this.stmtName('contact_upsert'),
+            text: `INSERT INTO ${this.t('mailbox_contacts')} (session_id, jid, display_name, push_name, lid, phone_number, last_updated_ms) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (session_id, jid) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, ${this.t('mailbox_contacts')}.display_name), push_name = COALESCE(EXCLUDED.push_name, ${this.t('mailbox_contacts')}.push_name), lid = COALESCE(EXCLUDED.lid, ${this.t('mailbox_contacts')}.lid), phone_number = COALESCE(EXCLUDED.phone_number, ${this.t('mailbox_contacts')}.phone_number), last_updated_ms = EXCLUDED.last_updated_ms`,
+            values
+        }
+    }
+
     public async upsert(record: WaStoredContactRecord): Promise<void> {
         await this.ensureReady()
-        await this.pool.query({
-            name: this.stmtName('contact_upsert'),
-            text: `INSERT INTO ${this.t('mailbox_contacts')} (
-                session_id, jid, display_name, push_name, lid,
-                phone_number, last_updated_ms
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (session_id, jid) DO UPDATE SET
-                display_name = COALESCE(EXCLUDED.display_name, ${this.t('mailbox_contacts')}.display_name),
-                push_name = COALESCE(EXCLUDED.push_name, ${this.t('mailbox_contacts')}.push_name),
-                lid = COALESCE(EXCLUDED.lid, ${this.t('mailbox_contacts')}.lid),
-                phone_number = COALESCE(EXCLUDED.phone_number, ${this.t('mailbox_contacts')}.phone_number),
-                last_updated_ms = EXCLUDED.last_updated_ms`,
-            values: [
+        await this.pool.query(
+            this.upsertQuery([
                 this.sessionId,
                 record.jid,
                 record.displayName ?? null,
@@ -31,8 +28,8 @@ export class WaContactPgStore extends BasePgStore implements WaContactStore {
                 record.lid ?? null,
                 record.phoneNumber ?? null,
                 record.lastUpdatedMs
-            ]
-        })
+            ])
+        )
     }
 
     public async upsertBatch(records: readonly WaStoredContactRecord[]): Promise<void> {
@@ -40,19 +37,8 @@ export class WaContactPgStore extends BasePgStore implements WaContactStore {
 
         await this.withTransaction(async (client) => {
             for (const record of records) {
-                await client.query({
-                    name: this.stmtName('contact_upsert'),
-                    text: `INSERT INTO ${this.t('mailbox_contacts')} (
-                        session_id, jid, display_name, push_name, lid,
-                        phone_number, last_updated_ms
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-                    ON CONFLICT (session_id, jid) DO UPDATE SET
-                        display_name = COALESCE(EXCLUDED.display_name, ${this.t('mailbox_contacts')}.display_name),
-                        push_name = COALESCE(EXCLUDED.push_name, ${this.t('mailbox_contacts')}.push_name),
-                        lid = COALESCE(EXCLUDED.lid, ${this.t('mailbox_contacts')}.lid),
-                        phone_number = COALESCE(EXCLUDED.phone_number, ${this.t('mailbox_contacts')}.phone_number),
-                        last_updated_ms = EXCLUDED.last_updated_ms`,
-                    values: [
+                await client.query(
+                    this.upsertQuery([
                         this.sessionId,
                         record.jid,
                         record.displayName ?? null,
@@ -60,8 +46,8 @@ export class WaContactPgStore extends BasePgStore implements WaContactStore {
                         record.lid ?? null,
                         record.phoneNumber ?? null,
                         record.lastUpdatedMs
-                    ]
-                })
+                    ])
+                )
             }
         })
     }

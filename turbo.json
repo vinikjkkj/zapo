@@ -6,7 +6,23 @@
             "outputs": ["dist/**"]
         },
         "test": {
-            "dependsOn": ["build"]
+            "dependsOn": ["build"],
+            "passThroughEnv": [
+                "ZAPO_TEST_MYSQL_HOST",
+                "ZAPO_TEST_MYSQL_PORT",
+                "ZAPO_TEST_MYSQL_USER",
+                "ZAPO_TEST_MYSQL_PASSWORD",
+                "ZAPO_TEST_MYSQL_DATABASE",
+                "ZAPO_TEST_PG_HOST",
+                "ZAPO_TEST_PG_PORT",
+                "ZAPO_TEST_PG_USER",
+                "ZAPO_TEST_PG_PASSWORD",
+                "ZAPO_TEST_PG_DATABASE",
+                "ZAPO_TEST_REDIS_HOST",
+                "ZAPO_TEST_REDIS_PORT",
+                "ZAPO_TEST_MONGO_HOST",
+                "ZAPO_TEST_MONGO_PORT"
+            ]
         },
         "lint": {},
         "typecheck": {

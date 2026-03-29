@@ -9,21 +9,18 @@ export class WaPrivacyTokenPgStore extends BasePgStore implements WaPrivacyToken
         super(options, ['privacyToken'])
     }
 
+    private upsertQuery(values: unknown[]) {
+        return {
+            name: this.stmtName('privtoken_upsert'),
+            text: `INSERT INTO ${this.t('privacy_tokens')} (session_id, jid, tc_token, tc_token_timestamp, tc_token_sender_timestamp, nct_salt, updated_at_ms) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (session_id, jid) DO UPDATE SET tc_token = COALESCE(EXCLUDED.tc_token, ${this.t('privacy_tokens')}.tc_token), tc_token_timestamp = COALESCE(EXCLUDED.tc_token_timestamp, ${this.t('privacy_tokens')}.tc_token_timestamp), tc_token_sender_timestamp = COALESCE(EXCLUDED.tc_token_sender_timestamp, ${this.t('privacy_tokens')}.tc_token_sender_timestamp), nct_salt = COALESCE(EXCLUDED.nct_salt, ${this.t('privacy_tokens')}.nct_salt), updated_at_ms = EXCLUDED.updated_at_ms`,
+            values
+        }
+    }
+
     public async upsert(record: WaStoredPrivacyTokenRecord): Promise<void> {
         await this.ensureReady()
-        await this.pool.query({
-            name: this.stmtName('privtoken_upsert'),
-            text: `INSERT INTO ${this.t('privacy_tokens')} (
-                session_id, jid, tc_token, tc_token_timestamp,
-                tc_token_sender_timestamp, nct_salt, updated_at_ms
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (session_id, jid) DO UPDATE SET
-                tc_token = COALESCE(EXCLUDED.tc_token, ${this.t('privacy_tokens')}.tc_token),
-                tc_token_timestamp = COALESCE(EXCLUDED.tc_token_timestamp, ${this.t('privacy_tokens')}.tc_token_timestamp),
-                tc_token_sender_timestamp = COALESCE(EXCLUDED.tc_token_sender_timestamp, ${this.t('privacy_tokens')}.tc_token_sender_timestamp),
-                nct_salt = COALESCE(EXCLUDED.nct_salt, ${this.t('privacy_tokens')}.nct_salt),
-                updated_at_ms = EXCLUDED.updated_at_ms`,
-            values: [
+        await this.pool.query(
+            this.upsertQuery([
                 this.sessionId,
                 record.jid,
                 record.tcToken ?? null,
@@ -31,8 +28,8 @@ export class WaPrivacyTokenPgStore extends BasePgStore implements WaPrivacyToken
                 record.tcTokenSenderTimestamp ?? null,
                 record.nctSalt ?? null,
                 record.updatedAtMs
-            ]
-        })
+            ])
+        )
     }
 
     public async upsertBatch(records: readonly WaStoredPrivacyTokenRecord[]): Promise<void> {
@@ -40,19 +37,8 @@ export class WaPrivacyTokenPgStore extends BasePgStore implements WaPrivacyToken
 
         await this.withTransaction(async (client) => {
             for (const record of records) {
-                await client.query({
-                    name: this.stmtName('privtoken_upsert'),
-                    text: `INSERT INTO ${this.t('privacy_tokens')} (
-                        session_id, jid, tc_token, tc_token_timestamp,
-                        tc_token_sender_timestamp, nct_salt, updated_at_ms
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-                    ON CONFLICT (session_id, jid) DO UPDATE SET
-                        tc_token = COALESCE(EXCLUDED.tc_token, ${this.t('privacy_tokens')}.tc_token),
-                        tc_token_timestamp = COALESCE(EXCLUDED.tc_token_timestamp, ${this.t('privacy_tokens')}.tc_token_timestamp),
-                        tc_token_sender_timestamp = COALESCE(EXCLUDED.tc_token_sender_timestamp, ${this.t('privacy_tokens')}.tc_token_sender_timestamp),
-                        nct_salt = COALESCE(EXCLUDED.nct_salt, ${this.t('privacy_tokens')}.nct_salt),
-                        updated_at_ms = EXCLUDED.updated_at_ms`,
-                    values: [
+                await client.query(
+                    this.upsertQuery([
                         this.sessionId,
                         record.jid,
                         record.tcToken ?? null,
@@ -60,8 +46,8 @@ export class WaPrivacyTokenPgStore extends BasePgStore implements WaPrivacyToken
                         record.tcTokenSenderTimestamp ?? null,
                         record.nctSalt ?? null,
                         record.updatedAtMs
-                    ]
-                })
+                    ])
+                )
             }
         })
     }

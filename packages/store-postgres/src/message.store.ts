@@ -30,24 +30,18 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
         super(options, ['mailbox'])
     }
 
+    private upsertQuery(values: unknown[]) {
+        return {
+            name: this.stmtName('msg_upsert'),
+            text: `INSERT INTO ${this.t('mailbox_messages')} (session_id, message_id, thread_jid, sender_jid, participant_jid, from_me, timestamp_ms, enc_type, plaintext, message_bytes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (session_id, message_id) DO UPDATE SET thread_jid = EXCLUDED.thread_jid, sender_jid = EXCLUDED.sender_jid, participant_jid = EXCLUDED.participant_jid, from_me = EXCLUDED.from_me, timestamp_ms = EXCLUDED.timestamp_ms, enc_type = EXCLUDED.enc_type, plaintext = EXCLUDED.plaintext, message_bytes = EXCLUDED.message_bytes`,
+            values
+        }
+    }
+
     public async upsert(record: WaStoredMessageRecord): Promise<void> {
         await this.ensureReady()
-        await this.pool.query({
-            name: this.stmtName('msg_upsert'),
-            text: `INSERT INTO ${this.t('mailbox_messages')} (
-                session_id, message_id, thread_jid, sender_jid, participant_jid,
-                from_me, timestamp_ms, enc_type, plaintext, message_bytes
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            ON CONFLICT (session_id, message_id) DO UPDATE SET
-                thread_jid = EXCLUDED.thread_jid,
-                sender_jid = EXCLUDED.sender_jid,
-                participant_jid = EXCLUDED.participant_jid,
-                from_me = EXCLUDED.from_me,
-                timestamp_ms = EXCLUDED.timestamp_ms,
-                enc_type = EXCLUDED.enc_type,
-                plaintext = EXCLUDED.plaintext,
-                message_bytes = EXCLUDED.message_bytes`,
-            values: [
+        await this.pool.query(
+            this.upsertQuery([
                 this.sessionId,
                 record.id,
                 record.threadJid,
@@ -58,8 +52,8 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
                 record.encType ?? null,
                 record.plaintext ?? null,
                 record.messageBytes ?? null
-            ]
-        })
+            ])
+        )
     }
 
     public async upsertBatch(records: readonly WaStoredMessageRecord[]): Promise<void> {
@@ -67,22 +61,8 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
 
         await this.withTransaction(async (client) => {
             for (const record of records) {
-                await client.query({
-                    name: this.stmtName('msg_upsert'),
-                    text: `INSERT INTO ${this.t('mailbox_messages')} (
-                        session_id, message_id, thread_jid, sender_jid, participant_jid,
-                        from_me, timestamp_ms, enc_type, plaintext, message_bytes
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                    ON CONFLICT (session_id, message_id) DO UPDATE SET
-                        thread_jid = EXCLUDED.thread_jid,
-                        sender_jid = EXCLUDED.sender_jid,
-                        participant_jid = EXCLUDED.participant_jid,
-                        from_me = EXCLUDED.from_me,
-                        timestamp_ms = EXCLUDED.timestamp_ms,
-                        enc_type = EXCLUDED.enc_type,
-                        plaintext = EXCLUDED.plaintext,
-                        message_bytes = EXCLUDED.message_bytes`,
-                    values: [
+                await client.query(
+                    this.upsertQuery([
                         this.sessionId,
                         record.id,
                         record.threadJid,
@@ -93,8 +73,8 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
                         record.encType ?? null,
                         record.plaintext ?? null,
                         record.messageBytes ?? null
-                    ]
-                })
+                    ])
+                )
             }
         })
     }

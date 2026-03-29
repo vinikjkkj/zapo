@@ -61,7 +61,11 @@ export class WaParticipantsMysqlStore extends BaseMysqlStore implements WaPartic
             return null
         }
 
-        const parsed: unknown = JSON.parse(row.participants_json as string)
+        const rawJson =
+            row.participants_json instanceof Uint8Array
+                ? new TextDecoder().decode(row.participants_json)
+                : String(row.participants_json)
+        const parsed: unknown = JSON.parse(rawJson)
         if (!Array.isArray(parsed)) {
             throw new Error('group_participants_cache.participants_json must be an array')
         }
