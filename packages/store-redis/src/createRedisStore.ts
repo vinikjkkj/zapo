@@ -6,6 +6,7 @@ import { WaAuthRedisStore } from './auth.store'
 import { WaContactRedisStore } from './contact.store'
 import { WaDeviceListRedisStore } from './device-list.store'
 import { WaIdentityRedisStore } from './identity.store'
+import { WaMessageSecretRedisStore } from './message-secret.store'
 import { WaMessageRedisStore } from './message.store'
 import { WaParticipantsRedisStore } from './participants.store'
 import { WaPreKeyRedisStore } from './pre-key.store'
@@ -24,6 +25,7 @@ export interface WaRedisStoreConfig {
         readonly retryMs?: number
         readonly participantsMs?: number
         readonly deviceListMs?: number
+        readonly messageSecretMs?: number
     }
 }
 
@@ -46,6 +48,7 @@ export interface WaRedisStoreResult {
         readonly retry: (sessionId: string) => WaRetryRedisStore
         readonly participants: (sessionId: string) => WaParticipantsRedisStore
         readonly deviceList: (sessionId: string) => WaDeviceListRedisStore
+        readonly messageSecret: (sessionId: string) => WaMessageSecretRedisStore
     }
     destroy(): Promise<void>
 }
@@ -60,6 +63,7 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const participantsTtlMs = config.cacheTtlMs?.participantsMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
+    const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsRedis = !isRedis(config.redis)
 
     const opts = (sessionId: string): WaRedisStorageOptions => ({
@@ -87,7 +91,9 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
             retry: (sessionId) => new WaRetryRedisStore(opts(sessionId), retryTtlMs),
             participants: (sessionId) =>
                 new WaParticipantsRedisStore(opts(sessionId), participantsTtlMs),
-            deviceList: (sessionId) => new WaDeviceListRedisStore(opts(sessionId), deviceListTtlMs)
+            deviceList: (sessionId) => new WaDeviceListRedisStore(opts(sessionId), deviceListTtlMs),
+            messageSecret: (sessionId) =>
+                new WaMessageSecretRedisStore(opts(sessionId), messageSecretTtlMs)
         },
         async destroy(): Promise<void> {
             if (ownsRedis) {

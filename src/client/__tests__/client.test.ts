@@ -472,6 +472,11 @@ function createClearStoredStateHarness(logoutStoreClear?: {
             clear: async () => {
                 cleared.push('privacyToken')
             }
+        },
+        messageSecretStore: {
+            clear: async () => {
+                cleared.push('messageSecret')
+            }
         }
     }
     return { fakeClient, cleared }
@@ -486,6 +491,7 @@ test('clearStoredState clears every store domain by default', async () => {
         'appState',
         'contacts',
         'messages',
+        'messageSecret',
         'participants',
         'deviceList',
         'retry',
@@ -526,6 +532,7 @@ test('clearStoredState respects logoutStoreClear domain toggles', async () => {
     assert.deepEqual(cleared, [
         'contacts',
         'messages',
+        'messageSecret',
         'participants',
         'deviceList',
         'signal',

@@ -12,6 +12,7 @@ export type WaSqliteMigrationDomain =
     | 'deviceList'
     | 'mailbox'
     | 'privacyToken'
+    | 'messageSecret'
 
 interface WaSqliteMigration {
     readonly id: string
@@ -325,6 +326,24 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
                     updated_at_ms INTEGER NOT NULL,
                     PRIMARY KEY (session_id, jid)
                 );
+            `)
+        }
+    },
+    {
+        id: '0010_message_secrets_cache_schema',
+        domain: 'messageSecret',
+        up: (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS message_secrets_cache (
+                    session_id TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    secret BLOB NOT NULL,
+                    expires_at_ms INTEGER NOT NULL,
+                    PRIMARY KEY (session_id, message_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS message_secrets_cache_by_expiry
+                    ON message_secrets_cache (session_id, expires_at_ms);
             `)
         }
     }

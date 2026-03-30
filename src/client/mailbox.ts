@@ -1,12 +1,16 @@
 import type { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type { WaIncomingMessageEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import { needsSecretPersistence } from '@message/content'
 import { proto } from '@proto'
+import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
+import { toBytesView } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 interface WaPersistIncomingMailboxOptions {
     readonly logger: Logger
     readonly writeBehind: WriteBehindPersistence
+    readonly messageSecretStore: WaMessageSecretStore
     readonly event: WaIncomingMessageEvent
 }
 
@@ -29,7 +33,7 @@ function persistContacts(
 }
 
 export function persistIncomingMailboxEntities(options: WaPersistIncomingMailboxOptions): void {
-    const { logger, writeBehind, event } = options
+    const { logger, writeBehind, messageSecretStore, event } = options
     const { stanzaId, chatJid } = event
     if (!stanzaId || !chatJid) {
         return
@@ -53,6 +57,20 @@ export function persistIncomingMailboxEntities(options: WaPersistIncomingMailbox
             messageBytes
         })
         persistContacts(writeBehind, event, nowMs)
+        const rawSecret = event.message?.messageContextInfo?.messageSecret
+        if (
+            rawSecret &&
+            rawSecret.length > 0 &&
+            event.message &&
+            needsSecretPersistence(event.message)
+        ) {
+            void messageSecretStore.set(stanzaId, toBytesView(rawSecret)).catch((error) => {
+                logger.warn('failed to persist message secret', {
+                    id: stanzaId,
+                    message: toError(error).message
+                })
+            })
+        }
     } catch (error) {
         logger.warn('failed to persist incoming mailbox entities', {
             id: stanzaId,

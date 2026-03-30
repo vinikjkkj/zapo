@@ -48,6 +48,7 @@ import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
+import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaParticipantsStore } from '@store/contracts/participants.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
@@ -82,6 +83,7 @@ export class WaClient extends EventEmitter {
     private readonly appStateStore!: WaAppStateStore
     private readonly contactStore!: WaContactStore
     private readonly messageStore!: WaMessageStore
+    private readonly messageSecretStore!: WaMessageSecretStore
     private readonly participantsStore!: WaParticipantsStore
     private readonly privacyTokenStore!: WaPrivacyTokenStore
     private readonly deviceListStore!: WaDeviceListStore
@@ -127,6 +129,7 @@ export class WaClient extends EventEmitter {
         this.appStateStore = base.sessionStore.appState
         this.contactStore = base.sessionStore.contacts
         this.messageStore = base.sessionStore.messages
+        this.messageSecretStore = base.sessionStore.messageSecret
         this.participantsStore = base.sessionStore.participants
         this.privacyTokenStore = base.sessionStore.privacyToken
         this.deviceListStore = base.sessionStore.deviceList
@@ -276,6 +279,7 @@ export class WaClient extends EventEmitter {
             void persistIncomingMailboxEntities({
                 logger: this.logger,
                 writeBehind: this.writeBehind,
+                messageSecretStore: this.messageSecretStore,
                 event
             })
             const protocolMessage = event.message?.protocolMessage
@@ -880,15 +884,14 @@ export class WaClient extends EventEmitter {
         if (shouldClear('appState')) await this.appStateStore.clear()
         if (shouldClear('contacts')) await this.contactStore.clear()
         if (shouldClear('messages')) await this.messageStore.clear()
+        if (shouldClear('messageSecret')) await this.messageSecretStore.clear()
         if (shouldClear('participants')) await this.participantsStore.clear()
         if (shouldClear('deviceList')) await this.deviceListStore.clear()
         if (shouldClear('retry')) await this.retryStore.clear()
-        if (shouldClear('signal')) {
-            await this.signalStore.clear()
-            await this.preKeyStore.clear()
-            await this.sessionStore.clear()
-            await this.identityStore.clear()
-        }
+        if (shouldClear('signal')) await this.signalStore.clear()
+        if (shouldClear('preKey')) await this.preKeyStore.clear()
+        if (shouldClear('session')) await this.sessionStore.clear()
+        if (shouldClear('identity')) await this.identityStore.clear()
         if (shouldClear('senderKey')) await this.senderKeyStore.clear()
         if (shouldClear('threads')) await this.threadStore.clear()
         if (shouldClear('privacyToken')) await this.privacyTokenStore.clear()

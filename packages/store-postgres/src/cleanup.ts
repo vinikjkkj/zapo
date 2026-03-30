@@ -1,10 +1,16 @@
-import type { WaDeviceListStore, WaParticipantsStore, WaRetryStore } from 'zapo-js/store'
+import type {
+    WaDeviceListStore,
+    WaMessageSecretStore,
+    WaParticipantsStore,
+    WaRetryStore
+} from 'zapo-js/store'
 
 export interface PgCleanupPollerOptions {
     readonly intervalMs?: number
     readonly retry?: WaRetryStore
     readonly participants?: WaParticipantsStore
     readonly deviceList?: WaDeviceListStore
+    readonly messageSecret?: WaMessageSecretStore
     readonly onError?: (error: Error) => void
 }
 
@@ -15,6 +21,7 @@ export class PgCleanupPoller {
     private readonly retry: WaRetryStore | undefined
     private readonly participants: WaParticipantsStore | undefined
     private readonly deviceList: WaDeviceListStore | undefined
+    private readonly messageSecret: WaMessageSecretStore | undefined
     private readonly onError: ((error: Error) => void) | undefined
     private timer: ReturnType<typeof setInterval> | null
     private inFlight: boolean
@@ -28,6 +35,7 @@ export class PgCleanupPoller {
         this.retry = options.retry
         this.participants = options.participants
         this.deviceList = options.deviceList
+        this.messageSecret = options.messageSecret
         this.onError = options.onError
         this.timer = null
         this.inFlight = false
@@ -65,6 +73,7 @@ export class PgCleanupPoller {
         if (this.retry) tasks.push(this.retry.cleanupExpired(nowMs))
         if (this.participants) tasks.push(this.participants.cleanupExpired(nowMs))
         if (this.deviceList) tasks.push(this.deviceList.cleanupExpired(nowMs))
+        if (this.messageSecret) tasks.push(this.messageSecret.cleanupExpired(nowMs))
 
         const results = await Promise.allSettled(tasks)
         let total = 0

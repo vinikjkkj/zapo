@@ -15,12 +15,16 @@ export interface WaClientProxyOptions {
 export interface WaLogoutStoreClearOptions {
     readonly auth?: boolean
     readonly signal?: boolean
+    readonly preKey?: boolean
+    readonly session?: boolean
+    readonly identity?: boolean
     readonly senderKey?: boolean
     readonly appState?: boolean
     readonly retry?: boolean
     readonly participants?: boolean
     readonly deviceList?: boolean
     readonly messages?: boolean
+    readonly messageSecret?: boolean
     readonly threads?: boolean
     readonly contacts?: boolean
     readonly privacyToken?: boolean

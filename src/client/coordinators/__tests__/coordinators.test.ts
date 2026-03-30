@@ -121,6 +121,7 @@ function createMessageDispatchCoordinator(
         sessionStore: {} as never,
         identityStore: {} as never,
         deviceListStore: {} as never,
+        messageSecretStore: { set: async () => {} } as never,
         getCurrentMeJid: () => null,
         getCurrentMeLid: () => null,
         getCurrentSignedIdentity: () => null,

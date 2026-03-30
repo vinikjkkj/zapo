@@ -19,6 +19,7 @@ export { WaMessageMysqlStore } from './message.store'
 export { WaThreadMysqlStore } from './thread.store'
 export { WaContactMysqlStore } from './contact.store'
 export { WaPrivacyTokenMysqlStore } from './privacy-token.store'
+export { WaMessageSecretMysqlStore } from './message-secret.store'
 export { MysqlCleanupPoller, type MysqlCleanupPollerOptions } from './cleanup'
 export {
     createMysqlStore,

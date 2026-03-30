@@ -52,6 +52,9 @@ const mockAuthBackend = {
         },
         deviceList: () => {
             throw new Error('not expected')
+        },
+        messageSecret: () => {
+            throw new Error('not expected')
         }
     }
 } as const

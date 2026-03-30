@@ -23,6 +23,7 @@ export { WaMessageSqliteStore } from './message.store'
 export { WaThreadSqliteStore } from './thread.store'
 export { WaContactSqliteStore } from './contact.store'
 export { WaPrivacyTokenSqliteStore } from './privacy-token.store'
+export { WaMessageSecretSqliteStore } from './message-secret.store'
 export {
     createSqliteStore,
     type WaSqliteStoreConfig,

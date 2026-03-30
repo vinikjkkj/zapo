@@ -6,6 +6,7 @@ import { WaAuthMongoStore } from './auth.store'
 import { WaContactMongoStore } from './contact.store'
 import { WaDeviceListMongoStore } from './device-list.store'
 import { WaIdentityMongoStore } from './identity.store'
+import { WaMessageSecretMongoStore } from './message-secret.store'
 import { WaMessageMongoStore } from './message.store'
 import { WaParticipantsMongoStore } from './participants.store'
 import { WaPreKeyMongoStore } from './pre-key.store'
@@ -30,6 +31,7 @@ export interface WaMongoStoreConfig {
         readonly retryMs?: number
         readonly participantsMs?: number
         readonly deviceListMs?: number
+        readonly messageSecretMs?: number
     }
 }
 
@@ -52,6 +54,7 @@ export interface WaMongoStoreResult {
         readonly retry: (sessionId: string) => WaRetryMongoStore
         readonly participants: (sessionId: string) => WaParticipantsMongoStore
         readonly deviceList: (sessionId: string) => WaDeviceListMongoStore
+        readonly messageSecret: (sessionId: string) => WaMessageSecretMongoStore
     }
     destroy(): Promise<void>
 }
@@ -75,6 +78,7 @@ export function createMongoStore(config: WaMongoStoreConfig): WaMongoStoreResult
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const participantsTtlMs = config.cacheTtlMs?.participantsMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
+    const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
 
     const opts = (sessionId: string): WaMongoStorageOptions => ({
         db,
@@ -101,7 +105,9 @@ export function createMongoStore(config: WaMongoStoreConfig): WaMongoStoreResult
             retry: (sessionId) => new WaRetryMongoStore(opts(sessionId), retryTtlMs),
             participants: (sessionId) =>
                 new WaParticipantsMongoStore(opts(sessionId), participantsTtlMs),
-            deviceList: (sessionId) => new WaDeviceListMongoStore(opts(sessionId), deviceListTtlMs)
+            deviceList: (sessionId) => new WaDeviceListMongoStore(opts(sessionId), deviceListTtlMs),
+            messageSecret: (sessionId) =>
+                new WaMessageSecretMongoStore(opts(sessionId), messageSecretTtlMs)
         },
         async destroy(): Promise<void> {
             if (client) {

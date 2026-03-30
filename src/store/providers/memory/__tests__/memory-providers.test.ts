@@ -5,6 +5,7 @@ import { WA_APP_STATE_COLLECTIONS } from '@protocol/constants'
 import { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
 import { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
 import { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
+import { WaMessageSecretMemoryStore } from '@store/providers/memory/message-secret.store'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
 import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
@@ -211,6 +212,64 @@ test('memory signal/sender-key/appstate stores cover key workflows', async () =>
     assert.equal(states.length, 2)
     assert.equal(states[0].version, 2)
     assert.equal(states[1].initialized, false)
+})
+
+test('memory message secret store covers set/get, batch, TTL expiry, bounds and cleanup', async () => {
+    const store = new WaMessageSecretMemoryStore(100, { maxSecrets: 2 })
+
+    const secretA = new Uint8Array([1, 2, 3])
+    const secretB = new Uint8Array([4, 5, 6])
+    const secretC = new Uint8Array([7, 8, 9])
+
+    await store.set('msg-1', secretA)
+    await store.set('msg-2', secretB)
+    assert.deepEqual(await store.get('msg-1'), secretA)
+    assert.deepEqual(await store.get('msg-2'), secretB)
+    assert.equal(await store.get('missing'), null)
+
+    // bounds eviction — maxSecrets=2, so msg-1 gets evicted
+    await store.set('msg-3', secretC)
+    assert.equal(await store.get('msg-1'), null)
+    assert.deepEqual(await store.get('msg-3'), secretC)
+
+    // getBatch preserves order and handles missing
+    const batch = await store.getBatch(['msg-3', 'missing', 'msg-2'])
+    assert.deepEqual(batch, [secretC, null, secretB])
+
+    // empty getBatch
+    assert.deepEqual(await store.getBatch([]), [])
+
+    // setBatch
+    await store.clear()
+    await store.setBatch([
+        { messageId: 'b-1', secret: secretA },
+        { messageId: 'b-2', secret: secretB }
+    ])
+    assert.deepEqual(await store.get('b-1'), secretA)
+    assert.deepEqual(await store.get('b-2'), secretB)
+
+    // TTL expiry on get
+    const expired = await store.get('b-1', Date.now() + 200)
+    assert.equal(expired, null)
+
+    // TTL expiry on getBatch
+    const expiredBatch = await store.getBatch(['b-2'], Date.now() + 200)
+    assert.deepEqual(expiredBatch, [null])
+
+    // cleanupExpired
+    await store.clear()
+    await store.set('c-1', secretA)
+    await store.set('c-2', secretB)
+    const removed = await store.cleanupExpired(Date.now() + 200)
+    assert.equal(removed, 2)
+    assert.equal(await store.get('c-1'), null)
+
+    // clear
+    await store.set('d-1', secretA)
+    await store.clear()
+    assert.equal(await store.get('d-1'), null)
+
+    await store.destroy()
 })
 
 test('memory privacy token store merges partial updates and enforces bounds', async () => {

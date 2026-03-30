@@ -20,6 +20,7 @@ export { WaMessagePgStore } from './message.store'
 export { WaThreadPgStore } from './thread.store'
 export { WaContactPgStore } from './contact.store'
 export { WaPrivacyTokenPgStore } from './privacy-token.store'
+export { WaMessageSecretPgStore } from './message-secret.store'
 export { PgCleanupPoller, type PgCleanupPollerOptions } from './cleanup'
 export {
     createPostgresStore,

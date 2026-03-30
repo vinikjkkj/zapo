@@ -7,6 +7,7 @@ import { createPgPool } from './connection'
 import { WaContactPgStore } from './contact.store'
 import { WaDeviceListPgStore } from './device-list.store'
 import { WaIdentityPgStore } from './identity.store'
+import { WaMessageSecretPgStore } from './message-secret.store'
 import { WaMessagePgStore } from './message.store'
 import { WaParticipantsPgStore } from './participants.store'
 import { WaPreKeyPgStore } from './pre-key.store'
@@ -25,6 +26,7 @@ export interface WaPgStoreConfig {
         readonly retryMs?: number
         readonly participantsMs?: number
         readonly deviceListMs?: number
+        readonly messageSecretMs?: number
     }
     readonly cleanup?: {
         readonly intervalMs?: number
@@ -51,6 +53,7 @@ export interface WaPgStoreResult {
         readonly retry: (sessionId: string) => WaRetryPgStore
         readonly participants: (sessionId: string) => WaParticipantsPgStore
         readonly deviceList: (sessionId: string) => WaDeviceListPgStore
+        readonly messageSecret: (sessionId: string) => WaMessageSecretPgStore
     }
     startCleanup(sessionId: string): PgCleanupPoller
     destroy(): Promise<void>
@@ -66,6 +69,7 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const participantsTtlMs = config.cacheTtlMs?.participantsMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
+    const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsPool = !isPool(config.pool)
 
     const opts = (sessionId: string): WaPgStorageOptions => ({
@@ -95,7 +99,9 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
             retry: (sessionId) => new WaRetryPgStore(opts(sessionId), retryTtlMs),
             participants: (sessionId) =>
                 new WaParticipantsPgStore(opts(sessionId), participantsTtlMs),
-            deviceList: (sessionId) => new WaDeviceListPgStore(opts(sessionId), deviceListTtlMs)
+            deviceList: (sessionId) => new WaDeviceListPgStore(opts(sessionId), deviceListTtlMs),
+            messageSecret: (sessionId) =>
+                new WaMessageSecretPgStore(opts(sessionId), messageSecretTtlMs)
         },
         startCleanup(sessionId: string): PgCleanupPoller {
             const o = opts(sessionId)
@@ -104,6 +110,7 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
                 retry: new WaRetryPgStore(o, retryTtlMs),
                 participants: new WaParticipantsPgStore(o, participantsTtlMs),
                 deviceList: new WaDeviceListPgStore(o, deviceListTtlMs),
+                messageSecret: new WaMessageSecretPgStore(o, messageSecretTtlMs),
                 onError: config.cleanup?.onError
             })
             poller.start()

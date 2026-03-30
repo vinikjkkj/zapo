@@ -14,6 +14,7 @@ export { WaMessageMongoStore } from './message.store'
 export { WaThreadMongoStore } from './thread.store'
 export { WaContactMongoStore } from './contact.store'
 export { WaPrivacyTokenMongoStore } from './privacy-token.store'
+export { WaMessageSecretMongoStore } from './message-secret.store'
 export {
     createMongoStore,
     type WaMongoStoreConfig,

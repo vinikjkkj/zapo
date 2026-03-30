@@ -579,6 +579,7 @@ export function buildWaClientDependencies(input: {
         sessionStore: sessionStore.session,
         identityStore: sessionStore.identity,
         deviceListStore: sessionStore.deviceList,
+        messageSecretStore: sessionStore.messageSecret,
         getCurrentMeJid,
         getCurrentMeLid,
         getCurrentSignedIdentity,

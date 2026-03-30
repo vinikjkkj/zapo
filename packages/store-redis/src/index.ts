@@ -14,6 +14,7 @@ export { WaMessageRedisStore } from './message.store'
 export { WaThreadRedisStore } from './thread.store'
 export { WaContactRedisStore } from './contact.store'
 export { WaPrivacyTokenRedisStore } from './privacy-token.store'
+export { WaMessageSecretRedisStore } from './message-secret.store'
 export {
     createRedisStore,
     type WaRedisStoreConfig,

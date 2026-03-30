@@ -97,6 +97,19 @@ export function resolveMessageTypeAttr(message: Proto.IMessage): string {
 
 const REVOKED_REACTION_TEXT = ''
 
+export function needsSecretPersistence(message: Proto.IMessage): boolean {
+    const msg = unwrapMessage(message)
+    return !!(
+        msg.pollCreationMessage ||
+        msg.pollCreationMessageV2 ||
+        msg.pollCreationMessageV3 ||
+        msg.pollCreationMessageV4 ||
+        msg.pollCreationMessageV5 ||
+        msg.pollCreationMessageV6 ||
+        msg.eventMessage
+    )
+}
+
 export function resolveEditAttr(message: Proto.IMessage, subtype?: string): string | null {
     const msg = unwrapMessage(message)
 

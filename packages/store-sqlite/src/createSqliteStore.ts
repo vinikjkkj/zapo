@@ -3,6 +3,7 @@ import { WaAuthSqliteStore } from './auth.store'
 import { WaContactSqliteStore } from './contact.store'
 import { WaDeviceListSqliteStore } from './device-list.store'
 import { WaIdentitySqliteStore } from './identity.store'
+import { WaMessageSecretSqliteStore } from './message-secret.store'
 import { WaMessageSqliteStore } from './message.store'
 import { WaParticipantsSqliteStore } from './participants.store'
 import { WaPreKeySqliteStore } from './pre-key.store'
@@ -29,6 +30,7 @@ export interface WaSqliteStoreConfig {
         readonly retryMs?: number
         readonly participantsMs?: number
         readonly deviceListMs?: number
+        readonly messageSecretMs?: number
     }
 }
 
@@ -50,6 +52,7 @@ export interface WaSqliteStoreResult {
         readonly retry: (sessionId: string) => WaRetrySqliteStore
         readonly participants: (sessionId: string) => WaParticipantsSqliteStore
         readonly deviceList: (sessionId: string) => WaDeviceListSqliteStore
+        readonly messageSecret: (sessionId: string) => WaMessageSecretSqliteStore
     }
 }
 
@@ -57,6 +60,7 @@ export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreRes
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const participantsTtlMs = config.cacheTtlMs?.participantsMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
+    const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const batchSizes = config.batchSizes
 
     const opts = (sessionId: string): WaSqliteStorageOptions => ({
@@ -97,7 +101,9 @@ export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreRes
                     opts(sessionId),
                     deviceListTtlMs,
                     batchSizes?.deviceList
-                )
+                ),
+            messageSecret: (sessionId) =>
+                new WaMessageSecretSqliteStore(opts(sessionId), messageSecretTtlMs)
         }
     }
 }

@@ -298,6 +298,22 @@ const MIGRATIONS: readonly Migration[] = [
                 PRIMARY KEY (session_id, jid)
             )
         `
+    },
+    {
+        name: '0010_message_secrets_cache_schema',
+        domain: 'messageSecret',
+        sql: `
+            CREATE TABLE IF NOT EXISTS "__PREFIX__message_secrets_cache" (
+                session_id TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                secret BYTEA NOT NULL,
+                expires_at_ms BIGINT NOT NULL,
+                PRIMARY KEY (session_id, message_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS "__PREFIX__idx_message_secrets_expires"
+                ON "__PREFIX__message_secrets_cache" (session_id, expires_at_ms)
+        `
     }
 ]
 

@@ -3,6 +3,7 @@ import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
+import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaParticipantsStore } from '@store/contracts/participants.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
@@ -27,6 +28,7 @@ export interface WaStoreSession {
     readonly participants: WaParticipantsStore
     readonly deviceList: WaDeviceListStore
     readonly messages: WaMessageStore
+    readonly messageSecret: WaMessageSecretStore
     readonly threads: WaThreadStore
     readonly contacts: WaContactStore
     readonly privacyToken: WaPrivacyTokenStore
@@ -58,6 +60,7 @@ export interface WaStoreBackend {
         readonly retry: (sessionId: string) => WaRetryStore
         readonly participants: (sessionId: string) => WaParticipantsStore
         readonly deviceList: (sessionId: string) => WaDeviceListStore
+        readonly messageSecret: (sessionId: string) => WaMessageSecretStore
     }
 }
 
@@ -83,6 +86,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
         readonly retry?: B | 'memory'
         readonly participants?: B | 'memory' | 'none'
         readonly deviceList?: B | 'memory' | 'none'
+        readonly messageSecret?: B | 'memory' | 'none'
     }
     readonly memory?: {
         readonly limits?: WaStoreMemoryLimitSelection
@@ -90,6 +94,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
             readonly retryMs?: number
             readonly participantsMs?: number
             readonly deviceListMs?: number
+            readonly messageSecretMs?: number
         }
     }
 }
@@ -105,6 +110,7 @@ export interface WaStoreMemoryLimitSelection {
     readonly participantsGroups?: number
     readonly deviceListUsers?: number
     readonly messages?: number
+    readonly messageSecrets?: number
     readonly threads?: number
     readonly contacts?: number
     readonly privacyTokens?: number

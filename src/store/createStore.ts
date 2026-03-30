@@ -3,6 +3,7 @@ import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
+import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaParticipantsStore } from '@store/contracts/participants.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
@@ -17,6 +18,7 @@ import { withAuthLock } from '@store/locks/auth.lock'
 import { withContactLock } from '@store/locks/contact.lock'
 import { withDeviceListLock } from '@store/locks/device-list.lock'
 import { withIdentityLock } from '@store/locks/identity.lock'
+import { withMessageSecretLock } from '@store/locks/message-secret.lock'
 import { withMessageLock } from '@store/locks/message.lock'
 import { withParticipantsLock } from '@store/locks/participants.lock'
 import { withPreKeyLock } from '@store/locks/pre-key.lock'
@@ -29,6 +31,7 @@ import { withThreadLock } from '@store/locks/thread.lock'
 import {
     NOOP_CONTACT_STORE,
     NOOP_DEVICE_LIST_STORE,
+    NOOP_MESSAGE_SECRET_STORE,
     NOOP_MESSAGE_STORE,
     NOOP_PARTICIPANTS_STORE,
     NOOP_THREAD_STORE
@@ -37,6 +40,7 @@ import { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
 import { WaContactMemoryStore } from '@store/providers/memory/contact.store'
 import { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
 import { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
+import { WaMessageSecretMemoryStore } from '@store/providers/memory/message-secret.store'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
 import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
 import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
@@ -62,7 +66,8 @@ interface Destroyable {
 const DEFAULT_CACHE_TTLS_MS = Object.freeze({
     retryMs: 60 * 1000,
     participantsMs: 5 * 60 * 1000,
-    deviceListMs: 5 * 60 * 1000
+    deviceListMs: 5 * 60 * 1000,
+    messageSecretMs: 30 * 60 * 1000
 } as const)
 
 function hasDestroy(value: unknown): value is Destroyable {
@@ -120,6 +125,11 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
             options.memory?.cacheTtlMs?.deviceListMs,
             DEFAULT_CACHE_TTLS_MS.deviceListMs,
             'memory.cacheTtlMs.deviceListMs'
+        ),
+        messageSecret: resolvePositive(
+            options.memory?.cacheTtlMs?.messageSecretMs,
+            DEFAULT_CACHE_TTLS_MS.messageSecretMs,
+            'memory.cacheTtlMs.messageSecretMs'
         )
     } as const)
     const sessions = new Map<string, WaStoreSession>()
@@ -285,6 +295,19 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                           })
                         : NOOP_DEVICE_LIST_STORE
             )
+            const rawMessageSecret = resolveStore<WaMessageSecretStore>(
+                id,
+                backends,
+                cacheProviders.messageSecret ?? 'none',
+                'messageSecret',
+                'caches',
+                () =>
+                    cacheProviders.messageSecret === 'memory'
+                        ? new WaMessageSecretMemoryStore(cacheTtlsMs.messageSecret, {
+                              maxSecrets: ml.messageSecrets
+                          })
+                        : NOOP_MESSAGE_SECRET_STORE
+            )
 
             const authStore = withAuthLock(rawAuth)
             const signalStore = withSignalLock(rawSignal)
@@ -297,6 +320,7 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
             const participantsStore = withParticipantsLock(rawParticipants)
             const deviceListStore = withDeviceListLock(rawDeviceList)
             const messageStore = withMessageLock(rawMessages)
+            const messageSecretStore = withMessageSecretLock(rawMessageSecret)
             const threadStore = withThreadLock(rawThreads)
             const contactStore = withContactLock(rawContacts)
             const privacyTokenStore = withPrivacyTokenLock(rawPrivacyToken)
@@ -310,12 +334,14 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                 await Promise.all([
                     retryStore.clear(),
                     participantsStore.clear(),
-                    deviceListStore.clear()
+                    deviceListStore.clear(),
+                    messageSecretStore.clear()
                 ])
                 await Promise.all([
                     destroyIfSupported(retryStore),
                     destroyIfSupported(participantsStore),
-                    destroyIfSupported(deviceListStore)
+                    destroyIfSupported(deviceListStore),
+                    destroyIfSupported(messageSecretStore)
                 ])
             }
 
@@ -350,6 +376,7 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                 participants: participantsStore,
                 deviceList: deviceListStore,
                 messages: messageStore,
+                messageSecret: messageSecretStore,
                 threads: threadStore,
                 contacts: contactStore,
                 privacyToken: privacyTokenStore,

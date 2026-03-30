@@ -284,6 +284,20 @@ const MIGRATIONS: readonly Migration[] = [
                 PRIMARY KEY (session_id, jid)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `
+    },
+    {
+        name: '0010_message_secrets_cache_schema',
+        domain: 'messageSecret',
+        sql: `
+            CREATE TABLE IF NOT EXISTS \`__PREFIX__message_secrets_cache\` (
+                session_id VARCHAR(255) NOT NULL,
+                message_id VARCHAR(255) NOT NULL,
+                secret BLOB NOT NULL,
+                expires_at_ms BIGINT NOT NULL,
+                PRIMARY KEY (session_id, message_id),
+                INDEX idx_message_secrets_expires (session_id, expires_at_ms)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `
     }
 ]
 

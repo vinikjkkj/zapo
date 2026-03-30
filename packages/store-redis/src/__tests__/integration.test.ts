@@ -482,6 +482,38 @@ describe('store-redis integration', { timeout: 60_000 }, () => {
         await Promise.all([participants.clear(), deviceList.clear()])
     })
 
+    it('cache stores: messageSecret basic lifecycle', async (t) => {
+        if (!store) return t.skip('ZAPO_TEST_REDIS_* not set')
+
+        const sessionId = nextSessionId('messageSecret')
+        const secretStore = store.caches.messageSecret(sessionId)
+        const now = Date.now()
+
+        const secretA = new Uint8Array([1, 2, 3, 4])
+        const secretB = new Uint8Array([5, 6, 7, 8])
+
+        await secretStore.set('msg-1', secretA)
+        await secretStore.set('msg-2', secretB)
+        const got1 = await secretStore.get('msg-1', now)
+        assert.ok(got1 && got1.length === secretA.length && got1.every((b, i) => b === secretA[i]))
+        assert.equal(await secretStore.get('missing', now), null)
+
+        const batch = await secretStore.getBatch(['msg-2', 'missing', 'msg-1'], now)
+        assert.equal(batch.length, 3)
+        assert.ok(batch[0] && batch[0].every((b, i) => b === secretB[i]))
+        assert.equal(batch[1], null)
+        assert.ok(batch[2] && batch[2].every((b, i) => b === secretA[i]))
+
+        const secretC = new Uint8Array([9, 10])
+        await secretStore.setBatch([{ messageId: 'msg-3', secret: secretC }])
+        const got3 = await secretStore.get('msg-3', now)
+        assert.ok(got3 && got3.length === secretC.length && got3.every((b, i) => b === secretC[i]))
+
+        assert.equal(await secretStore.cleanupExpired(now), 0)
+        await secretStore.clear()
+        assert.equal(await secretStore.get('msg-1', now), null)
+    })
+
     it('signal: prekey generation mark-uploaded and consume', async (t) => {
         if (!store) return t.skip('ZAPO_TEST_REDIS_* not set')
 

@@ -12,6 +12,7 @@ export type WaMysqlMigrationDomain =
     | 'participants'
     | 'deviceList'
     | 'privacyToken'
+    | 'messageSecret'
 
 export interface WaMysqlStorageOptions {
     readonly pool: Pool

@@ -7,6 +7,7 @@ import { randomBytesAsync, sha256 } from '@crypto'
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { ensureMessageSecret } from '@message'
+import { needsSecretPersistence } from '@message/content'
 import {
     resolveEditAttr,
     resolveEncMediaType,
@@ -51,6 +52,7 @@ import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress } from '@signal/types'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
+import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { encodeBinaryNode } from '@transport/binary'
@@ -60,7 +62,7 @@ import {
     buildMetaNode
 } from '@transport/node/builders/message'
 import type { BinaryNode } from '@transport/types'
-import { bytesToHex, concatBytes, TEXT_ENCODER } from '@util/bytes'
+import { bytesToHex, concatBytes, TEXT_ENCODER, toBytesView } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 interface WaMessageDispatchCoordinatorOptions {
@@ -78,6 +80,7 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly sessionStore: WaSessionStore
     readonly identityStore: WaIdentityStore
     readonly deviceListStore: WaDeviceListStore
+    readonly messageSecretStore: WaMessageSecretStore
     readonly getCurrentMeJid: () => string | null | undefined
     readonly getCurrentMeLid: () => string | null | undefined
     readonly getCurrentSignedIdentity: () => Proto.IADVSignedDeviceIdentity | null | undefined
@@ -108,6 +111,7 @@ export class WaMessageDispatchCoordinator {
     private readonly sessionStore: WaSessionStore
     private readonly identityStore: WaIdentityStore
     private readonly deviceListStore: WaDeviceListStore
+    private readonly messageSecretStore: WaMessageSecretStore
     private readonly getCurrentMeJid: () => string | null | undefined
     private readonly getCurrentMeLid: () => string | null | undefined
     private readonly getCurrentSignedIdentity: () =>
@@ -135,6 +139,7 @@ export class WaMessageDispatchCoordinator {
         this.sessionStore = options.sessionStore
         this.identityStore = options.identityStore
         this.deviceListStore = options.deviceListStore
+        this.messageSecretStore = options.messageSecretStore
         this.getCurrentMeJid = options.getCurrentMeJid
         this.getCurrentMeLid = options.getCurrentMeLid
         this.getCurrentSignedIdentity = options.getCurrentSignedIdentity
@@ -268,6 +273,22 @@ export class WaMessageDispatchCoordinator {
             this.withResolvedMessageId(options)
         ])
         const messageWithSecret = await ensureMessageSecret(message)
+        const rawSecret = messageWithSecret.messageContextInfo?.messageSecret
+        if (
+            rawSecret &&
+            rawSecret.length > 0 &&
+            sendOptions.id &&
+            needsSecretPersistence(messageWithSecret)
+        ) {
+            void this.messageSecretStore
+                .set(sendOptions.id, toBytesView(rawSecret))
+                .catch((error) => {
+                    this.logger.warn('failed to persist outgoing message secret', {
+                        id: sendOptions.id,
+                        message: toError(error).message
+                    })
+                })
+        }
 
         const meJid = this.getCurrentMeJid()
         const regInfo = meJid ? await this.signalStore.getRegistrationInfo() : null
