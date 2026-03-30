@@ -225,6 +225,7 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         if (!store) return t.skip('ZAPO_TEST_MYSQL_* not set')
 
         const signal = store.stores.signal('test-session')
+        const preKeyStore = store.stores.preKey('test-session')
 
         assert.equal(await signal.getRegistrationInfo(), null)
 
@@ -241,7 +242,7 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         assert.ok(loaded)
         assert.equal(loaded.registrationId, 42)
 
-        await signal.putPreKey({
+        await preKeyStore.putPreKey({
             keyId: 1,
             keyPair: {
                 pubKey: new Uint8Array(33).fill(3),
@@ -249,11 +250,12 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
             }
         })
 
-        const preKey = await signal.getPreKeyById(1)
+        const preKey = await preKeyStore.getPreKeyById(1)
         assert.ok(preKey)
         assert.equal(preKey.keyId, 1)
 
         await signal.clear()
+        await preKeyStore.clear()
     })
 
     it('mailbox stores: thread/contact/privacy-token coalesce updates', async (t) => {
@@ -518,10 +520,10 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         if (!store) return t.skip('ZAPO_TEST_MYSQL_* not set')
 
         const sessionId = nextSessionId('signal-prekeys')
-        const signal = store.stores.signal(sessionId)
-        await signal.clear()
+        const preKey = store.stores.preKey(sessionId)
+        await preKey.clear()
 
-        const generated = await signal.getOrGenPreKeys(2, (keyId) => ({
+        const generated = await preKey.getOrGenPreKeys(2, (keyId) => ({
             keyId,
             keyPair: {
                 pubKey: new Uint8Array(33).fill(keyId % 255),
@@ -531,17 +533,17 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         }))
         assert.equal(generated.length, 2)
 
-        await signal.markKeyAsUploaded(generated[0].keyId)
-        const uploadedRecord = await signal.getPreKeyById(generated[0].keyId)
+        await preKey.markKeyAsUploaded(generated[0].keyId)
+        const uploadedRecord = await preKey.getPreKeyById(generated[0].keyId)
         assert.ok(uploadedRecord)
         assert.equal(uploadedRecord.uploaded, true)
 
-        const consumed = await signal.consumePreKeyById(generated[0].keyId)
+        const consumed = await preKey.consumePreKeyById(generated[0].keyId)
         assert.ok(consumed)
         assert.equal(consumed.keyId, generated[0].keyId)
-        assert.equal(await signal.getPreKeyById(generated[0].keyId), null)
+        assert.equal(await preKey.getPreKeyById(generated[0].keyId), null)
 
-        await signal.clear()
+        await preKey.clear()
     })
 
     it('auth: saves and loads optional credential fields', async (t) => {
@@ -714,6 +716,7 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
 
         const sessionId = nextSessionId('signal-meta')
         const signal = store.stores.signal(sessionId)
+        const preKey = store.stores.preKey(sessionId)
         await signal.clear()
 
         await signal.setSignedPreKey({
@@ -726,19 +729,21 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
             uploaded: true
         })
         await signal.setSignedPreKeyRotationTs(123_456)
-        await signal.setServerHasPreKeys(true)
+        await preKey.setServerHasPreKeys(true)
 
         const byId = await signal.getSignedPreKeyById(21)
         assert.ok(byId)
         assert.equal(byId.keyId, 21)
         assert.equal(byId.uploaded, true)
         assert.equal(await signal.getSignedPreKeyRotationTs(), 123_456)
-        assert.equal(await signal.getServerHasPreKeys(), true)
+        assert.equal(await preKey.getServerHasPreKeys(), true)
 
-        const meta = await signal.getSignalMeta()
-        assert.equal(meta.serverHasPreKeys, true)
-        assert.equal(meta.signedPreKeyRotationTs, 123_456)
-        assert.equal(meta.signedPreKey?.keyId, 21)
+        const signedPreKey = await signal.getSignedPreKey()
+        const signedPreKeyRotationTs = await signal.getSignedPreKeyRotationTs()
+        const serverHasPreKeys = await preKey.getServerHasPreKeys()
+        assert.equal(serverHasPreKeys, true)
+        assert.equal(signedPreKeyRotationTs, 123_456)
+        assert.equal(signedPreKey?.keyId, 21)
 
         await signal.clear()
     })
@@ -747,10 +752,10 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         if (!store) return t.skip('ZAPO_TEST_MYSQL_* not set')
 
         const sessionId = nextSessionId('signal-prekeys-order')
-        const signal = store.stores.signal(sessionId)
-        await signal.clear()
+        const preKey = store.stores.preKey(sessionId)
+        await preKey.clear()
 
-        await signal.putPreKey({
+        await preKey.putPreKey({
             keyId: 1,
             keyPair: {
                 pubKey: new Uint8Array(33).fill(1),
@@ -758,7 +763,7 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
             },
             uploaded: false
         })
-        await signal.putPreKey({
+        await preKey.putPreKey({
             keyId: 3,
             keyPair: {
                 pubKey: new Uint8Array(33).fill(3),
@@ -767,14 +772,14 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
             uploaded: false
         })
 
-        const records = await signal.getPreKeysById([3, 2, 1, 3])
+        const records = await preKey.getPreKeysById([3, 2, 1, 3])
         assert.equal(records.length, 4)
         assert.equal(records[0]?.keyId, 3)
         assert.equal(records[1], null)
         assert.equal(records[2]?.keyId, 1)
         assert.equal(records[3]?.keyId, 3)
 
-        await signal.clear()
+        await preKey.clear()
     })
 
     it('appstate: exportData returns keys and collections snapshot', async (t) => {
@@ -946,28 +951,28 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         if (!store) return t.skip('ZAPO_TEST_MYSQL_* not set')
 
         const sessionId = nextSessionId('signal-identities')
-        const signal = store.stores.signal(sessionId)
-        await signal.clear()
+        const identity = store.stores.identity(sessionId)
+        await identity.clear()
 
         const addressA = { user: '11111', server: 's.whatsapp.net', device: 1 } as const
         const addressB = { user: '22222', server: 's.whatsapp.net', device: 2 } as const
         const missing = { user: '99999', server: 's.whatsapp.net', device: 9 } as const
 
-        await signal.setRemoteIdentities([
+        await identity.setRemoteIdentities([
             { address: addressA, identityKey: new Uint8Array([1, 2, 3]) },
             { address: addressB, identityKey: new Uint8Array([4, 5, 6]) }
         ])
 
-        const single = await signal.getRemoteIdentity(addressA)
+        const single = await identity.getRemoteIdentity(addressA)
         assert.deepEqual(Array.from(single ?? []), [1, 2, 3])
 
-        const batch = await signal.getRemoteIdentities([addressB, missing, addressA])
+        const batch = await identity.getRemoteIdentities([addressB, missing, addressA])
         assert.equal(batch.length, 3)
         assert.deepEqual(Array.from(batch[0] ?? []), [4, 5, 6])
         assert.equal(batch[1], null)
         assert.deepEqual(Array.from(batch[2] ?? []), [1, 2, 3])
 
-        await signal.clear()
+        await identity.clear()
     })
 
     it('sender-key: deleteDeviceSenderKey without group clears all groups for sender', async (t) => {
@@ -1037,8 +1042,8 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         if (!store) return t.skip('ZAPO_TEST_MYSQL_* not set')
 
         const sessionId = nextSessionId('signal-sessions')
-        const signal = store.stores.signal(sessionId)
-        await signal.clear()
+        const session = store.stores.session(sessionId)
+        await session.clear()
 
         const addressA = makeAddress('11111', 1)
         const addressB = makeAddress('22222', 2)
@@ -1046,22 +1051,22 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         const sessionA = await makeSessionRecord(1)
         const sessionB = await makeSessionRecord(2)
 
-        assert.equal(await signal.hasSession(addressA), false)
-        await signal.setSession(addressA, sessionA)
-        await signal.setSessionsBatch([{ address: addressB, session: sessionB }])
+        assert.equal(await session.hasSession(addressA), false)
+        await session.setSession(addressA, sessionA)
+        await session.setSessionsBatch([{ address: addressB, session: sessionB }])
 
-        const hasBatch = await signal.hasSessions([addressA, addressB, addressC])
+        const hasBatch = await session.hasSessions([addressA, addressB, addressC])
         assert.deepEqual(hasBatch, [true, true, false])
 
-        const sessionsBatch = await signal.getSessionsBatch([addressB, addressC, addressA])
+        const sessionsBatch = await session.getSessionsBatch([addressB, addressC, addressA])
         assert.equal(sessionsBatch[0]?.local.regId, sessionB.local.regId)
         assert.equal(sessionsBatch[1], null)
         assert.equal(sessionsBatch[2]?.local.regId, sessionA.local.regId)
 
-        await signal.deleteSession(addressA)
-        assert.equal(await signal.hasSession(addressA), false)
+        await session.deleteSession(addressA)
+        assert.equal(await session.hasSession(addressA), false)
 
-        await signal.clear()
+        await session.clear()
     })
 
     it('appstate: updating same collection replaces previous index entries', async (t) => {
@@ -1240,10 +1245,10 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         if (!store) return t.skip('ZAPO_TEST_MYSQL_* not set')
 
         const sessionId = nextSessionId('signal-upload-boundary')
-        const signal = store.stores.signal(sessionId)
-        await signal.clear()
+        const preKey = store.stores.preKey(sessionId)
+        await preKey.clear()
 
-        await signal.putPreKey({
+        await preKey.putPreKey({
             keyId: 1,
             keyPair: {
                 pubKey: new Uint8Array(33).fill(1),
@@ -1252,9 +1257,9 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
             uploaded: false
         })
 
-        await assert.rejects(async () => signal.markKeyAsUploaded(9_999), /out of boundary/)
+        await assert.rejects(async () => preKey.markKeyAsUploaded(9_999), /out of boundary/)
 
-        await signal.clear()
+        await preKey.clear()
     })
 
     it('messages: listByThread limit keeps newest ordering', async (t) => {
@@ -1353,19 +1358,19 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         if (!store) return t.skip('ZAPO_TEST_MYSQL_* not set')
 
         const sessionId = nextSessionId('signal-get-session')
-        const signal = store.stores.signal(sessionId)
-        await signal.clear()
+        const session = store.stores.session(sessionId)
+        await session.clear()
 
         const addressA = makeAddress('77777', 1)
         const addressMissing = makeAddress('88888', 2)
         const record = await makeSessionRecord(7)
-        await signal.setSession(addressA, record)
+        await session.setSession(addressA, record)
 
-        const loaded = await signal.getSession(addressA)
+        const loaded = await session.getSession(addressA)
         assert.ok(loaded)
         assert.equal(loaded.local.regId, record.local.regId)
-        assert.equal(await signal.getSession(addressMissing), null)
+        assert.equal(await session.getSession(addressMissing), null)
 
-        await signal.clear()
+        await session.clear()
     })
 })

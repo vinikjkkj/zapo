@@ -7,6 +7,7 @@ import type {
     PreKeyRecord,
     SignedPreKeyRecord
 } from '@signal/types'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { toBytesView } from '@util/bytes'
 
@@ -73,7 +74,7 @@ export async function requireSignedPreKey(
     return signedPreKey
 }
 
-export async function requirePreKey(store: WaSignalStore, id: number): Promise<PreKeyRecord> {
+export async function requirePreKey(store: WaPreKeyStore, id: number): Promise<PreKeyRecord> {
     const preKey = await store.getPreKeyById(id)
     if (!preKey) {
         throw new Error(`prekey ${id} not found`)

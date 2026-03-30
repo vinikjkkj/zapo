@@ -2,11 +2,14 @@ import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
+import type { WaIdentityStore } from '@store/contracts/identity.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaParticipantsStore } from '@store/contracts/participants.store'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaPrivacyTokenStore } from '@store/contracts/privacy-token.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
+import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { WaThreadStore } from '@store/contracts/thread.store'
 
@@ -15,6 +18,9 @@ export type WithDestroyLifecycle<T> = T & { readonly destroy?: () => Promise<voi
 export interface WaStoreSession {
     readonly auth: WaAuthStore
     readonly signal: WaSignalStore
+    readonly preKey: WaPreKeyStore
+    readonly session: WaSessionStore
+    readonly identity: WaIdentityStore
     readonly senderKey: WaSenderKeyStore
     readonly appState: WaAppStateStore
     readonly retry: WaRetryStore
@@ -38,6 +44,9 @@ export interface WaStoreBackend {
     readonly stores: {
         readonly auth: (sessionId: string) => WaAuthStore
         readonly signal: (sessionId: string) => WaSignalStore
+        readonly preKey: (sessionId: string) => WaPreKeyStore
+        readonly session: (sessionId: string) => WaSessionStore
+        readonly identity: (sessionId: string) => WaIdentityStore
         readonly senderKey: (sessionId: string) => WaSenderKeyStore
         readonly appState: (sessionId: string) => WaAppStateStore
         readonly messages: (sessionId: string) => WaMessageStore
@@ -60,6 +69,9 @@ export interface WaCreateStoreOptions<B extends string = string> {
     readonly providers?: {
         readonly auth?: B | 'memory'
         readonly signal?: B | 'memory'
+        readonly preKey?: B | 'memory'
+        readonly session?: B | 'memory'
+        readonly identity?: B | 'memory'
         readonly senderKey?: B | 'memory'
         readonly appState?: B | 'memory'
         readonly messages?: B | 'memory' | 'none'

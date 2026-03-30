@@ -13,9 +13,12 @@ import type { SenderKeyRecord, SignalAddress, SignalSessionRecord } from 'zapo-j
 import { WaAppStateSqliteStore } from '../appstate.store'
 import type { WaSqliteConnection } from '../connection'
 import { WaDeviceListSqliteStore } from '../device-list.store'
+import { WaIdentitySqliteStore } from '../identity.store'
 import { WaParticipantsSqliteStore } from '../participants.store'
+import { WaPreKeySqliteStore } from '../pre-key.store'
 import { WaRetrySqliteStore } from '../retry.store'
 import { SenderKeySqliteStore } from '../sender-key.store'
+import { WaSessionSqliteStore } from '../session.store'
 import { WaSignalSqliteStore } from '../signal.store'
 import type { WaSqliteStorageOptions } from '../types'
 
@@ -433,45 +436,46 @@ test('sqlite sender-key store handles lists, batching and deletions', async () =
 test('sqlite signal store covers prekeys, sessions, identities and state helpers', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-signal-'))
     const sqlitePath = join(dir, 'state.sqlite')
-    const store = new WaSignalSqliteStore(makeSqliteOptions(sqlitePath, 'session-a'), {
-        preKeyBatchSize: 1,
-        hasSessionBatchSize: 1
-    })
-    const storeB = new WaSignalSqliteStore(makeSqliteOptions(sqlitePath, 'session-b'))
+    const optionsA = makeSqliteOptions(sqlitePath, 'session-a')
+    const signalStore = new WaSignalSqliteStore(optionsA)
+    const preKeyStore = new WaPreKeySqliteStore(optionsA, { preKeyBatchSize: 1 })
+    const sessionStore = new WaSessionSqliteStore(optionsA, { hasSessionBatchSize: 1 })
+    const identityStore = new WaIdentitySqliteStore(optionsA)
+    const signalStoreB = new WaSignalSqliteStore(makeSqliteOptions(sqlitePath, 'session-b'))
 
     try {
-        assert.equal(await store.getRegistrationInfo(), null)
+        assert.equal(await signalStore.getRegistrationInfo(), null)
         const registrationKeyPair = await X25519.generateKeyPair()
-        await store.setRegistrationInfo({
+        await signalStore.setRegistrationInfo({
             registrationId: 777,
             identityKeyPair: registrationKeyPair
         })
-        assert.equal((await store.getRegistrationInfo())?.registrationId, 777)
-        assert.equal(await storeB.getRegistrationInfo(), null)
+        assert.equal((await signalStore.getRegistrationInfo())?.registrationId, 777)
+        assert.equal(await signalStoreB.getRegistrationInfo(), null)
 
         const signedPreKeyPair = await X25519.generateKeyPair()
-        await store.setSignedPreKey({
+        await signalStore.setSignedPreKey({
             keyId: 11,
             keyPair: signedPreKeyPair,
             signature: makeBytes(64, 3),
             uploaded: false
         })
-        assert.equal((await store.getSignedPreKey())?.keyId, 11)
-        assert.equal((await store.getSignedPreKeyById(11))?.keyId, 11)
-        assert.equal(await store.getSignedPreKeyById(12), null)
+        assert.equal((await signalStore.getSignedPreKey())?.keyId, 11)
+        assert.equal((await signalStore.getSignedPreKeyById(11))?.keyId, 11)
+        assert.equal(await signalStore.getSignedPreKeyById(12), null)
 
-        await store.setSignedPreKeyRotationTs(1234)
-        assert.equal(await store.getSignedPreKeyRotationTs(), 1234)
+        await signalStore.setSignedPreKeyRotationTs(1234)
+        assert.equal(await signalStore.getSignedPreKeyRotationTs(), 1234)
 
         const preKeyPair5 = await X25519.generateKeyPair()
-        await store.putPreKey({
+        await preKeyStore.putPreKey({
             keyId: 5,
             keyPair: preKeyPair5,
             uploaded: false
         })
-        assert.equal((await store.getPreKeyById(5))?.keyId, 5)
+        assert.equal((await preKeyStore.getPreKeyById(5))?.keyId, 5)
 
-        const generated = await store.getOrGenPreKeys(2, async (keyId) => {
+        const generated = await preKeyStore.getOrGenPreKeys(2, async (keyId) => {
             const keyPair = await X25519.generateKeyPair()
             return {
                 keyId,
@@ -482,76 +486,89 @@ test('sqlite signal store covers prekeys, sessions, identities and state helpers
         assert.equal(generated.length, 2)
         await assert.rejects(
             () =>
-                store.getOrGenPreKeys(0, async (keyId) => {
+                preKeyStore.getOrGenPreKeys(0, async (keyId) => {
                     const keyPair = await X25519.generateKeyPair()
                     return { keyId, keyPair, uploaded: false }
                 }),
             /invalid prekey count/
         )
 
-        assert.deepEqual(await store.getPreKeysById([]), [])
-        const byIds = await store.getPreKeysById([5, generated[1].keyId, 999, 5])
+        assert.deepEqual(await preKeyStore.getPreKeysById([]), [])
+        const byIds = await preKeyStore.getPreKeysById([5, generated[1].keyId, 999, 5])
         assert.equal(byIds[0]?.keyId, 5)
         assert.equal(byIds[1]?.keyId, generated[1].keyId)
         assert.equal(byIds[2], null)
         assert.equal(byIds[3]?.keyId, 5)
 
-        assert.equal(await store.consumePreKeyById(999), null)
-        assert.equal((await store.consumePreKeyById(5))?.keyId, 5)
-        assert.equal(await store.getPreKeyById(5), null)
+        assert.equal(await preKeyStore.consumePreKeyById(999), null)
+        assert.equal((await preKeyStore.consumePreKeyById(5))?.keyId, 5)
+        assert.equal(await preKeyStore.getPreKeyById(5), null)
 
-        const single = await store.getOrGenSinglePreKey(async (keyId) => {
+        const single = await preKeyStore.getOrGenSinglePreKey(async (keyId) => {
             const keyPair = await X25519.generateKeyPair()
             return { keyId, keyPair, uploaded: false }
         })
         assert.ok(single.keyId > 0)
 
-        await assert.rejects(() => store.markKeyAsUploaded(-1), /out of boundary/)
-        await store.markKeyAsUploaded(single.keyId)
+        await assert.rejects(() => preKeyStore.markKeyAsUploaded(-1), /out of boundary/)
+        await preKeyStore.markKeyAsUploaded(single.keyId)
 
-        await store.setServerHasPreKeys(true)
-        assert.equal(await store.getServerHasPreKeys(), true)
+        await preKeyStore.setServerHasPreKeys(true)
+        assert.equal(await preKeyStore.getServerHasPreKeys(), true)
 
         const sessionAddressA = makeAddress('5511', 0)
         const sessionAddressB = makeAddress('5522', 0)
-        assert.equal(await store.hasSession(sessionAddressA), false)
+        assert.equal(await sessionStore.hasSession(sessionAddressA), false)
 
         const sessionRecord = await makeSessionRecord(1)
-        await store.setSession(sessionAddressA, sessionRecord)
-        assert.equal(await store.hasSession(sessionAddressA), true)
-        assert.deepEqual(await store.hasSessions([]), [])
-        assert.deepEqual(await store.hasSessions([sessionAddressA, sessionAddressB]), [true, false])
-        assert.deepEqual(await store.getSessionsBatch([]), [])
-        assert.deepEqual(await store.getSessionsBatch([sessionAddressA, sessionAddressB]), [
+        await sessionStore.setSession(sessionAddressA, sessionRecord)
+        assert.equal(await sessionStore.hasSession(sessionAddressA), true)
+        assert.deepEqual(await sessionStore.hasSessions([]), [])
+        assert.deepEqual(await sessionStore.hasSessions([sessionAddressA, sessionAddressB]), [
+            true,
+            false
+        ])
+        assert.deepEqual(await sessionStore.getSessionsBatch([]), [])
+        assert.deepEqual(await sessionStore.getSessionsBatch([sessionAddressA, sessionAddressB]), [
             sessionRecord,
             null
         ])
         const sessionRecordB = await makeSessionRecord(2)
-        await store.setSessionsBatch([{ address: sessionAddressB, session: sessionRecordB }])
-        assert.deepEqual(await store.getSessionsBatch([sessionAddressA, sessionAddressB]), [
+        await sessionStore.setSessionsBatch([{ address: sessionAddressB, session: sessionRecordB }])
+        assert.deepEqual(await sessionStore.getSessionsBatch([sessionAddressA, sessionAddressB]), [
             sessionRecord,
             sessionRecordB
         ])
-        assert.ok(await store.getSession(sessionAddressA))
-        await store.deleteSession(sessionAddressA)
-        assert.equal(await store.getSession(sessionAddressA), null)
+        assert.ok(await sessionStore.getSession(sessionAddressA))
+        await sessionStore.deleteSession(sessionAddressA)
+        assert.equal(await sessionStore.getSession(sessionAddressA), null)
 
-        await store.setRemoteIdentity(sessionAddressA, makeBytes(33, 20))
-        assert.deepEqual(await store.getRemoteIdentity(sessionAddressA), makeBytes(33, 20))
-        assert.deepEqual(await store.getRemoteIdentities([]), [])
-        await store.setRemoteIdentities([])
-        await store.setRemoteIdentities([
+        await identityStore.setRemoteIdentity(sessionAddressA, makeBytes(33, 20))
+        assert.deepEqual(await identityStore.getRemoteIdentity(sessionAddressA), makeBytes(33, 20))
+        assert.deepEqual(await identityStore.getRemoteIdentities([]), [])
+        await identityStore.setRemoteIdentities([])
+        await identityStore.setRemoteIdentities([
             { address: sessionAddressA, identityKey: makeBytes(33, 21) },
             { address: sessionAddressB, identityKey: makeBytes(33, 22) }
         ])
-        assert.deepEqual(await store.getRemoteIdentity(sessionAddressA), makeBytes(33, 21))
-        assert.deepEqual(await store.getRemoteIdentity(sessionAddressB), makeBytes(33, 22))
+        assert.deepEqual(await identityStore.getRemoteIdentity(sessionAddressA), makeBytes(33, 21))
+        assert.deepEqual(await identityStore.getRemoteIdentity(sessionAddressB), makeBytes(33, 22))
         assert.deepEqual(
-            await store.getRemoteIdentities([sessionAddressA, sessionAddressB, sessionAddressA]),
+            await identityStore.getRemoteIdentities([
+                sessionAddressA,
+                sessionAddressB,
+                sessionAddressA
+            ]),
             [makeBytes(33, 21), makeBytes(33, 22), makeBytes(33, 21)]
         )
     } finally {
-        await Promise.all([store.destroy(), storeB.destroy()])
+        await Promise.all([
+            signalStore.destroy(),
+            signalStoreB.destroy(),
+            preKeyStore.destroy(),
+            sessionStore.destroy(),
+            identityStore.destroy()
+        ])
         await rm(dir, { recursive: true, force: true })
     }
 })
@@ -559,8 +576,8 @@ test('sqlite signal store covers prekeys, sessions, identities and state helpers
 test('sqlite signal prekey generation is safe across concurrent sessions', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-signal-concurrency-'))
     const sqlitePath = join(dir, 'state.sqlite')
-    const storeA = new WaSignalSqliteStore(makeSqliteOptions(sqlitePath, 'session-a'))
-    const storeB = new WaSignalSqliteStore(makeSqliteOptions(sqlitePath, 'session-b'))
+    const storeA = new WaPreKeySqliteStore(makeSqliteOptions(sqlitePath, 'session-a'))
+    const storeB = new WaPreKeySqliteStore(makeSqliteOptions(sqlitePath, 'session-b'))
 
     try {
         const generator = async (keyId: number) => {
@@ -620,7 +637,7 @@ test('sqlite shared connection keeps other session alive after one destroy', asy
 test('sqlite signal prekey generation keeps monotonic progress for overlapping same-session calls', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-signal-same-session-concurrency-'))
     const sqlitePath = join(dir, 'state.sqlite')
-    const store = new WaSignalSqliteStore(makeSqliteOptions(sqlitePath, 'session-a'))
+    const store = new WaPreKeySqliteStore(makeSqliteOptions(sqlitePath, 'session-a'))
 
     try {
         const generator = async (keyId: number) => {

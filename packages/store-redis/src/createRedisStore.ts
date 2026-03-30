@@ -5,11 +5,14 @@ import { WaAppStateRedisStore } from './appstate.store'
 import { WaAuthRedisStore } from './auth.store'
 import { WaContactRedisStore } from './contact.store'
 import { WaDeviceListRedisStore } from './device-list.store'
+import { WaIdentityRedisStore } from './identity.store'
 import { WaMessageRedisStore } from './message.store'
 import { WaParticipantsRedisStore } from './participants.store'
+import { WaPreKeyRedisStore } from './pre-key.store'
 import { WaPrivacyTokenRedisStore } from './privacy-token.store'
 import { WaRetryRedisStore } from './retry.store'
 import { WaSenderKeyRedisStore } from './sender-key.store'
+import { WaSessionRedisStore } from './session.store'
 import { WaSignalRedisStore } from './signal.store'
 import { WaThreadRedisStore } from './thread.store'
 import type { WaRedisStorageOptions } from './types'
@@ -28,6 +31,9 @@ export interface WaRedisStoreResult {
     readonly redis: Redis
     readonly stores: {
         readonly auth: (sessionId: string) => WaAuthRedisStore
+        readonly preKey: (sessionId: string) => WaPreKeyRedisStore
+        readonly session: (sessionId: string) => WaSessionRedisStore
+        readonly identity: (sessionId: string) => WaIdentityRedisStore
         readonly signal: (sessionId: string) => WaSignalRedisStore
         readonly senderKey: (sessionId: string) => WaSenderKeyRedisStore
         readonly appState: (sessionId: string) => WaAppStateRedisStore
@@ -66,6 +72,9 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
         redis,
         stores: {
             auth: (sessionId) => new WaAuthRedisStore(opts(sessionId)),
+            preKey: (sessionId) => new WaPreKeyRedisStore(opts(sessionId)),
+            session: (sessionId) => new WaSessionRedisStore(opts(sessionId)),
+            identity: (sessionId) => new WaIdentityRedisStore(opts(sessionId)),
             signal: (sessionId) => new WaSignalRedisStore(opts(sessionId)),
             senderKey: (sessionId) => new WaSenderKeyRedisStore(opts(sessionId)),
             appState: (sessionId) => new WaAppStateRedisStore(opts(sessionId)),

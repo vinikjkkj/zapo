@@ -11,6 +11,7 @@ import {
     SIGNAL_SIGNATURE_LENGTH
 } from '@signal/api/constants'
 import type { RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import {
     decodeNodeContentBase64OrBytes,
@@ -25,6 +26,7 @@ interface SignalDigestSyncApiOptions {
     readonly logger: Logger
     readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
     readonly signalStore: WaSignalStore
+    readonly preKeyStore: WaPreKeyStore
     readonly defaultTimeoutMs?: number
     readonly hostDomain?: string
 }
@@ -67,6 +69,7 @@ export class SignalDigestSyncApi {
     private readonly logger: SignalDigestSyncApiOptions['logger']
     private readonly query: SignalDigestSyncApiOptions['query']
     private readonly signalStore: SignalDigestSyncApiOptions['signalStore']
+    private readonly preKeyStore: SignalDigestSyncApiOptions['preKeyStore']
     private readonly defaultTimeoutMs: number
     private readonly hostDomain: string
 
@@ -74,6 +77,7 @@ export class SignalDigestSyncApi {
         this.logger = options.logger
         this.query = options.query
         this.signalStore = options.signalStore
+        this.preKeyStore = options.preKeyStore
         this.defaultTimeoutMs =
             options.defaultTimeoutMs ?? WA_DEFAULTS.SIGNAL_FETCH_KEY_BUNDLES_TIMEOUT_MS
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
@@ -185,7 +189,7 @@ export class SignalDigestSyncApi {
             }
         }
 
-        const preKeys = await this.signalStore.getPreKeysById(digest.preKeyIds)
+        const preKeys = await this.preKeyStore.getPreKeysById(digest.preKeyIds)
         const bytesToHash: Uint8Array[] = [
             registrationInfo.identityKeyPair.pubKey,
             signedPreKey.keyPair.pubKey,

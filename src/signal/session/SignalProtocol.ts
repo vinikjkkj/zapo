@@ -26,6 +26,9 @@ import type {
     SignalPreKeyBundle,
     SignalSessionRecord
 } from '@signal/types'
+import type { WaIdentityStore } from '@store/contracts/identity.store'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
+import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { uint8Equal } from '@util/bytes'
 
@@ -41,13 +44,20 @@ interface EstablishOutgoingSessionOptions {
     readonly reuseExisting?: boolean
 }
 
+export interface SignalProtocolStores {
+    readonly signal: WaSignalStore
+    readonly preKey: WaPreKeyStore
+    readonly session: WaSessionStore
+    readonly identity: WaIdentityStore
+}
+
 export class SignalProtocol {
-    private readonly store: WaSignalStore
+    private readonly stores: SignalProtocolStores
     private readonly logger: Logger
     private readonly sessionMutationLock: StoreLock
 
-    public constructor(store: WaSignalStore, logger: Logger = new ConsoleLogger('info')) {
-        this.store = store
+    public constructor(stores: SignalProtocolStores, logger: Logger = new ConsoleLogger('info')) {
+        this.stores = stores
         this.logger = logger
         this.sessionMutationLock = new StoreLock()
     }
@@ -59,7 +69,7 @@ export class SignalProtocol {
     ): Promise<SignalSessionRecord> {
         return this.runWithAddressLock(address, async () => {
             if (options.reuseExisting) {
-                const existing = await this.store.getSession(address)
+                const existing = await this.stores.session.getSession(address)
                 if (existing) {
                     const remoteIdentity = toSerializedPubKey(remoteBundle.identity)
                     if (!uint8Equal(existing.remote.pubKey, remoteIdentity)) {
@@ -69,13 +79,13 @@ export class SignalProtocol {
                 }
             }
             const [local, localOneTimeBase] = await Promise.all([
-                requireLocalIdentity(this.store),
+                requireLocalIdentity(this.stores.signal),
                 generateSerializedKeyPair()
             ])
             const session = await initiateSessionOutgoing(local, remoteBundle, localOneTimeBase)
             // Keep writes ordered: a stored session without matching remote identity causes false mismatch checks.
-            await this.store.setRemoteIdentity(address, session.remote.pubKey)
-            await this.store.setSession(address, session)
+            await this.stores.identity.setRemoteIdentity(address, session.remote.pubKey)
+            await this.stores.session.setSession(address, session)
             return session
         })
     }
@@ -151,7 +161,7 @@ export class SignalProtocol {
             uniqueAddressKeys.length = uniqueAddressCount
             uniqueAddresses.length = uniqueAddressCount
 
-            const currentSessions = await this.store.getSessionsBatch(uniqueAddresses)
+            const currentSessions = await this.stores.session.getSessionsBatch(uniqueAddresses)
             const latestSessionByAddress = new Map<string, SignalSessionRecord>()
             for (let index = 0; index < uniqueAddressCount; index += 1) {
                 const addressKey = uniqueAddressKeys[index]
@@ -223,7 +233,7 @@ export class SignalProtocol {
                     identityUpdates[identityIndex] = update
                     identityIndex += 1
                 }
-                await this.store.setRemoteIdentities(identityUpdates)
+                await this.stores.identity.setRemoteIdentities(identityUpdates)
             }
             const sessionUpdates = new Array<{
                 readonly address: SignalAddress
@@ -234,7 +244,7 @@ export class SignalProtocol {
                 sessionUpdates[sessionIndex] = update
                 sessionIndex += 1
             }
-            await this.store.setSessionsBatch(sessionUpdates)
+            await this.stores.session.setSessionsBatch(sessionUpdates)
             return results
         })
     }
@@ -247,7 +257,7 @@ export class SignalProtocol {
         }
     ): Promise<Uint8Array> {
         return this.runWithAddressLock(address, async () => {
-            const currentSession = await this.store.getSession(address)
+            const currentSession = await this.stores.session.getSession(address)
 
             let outcome: DecryptOutcome
             if (envelope.type === 'pkmsg') {
@@ -273,9 +283,9 @@ export class SignalProtocol {
                 !currentSession || !uint8Equal(currentSession.remote.pubKey, nextRemoteIdentity)
             // Keep writes ordered for consistency with resolver identity checks.
             if (identityChanged) {
-                await this.store.setRemoteIdentity(address, nextRemoteIdentity)
+                await this.stores.identity.setRemoteIdentity(address, nextRemoteIdentity)
             }
-            await this.store.setSession(address, outcome.updatedSession)
+            await this.stores.session.setSession(address, outcome.updatedSession)
             return outcome.plaintext
         })
     }
@@ -299,11 +309,11 @@ export class SignalProtocol {
         }
 
         const [local, signedPreKey, oneTimePreKey] = await Promise.all([
-            requireLocalIdentity(this.store),
-            requireSignedPreKey(this.store, parsed.localSignedPreKeyId),
+            requireLocalIdentity(this.stores.signal),
+            requireSignedPreKey(this.stores.signal, parsed.localSignedPreKeyId),
             parsed.localOneTimeKeyId === null || parsed.localOneTimeKeyId === undefined
                 ? Promise.resolve(null)
-                : requirePreKey(this.store, parsed.localOneTimeKeyId)
+                : requirePreKey(this.stores.preKey, parsed.localOneTimeKeyId)
         ])
         const incoming = await initiateSessionIncoming(
             local,
@@ -333,7 +343,7 @@ export class SignalProtocol {
         const [updatedSession, plaintext] = await decryptMsgFromSession(baseSession, parsed)
         // Only consume one-time prekeys after successful decrypt/session materialization.
         if (parsed.localOneTimeKeyId !== null && parsed.localOneTimeKeyId !== undefined) {
-            await this.store.consumePreKeyById(parsed.localOneTimeKeyId)
+            await this.stores.preKey.consumePreKeyById(parsed.localOneTimeKeyId)
         }
         return {
             updatedSession,

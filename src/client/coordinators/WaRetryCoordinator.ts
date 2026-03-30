@@ -25,8 +25,10 @@ import type { SignalMissingPreKeysSyncApi } from '@signal/api/SignalMissingPreKe
 import { generatePreKeyPair } from '@signal/registration/keygen'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalPreKeyBundle } from '@signal/types'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
+import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { buildAckNode } from '@transport/node/builders/global'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
@@ -39,6 +41,8 @@ interface WaRetryCoordinatorOptions {
     readonly logger: Logger
     readonly retryStore: WaRetryStore
     readonly signalStore: WaSignalStore
+    readonly preKeyStore: WaPreKeyStore
+    readonly sessionStore: WaSessionStore
     readonly senderKeyStore: WaSenderKeyStore
     readonly signalProtocol: SignalProtocol
     readonly signalDeviceSync: SignalDeviceSyncApi
@@ -104,6 +108,8 @@ export class WaRetryCoordinator {
     private readonly retryStore: WaRetryStore
     private readonly retryTtlMs: number
     private readonly signalStore: WaSignalStore
+    private readonly preKeyStore: WaPreKeyStore
+    private readonly sessionStore: WaSessionStore
     private readonly senderKeyStore: WaSenderKeyStore
     private readonly signalProtocol: SignalProtocol
     private readonly signalDeviceSync: SignalDeviceSyncApi
@@ -125,6 +131,8 @@ export class WaRetryCoordinator {
         this.retryStore = options.retryStore
         this.retryTtlMs = this.retryStore.getTtlMs?.() ?? RETRY_OUTBOUND_TTL_MS
         this.signalStore = options.signalStore
+        this.preKeyStore = options.preKeyStore
+        this.sessionStore = options.sessionStore
         this.senderKeyStore = options.senderKeyStore
         this.signalProtocol = options.signalProtocol
         this.signalDeviceSync = options.signalDeviceSync
@@ -500,13 +508,13 @@ export class WaRetryCoordinator {
     ): Promise<WaRetryKeyBundle | undefined> {
         const [signedPreKey, preKey] = await Promise.all([
             this.signalStore.getSignedPreKey(),
-            this.signalStore.getOrGenSinglePreKey(generatePreKeyPair)
+            this.preKeyStore.getOrGenSinglePreKey(generatePreKeyPair)
         ])
         if (!signedPreKey) {
             this.logger.warn('retry keys section skipped: signed prekey unavailable')
             return undefined
         }
-        await this.signalStore.markKeyAsUploaded(preKey.keyId)
+        await this.preKeyStore.markKeyAsUploaded(preKey.keyId)
         const signedIdentity = this.getCurrentSignedIdentity()
         return {
             identity,
@@ -533,12 +541,12 @@ export class WaRetryCoordinator {
     ): Promise<boolean> {
         const [, currentSession] = await Promise.all([
             this.markRetryRequesterSenderKeyAsStale(request, requesterJid, requesterAddress),
-            this.signalStore.getSession(requesterAddress)
+            this.sessionStore.getSession(requesterAddress)
         ])
         const regIdMismatch =
             !!currentSession && request.regId > 0 && currentSession.remote.regId !== request.regId
         if (regIdMismatch && !request.keyBundle) {
-            await this.signalStore.deleteSession(requesterAddress)
+            await this.sessionStore.deleteSession(requesterAddress)
         }
         if (request.keyBundle) {
             if (!request.keyBundle.key || !request.keyBundle.skey.signature) {
@@ -556,7 +564,7 @@ export class WaRetryCoordinator {
                             ...getRemoteRetryReasonLogFields(request.retryReason)
                         }
                     )
-                    await this.signalStore.deleteSession(requesterAddress)
+                    await this.sessionStore.deleteSession(requesterAddress)
                     return false
                 }
                 if (regIdMismatch) {
@@ -570,11 +578,11 @@ export class WaRetryCoordinator {
                             ...getRemoteRetryReasonLogFields(request.retryReason)
                         }
                     )
-                    await this.signalStore.deleteSession(requesterAddress)
+                    await this.sessionStore.deleteSession(requesterAddress)
                     return false
                 }
             } else if (regIdMismatch) {
-                await this.signalStore.deleteSession(requesterAddress)
+                await this.sessionStore.deleteSession(requesterAddress)
             }
             await this.signalProtocol.establishOutgoingSession(requesterAddress, {
                 regId: request.regId,
@@ -634,7 +642,7 @@ export class WaRetryCoordinator {
         if (request.retryCount < 2) {
             return true
         }
-        const currentSession = await this.signalStore.getSession(requesterAddress)
+        const currentSession = await this.sessionStore.getSession(requesterAddress)
         const sessionBaseKey = currentSession?.aliceBaseKey ?? null
         if (!sessionBaseKey) {
             return true
@@ -658,7 +666,7 @@ export class WaRetryCoordinator {
             return true
         }
 
-        await this.signalStore.deleteSession(requesterAddress)
+        await this.sessionStore.deleteSession(requesterAddress)
         this.logger.info('retry request forcing session refresh due to repeated base key', {
             id: request.stanzaId,
             originalMsgId: request.originalMsgId,

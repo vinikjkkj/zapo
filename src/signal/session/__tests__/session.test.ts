@@ -19,6 +19,9 @@ import {
     requireSignedPreKey
 } from '@signal/session/SignalSerializer'
 import type { SignalAddress, SignalRecvChain, SignalSessionRecord } from '@signal/types'
+import { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
+import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
+import { WaSessionMemoryStore } from '@store/providers/memory/session.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 import { concatBytes } from '@util/bytes'
 
@@ -49,7 +52,7 @@ function makeAddress(user: string): SignalAddress {
     }
 }
 
-class DelayFirstSetSessionStore extends WaSignalMemoryStore {
+class DelayFirstSetSessionStore extends WaSessionMemoryStore {
     private blockFirstSetSession = true
     private readonly firstSetSessionStartedPromise: Promise<void>
     private resolveFirstSetSessionStarted: (() => void) | null = null
@@ -89,7 +92,7 @@ class DelayFirstSetSessionStore extends WaSignalMemoryStore {
     }
 }
 
-class CountingGetSessionsBatchStore extends WaSignalMemoryStore {
+class CountingGetSessionsBatchStore extends WaSessionMemoryStore {
     public getSessionsBatchCalls = 0
 
     public override async getSessionsBatch(
@@ -136,21 +139,22 @@ test('signal serializer parses signal and prekey-signal envelopes', () => {
 
 test('signal serializer key loaders require signed and one-time prekeys from store', async () => {
     const store = new WaSignalMemoryStore()
+    const preKeyStore = new WaPreKeyMemoryStore()
     const registration = await generateRegistrationInfo()
     await store.setRegistrationInfo(registration)
 
     const signed = await generateSignedPreKey(10, registration.identityKeyPair.privKey)
     const oneTime = await generatePreKeyPair(77)
     await store.setSignedPreKey(signed)
-    await store.putPreKey(oneTime)
+    await preKeyStore.putPreKey(oneTime)
 
     const loadedSigned = await requireSignedPreKey(store, 10)
-    const loadedPreKey = await requirePreKey(store, 77)
+    const loadedPreKey = await requirePreKey(preKeyStore, 77)
     assert.equal(loadedSigned.keyId, 10)
     assert.equal(loadedPreKey.keyId, 77)
 
     await assert.rejects(() => requireSignedPreKey(store, 11), /signed prekey 11 not found/)
-    await assert.rejects(() => requirePreKey(store, 78), /prekey 78 not found/)
+    await assert.rejects(() => requirePreKey(preKeyStore, 78), /prekey 78 not found/)
 })
 
 test('signal ratchet derives keys, selects future message keys and rejects duplicates', async () => {
@@ -181,7 +185,13 @@ test('signal ratchet derives keys, selects future message keys and rejects dupli
 test('signal protocol establishes outgoing session and decrypts prekey message on receiver', async () => {
     const logger = createLogger()
     const aliceStore = new WaSignalMemoryStore()
+    const alicePreKeyStore = new WaPreKeyMemoryStore()
+    const aliceSessionStore = new WaSessionMemoryStore()
+    const aliceIdentityStore = new WaIdentityMemoryStore()
     const bobStore = new WaSignalMemoryStore()
+    const bobPreKeyStore = new WaPreKeyMemoryStore()
+    const bobSessionStore = new WaSessionMemoryStore()
+    const bobIdentityStore = new WaIdentityMemoryStore()
 
     const [aliceRegistration, bobRegistration] = await Promise.all([
         generateRegistrationInfo(),
@@ -193,10 +203,26 @@ test('signal protocol establishes outgoing session and decrypts prekey message o
     const bobSignedPreKey = await generateSignedPreKey(1, bobRegistration.identityKeyPair.privKey)
     const bobOneTimePreKey = await generatePreKeyPair(9)
     await bobStore.setSignedPreKey(bobSignedPreKey)
-    await bobStore.putPreKey(bobOneTimePreKey)
+    await bobPreKeyStore.putPreKey(bobOneTimePreKey)
 
-    const aliceProtocol = new SignalProtocol(aliceStore, logger)
-    const bobProtocol = new SignalProtocol(bobStore, logger)
+    const aliceProtocol = new SignalProtocol(
+        {
+            signal: aliceStore,
+            preKey: alicePreKeyStore,
+            session: aliceSessionStore,
+            identity: aliceIdentityStore
+        },
+        logger
+    )
+    const bobProtocol = new SignalProtocol(
+        {
+            signal: bobStore,
+            preKey: bobPreKeyStore,
+            session: bobSessionStore,
+            identity: bobIdentityStore
+        },
+        logger
+    )
     const aliceAddress = makeAddress('5511000000001')
     const bobAddress = makeAddress('5511000000002')
 
@@ -228,7 +254,7 @@ test('signal protocol establishes outgoing session and decrypts prekey message o
         ciphertext: encrypted.ciphertext
     })
     assert.deepEqual(decrypted, plaintext)
-    assert.equal(await bobStore.getPreKeyById(bobOneTimePreKey.keyId), null)
+    assert.equal(await bobPreKeyStore.getPreKeyById(bobOneTimePreKey.keyId), null)
 
     await assert.rejects(
         () => aliceProtocol.encryptMessage(bobAddress, plaintext, makeBytes(32, 99)),
@@ -241,7 +267,15 @@ test('signal protocol throws when decrypting msg without an existing session', a
     const registration = await generateRegistrationInfo()
     await store.setRegistrationInfo(registration)
 
-    const protocol = new SignalProtocol(store, createLogger())
+    const protocol = new SignalProtocol(
+        {
+            signal: store,
+            preKey: new WaPreKeyMemoryStore(),
+            session: new WaSessionMemoryStore(),
+            identity: new WaIdentityMemoryStore()
+        },
+        createLogger()
+    )
     await assert.rejects(
         () =>
             protocol.decryptMessage(makeAddress('5511000000009'), {
@@ -255,7 +289,13 @@ test('signal protocol throws when decrypting msg without an existing session', a
 test('signal protocol serializes decrypt updates for the same address', async () => {
     const logger = createLogger()
     const aliceStore = new WaSignalMemoryStore()
-    const bobStore = new DelayFirstSetSessionStore()
+    const alicePreKeyStore = new WaPreKeyMemoryStore()
+    const aliceSessionStore = new WaSessionMemoryStore()
+    const aliceIdentityStore = new WaIdentityMemoryStore()
+    const bobStore = new WaSignalMemoryStore()
+    const bobPreKeyStore = new WaPreKeyMemoryStore()
+    const bobSessionStore = new DelayFirstSetSessionStore()
+    const bobIdentityStore = new WaIdentityMemoryStore()
 
     const [aliceRegistration, bobRegistration] = await Promise.all([
         generateRegistrationInfo(),
@@ -267,10 +307,26 @@ test('signal protocol serializes decrypt updates for the same address', async ()
     const bobSignedPreKey = await generateSignedPreKey(1, bobRegistration.identityKeyPair.privKey)
     const bobOneTimePreKey = await generatePreKeyPair(9)
     await bobStore.setSignedPreKey(bobSignedPreKey)
-    await bobStore.putPreKey(bobOneTimePreKey)
+    await bobPreKeyStore.putPreKey(bobOneTimePreKey)
 
-    const aliceProtocol = new SignalProtocol(aliceStore, logger)
-    const bobProtocol = new SignalProtocol(bobStore, logger)
+    const aliceProtocol = new SignalProtocol(
+        {
+            signal: aliceStore,
+            preKey: alicePreKeyStore,
+            session: aliceSessionStore,
+            identity: aliceIdentityStore
+        },
+        logger
+    )
+    const bobProtocol = new SignalProtocol(
+        {
+            signal: bobStore,
+            preKey: bobPreKeyStore,
+            session: bobSessionStore,
+            identity: bobIdentityStore
+        },
+        logger
+    )
     const aliceAddress = makeAddress('5511000000011')
     const bobAddress = makeAddress('5511000000022')
 
@@ -306,14 +362,14 @@ test('signal protocol serializes decrypt updates for the same address', async ()
         type: firstEncrypted.type,
         ciphertext: firstEncrypted.ciphertext
     })
-    await bobStore.waitFirstSetSessionStarted()
+    await bobSessionStore.waitFirstSetSessionStarted()
 
     const secondDecrypt = bobProtocol.decryptMessage(aliceAddress, {
         type: secondEncrypted.type,
         ciphertext: secondEncrypted.ciphertext
     })
 
-    bobStore.releaseFirstSetSession()
+    bobSessionStore.releaseFirstSetSession()
     const [decryptedFirst, decryptedSecond] = await Promise.all([firstDecrypt, secondDecrypt])
     assert.deepEqual(decryptedFirst, firstPlaintext)
     assert.deepEqual(decryptedSecond, secondPlaintext)
@@ -321,8 +377,12 @@ test('signal protocol serializes decrypt updates for the same address', async ()
 
 test('signal protocol reloads sessions from store even when prefetched sessions are provided', async () => {
     const logger = createLogger()
-    const aliceStore = new CountingGetSessionsBatchStore()
+    const aliceStore = new WaSignalMemoryStore()
+    const alicePreKeyStore = new WaPreKeyMemoryStore()
+    const aliceSessionStore = new CountingGetSessionsBatchStore()
+    const aliceIdentityStore = new WaIdentityMemoryStore()
     const bobStore = new WaSignalMemoryStore()
+    const bobPreKeyStore = new WaPreKeyMemoryStore()
 
     const [aliceRegistration, bobRegistration] = await Promise.all([
         generateRegistrationInfo(),
@@ -334,9 +394,17 @@ test('signal protocol reloads sessions from store even when prefetched sessions 
     const bobSignedPreKey = await generateSignedPreKey(1, bobRegistration.identityKeyPair.privKey)
     const bobOneTimePreKey = await generatePreKeyPair(9)
     await bobStore.setSignedPreKey(bobSignedPreKey)
-    await bobStore.putPreKey(bobOneTimePreKey)
+    await bobPreKeyStore.putPreKey(bobOneTimePreKey)
 
-    const aliceProtocol = new SignalProtocol(aliceStore, logger)
+    const aliceProtocol = new SignalProtocol(
+        {
+            signal: aliceStore,
+            preKey: alicePreKeyStore,
+            session: aliceSessionStore,
+            identity: aliceIdentityStore
+        },
+        logger
+    )
     const bobAddress = makeAddress('5511000000055')
 
     await aliceProtocol.establishOutgoingSession(bobAddress, {
@@ -353,7 +421,7 @@ test('signal protocol reloads sessions from store even when prefetched sessions 
         }
     })
 
-    const prefetched = await aliceStore.getSession(bobAddress)
+    const prefetched = await aliceSessionStore.getSession(bobAddress)
     if (!prefetched) {
         throw new Error('expected established session for prefetch test')
     }
@@ -374,5 +442,5 @@ test('signal protocol reloads sessions from store even when prefetched sessions 
         ]
     )
 
-    assert.equal(aliceStore.getSessionsBatchCalls > 0, true)
+    assert.equal(aliceSessionStore.getSessionsBatchCalls > 0, true)
 })

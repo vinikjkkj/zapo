@@ -14,6 +14,7 @@ import type {
 import type { Logger } from '@infra/log/types'
 import { getWaCompanionPlatformId, WA_DEFAULTS } from '@protocol/constants'
 import type { WaAuthStore } from '@store/contracts/auth.store'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { BinaryNode } from '@transport/types'
 import { uint8Equal } from '@util/bytes'
@@ -24,6 +25,7 @@ type WaAuthClientDeps = Readonly<{
     readonly logger: Logger
     readonly authStore: WaAuthStore
     readonly signalStore: WaSignalStore
+    readonly preKeyStore: WaPreKeyStore
     readonly socket: {
         readonly sendNode: (node: BinaryNode) => Promise<void>
         readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
@@ -43,6 +45,7 @@ export class WaAuthClient {
     private readonly callbacks: NonNullable<WaAuthClientDeps['callbacks']>
     private readonly authStore: WaAuthStore
     private readonly signalStore: WaSignalStore
+    private readonly preKeyStore: WaPreKeyStore
     private readonly qrFlow: WaQrFlow
     private readonly pairingFlow: WaPairingFlow
     private credentials: WaAuthCredentials | null
@@ -65,6 +68,7 @@ export class WaAuthClient {
         this.callbacks = deps.callbacks ?? {}
         this.authStore = deps.authStore
         this.signalStore = deps.signalStore
+        this.preKeyStore = deps.preKeyStore
         this.credentials = null
 
         this.qrFlow = new WaQrFlow({
@@ -109,7 +113,8 @@ export class WaAuthClient {
             this.credentials = await loadOrCreateCredentials({
                 logger: this.logger,
                 authStore: this.authStore,
-                signalStore: this.signalStore
+                signalStore: this.signalStore,
+                preKeyStore: this.preKeyStore
             })
             this.logger.info('auth client credentials ready', {
                 registered:
@@ -317,7 +322,8 @@ export class WaAuthClient {
             {
                 logger: this.logger,
                 authStore: this.authStore,
-                signalStore: this.signalStore
+                signalStore: this.signalStore,
+                preKeyStore: this.preKeyStore
             },
             credentials
         )

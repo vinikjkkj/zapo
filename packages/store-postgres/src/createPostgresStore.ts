@@ -6,11 +6,14 @@ import { PgCleanupPoller } from './cleanup'
 import { createPgPool } from './connection'
 import { WaContactPgStore } from './contact.store'
 import { WaDeviceListPgStore } from './device-list.store'
+import { WaIdentityPgStore } from './identity.store'
 import { WaMessagePgStore } from './message.store'
 import { WaParticipantsPgStore } from './participants.store'
+import { WaPreKeyPgStore } from './pre-key.store'
 import { WaPrivacyTokenPgStore } from './privacy-token.store'
 import { WaRetryPgStore } from './retry.store'
 import { WaSenderKeyPgStore } from './sender-key.store'
+import { WaSessionPgStore } from './session.store'
 import { WaSignalPgStore } from './signal.store'
 import { WaThreadPgStore } from './thread.store'
 import type { WaPgStorageOptions } from './types'
@@ -33,6 +36,9 @@ export interface WaPgStoreResult {
     readonly pool: Pool
     readonly stores: {
         readonly auth: (sessionId: string) => WaAuthPgStore
+        readonly preKey: (sessionId: string) => WaPreKeyPgStore
+        readonly session: (sessionId: string) => WaSessionPgStore
+        readonly identity: (sessionId: string) => WaIdentityPgStore
         readonly signal: (sessionId: string) => WaSignalPgStore
         readonly senderKey: (sessionId: string) => WaSenderKeyPgStore
         readonly appState: (sessionId: string) => WaAppStatePgStore
@@ -74,6 +80,9 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
         pool,
         stores: {
             auth: (sessionId) => new WaAuthPgStore(opts(sessionId)),
+            preKey: (sessionId) => new WaPreKeyPgStore(opts(sessionId)),
+            session: (sessionId) => new WaSessionPgStore(opts(sessionId)),
+            identity: (sessionId) => new WaIdentityPgStore(opts(sessionId)),
             signal: (sessionId) => new WaSignalPgStore(opts(sessionId)),
             senderKey: (sessionId) => new WaSenderKeyPgStore(opts(sessionId)),
             appState: (sessionId) => new WaAppStatePgStore(opts(sessionId)),

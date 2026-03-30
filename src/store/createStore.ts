@@ -2,22 +2,28 @@ import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
+import type { WaIdentityStore } from '@store/contracts/identity.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaParticipantsStore } from '@store/contracts/participants.store'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaPrivacyTokenStore } from '@store/contracts/privacy-token.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
+import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { WaThreadStore } from '@store/contracts/thread.store'
 import { withAppStateLock } from '@store/locks/appstate.lock'
 import { withAuthLock } from '@store/locks/auth.lock'
 import { withContactLock } from '@store/locks/contact.lock'
 import { withDeviceListLock } from '@store/locks/device-list.lock'
+import { withIdentityLock } from '@store/locks/identity.lock'
 import { withMessageLock } from '@store/locks/message.lock'
 import { withParticipantsLock } from '@store/locks/participants.lock'
+import { withPreKeyLock } from '@store/locks/pre-key.lock'
 import { withPrivacyTokenLock } from '@store/locks/privacy-token.lock'
 import { withRetryLock } from '@store/locks/retry.lock'
 import { withSenderKeyLock } from '@store/locks/sender-key.lock'
+import { withSessionLock } from '@store/locks/session.lock'
 import { withSignalLock } from '@store/locks/signal.lock'
 import { withThreadLock } from '@store/locks/thread.lock'
 import {
@@ -30,11 +36,14 @@ import {
 import { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
 import { WaContactMemoryStore } from '@store/providers/memory/contact.store'
 import { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
+import { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
 import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
+import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
 import { WaRetryMemoryStore } from '@store/providers/memory/retry.store'
 import { SenderKeyMemoryStore } from '@store/providers/memory/sender-key.store'
+import { WaSessionMemoryStore } from '@store/providers/memory/session.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 import { WaThreadMemoryStore } from '@store/providers/memory/thread.store'
 import type {
@@ -148,10 +157,32 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                 providers.signal ?? 'memory',
                 'signal',
                 'stores',
+                () => new WaSignalMemoryStore()
+            )
+            const rawPreKey = resolveStore<WaPreKeyStore>(
+                id,
+                backends,
+                providers.preKey ?? 'memory',
+                'preKey',
+                'stores',
+                () => new WaPreKeyMemoryStore({ maxPreKeys: ml.signalPreKeys })
+            )
+            const rawSession = resolveStore<WaSessionStore>(
+                id,
+                backends,
+                providers.session ?? 'memory',
+                'session',
+                'stores',
+                () => new WaSessionMemoryStore({ maxSessions: ml.signalSessions })
+            )
+            const rawIdentity = resolveStore<WaIdentityStore>(
+                id,
+                backends,
+                providers.identity ?? 'memory',
+                'identity',
+                'stores',
                 () =>
-                    new WaSignalMemoryStore({
-                        maxPreKeys: ml.signalPreKeys,
-                        maxSessions: ml.signalSessions,
+                    new WaIdentityMemoryStore({
                         maxRemoteIdentities: ml.signalRemoteIdentities
                     })
             )
@@ -257,6 +288,9 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
 
             const authStore = withAuthLock(rawAuth)
             const signalStore = withSignalLock(rawSignal)
+            const preKeyStore = withPreKeyLock(rawPreKey)
+            const sessionStore = withSessionLock(rawSession)
+            const identityStore = withIdentityLock(rawIdentity)
             const senderKeyStore = withSenderKeyLock(rawSenderKey)
             const appStateStore = withAppStateLock(rawAppState)
             const retryStore = withRetryLock(rawRetry)
@@ -292,6 +326,9 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                 await Promise.all([
                     destroyIfSupported(authStore),
                     destroyIfSupported(signalStore),
+                    destroyIfSupported(preKeyStore),
+                    destroyIfSupported(sessionStore),
+                    destroyIfSupported(identityStore),
                     destroyIfSupported(senderKeyStore),
                     destroyIfSupported(appStateStore),
                     destroyIfSupported(messageStore),
@@ -301,9 +338,12 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                 ])
             }
 
-            const session: WaStoreSession = {
+            const storeSession: WaStoreSession = {
                 auth: authStore,
                 signal: signalStore,
+                preKey: preKeyStore,
+                session: sessionStore,
+                identity: identityStore,
                 senderKey: senderKeyStore,
                 appState: appStateStore,
                 retry: retryStore,
@@ -317,8 +357,8 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                 destroy
             }
 
-            sessions.set(id, session)
-            return session
+            sessions.set(id, storeSession)
+            return storeSession
         },
 
         async destroyCaches(): Promise<void> {

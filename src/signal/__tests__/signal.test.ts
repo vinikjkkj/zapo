@@ -11,6 +11,7 @@ import {
     SIGNAL_VERSION,
     WHISPER_GROUP_INFO
 } from '@signal/constants'
+import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 
 test('signal constants expose expected protocol invariants', () => {
@@ -38,11 +39,12 @@ test('signal index exports stable public APIs', () => {
 
 test('signal barrel utility createAndStoreInitialKeys integrates with memory store', async () => {
     const store = new WaSignalMemoryStore()
-    const created = await signal.createAndStoreInitialKeys(store)
+    const preKeyStore = new WaPreKeyMemoryStore()
+    const created = await signal.createAndStoreInitialKeys(store, preKeyStore)
 
     assert.equal(created.firstPreKey.keyId, 1)
     assert.equal(created.signedPreKey.keyId, 1)
     assert.ok(await store.getRegistrationInfo())
     assert.ok(await store.getSignedPreKey())
-    assert.ok(await store.getPreKeyById(created.firstPreKey.keyId))
+    assert.ok(await preKeyStore.getPreKeyById(created.firstPreKey.keyId))
 })

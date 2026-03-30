@@ -7,6 +7,7 @@ import { getLoginIdentity } from '@protocol/jid'
 import { verifySignalSignature } from '@signal/crypto/WaAdvSignature'
 import { createAndStoreInitialKeys } from '@signal/registration/utils'
 import type { WaAuthStore } from '@store/contracts/auth.store'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { toProxyAgent, toProxyDispatcher } from '@transport/proxy'
 import type { WaCommsConfig } from '@transport/types'
@@ -16,6 +17,7 @@ interface WaAuthCredentialsFlowArgs {
     readonly logger: Logger
     readonly authStore: WaAuthStore
     readonly signalStore: WaSignalStore
+    readonly preKeyStore: WaPreKeyStore
 }
 
 export async function loadOrCreateCredentials(
@@ -41,7 +43,7 @@ export async function loadOrCreateCredentials(
         return fresh
     }
 
-    await restoreSignalStore(args.signalStore, existing)
+    await restoreSignalStore(args.signalStore, args.preKeyStore, existing)
     args.logger.trace('auth credentials restored into signal store')
     return existing
 }
@@ -115,12 +117,13 @@ export function buildCommsConfig(
 
 async function createFreshCredentials(
     signalStore: WaSignalStore,
+    preKeyStore: WaPreKeyStore,
     logger: Logger
 ): Promise<WaAuthCredentials> {
     logger.trace('creating fresh credentials')
     const [noiseKeyPair, registrationBundle, advSecretKey] = await Promise.all([
         X25519.generateKeyPair(),
-        createAndStoreInitialKeys(signalStore),
+        createAndStoreInitialKeys(signalStore, preKeyStore),
         randomBytesAsync(32)
     ])
     return {
@@ -135,10 +138,14 @@ async function createFreshCredentials(
 async function createFreshAndPersistCredentials(
     args: WaAuthCredentialsFlowArgs
 ): Promise<WaAuthCredentials> {
-    const credentials = await createFreshCredentials(args.signalStore, args.logger)
+    const credentials = await createFreshCredentials(
+        args.signalStore,
+        args.preKeyStore,
+        args.logger
+    )
     // Persist credentials first so signal restore never commits state for credentials that failed to save.
     await args.authStore.save(credentials)
-    await restoreSignalStore(args.signalStore, credentials)
+    await restoreSignalStore(args.signalStore, args.preKeyStore, credentials)
     return credentials
 }
 
@@ -165,11 +172,12 @@ async function hasValidSignedPreKey(
 
 async function restoreSignalStore(
     signalStore: WaSignalStore,
+    preKeyStore: WaPreKeyStore,
     credentials: WaAuthCredentials
 ): Promise<void> {
     await Promise.all([
         signalStore.setRegistrationInfo(credentials.registrationInfo),
         signalStore.setSignedPreKey(credentials.signedPreKey),
-        signalStore.setServerHasPreKeys(credentials.serverHasPreKeys === true)
+        preKeyStore.setServerHasPreKeys(credentials.serverHasPreKeys === true)
     ])
 }

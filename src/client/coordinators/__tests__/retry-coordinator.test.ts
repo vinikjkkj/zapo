@@ -178,6 +178,8 @@ test('retry coordinator serializes outbound receipt tracking per message id', as
         logger: createLogger(),
         retryStore,
         signalStore: {} as never,
+        preKeyStore: {} as never,
+        sessionStore: {} as never,
         senderKeyStore: {} as never,
         signalProtocol: {} as never,
         signalDeviceSync: {} as never,

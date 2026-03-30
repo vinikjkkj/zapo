@@ -9,6 +9,7 @@ import {
 } from '@auth/flow/WaAuthCredentialsFlow'
 import type { WaAuthCredentials } from '@auth/types'
 import type { Logger } from '@infra/log/types'
+import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 import type { WaProxyDispatcher } from '@transport/types'
 
@@ -65,16 +66,18 @@ test('auth flow persists and restores existing credentials', async () => {
         }
     }
     const signalStore = new WaSignalMemoryStore()
+    const preKeyStore = new WaPreKeyMemoryStore()
 
     const loaded = await loadOrCreateCredentials({
         logger: createLogger(),
         authStore,
-        signalStore
+        signalStore,
+        preKeyStore
     })
 
     assert.equal(loaded.meJid, credentials.meJid)
     await persistCredentials(
-        { logger: createLogger(), authStore, signalStore },
+        { logger: createLogger(), authStore, signalStore, preKeyStore },
         {
             ...loaded,
             meDisplayName: 'Tester'

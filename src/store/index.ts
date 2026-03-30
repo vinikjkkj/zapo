@@ -21,8 +21,11 @@ export type {
     WaAppStateCollectionStoreState,
     WaAppStateStore
 } from '@store/contracts/appstate.store'
+export type { WaIdentityStore } from '@store/contracts/identity.store'
+export type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 export type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
-export type { WaSignalMetaSnapshot, WaSignalStore } from '@store/contracts/signal.store'
+export type { WaSessionStore } from '@store/contracts/session.store'
+export type { WaSignalStore } from '@store/contracts/signal.store'
 export type { WaRetryStore } from '@store/contracts/retry.store'
 export type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/thread.store'
 export type {
@@ -31,6 +34,9 @@ export type {
 } from '@store/contracts/privacy-token.store'
 export { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
 export { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
+export { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
+export { WaSessionMemoryStore } from '@store/providers/memory/session.store'
+export { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
 export { SenderKeyMemoryStore } from '@store/providers/memory/sender-key.store'
 export { WaRetryMemoryStore } from '@store/providers/memory/retry.store'
 export { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'

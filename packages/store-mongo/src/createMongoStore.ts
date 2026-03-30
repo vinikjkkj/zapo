@@ -5,11 +5,14 @@ import { WaAppStateMongoStore } from './appstate.store'
 import { WaAuthMongoStore } from './auth.store'
 import { WaContactMongoStore } from './contact.store'
 import { WaDeviceListMongoStore } from './device-list.store'
+import { WaIdentityMongoStore } from './identity.store'
 import { WaMessageMongoStore } from './message.store'
 import { WaParticipantsMongoStore } from './participants.store'
+import { WaPreKeyMongoStore } from './pre-key.store'
 import { WaPrivacyTokenMongoStore } from './privacy-token.store'
 import { WaRetryMongoStore } from './retry.store'
 import { WaSenderKeyMongoStore } from './sender-key.store'
+import { WaSessionMongoStore } from './session.store'
 import { WaSignalMongoStore } from './signal.store'
 import { WaThreadMongoStore } from './thread.store'
 import type { WaMongoStorageOptions } from './types'
@@ -34,6 +37,9 @@ export interface WaMongoStoreResult {
     readonly db: Db
     readonly stores: {
         readonly auth: (sessionId: string) => WaAuthMongoStore
+        readonly preKey: (sessionId: string) => WaPreKeyMongoStore
+        readonly session: (sessionId: string) => WaSessionMongoStore
+        readonly identity: (sessionId: string) => WaIdentityMongoStore
         readonly signal: (sessionId: string) => WaSignalMongoStore
         readonly senderKey: (sessionId: string) => WaSenderKeyMongoStore
         readonly appState: (sessionId: string) => WaAppStateMongoStore
@@ -80,6 +86,9 @@ export function createMongoStore(config: WaMongoStoreConfig): WaMongoStoreResult
         db,
         stores: {
             auth: (sessionId) => new WaAuthMongoStore(opts(sessionId)),
+            preKey: (sessionId) => new WaPreKeyMongoStore(opts(sessionId)),
+            session: (sessionId) => new WaSessionMongoStore(opts(sessionId)),
+            identity: (sessionId) => new WaIdentityMongoStore(opts(sessionId)),
             signal: (sessionId) => new WaSignalMongoStore(opts(sessionId)),
             senderKey: (sessionId) => new WaSenderKeyMongoStore(opts(sessionId)),
             appState: (sessionId) => new WaAppStateMongoStore(opts(sessionId)),

@@ -15,6 +15,15 @@ const mockAuthBackend = {
         signal: () => {
             throw new Error('not expected')
         },
+        preKey: () => {
+            throw new Error('not expected')
+        },
+        session: () => {
+            throw new Error('not expected')
+        },
+        identity: () => {
+            throw new Error('not expected')
+        },
         senderKey: () => {
             throw new Error('not expected')
         },

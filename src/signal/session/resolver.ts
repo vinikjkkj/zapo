@@ -6,7 +6,8 @@ import type { SignalIdentitySyncApi } from '@signal/api/SignalIdentitySyncApi'
 import type { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress, SignalPreKeyBundle, SignalSessionRecord } from '@signal/types'
-import type { WaSignalStore } from '@store/contracts/signal.store'
+import type { WaIdentityStore } from '@store/contracts/identity.store'
+import type { WaSessionStore } from '@store/contracts/session.store'
 import { bytesToHex, uint8Equal } from '@util/bytes'
 import { toError } from '@util/primitives'
 
@@ -32,12 +33,20 @@ export type SignalSessionResolver = {
 
 export function createSignalSessionResolver(options: {
     readonly signalProtocol: SignalProtocol
-    readonly signalStore: WaSignalStore
+    readonly sessionStore: WaSessionStore
+    readonly identityStore: WaIdentityStore
     readonly signalIdentitySync: SignalIdentitySyncApi
     readonly signalSessionSync: SignalSessionSyncApi
     readonly logger: Logger
 }): SignalSessionResolver {
-    const { signalProtocol, signalStore, signalIdentitySync, signalSessionSync, logger } = options
+    const {
+        signalProtocol,
+        sessionStore,
+        identityStore,
+        signalIdentitySync,
+        signalSessionSync,
+        logger
+    } = options
     const dedup = new PromiseDedup()
 
     const ensureSessionInternal = async (
@@ -53,9 +62,9 @@ export function createSignalSessionResolver(options: {
         if (reasonIdentity) {
             await signalIdentitySync.syncIdentityKeys([jid])
         }
-        if (await signalStore.hasSession(address)) {
+        if (await sessionStore.hasSession(address)) {
             if (expectedSerializedIdentity) {
-                const storedIdentity = await signalStore.getRemoteIdentity(address)
+                const storedIdentity = await identityStore.getRemoteIdentity(address)
                 if (!storedIdentity || !uint8Equal(storedIdentity, expectedSerializedIdentity)) {
                     throw new Error('identity mismatch')
                 }
@@ -77,7 +86,7 @@ export function createSignalSessionResolver(options: {
         }
         const remoteIdentity = toSerializedPubKey(fetched.bundle.identity)
         if (reasonIdentity) {
-            const storedIdentity = await signalStore.getRemoteIdentity(address)
+            const storedIdentity = await identityStore.getRemoteIdentity(address)
             if (storedIdentity && !uint8Equal(remoteIdentity, storedIdentity)) {
                 throw new Error('identity mismatch')
             }
@@ -160,7 +169,7 @@ export function createSignalSessionResolver(options: {
             }
         }
 
-        const resolvedByIndex = (await signalStore.getSessionsBatch(
+        const resolvedByIndex = (await sessionStore.getSessionsBatch(
             normalizedTargetAddresses
         )) as (SignalSessionRecord | null)[]
         const collectResolvedTargets = (): readonly SignalResolvedSessionTarget[] => {
@@ -279,7 +288,7 @@ export function createSignalSessionResolver(options: {
             for (let i = 0; i < fallbackIndices.length; i++) {
                 fallbackAddresses[i] = normalizedTargetAddresses[fallbackIndices[i]]
             }
-            const fallbackSessions = await signalStore.getSessionsBatch(fallbackAddresses)
+            const fallbackSessions = await sessionStore.getSessionsBatch(fallbackAddresses)
             for (let i = 0; i < fallbackIndices.length; i++) {
                 const session = fallbackSessions[i]
                 if (session) {

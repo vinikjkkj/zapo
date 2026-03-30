@@ -25,6 +25,8 @@ import {
     generateSignedPreKey
 } from '@signal/registration/keygen'
 import { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
+import { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
+import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 import type { BinaryNode } from '@transport/types'
 import { concatBytes, intToBytes } from '@util/bytes'
@@ -73,13 +75,14 @@ test('signal api codec decodes exact lengths and unsigned integers', () => {
 
 test('signal digest api validates key bundle hash and maps digest mismatch reasons', async () => {
     const signalStore = new WaSignalMemoryStore()
+    const preKeyStore = new WaPreKeyMemoryStore()
     const registration = await generateRegistrationInfo()
     const signedPreKey = await generateSignedPreKey(3, registration.identityKeyPair.privKey)
     const preKeys = [await generatePreKeyPair(10), await generatePreKeyPair(11)]
 
     await signalStore.setRegistrationInfo(registration)
     await signalStore.setSignedPreKey(signedPreKey)
-    await Promise.all(preKeys.map((record) => signalStore.putPreKey(record)))
+    await Promise.all(preKeys.map((record) => preKeyStore.putPreKey(record)))
 
     const digestHash = (
         await sha1(
@@ -152,6 +155,7 @@ test('signal digest api validates key bundle hash and maps digest mismatch reaso
     const digestApi = new SignalDigestSyncApi({
         logger: createLogger(),
         signalStore,
+        preKeyStore,
         query: async () => iqResult([digestNode])
     })
     const valid = await digestApi.validateLocalKeyBundle()
@@ -162,6 +166,7 @@ test('signal digest api validates key bundle hash and maps digest mismatch reaso
     const mismatchApi = new SignalDigestSyncApi({
         logger: createLogger(),
         signalStore,
+        preKeyStore,
         query: async () =>
             iqResult([
                 {
@@ -273,7 +278,9 @@ test('signal digest api accepts prefetched local key bundle context', async () =
             getSignedPreKey: async () => {
                 getSignedPreKeyCalls += 1
                 throw new Error('getSignedPreKey should not be called with prefetched context')
-            },
+            }
+        } as never,
+        preKeyStore: {
             getPreKeysById: async (preKeyIds: readonly number[]) =>
                 preKeyIds.map((preKeyId) => (preKeyId === preKey.keyId ? preKey : null))
         } as never
@@ -833,10 +840,10 @@ test('signal device sync api maps hosted.lid user response to requested lid user
 })
 
 test('signal identity sync api parses result list and stores remote identities', async () => {
-    const signalStore = new WaSignalMemoryStore()
+    const identityStore = new WaIdentityMemoryStore()
     const api = new SignalIdentitySyncApi({
         logger: createLogger(),
-        signalStore,
+        identityStore,
         query: async () =>
             iqResult([
                 {
@@ -883,7 +890,7 @@ test('signal identity sync api parses result list and stores remote identities',
     assert.equal(result[0].identity.length, 32)
     assert.equal(result[0].type, SIGNAL_KEY_BUNDLE_TYPE_BYTES[0])
 
-    const persisted = await signalStore.getRemoteIdentity(
+    const persisted = await identityStore.getRemoteIdentity(
         parseSignalAddressFromJid('5511999999999:1@s.whatsapp.net')
     )
     assert.ok(persisted)

@@ -118,6 +118,8 @@ function createMessageDispatchCoordinator(
         senderKeyManager: {} as never,
         signalProtocol: {} as never,
         signalStore: {} as never,
+        sessionStore: {} as never,
+        identityStore: {} as never,
         deviceListStore: {} as never,
         getCurrentMeJid: () => null,
         getCurrentMeLid: () => null,
@@ -885,29 +887,26 @@ function createPassiveTasksCoordinator(overrides: {
     return new WaPassiveTasksCoordinator({
         logger: createLogger(),
         signalStore: {
-            getSignalMeta: async () => ({
-                serverHasPreKeys: true,
-                signedPreKeyRotationTs: Date.now()
-            }),
-            getServerHasPreKeys: async () => true,
-            setServerHasPreKeys: async () => undefined,
             getSignedPreKeyRotationTs: async () => Date.now(),
             setSignedPreKeyRotationTs: async () => undefined,
-            getIdentityKeyPair: async () => null,
-            getRegistrationId: async () => null,
-            getPreKeys: async () => [],
-            getPreKeyCount: async () => 0,
+            getRegistrationInfo: async () => null,
             getSignedPreKey: async () => null,
-            storePreKeys: async () => undefined,
-            removePreKeys: async () => undefined,
-            storeSignedPreKey: async () => undefined,
-            getSession: async () => null,
-            storeSession: async () => undefined,
-            removeSession: async () => undefined,
-            removeSessionsByAddress: async () => undefined,
-            removeAllSessions: async () => undefined,
-            clear: async () => undefined,
-            destroy: async () => undefined
+            setRegistrationInfo: async () => undefined,
+            setSignedPreKey: async () => undefined,
+            getSignedPreKeyById: async () => null,
+            clear: async () => undefined
+        } as never,
+        preKeyStore: {
+            getServerHasPreKeys: async () => true,
+            setServerHasPreKeys: async () => undefined,
+            getPreKeyById: async () => null,
+            getPreKeysById: async () => [],
+            putPreKey: async () => undefined,
+            getOrGenPreKeys: async () => [],
+            getOrGenSinglePreKey: async () => ({}) as never,
+            consumePreKeyById: async () => null,
+            markKeyAsUploaded: async () => undefined,
+            clear: async () => undefined
         } as never,
         signalDigestSync: {
             validateLocalKeyBundle: async () => ({ valid: true, preKeyCount: 10 })

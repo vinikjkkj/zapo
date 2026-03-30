@@ -2,11 +2,14 @@ import { WaAppStateSqliteStore } from './appstate.store'
 import { WaAuthSqliteStore } from './auth.store'
 import { WaContactSqliteStore } from './contact.store'
 import { WaDeviceListSqliteStore } from './device-list.store'
+import { WaIdentitySqliteStore } from './identity.store'
 import { WaMessageSqliteStore } from './message.store'
 import { WaParticipantsSqliteStore } from './participants.store'
+import { WaPreKeySqliteStore } from './pre-key.store'
 import { WaPrivacyTokenSqliteStore } from './privacy-token.store'
 import { WaRetrySqliteStore } from './retry.store'
 import { SenderKeySqliteStore } from './sender-key.store'
+import { WaSessionSqliteStore } from './session.store'
 import { WaSignalSqliteStore } from './signal.store'
 import { WaThreadSqliteStore } from './thread.store'
 import type {
@@ -32,6 +35,9 @@ export interface WaSqliteStoreConfig {
 export interface WaSqliteStoreResult {
     readonly stores: {
         readonly auth: (sessionId: string) => WaAuthSqliteStore
+        readonly preKey: (sessionId: string) => WaPreKeySqliteStore
+        readonly session: (sessionId: string) => WaSessionSqliteStore
+        readonly identity: (sessionId: string) => WaIdentitySqliteStore
         readonly signal: (sessionId: string) => WaSignalSqliteStore
         readonly senderKey: (sessionId: string) => SenderKeySqliteStore
         readonly appState: (sessionId: string) => WaAppStateSqliteStore
@@ -64,11 +70,16 @@ export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreRes
     return {
         stores: {
             auth: (sessionId) => new WaAuthSqliteStore(opts(sessionId)),
-            signal: (sessionId) =>
-                new WaSignalSqliteStore(opts(sessionId), {
-                    preKeyBatchSize: batchSizes?.signalPreKey,
+            preKey: (sessionId) =>
+                new WaPreKeySqliteStore(opts(sessionId), {
+                    preKeyBatchSize: batchSizes?.signalPreKey
+                }),
+            session: (sessionId) =>
+                new WaSessionSqliteStore(opts(sessionId), {
                     hasSessionBatchSize: batchSizes?.signalHasSession
                 }),
+            identity: (sessionId) => new WaIdentitySqliteStore(opts(sessionId)),
+            signal: (sessionId) => new WaSignalSqliteStore(opts(sessionId)),
             senderKey: (sessionId) =>
                 new SenderKeySqliteStore(opts(sessionId), batchSizes?.senderKeyDistribution),
             appState: (sessionId) => new WaAppStateSqliteStore(opts(sessionId)),

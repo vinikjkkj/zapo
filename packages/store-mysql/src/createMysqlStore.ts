@@ -6,11 +6,14 @@ import { MysqlCleanupPoller } from './cleanup'
 import { createMysqlPool } from './connection'
 import { WaContactMysqlStore } from './contact.store'
 import { WaDeviceListMysqlStore } from './device-list.store'
+import { WaIdentityMysqlStore } from './identity.store'
 import { WaMessageMysqlStore } from './message.store'
 import { WaParticipantsMysqlStore } from './participants.store'
+import { WaPreKeyMysqlStore } from './pre-key.store'
 import { WaPrivacyTokenMysqlStore } from './privacy-token.store'
 import { WaRetryMysqlStore } from './retry.store'
 import { WaSenderKeyMysqlStore } from './sender-key.store'
+import { WaSessionMysqlStore } from './session.store'
 import { WaSignalMysqlStore } from './signal.store'
 import { WaThreadMysqlStore } from './thread.store'
 import type { WaMysqlStorageOptions } from './types'
@@ -34,6 +37,9 @@ export interface WaMysqlStoreResult {
     readonly pool: Pool
     readonly stores: {
         readonly auth: (sessionId: string) => WaAuthMysqlStore
+        readonly preKey: (sessionId: string) => WaPreKeyMysqlStore
+        readonly session: (sessionId: string) => WaSessionMysqlStore
+        readonly identity: (sessionId: string) => WaIdentityMysqlStore
         readonly signal: (sessionId: string) => WaSignalMysqlStore
         readonly senderKey: (sessionId: string) => WaSenderKeyMysqlStore
         readonly appState: (sessionId: string) => WaAppStateMysqlStore
@@ -75,6 +81,9 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
         pool,
         stores: {
             auth: (sessionId) => new WaAuthMysqlStore(opts(sessionId)),
+            preKey: (sessionId) => new WaPreKeyMysqlStore(opts(sessionId)),
+            session: (sessionId) => new WaSessionMysqlStore(opts(sessionId)),
+            identity: (sessionId) => new WaIdentityMysqlStore(opts(sessionId)),
             signal: (sessionId) => new WaSignalMysqlStore(opts(sessionId)),
             senderKey: (sessionId) => new WaSenderKeyMysqlStore(opts(sessionId)),
             appState: (sessionId) => new WaAppStateMysqlStore(opts(sessionId)),

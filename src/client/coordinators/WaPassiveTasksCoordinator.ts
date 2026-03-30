@@ -13,7 +13,8 @@ import type {
 } from '@signal/api/SignalDigestSyncApi'
 import type { SignalRotateKeyApi } from '@signal/api/SignalRotateKeyApi'
 import { generatePreKeyPair } from '@signal/registration/keygen'
-import type { WaSignalMetaSnapshot, WaSignalStore } from '@store/contracts/signal.store'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
+import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
 
@@ -35,6 +36,7 @@ type WaPassiveTasksRuntime = {
 export class WaPassiveTasksCoordinator {
     private readonly logger: Logger
     private readonly signalStore: WaSignalStore
+    private readonly preKeyStore: WaPreKeyStore
     private readonly signalDigestSync: SignalDigestSyncApi
     private readonly signalRotateKey: SignalRotateKeyApi
     private readonly signedPreKeyRotationIntervalMs: number
@@ -45,6 +47,7 @@ export class WaPassiveTasksCoordinator {
     public constructor(options: {
         readonly logger: Logger
         readonly signalStore: WaSignalStore
+        readonly preKeyStore: WaPreKeyStore
         readonly signalDigestSync: SignalDigestSyncApi
         readonly signalRotateKey: SignalRotateKeyApi
         readonly signedPreKeyRotationIntervalMs?: number
@@ -53,6 +56,7 @@ export class WaPassiveTasksCoordinator {
     }) {
         this.logger = options.logger
         this.signalStore = options.signalStore
+        this.preKeyStore = options.preKeyStore
         this.signalDigestSync = options.signalDigestSync
         this.signalRotateKey = options.signalRotateKey
         this.signedPreKeyRotationIntervalMs =
@@ -81,7 +85,7 @@ export class WaPassiveTasksCoordinator {
 
     public async handlePreKeyLowNotification(): Promise<void> {
         await Promise.all([
-            this.signalStore.setServerHasPreKeys(false),
+            this.preKeyStore.setServerHasPreKeys(false),
             this.runtime.persistServerHasPreKeys(false)
         ])
         await this.uploadPreKeysIfMissing(false)
@@ -106,11 +110,18 @@ export class WaPassiveTasksCoordinator {
             return
         }
 
-        const signalMeta = await this.signalStore.getSignalMeta()
-        const prefetchedLocalKeyBundle = this.resolveLocalKeyBundle(signalMeta)
-        await this.uploadPreKeysIfMissing(signalMeta.serverHasPreKeys, prefetchedLocalKeyBundle)
+        const [registrationInfo, signedPreKey, serverHasPreKeys, signedPreKeyRotationTs] =
+            await Promise.all([
+                this.signalStore.getRegistrationInfo(),
+                this.signalStore.getSignedPreKey(),
+                this.preKeyStore.getServerHasPreKeys(),
+                this.signalStore.getSignedPreKeyRotationTs()
+            ])
+        const prefetchedLocalKeyBundle =
+            registrationInfo && signedPreKey ? { registrationInfo, signedPreKey } : null
+        await this.uploadPreKeysIfMissing(serverHasPreKeys, prefetchedLocalKeyBundle)
         await this.validateDigestAndRecoverPreKeys(prefetchedLocalKeyBundle)
-        await this.rotateSignedPreKeyIfDue(signalMeta.signedPreKeyRotationTs)
+        await this.rotateSignedPreKeyIfDue(signedPreKeyRotationTs)
         await this.flushDanglingReceipts()
     }
 
@@ -137,7 +148,7 @@ export class WaPassiveTasksCoordinator {
             }
 
             await Promise.all([
-                this.signalStore.setServerHasPreKeys(false),
+                this.preKeyStore.setServerHasPreKeys(false),
                 this.runtime.persistServerHasPreKeys(false)
             ])
             await this.uploadPreKeysIfMissing(false, prefetchedLocalKeyBundle)
@@ -153,7 +164,7 @@ export class WaPassiveTasksCoordinator {
         prefetchedLocalKeyBundle?: SignalDigestPrefetchedLocalKeyBundle | null
     ): Promise<void> {
         const serverHasPreKeys =
-            serverHasPreKeysHint ?? (await this.signalStore.getServerHasPreKeys())
+            serverHasPreKeysHint ?? (await this.preKeyStore.getServerHasPreKeys())
         if (serverHasPreKeys) {
             this.logger.trace('prekey upload skipped: server already has prekeys')
             return
@@ -167,7 +178,7 @@ export class WaPassiveTasksCoordinator {
         }
         const { registrationInfo, signedPreKey } = resolvedLocalKeyBundle
 
-        const preKeys = await this.signalStore.getOrGenPreKeys(
+        const preKeys = await this.preKeyStore.getOrGenPreKeys(
             SIGNAL_UPLOAD_PREKEYS_COUNT,
             generatePreKeyPair
         )
@@ -188,9 +199,9 @@ export class WaPassiveTasksCoordinator {
         )
         if (response.attrs.type === 'result') {
             // Mark uploaded key first so the serverHasPreKeys flag never commits ahead of local key progress.
-            await this.signalStore.markKeyAsUploaded(lastPreKeyId)
+            await this.preKeyStore.markKeyAsUploaded(lastPreKeyId)
             await Promise.all([
-                this.signalStore.setServerHasPreKeys(true),
+                this.preKeyStore.setServerHasPreKeys(true),
                 this.runtime.persistServerHasPreKeys(true)
             ])
             this.logger.info('uploaded prekeys to server', {
@@ -245,21 +256,15 @@ export class WaPassiveTasksCoordinator {
         }
     }
 
-    private resolveLocalKeyBundle(
-        signalMeta: WaSignalMetaSnapshot
-    ): SignalDigestPrefetchedLocalKeyBundle | null {
-        const { registrationInfo, signedPreKey } = signalMeta
+    private async resolveLocalKeyBundleFromStore(): Promise<SignalDigestPrefetchedLocalKeyBundle | null> {
+        const [registrationInfo, signedPreKey] = await Promise.all([
+            this.signalStore.getRegistrationInfo(),
+            this.signalStore.getSignedPreKey()
+        ])
         if (!registrationInfo || !signedPreKey) {
             return null
         }
-        return {
-            registrationInfo,
-            signedPreKey
-        }
-    }
-
-    private async resolveLocalKeyBundleFromStore(): Promise<SignalDigestPrefetchedLocalKeyBundle | null> {
-        return this.resolveLocalKeyBundle(await this.signalStore.getSignalMeta())
+        return { registrationInfo, signedPreKey }
     }
 
     private resolveRotationTimestamp(nowMs: number, errorCode: number | undefined): number {

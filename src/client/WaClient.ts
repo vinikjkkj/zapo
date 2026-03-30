@@ -47,11 +47,14 @@ import type { SignalDeviceSyncApi, SignalLidSyncResult } from '@signal/api/Signa
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
+import type { WaIdentityStore } from '@store/contracts/identity.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaParticipantsStore } from '@store/contracts/participants.store'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaPrivacyTokenStore } from '@store/contracts/privacy-token.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
+import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { WaThreadStore } from '@store/contracts/thread.store'
 import type { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
@@ -84,6 +87,9 @@ export class WaClient extends EventEmitter {
     private readonly deviceListStore!: WaDeviceListStore
     private readonly retryStore!: WaRetryStore
     private readonly signalStore!: WaSignalStore
+    private readonly preKeyStore!: WaPreKeyStore
+    private readonly sessionStore!: WaSessionStore
+    private readonly identityStore!: WaIdentityStore
     private readonly senderKeyStore!: WaSenderKeyStore
     private readonly threadStore!: WaThreadStore
     private readonly authClient!: WaAuthClient
@@ -126,6 +132,9 @@ export class WaClient extends EventEmitter {
         this.deviceListStore = base.sessionStore.deviceList
         this.retryStore = base.sessionStore.retry
         this.signalStore = base.sessionStore.signal
+        this.preKeyStore = base.sessionStore.preKey
+        this.sessionStore = base.sessionStore.session
+        this.identityStore = base.sessionStore.identity
         this.senderKeyStore = base.sessionStore.senderKey
         this.threadStore = base.sessionStore.threads
         this.writeBehind = new WriteBehindPersistence(
@@ -874,7 +883,12 @@ export class WaClient extends EventEmitter {
         if (shouldClear('participants')) await this.participantsStore.clear()
         if (shouldClear('deviceList')) await this.deviceListStore.clear()
         if (shouldClear('retry')) await this.retryStore.clear()
-        if (shouldClear('signal')) await this.signalStore.clear()
+        if (shouldClear('signal')) {
+            await this.signalStore.clear()
+            await this.preKeyStore.clear()
+            await this.sessionStore.clear()
+            await this.identityStore.clear()
+        }
         if (shouldClear('senderKey')) await this.senderKeyStore.clear()
         if (shouldClear('threads')) await this.threadStore.clear()
         if (shouldClear('privacyToken')) await this.privacyTokenStore.clear()

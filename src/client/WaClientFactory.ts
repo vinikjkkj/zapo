@@ -406,11 +406,20 @@ export function buildWaClientDependencies(input: {
         defaultRetryDelayMs: options.messageRetryDelayMs
     })
     const senderKeyManager = new SenderKeyManager(sessionStore.senderKey)
-    const signalProtocol = new SignalProtocol(sessionStore.signal, logger)
+    const signalProtocol = new SignalProtocol(
+        {
+            signal: sessionStore.signal,
+            preKey: sessionStore.preKey,
+            session: sessionStore.session,
+            identity: sessionStore.identity
+        },
+        logger
+    )
     const signalDigestSync = new SignalDigestSyncApi({
         logger,
         query: runtime.query,
         signalStore: sessionStore.signal,
+        preKeyStore: sessionStore.preKey,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
     const generateUsyncSid = createUsyncSidGenerator()
@@ -424,7 +433,7 @@ export function buildWaClientDependencies(input: {
     const signalIdentitySync = new SignalIdentitySyncApi({
         logger,
         query: runtime.query,
-        signalStore: sessionStore.signal,
+        identityStore: sessionStore.identity,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
     const signalMissingPreKeysSync = new SignalMissingPreKeysSyncApi({
@@ -456,6 +465,7 @@ export function buildWaClientDependencies(input: {
             logger,
             authStore: sessionStore.auth,
             signalStore: sessionStore.signal,
+            preKeyStore: sessionStore.preKey,
             socket: {
                 sendNode: runtime.sendNode,
                 query: runtime.query
@@ -502,7 +512,8 @@ export function buildWaClientDependencies(input: {
     })
     const sessionResolver = createSignalSessionResolver({
         signalProtocol,
-        signalStore: sessionStore.signal,
+        sessionStore: sessionStore.session,
+        identityStore: sessionStore.identity,
         signalIdentitySync,
         signalSessionSync,
         logger
@@ -565,6 +576,8 @@ export function buildWaClientDependencies(input: {
         senderKeyManager,
         signalProtocol,
         signalStore: sessionStore.signal,
+        sessionStore: sessionStore.session,
+        identityStore: sessionStore.identity,
         deviceListStore: sessionStore.deviceList,
         getCurrentMeJid,
         getCurrentMeLid,
@@ -585,6 +598,8 @@ export function buildWaClientDependencies(input: {
         logger,
         retryStore: sessionStore.retry,
         signalStore: sessionStore.signal,
+        preKeyStore: sessionStore.preKey,
+        sessionStore: sessionStore.session,
         senderKeyStore: sessionStore.senderKey,
         signalProtocol,
         signalDeviceSync,
@@ -823,13 +838,13 @@ export function buildWaClientDependencies(input: {
                     }
                 }
 
-                const oldIdentity = await sessionStore.signal.getRemoteIdentity(address)
+                const oldIdentity = await sessionStore.identity.getRemoteIdentity(address)
 
                 if (oldIdentity) {
                     logger.info('identity-change: clearing session', {
                         jid: parsed.fromJid
                     })
-                    await sessionStore.signal.deleteSession(address)
+                    await sessionStore.session.deleteSession(address)
 
                     const userJid = toUserJid(parsed.fromJid)
                     await trustedContactToken.reissueOnIdentityChange(userJid).catch((error) => {
@@ -888,7 +903,7 @@ export function buildWaClientDependencies(input: {
                         server: baseAddress.server,
                         device: device.deviceId
                     }
-                    await sessionStore.signal.deleteSession(address).catch((error) => {
+                    await sessionStore.session.deleteSession(address).catch((error) => {
                         logger.warn('devices-notification: delete session failed', {
                             message: toError(error).message
                         })
@@ -959,6 +974,7 @@ export function buildWaClientDependencies(input: {
     passiveTasks = new WaPassiveTasksCoordinator({
         logger,
         signalStore: sessionStore.signal,
+        preKeyStore: sessionStore.preKey,
         signalDigestSync,
         signalRotateKey,
         runtime: createPassiveTasksRuntime({

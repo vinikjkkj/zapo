@@ -4,6 +4,7 @@ import {
     generateSignedPreKey
 } from '@signal/registration/keygen'
 import type { PreKeyRecord, RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 
 interface RegistrationBundle {
@@ -12,7 +13,10 @@ interface RegistrationBundle {
     readonly firstPreKey: PreKeyRecord
 }
 
-export async function createAndStoreInitialKeys(store: WaSignalStore): Promise<RegistrationBundle> {
+export async function createAndStoreInitialKeys(
+    store: WaSignalStore,
+    preKeyStore: WaPreKeyStore
+): Promise<RegistrationBundle> {
     const [registrationInfo, firstPreKey] = await Promise.all([
         generateRegistrationInfo(),
         generatePreKeyPair(1)
@@ -22,7 +26,7 @@ export async function createAndStoreInitialKeys(store: WaSignalStore): Promise<R
     // Keep writes ordered so partial commit failures don't leave split registration bootstrap state.
     await store.setRegistrationInfo(registrationInfo)
     await store.setSignedPreKey(signedPreKey)
-    await store.getOrGenSinglePreKey(async () => firstPreKey)
+    await preKeyStore.getOrGenSinglePreKey(async () => firstPreKey)
 
     return {
         registrationInfo,

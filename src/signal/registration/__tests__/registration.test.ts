@@ -10,6 +10,7 @@ import {
     generateSignedPreKey
 } from '@signal/registration/keygen'
 import { createAndStoreInitialKeys } from '@signal/registration/utils'
+import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 
 test('registration id generation stays within expected signal range', async () => {
@@ -49,14 +50,15 @@ test('registration key generation creates prekeys and signed prekeys with valid 
 
 test('createAndStoreInitialKeys persists registration, signed prekey and first prekey', async () => {
     const store = new WaSignalMemoryStore()
+    const preKeyStore = new WaPreKeyMemoryStore()
 
-    const created = await createAndStoreInitialKeys(store)
+    const created = await createAndStoreInitialKeys(store, preKeyStore)
     assert.equal(created.firstPreKey.keyId, 1)
     assert.equal(created.signedPreKey.keyId, 1)
 
     const persistedRegistration = await store.getRegistrationInfo()
     const persistedSignedPreKey = await store.getSignedPreKey()
-    const persistedPreKey = await store.getPreKeyById(1)
+    const persistedPreKey = await preKeyStore.getPreKeyById(1)
 
     assert.ok(persistedRegistration)
     assert.ok(persistedSignedPreKey)

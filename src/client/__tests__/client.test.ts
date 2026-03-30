@@ -443,6 +443,21 @@ function createClearStoredStateHarness(logoutStoreClear?: {
                 cleared.push('signal')
             }
         },
+        preKeyStore: {
+            clear: async () => {
+                cleared.push('preKey')
+            }
+        },
+        sessionStore: {
+            clear: async () => {
+                cleared.push('session')
+            }
+        },
+        identityStore: {
+            clear: async () => {
+                cleared.push('identity')
+            }
+        },
         senderKeyStore: {
             clear: async () => {
                 cleared.push('senderKey')
@@ -475,6 +490,9 @@ test('clearStoredState clears every store domain by default', async () => {
         'deviceList',
         'retry',
         'signal',
+        'preKey',
+        'session',
+        'identity',
         'senderKey',
         'threads',
         'privacyToken'
@@ -511,6 +529,9 @@ test('clearStoredState respects logoutStoreClear domain toggles', async () => {
         'participants',
         'deviceList',
         'signal',
+        'preKey',
+        'session',
+        'identity',
         'senderKey',
         'threads'
     ])

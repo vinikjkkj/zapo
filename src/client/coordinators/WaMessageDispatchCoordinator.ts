@@ -50,6 +50,8 @@ import type { SignalResolvedSessionTarget, SignalSessionResolver } from '@signal
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress } from '@signal/types'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
+import type { WaIdentityStore } from '@store/contracts/identity.store'
+import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { encodeBinaryNode } from '@transport/binary'
 import {
@@ -73,6 +75,8 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly senderKeyManager: SenderKeyManager
     readonly signalProtocol: SignalProtocol
     readonly signalStore: WaSignalStore
+    readonly sessionStore: WaSessionStore
+    readonly identityStore: WaIdentityStore
     readonly deviceListStore: WaDeviceListStore
     readonly getCurrentMeJid: () => string | null | undefined
     readonly getCurrentMeLid: () => string | null | undefined
@@ -101,6 +105,8 @@ export class WaMessageDispatchCoordinator {
     private readonly senderKeyManager: SenderKeyManager
     private readonly signalProtocol: SignalProtocol
     private readonly signalStore: WaSignalStore
+    private readonly sessionStore: WaSessionStore
+    private readonly identityStore: WaIdentityStore
     private readonly deviceListStore: WaDeviceListStore
     private readonly getCurrentMeJid: () => string | null | undefined
     private readonly getCurrentMeLid: () => string | null | undefined
@@ -126,6 +132,8 @@ export class WaMessageDispatchCoordinator {
         this.senderKeyManager = options.senderKeyManager
         this.signalProtocol = options.signalProtocol
         this.signalStore = options.signalStore
+        this.sessionStore = options.sessionStore
+        this.identityStore = options.identityStore
         this.deviceListStore = options.deviceListStore
         this.getCurrentMeJid = options.getCurrentMeJid
         this.getCurrentMeLid = options.getCurrentMeLid
@@ -826,7 +834,7 @@ export class WaMessageDispatchCoordinator {
             for (let index = 0; index < pendingTargets.length; index += 1) {
                 pendingTargetAddresses[index] = pendingTargets[index].address
             }
-            const hasPendingSessions = await this.signalStore.hasSessions(pendingTargetAddresses)
+            const hasPendingSessions = await this.sessionStore.hasSessions(pendingTargetAddresses)
             const nextAvailableTargets: {
                 readonly jid: string
                 readonly address: SignalAddress
@@ -1184,7 +1192,7 @@ export class WaMessageDispatchCoordinator {
                 }
                 return resolveIcdcMeta(
                     snapshot.deviceJids,
-                    this.signalStore,
+                    this.identityStore,
                     snapshot.updatedAtMs,
                     localIdentity
                 )

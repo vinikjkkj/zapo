@@ -4,6 +4,7 @@ import test from 'node:test'
 import type { WaAuthCredentials } from '@auth/types'
 import { WaAuthClient } from '@auth/WaAuthClient'
 import type { Logger } from '@infra/log/types'
+import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 
 function createLogger(): Logger {
@@ -39,6 +40,7 @@ function createInMemoryAuthStore(initial: WaAuthCredentials | null = null) {
 test('WaAuthClient creates credentials, persists fields and clears state', async () => {
     const auth = createInMemoryAuthStore(null)
     const signalStore = new WaSignalMemoryStore()
+    const preKeyStore = new WaPreKeyMemoryStore()
 
     const client = new WaAuthClient(
         {
@@ -49,6 +51,7 @@ test('WaAuthClient creates credentials, persists fields and clears state', async
             logger: createLogger(),
             authStore: auth.store,
             signalStore,
+            preKeyStore,
             socket: {
                 sendNode: async () => undefined,
                 query: async () => ({ tag: 'iq', attrs: { type: 'result' } })
@@ -92,6 +95,7 @@ test('WaAuthClient throws when credentials are required but missing', async () =
             logger: createLogger(),
             authStore: auth.store,
             signalStore: new WaSignalMemoryStore(),
+            preKeyStore: new WaPreKeyMemoryStore(),
             socket: {
                 sendNode: async () => undefined,
                 query: async () => ({ tag: 'iq', attrs: { type: 'result' } })

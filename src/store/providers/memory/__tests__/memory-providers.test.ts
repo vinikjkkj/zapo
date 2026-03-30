@@ -4,11 +4,13 @@ import test from 'node:test'
 import { WA_APP_STATE_COLLECTIONS } from '@protocol/constants'
 import { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
 import { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
+import { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
+import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
 import { WaRetryMemoryStore } from '@store/providers/memory/retry.store'
 import { SenderKeyMemoryStore } from '@store/providers/memory/sender-key.store'
-import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
+import { WaSessionMemoryStore } from '@store/providers/memory/session.store'
 import { WaThreadMemoryStore } from '@store/providers/memory/thread.store'
 
 test('memory message/thread stores enforce limits and ordering', async () => {
@@ -93,8 +95,10 @@ test('memory retry/device-list stores expire entries and support cleanup', async
 })
 
 test('memory signal/sender-key/appstate stores cover key workflows', async () => {
-    const signalStore = new WaSignalMemoryStore({ maxPreKeys: 4 })
-    const generated = await signalStore.getOrGenPreKeys(2, async (keyId) => ({
+    const preKeyStore = new WaPreKeyMemoryStore({ maxPreKeys: 4 })
+    const sessionStore = new WaSessionMemoryStore()
+    const identityStore = new WaIdentityMemoryStore()
+    const generated = await preKeyStore.getOrGenPreKeys(2, async (keyId) => ({
         keyId,
         keyPair: {
             pubKey: new Uint8Array(32).fill(keyId),
@@ -104,10 +108,10 @@ test('memory signal/sender-key/appstate stores cover key workflows', async () =>
     }))
 
     assert.equal(generated.length, 2)
-    await signalStore.markKeyAsUploaded(generated[1].keyId)
-    assert.equal(await signalStore.getServerHasPreKeys(), false)
-    await signalStore.setServerHasPreKeys(true)
-    assert.equal(await signalStore.getServerHasPreKeys(), true)
+    await preKeyStore.markKeyAsUploaded(generated[1].keyId)
+    assert.equal(await preKeyStore.getServerHasPreKeys(), false)
+    await preKeyStore.setServerHasPreKeys(true)
+    assert.equal(await preKeyStore.getServerHasPreKeys(), true)
     const addressA = { user: '5511', server: 's.whatsapp.net', device: 0 } as const
     const addressB = { user: '5522', server: 's.whatsapp.net', device: 0 } as const
     const sessionA = {
@@ -132,18 +136,21 @@ test('memory signal/sender-key/appstate stores cover key workflows', async () =>
         aliceBaseKey: null,
         prevSessions: []
     } as const
-    await signalStore.setSession(addressA, sessionA)
-    assert.deepEqual(await signalStore.getSessionsBatch([]), [])
-    assert.deepEqual(await signalStore.getSessionsBatch([addressA, addressB]), [sessionA, null])
+    await sessionStore.setSession(addressA, sessionA)
+    assert.deepEqual(await sessionStore.getSessionsBatch([]), [])
+    assert.deepEqual(await sessionStore.getSessionsBatch([addressA, addressB]), [sessionA, null])
     const sessionB = {
         ...sessionA,
         remote: { ...sessionA.remote, regId: 3 }
     }
-    await signalStore.setSessionsBatch([{ address: addressB, session: sessionB }])
-    assert.deepEqual(await signalStore.getSessionsBatch([addressA, addressB]), [sessionA, sessionB])
-    await signalStore.setRemoteIdentity(addressA, new Uint8Array([7]))
-    assert.deepEqual(await signalStore.getRemoteIdentities([]), [])
-    assert.deepEqual(await signalStore.getRemoteIdentities([addressA, addressB, addressA]), [
+    await sessionStore.setSessionsBatch([{ address: addressB, session: sessionB }])
+    assert.deepEqual(await sessionStore.getSessionsBatch([addressA, addressB]), [
+        sessionA,
+        sessionB
+    ])
+    await identityStore.setRemoteIdentity(addressA, new Uint8Array([7]))
+    assert.deepEqual(await identityStore.getRemoteIdentities([]), [])
+    assert.deepEqual(await identityStore.getRemoteIdentities([addressA, addressB, addressA]), [
         new Uint8Array([7]),
         null,
         new Uint8Array([7])

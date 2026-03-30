@@ -2,7 +2,7 @@ import { sha256, toRawPubKey } from '@crypto'
 import type { Proto } from '@proto'
 import { parseSignalAddressFromJid } from '@protocol/jid'
 import type { SignalAddress } from '@signal/types'
-import type { WaSignalStore } from '@store/contracts/signal.store'
+import type { WaIdentityStore } from '@store/contracts/identity.store'
 import { concatBytes } from '@util/bytes'
 
 const ICDC_HASH_LENGTH = 8
@@ -33,7 +33,7 @@ export async function computeDeviceKeyHash(
 
 export async function resolveIcdcMeta(
     deviceJids: readonly string[],
-    signalStore: WaSignalStore,
+    identityStore: WaIdentityStore,
     updatedAtMs: number | undefined,
     localIdentity?: { readonly address: SignalAddress; readonly pubKey: Uint8Array }
 ): Promise<IcdcMeta | null> {
@@ -44,7 +44,7 @@ export async function resolveIcdcMeta(
     for (let i = 0; i < deviceJids.length; i += 1) {
         addresses[i] = parseSignalAddressFromJid(deviceJids[i])
     }
-    const remoteKeys = await signalStore.getRemoteIdentities(addresses)
+    const remoteKeys = await identityStore.getRemoteIdentities(addresses)
     const keys: Uint8Array[] = []
     for (let i = 0; i < addresses.length; i += 1) {
         const key = remoteKeys[i]
