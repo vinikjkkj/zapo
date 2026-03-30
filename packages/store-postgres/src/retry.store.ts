@@ -21,8 +21,8 @@ export class WaRetryPgStore extends BasePgStore implements WaRetryStore {
 
     public constructor(options: WaPgStorageOptions, ttlMs = DEFAULT_RETRY_TTL_MS) {
         super(options, ['retry'])
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('retry ttlMs must be a non-negative finite number')
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('retry ttlMs must be a positive finite number')
         }
         this.ttlMs = ttlMs
     }

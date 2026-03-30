@@ -2,7 +2,7 @@ import type { PreKeyRecord } from 'zapo-js/signal'
 import type { WaPreKeyStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
-import { safeLimit, scanKeys, toBytesOrNull, toRedisBuffer } from './helpers'
+import { deleteKeysChunked, safeLimit, scanKeys, toBytesOrNull, toRedisBuffer } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
 const LUA_CONSUME_PREKEY = `
@@ -357,7 +357,7 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
         const scannedKeys = await Promise.all(scanPatterns.map((p) => scanKeys(this.redis, p)))
         const allKeys = [...patterns, ...scannedKeys.flat()]
         if (allKeys.length > 0) {
-            await this.redis.del(...allKeys)
+            await deleteKeysChunked(this.redis, allKeys)
         }
         const metaKey = this.k('signal:meta', this.sessionId)
         await this.redis.hmset(metaKey, {

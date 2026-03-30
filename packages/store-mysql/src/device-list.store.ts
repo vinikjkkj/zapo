@@ -13,8 +13,8 @@ export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceLi
 
     public constructor(options: WaMysqlStorageOptions, ttlMs = DEFAULT_DEVICE_LIST_TTL_MS) {
         super(options, ['deviceList'])
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('device-list ttlMs must be a non-negative finite number')
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('device-list ttlMs must be a positive finite number')
         }
         this.ttlMs = ttlMs
     }

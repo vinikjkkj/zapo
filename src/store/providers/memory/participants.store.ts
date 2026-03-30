@@ -25,6 +25,9 @@ export class WaParticipantsMemoryStore implements WaParticipantsStore {
     private readonly cleanupTimer: NodeJS.Timeout
 
     public constructor(ttlMs = DEFAULTS.ttlMs, options: WaParticipantsMemoryStoreOptions = {}) {
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('participants ttlMs must be a positive finite number')
+        }
         this.records = new Map()
         this.ttlMs = ttlMs
         this.maxGroups = resolvePositive(

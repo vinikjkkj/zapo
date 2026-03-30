@@ -3,7 +3,13 @@ import { proto } from 'zapo-js/proto'
 import type { WaAuthStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
-import { scanKeys, toBytesOrNull, toRedisBuffer, toStringOrNull } from './helpers'
+import {
+    deleteKeysChunked,
+    scanKeys,
+    toBytesOrNull,
+    toRedisBuffer,
+    toStringOrNull
+} from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
 const BINARY_FIELDS = [
@@ -202,7 +208,7 @@ export class WaAuthRedisStore extends BaseRedisStore implements WaAuthStore {
         const baseKey = this.k('auth', this.sessionId)
         const subKeys = await scanKeys(this.redis, `${baseKey}:*`)
         if (subKeys.length > 0) {
-            await this.redis.del(...subKeys)
+            await deleteKeysChunked(this.redis, subKeys)
         }
         await this.redis.del(baseKey)
     }

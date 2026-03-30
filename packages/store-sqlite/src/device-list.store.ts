@@ -28,6 +28,9 @@ export class WaDeviceListSqliteStore extends BaseSqliteStore implements WaDevice
         batchSize?: number
     ) {
         super(options, ['deviceList'])
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('device-list ttlMs must be a positive finite number')
+        }
         this.ttlMs = ttlMs
         this.batchSize = resolvePositive(
             batchSize,

@@ -27,8 +27,8 @@ export class WaMessageSecretSqliteStore extends BaseSqliteStore implements WaMes
         batchSize = DEFAULTS.batchSize
     ) {
         super(options, ['messageSecret'])
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('message-secret ttlMs must be a non-negative finite number')
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('message-secret ttlMs must be a positive finite number')
         }
         if (!Number.isFinite(batchSize) || batchSize < 1) {
             throw new Error('message-secret batchSize must be a positive finite number')

@@ -17,8 +17,8 @@ export class WaDeviceListMongoStore extends BaseMongoStore implements WaDeviceLi
 
     public constructor(options: WaMongoStorageOptions, ttlMs = DEFAULT_DEVICE_LIST_TTL_MS) {
         super(options)
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('device-list ttlMs must be a non-negative finite number')
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('device-list ttlMs must be a positive finite number')
         }
         this.ttlMs = ttlMs
     }
@@ -50,7 +50,7 @@ export class WaDeviceListMongoStore extends BaseMongoStore implements WaDeviceLi
 
     public async getUserDevicesBatch(
         userJids: readonly string[],
-        _nowMs?: number
+        nowMs = Date.now()
     ): Promise<readonly (WaDeviceListSnapshot | null)[]> {
         if (userJids.length === 0) return []
         await this.ensureIndexes()
@@ -59,7 +59,8 @@ export class WaDeviceListMongoStore extends BaseMongoStore implements WaDeviceLi
         const docs = await col
             .find({
                 '_id.session_id': this.sessionId,
-                '_id.user_jid': { $in: uniqueUserJids }
+                '_id.user_jid': { $in: uniqueUserJids },
+                expires_at: { $gt: new Date(nowMs) }
             })
             .toArray()
 

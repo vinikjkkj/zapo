@@ -18,8 +18,8 @@ export class WaMessageSecretMongoStore extends BaseMongoStore implements WaMessa
 
     public constructor(options: WaMongoStorageOptions, ttlMs = DEFAULT_MESSAGE_SECRET_TTL_MS) {
         super(options)
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('message-secret ttlMs must be a non-negative finite number')
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('message-secret ttlMs must be a positive finite number')
         }
         this.ttlMs = ttlMs
     }

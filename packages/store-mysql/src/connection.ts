@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise'
 import type { Pool, PoolOptions } from 'mysql2/promise'
 
-import { queryRows } from './helpers'
+import { assertSafeTablePrefix, queryRows } from './helpers'
 import type { WaMysqlMigrationDomain } from './types'
 
 interface Migration {
@@ -328,6 +328,7 @@ export async function ensureMysqlMigrations(
     domains: readonly WaMysqlMigrationDomain[],
     tablePrefix = ''
 ): Promise<void> {
+    assertSafeTablePrefix(tablePrefix)
     const t = (name: string) => `${tablePrefix}${name}`
     const domainSet = new Set(domains)
     const pending = MIGRATIONS.filter((m) => domainSet.has(m.domain))

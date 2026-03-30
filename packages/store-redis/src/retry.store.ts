@@ -2,7 +2,13 @@ import type { WaRetryOutboundMessageRecord, WaRetryOutboundState } from 'zapo-js
 import type { WaRetryStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
-import { scanKeys, toBytesOrNull, toRedisBuffer, toStringOrNull } from './helpers'
+import {
+    deleteKeysChunked,
+    scanKeys,
+    toBytesOrNull,
+    toRedisBuffer,
+    toStringOrNull
+} from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
 interface RetryRequesterStatusPayload {
@@ -69,8 +75,8 @@ export class WaRetryRedisStore extends BaseRedisStore implements WaRetryStore {
 
     public constructor(options: WaRedisStorageOptions, ttlMs = DEFAULT_RETRY_TTL_MS) {
         super(options)
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('retry ttlMs must be a non-negative finite number')
+        if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) {
+            throw new Error('retry ttlMs must be a positive integer')
         }
         this.ttlMs = ttlMs
     }
@@ -285,7 +291,7 @@ export class WaRetryRedisStore extends BaseRedisStore implements WaRetryStore {
         ])
         const allKeys = [...outKeys, ...inKeys]
         if (allKeys.length > 0) {
-            await this.redis.del(...allKeys)
+            await deleteKeysChunked(this.redis, allKeys)
         }
     }
 

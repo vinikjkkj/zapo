@@ -18,6 +18,7 @@ import type {
 import { BaseRedisStore } from './BaseRedisStore'
 import {
     bytesToHex,
+    deleteKeysChunked,
     hexToBytes,
     scanKeys,
     toBytesOrNull,
@@ -428,7 +429,7 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
         const scannedKeys = await Promise.all(scanPatterns.map((p) => scanKeys(this.redis, p)))
         const allKeys = [...fixedKeys, ...scannedKeys.flat()]
         if (allKeys.length > 0) {
-            await this.redis.del(...allKeys)
+            await deleteKeysChunked(this.redis, allKeys)
         }
     }
 }

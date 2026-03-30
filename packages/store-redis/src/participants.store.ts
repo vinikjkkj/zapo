@@ -1,7 +1,7 @@
 import type { WaParticipantsSnapshot, WaParticipantsStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
-import { scanKeys } from './helpers'
+import { deleteKeysChunked, scanKeys } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
 const DEFAULT_PARTICIPANTS_TTL_MS = 5 * 60 * 1000
@@ -11,8 +11,8 @@ export class WaParticipantsRedisStore extends BaseRedisStore implements WaPartic
 
     public constructor(options: WaRedisStorageOptions, ttlMs = DEFAULT_PARTICIPANTS_TTL_MS) {
         super(options)
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('participants ttlMs must be a non-negative finite number')
+        if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) {
+            throw new Error('participants ttlMs must be a positive integer')
         }
         this.ttlMs = ttlMs
     }
@@ -61,7 +61,7 @@ export class WaParticipantsRedisStore extends BaseRedisStore implements WaPartic
         const pattern = this.k('participants', this.sessionId, '*')
         const keys = await scanKeys(this.redis, pattern)
         if (keys.length > 0) {
-            await this.redis.del(...keys)
+            await deleteKeysChunked(this.redis, keys)
         }
     }
 }

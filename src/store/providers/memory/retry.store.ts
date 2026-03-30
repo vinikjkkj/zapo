@@ -1,29 +1,54 @@
 import type { WaRetryOutboundMessageRecord, WaRetryOutboundState } from '@retry/types'
 import type { WaRetryStore } from '@store/contracts/retry.store'
-import { resolveCleanupIntervalMs } from '@util/collections'
+import { resolvePositive } from '@util/coercion'
+import { resolveCleanupIntervalMs, setBoundedMapEntry } from '@util/collections'
 
 interface RetryInboundCounterRecord {
-    count: number
-    expiresAtMs: number
+    readonly count: number
+    readonly expiresAtMs: number
 }
 
-const DEFAULT_RETRY_TTL_MS = 60 * 1000
+const DEFAULTS = Object.freeze({
+    ttlMs: 60 * 1000,
+    maxOutboundMessages: 10_000,
+    maxInboundCounters: 20_000
+} as const)
+
+export interface WaRetryMemoryStoreOptions {
+    readonly maxOutboundMessages?: number
+    readonly maxInboundCounters?: number
+}
 
 export class WaRetryMemoryStore implements WaRetryStore {
     private readonly outboundMessages: Map<string, WaRetryOutboundMessageRecord>
     private readonly eligibleSets: Map<string, Set<string>>
     private readonly inboundCounters: Map<string, RetryInboundCounterRecord>
     private readonly ttlMs: number
+    private readonly maxOutboundMessages: number
+    private readonly maxInboundCounters: number
     private readonly cleanupTimer: NodeJS.Timeout
 
-    public constructor(ttlMs = DEFAULT_RETRY_TTL_MS) {
+    public constructor(ttlMs = DEFAULTS.ttlMs, options: WaRetryMemoryStoreOptions = {}) {
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('retry ttlMs must be a positive finite number')
+        }
         this.outboundMessages = new Map()
         this.eligibleSets = new Map()
         this.inboundCounters = new Map()
         this.ttlMs = ttlMs
+        this.maxOutboundMessages = resolvePositive(
+            options.maxOutboundMessages,
+            DEFAULTS.maxOutboundMessages,
+            'WaRetryMemoryStoreOptions.maxOutboundMessages'
+        )
+        this.maxInboundCounters = resolvePositive(
+            options.maxInboundCounters,
+            DEFAULTS.maxInboundCounters,
+            'WaRetryMemoryStoreOptions.maxInboundCounters'
+        )
         this.cleanupTimer = setInterval(() => {
             void this.cleanupExpired(Date.now())
-        }, resolveCleanupIntervalMs(ttlMs))
+        }, resolveCleanupIntervalMs(this.ttlMs))
         this.cleanupTimer.unref()
     }
 
@@ -78,7 +103,7 @@ export class WaRetryMemoryStore implements WaRetryStore {
     }
 
     public async upsertOutboundMessage(record: WaRetryOutboundMessageRecord): Promise<void> {
-        this.outboundMessages.set(record.messageId, {
+        const storedRecord: WaRetryOutboundMessageRecord = {
             ...record,
             eligibleRequesterDeviceJids: record.eligibleRequesterDeviceJids
                 ? [...record.eligibleRequesterDeviceJids]
@@ -86,7 +111,16 @@ export class WaRetryMemoryStore implements WaRetryStore {
             deliveredRequesterDeviceJids: record.deliveredRequesterDeviceJids
                 ? [...record.deliveredRequesterDeviceJids]
                 : undefined
-        })
+        }
+        setBoundedMapEntry(
+            this.outboundMessages,
+            record.messageId,
+            storedRecord,
+            this.maxOutboundMessages,
+            (messageId) => {
+                this.eligibleSets.delete(messageId)
+            }
+        )
         if (record.eligibleRequesterDeviceJids && record.eligibleRequesterDeviceJids.length > 0) {
             this.eligibleSets.set(record.messageId, new Set(record.eligibleRequesterDeviceJids))
         } else {
@@ -116,12 +150,20 @@ export class WaRetryMemoryStore implements WaRetryStore {
         if (!current) {
             return
         }
-        this.outboundMessages.set(messageId, {
-            ...current,
-            state,
-            updatedAtMs,
-            expiresAtMs
-        })
+        setBoundedMapEntry(
+            this.outboundMessages,
+            messageId,
+            {
+                ...current,
+                state,
+                updatedAtMs,
+                expiresAtMs
+            },
+            this.maxOutboundMessages,
+            (evictedMessageId) => {
+                this.eligibleSets.delete(evictedMessageId)
+            }
+        )
     }
 
     public async markOutboundRequesterDelivered(
@@ -136,12 +178,20 @@ export class WaRetryMemoryStore implements WaRetryStore {
         }
         const delivered = new Set(current.deliveredRequesterDeviceJids ?? [])
         delivered.add(requesterDeviceJid)
-        this.outboundMessages.set(messageId, {
-            ...current,
-            deliveredRequesterDeviceJids: Array.from(delivered),
-            updatedAtMs,
-            expiresAtMs
-        })
+        setBoundedMapEntry(
+            this.outboundMessages,
+            messageId,
+            {
+                ...current,
+                deliveredRequesterDeviceJids: Array.from(delivered),
+                updatedAtMs,
+                expiresAtMs
+            },
+            this.maxOutboundMessages,
+            (evictedMessageId) => {
+                this.eligibleSets.delete(evictedMessageId)
+            }
+        )
     }
 
     public async incrementInboundCounter(
@@ -153,10 +203,12 @@ export class WaRetryMemoryStore implements WaRetryStore {
         const key = this.counterKey(messageId, requesterJid)
         const current = this.inboundCounters.get(key)
         const count = current ? current.count + 1 : 1
-        this.inboundCounters.set(key, {
-            count,
-            expiresAtMs
-        })
+        setBoundedMapEntry(
+            this.inboundCounters,
+            key,
+            { count, expiresAtMs },
+            this.maxInboundCounters
+        )
         return count
     }
 

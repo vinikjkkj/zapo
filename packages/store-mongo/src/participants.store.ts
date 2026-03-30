@@ -17,8 +17,8 @@ export class WaParticipantsMongoStore extends BaseMongoStore implements WaPartic
 
     public constructor(options: WaMongoStorageOptions, ttlMs = DEFAULT_PARTICIPANTS_TTL_MS) {
         super(options)
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('participants ttlMs must be a non-negative finite number')
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('participants ttlMs must be a positive finite number')
         }
         this.ttlMs = ttlMs
     }
@@ -46,12 +46,13 @@ export class WaParticipantsMongoStore extends BaseMongoStore implements WaPartic
 
     public async getGroupParticipants(
         groupJid: string,
-        _nowMs?: number
+        nowMs = Date.now()
     ): Promise<WaParticipantsSnapshot | null> {
         await this.ensureIndexes()
         const col = this.col<ParticipantsDoc>('group_participants_cache')
         const doc = await col.findOne({
-            _id: { session_id: this.sessionId, group_jid: groupJid }
+            _id: { session_id: this.sessionId, group_jid: groupJid },
+            expires_at: { $gt: new Date(nowMs) }
         })
         if (!doc) return null
         return {

@@ -7,7 +7,7 @@ import {
 import type { WaSessionStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
-import { scanKeys, toRedisBuffer } from './helpers'
+import { deleteKeysChunked, scanKeys, toRedisBuffer } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
 export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStore {
@@ -143,7 +143,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         const scannedKeys = await Promise.all(scanPatterns.map((p) => scanKeys(this.redis, p)))
         const allKeys = scannedKeys.flat()
         if (allKeys.length > 0) {
-            await this.redis.del(...allKeys)
+            await deleteKeysChunked(this.redis, allKeys)
         }
     }
 }

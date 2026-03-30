@@ -43,8 +43,8 @@ export class WaRetryMongoStore extends BaseMongoStore implements WaRetryStore {
 
     public constructor(options: WaMongoStorageOptions, ttlMs = DEFAULT_RETRY_TTL_MS) {
         super(options)
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('retry ttlMs must be a non-negative finite number')
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('retry ttlMs must be a positive finite number')
         }
         this.ttlMs = ttlMs
     }
@@ -75,8 +75,10 @@ export class WaRetryMongoStore extends BaseMongoStore implements WaRetryStore {
     } | null> {
         await this.ensureIndexes()
         const col = this.col<OutboundDoc>('retry_outbound_messages')
+        const now = new Date(Date.now())
         const doc = await col.findOne({
-            _id: { session_id: this.sessionId, message_id: messageId }
+            _id: { session_id: this.sessionId, message_id: messageId },
+            expires_at: { $gt: now }
         })
         if (!doc) return null
         if (!doc.requesters_json) return null
@@ -146,8 +148,10 @@ export class WaRetryMongoStore extends BaseMongoStore implements WaRetryStore {
     ): Promise<WaRetryOutboundMessageRecord | null> {
         await this.ensureIndexes()
         const col = this.col<OutboundDoc>('retry_outbound_messages')
+        const now = new Date(Date.now())
         const doc = await col.findOne({
-            _id: { session_id: this.sessionId, message_id: messageId }
+            _id: { session_id: this.sessionId, message_id: messageId },
+            expires_at: { $gt: now }
         })
         if (!doc) return null
         const requesters = doc.requesters_json
@@ -200,8 +204,12 @@ export class WaRetryMongoStore extends BaseMongoStore implements WaRetryStore {
     ): Promise<void> {
         await this.withSession(async (session) => {
             const col = this.col<OutboundDoc>('retry_outbound_messages')
+            const now = new Date(Date.now())
             const doc = await col.findOne(
-                { _id: { session_id: this.sessionId, message_id: messageId } },
+                {
+                    _id: { session_id: this.sessionId, message_id: messageId },
+                    expires_at: { $gt: now }
+                },
                 { session }
             )
             if (!doc) return
@@ -225,7 +233,10 @@ export class WaRetryMongoStore extends BaseMongoStore implements WaRetryStore {
                 requesterDeviceJid
             ])
             await col.updateOne(
-                { _id: { session_id: this.sessionId, message_id: messageId } },
+                {
+                    _id: { session_id: this.sessionId, message_id: messageId },
+                    expires_at: { $gt: now }
+                },
                 {
                     $set: {
                         requesters_json: nextRequestersJson,

@@ -18,6 +18,9 @@ export class WaParticipantsSqliteStore extends BaseSqliteStore implements WaPart
 
     public constructor(options: WaSqliteStorageOptions, ttlMs = DEFAULT_PARTICIPANTS_TTL_MS) {
         super(options, ['participants'])
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('participants ttlMs must be a positive finite number')
+        }
         this.ttlMs = ttlMs
     }
 

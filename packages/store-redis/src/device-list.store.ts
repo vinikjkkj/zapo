@@ -1,7 +1,7 @@
 import type { WaDeviceListSnapshot, WaDeviceListStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
-import { scanKeys } from './helpers'
+import { deleteKeysChunked, scanKeys } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
 const DEFAULT_DEVICE_LIST_TTL_MS = 5 * 60 * 1000
@@ -11,8 +11,8 @@ export class WaDeviceListRedisStore extends BaseRedisStore implements WaDeviceLi
 
     public constructor(options: WaRedisStorageOptions, ttlMs = DEFAULT_DEVICE_LIST_TTL_MS) {
         super(options)
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('device-list ttlMs must be a non-negative finite number')
+        if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) {
+            throw new Error('device-list ttlMs must be a positive integer')
         }
         this.ttlMs = ttlMs
     }
@@ -76,7 +76,7 @@ export class WaDeviceListRedisStore extends BaseRedisStore implements WaDeviceLi
         const pattern = this.k('devlist', this.sessionId, '*')
         const keys = await scanKeys(this.redis, pattern)
         if (keys.length > 0) {
-            await this.redis.del(...keys)
+            await deleteKeysChunked(this.redis, keys)
         }
     }
 }

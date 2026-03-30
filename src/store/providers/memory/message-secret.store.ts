@@ -23,6 +23,9 @@ export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
     private readonly cleanupTimer: NodeJS.Timeout
 
     public constructor(ttlMs = DEFAULTS.ttlMs, options: WaMessageSecretMemoryStoreOptions = {}) {
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('message-secret ttlMs must be a positive finite number')
+        }
         this.secrets = new Map()
         this.ttlMs = ttlMs
         this.maxSecrets = resolvePositive(

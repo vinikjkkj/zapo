@@ -83,7 +83,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
         readonly privacyToken?: B | 'memory'
     }
     readonly cacheProviders?: {
-        readonly retry?: B | 'memory'
+        readonly retry?: B | 'memory' | 'none'
         readonly participants?: B | 'memory' | 'none'
         readonly deviceList?: B | 'memory' | 'none'
         readonly messageSecret?: B | 'memory' | 'none'
@@ -111,6 +111,8 @@ export interface WaStoreMemoryLimitSelection {
     readonly deviceListUsers?: number
     readonly messages?: number
     readonly messageSecrets?: number
+    readonly retryOutboundMessages?: number
+    readonly retryInboundCounters?: number
     readonly threads?: number
     readonly contacts?: number
     readonly privacyTokens?: number

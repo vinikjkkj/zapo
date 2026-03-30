@@ -3,7 +3,7 @@ import { encodeSenderKeyRecord, decodeSenderKeyRecord, toSignalAddressParts } fr
 import type { WaSenderKeyStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
-import { scanKeys, toRedisBuffer } from './helpers'
+import { deleteKeysChunked, scanKeys, toRedisBuffer } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
 export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKeyStore {
@@ -316,7 +316,7 @@ export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKey
         const scannedKeys = await Promise.all(patterns.map((p) => scanKeys(this.redis, p)))
         const allKeys = scannedKeys.flat()
         if (allKeys.length > 0) {
-            await this.redis.del(...allKeys)
+            await deleteKeysChunked(this.redis, allKeys)
         }
     }
 }

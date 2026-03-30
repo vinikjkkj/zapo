@@ -11,8 +11,8 @@ export class WaParticipantsPgStore extends BasePgStore implements WaParticipants
 
     public constructor(options: WaPgStorageOptions, ttlMs = DEFAULT_PARTICIPANTS_TTL_MS) {
         super(options, ['participants'])
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('participants ttlMs must be a non-negative finite number')
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('participants ttlMs must be a positive finite number')
         }
         this.ttlMs = ttlMs
     }

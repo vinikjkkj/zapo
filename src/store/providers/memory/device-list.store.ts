@@ -22,6 +22,9 @@ export class WaDeviceListMemoryStore implements WaDeviceListStore {
     private readonly cleanupTimer: NodeJS.Timeout
 
     public constructor(ttlMs = DEFAULTS.ttlMs, options: WaDeviceListMemoryStoreOptions = {}) {
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('device-list ttlMs must be a positive finite number')
+        }
         this.records = new Map()
         this.ttlMs = ttlMs
         this.maxUsers = resolvePositive(

@@ -1,3 +1,4 @@
+import type { WaRetryOutboundMessageRecord } from '@retry/types'
 import type { WaContactStore, WaStoredContactRecord } from '@store/contracts/contact.store'
 import type { WaDeviceListSnapshot, WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
@@ -6,6 +7,7 @@ import type {
     WaParticipantsSnapshot,
     WaParticipantsStore
 } from '@store/contracts/participants.store'
+import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/thread.store'
 
 const EMPTY_STORE_LIST = Object.freeze([]) as readonly unknown[]
@@ -52,6 +54,19 @@ export const NOOP_CONTACT_STORE: WaContactStore = Object.freeze({
     getByJid: async (_jid: string): Promise<WaStoredContactRecord | null> => null,
     deleteByJid: async (_jid: string): Promise<number> => 0,
     clear: async (): Promise<void> => {}
+})
+
+export const NOOP_RETRY_STORE: WaRetryStore = Object.freeze({
+    getOutboundRequesterStatus: async (): Promise<null> => null,
+    upsertOutboundMessage: async (_record: WaRetryOutboundMessageRecord): Promise<void> => {},
+    deleteOutboundMessage: async (_messageId: string): Promise<number> => 0,
+    getOutboundMessage: async (_messageId: string): Promise<null> => null,
+    updateOutboundMessageState: async (): Promise<void> => {},
+    markOutboundRequesterDelivered: async (): Promise<void> => {},
+    incrementInboundCounter: async (): Promise<number> => 0,
+    cleanupExpired: async (_nowMs: number): Promise<number> => 0,
+    clear: async (): Promise<void> => {},
+    destroy: async (): Promise<void> => {}
 })
 
 export const NOOP_PARTICIPANTS_STORE: WaParticipantsStore = Object.freeze({

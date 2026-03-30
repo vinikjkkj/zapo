@@ -12,8 +12,8 @@ export class WaMessageSecretPgStore extends BasePgStore implements WaMessageSecr
 
     public constructor(options: WaPgStorageOptions, ttlMs = DEFAULT_MESSAGE_SECRET_TTL_MS) {
         super(options, ['messageSecret'])
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('message-secret ttlMs must be a non-negative finite number')
+        if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+            throw new Error('message-secret ttlMs must be a positive finite number')
         }
         this.ttlMs = ttlMs
     }

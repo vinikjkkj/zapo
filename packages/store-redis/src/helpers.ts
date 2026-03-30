@@ -43,6 +43,27 @@ export async function scanKeys(redis: Redis, pattern: string): Promise<string[]>
     return keys
 }
 
+const DEFAULT_DELETE_CHUNK_SIZE = 500
+
+export async function deleteKeysChunked(
+    redis: Redis,
+    keys: readonly string[],
+    chunkSize = DEFAULT_DELETE_CHUNK_SIZE
+): Promise<number> {
+    if (keys.length === 0) {
+        return 0
+    }
+    if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) {
+        throw new Error('delete keys chunkSize must be a positive safe integer')
+    }
+    let deleted = 0
+    for (let start = 0; start < keys.length; start += chunkSize) {
+        const end = Math.min(start + chunkSize, keys.length)
+        deleted += await redis.del(...keys.slice(start, end))
+    }
+    return deleted
+}
+
 export function toRedisBuffer(bytes: Uint8Array): Buffer {
     return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
 }

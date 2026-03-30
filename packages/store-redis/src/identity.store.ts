@@ -3,7 +3,7 @@ import { toSignalAddressParts } from 'zapo-js/signal'
 import type { WaIdentityStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
-import { scanKeys, toRedisBuffer } from './helpers'
+import { deleteKeysChunked, scanKeys, toRedisBuffer } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
 export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentityStore {
@@ -93,7 +93,7 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
         const scannedKeys = await Promise.all(scanPatterns.map((p) => scanKeys(this.redis, p)))
         const allKeys = scannedKeys.flat()
         if (allKeys.length > 0) {
-            await this.redis.del(...allKeys)
+            await deleteKeysChunked(this.redis, allKeys)
         }
     }
 }

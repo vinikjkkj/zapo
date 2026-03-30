@@ -34,6 +34,7 @@ import {
     NOOP_MESSAGE_SECRET_STORE,
     NOOP_MESSAGE_STORE,
     NOOP_PARTICIPANTS_STORE,
+    NOOP_RETRY_STORE,
     NOOP_THREAD_STORE
 } from '@store/noop.store'
 import { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
@@ -267,7 +268,13 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                 cacheProviders.retry ?? 'memory',
                 'retry',
                 'caches',
-                () => new WaRetryMemoryStore(cacheTtlsMs.retry)
+                () =>
+                    cacheProviders.retry === 'memory' || !cacheProviders.retry
+                        ? new WaRetryMemoryStore(cacheTtlsMs.retry, {
+                              maxOutboundMessages: ml.retryOutboundMessages,
+                              maxInboundCounters: ml.retryInboundCounters
+                          })
+                        : NOOP_RETRY_STORE
             )
             const rawParticipants = resolveStore<WaParticipantsStore>(
                 id,

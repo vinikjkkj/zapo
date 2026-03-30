@@ -1,7 +1,7 @@
 import type { WaMessageSecretStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
-import { scanKeys, toBytesOrNull, toRedisBuffer } from './helpers'
+import { deleteKeysChunked, scanKeys, toBytesOrNull, toRedisBuffer } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
 const DEFAULT_MESSAGE_SECRET_TTL_MS = 30 * 60 * 1000
@@ -11,8 +11,8 @@ export class WaMessageSecretRedisStore extends BaseRedisStore implements WaMessa
 
     public constructor(options: WaRedisStorageOptions, ttlMs = DEFAULT_MESSAGE_SECRET_TTL_MS) {
         super(options)
-        if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-            throw new Error('message-secret ttlMs must be a non-negative finite number')
+        if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) {
+            throw new Error('message-secret ttlMs must be a positive integer')
         }
         this.ttlMs = ttlMs
     }
@@ -68,7 +68,7 @@ export class WaMessageSecretRedisStore extends BaseRedisStore implements WaMessa
         const pattern = this.k('msgsecret', this.sessionId, '*')
         const keys = await scanKeys(this.redis, pattern)
         if (keys.length > 0) {
-            await this.redis.del(...keys)
+            await deleteKeysChunked(this.redis, keys)
         }
     }
 }

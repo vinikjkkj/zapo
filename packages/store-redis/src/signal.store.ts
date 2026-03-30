@@ -2,7 +2,7 @@ import type { RegistrationInfo, SignedPreKeyRecord } from 'zapo-js/signal'
 import type { WaSignalStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
-import { scanKeys, toBytesOrNull, toRedisBuffer } from './helpers'
+import { deleteKeysChunked, scanKeys, toBytesOrNull, toRedisBuffer } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
 export class WaSignalRedisStore extends BaseRedisStore implements WaSignalStore {
@@ -110,7 +110,7 @@ export class WaSignalRedisStore extends BaseRedisStore implements WaSignalStore 
         const scannedKeys = await Promise.all(scanPatterns.map((p) => scanKeys(this.redis, p)))
         const allKeys = [...patterns, ...scannedKeys.flat()]
         if (allKeys.length > 0) {
-            await this.redis.del(...allKeys)
+            await deleteKeysChunked(this.redis, allKeys)
         }
     }
 
