@@ -104,8 +104,8 @@ export function identifyEncryptedAddon(message: Proto.IMessage): WaIdentifiedEnc
             return {
                 kind: 'reaction',
                 targetMessageKey,
-                encPayload: toBytesView(encPayload),
-                encIv: toBytesView(encIv),
+                encPayload: encPayload,
+                encIv: encIv,
                 modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.ENC_REACTION,
                 raw: message
             }
@@ -118,8 +118,8 @@ export function identifyEncryptedAddon(message: Proto.IMessage): WaIdentifiedEnc
             return {
                 kind: 'poll_vote',
                 targetMessageKey: pollCreationMessageKey,
-                encPayload: toBytesView(vote.encPayload),
-                encIv: toBytesView(vote.encIv),
+                encPayload: vote.encPayload,
+                encIv: vote.encIv,
                 modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.POLL_VOTE,
                 raw: message
             }
@@ -132,8 +132,8 @@ export function identifyEncryptedAddon(message: Proto.IMessage): WaIdentifiedEnc
             return {
                 kind: 'event_response',
                 targetMessageKey: eventCreationMessageKey,
-                encPayload: toBytesView(encPayload),
-                encIv: toBytesView(encIv),
+                encPayload: encPayload,
+                encIv: encIv,
                 modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.EVENT_RESPONSE,
                 raw: message
             }
@@ -146,8 +146,8 @@ export function identifyEncryptedAddon(message: Proto.IMessage): WaIdentifiedEnc
             return {
                 kind: 'comment',
                 targetMessageKey,
-                encPayload: toBytesView(encPayload),
-                encIv: toBytesView(encIv),
+                encPayload: encPayload,
+                encIv: encIv,
                 modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.ENC_COMMENT,
                 raw: message
             }
@@ -201,8 +201,8 @@ export async function resolveParentMessageSecret(
     try {
         const decoded = proto.Message.decode(record.messageBytes)
         const secret = decoded.messageContextInfo?.messageSecret
-        if (!secret || toBytesView(secret).byteLength !== WA_MESSAGE_SECRET_BYTES) return null
-        return { secret: toBytesView(secret), senderJid: record.senderJid ?? '' }
+        if (!secret || secret.byteLength !== WA_MESSAGE_SECRET_BYTES) return null
+        return { secret, senderJid: record.senderJid ?? '' }
     } catch {
         return null
     }

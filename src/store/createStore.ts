@@ -406,6 +406,8 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
             const list = Array.from(sessions.values())
             sessions.clear()
             await Promise.all(list.map((s) => s.destroy()))
+            const uniqueBackends = new Set(Object.values(backends))
+            await Promise.all(Array.from(uniqueBackends, (backend) => destroyIfSupported(backend)))
         }
     }
 }

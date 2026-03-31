@@ -97,7 +97,7 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
         },
         async destroy(): Promise<void> {
             if (ownsRedis) {
-                redis.disconnect()
+                await redis.quit()
             }
         }
     }

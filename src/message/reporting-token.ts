@@ -1,13 +1,7 @@
 import { hkdf, hmacSign, importHmacKey } from '@crypto'
 import { proto, type Proto } from '@proto'
 import type { BinaryNode } from '@transport/types'
-import {
-    base64ToBytesChecked,
-    concatBytes,
-    EMPTY_BYTES,
-    TEXT_ENCODER,
-    toBytesView
-} from '@util/bytes'
+import { base64ToBytesChecked, concatBytes, EMPTY_BYTES, TEXT_ENCODER } from '@util/bytes'
 
 const WA_REPORTING_TOKEN_BYTES = 16
 const WA_REPORTING_TOKEN_KEY_BYTES = 32
@@ -95,7 +89,7 @@ export async function buildReportingTokenArtifacts(
     }
 
     const messageSecret = input.message.messageContextInfo?.messageSecret
-    if (!messageSecret || toBytesView(messageSecret).byteLength === 0) {
+    if (!messageSecret || messageSecret.byteLength === 0) {
         return null
     }
 
@@ -111,7 +105,7 @@ export async function buildReportingTokenArtifacts(
         stanzaId + input.senderUserJid + input.remoteJid + WA_REPORTING_TOKEN_USE_CASE
     )
     const reportingTokenKey = await hkdf(
-        toBytesView(messageSecret),
+        messageSecret,
         null,
         secretInfo,
         WA_REPORTING_TOKEN_KEY_BYTES

@@ -1,7 +1,6 @@
 import { WA_PRIVACY_TOKEN_TAGS } from '@protocol/privacy-token'
 import { findNodeChild, getNodeChildren } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
-import { toBytesView } from '@util/bytes'
 import { asNumber } from '@util/coercion'
 
 export interface ParsedPrivacyToken {
@@ -38,7 +37,7 @@ export function parsePrivacyTokenNotification(node: BinaryNode): readonly Parsed
         }
         result[result.length] = {
             type,
-            tokenBytes: toBytesView(content),
+            tokenBytes: content,
             timestampS: asNumber(Number(rawTimestamp), 'privacy_token.t')
         }
     }

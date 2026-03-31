@@ -18,7 +18,6 @@ import {
     toSignalAddressParts
 } from '@signal/encoding'
 import type { SignalAddress, SignalSessionRecord } from '@signal/types'
-import { toBytesView } from '@util/bytes'
 
 function makeBytes(length: number, seed = 0): Uint8Array {
     const out = new Uint8Array(length)
@@ -193,7 +192,7 @@ test('sqlite signal helpers encode/decode sender key records and distribution ro
     assert.equal(decoded.keyId, 55)
     assert.equal(decoded.iteration, 12)
     assert.equal(decoded.unusedMessageKeys?.length, 2)
-    assert.equal(toBytesView(decoded.signingPublicKey)[0], toBytesView(record.signingPublicKey)[0])
+    assert.equal(decoded.signingPublicKey[0], record.signingPublicKey[0])
 
     const distribution = decodeSenderKeyDistributionRow({
         group_id: record.groupId,

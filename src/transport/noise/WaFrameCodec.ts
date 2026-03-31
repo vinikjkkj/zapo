@@ -1,4 +1,4 @@
-import { EMPTY_BYTES, toBytesView } from '@util/bytes'
+import { EMPTY_BYTES } from '@util/bytes'
 
 const WA_MAX_FRAME_LENGTH = (1 << 24) - 1
 
@@ -19,7 +19,7 @@ export class WaFrameCodec {
         if (maxFrameLength >= 1 << 24) {
             throw new Error('maxFrameLength must be lower than protocol limit (16777216)')
         }
-        this.introFrame = introFrame && introFrame.length > 0 ? toBytesView(introFrame) : null
+        this.introFrame = introFrame && introFrame.length > 0 ? introFrame : null
         this.maxFrameLength = maxFrameLength
         this.introSent = false
         this.buffered = EMPTY_BYTES
