@@ -3,7 +3,7 @@ import { SIGNAL_KEY_BUNDLE_TYPE_BYTES } from '@signal/api/constants'
 import type { SignalMissingPreKeysTarget } from '@signal/api/SignalMissingPreKeysSyncApi'
 import type { PreKeyRecord, RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
 import { buildIqNode } from '@transport/node/query'
-import { intToBytes, toBytesView } from '@util/bytes'
+import { intToBytes } from '@util/bytes'
 
 function buildSignedPreKeyNode(signedPreKey: SignedPreKeyRecord) {
     return {
@@ -18,12 +18,12 @@ function buildSignedPreKeyNode(signedPreKey: SignedPreKeyRecord) {
             {
                 tag: WA_NODE_TAGS.VALUE,
                 attrs: {},
-                content: toBytesView(signedPreKey.keyPair.pubKey)
+                content: signedPreKey.keyPair.pubKey
             },
             {
                 tag: WA_NODE_TAGS.SIGNATURE,
                 attrs: {},
-                content: toBytesView(signedPreKey.signature)
+                content: signedPreKey.signature
             }
         ]
     }
@@ -48,7 +48,7 @@ export function buildPreKeyUploadIq(
         {
             tag: WA_NODE_TAGS.IDENTITY,
             attrs: {},
-            content: toBytesView(registrationInfo.identityKeyPair.pubKey)
+            content: registrationInfo.identityKeyPair.pubKey
         },
         {
             tag: WA_NODE_TAGS.LIST,
@@ -65,7 +65,7 @@ export function buildPreKeyUploadIq(
                     {
                         tag: WA_NODE_TAGS.VALUE,
                         attrs: {},
-                        content: toBytesView(record.keyPair.pubKey)
+                        content: record.keyPair.pubKey
                     }
                 ]
             }))

@@ -16,7 +16,7 @@ import { verifyNoiseCertificateChain } from '@transport/noise/WaNoiseCert'
 import { WaNoiseHandshake } from '@transport/noise/WaNoiseHandshake'
 import type { WaNoiseSocket } from '@transport/noise/WaNoiseSocket'
 import type { WaNoiseConfig } from '@transport/types'
-import { concatBytes, toBytesView } from '@util/bytes'
+import { concatBytes } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 function resolvePayload(
@@ -25,7 +25,7 @@ function resolvePayload(
     if (payload instanceof Uint8Array) {
         return Promise.resolve(payload)
     }
-    return Promise.resolve(payload()).then((value) => toBytesView(value))
+    return Promise.resolve(payload())
 }
 
 async function resolveHandshakePayload(config: WaNoiseConfig): Promise<Uint8Array> {
@@ -91,9 +91,7 @@ export class WaNoiseSession {
             isRegistered: config.isRegistered,
             hasServerStaticKey: !!config.serverStaticKey
         })
-        const protocolHeader = config.protocolHeader
-            ? toBytesView(config.protocolHeader)
-            : WA_PROTO_HEADER
+        const protocolHeader = config.protocolHeader ?? WA_PROTO_HEADER
         const introFrame =
             config.routingInfo && config.routingInfo.length > 0
                 ? concatBytes([buildRoutingInfoPrefix(config.routingInfo), protocolHeader])
@@ -354,7 +352,7 @@ export class WaNoiseSession {
         if (!serverHello.payload) {
             throw new Error('noise resume handshake missing certificate payload')
         }
-        const serverEphemeral = toBytesView(serverHello.ephemeral)
+        const serverEphemeral = serverHello.ephemeral
         await handshake.authenticate(serverEphemeral)
 
         const [dh1, dh2] = await Promise.all([
@@ -365,7 +363,7 @@ export class WaNoiseSession {
         await handshake.mixIntoKey(dh1)
         await handshake.mixIntoKey(dh2)
 
-        await handshake.decrypt(toBytesView(serverHello.payload))
+        await handshake.decrypt(serverHello.payload)
         this.serverStaticKey = serverStaticKey
         this.logger.info('noise resume handshake successful without fallback')
         return { socket: await handshake.finish(), serverHelloFrame: null }
@@ -407,16 +405,16 @@ export class WaNoiseSession {
             throw new Error('noise full handshake missing server hello fields')
         }
 
-        const serverEphemeral = toBytesView(serverHello.ephemeral)
+        const serverEphemeral = serverHello.ephemeral
         await handshake.authenticate(serverEphemeral)
         await handshake.mixIntoKey(
             await X25519.scalarMult(ephemeralKeyPair.privKey, serverEphemeral)
         )
 
-        const serverStatic = await handshake.decrypt(toBytesView(serverHello.static))
+        const serverStatic = await handshake.decrypt(serverHello.static)
         await handshake.mixIntoKey(await X25519.scalarMult(ephemeralKeyPair.privKey, serverStatic))
 
-        const certificate = await handshake.decrypt(toBytesView(serverHello.payload))
+        const certificate = await handshake.decrypt(serverHello.payload)
         if (verifyCertificates) {
             await verifyNoiseCertificateChain(certificate, serverStatic)
             this.logger.trace('noise certificate chain verified')

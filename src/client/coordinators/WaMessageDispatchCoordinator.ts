@@ -62,7 +62,7 @@ import {
     buildMetaNode
 } from '@transport/node/builders/message'
 import type { BinaryNode } from '@transport/types'
-import { bytesToHex, concatBytes, TEXT_ENCODER, toBytesView } from '@util/bytes'
+import { bytesToHex, concatBytes, TEXT_ENCODER } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 interface WaMessageDispatchCoordinatorOptions {
@@ -282,7 +282,7 @@ export class WaMessageDispatchCoordinator {
         ) {
             const meJid = this.getCurrentMeJid() ?? ''
             void this.messageSecretStore
-                .set(sendOptions.id, { secret: toBytesView(rawSecret), senderJid: meJid })
+                .set(sendOptions.id, { secret: rawSecret, senderJid: meJid })
                 .catch((error) => {
                     this.logger.warn('failed to persist outgoing message secret', {
                         id: sendOptions.id,

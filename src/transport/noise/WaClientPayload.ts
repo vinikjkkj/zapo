@@ -8,7 +8,7 @@ import type {
     WaPayloadCommonConfig,
     WaRegistrationPayloadConfig
 } from '@transport/noise/types'
-import { intToBytes, toBytesView } from '@util/bytes'
+import { intToBytes } from '@util/bytes'
 
 function parseVersion(versionBase: string): {
     primary: number
@@ -191,16 +191,14 @@ export function buildRegistrationPayload(config: WaRegistrationPayloadConfig): U
     const version = parseVersion(versionBase)
     const common = buildCommonPayload(config, version)
     const devicePairingData = {
-        buildHash: config.buildHash ? toBytesView(config.buildHash) : md5Bytes(versionBase),
-        deviceProps: config.deviceProps
-            ? toBytesView(config.deviceProps)
-            : defaultDeviceProps(versionBase, config, version),
+        buildHash: config.buildHash ?? md5Bytes(versionBase),
+        deviceProps: config.deviceProps ?? defaultDeviceProps(versionBase, config, version),
         eRegid: intToBytes(4, registrationId),
         eKeytype: intToBytes(1, 5),
-        eIdent: toBytesView(config.registrationInfo.identityKeyPair.pubKey),
+        eIdent: config.registrationInfo.identityKeyPair.pubKey,
         eSkeyId: intToBytes(3, signedPreKeyId),
-        eSkeyVal: toBytesView(config.signedPreKey.keyPair.pubKey),
-        eSkeySig: toBytesView(config.signedPreKey.signature)
+        eSkeyVal: config.signedPreKey.keyPair.pubKey,
+        eSkeySig: config.signedPreKey.signature
     }
     return proto.ClientPayload.encode({
         ...common,

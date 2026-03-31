@@ -29,7 +29,7 @@ export function assertMessageSecret(
 
 export async function ensureMessageSecret(message: Proto.IMessage): Promise<Proto.IMessage> {
     const messageSecret = message.messageContextInfo?.messageSecret
-    if (messageSecret && toBytesView(messageSecret).byteLength > 0) {
+    if (messageSecret && messageSecret.byteLength > 0) {
         return message
     }
 

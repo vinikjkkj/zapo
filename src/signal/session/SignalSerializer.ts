@@ -9,7 +9,6 @@ import type {
 } from '@signal/types'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
-import { toBytesView } from '@util/bytes'
 
 export function deserializeMsg(versionContentMac: Uint8Array): ParsedSignalMessage {
     const content = readVersionedContent(versionContentMac, SIGNAL_VERSION, SIGNAL_MAC_SIZE)
@@ -25,9 +24,9 @@ export function deserializeMsg(versionContentMac: Uint8Array): ParsedSignalMessa
         throw new Error('invalid signal message')
     }
     return {
-        ratchetPubKey: toSerializedPubKey(toBytesView(parsed.ratchetKey)),
+        ratchetPubKey: toSerializedPubKey(parsed.ratchetKey),
         counter: parsed.counter,
-        ciphertext: toBytesView(parsed.ciphertext),
+        ciphertext: parsed.ciphertext,
         versionContentMac
     }
 }
@@ -50,14 +49,14 @@ export function deserializePkMsg(versionContent: Uint8Array): ParsedPreKeySignal
         throw new Error('invalid prekey signal message')
     }
 
-    const signal = deserializeMsg(toBytesView(parsed.message))
+    const signal = deserializeMsg(parsed.message)
     return {
         ...signal,
         remote: {
             regId: parsed.registrationId,
-            pubKey: toSerializedPubKey(toBytesView(parsed.identityKey))
+            pubKey: toSerializedPubKey(parsed.identityKey)
         },
-        sessionBaseKey: toSerializedPubKey(toBytesView(parsed.baseKey)),
+        sessionBaseKey: toSerializedPubKey(parsed.baseKey),
         localSignedPreKeyId: parsed.signedPreKeyId,
         localOneTimeKeyId: parsed.preKeyId ?? null
     }

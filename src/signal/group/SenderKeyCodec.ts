@@ -2,7 +2,7 @@ import { readVersionedContent, toSerializedPubKey } from '@crypto'
 import { proto } from '@proto'
 import { SIGNAL_SIGNATURE_LENGTH } from '@signal/api/constants'
 import { SIGNAL_GROUP_VERSION } from '@signal/constants'
-import { assertByteLength, toBytesView } from '@util/bytes'
+import { assertByteLength } from '@util/bytes'
 
 export function parseDistributionPayload(payload: Uint8Array): {
     readonly keyId: number
@@ -25,14 +25,13 @@ export function parseDistributionPayload(payload: Uint8Array): {
         throw new Error('invalid sender key distribution message')
     }
 
-    const chainKey = toBytesView(decoded.chainKey)
-    assertByteLength(chainKey, 32, 'sender key distribution chainKey must be 32 bytes')
+    assertByteLength(decoded.chainKey, 32, 'sender key distribution chainKey must be 32 bytes')
 
     return {
         keyId: decoded.id,
         iteration: decoded.iteration,
-        chainKey,
-        signingPublicKey: toSerializedPubKey(toBytesView(decoded.signingKey))
+        chainKey: decoded.chainKey,
+        signingPublicKey: toSerializedPubKey(decoded.signingKey)
     }
 }
 
@@ -62,7 +61,7 @@ export function parseSenderKeyMessage(versionContentMac: Uint8Array): {
     return {
         keyId: decoded.id,
         iteration: decoded.iteration,
-        ciphertext: toBytesView(decoded.ciphertext),
+        ciphertext: decoded.ciphertext,
         versionContentMac
     }
 }

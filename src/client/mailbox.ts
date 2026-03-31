@@ -4,7 +4,6 @@ import type { Logger } from '@infra/log/types'
 import { needsSecretPersistence } from '@message/content'
 import { proto } from '@proto'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
-import { toBytesView } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 interface WaPersistIncomingMailboxOptions {
@@ -66,7 +65,7 @@ export function persistIncomingMailboxEntities(options: WaPersistIncomingMailbox
         ) {
             const senderJid = event.senderJid ?? event.rawNode.attrs.participant ?? ''
             void messageSecretStore
-                .set(stanzaId, { secret: toBytesView(rawSecret), senderJid })
+                .set(stanzaId, { secret: rawSecret, senderJid })
                 .catch((error) => {
                     logger.warn('failed to persist message secret', {
                         id: stanzaId,
