@@ -1,4 +1,4 @@
-import type { WaMessageSecretStore } from 'zapo-js/store'
+import type { WaMessageSecretEntry, WaMessageSecretStore } from 'zapo-js/store'
 
 import { BaseMysqlStore } from './BaseMysqlStore'
 import { affectedRows, queryRows, toBytes } from './helpers'
@@ -19,11 +19,11 @@ export class WaMessageSecretMysqlStore extends BaseMysqlStore implements WaMessa
         this.ttlMs = ttlMs
     }
 
-    public async get(messageId: string, nowMs = Date.now()): Promise<Uint8Array | null> {
+    public async get(messageId: string, nowMs = Date.now()): Promise<WaMessageSecretEntry | null> {
         await this.ensureReady()
         const rows = queryRows(
             await this.pool.execute(
-                `SELECT secret, expires_at_ms
+                `SELECT secret, sender_jid, expires_at_ms
                  FROM ${this.t('message_secrets_cache')}
                  WHERE session_id = ? AND message_id = ?`,
                 [this.sessionId, messageId]
@@ -41,18 +41,18 @@ export class WaMessageSecretMysqlStore extends BaseMysqlStore implements WaMessa
             return null
         }
 
-        return toBytes(row.secret)
+        return { secret: toBytes(row.secret), senderJid: String(row.sender_jid) }
     }
 
     public async getBatch(
         messageIds: readonly string[],
         nowMs = Date.now()
-    ): Promise<readonly (Uint8Array | null)[]> {
+    ): Promise<readonly (WaMessageSecretEntry | null)[]> {
         if (messageIds.length === 0) return []
         await this.ensureReady()
 
         const uniqueIds = [...new Set(messageIds)]
-        const activeById = new Map<string, Uint8Array>()
+        const activeById = new Map<string, WaMessageSecretEntry>()
         const expiredIds: string[] = []
 
         for (let start = 0; start < uniqueIds.length; start += BATCH_SIZE) {
@@ -60,7 +60,7 @@ export class WaMessageSecretMysqlStore extends BaseMysqlStore implements WaMessa
             while (batch.length < BATCH_SIZE) batch.push('')
             const rows = queryRows(
                 await this.pool.execute(
-                    `SELECT message_id, secret, expires_at_ms
+                    `SELECT message_id, secret, sender_jid, expires_at_ms
                      FROM ${this.t('message_secrets_cache')}
                      WHERE session_id = ? AND message_id IN (${FIXED_IN_PLACEHOLDERS})`,
                     [this.sessionId, ...batch]
@@ -73,7 +73,10 @@ export class WaMessageSecretMysqlStore extends BaseMysqlStore implements WaMessa
                     expiredIds.push(id)
                     continue
                 }
-                activeById.set(id, toBytes(row.secret))
+                activeById.set(id, {
+                    secret: toBytes(row.secret),
+                    senderJid: String(row.sender_jid)
+                })
             }
         }
 
@@ -92,35 +95,43 @@ export class WaMessageSecretMysqlStore extends BaseMysqlStore implements WaMessa
         return messageIds.map((id) => activeById.get(id) ?? null)
     }
 
-    public async set(messageId: string, secret: Uint8Array): Promise<void> {
+    public async set(messageId: string, entry: WaMessageSecretEntry): Promise<void> {
         await this.ensureReady()
         const nowMs = Date.now()
         await this.pool.execute(
             `INSERT INTO ${this.t('message_secrets_cache')} (
-                session_id, message_id, secret, expires_at_ms
-            ) VALUES (?, ?, ?, ?)
+                session_id, message_id, secret, sender_jid, expires_at_ms
+            ) VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 secret = VALUES(secret),
+                sender_jid = VALUES(sender_jid),
                 expires_at_ms = VALUES(expires_at_ms)`,
-            [this.sessionId, messageId, secret, nowMs + this.ttlMs]
+            [this.sessionId, messageId, entry.secret, entry.senderJid, nowMs + this.ttlMs]
         )
     }
 
     public async setBatch(
-        entries: readonly { readonly messageId: string; readonly secret: Uint8Array }[]
+        entries: readonly { readonly messageId: string; readonly entry: WaMessageSecretEntry }[]
     ): Promise<void> {
         if (entries.length === 0) return
         const nowMs = Date.now()
         await this.withTransaction(async (conn) => {
-            for (const entry of entries) {
+            for (const e of entries) {
                 await conn.execute(
                     `INSERT INTO ${this.t('message_secrets_cache')} (
-                        session_id, message_id, secret, expires_at_ms
-                    ) VALUES (?, ?, ?, ?)
+                        session_id, message_id, secret, sender_jid, expires_at_ms
+                    ) VALUES (?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                         secret = VALUES(secret),
+                        sender_jid = VALUES(sender_jid),
                         expires_at_ms = VALUES(expires_at_ms)`,
-                    [this.sessionId, entry.messageId, entry.secret, nowMs + this.ttlMs]
+                    [
+                        this.sessionId,
+                        e.messageId,
+                        e.entry.secret,
+                        e.entry.senderJid,
+                        nowMs + this.ttlMs
+                    ]
                 )
             }
         })

@@ -1,5 +1,6 @@
 import type { AppStateCollectionName } from '@appstate/types'
 import type { WaAuthClientOptions, WaAuthCredentials, WaAuthSocketOptions } from '@auth/types'
+import type { WaDecodedAddon } from '@message/addon-crypto'
 import type { WaMessagePublishOptions } from '@message/types'
 import type { Proto } from '@proto'
 import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
@@ -51,7 +52,12 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
         readonly emitSnapshotMutations?: boolean
     }
     readonly privacyToken?: WaPrivacyTokenOptions
+    readonly addons?: WaAddonOptions
     readonly logoutStoreClear?: WaLogoutStoreClearOptions
+}
+
+export interface WaAddonOptions {
+    readonly autoDecrypt?: boolean
 }
 
 export interface WaPrivacyTokenOptions {
@@ -159,6 +165,16 @@ export interface WaIncomingNotificationEvent extends WaIncomingBaseEvent {
     readonly notificationType?: string
     readonly classification?: 'core' | 'out_of_scope' | 'unknown' | 'info_bulletin'
     readonly details?: Readonly<Record<string, unknown>>
+}
+
+export type WaAddonKind = 'reaction' | 'poll_vote' | 'event_response' | 'comment'
+
+export interface WaIncomingAddonEvent extends WaIncomingBaseEvent {
+    readonly kind: WaAddonKind
+    readonly targetMessageId: string
+    readonly senderJid: string
+    readonly decrypted: WaDecodedAddon
+    readonly raw: Proto.IMessage
 }
 
 export interface WaIncomingFailureEvent extends WaIncomingBaseEvent {
@@ -354,6 +370,7 @@ export interface WaClientEventMap {
         readonly frame: Uint8Array
     }) => void
     readonly message: (event: WaIncomingMessageEvent) => void
+    readonly message_addon: (event: WaIncomingAddonEvent) => void
     readonly message_protocol: (event: WaIncomingProtocolMessageEvent) => void
     readonly message_receipt: (event: WaIncomingReceiptEvent) => void
     readonly presence: (event: WaIncomingPresenceEvent) => void

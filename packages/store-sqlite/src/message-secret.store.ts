@@ -1,4 +1,4 @@
-import type { WaMessageSecretStore } from 'zapo-js/store'
+import type { WaMessageSecretEntry, WaMessageSecretStore } from 'zapo-js/store'
 import { asBytes, asNumber, asString } from 'zapo-js/util'
 
 import { BaseSqliteStore } from './BaseSqliteStore'
@@ -9,6 +9,7 @@ import type { WaSqliteStorageOptions } from './types'
 interface MessageSecretRow extends Record<string, unknown> {
     readonly message_id: unknown
     readonly secret: unknown
+    readonly sender_jid: unknown
     readonly expires_at_ms: unknown
 }
 
@@ -37,10 +38,10 @@ export class WaMessageSecretSqliteStore extends BaseSqliteStore implements WaMes
         this.batchSize = batchSize
     }
 
-    public async get(messageId: string, nowMs = Date.now()): Promise<Uint8Array | null> {
+    public async get(messageId: string, nowMs = Date.now()): Promise<WaMessageSecretEntry | null> {
         const db = await this.getConnection()
         const row = db.get<MessageSecretRow>(
-            `SELECT message_id, secret, expires_at_ms
+            `SELECT message_id, secret, sender_jid, expires_at_ms
              FROM message_secrets_cache
              WHERE session_id = ? AND message_id = ?`,
             [this.options.sessionId, messageId]
@@ -57,19 +58,22 @@ export class WaMessageSecretSqliteStore extends BaseSqliteStore implements WaMes
             )
             return null
         }
-        return asBytes(row.secret, 'message_secrets_cache.secret')
+        return {
+            secret: asBytes(row.secret, 'message_secrets_cache.secret'),
+            senderJid: asString(row.sender_jid, 'message_secrets_cache.sender_jid')
+        }
     }
 
     public async getBatch(
         messageIds: readonly string[],
         nowMs = Date.now()
-    ): Promise<readonly (Uint8Array | null)[]> {
+    ): Promise<readonly (WaMessageSecretEntry | null)[]> {
         if (messageIds.length === 0) {
             return []
         }
         const uniqueMessageIds = [...new Set(messageIds)]
         return this.withTransaction((db) => {
-            const activeByMessageId = new Map<string, Uint8Array>()
+            const activeByMessageId = new Map<string, WaMessageSecretEntry>()
             const expiredMessageIds: string[] = []
             for (let start = 0; start < uniqueMessageIds.length; start += this.batchSize) {
                 const end = Math.min(start + this.batchSize, uniqueMessageIds.length)
@@ -80,7 +84,7 @@ export class WaMessageSecretSqliteStore extends BaseSqliteStore implements WaMes
                     params.push(uniqueMessageIds[index])
                 }
                 const rows = db.all<MessageSecretRow>(
-                    `SELECT message_id, secret, expires_at_ms
+                    `SELECT message_id, secret, sender_jid, expires_at_ms
                      FROM message_secrets_cache
                      WHERE session_id = ? AND message_id IN (${placeholders})`,
                     params
@@ -95,16 +99,16 @@ export class WaMessageSecretSqliteStore extends BaseSqliteStore implements WaMes
                         expiredMessageIds.push(messageId)
                         continue
                     }
-                    activeByMessageId.set(
-                        messageId,
-                        asBytes(row.secret, 'message_secrets_cache.secret')
-                    )
+                    activeByMessageId.set(messageId, {
+                        secret: asBytes(row.secret, 'message_secrets_cache.secret'),
+                        senderJid: asString(row.sender_jid, 'message_secrets_cache.sender_jid')
+                    })
                 }
             }
             if (expiredMessageIds.length > 0) {
                 this.deleteMessageSecretsByIds(db, expiredMessageIds)
             }
-            const results = new Array<Uint8Array | null>(messageIds.length)
+            const results = new Array<WaMessageSecretEntry | null>(messageIds.length)
             for (let index = 0; index < messageIds.length; index += 1) {
                 results[index] = activeByMessageId.get(messageIds[index]) ?? null
             }
@@ -112,20 +116,20 @@ export class WaMessageSecretSqliteStore extends BaseSqliteStore implements WaMes
         })
     }
 
-    public async set(messageId: string, secret: Uint8Array): Promise<void> {
+    public async set(messageId: string, entry: WaMessageSecretEntry): Promise<void> {
         const db = await this.getConnection()
-        this.upsertRow(db, messageId, secret)
+        this.upsertRow(db, messageId, entry)
     }
 
     public async setBatch(
-        entries: readonly { readonly messageId: string; readonly secret: Uint8Array }[]
+        entries: readonly { readonly messageId: string; readonly entry: WaMessageSecretEntry }[]
     ): Promise<void> {
         if (entries.length === 0) {
             return
         }
         await this.withTransaction((db) => {
-            for (const entry of entries) {
-                this.upsertRow(db, entry.messageId, entry.secret)
+            for (const e of entries) {
+                this.upsertRow(db, e.messageId, e.entry)
             }
         })
     }
@@ -146,19 +150,25 @@ export class WaMessageSecretSqliteStore extends BaseSqliteStore implements WaMes
         db.run('DELETE FROM message_secrets_cache WHERE session_id = ?', [this.options.sessionId])
     }
 
-    private upsertRow(db: WaSqliteConnection, messageId: string, secret: Uint8Array): void {
+    private upsertRow(
+        db: WaSqliteConnection,
+        messageId: string,
+        entry: WaMessageSecretEntry
+    ): void {
         const nowMs = Date.now()
         db.run(
             `INSERT INTO message_secrets_cache (
                 session_id,
                 message_id,
                 secret,
+                sender_jid,
                 expires_at_ms
-            ) VALUES (?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(session_id, message_id) DO UPDATE SET
                 secret=excluded.secret,
+                sender_jid=excluded.sender_jid,
                 expires_at_ms=excluded.expires_at_ms`,
-            [this.options.sessionId, messageId, secret, nowMs + this.ttlMs]
+            [this.options.sessionId, messageId, entry.secret, entry.senderJid, nowMs + this.ttlMs]
         )
     }
 

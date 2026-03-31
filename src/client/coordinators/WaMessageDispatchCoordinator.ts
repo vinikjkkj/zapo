@@ -280,8 +280,9 @@ export class WaMessageDispatchCoordinator {
             sendOptions.id &&
             needsSecretPersistence(messageWithSecret)
         ) {
+            const meJid = this.getCurrentMeJid() ?? ''
             void this.messageSecretStore
-                .set(sendOptions.id, toBytesView(rawSecret))
+                .set(sendOptions.id, { secret: toBytesView(rawSecret), senderJid: meJid })
                 .catch((error) => {
                     this.logger.warn('failed to persist outgoing message secret', {
                         id: sendOptions.id,

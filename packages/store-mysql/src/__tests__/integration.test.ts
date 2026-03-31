@@ -523,25 +523,37 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         const secretStore = store.caches.messageSecret(sessionId)
         const now = Date.now()
 
-        const secretA = new Uint8Array([1, 2, 3, 4])
-        const secretB = new Uint8Array([5, 6, 7, 8])
+        const entryA = { secret: new Uint8Array([1, 2, 3, 4]), senderJid: 'alice@s.whatsapp.net' }
+        const entryB = { secret: new Uint8Array([5, 6, 7, 8]), senderJid: 'bob@s.whatsapp.net' }
 
-        await secretStore.set('msg-1', secretA)
-        await secretStore.set('msg-2', secretB)
+        await secretStore.set('msg-1', entryA)
+        await secretStore.set('msg-2', entryB)
         const got1 = await secretStore.get('msg-1', now)
-        assert.ok(got1 && got1.length === secretA.length && got1.every((b, i) => b === secretA[i]))
+        assert.ok(
+            got1 &&
+                got1.secret.length === entryA.secret.length &&
+                got1.secret.every((b, i) => b === entryA.secret[i])
+        )
+        assert.equal(got1.senderJid, entryA.senderJid)
         assert.equal(await secretStore.get('missing', now), null)
 
         const batch = await secretStore.getBatch(['msg-2', 'missing', 'msg-1'], now)
         assert.equal(batch.length, 3)
-        assert.ok(batch[0] && batch[0].every((b, i) => b === secretB[i]))
+        assert.ok(batch[0] && batch[0].secret.every((b, i) => b === entryB.secret[i]))
+        assert.equal(batch[0].senderJid, entryB.senderJid)
         assert.equal(batch[1], null)
-        assert.ok(batch[2] && batch[2].every((b, i) => b === secretA[i]))
+        assert.ok(batch[2] && batch[2].secret.every((b, i) => b === entryA.secret[i]))
+        assert.equal(batch[2].senderJid, entryA.senderJid)
 
-        const secretC = new Uint8Array([9, 10])
-        await secretStore.setBatch([{ messageId: 'msg-3', secret: secretC }])
+        const entryC = { secret: new Uint8Array([9, 10]), senderJid: 'carol@s.whatsapp.net' }
+        await secretStore.setBatch([{ messageId: 'msg-3', entry: entryC }])
         const got3 = await secretStore.get('msg-3', now)
-        assert.ok(got3 && got3.length === secretC.length && got3.every((b, i) => b === secretC[i]))
+        assert.ok(
+            got3 &&
+                got3.secret.length === entryC.secret.length &&
+                got3.secret.every((b, i) => b === entryC.secret[i])
+        )
+        assert.equal(got3.senderJid, entryC.senderJid)
 
         assert.equal(await secretStore.cleanupExpired(now), 0)
         await secretStore.clear()

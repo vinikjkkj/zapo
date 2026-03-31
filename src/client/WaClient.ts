@@ -26,6 +26,7 @@ import type {
     WaClientOptions,
     WaSendMessageOptions,
     WaClientEventMap,
+    WaIncomingAddonEvent,
     WaIncomingProtocolMessageEvent,
     WaIncomingNodeHandlerRegistration,
     WaIncomingMessageEvent
@@ -34,6 +35,15 @@ import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClient
 import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
+import {
+    decryptAddonPayload,
+    shouldUseAddonAdditionalData,
+    buildAddonAdditionalData,
+    identifyEncryptedAddon,
+    decodeAddonPlaintext,
+    resolveParentMessageSecret,
+    resolvePollOptionNames
+} from '@message/addon-crypto'
 import type {
     WaMessagePublishResult,
     WaSendMessageContent,
@@ -58,6 +68,7 @@ import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
 import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { WaThreadStore } from '@store/contracts/thread.store'
+import { NOOP_MESSAGE_SECRET_STORE } from '@store/noop.store'
 import type { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 import { queryWithContext as queryNodeWithContext } from '@transport/node/query'
 import type { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
@@ -149,6 +160,16 @@ export class WaClient extends EventEmitter {
             this.logger,
             this.options.writeBehind
         )
+
+        if (
+            this.options.addons?.autoDecrypt &&
+            this.messageSecretStore === NOOP_MESSAGE_SECRET_STORE
+        ) {
+            this.logger.warn(
+                'addons.autoDecrypt is enabled but messageSecret cache is noop — ' +
+                    'addon decryption will only work if secrets are in the message store'
+            )
+        }
 
         const dependencies = buildWaClientDependencies({
             base,
@@ -282,6 +303,14 @@ export class WaClient extends EventEmitter {
                 messageSecretStore: this.messageSecretStore,
                 event
             })
+            if (this.options.addons?.autoDecrypt && event.message) {
+                void this.tryDecryptAddon(event).catch((err) => {
+                    this.logger.warn('addon auto-decrypt failed', {
+                        id: event.stanzaId,
+                        message: toError(err).message
+                    })
+                })
+            }
             const protocolMessage = event.message?.protocolMessage
             if (!protocolMessage) {
                 return
@@ -895,6 +924,70 @@ export class WaClient extends EventEmitter {
         if (shouldClear('senderKey')) await this.senderKeyStore.clear()
         if (shouldClear('threads')) await this.threadStore.clear()
         if (shouldClear('privacyToken')) await this.privacyTokenStore.clear()
+    }
+
+    private async tryDecryptAddon(event: WaIncomingMessageEvent): Promise<void> {
+        const message = event.message
+        if (!message) return
+
+        const addon = identifyEncryptedAddon(message)
+        if (!addon) return
+
+        const targetMessageId = addon.targetMessageKey.id
+        if (!targetMessageId) return
+
+        const parentEntry = await resolveParentMessageSecret(
+            targetMessageId,
+            this.messageSecretStore,
+            this.messageStore
+        )
+        if (!parentEntry) {
+            this.logger.debug('addon parent message secret not found', {
+                id: event.stanzaId,
+                targetId: targetMessageId
+            })
+            return
+        }
+
+        const parentMsgOriginalSender = parentEntry.senderJid
+        const modificationSender = event.senderJid ?? ''
+
+        const plaintext = await decryptAddonPayload({
+            messageSecret: parentEntry.secret,
+            stanzaId: targetMessageId,
+            parentMsgOriginalSender,
+            modificationSender,
+            modificationType: addon.modificationType,
+            ciphertext: addon.encPayload,
+            iv: addon.encIv,
+            additionalData: shouldUseAddonAdditionalData(addon.modificationType)
+                ? buildAddonAdditionalData(targetMessageId, modificationSender)
+                : undefined
+        })
+
+        let decrypted = decodeAddonPlaintext(addon.kind, plaintext)
+        if (decrypted.kind === 'poll_vote' && decrypted.pollVote.selectedOptions) {
+            const names = await resolvePollOptionNames(
+                decrypted.pollVote.selectedOptions,
+                targetMessageId,
+                this.messageStore
+            )
+            if (names) {
+                decrypted = { ...decrypted, selectedOptionNames: names }
+            }
+        }
+        const addonEvent: WaIncomingAddonEvent = {
+            rawNode: event.rawNode,
+            stanzaId: event.stanzaId,
+            chatJid: event.chatJid,
+            stanzaType: event.stanzaType,
+            kind: addon.kind,
+            targetMessageId,
+            senderJid: modificationSender,
+            decrypted,
+            raw: message
+        }
+        this.emit('message_addon', addonEvent)
     }
 
     private tryEnterIncomingHandler(): boolean {

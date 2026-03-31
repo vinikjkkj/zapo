@@ -1,9 +1,17 @@
+export interface WaMessageSecretEntry {
+    readonly secret: Uint8Array
+    readonly senderJid: string
+}
+
 export interface WaMessageSecretStore {
-    get(messageId: string, nowMs?: number): Promise<Uint8Array | null>
-    getBatch(messageIds: readonly string[], nowMs?: number): Promise<readonly (Uint8Array | null)[]>
-    set(messageId: string, secret: Uint8Array): Promise<void>
+    get(messageId: string, nowMs?: number): Promise<WaMessageSecretEntry | null>
+    getBatch(
+        messageIds: readonly string[],
+        nowMs?: number
+    ): Promise<readonly (WaMessageSecretEntry | null)[]>
+    set(messageId: string, entry: WaMessageSecretEntry): Promise<void>
     setBatch(
-        entries: readonly { readonly messageId: string; readonly secret: Uint8Array }[]
+        entries: readonly { readonly messageId: string; readonly entry: WaMessageSecretEntry }[]
     ): Promise<void>
     cleanupExpired(nowMs: number): Promise<number>
     clear(): Promise<void>

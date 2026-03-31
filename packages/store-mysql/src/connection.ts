@@ -293,6 +293,7 @@ const MIGRATIONS: readonly Migration[] = [
                 session_id VARCHAR(255) NOT NULL,
                 message_id VARCHAR(255) NOT NULL,
                 secret BLOB NOT NULL,
+                sender_jid VARCHAR(255) NOT NULL DEFAULT '',
                 expires_at_ms BIGINT NOT NULL,
                 PRIMARY KEY (session_id, message_id),
                 INDEX idx_message_secrets_expires (session_id, expires_at_ms)

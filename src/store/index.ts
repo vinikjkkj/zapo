@@ -11,7 +11,10 @@ export { createStore } from '@store/createStore'
 export type { WaAuthStore } from '@store/contracts/auth.store'
 export type { WaContactStore, WaStoredContactRecord } from '@store/contracts/contact.store'
 export type { WaDeviceListSnapshot, WaDeviceListStore } from '@store/contracts/device-list.store'
-export type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
+export type {
+    WaMessageSecretEntry,
+    WaMessageSecretStore
+} from '@store/contracts/message-secret.store'
 export type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
 export type {
     WaParticipantsSnapshot,

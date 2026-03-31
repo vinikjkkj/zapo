@@ -64,12 +64,15 @@ export function persistIncomingMailboxEntities(options: WaPersistIncomingMailbox
             event.message &&
             needsSecretPersistence(event.message)
         ) {
-            void messageSecretStore.set(stanzaId, toBytesView(rawSecret)).catch((error) => {
-                logger.warn('failed to persist message secret', {
-                    id: stanzaId,
-                    message: toError(error).message
+            const senderJid = event.senderJid ?? event.rawNode.attrs.participant ?? ''
+            void messageSecretStore
+                .set(stanzaId, { secret: toBytesView(rawSecret), senderJid })
+                .catch((error) => {
+                    logger.warn('failed to persist message secret', {
+                        id: stanzaId,
+                        message: toError(error).message
+                    })
                 })
-            })
         }
     } catch (error) {
         logger.warn('failed to persist incoming mailbox entities', {

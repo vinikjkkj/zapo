@@ -1,9 +1,13 @@
-import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
+import type {
+    WaMessageSecretEntry,
+    WaMessageSecretStore
+} from '@store/contracts/message-secret.store'
 import { resolvePositive } from '@util/coercion'
 import { resolveCleanupIntervalMs, setBoundedMapEntry } from '@util/collections'
 
-interface WaMessageSecretEntry {
+interface CachedEntry {
     readonly secret: Uint8Array
+    readonly senderJid: string
     readonly expiresAtMs: number
 }
 
@@ -17,7 +21,7 @@ export interface WaMessageSecretMemoryStoreOptions {
 }
 
 export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
-    private readonly secrets: Map<string, WaMessageSecretEntry>
+    private readonly secrets: Map<string, CachedEntry>
     private readonly ttlMs: number
     private readonly maxSecrets: number
     private readonly cleanupTimer: NodeJS.Timeout
@@ -39,55 +43,63 @@ export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
         this.cleanupTimer.unref()
     }
 
-    public async get(messageId: string, nowMs = Date.now()): Promise<Uint8Array | null> {
-        const entry = this.secrets.get(messageId)
-        if (!entry) return null
-        if (entry.expiresAtMs <= nowMs) {
+    public async get(messageId: string, nowMs = Date.now()): Promise<WaMessageSecretEntry | null> {
+        const cached = this.secrets.get(messageId)
+        if (!cached) return null
+        if (cached.expiresAtMs <= nowMs) {
             this.secrets.delete(messageId)
             return null
         }
-        return entry.secret
+        return { secret: cached.secret, senderJid: cached.senderJid }
     }
 
     public async getBatch(
         messageIds: readonly string[],
         nowMs = Date.now()
-    ): Promise<readonly (Uint8Array | null)[]> {
-        const result = new Array<Uint8Array | null>(messageIds.length)
+    ): Promise<readonly (WaMessageSecretEntry | null)[]> {
+        const result = new Array<WaMessageSecretEntry | null>(messageIds.length)
         for (let i = 0; i < messageIds.length; i += 1) {
-            const entry = this.secrets.get(messageIds[i])
-            if (!entry) {
+            const cached = this.secrets.get(messageIds[i])
+            if (!cached) {
                 result[i] = null
                 continue
             }
-            if (entry.expiresAtMs <= nowMs) {
+            if (cached.expiresAtMs <= nowMs) {
                 this.secrets.delete(messageIds[i])
                 result[i] = null
                 continue
             }
-            result[i] = entry.secret
+            result[i] = { secret: cached.secret, senderJid: cached.senderJid }
         }
         return result
     }
 
-    public async set(messageId: string, secret: Uint8Array): Promise<void> {
+    public async set(messageId: string, entry: WaMessageSecretEntry): Promise<void> {
         setBoundedMapEntry(
             this.secrets,
             messageId,
-            { secret, expiresAtMs: Date.now() + this.ttlMs },
+            {
+                secret: entry.secret,
+                senderJid: entry.senderJid,
+                expiresAtMs: Date.now() + this.ttlMs
+            },
             this.maxSecrets
         )
     }
 
     public async setBatch(
-        entries: readonly { readonly messageId: string; readonly secret: Uint8Array }[]
+        entries: readonly { readonly messageId: string; readonly entry: WaMessageSecretEntry }[]
     ): Promise<void> {
         const nowMs = Date.now()
         for (let i = 0; i < entries.length; i += 1) {
             setBoundedMapEntry(
                 this.secrets,
                 entries[i].messageId,
-                { secret: entries[i].secret, expiresAtMs: nowMs + this.ttlMs },
+                {
+                    secret: entries[i].entry.secret,
+                    senderJid: entries[i].entry.senderJid,
+                    expiresAtMs: nowMs + this.ttlMs
+                },
                 this.maxSecrets
             )
         }

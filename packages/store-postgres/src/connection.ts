@@ -307,6 +307,7 @@ const MIGRATIONS: readonly Migration[] = [
                 session_id TEXT NOT NULL,
                 message_id TEXT NOT NULL,
                 secret BYTEA NOT NULL,
+                sender_jid TEXT NOT NULL DEFAULT '',
                 expires_at_ms BIGINT NOT NULL,
                 PRIMARY KEY (session_id, message_id)
             );

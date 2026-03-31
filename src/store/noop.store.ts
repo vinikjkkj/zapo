@@ -1,7 +1,10 @@
 import type { WaRetryOutboundMessageRecord } from '@retry/types'
 import type { WaContactStore, WaStoredContactRecord } from '@store/contracts/contact.store'
 import type { WaDeviceListSnapshot, WaDeviceListStore } from '@store/contracts/device-list.store'
-import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
+import type {
+    WaMessageSecretEntry,
+    WaMessageSecretStore
+} from '@store/contracts/message-secret.store'
 import type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
 import type {
     WaParticipantsSnapshot,
@@ -13,12 +16,17 @@ import type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/threa
 const EMPTY_STORE_LIST = Object.freeze([]) as readonly unknown[]
 
 export const NOOP_MESSAGE_SECRET_STORE: WaMessageSecretStore = Object.freeze({
-    get: async (_messageId: string): Promise<Uint8Array | null> => null,
-    getBatch: async (messageIds: readonly string[]): Promise<readonly (Uint8Array | null)[]> =>
-        new Array<Uint8Array | null>(messageIds.length).fill(null),
-    set: async (_messageId: string, _secret: Uint8Array): Promise<void> => {},
+    get: async (_messageId: string): Promise<WaMessageSecretEntry | null> => null,
+    getBatch: async (
+        messageIds: readonly string[]
+    ): Promise<readonly (WaMessageSecretEntry | null)[]> =>
+        new Array<WaMessageSecretEntry | null>(messageIds.length).fill(null),
+    set: async (_messageId: string, _entry: WaMessageSecretEntry): Promise<void> => {},
     setBatch: async (
-        _entries: readonly { readonly messageId: string; readonly secret: Uint8Array }[]
+        _entries: readonly {
+            readonly messageId: string
+            readonly entry: WaMessageSecretEntry
+        }[]
     ): Promise<void> => {},
     cleanupExpired: async (_nowMs: number): Promise<number> => 0,
     clear: async (): Promise<void> => {}

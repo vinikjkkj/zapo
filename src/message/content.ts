@@ -19,7 +19,7 @@ export function isSendMediaMessage(content: unknown): content is WaSendMediaMess
     )
 }
 
-function unwrapMessage(message: Proto.IMessage): Proto.IMessage {
+export function unwrapMessage(message: Proto.IMessage): Proto.IMessage {
     let msg = message
     for (;;) {
         const inner =

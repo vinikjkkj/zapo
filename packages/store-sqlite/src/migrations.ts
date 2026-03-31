@@ -338,6 +338,7 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
                     session_id TEXT NOT NULL,
                     message_id TEXT NOT NULL,
                     secret BLOB NOT NULL,
+                    sender_jid TEXT NOT NULL DEFAULT '',
                     expires_at_ms INTEGER NOT NULL,
                     PRIMARY KEY (session_id, message_id)
                 );

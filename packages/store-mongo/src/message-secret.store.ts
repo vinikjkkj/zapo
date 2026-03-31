@@ -1,5 +1,5 @@
 import type { Binary } from 'mongodb'
-import type { WaMessageSecretStore } from 'zapo-js/store'
+import type { WaMessageSecretEntry, WaMessageSecretStore } from 'zapo-js/store'
 
 import { BaseMongoStore } from './BaseMongoStore'
 import { fromBinary, toBinary } from './helpers'
@@ -8,6 +8,7 @@ import type { WaMongoStorageOptions } from './types'
 interface MessageSecretDoc {
     _id: { session_id: string; message_id: string }
     secret: Binary
+    sender_jid: string
     expires_at: Date
 }
 
@@ -29,7 +30,7 @@ export class WaMessageSecretMongoStore extends BaseMongoStore implements WaMessa
         await col.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 })
     }
 
-    public async get(messageId: string, nowMs = Date.now()): Promise<Uint8Array | null> {
+    public async get(messageId: string, nowMs = Date.now()): Promise<WaMessageSecretEntry | null> {
         await this.ensureIndexes()
         const col = this.col<MessageSecretDoc>('message_secrets_cache')
         const doc = await col.findOne({
@@ -37,13 +38,13 @@ export class WaMessageSecretMongoStore extends BaseMongoStore implements WaMessa
             expires_at: { $gt: new Date(nowMs) }
         })
         if (!doc) return null
-        return fromBinary(doc.secret)
+        return { secret: fromBinary(doc.secret), senderJid: doc.sender_jid }
     }
 
     public async getBatch(
         messageIds: readonly string[],
         nowMs = Date.now()
-    ): Promise<readonly (Uint8Array | null)[]> {
+    ): Promise<readonly (WaMessageSecretEntry | null)[]> {
         if (messageIds.length === 0) return []
         await this.ensureIndexes()
         const col = this.col<MessageSecretDoc>('message_secrets_cache')
@@ -56,21 +57,25 @@ export class WaMessageSecretMongoStore extends BaseMongoStore implements WaMessa
             })
             .toArray()
 
-        const byMessageId = new Map<string, Uint8Array>()
+        const byMessageId = new Map<string, WaMessageSecretEntry>()
         for (const doc of docs) {
-            byMessageId.set(doc._id.message_id, fromBinary(doc.secret))
+            byMessageId.set(doc._id.message_id, {
+                secret: fromBinary(doc.secret),
+                senderJid: doc.sender_jid
+            })
         }
         return messageIds.map((id) => byMessageId.get(id) ?? null)
     }
 
-    public async set(messageId: string, secret: Uint8Array): Promise<void> {
+    public async set(messageId: string, entry: WaMessageSecretEntry): Promise<void> {
         await this.ensureIndexes()
         const col = this.col<MessageSecretDoc>('message_secrets_cache')
         await col.updateOne(
             { _id: { session_id: this.sessionId, message_id: messageId } },
             {
                 $set: {
-                    secret: toBinary(secret),
+                    secret: toBinary(entry.secret),
+                    sender_jid: entry.senderJid,
                     expires_at: new Date(Date.now() + this.ttlMs)
                 }
             },
@@ -79,18 +84,19 @@ export class WaMessageSecretMongoStore extends BaseMongoStore implements WaMessa
     }
 
     public async setBatch(
-        entries: readonly { readonly messageId: string; readonly secret: Uint8Array }[]
+        entries: readonly { readonly messageId: string; readonly entry: WaMessageSecretEntry }[]
     ): Promise<void> {
         if (entries.length === 0) return
         await this.ensureIndexes()
         const col = this.col<MessageSecretDoc>('message_secrets_cache')
         const now = Date.now()
-        const ops = entries.map((entry) => ({
+        const ops = entries.map((e) => ({
             updateOne: {
-                filter: { _id: { session_id: this.sessionId, message_id: entry.messageId } },
+                filter: { _id: { session_id: this.sessionId, message_id: e.messageId } },
                 update: {
                     $set: {
-                        secret: toBinary(entry.secret),
+                        secret: toBinary(e.entry.secret),
+                        sender_jid: e.entry.senderJid,
                         expires_at: new Date(now + this.ttlMs)
                     }
                 },

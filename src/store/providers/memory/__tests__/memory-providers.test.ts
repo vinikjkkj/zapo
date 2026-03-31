@@ -217,24 +217,24 @@ test('memory signal/sender-key/appstate stores cover key workflows', async () =>
 test('memory message secret store covers set/get, batch, TTL expiry, bounds and cleanup', async () => {
     const store = new WaMessageSecretMemoryStore(100, { maxSecrets: 2 })
 
-    const secretA = new Uint8Array([1, 2, 3])
-    const secretB = new Uint8Array([4, 5, 6])
-    const secretC = new Uint8Array([7, 8, 9])
+    const entryA = { secret: new Uint8Array([1, 2, 3]), senderJid: 'alice@s.whatsapp.net' }
+    const entryB = { secret: new Uint8Array([4, 5, 6]), senderJid: 'bob@s.whatsapp.net' }
+    const entryC = { secret: new Uint8Array([7, 8, 9]), senderJid: 'carol@s.whatsapp.net' }
 
-    await store.set('msg-1', secretA)
-    await store.set('msg-2', secretB)
-    assert.deepEqual(await store.get('msg-1'), secretA)
-    assert.deepEqual(await store.get('msg-2'), secretB)
+    await store.set('msg-1', entryA)
+    await store.set('msg-2', entryB)
+    assert.deepEqual(await store.get('msg-1'), entryA)
+    assert.deepEqual(await store.get('msg-2'), entryB)
     assert.equal(await store.get('missing'), null)
 
     // bounds eviction — maxSecrets=2, so msg-1 gets evicted
-    await store.set('msg-3', secretC)
+    await store.set('msg-3', entryC)
     assert.equal(await store.get('msg-1'), null)
-    assert.deepEqual(await store.get('msg-3'), secretC)
+    assert.deepEqual(await store.get('msg-3'), entryC)
 
     // getBatch preserves order and handles missing
     const batch = await store.getBatch(['msg-3', 'missing', 'msg-2'])
-    assert.deepEqual(batch, [secretC, null, secretB])
+    assert.deepEqual(batch, [entryC, null, entryB])
 
     // empty getBatch
     assert.deepEqual(await store.getBatch([]), [])
@@ -242,11 +242,11 @@ test('memory message secret store covers set/get, batch, TTL expiry, bounds and 
     // setBatch
     await store.clear()
     await store.setBatch([
-        { messageId: 'b-1', secret: secretA },
-        { messageId: 'b-2', secret: secretB }
+        { messageId: 'b-1', entry: entryA },
+        { messageId: 'b-2', entry: entryB }
     ])
-    assert.deepEqual(await store.get('b-1'), secretA)
-    assert.deepEqual(await store.get('b-2'), secretB)
+    assert.deepEqual(await store.get('b-1'), entryA)
+    assert.deepEqual(await store.get('b-2'), entryB)
 
     // TTL expiry on get
     const expired = await store.get('b-1', Date.now() + 200)
@@ -258,14 +258,14 @@ test('memory message secret store covers set/get, batch, TTL expiry, bounds and 
 
     // cleanupExpired
     await store.clear()
-    await store.set('c-1', secretA)
-    await store.set('c-2', secretB)
+    await store.set('c-1', entryA)
+    await store.set('c-2', entryB)
     const removed = await store.cleanupExpired(Date.now() + 200)
     assert.equal(removed, 2)
     assert.equal(await store.get('c-1'), null)
 
     // clear
-    await store.set('d-1', secretA)
+    await store.set('d-1', entryA)
     await store.clear()
     assert.equal(await store.get('d-1'), null)
 

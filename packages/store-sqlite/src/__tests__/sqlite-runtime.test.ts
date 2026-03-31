@@ -671,35 +671,35 @@ test('sqlite message-secret store covers set/get, batch, TTL expiry and cleanup'
     const store = new WaMessageSecretSqliteStore(makeSqliteOptions(sqlitePath, 'session-a'), 100)
 
     try {
-        const secretA = new Uint8Array([1, 2, 3])
-        const secretB = new Uint8Array([4, 5, 6])
+        const entryA = { secret: new Uint8Array([1, 2, 3]), senderJid: 'alice@s.whatsapp.net' }
+        const entryB = { secret: new Uint8Array([4, 5, 6]), senderJid: 'bob@s.whatsapp.net' }
 
-        await store.set('msg-1', secretA)
-        await store.set('msg-2', secretB)
+        await store.set('msg-1', entryA)
+        await store.set('msg-2', entryB)
 
-        assert.deepEqual(await store.get('msg-1', Date.now()), secretA)
-        assert.deepEqual(await store.get('msg-2', Date.now()), secretB)
+        assert.deepEqual(await store.get('msg-1', Date.now()), entryA)
+        assert.deepEqual(await store.get('msg-2', Date.now()), entryB)
         assert.equal(await store.get('missing', Date.now()), null)
 
         // getBatch preserves order and handles missing
         const batch = await store.getBatch(['msg-2', 'missing', 'msg-1'], Date.now())
         assert.equal(batch.length, 3)
-        assert.deepEqual(batch[0], secretB)
+        assert.deepEqual(batch[0], entryB)
         assert.equal(batch[1], null)
-        assert.deepEqual(batch[2], secretA)
+        assert.deepEqual(batch[2], entryA)
 
         // empty getBatch
         assert.deepEqual(await store.getBatch([], Date.now()), [])
 
         // setBatch
-        const secretC = new Uint8Array([7, 8, 9])
-        const secretD = new Uint8Array([10, 11, 12])
+        const entryC = { secret: new Uint8Array([7, 8, 9]), senderJid: 'carol@s.whatsapp.net' }
+        const entryD = { secret: new Uint8Array([10, 11, 12]), senderJid: 'dave@s.whatsapp.net' }
         await store.setBatch([
-            { messageId: 'msg-3', secret: secretC },
-            { messageId: 'msg-4', secret: secretD }
+            { messageId: 'msg-3', entry: entryC },
+            { messageId: 'msg-4', entry: entryD }
         ])
-        assert.deepEqual(await store.get('msg-3', Date.now()), secretC)
-        assert.deepEqual(await store.get('msg-4', Date.now()), secretD)
+        assert.deepEqual(await store.get('msg-3', Date.now()), entryC)
+        assert.deepEqual(await store.get('msg-4', Date.now()), entryD)
 
         // TTL expiry — reading after TTL returns null
         const expired = await store.get('msg-1', Date.now() + 200)
@@ -709,7 +709,7 @@ test('sqlite message-secret store covers set/get, batch, TTL expiry and cleanup'
         assert.ok((await store.cleanupExpired(Date.now() + 200)) >= 1)
 
         // clear
-        await store.set('msg-5', secretA)
+        await store.set('msg-5', entryA)
         await store.clear()
         assert.equal(await store.get('msg-5', Date.now()), null)
     } finally {

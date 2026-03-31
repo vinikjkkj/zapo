@@ -10,7 +10,7 @@ export function withMessageSecretLock(
     return {
         get: (messageId, nowMs) => gate.runShared(() => store.get(messageId, nowMs)),
         getBatch: (messageIds, nowMs) => gate.runShared(() => store.getBatch(messageIds, nowMs)),
-        set: (messageId, secret) => gate.runShared(() => store.set(messageId, secret)),
+        set: (messageId, entry) => gate.runShared(() => store.set(messageId, entry)),
         setBatch: (entries) => gate.runShared(() => store.setBatch(entries)),
         cleanupExpired: (nowMs) => gate.runExclusive(() => store.cleanupExpired(nowMs)),
         clear: () => gate.runExclusive(() => store.clear()),
