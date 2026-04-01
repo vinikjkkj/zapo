@@ -1,7 +1,8 @@
 export const WA_NOTIFICATION_TYPES = Object.freeze({
     GROUP: 'w:gp2',
     ENCRYPT: 'encrypt',
-    DEVICES: 'devices'
+    DEVICES: 'devices',
+    SERVER: 'server'
 } as const)
 
 export const WA_GROUP_NOTIFICATION_TAGS = Object.freeze({

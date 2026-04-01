@@ -925,7 +925,8 @@ function createPassiveTasksCoordinator(overrides: {
             takeDanglingReceipts: overrides.takeDanglingReceipts,
             requeueDanglingReceipt:
                 overrides.requeueDanglingReceipt ?? ((node) => requeued.push(node)),
-            shouldQueueDanglingReceipt: overrides.shouldQueueDanglingReceipt ?? (() => true)
+            shouldQueueDanglingReceipt: overrides.shouldQueueDanglingReceipt ?? (() => true),
+            syncAbProps: () => undefined
         }
     })
 }

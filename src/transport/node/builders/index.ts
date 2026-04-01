@@ -1,3 +1,4 @@
+export { buildGetAbPropsIq } from '@transport/node/builders/abprops'
 export {
     buildAccountBlocklistSyncIq,
     buildAccountDevicesSyncIq,

@@ -31,6 +31,7 @@ type WaPassiveTasksRuntime = {
     readonly takeDanglingReceipts: () => BinaryNode[]
     readonly requeueDanglingReceipt: (node: BinaryNode) => void
     readonly shouldQueueDanglingReceipt: (node: BinaryNode, error: Error) => boolean
+    readonly syncAbProps: () => void
 }
 
 export class WaPassiveTasksCoordinator {
@@ -109,6 +110,8 @@ export class WaPassiveTasksCoordinator {
             this.logger.trace('passive connect tasks skipped: session is not registered')
             return
         }
+
+        this.runtime.syncAbProps()
 
         const [registrationInfo, signedPreKey, serverHasPreKeys, signedPreKeyRotationTs] =
             await Promise.all([

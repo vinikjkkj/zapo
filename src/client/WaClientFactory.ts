@@ -4,6 +4,7 @@ import { WaAuthClient } from '@auth/WaAuthClient'
 import { WaConnectionManager } from '@client/connection/WaConnectionManager'
 import { WaKeyShareCoordinator } from '@client/connection/WaKeyShareCoordinator'
 import { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
+import { WaAbPropsCoordinator } from '@client/coordinators/WaAbPropsCoordinator'
 import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import {
     createBusinessCoordinator,
@@ -146,6 +147,7 @@ interface WaClientDependencies {
     readonly keyShareCoordinator: WaKeyShareCoordinator
     readonly connectionManager: WaConnectionManager
     readonly trustedContactToken: WaTrustedContactTokenCoordinator
+    readonly abPropsCoordinator: WaAbPropsCoordinator
 }
 
 function assertProxyTransport(value: unknown, path: string): void {
@@ -325,9 +327,16 @@ function createPassiveTasksRuntime(input: {
     readonly nodeOrchestrator: WaNodeOrchestrator
     readonly receiptQueue: WaReceiptQueue
     readonly getCurrentCredentials: () => ReturnType<WaAuthClient['getCurrentCredentials']>
+    readonly abPropsCoordinator: WaAbPropsCoordinator
 }): ConstructorParameters<typeof WaPassiveTasksCoordinator>[0]['runtime'] {
-    const { queryWithContext, authClient, nodeOrchestrator, receiptQueue, getCurrentCredentials } =
-        input
+    const {
+        queryWithContext,
+        authClient,
+        nodeOrchestrator,
+        receiptQueue,
+        getCurrentCredentials,
+        abPropsCoordinator
+    } = input
 
     return {
         queryWithContext,
@@ -337,7 +346,8 @@ function createPassiveTasksRuntime(input: {
         sendNodeDirect: (node) => nodeOrchestrator.sendNode(node),
         takeDanglingReceipts: () => receiptQueue.take(),
         requeueDanglingReceipt: (node) => receiptQueue.enqueue(node),
-        shouldQueueDanglingReceipt: (node, error) => receiptQueue.shouldQueue(node, error)
+        shouldQueueDanglingReceipt: (node, error) => receiptQueue.shouldQueue(node, error),
+        syncAbProps: () => abPropsCoordinator.sync()
     }
 }
 
@@ -552,6 +562,13 @@ export function buildWaClientDependencies(input: {
         maxDurationS: options.privacyToken?.tcTokenMaxDurationS
     })
 
+    const abPropsCoordinator = new WaAbPropsCoordinator({
+        logger,
+        runtime: {
+            queryWithContext: runtime.queryWithContext
+        }
+    })
+
     let messageDispatch!: WaMessageDispatchCoordinator
 
     const appStateSyncKeyProtocol = createAppStateSyncKeyProtocol({
@@ -651,6 +668,7 @@ export function buildWaClientDependencies(input: {
         code: WaConnectionCode | null
     ): Promise<void> => {
         keyShareCoordinator.notifyDisconnected()
+        abPropsCoordinator.reset()
         await connectionManager?.disconnect()
         runtime.emitEvent('connection', {
             status: 'close',
@@ -972,6 +990,27 @@ export function buildWaClientDependencies(input: {
         }
     })
 
+    // AB Props: sync after successful login and on server notification
+    incomingNode.registerIncomingHandler({
+        tag: WA_NODE_TAGS.NOTIFICATION,
+        subtype: WA_NOTIFICATION_TYPES.SERVER,
+        prepend: true,
+        handler: async (node) => {
+            const firstChild = getFirstNodeChild(node)
+            if (!firstChild || firstChild.tag !== WA_NODE_TAGS.ABPROPS) {
+                return false
+            }
+            const ackNode = buildAckNode({
+                kind: 'notification',
+                node,
+                includeType: false
+            })
+            await runtime.sendNode(ackNode)
+            abPropsCoordinator.sync()
+            return true
+        }
+    })
+
     passiveTasks = new WaPassiveTasksCoordinator({
         logger,
         signalStore: sessionStore.signal,
@@ -983,7 +1022,8 @@ export function buildWaClientDependencies(input: {
             authClient,
             nodeOrchestrator,
             receiptQueue,
-            getCurrentCredentials
+            getCurrentCredentials,
+            abPropsCoordinator
         })
     })
 
@@ -1017,6 +1057,7 @@ export function buildWaClientDependencies(input: {
         receiptQueue,
         keyShareCoordinator,
         connectionManager,
-        trustedContactToken
+        trustedContactToken,
+        abPropsCoordinator
     }
 }

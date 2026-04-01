@@ -59,5 +59,12 @@ export {
 } from '@protocol/privacy'
 export type { WaPrivacyCategory, WaPrivacySettingName, WaPrivacyValue } from '@protocol/privacy'
 export { WA_DEFAULTS } from '@protocol/defaults'
+export {
+    AB_PROP_CONFIGS,
+    resolveAbPropNameByCode,
+    WA_ABPROPS_PROTOCOL_VERSION,
+    WA_ABPROPS_REFRESH_BOUNDS
+} from '@protocol/abprops'
+export type { AbPropConfigEntry, AbPropName, AbPropType, AbPropValue } from '@protocol/abprops'
 export { WA_GROUP_PARTICIPANT_TYPES, type WaGroupSetting } from '@protocol/group'
 export { WA_USYNC_CONTEXTS, WA_USYNC_DEFAULTS, WA_USYNC_MODES } from '@protocol/usync'
