@@ -29,6 +29,8 @@ import {
     buildIqResultNode,
     buildLeaveGroupIq,
     buildNewsletterMetadataSyncIq,
+    buildOfflineBatchNode,
+    buildPresenceNode,
     buildReceiptNode,
     buildSignedPreKeyRotateIq,
     buildUsyncIq,
@@ -59,9 +61,37 @@ test('builders barrel exports stable constructors', () => {
     assert.equal(typeof buildAccountDevicesSyncIq, 'function')
     assert.equal(typeof buildCompanionHelloRequestNode, 'function')
     assert.equal(typeof buildGroupSenderKeyMessageNode, 'function')
+    assert.equal(typeof buildOfflineBatchNode, 'function')
+    assert.equal(typeof buildPresenceNode, 'function')
     assert.equal(typeof buildSignedPreKeyRotateIq, 'function')
     assert.equal(typeof buildUsyncIq, 'function')
     assert.equal(typeof buildUsyncUserNode, 'function')
+})
+
+test('presence and offline builders generate expected lightweight nodes', () => {
+    const presence = buildPresenceNode({
+        type: 'unavailable',
+        name: 'Vinicius'
+    })
+    assert.deepEqual(presence, {
+        tag: 'presence',
+        attrs: {
+            type: 'unavailable',
+            name: 'Vinicius'
+        }
+    })
+
+    const offlineBatch = buildOfflineBatchNode(200)
+    assert.equal(offlineBatch.tag, WA_NODE_TAGS.INFO_BULLETIN)
+    assert.ok(Array.isArray(offlineBatch.content))
+    if (!Array.isArray(offlineBatch.content)) {
+        throw new Error('expected offline batch content array')
+    }
+    assert.deepEqual(offlineBatch.content[0], {
+        tag: 'offline_batch',
+        attrs: { count: '200' },
+        content: undefined
+    })
 })
 
 test('usync builder composes query/list nodes with defaults and overrides', () => {

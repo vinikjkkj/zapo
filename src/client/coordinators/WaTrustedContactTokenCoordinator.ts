@@ -42,7 +42,8 @@ export class WaTrustedContactTokenCoordinator {
     private readonly logger: Logger
     private readonly store: WaPrivacyTokenStore
     private readonly runtime: WaTrustedContactTokenRuntime
-    private readonly config: WaTrustedContactTokenConfig
+    private readonly baseConfig: WaTrustedContactTokenConfig
+    private readonly getConfigOverrides: (() => Partial<WaTrustedContactTokenConfig>) | undefined
     private readonly csTokenGenerator: CsTokenGenerator
     private readonly senderTokenDedup: PromiseDedup
     private cachedNctSalt: Uint8Array | null
@@ -57,12 +58,13 @@ export class WaTrustedContactTokenCoordinator {
         readonly senderDurationS?: number
         readonly senderNumBuckets?: number
         readonly maxDurationS?: number
+        readonly getConfigOverrides?: () => Partial<WaTrustedContactTokenConfig>
     }) {
         this.logger = options.logger
         this.store = options.store
         this.runtime = options.runtime
         const maxDurationS = options.maxDurationS ?? WA_TC_TOKEN_DEFAULTS.MAX_DURATION_S
-        this.config = {
+        this.baseConfig = {
             durationS: clampDuration(
                 options.durationS ?? WA_TC_TOKEN_DEFAULTS.DURATION_S,
                 maxDurationS
@@ -75,24 +77,44 @@ export class WaTrustedContactTokenCoordinator {
             senderNumBuckets: options.senderNumBuckets ?? WA_TC_TOKEN_DEFAULTS.SENDER_NUM_BUCKETS,
             maxDurationS
         }
+        this.getConfigOverrides = options.getConfigOverrides
         this.csTokenGenerator = new CsTokenGenerator()
         this.senderTokenDedup = new PromiseDedup()
         this.cachedNctSalt = null
         this.nctSaltHydrated = false
     }
 
+    private resolveConfig(): WaTrustedContactTokenConfig {
+        const overrides = this.getConfigOverrides?.()
+        if (!overrides) {
+            return this.baseConfig
+        }
+        const maxDurationS = overrides.maxDurationS ?? this.baseConfig.maxDurationS
+        return {
+            durationS: clampDuration(overrides.durationS ?? this.baseConfig.durationS, maxDurationS),
+            numBuckets: overrides.numBuckets ?? this.baseConfig.numBuckets,
+            senderDurationS: clampDuration(
+                overrides.senderDurationS ?? this.baseConfig.senderDurationS,
+                maxDurationS
+            ),
+            senderNumBuckets: overrides.senderNumBuckets ?? this.baseConfig.senderNumBuckets,
+            maxDurationS
+        }
+    }
+
     public async resolveTokenForMessage(recipientJid: string): Promise<BinaryNode | null> {
         const record = await this.store.getByJid(recipientJid)
         const nowS = Math.floor(Date.now() / 1000)
 
+        const config = this.resolveConfig()
         if (
             record?.tcToken &&
             record.tcTokenTimestamp !== undefined &&
             !isTokenExpired(
                 record.tcTokenTimestamp,
                 nowS,
-                this.config.durationS,
-                this.config.numBuckets
+                config.durationS,
+                config.numBuckets
             )
         ) {
             return buildTcTokenMessageNode(record.tcToken)
@@ -144,8 +166,15 @@ export class WaTrustedContactTokenCoordinator {
             const record = await this.store.getByJid(recipientJid)
             const senderTimestampS = record?.tcTokenSenderTimestamp
 
+            const config = this.resolveConfig()
             if (senderTimestampS !== undefined && senderTimestampS > 0) {
-                if (!shouldSendNewToken(senderTimestampS, nowS, this.config.senderDurationS)) {
+                if (
+                    !shouldSendNewToken(
+                        senderTimestampS,
+                        nowS,
+                        config.senderDurationS
+                    )
+                ) {
                     return
                 }
             }
@@ -166,12 +195,13 @@ export class WaTrustedContactTokenCoordinator {
         }
 
         const nowS = Math.floor(Date.now() / 1000)
+        const config = this.resolveConfig()
         if (
             isTokenExpired(
                 record.tcTokenSenderTimestamp,
                 nowS,
-                this.config.senderDurationS,
-                this.config.senderNumBuckets
+                config.senderDurationS,
+                config.senderNumBuckets
             )
         ) {
             return

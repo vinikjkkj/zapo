@@ -39,7 +39,7 @@ const RETRY_REASON_MATCHERS = [
     }
 ] as const
 
-export function mapRetryReasonFromError(error: unknown): WaRetryReasonCode {
+export function mapRetryReasonFromError(error: unknown): WaRetryReasonCode | undefined {
     const message = toError(error).message.toLowerCase()
 
     for (const matcher of RETRY_REASON_MATCHERS) {
@@ -53,5 +53,5 @@ export function mapRetryReasonFromError(error: unknown): WaRetryReasonCode {
             return matcher.code
         }
     }
-    return RETRY_REASON.UnknownError
+    return undefined
 }

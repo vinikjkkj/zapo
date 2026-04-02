@@ -149,7 +149,15 @@ test('incoming node coordinator supports dynamic handler registration and unregi
     const { runtime, unhandled } = createIncomingRuntime()
     const coordinator = new WaIncomingNodeCoordinator({
         logger: createLogger(),
-        runtime
+        runtime,
+        offlineResume: {
+            trackOfflineStanza() {},
+            handleOfflinePreview() {},
+            handleOfflineComplete() {},
+            reset() {},
+            isComplete: false,
+            isResuming: false
+        } as never
     })
 
     let handledCount = 0
@@ -170,6 +178,165 @@ test('incoming node coordinator supports dynamic handler registration and unregi
     await coordinator.handleIncomingNode({ tag: 'custom', attrs: {} })
     assert.equal(handledCount, 1)
     assert.equal(unhandled.length, 1)
+})
+
+test('incoming node coordinator tracks offline stanzas before dispatching handlers', async () => {
+    const { runtime, unhandled } = createIncomingRuntime()
+    let trackedStanzas = 0
+    const coordinator = new WaIncomingNodeCoordinator({
+        logger: createLogger(),
+        runtime,
+        offlineResume: {
+            trackOfflineStanza() {
+                trackedStanzas += 1
+            },
+            handleOfflinePreview() {},
+            handleOfflineComplete() {},
+            reset() {},
+            isComplete: false,
+            isResuming: false
+        } as never
+    })
+
+    await coordinator.handleIncomingNode({
+        tag: 'custom',
+        attrs: { offline: '1' }
+    })
+
+    assert.equal(trackedStanzas, 1)
+    assert.equal(unhandled.length, 1)
+})
+
+test('incoming node coordinator emits info bulletin notifications and forwards offline resume hooks', async () => {
+    const notifications: unknown[] = []
+    const { runtime: baseRuntime } = createIncomingRuntime()
+    const runtime = {
+        ...baseRuntime,
+        emitIncomingNotification: (event: unknown) => {
+            notifications.push(event)
+        }
+    }
+
+    const previewCounts: number[] = []
+    let offlineCompleteCalls = 0
+    const coordinator = new WaIncomingNodeCoordinator({
+        logger: createLogger(),
+        runtime,
+        offlineResume: {
+            trackOfflineStanza() {},
+            handleOfflinePreview(messageCount: number) {
+                previewCounts.push(messageCount)
+            },
+            handleOfflineComplete() {
+                offlineCompleteCalls += 1
+            },
+            reset() {},
+            isComplete: false,
+            isResuming: false
+        } as never
+    })
+
+    await coordinator.handleIncomingNode({
+        tag: 'ib',
+        attrs: {
+            id: 'ib-1',
+            from: 's.whatsapp.net'
+        },
+        content: [
+            {
+                tag: 'offline_preview',
+                attrs: {
+                    count: '1',
+                    message: '3',
+                    t: '123'
+                }
+            },
+            {
+                tag: 'offline',
+                attrs: {
+                    count: '3'
+                }
+            }
+        ]
+    })
+
+    assert.deepEqual(previewCounts, [3])
+    assert.equal(offlineCompleteCalls, 1)
+    assert.equal(notifications.length, 2)
+    assert.deepEqual(notifications[0], {
+        rawNode: {
+            tag: 'ib',
+            attrs: {
+                id: 'ib-1',
+                from: 's.whatsapp.net'
+            },
+            content: [
+                {
+                    tag: 'offline_preview',
+                    attrs: {
+                        count: '1',
+                        message: '3',
+                        t: '123'
+                    }
+                },
+                {
+                    tag: 'offline',
+                    attrs: {
+                        count: '3'
+                    }
+                }
+            ]
+        },
+        stanzaId: 'ib-1',
+        chatJid: 's.whatsapp.net',
+        stanzaType: undefined,
+        notificationType: 'ib.offline_preview',
+        classification: 'info_bulletin',
+        details: {
+            count: 1,
+            message: 3,
+            receipt: undefined,
+            notification: undefined,
+            t: 123
+        }
+    })
+    assert.deepEqual(notifications[1], {
+        rawNode: {
+            tag: 'ib',
+            attrs: {
+                id: 'ib-1',
+                from: 's.whatsapp.net'
+            },
+            content: [
+                {
+                    tag: 'offline_preview',
+                    attrs: {
+                        count: '1',
+                        message: '3',
+                        t: '123'
+                    }
+                },
+                {
+                    tag: 'offline',
+                    attrs: {
+                        count: '3'
+                    }
+                }
+            ]
+        },
+        stanzaId: 'ib-1',
+        chatJid: 's.whatsapp.net',
+        stanzaType: undefined,
+        notificationType: 'ib.offline',
+        classification: 'info_bulletin',
+        details: {
+            count: 3,
+            message: undefined,
+            receipt: undefined,
+            notification: undefined,
+            t: undefined
+        }
+    })
 })
 
 test('stream control handler runs force-login and resume flows', async () => {
@@ -926,7 +1093,8 @@ function createPassiveTasksCoordinator(overrides: {
             requeueDanglingReceipt:
                 overrides.requeueDanglingReceipt ?? ((node) => requeued.push(node)),
             shouldQueueDanglingReceipt: overrides.shouldQueueDanglingReceipt ?? (() => true),
-            syncAbProps: () => undefined
+            syncAbProps: () => undefined,
+            sendPresenceAvailable: async () => undefined
         }
     })
 }

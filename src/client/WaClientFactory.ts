@@ -16,6 +16,7 @@ import {
 } from '@client/coordinators/WaGroupCoordinator'
 import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
+import { WaOfflineResumeCoordinator } from '@client/coordinators/WaOfflineResumeCoordinator'
 import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import {
     createPrivacyCoordinator,
@@ -77,6 +78,7 @@ import { createSignalSessionResolver } from '@signal/session/resolver'
 import { SignalProtocol } from '@signal/session/SignalProtocol'
 import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 import { buildAckNode } from '@transport/node/builders/global'
+import { buildPresenceNode } from '@transport/node/builders/presence'
 import { getFirstNodeChild } from '@transport/node/helpers'
 import { createUsyncSidGenerator } from '@transport/node/usync'
 import { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
@@ -347,7 +349,14 @@ function createPassiveTasksRuntime(input: {
         takeDanglingReceipts: () => receiptQueue.take(),
         requeueDanglingReceipt: (node) => receiptQueue.enqueue(node),
         shouldQueueDanglingReceipt: (node, error) => receiptQueue.shouldQueue(node, error),
-        syncAbProps: () => abPropsCoordinator.sync()
+        syncAbProps: () => abPropsCoordinator.sync(),
+        sendPresenceAvailable: async () => {
+            const credentials = getCurrentCredentials()
+            await nodeOrchestrator.sendNode(
+                buildPresenceNode({ name: credentials?.meDisplayName ?? undefined }),
+                false
+            )
+        }
     }
 }
 
@@ -378,6 +387,8 @@ export function buildWaClientDependencies(input: {
         nodeOrchestrator,
         getComms: () => connectionManager?.getComms() ?? null,
         intervalMs: options.keepAliveIntervalMs,
+        getIntervalMs: () =>
+            abPropsCoordinator.getConfigValue<number>('heartbeat_interval_s') * 1_000,
         timeoutMs: options.deadSocketTimeoutMs,
         hostDomain: WA_DEFAULTS.HOST_DOMAIN
     })
@@ -415,7 +426,10 @@ export function buildWaClientDependencies(input: {
         defaultMaxAttempts: options.messageMaxAttempts,
         defaultRetryDelayMs: options.messageRetryDelayMs
     })
-    const senderKeyManager = new SenderKeyManager(sessionStore.senderKey)
+    const senderKeyManager = new SenderKeyManager(sessionStore.senderKey, {
+        getFutureMessagesMax: () =>
+            abPropsCoordinator.getConfigValue('web_signal_future_messages_max')
+    })
     const signalProtocol = new SignalProtocol(
         {
             signal: sessionStore.signal,
@@ -559,7 +573,15 @@ export function buildWaClientDependencies(input: {
         numBuckets: options.privacyToken?.tcTokenNumBuckets,
         senderDurationS: options.privacyToken?.tcTokenSenderDurationS,
         senderNumBuckets: options.privacyToken?.tcTokenSenderNumBuckets,
-        maxDurationS: options.privacyToken?.tcTokenMaxDurationS
+        maxDurationS: options.privacyToken?.tcTokenMaxDurationS,
+        getConfigOverrides: () => ({
+            durationS: abPropsCoordinator.getConfigValue<number>('tctoken_duration'),
+            numBuckets: abPropsCoordinator.getConfigValue<number>('tctoken_num_buckets'),
+            senderDurationS: abPropsCoordinator.getConfigValue<number>('tctoken_duration_sender'),
+            senderNumBuckets: abPropsCoordinator.getConfigValue<number>(
+                'tctoken_num_buckets_sender'
+            )
+        })
     })
 
     const abPropsCoordinator = new WaAbPropsCoordinator({
@@ -609,7 +631,8 @@ export function buildWaClientDependencies(input: {
                     message: toError(err).message
                 })
             )
-        }
+        },
+        getIcdcHashLength: () => abPropsCoordinator.getConfigValue('md_icdc_hash_length')
     })
 
     const retryCoordinator = new WaRetryCoordinator({
@@ -669,6 +692,7 @@ export function buildWaClientDependencies(input: {
     ): Promise<void> => {
         keyShareCoordinator.notifyDisconnected()
         abPropsCoordinator.reset()
+        offlineResume.reset()
         await connectionManager?.disconnect()
         runtime.emitEvent('connection', {
             status: 'close',
@@ -737,8 +761,17 @@ export function buildWaClientDependencies(input: {
             dirtyBits
         )
 
+    const offlineResume = new WaOfflineResumeCoordinator({
+        logger,
+        runtime: {
+            sendNode: (node) => nodeOrchestrator.sendNode(node, false),
+            emitOfflineResume: (event) => runtime.emitEvent('offline_resume', event)
+        }
+    })
+
     const incomingNode = new WaIncomingNodeCoordinator({
         logger,
+        offlineResume,
         runtime: createIncomingNodeRuntime({
             logger,
             emitEvent: runtime.emitEvent,

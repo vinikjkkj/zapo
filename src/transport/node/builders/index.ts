@@ -21,6 +21,8 @@ export {
     buildGroupSenderKeyMessageNode,
     buildMetaNode
 } from '@transport/node/builders/message'
+export { buildOfflineBatchNode } from '@transport/node/builders/offline'
+export { buildPresenceNode, type BuildPresenceNodeInput } from '@transport/node/builders/presence'
 export { buildRetryReceiptNode } from '@transport/node/builders/retry'
 export {
     buildMissingPreKeysFetchIq,

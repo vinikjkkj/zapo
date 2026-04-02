@@ -105,10 +105,7 @@ test('retry state ranking and reason mapping favor higher-priority states', () =
         mapRetryReasonFromError(new Error('invalid signature data')),
         RETRY_REASON.SignalErrorInvalidSignature
     )
-    assert.equal(
-        mapRetryReasonFromError(new Error('totally unknown error')),
-        RETRY_REASON.UnknownError
-    )
+    assert.equal(mapRetryReasonFromError(new Error('totally unknown error')), undefined)
 })
 
 test('retry receipt parser validates and decodes built retry nodes', () => {

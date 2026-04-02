@@ -5,10 +5,9 @@ import type { SignalAddress } from '@signal/types'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
 import { concatBytes } from '@util/bytes'
 
-const ICDC_HASH_LENGTH = 8
+const ICDC_DEFAULT_HASH_LENGTH = 8
 const ICDC_FRESHNESS_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1_000
 const DEVICE_LIST_METADATA_VERSION = 2
-const EMPTY_KEY_HASH = new Uint8Array(ICDC_HASH_LENGTH)
 
 export interface IcdcMeta {
     readonly keyHash: Uint8Array
@@ -16,10 +15,12 @@ export interface IcdcMeta {
 }
 
 export async function computeDeviceKeyHash(
-    identityKeys: readonly Uint8Array[]
+    identityKeys: readonly Uint8Array[],
+    hashLength?: number
 ): Promise<Uint8Array> {
+    const length = hashLength ?? ICDC_DEFAULT_HASH_LENGTH
     if (identityKeys.length === 0) {
-        return EMPTY_KEY_HASH
+        return new Uint8Array(length)
     }
     const rawKeys: Uint8Array[] = new Array(identityKeys.length)
     for (let i = 0; i < identityKeys.length; i += 1) {
@@ -28,14 +29,15 @@ export async function computeDeviceKeyHash(
     }
     const combined = concatBytes(rawKeys)
     const hash = await sha256(combined)
-    return hash.subarray(0, ICDC_HASH_LENGTH)
+    return hash.subarray(0, length)
 }
 
 export async function resolveIcdcMeta(
     deviceJids: readonly string[],
     identityStore: WaIdentityStore,
     updatedAtMs: number | undefined,
-    localIdentity?: { readonly address: SignalAddress; readonly pubKey: Uint8Array }
+    localIdentity?: { readonly address: SignalAddress; readonly pubKey: Uint8Array },
+    hashLength?: number
 ): Promise<IcdcMeta | null> {
     if (deviceJids.length === 0) {
         return null
@@ -61,7 +63,7 @@ export async function resolveIcdcMeta(
     if (keys.length === 0) {
         return null
     }
-    const keyHash = await computeDeviceKeyHash(keys)
+    const keyHash = await computeDeviceKeyHash(keys, hashLength)
     const timestamp =
         updatedAtMs !== undefined && Date.now() - updatedAtMs < ICDC_FRESHNESS_THRESHOLD_MS
             ? Math.floor(updatedAtMs / 1_000)

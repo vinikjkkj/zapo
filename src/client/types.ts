@@ -384,6 +384,14 @@ export interface WaClientEventMap {
     readonly chat_event: (event: WaChatEvent) => void
     readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void
     readonly privacy_token_update: (event: WaPrivacyTokenUpdateEvent) => void
+    readonly offline_resume: (event: WaOfflineResumeEvent) => void
+}
+
+export interface WaOfflineResumeEvent {
+    readonly status: 'resuming' | 'complete'
+    readonly totalMessages: number
+    readonly remainingMessages: number
+    readonly forced: boolean
 }
 
 export interface WaPrivacyTokenUpdateEvent {

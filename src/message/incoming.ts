@@ -371,12 +371,13 @@ export async function handleIncomingMessageAck(
             })
         }
         if (encCount > 0 && !hasSuccessfulDecrypt && firstDecryptFailure) {
-            shouldSendStandardReceipt = !(await sendRetryReceiptForDecryptFailure(
+            await sendRetryReceiptForDecryptFailure(
                 node,
                 options,
                 firstDecryptFailure.error,
                 firstDecryptFailure.encType
-            ))
+            )
+            shouldSendStandardReceipt = false
         }
     }
 

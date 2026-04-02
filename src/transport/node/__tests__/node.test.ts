@@ -184,6 +184,35 @@ test('WaNodeOrchestrator resolves pending queries and handles ping iq', async ()
     assert.equal(sentNodes[sentNodes.length - 1].attrs.type, WA_IQ_TYPES.RESULT)
 })
 
+test('WaNodeOrchestrator can send nodes without auto-generated ids', async () => {
+    const sentNodes: BinaryNode[] = []
+    const orchestrator = new WaNodeOrchestrator({
+        logger: createLogger(),
+        sendNode: async (node) => {
+            sentNodes.push(node)
+        }
+    })
+
+    await orchestrator.sendNode(
+        {
+            tag: 'presence',
+            attrs: {
+                name: 'Vinicius'
+            }
+        },
+        false
+    )
+
+    assert.deepEqual(sentNodes, [
+        {
+            tag: 'presence',
+            attrs: {
+                name: 'Vinicius'
+            }
+        }
+    ])
+})
+
 test('WaNodeOrchestrator query timeout rejects pending request', async () => {
     const orchestrator = new WaNodeOrchestrator({
         logger: createLogger(),

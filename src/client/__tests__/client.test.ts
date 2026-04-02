@@ -9,6 +9,8 @@ import { WaClient } from '@client/WaClient'
 import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClientFactory'
 import type { Logger } from '@infra/log/types'
 import { proto } from '@proto'
+import type { AbPropName } from '@protocol/abprops'
+import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
 import type { BinaryNode } from '@transport/types'
 
 function createLogger(): Logger {
@@ -361,12 +363,97 @@ test('buildWaClientDependencies wires privacy coordinator', () => {
     assert.equal(typeof dependencies.privacyCoordinator.getPrivacySettings, 'function')
 })
 
+test('buildWaClientDependencies wires trusted contact token AB prop overrides', () => {
+    const sessionStore = {
+        auth: {} as never,
+        signal: {} as never,
+        senderKey: {} as never,
+        appState: {} as never,
+        messages: {} as never,
+        threads: {} as never,
+        contacts: {} as never,
+        retry: {} as never,
+        participants: {} as never,
+        deviceList: {} as never,
+        privacyToken: new WaPrivacyTokenMemoryStore()
+    }
+    const options = {
+        store: {
+            session: () => sessionStore
+        },
+        sessionId: 'session'
+    } as unknown as WaClientOptions
+
+    const base = resolveWaClientBase(options, createLogger())
+    const runtime = {
+        sendNode: async (_node: BinaryNode) => undefined,
+        query: async (_node: BinaryNode) =>
+            ({ tag: 'iq', attrs: { type: 'result' } }) as BinaryNode,
+        queryWithContext: async (_context: string, _node: BinaryNode) =>
+            ({ tag: 'iq', attrs: { type: 'result' } }) as BinaryNode,
+        syncAppState: async () => undefined,
+        syncAppStateWithOptions: async () => ({ collections: [] }) as never,
+        emitEvent: (() => undefined) as never,
+        handleIncomingMessageEvent: async () => undefined,
+        handleError: (_error: Error) => undefined,
+        handleIncomingFrame: async (_frame: Uint8Array) => undefined,
+        clearStoredState: async () => undefined,
+        resumeIncomingEvents: () => undefined
+    }
+
+    const dependencies = buildWaClientDependencies({ base, runtime })
+    const originalGetConfigValue = dependencies.abPropsCoordinator.getConfigValue.bind(
+        dependencies.abPropsCoordinator
+    )
+    dependencies.abPropsCoordinator.getConfigValue = ((name: AbPropName) => {
+        switch (name) {
+            case 'tctoken_duration':
+                return 60 as never
+            case 'tctoken_num_buckets':
+                return 2 as never
+            case 'tctoken_duration_sender':
+                return 120 as never
+            case 'tctoken_num_buckets_sender':
+                return 4 as never
+            default:
+                return originalGetConfigValue(name as never)
+        }
+    }) as never
+
+    const config = (
+        dependencies.trustedContactToken as unknown as {
+            resolveConfig(): {
+                readonly durationS: number
+                readonly numBuckets: number
+                readonly senderDurationS: number
+                readonly senderNumBuckets: number
+            }
+        }
+    ).resolveConfig()
+
+    assert.equal(config.durationS, 60)
+    assert.equal(config.numBuckets, 2)
+    assert.equal(config.senderDurationS, 120)
+    assert.equal(config.senderNumBuckets, 4)
+})
+
 function getClearStoredStateMethod() {
     return (
         WaClient.prototype as unknown as {
             readonly clearStoredState: (this: unknown) => Promise<void>
         }
     ).clearStoredState
+}
+
+function getSendPresenceMethod() {
+    return (
+        WaClient.prototype as unknown as {
+            readonly sendPresence: (
+                this: unknown,
+                type?: 'available' | 'unavailable'
+            ) => Promise<void>
+        }
+    ).sendPresence
 }
 
 function getCoordinatorGetterMethod(name: 'chat' | 'group' | 'privacy') {
@@ -502,6 +589,39 @@ test('clearStoredState clears every store domain by default', async () => {
         'senderKey',
         'threads',
         'privacyToken'
+    ])
+})
+
+test('WaClient.sendPresence sends a presence node without auto-generated id', async () => {
+    const calls: Array<{ readonly node: BinaryNode; readonly autoId: boolean | undefined }> = []
+
+    await getSendPresenceMethod().call(
+        {
+            authClient: {
+                getCurrentCredentials: () => ({
+                    meDisplayName: 'Vinicius'
+                })
+            },
+            nodeOrchestrator: {
+                sendNode: async (node: BinaryNode, autoId?: boolean) => {
+                    calls.push({ node, autoId })
+                }
+            }
+        },
+        'available'
+    )
+
+    assert.deepEqual(calls, [
+        {
+            node: {
+                tag: 'presence',
+                attrs: {
+                    type: 'available',
+                    name: 'Vinicius'
+                }
+            },
+            autoId: false
+        }
     ])
 })
 
