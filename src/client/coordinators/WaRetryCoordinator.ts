@@ -62,7 +62,7 @@ interface RetryDecryptFailurePreparation {
     readonly registrationId: number
     readonly retryCount: number
     readonly retryKeys?: WaRetryKeyBundle
-    readonly retryReason: number
+    readonly retryReason: number | undefined
     readonly timestamp: string
 }
 

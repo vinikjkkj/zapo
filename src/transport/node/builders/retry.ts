@@ -91,7 +91,7 @@ export function buildRetryReceiptNode(input: {
         id: input.originalMsgId,
         t: input.t
     }
-    if (input.error !== undefined) {
+    if (input.error !== undefined && input.error !== 0) {
         retryAttrs.error = String(input.error)
     }
 

@@ -32,6 +32,7 @@ type WaPassiveTasksRuntime = {
     readonly requeueDanglingReceipt: (node: BinaryNode) => void
     readonly shouldQueueDanglingReceipt: (node: BinaryNode, error: Error) => boolean
     readonly syncAbProps: () => void
+    readonly sendPresenceAvailable: () => Promise<void>
 }
 
 export class WaPassiveTasksCoordinator {
@@ -112,6 +113,12 @@ export class WaPassiveTasksCoordinator {
         }
 
         this.runtime.syncAbProps()
+
+        await this.runtime.sendPresenceAvailable().catch((error) => {
+            this.logger.warn('presence available send failed', {
+                message: toError(error).message
+            })
+        })
 
         const [registrationInfo, signedPreKey, serverHasPreKeys, signedPreKeyRotationTs] =
             await Promise.all([

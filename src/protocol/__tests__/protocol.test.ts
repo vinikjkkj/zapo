@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { AB_PROP_CONFIGS, resolveAbPropNameByCode } from '@protocol/abprops'
 import {
     WA_APP_STATE_CHAT_MUTATION_SPECS,
     getWaCompanionPlatformId,
@@ -149,4 +150,31 @@ test('privacy protocol constants keep mapping invariants', () => {
         (category) => WA_PRIVACY_CATEGORY_TO_SETTING[category]
     )
     assert.deepEqual(disallowedSettings.sort(), ['about', 'groupAdd', 'lastSeen', 'profilePicture'])
+})
+
+test('ab props keep protocol-specific group and trusted-contact mappings', () => {
+    assert.deepEqual(AB_PROP_CONFIGS.group_size_limit, {
+        configCode: 1304,
+        type: 'int',
+        defaultValue: 257
+    })
+    assert.deepEqual(AB_PROP_CONFIGS.community_announcement_group_size_limit, {
+        configCode: 2774,
+        type: 'int',
+        defaultValue: 5000
+    })
+    assert.deepEqual(AB_PROP_CONFIGS.tctoken_duration, {
+        configCode: 865,
+        type: 'int',
+        defaultValue: 604800
+    })
+    assert.deepEqual(AB_PROP_CONFIGS.tctoken_duration_sender, {
+        configCode: 996,
+        type: 'int',
+        defaultValue: 604800
+    })
+    assert.equal(resolveAbPropNameByCode(1304), 'group_size_limit')
+    assert.equal(resolveAbPropNameByCode(2774), 'community_announcement_group_size_limit')
+    assert.equal(resolveAbPropNameByCode(865), 'tctoken_duration')
+    assert.equal(resolveAbPropNameByCode(996), 'tctoken_duration_sender')
 })

@@ -27,10 +27,11 @@ export interface SenderKeyMessageKeySelection {
 
 export async function selectMessageKey(
     senderKey: SenderKeyRecord,
-    targetIteration: number
+    targetIteration: number,
+    futureMessagesMax?: number
 ): Promise<SenderKeyMessageKeySelection> {
     const delta = targetIteration - senderKey.iteration
-    if (delta > SENDER_KEY_FUTURE_MESSAGES_MAX) {
+    if (delta > (futureMessagesMax ?? SENDER_KEY_FUTURE_MESSAGES_MAX)) {
         throw new Error('sender key message is too far in future')
     }
 

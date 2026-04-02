@@ -67,9 +67,10 @@ export const AB_PROP_CONFIGS = Object.freeze({
     wa_nct_token_history_sync_enabled: prop(25189, 'bool', false),
 
     // --- group ---
-    group_size_limit: prop(3596, 'int', 1_024),
+    community_announcement_group_size_limit: prop(2774, 'int', 5_000),
+    group_size_limit: prop(1304, 'int', 257),
     group_max_subject: prop(3597, 'int', 100),
-    group_description_length: prop(3598, 'int', 2_048),
+    group_description_length: prop(14778, 'int', 2_048),
     anyone_can_link_to_groups: prop(3978, 'bool', false),
     group_call_max_participants: prop(4190, 'int', 32),
     group_history_receive: prop(15311, 'bool', false),
@@ -93,8 +94,8 @@ export const AB_PROP_CONFIGS = Object.freeze({
 
     // --- history sync ---
     web_abprop_drop_full_history_sync: prop(13034, 'bool', false),
-    wa_web_history_sync_dynamic_throttling: prop(14178, 'bool', false),
-    web_e2e_backfill_expire_time: prop(11244, 'int', 0),
+    wa_web_history_sync_dynamic_throttling: prop(19110, 'bool', true),
+    web_e2e_backfill_expire_time: prop(3234, 'int', 5),
     history_sync_on_demand: prop(3337, 'bool', false),
     history_sync_on_demand_message_count: prop(3811, 'int', 50),
     history_sync_on_demand_failure_limit: prop(4364, 'int', 10),
@@ -106,12 +107,12 @@ export const AB_PROP_CONFIGS = Object.freeze({
     web_history_sync_allow_duplicate_in_bulk_error: prop(10842, 'bool', false),
 
     // --- media ---
-    default_media_limit_mb: prop(1290, 'int', 100),
+    default_media_limit_mb: prop(3660, 'int', 16),
     web_image_max_edge: prop(10371, 'int', 1_600),
     web_image_max_hd_edge: prop(3204, 'int', 2_560),
     web_channel_video_server_transcode_upload: prop(19920, 'bool', false),
     web_deprecate_mms4_hash_based_download: prop(3152, 'bool', false),
-    kaleidoscope_thumbnail_validation: prop(18114, 'bool', true),
+    kaleidoscope_thumbnail_validation: prop(18114, 'bool', false),
     web_use_kaleidoscope_media_check_enabled: prop(20375, 'bool', false),
     low_cache_hit_rate_media_types: prop(4836, 'string', 'ptt,audio,document,ppic'),
     web_anr_async_media_decryption_enabled: prop(23200, 'bool', false),
@@ -119,7 +120,7 @@ export const AB_PROP_CONFIGS = Object.freeze({
     web_media_compute_in_worker_enabled: prop(25641, 'bool', false),
 
     // --- device management / auth ---
-    adv_accept_hosted_devices: prop(6939, 'bool', true),
+    adv_accept_hosted_devices: prop(6939, 'bool', false),
     num_days_key_index_list_expiration: prop(730, 'int', 35),
     num_days_before_device_expiry_check: prop(731, 'int', 7),
     web_adv_logout_on_self_device_list_expired: prop(11011, 'bool', false),
@@ -127,12 +128,13 @@ export const AB_PROP_CONFIGS = Object.freeze({
     noise_pq_mode: prop(20161, 'int', 0),
 
     // --- trusted contacts / privacy tokens ---
+    tctoken_duration: prop(865, 'int', 604_800),
     tctoken_num_buckets: prop(909, 'int', 4),
     tctoken_num_buckets_sender: prop(997, 'int', 4),
     tctoken_duration_sender: prop(996, 'int', 604_800),
 
     // --- connection / offline ---
-    heartbeat_interval_s: prop(1430, 'int', 5),
+    heartbeat_interval_s: prop(1430, 'int', 10),
     web_offline_message_processor_timeout_seconds: prop(12834, 'int', 15),
     web_offline_resume_wait_for_ping_response_enabled: prop(14567, 'bool', false),
     web_offline_resume_wait_for_ping_timeout_seconds: prop(14568, 'int', 5),
@@ -144,7 +146,6 @@ export const AB_PROP_CONFIGS = Object.freeze({
     lid_status_non_soaked_client_support_enabled: prop(19696, 'bool', true),
 
     // --- signal protocol ---
-    s567418_local_keys_strict_validation: prop(23899, 'bool', true),
     s567418_mitigation_enabled: prop(22029, 'bool', true),
     web_signal_future_messages_max: prop(12509, 'int', 20_000),
 
@@ -167,7 +168,7 @@ export const AB_PROP_CONFIGS = Object.freeze({
     username_min_length: prop(20494, 'int', 3),
 
     // --- message capping ---
-    wa_individual_new_chat_msg_capping_enabled: prop(20865, 'bool', true),
+    wa_individual_new_chat_msg_capping_enabled: prop(20865, 'bool', false),
     wa_individual_new_chat_msg_capping_limit: prop(17845, 'int', 0),
     wa_individual_new_chat_msg_capping_fetch_ttl_seconds: prop(20649, 'int', 3_600),
 

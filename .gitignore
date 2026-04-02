@@ -12,3 +12,4 @@ coverage
 *.cpuprofile
 /test/
 .claude
+*.log

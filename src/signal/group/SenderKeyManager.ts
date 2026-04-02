@@ -59,9 +59,14 @@ async function aesCbcDecryptFromSeed(
 export class SenderKeyManager {
     private readonly store: WaSenderKeyStore
     private readonly senderLock = new StoreLock()
+    private readonly getFutureMessagesMax: (() => number) | undefined
 
-    public constructor(store: WaSenderKeyStore) {
+    public constructor(
+        store: WaSenderKeyStore,
+        options?: { readonly getFutureMessagesMax?: () => number }
+    ) {
         this.store = store
+        this.getFutureMessagesMax = options?.getFutureMessagesMax
     }
 
     public async prepareGroupEncryption(
@@ -252,7 +257,11 @@ export class SenderKeyManager {
                 throw new Error('invalid sender key signature')
             }
 
-            const selected = await selectMessageKey(senderKey, parsed.iteration)
+            const selected = await selectMessageKey(
+                senderKey,
+                parsed.iteration,
+                this.getFutureMessagesMax?.()
+            )
             // Keep decrypt + persist ordered: failed decrypt must not advance sender-key state.
             const plaintext = await aesCbcDecryptFromSeed(
                 selected.messageKey.seed,

@@ -86,6 +86,7 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly getCurrentSignedIdentity: () => Proto.IADVSignedDeviceIdentity | null | undefined
     readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
     readonly onDirectMessageSent: (recipientJid: string) => void
+    readonly getIcdcHashLength?: () => number
 }
 
 type GroupAddressingMode = 'pn' | 'lid'
@@ -120,6 +121,7 @@ export class WaMessageDispatchCoordinator {
         | undefined
     private readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
     private readonly onDirectMessageSent: (recipientJid: string) => void
+    private readonly getIcdcHashLength: (() => number) | undefined
     private readonly icdcDedup = new PromiseDedup()
     private readonly privacyTokenDedup = new PromiseDedup()
     private readonly distributionDedup = new PromiseDedup()
@@ -145,6 +147,7 @@ export class WaMessageDispatchCoordinator {
         this.getCurrentSignedIdentity = options.getCurrentSignedIdentity
         this.resolvePrivacyTokenNode = options.resolvePrivacyTokenNode
         this.onDirectMessageSent = options.onDirectMessageSent
+        this.getIcdcHashLength = options.getIcdcHashLength
     }
 
     public async publishMessageNode(
@@ -1216,7 +1219,8 @@ export class WaMessageDispatchCoordinator {
                     snapshot.deviceJids,
                     this.identityStore,
                     snapshot.updatedAtMs,
-                    localIdentity
+                    localIdentity,
+                    this.getIcdcHashLength?.()
                 )
             } catch (error) {
                 this.logger.trace('icdc resolution failed', {

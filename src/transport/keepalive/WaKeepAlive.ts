@@ -16,6 +16,7 @@ interface WaKeepAliveOptions {
     }
     readonly getComms: () => WaComms | null
     readonly intervalMs?: number
+    readonly getIntervalMs?: () => number
     readonly timeoutMs?: number
     readonly hostDomain?: string
     readonly jitterRatio?: number
@@ -26,7 +27,8 @@ export class WaKeepAlive {
     private readonly logger: Logger
     private readonly nodeOrchestrator: WaKeepAliveOptions['nodeOrchestrator']
     private readonly getCommsFn: () => WaComms | null
-    private readonly intervalMs: number
+    private readonly baseIntervalMs: number
+    private readonly getIntervalMs: (() => number) | undefined
     private readonly timeoutMs: number
     private readonly hostDomain: string
     private readonly jitterRatio: number
@@ -39,7 +41,8 @@ export class WaKeepAlive {
         this.logger = options.logger
         this.nodeOrchestrator = options.nodeOrchestrator
         this.getCommsFn = options.getComms
-        this.intervalMs = options.intervalMs ?? WA_DEFAULTS.HEALTH_CHECK_INTERVAL_MS
+        this.baseIntervalMs = options.intervalMs ?? WA_DEFAULTS.HEALTH_CHECK_INTERVAL_MS
+        this.getIntervalMs = options.getIntervalMs
         this.timeoutMs = options.timeoutMs ?? WA_DEFAULTS.DEAD_SOCKET_TIMEOUT_MS
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
         this.jitterRatio = this.normalizeJitterRatio(options.jitterRatio)
@@ -54,7 +57,7 @@ export class WaKeepAlive {
 
     public start(): void {
         this.logger.info('keepalive start', {
-            intervalMs: this.intervalMs,
+            intervalMs: this.resolveIntervalMs(),
             timeoutMs: this.timeoutMs,
             jitterRatio: this.jitterRatio,
             minJitterMs: this.minJitterMs
@@ -85,7 +88,7 @@ export class WaKeepAlive {
         this.logger.trace('keepalive scheduled', {
             generation,
             inMs: nextDelayMs,
-            baseIntervalMs: this.intervalMs
+            baseIntervalMs: this.resolveIntervalMs()
         })
     }
 
@@ -151,20 +154,29 @@ export class WaKeepAlive {
         return Math.min(Math.max(normalized, 0), KEEPALIVE_MAX_JITTER_RATIO)
     }
 
+    private resolveIntervalMs(): number {
+        const candidate = this.getIntervalMs?.() ?? this.baseIntervalMs
+        if (!Number.isFinite(candidate) || candidate <= 0) {
+            return this.baseIntervalMs
+        }
+        return candidate
+    }
+
     private computeNextDelayMs(): number {
-        if (this.intervalMs <= 0) {
+        const intervalMs = this.resolveIntervalMs()
+        if (intervalMs <= 0) {
             return 0
         }
         if (this.jitterRatio <= 0 && this.minJitterMs <= 0) {
-            return this.intervalMs
+            return intervalMs
         }
-        const ratioJitterMs = Math.floor(this.intervalMs * this.jitterRatio)
+        const ratioJitterMs = Math.floor(intervalMs * this.jitterRatio)
         const jitterWindowMs = Math.max(this.minJitterMs, ratioJitterMs)
         if (jitterWindowMs <= 0) {
-            return this.intervalMs
+            return intervalMs
         }
         const offsetMs = Math.floor(Math.random() * (jitterWindowMs * 2 + 1) - jitterWindowMs)
-        return Math.max(1, this.intervalMs + offsetMs)
+        return Math.max(1, intervalMs + offsetMs)
     }
 
     private clearTimer(): void {

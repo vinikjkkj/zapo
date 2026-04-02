@@ -1,4 +1,5 @@
 import type { WaSuccessPersistAttributes } from '@auth/types'
+import type { WaOfflineResumeCoordinator } from '@client/coordinators/WaOfflineResumeCoordinator'
 import type { WaDirtyBit } from '@client/dirty'
 import {
     createIncomingBaseEvent,
@@ -34,6 +35,7 @@ import type { WaConnectionCode, WaDisconnectReason } from '@protocol/stream'
 import {
     decodeNodeContentBase64OrBytes,
     findNodeChild,
+    getNodeChildren,
     getNodeChildrenByTag
 } from '@transport/node/helpers'
 import {
@@ -85,9 +87,10 @@ interface WaIncomingNodeRuntime {
 interface WaIncomingNodeCoordinatorOptions {
     readonly logger: Logger
     readonly runtime: WaIncomingNodeRuntime
+    readonly offlineResume: WaOfflineResumeCoordinator
 }
 
-const INFO_BULLETIN_NOTIFICATION_TYPES = new Set<string>([
+const INFO_BULLETIN_CHILD_TAGS = new Set<string>([
     'offline',
     'offline_preview',
     'priority_offline_complete',
@@ -99,6 +102,7 @@ const INFO_BULLETIN_NOTIFICATION_TYPES = new Set<string>([
 export class WaIncomingNodeCoordinator {
     private readonly logger: Logger
     private readonly runtime: WaIncomingNodeRuntime
+    private readonly offlineResume: WaOfflineResumeCoordinator
     private readonly nodeHandlerRegistry: Map<
         string,
         { readonly subtype?: string; readonly handler: WaIncomingNodeHandler }[]
@@ -108,6 +112,7 @@ export class WaIncomingNodeCoordinator {
     public constructor(options: WaIncomingNodeCoordinatorOptions) {
         this.logger = options.logger
         this.runtime = options.runtime
+        this.offlineResume = options.offlineResume
         this.nodeHandlerRegistry = new Map()
         this.registerDefaultIncomingHandlers()
         this.mediaConnWarmupPromise = null
@@ -119,6 +124,9 @@ export class WaIncomingNodeCoordinator {
             id: node.attrs.id,
             type: node.attrs.type
         })
+        if (node.attrs.offline !== undefined) {
+            this.offlineResume.trackOfflineStanza()
+        }
         const streamControlResult = parseStreamControlNode(node)
         if (streamControlResult) {
             await this.runtime.handleStreamControlResult(streamControlResult)
@@ -372,15 +380,28 @@ export class WaIncomingNodeCoordinator {
         }
         let handled = false
 
-        const ibType = node.attrs.type
-        if (ibType && INFO_BULLETIN_NOTIFICATION_TYPES.has(ibType)) {
-            this.runtime.emitIncomingNotification(
-                createInfoBulletinNotificationEvent(node, ibType, {
-                    count: parseOptionalInt(node.attrs.count),
-                    t: parseOptionalInt(node.attrs.t)
-                })
-            )
-            handled = true
+        const children = getNodeChildren(node)
+        for (const child of children) {
+            if (INFO_BULLETIN_CHILD_TAGS.has(child.tag)) {
+                this.runtime.emitIncomingNotification(
+                    createInfoBulletinNotificationEvent(node, child.tag, {
+                        count: parseOptionalInt(child.attrs.count),
+                        message: parseOptionalInt(child.attrs.message),
+                        receipt: parseOptionalInt(child.attrs.receipt),
+                        notification: parseOptionalInt(child.attrs.notification),
+                        t: parseOptionalInt(child.attrs.t)
+                    })
+                )
+                if (child.tag === 'offline_preview') {
+                    this.offlineResume.handleOfflinePreview(
+                        parseOptionalInt(child.attrs.message) ?? 0
+                    )
+                }
+                if (child.tag === 'offline') {
+                    this.offlineResume.handleOfflineComplete()
+                }
+                handled = true
+            }
         }
 
         const edgeRoutingNode = findNodeChild(node, WA_NODE_TAGS.EDGE_ROUTING)

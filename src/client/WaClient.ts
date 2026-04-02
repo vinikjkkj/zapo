@@ -70,6 +70,7 @@ import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { WaThreadStore } from '@store/contracts/thread.store'
 import { NOOP_MESSAGE_SECRET_STORE } from '@store/noop.store'
 import type { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
+import { buildPresenceNode } from '@transport/node/builders/presence'
 import { queryWithContext as queryNodeWithContext } from '@transport/node/query'
 import type { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import type { WaNodeTransport } from '@transport/node/WaNodeTransport'
@@ -255,6 +256,14 @@ export class WaClient extends EventEmitter {
             }
             throw normalized
         }
+    }
+
+    public async sendPresence(type?: 'available' | 'unavailable'): Promise<void> {
+        const credentials = this.authClient.getCurrentCredentials()
+        await this.nodeOrchestrator.sendNode(
+            buildPresenceNode({ type, name: credentials?.meDisplayName ?? undefined }),
+            false
+        )
     }
 
     public async query(

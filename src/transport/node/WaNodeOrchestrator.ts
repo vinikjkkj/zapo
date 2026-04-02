@@ -103,8 +103,8 @@ export class WaNodeOrchestrator {
         return true
     }
 
-    public async sendNode(node: BinaryNode): Promise<void> {
-        const outbound = await this.withAutoId(node)
+    public async sendNode(node: BinaryNode, autoId = true): Promise<void> {
+        const outbound = autoId ? await this.withAutoId(node) : node
         await this.sendNodeFn(outbound)
     }
 
