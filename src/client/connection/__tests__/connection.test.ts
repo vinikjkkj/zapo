@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { WaConnectionManager } from '@client/connection/WaConnectionManager'
-import { WaKeyShareCoordinator } from '@client/connection/WaKeyShareCoordinator'
 import { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import type { Logger } from '@infra/log/types'
 
@@ -49,23 +48,6 @@ test('receipt queue ignores enqueues when max size is zero', () => {
     }
     assert.equal(queue.size(), 0)
     assert.deepEqual(queue.take(), [])
-})
-
-test('key share coordinator releases waiters and tracks version', async () => {
-    const coordinator = new WaKeyShareCoordinator()
-
-    const waiterPromise = coordinator.waitForShare(100)
-    assert.equal(coordinator.hasWaiters(), true)
-    coordinator.notifyReceived()
-
-    const resolved = await waiterPromise
-    assert.equal(resolved, true)
-    assert.equal(coordinator.getVersion(), 1)
-
-    coordinator.markBootstrapDone()
-    assert.equal(coordinator.isBootstrapDone(), true)
-    coordinator.notifyDisconnected()
-    assert.equal(coordinator.isBootstrapDone(), false)
 })
 
 test('connection manager exposes media cache and clock skew helpers', async () => {

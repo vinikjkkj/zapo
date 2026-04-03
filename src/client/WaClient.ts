@@ -6,7 +6,6 @@ import { downloadExternalBlobReference } from '@appstate/utils'
 import type { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import type { WaAuthClient } from '@auth/WaAuthClient'
 import type { WaConnectionManager } from '@client/connection/WaConnectionManager'
-import type { WaKeyShareCoordinator } from '@client/connection/WaKeyShareCoordinator'
 import type { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { WaBusinessCoordinator } from '@client/coordinators/WaBusinessCoordinator'
@@ -86,8 +85,6 @@ const SYNC_RELATED_PROTOCOL_TYPES = new Set<WaIncomingProtocolType>([
     proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_MESSAGE,
     proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE
 ])
-const WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS = 15_000
-const WA_APP_STATE_KEY_SHARE_MAX_RETRIES = 2
 
 export class WaClient extends EventEmitter {
     private readonly options!: Readonly<WaClientOptions>
@@ -123,7 +120,6 @@ export class WaClient extends EventEmitter {
     private readonly passiveTasks!: WaPassiveTasksCoordinator
     private readonly keepAlive!: WaKeepAlive
     private readonly receiptQueue!: WaReceiptQueue
-    private readonly keyShareCoordinator!: WaKeyShareCoordinator
     private readonly connectionManager!: WaConnectionManager
     private readonly trustedContactToken!: WaTrustedContactTokenCoordinator
     private readonly writeBehind!: WriteBehindPersistence
@@ -398,16 +394,6 @@ export class WaClient extends EventEmitter {
                 imported
             })
             if (imported > 0) {
-                const hadWaiters = this.keyShareCoordinator.hasWaiters()
-                this.keyShareCoordinator.notifyReceived()
-                if (hadWaiters) {
-                    this.logger.debug('app-state key share imported and waiters released', {
-                        id: event.stanzaId,
-                        from: event.chatJid,
-                        imported
-                    })
-                    return
-                }
                 void this.syncAppState().catch((error) => {
                     this.logger.warn('failed to sync app-state after key share import', {
                         id: event.stanzaId,
@@ -634,7 +620,6 @@ export class WaClient extends EventEmitter {
                 remaining: writeBehindFlush.remaining
             })
         }
-        this.keyShareCoordinator.notifyDisconnected()
         await this.connectionManager.disconnect()
         this.emit('connection', {
             status: 'close',
@@ -736,72 +721,13 @@ export class WaClient extends EventEmitter {
         if (!this.connectionManager.isConnected()) {
             throw new Error('client is not connected')
         }
-        const shouldWaitForKeyShare = (await this.appStateStore.getActiveSyncKey()) === null
-        if (shouldWaitForKeyShare && !this.keyShareCoordinator.isBootstrapDone()) {
-            this.keyShareCoordinator.markBootstrapDone()
-            this.logger.info('app-state bootstrap pre-sync waiting for key share', {
-                timeoutMs: WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS
-            })
-            const received = await this.keyShareCoordinator.waitForShare(
-                WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS
-            )
-            if (received) {
-                this.logger.info('app-state bootstrap pre-sync received key share, continuing sync')
-            } else {
-                this.logger.warn(
-                    'app-state bootstrap pre-sync key share wait timed out, continuing sync',
-                    {
-                        timeoutMs: WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS
-                    }
-                )
-            }
-        }
-        let syncResult = await this.executeAppStateSync(options)
-        let blockedCollections = this.getBlockedAppStateCollections(syncResult)
-        if (!shouldWaitForKeyShare || blockedCollections.length === 0) {
-            this.emitChatEventsFromAppStateSyncResult(syncResult)
-            return syncResult
-        }
-
-        let retryCount = 0
-        let observedKeyShareVersion = this.keyShareCoordinator.getVersion()
-        while (blockedCollections.length > 0 && retryCount < WA_APP_STATE_KEY_SHARE_MAX_RETRIES) {
-            const hasFreshShare = this.keyShareCoordinator.getVersion() !== observedKeyShareVersion
-            if (!hasFreshShare) {
-                this.logger.info('app-state bootstrap waiting for key share', {
-                    blockedCollections: blockedCollections.join(','),
-                    timeoutMs: WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS,
-                    retryCount: retryCount + 1
-                })
-                const received = await this.keyShareCoordinator.waitForShare(
-                    WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS
-                )
-                if (!received) {
-                    this.logger.warn('app-state bootstrap key share wait timed out', {
-                        blockedCollections: blockedCollections.join(','),
-                        timeoutMs: WA_APP_STATE_KEY_SHARE_WAIT_TIMEOUT_MS
-                    })
-                    break
-                }
-            }
-
-            observedKeyShareVersion = this.keyShareCoordinator.getVersion()
-            retryCount += 1
-            this.logger.info('app-state bootstrap retrying sync after key share', {
-                retryCount,
+        const syncResult = await this.executeAppStateSync(options)
+        const blockedCollections = this.getBlockedAppStateCollections(syncResult)
+        if (blockedCollections.length > 0) {
+            this.logger.warn('app-state sync has blocked collections', {
                 blockedCollections: blockedCollections.join(',')
             })
-            syncResult = await this.executeAppStateSync(options)
-            blockedCollections = this.getBlockedAppStateCollections(syncResult)
         }
-
-        if (blockedCollections.length > 0) {
-            this.logger.warn('app-state bootstrap still blocked after waiting for key share', {
-                blockedCollections: blockedCollections.join(','),
-                retries: retryCount
-            })
-        }
-
         this.emitChatEventsFromAppStateSyncResult(syncResult)
         return syncResult
     }

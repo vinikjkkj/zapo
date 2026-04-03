@@ -305,6 +305,7 @@ const MIGRATIONS: readonly Migration[] = [
 export function createMysqlPool(options: PoolOptions): Pool {
     const userTypeCast = options.typeCast
     return mysql.createPool({
+        maxPreparedStatements: 100,
         ...options,
         typeCast: function (field, next) {
             if (
