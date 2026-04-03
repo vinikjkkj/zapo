@@ -78,14 +78,14 @@ export class WaMediaCrypto {
         plaintext: Uint8Array
     ): Promise<WaMediaEncryptionResult> {
         const keys = await WaMediaCrypto.deriveKeys(mediaType, mediaKey)
-        const [aesKey, macKey] = await Promise.all([
+        const [aesKey, hmacKey] = await Promise.all([
             importAesCbcKey(keys.encKey),
             importHmacKey(keys.macKey)
         ])
         const ciphertext = await aesCbcEncrypt(aesKey, keys.iv, plaintext)
         const ivCiphertext = concatBytes([keys.iv, ciphertext])
 
-        const mac = await hmacSign(macKey, ivCiphertext)
+        const mac = await hmacSign(hmacKey, ivCiphertext)
         const signature = mac.subarray(0, HMAC_TRUNCATED_SIZE)
         const ciphertextHmac = concatBytes([ciphertext, signature])
 
@@ -115,6 +115,10 @@ export class WaMediaCrypto {
         }
 
         const keys = await WaMediaCrypto.deriveKeys(mediaType, mediaKey)
+        const [aesKey, hmacKey] = await Promise.all([
+            importAesCbcKey(keys.encKey),
+            importHmacKey(keys.macKey)
+        ])
         const ciphertext = ciphertextHmac.subarray(
             0,
             ciphertextHmac.byteLength - HMAC_TRUNCATED_SIZE
@@ -122,11 +126,7 @@ export class WaMediaCrypto {
         const expectedMac = ciphertextHmac.subarray(ciphertextHmac.byteLength - HMAC_TRUNCATED_SIZE)
         const ivCiphertext = concatBytes([keys.iv, ciphertext])
 
-        const [macKey, aesKey] = await Promise.all([
-            importHmacKey(keys.macKey),
-            importAesCbcKey(keys.encKey)
-        ])
-        const mac = await hmacSign(macKey, ivCiphertext)
+        const mac = await hmacSign(hmacKey, ivCiphertext)
         const signature = mac.subarray(0, HMAC_TRUNCATED_SIZE)
         if (!uint8TimingSafeEqual(signature, expectedMac)) {
             throw new Error('media MAC mismatch')

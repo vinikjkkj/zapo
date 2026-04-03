@@ -2,7 +2,6 @@ import type { WaAppStateSyncOptions, WaAppStateSyncResult } from '@appstate/type
 import { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import { WaAuthClient } from '@auth/WaAuthClient'
 import { WaConnectionManager } from '@client/connection/WaConnectionManager'
-import { WaKeyShareCoordinator } from '@client/connection/WaKeyShareCoordinator'
 import { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import { WaAbPropsCoordinator } from '@client/coordinators/WaAbPropsCoordinator'
 import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
@@ -146,7 +145,6 @@ interface WaClientDependencies {
     readonly profileCoordinator: WaProfileCoordinator
     readonly businessCoordinator: WaBusinessCoordinator
     readonly receiptQueue: WaReceiptQueue
-    readonly keyShareCoordinator: WaKeyShareCoordinator
     readonly connectionManager: WaConnectionManager
     readonly trustedContactToken: WaTrustedContactTokenCoordinator
     readonly abPropsCoordinator: WaAbPropsCoordinator
@@ -368,7 +366,6 @@ export function buildWaClientDependencies(input: {
     const { options, logger, sessionStore } = base
 
     const receiptQueue = new WaReceiptQueue()
-    const keyShareCoordinator = new WaKeyShareCoordinator()
 
     let connectionManager: WaConnectionManager | null = null
     let passiveTasks: WaPassiveTasksCoordinator | null = null
@@ -690,7 +687,6 @@ export function buildWaClientDependencies(input: {
         isLogout: boolean,
         code: WaConnectionCode | null
     ): Promise<void> => {
-        keyShareCoordinator.notifyDisconnected()
         abPropsCoordinator.reset()
         offlineResume.reset()
         await connectionManager?.disconnect()
@@ -1088,7 +1084,6 @@ export function buildWaClientDependencies(input: {
         profileCoordinator,
         businessCoordinator,
         receiptQueue,
-        keyShareCoordinator,
         connectionManager,
         trustedContactToken,
         abPropsCoordinator
