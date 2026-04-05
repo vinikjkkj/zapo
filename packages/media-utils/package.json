@@ -1,0 +1,36 @@
+{
+    "name": "@zapo-js/media-utils",
+    "version": "0.1.0",
+    "description": "Media processing utilities for zapo-js (thumbnails, waveforms, probing)",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.build.cjs.json",
+        "typecheck": "tsc --noEmit",
+        "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\""
+    },
+    "peerDependencies": {
+        "zapo-js": ">=0.1.0",
+        "sharp": ">=0.33.0"
+    },
+    "devDependencies": {
+        "sharp": "^0.33.0",
+        "zapo-js": "file:../.."
+    },
+    "engines": {
+        "node": ">=20.9.0"
+    }
+}

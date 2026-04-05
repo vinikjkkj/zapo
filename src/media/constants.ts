@@ -11,6 +11,8 @@ export const ENC_KEY_END = 48
 export const MAC_KEY_START = 48
 export const MAC_KEY_END = 80
 export const HMAC_TRUNCATED_SIZE = 10
+export const SIDECAR_CHUNK_SIZE = 65_536
+export const SIDECAR_HMAC_SIZE = 10
 
 export const MEDIA_UPLOAD_PATHS: Readonly<
     Record<'image' | 'video' | 'audio' | 'document' | 'sticker' | 'gif' | 'ptt' | 'ptv', string>

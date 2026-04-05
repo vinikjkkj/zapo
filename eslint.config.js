@@ -42,7 +42,8 @@ module.exports = [
                     './packages/store-sqlite/tsconfig.json',
                     './packages/store-postgres/tsconfig.json',
                     './packages/store-redis/tsconfig.json',
-                    './packages/store-mongo/tsconfig.json'
+                    './packages/store-mongo/tsconfig.json',
+                    './packages/media-utils/tsconfig.json'
                 ]
             }
         }

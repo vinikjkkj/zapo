@@ -11,6 +11,7 @@
             "zapo-js/proto": ["dist/types/proto.d.ts"],
             "zapo-js/protocol": ["dist/types/protocol/index.d.ts"],
             "zapo-js/crypto": ["dist/types/crypto/index.d.ts"],
+            "zapo-js/media": ["dist/types/media/index.d.ts"],
             "zapo-js/util": ["dist/types/util/index.d.ts"]
         }
     }

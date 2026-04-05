@@ -1,7 +1,7 @@
 import type { Readable } from 'node:stream'
 
 import type { Logger } from '@infra/log/types'
-import type { WaProxyAgent, WaProxyDispatcher } from '@transport/types'
+import type { WaProxyAgent } from '@transport/types'
 
 export type MediaKind = 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'ptv'
 export type MediaCryptoType = MediaKind | 'ptt' | 'gif' | 'history' | 'md-app-state'
@@ -23,8 +23,6 @@ export interface WaMediaTransferClientOptions {
     readonly defaultTimeoutMs?: number
     readonly defaultMaxReadBytes?: number
     readonly defaultHeaders?: Readonly<Record<string, string>>
-    readonly defaultUploadDispatcher?: WaProxyDispatcher
-    readonly defaultDownloadDispatcher?: WaProxyDispatcher
     readonly defaultUploadAgent?: WaProxyAgent
     readonly defaultDownloadAgent?: WaProxyAgent
 }
@@ -40,6 +38,8 @@ export interface WaMediaEncryptionResult {
     readonly ciphertextHmac: Uint8Array
     readonly fileSha256: Uint8Array
     readonly fileEncSha256: Uint8Array
+    readonly streamingSidecar?: Uint8Array
+    readonly firstFrameSidecar?: Uint8Array
 }
 
 export interface WaMediaDecryptionResult {
@@ -54,6 +54,8 @@ export interface WaMediaReadableEncryptionResult {
         readonly fileSha256: Uint8Array
         readonly fileEncSha256: Uint8Array
         readonly plaintextLength: number
+        readonly streamingSidecar?: Uint8Array
+        readonly firstFrameSidecar?: Uint8Array
     }>
 }
 
@@ -71,6 +73,8 @@ export interface WaMediaFileEncryptionResult {
     readonly fileSha256: Uint8Array
     readonly fileEncSha256: Uint8Array
     readonly plaintextLength: number
+    readonly streamingSidecar?: Uint8Array
+    readonly firstFrameSidecar?: Uint8Array
 }
 
 export interface WaMediaDecryptReadableOptions {

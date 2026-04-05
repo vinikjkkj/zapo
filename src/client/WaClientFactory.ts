@@ -82,7 +82,7 @@ import { getFirstNodeChild } from '@transport/node/helpers'
 import { createUsyncSidGenerator } from '@transport/node/usync'
 import { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import { WaNodeTransport } from '@transport/node/WaNodeTransport'
-import { isProxyTransport, toProxyAgent, toProxyDispatcher } from '@transport/proxy'
+import { isProxyTransport, toProxyAgent } from '@transport/proxy'
 import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
 import { getRuntimeOsDisplayName } from '@util/runtime'
@@ -393,8 +393,6 @@ export function buildWaClientDependencies(input: {
     const mediaTransfer = new WaMediaTransferClient({
         logger,
         defaultTimeoutMs: options.mediaTimeoutMs,
-        defaultUploadDispatcher: toProxyDispatcher(options.proxy?.mediaUpload),
-        defaultDownloadDispatcher: toProxyDispatcher(options.proxy?.mediaDownload),
         defaultUploadAgent: toProxyAgent(options.proxy?.mediaUpload),
         defaultDownloadAgent: toProxyAgent(options.proxy?.mediaDownload)
     })
@@ -412,7 +410,8 @@ export function buildWaClientDependencies(input: {
         setMediaConnCache: (mediaConn) => {
             mediaConnCacheFallback = mediaConn
             connectionManager?.setMediaConnCache(mediaConn)
-        }
+        },
+        media: options.media
     }
 
     const messageClient = new WaMessageClient({

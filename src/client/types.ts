@@ -1,5 +1,6 @@
 import type { AppStateCollectionName } from '@appstate/types'
 import type { WaAuthClientOptions, WaAuthCredentials, WaAuthSocketOptions } from '@auth/types'
+import type { WaMediaProcessor } from '@media/processor'
 import type { WaDecodedAddon } from '@message/addon-crypto'
 import type { WaMessagePublishOptions } from '@message/types'
 import type { Proto } from '@proto'
@@ -54,6 +55,15 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
     readonly privacyToken?: WaPrivacyTokenOptions
     readonly addons?: WaAddonOptions
     readonly logoutStoreClear?: WaLogoutStoreClearOptions
+    readonly media?: WaMediaOptions
+}
+
+export interface WaMediaOptions {
+    readonly processor?: WaMediaProcessor
+    readonly generateThumbnail?: boolean
+    readonly generateProbe?: boolean
+    readonly generateWaveform?: boolean
+    readonly generateStickerThumbnail?: boolean
 }
 
 export interface WaAddonOptions {

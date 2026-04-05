@@ -1,6 +1,16 @@
 import { createReadStream } from 'node:fs'
 import type { Readable } from 'node:stream'
 
+import {
+    cleanupTempFile,
+    hasMediaProcessingTasks,
+    isReadableStream,
+    parseWebpAnimation,
+    readFileHead,
+    resolveMediaInputs,
+    runMediaProcessor
+} from '@client/media'
+import type { WaMediaOptions } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { parseMediaConnResponse } from '@media/conn'
 import { MEDIA_CONN_CACHE_GRACE_MS, MEDIA_UPLOAD_PATHS } from '@media/constants'
@@ -13,7 +23,7 @@ import type { Proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
 import { buildMediaConnIq } from '@transport/node/builders/media'
 import type { BinaryNode } from '@transport/types'
-import { bytesToBase64UrlSafe, TEXT_DECODER, toBytesView } from '@util/bytes'
+import { bytesToBase64UrlSafe, TEXT_DECODER } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 export interface WaMediaMessageOptions {
@@ -28,6 +38,7 @@ export interface WaMediaMessageOptions {
     ) => Promise<BinaryNode>
     readonly getMediaConnCache: () => WaMediaConn | null
     readonly setMediaConnCache: (mediaConn: WaMediaConn | null) => void
+    readonly media?: WaMediaOptions
 }
 
 export async function buildMediaMessageContent(
@@ -67,100 +78,174 @@ export async function getMediaConn(
     return mediaConn
 }
 
+function needsSidecar(content: WaSendMediaMessage): boolean {
+    return content.type === 'video' || content.type === 'ptv' || content.type === 'audio'
+}
+
 function resolveUploadType(content: WaSendMediaMessage): MediaCryptoType {
     if (content.type === 'video' && content.gifPlayback) return 'gif'
     if (content.type === 'audio' && content.ptt) return 'ptt'
     return content.type as MediaCryptoType
 }
 
-function isReadableStream(value: unknown): value is Readable {
-    return (
-        !!value &&
-        typeof value === 'object' &&
-        'pipe' in value &&
-        typeof (value as Readable).pipe === 'function'
-    )
+function resolveMimetype(content: WaSendMediaMessage): string {
+    if (content.mimetype) return content.mimetype
+    if (content.type === 'sticker') return 'image/webp'
+    throw new Error(`mimetype is required for ${content.type} messages`)
 }
 
 async function buildMediaMessage(
     options: WaMediaMessageOptions,
     content: WaSendMediaMessage
 ): Promise<Proto.IMessage> {
-    const uploaded = isReadableStream(content.media)
-        ? await uploadMediaStream(options, content, content.media)
-        : await uploadMediaBytes(options, content, toBytesView(content.media))
-    const mediaKeyTimestamp = Math.floor(Date.now() / 1000)
-    const common = {
-        url: uploaded.url,
-        mimetype: content.mimetype,
-        fileSha256: uploaded.fileSha256,
-        fileLength: uploaded.fileLength,
-        mediaKey: uploaded.mediaKey,
-        fileEncSha256: uploaded.fileEncSha256,
-        directPath: uploaded.directPath,
-        mediaKeyTimestamp
-    }
+    const needsTempFile =
+        hasMediaProcessingTasks(options.media, content) ||
+        (content.type === 'sticker' && content.firstFrameLength === undefined)
+    const resolved = await resolveMediaInputs(needsTempFile, content.media)
 
-    switch (content.type) {
-        case 'image':
-            return {
-                imageMessage: {
-                    ...common,
-                    caption: content.caption,
-                    width: content.width,
-                    height: content.height
+    try {
+        let detectedFirstFrameLength: number | undefined
+        if (
+            content.type === 'sticker' &&
+            content.firstFrameLength === undefined &&
+            resolved.processorInput
+        ) {
+            const input = resolved.processorInput
+            const header =
+                typeof input === 'string' ? await readFileHead(input, 100) : input.subarray(0, 100)
+            detectedFirstFrameLength = parseWebpAnimation(header)?.firstFrameLength
+        }
+        const firstFrameLength =
+            content.type === 'sticker'
+                ? (content.firstFrameLength ?? detectedFirstFrameLength)
+                : undefined
+
+        const uploadPromise = isReadableStream(resolved.uploadMedia)
+            ? uploadMediaStream(options, content, resolved.uploadMedia, firstFrameLength)
+            : uploadMediaBytes(options, content, resolved.uploadMedia, firstFrameLength)
+        const processPromise = runMediaProcessor(
+            options.media,
+            resolved.processorInput,
+            content,
+            options.logger
+        )
+        const [uploadResult, processResult] = await Promise.allSettled([
+            uploadPromise,
+            processPromise
+        ])
+        if (uploadResult.status === 'rejected') throw uploadResult.reason
+        if (processResult.status === 'rejected') throw processResult.reason
+        const uploaded = uploadResult.value
+        const processed = processResult.value
+        const mediaKeyTimestamp = Math.floor(Date.now() / 1000)
+        const uploadedFields = {
+            url: uploaded.url,
+            fileSha256: uploaded.fileSha256,
+            fileLength: uploaded.fileLength,
+            mediaKey: uploaded.mediaKey,
+            fileEncSha256: uploaded.fileEncSha256,
+            directPath: uploaded.directPath,
+            mediaKeyTimestamp,
+            mimetype: resolveMimetype(content)
+        }
+
+        function spread(c: WaSendMediaMessage): Record<string, unknown> {
+            const result: Record<string, unknown> = {}
+            for (const key in c) {
+                if (
+                    key !== 'type' &&
+                    key !== 'media' &&
+                    key !== 'fileLength' &&
+                    key !== 'mimetype'
+                ) {
+                    result[key] = (c as unknown as Record<string, unknown>)[key]
                 }
             }
-        case 'video':
-            return {
-                videoMessage: {
-                    ...common,
-                    caption: content.caption,
-                    gifPlayback: content.gifPlayback,
-                    seconds: content.seconds,
-                    width: content.width,
-                    height: content.height,
-                    metadataUrl: uploaded.metadataUrl
+            return result
+        }
+
+        switch (content.type) {
+            case 'image':
+                return {
+                    imageMessage: {
+                        ...spread(content),
+                        ...uploadedFields,
+                        width: content.width ?? processed.width,
+                        height: content.height ?? processed.height,
+                        jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail
+                    }
                 }
-            }
-        case 'ptv':
-            return {
-                ptvMessage: {
-                    ...common,
-                    seconds: content.seconds,
-                    width: content.width,
-                    height: content.height
+            case 'video':
+                return {
+                    videoMessage: {
+                        ...spread(content),
+                        ...uploadedFields,
+                        seconds: content.seconds ?? processed.seconds,
+                        width: content.width ?? processed.width,
+                        height: content.height ?? processed.height,
+                        jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail,
+                        streamingSidecar: uploaded.streamingSidecar,
+                        metadataUrl: uploaded.metadataUrl
+                    }
                 }
-            }
-        case 'audio':
-            return {
-                audioMessage: {
-                    ...common,
-                    seconds: content.seconds,
-                    ptt: content.ptt
+            case 'ptv':
+                return {
+                    ptvMessage: {
+                        ...spread(content),
+                        ...uploadedFields,
+                        seconds: content.seconds ?? processed.seconds,
+                        width: content.width ?? processed.width,
+                        height: content.height ?? processed.height,
+                        jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail,
+                        streamingSidecar: uploaded.streamingSidecar
+                    }
                 }
-            }
-        case 'document':
-            return {
-                documentMessage: {
-                    ...common,
-                    caption: content.caption,
-                    fileName: content.fileName ?? 'file',
-                    title: content.fileName ?? undefined
+            case 'audio':
+                return {
+                    audioMessage: {
+                        ...spread(content),
+                        ...uploadedFields,
+                        seconds: content.seconds ?? processed.seconds,
+                        streamingSidecar: uploaded.streamingSidecar,
+                        waveform: content.waveform ?? processed.waveform
+                    }
                 }
-            }
-        case 'sticker':
-            return {
-                stickerMessage: {
-                    ...common,
-                    width: content.width,
-                    height: content.height
+            case 'document':
+                return {
+                    documentMessage: {
+                        ...spread(content),
+                        ...uploadedFields,
+                        fileName: content.fileName ?? 'file',
+                        title: content.title ?? content.fileName ?? undefined,
+                        jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail
+                    }
                 }
-            }
-        default:
-            throw new Error(
-                `unsupported media message type: ${String((content as Record<string, unknown>).type)}`
-            )
+            case 'sticker':
+                return {
+                    stickerMessage: {
+                        ...spread(content),
+                        ...uploadedFields,
+                        width: content.width ?? processed.width,
+                        height: content.height ?? processed.height,
+                        pngThumbnail: content.pngThumbnail ?? processed.pngThumbnail,
+                        isAnimated:
+                            content.isAnimated ??
+                            processed.isAnimated ??
+                            firstFrameLength !== undefined,
+                        firstFrameLength: content.firstFrameLength ?? uploaded.firstFrameLength,
+                        firstFrameSidecar: content.firstFrameSidecar ?? uploaded.firstFrameSidecar,
+                        stickerSentTs: content.stickerSentTs ?? Date.now()
+                    }
+                }
+            default:
+                throw new Error(
+                    `unsupported media message type: ${String((content as Record<string, unknown>).type)}`
+                )
+        }
+    } finally {
+        if (resolved.tempFilePath) {
+            await cleanupTempFile(resolved.tempFilePath)
+        }
     }
 }
 
@@ -172,6 +257,9 @@ interface UploadResult {
     readonly fileEncSha256: Uint8Array
     readonly fileLength: number
     readonly metadataUrl?: string
+    readonly streamingSidecar?: Uint8Array
+    readonly firstFrameSidecar?: Uint8Array
+    readonly firstFrameLength?: number
 }
 
 function buildUploadUrl(
@@ -222,12 +310,16 @@ function parseUploadResponse(
 async function uploadMediaBytes(
     options: WaMediaMessageOptions,
     content: WaSendMediaMessage,
-    mediaBytes: Uint8Array
+    mediaBytes: Uint8Array,
+    firstFrameLength?: number
 ): Promise<UploadResult> {
     const uploadType = resolveUploadType(content)
     const mediaKey = await WaMediaCrypto.generateMediaKey()
     const [encrypted, mediaConn] = await Promise.all([
-        WaMediaCrypto.encryptBytes(uploadType, mediaKey, mediaBytes),
+        WaMediaCrypto.encryptBytes(uploadType, mediaKey, mediaBytes, {
+            sidecar: needsSidecar(content),
+            firstFrameLength
+        }),
         getMediaConn(options)
     ])
     const selectedHost =
@@ -249,7 +341,7 @@ async function uploadMediaBytes(
         method: 'POST',
         body: encrypted.ciphertextHmac,
         contentLength: encrypted.ciphertextHmac.byteLength,
-        contentType: content.mimetype
+        contentType: resolveMimetype(content)
     })
     const responseBody = await options.mediaTransfer.readResponseBytes(uploadResponse)
     const parsed = parseUploadResponse(responseBody, uploadResponse.status)
@@ -258,18 +350,25 @@ async function uploadMediaBytes(
         mediaKey,
         fileSha256: encrypted.fileSha256,
         fileEncSha256: encrypted.fileEncSha256,
-        fileLength: mediaBytes.byteLength
+        fileLength: mediaBytes.byteLength,
+        streamingSidecar: encrypted.streamingSidecar,
+        firstFrameSidecar: encrypted.firstFrameSidecar,
+        firstFrameLength
     }
 }
 
 async function uploadMediaStream(
     options: WaMediaMessageOptions,
     content: WaSendMediaMessage,
-    stream: Readable
+    stream: Readable,
+    firstFrameLength?: number
 ): Promise<UploadResult> {
     const uploadType = resolveUploadType(content)
     const mediaKey = await WaMediaCrypto.generateMediaKey()
-    const encResult = await WaMediaCrypto.encryptToFile(uploadType, mediaKey, stream)
+    const encResult = await WaMediaCrypto.encryptToFile(uploadType, mediaKey, stream, {
+        sidecar: needsSidecar(content),
+        firstFrameLength
+    })
     let readStream: ReturnType<typeof createReadStream> | undefined
     try {
         const mediaConn = await getMediaConn(options)
@@ -295,7 +394,7 @@ async function uploadMediaStream(
             method: 'POST',
             body: readStream,
             contentLength: encResult.fileSize,
-            contentType: content.mimetype
+            contentType: resolveMimetype(content)
         })
         const responseBody = await options.mediaTransfer.readResponseBytes(uploadResponse)
         const parsed = parseUploadResponse(responseBody, uploadResponse.status)
@@ -304,7 +403,10 @@ async function uploadMediaStream(
             mediaKey,
             fileSha256: encResult.fileSha256,
             fileEncSha256: encResult.fileEncSha256,
-            fileLength: encResult.plaintextLength
+            fileLength: encResult.plaintextLength,
+            streamingSidecar: encResult.streamingSidecar,
+            firstFrameSidecar: encResult.firstFrameSidecar,
+            firstFrameLength
         }
     } finally {
         if (readStream && !readStream.closed) {

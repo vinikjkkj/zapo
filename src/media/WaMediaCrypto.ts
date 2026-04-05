@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import { once } from 'node:events'
 import { createWriteStream } from 'node:fs'
 import { stat, unlink } from 'node:fs/promises'
@@ -8,6 +8,7 @@ import { PassThrough } from 'node:stream'
 import type { Readable, Writable } from 'node:stream'
 
 import { hkdf } from '@crypto/core/hkdf'
+import type { CryptoKey } from '@crypto/core/primitives'
 import {
     aesCbcDecrypt,
     aesCbcEncrypt,
@@ -24,7 +25,9 @@ import {
     IV_SIZE,
     MAC_KEY_END,
     MAC_KEY_START,
-    MEDIA_HKDF_SIZE
+    MEDIA_HKDF_SIZE,
+    SIDECAR_CHUNK_SIZE,
+    SIDECAR_HMAC_SIZE
 } from '@media/constants'
 import type {
     MediaCryptoType,
@@ -47,6 +50,117 @@ import {
     uint8TimingSafeEqual
 } from '@util/bytes'
 import { toError } from '@util/primitives'
+
+const AES_BLOCK_SIZE = 16
+const PKCS7_FULL_BLOCK = new Uint8Array(AES_BLOCK_SIZE).fill(AES_BLOCK_SIZE)
+
+async function aesCbcEncryptChunk(
+    key: CryptoKey,
+    iv: Uint8Array,
+    chunk: Uint8Array,
+    isFinal: boolean
+): Promise<{ ciphertext: Uint8Array; nextIv: Uint8Array }> {
+    const encrypted = await aesCbcEncrypt(key, iv, chunk)
+    if (isFinal) {
+        return {
+            ciphertext: encrypted,
+            nextIv: encrypted.subarray(encrypted.byteLength - AES_BLOCK_SIZE)
+        }
+    }
+    const ciphertext = encrypted.subarray(0, encrypted.byteLength - AES_BLOCK_SIZE)
+    return {
+        ciphertext,
+        nextIv: ciphertext.subarray(ciphertext.byteLength - AES_BLOCK_SIZE)
+    }
+}
+
+async function aesCbcDecryptChunk(
+    key: CryptoKey,
+    iv: Uint8Array,
+    ciphertext: Uint8Array,
+    isFinal: boolean
+): Promise<{ plaintext: Uint8Array; nextIv: Uint8Array }> {
+    const nextIv = toBytesView(ciphertext.subarray(ciphertext.byteLength - AES_BLOCK_SIZE))
+    if (isFinal) {
+        return { plaintext: await aesCbcDecrypt(key, iv, ciphertext), nextIv }
+    }
+    const padBlock = (await aesCbcEncrypt(key, nextIv, PKCS7_FULL_BLOCK)).subarray(
+        0,
+        AES_BLOCK_SIZE
+    )
+    const withPad = concatBytes([ciphertext, padBlock])
+    return { plaintext: await aesCbcDecrypt(key, iv, withPad), nextIv }
+}
+
+async function computeFirstFrameSidecar(
+    macKey: Uint8Array,
+    ivCiphertext: Uint8Array,
+    firstFrameLength: number
+): Promise<Uint8Array> {
+    const aligned = Math.ceil(firstFrameLength / AES_BLOCK_SIZE) * AES_BLOCK_SIZE
+    const slice = ivCiphertext.subarray(0, IV_SIZE + aligned)
+    const key = await importHmacKey(macKey)
+    const digest = await hmacSign(key, slice)
+    return digest.subarray(0, SIDECAR_HMAC_SIZE)
+}
+
+class SidecarAccumulator {
+    private readonly macKey: Uint8Array
+    private result: Uint8Array
+    private resultOffset = 0
+    private totalPushed = 0
+    private readonly window: Uint8Array
+    private windowOffset = 0
+    private nextChunkStart = 0
+
+    constructor(macKey: Uint8Array, estimatedSize = 0) {
+        this.macKey = macKey
+        this.window = new Uint8Array(IV_SIZE + SIDECAR_CHUNK_SIZE)
+        const estimated = Math.max(Math.ceil(estimatedSize / SIDECAR_CHUNK_SIZE) + 1, 16)
+        this.result = new Uint8Array(estimated * SIDECAR_HMAC_SIZE)
+    }
+
+    push(data: Uint8Array): void {
+        let srcOffset = 0
+        while (srcOffset < data.byteLength) {
+            const windowEnd = this.nextChunkStart + IV_SIZE + SIDECAR_CHUNK_SIZE
+            const remaining = windowEnd - this.totalPushed
+            const toCopy = Math.min(remaining, data.byteLength - srcOffset)
+            this.window.set(data.subarray(srcOffset, srcOffset + toCopy), this.windowOffset)
+            this.windowOffset += toCopy
+            this.totalPushed += toCopy
+            srcOffset += toCopy
+            if (this.totalPushed === windowEnd) {
+                this.flushChunk()
+            }
+        }
+    }
+
+    finish(): Uint8Array {
+        if (this.windowOffset > 0) {
+            this.flushChunk()
+        }
+        return this.result.subarray(0, this.resultOffset)
+    }
+
+    private flushChunk(): void {
+        const digest = createHmac('sha256', this.macKey)
+            .update(this.window.subarray(0, this.windowOffset))
+            .digest()
+        if (this.resultOffset + SIDECAR_HMAC_SIZE > this.result.byteLength) {
+            const grown = new Uint8Array(this.result.byteLength * 2)
+            grown.set(this.result)
+            this.result = grown
+        }
+        this.result.set(digest.subarray(0, SIDECAR_HMAC_SIZE), this.resultOffset)
+        this.resultOffset += SIDECAR_HMAC_SIZE
+
+        this.nextChunkStart += SIDECAR_CHUNK_SIZE
+        const overlapSrc = this.window.subarray(this.windowOffset - IV_SIZE, this.windowOffset)
+        this.window.set(overlapSrc, 0)
+        this.windowOffset = IV_SIZE
+    }
+}
 
 export class WaMediaCrypto {
     static async generateMediaKey(): Promise<Uint8Array> {
@@ -75,7 +189,8 @@ export class WaMediaCrypto {
     static async encryptBytes(
         mediaType: MediaCryptoType,
         mediaKey: Uint8Array,
-        plaintext: Uint8Array
+        plaintext: Uint8Array,
+        options?: { readonly sidecar?: boolean; readonly firstFrameLength?: number }
     ): Promise<WaMediaEncryptionResult> {
         const keys = await WaMediaCrypto.deriveKeys(mediaType, mediaKey)
         const [aesKey, hmacKey] = await Promise.all([
@@ -89,11 +204,35 @@ export class WaMediaCrypto {
         const signature = mac.subarray(0, HMAC_TRUNCATED_SIZE)
         const ciphertextHmac = concatBytes([ciphertext, signature])
 
+        let streamingSidecar: Uint8Array | undefined
+        if (options?.sidecar !== false) {
+            const acc = new SidecarAccumulator(keys.macKey)
+            acc.push(keys.iv)
+            acc.push(ciphertext)
+            acc.push(signature)
+            streamingSidecar = acc.finish()
+        }
+
+        const firstFrameSidecar =
+            options?.firstFrameLength !== undefined
+                ? await computeFirstFrameSidecar(
+                      keys.macKey,
+                      ivCiphertext,
+                      options.firstFrameLength
+                  )
+                : undefined
+
         const [fileSha256, fileEncSha256] = await Promise.all([
             sha256(plaintext),
             sha256(ciphertextHmac)
         ])
-        return { ciphertextHmac, fileSha256, fileEncSha256 }
+        return {
+            ciphertextHmac,
+            fileSha256,
+            fileEncSha256,
+            streamingSidecar,
+            firstFrameSidecar
+        }
     }
 
     static async decryptBytes(
@@ -145,18 +284,26 @@ export class WaMediaCrypto {
     static async encryptReadable(
         mediaType: MediaCryptoType,
         mediaKey: Uint8Array,
-        plaintext: Readable
+        plaintext: Readable,
+        options?: { readonly sidecar?: boolean; readonly firstFrameLength?: number }
     ): Promise<WaMediaReadableEncryptionResult> {
         const keys = await WaMediaCrypto.deriveKeys(mediaType, mediaKey)
         const encrypted = new PassThrough()
-        const metadata = pumpEncryption(plaintext, encrypted, keys)
+        const metadata = pumpEncryption(
+            plaintext,
+            encrypted,
+            keys,
+            options?.sidecar !== false,
+            options?.firstFrameLength
+        )
         return { encrypted, metadata }
     }
 
     static async encryptToFile(
         mediaType: MediaCryptoType,
         mediaKey: Uint8Array,
-        plaintext: Readable
+        plaintext: Readable,
+        options?: { readonly sidecar?: boolean; readonly firstFrameLength?: number }
     ): Promise<WaMediaFileEncryptionResult> {
         const keys = await WaMediaCrypto.deriveKeys(mediaType, mediaKey)
         const filePath = join(
@@ -165,7 +312,13 @@ export class WaMediaCrypto {
         )
         const output = createWriteStream(filePath)
         try {
-            const metadata = await pumpEncryptionToWritable(plaintext, output, keys)
+            const metadata = await pumpEncryptionToWritable(
+                plaintext,
+                output,
+                keys,
+                options?.sidecar !== false,
+                options?.firstFrameLength
+            )
             const fileSize = (await stat(filePath)).size
             return { filePath, fileSize, ...metadata }
         } catch (error) {
@@ -200,51 +353,107 @@ export class WaMediaCrypto {
 async function pumpEncryption(
     plaintext: Readable,
     encrypted: PassThrough,
-    keys: WaMediaDerivedKeys
+    keys: WaMediaDerivedKeys,
+    computeSidecar: boolean,
+    firstFrameLength?: number
 ): Promise<{
     readonly fileSha256: Uint8Array
     readonly fileEncSha256: Uint8Array
     readonly plaintextLength: number
+    readonly streamingSidecar?: Uint8Array
+    readonly firstFrameSidecar?: Uint8Array
 }> {
+    const aesKey = await importAesCbcKey(keys.encKey)
     const plainHash = createHash('sha256')
     const encHash = createHash('sha256')
     const hmac = createHmac('sha256', keys.macKey)
-    const cipher = createCipheriv('aes-256-cbc', keys.encKey, keys.iv)
+    const sidecar = computeSidecar ? new SidecarAccumulator(keys.macKey) : null
+    const ffTarget =
+        firstFrameLength !== undefined
+            ? IV_SIZE + Math.ceil(firstFrameLength / AES_BLOCK_SIZE) * AES_BLOCK_SIZE
+            : 0
+    let ffCollected = 0
+    const ffChunks: Uint8Array[] = ffTarget > 0 ? [keys.iv] : []
+    if (ffTarget > 0) ffCollected = IV_SIZE
     let plaintextLength = 0
+    let currentIv = keys.iv
+    let pending: Uint8Array = EMPTY_BYTES
 
     hmac.update(keys.iv)
+    sidecar?.push(keys.iv)
     try {
         for await (const chunk of plaintext) {
             const plainChunk = toChunkBytes(chunk)
-            if (plainChunk.byteLength === 0) {
-                continue
-            }
+            if (plainChunk.byteLength === 0) continue
             plaintextLength += plainChunk.byteLength
             plainHash.update(plainChunk)
-            const encryptedChunk = cipher.update(plainChunk)
-            if (encryptedChunk.byteLength > 0) {
-                hmac.update(encryptedChunk)
-                encHash.update(encryptedChunk)
-                await writeChunk(encrypted, encryptedChunk)
+
+            const combined =
+                pending.byteLength > 0
+                    ? concatBytes([pending, plainChunk])
+                    : toBytesView(plainChunk)
+            const aligned = combined.byteLength - (combined.byteLength % AES_BLOCK_SIZE)
+            if (aligned === 0) {
+                pending = combined
+                continue
             }
+
+            const toEncrypt = toBytesView(combined.subarray(0, aligned))
+            pending = toBytesView(combined.subarray(aligned))
+
+            const { ciphertext, nextIv } = await aesCbcEncryptChunk(
+                aesKey,
+                currentIv,
+                toEncrypt,
+                false
+            )
+            currentIv = nextIv
+            hmac.update(ciphertext)
+            encHash.update(ciphertext)
+            sidecar?.push(ciphertext)
+            if (ffCollected < ffTarget) {
+                const need = ffTarget - ffCollected
+                ffChunks.push(ciphertext.subarray(0, Math.min(need, ciphertext.byteLength)))
+                ffCollected += ciphertext.byteLength
+            }
+            await writeChunk(encrypted, ciphertext)
         }
 
-        const encryptedFinal = cipher.final()
-        if (encryptedFinal.byteLength > 0) {
-            hmac.update(encryptedFinal)
-            encHash.update(encryptedFinal)
-            await writeChunk(encrypted, encryptedFinal)
+        const { ciphertext: finalCiphertext } = await aesCbcEncryptChunk(
+            aesKey,
+            currentIv,
+            pending,
+            true
+        )
+        hmac.update(finalCiphertext)
+        encHash.update(finalCiphertext)
+        sidecar?.push(finalCiphertext)
+        if (ffCollected < ffTarget) {
+            const need = ffTarget - ffCollected
+            ffChunks.push(finalCiphertext.subarray(0, Math.min(need, finalCiphertext.byteLength)))
         }
+        await writeChunk(encrypted, finalCiphertext)
 
-        const signature = hmac.digest().subarray(0, HMAC_TRUNCATED_SIZE)
+        const signature = toBytesView(hmac.digest().subarray(0, HMAC_TRUNCATED_SIZE))
         encHash.update(signature)
+        sidecar?.push(signature)
         await writeChunk(encrypted, signature)
         encrypted.end()
+
+        let firstFrameSidecar: Uint8Array | undefined
+        if (ffTarget > 0) {
+            const ivCiphertextSlice = concatBytes(ffChunks)
+            const ffKey = await importHmacKey(keys.macKey)
+            const ffDigest = await hmacSign(ffKey, ivCiphertextSlice)
+            firstFrameSidecar = ffDigest.subarray(0, SIDECAR_HMAC_SIZE)
+        }
 
         return {
             fileSha256: toBytesView(plainHash.digest()),
             fileEncSha256: toBytesView(encHash.digest()),
-            plaintextLength
+            plaintextLength,
+            streamingSidecar: sidecar?.finish(),
+            firstFrameSidecar
         }
     } catch (error) {
         const normalized = toError(error)
@@ -284,51 +493,107 @@ async function endWritable(stream: Writable): Promise<void> {
 async function pumpEncryptionToWritable(
     plaintext: Readable,
     output: Writable,
-    keys: WaMediaDerivedKeys
+    keys: WaMediaDerivedKeys,
+    computeSidecar: boolean,
+    firstFrameLength?: number
 ): Promise<{
     readonly fileSha256: Uint8Array
     readonly fileEncSha256: Uint8Array
     readonly plaintextLength: number
+    readonly streamingSidecar?: Uint8Array
+    readonly firstFrameSidecar?: Uint8Array
 }> {
+    const aesKey = await importAesCbcKey(keys.encKey)
     const plainHash = createHash('sha256')
     const encHash = createHash('sha256')
     const hmac = createHmac('sha256', keys.macKey)
-    const cipher = createCipheriv('aes-256-cbc', keys.encKey, keys.iv)
+    const sidecar = computeSidecar ? new SidecarAccumulator(keys.macKey) : null
+    const ffTarget =
+        firstFrameLength !== undefined
+            ? IV_SIZE + Math.ceil(firstFrameLength / AES_BLOCK_SIZE) * AES_BLOCK_SIZE
+            : 0
+    let ffCollected = 0
+    const ffChunks: Uint8Array[] = ffTarget > 0 ? [keys.iv] : []
+    if (ffTarget > 0) ffCollected = IV_SIZE
     let plaintextLength = 0
+    let currentIv = keys.iv
+    let pending: Uint8Array = EMPTY_BYTES
 
     hmac.update(keys.iv)
+    sidecar?.push(keys.iv)
     try {
         for await (const chunk of plaintext) {
             const plainChunk = toChunkBytes(chunk)
-            if (plainChunk.byteLength === 0) {
-                continue
-            }
+            if (plainChunk.byteLength === 0) continue
             plaintextLength += plainChunk.byteLength
             plainHash.update(plainChunk)
-            const encryptedChunk = cipher.update(plainChunk)
-            if (encryptedChunk.byteLength > 0) {
-                hmac.update(encryptedChunk)
-                encHash.update(encryptedChunk)
-                await writeChunkToWritable(output, encryptedChunk)
+
+            const combined =
+                pending.byteLength > 0
+                    ? concatBytes([pending, plainChunk])
+                    : toBytesView(plainChunk)
+            const aligned = combined.byteLength - (combined.byteLength % AES_BLOCK_SIZE)
+            if (aligned === 0) {
+                pending = combined
+                continue
             }
+
+            const toEncrypt = toBytesView(combined.subarray(0, aligned))
+            pending = toBytesView(combined.subarray(aligned))
+
+            const { ciphertext, nextIv } = await aesCbcEncryptChunk(
+                aesKey,
+                currentIv,
+                toEncrypt,
+                false
+            )
+            currentIv = nextIv
+            hmac.update(ciphertext)
+            encHash.update(ciphertext)
+            sidecar?.push(ciphertext)
+            if (ffCollected < ffTarget) {
+                const need = ffTarget - ffCollected
+                ffChunks.push(ciphertext.subarray(0, Math.min(need, ciphertext.byteLength)))
+                ffCollected += ciphertext.byteLength
+            }
+            await writeChunkToWritable(output, ciphertext)
         }
 
-        const encryptedFinal = cipher.final()
-        if (encryptedFinal.byteLength > 0) {
-            hmac.update(encryptedFinal)
-            encHash.update(encryptedFinal)
-            await writeChunkToWritable(output, encryptedFinal)
+        const { ciphertext: finalCiphertext } = await aesCbcEncryptChunk(
+            aesKey,
+            currentIv,
+            pending,
+            true
+        )
+        hmac.update(finalCiphertext)
+        encHash.update(finalCiphertext)
+        sidecar?.push(finalCiphertext)
+        if (ffCollected < ffTarget) {
+            const need = ffTarget - ffCollected
+            ffChunks.push(finalCiphertext.subarray(0, Math.min(need, finalCiphertext.byteLength)))
         }
+        await writeChunkToWritable(output, finalCiphertext)
 
-        const signature = hmac.digest().subarray(0, HMAC_TRUNCATED_SIZE)
+        const signature = toBytesView(hmac.digest().subarray(0, HMAC_TRUNCATED_SIZE))
         encHash.update(signature)
+        sidecar?.push(signature)
         await writeChunkToWritable(output, signature)
         await endWritable(output)
+
+        let firstFrameSidecar: Uint8Array | undefined
+        if (ffTarget > 0) {
+            const ivCiphertextSlice = concatBytes(ffChunks)
+            const ffKey = await importHmacKey(keys.macKey)
+            const ffDigest = await hmacSign(ffKey, ivCiphertextSlice)
+            firstFrameSidecar = ffDigest.subarray(0, SIDECAR_HMAC_SIZE)
+        }
 
         return {
             fileSha256: toBytesView(plainHash.digest()),
             fileEncSha256: toBytesView(encHash.digest()),
-            plaintextLength
+            plaintextLength,
+            streamingSidecar: sidecar?.finish(),
+            firstFrameSidecar
         }
     } catch (error) {
         const normalized = toError(error)
@@ -343,10 +608,12 @@ async function pumpDecryption(
     keys: WaMediaDerivedKeys,
     options: WaMediaDecryptReadableOptions
 ): Promise<{ readonly fileSha256: Uint8Array; readonly fileEncSha256: Uint8Array }> {
+    const aesKey = await importAesCbcKey(keys.encKey)
     const plainHash = createHash('sha256')
     const encHash = createHash('sha256')
     const hmac = createHmac('sha256', keys.macKey)
-    const decipher = createDecipheriv('aes-256-cbc', keys.encKey, keys.iv)
+    let currentIv = keys.iv
+    let pending: Uint8Array = EMPTY_BYTES
 
     hmac.update(keys.iv)
     try {
@@ -366,10 +633,28 @@ async function pumpDecryption(
             const ciphertextChunk = merged.subarray(0, merged.byteLength - HMAC_TRUNCATED_SIZE)
             trailing = merged.subarray(merged.byteLength - HMAC_TRUNCATED_SIZE)
             hmac.update(ciphertextChunk)
-            const plainChunk = decipher.update(ciphertextChunk)
-            if (plainChunk.byteLength > 0) {
-                plainHash.update(plainChunk)
-                await writeChunk(plaintext, plainChunk)
+
+            const combined =
+                pending.byteLength > 0
+                    ? concatBytes([pending, ciphertextChunk])
+                    : toBytesView(ciphertextChunk)
+            const aligned = combined.byteLength - (combined.byteLength % AES_BLOCK_SIZE)
+            if (aligned > AES_BLOCK_SIZE) {
+                const toDecrypt = combined.subarray(0, aligned - AES_BLOCK_SIZE)
+                const { plaintext: plainChunk, nextIv } = await aesCbcDecryptChunk(
+                    aesKey,
+                    currentIv,
+                    toDecrypt,
+                    false
+                )
+                currentIv = nextIv
+                if (plainChunk.byteLength > 0) {
+                    plainHash.update(plainChunk)
+                    await writeChunk(plaintext, plainChunk)
+                }
+                pending = toBytesView(combined.subarray(aligned - AES_BLOCK_SIZE))
+            } else {
+                pending = combined
             }
         }
 
@@ -382,7 +667,10 @@ async function pumpDecryption(
             throw new Error('media MAC mismatch')
         }
 
-        const plainFinal = decipher.final()
+        if (pending.byteLength < AES_BLOCK_SIZE || pending.byteLength % AES_BLOCK_SIZE !== 0) {
+            throw new Error(`invalid ciphertext length: ${pending.byteLength}`)
+        }
+        const { plaintext: plainFinal } = await aesCbcDecryptChunk(aesKey, currentIv, pending, true)
         if (plainFinal.byteLength > 0) {
             plainHash.update(plainFinal)
             await writeChunk(plaintext, plainFinal)

@@ -26,7 +26,23 @@ export interface WaMessagePublishResult {
     readonly ack: WaMessageAckMetadata
 }
 
-type MediaInput = Uint8Array | ArrayBuffer | Readable
+type MediaInput = Uint8Array | ArrayBuffer | Readable | string
+
+type MediaFieldsFilledByBuilder =
+    | 'url'
+    | 'mimetype'
+    | 'fileSha256'
+    | 'fileLength'
+    | 'mediaKey'
+    | 'fileEncSha256'
+    | 'directPath'
+    | 'mediaKeyTimestamp'
+    | 'streamingSidecar'
+    | 'metadataUrl'
+
+type UserMediaFields<T> = {
+    readonly [K in keyof Omit<T, MediaFieldsFilledByBuilder>]?: T[K]
+}
 
 interface WaSendMediaBase {
     readonly media: MediaInput
@@ -34,45 +50,36 @@ interface WaSendMediaBase {
     readonly fileLength?: number
 }
 
-interface WaSendImageMessage extends WaSendMediaBase {
+interface WaSendMediaBaseOptionalMime {
+    readonly media: MediaInput
+    readonly mimetype?: string
+    readonly fileLength?: number
+}
+
+interface WaSendImageMessage extends WaSendMediaBase, UserMediaFields<Proto.Message.IImageMessage> {
     readonly type: 'image'
-    readonly caption?: string
-    readonly width?: number
-    readonly height?: number
 }
 
-interface WaSendVideoMessage extends WaSendMediaBase {
+interface WaSendVideoMessage extends WaSendMediaBase, UserMediaFields<Proto.Message.IVideoMessage> {
     readonly type: 'video'
-    readonly caption?: string
-    readonly gifPlayback?: boolean
-    readonly seconds?: number
-    readonly width?: number
-    readonly height?: number
 }
 
-interface WaSendPtvMessage extends WaSendMediaBase {
+interface WaSendPtvMessage extends WaSendMediaBase, UserMediaFields<Proto.Message.IVideoMessage> {
     readonly type: 'ptv'
-    readonly seconds?: number
-    readonly width?: number
-    readonly height?: number
 }
 
-interface WaSendAudioMessage extends WaSendMediaBase {
+interface WaSendAudioMessage extends WaSendMediaBase, UserMediaFields<Proto.Message.IAudioMessage> {
     readonly type: 'audio'
-    readonly ptt?: boolean
-    readonly seconds?: number
 }
 
-interface WaSendDocumentMessage extends WaSendMediaBase {
+interface WaSendDocumentMessage
+    extends WaSendMediaBase, UserMediaFields<Proto.Message.IDocumentMessage> {
     readonly type: 'document'
-    readonly caption?: string
-    readonly fileName?: string
 }
 
-interface WaSendStickerMessage extends WaSendMediaBase {
+interface WaSendStickerMessage
+    extends WaSendMediaBaseOptionalMime, UserMediaFields<Proto.Message.IStickerMessage> {
     readonly type: 'sticker'
-    readonly width?: number
-    readonly height?: number
 }
 
 export type WaSendMediaMessage =

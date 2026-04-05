@@ -10,13 +10,7 @@ import {
 } from '@protocol/constants'
 
 export function isSendMediaMessage(content: unknown): content is WaSendMediaMessage {
-    return (
-        !!content &&
-        typeof content === 'object' &&
-        'type' in content &&
-        'media' in content &&
-        'mimetype' in content
-    )
+    return !!content && typeof content === 'object' && 'type' in content && 'media' in content
 }
 
 export function unwrapMessage(message: Proto.IMessage): Proto.IMessage {
