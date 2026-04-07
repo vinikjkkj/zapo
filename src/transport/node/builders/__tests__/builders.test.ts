@@ -367,6 +367,7 @@ test('privacy token builders create iq and message token nodes', () => {
     })
     assert.equal(iq.tag, WA_NODE_TAGS.IQ)
     assert.equal(iq.attrs.type, 'set')
+    assert.equal(iq.attrs.to, WA_DEFAULTS.HOST_DOMAIN)
     assert.ok(Array.isArray(iq.content))
     if (!Array.isArray(iq.content)) {
         throw new Error('expected privacy token iq content array')
@@ -376,11 +377,12 @@ test('privacy token builders create iq and message token nodes', () => {
     if (!Array.isArray(iq.content[0].content)) {
         throw new Error('expected privacy token list content array')
     }
+    assert.equal(iq.content[0].content[0].attrs.jid, '5511999999999@s.whatsapp.net')
     assert.equal(iq.content[0].content[0].attrs.type, WA_PRIVACY_TOKEN_TYPES.TRUSTED_CONTACT)
     assert.equal(iq.content[0].content[0].attrs.t, '123')
 
     const customTypeIq = buildPrivacyTokenIqNode({
-        jid: '5511888888888@s.whatsapp.net',
+        jid: '5511888888888:12@s.whatsapp.net',
         timestampS: 456,
         type: 'custom_type'
     })
@@ -392,7 +394,10 @@ test('privacy token builders create iq and message token nodes', () => {
     if (!Array.isArray(customTypeIq.content[0].content)) {
         throw new Error('expected custom privacy token list content array')
     }
+    assert.equal(customTypeIq.attrs.to, WA_DEFAULTS.HOST_DOMAIN)
+    assert.equal(customTypeIq.content[0].content[0].attrs.jid, '5511888888888@s.whatsapp.net')
     assert.equal(customTypeIq.content[0].content[0].attrs.type, 'custom_type')
+    assert.equal(customTypeIq.content[0].content[0].attrs.t, '456')
 
     const tcNode = buildTcTokenMessageNode(new Uint8Array([7]))
     assert.equal(tcNode.tag, WA_PRIVACY_TOKEN_TAGS.TC_TOKEN)

@@ -196,5 +196,6 @@ test('trusted contact token coordinator reissues token on identity change when s
     if (!Array.isArray(tokensNode.content)) {
         throw new Error('expected privacy token list content array')
     }
+    assert.equal(queries[0].node.attrs.to, 's.whatsapp.net')
     assert.equal(tokensNode.content[0].attrs.t, String(senderTimestampS))
 })
