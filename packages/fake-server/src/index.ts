@@ -20,16 +20,25 @@ export type {
     WaFakeIqType
 } from './protocol/iq/router'
 export { buildIqError, buildIqResult } from './protocol/iq/router'
+export { buildCall, buildFailure } from './protocol/push/call-failure'
+export type { BuildCallInput, BuildFailureInput } from './protocol/push/call-failure'
 export { buildChatstate } from './protocol/push/chatstate'
 export type { BuildChatstateInput, FakeChatstateState } from './protocol/push/chatstate'
 export { buildIncomingErrorStanza } from './protocol/push/error-stanza'
 export type { BuildIncomingErrorStanzaInput } from './protocol/push/error-stanza'
+export { buildGroupNotification, buildNotification } from './protocol/push/notification'
+export type {
+    BuildGroupNotificationInput,
+    BuildNotificationInput
+} from './protocol/push/notification'
 export { buildIncomingPresence } from './protocol/push/presence'
 export type {
     BuildIncomingPresenceInput,
     FakePresenceLastSentinel,
     FakePresenceType
 } from './protocol/push/presence'
+export { buildReceipt } from './protocol/push/receipt'
+export type { BuildReceiptInput, FakeReceiptType } from './protocol/push/receipt'
 export {
     buildStreamErrorAck,
     buildStreamErrorCode,
