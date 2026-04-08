@@ -7,7 +7,22 @@
  * cross-check tests. Production fake-server code must NOT import this.
  */
 
-import { createStore, type WaAuthCredentials, type WaAuthStore, WaClient } from 'zapo-js'
+import {
+    createStore,
+    type Logger,
+    type WaAuthCredentials,
+    type WaAuthStore,
+    WaClient
+} from 'zapo-js'
+
+const NOOP_LOGGER: Logger = {
+    level: 'error',
+    trace: () => {},
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {}
+}
 
 import type { FakeWaServer } from '../../api/FakeWaServer'
 
@@ -56,6 +71,7 @@ export interface CreateZapoClientOptions {
     readonly sessionId?: string
     readonly connectTimeoutMs?: number
     readonly historySyncEnabled?: boolean
+    readonly logger?: Logger
 }
 
 export interface ZapoClientFixture {
@@ -85,16 +101,19 @@ export function createZapoClient(
         }
     })
 
-    const client = new WaClient({
-        store,
-        sessionId: options.sessionId ?? 'fake-server-cross-check',
-        chatSocketUrls: [server.url],
-        connectTimeoutMs: options.connectTimeoutMs ?? 5_000,
-        history: options.historySyncEnabled ? { enabled: true } : undefined,
-        testHooks: {
-            noiseRootCa: server.noiseRootCa
-        }
-    })
+    const client = new WaClient(
+        {
+            store,
+            sessionId: options.sessionId ?? 'fake-server-cross-check',
+            chatSocketUrls: [server.url],
+            connectTimeoutMs: options.connectTimeoutMs ?? 5_000,
+            history: options.historySyncEnabled ? { enabled: true } : undefined,
+            testHooks: {
+                noiseRootCa: server.noiseRootCa
+            }
+        },
+        options.logger ?? NOOP_LOGGER
+    )
 
     return { client, authStore }
 }

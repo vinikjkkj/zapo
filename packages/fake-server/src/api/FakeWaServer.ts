@@ -22,9 +22,12 @@ import {
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
 import {
+    buildAppStateSyncFullResult,
     buildAppStateSyncResult,
     buildServerSyncNotification,
-    type BuildServerSyncNotificationInput
+    type BuildServerSyncNotificationInput,
+    type FakeAppStateCollectionPayload,
+    parseAppStateSyncRequest
 } from '../protocol/iq/appstate-sync'
 import { buildPreKeyFetchResult } from '../protocol/iq/prekey-fetch'
 import {
@@ -120,6 +123,17 @@ export class FakeWaServer {
     private rejectMode: { readonly code: number; readonly reason: string } | null = null
     private capturedPreKeyBundle: ClientPreKeyBundle | null = null
     private nextPreKeyNotificationId = 1
+    /**
+     * Per-collection app-state payload providers. The auto IQ handler
+     * consults this map for each requested collection: if a provider is
+     * registered, it produces a `<patches>`/`<snapshot>` payload that
+     * advances the lib's collection state. Missing collections fall back
+     * to the empty-success response.
+     */
+    private readonly appStateCollectionProviders = new Map<
+        string,
+        () => Promise<FakeAppStateCollectionPayload | null> | FakeAppStateCollectionPayload | null
+    >()
 
     public constructor(options: FakeWaServerOptions = {}) {
         this.wsServer = new WaFakeWsServer(options)
@@ -155,17 +169,32 @@ export class FakeWaServer {
             respond: (iq) => buildIqError(iq, { code: 404, text: 'item-not-found' })
         })
 
-        // Auto-respond to `<iq xmlns="w:sync:app:state" type="set"><sync>...</sync></iq>`
-        // with an empty success response that echoes each requested
-        // collection back as `<collection name=... version=N type="result"/>`
-        // (no patches, no snapshot). This is enough to unblock a
-        // `client.syncAppState()` round-trip without shipping real
-        // encrypted patches. Tests that need fancier responses can
-        // override the handler via `registerIqHandler` after construction.
+        // Auto-respond to `<iq xmlns="w:sync:app:state" type="set"><sync>...</sync></iq>`.
+        // For each requested collection: if a provider has been
+        // registered via `provideAppStateCollection`, it produces a
+        // `<patches>`/`<snapshot>` payload (real encrypted mutations);
+        // otherwise the collection echoes back as empty success at the
+        // inbound version. This unblocks both the fully-mocked and the
+        // fully-instrumented sync flows from a single handler.
         this.iqRouter.register({
             label: 'app-state-sync',
             matcher: { xmlns: 'w:sync:app:state', type: 'set' },
-            respond: (iq) => buildAppStateSyncResult(iq)
+            respond: async (iq) => {
+                if (this.appStateCollectionProviders.size === 0) {
+                    return buildAppStateSyncResult(iq)
+                }
+                const requests = parseAppStateSyncRequest(iq)
+                const payloads: FakeAppStateCollectionPayload[] = []
+                for (const request of requests) {
+                    const provider = this.appStateCollectionProviders.get(request.name)
+                    if (!provider) continue
+                    const payload = await provider()
+                    if (payload) {
+                        payloads.push(payload)
+                    }
+                }
+                return buildAppStateSyncFullResult(iq, { payloads })
+            }
         })
     }
 
@@ -361,8 +390,8 @@ export class FakeWaServer {
      * Pushes a `<notification type="server_sync"/>` listing the given
      * collection names. The lib's incoming notification handler reacts
      * by triggering an `appStateSync.sync()` round, which the
-     * auto-registered `app-state-sync` IQ handler answers with an
-     * empty success response.
+     * auto-registered `app-state-sync` IQ handler answers via the
+     * registered providers (or empty success if none are registered).
      *
      * Resolves once the notification has been written to the wire.
      */
@@ -371,6 +400,30 @@ export class FakeWaServer {
         input: BuildServerSyncNotificationInput
     ): Promise<void> {
         await pipeline.sendStanza(buildServerSyncNotification(input))
+    }
+
+    /**
+     * Registers a payload provider for a given app-state collection.
+     * The provider is invoked once per inbound app-state sync IQ that
+     * names the collection, and the returned payload is shipped inside
+     * the `<sync><collection>` response. Returning `null` falls back to
+     * the empty-success default.
+     *
+     * Used by tests that ship real encrypted snapshots/patches: the
+     * provider typically wraps a `FakeAppStateCollection` and returns
+     * its `encodeSnapshot()` (first round) then `encodePendingPatch()`
+     * (subsequent rounds with queued mutations).
+     *
+     * Returns an unsubscribe function that clears the provider.
+     */
+    public provideAppStateCollection(
+        name: string,
+        provider: () => Promise<FakeAppStateCollectionPayload | null> | FakeAppStateCollectionPayload | null
+    ): () => void {
+        this.appStateCollectionProviders.set(name, provider)
+        return () => {
+            this.appStateCollectionProviders.delete(name)
+        }
     }
 
     /**

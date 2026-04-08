@@ -26,6 +26,10 @@
  * that just need to assert "the client sent _something_".
  */
 
+import {
+    type BuildAppStateSyncKeyShareInput,
+    buildAppStateSyncKeyShareMessage
+} from '../protocol/push/app-state-key-share'
 import { type BuildHistorySyncInput, buildHistorySyncMessage } from '../protocol/push/history-sync'
 import { buildMessage, type FakeEncChild } from '../protocol/push/message'
 import { FakePeerGroupRecvSession } from '../protocol/signal/fake-peer-group-recv-session'
@@ -181,6 +185,20 @@ export class FakePeer {
         options: SendMessageOptions = {}
     ): Promise<void> {
         const message = await buildHistorySyncMessage(input)
+        await this.sendMessage(message, options)
+    }
+
+    /**
+     * Encrypts and pushes a `protocolMessage.appStateSyncKeyShare`
+     * carrying one or more sync keys. The lib's incoming message
+     * dispatcher persists the keys via `WaAppStateStore.upsertSyncKeys`
+     * and auto-triggers a `syncAppState()` round.
+     */
+    public async sendAppStateSyncKeyShare(
+        input: BuildAppStateSyncKeyShareInput,
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        const message = buildAppStateSyncKeyShareMessage(input)
         await this.sendMessage(message, options)
     }
 

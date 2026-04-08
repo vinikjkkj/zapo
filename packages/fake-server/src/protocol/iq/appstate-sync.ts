@@ -72,6 +72,32 @@ export interface BuildAppStateSyncResultInput {
     readonly versions?: Readonly<Partial<Record<FakeAppStateCollectionName, number>>>
 }
 
+export interface FakeAppStateCollectionPayload {
+    readonly name: string
+    readonly version: number
+    /**
+     * One or more encoded `SyncdPatch` blobs to ship inside `<patches>`.
+     * Mutually exclusive with `snapshot`.
+     */
+    readonly patches?: readonly Uint8Array[]
+    /**
+     * Encoded `SyncdSnapshot` blob to ship inside `<snapshot>`. Used for
+     * the bootstrap round of an uninitialized collection. Mutually
+     * exclusive with `patches`.
+     */
+    readonly snapshot?: Uint8Array
+    /**
+     * If `true`, the collection node carries `has_more_patches="true"`
+     * so the lib's processor will issue another sync round.
+     */
+    readonly hasMore?: boolean
+}
+
+export interface BuildAppStateSyncFullResultInput {
+    /** Per-collection payloads keyed by collection name. */
+    readonly payloads: readonly FakeAppStateCollectionPayload[]
+}
+
 interface ParsedCollectionRequest {
     readonly name: string
     /** Inbound version (parsed from `attrs.version` or 0). */
@@ -124,6 +150,87 @@ export function buildAppStateSyncResult(
                 version: String(responseVersion),
                 type: 'result'
             }
+        }
+    })
+    const result = buildIqResult(iq)
+    return {
+        ...result,
+        attrs: { ...result.attrs, from: 's.whatsapp.net' },
+        content: [
+            {
+                tag: 'sync',
+                attrs: {},
+                content: collectionNodes
+            }
+        ]
+    }
+}
+
+/**
+ * Builds a payload-rich `<iq type="result"><sync>...</sync></iq>` for
+ * the supplied inbound IQ. Each requested collection that has a matching
+ * entry in `payloads` is filled with `<patches>` or `<snapshot>` and the
+ * stamped version. Collections present in the inbound IQ but missing
+ * from `payloads` are echoed back as empty success at their inbound
+ * version (same shape as `buildAppStateSyncResult`).
+ */
+export function buildAppStateSyncFullResult(
+    iq: BinaryNode,
+    input: BuildAppStateSyncFullResultInput
+): BinaryNode {
+    const requests = parseAppStateSyncRequest(iq)
+    const payloadsByName = new Map<string, FakeAppStateCollectionPayload>()
+    for (const payload of input.payloads) {
+        payloadsByName.set(payload.name, payload)
+    }
+    const collectionNodes: BinaryNode[] = requests.map((request) => {
+        const payload = payloadsByName.get(request.name)
+        if (!payload) {
+            return {
+                tag: 'collection',
+                attrs: {
+                    name: request.name,
+                    version: String(request.version),
+                    type: 'result'
+                }
+            }
+        }
+        const children: BinaryNode[] = []
+        if (payload.snapshot && payload.patches) {
+            throw new Error(
+                `app-state collection ${request.name}: snapshot and patches are mutually exclusive`
+            )
+        }
+        if (payload.snapshot) {
+            children.push({
+                tag: 'snapshot',
+                attrs: {},
+                content: payload.snapshot
+            })
+        }
+        if (payload.patches && payload.patches.length > 0) {
+            children.push({
+                tag: 'patches',
+                attrs: {},
+                content: payload.patches.map((patchBytes) => ({
+                    tag: 'patch',
+                    attrs: {},
+                    content: patchBytes
+                }))
+            })
+        }
+        const attrs: Record<string, string> = {
+            name: request.name,
+            version: String(payload.version),
+            type: 'result'
+        }
+        if (payload.hasMore) {
+            attrs.has_more_patches = 'true'
+        }
+        return {
+            tag: 'collection',
+            attrs,
+            content: children.length > 0 ? children : undefined
         }
     })
     const result = buildIqResult(iq)

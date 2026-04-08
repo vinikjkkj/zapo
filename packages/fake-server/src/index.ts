@@ -36,14 +36,17 @@ export type {
     WaFakeIqType
 } from './protocol/iq/router'
 export {
+    buildAppStateSyncFullResult,
     buildAppStateSyncResult,
     buildServerSyncNotification,
     parseAppStateSyncRequest
 } from './protocol/iq/appstate-sync'
 export type {
+    BuildAppStateSyncFullResultInput,
     BuildAppStateSyncResultInput,
     BuildServerSyncNotificationInput,
-    FakeAppStateCollectionName
+    FakeAppStateCollectionName,
+    FakeAppStateCollectionPayload
 } from './protocol/iq/appstate-sync'
 export { buildIqError, buildIqResult } from './protocol/iq/router'
 export { buildCall, buildFailure } from './protocol/push/call-failure'
@@ -52,6 +55,11 @@ export { buildChatstate } from './protocol/push/chatstate'
 export type { BuildChatstateInput, FakeChatstateState } from './protocol/push/chatstate'
 export { buildIncomingErrorStanza } from './protocol/push/error-stanza'
 export type { BuildIncomingErrorStanzaInput } from './protocol/push/error-stanza'
+export { buildAppStateSyncKeyShareMessage } from './protocol/push/app-state-key-share'
+export type {
+    BuildAppStateSyncKeyShareInput,
+    FakeAppStateSyncKey
+} from './protocol/push/app-state-key-share'
 export { buildHistorySyncMessage } from './protocol/push/history-sync'
 export type {
     BuildHistorySyncInput,
@@ -59,6 +67,20 @@ export type {
     FakeHistorySyncPushname,
     FakeHistorySyncWebMessage
 } from './protocol/push/history-sync'
+export {
+    APP_STATE_EMPTY_LT_HASH,
+    FakeAppStateCrypto
+} from './protocol/signal/fake-app-state-crypto'
+export type {
+    FakeAppStateDerivedKeys,
+    FakeAppStateEncryptedMutation,
+    FakeAppStateMutationInput
+} from './protocol/signal/fake-app-state-crypto'
+export { FakeAppStateCollection } from './state/fake-app-state-collection'
+export type {
+    FakeAppStateCollectionOptions,
+    FakeAppStateMutationDescriptor
+} from './state/fake-app-state-collection'
 export { buildMessage } from './protocol/push/message'
 export type { BuildMessageInput, FakeEncChild, FakeEncType } from './protocol/push/message'
 export { buildGroupNotification, buildNotification } from './protocol/push/notification'
