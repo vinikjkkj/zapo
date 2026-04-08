@@ -55,6 +55,7 @@ const AUTH_BACKEND = (
 export interface CreateZapoClientOptions {
     readonly sessionId?: string
     readonly connectTimeoutMs?: number
+    readonly historySyncEnabled?: boolean
 }
 
 export interface ZapoClientFixture {
@@ -89,6 +90,7 @@ export function createZapoClient(
         sessionId: options.sessionId ?? 'fake-server-cross-check',
         chatSocketUrls: [server.url],
         connectTimeoutMs: options.connectTimeoutMs ?? 5_000,
+        history: options.historySyncEnabled ? { enabled: true } : undefined,
         testHooks: {
             noiseRootCa: server.noiseRootCa
         }

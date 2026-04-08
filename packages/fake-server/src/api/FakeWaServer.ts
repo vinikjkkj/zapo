@@ -21,6 +21,11 @@ import {
 } from '../infra/WaFakeConnectionPipeline'
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
+import {
+    buildAppStateSyncResult,
+    buildServerSyncNotification,
+    type BuildServerSyncNotificationInput
+} from '../protocol/iq/appstate-sync'
 import { buildPreKeyFetchResult } from '../protocol/iq/prekey-fetch'
 import {
     buildIqError,
@@ -148,6 +153,19 @@ export class FakeWaServer {
             label: 'signal-digest',
             matcher: { xmlns: 'encrypt', type: 'get', childTag: 'digest' },
             respond: (iq) => buildIqError(iq, { code: 404, text: 'item-not-found' })
+        })
+
+        // Auto-respond to `<iq xmlns="w:sync:app:state" type="set"><sync>...</sync></iq>`
+        // with an empty success response that echoes each requested
+        // collection back as `<collection name=... version=N type="result"/>`
+        // (no patches, no snapshot). This is enough to unblock a
+        // `client.syncAppState()` round-trip without shipping real
+        // encrypted patches. Tests that need fancier responses can
+        // override the handler via `registerIqHandler` after construction.
+        this.iqRouter.register({
+            label: 'app-state-sync',
+            matcher: { xmlns: 'w:sync:app:state', type: 'set' },
+            respond: (iq) => buildAppStateSyncResult(iq)
         })
     }
 
@@ -337,6 +355,22 @@ export class FakeWaServer {
                 resolve(pipeline)
             })
         })
+    }
+
+    /**
+     * Pushes a `<notification type="server_sync"/>` listing the given
+     * collection names. The lib's incoming notification handler reacts
+     * by triggering an `appStateSync.sync()` round, which the
+     * auto-registered `app-state-sync` IQ handler answers with an
+     * empty success response.
+     *
+     * Resolves once the notification has been written to the wire.
+     */
+    public async pushServerSyncNotification(
+        pipeline: WaFakeConnectionPipeline,
+        input: BuildServerSyncNotificationInput
+    ): Promise<void> {
+        await pipeline.sendStanza(buildServerSyncNotification(input))
     }
 
     /**

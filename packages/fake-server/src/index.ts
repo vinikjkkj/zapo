@@ -35,6 +35,16 @@ export type {
     WaFakeIqRouterEvents,
     WaFakeIqType
 } from './protocol/iq/router'
+export {
+    buildAppStateSyncResult,
+    buildServerSyncNotification,
+    parseAppStateSyncRequest
+} from './protocol/iq/appstate-sync'
+export type {
+    BuildAppStateSyncResultInput,
+    BuildServerSyncNotificationInput,
+    FakeAppStateCollectionName
+} from './protocol/iq/appstate-sync'
 export { buildIqError, buildIqResult } from './protocol/iq/router'
 export { buildCall, buildFailure } from './protocol/push/call-failure'
 export type { BuildCallInput, BuildFailureInput } from './protocol/push/call-failure'
@@ -42,6 +52,13 @@ export { buildChatstate } from './protocol/push/chatstate'
 export type { BuildChatstateInput, FakeChatstateState } from './protocol/push/chatstate'
 export { buildIncomingErrorStanza } from './protocol/push/error-stanza'
 export type { BuildIncomingErrorStanzaInput } from './protocol/push/error-stanza'
+export { buildHistorySyncMessage } from './protocol/push/history-sync'
+export type {
+    BuildHistorySyncInput,
+    FakeHistorySyncConversation,
+    FakeHistorySyncPushname,
+    FakeHistorySyncWebMessage
+} from './protocol/push/history-sync'
 export { buildMessage } from './protocol/push/message'
 export type { BuildMessageInput, FakeEncChild, FakeEncType } from './protocol/push/message'
 export { buildGroupNotification, buildNotification } from './protocol/push/notification'

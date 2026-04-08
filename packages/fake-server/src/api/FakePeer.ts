@@ -26,6 +26,7 @@
  * that just need to assert "the client sent _something_".
  */
 
+import { type BuildHistorySyncInput, buildHistorySyncMessage } from '../protocol/push/history-sync'
 import { buildMessage, type FakeEncChild } from '../protocol/push/message'
 import { FakePeerGroupRecvSession } from '../protocol/signal/fake-peer-group-recv-session'
 import {
@@ -167,6 +168,20 @@ export class FakePeer {
      */
     public sendConversation(text: string, options: SendMessageOptions = {}): Promise<void> {
         return this.sendMessage({ conversation: text }, options)
+    }
+
+    /**
+     * Encrypts and pushes a `historySyncNotification` carrying an inline,
+     * zlib-compressed `HistorySync` proto. The lib processes it via
+     * `processHistorySyncNotification` and emits a single
+     * `history_sync_chunk` event with the conversation/pushname counts.
+     */
+    public async sendHistorySync(
+        input: BuildHistorySyncInput = {},
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        const message = await buildHistorySyncMessage(input)
+        await this.sendMessage(message, options)
     }
 
     /**
