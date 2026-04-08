@@ -27,6 +27,7 @@
  */
 
 import { buildMessage, type FakeEncChild } from '../protocol/push/message'
+import { FakePeerGroupRecvSession } from '../protocol/signal/fake-peer-group-recv-session'
 import {
     type FakePeerKeyBundle,
     generateFakePeerKeyBundle
@@ -61,12 +62,22 @@ export interface ReceivedMessage {
     readonly message: proto.IMessage
     /** Original `<message>` stanza the lib sent. */
     readonly stanza: BinaryNode
-    /** Type of the matching `<enc>` child (`pkmsg` or `msg`). */
-    readonly encType: 'pkmsg' | 'msg'
+    /** Type of the matching `<enc>` child the test asserts against. */
+    readonly encType: 'pkmsg' | 'msg' | 'skmsg'
 }
 
 export interface ExpectMessageOptions {
     readonly timeoutMs?: number
+}
+
+export interface ExpectGroupMessageOptions extends ExpectMessageOptions {
+    /**
+     * Override the senderJid the lib used when bootstrapping the
+     * SenderKey chain. Required for outbound `<message to=group-jid>`
+     * stanzas, which carry no `participant` attribute (the lib's own
+     * meJid is the implicit sender).
+     */
+    readonly senderJid?: string
 }
 
 interface FakePeerDeps {
@@ -92,6 +103,7 @@ export class FakePeer {
     private readonly senderKeysByGroup = new Map<string, FakeSenderKey>()
     private readonly groupsBootstrapped = new Set<string>()
     private readonly recvSession: FakePeerRecvSession
+    private readonly groupRecvSession = new FakePeerGroupRecvSession()
 
     private constructor(
         keyBundle: FakePeerKeyBundle,
@@ -230,9 +242,9 @@ export class FakePeer {
     }
 
     /**
-     * Captures the next inbound `<message to=this.jid>` stanza the real
-     * client sends, decrypts the first `<enc>` child via the recv session,
-     * decodes the proto.Message and resolves it.
+     * Captures the next inbound 1:1 `<message to=this.jid>` stanza the
+     * real client sends, decrypts the matching `<enc>` child via the
+     * recv session, decodes the `proto.Message` and resolves it.
      */
     public expectMessage(options: ExpectMessageOptions = {}): Promise<ReceivedMessage> {
         const timeoutMs = options.timeoutMs ?? 5_000
@@ -244,19 +256,15 @@ export class FakePeer {
             }, timeoutMs)
 
             unsubscribe = this.deps.subscribeInboundMessages((stanza) => {
-                const enc = findFirstEnc(stanza)
+                if (stanza.attrs.to !== this.jid) return
+                const enc = findEncForPeer(stanza, this.jid)
                 if (!enc) return
                 const encType = enc.attrs.type
                 if (encType !== 'pkmsg' && encType !== 'msg') return
                 const ciphertext = enc.content
                 if (!(ciphertext instanceof Uint8Array)) return
-                const decryptPromise =
-                    encType === 'pkmsg'
-                        ? this.recvSession.decryptPreKeyMessage(ciphertext)
-                        : this.recvSession.decryptMessage(ciphertext)
-                decryptPromise
-                    .then((padded) => {
-                        const message = proto.Message.decode(padded)
+                this.decryptPairwise(encType, ciphertext)
+                    .then((message) => {
                         clearTimeout(timer)
                         if (unsubscribe) unsubscribe()
                         resolve({ message, stanza, encType })
@@ -268,6 +276,97 @@ export class FakePeer {
                     })
             })
         })
+    }
+
+    /**
+     * Captures the next inbound group `<message to=groupJid>` stanza the
+     * real client sends, decrypts the bootstrap `<enc type=pkmsg|msg>`
+     * child addressed to this peer (extracting the SKDM), then decrypts
+     * the top-level `<enc type=skmsg>` child via the group recv session.
+     *
+     * On subsequent calls in the same chain the bootstrap pkmsg is
+     * absent and only the skmsg is decrypted using the previously
+     * stored sender key state.
+     */
+    public expectGroupMessage(
+        groupJid: string,
+        options: ExpectGroupMessageOptions = {}
+    ): Promise<ReceivedMessage> {
+        const timeoutMs = options.timeoutMs ?? 5_000
+        return new Promise<ReceivedMessage>((resolve, reject) => {
+            let unsubscribe: (() => void) | null = null
+            const timer = setTimeout(() => {
+                if (unsubscribe) unsubscribe()
+                reject(new Error(`FakePeer.expectGroupMessage timed out after ${timeoutMs}ms`))
+            }, timeoutMs)
+
+            unsubscribe = this.deps.subscribeInboundMessages((stanza) => {
+                if (stanza.attrs.to !== groupJid) return
+                const skmsg = findTopLevelEnc(stanza, 'skmsg')
+                if (!skmsg || !(skmsg.content instanceof Uint8Array)) return
+                // Outbound group <message to=group-jid> stanzas have no
+                // `participant` attribute (the sender is the lib client
+                // itself). The test must pass the expected sender jid in
+                // `options.senderJid` to identify the senderkey state.
+                const senderJid = options.senderJid ?? stanza.attrs.participant
+                if (!senderJid) {
+                    return
+                }
+                this.bootstrapAndDecryptGroup(senderJid, groupJid, stanza, skmsg.content)
+                    .then((message) => {
+                        clearTimeout(timer)
+                        if (unsubscribe) unsubscribe()
+                        resolve({ message, stanza, encType: 'skmsg' as const })
+                    })
+                    .catch((error) => {
+                        clearTimeout(timer)
+                        if (unsubscribe) unsubscribe()
+                        reject(error instanceof Error ? error : new Error(String(error)))
+                    })
+            })
+        })
+    }
+
+    private async decryptPairwise(
+        encType: 'pkmsg' | 'msg',
+        ciphertext: Uint8Array
+    ): Promise<proto.IMessage> {
+        const padded =
+            encType === 'pkmsg'
+                ? await this.recvSession.decryptPreKeyMessage(ciphertext)
+                : await this.recvSession.decryptMessage(ciphertext)
+        return proto.Message.decode(padded)
+    }
+
+    private async bootstrapAndDecryptGroup(
+        senderJid: string,
+        groupJid: string,
+        stanza: BinaryNode,
+        skmsgCiphertext: Uint8Array
+    ): Promise<proto.IMessage> {
+        // Look for the per-recipient bootstrap enc inside <participants><to jid=peer.jid>.
+        const bootstrap = findEncForPeer(stanza, this.jid)
+        if (bootstrap && bootstrap.content instanceof Uint8Array) {
+            const bootstrapType = bootstrap.attrs.type
+            if (bootstrapType === 'pkmsg' || bootstrapType === 'msg') {
+                const padded =
+                    bootstrapType === 'pkmsg'
+                        ? await this.recvSession.decryptPreKeyMessage(bootstrap.content)
+                        : await this.recvSession.decryptMessage(bootstrap.content)
+                const innerMessage = proto.Message.decode(padded)
+                const skdm = innerMessage.senderKeyDistributionMessage
+                const axolotl = skdm?.axolotlSenderKeyDistributionMessage
+                if (axolotl) {
+                    this.groupRecvSession.addDistribution(groupJid, senderJid, axolotl)
+                }
+            }
+        }
+        const padded = await this.groupRecvSession.decryptGroupMessage(
+            groupJid,
+            senderJid,
+            skmsgCiphertext
+        )
+        return proto.Message.decode(padded)
     }
 
     private async ensureSession(): Promise<void> {
@@ -291,12 +390,36 @@ export class FakePeer {
  * where `padLen = 16 - (encode(message).length % 16)`. This is the same
  * padding the lib applies on the send side; the receive side strips it.
  */
-function findFirstEnc(node: BinaryNode): BinaryNode | null {
-    if (node.tag === 'enc') return node
-    if (!Array.isArray(node.content)) return null
-    for (const child of node.content) {
-        const found = findFirstEnc(child)
-        if (found) return found
+/**
+ * Finds the `<enc>` child addressed to the given peer jid. Walks both
+ * the direct-fanout shape (`<message><enc/></message>`) and the group
+ * fanout shape (`<message><participants><to jid=peer><enc/></to></participants></message>`).
+ */
+function findEncForPeer(stanza: BinaryNode, peerJid: string): BinaryNode | null {
+    if (!Array.isArray(stanza.content)) return null
+    for (const child of stanza.content) {
+        if (child.tag === 'enc' && stanza.attrs.to === peerJid) {
+            return child
+        }
+        if (child.tag === 'participants' && Array.isArray(child.content)) {
+            for (const toNode of child.content) {
+                if (toNode.tag !== 'to' || toNode.attrs.jid !== peerJid) continue
+                if (!Array.isArray(toNode.content)) continue
+                for (const inner of toNode.content) {
+                    if (inner.tag === 'enc') return inner
+                }
+            }
+        }
+    }
+    return null
+}
+
+function findTopLevelEnc(stanza: BinaryNode, type: string): BinaryNode | null {
+    if (!Array.isArray(stanza.content)) return null
+    for (const child of stanza.content) {
+        if (child.tag === 'enc' && child.attrs.type === type) {
+            return child
+        }
     }
     return null
 }

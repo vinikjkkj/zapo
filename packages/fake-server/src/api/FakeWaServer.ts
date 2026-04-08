@@ -422,14 +422,12 @@ export class FakeWaServer {
         options: CreateFakePeerOptions,
         pipeline: WaFakeConnectionPipeline
     ): Promise<FakePeer> {
-        const peerJid = options.jid
         const peer = await FakePeer.create(options, {
             bundleResolver: () => this.awaitPreKeyBundle(),
             pushStanza: (stanza) => pipeline.sendStanza(stanza),
             subscribeInboundMessages: (listener) => {
                 const wrapped = (node: BinaryNode): void => {
                     if (node.tag !== 'message') return
-                    if (node.attrs.to !== peerJid) return
                     listener(node)
                 }
                 this.inboundStanzaListeners.add(wrapped)
