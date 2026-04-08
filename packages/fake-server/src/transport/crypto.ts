@@ -7,16 +7,25 @@
  */
 
 export {
+    aesCbcDecrypt,
+    aesCbcEncrypt,
     aesGcmDecrypt,
     aesGcmEncrypt,
     Ed25519,
     hkdf,
     hkdfSplit,
     hmacSign,
+    importAesCbcKey,
     importAesGcmKey,
     importHmacKey,
+    importHmacSha512Key,
+    prependVersion,
     randomBytesAsync,
+    readVersionedContent,
     sha256,
+    sha512,
+    toRawPubKey,
+    toSerializedPubKey,
     X25519
 } from 'zapo-js/crypto'
 export type { CryptoKey, SignalKeyPair } from 'zapo-js/crypto'

@@ -22,14 +22,18 @@ import {
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
 import {
+    buildIqResult,
     type WaFakeIqHandler,
     type WaFakeIqMatcher,
     type WaFakeIqResponder,
     WaFakeIqRouter
 } from '../protocol/iq/router'
+import { buildNotification } from '../protocol/push/notification'
+import { type ClientPreKeyBundle, parsePreKeyUploadIq } from '../protocol/signal/prekey-upload'
 import { type BinaryNode } from '../transport/codec'
 import { type SignalKeyPair, X25519 } from '../transport/crypto'
 
+import { type CreateFakePeerOptions, FakePeer } from './FakePeer'
 import { type AuthenticatedPipelineListener, Scenario } from './Scenario'
 
 export interface FakeWaServerOptions {
@@ -84,6 +88,12 @@ interface PendingStanzaExpectation {
     readonly timer: NodeJS.Timeout
 }
 
+interface PendingPreKeyBundleWaiter {
+    readonly resolve: (bundle: ClientPreKeyBundle) => void
+    readonly reject: (error: Error) => void
+    readonly timer: NodeJS.Timeout
+}
+
 export class FakeWaServer {
     private readonly wsServer: WaFakeWsServer
     private readonly pipelines = new Set<WaFakeConnectionPipeline>()
@@ -92,15 +102,39 @@ export class FakeWaServer {
     private readonly pendingIqExpectations = new Set<PendingIqExpectation>()
     private readonly pendingStanzaExpectations = new Set<PendingStanzaExpectation>()
     private readonly authenticatedListeners = new Set<AuthenticatedPipelineListener>()
+    private readonly preKeyBundleWaiters = new Set<PendingPreKeyBundleWaiter>()
     private rootCa: FakeNoiseRootCa | null = null
     private serverStaticKeyPair: SignalKeyPair | null = null
     private listenInfo: WaFakeWsServerListenInfo | null = null
     private pipelineListener: FakeWaServerPipelineListener | null = null
     private rejectMode: { readonly code: number; readonly reason: string } | null = null
+    private capturedPreKeyBundle: ClientPreKeyBundle | null = null
+    private nextPreKeyNotificationId = 1
 
     public constructor(options: FakeWaServerOptions = {}) {
         this.wsServer = new WaFakeWsServer(options)
         this.wsServer.onConnection((connection) => this.handleConnection(connection))
+        // Auto-handle the client's PreKey upload IQ: capture the bundle, ack
+        // with a plain `<iq type="result"/>` so the lib's upload promise
+        // resolves successfully, and unblock any pending bundle waiters.
+        this.iqRouter.register({
+            label: 'prekey-upload',
+            matcher: { xmlns: 'encrypt', type: 'set' },
+            respond: (iq) => {
+                try {
+                    const bundle = parsePreKeyUploadIq(iq)
+                    this.capturedPreKeyBundle = bundle
+                    for (const waiter of this.preKeyBundleWaiters) {
+                        waiter.resolve(bundle)
+                    }
+                    this.preKeyBundleWaiters.clear()
+                } catch {
+                    // Fall through and let the lib see a `result` regardless;
+                    // tests can still inspect captured stanzas.
+                }
+                return buildIqResult(iq)
+            }
+        })
     }
 
     /**
@@ -279,6 +313,90 @@ export class FakeWaServer {
                 unregister()
                 resolve(pipeline)
             })
+        })
+    }
+
+    /**
+     * Pushes a `<notification type="encrypt"><count value="0"/></notification>`
+     * to the given pipeline. The lib's `WAWebHandlePreKeyLow` handler reacts
+     * to this by sending a fresh PreKey upload IQ, which the fake server
+     * automatically captures via its built-in `prekey-upload` IQ handler.
+     *
+     * Returns a promise that resolves once the upload bundle has been
+     * captured (or immediately if it was captured earlier).
+     */
+    public async triggerPreKeyUpload(
+        pipeline: WaFakeConnectionPipeline,
+        timeoutMs = 5_000
+    ): Promise<ClientPreKeyBundle> {
+        if (this.capturedPreKeyBundle) {
+            return this.capturedPreKeyBundle
+        }
+        const bundlePromise = this.awaitPreKeyBundle(timeoutMs)
+        const id = `prekey-low-${this.nextPreKeyNotificationId++}`
+        await pipeline.sendStanza(
+            buildNotification({
+                id,
+                type: 'encrypt',
+                content: [
+                    {
+                        tag: 'count',
+                        attrs: { value: '0' }
+                    }
+                ]
+            })
+        )
+        return bundlePromise
+    }
+
+    /**
+     * Returns a promise that resolves with the client's PreKey upload
+     * bundle as soon as it has been captured. Resolves immediately if a
+     * bundle was already captured. Rejects after `timeoutMs` if none has
+     * arrived.
+     */
+    public awaitPreKeyBundle(timeoutMs = 5_000): Promise<ClientPreKeyBundle> {
+        if (this.capturedPreKeyBundle) {
+            return Promise.resolve(this.capturedPreKeyBundle)
+        }
+        return new Promise((resolve, reject) => {
+            const waiter: PendingPreKeyBundleWaiter = {
+                resolve: (bundle) => {
+                    clearTimeout(waiter.timer)
+                    this.preKeyBundleWaiters.delete(waiter)
+                    resolve(bundle)
+                },
+                reject: (error) => {
+                    clearTimeout(waiter.timer)
+                    this.preKeyBundleWaiters.delete(waiter)
+                    reject(error)
+                },
+                timer: setTimeout(() => {
+                    this.preKeyBundleWaiters.delete(waiter)
+                    reject(new Error(`awaitPreKeyBundle timed out after ${timeoutMs}ms`))
+                }, timeoutMs)
+            }
+            this.preKeyBundleWaiters.add(waiter)
+        })
+    }
+
+    /** Snapshot of the captured PreKey bundle, or `null` if none seen yet. */
+    public capturedPreKeyBundleSnapshot(): ClientPreKeyBundle | null {
+        return this.capturedPreKeyBundle
+    }
+
+    /**
+     * Creates a fake peer that can encrypt messages for the connected
+     * client. The peer lazily resolves the client's PreKey bundle on its
+     * first send (using whatever bundle was captured by then).
+     */
+    public async createFakePeer(
+        options: CreateFakePeerOptions,
+        pipeline: WaFakeConnectionPipeline
+    ): Promise<FakePeer> {
+        return FakePeer.create(options, {
+            bundleResolver: () => this.awaitPreKeyBundle(),
+            pushStanza: (stanza) => pipeline.sendStanza(stanza)
         })
     }
 

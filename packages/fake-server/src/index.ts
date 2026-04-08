@@ -1,3 +1,5 @@
+export { FakePeer } from './api/FakePeer'
+export type { CreateFakePeerOptions, SendMessageOptions } from './api/FakePeer'
 export { FakeWaServer } from './api/FakeWaServer'
 export type {
     BinaryNode,
@@ -28,6 +30,8 @@ export { buildChatstate } from './protocol/push/chatstate'
 export type { BuildChatstateInput, FakeChatstateState } from './protocol/push/chatstate'
 export { buildIncomingErrorStanza } from './protocol/push/error-stanza'
 export type { BuildIncomingErrorStanzaInput } from './protocol/push/error-stanza'
+export { buildMessage } from './protocol/push/message'
+export type { BuildMessageInput, FakeEncChild, FakeEncType } from './protocol/push/message'
 export { buildGroupNotification, buildNotification } from './protocol/push/notification'
 export type {
     BuildGroupNotificationInput,
@@ -41,6 +45,14 @@ export type {
 } from './protocol/push/presence'
 export { buildReceipt } from './protocol/push/receipt'
 export type { BuildReceiptInput, FakeReceiptType } from './protocol/push/receipt'
+export { FakePeerSession, generateFakePeerIdentity } from './protocol/signal/fake-peer-session'
+export type { FakePeerIdentity } from './protocol/signal/fake-peer-session'
+export { parsePreKeyUploadIq, PreKeyUploadParseError } from './protocol/signal/prekey-upload'
+export type {
+    ClientPreKeyBundle,
+    ClientPreKeyEntry,
+    ClientSignedPreKey
+} from './protocol/signal/prekey-upload'
 export {
     buildStreamErrorAck,
     buildStreamErrorCode,
