@@ -2,9 +2,11 @@ export { FakeWaServer } from './api/FakeWaServer'
 export type {
     BinaryNode,
     ExpectIqOptions,
+    ExpectStanzaOptions,
     FakeWaServerNoiseRootCa,
     FakeWaServerOptions,
     FakeWaServerPipelineListener,
+    StanzaMatcher,
     WaFakeAuthenticatedInfo,
     WaFakeConnectionPipeline
 } from './api/FakeWaServer'

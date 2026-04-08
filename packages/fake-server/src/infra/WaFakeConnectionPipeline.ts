@@ -95,6 +95,10 @@ export class WaFakeConnectionPipeline {
         this.events = events
     }
 
+    public isAuthenticated(): boolean {
+        return this.state.kind === 'authenticated'
+    }
+
     /**
      * Encrypts a stanza with the post-handshake transport keys and pushes
      * it to the client. Throws if the connection is not yet authenticated.

@@ -84,6 +84,21 @@ test('stream:error code=516 triggers a logout-style close (force_logout)', async
     }
 })
 
+test('stream:error code=515 triggers a force-login style close', async () => {
+    const server = await FakeWaServer.start()
+    try {
+        const { client, close } = await pushStreamErrorAndWaitForClose(
+            server,
+            buildStreamErrorCode(515)
+        )
+        assert.equal(close.status, 'close')
+        assert.equal(close.reason, 'stream_error_force_login')
+        await client.disconnect().catch(() => undefined)
+    } finally {
+        await server.stop()
+    }
+})
+
 test('stream:error <conflict type="replaced"/> triggers stream_error_replaced close', async () => {
     const server = await FakeWaServer.start()
     try {
