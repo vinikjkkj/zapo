@@ -32,6 +32,7 @@ import { WaFakeNoiseHandshake } from './WaFakeNoiseHandshake'
 import { WaFakeTransport } from './WaFakeTransport'
 
 const NOISE_XX_NAME = new TextEncoder().encode('Noise_XX_25519_AESGCM_SHA256\0\0\0\0')
+const NOISE_IK_NAME = new TextEncoder().encode('Noise_IK_25519_AESGCM_SHA256\0\0\0\0')
 const PROLOGUE = new Uint8Array([0x57, 0x41, 0x06, 0x03])
 
 export interface WaFakeConnectionPipelineConfig {
@@ -60,6 +61,7 @@ type State =
     | { readonly kind: 'awaiting_client_hello' }
     | {
           readonly kind: 'awaiting_client_finish'
+          readonly handshake: WaFakeNoiseHandshake
           readonly serverEphemeralKeyPair: SignalKeyPair
           readonly clientEphemeralPub: Uint8Array
       }
@@ -72,7 +74,6 @@ type State =
 export class WaFakeConnectionPipeline {
     private readonly config: WaFakeConnectionPipelineConfig
     private readonly frameSocket: WaFakeFrameSocket
-    private readonly handshake = new WaFakeNoiseHandshake()
     private events: WaFakeConnectionPipelineEvents = {}
     private state: State = { kind: 'awaiting_prologue' }
     private chain: Promise<void> = Promise.resolve()
@@ -118,15 +119,6 @@ export class WaFakeConnectionPipeline {
             return
         }
         this.state = { kind: 'awaiting_client_hello' }
-        this.chain = this.chain.then(() => this.startHandshake())
-    }
-
-    private async startHandshake(): Promise<void> {
-        try {
-            await this.handshake.start(NOISE_XX_NAME, PROLOGUE)
-        } catch (error) {
-            this.fail(error)
-        }
     }
 
     private scheduleFrame(frame: Uint8Array): void {
@@ -140,7 +132,11 @@ export class WaFakeConnectionPipeline {
                     await this.handleClientHello(frame)
                     return
                 case 'awaiting_client_finish':
-                    await this.handleClientFinish(frame, this.state.serverEphemeralKeyPair)
+                    await this.handleClientFinish(
+                        frame,
+                        this.state.handshake,
+                        this.state.serverEphemeralKeyPair
+                    )
                     return
                 case 'authenticated':
                     await this.handleAuthenticatedFrame(frame, this.state.transport)
@@ -161,19 +157,30 @@ export class WaFakeConnectionPipeline {
         if (!clientHello?.ephemeral) {
             throw new Error('ClientHello missing ephemeral')
         }
-        const clientEphemeralPub = clientHello.ephemeral
-        await this.handshake.authenticate(clientEphemeralPub)
+
+        // IK ClientHello carries `static` (encrypted client static) + `payload`.
+        // XX ClientHello has only `ephemeral`.
+        if (clientHello.static && clientHello.payload) {
+            await this.handleIkClientHello(clientHello)
+        } else {
+            await this.handleXxClientHello(clientHello.ephemeral)
+        }
+    }
+
+    private async handleXxClientHello(clientEphemeralPub: Uint8Array): Promise<void> {
+        const handshake = new WaFakeNoiseHandshake()
+        await handshake.start(NOISE_XX_NAME, PROLOGUE)
+        await handshake.authenticate(clientEphemeralPub)
 
         const serverEphemeral = await X25519.generateKeyPair()
-
-        await this.handshake.authenticate(serverEphemeral.pubKey)
-        await this.handshake.mixIntoKey(
+        await handshake.authenticate(serverEphemeral.pubKey)
+        await handshake.mixIntoKey(
             await X25519.scalarMult(serverEphemeral.privKey, clientEphemeralPub)
         )
-        const encryptedServerStatic = await this.handshake.encrypt(
+        const encryptedServerStatic = await handshake.encrypt(
             this.config.serverStaticKeyPair.pubKey
         )
-        await this.handshake.mixIntoKey(
+        await handshake.mixIntoKey(
             await X25519.scalarMult(this.config.serverStaticKeyPair.privKey, clientEphemeralPub)
         )
 
@@ -181,7 +188,7 @@ export class WaFakeConnectionPipeline {
             root: this.config.rootCa,
             leafKey: this.config.serverStaticKeyPair.pubKey
         })
-        const encryptedCertPayload = await this.handshake.encrypt(certChain.encoded)
+        const encryptedCertPayload = await handshake.encrypt(certChain.encoded)
 
         const serverHello = proto.HandshakeMessage.encode({
             serverHello: {
@@ -195,28 +202,73 @@ export class WaFakeConnectionPipeline {
 
         this.state = {
             kind: 'awaiting_client_finish',
+            handshake,
             serverEphemeralKeyPair: serverEphemeral,
             clientEphemeralPub
         }
     }
 
-    private async handleClientFinish(
-        frame: Uint8Array,
-        serverEphemeralKeyPair: SignalKeyPair
-    ): Promise<void> {
-        const parsed = proto.HandshakeMessage.decode(frame)
-        const clientFinish = parsed.clientFinish
-        if (!clientFinish?.static || !clientFinish.payload) {
-            throw new Error('ClientFinish missing static/payload')
+    /**
+     * IK handshake server-side. The client has the cached server static key
+     * and sends ephemeral + encrypted static + encrypted payload in a single
+     * ClientHello. We complete the handshake in a single round-trip:
+     * decrypt the client material, generate our ephemeral, and respond with
+     * a ServerHello carrying only `ephemeral` + cert payload (no `static`,
+     * which would otherwise trigger the client's XX fallback path).
+     *
+     * Source: /deobfuscated/WAWebOpenC/WAWebOpenChatSocket.js (function q)
+     */
+    private async handleIkClientHello(clientHello: {
+        readonly ephemeral?: Uint8Array | null
+        readonly static?: Uint8Array | null
+        readonly payload?: Uint8Array | null
+    }): Promise<void> {
+        if (!clientHello.ephemeral || !clientHello.static || !clientHello.payload) {
+            throw new Error('IK ClientHello missing ephemeral/static/payload')
         }
-        const clientStaticKey = await this.handshake.decrypt(clientFinish.static)
-        await this.handshake.mixIntoKey(
-            await X25519.scalarMult(serverEphemeralKeyPair.privKey, clientStaticKey)
+        const clientEphemeralPub = clientHello.ephemeral
+        const encryptedClientStatic = clientHello.static
+        const encryptedClientPayload = clientHello.payload
+
+        const handshake = new WaFakeNoiseHandshake()
+        await handshake.start(NOISE_IK_NAME, PROLOGUE)
+        await handshake.authenticate(this.config.serverStaticKeyPair.pubKey)
+        await handshake.authenticate(clientEphemeralPub)
+        await handshake.mixIntoKey(
+            await X25519.scalarMult(this.config.serverStaticKeyPair.privKey, clientEphemeralPub)
         )
-        const clientPayloadBytes = await this.handshake.decrypt(clientFinish.payload)
+        const clientStaticKey = await handshake.decrypt(encryptedClientStatic)
+        await handshake.mixIntoKey(
+            await X25519.scalarMult(this.config.serverStaticKeyPair.privKey, clientStaticKey)
+        )
+        const clientPayloadBytes = await handshake.decrypt(encryptedClientPayload)
         const clientPayload = parseClientPayload(clientPayloadBytes)
 
-        const keys = await this.handshake.finish()
+        // ServerHello side of IK.
+        const serverEphemeral = await X25519.generateKeyPair()
+        await handshake.authenticate(serverEphemeral.pubKey)
+        await handshake.mixIntoKey(
+            await X25519.scalarMult(serverEphemeral.privKey, clientEphemeralPub)
+        )
+        await handshake.mixIntoKey(
+            await X25519.scalarMult(serverEphemeral.privKey, clientStaticKey)
+        )
+        const certChain = await buildFakeCertChain({
+            root: this.config.rootCa,
+            leafKey: this.config.serverStaticKeyPair.pubKey
+        })
+        const encryptedCertPayload = await handshake.encrypt(certChain.encoded)
+
+        const serverHello = proto.HandshakeMessage.encode({
+            serverHello: {
+                ephemeral: serverEphemeral.pubKey,
+                payload: encryptedCertPayload
+            }
+        }).finish()
+
+        this.frameSocket.sendFrame(serverHello)
+
+        const keys = await handshake.finish()
         const transport = new WaFakeTransport({
             recvKey: keys.recvKey,
             sendKey: keys.sendKey
@@ -224,8 +276,34 @@ export class WaFakeConnectionPipeline {
         this.state = { kind: 'authenticated', transport }
 
         this.events.onAuthenticated?.({ clientPayload, clientStaticKey })
+        await this.sendStanza(buildSuccessNode(this.config.successNodeAttributes))
+    }
 
-        // Phase 1: send the success node immediately on authentication.
+    private async handleClientFinish(
+        frame: Uint8Array,
+        handshake: WaFakeNoiseHandshake,
+        serverEphemeralKeyPair: SignalKeyPair
+    ): Promise<void> {
+        const parsed = proto.HandshakeMessage.decode(frame)
+        const clientFinish = parsed.clientFinish
+        if (!clientFinish?.static || !clientFinish.payload) {
+            throw new Error('ClientFinish missing static/payload')
+        }
+        const clientStaticKey = await handshake.decrypt(clientFinish.static)
+        await handshake.mixIntoKey(
+            await X25519.scalarMult(serverEphemeralKeyPair.privKey, clientStaticKey)
+        )
+        const clientPayloadBytes = await handshake.decrypt(clientFinish.payload)
+        const clientPayload = parseClientPayload(clientPayloadBytes)
+
+        const keys = await handshake.finish()
+        const transport = new WaFakeTransport({
+            recvKey: keys.recvKey,
+            sendKey: keys.sendKey
+        })
+        this.state = { kind: 'authenticated', transport }
+
+        this.events.onAuthenticated?.({ clientPayload, clientStaticKey })
         await this.sendStanza(buildSuccessNode(this.config.successNodeAttributes))
     }
 
