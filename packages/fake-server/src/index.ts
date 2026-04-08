@@ -20,6 +20,16 @@ export type {
     WaFakeIqType
 } from './protocol/iq/router'
 export { buildIqError, buildIqResult } from './protocol/iq/router'
+export { buildChatstate } from './protocol/push/chatstate'
+export type { BuildChatstateInput, FakeChatstateState } from './protocol/push/chatstate'
+export { buildIncomingErrorStanza } from './protocol/push/error-stanza'
+export type { BuildIncomingErrorStanzaInput } from './protocol/push/error-stanza'
+export { buildIncomingPresence } from './protocol/push/presence'
+export type {
+    BuildIncomingPresenceInput,
+    FakePresenceLastSentinel,
+    FakePresenceType
+} from './protocol/push/presence'
 export {
     buildStreamErrorAck,
     buildStreamErrorCode,
