@@ -32,6 +32,7 @@ import {
     FakePeerSession,
     generateFakePeerIdentity
 } from '../protocol/signal/fake-peer-session'
+import { FakeSenderKey } from '../protocol/signal/fake-sender-key'
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
 import { proto } from '../transport/protos'
 
@@ -66,6 +67,8 @@ export class FakePeer {
     private readonly deps: FakePeerDeps
     private session: FakePeerSession | null = null
     private nextMessageCounter = 0
+    private readonly senderKeysByGroup = new Map<string, FakeSenderKey>()
+    private readonly groupsBootstrapped = new Set<string>()
 
     private constructor(
         identity: FakePeerIdentity,
@@ -124,6 +127,78 @@ export class FakePeer {
      */
     public sendConversation(text: string, options: SendMessageOptions = {}): Promise<void> {
         return this.sendMessage({ conversation: text }, options)
+    }
+
+    /**
+     * Sends a SenderKey-encrypted **group** message.
+     *
+     * The first message in a given group bootstraps the recipient's sender
+     * key state via a pairwise `<message><enc type="pkmsg"/>` whose
+     * decrypted `Message.senderKeyDistributionMessage` field hands the
+     * SKDM to the lib. The actual content is then pushed in a separate
+     * group `<message from="<group>" participant="<peer>">` carrying an
+     * `<enc type="skmsg"/>` ciphertext.
+     *
+     * On subsequent calls only the `<enc type="skmsg"/>` stanza is pushed.
+     */
+    public async sendGroupConversation(
+        groupJid: string,
+        text: string,
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        return this.sendGroupMessage(groupJid, { conversation: text }, options)
+    }
+
+    public async sendGroupMessage(
+        groupJid: string,
+        message: proto.IMessage,
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        // Lazily create the sender key for this group.
+        let senderKey = this.senderKeysByGroup.get(groupJid)
+        if (!senderKey) {
+            senderKey = await FakeSenderKey.generate()
+            this.senderKeysByGroup.set(groupJid, senderKey)
+        }
+
+        const plaintext = encodePlaintextWithPadding(message)
+        const { ciphertext, distributionMessage } = await senderKey.encrypt(plaintext)
+
+        // The lib's incoming-message dispatcher walks every <enc> child in
+        // a single <message> stanza in order. We bundle the SKDM-carrying
+        // pkmsg first and the actual skmsg second so the lib's sender key
+        // store is populated in time for the skmsg decrypt step.
+        const encChildren: FakeEncChild[] = []
+
+        if (!this.groupsBootstrapped.has(groupJid)) {
+            await this.ensureSession()
+            const session = this.session
+            if (!session) {
+                throw new Error('fake peer session was not established')
+            }
+            const bootstrapPlaintext = encodePlaintextWithPadding({
+                senderKeyDistributionMessage: {
+                    groupId: groupJid,
+                    axolotlSenderKeyDistributionMessage: distributionMessage
+                }
+            })
+            const { type: pkType, ciphertext: pkCt } = await session.encrypt(bootstrapPlaintext)
+            encChildren.push({ type: pkType, ciphertext: pkCt })
+            this.groupsBootstrapped.add(groupJid)
+        }
+
+        encChildren.push({ type: 'skmsg', ciphertext })
+
+        const groupStanza = buildMessage({
+            id: options.id ?? this.nextId(),
+            from: groupJid,
+            participant: this.jid,
+            t: options.t,
+            type: options.type ?? 'text',
+            notify: this.displayName,
+            enc: encChildren
+        })
+        await this.deps.pushStanza(groupStanza)
     }
 
     private async ensureSession(): Promise<void> {

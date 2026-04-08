@@ -47,6 +47,8 @@ export { buildReceipt } from './protocol/push/receipt'
 export type { BuildReceiptInput, FakeReceiptType } from './protocol/push/receipt'
 export { FakePeerSession, generateFakePeerIdentity } from './protocol/signal/fake-peer-session'
 export type { FakePeerIdentity } from './protocol/signal/fake-peer-session'
+export { FakeSenderKey } from './protocol/signal/fake-sender-key'
+export type { FakeSenderKeyEncryptionResult } from './protocol/signal/fake-sender-key'
 export { parsePreKeyUploadIq, PreKeyUploadParseError } from './protocol/signal/prekey-upload'
 export type {
     ClientPreKeyBundle,
