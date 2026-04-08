@@ -52,6 +52,7 @@ import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import { WA_APP_STATE_COLLECTION_STATES, WA_DEFAULTS } from '@protocol/constants'
 import { normalizeDeviceJid, parsePhoneJid, toUserJid } from '@protocol/jid'
+import { WA_LOGOUT_REASONS, type WaLogoutReason } from '@protocol/stream'
 import type { SignalDeviceSyncApi, SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
@@ -69,8 +70,9 @@ import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { WaThreadStore } from '@store/contracts/thread.store'
 import { NOOP_MESSAGE_SECRET_STORE } from '@store/noop.store'
 import type { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
+import { buildRemoveCompanionDeviceIq } from '@transport/node/builders/device'
 import { buildPresenceNode } from '@transport/node/builders/presence'
-import { queryWithContext as queryNodeWithContext } from '@transport/node/query'
+import { assertIqResult, queryWithContext as queryNodeWithContext } from '@transport/node/query'
 import type { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import type { WaNodeTransport } from '@transport/node/WaNodeTransport'
 import type { BinaryNode } from '@transport/types'
@@ -699,6 +701,20 @@ export class WaClient extends EventEmitter {
     }
     public get business(): WaBusinessCoordinator {
         return this.businessCoordinator
+    }
+
+    public async logout(reason: WaLogoutReason = WA_LOGOUT_REASONS.USER_INITIATED): Promise<void> {
+        const meJid = this.authClient.getCurrentCredentials()?.meJid
+        if (!meJid) {
+            throw new Error('cannot logout: client is not authenticated')
+        }
+        const deviceJid = normalizeDeviceJid(meJid)
+        const node = buildRemoveCompanionDeviceIq(deviceJid, reason)
+        const result = await this.queryWithContext('client.logout', node, undefined, {
+            jid: deviceJid,
+            reason
+        })
+        assertIqResult(result, 'client.logout')
     }
 
     public sendReceipt(input: WaSendReceiptInput): Promise<void> {

@@ -21,6 +21,7 @@ export {
     buildGroupSenderKeyMessageNode,
     buildMetaNode
 } from '@transport/node/builders/message'
+export { buildRemoveCompanionDeviceIq } from '@transport/node/builders/device'
 export { buildOfflineBatchNode } from '@transport/node/builders/offline'
 export { buildPresenceNode, type BuildPresenceNodeInput } from '@transport/node/builders/presence'
 export { buildRetryReceiptNode } from '@transport/node/builders/retry'

@@ -43,6 +43,8 @@ export const WA_LOGOUT_REASONS = Object.freeze({
     CACHE_STORAGE_OPEN_FAILED: 'cache_storage_open_failed'
 } as const)
 
+export type WaLogoutReason = (typeof WA_LOGOUT_REASONS)[keyof typeof WA_LOGOUT_REASONS]
+
 export const WA_STREAM_SIGNALING = Object.freeze({
     STREAM_ERROR_TAG: 'stream:error',
     XML_STREAM_END_TAG: 'xmlstreamend',

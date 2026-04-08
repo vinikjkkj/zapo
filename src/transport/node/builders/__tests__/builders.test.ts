@@ -36,6 +36,7 @@ import {
     buildUsyncIq,
     buildUsyncUserNode
 } from '@transport/node/builders'
+import { buildRemoveCompanionDeviceIq } from '@transport/node/builders/device'
 import {
     buildDirectMessageFanoutNode,
     buildGroupRetryMessageNode,
@@ -224,6 +225,18 @@ test('account sync builders generate expected iq structure', () => {
     assert.ok(Array.isArray(clearDirty.content))
     assert.equal(clearDirty.content[0].attrs.type, 'groups')
     assert.equal(clearDirty.content[1].attrs.timestamp, '22')
+})
+
+test('device builder produces remove-companion-device IQ', () => {
+    const iq = buildRemoveCompanionDeviceIq('5511999999999:3@s.whatsapp.net', 'user_initiated')
+    assert.equal(iq.attrs.type, 'set')
+    assert.equal(iq.attrs.to, WA_DEFAULTS.HOST_DOMAIN)
+    assert.equal(iq.attrs.xmlns, WA_XMLNS.MD)
+    assert.ok(Array.isArray(iq.content))
+    const child = iq.content[0]
+    assert.equal(child.tag, 'remove-companion-device')
+    assert.equal(child.attrs.jid, '5511999999999:3@s.whatsapp.net')
+    assert.equal(child.attrs.reason, 'user_initiated')
 })
 
 test('group builders support create participant updates and leave', () => {
