@@ -5,7 +5,13 @@ export type {
     FakePairingDriverOptions
 } from './api/FakePairingDriver'
 export { FakePeer } from './api/FakePeer'
-export type { CreateFakePeerOptions, SendMessageOptions } from './api/FakePeer'
+export type {
+    CreateFakePeerOptions,
+    ExpectGroupMessageOptions,
+    ExpectMessageOptions,
+    ReceivedMessage,
+    SendMessageOptions
+} from './api/FakePeer'
 export { FakeWaServer } from './api/FakeWaServer'
 export type {
     BinaryNode,
