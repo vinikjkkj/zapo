@@ -31,9 +31,11 @@ import {
     type FakePeerKeyBundle,
     generateFakePeerKeyBundle
 } from '../protocol/signal/fake-peer-key-bundle'
+import { FakePeerRecvSession } from '../protocol/signal/fake-peer-recv-session'
 import { type FakePeerIdentity, FakePeerSession } from '../protocol/signal/fake-peer-session'
 import { FakeSenderKey } from '../protocol/signal/fake-sender-key'
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
+import type { BinaryNode } from '../transport/codec'
 import { proto } from '../transport/protos'
 
 export interface CreateFakePeerOptions {
@@ -54,9 +56,28 @@ export interface SendMessageOptions {
     readonly type?: string
 }
 
+export interface ReceivedMessage {
+    /** Decrypted, depadded `Message` proto. */
+    readonly message: proto.IMessage
+    /** Original `<message>` stanza the lib sent. */
+    readonly stanza: BinaryNode
+    /** Type of the matching `<enc>` child (`pkmsg` or `msg`). */
+    readonly encType: 'pkmsg' | 'msg'
+}
+
+export interface ExpectMessageOptions {
+    readonly timeoutMs?: number
+}
+
 interface FakePeerDeps {
     readonly bundleResolver: () => Promise<ClientPreKeyBundle>
     readonly pushStanza: (node: ReturnType<typeof buildMessage>) => Promise<void>
+    /**
+     * Subscribes to inbound `<message to="<peer-jid>"/>` stanzas the
+     * real client sends to this peer. Used by `expectMessage` to capture
+     * + decrypt outbound messages.
+     */
+    readonly subscribeInboundMessages: (listener: (stanza: BinaryNode) => void) => () => void
 }
 
 export class FakePeer {
@@ -70,6 +91,7 @@ export class FakePeer {
     private nextMessageCounter = 0
     private readonly senderKeysByGroup = new Map<string, FakeSenderKey>()
     private readonly groupsBootstrapped = new Set<string>()
+    private readonly recvSession: FakePeerRecvSession
 
     private constructor(
         keyBundle: FakePeerKeyBundle,
@@ -84,6 +106,7 @@ export class FakePeer {
         this.jid = options.jid
         this.displayName = options.displayName
         this.deps = deps
+        this.recvSession = new FakePeerRecvSession(keyBundle)
     }
 
     public static async create(
@@ -206,6 +229,47 @@ export class FakePeer {
         await this.deps.pushStanza(groupStanza)
     }
 
+    /**
+     * Captures the next inbound `<message to=this.jid>` stanza the real
+     * client sends, decrypts the first `<enc>` child via the recv session,
+     * decodes the proto.Message and resolves it.
+     */
+    public expectMessage(options: ExpectMessageOptions = {}): Promise<ReceivedMessage> {
+        const timeoutMs = options.timeoutMs ?? 5_000
+        return new Promise<ReceivedMessage>((resolve, reject) => {
+            let unsubscribe: (() => void) | null = null
+            const timer = setTimeout(() => {
+                if (unsubscribe) unsubscribe()
+                reject(new Error(`FakePeer.expectMessage timed out after ${timeoutMs}ms`))
+            }, timeoutMs)
+
+            unsubscribe = this.deps.subscribeInboundMessages((stanza) => {
+                const enc = findFirstEnc(stanza)
+                if (!enc) return
+                const encType = enc.attrs.type
+                if (encType !== 'pkmsg' && encType !== 'msg') return
+                const ciphertext = enc.content
+                if (!(ciphertext instanceof Uint8Array)) return
+                const decryptPromise =
+                    encType === 'pkmsg'
+                        ? this.recvSession.decryptPreKeyMessage(ciphertext)
+                        : this.recvSession.decryptMessage(ciphertext)
+                decryptPromise
+                    .then((padded) => {
+                        const message = proto.Message.decode(padded)
+                        clearTimeout(timer)
+                        if (unsubscribe) unsubscribe()
+                        resolve({ message, stanza, encType })
+                    })
+                    .catch((error) => {
+                        clearTimeout(timer)
+                        if (unsubscribe) unsubscribe()
+                        reject(error instanceof Error ? error : new Error(String(error)))
+                    })
+            })
+        })
+    }
+
     private async ensureSession(): Promise<void> {
         if (this.session) return
         const bundle = await this.deps.bundleResolver()
@@ -227,6 +291,16 @@ export class FakePeer {
  * where `padLen = 16 - (encode(message).length % 16)`. This is the same
  * padding the lib applies on the send side; the receive side strips it.
  */
+function findFirstEnc(node: BinaryNode): BinaryNode | null {
+    if (node.tag === 'enc') return node
+    if (!Array.isArray(node.content)) return null
+    for (const child of node.content) {
+        const found = findFirstEnc(child)
+        if (found) return found
+    }
+    return null
+}
+
 function encodePlaintextWithPadding(message: proto.IMessage): Uint8Array {
     const encoded = proto.Message.encode(message).finish()
     const padLen = 16 - (encoded.byteLength % 16)

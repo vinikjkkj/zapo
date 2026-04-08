@@ -107,6 +107,7 @@ export class FakeWaServer {
     private readonly pendingStanzaExpectations = new Set<PendingStanzaExpectation>()
     private readonly authenticatedListeners = new Set<AuthenticatedPipelineListener>()
     private readonly preKeyBundleWaiters = new Set<PendingPreKeyBundleWaiter>()
+    private readonly inboundStanzaListeners = new Set<(node: BinaryNode) => void>()
     private rootCa: FakeNoiseRootCa | null = null
     private serverStaticKeyPair: SignalKeyPair | null = null
     private listenInfo: WaFakeWsServerListenInfo | null = null
@@ -421,9 +422,21 @@ export class FakeWaServer {
         options: CreateFakePeerOptions,
         pipeline: WaFakeConnectionPipeline
     ): Promise<FakePeer> {
+        const peerJid = options.jid
         const peer = await FakePeer.create(options, {
             bundleResolver: () => this.awaitPreKeyBundle(),
-            pushStanza: (stanza) => pipeline.sendStanza(stanza)
+            pushStanza: (stanza) => pipeline.sendStanza(stanza),
+            subscribeInboundMessages: (listener) => {
+                const wrapped = (node: BinaryNode): void => {
+                    if (node.tag !== 'message') return
+                    if (node.attrs.to !== peerJid) return
+                    listener(node)
+                }
+                this.inboundStanzaListeners.add(wrapped)
+                return () => {
+                    this.inboundStanzaListeners.delete(wrapped)
+                }
+            }
         })
 
         // Auto-register usync handler for THIS peer's jid.
@@ -598,6 +611,14 @@ export class FakeWaServer {
 
     private handleCapturedStanza(node: BinaryNode): void {
         this.capturedStanzas.push(node)
+
+        for (const listener of this.inboundStanzaListeners) {
+            try {
+                listener(node)
+            } catch {
+                // Listeners are best-effort.
+            }
+        }
 
         for (const expectation of this.pendingStanzaExpectations) {
             if (matchesStanza(node, expectation.matcher)) {
