@@ -30,7 +30,12 @@ import {
     type BuildAppStateSyncKeyShareInput,
     buildAppStateSyncKeyShareMessage
 } from '../protocol/push/app-state-key-share'
-import { type BuildHistorySyncInput, buildHistorySyncMessage } from '../protocol/push/history-sync'
+import {
+    type BuildHistorySyncExternalInput,
+    buildHistorySyncExternalMessage,
+    type BuildHistorySyncInput,
+    buildHistorySyncMessage
+} from '../protocol/push/history-sync'
 import { buildMessage, type FakeEncChild } from '../protocol/push/message'
 import { FakePeerGroupRecvSession } from '../protocol/signal/fake-peer-group-recv-session'
 import {
@@ -186,6 +191,69 @@ export class FakePeer {
     ): Promise<void> {
         const message = await buildHistorySyncMessage(input)
         await this.sendMessage(message, options)
+    }
+
+    /**
+     * External-blob variant of `sendHistorySync`: encrypts and pushes a
+     * `historySyncNotification` whose `directPath`/`mediaKey`/`fileSha256`
+     * point at a previously-published media blob (typically minted via
+     * `FakeWaServer.publishMediaBlob({ mediaType: 'history', plaintext })`).
+     *
+     * The lib's `processHistorySyncNotification` falls through to its
+     * media transfer client, downloads the encrypted bytes from the
+     * fake server's HTTP listener, decrypts via real `WaMediaCrypto`,
+     * and emits a single `history_sync_chunk` event.
+     */
+    public async sendHistorySyncExternal(
+        input: BuildHistorySyncExternalInput,
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        const message = buildHistorySyncExternalMessage(input)
+        await this.sendMessage(message, options)
+    }
+
+    /**
+     * Convenience for an `imageMessage` whose payload bytes have
+     * already been encrypted + published via
+     * `FakeWaServer.publishMediaBlob({ mediaType: 'image', plaintext })`.
+     * The lib's incoming-message dispatcher emits the standard `message`
+     * event; the test can then call
+     * `client.mediaTransfer.downloadAndDecrypt({ directPath, mediaType: 'image', mediaKey, fileSha256, fileEncSha256 })`
+     * to round-trip the bytes through the lib's real media transfer
+     * client.
+     */
+    public async sendImageMessage(
+        input: {
+            readonly directPath: string
+            readonly mediaKey: Uint8Array
+            readonly fileSha256: Uint8Array
+            readonly fileEncSha256: Uint8Array
+            readonly fileLength: number
+            readonly mimetype?: string
+            readonly caption?: string
+            readonly width?: number
+            readonly height?: number
+        },
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        await this.sendMessage(
+            {
+                imageMessage: {
+                    url: input.directPath,
+                    directPath: input.directPath,
+                    mediaKey: input.mediaKey,
+                    fileSha256: input.fileSha256,
+                    fileEncSha256: input.fileEncSha256,
+                    fileLength: input.fileLength,
+                    mimetype: input.mimetype ?? 'image/jpeg',
+                    caption: input.caption,
+                    width: input.width,
+                    height: input.height,
+                    mediaKeyTimestamp: Math.floor(Date.now() / 1_000)
+                }
+            },
+            options
+        )
     }
 
     /**

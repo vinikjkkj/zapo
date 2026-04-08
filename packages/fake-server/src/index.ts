@@ -60,8 +60,13 @@ export type {
     BuildAppStateSyncKeyShareInput,
     FakeAppStateSyncKey
 } from './protocol/push/app-state-key-share'
-export { buildHistorySyncMessage } from './protocol/push/history-sync'
+export {
+    buildHistorySyncExternalMessage,
+    buildHistorySyncMessage,
+    encodeHistorySyncPlaintext
+} from './protocol/push/history-sync'
 export type {
+    BuildHistorySyncExternalInput,
     BuildHistorySyncInput,
     FakeHistorySyncConversation,
     FakeHistorySyncPushname,
@@ -81,6 +86,12 @@ export type {
     FakeAppStateCollectionOptions,
     FakeAppStateMutationDescriptor
 } from './state/fake-app-state-collection'
+export { FakeMediaStore } from './state/fake-media-store'
+export type {
+    FakeMediaType,
+    PublishedMediaBlob,
+    PublishMediaInput
+} from './state/fake-media-store'
 export { buildMessage } from './protocol/push/message'
 export type { BuildMessageInput, FakeEncChild, FakeEncType } from './protocol/push/message'
 export { buildGroupNotification, buildNotification } from './protocol/push/notification'

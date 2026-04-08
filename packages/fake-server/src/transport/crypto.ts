@@ -29,4 +29,5 @@ export {
     X25519
 } from 'zapo-js/crypto'
 export type { CryptoKey, SignalKeyPair } from 'zapo-js/crypto'
+export { WaMediaCrypto } from 'zapo-js/media'
 export { signSignalMessage, verifySignalSignature } from 'zapo-js/signal'

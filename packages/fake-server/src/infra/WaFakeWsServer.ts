@@ -8,12 +8,22 @@
  * This file is server scaffolding, not a `/deobfuscated` mirror — see AGENTS.md §4.
  */
 
-import { createServer, type Server } from 'node:http'
+import {
+    createServer,
+    type IncomingMessage,
+    type Server,
+    type ServerResponse
+} from 'node:http'
 import type { AddressInfo } from 'node:net'
 
 import { WebSocketServer } from 'ws'
 
 import { WaFakeConnection } from './WaFakeConnection'
+
+export type WaFakeHttpRequestHandler = (
+    req: IncomingMessage,
+    res: ServerResponse
+) => void | Promise<void>
 
 export interface WaFakeWsServerOptions {
     readonly host?: string
@@ -35,6 +45,7 @@ export class WaFakeWsServer {
     private httpServer: Server | null = null
     private wsServer: WebSocketServer | null = null
     private connectionListener: WaFakeWsServerConnectionListener | null = null
+    private httpRequestHandler: WaFakeHttpRequestHandler | null = null
     private nextConnectionId = 0
 
     public constructor(options: WaFakeWsServerOptions = {}) {
@@ -49,12 +60,45 @@ export class WaFakeWsServer {
         this.connectionListener = listener
     }
 
+    /**
+     * Registers a handler for non-WebSocket HTTP requests (e.g. media
+     * blob downloads). Requests targeting the WebSocket upgrade path
+     * are still handled by the underlying `WebSocketServer`; everything
+     * else is forwarded to the handler.
+     */
+    public setHttpRequestHandler(handler: WaFakeHttpRequestHandler | null): void {
+        this.httpRequestHandler = handler
+    }
+
     public async listen(): Promise<WaFakeWsServerListenInfo> {
         if (this.httpServer) {
             throw new Error('fake ws server is already listening')
         }
 
-        const httpServer = createServer()
+        const httpServer = createServer((req, res) => {
+            const handler = this.httpRequestHandler
+            if (!handler) {
+                res.statusCode = 404
+                res.end()
+                return
+            }
+            try {
+                const result = handler(req, res)
+                if (result instanceof Promise) {
+                    result.catch((error) => {
+                        if (!res.headersSent) {
+                            res.statusCode = 500
+                        }
+                        res.end(error instanceof Error ? error.message : String(error))
+                    })
+                }
+            } catch (error) {
+                if (!res.headersSent) {
+                    res.statusCode = 500
+                }
+                res.end(error instanceof Error ? error.message : String(error))
+            }
+        })
         const wsServer = new WebSocketServer({ server: httpServer, path: this.options.path })
 
         wsServer.on('connection', (socket) => {

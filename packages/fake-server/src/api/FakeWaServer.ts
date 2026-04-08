@@ -41,6 +41,11 @@ import {
 import { buildUsyncDevicesResult } from '../protocol/iq/usync'
 import { buildNotification } from '../protocol/push/notification'
 import { type ClientPreKeyBundle, parsePreKeyUploadIq } from '../protocol/signal/prekey-upload'
+import {
+    FakeMediaStore,
+    type PublishedMediaBlob,
+    type PublishMediaInput
+} from '../state/fake-media-store'
 import { type BinaryNode } from '../transport/codec'
 import { type SignalKeyPair, X25519 } from '../transport/crypto'
 
@@ -123,6 +128,7 @@ export class FakeWaServer {
     private rejectMode: { readonly code: number; readonly reason: string } | null = null
     private capturedPreKeyBundle: ClientPreKeyBundle | null = null
     private nextPreKeyNotificationId = 1
+    private readonly mediaStore = new FakeMediaStore()
     /**
      * Per-collection app-state payload providers. The auto IQ handler
      * consults this map for each requested collection: if a provider is
@@ -167,6 +173,42 @@ export class FakeWaServer {
             label: 'signal-digest',
             matcher: { xmlns: 'encrypt', type: 'get', childTag: 'digest' },
             respond: (iq) => buildIqError(iq, { code: 404, text: 'item-not-found' })
+        })
+
+        // Auto-respond to the media_conn IQ (`<iq xmlns="w:m" type="set"><media_conn/></iq>`)
+        // by pointing the lib at our HTTP listener. The lib's
+        // `parseMediaConnResponse` only validates `auth`, `ttl > 0`,
+        // and at least one `<host hostname=...>` child — it doesn't
+        // care about the host being a real domain, so we hand it the
+        // ws server's host:port verbatim. Tests that use absolute
+        // `directPath` URLs (`http://127.0.0.1:port/...`) bypass this
+        // entirely; the handler is here for the lib's media uploads
+        // and for download paths that pass relative directPaths.
+        this.iqRouter.register({
+            label: 'media-conn',
+            matcher: { xmlns: 'w:m', type: 'set', childTag: 'media_conn' },
+            respond: (iq) => {
+                const info = this.requireListening()
+                const result = buildIqResult(iq)
+                return {
+                    ...result,
+                    attrs: { ...result.attrs, from: 's.whatsapp.net' },
+                    content: [
+                        {
+                            tag: 'media_conn',
+                            attrs: { auth: 'fake-media-auth', ttl: '3600' },
+                            content: [
+                                {
+                                    tag: 'host',
+                                    attrs: {
+                                        hostname: `${info.host}:${info.port}`
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
         })
 
         // Auto-respond to `<iq xmlns="w:sync:app:state" type="set"><sync>...</sync></iq>`.
@@ -400,6 +442,36 @@ export class FakeWaServer {
         input: BuildServerSyncNotificationInput
     ): Promise<void> {
         await pipeline.sendStanza(buildServerSyncNotification(input))
+    }
+
+    /**
+     * Encrypts the supplied plaintext via the lib's real
+     * `WaMediaCrypto.encryptBytes`, stores the resulting ciphertext
+     * keyed by a fresh random URL path, and returns the metadata
+     * (mediaKey + sha-256s + path) the test must embed in any message
+     * proto / `historySyncNotification` / `ExternalBlobReference` it
+     * hands to the client.
+     *
+     * The lib downloads the bytes from the fake server's HTTP listener
+     * (via the absolute URL exposed by `mediaUrl(path)`), then runs
+     * its own `WaMediaCrypto.decryptBytes` against the ciphertext.
+     */
+    public async publishMediaBlob(input: PublishMediaInput): Promise<PublishedMediaBlob> {
+        return this.mediaStore.publish(input)
+    }
+
+    /**
+     * Builds the absolute `http://host:port/<path>` URL the lib should
+     * use to download a previously-published media blob. Tests stamp
+     * the result into a message proto's `directPath` so that the lib's
+     * media transfer client picks it up verbatim (the lib accepts both
+     * `http://` and `https://` absolute directPaths and bypasses its
+     * default media-host fallback).
+     */
+    public mediaUrl(path: string): string {
+        const info = this.requireListening()
+        const normalized = path.startsWith('/') ? path : `/${path}`
+        return `http://${info.host}:${info.port}${normalized}`
     }
 
     /**
@@ -653,6 +725,24 @@ export class FakeWaServer {
             generateFakeNoiseRootCa(),
             X25519.generateKeyPair()
         ])
+        // Wire the HTTP request handler BEFORE the listen call so we
+        // never race against an inbound media GET that lands while the
+        // listener is still bare. The handler serves blobs registered
+        // via `publishMediaBlob`; everything else 404s.
+        this.wsServer.setHttpRequestHandler((req, res) => {
+            const url = req.url ?? ''
+            const path = url.split('?')[0]
+            const blob = this.mediaStore.get(path)
+            if (!blob) {
+                res.statusCode = 404
+                res.end()
+                return
+            }
+            res.statusCode = 200
+            res.setHeader('content-type', 'application/octet-stream')
+            res.setHeader('content-length', String(blob.encryptedBytes.byteLength))
+            res.end(Buffer.from(blob.encryptedBytes))
+        })
         this.listenInfo = await this.wsServer.listen()
     }
 
