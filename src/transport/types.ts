@@ -70,6 +70,14 @@ export interface WaNoiseConfig {
     readonly routingInfo?: Uint8Array
     readonly protocolHeader?: Uint8Array
     readonly verifyCertificateChain?: boolean
+    readonly trustedRootCa?: WaNoiseTrustedRootCa
+}
+
+export interface WaNoiseTrustedRootCa {
+    /** Raw 32-byte X25519 public key (without version prefix). */
+    readonly publicKey: Uint8Array
+    /** Serial number that intermediate certs issued by this root must claim. */
+    readonly serial: number
 }
 
 export interface WebSocketEventLike {

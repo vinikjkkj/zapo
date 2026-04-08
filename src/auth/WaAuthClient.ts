@@ -16,7 +16,7 @@ import { getWaCompanionPlatformId, WA_DEFAULTS } from '@protocol/constants'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
-import type { BinaryNode } from '@transport/types'
+import type { BinaryNode, WaNoiseTrustedRootCa } from '@transport/types'
 import { uint8Equal } from '@util/bytes'
 import { toError } from '@util/primitives'
 import { getRuntimeOsDisplayName } from '@util/runtime'
@@ -124,13 +124,17 @@ export class WaAuthClient {
         })
     }
 
-    public buildCommsConfig(socketOptions: WaAuthSocketOptions) {
+    public buildCommsConfig(
+        socketOptions: WaAuthSocketOptions,
+        overrides: { readonly noiseTrustedRootCa?: WaNoiseTrustedRootCa } = {}
+    ) {
         this.logger.trace('auth client building comms config')
         return buildCommsConfig(this.logger, this.requireCredentials(), socketOptions, {
             deviceBrowser: this.options.deviceBrowser,
             deviceOsDisplayName: this.options.deviceOsDisplayName,
             requireFullSync: this.options.requireFullSync,
-            version: this.options.version
+            version: this.options.version,
+            noiseTrustedRootCa: overrides.noiseTrustedRootCa
         })
     }
 

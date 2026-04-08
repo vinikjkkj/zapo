@@ -13,6 +13,7 @@ export type {
     WaPrivacyDisallowedListResult,
     WaPrivacySettings
 } from '@client/coordinators/WaPrivacyCoordinator'
+export type { WaAuthCredentials } from '@auth/types'
 export { ConsoleLogger } from '@infra/log/ConsoleLogger'
 export { PinoLogger, createPinoLogger } from '@infra/log/PinoLogger'
 export type { PinoLoggerOptions } from '@infra/log/PinoLogger'

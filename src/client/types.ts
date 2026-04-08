@@ -56,6 +56,32 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
     readonly addons?: WaAddonOptions
     readonly logoutStoreClear?: WaLogoutStoreClearOptions
     readonly media?: WaMediaOptions
+    /**
+     * Escape hatches intended exclusively for tests against a fake server.
+     * **Do not enable in production.** Each flag here disables a security check
+     * the production code path enforces.
+     */
+    readonly testHooks?: WaClientTestHooks
+}
+
+export interface WaClientTestHooks {
+    /**
+     * Override the noise certificate-chain root CA used to verify the
+     * server's static key during the handshake.
+     *
+     * The default is the production WhatsApp root. Tests against a fake
+     * server inject the fake server's ephemeral root here so that the lib
+     * still runs the full certificate-verification code path against a
+     * chain signed by a known key — no validation logic is bypassed.
+     */
+    readonly noiseRootCa?: WaNoiseRootCaOverride
+}
+
+export interface WaNoiseRootCaOverride {
+    /** Serialized X25519 public key (32 bytes raw, no version prefix). */
+    readonly publicKey: Uint8Array
+    /** Serial number that intermediate certificates issued by this root must declare. */
+    readonly serial: number
 }
 
 export interface WaMediaOptions {
