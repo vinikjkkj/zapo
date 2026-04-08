@@ -1,3 +1,9 @@
+export { FakePairingDriver } from './api/FakePairingDriver'
+export type {
+    CompanionPairingMaterial,
+    FakePairingDriverDeps,
+    FakePairingDriverOptions
+} from './api/FakePairingDriver'
 export { FakePeer } from './api/FakePeer'
 export type { CreateFakePeerOptions, SendMessageOptions } from './api/FakePeer'
 export { FakeWaServer } from './api/FakeWaServer'
@@ -49,6 +55,25 @@ export { FakePeerSession, generateFakePeerIdentity } from './protocol/signal/fak
 export type { FakePeerIdentity } from './protocol/signal/fake-peer-session'
 export { FakeSenderKey } from './protocol/signal/fake-sender-key'
 export type { FakeSenderKeyEncryptionResult } from './protocol/signal/fake-sender-key'
+export {
+    buildAdvSignedDeviceIdentity,
+    generateFakePrimaryDevice
+} from './protocol/auth/fake-primary-device'
+export type {
+    BuildAdvIdentityInput,
+    BuildAdvIdentityResult,
+    FakePrimaryDevice
+} from './protocol/auth/fake-primary-device'
+export {
+    buildPairDeviceIq,
+    buildPairSuccessIq,
+    parsePairingQrString
+} from './protocol/auth/pair-device'
+export type {
+    BuildPairDeviceIqInput,
+    BuildPairSuccessIqInput,
+    ParsedPairingQr
+} from './protocol/auth/pair-device'
 export { parsePreKeyUploadIq, PreKeyUploadParseError } from './protocol/signal/prekey-upload'
 export type {
     ClientPreKeyBundle,

@@ -33,6 +33,7 @@ import { type ClientPreKeyBundle, parsePreKeyUploadIq } from '../protocol/signal
 import { type BinaryNode } from '../transport/codec'
 import { type SignalKeyPair, X25519 } from '../transport/crypto'
 
+import { FakePairingDriver, type FakePairingDriverOptions } from './FakePairingDriver'
 import { type CreateFakePeerOptions, FakePeer } from './FakePeer'
 import { type AuthenticatedPipelineListener, Scenario } from './Scenario'
 
@@ -398,6 +399,37 @@ export class FakeWaServer {
             bundleResolver: () => this.awaitPreKeyBundle(),
             pushStanza: (stanza) => pipeline.sendStanza(stanza)
         })
+    }
+
+    /**
+     * Drives the QR-pairing flow with a real, freshly-created `WaClient`
+     * end-to-end via the wire (no auth-store stubbing).
+     *
+     * The driver:
+     *   1. Sends a `pair-device` IQ with 6 random refs.
+     *   2. Awaits the `advSecretKey` callback (the test extracts it from
+     *      the `auth_qr` event the lib emits as soon as it sees the refs).
+     *   3. Builds an `ADVSignedDeviceIdentityHMAC` using a fresh fake
+     *      primary keypair and the supplied `advSecretKey`, and pushes
+     *      a `pair-success` IQ.
+     *
+     * The lib's pairing flow then verifies the HMAC, the account
+     * signature, replies with `<pair-device-sign>`, persists the new
+     * credentials and emits `auth_paired`.
+     */
+    public async runPairing(
+        pipeline: WaFakeConnectionPipeline,
+        options: FakePairingDriverOptions,
+        companionMaterialResolver: () => Promise<{
+            readonly advSecretKey: Uint8Array
+            readonly identityPublicKey: Uint8Array
+        }>
+    ): Promise<void> {
+        const driver = new FakePairingDriver(options, {
+            pipeline,
+            companionMaterialResolver
+        })
+        await driver.run()
     }
 
     /**
