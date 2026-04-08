@@ -28,10 +28,10 @@
 
 import { buildMessage, type FakeEncChild } from '../protocol/push/message'
 import {
-    type FakePeerIdentity,
-    FakePeerSession,
-    generateFakePeerIdentity
-} from '../protocol/signal/fake-peer-session'
+    type FakePeerKeyBundle,
+    generateFakePeerKeyBundle
+} from '../protocol/signal/fake-peer-key-bundle'
+import { type FakePeerIdentity, FakePeerSession } from '../protocol/signal/fake-peer-session'
 import { FakeSenderKey } from '../protocol/signal/fake-sender-key'
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
 import { proto } from '../transport/protos'
@@ -41,8 +41,8 @@ export interface CreateFakePeerOptions {
     readonly jid: string
     /** Optional display name pushed via the `notify` attribute. */
     readonly displayName?: string
-    /** Optional pre-generated identity (default: random). */
-    readonly identity?: FakePeerIdentity
+    /** Optional pre-generated key bundle (default: freshly generated). */
+    readonly keyBundle?: FakePeerKeyBundle
 }
 
 export interface SendMessageOptions {
@@ -62,6 +62,7 @@ interface FakePeerDeps {
 export class FakePeer {
     public readonly jid: string
     public readonly displayName?: string
+    public readonly keyBundle: FakePeerKeyBundle
     public readonly identity: FakePeerIdentity
 
     private readonly deps: FakePeerDeps
@@ -71,11 +72,15 @@ export class FakePeer {
     private readonly groupsBootstrapped = new Set<string>()
 
     private constructor(
-        identity: FakePeerIdentity,
+        keyBundle: FakePeerKeyBundle,
         options: CreateFakePeerOptions,
         deps: FakePeerDeps
     ) {
-        this.identity = identity
+        this.keyBundle = keyBundle
+        this.identity = {
+            identityKeyPair: keyBundle.identityKeyPair,
+            registrationId: keyBundle.registrationId
+        }
         this.jid = options.jid
         this.displayName = options.displayName
         this.deps = deps
@@ -85,8 +90,8 @@ export class FakePeer {
         options: CreateFakePeerOptions,
         deps: FakePeerDeps
     ): Promise<FakePeer> {
-        const identity = options.identity ?? (await generateFakePeerIdentity())
-        return new FakePeer(identity, options, deps)
+        const keyBundle = options.keyBundle ?? (await generateFakePeerKeyBundle())
+        return new FakePeer(keyBundle, options, deps)
     }
 
     /**

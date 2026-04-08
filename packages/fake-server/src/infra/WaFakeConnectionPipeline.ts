@@ -322,6 +322,31 @@ export class WaFakeConnectionPipeline {
             } else {
                 this.events.onUnhandledStanza?.(node)
             }
+            return
+        }
+
+        // Auto-ack outbound `<message>` stanzas. The lib's
+        // `WaMessageClient.publish` registers the message id with
+        // `WaNodeOrchestrator.tryResolvePending`, so any node carrying
+        // the same id resolves the pending publish promise. Sending an
+        // `<ack id=msg-id class=receipt type=text from=peer-jid/>` is
+        // the smallest reply that unblocks the lib.
+        if (node.tag === 'message' && node.attrs.id) {
+            const messageType = node.attrs.type ?? 'text'
+            const from = node.attrs.to ?? 's.whatsapp.net'
+            const ackAttrs: Record<string, string> = {
+                id: node.attrs.id,
+                class: 'receipt',
+                type: messageType,
+                from
+            }
+            if (node.attrs.participant) {
+                ackAttrs.participant = node.attrs.participant
+            }
+            await this.sendStanza({
+                tag: 'ack',
+                attrs: ackAttrs
+            })
         }
     }
 

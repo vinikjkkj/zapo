@@ -21,13 +21,16 @@ import {
 } from '../infra/WaFakeConnectionPipeline'
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
+import { buildPreKeyFetchResult } from '../protocol/iq/prekey-fetch'
 import {
+    buildIqError,
     buildIqResult,
     type WaFakeIqHandler,
     type WaFakeIqMatcher,
     type WaFakeIqResponder,
     WaFakeIqRouter
 } from '../protocol/iq/router'
+import { buildUsyncDevicesResult } from '../protocol/iq/usync'
 import { buildNotification } from '../protocol/push/notification'
 import { type ClientPreKeyBundle, parsePreKeyUploadIq } from '../protocol/signal/prekey-upload'
 import { type BinaryNode } from '../transport/codec'
@@ -135,6 +138,15 @@ export class FakeWaServer {
                 }
                 return buildIqResult(iq)
             }
+        })
+
+        // Reply to `<iq xmlns="encrypt" type="get"><digest/></iq>` with a 404
+        // error so the lib triggers a fresh prekey upload (which we then
+        // capture via the `prekey-upload` handler above).
+        this.iqRouter.register({
+            label: 'signal-digest',
+            matcher: { xmlns: 'encrypt', type: 'get', childTag: 'digest' },
+            respond: (iq) => buildIqError(iq, { code: 404, text: 'item-not-found' })
         })
     }
 
@@ -300,12 +312,21 @@ export class FakeWaServer {
                 return Promise.resolve(pipeline)
             }
         }
+        return this.waitForNextAuthenticatedPipeline(timeoutMs)
+    }
 
+    /**
+     * Waits for the **next** pipeline to reach the authenticated state,
+     * even if there is already a pipeline authenticated. Useful after a
+     * lib-side reconnect (e.g. after pairing) where the existing pipeline
+     * is about to close and a fresh one will replace it.
+     */
+    public waitForNextAuthenticatedPipeline(timeoutMs = 5_000): Promise<WaFakeConnectionPipeline> {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(
                 () =>
                     reject(
-                        new Error(`waitForAuthenticatedPipeline timed out after ${timeoutMs}ms`)
+                        new Error(`waitForNextAuthenticatedPipeline timed out after ${timeoutMs}ms`)
                     ),
                 timeoutMs
             )
@@ -390,15 +411,59 @@ export class FakeWaServer {
      * Creates a fake peer that can encrypt messages for the connected
      * client. The peer lazily resolves the client's PreKey bundle on its
      * first send (using whatever bundle was captured by then).
+     *
+     * Also auto-registers IQ handlers so the lib can resolve this peer
+     * via `usync` (devices fetch) and `<key_fetch>` (prekey bundle fetch)
+     * — required for the lib's `client.sendMessage` to establish a
+     * Signal session with the peer.
      */
     public async createFakePeer(
         options: CreateFakePeerOptions,
         pipeline: WaFakeConnectionPipeline
     ): Promise<FakePeer> {
-        return FakePeer.create(options, {
+        const peer = await FakePeer.create(options, {
             bundleResolver: () => this.awaitPreKeyBundle(),
             pushStanza: (stanza) => pipeline.sendStanza(stanza)
         })
+
+        // Auto-register usync handler for THIS peer's jid.
+        this.registerIqHandler(
+            { xmlns: 'usync', type: 'get', childTag: 'usync' },
+            (iq) => buildUsyncDevicesResult(iq, [{ userJid: peer.jid, deviceIds: [0] }]),
+            `usync:${peer.jid}`
+        )
+
+        // Auto-register prekey-fetch handler that returns this peer's bundle.
+        // The lib's `fetchKeyBundles` sends `<iq xmlns="encrypt" type="get"><key><user jid=.../></key></iq>`
+        this.registerIqHandler(
+            { xmlns: 'encrypt', type: 'get', childTag: 'key' },
+            (iq) => {
+                const oneTime = peer.keyBundle.oneTimePreKeys[0]
+                return buildPreKeyFetchResult(iq, [
+                    {
+                        userJid: peer.jid,
+                        registrationId: peer.keyBundle.registrationId,
+                        identityPublicKey: peer.keyBundle.identityKeyPair.pubKey,
+                        signedPreKey: {
+                            id: peer.keyBundle.signedPreKey.id,
+                            publicKey: peer.keyBundle.signedPreKey.keyPair.pubKey,
+                            signature: peer.keyBundle.signedPreKey.signature
+                        },
+                        ...(oneTime
+                            ? {
+                                  oneTimePreKey: {
+                                      id: oneTime.id,
+                                      publicKey: oneTime.keyPair.pubKey
+                                  }
+                              }
+                            : {})
+                    }
+                ])
+            },
+            `prekey-fetch:${peer.jid}`
+        )
+
+        return peer
     }
 
     /**
