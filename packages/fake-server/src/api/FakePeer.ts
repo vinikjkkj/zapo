@@ -180,6 +180,92 @@ export class FakePeer {
     }
 
     /**
+     * Encrypts and pushes a `protocolMessage.editedMessage` carrying a
+     * fresh `conversation` payload that supersedes a previous message.
+     * The lib's incoming-message dispatcher routes the protocol message
+     * to its edit handler and emits a `message_protocol` event of type
+     * `MESSAGE_EDIT`.
+     */
+    public async sendMessageEdit(
+        input: {
+            readonly targetMessageId: string
+            readonly newText: string
+        },
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        await this.sendMessage(
+            {
+                protocolMessage: {
+                    type: proto.Message.ProtocolMessage.Type.MESSAGE_EDIT,
+                    key: {
+                        remoteJid: this.jid,
+                        fromMe: false,
+                        id: input.targetMessageId
+                    },
+                    timestampMs: Date.now(),
+                    editedMessage: {
+                        conversation: input.newText
+                    }
+                }
+            },
+            options
+        )
+    }
+
+    /**
+     * Encrypts and pushes a `protocolMessage` of type `REVOKE` that
+     * deletes a previously-sent message for the recipient.
+     */
+    public async sendMessageRevoke(
+        input: {
+            readonly targetMessageId: string
+        },
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        await this.sendMessage(
+            {
+                protocolMessage: {
+                    type: proto.Message.ProtocolMessage.Type.REVOKE,
+                    key: {
+                        remoteJid: this.jid,
+                        fromMe: false,
+                        id: input.targetMessageId
+                    }
+                }
+            },
+            options
+        )
+    }
+
+    /**
+     * Encrypts and pushes a `reactionMessage` (e.g. an emoji reaction
+     * to a previously-sent message). Pass an empty `text` to remove a
+     * prior reaction.
+     */
+    public async sendReaction(
+        input: {
+            readonly targetMessageId: string
+            readonly emoji: string
+        },
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        await this.sendMessage(
+            {
+                reactionMessage: {
+                    key: {
+                        remoteJid: this.jid,
+                        fromMe: false,
+                        id: input.targetMessageId
+                    },
+                    text: input.emoji,
+                    senderTimestampMs: Date.now()
+                }
+            },
+            options
+        )
+    }
+
+    /**
      * Encrypts and pushes a `historySyncNotification` carrying an inline,
      * zlib-compressed `HistorySync` proto. The lib processes it via
      * `processHistorySyncNotification` and emits a single
@@ -357,7 +443,15 @@ export class FakePeer {
             }, timeoutMs)
 
             unsubscribe = this.deps.subscribeInboundMessages((stanza) => {
-                if (stanza.attrs.to !== this.jid) return
+                // Skip group messages — those are handled by
+                // `expectGroupMessage`. For 1:1 messages the wire `to`
+                // is either this peer's exact device JID (single-device
+                // case) or the bare user JID with multiple device-
+                // suffixed children inside <participants> (multi-device
+                // fanout). `findEncForPeer` walks both shapes and
+                // returns the matching <enc> if any.
+                const to = stanza.attrs.to ?? ''
+                if (to.endsWith('@g.us')) return
                 const enc = findEncForPeer(stanza, this.jid)
                 if (!enc) return
                 const encType = enc.attrs.type

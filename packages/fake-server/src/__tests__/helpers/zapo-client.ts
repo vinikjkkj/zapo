@@ -71,6 +71,7 @@ export interface CreateZapoClientOptions {
     readonly sessionId?: string
     readonly connectTimeoutMs?: number
     readonly historySyncEnabled?: boolean
+    readonly emitSnapshotMutations?: boolean
     readonly logger?: Logger
 }
 
@@ -108,6 +109,17 @@ export function createZapoClient(
             chatSocketUrls: [server.url],
             connectTimeoutMs: options.connectTimeoutMs ?? 5_000,
             history: options.historySyncEnabled ? { enabled: true } : undefined,
+            chatEvents: options.emitSnapshotMutations
+                ? { emitSnapshotMutations: true }
+                : undefined,
+            // The fake media HTTPS listener uses a self-signed cert.
+            // Pass our `rejectUnauthorized: false` agent for both
+            // upload and download so the lib's media transfer client
+            // accepts the cert without breaking real production paths.
+            proxy: {
+                mediaUpload: server.mediaProxyAgent,
+                mediaDownload: server.mediaProxyAgent
+            },
             testHooks: {
                 noiseRootCa: server.noiseRootCa
             }

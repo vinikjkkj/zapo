@@ -53,6 +53,7 @@
  */
 
 import type { BinaryNode } from '../../transport/codec'
+import { proto } from '../../transport/protos'
 
 import { buildIqResult } from './router'
 
@@ -96,6 +97,28 @@ export interface FakeAppStateCollectionPayload {
 export interface BuildAppStateSyncFullResultInput {
     /** Per-collection payloads keyed by collection name. */
     readonly payloads: readonly FakeAppStateCollectionPayload[]
+}
+
+/**
+ * Encodes an `ExternalBlobReference` proto pointing at a previously
+ * published `md-app-state` media blob. Stamp the result into a
+ * `FakeAppStateCollectionPayload.snapshot` to drive the lib's
+ * external-snapshot download path.
+ */
+export function buildExternalBlobReference(input: {
+    readonly mediaKey: Uint8Array
+    readonly directPath: string
+    readonly fileSha256: Uint8Array
+    readonly fileEncSha256: Uint8Array
+    readonly fileSizeBytes?: number
+}): Uint8Array {
+    return proto.ExternalBlobReference.encode({
+        mediaKey: input.mediaKey,
+        directPath: input.directPath,
+        fileSha256: input.fileSha256,
+        fileEncSha256: input.fileEncSha256,
+        fileSizeBytes: input.fileSizeBytes
+    }).finish()
 }
 
 interface ParsedCollectionRequest {

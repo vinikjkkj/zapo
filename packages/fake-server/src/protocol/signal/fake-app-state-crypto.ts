@@ -42,6 +42,7 @@
  */
 
 import {
+    aesCbcDecrypt,
     aesCbcEncrypt,
     type CryptoKey,
     hkdf,
@@ -177,6 +178,70 @@ export class FakeAppStateCrypto {
         }
     }
 
+    /**
+     * Decrypts an outbound mutation the lib uploaded inside a
+     * `SyncdPatch`. Mirrors the lib's
+     * `WaAppStateCrypto.decryptMutation`: verifies the value MAC,
+     * AES-CBC decrypts the cipher blob, decodes the inner
+     * `SyncActionData`, and re-derives the index MAC to confirm it
+     * matches the encrypted one. Returns the plaintext mutation
+     * (index + value + version) plus the indexMac/valueMac the caller
+     * needs to advance the LTHash.
+     */
+    public async decryptMutation(input: {
+        readonly operation: 'set' | 'remove'
+        readonly keyId: Uint8Array
+        readonly keyData: Uint8Array
+        readonly indexMac: Uint8Array
+        readonly valueBlob: Uint8Array
+    }): Promise<{
+        readonly index: string
+        readonly value: Proto.ISyncActionValue | null
+        readonly version: number
+        readonly indexMac: Uint8Array
+        readonly valueMac: Uint8Array
+    }> {
+        if (input.valueBlob.byteLength < APP_STATE_IV_LENGTH + APP_STATE_VALUE_MAC_LENGTH) {
+            throw new Error('invalid mutation value blob')
+        }
+        const derivedKeys = await this.deriveKeys(input.keyData)
+        const iv = input.valueBlob.subarray(0, APP_STATE_IV_LENGTH)
+        const macStart = input.valueBlob.byteLength - APP_STATE_VALUE_MAC_LENGTH
+        const valueMac = input.valueBlob.subarray(macStart)
+        const cipherText = input.valueBlob.subarray(APP_STATE_IV_LENGTH, macStart)
+        const cipherWithIv = input.valueBlob.subarray(0, macStart)
+
+        const associatedData = generateAssociatedData(input.operation, input.keyId)
+        const expectedMac = await this.generateValueMac(
+            derivedKeys.valueMacHmacKey,
+            associatedData,
+            cipherWithIv
+        )
+        if (!uint8Equal(expectedMac, valueMac)) {
+            throw new Error('mutation value MAC mismatch')
+        }
+
+        const plaintext = await aesCbcDecrypt(derivedKeys.valueEncryptionAesKey, iv, cipherText)
+        const syncActionData = proto.SyncActionData.decode(plaintext)
+        if (!syncActionData.index) {
+            throw new Error('missing sync action index')
+        }
+        if (syncActionData.version === null || syncActionData.version === undefined) {
+            throw new Error('missing sync action version')
+        }
+        const generatedIndexMac = await hmacSign(derivedKeys.indexHmacKey, syncActionData.index)
+        if (!uint8Equal(generatedIndexMac, input.indexMac)) {
+            throw new Error('mutation index MAC mismatch')
+        }
+        return {
+            index: new TextDecoder().decode(syncActionData.index),
+            value: syncActionData.value ?? null,
+            version: syncActionData.version,
+            indexMac: input.indexMac,
+            valueMac
+        }
+    }
+
     public async generateSnapshotMac(
         keyData: Uint8Array,
         ltHash: Uint8Array,
@@ -308,6 +373,15 @@ function intToBytesBe(byteLength: number, value: number): Uint8Array {
         current = Math.floor(current / 256)
     }
     return out
+}
+
+function uint8Equal(a: Uint8Array, b: Uint8Array): boolean {
+    if (a.byteLength !== b.byteLength) return false
+    let diff = 0
+    for (let index = 0; index < a.byteLength; index += 1) {
+        diff |= a[index] ^ b[index]
+    }
+    return diff === 0
 }
 
 function concatBytes(parts: readonly Uint8Array[]): Uint8Array {

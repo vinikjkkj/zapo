@@ -14,11 +14,15 @@
  *         the client sends after success).
  */
 
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import { Agent as HttpsAgent } from 'node:https'
+
 import type { WaFakeConnection } from '../infra/WaFakeConnection'
 import {
     type WaFakeAuthenticatedInfo,
     WaFakeConnectionPipeline
 } from '../infra/WaFakeConnectionPipeline'
+import { WaFakeMediaHttpsServer } from '../infra/WaFakeMediaHttpsServer'
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
 import {
@@ -40,6 +44,7 @@ import {
 } from '../protocol/iq/router'
 import { buildUsyncDevicesResult } from '../protocol/iq/usync'
 import { buildNotification } from '../protocol/push/notification'
+import { FakeAppStateCrypto } from '../protocol/signal/fake-app-state-crypto'
 import { type ClientPreKeyBundle, parsePreKeyUploadIq } from '../protocol/signal/prekey-upload'
 import {
     FakeMediaStore,
@@ -48,6 +53,7 @@ import {
 } from '../state/fake-media-store'
 import { type BinaryNode } from '../transport/codec'
 import { type SignalKeyPair, X25519 } from '../transport/crypto'
+import { proto, type Proto } from '../transport/protos'
 
 import { FakePairingDriver, type FakePairingDriverOptions } from './FakePairingDriver'
 import { type CreateFakePeerOptions, FakePeer } from './FakePeer'
@@ -111,6 +117,38 @@ interface PendingPreKeyBundleWaiter {
     readonly timer: NodeJS.Timeout
 }
 
+export interface CapturedAppStateMutation {
+    /** Collection name parsed from the inbound `<collection>`. */
+    readonly collection: string
+    /** `set` or `remove`. */
+    readonly operation: 'set' | 'remove'
+    /** Decoded mutation index (e.g. `JSON.stringify(['mute', '5511...@s.whatsapp.net'])`). */
+    readonly index: string
+    /** First parsed segment of the JSON-encoded index (e.g. `'mute'`). */
+    readonly action: string | undefined
+    /** Per-mutation `version` field embedded inside the `SyncActionData`. */
+    readonly version: number
+    /** Decoded `SyncActionValue` carrying the actual action payload. */
+    readonly value: Proto.ISyncActionValue | null
+    /** Patch version the lib advanced to. */
+    readonly patchVersion: number
+}
+
+export interface CapturedMediaUpload {
+    /** URL path the lib POSTed to (e.g. `/mms/image/<base64-token>`). */
+    readonly path: string
+    /** `image|video|audio|...` parsed from the upload path. */
+    readonly mediaType: string
+    /** Raw encrypted bytes the lib uploaded (`iv || ciphertext || mac10`). */
+    readonly encryptedBytes: Uint8Array
+    /** `Content-Type` header the lib sent. */
+    readonly contentType: string | undefined
+    /** Query string `auth=` token (echoed from media_conn). */
+    readonly auth: string | undefined
+    /** Wall-clock time the upload landed. */
+    readonly receivedAtMs: number
+}
+
 export class FakeWaServer {
     private readonly wsServer: WaFakeWsServer
     private readonly pipelines = new Set<WaFakeConnectionPipeline>()
@@ -129,6 +167,10 @@ export class FakeWaServer {
     private capturedPreKeyBundle: ClientPreKeyBundle | null = null
     private nextPreKeyNotificationId = 1
     private readonly mediaStore = new FakeMediaStore()
+    private readonly mediaHttpsServer = new WaFakeMediaHttpsServer()
+    private readonly capturedMediaUploads: CapturedMediaUpload[] = []
+    private nextUploadCounter = 0
+    private cachedMediaProxyAgent: HttpsAgent | null = null
     /**
      * Per-collection app-state payload providers. The auto IQ handler
      * consults this map for each requested collection: if a provider is
@@ -139,6 +181,23 @@ export class FakeWaServer {
     private readonly appStateCollectionProviders = new Map<
         string,
         () => Promise<FakeAppStateCollectionPayload | null> | FakeAppStateCollectionPayload | null
+    >()
+    /**
+     * Sync keys (`keyIdHex` → `keyData`) the fake server knows about.
+     * Tests register a key here when they want the fake server to
+     * decrypt outbound mutation patches the lib uploads. The keyId is
+     * normalized to lowercase hex.
+     */
+    private readonly appStateSyncKeysByKeyId = new Map<string, Uint8Array>()
+    private readonly appStateCrypto = new FakeAppStateCrypto()
+    /**
+     * Listeners notified for every mutation the lib uploads inside an
+     * `<iq xmlns=w:sync:app:state>` patch. Tests register a listener
+     * (typically scoped to a specific collection or chat jid) and
+     * resolve a promise when the matching mutation arrives.
+     */
+    private readonly outboundMutationListeners = new Set<
+        (mutation: CapturedAppStateMutation) => void
     >()
 
     public constructor(options: FakeWaServerOptions = {}) {
@@ -176,19 +235,23 @@ export class FakeWaServer {
         })
 
         // Auto-respond to the media_conn IQ (`<iq xmlns="w:m" type="set"><media_conn/></iq>`)
-        // by pointing the lib at our HTTP listener. The lib's
-        // `parseMediaConnResponse` only validates `auth`, `ttl > 0`,
-        // and at least one `<host hostname=...>` child — it doesn't
-        // care about the host being a real domain, so we hand it the
-        // ws server's host:port verbatim. Tests that use absolute
-        // `directPath` URLs (`http://127.0.0.1:port/...`) bypass this
-        // entirely; the handler is here for the lib's media uploads
-        // and for download paths that pass relative directPaths.
+        // by pointing the lib at our HTTPS listener. The lib hardcodes
+        // `https://${host}${path}` in `buildUploadUrl` (and in
+        // `resolveUrls` for relative download paths), so the host we
+        // hand back has to speak TLS. The fake media server uses a
+        // throwaway self-signed cert; tests pass a custom
+        // `https.Agent({ rejectUnauthorized: false })` via
+        // `proxy: { mediaUpload, mediaDownload }` to bypass cert
+        // verification.
+        //
+        // The lib's `parseMediaConnResponse` only validates `auth`,
+        // `ttl > 0`, and at least one `<host hostname=...>` child, so
+        // we hand it `127.0.0.1:PORT` verbatim.
         this.iqRouter.register({
             label: 'media-conn',
             matcher: { xmlns: 'w:m', type: 'set', childTag: 'media_conn' },
             respond: (iq) => {
-                const info = this.requireListening()
+                const info = this.requireMediaHttpsInfo()
                 const result = buildIqResult(iq)
                 return {
                     ...result,
@@ -222,6 +285,13 @@ export class FakeWaServer {
             label: 'app-state-sync',
             matcher: { xmlns: 'w:sync:app:state', type: 'set' },
             respond: async (iq) => {
+                // First, walk every `<collection><patch>...</patch></collection>`
+                // child of the inbound IQ. If we have a sync key for the
+                // patch's keyId, decrypt every mutation inside it and
+                // notify any registered listeners — this is what makes
+                // `client.chat.setChatMute(...)` observable on the fake
+                // server side.
+                await this.consumeOutboundAppStatePatches(iq)
                 if (this.appStateCollectionProviders.size === 0) {
                     return buildAppStateSyncResult(iq)
                 }
@@ -238,6 +308,93 @@ export class FakeWaServer {
                 return buildAppStateSyncFullResult(iq, { payloads })
             }
         })
+    }
+
+    private async consumeOutboundAppStatePatches(iq: BinaryNode): Promise<void> {
+        if (!Array.isArray(iq.content)) return
+        const sync = iq.content.find((child) => child.tag === 'sync')
+        if (!sync || !Array.isArray(sync.content)) return
+        for (const collectionNode of sync.content) {
+            if (collectionNode.tag !== 'collection') continue
+            if (!Array.isArray(collectionNode.content)) continue
+            const collectionName = collectionNode.attrs.name
+            if (!collectionName) continue
+            for (const patchNode of collectionNode.content) {
+                if (patchNode.tag !== 'patch') continue
+                const patchBytes = patchNode.content
+                if (!(patchBytes instanceof Uint8Array)) continue
+                try {
+                    const decoded = proto.SyncdPatch.decode(patchBytes)
+                    const keyId = decoded.keyId?.id
+                    if (!keyId) continue
+                    const keyData = this.appStateSyncKeysByKeyId.get(toHex(keyId))
+                    if (!keyData) continue
+                    // protobuf.js may return uint64 as a Long or a primitive
+                    // number depending on configuration. Normalize via the
+                    // Long-style toNumber() shim if it's available.
+                    const rawVersion = decoded.version?.version
+                    let patchVersion = 0
+                    if (typeof rawVersion === 'number') {
+                        patchVersion = rawVersion
+                    } else if (
+                        rawVersion !== null &&
+                        rawVersion !== undefined &&
+                        typeof (rawVersion as { toNumber?: () => number }).toNumber === 'function'
+                    ) {
+                        patchVersion = (rawVersion as { toNumber: () => number }).toNumber()
+                    }
+                    for (const mutation of decoded.mutations ?? []) {
+                        const operationCode = mutation.operation
+                        if (operationCode === null || operationCode === undefined) continue
+                        const record = mutation.record
+                        if (!record) continue
+                        const indexMac = record.index?.blob
+                        const valueBlob = record.value?.blob
+                        if (!indexMac || !valueBlob) continue
+                        const operation: 'set' | 'remove' =
+                            operationCode === proto.SyncdMutation.SyncdOperation.REMOVE
+                                ? 'remove'
+                                : 'set'
+                        const decrypted = await this.appStateCrypto.decryptMutation({
+                            operation,
+                            keyId,
+                            keyData,
+                            indexMac,
+                            valueBlob
+                        })
+                        let action: string | undefined
+                        try {
+                            const parsed = JSON.parse(decrypted.index)
+                            if (Array.isArray(parsed) && typeof parsed[0] === 'string') {
+                                action = parsed[0]
+                            }
+                        } catch {
+                            // index is opaque — leave action undefined
+                        }
+                        const captured: CapturedAppStateMutation = {
+                            collection: collectionName,
+                            operation,
+                            index: decrypted.index,
+                            action,
+                            version: decrypted.version,
+                            value: decrypted.value,
+                            patchVersion
+                        }
+                        for (const listener of this.outboundMutationListeners) {
+                            try {
+                                listener(captured)
+                            } catch {
+                                // listeners are best-effort
+                            }
+                        }
+                    }
+                } catch {
+                    // bad patch — skip silently so the auto handler still
+                    // returns a success response (the lib will reconcile
+                    // via its retry logic if it really cared).
+                }
+            }
+        }
     }
 
     /**
@@ -461,17 +618,89 @@ export class FakeWaServer {
     }
 
     /**
-     * Builds the absolute `http://host:port/<path>` URL the lib should
+     * Builds the absolute `https://host:port/<path>` URL the lib should
      * use to download a previously-published media blob. Tests stamp
      * the result into a message proto's `directPath` so that the lib's
-     * media transfer client picks it up verbatim (the lib accepts both
-     * `http://` and `https://` absolute directPaths and bypasses its
-     * default media-host fallback).
+     * media transfer client picks it up verbatim (the lib accepts
+     * absolute directPaths and bypasses its default media-host
+     * fallback). The URL points at the fake server's HTTPS listener,
+     * which uses a throwaway self-signed cert — clients trust it via
+     * the `mediaDownloadAgent` exposed below.
      */
     public mediaUrl(path: string): string {
-        const info = this.requireListening()
+        const info = this.requireMediaHttpsInfo()
         const normalized = path.startsWith('/') ? path : `/${path}`
-        return `http://${info.host}:${info.port}${normalized}`
+        return `https://${info.host}:${info.port}${normalized}`
+    }
+
+    private requireMediaHttpsInfo(): { readonly host: string; readonly port: number } {
+        const info = this.mediaHttpsServer.info
+        if (!info) {
+            throw new Error('fake media https server is not listening')
+        }
+        return info
+    }
+
+    /**
+     * Returns an `https.Agent` configured to skip TLS verification, so
+     * tests can hand it to a `WaClient` via
+     * `proxy: { mediaUpload: server.mediaProxyAgent, mediaDownload: server.mediaProxyAgent }`
+     * and have the lib's media transfer client trust the fake media
+     * HTTPS listener's self-signed cert.
+     */
+    public get mediaProxyAgent(): HttpsAgent {
+        if (!this.cachedMediaProxyAgent) {
+            this.cachedMediaProxyAgent = new HttpsAgent({ rejectUnauthorized: false })
+        }
+        return this.cachedMediaProxyAgent
+    }
+
+    /**
+     * Registers an app-state sync key (the same `keyId`/`keyData` the
+     * test ships to the lib via `FakePeer.sendAppStateSyncKeyShare`)
+     * so the fake server can decrypt outbound mutations the lib uploads
+     * inside `<iq xmlns=w:sync:app:state>` patches. Without a registered
+     * key the patch is silently echoed back as success and the
+     * mutation contents are inaccessible to the test.
+     */
+    public registerAppStateSyncKey(keyId: Uint8Array, keyData: Uint8Array): void {
+        this.appStateSyncKeysByKeyId.set(toHex(keyId), keyData)
+    }
+
+    /**
+     * Subscribes to outbound app-state mutations the lib uploads. The
+     * listener fires once per decrypted `SyncdMutation` inside any
+     * inbound app-state sync IQ. Returns an unsubscribe function.
+     */
+    public onOutboundAppStateMutation(
+        listener: (mutation: CapturedAppStateMutation) => void
+    ): () => void {
+        this.outboundMutationListeners.add(listener)
+        return () => {
+            this.outboundMutationListeners.delete(listener)
+        }
+    }
+
+    /**
+     * Convenience that resolves with the next decrypted outbound
+     * mutation matching the given predicate. Rejects after `timeoutMs`.
+     */
+    public expectAppStateMutation(
+        predicate: (mutation: CapturedAppStateMutation) => boolean,
+        timeoutMs = 5_000
+    ): Promise<CapturedAppStateMutation> {
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                unsubscribe()
+                reject(new Error(`expectAppStateMutation timed out after ${timeoutMs}ms`))
+            }, timeoutMs)
+            const unsubscribe = this.onOutboundAppStateMutation((mutation) => {
+                if (!predicate(mutation)) return
+                clearTimeout(timer)
+                unsubscribe()
+                resolve(mutation)
+            })
+        })
     }
 
     /**
@@ -637,6 +866,116 @@ export class FakeWaServer {
     }
 
     /**
+     * Multi-device variant of `createFakePeer`. Creates one `FakePeer`
+     * per `deviceId` (each with its own Signal identity + prekey
+     * bundle), and registers a single shared usync + prekey-fetch
+     * handler pair for the user JID. The usync handler returns all
+     * device ids in one response; the prekey-fetch handler parses the
+     * inbound `<key><user jid="...">` children, looks up the matching
+     * device, and emits one `<user>` per requested JID.
+     *
+     * Use this for cross-checks that exercise the lib's device
+     * fanout — `client.sendMessage(userJid, ...)` will produce a
+     * `<message><participants><to jid=user:N><enc/></to>...</participants></message>`
+     * stanza with one `<enc>` child per device, each encrypted with
+     * its own session.
+     */
+    public async createFakePeerGroup(input: {
+        readonly userJid: string
+        readonly deviceIds: readonly number[]
+        readonly displayName?: string
+    }, pipeline: WaFakeConnectionPipeline): Promise<readonly FakePeer[]> {
+        if (input.deviceIds.length === 0) {
+            throw new Error('createFakePeerGroup requires at least one deviceId')
+        }
+        const userParts = input.userJid.split('@')
+        if (userParts.length !== 2) {
+            throw new Error(`invalid userJid ${input.userJid}`)
+        }
+        const [user, server] = userParts
+        const peers: FakePeer[] = []
+        for (const deviceId of input.deviceIds) {
+            const deviceJid = deviceId === 0 ? input.userJid : `${user}:${deviceId}@${server}`
+            const peer = await FakePeer.create(
+                { jid: deviceJid, displayName: input.displayName },
+                {
+                    bundleResolver: () => this.awaitPreKeyBundle(),
+                    pushStanza: (stanza) => pipeline.sendStanza(stanza),
+                    subscribeInboundMessages: (listener) => {
+                        const wrapped = (node: BinaryNode): void => {
+                            if (node.tag !== 'message') return
+                            listener(node)
+                        }
+                        this.inboundStanzaListeners.add(wrapped)
+                        return () => {
+                            this.inboundStanzaListeners.delete(wrapped)
+                        }
+                    }
+                }
+            )
+            peers.push(peer)
+        }
+        const peersByDeviceJid = new Map(peers.map((peer) => [peer.jid, peer]))
+
+        // Single shared usync handler returning every device id under
+        // the user JID. The lib's `parseDeviceSyncResponse` reads the
+        // device-list children and uses them as the fanout target set.
+        this.registerIqHandler(
+            { xmlns: 'usync', type: 'get', childTag: 'usync' },
+            (iq) =>
+                buildUsyncDevicesResult(iq, [
+                    {
+                        userJid: input.userJid,
+                        deviceIds: input.deviceIds
+                    }
+                ]),
+            `usync:${input.userJid}:multi`
+        )
+
+        // Single shared prekey-fetch handler. The lib's
+        // `fetchKeyBundles` sends one `<user jid=device-jid/>` per
+        // device — we read each child, find the corresponding peer,
+        // and ship its bundle back inside a single `<list>` block.
+        this.registerIqHandler(
+            { xmlns: 'encrypt', type: 'get', childTag: 'key' },
+            (iq) => {
+                const requestedJids = parseRequestedKeyJids(iq)
+                const bundles = requestedJids
+                    .map((jid) => {
+                        const peer = peersByDeviceJid.get(jid)
+                        if (!peer) return null
+                        const oneTime = peer.keyBundle.oneTimePreKeys[0]
+                        return {
+                            userJid: jid,
+                            registrationId: peer.keyBundle.registrationId,
+                            identityPublicKey: peer.keyBundle.identityKeyPair.pubKey,
+                            signedPreKey: {
+                                id: peer.keyBundle.signedPreKey.id,
+                                publicKey: peer.keyBundle.signedPreKey.keyPair.pubKey,
+                                signature: peer.keyBundle.signedPreKey.signature
+                            },
+                            ...(oneTime
+                                ? {
+                                      oneTimePreKey: {
+                                          id: oneTime.id,
+                                          publicKey: oneTime.keyPair.pubKey
+                                      }
+                                  }
+                                : {})
+                        }
+                    })
+                    .filter(
+                        (bundle): bundle is NonNullable<typeof bundle> => bundle !== null
+                    )
+                return buildPreKeyFetchResult(iq, bundles)
+            },
+            `prekey-fetch:${input.userJid}:multi`
+        )
+
+        return peers
+    }
+
+    /**
      * Drives the QR-pairing flow with a real, freshly-created `WaClient`
      * end-to-end via the wire (no auth-store stubbing).
      *
@@ -729,9 +1068,22 @@ export class FakeWaServer {
         // never race against an inbound media GET that lands while the
         // listener is still bare. The handler serves blobs registered
         // via `publishMediaBlob`; everything else 404s.
-        this.wsServer.setHttpRequestHandler((req, res) => {
-            const url = req.url ?? ''
-            const path = url.split('?')[0]
+        const mediaHandler = this.buildMediaRequestHandler()
+        this.wsServer.setHttpRequestHandler(mediaHandler)
+        this.mediaHttpsServer.setRequestHandler(mediaHandler)
+        this.listenInfo = await this.wsServer.listen()
+        await this.mediaHttpsServer.listen('127.0.0.1')
+    }
+
+    private buildMediaRequestHandler(): (req: IncomingMessage, res: ServerResponse) => void {
+        return (req, res): void => {
+            const rawUrl = req.url ?? ''
+            const [path, query] = rawUrl.split('?')
+            const method = (req.method ?? 'GET').toUpperCase()
+            if (method === 'POST') {
+                this.handleMediaUpload(req, res, path, query)
+                return
+            }
             const blob = this.mediaStore.get(path)
             if (!blob) {
                 res.statusCode = 404
@@ -742,8 +1094,64 @@ export class FakeWaServer {
             res.setHeader('content-type', 'application/octet-stream')
             res.setHeader('content-length', String(blob.encryptedBytes.byteLength))
             res.end(Buffer.from(blob.encryptedBytes))
+        }
+    }
+
+    private handleMediaUpload(
+        req: IncomingMessage,
+        res: ServerResponse,
+        path: string,
+        query: string | undefined
+    ): void {
+        const chunks: Buffer[] = []
+        req.on('data', (chunk: Buffer) => {
+            chunks.push(chunk)
         })
-        this.listenInfo = await this.wsServer.listen()
+        req.on('end', () => {
+            const encryptedBytes = new Uint8Array(Buffer.concat(chunks))
+            // Path layout: `/mms/<type>/<base64UrlSafe(fileEncSha256)>`.
+            // The token in the trailing segment is what the lib uses as the
+            // `direct_path` echo, so we just hand it back unchanged in the
+            // JSON response below.
+            const segments = path.split('/').filter(Boolean)
+            const mediaType = segments[1] ?? 'unknown'
+            const auth = parseQueryParam(query, 'auth')
+            const upload: CapturedMediaUpload = {
+                path,
+                mediaType,
+                encryptedBytes,
+                contentType: req.headers['content-type'],
+                auth,
+                receivedAtMs: Date.now()
+            }
+            this.capturedMediaUploads.push(upload)
+            this.nextUploadCounter += 1
+            const downloadUrl = this.mediaUrl(path)
+            const responseBody = JSON.stringify({
+                url: downloadUrl,
+                direct_path: path
+            })
+            res.statusCode = 200
+            res.setHeader('content-type', 'application/json')
+            res.setHeader('content-length', String(Buffer.byteLength(responseBody)))
+            res.end(responseBody)
+        })
+        req.on('error', (error) => {
+            if (!res.headersSent) {
+                res.statusCode = 500
+            }
+            res.end(error.message)
+        })
+    }
+
+    /**
+     * Snapshot of every media upload the lib has POSTed to the fake
+     * media server since startup, in arrival order. Tests assert
+     * upload contents (or pass them through `WaMediaCrypto.decryptBytes`
+     * with a captured mediaKey to round-trip the original plaintext).
+     */
+    public capturedMediaUploadSnapshot(): readonly CapturedMediaUpload[] {
+        return this.capturedMediaUploads.slice()
     }
 
     public async stop(): Promise<void> {
@@ -751,6 +1159,7 @@ export class FakeWaServer {
         // We additionally race the close to make `stop` deterministic.
         this.pipelines.clear()
         await this.wsServer.close()
+        await this.mediaHttpsServer.close()
         this.listenInfo = null
         this.rootCa = null
         this.serverStaticKeyPair = null
@@ -826,6 +1235,42 @@ export class FakeWaServer {
         }
         return this.rootCa
     }
+}
+
+function parseRequestedKeyJids(iq: BinaryNode): readonly string[] {
+    if (!Array.isArray(iq.content)) return []
+    const out: string[] = []
+    for (const child of iq.content) {
+        if (child.tag !== 'key') continue
+        if (!Array.isArray(child.content)) continue
+        for (const userNode of child.content) {
+            if (userNode.tag !== 'user') continue
+            const jid = userNode.attrs.jid
+            if (jid) out.push(jid)
+        }
+    }
+    return out
+}
+
+function toHex(bytes: Uint8Array): string {
+    let out = ''
+    for (let index = 0; index < bytes.byteLength; index += 1) {
+        const value = bytes[index]
+        out += value < 16 ? `0${value.toString(16)}` : value.toString(16)
+    }
+    return out
+}
+
+function parseQueryParam(query: string | undefined, name: string): string | undefined {
+    if (!query) return undefined
+    for (const pair of query.split('&')) {
+        const eq = pair.indexOf('=')
+        if (eq < 0) continue
+        const key = decodeURIComponent(pair.slice(0, eq))
+        if (key !== name) continue
+        return decodeURIComponent(pair.slice(eq + 1))
+    }
+    return undefined
 }
 
 function matchesIq(iq: BinaryNode, matcher: WaFakeIqMatcher): boolean {
