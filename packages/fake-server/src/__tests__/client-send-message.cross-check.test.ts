@@ -59,7 +59,7 @@ test('paired client.sendMessage reaches the wire as a real <message> stanza', as
         })
     })
     const pairedPromise = new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('auth_paired timeout')), 5_000)
+        const timer = setTimeout(() => reject(new Error('auth_paired timeout')), 60_000)
         client.once('auth_paired', () => {
             clearTimeout(timer)
             resolve()

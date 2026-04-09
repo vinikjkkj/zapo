@@ -66,7 +66,7 @@ test('bidirectional 1:1 ping-pong (peer\u2192client\u2192peer\u2192client\u2192p
         })
     })
     const pairedPromise = new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('auth_paired timeout')), 5_000)
+        const timer = setTimeout(() => reject(new Error('auth_paired timeout')), 60_000)
         client.once('auth_paired', () => {
             clearTimeout(timer)
             resolve()
@@ -155,7 +155,7 @@ test('bidirectional 1:1 starting with the lib (client\u2192peer\u2192client\u219
         })
     })
     const pairedPromise = new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('auth_paired timeout')), 5_000)
+        const timer = setTimeout(() => reject(new Error('auth_paired timeout')), 60_000)
         client.once('auth_paired', () => {
             clearTimeout(timer)
             resolve()

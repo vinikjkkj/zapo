@@ -107,8 +107,9 @@ export type {
 } from './protocol/push/presence'
 export { buildReceipt } from './protocol/push/receipt'
 export type { BuildReceiptInput, FakeReceiptType } from './protocol/push/receipt'
-export { FakePeerSession, generateFakePeerIdentity } from './protocol/signal/fake-peer-session'
-export type { FakePeerIdentity } from './protocol/signal/fake-peer-session'
+export { generateFakePeerIdentity } from './protocol/signal/fake-peer-identity'
+export type { FakePeerIdentity } from './protocol/signal/fake-peer-identity'
+export { FakePeerDoubleRatchet } from './protocol/signal/fake-peer-double-ratchet'
 export { FakeSenderKey } from './protocol/signal/fake-sender-key'
 export type { FakeSenderKeyEncryptionResult } from './protocol/signal/fake-sender-key'
 export {

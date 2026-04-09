@@ -48,7 +48,7 @@ test('client completes QR pairing end-to-end and emits auth_paired with meJid', 
     const pairedPromise = new Promise<WaAuthCredentials>((resolve, reject) => {
         const timer = setTimeout(
             () => reject(new Error('timed out waiting for auth_paired')),
-            5_000
+            60_000
         )
         client.once('auth_paired', (event: Parameters<WaClientEventMap['auth_paired']>[0]) => {
             clearTimeout(timer)

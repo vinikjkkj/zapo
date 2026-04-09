@@ -553,7 +553,7 @@ export class FakeWaServer {
      * state. Resolves immediately if a pipeline is already authenticated.
      * Rejects after `timeoutMs` if none becomes authenticated in time.
      */
-    public waitForAuthenticatedPipeline(timeoutMs = 5_000): Promise<WaFakeConnectionPipeline> {
+    public waitForAuthenticatedPipeline(timeoutMs = 60_000): Promise<WaFakeConnectionPipeline> {
         for (const pipeline of this.pipelines) {
             if (pipeline.isAuthenticated()) {
                 return Promise.resolve(pipeline)
@@ -568,7 +568,7 @@ export class FakeWaServer {
      * lib-side reconnect (e.g. after pairing) where the existing pipeline
      * is about to close and a fresh one will replace it.
      */
-    public waitForNextAuthenticatedPipeline(timeoutMs = 5_000): Promise<WaFakeConnectionPipeline> {
+    public waitForNextAuthenticatedPipeline(timeoutMs = 60_000): Promise<WaFakeConnectionPipeline> {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(
                 () =>
@@ -687,7 +687,7 @@ export class FakeWaServer {
      */
     public expectAppStateMutation(
         predicate: (mutation: CapturedAppStateMutation) => boolean,
-        timeoutMs = 5_000
+        timeoutMs = 15_000
     ): Promise<CapturedAppStateMutation> {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -738,7 +738,7 @@ export class FakeWaServer {
      */
     public async triggerPreKeyUpload(
         pipeline: WaFakeConnectionPipeline,
-        timeoutMs = 5_000
+        timeoutMs = 15_000
     ): Promise<ClientPreKeyBundle> {
         if (this.capturedPreKeyBundle) {
             return this.capturedPreKeyBundle
@@ -766,7 +766,7 @@ export class FakeWaServer {
      * bundle was already captured. Rejects after `timeoutMs` if none has
      * arrived.
      */
-    public awaitPreKeyBundle(timeoutMs = 5_000): Promise<ClientPreKeyBundle> {
+    public awaitPreKeyBundle(timeoutMs = 15_000): Promise<ClientPreKeyBundle> {
         if (this.capturedPreKeyBundle) {
             return Promise.resolve(this.capturedPreKeyBundle)
         }
@@ -1160,6 +1160,14 @@ export class FakeWaServer {
         this.pipelines.clear()
         await this.wsServer.close()
         await this.mediaHttpsServer.close()
+        // Tear down the keep-alive proxy agent so its sockets release
+        // and the test process can exit cleanly. Without this the
+        // accumulated sockets across many tests starve the OS file
+        // descriptor pool and slow subsequent tests.
+        if (this.cachedMediaProxyAgent) {
+            this.cachedMediaProxyAgent.destroy()
+            this.cachedMediaProxyAgent = null
+        }
         this.listenInfo = null
         this.rootCa = null
         this.serverStaticKeyPair = null

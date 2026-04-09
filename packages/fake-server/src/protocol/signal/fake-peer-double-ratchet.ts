@@ -74,12 +74,28 @@ interface SendChain {
     nextIndex: number
 }
 
+interface UnusedMessageKey {
+    readonly index: number
+    readonly cipherKey: Uint8Array
+    readonly macKey: Uint8Array
+    readonly iv: Uint8Array
+}
+
 interface RecvChain {
     /** 33-byte serialized remote ratchet pub. */
     ratchetPubKey: Uint8Array
     chainKey: Uint8Array
     nextIndex: number
+    /**
+     * Cache of message keys we derived past the current chain head but
+     * haven't consumed yet — happens when an inbound message arrives
+     * out of order (e.g. counter=3 lands before counter=2). Mirrors
+     * the lib's `SignalRecvChain.unusedMsgKeys` slot.
+     */
+    unusedKeys: UnusedMessageKey[]
 }
+
+const MAX_FUTURE_RECV_KEYS = 2_000
 
 interface PendingPreKeyHeader {
     readonly preKeyId?: number
@@ -385,7 +401,8 @@ export class FakePeerDoubleRatchet {
             this.recvChain = {
                 ratchetPubKey: ratchetSerialized,
                 chainKey: recvChainKey,
-                nextIndex: 0
+                nextIndex: 0,
+                unusedKeys: []
             }
             // After the first recv DR step on the Bob side, the lib (Alice)
             // is sitting on its own send chain. When the fake peer wants to
@@ -405,30 +422,83 @@ export class FakePeerDoubleRatchet {
         if (!this.recvChain) {
             throw new FakePeerDoubleRatchetError('recv chain not initialized')
         }
-        if (counter < this.recvChain.nextIndex) {
-            throw new FakePeerDoubleRatchetError(
-                `out-of-order recv counter ${counter} < ${this.recvChain.nextIndex}`
-            )
-        }
-        let chainKey = this.recvChain.chainKey
+        // Three cases for message-key selection (mirrors the lib's
+        // `selectMessageKey` in `SignalRatchet.ts`):
+        //
+        //   1. counter < recvChain.nextIndex → look for a previously
+        //      stashed unused key for that counter (out-of-order
+        //      arrival of an earlier message). If we don't have it,
+        //      it's a stale duplicate and we error.
+        //   2. counter === recvChain.nextIndex → derive the next key
+        //      and walk the chain head forward.
+        //   3. counter > recvChain.nextIndex → walk the chain forward,
+        //      stashing every intermediate key into `unusedKeys` so
+        //      they can be consumed by case (1) when the missing
+        //      messages eventually arrive.
         let messageKey: { cipherKey: Uint8Array; macKey: Uint8Array; iv: Uint8Array } | null =
             null
-        let nextIndex = this.recvChain.nextIndex
-        while (nextIndex <= counter) {
-            const derived = await deriveMessageKeyFromChain(chainKey)
-            chainKey = derived.nextChainKey
-            if (nextIndex === counter) {
-                messageKey = derived.messageKey
+        if (counter < this.recvChain.nextIndex) {
+            const stashedIndex = this.recvChain.unusedKeys.findIndex(
+                (entry) => entry.index === counter
+            )
+            if (stashedIndex === -1) {
+                throw new FakePeerDoubleRatchetError(
+                    `recv counter ${counter} is stale (next=${this.recvChain.nextIndex})`
+                )
             }
-            nextIndex += 1
+            const stashed = this.recvChain.unusedKeys[stashedIndex]
+            messageKey = {
+                cipherKey: stashed.cipherKey,
+                macKey: stashed.macKey,
+                iv: stashed.iv
+            }
+            this.recvChain = {
+                ratchetPubKey: this.recvChain.ratchetPubKey,
+                chainKey: this.recvChain.chainKey,
+                nextIndex: this.recvChain.nextIndex,
+                unusedKeys: this.recvChain.unusedKeys.filter((_, i) => i !== stashedIndex)
+            }
+        } else {
+            const skipDistance = counter - this.recvChain.nextIndex
+            if (skipDistance > MAX_FUTURE_RECV_KEYS) {
+                throw new FakePeerDoubleRatchetError(
+                    `recv counter ${counter} is too far in the future (skip=${skipDistance})`
+                )
+            }
+            let chainKey = this.recvChain.chainKey
+            const newlyStashed: UnusedMessageKey[] = []
+            let walkIndex = this.recvChain.nextIndex
+            while (walkIndex <= counter) {
+                const derived = await deriveMessageKeyFromChain(chainKey)
+                chainKey = derived.nextChainKey
+                if (walkIndex === counter) {
+                    messageKey = derived.messageKey
+                } else {
+                    newlyStashed.push({
+                        index: walkIndex,
+                        cipherKey: derived.messageKey.cipherKey,
+                        macKey: derived.messageKey.macKey,
+                        iv: derived.messageKey.iv
+                    })
+                }
+                walkIndex += 1
+            }
+            const allUnused = [...this.recvChain.unusedKeys, ...newlyStashed]
+            // Cap the cache size to keep memory bounded under
+            // pathological skip patterns.
+            const trimmed =
+                allUnused.length > MAX_FUTURE_RECV_KEYS
+                    ? allUnused.slice(allUnused.length - MAX_FUTURE_RECV_KEYS)
+                    : allUnused
+            this.recvChain = {
+                ratchetPubKey: this.recvChain.ratchetPubKey,
+                chainKey,
+                nextIndex: walkIndex,
+                unusedKeys: trimmed
+            }
         }
         if (!messageKey) {
             throw new FakePeerDoubleRatchetError('failed to derive recv message key')
-        }
-        this.recvChain = {
-            ratchetPubKey: this.recvChain.ratchetPubKey,
-            chainKey,
-            nextIndex
         }
 
         // MAC verify.
@@ -475,7 +545,8 @@ export class FakePeerDoubleRatchet {
         this.recvChain = {
             ratchetPubKey: toSerializedPubKey(remoteRatchetPub),
             chainKey: recvChainKey,
-            nextIndex: 0
+            nextIndex: 0,
+            unusedKeys: []
         }
         // After receiving fresh remote ratchet, mint a new local ratchet
         // and run a SECOND DR step so the next outbound encrypt uses a

@@ -39,11 +39,11 @@ import {
 import { buildMessage, type FakeEncChild } from '../protocol/push/message'
 import { FakePeerDoubleRatchet } from '../protocol/signal/fake-peer-double-ratchet'
 import { FakePeerGroupRecvSession } from '../protocol/signal/fake-peer-group-recv-session'
+import type { FakePeerIdentity } from '../protocol/signal/fake-peer-identity'
 import {
     type FakePeerKeyBundle,
     generateFakePeerKeyBundle
 } from '../protocol/signal/fake-peer-key-bundle'
-import type { FakePeerIdentity } from '../protocol/signal/fake-peer-session'
 import { FakeSenderKey } from '../protocol/signal/fake-sender-key'
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
 import type { BinaryNode } from '../transport/codec'
@@ -78,6 +78,16 @@ export interface SendMessageOptions {
      * peer-device JID here.
      */
     readonly participant?: string
+    /**
+     * Optional hook that mutates the encrypted ciphertext bytes
+     * BEFORE they're wrapped in the `<enc>` child. Tests use this
+     * to simulate corrupted ciphertexts (e.g. flip a byte to
+     * trigger the lib's `<receipt type="retry"/>` flow).
+     *
+     * Receives the freshly-encrypted bytes; return the bytes the
+     * fake peer should actually push on the wire.
+     */
+    readonly tamperCiphertext?: (ciphertext: Uint8Array) => Uint8Array
 }
 
 export interface ReceivedMessage {
@@ -173,8 +183,11 @@ export class FakePeer {
 
         const plaintext = encodePlaintextWithPadding(message)
         const { type, ciphertext } = await this.ratchet.encrypt(plaintext)
+        const finalCiphertext = options.tamperCiphertext
+            ? options.tamperCiphertext(ciphertext)
+            : ciphertext
 
-        const enc: FakeEncChild = { type, ciphertext }
+        const enc: FakeEncChild = { type, ciphertext: finalCiphertext }
         const id = options.id ?? this.nextId()
         const stanza = buildMessage({
             id,
@@ -696,6 +709,26 @@ export class FakePeer {
                 ? await this.ratchet.decryptPreKeyMessage(ciphertext)
                 : await this.ratchet.decryptMessage(ciphertext)
         return proto.Message.decode(padded)
+    }
+
+    /**
+     * Decrypts an arbitrary `<message>` stanza captured from the wire,
+     * bypassing the `expectMessage` listener machinery. Useful for
+     * tests that need to feed messages to the recv session in a
+     * specific (e.g. out-of-order) sequence.
+     *
+     * Walks both the direct (`<message><enc/></message>`) and the
+     * fanout (`<message><participants><to><enc/></to></participants></message>`)
+     * shapes; returns `null` if the stanza carries no enc targeting
+     * this peer.
+     */
+    public async decryptStanza(stanza: BinaryNode): Promise<ReceivedMessage | null> {
+        const enc = findEncForPeer(stanza, this.jid)
+        if (!enc || !(enc.content instanceof Uint8Array)) return null
+        const encType = enc.attrs.type
+        if (encType !== 'pkmsg' && encType !== 'msg') return null
+        const message = await this.decryptPairwise(encType, enc.content)
+        return { message, stanza, encType }
     }
 
     private async bootstrapAndDecryptGroup(
