@@ -50,15 +50,27 @@ export interface WaFakeIqRouterEvents {
 }
 
 export class WaFakeIqRouter {
+    /**
+     * Test-installed handlers — checked FIRST so they shadow the
+     * default global handlers registered by `FakeWaServer` in its
+     * constructor. Tests opt in by passing `{ priority: 'high' }`.
+     */
+    private readonly highPriorityHandlers: WaFakeIqHandler[] = []
+    /** Default global handlers registered by `FakeWaServer`. */
     private readonly handlers: WaFakeIqHandler[] = []
     private events: WaFakeIqRouterEvents = {}
 
-    public register(handler: WaFakeIqHandler): () => void {
-        this.handlers.push(handler)
+    public register(
+        handler: WaFakeIqHandler,
+        options: { readonly priority?: 'high' | 'default' } = {}
+    ): () => void {
+        const list =
+            options.priority === 'high' ? this.highPriorityHandlers : this.handlers
+        list.push(handler)
         return () => {
-            const index = this.handlers.indexOf(handler)
+            const index = list.indexOf(handler)
             if (index >= 0) {
-                this.handlers.splice(index, 1)
+                list.splice(index, 1)
             }
         }
     }
@@ -71,6 +83,11 @@ export class WaFakeIqRouter {
     public async route(iq: BinaryNode): Promise<BinaryNode | null> {
         if (iq.tag !== 'iq') {
             return null
+        }
+        for (const handler of this.highPriorityHandlers) {
+            if (matches(iq, handler.matcher)) {
+                return handler.respond(iq)
+            }
         }
         for (const handler of this.handlers) {
             if (matches(iq, handler.matcher)) {

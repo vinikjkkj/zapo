@@ -25,6 +25,7 @@ import {
 import { WaFakeMediaHttpsServer } from '../infra/WaFakeMediaHttpsServer'
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
+import { buildAbPropsResult } from '../protocol/iq/abprops'
 import {
     buildAppStateSyncFullResult,
     buildAppStateSyncResult,
@@ -33,7 +34,41 @@ import {
     type FakeAppStateCollectionPayload,
     parseAppStateSyncRequest
 } from '../protocol/iq/appstate-sync'
+import {
+    buildBusinessProfileResult,
+    type FakeBusinessProfile,
+    parseGetBusinessProfileIq
+} from '../protocol/iq/business'
+import {
+    buildGroupMetadataNode,
+    buildGroupParticipantChangeResult,
+    type FakeGroupParticipantAction,
+    parseCreateGroupIq,
+    parseGroupParticipantChangeIq,
+    parseLeaveGroupIq,
+    parseSetDescriptionIq,
+    parseSetSubjectIq
+} from '../protocol/iq/group-ops'
 import { buildPreKeyFetchResult, type PreKeyBundleForUser } from '../protocol/iq/prekey-fetch'
+import {
+    buildBlocklistResult,
+    buildPrivacyDisallowedListResult,
+    buildPrivacySettingsResult,
+    FAKE_DEFAULT_PRIVACY_SETTINGS,
+    type FakePrivacyCategoryName,
+    type FakePrivacySettingsState,
+    parseBlocklistChangeIq,
+    parsePrivacyDisallowedListGetIq,
+    parsePrivacySetCategoryIq
+} from '../protocol/iq/privacy'
+import {
+    buildGetProfilePictureResult,
+    buildSetProfilePictureResult,
+    type FakeProfilePictureResult,
+    parseGetProfilePictureIq,
+    parseSetProfilePictureIq,
+    parseSetStatusIq
+} from '../protocol/iq/profile'
 import {
     buildIqError,
     buildIqResult,
@@ -122,6 +157,8 @@ export interface FakeGroupMetadata {
     readonly groupJid: string
     /** Display name returned in the `subject` attribute. */
     readonly subject: string
+    /** Description text the lib stores under the group's metadata. */
+    readonly description?: string
     /** Creator JID — defaults to the first participant. */
     readonly creator: string
     /** Unix-seconds creation timestamp. */
@@ -129,6 +166,43 @@ export interface FakeGroupMetadata {
     /** Participants of the group. The lib's outbound group fanout will
      *  resolve devices for each one and encrypt per-device. */
     readonly participants: readonly FakePeer[]
+}
+
+interface MutableFakeGroup {
+    groupJid: string
+    subject: string
+    description: string | undefined
+    creator: string
+    creationSeconds: number
+    participants: FakePeer[]
+}
+
+export interface CapturedGroupOp {
+    /** `create | add | remove | promote | demote | subject | description | leave`. */
+    readonly action: 'create' | FakeGroupParticipantAction | 'subject' | 'description' | 'leave'
+    readonly groupJid: string
+    readonly participantJids?: readonly string[]
+    readonly subject?: string
+    readonly description?: string | null
+}
+
+export interface CapturedPrivacySet {
+    readonly category: FakePrivacyCategoryName
+    readonly value: string
+}
+
+export interface CapturedBlocklistChange {
+    readonly jid: string
+    readonly action: 'block' | 'unblock'
+}
+
+export interface CapturedProfilePictureSet {
+    readonly targetJid: string | undefined
+    readonly imageBytes: Uint8Array
+}
+
+export interface CapturedStatusSet {
+    readonly text: string
 }
 
 export interface CapturedAppStateMutation {
@@ -229,9 +303,34 @@ export class FakeWaServer {
      * `createFakeGroup` is indexed here by its `groupJid`. The global
      * `w:g2` group-metadata handler consults this map when the lib
      * issues a `<iq xmlns="w:g2" type="get" to="<group-jid>"><query/></iq>`
-     * during outbound group sends.
+     * during outbound group sends. Mutated by the global group-ops
+     * handler when the lib calls `client.group.{add,remove,promote,
+     * demote}Participants`, `setSubject`, `setDescription`, etc.
      */
-    private readonly groupRegistry = new Map<string, FakeGroupMetadata>()
+    private readonly groupRegistry = new Map<string, MutableFakeGroup>()
+    /** Mutable per-server privacy state. Mutated by setPrivacy IQs. */
+    private privacySettings: FakePrivacySettingsState = FAKE_DEFAULT_PRIVACY_SETTINGS
+    /** Per-server blocklist of jids. Mutated by blocklist set IQs. */
+    private readonly blocklistJids = new Set<string>()
+    /** Profile picture per jid (defaults to undefined / 404 path). */
+    private readonly profilePicturesByJid = new Map<string, FakeProfilePictureResult>()
+    /** Business profiles per jid. */
+    private readonly businessProfilesByJid = new Map<string, FakeBusinessProfile>()
+    /** "Status" text the lib's setStatus call most recently published. */
+    private latestStatusText: string | null = null
+    /**
+     * Listener fan-outs for IQ-driven side effects so tests can
+     * `await` a specific operation. Each set holds (`predicate`, `resolve`)
+     * pairs the global handlers consult after applying state changes.
+     */
+    private readonly groupOpListeners = new Set<(op: CapturedGroupOp) => void>()
+    private readonly privacySetListeners = new Set<(op: CapturedPrivacySet) => void>()
+    private readonly blocklistChangeListeners = new Set<(op: CapturedBlocklistChange) => void>()
+    private readonly profilePictureSetListeners = new Set<
+        (op: CapturedProfilePictureSet) => void
+    >()
+    private readonly statusSetListeners = new Set<(op: CapturedStatusSet) => void>()
+    private readonly logoutListeners = new Set<() => void>()
 
     public constructor(options: FakeWaServerOptions = {}) {
         this.wsServer = new WaFakeWsServer(options)
@@ -416,9 +515,406 @@ export class FakeWaServer {
                 if (!metadata) {
                     return buildIqError(iq, { code: 404, text: 'group-not-found' })
                 }
-                return buildGroupMetadataIqResult(iq, metadata)
+                return this.buildGroupMetadataReply(iq, metadata)
             }
         })
+
+        // ─── Tier 1: lifecycle / bring-up handlers ────────────────
+
+        // `<iq xmlns="abt" type="get"><props .../></iq>` — AB props
+        // bootstrap. The lib calls this at startup; we return an
+        // empty `<props>` payload (no AB experiments).
+        this.iqRouter.register({
+            label: 'abprops',
+            matcher: { xmlns: 'abt', type: 'get', childTag: 'props' },
+            respond: (iq) => buildAbPropsResult(iq)
+        })
+
+        // `<iq xmlns="w:p" type="get"/>` — keepalive ping. The lib
+        // calls this on a timer to verify the WS is still alive.
+        // Just ack with a result.
+        this.iqRouter.register({
+            label: 'whatsapp-ping',
+            matcher: { xmlns: 'w:p', type: 'get' },
+            respond: (iq) => buildIqResult(iq)
+        })
+
+        // `<iq xmlns="urn:xmpp:ping" type="get"/>` — XMPP ping.
+        // Same deal.
+        this.iqRouter.register({
+            label: 'xmpp-ping',
+            matcher: { xmlns: 'urn:xmpp:ping', type: 'get' },
+            respond: (iq) => buildIqResult(iq)
+        })
+
+        // `<iq xmlns="encrypt" type="set"><rotate>...</rotate></iq>` —
+        // signed prekey rotation. Periodic. Just ack success.
+        this.iqRouter.register({
+            label: 'signed-prekey-rotate',
+            matcher: { xmlns: 'encrypt', type: 'set', childTag: 'rotate' },
+            respond: (iq) => buildIqResult(iq)
+        })
+
+        // `<iq xmlns="md" type="set"><remove-companion-device .../></iq>` —
+        // logout / unpair. Ack success and notify any registered
+        // listeners so tests can assert the lib actually shipped the
+        // call before tearing down.
+        this.iqRouter.register({
+            label: 'remove-companion-device',
+            matcher: { xmlns: 'md', type: 'set', childTag: 'remove-companion-device' },
+            respond: (iq) => {
+                for (const listener of this.logoutListeners) {
+                    try {
+                        listener()
+                    } catch {
+                        // best-effort
+                    }
+                }
+                return buildIqResult(iq)
+            }
+        })
+
+        // ─── Tier 2: group operations ─────────────────────────────
+
+        // `<iq xmlns="w:g2" type="set"><create subject=...><participant .../></create></iq>`
+        // The lib's `client.group.createGroup` reads back a `<group>`
+        // metadata payload — we mint one from the inbound participants.
+        this.iqRouter.register({
+            label: 'group-create',
+            matcher: { xmlns: 'w:g2', type: 'set', childTag: 'create' },
+            respond: (iq) => {
+                const parsed = parseCreateGroupIq(iq)
+                if (!parsed) {
+                    return buildIqError(iq, { code: 400, text: 'invalid-create' })
+                }
+                const groupJid = `120363${Date.now()}@g.us`
+                const creator = parsed.participantJids[0] ?? 's.whatsapp.net'
+                const creationSeconds = Math.floor(Date.now() / 1_000)
+                const participants: FakePeer[] = []
+                for (const jid of parsed.participantJids) {
+                    const peer = this.peerRegistry.get(jid)
+                    if (peer) participants.push(peer)
+                }
+                const mutable: MutableFakeGroup = {
+                    groupJid,
+                    subject: parsed.subject,
+                    description: parsed.description,
+                    creator,
+                    creationSeconds,
+                    participants
+                }
+                this.groupRegistry.set(groupJid, mutable)
+                this.notifyGroupOp({
+                    action: 'create',
+                    groupJid,
+                    subject: parsed.subject,
+                    participantJids: parsed.participantJids,
+                    description: parsed.description
+                })
+                const result = buildIqResult(iq)
+                return {
+                    ...result,
+                    content: [
+                        buildGroupMetadataNode({
+                            groupJid,
+                            subject: parsed.subject,
+                            creator,
+                            creationSeconds,
+                            participantJids: parsed.participantJids,
+                            description: parsed.description
+                        })
+                    ]
+                }
+            }
+        })
+
+        // Participant changes — `add | remove | promote | demote`.
+        for (const action of ['add', 'remove', 'promote', 'demote'] as const) {
+            this.iqRouter.register({
+                label: `group-${action}`,
+                matcher: { xmlns: 'w:g2', type: 'set', childTag: action },
+                respond: (iq) => {
+                    const parsed = parseGroupParticipantChangeIq(iq)
+                    if (!parsed) {
+                        return buildIqError(iq, { code: 400, text: 'invalid-change' })
+                    }
+                    const group = this.groupRegistry.get(parsed.groupJid)
+                    if (group) {
+                        if (parsed.action === 'add') {
+                            for (const jid of parsed.participantJids) {
+                                const peer = this.peerRegistry.get(jid)
+                                if (peer && !group.participants.includes(peer)) {
+                                    group.participants.push(peer)
+                                }
+                            }
+                        } else if (parsed.action === 'remove') {
+                            const removed = new Set(parsed.participantJids)
+                            group.participants = group.participants.filter(
+                                (peer) => !removed.has(peer.jid)
+                            )
+                        }
+                        // promote/demote don't change the participant
+                        // list, only roles — we don't track roles yet.
+                    }
+                    this.notifyGroupOp({
+                        action: parsed.action,
+                        groupJid: parsed.groupJid,
+                        participantJids: parsed.participantJids
+                    })
+                    return buildGroupParticipantChangeResult(iq, parsed.action, parsed.participantJids)
+                }
+            })
+        }
+
+        // setSubject
+        this.iqRouter.register({
+            label: 'group-subject',
+            matcher: { xmlns: 'w:g2', type: 'set', childTag: 'subject' },
+            respond: (iq) => {
+                const parsed = parseSetSubjectIq(iq)
+                if (!parsed) return buildIqError(iq, { code: 400, text: 'invalid-subject' })
+                const group = this.groupRegistry.get(parsed.groupJid)
+                if (group) group.subject = parsed.subject
+                this.notifyGroupOp({
+                    action: 'subject',
+                    groupJid: parsed.groupJid,
+                    subject: parsed.subject
+                })
+                return buildIqResult(iq)
+            }
+        })
+
+        // setDescription
+        this.iqRouter.register({
+            label: 'group-description',
+            matcher: { xmlns: 'w:g2', type: 'set', childTag: 'description' },
+            respond: (iq) => {
+                const parsed = parseSetDescriptionIq(iq)
+                if (!parsed) return buildIqError(iq, { code: 400, text: 'invalid-description' })
+                const group = this.groupRegistry.get(parsed.groupJid)
+                if (group) group.description = parsed.description ?? undefined
+                this.notifyGroupOp({
+                    action: 'description',
+                    groupJid: parsed.groupJid,
+                    description: parsed.description
+                })
+                return buildIqResult(iq)
+            }
+        })
+
+        // leaveGroup
+        this.iqRouter.register({
+            label: 'group-leave',
+            matcher: { xmlns: 'w:g2', type: 'set', childTag: 'leave' },
+            respond: (iq) => {
+                const groupJids = parseLeaveGroupIq(iq) ?? []
+                for (const groupJid of groupJids) {
+                    this.groupRegistry.delete(groupJid)
+                    this.notifyGroupOp({ action: 'leave', groupJid })
+                }
+                return buildIqResult(iq)
+            }
+        })
+
+        // ─── Tier 2: privacy + blocklist ──────────────────────────
+
+        // `<iq xmlns="privacy" type="get"><privacy/></iq>` — full
+        // settings query (no `<list>` child). The disallowed-list
+        // query carries a `<privacy><list .../></privacy>` instead
+        // and is handled below by inspecting the inbound shape.
+        this.iqRouter.register({
+            label: 'privacy-get',
+            matcher: { xmlns: 'privacy', type: 'get', childTag: 'privacy' },
+            respond: (iq) => {
+                const disallowedCategory = parsePrivacyDisallowedListGetIq(iq)
+                if (disallowedCategory) {
+                    return buildPrivacyDisallowedListResult(
+                        iq,
+                        disallowedCategory,
+                        this.privacySettings.disallowed[disallowedCategory] ?? []
+                    )
+                }
+                return buildPrivacySettingsResult(iq, this.privacySettings)
+            }
+        })
+
+        // `<iq xmlns="privacy" type="set"><privacy><category .../></privacy></iq>`
+        this.iqRouter.register({
+            label: 'privacy-set',
+            matcher: { xmlns: 'privacy', type: 'set', childTag: 'privacy' },
+            respond: (iq) => {
+                const change = parsePrivacySetCategoryIq(iq)
+                if (!change) return buildIqError(iq, { code: 400, text: 'invalid-privacy-set' })
+                const next = {
+                    ...this.privacySettings,
+                    settings: {
+                        ...this.privacySettings.settings,
+                        [change.category]: change.value
+                    }
+                }
+                this.privacySettings = next
+                for (const listener of this.privacySetListeners) {
+                    try {
+                        listener(change)
+                    } catch {
+                        // best-effort
+                    }
+                }
+                return buildIqResult(iq)
+            }
+        })
+
+        // `<iq xmlns="blocklist" type="get"/>` — list query
+        this.iqRouter.register({
+            label: 'blocklist-get',
+            matcher: { xmlns: 'blocklist', type: 'get' },
+            respond: (iq) => buildBlocklistResult(iq, [...this.blocklistJids])
+        })
+
+        // `<iq xmlns="blocklist" type="set"><item jid=... action="..."/></iq>`
+        this.iqRouter.register({
+            label: 'blocklist-set',
+            matcher: { xmlns: 'blocklist', type: 'set' },
+            respond: (iq) => {
+                const change = parseBlocklistChangeIq(iq)
+                if (!change) {
+                    return buildIqError(iq, { code: 400, text: 'invalid-blocklist-set' })
+                }
+                if (change.action === 'block') {
+                    this.blocklistJids.add(change.jid)
+                } else {
+                    this.blocklistJids.delete(change.jid)
+                }
+                for (const listener of this.blocklistChangeListeners) {
+                    try {
+                        listener(change)
+                    } catch {
+                        // best-effort
+                    }
+                }
+                return buildIqResult(iq)
+            }
+        })
+
+        // ─── Tier 3: profile / status / business ──────────────────
+
+        // `<iq xmlns="w:profile:picture" type="get" target=<jid>><picture .../></iq>`
+        this.iqRouter.register({
+            label: 'profile-picture-get',
+            matcher: { xmlns: 'w:profile:picture', type: 'get' },
+            respond: (iq) => {
+                const parsed = parseGetProfilePictureIq(iq)
+                if (!parsed) return buildIqError(iq, { code: 400, text: 'invalid-target' })
+                const picture = this.profilePicturesByJid.get(parsed.targetJid)
+                if (!picture) {
+                    return buildIqError(iq, { code: 404, text: 'item-not-found' })
+                }
+                return buildGetProfilePictureResult(iq, { ...picture, type: parsed.type })
+            }
+        })
+
+        // `<iq xmlns="w:profile:picture" type="set"><picture type="image">[bytes]</picture></iq>`
+        this.iqRouter.register({
+            label: 'profile-picture-set',
+            matcher: { xmlns: 'w:profile:picture', type: 'set' },
+            respond: (iq) => {
+                const parsed = parseSetProfilePictureIq(iq)
+                if (!parsed) return buildIqError(iq, { code: 400, text: 'invalid-set' })
+                const targetJid = parsed.targetJid ?? 'me'
+                const newId = `${Date.now()}`
+                this.profilePicturesByJid.set(targetJid, {
+                    id: newId,
+                    url: `https://fake-media.local/profile/${targetJid}/${newId}.jpg`,
+                    directPath: `/profile/${targetJid}/${newId}.jpg`,
+                    type: 'image'
+                })
+                for (const listener of this.profilePictureSetListeners) {
+                    try {
+                        listener(parsed)
+                    } catch {
+                        // best-effort
+                    }
+                }
+                return buildSetProfilePictureResult(iq, newId)
+            }
+        })
+
+        // `<iq xmlns="status" type="set"><status>...</status></iq>`
+        this.iqRouter.register({
+            label: 'status-set',
+            matcher: { xmlns: 'status', type: 'set' },
+            respond: (iq) => {
+                const parsed = parseSetStatusIq(iq)
+                if (parsed) {
+                    this.latestStatusText = parsed.text
+                    for (const listener of this.statusSetListeners) {
+                        try {
+                            listener(parsed)
+                        } catch {
+                            // best-effort
+                        }
+                    }
+                }
+                return buildIqResult(iq)
+            }
+        })
+
+        // `<iq xmlns="w:biz" type="get"><business_profile><profile jid=.../></business_profile></iq>`
+        this.iqRouter.register({
+            label: 'business-profile-get',
+            matcher: { xmlns: 'w:biz', type: 'get', childTag: 'business_profile' },
+            respond: (iq) => {
+                const requestedJids = parseGetBusinessProfileIq(iq) ?? []
+                const profiles: FakeBusinessProfile[] = []
+                for (const jid of requestedJids) {
+                    const profile = this.businessProfilesByJid.get(jid)
+                    if (profile) profiles.push(profile)
+                }
+                return buildBusinessProfileResult(iq, profiles)
+            }
+        })
+
+        // `<iq xmlns="w:biz" type="set"><business_profile .../></iq>` — edit
+        // We just ack success; tests can inspect the captured stanza
+        // via `capturedStanzaSnapshot()` if they need to validate the
+        // shape.
+        this.iqRouter.register({
+            label: 'business-profile-set',
+            matcher: { xmlns: 'w:biz', type: 'set', childTag: 'business_profile' },
+            respond: (iq) => buildIqResult(iq)
+        })
+    }
+
+    private buildGroupMetadataReply(
+        iq: BinaryNode,
+        metadata: MutableFakeGroup
+    ): BinaryNode {
+        const result = buildIqResult(iq)
+        return {
+            ...result,
+            content: [
+                buildGroupMetadataNode({
+                    groupJid: metadata.groupJid,
+                    subject: metadata.subject,
+                    creator: metadata.creator,
+                    creationSeconds: metadata.creationSeconds,
+                    participantJids: metadata.participants.map((peer) => toUserJidPart(peer.jid)),
+                    ...(metadata.description !== undefined
+                        ? { description: metadata.description }
+                        : {})
+                })
+            ]
+        }
+    }
+
+    private notifyGroupOp(op: CapturedGroupOp): void {
+        for (const listener of this.groupOpListeners) {
+            try {
+                listener(op)
+            } catch {
+                // best-effort
+            }
+        }
     }
 
     private lookupDeviceIdsForUser(userJid: string): readonly number[] {
@@ -521,7 +1017,8 @@ export class FakeWaServer {
     /**
      * Register an IQ handler. The fake server matches incoming IQ stanzas
      * against the registered handlers in registration order; the first
-     * match wins.
+     * match wins. Test-installed handlers are prepended so they shadow
+     * the constructor-registered global defaults.
      */
     public registerIqHandler(
         matcher: WaFakeIqMatcher,
@@ -529,7 +1026,7 @@ export class FakeWaServer {
         label?: string
     ): () => void {
         const handler: WaFakeIqHandler = { matcher, respond, label }
-        return this.iqRouter.register(handler)
+        return this.iqRouter.register(handler, { priority: 'high' })
     }
 
     /**
@@ -1017,6 +1514,7 @@ export class FakeWaServer {
     public createFakeGroup(input: {
         readonly groupJid: string
         readonly subject?: string
+        readonly description?: string
         readonly participants: readonly FakePeer[]
         readonly creator?: string
         readonly creationSeconds?: number
@@ -1025,15 +1523,116 @@ export class FakeWaServer {
             throw new Error('createFakeGroup requires at least one participant')
         }
         const creator = input.creator ?? toUserJidPart(input.participants[0].jid)
-        const metadata: FakeGroupMetadata = {
+        const mutable: MutableFakeGroup = {
             groupJid: input.groupJid,
             subject: input.subject ?? 'Fake Group',
+            description: input.description,
             creator,
             creationSeconds: input.creationSeconds ?? Math.floor(Date.now() / 1_000),
-            participants: input.participants
+            participants: [...input.participants]
         }
-        this.groupRegistry.set(input.groupJid, metadata)
-        return metadata
+        this.groupRegistry.set(input.groupJid, mutable)
+        return {
+            groupJid: mutable.groupJid,
+            subject: mutable.subject,
+            description: mutable.description,
+            creator: mutable.creator,
+            creationSeconds: mutable.creationSeconds,
+            participants: mutable.participants
+        }
+    }
+
+    /** Subscribes to outbound group operation IQs the lib uploads. */
+    public onOutboundGroupOp(listener: (op: CapturedGroupOp) => void): () => void {
+        this.groupOpListeners.add(listener)
+        return () => {
+            this.groupOpListeners.delete(listener)
+        }
+    }
+
+    /** Subscribes to outbound privacy-set IQs the lib uploads. */
+    public onOutboundPrivacySet(listener: (op: CapturedPrivacySet) => void): () => void {
+        this.privacySetListeners.add(listener)
+        return () => {
+            this.privacySetListeners.delete(listener)
+        }
+    }
+
+    /** Subscribes to outbound blocklist change IQs the lib uploads. */
+    public onOutboundBlocklistChange(
+        listener: (op: CapturedBlocklistChange) => void
+    ): () => void {
+        this.blocklistChangeListeners.add(listener)
+        return () => {
+            this.blocklistChangeListeners.delete(listener)
+        }
+    }
+
+    /** Subscribes to outbound profile-picture-set IQs the lib uploads. */
+    public onOutboundProfilePictureSet(
+        listener: (op: CapturedProfilePictureSet) => void
+    ): () => void {
+        this.profilePictureSetListeners.add(listener)
+        return () => {
+            this.profilePictureSetListeners.delete(listener)
+        }
+    }
+
+    /** Subscribes to outbound status-set IQs the lib uploads. */
+    public onOutboundStatusSet(listener: (op: CapturedStatusSet) => void): () => void {
+        this.statusSetListeners.add(listener)
+        return () => {
+            this.statusSetListeners.delete(listener)
+        }
+    }
+
+    /** Subscribes to logout / `remove-companion-device` IQs. */
+    public onLogout(listener: () => void): () => void {
+        this.logoutListeners.add(listener)
+        return () => {
+            this.logoutListeners.delete(listener)
+        }
+    }
+
+    /** Snapshot of the current privacy settings + per-category disallowed lists. */
+    public privacySettingsSnapshot(): FakePrivacySettingsState {
+        return this.privacySettings
+    }
+
+    /** Snapshot of the current blocklist as a sorted array. */
+    public blocklistSnapshot(): readonly string[] {
+        return [...this.blocklistJids].sort()
+    }
+
+    /** Pre-set or override a profile picture record for a given jid. */
+    public setProfilePictureRecord(jid: string, picture: FakeProfilePictureResult): void {
+        this.profilePicturesByJid.set(jid, picture)
+    }
+
+    /** Pre-set or override a business profile record for a given jid. */
+    public setBusinessProfileRecord(jid: string, profile: FakeBusinessProfile): void {
+        this.businessProfilesByJid.set(jid, profile)
+    }
+
+    /** Snapshot of the most recent `setStatus` text the lib uploaded. */
+    public latestStatusSnapshot(): string | null {
+        return this.latestStatusText
+    }
+
+    /** Snapshot of the current group registry as a read-only map. */
+    public groupRegistrySnapshot(): ReadonlyMap<string, FakeGroupMetadata> {
+        const out = new Map<string, FakeGroupMetadata>()
+        for (const [groupJid, metadata] of this.groupRegistry) {
+            out.set(groupJid, {
+                groupJid: metadata.groupJid,
+                subject: metadata.subject,
+                description: metadata.description,
+                creator: metadata.creator,
+                creationSeconds: metadata.creationSeconds,
+                participants: metadata.participants
+            })
+        }
+        return out
     }
 
     private buildFakePeerDeps(pipeline: WaFakeConnectionPipeline): {
@@ -1386,30 +1985,6 @@ function toDeviceIdPart(deviceJid: string): number {
  * Builds the `<iq type=result><group jid=.../></iq>` payload the
  * lib's `parseGroupMetadata` reads.
  */
-function buildGroupMetadataIqResult(iq: BinaryNode, metadata: FakeGroupMetadata): BinaryNode {
-    const result = buildIqResult(iq)
-    return {
-        ...result,
-        content: [
-            {
-                tag: 'group',
-                attrs: {
-                    id: metadata.groupJid,
-                    subject: metadata.subject,
-                    creation: String(metadata.creationSeconds),
-                    creator: metadata.creator,
-                    s_t: String(metadata.creationSeconds),
-                    s_o: metadata.creator
-                },
-                content: metadata.participants.map((peer) => ({
-                    tag: 'participant',
-                    attrs: { jid: toUserJidPart(peer.jid) }
-                }))
-            }
-        ]
-    }
-}
-
 function parseRequestedKeyJids(iq: BinaryNode): readonly string[] {
     if (!Array.isArray(iq.content)) return []
     const out: string[] = []
