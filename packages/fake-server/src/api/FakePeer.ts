@@ -37,13 +37,13 @@ import {
     buildHistorySyncMessage
 } from '../protocol/push/history-sync'
 import { buildMessage, type FakeEncChild } from '../protocol/push/message'
+import { FakePeerDoubleRatchet } from '../protocol/signal/fake-peer-double-ratchet'
 import { FakePeerGroupRecvSession } from '../protocol/signal/fake-peer-group-recv-session'
 import {
     type FakePeerKeyBundle,
     generateFakePeerKeyBundle
 } from '../protocol/signal/fake-peer-key-bundle'
-import { FakePeerRecvSession } from '../protocol/signal/fake-peer-recv-session'
-import { type FakePeerIdentity, FakePeerSession } from '../protocol/signal/fake-peer-session'
+import type { FakePeerIdentity } from '../protocol/signal/fake-peer-session'
 import { FakeSenderKey } from '../protocol/signal/fake-sender-key'
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
 import type { BinaryNode } from '../transport/codec'
@@ -121,11 +121,18 @@ export class FakePeer {
     public readonly identity: FakePeerIdentity
 
     private readonly deps: FakePeerDeps
-    private session: FakePeerSession | null = null
+    /**
+     * Unified Double Ratchet that handles both encrypt + decrypt for
+     * the 1:1 conversation with the lib. Bootstraps lazily on the first
+     * `sendMessage` (Alice X3DH) or the first inbound `pkmsg` (Bob
+     * X3DH); after that the same instance carries all subsequent
+     * messages in either direction, including DH ratchet rotations.
+     */
+    private readonly ratchet: FakePeerDoubleRatchet
+    private ratchetInitiated = false
     private nextMessageCounter = 0
     private readonly senderKeysByGroup = new Map<string, FakeSenderKey>()
     private readonly groupsBootstrapped = new Set<string>()
-    private readonly recvSession: FakePeerRecvSession
     private readonly groupRecvSession = new FakePeerGroupRecvSession()
 
     private constructor(
@@ -141,7 +148,7 @@ export class FakePeer {
         this.jid = options.jid
         this.displayName = options.displayName
         this.deps = deps
-        this.recvSession = new FakePeerRecvSession(keyBundle)
+        this.ratchet = new FakePeerDoubleRatchet(keyBundle)
     }
 
     public static async create(
@@ -162,14 +169,10 @@ export class FakePeer {
         message: proto.IMessage,
         options: SendMessageOptions = {}
     ): Promise<void> {
-        await this.ensureSession()
-        const session = this.session
-        if (!session) {
-            throw new Error('fake peer session was not established')
-        }
+        await this.ensureRatchetInitiated()
 
         const plaintext = encodePlaintextWithPadding(message)
-        const { type, ciphertext } = await session.encrypt(plaintext)
+        const { type, ciphertext } = await this.ratchet.encrypt(plaintext)
 
         const enc: FakeEncChild = { type, ciphertext }
         const id = options.id ?? this.nextId()
@@ -562,18 +565,16 @@ export class FakePeer {
         const encChildren: FakeEncChild[] = []
 
         if (!this.groupsBootstrapped.has(groupJid)) {
-            await this.ensureSession()
-            const session = this.session
-            if (!session) {
-                throw new Error('fake peer session was not established')
-            }
+            await this.ensureRatchetInitiated()
             const bootstrapPlaintext = encodePlaintextWithPadding({
                 senderKeyDistributionMessage: {
                     groupId: groupJid,
                     axolotlSenderKeyDistributionMessage: distributionMessage
                 }
             })
-            const { type: pkType, ciphertext: pkCt } = await session.encrypt(bootstrapPlaintext)
+            const { type: pkType, ciphertext: pkCt } = await this.ratchet.encrypt(
+                bootstrapPlaintext
+            )
             encChildren.push({ type: pkType, ciphertext: pkCt })
             this.groupsBootstrapped.add(groupJid)
         }
@@ -692,8 +693,8 @@ export class FakePeer {
     ): Promise<proto.IMessage> {
         const padded =
             encType === 'pkmsg'
-                ? await this.recvSession.decryptPreKeyMessage(ciphertext)
-                : await this.recvSession.decryptMessage(ciphertext)
+                ? await this.ratchet.decryptPreKeyMessage(ciphertext)
+                : await this.ratchet.decryptMessage(ciphertext)
         return proto.Message.decode(padded)
     }
 
@@ -710,8 +711,8 @@ export class FakePeer {
             if (bootstrapType === 'pkmsg' || bootstrapType === 'msg') {
                 const padded =
                     bootstrapType === 'pkmsg'
-                        ? await this.recvSession.decryptPreKeyMessage(bootstrap.content)
-                        : await this.recvSession.decryptMessage(bootstrap.content)
+                        ? await this.ratchet.decryptPreKeyMessage(bootstrap.content)
+                        : await this.ratchet.decryptMessage(bootstrap.content)
                 const innerMessage = proto.Message.decode(padded)
                 const skdm = innerMessage.senderKeyDistributionMessage
                 const axolotl = skdm?.axolotlSenderKeyDistributionMessage
@@ -728,10 +729,18 @@ export class FakePeer {
         return proto.Message.decode(padded)
     }
 
-    private async ensureSession(): Promise<void> {
-        if (this.session) return
+    private async ensureRatchetInitiated(): Promise<void> {
+        if (this.ratchetInitiated) return
+        // If a prior inbound pkmsg already bootstrapped the session in
+        // Bob mode and a recv DR step minted a fresh local send chain,
+        // we can skip the X3DH initiator path entirely.
+        if (this.ratchet.hasSendChain()) {
+            this.ratchetInitiated = true
+            return
+        }
         const bundle = await this.deps.bundleResolver()
-        this.session = await FakePeerSession.initiate(this.identity, bundle)
+        await this.ratchet.initiateOutbound(bundle)
+        this.ratchetInitiated = true
     }
 
     private nextId(): string {
