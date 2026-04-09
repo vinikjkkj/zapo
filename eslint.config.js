@@ -36,7 +36,7 @@ module.exports = [
         }
     },
     {
-        files: ['packages/*/src/**/*.ts'],
+        files: ['packages/*/src/**/*.ts', 'packages/*/bench/**/*.ts'],
         languageOptions: {
             parserOptions: {
                 tsconfigRootDir: __dirname,

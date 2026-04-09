@@ -154,7 +154,20 @@ export class FakePeerDoubleRatchet {
      */
     public async initiateOutbound(
         bundle: ClientPreKeyBundle,
-        oneTimePreKey?: { readonly keyId: number; readonly publicKey: Uint8Array }
+        options: {
+            readonly oneTimePreKey?: { readonly keyId: number; readonly publicKey: Uint8Array }
+            /**
+             * When true, the X3DH initiator skips the one-time prekey
+             * mix entirely (the lib accepts pkmsg with `preKeyId`
+             * absent and builds the responder session without DH4).
+             * This unblocks bench scenarios that bring up many
+             * concurrent peers — the lib's prekey upload only contains
+             * a fixed number of one-time prekeys, so reusing index 0
+             * across N peers would cause the lib to reject every
+             * pkmsg after the first as "prekey N not found".
+             */
+            readonly skipOneTimePreKey?: boolean
+        } = {}
     ): Promise<void> {
         if (this.rootKey || this.sendChain || this.recvChain) {
             throw new FakePeerDoubleRatchetError('session already initialized')
@@ -164,7 +177,9 @@ export class FakePeerDoubleRatchet {
         const localBase = await X25519.generateKeyPair()
         const localBaseSerialized = toSerializedPubKey(localBase.pubKey)
 
-        const consumedOneTime = oneTimePreKey ?? bundle.preKeys[0]
+        const consumedOneTime = options.skipOneTimePreKey
+            ? undefined
+            : (options.oneTimePreKey ?? bundle.preKeys[0])
         const remoteOneTime = consumedOneTime
             ? toSerializedPubKey(consumedOneTime.publicKey)
             : null

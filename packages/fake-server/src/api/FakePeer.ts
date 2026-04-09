@@ -56,6 +56,17 @@ export interface CreateFakePeerOptions {
     readonly displayName?: string
     /** Optional pre-generated key bundle (default: freshly generated). */
     readonly keyBundle?: FakePeerKeyBundle
+    /**
+     * When true, this peer skips the one-time prekey leg of X3DH when
+     * initiating outbound encryption. The lib happily accepts pkmsg
+     * with no `preKeyId` and builds the responder session without DH4.
+     * Set this when bringing up many concurrent peers in a single test
+     * — the lib's prekey upload only contains a fixed number of
+     * one-time prekeys, so reusing index 0 across N peers would cause
+     * the lib to reject every pkmsg after the first as
+     * "prekey N not found".
+     */
+    readonly skipOneTimePreKey?: boolean
 }
 
 export interface SendMessageOptions {
@@ -139,6 +150,7 @@ export class FakePeer {
      * messages in either direction, including DH ratchet rotations.
      */
     private readonly ratchet: FakePeerDoubleRatchet
+    private readonly skipOneTimePreKey: boolean
     private ratchetInitiated = false
     private nextMessageCounter = 0
     private readonly senderKeysByGroup = new Map<string, FakeSenderKey>()
@@ -158,6 +170,7 @@ export class FakePeer {
         this.jid = options.jid
         this.displayName = options.displayName
         this.deps = deps
+        this.skipOneTimePreKey = options.skipOneTimePreKey === true
         this.ratchet = new FakePeerDoubleRatchet(keyBundle)
     }
 
@@ -772,7 +785,9 @@ export class FakePeer {
             return
         }
         const bundle = await this.deps.bundleResolver()
-        await this.ratchet.initiateOutbound(bundle)
+        await this.ratchet.initiateOutbound(bundle, {
+            skipOneTimePreKey: this.skipOneTimePreKey
+        })
         this.ratchetInitiated = true
     }
 

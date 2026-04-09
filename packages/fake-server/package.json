@@ -22,7 +22,8 @@
         "build": "tsc -p tsconfig.build.cjs.json",
         "typecheck": "tsc --noEmit",
         "test": "node --import tsx --test --test-concurrency=1 \"src/**/__tests__/**/*.test.ts\"",
-        "cli": "node --import tsx src/cli.ts"
+        "cli": "node --import tsx src/cli.ts",
+        "bench:messaging": "node --expose-gc --import tsx bench/messaging.bench.ts"
     },
     "peerDependencies": {
         "zapo-js": ">=0.1.0"

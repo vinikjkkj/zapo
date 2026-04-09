@@ -1542,6 +1542,7 @@ export class FakeWaServer {
             readonly userJid: string
             readonly deviceIds: readonly number[]
             readonly displayName?: string
+            readonly skipOneTimePreKey?: boolean
         },
         pipeline: WaFakeConnectionPipeline
     ): Promise<readonly FakePeer[]> {
@@ -1559,7 +1560,11 @@ export class FakeWaServer {
             const deviceJid =
                 deviceId === 0 ? input.userJid : `${userPart}:${deviceId}@${server}`
             const peer = await FakePeer.create(
-                { jid: deviceJid, displayName: input.displayName },
+                {
+                    jid: deviceJid,
+                    displayName: input.displayName,
+                    skipOneTimePreKey: input.skipOneTimePreKey
+                },
                 this.buildFakePeerDeps(pipeline)
             )
             this.peerRegistry.set(peer.jid, peer)
