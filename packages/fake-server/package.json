@@ -5,6 +5,9 @@
     "description": "Fake WhatsApp Web server used to test zapo-js",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
+    "bin": {
+        "fake-wa-server": "./dist/cli.js"
+    },
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
@@ -18,7 +21,8 @@
     "scripts": {
         "build": "tsc -p tsconfig.build.cjs.json",
         "typecheck": "tsc --noEmit",
-        "test": "node --import tsx --test --test-concurrency=1 \"src/**/__tests__/**/*.test.ts\""
+        "test": "node --import tsx --test --test-concurrency=1 \"src/**/__tests__/**/*.test.ts\"",
+        "cli": "node --import tsx src/cli.ts"
     },
     "peerDependencies": {
         "zapo-js": ">=0.1.0"
