@@ -65,6 +65,19 @@ export interface SendMessageOptions {
     readonly t?: number
     /** Stanza-level type (default: `text`). */
     readonly type?: string
+    /**
+     * Override the `from` attribute of the outbound `<message>` stanza.
+     * Defaults to the peer's own JID. Useful for status broadcasts
+     * (`status@broadcast`), where the wire `from` is the broadcast jid
+     * and the peer jid travels in `participant`.
+     */
+    readonly from?: string
+    /**
+     * Override the `participant` attribute. Defaults to undefined for
+     * 1:1 messages. For status broadcasts, the lib expects the
+     * peer-device JID here.
+     */
+    readonly participant?: string
 }
 
 export interface ReceivedMessage {
@@ -162,10 +175,11 @@ export class FakePeer {
         const id = options.id ?? this.nextId()
         const stanza = buildMessage({
             id,
-            from: this.jid,
+            from: options.from ?? this.jid,
             t: options.t,
             type: options.type ?? 'text',
             notify: this.displayName,
+            participant: options.participant,
             enc: [enc]
         })
         await this.deps.pushStanza(stanza)
@@ -335,6 +349,156 @@ export class FakePeer {
                     caption: input.caption,
                     width: input.width,
                     height: input.height,
+                    mediaKeyTimestamp: Math.floor(Date.now() / 1_000)
+                }
+            },
+            options
+        )
+    }
+
+    /**
+     * Convenience for a `videoMessage` mirroring `sendImageMessage`.
+     */
+    public async sendVideoMessage(
+        input: {
+            readonly directPath: string
+            readonly mediaKey: Uint8Array
+            readonly fileSha256: Uint8Array
+            readonly fileEncSha256: Uint8Array
+            readonly fileLength: number
+            readonly mimetype?: string
+            readonly caption?: string
+            readonly seconds?: number
+            readonly width?: number
+            readonly height?: number
+        },
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        await this.sendMessage(
+            {
+                videoMessage: {
+                    url: input.directPath,
+                    directPath: input.directPath,
+                    mediaKey: input.mediaKey,
+                    fileSha256: input.fileSha256,
+                    fileEncSha256: input.fileEncSha256,
+                    fileLength: input.fileLength,
+                    mimetype: input.mimetype ?? 'video/mp4',
+                    caption: input.caption,
+                    seconds: input.seconds,
+                    width: input.width,
+                    height: input.height,
+                    mediaKeyTimestamp: Math.floor(Date.now() / 1_000)
+                }
+            },
+            options
+        )
+    }
+
+    /**
+     * Convenience for an `audioMessage`. Pass `ptt: true` to mark it
+     * as a push-to-talk voice note (the `mediaType` for the blob
+     * should still be `'ptt'` rather than `'audio'` in that case).
+     */
+    public async sendAudioMessage(
+        input: {
+            readonly directPath: string
+            readonly mediaKey: Uint8Array
+            readonly fileSha256: Uint8Array
+            readonly fileEncSha256: Uint8Array
+            readonly fileLength: number
+            readonly mimetype?: string
+            readonly seconds?: number
+            readonly ptt?: boolean
+        },
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        await this.sendMessage(
+            {
+                audioMessage: {
+                    url: input.directPath,
+                    directPath: input.directPath,
+                    mediaKey: input.mediaKey,
+                    fileSha256: input.fileSha256,
+                    fileEncSha256: input.fileEncSha256,
+                    fileLength: input.fileLength,
+                    mimetype: input.mimetype ?? (input.ptt ? 'audio/ogg' : 'audio/mp4'),
+                    seconds: input.seconds,
+                    ptt: input.ptt,
+                    mediaKeyTimestamp: Math.floor(Date.now() / 1_000)
+                }
+            },
+            options
+        )
+    }
+
+    /**
+     * Convenience for a `documentMessage`.
+     */
+    public async sendDocumentMessage(
+        input: {
+            readonly directPath: string
+            readonly mediaKey: Uint8Array
+            readonly fileSha256: Uint8Array
+            readonly fileEncSha256: Uint8Array
+            readonly fileLength: number
+            readonly mimetype?: string
+            readonly title?: string
+            readonly fileName?: string
+            readonly pageCount?: number
+        },
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        await this.sendMessage(
+            {
+                documentMessage: {
+                    url: input.directPath,
+                    directPath: input.directPath,
+                    mediaKey: input.mediaKey,
+                    fileSha256: input.fileSha256,
+                    fileEncSha256: input.fileEncSha256,
+                    fileLength: input.fileLength,
+                    mimetype: input.mimetype ?? 'application/pdf',
+                    title: input.title,
+                    fileName: input.fileName,
+                    pageCount: input.pageCount,
+                    mediaKeyTimestamp: Math.floor(Date.now() / 1_000)
+                }
+            },
+            options
+        )
+    }
+
+    /**
+     * Convenience for a `stickerMessage`.
+     */
+    public async sendStickerMessage(
+        input: {
+            readonly directPath: string
+            readonly mediaKey: Uint8Array
+            readonly fileSha256: Uint8Array
+            readonly fileEncSha256: Uint8Array
+            readonly fileLength: number
+            readonly mimetype?: string
+            readonly width?: number
+            readonly height?: number
+            readonly isAnimated?: boolean
+        },
+        options: SendMessageOptions = {}
+    ): Promise<void> {
+        await this.sendMessage(
+            {
+                stickerMessage: {
+                    url: input.directPath,
+                    directPath: input.directPath,
+                    mediaKey: input.mediaKey,
+                    fileSha256: input.fileSha256,
+                    fileEncSha256: input.fileEncSha256,
+                    fileLength: input.fileLength,
+                    mimetype: input.mimetype ?? 'image/webp',
+                    width: input.width,
+                    height: input.height,
+                    isAnimated: input.isAnimated,
                     mediaKeyTimestamp: Math.floor(Date.now() / 1_000)
                 }
             },
