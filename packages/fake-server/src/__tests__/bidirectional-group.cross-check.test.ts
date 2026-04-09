@@ -29,8 +29,6 @@ import type { WaClient, WaClientEventMap } from 'zapo-js'
 
 import { FakeWaServer } from '../api/FakeWaServer'
 import { parsePairingQrString } from '../protocol/auth/pair-device'
-import { buildIqResult } from '../protocol/iq/router'
-import type { BinaryNode } from '../transport/codec'
 
 import { createZapoClient } from './helpers/zapo-client'
 
@@ -53,36 +51,6 @@ function waitForMessage(
         }
         client.on('message', listener)
     })
-}
-
-function buildGroupMetadataResult(
-    iq: BinaryNode,
-    groupJid: string,
-    participantJid: string
-): BinaryNode {
-    const result = buildIqResult(iq)
-    return {
-        ...result,
-        content: [
-            {
-                tag: 'group',
-                attrs: {
-                    id: groupJid,
-                    creation: String(Math.floor(Date.now() / 1_000)),
-                    creator: participantJid,
-                    subject: 'Bidi Group',
-                    s_t: String(Math.floor(Date.now() / 1_000)),
-                    s_o: participantJid
-                },
-                content: [
-                    {
-                        tag: 'participant',
-                        attrs: { jid: participantJid }
-                    }
-                ]
-            }
-        ]
-    }
 }
 
 test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) decrypts on both sides', async () => {
@@ -126,15 +94,15 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
         await pairedPromise
         const pipelineAfterPair = await pipelineAfterPairPromise
 
-        // Group metadata IQ handler — needed for the lib's outbound
-        // group send to resolve participants.
-        server.registerIqHandler(
-            { xmlns: 'w:g2', type: 'get', childTag: 'query' },
-            (iq) => buildGroupMetadataResult(iq, groupJid, peerJid),
-            'group-metadata'
-        )
-
         const peer = await server.createFakePeer({ jid: peerJid }, pipelineAfterPair)
+        // Register the group via the centralised registry — the
+        // global w:g2 group-metadata handler will return this peer
+        // as the only participant when the lib queries the group.
+        server.createFakeGroup({
+            groupJid,
+            subject: 'Bidi Group',
+            participants: [peer]
+        })
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
         // === Round 1: peer → client (fake peer sends group conversation) ===

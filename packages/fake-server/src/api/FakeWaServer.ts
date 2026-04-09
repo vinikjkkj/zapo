@@ -33,7 +33,7 @@ import {
     type FakeAppStateCollectionPayload,
     parseAppStateSyncRequest
 } from '../protocol/iq/appstate-sync'
-import { buildPreKeyFetchResult } from '../protocol/iq/prekey-fetch'
+import { buildPreKeyFetchResult, type PreKeyBundleForUser } from '../protocol/iq/prekey-fetch'
 import {
     buildIqError,
     buildIqResult,
@@ -115,6 +115,20 @@ interface PendingPreKeyBundleWaiter {
     readonly resolve: (bundle: ClientPreKeyBundle) => void
     readonly reject: (error: Error) => void
     readonly timer: NodeJS.Timeout
+}
+
+export interface FakeGroupMetadata {
+    /** Full group JID (e.g. `120363111111111111@g.us`). */
+    readonly groupJid: string
+    /** Display name returned in the `subject` attribute. */
+    readonly subject: string
+    /** Creator JID — defaults to the first participant. */
+    readonly creator: string
+    /** Unix-seconds creation timestamp. */
+    readonly creationSeconds: number
+    /** Participants of the group. The lib's outbound group fanout will
+     *  resolve devices for each one and encrypt per-device. */
+    readonly participants: readonly FakePeer[]
 }
 
 export interface CapturedAppStateMutation {
@@ -199,6 +213,25 @@ export class FakeWaServer {
     private readonly outboundMutationListeners = new Set<
         (mutation: CapturedAppStateMutation) => void
     >()
+    /**
+     * Centralised peer registry. Every `FakePeer` minted via
+     * `createFakePeer` / `createFakePeerWithDevices` is indexed here
+     * by its **device JID** (`5511aaa@s.whatsapp.net` for device 0,
+     * `5511aaa:1@s.whatsapp.net` for device 1+). The global usync and
+     * prekey-fetch handlers consult this registry instead of each
+     * peer registering its own per-handler — that's the only way to
+     * support multi-peer scenarios under the lib's first-match-wins
+     * IQ router.
+     */
+    private readonly peerRegistry = new Map<string, FakePeer>()
+    /**
+     * Centralised group registry. Every `FakeGroup` minted via
+     * `createFakeGroup` is indexed here by its `groupJid`. The global
+     * `w:g2` group-metadata handler consults this map when the lib
+     * issues a `<iq xmlns="w:g2" type="get" to="<group-jid>"><query/></iq>`
+     * during outbound group sends.
+     */
+    private readonly groupRegistry = new Map<string, FakeGroupMetadata>()
 
     public constructor(options: FakeWaServerOptions = {}) {
         this.wsServer = new WaFakeWsServer(options)
@@ -308,6 +341,94 @@ export class FakeWaServer {
                 return buildAppStateSyncFullResult(iq, { payloads })
             }
         })
+
+        // Global usync handler. Walks the inbound `<usync><list><user jid=.../></list></usync>`
+        // children, looks up every device registered under each
+        // requested user JID in the peer registry, and returns one
+        // `<user jid=...><devices><device-list><device id=N/></device-list></devices></user>`
+        // entry per user. Replaces the per-peer usync handlers used by
+        // the old `createFakePeer` design (which only worked for one
+        // peer because the IQ router does first-match-wins).
+        this.iqRouter.register({
+            label: 'usync',
+            matcher: { xmlns: 'usync', type: 'get', childTag: 'usync' },
+            respond: (iq) => {
+                const requestedUserJids = parseUsyncRequestedUserJids(iq)
+                const results = requestedUserJids.map((userJid) => ({
+                    userJid,
+                    deviceIds: this.lookupDeviceIdsForUser(userJid)
+                }))
+                return buildUsyncDevicesResult(iq, results)
+            }
+        })
+
+        // Global prekey-fetch handler. Parses every `<key><user jid=device-jid/>`
+        // child of the inbound IQ and returns one bundle per device JID
+        // it can find in the peer registry. Replaces the per-peer
+        // prekey-fetch handler the old `createFakePeer` design used.
+        this.iqRouter.register({
+            label: 'prekey-fetch',
+            matcher: { xmlns: 'encrypt', type: 'get', childTag: 'key' },
+            respond: (iq) => {
+                const requestedDeviceJids = parseRequestedKeyJids(iq)
+                const bundles: PreKeyBundleForUser[] = []
+                for (const deviceJid of requestedDeviceJids) {
+                    const peer = this.peerRegistry.get(deviceJid)
+                    if (!peer) continue
+                    const oneTime = peer.keyBundle.oneTimePreKeys[0]
+                    bundles.push({
+                        userJid: deviceJid,
+                        registrationId: peer.keyBundle.registrationId,
+                        identityPublicKey: peer.keyBundle.identityKeyPair.pubKey,
+                        signedPreKey: {
+                            id: peer.keyBundle.signedPreKey.id,
+                            publicKey: peer.keyBundle.signedPreKey.keyPair.pubKey,
+                            signature: peer.keyBundle.signedPreKey.signature
+                        },
+                        ...(oneTime
+                            ? {
+                                  oneTimePreKey: {
+                                      id: oneTime.id,
+                                      publicKey: oneTime.keyPair.pubKey
+                                  }
+                              }
+                            : {})
+                    })
+                }
+                return buildPreKeyFetchResult(iq, bundles)
+            }
+        })
+
+        // Global w:g2 group-metadata handler. Looks up the inbound IQ's
+        // `to` attribute (which is the group JID being queried) in the
+        // group registry and returns a `<group/>` payload listing every
+        // participant. The lib's `createGroup` IQ flow is fielded by
+        // an inline test handler, not this one.
+        this.iqRouter.register({
+            label: 'group-metadata',
+            matcher: { xmlns: 'w:g2', type: 'get', childTag: 'query' },
+            respond: (iq) => {
+                const groupJid = iq.attrs.to
+                if (!groupJid) {
+                    return buildIqError(iq, { code: 400, text: 'missing-to' })
+                }
+                const metadata = this.groupRegistry.get(groupJid)
+                if (!metadata) {
+                    return buildIqError(iq, { code: 404, text: 'group-not-found' })
+                }
+                return buildGroupMetadataIqResult(iq, metadata)
+            }
+        })
+    }
+
+    private lookupDeviceIdsForUser(userJid: string): readonly number[] {
+        const deviceIds: number[] = []
+        for (const peer of this.peerRegistry.values()) {
+            if (toUserJidPart(peer.jid) !== userJid) continue
+            deviceIds.push(toDeviceIdPart(peer.jid))
+        }
+        deviceIds.sort((a, b) => a - b)
+        return deviceIds
     }
 
     private async consumeOutboundAppStatePatches(iq: BinaryNode): Promise<void> {
@@ -801,16 +922,128 @@ export class FakeWaServer {
      * client. The peer lazily resolves the client's PreKey bundle on its
      * first send (using whatever bundle was captured by then).
      *
-     * Also auto-registers IQ handlers so the lib can resolve this peer
-     * via `usync` (devices fetch) and `<key_fetch>` (prekey bundle fetch)
-     * — required for the lib's `client.sendMessage` to establish a
-     * Signal session with the peer.
+     * The peer is added to the centralised `peerRegistry` keyed by its
+     * device JID; the global usync + prekey-fetch IQ handlers
+     * registered in the constructor look the peer up by JID at request
+     * time, so multiple peers can coexist without IQ-handler
+     * collisions. Tests that need multi-device fanout for a single
+     * user JID should use `createFakePeerWithDevices`; tests that need
+     * a real group with multiple participants should use
+     * `createFakeGroup`.
      */
     public async createFakePeer(
         options: CreateFakePeerOptions,
         pipeline: WaFakeConnectionPipeline
     ): Promise<FakePeer> {
-        const peer = await FakePeer.create(options, {
+        const peer = await FakePeer.create(options, this.buildFakePeerDeps(pipeline))
+        this.peerRegistry.set(peer.jid, peer)
+        return peer
+    }
+
+    /**
+     * Multi-device variant of `createFakePeer`. Creates one `FakePeer`
+     * per `deviceId` (each with its own Signal identity + prekey
+     * bundle) under a shared user JID. Each device is added to the
+     * peer registry independently, so the global usync handler will
+     * return all of them together when the lib resolves the user.
+     *
+     * Use this for cross-checks that exercise the lib's device
+     * fanout — `client.sendMessage(userJid, ...)` will produce a
+     * `<message><participants><to jid=user:N><enc/></to>...</participants></message>`
+     * stanza with one `<enc>` child per device.
+     */
+    public async createFakePeerWithDevices(
+        input: {
+            readonly userJid: string
+            readonly deviceIds: readonly number[]
+            readonly displayName?: string
+        },
+        pipeline: WaFakeConnectionPipeline
+    ): Promise<readonly FakePeer[]> {
+        if (input.deviceIds.length === 0) {
+            throw new Error('createFakePeerWithDevices requires at least one deviceId')
+        }
+        const atIdx = input.userJid.indexOf('@')
+        if (atIdx < 0) {
+            throw new Error(`invalid userJid ${input.userJid}`)
+        }
+        const userPart = input.userJid.slice(0, atIdx)
+        const server = input.userJid.slice(atIdx + 1)
+        const peers: FakePeer[] = []
+        for (const deviceId of input.deviceIds) {
+            const deviceJid =
+                deviceId === 0 ? input.userJid : `${userPart}:${deviceId}@${server}`
+            const peer = await FakePeer.create(
+                { jid: deviceJid, displayName: input.displayName },
+                this.buildFakePeerDeps(pipeline)
+            )
+            this.peerRegistry.set(peer.jid, peer)
+            peers.push(peer)
+        }
+        return peers
+    }
+
+    /**
+     * Backwards-compat alias for `createFakePeerWithDevices`. The old
+     * name was confusing because "peer group" implied a chat group;
+     * the new name says what the call actually does. Both names are
+     * kept around so existing tests don't break.
+     *
+     * @deprecated use `createFakePeerWithDevices` instead.
+     */
+    public createFakePeerGroup(
+        input: {
+            readonly userJid: string
+            readonly deviceIds: readonly number[]
+            readonly displayName?: string
+        },
+        pipeline: WaFakeConnectionPipeline
+    ): Promise<readonly FakePeer[]> {
+        return this.createFakePeerWithDevices(input, pipeline)
+    }
+
+    /**
+     * Registers a fake group with a fixed participant set. The global
+     * `w:g2` group-metadata handler answers any `<iq xmlns="w:g2"
+     * type="get" to=<group-jid>><query/></iq>` with the participants
+     * stored here, and the lib's outbound group fanout will then run
+     * usync + prekey-fetch against each participant via the global
+     * peer registry handlers.
+     *
+     * Each participant must already exist in the peer registry —
+     * pass the `FakePeer` instances you got from `createFakePeer` /
+     * `createFakePeerWithDevices` directly.
+     */
+    public createFakeGroup(input: {
+        readonly groupJid: string
+        readonly subject?: string
+        readonly participants: readonly FakePeer[]
+        readonly creator?: string
+        readonly creationSeconds?: number
+    }): FakeGroupMetadata {
+        if (input.participants.length === 0) {
+            throw new Error('createFakeGroup requires at least one participant')
+        }
+        const creator = input.creator ?? toUserJidPart(input.participants[0].jid)
+        const metadata: FakeGroupMetadata = {
+            groupJid: input.groupJid,
+            subject: input.subject ?? 'Fake Group',
+            creator,
+            creationSeconds: input.creationSeconds ?? Math.floor(Date.now() / 1_000),
+            participants: input.participants
+        }
+        this.groupRegistry.set(input.groupJid, metadata)
+        return metadata
+    }
+
+    private buildFakePeerDeps(pipeline: WaFakeConnectionPipeline): {
+        readonly bundleResolver: () => Promise<ClientPreKeyBundle>
+        readonly pushStanza: (stanza: BinaryNode) => Promise<void>
+        readonly subscribeInboundMessages: (
+            listener: (stanza: BinaryNode) => void
+        ) => () => void
+    } {
+        return {
             bundleResolver: () => this.awaitPreKeyBundle(),
             pushStanza: (stanza) => pipeline.sendStanza(stanza),
             subscribeInboundMessages: (listener) => {
@@ -823,156 +1056,7 @@ export class FakeWaServer {
                     this.inboundStanzaListeners.delete(wrapped)
                 }
             }
-        })
-
-        // Auto-register usync handler for THIS peer's jid.
-        this.registerIqHandler(
-            { xmlns: 'usync', type: 'get', childTag: 'usync' },
-            (iq) => buildUsyncDevicesResult(iq, [{ userJid: peer.jid, deviceIds: [0] }]),
-            `usync:${peer.jid}`
-        )
-
-        // Auto-register prekey-fetch handler that returns this peer's bundle.
-        // The lib's `fetchKeyBundles` sends `<iq xmlns="encrypt" type="get"><key><user jid=.../></key></iq>`
-        this.registerIqHandler(
-            { xmlns: 'encrypt', type: 'get', childTag: 'key' },
-            (iq) => {
-                const oneTime = peer.keyBundle.oneTimePreKeys[0]
-                return buildPreKeyFetchResult(iq, [
-                    {
-                        userJid: peer.jid,
-                        registrationId: peer.keyBundle.registrationId,
-                        identityPublicKey: peer.keyBundle.identityKeyPair.pubKey,
-                        signedPreKey: {
-                            id: peer.keyBundle.signedPreKey.id,
-                            publicKey: peer.keyBundle.signedPreKey.keyPair.pubKey,
-                            signature: peer.keyBundle.signedPreKey.signature
-                        },
-                        ...(oneTime
-                            ? {
-                                  oneTimePreKey: {
-                                      id: oneTime.id,
-                                      publicKey: oneTime.keyPair.pubKey
-                                  }
-                              }
-                            : {})
-                    }
-                ])
-            },
-            `prekey-fetch:${peer.jid}`
-        )
-
-        return peer
-    }
-
-    /**
-     * Multi-device variant of `createFakePeer`. Creates one `FakePeer`
-     * per `deviceId` (each with its own Signal identity + prekey
-     * bundle), and registers a single shared usync + prekey-fetch
-     * handler pair for the user JID. The usync handler returns all
-     * device ids in one response; the prekey-fetch handler parses the
-     * inbound `<key><user jid="...">` children, looks up the matching
-     * device, and emits one `<user>` per requested JID.
-     *
-     * Use this for cross-checks that exercise the lib's device
-     * fanout — `client.sendMessage(userJid, ...)` will produce a
-     * `<message><participants><to jid=user:N><enc/></to>...</participants></message>`
-     * stanza with one `<enc>` child per device, each encrypted with
-     * its own session.
-     */
-    public async createFakePeerGroup(input: {
-        readonly userJid: string
-        readonly deviceIds: readonly number[]
-        readonly displayName?: string
-    }, pipeline: WaFakeConnectionPipeline): Promise<readonly FakePeer[]> {
-        if (input.deviceIds.length === 0) {
-            throw new Error('createFakePeerGroup requires at least one deviceId')
         }
-        const userParts = input.userJid.split('@')
-        if (userParts.length !== 2) {
-            throw new Error(`invalid userJid ${input.userJid}`)
-        }
-        const [user, server] = userParts
-        const peers: FakePeer[] = []
-        for (const deviceId of input.deviceIds) {
-            const deviceJid = deviceId === 0 ? input.userJid : `${user}:${deviceId}@${server}`
-            const peer = await FakePeer.create(
-                { jid: deviceJid, displayName: input.displayName },
-                {
-                    bundleResolver: () => this.awaitPreKeyBundle(),
-                    pushStanza: (stanza) => pipeline.sendStanza(stanza),
-                    subscribeInboundMessages: (listener) => {
-                        const wrapped = (node: BinaryNode): void => {
-                            if (node.tag !== 'message') return
-                            listener(node)
-                        }
-                        this.inboundStanzaListeners.add(wrapped)
-                        return () => {
-                            this.inboundStanzaListeners.delete(wrapped)
-                        }
-                    }
-                }
-            )
-            peers.push(peer)
-        }
-        const peersByDeviceJid = new Map(peers.map((peer) => [peer.jid, peer]))
-
-        // Single shared usync handler returning every device id under
-        // the user JID. The lib's `parseDeviceSyncResponse` reads the
-        // device-list children and uses them as the fanout target set.
-        this.registerIqHandler(
-            { xmlns: 'usync', type: 'get', childTag: 'usync' },
-            (iq) =>
-                buildUsyncDevicesResult(iq, [
-                    {
-                        userJid: input.userJid,
-                        deviceIds: input.deviceIds
-                    }
-                ]),
-            `usync:${input.userJid}:multi`
-        )
-
-        // Single shared prekey-fetch handler. The lib's
-        // `fetchKeyBundles` sends one `<user jid=device-jid/>` per
-        // device — we read each child, find the corresponding peer,
-        // and ship its bundle back inside a single `<list>` block.
-        this.registerIqHandler(
-            { xmlns: 'encrypt', type: 'get', childTag: 'key' },
-            (iq) => {
-                const requestedJids = parseRequestedKeyJids(iq)
-                const bundles = requestedJids
-                    .map((jid) => {
-                        const peer = peersByDeviceJid.get(jid)
-                        if (!peer) return null
-                        const oneTime = peer.keyBundle.oneTimePreKeys[0]
-                        return {
-                            userJid: jid,
-                            registrationId: peer.keyBundle.registrationId,
-                            identityPublicKey: peer.keyBundle.identityKeyPair.pubKey,
-                            signedPreKey: {
-                                id: peer.keyBundle.signedPreKey.id,
-                                publicKey: peer.keyBundle.signedPreKey.keyPair.pubKey,
-                                signature: peer.keyBundle.signedPreKey.signature
-                            },
-                            ...(oneTime
-                                ? {
-                                      oneTimePreKey: {
-                                          id: oneTime.id,
-                                          publicKey: oneTime.keyPair.pubKey
-                                      }
-                                  }
-                                : {})
-                        }
-                    })
-                    .filter(
-                        (bundle): bundle is NonNullable<typeof bundle> => bundle !== null
-                    )
-                return buildPreKeyFetchResult(iq, bundles)
-            },
-            `prekey-fetch:${input.userJid}:multi`
-        )
-
-        return peers
     }
 
     /**
@@ -1242,6 +1326,87 @@ export class FakeWaServer {
             throw new Error('fake server is not listening')
         }
         return this.rootCa
+    }
+}
+
+/**
+ * Walks `<iq><usync><list><user jid=.../></list></usync></iq>` and
+ * returns the user JIDs being queried. Used by the global usync
+ * handler to look up devices in the peer registry.
+ */
+function parseUsyncRequestedUserJids(iq: BinaryNode): readonly string[] {
+    if (!Array.isArray(iq.content)) return []
+    const out: string[] = []
+    for (const child of iq.content) {
+        if (child.tag !== 'usync') continue
+        if (!Array.isArray(child.content)) continue
+        for (const inner of child.content) {
+            if (inner.tag !== 'list') continue
+            if (!Array.isArray(inner.content)) continue
+            for (const userNode of inner.content) {
+                if (userNode.tag !== 'user') continue
+                if (typeof userNode.attrs.jid === 'string') {
+                    out.push(userNode.attrs.jid)
+                }
+            }
+        }
+    }
+    return out
+}
+
+/**
+ * Strips the device suffix from a JID. `5511aaa:1@s.whatsapp.net`
+ * becomes `5511aaa@s.whatsapp.net`. Idempotent for user JIDs.
+ */
+function toUserJidPart(deviceJid: string): string {
+    const atIdx = deviceJid.indexOf('@')
+    if (atIdx < 0) return deviceJid
+    const userPart = deviceJid.slice(0, atIdx)
+    const server = deviceJid.slice(atIdx + 1)
+    const colonIdx = userPart.indexOf(':')
+    const baseUser = colonIdx < 0 ? userPart : userPart.slice(0, colonIdx)
+    return `${baseUser}@${server}`
+}
+
+/**
+ * Extracts the numeric device id from a JID. Returns 0 when there
+ * is no `:N` suffix (the WhatsApp convention for device 0).
+ */
+function toDeviceIdPart(deviceJid: string): number {
+    const atIdx = deviceJid.indexOf('@')
+    if (atIdx < 0) return 0
+    const userPart = deviceJid.slice(0, atIdx)
+    const colonIdx = userPart.indexOf(':')
+    if (colonIdx < 0) return 0
+    const parsed = Number.parseInt(userPart.slice(colonIdx + 1), 10)
+    return Number.isFinite(parsed) ? parsed : 0
+}
+
+/**
+ * Builds the `<iq type=result><group jid=.../></iq>` payload the
+ * lib's `parseGroupMetadata` reads.
+ */
+function buildGroupMetadataIqResult(iq: BinaryNode, metadata: FakeGroupMetadata): BinaryNode {
+    const result = buildIqResult(iq)
+    return {
+        ...result,
+        content: [
+            {
+                tag: 'group',
+                attrs: {
+                    id: metadata.groupJid,
+                    subject: metadata.subject,
+                    creation: String(metadata.creationSeconds),
+                    creator: metadata.creator,
+                    s_t: String(metadata.creationSeconds),
+                    s_o: metadata.creator
+                },
+                content: metadata.participants.map((peer) => ({
+                    tag: 'participant',
+                    attrs: { jid: toUserJidPart(peer.jid) }
+                }))
+            }
+        ]
     }
 }
 

@@ -107,7 +107,7 @@ export function createZapoClient(
             store,
             sessionId: options.sessionId ?? 'fake-server-cross-check',
             chatSocketUrls: [server.url],
-            connectTimeoutMs: options.connectTimeoutMs ?? 15_000,
+            connectTimeoutMs: options.connectTimeoutMs ?? 60_000,
             history: options.historySyncEnabled ? { enabled: true } : undefined,
             chatEvents: options.emitSnapshotMutations
                 ? { emitSnapshotMutations: true }

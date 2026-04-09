@@ -135,8 +135,17 @@ export class FakePeerGroupRecvSession {
             )
         }
         const sigStart = skmsgBytes.byteLength - SIGNAL_SIGNATURE_LENGTH
-        const versionedContent = skmsgBytes.subarray(0, sigStart)
-        const signature = skmsgBytes.subarray(sigStart)
+        // The lib's `verifySignalSignature` mutates the signature buffer
+        // in place (clears the high bit of byte 63 then restores it in
+        // its `finally`). When the same `<message>` stanza fans out to
+        // multiple FakePeers in the group recv path, each peer
+        // verifies the SAME signature bytes concurrently — and
+        // because `subarray` returns a view, the mutations race and
+        // corrupt the shared buffer. Copy the signature into a fresh
+        // ArrayBuffer per call so every verify gets its own writable
+        // 64 bytes.
+        const versionedContent = skmsgBytes.subarray(0, sigStart).slice()
+        const signature = skmsgBytes.subarray(sigStart).slice()
         const protoBody = versionedContent.subarray(1)
 
         const decoded = proto.SenderKeyMessage.decode(protoBody)

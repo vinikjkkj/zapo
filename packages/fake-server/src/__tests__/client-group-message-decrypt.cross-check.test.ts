@@ -29,36 +29,8 @@ import type { WaClientEventMap } from 'zapo-js'
 
 import { FakeWaServer } from '../api/FakeWaServer'
 import { parsePairingQrString } from '../protocol/auth/pair-device'
-import { buildIqResult } from '../protocol/iq/router'
-import type { BinaryNode } from '../transport/codec'
 
 import { createZapoClient } from './helpers/zapo-client'
-
-function buildGroupMetadataResult(iq: BinaryNode, groupJid: string, participantJid: string): BinaryNode {
-    const result = buildIqResult(iq)
-    return {
-        ...result,
-        content: [
-            {
-                tag: 'group',
-                attrs: {
-                    id: groupJid,
-                    creation: String(Math.floor(Date.now() / 1_000)),
-                    creator: participantJid,
-                    subject: 'Fake Group',
-                    s_t: String(Math.floor(Date.now() / 1_000)),
-                    s_o: participantJid
-                },
-                content: [
-                    {
-                        tag: 'participant',
-                        attrs: { jid: participantJid }
-                    }
-                ]
-            }
-        ]
-    }
-}
 
 test('paired client.sendMessage to a group is decrypted by the fake peer', async () => {
     const server = await FakeWaServer.start()
@@ -102,18 +74,19 @@ test('paired client.sendMessage to a group is decrypted by the fake peer', async
         await pairedPromise
         const pipelineAfterPair = await pipelineAfterPairPromise
 
-        // Register the group metadata IQ handler BEFORE creating the peer,
-        // so the lib's `queryGroupMetadata` resolves it.
-        server.registerIqHandler(
-            { xmlns: 'w:g2', type: 'get', childTag: 'query' },
-            (iq) => buildGroupMetadataResult(iq, groupJid, peerJid),
-            `group-metadata:${groupJid}`
-        )
-
         const peer = await server.createFakePeer(
             { jid: peerJid, displayName: 'Group Peer' },
             pipelineAfterPair
         )
+        // The global w:g2 group-metadata handler reads from the
+        // server's group registry — registering the group here lets
+        // the lib's `queryGroupMetadata` resolve to a single-peer
+        // participant list without an inline IQ handler.
+        server.createFakeGroup({
+            groupJid,
+            subject: 'Fake Group',
+            participants: [peer]
+        })
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
         const groupReceivedPromise = peer.expectGroupMessage(groupJid, {
