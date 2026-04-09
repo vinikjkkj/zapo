@@ -25,7 +25,7 @@ import {
 import { WaFakeMediaHttpsServer } from '../infra/WaFakeMediaHttpsServer'
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
-import { buildAbPropsResult } from '../protocol/iq/abprops'
+import { buildAbPropsResult, type BuildAbPropsResultInput } from '../protocol/iq/abprops'
 import {
     buildAppStateSyncFullResult,
     buildAppStateSyncResult,
@@ -39,6 +39,7 @@ import {
     type FakeBusinessProfile,
     parseGetBusinessProfileIq
 } from '../protocol/iq/business'
+import { parseClearDirtyBitsIq } from '../protocol/iq/dirty-bits'
 import {
     buildGroupMetadataNode,
     buildGroupParticipantChangeResult,
@@ -49,6 +50,7 @@ import {
     parseSetDescriptionIq,
     parseSetSubjectIq
 } from '../protocol/iq/group-ops'
+import { buildNewsletterMyAddonsResult } from '../protocol/iq/newsletter'
 import { buildPreKeyFetchResult, type PreKeyBundleForUser } from '../protocol/iq/prekey-fetch'
 import {
     buildBlocklistResult,
@@ -61,6 +63,10 @@ import {
     parsePrivacyDisallowedListGetIq,
     parsePrivacySetCategoryIq
 } from '../protocol/iq/privacy'
+import {
+    type FakePrivacyTokenIssue,
+    parsePrivacyTokenIssueIq
+} from '../protocol/iq/privacy-token'
 import {
     buildGetProfilePictureResult,
     buildSetProfilePictureResult,
@@ -205,6 +211,10 @@ export interface CapturedStatusSet {
     readonly text: string
 }
 
+export interface CapturedDirtyBitsClear {
+    readonly bits: ReadonlyArray<{ readonly type: string; readonly timestamp: number }>
+}
+
 export interface CapturedAppStateMutation {
     /** Collection name parsed from the inbound `<collection>`. */
     readonly collection: string
@@ -319,6 +329,19 @@ export class FakeWaServer {
     /** "Status" text the lib's setStatus call most recently published. */
     private latestStatusText: string | null = null
     /**
+     * Trusted-contact privacy tokens the lib has issued, captured per
+     * recipient jid. The lib only requires a bare ack but tests can
+     * subscribe via {@link onOutboundPrivacyTokenIssue}.
+     */
+    private readonly issuedPrivacyTokens = new Map<string, FakePrivacyTokenIssue>()
+    /**
+     * AB-experiment payload returned by the global `abprops` handler.
+     * Defaults to an empty `<props/>`. Tests opt in via
+     * {@link setAbProps}; the payload is then mirrored back on every
+     * subsequent `<iq xmlns="abt">` query.
+     */
+    private abPropsInput: BuildAbPropsResultInput = {}
+    /**
      * Listener fan-outs for IQ-driven side effects so tests can
      * `await` a specific operation. Each set holds (`predicate`, `resolve`)
      * pairs the global handlers consult after applying state changes.
@@ -331,6 +354,12 @@ export class FakeWaServer {
     >()
     private readonly statusSetListeners = new Set<(op: CapturedStatusSet) => void>()
     private readonly logoutListeners = new Set<() => void>()
+    private readonly privacyTokenIssueListeners = new Set<
+        (op: FakePrivacyTokenIssue) => void
+    >()
+    private readonly dirtyBitsClearListeners = new Set<
+        (op: CapturedDirtyBitsClear) => void
+    >()
 
     public constructor(options: FakeWaServerOptions = {}) {
         this.wsServer = new WaFakeWsServer(options)
@@ -527,7 +556,7 @@ export class FakeWaServer {
         this.iqRouter.register({
             label: 'abprops',
             matcher: { xmlns: 'abt', type: 'get', childTag: 'props' },
-            respond: (iq) => buildAbPropsResult(iq)
+            respond: (iq) => buildAbPropsResult(iq, this.abPropsInput)
         })
 
         // `<iq xmlns="w:p" type="get"/>` — keepalive ping. The lib
@@ -790,6 +819,65 @@ export class FakeWaServer {
                         listener(change)
                     } catch {
                         // best-effort
+                    }
+                }
+                return buildIqResult(iq)
+            }
+        })
+
+        // `<iq xmlns="privacy" type="set"><tokens><token jid t type/></tokens></iq>` —
+        // trusted-contact privacy token issue. The lib's
+        // `WaTrustedContactTokenCoordinator.issuePrivacyToken` only
+        // awaits the response, so a bare `result` is enough; we still
+        // capture the issued tokens so tests can assert on them via
+        // `onOutboundPrivacyTokenIssue`.
+        this.iqRouter.register({
+            label: 'privacy-token-issue',
+            matcher: { xmlns: 'privacy', type: 'set', childTag: 'tokens' },
+            respond: (iq) => {
+                const tokens = parsePrivacyTokenIssueIq(iq)
+                if (tokens) {
+                    for (const token of tokens) {
+                        this.issuedPrivacyTokens.set(token.jid, token)
+                        for (const listener of this.privacyTokenIssueListeners) {
+                            try {
+                                listener(token)
+                            } catch {
+                                // best-effort
+                            }
+                        }
+                    }
+                }
+                return buildIqResult(iq)
+            }
+        })
+
+        // `<iq xmlns="newsletter" type="get"><my_addons limit="1"/></iq>` —
+        // dirty-bit driven newsletter metadata sync. The lib only
+        // awaits the response (no `assertIqResult`), but we still
+        // return a well-formed `<my_addons/>` payload.
+        this.iqRouter.register({
+            label: 'newsletter-my-addons',
+            matcher: { xmlns: 'newsletter', type: 'get', childTag: 'my_addons' },
+            respond: (iq) => buildNewsletterMyAddonsResult(iq)
+        })
+
+        // `<iq xmlns="urn:xmpp:whatsapp:dirty" type="set"><clean .../></iq>` —
+        // dirty bits clear. The lib swallows errors so the bare ack is
+        // enough; we capture the cleared bits for tests via
+        // `onOutboundDirtyBitsClear`.
+        this.iqRouter.register({
+            label: 'dirty-bits-clear',
+            matcher: { xmlns: 'urn:xmpp:whatsapp:dirty', type: 'set' },
+            respond: (iq) => {
+                const bits = parseClearDirtyBitsIq(iq)
+                if (bits) {
+                    for (const listener of this.dirtyBitsClearListeners) {
+                        try {
+                            listener({ bits })
+                        } catch {
+                            // best-effort
+                        }
                     }
                 }
                 return buildIqResult(iq)
@@ -1591,6 +1679,76 @@ export class FakeWaServer {
         this.logoutListeners.add(listener)
         return () => {
             this.logoutListeners.delete(listener)
+        }
+    }
+
+    /**
+     * Subscribes to outbound `<iq xmlns="privacy" type="set"><tokens>`
+     * stanzas the lib emits when issuing a trusted-contact privacy
+     * token to a peer.
+     */
+    public onOutboundPrivacyTokenIssue(
+        listener: (op: FakePrivacyTokenIssue) => void
+    ): () => void {
+        this.privacyTokenIssueListeners.add(listener)
+        return () => {
+            this.privacyTokenIssueListeners.delete(listener)
+        }
+    }
+
+    /**
+     * Subscribes to outbound `<iq xmlns="urn:xmpp:whatsapp:dirty">`
+     * clear stanzas the lib emits at the end of a dirty-bit sync cycle.
+     */
+    public onOutboundDirtyBitsClear(
+        listener: (op: CapturedDirtyBitsClear) => void
+    ): () => void {
+        this.dirtyBitsClearListeners.add(listener)
+        return () => {
+            this.dirtyBitsClearListeners.delete(listener)
+        }
+    }
+
+    /** Snapshot of every trusted-contact privacy token the lib has issued. */
+    public privacyTokensIssuedSnapshot(): ReadonlyMap<string, FakePrivacyTokenIssue> {
+        return new Map(this.issuedPrivacyTokens)
+    }
+
+    /**
+     * Test-only escape hatch that feeds a synthetic IQ stanza through
+     * the global IQ router and returns whatever the matched handler
+     * produces. Used by unit-style tests that want to drive handlers
+     * which only fire from background lib code paths (dirty-bit clear,
+     * newsletter metadata sync, trusted-contact privacy-token issue).
+     */
+    public async routeIqForTest(iq: BinaryNode): Promise<BinaryNode | null> {
+        return this.iqRouter.route(iq)
+    }
+
+    /**
+     * Override the AB-experiment payload returned by the global
+     * `<iq xmlns="abt">` handler. Tests opt in to AB-gated lib code
+     * paths by feeding `{ props: [...] }` here.
+     */
+    public setAbProps(input: BuildAbPropsResultInput): void {
+        this.abPropsInput = input
+    }
+
+    /**
+     * Pre-seed the per-category privacy disallowed list (the
+     * `contact_blacklist` payload returned by the lib's
+     * `getDisallowedList(category)` query).
+     */
+    public setPrivacyDisallowedList(
+        category: FakePrivacyCategoryName,
+        jids: readonly string[]
+    ): void {
+        this.privacySettings = {
+            ...this.privacySettings,
+            disallowed: {
+                ...this.privacySettings.disallowed,
+                [category]: [...jids]
+            }
         }
     }
 
