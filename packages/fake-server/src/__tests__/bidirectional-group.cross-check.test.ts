@@ -82,8 +82,7 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
 
         const round1ReceivedByLib = waitForMessage(
             client,
-            (event) =>
-                event.chatJid === groupJid && event.message?.conversation === 'peer-group #1'
+            (event) => event.chatJid === groupJid && event.message?.conversation === 'peer-group #1'
         )
         await peer.sendGroupConversation(groupJid, 'peer-group #1')
         const round1 = await round1ReceivedByLib
@@ -103,8 +102,7 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
 
         const round3ReceivedByLib = waitForMessage(
             client,
-            (event) =>
-                event.chatJid === groupJid && event.message?.conversation === 'peer-group #2'
+            (event) => event.chatJid === groupJid && event.message?.conversation === 'peer-group #2'
         )
         await peer.sendGroupConversation(groupJid, 'peer-group #2')
         const round3 = await round3ReceivedByLib

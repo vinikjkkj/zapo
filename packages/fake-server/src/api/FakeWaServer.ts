@@ -33,10 +33,7 @@ import {
 import { type BinaryNode } from '../transport/codec'
 import { type SignalKeyPair, X25519 } from '../transport/crypto'
 
-import {
-    AppStateSyncManager,
-    type CapturedAppStateMutation
-} from './AppStateSyncManager'
+import { AppStateSyncManager, type CapturedAppStateMutation } from './AppStateSyncManager'
 import { FakePairingDriver, type FakePairingDriverOptions } from './FakePairingDriver'
 import { type CreateFakePeerOptions, FakePeer } from './FakePeer'
 import { type IqHandlerDeps, registerDefaultIqHandlers } from './iq-handlers'
@@ -153,22 +150,43 @@ export class FakeWaServer {
         const preKey = this.preKeyDispenser
         const appState = this.appStateSync
         return {
-            get peerRegistry() { return reg.peerRegistry },
-            get groupRegistry() { return reg.groupRegistry },
-            get privacySettings() { return reg.privacySettings },
-            get blocklistJids() { return reg.blocklistJids },
-            get profilePicturesByJid() { return reg.profilePicturesByJid },
-            get businessProfilesByJid() { return reg.businessProfilesByJid },
-            get abPropsInput() { return reg.abPropsInput },
-            get issuedPrivacyTokens() { return reg.issuedPrivacyTokens },
-            get latestStatusText() { return reg.latestStatusText },
-            setLatestStatusText: (text: string) => { reg.latestStatusText = text },
+            get peerRegistry() {
+                return reg.peerRegistry
+            },
+            get groupRegistry() {
+                return reg.groupRegistry
+            },
+            get privacySettings() {
+                return reg.privacySettings
+            },
+            get blocklistJids() {
+                return reg.blocklistJids
+            },
+            get profilePicturesByJid() {
+                return reg.profilePicturesByJid
+            },
+            get businessProfilesByJid() {
+                return reg.businessProfilesByJid
+            },
+            get abPropsInput() {
+                return reg.abPropsInput
+            },
+            get issuedPrivacyTokens() {
+                return reg.issuedPrivacyTokens
+            },
+            get latestStatusText() {
+                return reg.latestStatusText
+            },
+            setLatestStatusText: (text: string) => {
+                reg.latestStatusText = text
+            },
             lookupDeviceIdsForUser: (userJid) => reg.lookupDeviceIdsForUser(userJid),
             notifyGroupOp: (op) => reg.notifyGroupOp(op),
             mutatePrivacySettings: (category, value) => reg.mutatePrivacySettings(category, value),
             mutateBlocklist: (action, jid) => reg.mutateBlocklist(action, jid),
             notifyProfilePictureSet: (op) => reg.notifyProfilePictureSet(op),
-            handleProfilePictureSet: (targetJid, newId) => reg.handleProfilePictureSet(targetJid, newId),
+            handleProfilePictureSet: (targetJid, newId) =>
+                reg.handleProfilePictureSet(targetJid, newId),
             notifyStatusSet: (text) => reg.notifyStatusSet(text),
             notifyLogout: () => reg.notifyLogout(),
             notifyPrivacyTokenIssue: (token) => reg.notifyPrivacyTokenIssue(token),
@@ -193,7 +211,9 @@ export class FakeWaServer {
             },
             capturePreKeyBundle: (bundle) => preKey.captureBundle(bundle),
             consumeOutboundAppStatePatches: (iq) => appState.consumeOutboundAppStatePatches(iq),
-            get appStateCollectionProviders() { return appState.appStateCollectionProviders },
+            get appStateCollectionProviders() {
+                return appState.appStateCollectionProviders
+            },
             requireMediaHttpsInfo: () => this.requireMediaHttpsInfo()
         }
     }
@@ -219,9 +239,7 @@ export class FakeWaServer {
         return this.registries.onOutboundPrivacySet(listener)
     }
 
-    public onOutboundBlocklistChange(
-        listener: (op: CapturedBlocklistChange) => void
-    ): () => void {
+    public onOutboundBlocklistChange(listener: (op: CapturedBlocklistChange) => void): () => void {
         return this.registries.onOutboundBlocklistChange(listener)
     }
 
@@ -239,15 +257,11 @@ export class FakeWaServer {
         return this.registries.onLogout(listener)
     }
 
-    public onOutboundPrivacyTokenIssue(
-        listener: (op: FakePrivacyTokenIssue) => void
-    ): () => void {
+    public onOutboundPrivacyTokenIssue(listener: (op: FakePrivacyTokenIssue) => void): () => void {
         return this.registries.onOutboundPrivacyTokenIssue(listener)
     }
 
-    public onOutboundDirtyBitsClear(
-        listener: (op: CapturedDirtyBitsClear) => void
-    ): () => void {
+    public onOutboundDirtyBitsClear(listener: (op: CapturedDirtyBitsClear) => void): () => void {
         return this.registries.onOutboundDirtyBitsClear(listener)
     }
 
@@ -350,7 +364,10 @@ export class FakeWaServer {
 
     public provideAppStateCollection(
         name: string,
-        provider: () => Promise<FakeAppStateCollectionPayload | null> | FakeAppStateCollectionPayload | null
+        provider: () =>
+            | Promise<FakeAppStateCollectionPayload | null>
+            | FakeAppStateCollectionPayload
+            | null
     ): () => void {
         return this.appStateSync.provideAppStateCollection(name, provider)
     }
@@ -541,8 +558,7 @@ export class FakeWaServer {
         const server = input.userJid.slice(atIdx + 1)
         const peers: FakePeer[] = []
         for (const deviceId of input.deviceIds) {
-            const deviceJid =
-                deviceId === 0 ? input.userJid : `${userPart}:${deviceId}@${server}`
+            const deviceJid = deviceId === 0 ? input.userJid : `${userPart}:${deviceId}@${server}`
             const peer = await FakePeer.create(
                 {
                     jid: deviceJid,
@@ -564,9 +580,7 @@ export class FakeWaServer {
             readonly publicKey: Uint8Array
         } | null
         readonly pushStanza: (stanza: BinaryNode) => Promise<void>
-        readonly subscribeInboundMessages: (
-            listener: (stanza: BinaryNode) => void
-        ) => () => void
+        readonly subscribeInboundMessages: (listener: (stanza: BinaryNode) => void) => () => void
     } {
         return {
             bundleResolver: () => this.preKeyDispenser.awaitPreKeyBundle(),

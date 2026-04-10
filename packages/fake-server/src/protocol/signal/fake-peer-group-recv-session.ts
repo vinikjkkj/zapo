@@ -34,19 +34,13 @@ interface RecvSenderKeyRecord {
 export class FakePeerGroupRecvSession {
     private readonly records = new Map<string, RecvSenderKeyRecord>()
 
-    public addDistribution(
-        groupId: string,
-        senderJid: string,
-        axolotlBytes: Uint8Array
-    ): void {
+    public addDistribution(groupId: string, senderJid: string, axolotlBytes: Uint8Array): void {
         if (axolotlBytes.byteLength < 1) {
             throw new FakePeerGroupRecvSessionError('SKDM payload empty')
         }
         const version = axolotlBytes[0] >>> 4
         if (version !== SIGNAL_GROUP_VERSION) {
-            throw new FakePeerGroupRecvSessionError(
-                `unsupported SKDM version ${version}`
-            )
+            throw new FakePeerGroupRecvSessionError(`unsupported SKDM version ${version}`)
         }
         const body = axolotlBytes.subarray(1)
         const decoded = proto.SenderKeyDistributionMessage.decode(body)

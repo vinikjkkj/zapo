@@ -87,11 +87,7 @@ export type {
     FakeAppStateMutationDescriptor
 } from './state/fake-app-state-collection'
 export { FakeMediaStore } from './state/fake-media-store'
-export type {
-    FakeMediaType,
-    PublishedMediaBlob,
-    PublishMediaInput
-} from './state/fake-media-store'
+export type { FakeMediaType, PublishedMediaBlob, PublishMediaInput } from './state/fake-media-store'
 export { buildMessage } from './protocol/push/message'
 export type { BuildMessageInput, FakeEncChild, FakeEncType } from './protocol/push/message'
 export { buildGroupNotification, buildNotification } from './protocol/push/notification'

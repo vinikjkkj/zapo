@@ -73,9 +73,10 @@ export class FakePeer {
     private readonly deps: FakePeerDeps
     private readonly ratchet: FakePeerDoubleRatchet
     private readonly skipOneTimePreKey: boolean
-    private readonly reservedOneTimePreKey:
-        | { readonly keyId: number; readonly publicKey: Uint8Array }
-        | null
+    private readonly reservedOneTimePreKey: {
+        readonly keyId: number
+        readonly publicKey: Uint8Array
+    } | null
     private ratchetInitiated = false
     private nextMessageCounter = 0
     private readonly senderKeysByGroup = new Map<string, FakeSenderKey>()
@@ -438,9 +439,8 @@ export class FakePeer {
                     axolotlSenderKeyDistributionMessage: distributionMessage
                 }
             })
-            const { type: pkType, ciphertext: pkCt } = await this.ratchet.encrypt(
-                bootstrapPlaintext
-            )
+            const { type: pkType, ciphertext: pkCt } =
+                await this.ratchet.encrypt(bootstrapPlaintext)
             encChildren.push({ type: pkType, ciphertext: pkCt })
             this.groupsBootstrapped.add(groupJid)
         }

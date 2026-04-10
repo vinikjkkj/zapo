@@ -71,10 +71,7 @@ test('client.group.{add,remove}Participants mutate the registry via auto handler
         assert.ok(remainingJids.includes('5511aaa@s.whatsapp.net'))
         assert.ok(remainingJids.includes('5511ccc@s.whatsapp.net'))
 
-        assert.deepEqual(captured, [
-            'add:5511ccc@s.whatsapp.net',
-            'remove:5511bbb@s.whatsapp.net'
-        ])
+        assert.deepEqual(captured, ['add:5511ccc@s.whatsapp.net', 'remove:5511bbb@s.whatsapp.net'])
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()

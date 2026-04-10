@@ -34,10 +34,7 @@ import {
     parsePrivacyDisallowedListGetIq,
     parsePrivacySetCategoryIq
 } from '../protocol/iq/privacy'
-import {
-    type FakePrivacyTokenIssue,
-    parsePrivacyTokenIssueIq
-} from '../protocol/iq/privacy-token'
+import { type FakePrivacyTokenIssue, parsePrivacyTokenIssueIq } from '../protocol/iq/privacy-token'
 import {
     buildGetProfilePictureResult,
     buildSetProfilePictureResult,
@@ -46,11 +43,7 @@ import {
     parseSetProfilePictureIq,
     parseSetStatusIq
 } from '../protocol/iq/profile'
-import {
-    buildIqError,
-    buildIqResult,
-    type WaFakeIqRouter
-} from '../protocol/iq/router'
+import { buildIqError, buildIqResult, type WaFakeIqRouter } from '../protocol/iq/router'
 import { buildUsyncDevicesResult } from '../protocol/iq/usync'
 import { type ClientPreKeyBundle, parsePreKeyUploadIq } from '../protocol/signal/prekey-upload'
 import { type BinaryNode } from '../transport/codec'
@@ -133,10 +126,7 @@ export function parseRequestedKeyJids(iq: BinaryNode): readonly string[] {
     return out
 }
 
-function buildGroupMetadataReply(
-    iq: BinaryNode,
-    metadata: MutableFakeGroup
-): BinaryNode {
+function buildGroupMetadataReply(iq: BinaryNode, metadata: MutableFakeGroup): BinaryNode {
     const result = buildIqResult(iq)
     return {
         ...result,
@@ -147,18 +137,13 @@ function buildGroupMetadataReply(
                 creator: metadata.creator,
                 creationSeconds: metadata.creationSeconds,
                 participantJids: metadata.participants.map((peer) => toUserJidPart(peer.jid)),
-                ...(metadata.description !== undefined
-                    ? { description: metadata.description }
-                    : {})
+                ...(metadata.description !== undefined ? { description: metadata.description } : {})
             })
         ]
     }
 }
 
-export function registerDefaultIqHandlers(
-    router: WaFakeIqRouter,
-    deps: IqHandlerDeps
-): void {
+export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandlerDeps): void {
     router.register({
         label: 'prekey-upload',
         matcher: { xmlns: 'encrypt', type: 'set' },
@@ -166,7 +151,9 @@ export function registerDefaultIqHandlers(
             try {
                 const bundle = parsePreKeyUploadIq(iq)
                 deps.capturePreKeyBundle(bundle)
-            } catch { /* ignore */ }
+            } catch {
+                /* ignore */
+            }
             return buildIqResult(iq)
         }
     })

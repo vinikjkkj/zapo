@@ -161,10 +161,7 @@ async function main(): Promise<void> {
             if (setupComplete) return
             setupComplete = true
             try {
-                const peers = new Map<
-                    string,
-                    Awaited<ReturnType<typeof server.createFakePeer>>
-                >()
+                const peers = new Map<string, Awaited<ReturnType<typeof server.createFakePeer>>>()
                 for (const jid of args.peerJids) {
                     const peer = await server.createFakePeer({ jid }, pipeline)
                     peers.set(jid, peer)
@@ -289,6 +286,8 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 main().catch((error) => {
-    process.stderr.write(`fatal: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`)
+    process.stderr.write(
+        `fatal: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`
+    )
     process.exit(1)
 })

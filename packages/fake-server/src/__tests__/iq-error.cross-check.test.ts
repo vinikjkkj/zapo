@@ -31,10 +31,7 @@ test('lib privacy.getPrivacySettings rejects when fake server replies with iq er
         await client.connect()
         await openPromise
 
-        await assert.rejects(
-            () => client.privacy.getPrivacySettings(),
-            /401/
-        )
+        await assert.rejects(() => client.privacy.getPrivacySettings(), /401/)
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()

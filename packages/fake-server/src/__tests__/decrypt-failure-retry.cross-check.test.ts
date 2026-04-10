@@ -17,10 +17,7 @@ test('corrupted ciphertext from fake peer triggers a retry receipt from the lib'
         await server.triggerPreKeyUpload(pipeline)
         const peer = await server.createFakePeer({ jid: peerJid }, pipeline)
 
-        const receiptPromise = server.expectStanza(
-            { tag: 'receipt' },
-            { timeoutMs: 10_000 }
-        )
+        const receiptPromise = server.expectStanza({ tag: 'receipt' }, { timeoutMs: 10_000 })
 
         await peer.sendConversation('this should fail to decrypt', {
             id: messageId,

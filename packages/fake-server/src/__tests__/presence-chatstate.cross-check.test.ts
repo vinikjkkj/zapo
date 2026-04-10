@@ -59,9 +59,7 @@ test('fake server pushes a chatstate stanza and the lib emits the chatstate even
     try {
         await client.connect()
         const pipeline = await server.waitForAuthenticatedPipeline()
-        await pipeline.sendStanza(
-            buildChatstate({ from: peerJid, state: { kind: 'composing' } })
-        )
+        await pipeline.sendStanza(buildChatstate({ from: peerJid, state: { kind: 'composing' } }))
 
         const event = await chatstatePromise
         assert.equal(event.chatJid, peerJid)

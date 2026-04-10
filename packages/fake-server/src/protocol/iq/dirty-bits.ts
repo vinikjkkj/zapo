@@ -7,9 +7,7 @@ export interface FakeClearedDirtyBit {
     readonly timestamp: number
 }
 
-export function parseClearDirtyBitsIq(
-    iq: BinaryNode
-): readonly FakeClearedDirtyBit[] | null {
+export function parseClearDirtyBitsIq(iq: BinaryNode): readonly FakeClearedDirtyBit[] | null {
     if (!Array.isArray(iq.content)) return null
     const out: FakeClearedDirtyBit[] = []
     for (const child of iq.content) {

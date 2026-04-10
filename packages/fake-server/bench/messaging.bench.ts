@@ -350,9 +350,7 @@ class BenchProfiler {
         const out = this.fileName('heap', 'heaptimeline')
         const content = chunks.join('')
         await writeFile(out, content)
-        console.log(
-            `[heap] saved ${out} (${(content.length / 1024 / 1024).toFixed(1)} MB)`
-        )
+        console.log(`[heap] saved ${out} (${(content.length / 1024 / 1024).toFixed(1)} MB)`)
     }
 
     private fileName(prefix: string, ext: string): string {
@@ -361,7 +359,10 @@ class BenchProfiler {
 }
 
 function slug(name: string): string {
-    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    return name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
 }
 
 // ─── Configuration ────────────────────────────────────────────────────
@@ -375,12 +376,7 @@ interface BenchConfig {
     readonly scenarios: ReadonlySet<string>
 }
 
-const ALL_SCENARIOS = new Set([
-    'send_1to1',
-    'recv_1to1',
-    'send_group',
-    'recv_group'
-])
+const ALL_SCENARIOS = new Set(['send_1to1', 'recv_1to1', 'send_group', 'recv_group'])
 
 function readScenarioFilter(): ReadonlySet<string> {
     const raw = process.env.ZAPO_BENCH_SCENARIOS
@@ -516,10 +512,7 @@ async function buildContacts(
         // contact's devices.
         await ensurePreKeyPool(server, pipeline, devicesPerContact)
         const userJid = `5511${String(7_000_000_000 + i).padStart(10, '0')}@s.whatsapp.net`
-        const devices = await server.createFakePeerWithDevices(
-            { userJid, deviceIds },
-            pipeline
-        )
+        const devices = await server.createFakePeerWithDevices({ userJid, deviceIds }, pipeline)
         out.push({ userJid, devices })
     }
     return out
@@ -816,9 +809,7 @@ function printResult(result: ScenarioResult): void {
     console.log(`──[ ${result.name} ]──────────────────────────────`)
     console.log(`  messages          : ${result.messages}`)
     console.log(`  elapsed           : ${formatMs(result.elapsedMs)}`)
-    console.log(
-        `  throughput        : ${formatFixed(result.throughputMsgsPerSec, 1)} msg/s`
-    )
+    console.log(`  throughput        : ${formatFixed(result.throughputMsgsPerSec, 1)} msg/s`)
     console.log(`  avg / msg         : ${formatMs(result.avgMsPerMsg)}`)
     console.log(`  CPU time          : ${formatMs(result.cpuTimeMs)}`)
     console.log(`  CPU %             : ${formatFixed(result.cpuPercent, 1)}`)
@@ -1037,10 +1028,7 @@ async function runAllScenarios(
     groups: readonly AbstractGroupFixture[]
 ): Promise<ScenarioResult[]> {
     const results: ScenarioResult[] = []
-    const runOne = async (
-        name: string,
-        run: () => Promise<ScenarioResult>
-    ): Promise<void> => {
+    const runOne = async (name: string, run: () => Promise<ScenarioResult>): Promise<void> => {
         await profiler.beforeScenario(name)
         try {
             const r = await run()
@@ -1052,24 +1040,16 @@ async function runAllScenarios(
     }
 
     if (config.scenarios.has('send_1to1')) {
-        await runOne('send_1to1', () =>
-            scenarioSend1to1(client, contacts, config.messages)
-        )
+        await runOne('send_1to1', () => scenarioSend1to1(client, contacts, config.messages))
     }
     if (config.scenarios.has('recv_1to1')) {
-        await runOne('recv_1to1', () =>
-            scenarioRecv1to1(client, contacts, config.messages)
-        )
+        await runOne('recv_1to1', () => scenarioRecv1to1(client, contacts, config.messages))
     }
     if (config.scenarios.has('send_group')) {
-        await runOne('send_group', () =>
-            scenarioSendGroup(client, groups, config.messages)
-        )
+        await runOne('send_group', () => scenarioSendGroup(client, groups, config.messages))
     }
     if (config.scenarios.has('recv_group')) {
-        await runOne('recv_group', () =>
-            scenarioRecvGroup(client, groups, config.messages)
-        )
+        await runOne('recv_group', () => scenarioRecvGroup(client, groups, config.messages))
     }
     return results
 }
@@ -1092,9 +1072,7 @@ async function main(): Promise<void> {
 
     try {
         if (argSet.has('--snapshot')) {
-            await profiler
-                .takeHeapSnapshot('end')
-                .catch((err) => console.error('[snapshot]', err))
+            await profiler.takeHeapSnapshot('end').catch((err) => console.error('[snapshot]', err))
         }
         await profiler.stop()
     } finally {

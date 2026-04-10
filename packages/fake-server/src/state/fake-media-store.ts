@@ -44,7 +44,11 @@ export class FakeMediaStore {
 
     public async publish(input: PublishMediaInput): Promise<PublishedMediaBlob> {
         const mediaKey = input.mediaKey ?? new Uint8Array(randomBytes(32))
-        const encrypted = await WaMediaCrypto.encryptBytes(input.mediaType, mediaKey, input.plaintext)
+        const encrypted = await WaMediaCrypto.encryptBytes(
+            input.mediaType,
+            mediaKey,
+            input.plaintext
+        )
         const path = input.path ?? this.randomPath(input.mediaType)
         const stored: StoredBlob = {
             mediaType: input.mediaType,

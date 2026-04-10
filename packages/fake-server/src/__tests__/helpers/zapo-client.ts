@@ -93,9 +93,7 @@ export function createZapoClient(
             chatSocketUrls: [server.url],
             connectTimeoutMs: options.connectTimeoutMs ?? 60_000,
             history: options.historySyncEnabled ? { enabled: true } : undefined,
-            chatEvents: options.emitSnapshotMutations
-                ? { emitSnapshotMutations: true }
-                : undefined,
+            chatEvents: options.emitSnapshotMutations ? { emitSnapshotMutations: true } : undefined,
             proxy: {
                 mediaUpload: server.mediaProxyAgent,
                 mediaDownload: server.mediaProxyAgent

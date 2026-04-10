@@ -64,22 +64,14 @@ test('paired client.sendMessage fans out to all devices of a multi-device peer',
 
         const stanza = await stanzaPromise
         assert.equal(stanza.tag, 'message')
-        const children: readonly BinaryNode[] = Array.isArray(stanza.content)
-            ? stanza.content
-            : []
+        const children: readonly BinaryNode[] = Array.isArray(stanza.content) ? stanza.content : []
         const participantsNode = children.find((child) => child.tag === 'participants')
         assert.ok(participantsNode, 'fanout stanza should carry a <participants> wrapper')
-        const participantsContent: readonly BinaryNode[] = Array.isArray(
-            participantsNode.content
-        )
+        const participantsContent: readonly BinaryNode[] = Array.isArray(participantsNode.content)
             ? participantsNode.content
             : []
         const toNodes = participantsContent.filter((child) => child.tag === 'to')
-        assert.equal(
-            toNodes.length,
-            2,
-            `fanout should target both devices, got ${toNodes.length}`
-        )
+        assert.equal(toNodes.length, 2, `fanout should target both devices, got ${toNodes.length}`)
         const toJids = new Set(toNodes.map((node: BinaryNode) => node.attrs.jid))
         assert.ok(toJids.has(peers[0].jid), `missing <to jid=${peers[0].jid}>`)
         assert.ok(toJids.has(peers[1].jid), `missing <to jid=${peers[1].jid}>`)

@@ -8,9 +8,7 @@ export interface FakePrivacyTokenIssue {
     readonly type: string
 }
 
-export function parsePrivacyTokenIssueIq(
-    iq: BinaryNode
-): readonly FakePrivacyTokenIssue[] | null {
+export function parsePrivacyTokenIssueIq(iq: BinaryNode): readonly FakePrivacyTokenIssue[] | null {
     if (!Array.isArray(iq.content)) return null
     const tokens = iq.content.find((child) => child.tag === 'tokens')
     if (!tokens || !Array.isArray(tokens.content)) return null

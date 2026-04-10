@@ -124,10 +124,7 @@ test('client.group participant change methods round-trip via the fake server', a
         await client.group.demoteParticipants(groupJid, [peerB])
         await watchPromise
 
-        assert.deepEqual(
-            [...seenActions].sort(),
-            ['add', 'demote', 'promote', 'remove']
-        )
+        assert.deepEqual([...seenActions].sort(), ['add', 'demote', 'promote', 'remove'])
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()

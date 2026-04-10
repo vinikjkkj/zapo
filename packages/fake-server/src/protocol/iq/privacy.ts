@@ -58,12 +58,10 @@ export function buildPrivacySettingsResult(
             {
                 tag: 'privacy',
                 attrs: {},
-                content: (Object.keys(state.settings) as FakePrivacyCategoryName[]).map(
-                    (name) => ({
-                        tag: 'category',
-                        attrs: { name, value: state.settings[name] }
-                    })
-                )
+                content: (Object.keys(state.settings) as FakePrivacyCategoryName[]).map((name) => ({
+                    tag: 'category',
+                    attrs: { name, value: state.settings[name] }
+                }))
             }
         ]
     }
@@ -145,9 +143,7 @@ export function parseBlocklistChangeIq(iq: BinaryNode): {
     return { jid, action }
 }
 
-export function parsePrivacyDisallowedListGetIq(
-    iq: BinaryNode
-): FakePrivacyCategoryName | null {
+export function parsePrivacyDisallowedListGetIq(iq: BinaryNode): FakePrivacyCategoryName | null {
     if (!Array.isArray(iq.content)) return null
     const privacy = iq.content.find((child) => child.tag === 'privacy')
     if (!privacy || !Array.isArray(privacy.content)) return null

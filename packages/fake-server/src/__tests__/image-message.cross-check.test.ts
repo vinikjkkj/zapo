@@ -54,7 +54,8 @@ test('fake peer pushes an imageMessage and the lib downloads + decrypts the atta
 
         const messagePromise = waitForMessage(
             client,
-            (event) => event.message?.imageMessage !== undefined && event.message?.imageMessage !== null
+            (event) =>
+                event.message?.imageMessage !== undefined && event.message?.imageMessage !== null
         )
 
         await peer.sendImageMessage({

@@ -8,7 +8,6 @@ import { FakeAppStateCrypto } from '../protocol/signal/fake-app-state-crypto'
 import { type BinaryNode } from '../transport/codec'
 import { proto, type Proto } from '../transport/protos'
 
-
 export interface CapturedAppStateMutation {
     readonly collection: string
     readonly operation: 'set' | 'remove'
@@ -72,7 +71,10 @@ export class AppStateSyncManager {
 
     public provideAppStateCollection(
         name: string,
-        provider: () => Promise<FakeAppStateCollectionPayload | null> | FakeAppStateCollectionPayload | null
+        provider: () =>
+            | Promise<FakeAppStateCollectionPayload | null>
+            | FakeAppStateCollectionPayload
+            | null
     ): () => void {
         this.appStateCollectionProviders.set(name, provider)
         return () => {

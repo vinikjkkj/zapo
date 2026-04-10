@@ -180,9 +180,7 @@ export interface BuildServerSyncNotificationInput {
     readonly collections: readonly FakeAppStateCollectionName[]
 }
 
-export function buildServerSyncNotification(
-    input: BuildServerSyncNotificationInput
-): BinaryNode {
+export function buildServerSyncNotification(input: BuildServerSyncNotificationInput): BinaryNode {
     return {
         tag: 'notification',
         attrs: {

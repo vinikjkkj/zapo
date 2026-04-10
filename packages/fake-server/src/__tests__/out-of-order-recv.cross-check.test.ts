@@ -33,12 +33,7 @@ test('fake peer decrypts out-of-order msgs (counter 0,2,1,3) via the unused-keys
     })
 
     const peerJid = '5511777777777@s.whatsapp.net'
-    const messages = [
-        'out-of-order #0',
-        'out-of-order #1',
-        'out-of-order #2',
-        'out-of-order #3'
-    ]
+    const messages = ['out-of-order #0', 'out-of-order #1', 'out-of-order #2', 'out-of-order #3']
 
     try {
         await client.connect()

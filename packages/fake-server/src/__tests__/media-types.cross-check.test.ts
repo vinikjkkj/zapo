@@ -25,9 +25,7 @@ interface MediaTypeCase {
             readonly mimetype: string
         }
     ) => Promise<void>
-    readonly extractDescriptor: (
-        message: Proto.IMessage
-    ) =>
+    readonly extractDescriptor: (message: Proto.IMessage) =>
         | {
               readonly directPath?: string | null
               readonly mediaKey?: Uint8Array | null
@@ -77,8 +75,7 @@ const cases: readonly MediaTypeCase[] = [
         name: 'sticker',
         mediaType: 'sticker',
         mimetype: 'image/webp',
-        send: (peer, d) =>
-            peer.sendStickerMessage({ ...d, width: 512, height: 512 }),
+        send: (peer, d) => peer.sendStickerMessage({ ...d, width: 512, height: 512 }),
         extractDescriptor: (m) => m.stickerMessage
     }
 ]

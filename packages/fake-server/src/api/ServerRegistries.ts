@@ -94,17 +94,11 @@ export class ServerRegistries {
     public readonly groupOpListeners = new Set<(op: CapturedGroupOp) => void>()
     public readonly privacySetListeners = new Set<(op: CapturedPrivacySet) => void>()
     public readonly blocklistChangeListeners = new Set<(op: CapturedBlocklistChange) => void>()
-    public readonly profilePictureSetListeners = new Set<
-        (op: CapturedProfilePictureSet) => void
-    >()
+    public readonly profilePictureSetListeners = new Set<(op: CapturedProfilePictureSet) => void>()
     public readonly statusSetListeners = new Set<(op: CapturedStatusSet) => void>()
     public readonly logoutListeners = new Set<() => void>()
-    public readonly privacyTokenIssueListeners = new Set<
-        (op: FakePrivacyTokenIssue) => void
-    >()
-    public readonly dirtyBitsClearListeners = new Set<
-        (op: CapturedDirtyBitsClear) => void
-    >()
+    public readonly privacyTokenIssueListeners = new Set<(op: FakePrivacyTokenIssue) => void>()
+    public readonly dirtyBitsClearListeners = new Set<(op: CapturedDirtyBitsClear) => void>()
 
     public onOutboundGroupOp(listener: (op: CapturedGroupOp) => void): () => void {
         this.groupOpListeners.add(listener)
@@ -120,9 +114,7 @@ export class ServerRegistries {
         }
     }
 
-    public onOutboundBlocklistChange(
-        listener: (op: CapturedBlocklistChange) => void
-    ): () => void {
+    public onOutboundBlocklistChange(listener: (op: CapturedBlocklistChange) => void): () => void {
         this.blocklistChangeListeners.add(listener)
         return () => {
             this.blocklistChangeListeners.delete(listener)
@@ -152,18 +144,14 @@ export class ServerRegistries {
         }
     }
 
-    public onOutboundPrivacyTokenIssue(
-        listener: (op: FakePrivacyTokenIssue) => void
-    ): () => void {
+    public onOutboundPrivacyTokenIssue(listener: (op: FakePrivacyTokenIssue) => void): () => void {
         this.privacyTokenIssueListeners.add(listener)
         return () => {
             this.privacyTokenIssueListeners.delete(listener)
         }
     }
 
-    public onOutboundDirtyBitsClear(
-        listener: (op: CapturedDirtyBitsClear) => void
-    ): () => void {
+    public onOutboundDirtyBitsClear(listener: (op: CapturedDirtyBitsClear) => void): () => void {
         this.dirtyBitsClearListeners.add(listener)
         return () => {
             this.dirtyBitsClearListeners.delete(listener)
@@ -346,10 +334,7 @@ export class ServerRegistries {
         }
     }
 
-    public handleProfilePictureSet(
-        targetJid: string,
-        newId: string
-    ): void {
+    public handleProfilePictureSet(targetJid: string, newId: string): void {
         this.profilePicturesByJid.set(targetJid, {
             id: newId,
             url: `https://fake-media.local/profile/${targetJid}/${newId}.jpg`,

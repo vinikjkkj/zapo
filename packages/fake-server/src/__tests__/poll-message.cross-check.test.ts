@@ -53,10 +53,7 @@ test('fake peer pushes a poll creation message and the lib emits message', async
                 encKey,
                 name: 'Pizza ou hambúrguer?',
                 selectableOptionsCount: 1,
-                options: [
-                    { optionName: 'Pizza' },
-                    { optionName: 'Hambúrguer' }
-                ]
+                options: [{ optionName: 'Pizza' }, { optionName: 'Hambúrguer' }]
             }
         })
 

@@ -37,9 +37,7 @@ test('server_sync notification triggers a full app-state sync IQ round-trip', as
         const syncNode = findChild(syncIq, 'sync')
         assert.ok(syncNode, 'sync IQ should contain a <sync> child')
         const collectionNodes = findAllChildren(syncNode, 'collection')
-        const requestedNames = collectionNodes
-            .map((node) => node.attrs.name)
-            .sort()
+        const requestedNames = collectionNodes.map((node) => node.attrs.name).sort()
         assert.ok(
             requestedNames.includes('regular_low'),
             `expected regular_low in sync IQ, got ${requestedNames.join(',')}`

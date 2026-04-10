@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { proto ,type  WaClient,type  WaClientEventMap } from 'zapo-js'
+import { proto, type WaClient, type WaClientEventMap } from 'zapo-js'
 
 import { FakeWaServer } from '../api/FakeWaServer'
 
@@ -72,10 +72,7 @@ test('fake peer pushes a message edit and the lib emits a MESSAGE_EDIT protocol 
         })
 
         const event = await protocolPromise
-        assert.equal(
-            event.protocolMessage.type,
-            proto.Message.ProtocolMessage.Type.MESSAGE_EDIT
-        )
+        assert.equal(event.protocolMessage.type, proto.Message.ProtocolMessage.Type.MESSAGE_EDIT)
         assert.equal(event.protocolMessage.key?.id, 'original-msg-id')
         assert.equal(
             event.protocolMessage.editedMessage?.conversation,
@@ -127,7 +124,9 @@ test('fake peer pushes a reaction message and the lib emits the message event', 
 
         const messagePromise = waitForMessage(
             client,
-            (event) => event.message?.reactionMessage !== undefined && event.message?.reactionMessage !== null
+            (event) =>
+                event.message?.reactionMessage !== undefined &&
+                event.message?.reactionMessage !== null
         )
 
         await peer.sendReaction({

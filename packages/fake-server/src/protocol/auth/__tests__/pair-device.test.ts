@@ -38,7 +38,9 @@ test('parsePairingQrString decodes base64url key fields', () => {
 
 test('parsePairingQrString still decodes classic base64 key fields', () => {
     const noise = new Uint8Array(Array.from({ length: 32 }, (_, index) => (index * 9 + 1) & 0xff))
-    const identity = new Uint8Array(Array.from({ length: 32 }, (_, index) => (index * 3 + 17) & 0xff))
+    const identity = new Uint8Array(
+        Array.from({ length: 32 }, (_, index) => (index * 3 + 17) & 0xff)
+    )
     const advSecret = new Uint8Array(
         Array.from({ length: 32 }, (_, index) => (index * 15 + 19) & 0xff)
     )

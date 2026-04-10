@@ -64,9 +64,7 @@ async function handleWaitForNextAuthenticatedPipeline(): Promise<void> {
     pipeline = await server.waitForNextAuthenticatedPipeline()
 }
 
-async function handleRunPairing(params: {
-    deviceJid: string
-}): Promise<void> {
+async function handleRunPairing(params: { deviceJid: string }): Promise<void> {
     if (!server || !pipeline) throw new Error('no pipeline')
     // The pairing flow needs the client's advSecretKey + identityPublicKey.
     // We set up a one-shot listener on the pipeline that intercepts the
@@ -93,16 +91,10 @@ async function handleRunPairing(params: {
         process.on('message', handler)
     })
 
-    await server.runPairing(
-        pipeline,
-        { deviceJid: params.deviceJid },
-        () => materialPromise
-    )
+    await server.runPairing(pipeline, { deviceJid: params.deviceJid }, () => materialPromise)
 }
 
-async function handleTriggerPreKeyUpload(params: {
-    force?: boolean
-}): Promise<void> {
+async function handleTriggerPreKeyUpload(params: { force?: boolean }): Promise<void> {
     if (!server || !pipeline) throw new Error('no pipeline')
     await server.triggerPreKeyUpload(pipeline, { force: params.force ?? false })
 }
@@ -163,18 +155,13 @@ function handleCreateFakeGroup(params: {
     })
 }
 
-async function handleEnsurePreKeyPool(params: {
-    requiredHeadroom: number
-}): Promise<void> {
+async function handleEnsurePreKeyPool(params: { requiredHeadroom: number }): Promise<void> {
     if (!server || !pipeline) throw new Error('no pipeline')
     if (server.preKeysAvailable() >= params.requiredHeadroom) return
     await server.triggerPreKeyUpload(pipeline, { force: true })
 }
 
-async function handlePeerSendConversation(params: {
-    peerId: string
-    text: string
-}): Promise<void> {
+async function handlePeerSendConversation(params: { peerId: string; text: string }): Promise<void> {
     const peer = peersById.get(params.peerId)
     if (!peer) throw new Error(`peer ${params.peerId} not found`)
     await peer.sendConversation(params.text)
@@ -215,17 +202,12 @@ async function handleMediaProxyAgent(): Promise<null> {
 
 // ─── Dispatch ─────────────────────────────────────────────────────────
 
-const handlers: Record<
-    string,
-    (params: Record<string, unknown>) => Promise<unknown> | unknown
-> = {
+const handlers: Record<string, (params: Record<string, unknown>) => Promise<unknown> | unknown> = {
     start: handleStart,
     waitForAuthenticatedPipeline: handleWaitForAuthenticatedPipeline,
     waitForNextAuthenticatedPipeline: handleWaitForNextAuthenticatedPipeline,
     runPairing: handleRunPairing as (p: Record<string, unknown>) => Promise<void>,
-    triggerPreKeyUpload: handleTriggerPreKeyUpload as (
-        p: Record<string, unknown>
-    ) => Promise<void>,
+    triggerPreKeyUpload: handleTriggerPreKeyUpload as (p: Record<string, unknown>) => Promise<void>,
     createFakePeerWithDevices: handleCreateFakePeerWithDevices as (
         p: Record<string, unknown>
     ) => Promise<unknown>,

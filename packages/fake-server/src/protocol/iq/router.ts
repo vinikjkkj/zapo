@@ -33,8 +33,7 @@ export class WaFakeIqRouter {
         handler: WaFakeIqHandler,
         options: { readonly priority?: 'high' | 'default' } = {}
     ): () => void {
-        const list =
-            options.priority === 'high' ? this.highPriorityHandlers : this.handlers
+        const list = options.priority === 'high' ? this.highPriorityHandlers : this.handlers
         list.push(handler)
         return () => {
             const index = list.indexOf(handler)

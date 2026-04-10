@@ -65,10 +65,7 @@ test('client.sendReceipt emits a real <receipt/> stanza captured by the fake ser
         await client.connect()
         await server.waitForAuthenticatedPipeline()
 
-        const stanzaPromise = server.expectStanza(
-            { tag: 'receipt' },
-            { timeoutMs: 5_000 }
-        )
+        const stanzaPromise = server.expectStanza({ tag: 'receipt' }, { timeoutMs: 5_000 })
 
         await client.sendReceipt({
             to: peerJid,

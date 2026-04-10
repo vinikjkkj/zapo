@@ -92,22 +92,14 @@ test('paired client.sendMessage to a 3-participant group fans out via the regist
         await client.sendMessage(groupJid, { conversation: text })
 
         const stanza = await stanzaPromise
-        const children: readonly BinaryNode[] = Array.isArray(stanza.content)
-            ? stanza.content
-            : []
+        const children: readonly BinaryNode[] = Array.isArray(stanza.content) ? stanza.content : []
         const participantsNode = children.find((child) => child.tag === 'participants')
         assert.ok(participantsNode, 'fanout stanza should carry a <participants> wrapper')
-        const participantsContent: readonly BinaryNode[] = Array.isArray(
-            participantsNode.content
-        )
+        const participantsContent: readonly BinaryNode[] = Array.isArray(participantsNode.content)
             ? participantsNode.content
             : []
         const toNodes = participantsContent.filter((child) => child.tag === 'to')
-        assert.equal(
-            toNodes.length,
-            3,
-            `fanout should target all 3 peers, got ${toNodes.length}`
-        )
+        assert.equal(toNodes.length, 3, `fanout should target all 3 peers, got ${toNodes.length}`)
         const toJids = new Set(toNodes.map((node) => node.attrs.jid))
         assert.ok(toJids.has(peerA.jid), `missing fanout to ${peerA.jid}`)
         assert.ok(toJids.has(peerB.jid), `missing fanout to ${peerB.jid}`)

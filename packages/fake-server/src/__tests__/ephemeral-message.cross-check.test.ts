@@ -42,7 +42,9 @@ test('fake peer pushes an ephemeral wrapped conversation and the lib emits messa
 
         const messagePromise = waitForMessage(
             client,
-            (event) => event.message?.ephemeralMessage !== undefined && event.message?.ephemeralMessage !== null
+            (event) =>
+                event.message?.ephemeralMessage !== undefined &&
+                event.message?.ephemeralMessage !== null
         )
 
         await peer.sendMessage({

@@ -19,11 +19,7 @@ test('client reconnects after a stream:error and the fake server sees a fresh pi
         await firstPipeline.sendStanza(buildStreamErrorCode(515))
 
         const secondPipeline = await secondPipelinePromise
-        assert.notEqual(
-            secondPipeline,
-            firstPipeline,
-            'second pipeline should be a fresh instance'
-        )
+        assert.notEqual(secondPipeline, firstPipeline, 'second pipeline should be a fresh instance')
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()

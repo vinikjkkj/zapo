@@ -301,10 +301,7 @@ function pointwise(
     const rightView = new DataView(right.buffer, right.byteOffset, right.byteLength)
     const outView = new DataView(out.buffer, out.byteOffset, out.byteLength)
     for (let offset = 0; offset < left.byteLength; offset += APP_STATE_POINT_SIZE) {
-        const value = combine(
-            leftView.getUint16(offset, true),
-            rightView.getUint16(offset, true)
-        )
+        const value = combine(leftView.getUint16(offset, true), rightView.getUint16(offset, true))
         outView.setUint16(offset, value & 0xffff, true)
     }
 }

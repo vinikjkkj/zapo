@@ -131,7 +131,9 @@ export class FakeAppStateCollection {
 
     public async encodePendingPatch(): Promise<Uint8Array> {
         if (this.pendingPatchMutations.length === 0) {
-            throw new Error(`fake app-state collection ${this.name}: no pending mutations to encode`)
+            throw new Error(
+                `fake app-state collection ${this.name}: no pending mutations to encode`
+            )
         }
         this.currentVersion += 1
         const patchVersion = this.currentVersion

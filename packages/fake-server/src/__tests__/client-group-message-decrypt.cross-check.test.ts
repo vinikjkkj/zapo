@@ -40,11 +40,7 @@ test('paired client.sendMessage to a group is decrypted by the fake peer', async
     try {
         await client.connect()
         const pipeline = await server.waitForAuthenticatedPipeline()
-        await server.runPairing(
-            pipeline,
-            { deviceJid: meDeviceJid },
-            () => materialPromise
-        )
+        await server.runPairing(pipeline, { deviceJid: meDeviceJid }, () => materialPromise)
 
         const pipelineAfterPairPromise = server.waitForNextAuthenticatedPipeline()
         await pairedPromise

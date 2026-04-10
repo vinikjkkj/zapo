@@ -74,9 +74,7 @@ export class FakePeerDoubleRatchet {
 
     public constructor(keyBundle: FakePeerKeyBundle) {
         this.keyBundle = keyBundle
-        this.localIdentityPubSerialized = toSerializedPubKey(
-            keyBundle.identityKeyPair.pubKey
-        )
+        this.localIdentityPubSerialized = toSerializedPubKey(keyBundle.identityKeyPair.pubKey)
     }
 
     public get registrationId(): number {
@@ -104,18 +102,11 @@ export class FakePeerDoubleRatchet {
         const localBaseSerialized = toSerializedPubKey(localBase.pubKey)
 
         // Do not fallback to bundle.preKeys[0], otherwise concurrent peers reuse one key id.
-        const consumedOneTime = options.skipOneTimePreKey
-            ? undefined
-            : options.oneTimePreKey
-        const remoteOneTime = consumedOneTime
-            ? toSerializedPubKey(consumedOneTime.publicKey)
-            : null
+        const consumedOneTime = options.skipOneTimePreKey ? undefined : options.oneTimePreKey
+        const remoteOneTime = consumedOneTime ? toSerializedPubKey(consumedOneTime.publicKey) : null
 
         const [dh1, dh2, dh3, dh4] = await Promise.all([
-            X25519.scalarMult(
-                this.keyBundle.identityKeyPair.privKey,
-                toRawPubKey(remoteSigned)
-            ),
+            X25519.scalarMult(this.keyBundle.identityKeyPair.privKey, toRawPubKey(remoteSigned)),
             X25519.scalarMult(localBase.privKey, toRawPubKey(remoteIdentity)),
             X25519.scalarMult(localBase.privKey, toRawPubKey(remoteSigned)),
             remoteOneTime
@@ -237,9 +228,7 @@ export class FakePeerDoubleRatchet {
         if (oneTimePreKeyId !== null && oneTimePreKeyId !== undefined) {
             const entry = this.keyBundle.oneTimePreKeys.find((k) => k.id === oneTimePreKeyId)
             if (!entry) {
-                throw new FakePeerDoubleRatchetError(
-                    `unknown one-time preKeyId ${oneTimePreKeyId}`
-                )
+                throw new FakePeerDoubleRatchetError(`unknown one-time preKeyId ${oneTimePreKeyId}`)
             }
             oneTimePrivKey = entry.keyPair.privKey
         }
@@ -280,9 +269,7 @@ export class FakePeerDoubleRatchet {
         }
         const versionByte = signalMessageBytes[0]
         if (versionByte >>> 4 !== SIGNAL_VERSION) {
-            throw new FakePeerDoubleRatchetError(
-                `unsupported signal version ${versionByte >>> 4}`
-            )
+            throw new FakePeerDoubleRatchetError(`unsupported signal version ${versionByte >>> 4}`)
         }
         const macStart = signalMessageBytes.byteLength - SIGNAL_MAC_SIZE
         const versionedBody = signalMessageBytes.subarray(0, macStart)
@@ -320,15 +307,17 @@ export class FakePeerDoubleRatchet {
                 unusedKeys: []
             }
             await this.rotateSendRatchet(ratchetKey)
-        } else if (!this.recvChain || !uint8Equal(this.recvChain.ratchetPubKey, ratchetSerialized)) {
+        } else if (
+            !this.recvChain ||
+            !uint8Equal(this.recvChain.ratchetPubKey, ratchetSerialized)
+        ) {
             await this.runRecvRatchetStep(ratchetKey)
         }
 
         if (!this.recvChain) {
             throw new FakePeerDoubleRatchetError('recv chain not initialized')
         }
-        let messageKey: { cipherKey: Uint8Array; macKey: Uint8Array; iv: Uint8Array } | null =
-            null
+        let messageKey: { cipherKey: Uint8Array; macKey: Uint8Array; iv: Uint8Array } | null = null
         if (counter < this.recvChain.nextIndex) {
             const stashedIndex = this.recvChain.unusedKeys.findIndex(
                 (entry) => entry.index === counter
