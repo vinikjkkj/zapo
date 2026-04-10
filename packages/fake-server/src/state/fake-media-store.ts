@@ -69,9 +69,13 @@ export class FakeMediaStore {
     }
 
     /** Stores pre-encrypted bytes uploaded by the lib so the download path can serve them back. */
-    public setRaw(path: string, encryptedBytes: Uint8Array): void {
+    public setRaw(
+        path: string,
+        encryptedBytes: Uint8Array,
+        mediaType: FakeMediaType = 'image'
+    ): void {
         this.blobs.set(path, {
-            mediaType: 'image',
+            mediaType,
             encryptedBytes,
             mediaKey: new Uint8Array(32),
             fileSha256: new Uint8Array(32),

@@ -71,6 +71,7 @@ async function handleRunPairing(params: { deviceJid: string }): Promise<void> {
     // client's QR stanza and extracts the material. The client emits
     // `auth_qr` → the parent relays the parsed material back to us via
     // a `pairingMaterial` IPC call.
+    let cleanupHandler: (() => void) | null = null
     const materialPromise = new Promise<{
         readonly advSecretKey: Uint8Array
         readonly identityPublicKey: Uint8Array
@@ -78,6 +79,7 @@ async function handleRunPairing(params: { deviceJid: string }): Promise<void> {
         const handler = (msg: RpcRequest) => {
             if (msg.method === 'pairingMaterial') {
                 process.removeListener('message', handler)
+                cleanupHandler = null
                 const p = msg.params as {
                     advSecretKey: number[]
                     identityPublicKey: number[]
@@ -88,10 +90,15 @@ async function handleRunPairing(params: { deviceJid: string }): Promise<void> {
                 })
             }
         }
+        cleanupHandler = () => process.removeListener('message', handler)
         process.on('message', handler)
     })
 
-    await server.runPairing(pipeline, { deviceJid: params.deviceJid }, () => materialPromise)
+    try {
+        await server.runPairing(pipeline, { deviceJid: params.deviceJid }, () => materialPromise)
+    } finally {
+        cleanupHandler?.()
+    }
 }
 
 async function handleTriggerPreKeyUpload(params: { force?: boolean }): Promise<void> {

@@ -27,6 +27,7 @@ import {
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
 import {
     FakeMediaStore,
+    type FakeMediaType,
     type PublishedMediaBlob,
     type PublishMediaInput
 } from '../state/fake-media-store'
@@ -793,7 +794,7 @@ export class FakeWaServer {
                 receivedAtMs: Date.now()
             }
             this.capturedMediaUploads.push(upload)
-            this.mediaStore.setRaw(path, encryptedBytes)
+            this.mediaStore.setRaw(path, encryptedBytes, mediaType as FakeMediaType)
             this.nextUploadCounter += 1
             const downloadUrl = this.mediaUrl(path)
             const responseBody = JSON.stringify({
