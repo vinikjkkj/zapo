@@ -228,7 +228,7 @@ const handlers: Record<string, (params: Record<string, unknown>) => Promise<unkn
 
 process.on('message', async (msg: RpcRequest) => {
     // Skip non-RPC messages (e.g. pairingMaterial handled inline)
-    if (!msg.id || !msg.method) return
+    if (msg == null || typeof msg.id !== 'number' || typeof msg.method !== 'string') return
     if (msg.method === 'pairingMaterial') return
 
     const handler = handlers[msg.method]

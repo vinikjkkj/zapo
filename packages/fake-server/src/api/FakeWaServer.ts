@@ -793,6 +793,7 @@ export class FakeWaServer {
                 receivedAtMs: Date.now()
             }
             this.capturedMediaUploads.push(upload)
+            this.mediaStore.setRaw(path, encryptedBytes)
             this.nextUploadCounter += 1
             const downloadUrl = this.mediaUrl(path)
             const responseBody = JSON.stringify({
