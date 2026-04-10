@@ -41,11 +41,17 @@ export function md5Bytes(input: string): Uint8Array {
 // AES-GCM (for Noise protocol)
 // ============================================
 
+const aesGcmKeyCache = new WeakMap<Uint8Array, webcrypto.CryptoKey>()
+
 export async function importAesGcmKey(
     raw: Uint8Array,
     usages: ('encrypt' | 'decrypt')[]
 ): Promise<webcrypto.CryptoKey> {
-    return webcrypto.subtle.importKey('raw', raw, 'AES-GCM', false, usages)
+    const cached = aesGcmKeyCache.get(raw)
+    if (cached) return cached
+    const key = await webcrypto.subtle.importKey('raw', raw, 'AES-GCM', false, usages)
+    aesGcmKeyCache.set(raw, key)
+    return key
 }
 
 export async function aesGcmEncrypt(
@@ -82,11 +88,20 @@ export async function aesGcmDecrypt(
 // AES-CBC (for Signal protocol)
 // ============================================
 
+const aesCbcKeyCache = new WeakMap<Uint8Array, webcrypto.CryptoKey>()
+
 export async function importAesCbcKey(keyBytes: Uint8Array): Promise<webcrypto.CryptoKey> {
-    return webcrypto.subtle.importKey('raw', keyBytes, { name: 'AES-CBC', length: 256 }, false, [
-        'encrypt',
-        'decrypt'
-    ])
+    const cached = aesCbcKeyCache.get(keyBytes)
+    if (cached) return cached
+    const key = await webcrypto.subtle.importKey(
+        'raw',
+        keyBytes,
+        { name: 'AES-CBC', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+    )
+    aesCbcKeyCache.set(keyBytes, key)
+    return key
 }
 
 export async function aesCbcEncrypt(
@@ -109,16 +124,36 @@ export async function aesCbcDecrypt(
 // HMAC-SHA256 (for Signal protocol)
 // ============================================
 
+const hmac256KeyCache = new WeakMap<Uint8Array, webcrypto.CryptoKey>()
+
 export async function importHmacKey(keyBytes: Uint8Array): Promise<webcrypto.CryptoKey> {
-    return webcrypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, [
-        'sign'
-    ])
+    const cached = hmac256KeyCache.get(keyBytes)
+    if (cached) return cached
+    const key = await webcrypto.subtle.importKey(
+        'raw',
+        keyBytes,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    )
+    hmac256KeyCache.set(keyBytes, key)
+    return key
 }
 
+const hmac512KeyCache = new WeakMap<Uint8Array, webcrypto.CryptoKey>()
+
 export async function importHmacSha512Key(keyBytes: Uint8Array): Promise<webcrypto.CryptoKey> {
-    return webcrypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-512' }, false, [
-        'sign'
-    ])
+    const cached = hmac512KeyCache.get(keyBytes)
+    if (cached) return cached
+    const key = await webcrypto.subtle.importKey(
+        'raw',
+        keyBytes,
+        { name: 'HMAC', hash: 'SHA-512' },
+        false,
+        ['sign']
+    )
+    hmac512KeyCache.set(keyBytes, key)
+    return key
 }
 
 export async function hmacSign(key: webcrypto.CryptoKey, data: Uint8Array): Promise<Uint8Array> {

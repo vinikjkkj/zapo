@@ -2,13 +2,19 @@ import { webcrypto } from 'node:crypto'
 
 import { EMPTY_BYTES, TEXT_ENCODER, toBytesView } from '@util/bytes'
 
+const hkdfKeyCache = new WeakMap<Uint8Array, webcrypto.CryptoKey>()
+
 export async function hkdf(
     ikm: Uint8Array,
     salt: Uint8Array | null,
     info: Uint8Array | string,
     outLength: number
 ): Promise<Uint8Array> {
-    const key = await webcrypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits'])
+    let key = hkdfKeyCache.get(ikm)
+    if (!key) {
+        key = await webcrypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits'])
+        hkdfKeyCache.set(ikm, key)
+    }
     const infoBytes =
         typeof info === 'string' ? (info === '' ? EMPTY_BYTES : TEXT_ENCODER.encode(info)) : info
     const bits = await webcrypto.subtle.deriveBits(

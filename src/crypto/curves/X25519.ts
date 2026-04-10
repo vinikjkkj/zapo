@@ -6,6 +6,31 @@ import { FE_ONE } from '@crypto/math/constants'
 import { fe, feAdd, feFromBytes, feInv, feMul, fePack, feSub } from '@crypto/math/fe'
 import { assertByteLength, decodeBase64Url, toBytesView } from '@util/bytes'
 
+const privKeyCache = new WeakMap<Uint8Array, webcrypto.CryptoKey>()
+const pubKeyCache = new WeakMap<Uint8Array, webcrypto.CryptoKey>()
+
+async function cachedImportPrivateKey(raw: Uint8Array): Promise<webcrypto.CryptoKey> {
+    const cached = privKeyCache.get(raw)
+    if (cached) return cached
+    const key = await webcrypto.subtle.importKey(
+        'pkcs8',
+        pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, raw),
+        { name: 'X25519' },
+        false,
+        ['deriveBits']
+    )
+    privKeyCache.set(raw, key)
+    return key
+}
+
+async function cachedImportPublicKey(raw: Uint8Array): Promise<webcrypto.CryptoKey> {
+    const cached = pubKeyCache.get(raw)
+    if (cached) return cached
+    const key = await webcrypto.subtle.importKey('raw', raw, { name: 'X25519' }, false, [])
+    pubKeyCache.set(raw, key)
+    return key
+}
+
 // Pre-allocated temps for montgomeryToEdwardsPublic (safe: single-threaded)
 const _mx = fe()
 const _m1 = fe()
@@ -62,6 +87,8 @@ export class X25519 {
 
     static async keyPairFromPrivateKey(privKey: Uint8Array): Promise<SignalKeyPair> {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
+        // This needs extractable=true for exportKey, so it can't use the
+        // non-extractable cache. Import directly.
         const privateKey = await webcrypto.subtle.importKey(
             'pkcs8',
             pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, privKey),
@@ -81,14 +108,8 @@ export class X25519 {
         assertByteLength(pubKey, 32, 'x25519 public key must be 32 bytes')
 
         const [privateKey, publicKey] = await Promise.all([
-            webcrypto.subtle.importKey(
-                'pkcs8',
-                pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, privKey),
-                { name: 'X25519' },
-                false,
-                ['deriveBits']
-            ),
-            webcrypto.subtle.importKey('raw', pubKey, { name: 'X25519' }, false, [])
+            cachedImportPrivateKey(privKey),
+            cachedImportPublicKey(pubKey)
         ])
         const sharedBits = await webcrypto.subtle.deriveBits(
             { name: 'X25519', public: publicKey },
