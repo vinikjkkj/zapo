@@ -126,6 +126,21 @@ export interface ExpectGroupMessageOptions extends ExpectMessageOptions {
 
 interface FakePeerDeps {
     readonly bundleResolver: () => Promise<ClientPreKeyBundle>
+    /**
+     * Reserves a unique one-time prekey for this peer at creation
+     * time, or returns `null` if the dispenser pool has been
+     * exhausted (or no upload has been captured yet). The peer
+     * stores the result in a private slot and uses it later when
+     * X3DH bring-up runs on the first encrypt. Reserving eagerly
+     * (instead of lazily on first encrypt) is critical: it lets
+     * `FakeWaServer.createFakePeer` correctly observe `preKeysAvailable()`
+     * dropping by one per peer, so the harness can decide when to
+     * trigger a fresh upload.
+     */
+    readonly reserveOneTimePreKey?: () => {
+        readonly keyId: number
+        readonly publicKey: Uint8Array
+    } | null
     readonly pushStanza: (node: ReturnType<typeof buildMessage>) => Promise<void>
     /**
      * Subscribes to inbound `<message to="<peer-jid>"/>` stanzas the
@@ -151,6 +166,9 @@ export class FakePeer {
      */
     private readonly ratchet: FakePeerDoubleRatchet
     private readonly skipOneTimePreKey: boolean
+    private readonly reservedOneTimePreKey:
+        | { readonly keyId: number; readonly publicKey: Uint8Array }
+        | null
     private ratchetInitiated = false
     private nextMessageCounter = 0
     private readonly senderKeysByGroup = new Map<string, FakeSenderKey>()
@@ -171,6 +189,15 @@ export class FakePeer {
         this.displayName = options.displayName
         this.deps = deps
         this.skipOneTimePreKey = options.skipOneTimePreKey === true
+        // Eagerly reserve a one-time prekey from the dispenser at
+        // construction time. The dispenser is sync so we don't need
+        // to plumb async into the constructor; the alternative
+        // (resolving lazily on first encrypt) would mean the harness
+        // can't observe the prekey pool draining as it builds peers.
+        this.reservedOneTimePreKey =
+            !this.skipOneTimePreKey && deps.reserveOneTimePreKey
+                ? deps.reserveOneTimePreKey()
+                : null
         this.ratchet = new FakePeerDoubleRatchet(keyBundle)
     }
 
@@ -785,8 +812,10 @@ export class FakePeer {
             return
         }
         const bundle = await this.deps.bundleResolver()
+        const oneTimePreKey = this.reservedOneTimePreKey ?? undefined
         await this.ratchet.initiateOutbound(bundle, {
-            skipOneTimePreKey: this.skipOneTimePreKey
+            oneTimePreKey,
+            skipOneTimePreKey: this.skipOneTimePreKey || !oneTimePreKey
         })
         this.ratchetInitiated = true
     }

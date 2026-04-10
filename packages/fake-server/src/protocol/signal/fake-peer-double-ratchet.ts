@@ -177,9 +177,16 @@ export class FakePeerDoubleRatchet {
         const localBase = await X25519.generateKeyPair()
         const localBaseSerialized = toSerializedPubKey(localBase.pubKey)
 
+        // NOTE: deliberately do NOT fall back to `bundle.preKeys[0]`.
+        // Every FakePeer would otherwise consume the same prekey index,
+        // causing the lib to reject every pkmsg after the first as
+        // "prekey N not found". Callers must either pass an explicit
+        // `oneTimePreKey` (e.g. dispensed by `FakeWaServer`'s prekey
+        // dispenser) or set `skipOneTimePreKey: true` to opt out of
+        // DH4 entirely.
         const consumedOneTime = options.skipOneTimePreKey
             ? undefined
-            : (options.oneTimePreKey ?? bundle.preKeys[0])
+            : options.oneTimePreKey
         const remoteOneTime = consumedOneTime
             ? toSerializedPubKey(consumedOneTime.publicKey)
             : null

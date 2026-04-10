@@ -263,6 +263,20 @@ export class FakeWaServer {
     private pipelineListener: FakeWaServerPipelineListener | null = null
     private rejectMode: { readonly code: number; readonly reason: string } | null = null
     private capturedPreKeyBundle: ClientPreKeyBundle | null = null
+    /**
+     * Cursor into `capturedPreKeyBundle.preKeys` tracking how many
+     * one-time prekeys have been dispensed to FakePeers via
+     * {@link dispenseOneTimePreKey}. Resets to 0 every time a fresh
+     * upload is captured (e.g. after a lib reconnect that triggers a
+     * fresh `prekeys.upload` IQ). Each FakePeer the harness creates
+     * consumes exactly one entry from the dispenser, mirroring the
+     * lib's per-recipient consumption — the lib's prekey store
+     * deletes consumed entries, so reusing the same index across
+     * multiple peers would cause the lib to reject every pkmsg after
+     * the first as "prekey N not found".
+     */
+    private preKeyDispenserCursor = 0
+    private preKeyDispenserMisses = 0
     private nextPreKeyNotificationId = 1
     private readonly mediaStore = new FakeMediaStore()
     private readonly mediaHttpsServer = new WaFakeMediaHttpsServer()
@@ -374,6 +388,14 @@ export class FakeWaServer {
                 try {
                     const bundle = parsePreKeyUploadIq(iq)
                     this.capturedPreKeyBundle = bundle
+                    // Fresh upload → reset the dispenser cursor so the
+                    // next batch of FakePeers consumes from index 0 of
+                    // the new pool. The lib's prekey store keeps old
+                    // entries until they're individually consumed via
+                    // pkmsg, so the new bundle has fresh keyIds that
+                    // never collide with previous batches' reservations.
+                    this.preKeyDispenserCursor = 0
+                    this.preKeyDispenserMisses = 0
                     for (const waiter of this.preKeyBundleWaiters) {
                         waiter.resolve(bundle)
                     }
@@ -1444,10 +1466,20 @@ export class FakeWaServer {
      */
     public async triggerPreKeyUpload(
         pipeline: WaFakeConnectionPipeline,
-        timeoutMs = 15_000
+        options: { readonly timeoutMs?: number; readonly force?: boolean } | number = {}
     ): Promise<ClientPreKeyBundle> {
-        if (this.capturedPreKeyBundle) {
+        // Backwards compat: callers used to pass `timeoutMs` as a positional
+        // number arg.
+        const opts = typeof options === 'number' ? { timeoutMs: options } : options
+        const timeoutMs = opts.timeoutMs ?? 15_000
+        if (!opts.force && this.capturedPreKeyBundle) {
             return this.capturedPreKeyBundle
+        }
+        if (opts.force) {
+            // Drop the cached bundle so awaitPreKeyBundle waits for a
+            // fresh capture instead of returning the stale one.
+            this.capturedPreKeyBundle = null
+            this.preKeyDispenserCursor = 0
         }
         const bundlePromise = this.awaitPreKeyBundle(timeoutMs)
         const id = `prekey-low-${this.nextPreKeyNotificationId++}`
@@ -1520,6 +1552,16 @@ export class FakeWaServer {
         options: CreateFakePeerOptions,
         pipeline: WaFakeConnectionPipeline
     ): Promise<FakePeer> {
+        // If the lib's initial prekey upload has already been captured,
+        // reserve a unique one-time prekey for this peer at construction
+        // time. Otherwise the peer is constructed without a reserved
+        // slot and will silently skip the DH4 leg of X3DH on its first
+        // encrypt — historically the same behavior as the
+        // `bundle.preKeys[0]` fallback that used to live in the
+        // ratchet, just without the prekey-id collision bug. Tests that
+        // need full DH4 should call `triggerPreKeyUpload(pipeline)`
+        // before creating peers (every existing cross-check that
+        // exercises pkmsg already does).
         const peer = await FakePeer.create(options, this.buildFakePeerDeps(pipeline))
         this.peerRegistry.set(peer.jid, peer)
         return peer
@@ -1800,6 +1842,10 @@ export class FakeWaServer {
 
     private buildFakePeerDeps(pipeline: WaFakeConnectionPipeline): {
         readonly bundleResolver: () => Promise<ClientPreKeyBundle>
+        readonly reserveOneTimePreKey: () => {
+            readonly keyId: number
+            readonly publicKey: Uint8Array
+        } | null
         readonly pushStanza: (stanza: BinaryNode) => Promise<void>
         readonly subscribeInboundMessages: (
             listener: (stanza: BinaryNode) => void
@@ -1807,6 +1853,7 @@ export class FakeWaServer {
     } {
         return {
             bundleResolver: () => this.awaitPreKeyBundle(),
+            reserveOneTimePreKey: () => this.dispenseOneTimePreKey(),
             pushStanza: (stanza) => pipeline.sendStanza(stanza),
             subscribeInboundMessages: (listener) => {
                 const wrapped = (node: BinaryNode): void => {
@@ -1819,6 +1866,60 @@ export class FakeWaServer {
                 }
             }
         }
+    }
+
+    /**
+     * Returns the next unused one-time prekey from the captured client
+     * upload, or `null` if no upload has been captured yet or the pool
+     * has been exhausted. Each call advances the dispenser cursor by
+     * one entry; concurrent peers are guaranteed unique indices.
+     *
+     * The lib's prekey store deletes consumed entries (see
+     * `SignalProtocol.consumePreKeyById`), so handing the same index
+     * to two peers would cause the second pkmsg to fail with
+     * "prekey N not found".
+     *
+     * Returns `null` (and `FakePeer` then transparently skips the DH4
+     * leg of X3DH) when:
+     *   - the upload hasn't been captured yet, OR
+     *   - the dispenser has handed out all `preKeys.length` entries
+     *
+     * The dispenser is reset to index 0 every time a fresh upload is
+     * captured (the lib re-uploads on reconnect / digest mismatch).
+     */
+    public dispenseOneTimePreKey(): {
+        readonly keyId: number
+        readonly publicKey: Uint8Array
+    } | null {
+        const bundle = this.capturedPreKeyBundle
+        if (!bundle) {
+            this.preKeyDispenserMisses += 1
+            return null
+        }
+        if (this.preKeyDispenserCursor >= bundle.preKeys.length) {
+            this.preKeyDispenserMisses += 1
+            return null
+        }
+        const entry = bundle.preKeys[this.preKeyDispenserCursor]
+        this.preKeyDispenserCursor += 1
+        return { keyId: entry.keyId, publicKey: entry.publicKey }
+    }
+
+    /** Number of times the dispenser was asked but couldn't return a prekey. */
+    public preKeyDispenserMissesSnapshot(): number {
+        return this.preKeyDispenserMisses
+    }
+
+    /**
+     * Number of one-time prekeys still available in the dispenser
+     * pool. Tests + benches use this to know when to refill the lib's
+     * upload (e.g. force a fresh `prekeys.upload` IQ via
+     * `triggerPreKeyUpload`).
+     */
+    public preKeysAvailable(): number {
+        const bundle = this.capturedPreKeyBundle
+        if (!bundle) return 0
+        return Math.max(0, bundle.preKeys.length - this.preKeyDispenserCursor)
     }
 
     /**

@@ -92,8 +92,12 @@ const NOOP_LOGGER: Logger = {
     trace: () => {},
     debug: () => {},
     info: () => {},
-    warn: () => {},
-    error: () => {}
+    warn: (...args: unknown[]) => {
+        if (process.env.ZAPO_BENCH_VERBOSE) console.warn('[lib warn]', ...args)
+    },
+    error: (...args: unknown[]) => {
+        if (process.env.ZAPO_BENCH_VERBOSE) console.error('[lib error]', ...args)
+    }
 }
 
 class InMemoryAuthStore implements WaAuthStore {
@@ -202,7 +206,17 @@ async function bringUpPairedClient(): Promise<PairedFixture> {
             signal: 'memory',
             senderKey: 'memory',
             appState: 'memory'
-        }
+        },
+        // The default in-memory prekey store caps at 4_096 entries.
+        // The bench creates ~4000 fake peers and triggers ~5 prekey
+        // refills (each generates 812 fresh keyIds), so the total
+        // distinct keyId set hits ~4060 — right at the cap. The
+        // bounded map then evicts the oldest entries (the very keyIds
+        // that the early peers reserved), causing those peers to fail
+        // their pkmsg with "prekey N not found" later. Bumping the
+        // cap above the worst-case keeps every reserved keyId alive
+        // for the duration of the bench.
+        memory: { limits: { signalPreKeys: 16_384 } }
     })
 
     const client = new WaClient(
@@ -273,14 +287,39 @@ async function buildContacts(
     const out: ContactFixture[] = []
     const deviceIds = Array.from({ length: devicesPerContact }, (_, idx) => idx + 1)
     for (let i = 0; i < count; i += 1) {
+        // Each contact will lazily consume `devicesPerContact` prekeys
+        // from the dispenser on its first send. Top up the pool BEFORE
+        // creation so the dispenser has enough headroom for this
+        // contact's devices.
+        await ensurePreKeyPool(server, pipeline, devicesPerContact)
         const userJid = `5511${String(7_000_000_000 + i).padStart(10, '0')}@s.whatsapp.net`
         const devices = await server.createFakePeerWithDevices(
-            { userJid, deviceIds, skipOneTimePreKey: true },
+            { userJid, deviceIds },
             pipeline
         )
         out.push({ userJid, devices })
     }
     return out
+}
+
+/**
+ * Forces the lib to upload a fresh batch of one-time prekeys when
+ * the dispenser pool drops below `requiredHeadroom`. The fake server
+ * resets its dispenser cursor to 0 every time a new bundle lands, so
+ * after this returns the dispenser has the full
+ * `SIGNAL_UPLOAD_PREKEYS_COUNT` (812) entries available again.
+ *
+ * The lib treats every `<notification type="encrypt"><count value=0/>`
+ * as a "prekey low" hint and runs a full re-upload, so calling this
+ * frequently is cheap (one IQ round-trip per call).
+ */
+async function ensurePreKeyPool(
+    server: FakeWaServer,
+    pipeline: WaFakeConnectionPipeline,
+    requiredHeadroom: number
+): Promise<void> {
+    if (server.preKeysAvailable() >= requiredHeadroom) return
+    await server.triggerPreKeyUpload(pipeline, { force: true })
 }
 
 interface GroupFixture {
@@ -303,10 +342,8 @@ async function buildGroups(
         for (let m = 0; m < memberCount; m += 1) {
             const memberJid = `5511${String(8_000_000_000 + memberCursor).padStart(10, '0')}@s.whatsapp.net`
             memberCursor += 1
-            const peer = await server.createFakePeer(
-                { jid: memberJid, skipOneTimePreKey: true },
-                pipeline
-            )
+            await ensurePreKeyPool(server, pipeline, 1)
+            const peer = await server.createFakePeer({ jid: memberJid }, pipeline)
             members.push(peer)
         }
         server.createFakeGroup({
@@ -399,24 +436,41 @@ async function scenarioRecv1to1(
     const buckets = bucketize(messages, contacts.length)
     return runScenario('RECV 1:1', messages, async () => {
         let received = 0
-        const done = new Promise<void>((resolve) => {
+        let sent = 0
+        let lastProgressAt = Date.now()
+        const done = new Promise<void>((resolve, reject) => {
+            const watchdog = setInterval(() => {
+                if (Date.now() - lastProgressAt > 30_000) {
+                    clearInterval(watchdog)
+                    reject(
+                        new Error(
+                            `RECV 1:1 stalled: sent ${sent}/${messages}, received ${received}/${messages} (no progress for 30s)`
+                        )
+                    )
+                }
+            }, 5_000)
+            watchdog.unref?.()
             const listener: WaClientEventMap['message'] = () => {
                 received += 1
+                lastProgressAt = Date.now()
                 if (received >= messages) {
+                    clearInterval(watchdog)
                     client.off('message', listener)
                     resolve()
                 }
             }
             client.on('message', listener)
+            const peerSendChains = contacts.map(async (contact, contactIdx) => {
+                const count = buckets[contactIdx]
+                const sender = contact.devices[0]
+                for (let n = 0; n < count; n += 1) {
+                    await sender.sendConversation(`bench recv ${contactIdx}-${n}`)
+                    sent += 1
+                    lastProgressAt = Date.now()
+                }
+            })
+            Promise.all(peerSendChains).catch(reject)
         })
-        const peerSendChains = contacts.map(async (contact, contactIdx) => {
-            const count = buckets[contactIdx]
-            const sender = contact.devices[0]
-            for (let n = 0; n < count; n += 1) {
-                await sender.sendConversation(`bench recv ${contactIdx}-${n}`)
-            }
-        })
-        await Promise.all(peerSendChains)
         await done
     })
 }
@@ -579,7 +633,7 @@ async function main(): Promise<void> {
         console.log(
             `built ${contacts.length} contacts (${config.contactDevices} dev each) in ${formatMs(
                 performance.now() - t
-            )}`
+            )}, dispenser misses: ${fixture.server.preKeyDispenserMissesSnapshot()}`
         )
     }
 
@@ -594,7 +648,7 @@ async function main(): Promise<void> {
         console.log(
             `built ${groups.length} groups × ${config.groupMembers} members in ${formatMs(
                 performance.now() - t
-            )}`
+            )}, dispenser misses: ${fixture.server.preKeyDispenserMissesSnapshot()}`
         )
     }
     console.log('')

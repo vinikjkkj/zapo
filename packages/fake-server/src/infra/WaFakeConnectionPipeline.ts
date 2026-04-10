@@ -109,6 +109,12 @@ export class WaFakeConnectionPipeline {
             throw new Error(`cannot send stanza while pipeline is in state "${this.state.kind}"`)
         }
         const stanza = encodeBinaryNodeStanza(node)
+        // The transport's encryptFrame internally serializes via a
+        // promise chain so concurrent callers still see strict FIFO
+        // ordering at the wire — see WaFakeTransport.encryptFrame for
+        // the rationale. Each caller's continuation runs in the
+        // microtask queue immediately after the previous one's, so
+        // sendFrame() calls below also fire in order.
         const ciphertext = await this.state.transport.encryptFrame(stanza)
         this.frameSocket.sendFrame(ciphertext)
     }
