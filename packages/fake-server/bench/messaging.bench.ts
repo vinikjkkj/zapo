@@ -506,7 +506,7 @@ async function buildContacts(
     pipeline: WaFakeConnectionPipeline,
     count: number,
     devicesPerContact: number
-): Promise<readonly ContactFixture[]> {
+): Promise<readonly AbstractContactFixture[]> {
     const out: ContactFixture[] = []
     const deviceIds = Array.from({ length: devicesPerContact }, (_, idx) => idx + 1)
     for (let i = 0; i < count; i += 1) {
@@ -556,7 +556,7 @@ async function buildGroups(
     pipeline: WaFakeConnectionPipeline,
     groupCount: number,
     memberCount: number
-): Promise<readonly GroupFixture[]> {
+): Promise<readonly AbstractGroupFixture[]> {
     const out: GroupFixture[] = []
     let memberCursor = 0
     for (let g = 0; g < groupCount; g += 1) {
@@ -633,7 +633,7 @@ async function runScenario(
 
 async function scenarioSend1to1(
     client: WaClient,
-    contacts: readonly ContactFixture[],
+    contacts: readonly AbstractContactFixture[],
     messages: number
 ): Promise<ScenarioResult> {
     return runScenario('SEND 1:1', messages, async () => {
@@ -650,7 +650,7 @@ async function scenarioSend1to1(
 
 async function scenarioRecv1to1(
     client: WaClient,
-    contacts: readonly ContactFixture[],
+    contacts: readonly AbstractContactFixture[],
     messages: number
 ): Promise<ScenarioResult> {
     // Bucket the message count across contacts so each peer sends its
@@ -716,7 +716,7 @@ function bucketize(total: number, slots: number): readonly number[] {
 
 async function scenarioSendGroup(
     client: WaClient,
-    groups: readonly GroupFixture[],
+    groups: readonly AbstractGroupFixture[],
     messages: number
 ): Promise<ScenarioResult> {
     // Warm up: send 1 message to each group OUTSIDE the timed window
@@ -738,7 +738,7 @@ async function scenarioSendGroup(
 
 async function scenarioRecvGroup(
     client: WaClient,
-    groups: readonly GroupFixture[],
+    groups: readonly AbstractGroupFixture[],
     messages: number
 ): Promise<ScenarioResult> {
     // Warm up: each designated sender ships 1 message OUTSIDE the
@@ -829,16 +829,35 @@ function printResult(result: ScenarioResult): void {
     console.log('')
 }
 
+// ─── Abstract fixture interfaces ──────────────────────────────────────
+// Both in-process and separate-process modes produce these.
+
+interface PeerHandle {
+    sendConversation(text: string): Promise<void>
+    sendGroupConversation(groupJid: string, text: string): Promise<void>
+}
+
+interface AbstractContactFixture {
+    readonly userJid: string
+    readonly devices: readonly PeerHandle[]
+}
+
+interface AbstractGroupFixture {
+    readonly groupJid: string
+    readonly members: readonly PeerHandle[]
+    readonly designatedSender: PeerHandle
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────
 
-async function main(): Promise<void> {
-    const argSet = new Set(process.argv.slice(2))
-    const profiler = new BenchProfiler(readProfilerOptions(argSet))
-    await profiler.start()
-
-    const config = readConfig()
-    printConfig(config)
-
+async function mainInProcess(
+    config: BenchConfig,
+    profiler: BenchProfiler,
+    argSet: ReadonlySet<string>
+): Promise<{
+    results: ScenarioResult[]
+    cleanup: () => Promise<void>
+}> {
     const setupStart = performance.now()
     const fixture = await bringUpPairedClient()
     console.log(`paired in ${formatMs(performance.now() - setupStart)}`)
@@ -847,8 +866,8 @@ async function main(): Promise<void> {
         await profiler.takeHeapSnapshot('start').catch((err) => console.error('[snapshot]', err))
     }
 
-    let contacts: readonly ContactFixture[] = []
-    let groups: readonly GroupFixture[] = []
+    let contacts: readonly AbstractContactFixture[] = []
+    let groups: readonly AbstractGroupFixture[] = []
 
     const need1to1 = config.scenarios.has('send_1to1') || config.scenarios.has('recv_1to1')
     const needGroup = config.scenarios.has('send_group') || config.scenarios.has('recv_group')
@@ -884,6 +903,139 @@ async function main(): Promise<void> {
     }
     console.log('')
 
+    const results = await runAllScenarios(config, profiler, fixture.client, contacts, groups)
+    return {
+        results,
+        cleanup: async () => {
+            await fixture.client.disconnect().catch(() => undefined)
+            await fixture.server.stop()
+        }
+    }
+}
+
+async function mainSeparateProcess(
+    config: BenchConfig,
+    profiler: BenchProfiler,
+    argSet: ReadonlySet<string>
+): Promise<{
+    results: ScenarioResult[]
+    cleanup: () => Promise<void>
+}> {
+    const { ServerRpc } = await import('./server-rpc')
+    const rpc = new ServerRpc()
+    await rpc.spawn()
+    await rpc.start()
+
+    const authStore = new InMemoryAuthStore()
+    const store = createStore({
+        backends: { mem: AUTH_BACKEND(authStore) as never },
+        providers: {
+            auth: 'mem',
+            signal: 'memory',
+            senderKey: 'memory',
+            appState: 'memory'
+        },
+        memory: { limits: { signalPreKeys: 16_384 } }
+    })
+
+    const client = new WaClient(
+        {
+            store,
+            sessionId: 'zapo-bench-separate',
+            chatSocketUrls: [rpc.serverUrl],
+            connectTimeoutMs: 60_000,
+            proxy: {
+                mediaUpload: rpc.mediaProxyAgent!,
+                mediaDownload: rpc.mediaProxyAgent!
+            },
+            testHooks: {
+                noiseRootCa: rpc.noiseRootCa
+            }
+        },
+        NOOP_LOGGER
+    )
+
+    const meDeviceJid = '5511999999999:1@s.whatsapp.net'
+
+    // Set up pairing material relay
+    client.once('auth_qr', (event: Parameters<WaClientEventMap['auth_qr']>[0]) => {
+        const parsed = parsePairingQrString(event.qr)
+        rpc.sendPairingMaterial({
+            advSecretKey: parsed.advSecretKey,
+            identityPublicKey: parsed.identityPublicKey
+        })
+    })
+
+    const pairedPromise = new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('auth_paired timeout')), 60_000)
+        client.once('auth_paired', () => {
+            clearTimeout(timer)
+            resolve()
+        })
+    })
+
+    const setupStart = performance.now()
+    await client.connect()
+    await rpc.waitForAuthenticatedPipeline()
+    // Start pairing on the server side — the material relay is already wired
+    const pairPromise = rpc.runPairing(meDeviceJid)
+    const waitNextPromise = rpc.waitForNextAuthenticatedPipeline()
+    await pairedPromise
+    await pairPromise
+    await waitNextPromise
+    await rpc.triggerPreKeyUpload()
+    console.log(`paired in ${formatMs(performance.now() - setupStart)}`)
+
+    if (argSet.has('--snapshot')) {
+        await profiler.takeHeapSnapshot('start').catch((err) => console.error('[snapshot]', err))
+    }
+
+    let contacts: readonly AbstractContactFixture[] = []
+    let groups: readonly AbstractGroupFixture[] = []
+
+    const need1to1 = config.scenarios.has('send_1to1') || config.scenarios.has('recv_1to1')
+    const needGroup = config.scenarios.has('send_group') || config.scenarios.has('recv_group')
+
+    if (need1to1) {
+        const t = performance.now()
+        contacts = await rpc.buildContacts(config.contacts, config.contactDevices)
+        const misses = await rpc.dispenserMisses()
+        console.log(
+            `built ${contacts.length} contacts (${config.contactDevices} dev each) in ${formatMs(
+                performance.now() - t
+            )}, dispenser misses: ${misses}`
+        )
+    }
+
+    if (needGroup) {
+        const t = performance.now()
+        groups = await rpc.buildGroups(config.groups, config.groupMembers)
+        const misses = await rpc.dispenserMisses()
+        console.log(
+            `built ${groups.length} groups × ${config.groupMembers} members in ${formatMs(
+                performance.now() - t
+            )}, dispenser misses: ${misses}`
+        )
+    }
+    console.log('')
+
+    const results = await runAllScenarios(config, profiler, client, contacts, groups)
+    return {
+        results,
+        cleanup: async () => {
+            await client.disconnect().catch(() => undefined)
+            await rpc.stop()
+        }
+    }
+}
+
+async function runAllScenarios(
+    config: BenchConfig,
+    profiler: BenchProfiler,
+    client: WaClient,
+    contacts: readonly AbstractContactFixture[],
+    groups: readonly AbstractGroupFixture[]
+): Promise<ScenarioResult[]> {
     const results: ScenarioResult[] = []
     const runOne = async (
         name: string,
@@ -899,36 +1051,54 @@ async function main(): Promise<void> {
         }
     }
 
+    if (config.scenarios.has('send_1to1')) {
+        await runOne('send_1to1', () =>
+            scenarioSend1to1(client, contacts, config.messages)
+        )
+    }
+    if (config.scenarios.has('recv_1to1')) {
+        await runOne('recv_1to1', () =>
+            scenarioRecv1to1(client, contacts, config.messages)
+        )
+    }
+    if (config.scenarios.has('send_group')) {
+        await runOne('send_group', () =>
+            scenarioSendGroup(client, groups, config.messages)
+        )
+    }
+    if (config.scenarios.has('recv_group')) {
+        await runOne('recv_group', () =>
+            scenarioRecvGroup(client, groups, config.messages)
+        )
+    }
+    return results
+}
+
+async function main(): Promise<void> {
+    const argSet = new Set(process.argv.slice(2))
+    const profiler = new BenchProfiler(readProfilerOptions(argSet))
+    await profiler.start()
+
+    const config = readConfig()
+    const separateProcess = argSet.has('--separate-process')
+    if (separateProcess) {
+        console.log('(running fake server in separate process)')
+    }
+    printConfig(config)
+
+    const { results, cleanup } = separateProcess
+        ? await mainSeparateProcess(config, profiler, argSet)
+        : await mainInProcess(config, profiler, argSet)
+
     try {
-        if (config.scenarios.has('send_1to1')) {
-            await runOne('send_1to1', () =>
-                scenarioSend1to1(fixture.client, contacts, config.messages)
-            )
-        }
-        if (config.scenarios.has('recv_1to1')) {
-            await runOne('recv_1to1', () =>
-                scenarioRecv1to1(fixture.client, contacts, config.messages)
-            )
-        }
-        if (config.scenarios.has('send_group')) {
-            await runOne('send_group', () =>
-                scenarioSendGroup(fixture.client, groups, config.messages)
-            )
-        }
-        if (config.scenarios.has('recv_group')) {
-            await runOne('recv_group', () =>
-                scenarioRecvGroup(fixture.client, groups, config.messages)
-            )
-        }
-    } finally {
         if (argSet.has('--snapshot')) {
             await profiler
                 .takeHeapSnapshot('end')
                 .catch((err) => console.error('[snapshot]', err))
         }
         await profiler.stop()
-        await fixture.client.disconnect().catch(() => undefined)
-        await fixture.server.stop()
+    } finally {
+        await cleanup()
     }
 
     if (process.env.ZAPO_BENCH_JSON === '1') {
