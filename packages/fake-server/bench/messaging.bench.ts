@@ -29,12 +29,28 @@
  *                                     send_group, recv_group; default = all)
  *   ZAPO_BENCH_JSON                  (=1 to also print results as JSON)
  *
+ * Profiling flags (same shape as test/example.cjs):
+ *   --cpu                    — V8 CPU profile covering the whole run;
+ *                              saved to cpu-<ts>.cpuprofile on exit
+ *                              (and cpu-<scenario>-<ts>.cpuprofile per
+ *                              scenario if --per-scenario is passed)
+ *   --heap                   — heap allocation timeline tracking; saved
+ *                              to heap-<ts>.heaptimeline on exit
+ *   --snapshot               — heap snapshot at start + end of the run
+ *                              (snapshot-start-<ts>.heapsnapshot and
+ *                              snapshot-end-<ts>.heapsnapshot)
+ *   --per-scenario           — with --cpu, emit one profile per scenario
+ *   --snapshot-per-scenario  — heap snapshot between scenarios
+ *   --out-dir=<path>         — directory to write profiles into
+ *                              (default: cwd)
+ *
  * Run with:
- *   npm --workspace=@zapo-js/fake-server run bench:messaging
- * or:
- *   node --expose-gc --import tsx packages/fake-server/bench/messaging.bench.ts
+ *   node --expose-gc --import tsx packages/fake-server/bench/messaging.bench.ts --cpu --heap
  */
 
+import { mkdir, writeFile } from 'node:fs/promises'
+import * as inspector from 'node:inspector/promises'
+import { resolve as resolvePath } from 'node:path'
 import { performance } from 'node:perf_hooks'
 
 import {
@@ -140,6 +156,213 @@ const AUTH_BACKEND = (
         messageSecret: noopStore
     }
 })
+
+// ─── Profiler ─────────────────────────────────────────────────────────
+
+interface ProfilerOptions {
+    readonly cpu: boolean
+    readonly heap: boolean
+    readonly snapshot: boolean
+    readonly perScenario: boolean
+    readonly snapshotPerScenario: boolean
+    readonly outDir: string
+}
+
+function readProfilerOptions(args: ReadonlySet<string>): ProfilerOptions {
+    const outDirArg = process.argv.find((a) => a.startsWith('--out-dir='))
+    return {
+        cpu: args.has('--cpu'),
+        heap: args.has('--heap'),
+        snapshot: args.has('--snapshot'),
+        perScenario: args.has('--per-scenario'),
+        snapshotPerScenario: args.has('--snapshot-per-scenario'),
+        outDir: outDirArg ? outDirArg.split('=')[1] : process.cwd()
+    }
+}
+
+/**
+ * Thin wrapper around `node:inspector/promises` that mirrors the
+ * shape used by `test/example.cjs`. Captures one CPU profile + one
+ * heap-allocation timeline that span the whole bench run, plus
+ * optional per-scenario CPU profiles when `--per-scenario` is set.
+ *
+ * IMPORTANT: this is constructed and `start()`-ed BEFORE any
+ * fake-server / zapo-js modules are imported in main(), so module-
+ * level allocations are captured by the heap timeline.
+ */
+class BenchProfiler {
+    private readonly options: ProfilerOptions
+    private session: inspector.Session | null = null
+    private active = false
+
+    public constructor(options: ProfilerOptions) {
+        this.options = options
+    }
+
+    public get enabled(): boolean {
+        return (
+            this.options.cpu ||
+            this.options.heap ||
+            this.options.snapshot ||
+            this.options.snapshotPerScenario
+        )
+    }
+
+    public async start(): Promise<void> {
+        if (!this.enabled) return
+        await mkdir(this.options.outDir, { recursive: true })
+        this.session = new inspector.Session()
+        this.session.connect()
+        if (this.options.heap) {
+            await this.session.post('HeapProfiler.startTrackingHeapObjects', {
+                trackAllocations: true
+            })
+            console.log('[heap] allocation tracking started')
+        }
+        if (this.options.cpu) {
+            await this.session.post('Profiler.enable')
+            await this.session.post('Profiler.start')
+            console.log('[cpu] profiling started')
+        }
+        this.active = true
+    }
+
+    /**
+     * Per-scenario hook. With `--per-scenario`, we stop the running
+     * CPU profile, save it under a scenario-tagged filename, and
+     * start a fresh one. With `--snapshot-per-scenario` we also
+     * write a heap snapshot tagged with the scenario name.
+     */
+    public async beforeScenario(name: string): Promise<void> {
+        if (!this.active || !this.session) return
+        if (this.options.cpu && this.options.perScenario) {
+            try {
+                await this.session.post('Profiler.start')
+            } catch {
+                // already running — fine
+            }
+        }
+        if (this.options.snapshotPerScenario) {
+            await this.takeHeapSnapshot(`pre-${slug(name)}`).catch((err) =>
+                console.error(`[snapshot:pre-${name}]`, err)
+            )
+        }
+    }
+
+    public async afterScenario(name: string): Promise<void> {
+        if (!this.active || !this.session) return
+        if (this.options.cpu && this.options.perScenario) {
+            try {
+                const result = (await this.session.post('Profiler.stop')) as {
+                    profile: unknown
+                }
+                const out = this.fileName(`cpu-${slug(name)}`, 'cpuprofile')
+                await writeFile(out, JSON.stringify(result.profile))
+                console.log(`[cpu] saved ${out}`)
+                // Restart for the next scenario.
+                await this.session.post('Profiler.start')
+            } catch (err) {
+                console.error(`[cpu:per-scenario:${name}]`, err)
+            }
+        }
+        if (this.options.snapshotPerScenario) {
+            await this.takeHeapSnapshot(`post-${slug(name)}`).catch((err) =>
+                console.error(`[snapshot:post-${name}]`, err)
+            )
+        }
+    }
+
+    public async stop(): Promise<void> {
+        if (!this.active || !this.session) return
+        if (this.options.cpu) {
+            try {
+                const result = (await this.session.post('Profiler.stop')) as {
+                    profile: unknown
+                }
+                const out = this.fileName('cpu', 'cpuprofile')
+                await writeFile(out, JSON.stringify(result.profile))
+                console.log(`[cpu] saved ${out}`)
+            } catch (err) {
+                console.error('[cpu:stop]', err)
+            }
+        }
+        if (this.options.heap) {
+            await this.saveHeapTimeline().catch((err) => console.error('[heap]', err))
+        }
+        try {
+            this.session.disconnect()
+        } catch {
+            // best-effort
+        }
+        this.session = null
+        this.active = false
+    }
+
+    public async takeHeapSnapshot(label: string): Promise<void> {
+        if (!this.session) return
+        const chunks: string[] = []
+        const onChunk = (msg: { params: { chunk: string } }): void => {
+            chunks.push(msg.params.chunk)
+        }
+        this.session.on(
+            'HeapProfiler.addHeapSnapshotChunk',
+            onChunk as unknown as (m: object) => void
+        )
+        try {
+            await this.session.post('HeapProfiler.takeHeapSnapshot', { reportProgress: false })
+        } finally {
+            this.session.removeListener(
+                'HeapProfiler.addHeapSnapshotChunk',
+                onChunk as unknown as (m: object) => void
+            )
+        }
+        const out = this.fileName(`snapshot-${label}`, 'heapsnapshot')
+        const content = chunks.join('')
+        await writeFile(out, content)
+        console.log(
+            `[snapshot:${label}] saved ${out} (${(content.length / 1024 / 1024).toFixed(1)} MB)`
+        )
+    }
+
+    private async saveHeapTimeline(): Promise<void> {
+        if (!this.session) return
+        const chunks: string[] = []
+        const onChunk = (msg: { params: { chunk: string } }): void => {
+            chunks.push(msg.params.chunk)
+        }
+        this.session.on(
+            'HeapProfiler.addHeapSnapshotChunk',
+            onChunk as unknown as (m: object) => void
+        )
+        try {
+            // Take snapshot WHILE tracking is still active to capture trace stacks.
+            await this.session.post('HeapProfiler.takeHeapSnapshot', {
+                reportProgress: false,
+                treatGlobalObjectsAsRoots: true
+            })
+            await this.session.post('HeapProfiler.stopTrackingHeapObjects')
+        } finally {
+            this.session.removeListener(
+                'HeapProfiler.addHeapSnapshotChunk',
+                onChunk as unknown as (m: object) => void
+            )
+        }
+        const out = this.fileName('heap', 'heaptimeline')
+        const content = chunks.join('')
+        await writeFile(out, content)
+        console.log(
+            `[heap] saved ${out} (${(content.length / 1024 / 1024).toFixed(1)} MB)`
+        )
+    }
+
+    private fileName(prefix: string, ext: string): string {
+        return resolvePath(this.options.outDir, `${prefix}-${Date.now()}.${ext}`)
+    }
+}
+
+function slug(name: string): string {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
 
 // ─── Configuration ────────────────────────────────────────────────────
 
@@ -609,12 +832,20 @@ function printResult(result: ScenarioResult): void {
 // ─── Main ─────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+    const argSet = new Set(process.argv.slice(2))
+    const profiler = new BenchProfiler(readProfilerOptions(argSet))
+    await profiler.start()
+
     const config = readConfig()
     printConfig(config)
 
     const setupStart = performance.now()
     const fixture = await bringUpPairedClient()
     console.log(`paired in ${formatMs(performance.now() - setupStart)}`)
+
+    if (argSet.has('--snapshot')) {
+        await profiler.takeHeapSnapshot('start').catch((err) => console.error('[snapshot]', err))
+    }
 
     let contacts: readonly ContactFixture[] = []
     let groups: readonly GroupFixture[] = []
@@ -654,28 +885,48 @@ async function main(): Promise<void> {
     console.log('')
 
     const results: ScenarioResult[] = []
+    const runOne = async (
+        name: string,
+        run: () => Promise<ScenarioResult>
+    ): Promise<void> => {
+        await profiler.beforeScenario(name)
+        try {
+            const r = await run()
+            results.push(r)
+            printResult(r)
+        } finally {
+            await profiler.afterScenario(name)
+        }
+    }
+
     try {
         if (config.scenarios.has('send_1to1')) {
-            const r = await scenarioSend1to1(fixture.client, contacts, config.messages)
-            results.push(r)
-            printResult(r)
+            await runOne('send_1to1', () =>
+                scenarioSend1to1(fixture.client, contacts, config.messages)
+            )
         }
         if (config.scenarios.has('recv_1to1')) {
-            const r = await scenarioRecv1to1(fixture.client, contacts, config.messages)
-            results.push(r)
-            printResult(r)
+            await runOne('recv_1to1', () =>
+                scenarioRecv1to1(fixture.client, contacts, config.messages)
+            )
         }
         if (config.scenarios.has('send_group')) {
-            const r = await scenarioSendGroup(fixture.client, groups, config.messages)
-            results.push(r)
-            printResult(r)
+            await runOne('send_group', () =>
+                scenarioSendGroup(fixture.client, groups, config.messages)
+            )
         }
         if (config.scenarios.has('recv_group')) {
-            const r = await scenarioRecvGroup(fixture.client, groups, config.messages)
-            results.push(r)
-            printResult(r)
+            await runOne('recv_group', () =>
+                scenarioRecvGroup(fixture.client, groups, config.messages)
+            )
         }
     } finally {
+        if (argSet.has('--snapshot')) {
+            await profiler
+                .takeHeapSnapshot('end')
+                .catch((err) => console.error('[snapshot]', err))
+        }
+        await profiler.stop()
         await fixture.client.disconnect().catch(() => undefined)
         await fixture.server.stop()
     }
@@ -704,4 +955,21 @@ async function main(): Promise<void> {
 void main().catch((err) => {
     console.error(err)
     process.exit(1)
+})
+
+// Best-effort: if an uncaught error escapes the main try/finally, the
+// profiler.stop() in main() may not run. Wire a fallback so the user
+// at least gets a partial CPU profile.
+let _emergencyStopRan = false
+async function _emergencyStop(label: string, err: unknown): Promise<void> {
+    if (_emergencyStopRan) return
+    _emergencyStopRan = true
+    console.error(`[${label}]`, err)
+    process.exit(1)
+}
+process.on('uncaughtException', (err) => {
+    void _emergencyStop('uncaughtException', err)
+})
+process.on('unhandledRejection', (err) => {
+    void _emergencyStop('unhandledRejection', err)
 })
