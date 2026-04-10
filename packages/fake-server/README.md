@@ -10,7 +10,9 @@ import { createStore, WaClient } from 'zapo-js'
 
 const server = await FakeWaServer.start()
 const client = new WaClient({
-    store: createStore({ providers: { auth: 'memory', signal: 'memory', senderKey: 'memory', appState: 'memory' } }),
+    store: createStore({
+        providers: { auth: 'memory', signal: 'memory', senderKey: 'memory', appState: 'memory' }
+    }),
     chatSocketUrls: [server.url],
     testHooks: { noiseRootCa: server.noiseRootCa },
     proxy: { mediaUpload: server.mediaProxyAgent, mediaDownload: server.mediaProxyAgent }
@@ -93,29 +95,29 @@ After pairing, the lib reconnects with IK handshake. Use `waitForNextAuthenticat
 
 Every outbound IQ the lib sends during normal operation is handled:
 
-| IQ | Handler | State mutation |
-|----|---------|---------------|
-| `abt` get | `abprops` | Seedable via `setAbProps()` |
-| `w:p` / `urn:xmpp:ping` get | `whatsapp-ping` / `xmpp-ping` | Ack |
-| `encrypt` set | `prekey-upload` | Captures bundle, resets dispenser |
-| `encrypt` get `<digest>` | `signal-digest` | Returns 404 → forces upload |
-| `encrypt` set `<rotate>` | `signed-prekey-rotate` | Ack |
-| `encrypt` get `<key>` | `prekey-fetch` | Serves peer bundles from registry |
-| `usync` get | `usync` | Resolves device IDs from registry |
-| `w:m` set `<media_conn>` | `media-conn` | Points lib at fake HTTPS server |
-| `w:sync:app:state` set | `app-state-sync` | Serves patches/snapshots from providers |
-| `w:g2` get `<query>` | `group-metadata` | Serves from group registry |
-| `w:g2` set `<create\|add\|remove\|promote\|demote\|subject\|description\|leave>` | `group-*` | Mutates group registry |
-| `privacy` get | `privacy-get` | Serves settings + disallowed lists |
-| `privacy` set `<privacy>` | `privacy-set` | Mutates privacy state |
-| `privacy` set `<tokens>` | `privacy-token-issue` | Captures issued tokens |
-| `blocklist` get/set | `blocklist-*` | Mutates blocklist |
-| `w:profile:picture` get/set | `profile-picture-*` | Mutates profile picture registry |
-| `status` set | `status-set` | Captures latest status |
-| `w:biz` get/set | `business-profile-*` | Serves/captures business profiles |
-| `md` set `<remove-companion-device>` | `remove-companion-device` | Fires logout listeners |
-| `newsletter` get `<my_addons>` | `newsletter-my-addons` | Ack |
-| `urn:xmpp:whatsapp:dirty` set | `dirty-bits-clear` | Captures cleared bits |
+| IQ                                                                               | Handler                       | State mutation                          |
+| -------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------- |
+| `abt` get                                                                        | `abprops`                     | Seedable via `setAbProps()`             |
+| `w:p` / `urn:xmpp:ping` get                                                      | `whatsapp-ping` / `xmpp-ping` | Ack                                     |
+| `encrypt` set                                                                    | `prekey-upload`               | Captures bundle, resets dispenser       |
+| `encrypt` get `<digest>`                                                         | `signal-digest`               | Returns 404 → forces upload             |
+| `encrypt` set `<rotate>`                                                         | `signed-prekey-rotate`        | Ack                                     |
+| `encrypt` get `<key>`                                                            | `prekey-fetch`                | Serves peer bundles from registry       |
+| `usync` get                                                                      | `usync`                       | Resolves device IDs from registry       |
+| `w:m` set `<media_conn>`                                                         | `media-conn`                  | Points lib at fake HTTPS server         |
+| `w:sync:app:state` set                                                           | `app-state-sync`              | Serves patches/snapshots from providers |
+| `w:g2` get `<query>`                                                             | `group-metadata`              | Serves from group registry              |
+| `w:g2` set `<create\|add\|remove\|promote\|demote\|subject\|description\|leave>` | `group-*`                     | Mutates group registry                  |
+| `privacy` get                                                                    | `privacy-get`                 | Serves settings + disallowed lists      |
+| `privacy` set `<privacy>`                                                        | `privacy-set`                 | Mutates privacy state                   |
+| `privacy` set `<tokens>`                                                         | `privacy-token-issue`         | Captures issued tokens                  |
+| `blocklist` get/set                                                              | `blocklist-*`                 | Mutates blocklist                       |
+| `w:profile:picture` get/set                                                      | `profile-picture-*`           | Mutates profile picture registry        |
+| `status` set                                                                     | `status-set`                  | Captures latest status                  |
+| `w:biz` get/set                                                                  | `business-profile-*`          | Serves/captures business profiles       |
+| `md` set `<remove-companion-device>`                                             | `remove-companion-device`     | Fires logout listeners                  |
+| `newsletter` get `<my_addons>`                                                   | `newsletter-my-addons`        | Ack                                     |
+| `urn:xmpp:whatsapp:dirty` set                                                    | `dirty-bits-clear`            | Captures cleared bits                   |
 
 ## Benchmarking
 
@@ -134,28 +136,28 @@ node --expose-gc --import tsx packages/fake-server/bench/messaging.bench.ts --cp
 
 ### Profiling flags
 
-| Flag | Output |
-|------|--------|
-| `--cpu` | `cpu-<ts>.cpuprofile` (whole run) |
-| `--heap` | `heap-<ts>.heaptimeline` (allocation tracking) |
-| `--snapshot` | `snapshot-{start,end}-<ts>.heapsnapshot` |
-| `--per-scenario` | Per-scenario CPU profiles |
-| `--snapshot-per-scenario` | Per-scenario heap snapshots |
-| `--separate-process` | Forks fake server into child process for clean lib CPU profiling |
-| `--out-dir=<path>` | Output directory (default: cwd) |
+| Flag                      | Output                                                           |
+| ------------------------- | ---------------------------------------------------------------- |
+| `--cpu`                   | `cpu-<ts>.cpuprofile` (whole run)                                |
+| `--heap`                  | `heap-<ts>.heaptimeline` (allocation tracking)                   |
+| `--snapshot`              | `snapshot-{start,end}-<ts>.heapsnapshot`                         |
+| `--per-scenario`          | Per-scenario CPU profiles                                        |
+| `--snapshot-per-scenario` | Per-scenario heap snapshots                                      |
+| `--separate-process`      | Forks fake server into child process for clean lib CPU profiling |
+| `--out-dir=<path>`        | Output directory (default: cwd)                                  |
 
 ### Env vars
 
-| Var | Default | Description |
-|-----|---------|-------------|
-| `ZAPO_BENCH_CONTACTS` | 1000 | Number of contacts |
-| `ZAPO_BENCH_CONTACT_DEVICES` | 2 | Devices per contact |
-| `ZAPO_BENCH_GROUPS` | 4 | Number of groups |
-| `ZAPO_BENCH_GROUP_MEMBERS` | 500 | Members per group |
-| `ZAPO_BENCH_MESSAGES` | 1000 | Messages per scenario |
-| `ZAPO_BENCH_SCENARIOS` | all | CSV of: `send_1to1`, `recv_1to1`, `send_group`, `recv_group` |
-| `ZAPO_BENCH_JSON` | 0 | Set to `1` to print JSON results |
-| `ZAPO_BENCH_VERBOSE` | 0 | Set to `1` to forward lib warns/errors |
+| Var                          | Default | Description                                                  |
+| ---------------------------- | ------- | ------------------------------------------------------------ |
+| `ZAPO_BENCH_CONTACTS`        | 1000    | Number of contacts                                           |
+| `ZAPO_BENCH_CONTACT_DEVICES` | 2       | Devices per contact                                          |
+| `ZAPO_BENCH_GROUPS`          | 4       | Number of groups                                             |
+| `ZAPO_BENCH_GROUP_MEMBERS`   | 500     | Members per group                                            |
+| `ZAPO_BENCH_MESSAGES`        | 1000    | Messages per scenario                                        |
+| `ZAPO_BENCH_SCENARIOS`       | all     | CSV of: `send_1to1`, `recv_1to1`, `send_group`, `recv_group` |
+| `ZAPO_BENCH_JSON`            | 0       | Set to `1` to print JSON results                             |
+| `ZAPO_BENCH_VERBOSE`         | 0       | Set to `1` to forward lib warns/errors                       |
 
 ## CLI
 
