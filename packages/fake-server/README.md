@@ -26,7 +26,7 @@ await server.stop()
 
 ## Architecture
 
-```
+```text
 src/
 ├── api/                     # Public-facing API
 │   ├── FakeWaServer.ts      # Main facade — WS server, IQ router, registries, lifecycle
@@ -50,7 +50,7 @@ src/
 │   ├── fake-media-store.ts  # In-memory media blob store
 │   └── fake-app-state-collection.ts  # App-state patch/snapshot provider
 ├── transport/               # Re-exports from zapo-js (codec, crypto, protos)
-└── __tests__/               # Cross-check test suite (144 tests)
+└── __tests__/               # Cross-check test suite (147 tests)
     └── helpers/             # Shared test utilities (zapo-client factory)
 
 bench/
@@ -163,14 +163,14 @@ node --expose-gc --import tsx packages/fake-server/bench/messaging.bench.ts --cp
 
 ```bash
 # Standalone server for manual testing
-npm --workspace=@zapo-js/fake-server run cli -- --port 5222 --peer 5511888@s.whatsapp.net --log info
+npm --workspace=@zapo-js/fake-server run cli -- --port 5222 --peer 5511888@s.whatsapp.net --log
 ```
 
 ## Test suite
 
 ```bash
 npm --workspace=@zapo-js/fake-server test
-# 144 tests, ~130s, --test-concurrency=1
+# 147 tests, --test-concurrency=1
 ```
 
 Cross-check tests drive a real `WaClient` against the fake server and assert on both sides (lib emits correct events, peer decrypts correctly). Unit tests validate protocol builders/parsers in isolation.
