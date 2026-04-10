@@ -1,24 +1,3 @@
-/**
- * Phase 16 cross-check: history sync notification end-to-end.
- *
- * Scenario:
- *   1. Real WaClient connects + completes the noise handshake.
- *   2. Lib uploads its prekeys (triggered by the fake server's
- *      "encrypt count low" notification).
- *   3. Test creates a FakePeer and calls `peer.sendHistorySync({...})`,
- *      which encrypts and pushes a `<message>` whose decrypted plaintext
- *      contains a `protocolMessage.historySyncNotification` carrying an
- *      inline, zlib-compressed `HistorySync` proto with two conversations,
- *      a single message in one of them, and one pushname.
- *   4. The lib's `processHistorySyncNotification` decompresses the inline
- *      payload, persists conversations + pushnames + messages via
- *      writeBehind, and emits a `history_sync_chunk` event with the
- *      observed counts.
- *   5. Test asserts the event payload matches the input.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

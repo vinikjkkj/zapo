@@ -1,30 +1,4 @@
-/**
- * High-level fake peer that drives a Signal-encrypted message exchange
- * with a real `WaClient` connected to a `FakeWaServer`.
- *
- * Usage:
- *
- *   const peer = await server.createFakePeer({
- *       jid: '5511888888888@s.whatsapp.net'
- *   })
- *
- *   // The fake server captures the client's prekey upload IQ and feeds
- *   // its bundle into the peer. After that the peer can encrypt and push
- *   // arbitrary protobuf-encoded message payloads.
- *
- *   await peer.sendConversation('hello world')
- *
- * The first message a peer sends in a session is wrapped in a
- * `PreKeySignalMessage` (`<enc type="pkmsg"/>`); subsequent messages use
- * the lighter `SignalMessage` envelope (`<enc type="msg"/>`).
- *
- * Inbound messages from the real client are NOT decrypted by the fake
- * server in this phase — that would require maintaining a recv chain and
- * the inverse Double Ratchet logic, which is out of scope for the
- * pairing/bring-up tests we want to enable. The captured `<enc>` bytes
- * are still surfaced via `FakeWaServer.capturedStanzaSnapshot` for tests
- * that just need to assert "the client sent _something_".
- */
+/** Fake peer used by tests to encrypt and push Signal messages to the lib. */
 
 import {
     type BuildAppStateSyncKeyShareInput,
@@ -50,63 +24,25 @@ import type { BinaryNode } from '../transport/codec'
 import { proto } from '../transport/protos'
 
 export interface CreateFakePeerOptions {
-    /** JID this peer presents as (e.g. `5511888888888@s.whatsapp.net`). */
     readonly jid: string
-    /** Optional display name pushed via the `notify` attribute. */
     readonly displayName?: string
-    /** Optional pre-generated key bundle (default: freshly generated). */
     readonly keyBundle?: FakePeerKeyBundle
-    /**
-     * When true, this peer skips the one-time prekey leg of X3DH when
-     * initiating outbound encryption. The lib happily accepts pkmsg
-     * with no `preKeyId` and builds the responder session without DH4.
-     * Set this when bringing up many concurrent peers in a single test
-     * — the lib's prekey upload only contains a fixed number of
-     * one-time prekeys, so reusing index 0 across N peers would cause
-     * the lib to reject every pkmsg after the first as
-     * "prekey N not found".
-     */
     readonly skipOneTimePreKey?: boolean
 }
 
 export interface SendMessageOptions {
-    /** Message id (default: auto-generated). */
     readonly id?: string
-    /** Unix-seconds timestamp (default: now). */
     readonly t?: number
-    /** Stanza-level type (default: `text`). */
     readonly type?: string
-    /**
-     * Override the `from` attribute of the outbound `<message>` stanza.
-     * Defaults to the peer's own JID. Useful for status broadcasts
-     * (`status@broadcast`), where the wire `from` is the broadcast jid
-     * and the peer jid travels in `participant`.
-     */
     readonly from?: string
-    /**
-     * Override the `participant` attribute. Defaults to undefined for
-     * 1:1 messages. For status broadcasts, the lib expects the
-     * peer-device JID here.
-     */
     readonly participant?: string
-    /**
-     * Optional hook that mutates the encrypted ciphertext bytes
-     * BEFORE they're wrapped in the `<enc>` child. Tests use this
-     * to simulate corrupted ciphertexts (e.g. flip a byte to
-     * trigger the lib's `<receipt type="retry"/>` flow).
-     *
-     * Receives the freshly-encrypted bytes; return the bytes the
-     * fake peer should actually push on the wire.
-     */
+    /** Mutates ciphertext before wrapping in `<enc>` (for corruption tests). */
     readonly tamperCiphertext?: (ciphertext: Uint8Array) => Uint8Array
 }
 
 export interface ReceivedMessage {
-    /** Decrypted, depadded `Message` proto. */
     readonly message: proto.IMessage
-    /** Original `<message>` stanza the lib sent. */
     readonly stanza: BinaryNode
-    /** Type of the matching `<enc>` child the test asserts against. */
     readonly encType: 'pkmsg' | 'msg' | 'skmsg'
 }
 
@@ -115,38 +51,16 @@ export interface ExpectMessageOptions {
 }
 
 export interface ExpectGroupMessageOptions extends ExpectMessageOptions {
-    /**
-     * Override the senderJid the lib used when bootstrapping the
-     * SenderKey chain. Required for outbound `<message to=group-jid>`
-     * stanzas, which carry no `participant` attribute (the lib's own
-     * meJid is the implicit sender).
-     */
     readonly senderJid?: string
 }
 
 interface FakePeerDeps {
     readonly bundleResolver: () => Promise<ClientPreKeyBundle>
-    /**
-     * Reserves a unique one-time prekey for this peer at creation
-     * time, or returns `null` if the dispenser pool has been
-     * exhausted (or no upload has been captured yet). The peer
-     * stores the result in a private slot and uses it later when
-     * X3DH bring-up runs on the first encrypt. Reserving eagerly
-     * (instead of lazily on first encrypt) is critical: it lets
-     * `FakeWaServer.createFakePeer` correctly observe `preKeysAvailable()`
-     * dropping by one per peer, so the harness can decide when to
-     * trigger a fresh upload.
-     */
     readonly reserveOneTimePreKey?: () => {
         readonly keyId: number
         readonly publicKey: Uint8Array
     } | null
     readonly pushStanza: (node: ReturnType<typeof buildMessage>) => Promise<void>
-    /**
-     * Subscribes to inbound `<message to="<peer-jid>"/>` stanzas the
-     * real client sends to this peer. Used by `expectMessage` to capture
-     * + decrypt outbound messages.
-     */
     readonly subscribeInboundMessages: (listener: (stanza: BinaryNode) => void) => () => void
 }
 
@@ -157,13 +71,6 @@ export class FakePeer {
     public readonly identity: FakePeerIdentity
 
     private readonly deps: FakePeerDeps
-    /**
-     * Unified Double Ratchet that handles both encrypt + decrypt for
-     * the 1:1 conversation with the lib. Bootstraps lazily on the first
-     * `sendMessage` (Alice X3DH) or the first inbound `pkmsg` (Bob
-     * X3DH); after that the same instance carries all subsequent
-     * messages in either direction, including DH ratchet rotations.
-     */
     private readonly ratchet: FakePeerDoubleRatchet
     private readonly skipOneTimePreKey: boolean
     private readonly reservedOneTimePreKey:
@@ -189,11 +96,6 @@ export class FakePeer {
         this.displayName = options.displayName
         this.deps = deps
         this.skipOneTimePreKey = options.skipOneTimePreKey === true
-        // Eagerly reserve a one-time prekey from the dispenser at
-        // construction time. The dispenser is sync so we don't need
-        // to plumb async into the constructor; the alternative
-        // (resolving lazily on first encrypt) would mean the harness
-        // can't observe the prekey pool draining as it builds peers.
         this.reservedOneTimePreKey =
             !this.skipOneTimePreKey && deps.reserveOneTimePreKey
                 ? deps.reserveOneTimePreKey()
@@ -209,12 +111,6 @@ export class FakePeer {
         return new FakePeer(keyBundle, options, deps)
     }
 
-    /**
-     * Encrypts a `Message` proto and pushes it to the connected client.
-     * The first call resolves the client's prekey bundle (which captures
-     * it from a prekey upload IQ if it has not been seen yet) and runs
-     * X3DH to set up the session.
-     */
     public async sendMessage(
         message: proto.IMessage,
         options: SendMessageOptions = {}
@@ -241,21 +137,10 @@ export class FakePeer {
         await this.deps.pushStanza(stanza)
     }
 
-    /**
-     * Convenience for the most common case: an `extendedTextMessage` /
-     * `conversation` payload carrying a single string.
-     */
     public sendConversation(text: string, options: SendMessageOptions = {}): Promise<void> {
         return this.sendMessage({ conversation: text }, options)
     }
 
-    /**
-     * Encrypts and pushes a `protocolMessage.editedMessage` carrying a
-     * fresh `conversation` payload that supersedes a previous message.
-     * The lib's incoming-message dispatcher routes the protocol message
-     * to its edit handler and emits a `message_protocol` event of type
-     * `MESSAGE_EDIT`.
-     */
     public async sendMessageEdit(
         input: {
             readonly targetMessageId: string
@@ -282,10 +167,6 @@ export class FakePeer {
         )
     }
 
-    /**
-     * Encrypts and pushes a `protocolMessage` of type `REVOKE` that
-     * deletes a previously-sent message for the recipient.
-     */
     public async sendMessageRevoke(
         input: {
             readonly targetMessageId: string
@@ -307,11 +188,6 @@ export class FakePeer {
         )
     }
 
-    /**
-     * Encrypts and pushes a `reactionMessage` (e.g. an emoji reaction
-     * to a previously-sent message). Pass an empty `text` to remove a
-     * prior reaction.
-     */
     public async sendReaction(
         input: {
             readonly targetMessageId: string
@@ -335,12 +211,6 @@ export class FakePeer {
         )
     }
 
-    /**
-     * Encrypts and pushes a `historySyncNotification` carrying an inline,
-     * zlib-compressed `HistorySync` proto. The lib processes it via
-     * `processHistorySyncNotification` and emits a single
-     * `history_sync_chunk` event with the conversation/pushname counts.
-     */
     public async sendHistorySync(
         input: BuildHistorySyncInput = {},
         options: SendMessageOptions = {}
@@ -349,17 +219,6 @@ export class FakePeer {
         await this.sendMessage(message, options)
     }
 
-    /**
-     * External-blob variant of `sendHistorySync`: encrypts and pushes a
-     * `historySyncNotification` whose `directPath`/`mediaKey`/`fileSha256`
-     * point at a previously-published media blob (typically minted via
-     * `FakeWaServer.publishMediaBlob({ mediaType: 'history', plaintext })`).
-     *
-     * The lib's `processHistorySyncNotification` falls through to its
-     * media transfer client, downloads the encrypted bytes from the
-     * fake server's HTTP listener, decrypts via real `WaMediaCrypto`,
-     * and emits a single `history_sync_chunk` event.
-     */
     public async sendHistorySyncExternal(
         input: BuildHistorySyncExternalInput,
         options: SendMessageOptions = {}
@@ -368,16 +227,6 @@ export class FakePeer {
         await this.sendMessage(message, options)
     }
 
-    /**
-     * Convenience for an `imageMessage` whose payload bytes have
-     * already been encrypted + published via
-     * `FakeWaServer.publishMediaBlob({ mediaType: 'image', plaintext })`.
-     * The lib's incoming-message dispatcher emits the standard `message`
-     * event; the test can then call
-     * `client.mediaTransfer.downloadAndDecrypt({ directPath, mediaType: 'image', mediaKey, fileSha256, fileEncSha256 })`
-     * to round-trip the bytes through the lib's real media transfer
-     * client.
-     */
     public async sendImageMessage(
         input: {
             readonly directPath: string
@@ -412,9 +261,6 @@ export class FakePeer {
         )
     }
 
-    /**
-     * Convenience for a `videoMessage` mirroring `sendImageMessage`.
-     */
     public async sendVideoMessage(
         input: {
             readonly directPath: string
@@ -451,11 +297,6 @@ export class FakePeer {
         )
     }
 
-    /**
-     * Convenience for an `audioMessage`. Pass `ptt: true` to mark it
-     * as a push-to-talk voice note (the `mediaType` for the blob
-     * should still be `'ptt'` rather than `'audio'` in that case).
-     */
     public async sendAudioMessage(
         input: {
             readonly directPath: string
@@ -488,9 +329,6 @@ export class FakePeer {
         )
     }
 
-    /**
-     * Convenience for a `documentMessage`.
-     */
     public async sendDocumentMessage(
         input: {
             readonly directPath: string
@@ -525,9 +363,6 @@ export class FakePeer {
         )
     }
 
-    /**
-     * Convenience for a `stickerMessage`.
-     */
     public async sendStickerMessage(
         input: {
             readonly directPath: string
@@ -562,12 +397,6 @@ export class FakePeer {
         )
     }
 
-    /**
-     * Encrypts and pushes a `protocolMessage.appStateSyncKeyShare`
-     * carrying one or more sync keys. The lib's incoming message
-     * dispatcher persists the keys via `WaAppStateStore.upsertSyncKeys`
-     * and auto-triggers a `syncAppState()` round.
-     */
     public async sendAppStateSyncKeyShare(
         input: BuildAppStateSyncKeyShareInput,
         options: SendMessageOptions = {}
@@ -576,18 +405,6 @@ export class FakePeer {
         await this.sendMessage(message, options)
     }
 
-    /**
-     * Sends a SenderKey-encrypted **group** message.
-     *
-     * The first message in a given group bootstraps the recipient's sender
-     * key state via a pairwise `<message><enc type="pkmsg"/>` whose
-     * decrypted `Message.senderKeyDistributionMessage` field hands the
-     * SKDM to the lib. The actual content is then pushed in a separate
-     * group `<message from="<group>" participant="<peer>">` carrying an
-     * `<enc type="skmsg"/>` ciphertext.
-     *
-     * On subsequent calls only the `<enc type="skmsg"/>` stanza is pushed.
-     */
     public async sendGroupConversation(
         groupJid: string,
         text: string,
@@ -601,7 +418,6 @@ export class FakePeer {
         message: proto.IMessage,
         options: SendMessageOptions = {}
     ): Promise<void> {
-        // Lazily create the sender key for this group.
         let senderKey = this.senderKeysByGroup.get(groupJid)
         if (!senderKey) {
             senderKey = await FakeSenderKey.generate()
@@ -611,10 +427,7 @@ export class FakePeer {
         const plaintext = encodePlaintextWithPadding(message)
         const { ciphertext, distributionMessage } = await senderKey.encrypt(plaintext)
 
-        // The lib's incoming-message dispatcher walks every <enc> child in
-        // a single <message> stanza in order. We bundle the SKDM-carrying
-        // pkmsg first and the actual skmsg second so the lib's sender key
-        // store is populated in time for the skmsg decrypt step.
+        // Seed the sender key before the first skmsg for this group.
         const encChildren: FakeEncChild[] = []
 
         if (!this.groupsBootstrapped.has(groupJid)) {
@@ -646,11 +459,6 @@ export class FakePeer {
         await this.deps.pushStanza(groupStanza)
     }
 
-    /**
-     * Captures the next inbound 1:1 `<message to=this.jid>` stanza the
-     * real client sends, decrypts the matching `<enc>` child via the
-     * recv session, decodes the `proto.Message` and resolves it.
-     */
     public expectMessage(options: ExpectMessageOptions = {}): Promise<ReceivedMessage> {
         const timeoutMs = options.timeoutMs ?? 5_000
         return new Promise<ReceivedMessage>((resolve, reject) => {
@@ -661,13 +469,6 @@ export class FakePeer {
             }, timeoutMs)
 
             unsubscribe = this.deps.subscribeInboundMessages((stanza) => {
-                // Skip group messages — those are handled by
-                // `expectGroupMessage`. For 1:1 messages the wire `to`
-                // is either this peer's exact device JID (single-device
-                // case) or the bare user JID with multiple device-
-                // suffixed children inside <participants> (multi-device
-                // fanout). `findEncForPeer` walks both shapes and
-                // returns the matching <enc> if any.
                 const to = stanza.attrs.to ?? ''
                 if (to.endsWith('@g.us')) return
                 const enc = findEncForPeer(stanza, this.jid)
@@ -691,16 +492,6 @@ export class FakePeer {
         })
     }
 
-    /**
-     * Captures the next inbound group `<message to=groupJid>` stanza the
-     * real client sends, decrypts the bootstrap `<enc type=pkmsg|msg>`
-     * child addressed to this peer (extracting the SKDM), then decrypts
-     * the top-level `<enc type=skmsg>` child via the group recv session.
-     *
-     * On subsequent calls in the same chain the bootstrap pkmsg is
-     * absent and only the skmsg is decrypted using the previously
-     * stored sender key state.
-     */
     public expectGroupMessage(
         groupJid: string,
         options: ExpectGroupMessageOptions = {}
@@ -717,10 +508,6 @@ export class FakePeer {
                 if (stanza.attrs.to !== groupJid) return
                 const skmsg = findTopLevelEnc(stanza, 'skmsg')
                 if (!skmsg || !(skmsg.content instanceof Uint8Array)) return
-                // Outbound group <message to=group-jid> stanzas have no
-                // `participant` attribute (the sender is the lib client
-                // itself). The test must pass the expected sender jid in
-                // `options.senderJid` to identify the senderkey state.
                 const senderJid = options.senderJid ?? stanza.attrs.participant
                 if (!senderJid) {
                     return
@@ -751,17 +538,6 @@ export class FakePeer {
         return proto.Message.decode(padded)
     }
 
-    /**
-     * Decrypts an arbitrary `<message>` stanza captured from the wire,
-     * bypassing the `expectMessage` listener machinery. Useful for
-     * tests that need to feed messages to the recv session in a
-     * specific (e.g. out-of-order) sequence.
-     *
-     * Walks both the direct (`<message><enc/></message>`) and the
-     * fanout (`<message><participants><to><enc/></to></participants></message>`)
-     * shapes; returns `null` if the stanza carries no enc targeting
-     * this peer.
-     */
     public async decryptStanza(stanza: BinaryNode): Promise<ReceivedMessage | null> {
         const enc = findEncForPeer(stanza, this.jid)
         if (!enc || !(enc.content instanceof Uint8Array)) return null
@@ -777,7 +553,6 @@ export class FakePeer {
         stanza: BinaryNode,
         skmsgCiphertext: Uint8Array
     ): Promise<proto.IMessage> {
-        // Look for the per-recipient bootstrap enc inside <participants><to jid=peer.jid>.
         const bootstrap = findEncForPeer(stanza, this.jid)
         if (bootstrap && bootstrap.content instanceof Uint8Array) {
             const bootstrapType = bootstrap.attrs.type
@@ -804,9 +579,6 @@ export class FakePeer {
 
     private async ensureRatchetInitiated(): Promise<void> {
         if (this.ratchetInitiated) return
-        // If a prior inbound pkmsg already bootstrapped the session in
-        // Bob mode and a recv DR step minted a fresh local send chain,
-        // we can skip the X3DH initiator path entirely.
         if (this.ratchet.hasSendChain()) {
             this.ratchetInitiated = true
             return
@@ -826,20 +598,6 @@ export class FakePeer {
     }
 }
 
-/**
- * Encodes a `Message` proto with the WhatsApp-style PKCS-padded plaintext
- * the lib's signal layer expects. The padding scheme:
- *
- *     plaintext = encode(message) || repeat(padLen, padLen)
- *
- * where `padLen = 16 - (encode(message).length % 16)`. This is the same
- * padding the lib applies on the send side; the receive side strips it.
- */
-/**
- * Finds the `<enc>` child addressed to the given peer jid. Walks both
- * the direct-fanout shape (`<message><enc/></message>`) and the group
- * fanout shape (`<message><participants><to jid=peer><enc/></to></participants></message>`).
- */
 function findEncForPeer(stanza: BinaryNode, peerJid: string): BinaryNode | null {
     if (!Array.isArray(stanza.content)) return null
     for (const child of stanza.content) {

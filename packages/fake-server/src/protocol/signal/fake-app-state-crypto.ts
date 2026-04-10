@@ -1,45 +1,4 @@
-/**
- * Fake-server-side mirror of the WhatsApp Web app-state mutation crypto.
- *
- * Source:
- *   /deobfuscated/WAWebSyncd/WAWebSyncdMutationsCryptoUtils.js
- *   /deobfuscated/WAWebSyncd/WAWebSyncdLtHash.js
- *
- * Cross-checked against the lib's `WaAppStateCrypto`
- * (`src/appstate/WaAppStateCrypto.ts`) — every constant, label and
- * derivation here mirrors the lib so that ciphertext + MACs round-trip
- * cleanly. Tests in `__tests__/` import zapo-js to verify the round
- * trip end-to-end.
- *
- * Encryption pipeline (per mutation):
- *
- *   derived = HKDF(syncKey, info="WhatsApp Mutation Keys", 160)
- *     [0..32)   indexHmacKey       (HMAC-SHA256)
- *     [32..64)  valueEncryptionKey (AES-CBC)
- *     [64..96)  valueMacKey        (HMAC-SHA512)
- *     [96..128) snapshotMacKey     (HMAC-SHA256)
- *     [128..160) patchMacKey       (HMAC-SHA256)
- *
- *   plaintext = SyncActionData{ index, value, padding="", version }
- *   ciphertext = AES-CBC(valueEncryptionKey, iv, plaintext)
- *   cipherWithIv = iv || ciphertext
- *   associatedData = (operation+1) || keyId
- *   octetLength = 8-byte BE int = associatedData.byteLength
- *   valueMac = HMAC-SHA512(valueMacKey, associatedData || cipherWithIv || octetLength)[0..32]
- *   indexMac = HMAC-SHA256(indexHmacKey, indexBytes)
- *   valueBlob = cipherWithIv || valueMac
- *
- * Snapshot/patch macs:
- *
- *   snapshotMac = HMAC-SHA256(snapshotMacKey, ltHash || version_be8 || collectionName)
- *   patchMac    = HMAC-SHA256(patchMacKey, snapshotMac || valueMacs... || version_be8 || collectionName)
- *
- * LTHash transition:
- *
- *   For each value to add/remove: HKDF(value, info="WhatsApp Patch Integrity", 128) → 128-byte vector.
- *   The vector is interpreted as 64 little-endian uint16 lanes.
- *   Adds add lanes; removes subtract lanes; both with wrap-around mod 2^16.
- */
+/** App-state crypto helpers mirrored from WhatsApp Web behavior. */
 
 import {
     aesCbcDecrypt,
@@ -178,16 +137,6 @@ export class FakeAppStateCrypto {
         }
     }
 
-    /**
-     * Decrypts an outbound mutation the lib uploaded inside a
-     * `SyncdPatch`. Mirrors the lib's
-     * `WaAppStateCrypto.decryptMutation`: verifies the value MAC,
-     * AES-CBC decrypts the cipher blob, decodes the inner
-     * `SyncActionData`, and re-derives the index MAC to confirm it
-     * matches the encrypted one. Returns the plaintext mutation
-     * (index + value + version) plus the indexMac/valueMac the caller
-     * needs to advance the LTHash.
-     */
     public async decryptMutation(input: {
         readonly operation: 'set' | 'remove'
         readonly keyId: Uint8Array
@@ -325,9 +274,7 @@ export class FakeAppStateCrypto {
 }
 
 function generateAssociatedData(operation: 'set' | 'remove', keyId: Uint8Array): Uint8Array {
-    // Mirrors the lib's `generateAssociatedData`: byte 0 = `operation + 1`
-    // (SET=0+1=1, REMOVE=1+1=2), then keyId. The +1 offset is part of the
-    // wire format and not just a quirk of the proto enum encoding.
+    // byte 0 is operation+1 (set=1, remove=2), then keyId bytes.
     const opCode = operation === 'set' ? 1 : 2
     const out = new Uint8Array(1 + keyId.byteLength)
     out[0] = opCode

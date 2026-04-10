@@ -1,27 +1,3 @@
-/**
- * Phase 24 cross-check: multi-device fanout end-to-end.
- *
- * Scenario:
- *   1. Real WaClient connects + completes the noise handshake.
- *   2. Test creates a peer GROUP under a single user JID with two
- *      device ids (`0` and `1`). Each device is its own `FakePeer`
- *      with an independent Signal identity + prekey bundle. The
- *      group registers a single shared usync handler returning both
- *      device ids and a single shared prekey-fetch handler that
- *      parses the inbound `<key><user jid="...">` children and
- *      ships one bundle per requested device JID.
- *   3. Test triggers a fresh prekey upload + calls
- *      `client.sendMessage(userJid, { conversation })`.
- *   4. The lib resolves the peer via usync (gets back two devices),
- *      runs `fetchKeyBundles` for both device JIDs, runs X3DH twice,
- *      and pushes a single `<message><participants>` stanza with one
- *      `<to jid=user:N>...<enc/></to>` child per device.
- *   5. Each FakePeer's `expectMessage` resolves with the same
- *      decrypted plaintext.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -73,15 +49,13 @@ test('paired client.sendMessage fans out to all devices of a multi-device peer',
         await pairedPromise
         const pipelineAfterPair = await pipelineAfterPairPromise
 
-        const peers = await server.createFakePeerGroup(
+        const peers = await server.createFakePeerWithDevices(
             { userJid, deviceIds: [0, 1], displayName: 'Multi Device' },
             pipelineAfterPair
         )
         assert.equal(peers.length, 2)
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
-        // Capture the outbound <message> stanza so we can confirm the
-        // lib actually fanned out to both devices via <participants>.
         const stanzaPromise = server.expectStanza({ tag: 'message' }, { timeoutMs: 8_000 })
         const device0Promise = peers[0].expectMessage({ timeoutMs: 8_000 })
         const device1Promise = peers[1].expectMessage({ timeoutMs: 8_000 })
@@ -90,8 +64,6 @@ test('paired client.sendMessage fans out to all devices of a multi-device peer',
 
         const stanza = await stanzaPromise
         assert.equal(stanza.tag, 'message')
-        // The lib's fanout produces a <participants> wrapper with one
-        // <to jid=device-jid> per recipient device.
         const children: readonly BinaryNode[] = Array.isArray(stanza.content)
             ? stanza.content
             : []
@@ -112,7 +84,6 @@ test('paired client.sendMessage fans out to all devices of a multi-device peer',
         assert.ok(toJids.has(peers[0].jid), `missing <to jid=${peers[0].jid}>`)
         assert.ok(toJids.has(peers[1].jid), `missing <to jid=${peers[1].jid}>`)
 
-        // Each device decrypts the same plaintext via its own session.
         const [received0, received1] = await Promise.all([device0Promise, device1Promise])
         assert.equal(received0.message.conversation, expectedText)
         assert.equal(received1.message.conversation, expectedText)

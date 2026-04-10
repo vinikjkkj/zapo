@@ -1,20 +1,4 @@
-/**
- * Builds a Signal pre-key bundle that the fake server can publish on
- * behalf of a `FakePeer` so the real `WaClient` can fetch it via the
- * `<key_fetch>` IQ and start an outgoing Signal session.
- *
- * Sources:
- *   /deobfuscated/WAWebFetch/WAWebFetchPrekeysJob.js
- *   /deobfuscated/WASignal/WASignalKeys.js
- * Cross-checked against the lib's `parseUserKeyBundle` in
- * `src/signal/api/SignalSessionSyncApi.ts` and `initiateSessionOutgoing`
- * in `src/signal/session/SignalSession.ts`.
- *
- * The signed pre-key signature uses the WhatsApp variant of XEdDSA over
- * the **serialized (33-byte, 0x05-prefixed)** signed pre-key public key.
- * Both the lib's `verifySignalSignature` and `signSignalMessage` operate
- * on the serialized form, so we sign the serialized public key here.
- */
+/** Generates Signal prekey bundles for fake peers. */
 
 import {
     type SignalKeyPair,
@@ -24,14 +8,11 @@ import {
 } from '../../transport/crypto'
 
 export interface FakePeerKeyBundle {
-    /** 32-bit registration id (re-used for the PreKeySignalMessage proto). */
     readonly registrationId: number
-    /** Long-term identity keypair (the "Bob" identity from the lib's POV). */
     readonly identityKeyPair: SignalKeyPair
     readonly signedPreKey: {
         readonly id: number
         readonly keyPair: SignalKeyPair
-        /** XEdDSA signature over `toSerializedPubKey(signedPreKey.keyPair.pubKey)`. */
         readonly signature: Uint8Array
     }
     readonly oneTimePreKeys: ReadonlyArray<{
@@ -41,15 +22,10 @@ export interface FakePeerKeyBundle {
 }
 
 export interface GenerateFakePeerKeyBundleOptions {
-    /** How many one-time prekeys to mint (default: 4). */
     readonly oneTimePreKeyCount?: number
-    /** Optional pre-existing identity keypair. */
     readonly identityKeyPair?: SignalKeyPair
-    /** Optional pre-existing registration id. */
     readonly registrationId?: number
-    /** Optional fixed signed prekey id (default: 1). */
     readonly signedPreKeyId?: number
-    /** Optional starting one-time prekey id (default: 1). */
     readonly firstOneTimePreKeyId?: number
 }
 

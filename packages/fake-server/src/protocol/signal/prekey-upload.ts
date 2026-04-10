@@ -1,33 +1,4 @@
-/**
- * Parser for the client's PreKey upload IQ.
- *
- * Source:
- *   /deobfuscated/WAWebUploadPre/WAWebUploadPreKeysJob.js
- *   /deobfuscated/WAWebSignal/WAWebSignalUtilsApi.js (xmppPreKey, xmppSignedPreKey)
- *
- * Wire layout (extracted from the deobfuscated `wap("iq", ..., wap(...))` calls):
- *
- *   <iq xmlns="encrypt" type="set" to="s.whatsapp.net" id="...">
- *     <registration>[4-byte BE registration id]</registration>
- *     <type>[KEY_BUNDLE_TYPE byte(s) — empty in current builds]</type>
- *     <identity>[32-byte raw curve25519 public key]</identity>
- *     <list>
- *       <key>
- *         <id>[3-byte BE prekey id]</id>
- *         <value>[32-byte public key]</value>
- *       </key>
- *       ...
- *     </list>
- *     <skey>
- *       <id>[3-byte BE signed prekey id]</id>
- *       <value>[32-byte public key]</value>
- *       <signature>[64-byte XEdDSA signature]</signature>
- *     </skey>
- *   </iq>
- *
- * The parser turns the binary node back into a typed `ClientPreKeyBundle`
- * the fake peer can use for X3DH session setup.
- */
+/** Parser for client prekey upload IQs (`xmlns=encrypt`, `type=set`). */
 
 import type { BinaryNode } from '../../transport/codec'
 

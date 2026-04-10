@@ -1,19 +1,3 @@
-/**
- * Phase 4 cross-check tests for stream:error variants.
- *
- * For each variant we cover, the fake server pushes a `<stream:error/>`
- * stanza to a freshly-connected `WaClient` and asserts the lib reacts with
- * the expected `connection { status: 'close', reason }` event.
- *
- * The reasons we assert against are the constants the lib emits when its
- * own `WaStreamControlCoordinator` parses each variant — they live in
- * `src/protocol/stream.ts` (`WA_DISCONNECT_REASONS`). The fake server only
- * builds the stanza; the lib does the parsing & dispatching.
- *
- * NOTE: this file is allowed to import zapo-js directly because it is a
- * cross-check test that drives the lib end-to-end.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -54,8 +38,6 @@ async function pushStreamErrorAndWaitForClose(
 ): Promise<{ readonly client: WaClient; readonly close: CloseEvent }> {
     server.scenario((s) => {
         s.afterAuth(async (pipeline) => {
-            // Hand the pipeline a moment to settle the success node before we
-            // intentionally tear it down with the stream:error.
             await new Promise((resolve) => setTimeout(resolve, 30))
             await pipeline.sendStanza(streamError)
         })

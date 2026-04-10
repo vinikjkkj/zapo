@@ -1,34 +1,3 @@
-/**
- * Phase 19 cross-check: history sync via external (downloaded) blob.
- *
- * Scenario:
- *   1. Real WaClient connects + completes the noise handshake.
- *   2. Test encodes a `HistorySync` proto + zlib-compresses it via
- *      `encodeHistorySyncPlaintext` (the same encoder used by the
- *      inline path) and publishes the bytes as an `history` media blob
- *      via `server.publishMediaBlob`. The fake server runs the lib's
- *      real `WaMediaCrypto.encryptBytes` against the plaintext, mints
- *      a fresh 32-byte media key, computes both sha-256 integrity
- *      hashes, and stores the ciphertext keyed by a random URL path.
- *   3. Test triggers a fresh prekey upload, creates a FakePeer, then
- *      uses `peer.sendHistorySyncExternal` to push a
- *      `historySyncNotification` whose `directPath` is the absolute
- *      `http://127.0.0.1:port/<path>` URL the fake server's HTTP
- *      listener will serve, plus the mediaKey + sha-256s.
- *   4. The lib decrypts the protocol message, falls through to its
- *      media transfer client, GETs the encrypted blob from the fake
- *      server, decrypts via real `WaMediaCrypto.decryptBytes`,
- *      decompresses, decodes the `HistorySync` proto, persists the
- *      conversations + pushnames + messages and emits
- *      `history_sync_chunk`.
- *   5. Test asserts the event counts match the input.
- *
- * The whole pipeline runs against the lib's real media transfer +
- * crypto path with no stubbing on either side.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

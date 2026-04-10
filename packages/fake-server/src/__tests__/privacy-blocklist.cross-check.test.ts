@@ -1,16 +1,3 @@
-/**
- * Phase 39 cross-check: privacy + blocklist auto-handlers.
- *
- * Drives `client.privacy.*` against the global handlers and asserts
- * the round-trip:
- *   - `getPrivacySettings` returns the default state.
- *   - `setPrivacySetting` mutates the server-side state and the next
- *     `getPrivacySettings` reflects the change.
- *   - `getBlocklist` reflects `blockUser` / `unblockUser` round-trips.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -47,16 +34,13 @@ test('client.privacy.setPrivacySetting mutates the registry and is observable', 
         await server.waitForAuthenticatedPipeline()
         await client.privacy.setPrivacySetting('readReceipts', 'none')
 
-        // Listener saw the mutation.
         assert.equal(captured.length, 1, 'expected onOutboundPrivacySet to fire')
         assert.equal(captured[0].category, 'readreceipts')
         assert.equal(captured[0].value, 'none')
 
-        // The registry reflects the change.
         const snapshot = server.privacySettingsSnapshot()
         assert.equal(snapshot.settings.readreceipts, 'none')
 
-        // A subsequent get returns the new value.
         const settings = await client.privacy.getPrivacySettings()
         assert.equal(settings.readReceipts, 'none')
     } finally {
@@ -74,17 +58,14 @@ test('client.privacy.getBlocklist + blockUser + unblockUser round-trip via the r
         await client.connect()
         await server.waitForAuthenticatedPipeline()
 
-        // Empty initially.
         const empty = await client.privacy.getBlocklist()
         assert.deepEqual(empty.jids, [])
 
-        // Block.
         await client.privacy.blockUser(peerJid)
         assert.deepEqual(server.blocklistSnapshot(), [peerJid])
         const afterBlock = await client.privacy.getBlocklist()
         assert.deepEqual(afterBlock.jids, [peerJid])
 
-        // Unblock.
         await client.privacy.unblockUser(peerJid)
         assert.deepEqual(server.blocklistSnapshot(), [])
         const afterUnblock = await client.privacy.getBlocklist()

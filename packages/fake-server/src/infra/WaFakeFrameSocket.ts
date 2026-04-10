@@ -1,38 +1,9 @@
-/**
- * WhatsApp Web framing layer.
- *
- * Source:
- *   /deobfuscated/WAF/WAFrameSocket.js
- *   /deobfuscated/WAWebOpenC/WAWebOpenChatSocket.js (lines 13-16 for the prologue)
- *
- * Wire layout
- * -----------
- * Connection start, optional routing prefix:
- *     0xED  <hi:u8>  <lo:u16-be>  <routingBytes...>
- *
- * Connection start, mandatory version header (4 bytes):
- *     "W"  "A"  0x06  0x03
- *     - 0x06 = protocol version P
- *     - 0x03 = WAP dictionary version
- *
- * After the prologue, every frame in either direction is wrapped in a 3-byte
- * big-endian length prefix:
- *     <hi:u8>  <lo:u16-be>  <bodyBytes...>     // body length up to (1 << 24) - 1
- *
- * The frame socket is intentionally protocol-naive: it does not interpret
- * frame contents (those are noise handshake or stanza payloads). It only
- * exposes a callback when a complete frame arrives and an action to write
- * one out.
- *
- * This file is server scaffolding plus a /deobfuscated mirror of the framing.
- */
+/** WhatsApp frame codec (prologue + 3-byte length-prefixed frames). */
 
 import type { WaFakeConnection } from './WaFakeConnection'
 
 const PROLOGUE_W = 0x57
 const PROLOGUE_A = 0x41
-const PROLOGUE_PROTOCOL_VERSION = 0x06
-const PROLOGUE_DICT_VERSION = 0x03
 const ROUTING_MAGIC = 0xed
 const VERSION_HEADER_LENGTH = 4
 const FRAME_LENGTH_PREFIX_BYTES = 3
@@ -106,7 +77,6 @@ export class WaFakeFrameSocket {
         }
 
         if (buffer[0] === ROUTING_MAGIC) {
-            // Need at least magic + 3 length bytes to know the routing payload size.
             if (buffer.byteLength < 4) {
                 return false
             }
@@ -128,12 +98,6 @@ export class WaFakeFrameSocket {
         }
         const protocolVersion = buffer[versionStart + 2]
         const dictVersion = buffer[versionStart + 3]
-        if (
-            protocolVersion !== PROLOGUE_PROTOCOL_VERSION ||
-            dictVersion !== PROLOGUE_DICT_VERSION
-        ) {
-            // Accept and report — we don't enforce a specific version yet.
-        }
 
         offset = versionStart + VERSION_HEADER_LENGTH
         this.inboundBuffer = buffer.slice(offset)

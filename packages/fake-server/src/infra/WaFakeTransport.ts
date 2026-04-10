@@ -1,25 +1,4 @@
-/**
- * Post-handshake transport encryption for the fake server.
- *
- * Source: /deobfuscated/WANoise/WANoiseSocket.js
- *
- * Once the noise handshake completes, every frame on the wire is AES-GCM
- * encrypted with one of the two keys derived in `finish()`. Each side
- * maintains an independent monotonically-incrementing counter for its own
- * direction:
- *
- *   - server send  → uses sendKey, counter starts at 0 (matches client recv counter)
- *   - server recv  → uses recvKey, counter starts at 0 (matches client send counter)
- *
- * The 12-byte AES-GCM nonce is the counter encoded as u32 BE in the last
- * 4 bytes; bytes 0-7 are zero. Same layout as the handshake nonces.
- *
- * No additional authenticated data is used post-handshake (the AAD slot
- * is empty).
- *
- * This file is server scaffolding plus a /deobfuscated mirror of the noise
- * transport layer.
- */
+/** Post-handshake Noise transport (AES-GCM with direction-specific counters). */
 
 import { aesGcmDecrypt, aesGcmEncrypt, type CryptoKey } from '../transport/crypto'
 

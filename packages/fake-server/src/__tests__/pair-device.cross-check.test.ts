@@ -1,24 +1,3 @@
-/**
- * Phase 10 cross-check: full QR-pairing flow.
- *
- * The fake server drives a real `WaClient` from "fresh, no credentials"
- * through pairing all the way to `auth_paired` (with a populated
- * `meJid`) — entirely via the wire, no auth-store stubbing.
- *
- *   1. Client connects, completes Noise XX, receives `<success/>`.
- *   2. Server sends `<iq type="set" xmlns="md"><pair-device><ref/>x6></iq>`.
- *   3. Lib emits `auth_qr` with `ref,noisePub,identityPub,advSecret,platform`.
- *   4. Test parses the QR string, hands the `advSecretKey` back to the
- *      fake server.
- *   5. Server signs an `ADVSignedDeviceIdentityHMAC` with a fresh fake
- *      primary identity and pushes a `pair-success` IQ.
- *   6. Lib verifies HMAC + account signature, replies with
- *      `<pair-device-sign>`, persists credentials and emits `auth_paired`.
- *
- * NOTE: this file is allowed to import zapo-js directly because it is a
- * cross-check test that drives the lib end-to-end.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

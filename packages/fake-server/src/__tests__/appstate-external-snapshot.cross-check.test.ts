@@ -1,33 +1,4 @@
-/**
- * Phase 22 cross-check: app-state sync via external `md-app-state`
- * media blob.
- *
- * Scenario:
- *   1. Real WaClient connects + completes the noise handshake.
- *   2. Test mints a fresh sync key, applies a chat MUTE mutation to a
- *      `FakeAppStateCollection` for `regular_high`, and encodes the
- *      collection as a `SyncdSnapshot` blob.
- *   3. The snapshot bytes are published as an `md-app-state` media
- *      blob via `server.publishMediaBlob`. The fake server runs the
- *      lib's real `WaMediaCrypto.encryptBytes` against the snapshot,
- *      mints a fresh 32-byte media key + sha-256s, and stores the
- *      ciphertext on the HTTPS listener.
- *   4. Test wraps the blob descriptor inside an `ExternalBlobReference`
- *      proto via `buildExternalBlobReference` and registers a payload
- *      provider that ships it inside the `<sync><collection><snapshot>`
- *      child of the next app-state sync IQ response.
- *   5. Test ships the sync key to the lib via
- *      `peer.sendAppStateSyncKeyShare`. The lib auto-imports the key,
- *      auto-syncs, sees the `<snapshot>`, downloads + decrypts the
- *      blob via real `WaMediaTransferClient.downloadAndDecrypt`,
- *      decodes the inner `SyncdSnapshot`, applies the contained
- *      mutation, and emits a `chat_event { action: 'mute', ... }`.
- *
- * The whole pipeline runs against the lib's real media transfer +
- * app-state crypto path with no stubbing on either side.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
+/** Cross-check: app-state sync via external `md-app-state` snapshot blob. */
 
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
@@ -68,9 +39,6 @@ test('app-state sync via external md-app-state snapshot blob', async () => {
     const server = await FakeWaServer.start()
     const { client } = createZapoClient(server, {
         sessionId: 'app-state-external-snapshot',
-        // The lib's WaClient skips snapshot-source mutations from the
-        // chat_event stream by default — we need to opt in so the test
-        // can observe the mute action that arrived inside the snapshot.
         emitSnapshotMutations: true
     })
 
@@ -96,9 +64,6 @@ test('app-state sync via external md-app-state snapshot blob', async () => {
     const snapshotBytes = await collection.encodeSnapshot()
     const snapshotVersion = collection.version
 
-    // Publish the snapshot bytes as an md-app-state media blob — the
-    // lib will GET them from the fake HTTPS listener and run real
-    // WaMediaCrypto.decryptBytes against the ciphertext.
     const mediaBlob = await server.publishMediaBlob({
         mediaType: 'md-app-state',
         plaintext: snapshotBytes

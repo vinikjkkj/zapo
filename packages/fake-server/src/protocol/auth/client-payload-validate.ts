@@ -1,28 +1,4 @@
-/**
- * ClientPayload parser and dispatcher.
- *
- * Source:
- *   /deobfuscated/WAWebClientPayload/WAWebClientPayload.js
- *   - getClientPayloadForLogin       → builds the login flavor
- *   - getClientPayloadForRegistration → builds the registration flavor
- *
- * The fake server only consumes the payload — it never produces one — so
- * this module is the inverse of the deobfuscated builders. It decodes the
- * raw bytes coming out of the noise handshake into a typed result that
- * higher layers can use to decide which response to send back.
- *
- * Two flavors:
- *
- *   1. Registration (first-time pairing)
- *      Identified by the presence of `devicePairingData`. Carries the
- *      Signal identity key, signed pre-key + signature, registration ID
- *      and DeviceProps so the server can pair the new companion device.
- *
- *   2. Login (resume / reconnection)
- *      Identified by the presence of `username` (the JID user as uint64)
- *      and the absence of `devicePairingData`. Carries the login counter
- *      and the device index.
- */
+/** ClientPayload parser/validator (registration vs login flavors). */
 
 import { proto, type Proto } from '../../transport/protos'
 

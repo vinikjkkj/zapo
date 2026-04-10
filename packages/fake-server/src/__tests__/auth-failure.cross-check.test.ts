@@ -1,15 +1,3 @@
-/**
- * Phase 4 cross-check: server-side handshake / auth failure.
- *
- * The fake server is put into reject mode so it closes every websocket
- * immediately after accepting it. The lib's `client.connect()` should
- * reject because the noise handshake never completes (the underlying
- * websocket dies before the first noise message arrives).
- *
- * NOTE: this file is allowed to import zapo-js directly because it is a
- * cross-check test that drives the lib end-to-end.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

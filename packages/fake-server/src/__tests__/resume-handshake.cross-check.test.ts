@@ -1,24 +1,3 @@
-/**
- * Phase 7 cross-check: noise IK (resume) handshake.
- *
- * Scenario:
- *   1. Client connects fresh — completes XX handshake; the lib persists
- *      the fake server's static key in the auth store.
- *   2. Client disconnects.
- *   3. The same auth store is reused. A second `WaClient` instance is
- *      created against the same `FakeWaServer` (whose serverStaticKeyPair
- *      is stable across the test).
- *   4. The second connect now happens via IK (server static key cached).
- *      The fake server's pipeline takes the IK code path and replies with
- *      a ServerHello that omits the encrypted static — exactly what the
- *      lib's IK initiator expects to skip the XX fallback.
- *   5. Both connects must reach `connection { open }` and emit
- *      `connection_success`.
- *
- * NOTE: this file is allowed to import zapo-js directly because it is a
- * cross-check test that drives the lib end-to-end.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -130,7 +109,6 @@ test('resume handshake: second connection uses IK and reaches connection_open', 
     const authStore = new InMemoryAuthStore()
 
     try {
-        // ── First connect: full XX handshake ──────────────────────────────
         const firstClient = buildClientFor(server, authStore, 'resume-1')
         const firstSuccess = waitForEvent(firstClient, 'connection_success')
         const firstOpen = waitForOpen(firstClient)
@@ -147,7 +125,6 @@ test('resume handshake: second connection uses IK and reaches connection_open', 
 
         await firstClient.disconnect()
 
-        // ── Second connect: IK resume handshake ───────────────────────────
         const secondClient = buildClientFor(server, authStore, 'resume-2')
         const secondSuccess = waitForEvent(secondClient, 'connection_success')
         const secondOpen = waitForOpen(secondClient)

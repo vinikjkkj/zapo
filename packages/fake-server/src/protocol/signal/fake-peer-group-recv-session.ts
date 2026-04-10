@@ -1,28 +1,4 @@
-/**
- * Fake-peer-side group SenderKey RECEIVE session.
- *
- * Decrypts inbound `<enc type="skmsg"/>` ciphertexts a real `WaClient`
- * sends to a group the fake peer is a member of. Pairs with the 1:1
- * `FakePeerRecvSession` (which decrypts the bootstrap pkmsg/msg
- * carrying the `senderKeyDistributionMessage`) to complete the
- * end-to-end group decrypt path.
- *
- * Sources:
- *   /deobfuscated/WASignal/WASignalSenderKeyRecord.js
- *   /deobfuscated/WASignal/WASignalSenderKeyMessage.js
- *
- * Cross-checked against the lib's `SenderKeyManager.decryptGroupMessage`
- * (`src/signal/group/SenderKeyManager.ts`) and the chain key derivation
- * in `src/signal/group/SenderKeyChain.ts`.
- *
- * Wire format (skmsg ciphertext bytes):
- *
- *     versionByte (0x33) || SenderKeyMessage proto || 64-byte XEdDSA signature
- *
- * Where the proto carries `id`, `iteration`, `ciphertext` and the
- * AES-CBC plaintext is the same PKCS-padded `Message` proto used by
- * the 1:1 path.
- */
+/** Receiver-side SenderKey session for group `skmsg` decrypt. */
 
 import {
     aesCbcDecrypt,
@@ -50,26 +26,14 @@ export class FakePeerGroupRecvSessionError extends Error {
 
 interface RecvSenderKeyRecord {
     keyId: number
-    /** Next iteration we expect to derive from `chainKey`. */
     nextIteration: number
     chainKey: Uint8Array
-    /** 33-byte serialized XEdDSA verification key. */
     signingPublicKey: Uint8Array
 }
 
-/**
- * Per-(groupId, senderJid) recv state on the fake peer side. Bootstrapped
- * by `addDistribution(...)` which parses the `axolotlSenderKeyDistributionMessage`
- * bytes the fake peer pulled out of the bootstrap pkmsg, and reused for
- * subsequent skmsgs in the same chain.
- */
 export class FakePeerGroupRecvSession {
     private readonly records = new Map<string, RecvSenderKeyRecord>()
 
-    /**
-     * Bootstraps a recv senderkey state from a `SenderKeyDistributionMessage`
-     * payload (the inner bytes of `axolotlSenderKeyDistributionMessage`).
-     */
     public addDistribution(
         groupId: string,
         senderJid: string,
@@ -109,11 +73,6 @@ export class FakePeerGroupRecvSession {
         })
     }
 
-    /**
-     * Decrypts a group `<enc type="skmsg"/>` payload. Requires
-     * `addDistribution` to have been called first for the same
-     * (groupId, senderJid) pair.
-     */
     public async decryptGroupMessage(
         groupId: string,
         senderJid: string,
@@ -135,15 +94,7 @@ export class FakePeerGroupRecvSession {
             )
         }
         const sigStart = skmsgBytes.byteLength - SIGNAL_SIGNATURE_LENGTH
-        // The lib's `verifySignalSignature` mutates the signature buffer
-        // in place (clears the high bit of byte 63 then restores it in
-        // its `finally`). When the same `<message>` stanza fans out to
-        // multiple FakePeers in the group recv path, each peer
-        // verifies the SAME signature bytes concurrently — and
-        // because `subarray` returns a view, the mutations race and
-        // corrupt the shared buffer. Copy the signature into a fresh
-        // ArrayBuffer per call so every verify gets its own writable
-        // 64 bytes.
+        // verifySignalSignature mutates the signature buffer; isolate with copies.
         const versionedContent = skmsgBytes.subarray(0, sigStart).slice()
         const signature = skmsgBytes.subarray(sigStart).slice()
         const protoBody = versionedContent.subarray(1)
@@ -180,9 +131,6 @@ export class FakePeerGroupRecvSession {
             )
         }
 
-        // Walk the chain forward to the requested iteration. Same scheme
-        // as the lib: HMAC(chainKey, [1]) → seed input, HMAC(chainKey, [2])
-        // → next chain key, HKDF(seed, "WhisperGroup", 50) → message seed.
         let chainKey = record.chainKey
         let seed: Uint8Array | null = null
         let iteration = record.nextIteration

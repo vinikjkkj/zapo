@@ -1,19 +1,4 @@
-/**
- * Per-connection pipeline that drives a single client through the full
- * fake-server lifecycle:
- *
- *   1. Wait for the version-header prologue
- *   2. Receive ClientHello (noise XX msg 1)
- *   3. Send ServerHello with cert chain (noise XX msg 2)
- *   4. Receive ClientFinish (noise XX msg 3) → derive transport keys
- *   5. Decrypt the ClientPayload from ClientFinish
- *   6. Push the success stanza encrypted with the transport keys
- *   7. Continue dispatching encrypted binary stanzas
- *
- * This file is server scaffolding; the protocol-specific bits it calls into
- * (handshake, cert chain, success node, ClientPayload parser) are individually
- * derived from /deobfuscated.
- */
+/** Per-connection lifecycle pipeline (Noise handshake + stanza loop). */
 
 import { buildFakeCertChain, type FakeNoiseRootCa } from '../protocol/auth/cert-chain'
 import {
@@ -100,21 +85,12 @@ export class WaFakeConnectionPipeline {
         return this.state.kind === 'authenticated'
     }
 
-    /**
-     * Encrypts a stanza with the post-handshake transport keys and pushes
-     * it to the client. Throws if the connection is not yet authenticated.
-     */
     public async sendStanza(node: BinaryNode): Promise<void> {
         if (this.state.kind !== 'authenticated') {
             throw new Error(`cannot send stanza while pipeline is in state "${this.state.kind}"`)
         }
         const stanza = encodeBinaryNodeStanza(node)
-        // The transport's encryptFrame internally serializes via a
-        // promise chain so concurrent callers still see strict FIFO
-        // ordering at the wire — see WaFakeTransport.encryptFrame for
-        // the rationale. Each caller's continuation runs in the
-        // microtask queue immediately after the previous one's, so
-        // sendFrame() calls below also fire in order.
+        // Keep outbound encrypted frames in FIFO order across concurrent callers.
         const ciphertext = await this.state.transport.encryptFrame(stanza)
         this.frameSocket.sendFrame(ciphertext)
     }
@@ -164,8 +140,7 @@ export class WaFakeConnectionPipeline {
             throw new Error('ClientHello missing ephemeral')
         }
 
-        // IK ClientHello carries `static` (encrypted client static) + `payload`.
-        // XX ClientHello has only `ephemeral`.
+        // IK includes encrypted static+payload in ClientHello; XX does not.
         if (clientHello.static && clientHello.payload) {
             await this.handleIkClientHello(clientHello)
         } else {
@@ -214,16 +189,7 @@ export class WaFakeConnectionPipeline {
         }
     }
 
-    /**
-     * IK handshake server-side. The client has the cached server static key
-     * and sends ephemeral + encrypted static + encrypted payload in a single
-     * ClientHello. We complete the handshake in a single round-trip:
-     * decrypt the client material, generate our ephemeral, and respond with
-     * a ServerHello carrying only `ephemeral` + cert payload (no `static`,
-     * which would otherwise trigger the client's XX fallback path).
-     *
-     * Source: /deobfuscated/WAWebOpenC/WAWebOpenChatSocket.js (function q)
-     */
+    /** Server-side IK path used when the client already cached our static key. */
     private async handleIkClientHello(clientHello: {
         readonly ephemeral?: Uint8Array | null
         readonly static?: Uint8Array | null
@@ -250,7 +216,6 @@ export class WaFakeConnectionPipeline {
         const clientPayloadBytes = await handshake.decrypt(encryptedClientPayload)
         const clientPayload = parseClientPayload(clientPayloadBytes)
 
-        // ServerHello side of IK.
         const serverEphemeral = await X25519.generateKeyPair()
         await handshake.authenticate(serverEphemeral.pubKey)
         await handshake.mixIntoKey(
@@ -281,8 +246,8 @@ export class WaFakeConnectionPipeline {
         })
         this.state = { kind: 'authenticated', transport }
 
-        this.events.onAuthenticated?.({ clientPayload, clientStaticKey })
         await this.sendStanza(buildSuccessNode(this.config.successNodeAttributes))
+        this.events.onAuthenticated?.({ clientPayload, clientStaticKey })
     }
 
     private async handleClientFinish(
@@ -309,8 +274,8 @@ export class WaFakeConnectionPipeline {
         })
         this.state = { kind: 'authenticated', transport }
 
-        this.events.onAuthenticated?.({ clientPayload, clientStaticKey })
         await this.sendStanza(buildSuccessNode(this.config.successNodeAttributes))
+        this.events.onAuthenticated?.({ clientPayload, clientStaticKey })
     }
 
     private async handleAuthenticatedFrame(
@@ -331,12 +296,7 @@ export class WaFakeConnectionPipeline {
             return
         }
 
-        // Auto-ack outbound `<message>` stanzas. The lib's
-        // `WaMessageClient.publish` registers the message id with
-        // `WaNodeOrchestrator.tryResolvePending`, so any node carrying
-        // the same id resolves the pending publish promise. Sending an
-        // `<ack id=msg-id class=receipt type=text from=peer-jid/>` is
-        // the smallest reply that unblocks the lib.
+        // Mirror the minimal ack shape that resolves the lib pending publish.
         if (node.tag === 'message' && node.attrs.id) {
             const messageType = node.attrs.type ?? 'text'
             const from = node.attrs.to ?? 's.whatsapp.net'

@@ -1,19 +1,3 @@
-/**
- * Phase 31 cross-check: status broadcast inbound message.
- *
- * Scenario:
- *   1. Fake peer encrypts a 1:1 message via its existing Signal
- *      session with the lib, but overrides the outbound `<message>`
- *      `from` attribute to `status@broadcast` and stamps the peer's
- *      device JID into `participant` (the wire shape WhatsApp uses for
- *      status updates).
- *   2. The lib decrypts via the peer's session and emits a `message`
- *      event with `isBroadcastChat=true`, `chatJid=status@broadcast`,
- *      `senderJid=<peer-device>` and the decoded `proto.IMessage`.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

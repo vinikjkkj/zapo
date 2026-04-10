@@ -1,19 +1,4 @@
-/**
- * Drives the QR-pairing flow with a real `WaClient`.
- *
- * The fake server can run a full pairing exchange end-to-end with no
- * mocks: it sends `pair-device` IQs (with random refs) right after the
- * client emits a stream `<success/>`, and once the client has acked the
- * pair-device IQ AND someone has fed in the `advSecretKey` (extracted
- * from the QR string the lib emits via `auth_qr`), it sends a fully
- * signed `pair-success` IQ. The lib's `WaPairingFlow.handlePairSuccess`
- * verifies the HMAC, the account signature, replies with
- * `<pair-device-sign>` and emits `auth_paired` with the new credentials.
- *
- * Cross-checked against `src/auth/pairing/WaPairingFlow.ts` —
- * specifically the `handlePairSuccess` and `buildPairSuccessResponseIdentity`
- * paths in the lib.
- */
+/** Runs the server side of the QR pairing flow. */
 
 import type { WaFakeConnectionPipeline } from '../infra/WaFakeConnectionPipeline'
 import {
@@ -25,15 +10,10 @@ import { buildPairDeviceIq, buildPairSuccessIq } from '../protocol/auth/pair-dev
 import { randomBytesAsync } from '../transport/crypto'
 
 export interface FakePairingDriverOptions {
-    /** Companion device JID to assign in the `pair-success` IQ. */
     readonly deviceJid: string
-    /** Optional companion LID JID. */
     readonly deviceLid?: string
-    /** Companion device id (default: 1). */
     readonly companionDeviceId?: number
-    /** Platform name (default: `IOS`). */
     readonly platform?: string
-    /** Optional pre-generated primary identity (default: random). */
     readonly primary?: FakePrimaryDevice
 }
 
@@ -44,12 +24,7 @@ export interface CompanionPairingMaterial {
 
 export interface FakePairingDriverDeps {
     readonly pipeline: WaFakeConnectionPipeline
-    /**
-     * Resolves to the companion's pairing material (advSecretKey +
-     * identity pubkey) once the test side has extracted it from the
-     * lib's `auth_qr` event. The driver awaits this before building
-     * the `pair-success` IQ.
-     */
+    readonly waitForPairDeviceAck?: (pairDeviceIqId: string) => Promise<void>
     readonly companionMaterialResolver: () => Promise<CompanionPairingMaterial>
 }
 
@@ -66,15 +41,13 @@ export class FakePairingDriver {
     public async run(): Promise<void> {
         this.primary = this.options.primary ?? (await generateFakePrimaryDevice())
 
-        // Send 6 random refs. The lib uses each ref as an opaque marker
-        // when emitting the QR string; their content is not validated.
         const refs = await Promise.all(Array.from({ length: 6 }, () => randomBytesAsync(16)))
-        await this.deps.pipeline.sendStanza(buildPairDeviceIq({ refs }))
+        const pairDeviceIq = buildPairDeviceIq({ refs })
+        await this.deps.pipeline.sendStanza(pairDeviceIq)
+        const waitForAck =
+            this.deps.waitForPairDeviceAck?.(pairDeviceIq.attrs.id) ?? Promise.resolve()
 
-        // Wait for the test to extract the companion's advSecretKey +
-        // identity pubkey from the lib's `auth_qr` event and feed them
-        // back here.
-        const material = await this.deps.companionMaterialResolver()
+        const [material] = await Promise.all([this.deps.companionMaterialResolver(), waitForAck])
 
         const { deviceIdentityBytes } = await buildAdvSignedDeviceIdentity({
             primary: this.primary,

@@ -1,17 +1,3 @@
-/**
- * Phase 38 cross-check: lifecycle handlers (logout / remove-companion-device).
- *
- * The other Tier 1 handlers (`abt get props`, `w:p get` ping,
- * `encrypt set rotate`) only fire from background lib code paths
- * (startup AB props sync, keepalive timer, signed-prekey rotation
- * timer). They don't have a public API hook so we can't drive them
- * cleanly here — we trust the matcher registration in the
- * `FakeWaServer` constructor and rely on every other cross-check to
- * fail loudly if any of them broke.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -64,8 +50,6 @@ test('client.logout sends remove-companion-device and fires the logout listener'
         await pairedPromise
         const pipelineAfterPair = await pipelineAfterPairPromise
 
-        // Drive the post-pair prekey upload sync. Without this the lib
-        // can still be in the middle of bring-up when we issue logout.
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
         await client.logout()

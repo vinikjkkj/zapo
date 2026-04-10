@@ -1,23 +1,4 @@
-/**
- * HTTPS listener for fake media uploads + downloads.
- *
- * The lib's `WaMediaTransferClient` hardcodes `https://` for media
- * upload + relative-path download URLs (see `buildUploadUrl` in
- * `src/client/messages.ts` and `resolveUrls` in
- * `src/media/WaMediaTransferClient.ts`). To intercept those flows
- * end-to-end the fake server has to speak TLS.
- *
- * The cert/key below is a throwaway 100-year self-signed RSA pair
- * generated locally with `openssl req -x509 -newkey rsa:2048 ...`.
- * It is committed to the repo because it has zero security value
- * (only signs the literal hostname `fake-media.local`, never trusted
- * by any production CA, only loaded by test fixtures). Tests opt the
- * lib into trusting the cert by injecting a custom `https.Agent`
- * with `rejectUnauthorized: false` via
- * `proxy: { mediaUpload, mediaDownload }`.
- *
- * This file is server scaffolding, not a `/deobfuscated` mirror.
- */
+/** HTTPS listener used by fake media upload/download flows. */
 
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
 import type { AddressInfo } from 'node:net'

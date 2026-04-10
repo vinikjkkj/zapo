@@ -1,39 +1,13 @@
-/**
- * IQ router for the fake server.
- *
- * Source: dispatch model derived from
- *   /deobfuscated/WAWebHandleI/WAWebHandleIqResponse.js (request/response pairing)
- *   /deobfuscated/WAWebOpenC/WAWebOpenChatSocket.js (post-handshake stanza loop)
- *
- * The WhatsApp Web client sends IQ stanzas with the following minimum shape:
- *
- *   <iq id="<unique>" type="get|set" xmlns="<namespace>" to="<jid>">
- *      ...child...
- *   </iq>
- *
- * The server is expected to reply with an IQ that echoes the same `id` and
- * has type `result` or `error`. Until a response arrives the client may
- * block on the request (most IQs in the bootstrap path are blocking).
- *
- * The router is a thin matcher list. Each handler declares the (xmlns, child
- * tag, type) tuple it cares about and produces a response BinaryNode (or a
- * promise of one). Handlers are matched in registration order; the first
- * match wins.
- *
- * IQs that match no handler are reported via `onUnhandled` so tests can fail
- * loudly during bring-up of new flows.
- */
+/** IQ matcher/dispatcher used by the fake server. */
 
 import type { BinaryNode } from '../../transport/codec'
 
 export type WaFakeIqType = 'get' | 'set'
 
 export interface WaFakeIqMatcher {
-    /** IQ type to match (`get` or `set`). Omit to match any. */
+    readonly id?: string
     readonly type?: WaFakeIqType
-    /** `xmlns` attribute on the IQ stanza. */
     readonly xmlns?: string
-    /** First child tag inside the IQ. Omit to match any. */
     readonly childTag?: string
 }
 
@@ -50,13 +24,8 @@ export interface WaFakeIqRouterEvents {
 }
 
 export class WaFakeIqRouter {
-    /**
-     * Test-installed handlers — checked FIRST so they shadow the
-     * default global handlers registered by `FakeWaServer` in its
-     * constructor. Tests opt in by passing `{ priority: 'high' }`.
-     */
+    /** High-priority handlers override default ones for a test case. */
     private readonly highPriorityHandlers: WaFakeIqHandler[] = []
-    /** Default global handlers registered by `FakeWaServer`. */
     private readonly handlers: WaFakeIqHandler[] = []
     private events: WaFakeIqRouterEvents = {}
 
@@ -79,7 +48,6 @@ export class WaFakeIqRouter {
         this.events = events
     }
 
-    /** Returns the response stanza, or null if no handler matched. */
     public async route(iq: BinaryNode): Promise<BinaryNode | null> {
         if (iq.tag !== 'iq') {
             return null
@@ -100,6 +68,9 @@ export class WaFakeIqRouter {
 }
 
 function matches(iq: BinaryNode, matcher: WaFakeIqMatcher): boolean {
+    if (matcher.id !== undefined) {
+        if (iq.attrs.id !== matcher.id) return false
+    }
     if (matcher.type !== undefined) {
         if (iq.attrs.type !== matcher.type) return false
     }
@@ -114,10 +85,6 @@ function matches(iq: BinaryNode, matcher: WaFakeIqMatcher): boolean {
     return true
 }
 
-/**
- * Builds a generic `<iq type="result" id="<echo>" from="..."/>` response that
- * echoes the inbound id and optionally carries a payload.
- */
 export function buildIqResult(
     inbound: BinaryNode,
     options: { readonly from?: string; readonly content?: BinaryNode[] } = {}
@@ -133,7 +100,6 @@ export function buildIqResult(
     if (options.from !== undefined) {
         attrs.from = options.from
     } else if (typeof inbound.attrs.to === 'string') {
-        // Echo "to" back as "from" by default — matches WhatsApp Web server behavior.
         attrs.from = inbound.attrs.to
     }
     return {
@@ -143,10 +109,6 @@ export function buildIqResult(
     }
 }
 
-/**
- * Builds a generic `<iq type="error" id="<echo>" code="<n>" text="<msg>"/>`
- * response.
- */
 export function buildIqError(
     inbound: BinaryNode,
     options: { readonly code: number; readonly text?: string; readonly from?: string }

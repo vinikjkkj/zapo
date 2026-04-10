@@ -1,45 +1,4 @@
-/**
- * Server-side noise handshake for the WhatsApp Web XX pattern.
- *
- * Source: /deobfuscated/WANoise/WANoiseHandshake.js
- *         /deobfuscated/WAWebOpenC/WAWebOpenChatSocket.js (functions W and H — client side)
- *
- * State machine
- * -------------
- * Implements the same primitives the WhatsApp Web client uses (start /
- * authenticate / mixIntoKey / encrypt / decrypt / finish), mirroring the
- * deobfuscated `WANoiseHandshake` class. The fake server uses these
- * primitives in the responder role of the Noise XX pattern:
- *
- *     -> e
- *     <- e, ee, s, es
- *     -> s, se
- *
- * Server flow:
- *   1. start(NoiseXXName, prologue)             // h := name; ck := h; authenticate(prologue)
- *   2. receive ClientHello { ephemeral }
- *      authenticate(client_e_pub)
- *   3. generate server_e
- *      authenticate(server_e_pub)
- *      mixIntoKey(DH(server_e_priv, client_e_pub))     // ee
- *      ct_static  = encrypt(server_s_pub)              // s
- *      mixIntoKey(DH(server_s_priv, client_e_pub))     // es
- *      ct_payload = encrypt(certChain)                 // payload
- *      send ServerHello { ephemeral, static: ct_static, payload: ct_payload }
- *   4. receive ClientFinish { static: ct_cs, payload: ct_cp }
- *      client_s_pub = decrypt(ct_cs)
- *      mixIntoKey(DH(server_e_priv, client_s_pub))     // se
- *      client_payload = decrypt(ct_cp)
- *   5. finish() → { recvKey, sendKey }
- *      For the responder role: recvKey is the first 32 bytes of HKDF(ck, ""),
- *      sendKey is the second 32. This is the inverse of the initiator order.
- *
- * AEAD details (per /deobfuscated/WANoise/WANoiseHandshake.js f / h / y):
- *   - AES-GCM with 12-byte IV: bytes 0-7 = 0, bytes 8-11 = u32 BE counter
- *   - Counter is reset to 0 on every mixIntoKey
- *   - The current handshake hash `h` is used as additional authenticated data
- *   - After every encrypt/decrypt the ciphertext is appended to `h` via authenticate()
- */
+/** Responder-side Noise handshake primitives for fake server pipelines. */
 
 import {
     aesGcmDecrypt,
@@ -110,13 +69,7 @@ export class WaFakeNoiseHandshake {
         return plaintext
     }
 
-    /**
-     * Derives the post-handshake transport keys.
-     *
-     * The Noise XX pattern uses a salt-based HKDF on an empty IKM at the end
-     * of the handshake; the first 32 bytes go to the initiator's send (= our
-     * recv), the second 32 go to the responder's send.
-     */
+    /** Derives transport keys (`first -> recv`, `second -> send` for responder role). */
     public async finish(): Promise<WaFakeNoiseHandshakeFinishKeys> {
         const [first, second] = await hkdfSplit(EMPTY, this.chainingKey, '')
         const [recvKey, sendKey] = await Promise.all([

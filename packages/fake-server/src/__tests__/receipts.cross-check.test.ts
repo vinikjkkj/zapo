@@ -1,19 +1,3 @@
-/**
- * Phase 23 cross-check: receipts in both directions.
- *
- * Scenario A — fake server pushes a `<receipt/>` to the lib:
- *   1. Fake peer pushes a `<receipt id=msg-id type=read from=peer-jid t=...>`.
- *   2. The lib emits the `message_receipt` event with the receipt
- *      metadata.
- *
- * Scenario B — lib sends a `<receipt/>` via the public API:
- *   1. Test calls `client.sendReceipt({ to: peer-jid, id: msg-id, type: 'read' })`.
- *   2. The fake server captures the outbound `<receipt/>` stanza and
- *      asserts the attrs.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

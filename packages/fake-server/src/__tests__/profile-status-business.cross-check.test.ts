@@ -1,12 +1,3 @@
-/**
- * Phase 41 cross-check: profile picture, status, and business profile
- * auto-handlers. Drives the lib's `client.profile.*` and
- * `client.business.*` against the global handlers that mutate / read
- * the centralised registries on `FakeWaServer`.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

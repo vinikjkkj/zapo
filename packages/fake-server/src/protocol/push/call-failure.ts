@@ -1,23 +1,3 @@
-/**
- * Builders for `<call/>` and `<failure/>` push stanzas.
- *
- * Source: indirect — the lib's `WaIncomingNodeCoordinator` registers a
- * generic handler for both tags that emits the raw `BinaryNode` to the
- * consumer via `call` and `failure` events. The fake server only needs
- * to construct wire-correct stanzas; the consumer chooses what attrs to
- * inspect.
- *
- * `<call/>` wire layout (typical):
- *
- *   <call id="<unique>" from="<peer-jid>" to="<self-jid>" t="<unix-seconds>">
- *      <offer call-id="..." call-creator="..." .../>     ← or <accept/>, <reject/>, ...
- *   </call>
- *
- * `<failure/>` wire layout:
- *
- *   <failure reason="<short>" location="<context>"/>
- */
-
 import type { BinaryNode } from '../../transport/codec'
 
 export interface BuildCallInput {

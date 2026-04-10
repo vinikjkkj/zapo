@@ -1,18 +1,3 @@
-/**
- * Cross-validation for WaFakeTransport.
- *
- * After the noise handshake completes, both sides hold AES-GCM keys with
- * mirrored roles: the server's send key equals the client's read key, and
- * the server's recv key equals the client's write key. Counters are
- * independent on each direction and start at 0.
- *
- * This test runs a full XX handshake between zapo-js's WaNoiseHandshake
- * (initiator) and WaFakeNoiseHandshake (responder), instantiates a real
- * WaNoiseSocket on the client side and a WaFakeTransport on the server
- * side, and exchanges several frames in both directions to verify the
- * counters and keys stay synchronized.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -41,7 +26,6 @@ async function runXxHandshake(): Promise<{
     const serverStatic = await X25519.generateKeyPair()
     const clientStatic = await X25519.generateKeyPair()
 
-    // Message 1: client -> server
     await client.authenticate(clientEphemeral.pubKey)
     const m1 = proto.HandshakeMessage.encode({
         clientHello: { ephemeral: clientEphemeral.pubKey }
@@ -50,7 +34,6 @@ async function runXxHandshake(): Promise<{
     if (!parsedM1.clientHello?.ephemeral) throw new Error('m1 missing ephemeral')
     await server.authenticate(parsedM1.clientHello.ephemeral)
 
-    // Message 2: server -> client
     await server.authenticate(serverEphemeral.pubKey)
     await server.mixIntoKey(
         await X25519.scalarMult(serverEphemeral.privKey, parsedM1.clientHello.ephemeral)
@@ -77,7 +60,6 @@ async function runXxHandshake(): Promise<{
     await client.mixIntoKey(await X25519.scalarMult(clientEphemeral.privKey, decryptedServerStatic))
     await client.decrypt(sh.payload)
 
-    // Message 3: client -> server
     const ctClientStatic = await client.encrypt(clientStatic.pubKey)
     await client.mixIntoKey(await X25519.scalarMult(clientStatic.privKey, serverEphemeral.pubKey))
     const ctClientPayload = await client.encrypt(new Uint8Array([0x00]))

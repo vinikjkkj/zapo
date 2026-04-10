@@ -1,16 +1,3 @@
-/**
- * Per-connection state machine for the fake server.
- *
- * Owns the lifecycle of a single client websocket and exposes a thin event
- * surface (`onFrame`, `onClose`) plus a `sendFrame` action.
- *
- * The connection is intentionally protocol-naive at this layer: it deals with
- * raw frame bytes only. Decoding/encoding stanzas, running the noise handshake
- * and dispatching IQs are responsibilities of higher layers (`protocol/`).
- *
- * This file is server scaffolding, not a `/deobfuscated` mirror — see AGENTS.md §4.
- */
-
 import type { WebSocket } from 'ws'
 
 export type WaFakeConnectionState = 'open' | 'closing' | 'closed'
@@ -59,7 +46,6 @@ export class WaFakeConnection {
     private bindSocketEvents(): void {
         this.socket.on('message', (data, isBinary) => {
             if (!isBinary) {
-                // WhatsApp Web only ever sends binary frames; treat text as protocol error.
                 this.handlers.onError?.(new Error('received unexpected text frame'))
                 return
             }

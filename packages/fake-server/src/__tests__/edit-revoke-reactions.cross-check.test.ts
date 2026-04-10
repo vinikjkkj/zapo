@@ -1,17 +1,3 @@
-/**
- * Phase 25 cross-checks: edit / revoke / reaction message types.
- *
- * Three flows, all driven by FakePeer convenience helpers and asserted
- * via the lib's `message` / `message_protocol` events:
- *   1. `sendMessageEdit` — `protocolMessage.type = MESSAGE_EDIT`
- *      carrying a fresh `conversation` payload.
- *   2. `sendMessageRevoke` — `protocolMessage.type = REVOKE` for a
- *      previously-sent message.
- *   3. `sendReaction` — `reactionMessage` with an emoji.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

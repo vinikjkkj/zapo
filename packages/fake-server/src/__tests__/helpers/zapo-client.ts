@@ -1,12 +1,3 @@
-/**
- * Shared helpers for cross-check tests that drive a real WaClient against
- * a FakeWaServer. Lives under `__tests__/helpers/` so the file is not
- * picked up by the `*.test.ts` glob.
- *
- * NOTE: this helper imports zapo-js directly because it lives only under
- * cross-check tests. Production fake-server code must NOT import this.
- */
-
 import {
     createStore,
     type Logger,
@@ -80,18 +71,11 @@ export interface ZapoClientFixture {
     readonly authStore: WaAuthStore
 }
 
-/**
- * Builds a fresh in-memory `WaClient` wired to the given fake server.
- * Uses memory providers everywhere except `auth`, where a tiny in-process
- * stub is provided. The lib's `testHooks.noiseRootCa` is set automatically.
- */
 export function createZapoClient(
     server: FakeWaServer,
     options: CreateZapoClientOptions = {}
 ): ZapoClientFixture {
     const authStore = new InMemoryAuthStore()
-    // The createStore types require a fully populated backend; the noopStore
-    // slots throw if reached but never are in our happy-path tests.
     const store = createStore({
         backends: { mem: AUTH_BACKEND(authStore) as never },
         providers: {
@@ -112,10 +96,6 @@ export function createZapoClient(
             chatEvents: options.emitSnapshotMutations
                 ? { emitSnapshotMutations: true }
                 : undefined,
-            // The fake media HTTPS listener uses a self-signed cert.
-            // Pass our `rejectUnauthorized: false` agent for both
-            // upload and download so the lib's media transfer client
-            // accepts the cert without breaking real production paths.
             proxy: {
                 mediaUpload: server.mediaProxyAgent,
                 mediaDownload: server.mediaProxyAgent

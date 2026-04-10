@@ -1,17 +1,4 @@
-/**
- * Cross-validation tests for WaFakeNoiseHandshake.
- *
- * The strategy here is intentional: instead of validating the fake server
- * handshake against itself (tautology), we run the *real* zapo-js
- * `WaNoiseHandshake` (initiator) against `WaFakeNoiseHandshake` (responder)
- * and check that they reach the same shared keys after a complete XX
- * handshake. If both ends agree on the post-handshake keys, every protocol
- * step in between matched the WhatsApp Web specification.
- *
- * NOTE: this file is allowed to import zapo-js directly because the entire
- * point of cross-check tests is to drive the fake server alongside the real
- * lib. See the eslint override for `*.cross-check.test.ts`.
- */
+/** Cross-check: lib handshake and fake-server handshake must derive mirrored keys. */
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -52,25 +39,19 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
     const client = new WaNoiseHandshake()
     const server = new WaFakeNoiseHandshake()
 
-    // 0. Both sides initialize with the same protocol name + prologue.
     await client.start(NOISE_XX_NAME, PROLOGUE)
     await server.start(NOISE_XX_NAME, PROLOGUE)
 
-    // 1. Generate ephemeral keypairs on both ends.
     const clientEphemeral = await X25519.generateKeyPair()
     const serverEphemeral = await X25519.generateKeyPair()
     const serverStatic = await X25519.generateKeyPair()
     const clientStatic = await X25519.generateKeyPair()
 
-    // 2. Client builds and sends ClientHello.
     await client.authenticate(clientEphemeral.pubKey)
     const clientHello = proto.HandshakeMessage.encode({
         clientHello: { ephemeral: clientEphemeral.pubKey }
     }).finish()
 
-    // ---- wire ---->
-
-    // 3. Server receives ClientHello.
     const parsedHello = proto.HandshakeMessage.decode(clientHello)
     const clientHelloMsg = parsedHello.clientHello
     if (!clientHelloMsg?.ephemeral) {
@@ -79,7 +60,6 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
     const clientEphemeralPub = clientHelloMsg.ephemeral
     await server.authenticate(clientEphemeralPub)
 
-    // 4. Server builds ServerHello.
     await server.authenticate(serverEphemeral.pubKey)
     await server.mixIntoKey(await X25519.scalarMult(serverEphemeral.privKey, clientEphemeralPub)) // ee
     const encryptedServerStatic = await server.encrypt(serverStatic.pubKey) // s
@@ -93,9 +73,6 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
         }
     }).finish()
 
-    // <---- wire ----
-
-    // 5. Client receives ServerHello and processes it.
     const parsedServerHello = proto.HandshakeMessage.decode(serverHello)
     const sh = parsedServerHello.serverHello
     if (!sh?.ephemeral || !sh.static || !sh.payload) {
@@ -109,7 +86,6 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
     const decryptedPayload = await client.decrypt(sh.payload)
     assert.deepEqual(Array.from(decryptedPayload), [0x01, 0x02, 0x03])
 
-    // 6. Client builds ClientFinish.
     const encryptedClientStatic = await client.encrypt(clientStatic.pubKey)
     await client.mixIntoKey(await X25519.scalarMult(clientStatic.privKey, serverEphemeral.pubKey))
     const encryptedClientPayload = await client.encrypt(new Uint8Array([0xaa, 0xbb]))
@@ -120,9 +96,6 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
         }
     }).finish()
 
-    // ---- wire ---->
-
-    // 7. Server receives ClientFinish.
     const parsedFinish = proto.HandshakeMessage.decode(clientFinish)
     const cf = parsedFinish.clientFinish
     if (!cf?.static || !cf.payload) {
@@ -134,14 +107,9 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
     const decryptedClientFinishPayload = await server.decrypt(cf.payload)
     assert.deepEqual(Array.from(decryptedClientFinishPayload), [0xaa, 0xbb])
 
-    // 8. Both sides finish — keys must match in mirrored roles.
     const clientSocket = await client.finish()
     const serverKeys = await server.finish()
 
-    // Encrypt on the server side, decrypt on the client side (and vice versa)
-    // using independent counters. If the post-handshake keys are aligned, the
-    // ciphertext encrypted with the server's send key MUST decrypt with the
-    // client's read key.
     const messageA = new Uint8Array([0x10, 0x20, 0x30])
     const messageB = new Uint8Array([0xff, 0xee, 0xdd])
 

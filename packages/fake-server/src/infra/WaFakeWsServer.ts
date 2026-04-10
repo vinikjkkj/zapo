@@ -1,13 +1,3 @@
-/**
- * WebSocket listener for the fake server.
- *
- * Wraps the `ws` package's `WebSocketServer`, generates connection ids and
- * forwards each new socket as a `WaFakeConnection` to the consumer via
- * `onConnection`.
- *
- * This file is server scaffolding, not a `/deobfuscated` mirror — see AGENTS.md §4.
- */
-
 import {
     createServer,
     type IncomingMessage,
@@ -60,12 +50,6 @@ export class WaFakeWsServer {
         this.connectionListener = listener
     }
 
-    /**
-     * Registers a handler for non-WebSocket HTTP requests (e.g. media
-     * blob downloads). Requests targeting the WebSocket upgrade path
-     * are still handled by the underlying `WebSocketServer`; everything
-     * else is forwarded to the handler.
-     */
     public setHttpRequestHandler(handler: WaFakeHttpRequestHandler | null): void {
         this.httpRequestHandler = handler
     }

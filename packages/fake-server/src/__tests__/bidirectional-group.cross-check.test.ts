@@ -1,26 +1,4 @@
-/**
- * Phase 32 cross-check: bidirectional 1:N (group) ping-pong.
- *
- * Drives both directions of group messaging through the lib's real
- * SenderKey + Signal layer:
- *   1. Fake peer sends a group conversation (bootstraps the SKDM via
- *      a pkmsg + ships the actual content as skmsg). The lib decrypts
- *      and emits `message` with `chatJid=group`.
- *   2. Lib sends a group message back. The fake peer's
- *      `expectGroupMessage` walks the per-recipient pkmsg in
- *      `<participants>`, extracts the lib's SKDM via the now-mature
- *      Signal session, then decrypts the top-level skmsg via the
- *      `FakePeerGroupRecvSession`.
- *   3. Fake peer sends ANOTHER group message in the same group (the
- *      SenderKey chain advances; no new SKDM bootstrap).
- *   4. Lib sends ANOTHER group message back. Same fanout shape, fake
- *      peer decrypts via the cached recv senderkey.
- *
- * Combined with the bidirectional 1:1 cross-check, this covers the
- * "100% 1:1 + 1:N" send/recv matrix the user asked for.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
+/** Cross-check: bidirectional group ping-pong decrypts on both sides. */
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -95,9 +73,6 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
         const pipelineAfterPair = await pipelineAfterPairPromise
 
         const peer = await server.createFakePeer({ jid: peerJid }, pipelineAfterPair)
-        // Register the group via the centralised registry — the
-        // global w:g2 group-metadata handler will return this peer
-        // as the only participant when the lib queries the group.
         server.createFakeGroup({
             groupJid,
             subject: 'Bidi Group',
@@ -105,7 +80,6 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
         })
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
-        // === Round 1: peer → client (fake peer sends group conversation) ===
         const round1ReceivedByLib = waitForMessage(
             client,
             (event) =>
@@ -118,8 +92,6 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
         assert.equal(round1.isGroupChat, true)
         assert.equal(round1.message?.conversation, 'peer-group #1')
 
-        // === Round 2: client → peer (lib sends to group; fake peer decrypts
-        // via 1:1 bootstrap pkmsg → SKDM → skmsg) ===
         const round2Promise = peer.expectGroupMessage(groupJid, {
             timeoutMs: 8_000,
             senderJid: meJid
@@ -129,9 +101,6 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
         assert.equal(round2.encType, 'skmsg')
         assert.equal(round2.message.conversation, 'lib-group #1')
 
-        // === Round 3: peer → client AGAIN (SenderKey chain walks forward,
-        // no new SKDM needed since the lib already has the peer's
-        // sender key state from round 1) ===
         const round3ReceivedByLib = waitForMessage(
             client,
             (event) =>
@@ -141,9 +110,6 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
         const round3 = await round3ReceivedByLib
         assert.equal(round3.message?.conversation, 'peer-group #2')
 
-        // === Round 4: client → peer AGAIN (lib's SKDM was already cached
-        // by the peer in round 2 — this round walks the recv senderkey
-        // chain forward without re-bootstrapping) ===
         const round4Promise = peer.expectGroupMessage(groupJid, {
             timeoutMs: 8_000,
             senderJid: meJid

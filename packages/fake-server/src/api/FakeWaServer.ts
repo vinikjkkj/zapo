@@ -1,17 +1,3 @@
-/**
- * Public entry point for the fake server.
- *
- * `FakeWaServer` is now a thin facade that delegates:
- *   - registry state / listener fan-outs / snapshots → `ServerRegistries`
- *   - prekey dispenser logic → `PreKeyDispenser`
- *   - app-state sync management → `AppStateSyncManager`
- *   - IQ handler registrations → `registerDefaultIqHandlers` (iq-handlers.ts)
- *
- * It still owns: wsServer, pipelines, iqRouter, capturedStanzas,
- * pending expectations, media store, connection lifecycle, and the
- * test-facing convenience API (createFakePeer, scenario, pairing, etc.).
- */
-
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Agent as HttpsAgent } from 'node:https'
 
@@ -67,11 +53,6 @@ import {
     ServerRegistries
 } from './ServerRegistries'
 
-// ─── Re-exports from delegate modules ────────────────────────────────
-// These types used to be defined directly in this file. They are now
-// owned by the delegate modules but re-exported here so that every
-// existing `import { ... } from './FakeWaServer'` continues to compile.
-
 export type {
     FakeGroupMetadata,
     CapturedGroupOp,
@@ -83,8 +64,6 @@ export type {
 } from './ServerRegistries'
 
 export type { CapturedAppStateMutation } from './AppStateSyncManager'
-
-// ─── Interfaces local to FakeWaServer ────────────────────────────────
 
 export interface FakeWaServerOptions {
     readonly host?: string
@@ -100,27 +79,19 @@ export interface FakeWaServerNoiseRootCa {
 export type FakeWaServerPipelineListener = (pipeline: WaFakeConnectionPipeline) => void
 
 export interface ExpectIqOptions {
-    /** How long to wait before rejecting (default: 2000ms). */
     readonly timeoutMs?: number
 }
 
 export interface ExpectStanzaOptions {
-    /** How long to wait before rejecting (default: 2000ms). */
     readonly timeoutMs?: number
 }
 
 export interface StanzaMatcher {
-    /** Stanza tag (e.g. 'iq', 'message', 'receipt', 'notification'). */
     readonly tag?: string
-    /** Match against `attrs.type`. */
     readonly type?: string
-    /** Match against `attrs.xmlns`. */
     readonly xmlns?: string
-    /** Match against `attrs.from`. */
     readonly from?: string
-    /** Match against `attrs.to`. */
     readonly to?: string
-    /** First child tag inside the stanza. */
     readonly childTag?: string
 }
 
@@ -139,29 +110,19 @@ interface PendingStanzaExpectation {
 }
 
 export interface CapturedMediaUpload {
-    /** URL path the lib POSTed to (e.g. `/mms/image/<base64-token>`). */
     readonly path: string
-    /** `image|video|audio|...` parsed from the upload path. */
     readonly mediaType: string
-    /** Raw encrypted bytes the lib uploaded (`iv || ciphertext || mac10`). */
     readonly encryptedBytes: Uint8Array
-    /** `Content-Type` header the lib sent. */
     readonly contentType: string | undefined
-    /** Query string `auth=` token (echoed from media_conn). */
     readonly auth: string | undefined
-    /** Wall-clock time the upload landed. */
     readonly receivedAtMs: number
 }
 
-// ─── FakeWaServer class ──────────────────────────────────────────────
-
 export class FakeWaServer {
-    // ── Delegate objects ─────────────────────────────────────────────
     public readonly registries = new ServerRegistries()
     public readonly preKeyDispenser = new PreKeyDispenser()
     public readonly appStateSync = new AppStateSyncManager()
 
-    // ── Own state (kept here) ────────────────────────────────────────
     private readonly wsServer: WaFakeWsServer
     private readonly pipelines = new Set<WaFakeConnectionPipeline>()
     private readonly iqRouter = new WaFakeIqRouter()
@@ -184,19 +145,14 @@ export class FakeWaServer {
     public constructor(options: FakeWaServerOptions = {}) {
         this.wsServer = new WaFakeWsServer(options)
         this.wsServer.onConnection((connection) => this.handleConnection(connection))
-
-        // Wire all default IQ handlers through the extracted function
         registerDefaultIqHandlers(this.iqRouter, this.buildIqHandlerDeps())
     }
-
-    // ── IqHandlerDeps wiring ─────────────────────────────────────────
 
     private buildIqHandlerDeps(): IqHandlerDeps {
         const reg = this.registries
         const preKey = this.preKeyDispenser
         const appState = this.appStateSync
         return {
-            // ServerRegistries – state
             get peerRegistry() { return reg.peerRegistry },
             get groupRegistry() { return reg.groupRegistry },
             get privacySettings() { return reg.privacySettings },
@@ -207,8 +163,6 @@ export class FakeWaServer {
             get issuedPrivacyTokens() { return reg.issuedPrivacyTokens },
             get latestStatusText() { return reg.latestStatusText },
             setLatestStatusText: (text: string) => { reg.latestStatusText = text },
-
-            // ServerRegistries – methods
             lookupDeviceIdsForUser: (userJid) => reg.lookupDeviceIdsForUser(userJid),
             notifyGroupOp: (op) => reg.notifyGroupOp(op),
             mutatePrivacySettings: (category, value) => reg.mutatePrivacySettings(category, value),
@@ -221,35 +175,29 @@ export class FakeWaServer {
             notifyDirtyBitsClear: (op) => reg.notifyDirtyBitsClear(op),
             notifyPrivacySet: (change) => {
                 for (const listener of reg.privacySetListeners) {
-                    try { listener(change) } catch { /* best-effort */ }
+                    try {
+                        listener(change)
+                    } catch (error) {
+                        void error
+                    }
                 }
             },
             notifyBlocklistChange: (change) => {
                 for (const listener of reg.blocklistChangeListeners) {
-                    try { listener(change) } catch { /* best-effort */ }
+                    try {
+                        listener(change)
+                    } catch (error) {
+                        void error
+                    }
                 }
             },
-
-            // PreKeyDispenser
             capturePreKeyBundle: (bundle) => preKey.captureBundle(bundle),
-
-            // AppStateSyncManager
             consumeOutboundAppStatePatches: (iq) => appState.consumeOutboundAppStatePatches(iq),
             get appStateCollectionProviders() { return appState.appStateCollectionProviders },
-
-            // Media
             requireMediaHttpsInfo: () => this.requireMediaHttpsInfo()
         }
     }
 
-    // ── Forwarding: IQ / stanza routing ──────────────────────────────
-
-    /**
-     * Register an IQ handler. The fake server matches incoming IQ stanzas
-     * against the registered handlers in registration order; the first
-     * match wins. Test-installed handlers are prepended so they shadow
-     * the constructor-registered global defaults.
-     */
     public registerIqHandler(
         matcher: WaFakeIqMatcher,
         respond: WaFakeIqResponder,
@@ -259,108 +207,74 @@ export class FakeWaServer {
         return this.iqRouter.register(handler, { priority: 'high' })
     }
 
-    /**
-     * Test-only escape hatch that feeds a synthetic IQ stanza through
-     * the global IQ router and returns whatever the matched handler
-     * produces.
-     */
     public async routeIqForTest(iq: BinaryNode): Promise<BinaryNode | null> {
         return this.iqRouter.route(iq)
     }
 
-    // ── Forwarding: ServerRegistries ─────────────────────────────────
-
-    /** Subscribes to outbound group operation IQs the lib uploads. */
     public onOutboundGroupOp(listener: (op: CapturedGroupOp) => void): () => void {
         return this.registries.onOutboundGroupOp(listener)
     }
 
-    /** Subscribes to outbound privacy-set IQs the lib uploads. */
     public onOutboundPrivacySet(listener: (op: CapturedPrivacySet) => void): () => void {
         return this.registries.onOutboundPrivacySet(listener)
     }
 
-    /** Subscribes to outbound blocklist change IQs the lib uploads. */
     public onOutboundBlocklistChange(
         listener: (op: CapturedBlocklistChange) => void
     ): () => void {
         return this.registries.onOutboundBlocklistChange(listener)
     }
 
-    /** Subscribes to outbound profile-picture-set IQs the lib uploads. */
     public onOutboundProfilePictureSet(
         listener: (op: CapturedProfilePictureSet) => void
     ): () => void {
         return this.registries.onOutboundProfilePictureSet(listener)
     }
 
-    /** Subscribes to outbound status-set IQs the lib uploads. */
     public onOutboundStatusSet(listener: (op: CapturedStatusSet) => void): () => void {
         return this.registries.onOutboundStatusSet(listener)
     }
 
-    /** Subscribes to logout / `remove-companion-device` IQs. */
     public onLogout(listener: () => void): () => void {
         return this.registries.onLogout(listener)
     }
 
-    /**
-     * Subscribes to outbound `<iq xmlns="privacy" type="set"><tokens>`
-     * stanzas the lib emits when issuing a trusted-contact privacy
-     * token to a peer.
-     */
     public onOutboundPrivacyTokenIssue(
         listener: (op: FakePrivacyTokenIssue) => void
     ): () => void {
         return this.registries.onOutboundPrivacyTokenIssue(listener)
     }
 
-    /**
-     * Subscribes to outbound `<iq xmlns="urn:xmpp:whatsapp:dirty">`
-     * clear stanzas the lib emits at the end of a dirty-bit sync cycle.
-     */
     public onOutboundDirtyBitsClear(
         listener: (op: CapturedDirtyBitsClear) => void
     ): () => void {
         return this.registries.onOutboundDirtyBitsClear(listener)
     }
 
-    /** Snapshot of every trusted-contact privacy token the lib has issued. */
     public privacyTokensIssuedSnapshot(): ReadonlyMap<string, FakePrivacyTokenIssue> {
         return this.registries.privacyTokensIssuedSnapshot()
     }
 
-    /** Snapshot of the current privacy settings + per-category disallowed lists. */
     public privacySettingsSnapshot(): FakePrivacySettingsState {
         return this.registries.privacySettingsSnapshot()
     }
 
-    /** Snapshot of the current blocklist as a sorted array. */
     public blocklistSnapshot(): readonly string[] {
         return this.registries.blocklistSnapshot()
     }
 
-    /** Snapshot of the most recent `setStatus` text the lib uploaded. */
     public latestStatusSnapshot(): string | null {
         return this.registries.latestStatusSnapshot()
     }
 
-    /** Snapshot of the current group registry as a read-only map. */
     public groupRegistrySnapshot(): ReadonlyMap<string, FakeGroupMetadata> {
         return this.registries.groupRegistrySnapshot()
     }
 
-    /**
-     * Override the AB-experiment payload returned by the global
-     * `<iq xmlns="abt">` handler.
-     */
     public setAbProps(input: BuildAbPropsResultInput): void {
         this.registries.setAbProps(input)
     }
 
-    /**
-     * Pre-seed the per-category privacy disallowed list.
-     */
     public setPrivacyDisallowedList(
         category: FakePrivacyCategoryName,
         jids: readonly string[]
@@ -368,19 +282,14 @@ export class FakeWaServer {
         this.registries.setPrivacyDisallowedList(category, jids)
     }
 
-    /** Pre-set or override a profile picture record for a given jid. */
     public setProfilePictureRecord(jid: string, picture: FakeProfilePictureResult): void {
         this.registries.setProfilePictureRecord(jid, picture)
     }
 
-    /** Pre-set or override a business profile record for a given jid. */
     public setBusinessProfileRecord(jid: string, profile: FakeBusinessProfile): void {
         this.registries.setBusinessProfileRecord(jid, profile)
     }
 
-    /**
-     * Registers a fake group with a fixed participant set.
-     */
     public createFakeGroup(input: {
         readonly groupJid: string
         readonly subject?: string
@@ -392,17 +301,6 @@ export class FakeWaServer {
         return this.registries.createFakeGroup(input)
     }
 
-    // ── Forwarding: PreKeyDispenser ──────────────────────────────────
-
-    /**
-     * Pushes a `<notification type="encrypt"><count value="0"/></notification>`
-     * to the given pipeline. The lib's `WAWebHandlePreKeyLow` handler reacts
-     * to this by sending a fresh PreKey upload IQ, which the fake server
-     * automatically captures via its built-in `prekey-upload` IQ handler.
-     *
-     * Returns a promise that resolves once the upload bundle has been
-     * captured (or immediately if it was captured earlier).
-     */
     public async triggerPreKeyUpload(
         pipeline: WaFakeConnectionPipeline,
         options: { readonly timeoutMs?: number; readonly force?: boolean } | number = {}
@@ -410,24 +308,14 @@ export class FakeWaServer {
         return this.preKeyDispenser.triggerPreKeyUpload(pipeline, options)
     }
 
-    /**
-     * Returns a promise that resolves with the client's PreKey upload
-     * bundle as soon as it has been captured.
-     */
     public awaitPreKeyBundle(timeoutMs = 15_000): Promise<ClientPreKeyBundle> {
         return this.preKeyDispenser.awaitPreKeyBundle(timeoutMs)
     }
 
-    /** Snapshot of the captured PreKey bundle, or `null` if none seen yet. */
     public capturedPreKeyBundleSnapshot(): ClientPreKeyBundle | null {
         return this.preKeyDispenser.capturedPreKeyBundleSnapshot()
     }
 
-    /**
-     * Returns the next unused one-time prekey from the captured client
-     * upload, or `null` if no upload has been captured yet or the pool
-     * has been exhausted.
-     */
     public dispenseOneTimePreKey(): {
         readonly keyId: number
         readonly publicKey: Uint8Array
@@ -435,41 +323,24 @@ export class FakeWaServer {
         return this.preKeyDispenser.dispenseOneTimePreKey()
     }
 
-    /** Number of times the dispenser was asked but couldn't return a prekey. */
     public preKeyDispenserMissesSnapshot(): number {
         return this.preKeyDispenser.preKeyDispenserMissesSnapshot()
     }
 
-    /**
-     * Number of one-time prekeys still available in the dispenser pool.
-     */
     public preKeysAvailable(): number {
         return this.preKeyDispenser.preKeysAvailable()
     }
 
-    // ── Forwarding: AppStateSyncManager ──────────────────────────────
-
-    /**
-     * Registers an app-state sync key so the fake server can decrypt
-     * outbound mutations the lib uploads.
-     */
     public registerAppStateSyncKey(keyId: Uint8Array, keyData: Uint8Array): void {
         this.appStateSync.registerAppStateSyncKey(keyId, keyData)
     }
 
-    /**
-     * Subscribes to outbound app-state mutations the lib uploads.
-     */
     public onOutboundAppStateMutation(
         listener: (mutation: CapturedAppStateMutation) => void
     ): () => void {
         return this.appStateSync.onOutboundAppStateMutation(listener)
     }
 
-    /**
-     * Convenience that resolves with the next decrypted outbound
-     * mutation matching the given predicate.
-     */
     public expectAppStateMutation(
         predicate: (mutation: CapturedAppStateMutation) => boolean,
         timeoutMs = 15_000
@@ -477,9 +348,6 @@ export class FakeWaServer {
         return this.appStateSync.expectAppStateMutation(predicate, timeoutMs)
     }
 
-    /**
-     * Registers a payload provider for a given app-state collection.
-     */
     public provideAppStateCollection(
         name: string,
         provider: () => Promise<FakeAppStateCollectionPayload | null> | FakeAppStateCollectionPayload | null
@@ -487,10 +355,6 @@ export class FakeWaServer {
         return this.appStateSync.provideAppStateCollection(name, provider)
     }
 
-    /**
-     * Pushes a `<notification type="server_sync"/>` listing the given
-     * collection names.
-     */
     public async pushServerSyncNotification(
         pipeline: WaFakeConnectionPipeline,
         input: BuildServerSyncNotificationInput
@@ -498,35 +362,18 @@ export class FakeWaServer {
         return this.appStateSync.pushServerSyncNotification(pipeline, input)
     }
 
-    // ── Pipeline / auth listeners ────────────────────────────────────
-
-    /**
-     * Register a callback that runs each time a pipeline reaches the
-     * authenticated state.
-     */
     public onAuthenticatedPipeline(listener: AuthenticatedPipelineListener): () => void {
         this.authenticatedListeners.add(listener)
         return () => this.authenticatedListeners.delete(listener)
     }
 
-    /**
-     * Builds the scenario for this server and runs the synchronous
-     * configuration block.
-     */
     public scenario(configure: (s: Scenario) => void): void {
         configure(new Scenario(this))
     }
 
-    // ── Stanza expectations ──────────────────────────────────────────
-
-    /**
-     * Returns a promise that resolves with the next inbound stanza matching
-     * the given pattern.
-     */
     public expectIq(matcher: WaFakeIqMatcher, options: ExpectIqOptions = {}): Promise<BinaryNode> {
         const timeoutMs = options.timeoutMs ?? 2_000
 
-        // Check stanzas already captured.
         for (const captured of this.capturedStanzas) {
             if (matchesIq(captured, matcher)) {
                 return Promise.resolve(captured)
@@ -559,15 +406,10 @@ export class FakeWaServer {
         })
     }
 
-    /** Returns a snapshot of every stanza the client has sent so far. */
     public capturedStanzaSnapshot(): readonly BinaryNode[] {
         return this.capturedStanzas.slice()
     }
 
-    /**
-     * Returns a promise that resolves with the next inbound stanza of any
-     * tag matching the given pattern.
-     */
     public expectStanza(
         matcher: StanzaMatcher,
         options: ExpectStanzaOptions = {}
@@ -606,11 +448,6 @@ export class FakeWaServer {
         })
     }
 
-    // ── Broadcasting / pipeline waits ────────────────────────────────
-
-    /**
-     * Pushes the same stanza to every authenticated pipeline.
-     */
     public async broadcastStanza(node: BinaryNode): Promise<number> {
         const tasks: Array<Promise<void>> = []
         for (const pipeline of this.pipelines) {
@@ -620,10 +457,6 @@ export class FakeWaServer {
         return tasks.length
     }
 
-    /**
-     * Waits until at least one pipeline has reached the authenticated
-     * state.
-     */
     public waitForAuthenticatedPipeline(timeoutMs = 60_000): Promise<WaFakeConnectionPipeline> {
         for (const pipeline of this.pipelines) {
             if (pipeline.isAuthenticated()) {
@@ -633,9 +466,6 @@ export class FakeWaServer {
         return this.waitForNextAuthenticatedPipeline(timeoutMs)
     }
 
-    /**
-     * Waits for the **next** pipeline to reach the authenticated state.
-     */
     public waitForNextAuthenticatedPipeline(timeoutMs = 60_000): Promise<WaFakeConnectionPipeline> {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(
@@ -653,21 +483,10 @@ export class FakeWaServer {
         })
     }
 
-    // ── Media ────────────────────────────────────────────────────────
-
-    /**
-     * Encrypts the supplied plaintext via the lib's real
-     * `WaMediaCrypto.encryptBytes`, stores the resulting ciphertext
-     * keyed by a fresh random URL path, and returns the metadata.
-     */
     public async publishMediaBlob(input: PublishMediaInput): Promise<PublishedMediaBlob> {
         return this.mediaStore.publish(input)
     }
 
-    /**
-     * Builds the absolute `https://host:port/<path>` URL the lib should
-     * use to download a previously-published media blob.
-     */
     public mediaUrl(path: string): string {
         const info = this.requireMediaHttpsInfo()
         const normalized = path.startsWith('/') ? path : `/${path}`
@@ -682,9 +501,6 @@ export class FakeWaServer {
         return info
     }
 
-    /**
-     * Returns an `https.Agent` configured to skip TLS verification.
-     */
     public get mediaProxyAgent(): HttpsAgent {
         if (!this.cachedMediaProxyAgent) {
             this.cachedMediaProxyAgent = new HttpsAgent({ rejectUnauthorized: false })
@@ -692,20 +508,10 @@ export class FakeWaServer {
         return this.cachedMediaProxyAgent
     }
 
-    /**
-     * Snapshot of every media upload the lib has POSTed to the fake
-     * media server since startup.
-     */
     public capturedMediaUploadSnapshot(): readonly CapturedMediaUpload[] {
         return this.capturedMediaUploads.slice()
     }
 
-    // ── Peer creation ────────────────────────────────────────────────
-
-    /**
-     * Creates a fake peer that can encrypt messages for the connected
-     * client.
-     */
     public async createFakePeer(
         options: CreateFakePeerOptions,
         pipeline: WaFakeConnectionPipeline
@@ -715,9 +521,6 @@ export class FakeWaServer {
         return peer
     }
 
-    /**
-     * Multi-device variant of `createFakePeer`.
-     */
     public async createFakePeerWithDevices(
         input: {
             readonly userJid: string
@@ -754,22 +557,6 @@ export class FakeWaServer {
         return peers
     }
 
-    /**
-     * Backwards-compat alias for `createFakePeerWithDevices`.
-     *
-     * @deprecated use `createFakePeerWithDevices` instead.
-     */
-    public createFakePeerGroup(
-        input: {
-            readonly userJid: string
-            readonly deviceIds: readonly number[]
-            readonly displayName?: string
-        },
-        pipeline: WaFakeConnectionPipeline
-    ): Promise<readonly FakePeer[]> {
-        return this.createFakePeerWithDevices(input, pipeline)
-    }
-
     private buildFakePeerDeps(pipeline: WaFakeConnectionPipeline): {
         readonly bundleResolver: () => Promise<ClientPreKeyBundle>
         readonly reserveOneTimePreKey: () => {
@@ -798,12 +585,6 @@ export class FakeWaServer {
         }
     }
 
-    // ── Pairing ──────────────────────────────────────────────────────
-
-    /**
-     * Drives the QR-pairing flow with a real, freshly-created `WaClient`
-     * end-to-end via the wire.
-     */
     public async runPairing(
         pipeline: WaFakeConnectionPipeline,
         options: FakePairingDriverOptions,
@@ -814,17 +595,21 @@ export class FakeWaServer {
     ): Promise<void> {
         const driver = new FakePairingDriver(options, {
             pipeline,
-            companionMaterialResolver
+            companionMaterialResolver,
+            waitForPairDeviceAck: async (pairDeviceIqId) => {
+                await this.expectIq(
+                    {
+                        id: pairDeviceIqId
+                    },
+                    {
+                        timeoutMs: 15_000
+                    }
+                )
+            }
         })
         await driver.run()
     }
 
-    // ── Server lifecycle ─────────────────────────────────────────────
-
-    /**
-     * Make the fake server reject every new connection by closing the
-     * websocket immediately after `accept`.
-     */
     public setRejectMode(info: { readonly code?: number; readonly reason?: string } | null): void {
         if (info === null) {
             this.rejectMode = null
@@ -854,9 +639,6 @@ export class FakeWaServer {
         return this.requireListening().port
     }
 
-    /**
-     * The ephemeral root CA the fake server signs cert chains with.
-     */
     public get noiseRootCa(): FakeWaServerNoiseRootCa {
         const root = this.requireRootCa()
         return { publicKey: root.publicKey, serial: root.serial }
@@ -894,8 +676,6 @@ export class FakeWaServer {
         this.serverStaticKeyPair = null
     }
 
-    // ── Connection handling (private) ────────────────────────────────
-
     private handleConnection(connection: WaFakeConnection): void {
         if (this.rejectMode) {
             connection.close(this.rejectMode.code, this.rejectMode.reason)
@@ -930,8 +710,8 @@ export class FakeWaServer {
         for (const listener of this.inboundStanzaListeners) {
             try {
                 listener(node)
-            } catch {
-                // Listeners are best-effort.
+            } catch (error) {
+                void error
             }
         }
 
@@ -952,8 +732,6 @@ export class FakeWaServer {
             }
         }
     }
-
-    // ── Media upload handling (private) ──────────────────────────────
 
     private buildMediaRequestHandler(): (req: IncomingMessage, res: ServerResponse) => void {
         return (req, res): void => {
@@ -1020,8 +798,6 @@ export class FakeWaServer {
         })
     }
 
-    // ── Private helpers ──────────────────────────────────────────────
-
     private requireListening(): WaFakeWsServerListenInfo {
         if (!this.listenInfo) {
             throw new Error('fake server is not listening')
@@ -1037,8 +813,6 @@ export class FakeWaServer {
     }
 }
 
-// ─── Module-level helpers (stay here) ────────────────────────────────
-
 function parseQueryParam(query: string | undefined, name: string): string | undefined {
     if (!query) return undefined
     for (const pair of query.split('&')) {
@@ -1053,6 +827,7 @@ function parseQueryParam(query: string | undefined, name: string): string | unde
 
 function matchesIq(iq: BinaryNode, matcher: WaFakeIqMatcher): boolean {
     if (iq.tag !== 'iq') return false
+    if (matcher.id !== undefined && iq.attrs.id !== matcher.id) return false
     if (matcher.type !== undefined && iq.attrs.type !== matcher.type) return false
     if (matcher.xmlns !== undefined && iq.attrs.xmlns !== matcher.xmlns) return false
     if (matcher.childTag !== undefined) {
@@ -1065,6 +840,7 @@ function matchesIq(iq: BinaryNode, matcher: WaFakeIqMatcher): boolean {
 
 function describeMatcher(matcher: WaFakeIqMatcher): string {
     const parts: string[] = []
+    if (matcher.id !== undefined) parts.push(`id=${matcher.id}`)
     if (matcher.type !== undefined) parts.push(`type=${matcher.type}`)
     if (matcher.xmlns !== undefined) parts.push(`xmlns=${matcher.xmlns}`)
     if (matcher.childTag !== undefined) parts.push(`childTag=${matcher.childTag}`)

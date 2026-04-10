@@ -1,45 +1,5 @@
 #!/usr/bin/env node
-/**
- * `@zapo-js/fake-server` CLI.
- *
- * Boots a `FakeWaServer` standalone so external processes can drive a
- * real `WaClient` against it. Useful for:
- *   - manual REPL exploration / debugging the lib
- *   - running a long-lived sandbox while you iterate on app code
- *   - smoke tests outside the cross-check suite
- *
- * Usage:
- *
- *   npx @zapo-js/fake-server [flags]
- *
- * Flags:
- *   --host <host>       Bind host (default: 127.0.0.1)
- *   --port <port>       WebSocket listener port (default: 0 = random)
- *   --path <path>       WebSocket upgrade path (default: /ws/chat)
- *   --peer <jid>        Pre-create a fake peer; can be repeated
- *   --group <spec>      Pre-create a fake group; spec format
- *                       `<group-jid>=<peer-jid>,<peer-jid>,...`;
- *                       all peer-jids must already be `--peer` arguments;
- *                       can be repeated
- *   --log               Print every inbound stanza on the wire
- *   --quiet             Suppress the post-startup info banner
- *   --json              Print connection info as JSON instead of text
- *   -h | --help         Show this help
- *
- * Examples:
- *
- *   # Bare server
- *   npx @zapo-js/fake-server --port 9999
- *
- *   # Pre-paired sandbox with a 3-peer group ready to receive
- *   npx @zapo-js/fake-server \
- *       --peer 5511aaa1111@s.whatsapp.net \
- *       --peer 5511bbb2222@s.whatsapp.net \
- *       --peer 5511ccc3333@s.whatsapp.net \
- *       --group 120363555555555555@g.us=5511aaa1111@s.whatsapp.net,5511bbb2222@s.whatsapp.net,5511ccc3333@s.whatsapp.net
- *
- * The server stays up until you hit Ctrl+C, then shuts down cleanly.
- */
+/** Standalone CLI for `@zapo-js/fake-server`. */
 
 import { FakeWaServer } from './api/FakeWaServer'
 
@@ -177,7 +137,6 @@ async function main(): Promise<void> {
         process.exit(0)
     }
 
-    // Pre-validate group specs before we boot the server.
     const parsedGroups = args.groupSpecs.map(parseGroupSpec)
     for (const group of parsedGroups) {
         for (const jid of group.participantJids) {
@@ -195,17 +154,6 @@ async function main(): Promise<void> {
         port: args.port,
         path: args.path
     })
-
-    // Pre-create peers + groups before we expose the server. Each
-    // peer is bound to the FIRST authenticated pipeline, which
-    // doesn't exist yet — we have to wait for the lib to connect.
-    // The CLI registers an `onAuthenticatedPipeline` callback that
-    // does the binding lazily so the user can connect any time
-    // after seeing the startup banner.
-    const peerJidsByJid = new Map<string, true>()
-    for (const jid of args.peerJids) {
-        peerJidsByJid.set(jid, true)
-    }
 
     let setupComplete = false
     const setupPromise = new Promise<void>((resolve, reject) => {
@@ -328,8 +276,6 @@ async function main(): Promise<void> {
     process.on('SIGINT', () => void shutdown('SIGINT'))
     process.on('SIGTERM', () => void shutdown('SIGTERM'))
 
-    // Hold the event loop alive forever. The signal handlers above
-    // will resolve the promise via process.exit().
     await new Promise<void>(() => undefined)
 }
 

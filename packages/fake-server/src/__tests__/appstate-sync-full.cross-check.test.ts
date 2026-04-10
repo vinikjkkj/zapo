@@ -1,33 +1,4 @@
-/**
- * Phase 18 cross-check: full app-state sync round-trip with real
- * encrypted snapshot bytes.
- *
- * Scenario:
- *   1. Real WaClient connects + completes the noise handshake.
- *   2. Test mints a fresh sync key (random keyId + 32 random bytes).
- *   3. Test builds a `FakeAppStateCollection` for `regular_high`,
- *      applies one MUTE mutation against a chat jid, and registers a
- *      provider returning the resulting snapshot via
- *      `server.provideAppStateCollection`.
- *   4. Test triggers a fresh prekey upload, creates a FakePeer, then
- *      uses `peer.sendAppStateSyncKeyShare` to ship the sync key inside
- *      an encrypted protocolMessage.
- *   5. The lib decrypts the message, persists the key, and auto-triggers
- *      `syncAppState()`. The auto-registered IQ handler ships the
- *      snapshot for `regular_high` (and empty success for the other
- *      collections).
- *   6. The lib decrypts the snapshot mutation, advances its collection
- *      state to version 1, persists the mutation, and emits a
- *      `chat_event` event of action="mute" with the mute payload.
- *   7. Test asserts the event matches the input mutation.
- *
- * The whole pipeline runs against the lib's real `WaAppStateCrypto`
- * (mutation/value/snapshot/patch MAC, LTHash transition) — there is no
- * mock or stub on either side; the fake server's `FakeAppStateCrypto`
- * is bit-compatible with the lib.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
+/** Cross-check: full app-state sync round-trip with encrypted patch payload. */
 
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
@@ -77,9 +48,6 @@ test('full app-state sync round-trip ships an encrypted patch the lib decrypts',
         keyId: syncKeyId,
         keyData: syncKeyData
     })
-    // The mutation index format mirrors the lib's
-    // `buildMutationIndex(action, chatJid, ...)` which JSON-encodes
-    // ['mute', chatJid] for a chat-mute mutation.
     await collection.applyMutation({
         operation: 'set',
         index: JSON.stringify(['mute', chatJid]),
@@ -92,20 +60,9 @@ test('full app-state sync round-trip ships an encrypted patch the lib decrypts',
         },
         version: 2
     })
-    // Encode an inline `SyncdPatch` (version 0 → 1) with our mutation.
-    // The wire `<snapshot>` field carries an `ExternalBlobReference` and
-    // would require a media CDN to download the actual `SyncdSnapshot`
-    // bytes — we ship the equivalent state via an inline `<patches><patch>`
-    // instead, which the lib decodes immediately without an external
-    // download. The patch's snapshotMac/patchMac are computed against
-    // the post-mutation LTHash, which mirrors the empty-base-hash the
-    // lib carries in its initial collection state.
     const patchBytes = await collection.encodePendingPatch()
     const patchVersion = collection.version
 
-    // Hand the patch to the auto IQ handler. The first call returns the
-    // patch once; subsequent rounds get an empty success at the already-
-    // bumped version.
     let patchShipped = false
     server.provideAppStateCollection('regular_high', () => {
         if (patchShipped) {

@@ -1,38 +1,4 @@
-/**
- * Full bidirectional Signal Double Ratchet for the fake peer.
- *
- * Sources:
- *   /deobfuscated/WASignal/WASignalWhitepaper.js
- *   /deobfuscated/WASignal/WASignalCipher.js
- *   /deobfuscated/WASignal/WASignalSessions.js
- *   /deobfuscated/pb/WASignalWhisperTextProtocol_pb.js
- *
- * Cross-checked against the lib's `initiateSessionOutgoing`,
- * `initiateSessionIncoming`, `calculateRatchet`, `encryptMsg` and
- * `decryptMsgFromSession` (`src/signal/session/SignalSession.ts` and
- * `src/signal/session/SignalRatchet.ts`).
- *
- * This class consolidates the previously-split `FakePeerSession`
- * (sender) and `FakePeerRecvSession` (receiver) into one piece of
- * state that supports the full DR protocol:
- *
- *   - Either side can initiate (Alice via X3DH initiator, or wait for
- *     a pkmsg as Bob via X3DH responder).
- *   - On the FIRST encrypt the local side runs an outbound DH ratchet
- *     step against the remote signedPreKey to derive the initial send
- *     chain key.
- *   - On every inbound message with a NEW remote ratchet pub, the
- *     local side runs a recv DH ratchet step (and bumps the next
- *     outbound chain via a fresh local ratchet, exactly like the
- *     lib's `decryptMsgFromSession`).
- *   - Inbound messages with the current remote ratchet pub walk the
- *     recv chain forward.
- *   - Outbound messages walk the send chain forward.
- *
- * This is enough to support send→recv, recv→send, and arbitrarily
- * deep ping-pong sequences with one peer, all driven by the lib's
- * real Signal layer on the other side.
- */
+/** Bidirectional Signal Double Ratchet used by fake peers. */
 
 import {
     aesCbcDecrypt,
@@ -68,7 +34,6 @@ export class FakePeerDoubleRatchetError extends Error {
 
 interface SendChain {
     ratchetKeyPair: SignalKeyPair
-    /** 33-byte serialized version of `ratchetKeyPair.pubKey`. */
     ratchetPubSerialized: Uint8Array
     chainKey: Uint8Array
     nextIndex: number
@@ -82,16 +47,9 @@ interface UnusedMessageKey {
 }
 
 interface RecvChain {
-    /** 33-byte serialized remote ratchet pub. */
     ratchetPubKey: Uint8Array
     chainKey: Uint8Array
     nextIndex: number
-    /**
-     * Cache of message keys we derived past the current chain head but
-     * haven't consumed yet — happens when an inbound message arrives
-     * out of order (e.g. counter=3 lands before counter=2). Mirrors
-     * the lib's `SignalRecvChain.unusedMsgKeys` slot.
-     */
     unusedKeys: UnusedMessageKey[]
 }
 
@@ -105,24 +63,13 @@ interface PendingPreKeyHeader {
 
 export class FakePeerDoubleRatchet {
     private readonly keyBundle: FakePeerKeyBundle
-    /** 33-byte serialized peer (local) static identity public key. */
     private readonly localIdentityPubSerialized: Uint8Array
-    /** 33-byte serialized client (remote) static identity public key. */
     private remoteIdentityPubSerialized: Uint8Array | null = null
     private rootKey: Uint8Array | null = null
     private sendChain: SendChain | null = null
     private recvChain: RecvChain | null = null
-    /** Header to prepend to the FIRST outgoing message (Alice mode only). */
     private pendingPreKeyHeader: PendingPreKeyHeader | null = null
-    /**
-     * Cached chain key from the X3DH-only step. We keep it around so the
-     * first inbound recv ratchet step can use it as the salt for the
-     * "WhisperRatchet" HKDF (mirroring the lib's behaviour where the
-     * `chainKey` returned by `initiateSessionIncoming` is the precursor
-     * for the first DR step).
-     */
     private bootstrapChainKey: Uint8Array | null = null
-    /** True after the FIRST outbound DR step has installed sendChain. */
     private hasOutboundSendChain = false
 
     public constructor(keyBundle: FakePeerKeyBundle) {
@@ -136,36 +83,15 @@ export class FakePeerDoubleRatchet {
         return this.keyBundle.registrationId
     }
 
-    /**
-     * `true` once the session has a usable send chain — either via
-     * `initiateOutbound` (Alice path) or via a recv DR step that
-     * rotated a fresh local ratchet (Bob path after the first
-     * inbound pkmsg).
-     */
     public hasSendChain(): boolean {
         return this.sendChain !== null && this.hasOutboundSendChain
     }
 
-    /**
-     * Initiates a new outgoing session against the lib's prekey bundle
-     * (Alice role X3DH + first outbound DH ratchet step). Subsequent
-     * `encrypt()` calls walk the send chain forward; the FIRST one
-     * produces a `pkmsg` envelope, all later ones produce plain `msg`.
-     */
     public async initiateOutbound(
         bundle: ClientPreKeyBundle,
         options: {
             readonly oneTimePreKey?: { readonly keyId: number; readonly publicKey: Uint8Array }
-            /**
-             * When true, the X3DH initiator skips the one-time prekey
-             * mix entirely (the lib accepts pkmsg with `preKeyId`
-             * absent and builds the responder session without DH4).
-             * This unblocks bench scenarios that bring up many
-             * concurrent peers — the lib's prekey upload only contains
-             * a fixed number of one-time prekeys, so reusing index 0
-             * across N peers would cause the lib to reject every
-             * pkmsg after the first as "prekey N not found".
-             */
+            /** Skip DH4 (one-time prekey) when no per-peer prekey can be reserved. */
             readonly skipOneTimePreKey?: boolean
         } = {}
     ): Promise<void> {
@@ -177,13 +103,7 @@ export class FakePeerDoubleRatchet {
         const localBase = await X25519.generateKeyPair()
         const localBaseSerialized = toSerializedPubKey(localBase.pubKey)
 
-        // NOTE: deliberately do NOT fall back to `bundle.preKeys[0]`.
-        // Every FakePeer would otherwise consume the same prekey index,
-        // causing the lib to reject every pkmsg after the first as
-        // "prekey N not found". Callers must either pass an explicit
-        // `oneTimePreKey` (e.g. dispensed by `FakeWaServer`'s prekey
-        // dispenser) or set `skipOneTimePreKey: true` to opt out of
-        // DH4 entirely.
+        // Do not fallback to bundle.preKeys[0], otherwise concurrent peers reuse one key id.
         const consumedOneTime = options.skipOneTimePreKey
             ? undefined
             : options.oneTimePreKey
@@ -208,9 +128,6 @@ export class FakePeerDoubleRatchet {
         const [rootKey, _chainKey] = await hkdfSplit(shared, null, 'WhisperText')
         void _chainKey
 
-        // First outbound DR step: Alice mints a fresh sendRatchet and
-        // mixes ECDH(sendRatchet.priv, remote.signedPreKey.pub) with
-        // the X3DH root key.
         const sendRatchet = await X25519.generateKeyPair()
         const ratchetSecret = await X25519.scalarMult(
             sendRatchet.privKey,
@@ -238,12 +155,6 @@ export class FakePeerDoubleRatchet {
         }
     }
 
-    /**
-     * Encrypts a plaintext message and returns either a `pkmsg`
-     * envelope (first message in the session) or a plain `msg`
-     * envelope (subsequent messages, or after a recv-side DR rotation
-     * forced an outbound rotation).
-     */
     public async encrypt(
         plaintext: Uint8Array
     ): Promise<{ readonly type: 'pkmsg' | 'msg'; readonly ciphertext: Uint8Array }> {
@@ -306,12 +217,6 @@ export class FakePeerDoubleRatchet {
         return { type: 'msg', ciphertext: inner }
     }
 
-    /**
-     * Decrypts a `<enc type="pkmsg"/>` envelope (Bob role X3DH +
-     * first recv DH ratchet step). The session must NOT already have
-     * been initiated as Alice — pkmsg is the bootstrap shape for the
-     * receiver side.
-     */
     public async decryptPreKeyMessage(envelope: Uint8Array): Promise<Uint8Array> {
         const body = readVersionedBody(envelope)
         const preKeyMessage = proto.PreKeySignalMessage.decode(body)
@@ -339,7 +244,6 @@ export class FakePeerDoubleRatchet {
             oneTimePrivKey = entry.keyPair.privKey
         }
 
-        // Bob-role X3DH.
         const remoteIdentityRaw = toRawPubKey(remoteIdentity)
         const baseKeyRaw = toRawPubKey(baseKey)
         const signedPriv = this.keyBundle.signedPreKey.keyPair.privKey
@@ -360,18 +264,9 @@ export class FakePeerDoubleRatchet {
         this.remoteIdentityPubSerialized = toSerializedPubKey(remoteIdentity)
         this.rootKey = rootKey
         this.bootstrapChainKey = chainKey
-        // In Bob mode our "current local ratchet" for the first DR step
-        // is the signedPreKey itself. We materialise it as a SignalKeyPair
-        // so the recv-DR step below treats it like any send chain.
-        // The send chain is left null until we actively encrypt.
         return this.decryptInnerSignalMessage(innerMessage, /* isBootstrap */ true)
     }
 
-    /**
-     * Decrypts a `<enc type="msg"/>` envelope. Walks the recv chain
-     * forward, or runs a recv DH ratchet step if the inbound ratchet
-     * pub is fresh.
-     */
     public async decryptMessage(envelope: Uint8Array): Promise<Uint8Array> {
         return this.decryptInnerSignalMessage(envelope, /* isBootstrap */ false)
     }
@@ -403,9 +298,7 @@ export class FakePeerDoubleRatchet {
         const ciphertext = requireBytes(signalMessage.ciphertext, 'ciphertext')
         const ratchetSerialized = toSerializedPubKey(ratchetKey)
 
-        // Resolve the recv chain: bootstrap path, walk-forward, or DR rotation.
         if (isBootstrap) {
-            // Bob-role bootstrap: derive recv chain via DH(signedPreKey.priv, remote.ratchet).
             if (!this.rootKey || !this.bootstrapChainKey) {
                 throw new FakePeerDoubleRatchetError('bootstrap state missing')
             }
@@ -426,37 +319,14 @@ export class FakePeerDoubleRatchet {
                 nextIndex: 0,
                 unusedKeys: []
             }
-            // After the first recv DR step on the Bob side, the lib (Alice)
-            // is sitting on its own send chain. When the fake peer wants to
-            // REPLY, it needs a fresh local ratchet. We mint one + run an
-            // outbound DR step against the inbound ratchet so the next
-            // encrypt() can use a brand-new send chain. This mirrors the
-            // lib's `decryptMsgFromSession` which also rotates the send
-            // ratchet on every fresh recv ratchet kick.
             await this.rotateSendRatchet(ratchetKey)
-        } else if (this.recvChain && uint8Equal(this.recvChain.ratchetPubKey, ratchetSerialized)) {
-            // Walk forward — same remote ratchet.
-        } else {
-            // Fresh remote ratchet → recv DR step.
+        } else if (!this.recvChain || !uint8Equal(this.recvChain.ratchetPubKey, ratchetSerialized)) {
             await this.runRecvRatchetStep(ratchetKey)
         }
 
         if (!this.recvChain) {
             throw new FakePeerDoubleRatchetError('recv chain not initialized')
         }
-        // Three cases for message-key selection (mirrors the lib's
-        // `selectMessageKey` in `SignalRatchet.ts`):
-        //
-        //   1. counter < recvChain.nextIndex → look for a previously
-        //      stashed unused key for that counter (out-of-order
-        //      arrival of an earlier message). If we don't have it,
-        //      it's a stale duplicate and we error.
-        //   2. counter === recvChain.nextIndex → derive the next key
-        //      and walk the chain head forward.
-        //   3. counter > recvChain.nextIndex → walk the chain forward,
-        //      stashing every intermediate key into `unusedKeys` so
-        //      they can be consumed by case (1) when the missing
-        //      messages eventually arrive.
         let messageKey: { cipherKey: Uint8Array; macKey: Uint8Array; iv: Uint8Array } | null =
             null
         if (counter < this.recvChain.nextIndex) {
@@ -506,8 +376,6 @@ export class FakePeerDoubleRatchet {
                 walkIndex += 1
             }
             const allUnused = [...this.recvChain.unusedKeys, ...newlyStashed]
-            // Cap the cache size to keep memory bounded under
-            // pathological skip patterns.
             const trimmed =
                 allUnused.length > MAX_FUTURE_RECV_KEYS
                     ? allUnused.slice(allUnused.length - MAX_FUTURE_RECV_KEYS)
@@ -523,7 +391,6 @@ export class FakePeerDoubleRatchet {
             throw new FakePeerDoubleRatchetError('failed to derive recv message key')
         }
 
-        // MAC verify.
         if (!this.remoteIdentityPubSerialized) {
             throw new FakePeerDoubleRatchetError('remoteIdentityPub not set')
         }
@@ -570,9 +437,6 @@ export class FakePeerDoubleRatchet {
             nextIndex: 0,
             unusedKeys: []
         }
-        // After receiving fresh remote ratchet, mint a new local ratchet
-        // and run a SECOND DR step so the next outbound encrypt uses a
-        // brand-new send chain (mirrors the lib's behaviour).
         await this.rotateSendRatchet(remoteRatchetPub)
     }
 

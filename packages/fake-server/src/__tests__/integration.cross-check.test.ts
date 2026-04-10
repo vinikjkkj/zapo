@@ -1,20 +1,3 @@
-/**
- * Phase 1 integration test: full bring-up against a real WaClient.
- *
- * A `WaClient` (zapo-js, unmodified except for the `testHooks.noiseRootCa`
- * escape hatch) connects to `FakeWaServer.start()`, completes the noise XX
- * handshake against the fake server's ephemeral root CA, accepts the
- * encrypted `<success/>` stanza and emits both `connection_success` and
- * `connection { status: 'open' }`.
- *
- * If this test passes, every Phase 1 deliverable in
- * `packages/fake-server/AGENTS.md` is met.
- *
- * NOTE: this file is allowed to import zapo-js directly because it is the
- * cross-check test that drives the lib through the fake server end-to-end.
- * See the eslint override for `*.cross-check.test.ts`.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

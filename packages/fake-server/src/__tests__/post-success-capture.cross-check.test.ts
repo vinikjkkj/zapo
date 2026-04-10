@@ -1,14 +1,3 @@
-/**
- * Diagnostic capture test — observes which stanzas a real WaClient sends
- * after the noise handshake completes, so we know which IQ handlers Phase 2
- * needs to provide.
- *
- * This test is intentionally permissive: it never fails on missing handlers,
- * it only collects what the client sends and prints a summary. It sits in
- * the suite as a regression tripwire — if the client ever starts sending
- * different/more stanzas, the snapshot will diverge and a human will notice.
- */
-
 import test from 'node:test'
 
 import { FakeWaServer } from '../api/FakeWaServer'
@@ -43,8 +32,8 @@ test('capture: stanzas the client sends in the first 5s after success', async ()
     try {
         await client.connect()
         await new Promise((resolve) => setTimeout(resolve, 5_000))
-    } catch {
-        // Errors are expected — the client may give up when no IQ responses arrive.
+    } catch (error) {
+        void error
     } finally {
         await client.disconnect().catch(() => undefined)
     }

@@ -1,52 +1,4 @@
-/**
- * Builders + parsers for the `<iq xmlns="w:g2" type="set">` group
- * operation IQs the lib sends from `WaGroupCoordinator`.
- *
- * Sources:
- *   /deobfuscated/WAWebGroup/WAWebGroupOperationsResponse.js
- *   /deobfuscated/WAWebGroup/WAWebGroupAddParticipantsResponse.js
- *
- * Cross-checked against:
- *   src/transport/node/builders/group.ts
- *   src/client/coordinators/WaGroupCoordinator.ts
- *
- * The lib sends one of:
- *
- *   <iq type="set" to="g.us" xmlns="w:g2">
- *     <create subject="<title>">
- *       <participant jid="..."/>
- *       <participant jid="..."/>
- *       ...
- *       <description id="<ts>"><body>desc</body></description>
- *     </create>
- *   </iq>
- *
- *   <iq type="set" to="<group-jid>" xmlns="w:g2">
- *     <add|remove|promote|demote>
- *       <participant jid="..."/>
- *       ...
- *     </<add|remove|...>>
- *   </iq>
- *
- *   <iq type="set" to="<group-jid>" xmlns="w:g2">
- *     <subject>new subject</subject>
- *   </iq>
- *
- *   <iq type="set" to="<group-jid>" xmlns="w:g2">
- *     <description id="<ts>"><body>new description</body></description>
- *   </iq>
- *
- *   <iq type="set" to="g.us" xmlns="w:g2">
- *     <leave><group id="<group-jid>"/></leave>
- *   </iq>
- *
- * The lib's `WaGroupCoordinator` only checks for `attrs.type === 'result'`
- * for the participant change / leave / setSubject / setDescription /
- * setSetting / revokeInvite operations. Only `createGroup`,
- * `queryGroupMetadata`, `queryAllGroups` and `queryGroupInviteInfo`
- * actually parse the response payload, and the first three need a
- * `<group ...>` payload that mirrors the metadata format.
- */
+/** Builders/parsers for `w:g2` group IQ operations. */
 
 import type { BinaryNode } from '../../transport/codec'
 
@@ -54,10 +6,6 @@ import { buildIqResult } from './router'
 
 export type FakeGroupParticipantAction = 'add' | 'remove' | 'promote' | 'demote'
 
-/**
- * Parses the inbound participant-change IQ. Returns `null` if the
- * stanza doesn't carry one of the four known actions.
- */
 export function parseGroupParticipantChangeIq(iq: BinaryNode): {
     readonly action: FakeGroupParticipantAction
     readonly groupJid: string
@@ -91,13 +39,6 @@ export function parseGroupParticipantChangeIq(iq: BinaryNode): {
     return null
 }
 
-/**
- * Builds the participant-change IQ result. The lib only checks
- * `type === 'result'` for participant changes; we additionally echo
- * the modified `<participant>` list back inside the matching action
- * tag (with `error="200"` per real WhatsApp), which is the same shape
- * the production server uses.
- */
 export function buildGroupParticipantChangeResult(
     iq: BinaryNode,
     action: FakeGroupParticipantAction,
@@ -119,10 +60,6 @@ export function buildGroupParticipantChangeResult(
     }
 }
 
-/**
- * Parses the inbound `<iq><create subject=...><participant.../></create></iq>`
- * createGroup IQ.
- */
 export function parseCreateGroupIq(iq: BinaryNode): {
     readonly subject: string
     readonly participantJids: readonly string[]
@@ -151,10 +88,6 @@ export function parseCreateGroupIq(iq: BinaryNode): {
     return { subject, participantJids, description }
 }
 
-/**
- * Parses an `<iq><subject>...</subject></iq>` setSubject IQ. Decodes
- * the `<subject>` body whether it's a string or `Uint8Array`.
- */
 export function parseSetSubjectIq(iq: BinaryNode): {
     readonly groupJid: string
     readonly subject: string
@@ -170,10 +103,6 @@ export function parseSetSubjectIq(iq: BinaryNode): {
     }
 }
 
-/**
- * Parses an `<iq><description id=<ts>><body>desc</body></description></iq>`
- * setDescription IQ.
- */
 export function parseSetDescriptionIq(iq: BinaryNode): {
     readonly groupJid: string
     readonly description: string | null
@@ -197,11 +126,6 @@ export function parseSetDescriptionIq(iq: BinaryNode): {
     return { groupJid, description: body, descriptionId: desc.attrs.id }
 }
 
-/**
- * Parses an `<iq><leave><group id="<group-jid>"/></leave></iq>` leave IQ.
- * Returns the list of group JIDs the user is leaving (the lib supports
- * batched leaves but typically passes one).
- */
 export function parseLeaveGroupIq(iq: BinaryNode): readonly string[] | null {
     if (!Array.isArray(iq.content)) return null
     const leave = iq.content.find((child) => child.tag === 'leave')
@@ -215,11 +139,6 @@ export function parseLeaveGroupIq(iq: BinaryNode): readonly string[] | null {
     return out
 }
 
-/**
- * Builds the `<iq type="result"><group jid=... subject=... ...><participant jid=.../></group></iq>`
- * payload the lib's `parseGroupMetadata` reads. Used both as the
- * createGroup response and as the queryGroupMetadata response.
- */
 export function buildGroupMetadataNode(input: {
     readonly groupJid: string
     readonly subject: string

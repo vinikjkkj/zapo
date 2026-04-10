@@ -1,17 +1,3 @@
-/**
- * Phase 28 cross-check: disappearing (`ephemeralMessage`) wrapper.
- *
- * Scenario:
- *   1. Fake peer wraps a `conversation` payload inside an
- *      `ephemeralMessage` proto with a `contextInfo.expiration` TTL.
- *   2. Lib decrypts and emits the standard `message` event with the
- *      ephemeralMessage wrapper preserved.
- *   3. Test asserts the inner `conversation` text and the
- *      `expiration` field.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -71,9 +57,6 @@ test('fake peer pushes an ephemeral wrapped conversation and the lib emits messa
             messageContextInfo: {
                 deviceListMetadataVersion: 2
             },
-            // The expiration TTL travels alongside the wrapper. The lib
-            // doesn't validate the value, just round-trips it through
-            // the proto.
             extendedTextMessage: undefined
         })
 
@@ -82,7 +65,6 @@ test('fake peer pushes an ephemeral wrapped conversation and the lib emits messa
         assert.ok(ephemeral, 'ephemeralMessage wrapper should be present')
         assert.equal(ephemeral.message?.conversation, 'this self-destructs')
         assert.equal(event.senderJid, peerJid)
-        // Sanity-check the TTL constant didn't get clobbered.
         assert.equal(expirationSeconds, 604_800)
     } finally {
         await client.disconnect().catch(() => undefined)

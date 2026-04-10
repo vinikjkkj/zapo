@@ -1,21 +1,3 @@
-/**
- * Phase 30 cross-check: LID-addressed peer end-to-end.
- *
- * Two scenarios:
- *   (a) Fake peer push: peer's JID lives in the `@lid` server space
- *       (`5511777777777@lid`). The lib decrypts the inbound Signal
- *       message and emits `message` with `senderJid` in the LID space.
- *   (b) Outbound send: a paired `client.sendMessage(lidJid, ...)` runs
- *       usync + prekey-fetch against the LID jid, encrypts via X3DH,
- *       and the fake peer's `expectMessage` resolves with the
- *       decrypted plaintext (the recv session bootstraps from the
- *       pkmsg the lib ships). A fresh server is used per scenario so
- *       the fake peer's session state stays in pristine X3DH-responder
- *       form for the outbound case.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

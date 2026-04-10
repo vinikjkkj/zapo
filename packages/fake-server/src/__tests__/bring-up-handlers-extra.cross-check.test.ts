@@ -1,21 +1,3 @@
-/**
- * Phase 42 cross-check: gap-fill handlers landed on top of Phase 38.
- *
- * Covers the four handlers and seeders that have no public lib API
- * hook (or that fire only from background paths the cross-check suite
- * does not currently exercise):
- *
- *   1. `setPrivacyDisallowedList` seeder + `client.privacy.getDisallowedList`.
- *   2. Trusted-contact privacy-token issue (`<iq xmlns="privacy" type="set"><tokens>`).
- *   3. Newsletter `my_addons` metadata sync.
- *   4. Dirty-bits `<clean>` clear.
- *   5. AB-props seeder via `setAbProps`.
- *
- * For the three background-only IQs we feed a synthetic stanza through
- * `server.routeIqForTest`, which returns the response the global
- * handler would have written back on the wire.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

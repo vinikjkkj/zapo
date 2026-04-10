@@ -1,14 +1,3 @@
-/**
- * Phase 40 cross-check: group operation auto-handlers (no inline IQ
- * registration). Drives `client.group.*` against the global handlers
- * that mutate the centralised group registry.
- *
- * Replaces the older `group-operations.cross-check.test.ts` pattern
- * where every test had to register inline `<iq xmlns=w:g2>` handlers.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -34,11 +23,8 @@ test('client.group.createGroup mints a new group in the registry and returns met
         ])
         assert.equal(captured.length, 1, 'expected create op listener to fire')
         assert.equal(captured[0].subject, 'My Test Group')
-        // The lib parses the metadata; we trust the cross-check
-        // succeeded since it asserts iq result.
         assert.ok(result, 'createGroup should return a metadata BinaryNode')
 
-        // The registry has the new group.
         const groups = server.groupRegistrySnapshot()
         assert.equal(groups.size, 1)
         const [metadata] = groups.values()
@@ -74,12 +60,10 @@ test('client.group.{add,remove}Participants mutate the registry via auto handler
             captured.push(`${op.action}:${(op.participantJids ?? []).join(',')}`)
         })
 
-        // add peerC
         await client.group.addParticipants(groupJid, ['5511ccc@s.whatsapp.net'])
         let snapshot = server.groupRegistrySnapshot().get(groupJid)!
         assert.equal(snapshot.participants.length, 3)
 
-        // remove peerB
         await client.group.removeParticipants(groupJid, ['5511bbb@s.whatsapp.net'])
         snapshot = server.groupRegistrySnapshot().get(groupJid)!
         assert.equal(snapshot.participants.length, 2)

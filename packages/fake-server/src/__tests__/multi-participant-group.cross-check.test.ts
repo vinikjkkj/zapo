@@ -1,18 +1,3 @@
-/**
- * Phase 37 cross-check: paired client sends to a group with THREE
- * distinct participants, each in its own peer registry slot. Every
- * participant decrypts its copy via its own Signal session.
- *
- * The whole flow is driven by the centralised peer + group registries
- * — the test only calls `server.createFakePeer(...)` three times and
- * `server.createFakeGroup({ participants: [...] })` once. The global
- * usync / prekey-fetch / w:g2 handlers in `FakeWaServer`'s constructor
- * pick up everything from the registry; no inline IQ handlers are
- * needed.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -86,9 +71,6 @@ test('paired client.sendMessage to a 3-participant group fans out via the regist
 
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
-        // Pre-arm a stanza waiter so we can inspect the fanout shape
-        // BEFORE letting the per-peer expectGroupMessage callbacks
-        // consume it.
         const stanzaPromise = server.expectStanza(
             { tag: 'message', to: groupJid },
             { timeoutMs: 15_000 }
@@ -110,8 +92,6 @@ test('paired client.sendMessage to a 3-participant group fans out via the regist
         await client.sendMessage(groupJid, { conversation: text })
 
         const stanza = await stanzaPromise
-        // Confirm the lib produced a real fanout: <participants> with
-        // one <to> child per peer plus a top-level <enc type=skmsg>.
         const children: readonly BinaryNode[] = Array.isArray(stanza.content)
             ? stanza.content
             : []

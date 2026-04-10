@@ -1,17 +1,3 @@
-/**
- * Phase 27 cross-check: group operation IQs the lib sends via
- * `client.group.*` reach the fake server and resolve.
- *
- * Each operation registers a one-shot inline handler that asserts the
- * inbound IQ shape and returns a minimal `result` echo. The lib's
- * coordinator only requires `attrs.type === 'result'` for the
- * participant change / leave / setSubject / setDescription / setSetting
- * methods; createGroup additionally parses a `<group>` metadata
- * payload, so the test ships one.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -27,8 +13,6 @@ function findChild(node: BinaryNode, tag: string): BinaryNode | undefined {
 }
 
 function attachGroupMetadataResult(server: FakeWaServer): void {
-    // Inbound: <iq xmlns=w:g2 type=set to=g.us><create subject=...><participant jid=.../></create></iq>
-    // Reply: <iq type=result><group jid=120363... subject=... creation=...><participant jid=...></group></iq>
     server.registerIqHandler(
         { xmlns: 'w:g2', type: 'set', childTag: 'create' },
         (iq) => {
@@ -105,8 +89,6 @@ test('client.group participant change methods round-trip via the fake server', a
 
     const groupJid = '120363111111111111@g.us'
 
-    // Echo handler — accepts add/remove/promote/demote and returns
-    // success (the lib's coordinator only checks `type=result`).
     for (const action of ['add', 'remove', 'promote', 'demote'] as const) {
         server.registerIqHandler(
             { xmlns: 'w:g2', type: 'set', childTag: action },
@@ -122,8 +104,6 @@ test('client.group participant change methods round-trip via the fake server', a
         const peerA = '5511777777777@s.whatsapp.net'
         const peerB = '5511666666666@s.whatsapp.net'
 
-        // Drive every participant change action and assert the IQ
-        // landed on the wire with the right child tag.
         const seenActions = new Set<string>()
         const watchPromise = (async () => {
             const stream = ['add', 'remove', 'promote', 'demote'] as const

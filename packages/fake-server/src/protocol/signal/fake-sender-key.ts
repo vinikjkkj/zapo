@@ -1,36 +1,4 @@
-/**
- * Fake-peer-side Sender Key state for group messages.
- *
- * Source:
- *   /deobfuscated/WASignalGroup/WASignalGroupCipher.js
- *   /deobfuscated/WASignal/WASignalWhitepaper.js (deriveSenderKeyMsgKey)
- *
- * Wire format of a SenderKeyMessage (`<enc type="skmsg"/>`):
- *
- *     versionByte (0x33)            // (3<<4)|3
- *     proto.SenderKeyMessage {       // bytes
- *         id: uint32                 // sender key id
- *         iteration: uint32
- *         ciphertext: bytes          // AES-CBC(plaintext)
- *     }
- *     XEdDSA signature (64 bytes)   // signSignalMessage(signingKey.priv,
- *                                   //                   versionByte || proto)
- *
- * Wire format of a SenderKeyDistributionMessage (sent inside a pairwise
- * Message proto's `senderKeyDistributionMessage.axolotlSenderKeyDistributionMessage`
- * field — never on its own as a top-level stanza):
- *
- *     versionByte (0x33)
- *     proto.SenderKeyDistributionMessage {
- *         id: uint32
- *         iteration: uint32
- *         chainKey: bytes (32)
- *         signingKey: bytes (33, with 0x05 prefix)
- *     }
- *
- * Cross-checked against the lib's `SenderKeyManager.prepareGroupEncryption`
- * (`src/signal/group/SenderKeyManager.ts`).
- */
+/** SenderKey state used by fake peers for group encryption. */
 
 import {
     aesCbcEncrypt,
@@ -53,22 +21,15 @@ const MESSAGE_KEY_LABEL = new Uint8Array([1])
 const CHAIN_KEY_LABEL = new Uint8Array([2])
 
 interface SenderKeyState {
-    /** 32-bit sender key id (random per peer/group). */
     readonly id: number
-    /** Current chain key (32 bytes). */
     readonly chainKey: Uint8Array
-    /** Current iteration (advances on each encrypted message). */
     readonly iteration: number
-    /** Long-lived signing keypair for this sender. */
     readonly signingKeyPair: SignalKeyPair
 }
 
 export interface FakeSenderKeyEncryptionResult {
-    /** Bytes for `<enc type="skmsg"/>`. */
     readonly ciphertext: Uint8Array
-    /** Bytes to put inside `Message.senderKeyDistributionMessage.axolotlSenderKeyDistributionMessage`. */
     readonly distributionMessage: Uint8Array
-    /** Sender key id (caller may need to track distribution). */
     readonly keyId: number
 }
 
@@ -98,14 +59,6 @@ export class FakeSenderKey {
         return this.state.id
     }
 
-    /**
-     * Encrypts a plaintext, advances the chain, and returns both:
-     *   - The `<enc type="skmsg"/>` ciphertext bytes.
-     *   - The SenderKeyDistributionMessage bytes (always — even on
-     *     subsequent calls — so callers that haven't yet distributed the
-     *     sender key to a particular recipient can attach it to a pairwise
-     *     bootstrap message).
-     */
     public async encrypt(plaintext: Uint8Array): Promise<FakeSenderKeyEncryptionResult> {
         const distributionMessage = this.buildDistributionMessage()
 
@@ -157,7 +110,6 @@ export class FakeSenderKey {
 
 interface DerivedSenderKeyMessage {
     readonly iteration: number
-    /** 50-byte expanded HKDF output: bytes 0..16 = iv, bytes 16..48 = cipherKey. */
     readonly seed: Uint8Array
 }
 

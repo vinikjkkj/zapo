@@ -1,18 +1,3 @@
-/**
- * Phase 32 cross-checks: presence + chatstate inbound stanzas.
- *
- * Two scenarios:
- *   (a) Fake server pushes `<presence type="available" from=peer/>`
- *       and the lib emits `presence` with the matching `chatJid`.
- *   (b) Fake server pushes `<chatstate from=peer><composing/></chatstate>`
- *       and the lib emits `chatstate` with the matching `chatJid` +
- *       composing payload.
- *
- * Both flows are stanza-only — no Signal session is needed.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

@@ -1,31 +1,4 @@
-/**
- * Builders + parsers for `<iq xmlns="w:biz">` business profile IQs.
- *
- * Source:
- *   /deobfuscated/WAWebBusiness/WAWebBusinessProfileResponse.js
- *
- * Cross-checked against `src/transport/node/builders/business.ts` and
- * `src/client/coordinators/WaBusinessCoordinator.ts`.
- *
- * Wire layout (get):
- *   <iq type="result" id="<echo>">
- *     <business_profile v="116">
- *       <profile jid="5511...@s.whatsapp.net" tag="<id>">
- *         <address>...</address>
- *         <description>...</description>
- *         <email>...</email>
- *         <website>https://...</website>
- *         <categories>
- *           <category id="..."/>
- *         </categories>
- *         <business_hours timezone="America/Sao_Paulo">
- *           <business_hours_config day_of_week="mon" mode="open_24h"/>
- *           ...
- *         </business_hours>
- *       </profile>
- *     </business_profile>
- *   </iq>
- */
+/** Builders/parsers for `w:biz` business profile IQs. */
 
 import type { BinaryNode } from '../../transport/codec'
 
@@ -88,10 +61,6 @@ function buildBusinessProfileChildren(profile: FakeBusinessProfile): BinaryNode[
     return out
 }
 
-/**
- * Parses the inbound `<iq><business_profile v="116"><profile jid=...>` query
- * IQ and returns the list of jids the lib is asking about.
- */
 export function parseGetBusinessProfileIq(iq: BinaryNode): readonly string[] | null {
     if (!Array.isArray(iq.content)) return null
     const profile = iq.content.find((child) => child.tag === 'business_profile')

@@ -1,23 +1,3 @@
-/**
- * Phase 31 cross-check: bidirectional 1:1 ping-pong with the lib.
- *
- * This is the 100% coverage scenario for 1:1 send/recv:
- *   1. Fake peer (Alice X3DH initiator) sends pkmsg1 → lib decrypts.
- *   2. Lib replies with msg1 (its first reply, lib has done a recv DR
- *      step + a send DR step) → fake peer decrypts via the recv DR
- *      step (`runRecvRatchetStep`) using its own sendRatchet priv key.
- *   3. Fake peer sends msg2 → lib decrypts (after the recv DR rotation
- *      forced an outbound rotation, fake peer has a fresh send chain).
- *   4. Lib replies with msg2 → fake peer decrypts (another DR step).
- *   5. Fake peer sends msg3 → lib decrypts.
- *
- * Each direction goes through the lib's REAL Signal layer end-to-end;
- * the fake peer's `FakePeerDoubleRatchet` mirrors the lib's full DR
- * algorithm so every ratchet rotation lines up byte-for-byte.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -91,7 +71,6 @@ test('bidirectional 1:1 ping-pong (peer\u2192client\u2192peer\u2192client\u2192p
         const peer = await server.createFakePeer({ jid: peerJid }, pipelineAfterPair)
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
-        // === Round 1: peer → client (Alice X3DH initiator) ===
         const round1ReceivedByLib = waitForMessage(
             client,
             (event) => event.message?.conversation === 'peer-to-client #1'
@@ -100,16 +79,11 @@ test('bidirectional 1:1 ping-pong (peer\u2192client\u2192peer\u2192client\u2192p
         const round1Event = await round1ReceivedByLib
         assert.equal(round1Event.message?.conversation, 'peer-to-client #1')
 
-        // === Round 2: client → peer (lib's first reply, contains lib's NEW
-        // sendRatchet pub; fake peer must run a recv DR step to decrypt) ===
         const round2ReceivedByPeer = peer.expectMessage({ timeoutMs: 8_000 })
         await client.sendMessage(peerJid, { conversation: 'client-to-peer #1' })
         const round2 = await round2ReceivedByPeer
         assert.equal(round2.message.conversation, 'client-to-peer #1')
 
-        // === Round 3: peer → client (after recv DR step, fake peer has a
-        // brand-new send ratchet — this is a fresh chain, so the lib must
-        // also run a recv DR step to decrypt) ===
         const round3ReceivedByLib = waitForMessage(
             client,
             (event) => event.message?.conversation === 'peer-to-client #2'
@@ -118,13 +92,11 @@ test('bidirectional 1:1 ping-pong (peer\u2192client\u2192peer\u2192client\u2192p
         const round3Event = await round3ReceivedByLib
         assert.equal(round3Event.message?.conversation, 'peer-to-client #2')
 
-        // === Round 4: client → peer (lib does another DR rotation) ===
         const round4ReceivedByPeer = peer.expectMessage({ timeoutMs: 8_000 })
         await client.sendMessage(peerJid, { conversation: 'client-to-peer #2' })
         const round4 = await round4ReceivedByPeer
         assert.equal(round4.message.conversation, 'client-to-peer #2')
 
-        // === Round 5: peer → client (third send after two recv rotations) ===
         const round5ReceivedByLib = waitForMessage(
             client,
             (event) => event.message?.conversation === 'peer-to-client #3'
@@ -180,14 +152,12 @@ test('bidirectional 1:1 starting with the lib (client\u2192peer\u2192client\u219
         const peer = await server.createFakePeer({ jid: peerJid }, pipelineAfterPair)
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
-        // === Round 1: client → peer FIRST (lib X3DH initiator, Bob role) ===
         const round1Promise = peer.expectMessage({ timeoutMs: 8_000 })
         await client.sendMessage(peerJid, { conversation: 'lib first #1' })
         const round1 = await round1Promise
         assert.equal(round1.message.conversation, 'lib first #1')
         assert.equal(round1.encType, 'pkmsg')
 
-        // === Round 2: peer → client (fake peer's first send after Bob bootstrap) ===
         const round2Promise = waitForMessage(
             client,
             (event) => event.message?.conversation === 'peer reply #1'
@@ -196,13 +166,11 @@ test('bidirectional 1:1 starting with the lib (client\u2192peer\u2192client\u219
         const round2 = await round2Promise
         assert.equal(round2.message?.conversation, 'peer reply #1')
 
-        // === Round 3: client → peer again ===
         const round3Promise = peer.expectMessage({ timeoutMs: 8_000 })
         await client.sendMessage(peerJid, { conversation: 'lib reply #2' })
         const round3 = await round3Promise
         assert.equal(round3.message.conversation, 'lib reply #2')
 
-        // === Round 4: peer → client again ===
         const round4Promise = waitForMessage(
             client,
             (event) => event.message?.conversation === 'peer reply #2'

@@ -1,27 +1,3 @@
-/**
- * Phase 15 cross-check: real `WaClient` sends a group message,
- * fake peer decrypts the SenderKey ciphertext.
- *
- * Scenario:
- *   1. WaClient connects + pairs.
- *   2. Test creates a FakePeer with a real signed prekey bundle and
- *      registers it as the only participant of a fake group.
- *   3. Test registers an inline `<iq xmlns=w:g2 type=get>` handler
- *      replying with a minimal `<group/>` metadata node listing the
- *      fake peer as the single participant.
- *   4. Test triggers a fresh prekey upload.
- *   5. Test calls `client.sendMessage(groupJid, { conversation })`.
- *   6. The lib resolves the group metadata, fans out, runs X3DH for the
- *      peer (one-time pkmsg carrying the SKDM), encrypts the actual
- *      group payload as `<enc type="skmsg"/>` and pushes a single
- *      `<message to=group-jid>` stanza.
- *   7. The fake peer captures the stanza, decrypts the bootstrap pkmsg
- *      via the 1:1 recv session (extracting the SKDM), then decrypts
- *      the skmsg via the group recv session and asserts the plaintext.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -78,10 +54,6 @@ test('paired client.sendMessage to a group is decrypted by the fake peer', async
             { jid: peerJid, displayName: 'Group Peer' },
             pipelineAfterPair
         )
-        // The global w:g2 group-metadata handler reads from the
-        // server's group registry — registering the group here lets
-        // the lib's `queryGroupMetadata` resolve to a single-peer
-        // participant list without an inline IQ handler.
         server.createFakeGroup({
             groupJid,
             subject: 'Fake Group',

@@ -1,18 +1,4 @@
-/**
- * Per-collection app-state tracker for the fake server.
- *
- * Maintains the same view as the real WhatsApp Web server side: every
- * mutation observed for a collection bumps the version, advances the
- * collection's LTHash, and updates the running indexMac → valueMac map
- * used to compute the snapshot/patch MAC pair the lib verifies.
- *
- * Source:
- *   /deobfuscated/WAWebSyncd/WAWebSyncdLtHashUtils.js
- *   /deobfuscated/WAWebSyncd/WAWebSyncdMutationsCryptoUtils.js
- *
- * Cross-checked against `computeNextCollectionState` and
- * `assertPatchMacsMatch` in `src/appstate/WaAppStateSyncClient.ts`.
- */
+/** In-memory app-state collection tracker (version/LTHash + patch queue). */
 
 import {
     APP_STATE_EMPTY_LT_HASH,
@@ -22,11 +8,8 @@ import {
 import { proto, type Proto } from '../transport/protos'
 
 export interface FakeAppStateCollectionOptions {
-    /** Collection name (`regular_low`, `regular_high`, ...). */
     readonly name: string
-    /** 32-byte sync key id. */
     readonly keyId: Uint8Array
-    /** 32-byte sync key data. */
     readonly keyData: Uint8Array
     readonly crypto?: FakeAppStateCrypto
 }
@@ -35,7 +18,6 @@ export interface FakeAppStateMutationDescriptor {
     readonly operation: 'set' | 'remove'
     readonly index: string
     readonly value: Proto.ISyncActionValue | null
-    /** Per-mutation `version` field embedded inside `SyncActionData`. */
     readonly version: number
 }
 
@@ -46,26 +28,11 @@ interface InternalRecord {
     readonly valueBlob: Uint8Array
 }
 
-/**
- * State machine + builder for app-state snapshots and patches a fake
- * server hands to a real `WaClient`.
- *
- * Usage:
- *
- *     const collection = new FakeAppStateCollection({ name, keyId, keyData })
- *     await collection.applyMutation({ operation: 'set', index: '...', value, version: 2 })
- *     const snapshot = await collection.encodeSnapshot()  // first sync round
- *     // -> hand the bytes to <iq><sync><collection><snapshot>...</snapshot>
- *     await collection.applyMutation(...)                 // queue another mutation
- *     const patch = await collection.encodePendingPatch() // next sync round
- *     // -> hand the bytes to <iq><sync><collection><patches><patch>...
- */
 export class FakeAppStateCollection {
     public readonly name: string
     public readonly keyId: Uint8Array
     public readonly keyData: Uint8Array
     private readonly crypto: FakeAppStateCrypto
-    /** Collection version the lib will see after the next snapshot/patch. */
     private currentVersion = 0
     private currentLtHash: Uint8Array = APP_STATE_EMPTY_LT_HASH
     private readonly recordsByIndexMacHex = new Map<string, InternalRecord>()
@@ -90,13 +57,6 @@ export class FakeAppStateCollection {
         return this.currentLtHash
     }
 
-    /**
-     * Encrypts the mutation, advances the collection's LTHash, and queues
-     * it for the next snapshot/patch encoding. Mutations queued via
-     * `applyMutation` are bundled into the next call to either
-     * `encodeSnapshot()` (everything currently in the index map) or
-     * `encodePendingPatch()` (only the not-yet-flushed pending list).
-     */
     public async applyMutation(input: FakeAppStateMutationDescriptor): Promise<void> {
         const baseInput: FakeAppStateMutationInput = {
             operation: input.operation,
@@ -127,9 +87,6 @@ export class FakeAppStateCollection {
             addValues.push(encrypted.valueMac)
             this.pendingPatchMutations.push({ operation: 'set', record })
         } else {
-            // REMOVE: still queue a record so the patch carries the entry
-            // (the lib walks pending mutations, even removes — the encrypted
-            // blob is the same shape but the lib treats it as a removal).
             this.pendingPatchMutations.push({
                 operation: 'remove',
                 record: {
@@ -146,11 +103,6 @@ export class FakeAppStateCollection {
         this.hasUnflushedSnapshotChanges = true
     }
 
-    /**
-     * Encodes the **current full state** as a `SyncdSnapshot`. Bumps the
-     * collection version by 1 and clears the pending patch queue (the
-     * snapshot supersedes any queued patches).
-     */
     public async encodeSnapshot(): Promise<Uint8Array> {
         this.currentVersion += 1
         const records: Proto.ISyncdRecord[] = []
@@ -177,11 +129,6 @@ export class FakeAppStateCollection {
         }).finish()
     }
 
-    /**
-     * Encodes the queued pending mutations as a `SyncdPatch`. Bumps the
-     * collection version by 1, computes snapshot + patch MACs against
-     * the post-patch LTHash, and clears the pending queue.
-     */
     public async encodePendingPatch(): Promise<Uint8Array> {
         if (this.pendingPatchMutations.length === 0) {
             throw new Error(`fake app-state collection ${this.name}: no pending mutations to encode`)

@@ -1,32 +1,4 @@
-/**
- * Builders for `<iq xmlns="w:profile:picture">` and `<iq xmlns="status">`
- * IQ responses.
- *
- * Source:
- *   /deobfuscated/WAWebProfile/WAWebProfilePictureResponse.js
- *
- * Cross-checked against the lib's `parseProfilePicture` and
- * `parseSetPictureResult` (`src/client/coordinators/WaProfileCoordinator.ts`).
- *
- * Wire layouts:
- *
- *   getProfilePicture (preview/image):
- *     <iq type="result" id="<echo>">
- *       <picture
- *           url="https://..."
- *           direct_path="/v/.../n.jpg?..."
- *           id="<numeric>"
- *           type="image"/>
- *     </iq>
- *
- *   setProfilePicture:
- *     <iq type="result" id="<echo>">
- *       <picture id="<new-numeric>"/>
- *     </iq>
- *
- *   setStatus:
- *     <iq type="result" id="<echo>"/>      ← attributes only
- */
+/** Builders/parsers for profile picture and status IQs. */
 
 import type { BinaryNode } from '../../transport/codec'
 
@@ -60,11 +32,6 @@ export function buildGetProfilePictureResult(
     }
 }
 
-/**
- * Builds the `<iq type="result"><picture id="<new-id>"/></iq>` reply
- * the lib's `parseSetPictureResult` reads after a setProfilePicture
- * call.
- */
 export function buildSetProfilePictureResult(iq: BinaryNode, newId: string): BinaryNode {
     const result = buildIqResult(iq)
     return {
@@ -78,11 +45,6 @@ export function buildSetProfilePictureResult(iq: BinaryNode, newId: string): Bin
     }
 }
 
-/**
- * Parses the inbound `<iq xmlns="w:profile:picture" type="get"
- *   target="<jid>"><picture type="preview" query="url"/></iq>` and
- * returns the requested target jid + type.
- */
 export function parseGetProfilePictureIq(iq: BinaryNode): {
     readonly targetJid: string
     readonly type: 'image' | 'preview'
@@ -99,11 +61,6 @@ export function parseGetProfilePictureIq(iq: BinaryNode): {
     return { targetJid, type }
 }
 
-/**
- * Parses the inbound `<iq xmlns="w:profile:picture" type="set"><picture type="image">[bytes]</picture></iq>`.
- * Returns the bytes the lib uploaded so a test can assert against
- * them.
- */
 export function parseSetProfilePictureIq(iq: BinaryNode): {
     readonly targetJid: string | undefined
     readonly imageBytes: Uint8Array
@@ -117,9 +74,6 @@ export function parseSetProfilePictureIq(iq: BinaryNode): {
     }
 }
 
-/**
- * Parses the inbound `<iq xmlns="status" type="set"><status>text</status></iq>`.
- */
 export function parseSetStatusIq(iq: BinaryNode): { readonly text: string } | null {
     if (!Array.isArray(iq.content)) return null
     const status = iq.content.find((child) => child.tag === 'status')

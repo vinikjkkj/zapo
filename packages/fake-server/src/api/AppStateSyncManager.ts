@@ -10,19 +10,12 @@ import { proto, type Proto } from '../transport/protos'
 
 
 export interface CapturedAppStateMutation {
-    /** Collection name parsed from the inbound `<collection>`. */
     readonly collection: string
-    /** `set` or `remove`. */
     readonly operation: 'set' | 'remove'
-    /** Decoded mutation index (e.g. `JSON.stringify(['mute', '5511...@s.whatsapp.net'])`). */
     readonly index: string
-    /** First parsed segment of the JSON-encoded index (e.g. `'mute'`). */
     readonly action: string | undefined
-    /** Per-mutation `version` field embedded inside the `SyncActionData`. */
     readonly version: number
-    /** Decoded `SyncActionValue` carrying the actual action payload. */
     readonly value: Proto.ISyncActionValue | null
-    /** Patch version the lib advanced to. */
     readonly patchVersion: number
 }
 
@@ -36,52 +29,20 @@ function toHex(bytes: Uint8Array): string {
 }
 
 export class AppStateSyncManager {
-    /**
-     * Per-collection payload providers. The auto-registered IQ handler
-     * consults this map for each requested collection: if a provider is
-     * registered, it produces a `<patches>`/`<snapshot>` payload that
-     * advances the lib's collection state. Missing collections fall back
-     * to the empty-success response.
-     */
     public readonly appStateCollectionProviders = new Map<
         string,
         () => Promise<FakeAppStateCollectionPayload | null> | FakeAppStateCollectionPayload | null
     >()
-    /**
-     * Sync keys (`keyIdHex` → `keyData`) the fake server knows about.
-     * Tests register a key here when they want the fake server to
-     * decrypt outbound mutation patches the lib uploads. The keyId is
-     * normalized to lowercase hex.
-     */
     public readonly appStateSyncKeysByKeyId = new Map<string, Uint8Array>()
     public readonly appStateCrypto = new FakeAppStateCrypto()
-    /**
-     * Listeners notified for every mutation the lib uploads inside an
-     * `<iq xmlns=w:sync:app:state>` patch. Tests register a listener
-     * (typically scoped to a specific collection or chat jid) and
-     * resolve a promise when the matching mutation arrives.
-     */
     public readonly outboundMutationListeners = new Set<
         (mutation: CapturedAppStateMutation) => void
     >()
 
-    /**
-     * Registers an app-state sync key (the same `keyId`/`keyData` the
-     * test ships to the lib via `FakePeer.sendAppStateSyncKeyShare`)
-     * so the fake server can decrypt outbound mutations the lib uploads
-     * inside `<iq xmlns=w:sync:app:state>` patches. Without a registered
-     * key the patch is silently echoed back as success and the
-     * mutation contents are inaccessible to the test.
-     */
     public registerAppStateSyncKey(keyId: Uint8Array, keyData: Uint8Array): void {
         this.appStateSyncKeysByKeyId.set(toHex(keyId), keyData)
     }
 
-    /**
-     * Subscribes to outbound app-state mutations the lib uploads. The
-     * listener fires once per decrypted `SyncdMutation` inside any
-     * inbound app-state sync IQ. Returns an unsubscribe function.
-     */
     public onOutboundAppStateMutation(
         listener: (mutation: CapturedAppStateMutation) => void
     ): () => void {
@@ -91,10 +52,6 @@ export class AppStateSyncManager {
         }
     }
 
-    /**
-     * Convenience that resolves with the next decrypted outbound
-     * mutation matching the given predicate. Rejects after `timeoutMs`.
-     */
     public expectAppStateMutation(
         predicate: (mutation: CapturedAppStateMutation) => boolean,
         timeoutMs = 15_000
@@ -113,20 +70,6 @@ export class AppStateSyncManager {
         })
     }
 
-    /**
-     * Registers a payload provider for a given app-state collection.
-     * The provider is invoked once per inbound app-state sync IQ that
-     * names the collection, and the returned payload is shipped inside
-     * the `<sync><collection>` response. Returning `null` falls back to
-     * the empty-success default.
-     *
-     * Used by tests that ship real encrypted snapshots/patches: the
-     * provider typically wraps a `FakeAppStateCollection` and returns
-     * its `encodeSnapshot()` (first round) then `encodePendingPatch()`
-     * (subsequent rounds with queued mutations).
-     *
-     * Returns an unsubscribe function that clears the provider.
-     */
     public provideAppStateCollection(
         name: string,
         provider: () => Promise<FakeAppStateCollectionPayload | null> | FakeAppStateCollectionPayload | null
@@ -137,15 +80,6 @@ export class AppStateSyncManager {
         }
     }
 
-    /**
-     * Pushes a `<notification type="server_sync"/>` listing the given
-     * collection names. The lib's incoming notification handler reacts
-     * by triggering an `appStateSync.sync()` round, which the
-     * auto-registered `app-state-sync` IQ handler answers via the
-     * registered providers (or empty success if none are registered).
-     *
-     * Resolves once the notification has been written to the wire.
-     */
     public async pushServerSyncNotification(
         pipeline: WaFakeConnectionPipeline,
         input: BuildServerSyncNotificationInput
@@ -172,9 +106,6 @@ export class AppStateSyncManager {
                     if (!keyId) continue
                     const keyData = this.appStateSyncKeysByKeyId.get(toHex(keyId))
                     if (!keyData) continue
-                    // protobuf.js may return uint64 as a Long or a primitive
-                    // number depending on configuration. Normalize via the
-                    // Long-style toNumber() shim if it's available.
                     const rawVersion = decoded.version?.version
                     let patchVersion = 0
                     if (typeof rawVersion === 'number') {
@@ -212,7 +143,7 @@ export class AppStateSyncManager {
                                 action = parsed[0]
                             }
                         } catch {
-                            // index is opaque — leave action undefined
+                            // Ignore malformed index payloads; mutation capture still proceeds.
                         }
                         const captured: CapturedAppStateMutation = {
                             collection: collectionName,
@@ -227,14 +158,12 @@ export class AppStateSyncManager {
                             try {
                                 listener(captured)
                             } catch {
-                                // listeners are best-effort
+                                // Listener failures are best-effort.
                             }
                         }
                     }
                 } catch {
-                    // bad patch — skip silently so the auto handler still
-                    // returns a success response (the lib will reconcile
-                    // via its retry logic if it really cared).
+                    // Ignore malformed/undecryptable patches.
                 }
             }
         }

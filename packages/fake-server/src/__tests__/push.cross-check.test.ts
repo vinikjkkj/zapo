@@ -1,17 +1,3 @@
-/**
- * Phase 5 cross-check: server-pushed stanzas reach the lib's typed events.
- *
- * For each push builder we cover, the fake server pushes the stanza
- * immediately after the noise handshake completes (via `s.afterAuth(...)`)
- * and the test asserts that the corresponding `WaClientEventMap` event
- * fires on the lib side. This proves the stanza is wire-correct, the
- * post-handshake transport encryption matches the lib's expectations, and
- * the lib's incoming dispatch table accepts our shape.
- *
- * NOTE: this file is allowed to import zapo-js directly because it is a
- * cross-check test that drives the lib end-to-end.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -115,9 +101,6 @@ test('server pushes free-standing <error/> and lib emits stanza_error', async ()
     try {
         await client.connect()
         const [event] = await errorPromise
-        // The lib forwards the raw incoming node attrs in the event payload.
-        // We assert that *some* incoming event arrived; the exact attribute
-        // exposure depends on the lib's `createIncomingBaseEvent` shape.
         assert.ok(event)
     } finally {
         await client.disconnect().catch(() => undefined)
@@ -159,10 +142,6 @@ test('server pushes <receipt/> and lib emits incoming_receipt', async () => {
 test('server pushes generic <notification/> and lib emits incoming_notification', async () => {
     const server = await FakeWaServer.start()
 
-    // Use a custom notification type that no specialized handler claims, so it
-    // falls through to the generic notification handler. The lib's `devices`
-    // / `group` / `picture` handlers parse the `from` attribute as a fully
-    // qualified user/group JID and would reject the bare server JID.
     server.scenario((s) => {
         s.afterAuth(async (pipeline) => {
             await pipeline.sendStanza(

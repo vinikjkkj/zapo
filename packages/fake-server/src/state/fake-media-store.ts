@@ -1,19 +1,4 @@
-/**
- * In-memory media blob store served over the fake server's HTTP listener.
- *
- * Source:
- *   /deobfuscated/WAWebMediaCryptoUtil.js
- *   /deobfuscated/WAWebMediaConn.js
- *
- * The lib's `WaMediaTransferClient.downloadAndDecrypt` accepts an
- * absolute `directPath` (`http://...` or `https://...`) and downloads
- * the bytes verbatim before running its real
- * `WaMediaCrypto.decryptBytes` against them. By minting a fresh random
- * media key here, encrypting the plaintext via the lib's own
- * `WaMediaCrypto.encryptBytes`, and serving the resulting bytes via the
- * fake server's HTTP listener, the round-trip exercises the lib's full
- * media crypto path with no stubbing.
- */
+/** In-memory media blob store served by the fake media endpoint. */
 
 import { randomBytes } from 'node:crypto'
 
@@ -31,33 +16,17 @@ export type FakeMediaType =
     | 'md-app-state'
 
 export interface PublishMediaInput {
-    /** Plaintext bytes the lib will receive after decryption. */
     readonly plaintext: Uint8Array
-    /** HKDF info bucket — `image`, `video`, `history`, `md-app-state`, ... */
     readonly mediaType: FakeMediaType
-    /**
-     * Optional override for the URL path. If omitted, a random
-     * `/mms/<type>/<hex>` path is generated. Tests can pass a fixed
-     * path to make assertions easier.
-     */
     readonly path?: string
-    /**
-     * Optional pre-existing media key. If omitted, a fresh 32-byte key
-     * is generated.
-     */
     readonly mediaKey?: Uint8Array
 }
 
 export interface PublishedMediaBlob {
-    /** Random URL path the lib will GET (no leading host). */
     readonly path: string
-    /** 32-byte media key the lib will need to derive the AES/IV/HMAC. */
     readonly mediaKey: Uint8Array
-    /** SHA-256 of the plaintext (used for integrity check after decrypt). */
     readonly fileSha256: Uint8Array
-    /** SHA-256 of the encrypted blob (used for integrity check before decrypt). */
     readonly fileEncSha256: Uint8Array
-    /** Length of the encrypted blob in bytes. */
     readonly fileLength: number
     readonly mediaType: FakeMediaType
 }

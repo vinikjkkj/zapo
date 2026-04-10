@@ -1,15 +1,3 @@
-/**
- * Phase 29 cross-check: poll creation message round-trip.
- *
- * Scenario:
- *   1. Fake peer sends a `pollCreationMessageV3` with two options.
- *   2. Lib decrypts and emits the standard `message` event with the
- *      poll creation proto preserved.
- *   3. Test asserts the poll name and option labels.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import test from 'node:test'

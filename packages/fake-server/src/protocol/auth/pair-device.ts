@@ -1,41 +1,9 @@
-/**
- * Builders for the QR-pairing IQ stanzas.
- *
- * Sources:
- *   /deobfuscated/WASmaxInMdSet/WASmaxInMdSetToCompanionRequest.js  (pair-device)
- *   /deobfuscated/WASmaxInMdSet/WASmaxInMdSetRegRequest.js          (pair-success)
- *   /deobfuscated/WAWebHandlePairDevice.js
- *   /deobfuscated/WAWebHandlePairSuccess.js
- *   /deobfuscated/pb/WAWebProtobufsAdv_pb.js
- *
- * pair-device wire layout (server → client):
- *
- *   <iq type="set" xmlns="md" from="s.whatsapp.net" id="...">
- *     <pair-device>
- *       <ref>raw-bytes</ref>           ← exactly 6 refs (parser min/max 6)
- *       <ref>raw-bytes</ref>
- *       ...
- *     </pair-device>
- *   </iq>
- *
- * pair-success wire layout (server → client):
- *
- *   <iq type="set" xmlns="md" from="s.whatsapp.net" id="...">
- *     <pair-success>
- *       <device jid="..." [lid="..."]/>
- *       <platform name="..."/>
- *       <device-identity>[serialized ADVSignedDeviceIdentityHMAC]</device-identity>
- *       [<biz name="..."/>]
- *     </pair-success>
- *   </iq>
- */
+/** Pairing IQ builders/parsers (source: `WAWebHandlePairDevice*`, `/deobfuscated`). */
 
 import type { BinaryNode } from '../../transport/codec'
 
 export interface BuildPairDeviceIqInput {
-    /** IQ id (default auto-generated). */
     readonly id?: string
-    /** Refs as raw bytes (echoed inside the QR string the lib emits). */
     readonly refs: readonly Uint8Array[]
 }
 
@@ -67,15 +35,10 @@ export function buildPairDeviceIq(input: BuildPairDeviceIqInput): BinaryNode {
 
 export interface BuildPairSuccessIqInput {
     readonly id?: string
-    /** Device JID (e.g. `5511999999999:1@s.whatsapp.net`). */
     readonly deviceJid: string
-    /** Optional LID JID. */
     readonly deviceLid?: string
-    /** Platform name (e.g. `IOS`, `ANDROID`, `WEB`). */
     readonly platform: string
-    /** Serialized `ADVSignedDeviceIdentityHMAC` proto. */
     readonly deviceIdentityBytes: Uint8Array
-    /** Optional business name to inject as `<biz name="...">`. */
     readonly bizName?: string
 }
 
@@ -122,14 +85,7 @@ export function buildPairSuccessIq(input: BuildPairSuccessIqInput): BinaryNode {
     }
 }
 
-/**
- * Parses the QR string the lib emits via `auth_qr`. The format is
- * `ref,noisePub,identityPub,advSecret,platform` where each pubkey/secret
- * field is base64-encoded raw bytes (32 bytes for the keys, 32 for the
- * adv secret).
- *
- * Source: /deobfuscated/WAWebQrCodeOps.js
- */
+/** Parses `auth_qr`: `ref,noisePub,identityPub,advSecret,platform`. */
 export interface ParsedPairingQr {
     readonly ref: string
     readonly noisePublicKey: Uint8Array
@@ -143,15 +99,27 @@ export function parsePairingQrString(qr: string): ParsedPairingQr {
     if (parts.length < 5) {
         throw new Error(`pairing qr must have 5 comma-separated parts, got ${parts.length}`)
     }
+    const platform = parts[parts.length - 1]
+    const advSecretB64 = parts[parts.length - 2]
+    const identityPubB64 = parts[parts.length - 3]
+    const noisePubB64 = parts[parts.length - 4]
+    const ref = parts.slice(0, parts.length - 4).join(',')
     return {
-        ref: parts[0],
-        noisePublicKey: base64Decode(parts[1]),
-        identityPublicKey: base64Decode(parts[2]),
-        advSecretKey: base64Decode(parts[3]),
-        platform: parts[4]
+        ref,
+        noisePublicKey: base64Decode(noisePubB64),
+        identityPublicKey: base64Decode(identityPubB64),
+        advSecretKey: base64Decode(advSecretB64),
+        platform
     }
 }
 
 function base64Decode(input: string): Uint8Array {
-    return new Uint8Array(Buffer.from(input, 'base64'))
+    let normalized = input.replace(/-/g, '+').replace(/_/g, '/')
+    const remainder = normalized.length % 4
+    if (remainder === 2) normalized += '=='
+    else if (remainder === 3) normalized += '='
+    else if (remainder === 1) {
+        throw new Error(`invalid base64 string length: ${input.length}`)
+    }
+    return new Uint8Array(Buffer.from(normalized, 'base64'))
 }

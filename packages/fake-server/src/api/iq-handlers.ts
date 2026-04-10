@@ -1,13 +1,4 @@
-/**
- * Extracted IQ handler registrations.
- *
- * `registerDefaultIqHandlers(router, deps)` wires every auto-response the
- * fake server ships out of the box (prekey upload, media_conn, app-state
- * sync, usync, prekey-fetch, group ops, privacy, blocklist, profile,
- * status, business, etc.). The function is called once from the
- * `FakeWaServer` constructor; individual handlers talk to the rest of
- * the server exclusively through the narrow `IqHandlerDeps` interface.
- */
+/** Registers the default IQ auto-handlers used by `FakeWaServer`. */
 
 import { buildAbPropsResult, type BuildAbPropsResultInput } from '../protocol/iq/abprops'
 import {
@@ -75,10 +66,7 @@ import {
     toUserJidPart
 } from './ServerRegistries'
 
-// ─── Deps interface ──────────────────────────────────────────────────
-
 export interface IqHandlerDeps {
-    // From ServerRegistries
     readonly peerRegistry: ReadonlyMap<string, FakePeer>
     readonly groupRegistry: Map<string, MutableFakeGroup>
     readonly privacySettings: FakePrivacySettingsState
@@ -101,28 +89,15 @@ export interface IqHandlerDeps {
     notifyDirtyBitsClear(op: CapturedDirtyBitsClear): void
     notifyPrivacySet(change: CapturedPrivacySet): void
     notifyBlocklistChange(change: CapturedBlocklistChange): void
-
-    // From PreKeyDispenser
     capturePreKeyBundle(bundle: ClientPreKeyBundle): void
-
-    // From AppStateSyncManager
     consumeOutboundAppStatePatches(iq: BinaryNode): Promise<void>
     readonly appStateCollectionProviders: ReadonlyMap<
         string,
         () => Promise<FakeAppStateCollectionPayload | null> | FakeAppStateCollectionPayload | null
     >
-
-    // Media
     requireMediaHttpsInfo(): { readonly host: string; readonly port: number }
 }
 
-// ─── Helpers only used by handlers ───────────────────────────────────
-
-/**
- * Walks `<iq><usync><list><user jid=.../></list></usync></iq>` and
- * returns the user JIDs being queried. Used by the global usync
- * handler to look up devices in the peer registry.
- */
 export function parseUsyncRequestedUserJids(iq: BinaryNode): readonly string[] {
     if (!Array.isArray(iq.content)) return []
     const out: string[] = []
@@ -143,10 +118,6 @@ export function parseUsyncRequestedUserJids(iq: BinaryNode): readonly string[] {
     return out
 }
 
-/**
- * Builds the `<iq type=result><group jid=.../></iq>` payload the
- * lib's `parseGroupMetadata` reads.
- */
 export function parseRequestedKeyJids(iq: BinaryNode): readonly string[] {
     if (!Array.isArray(iq.content)) return []
     const out: string[] = []
@@ -184,15 +155,10 @@ function buildGroupMetadataReply(
     }
 }
 
-// ─── Registration function ───────────────────────────────────────────
-
 export function registerDefaultIqHandlers(
     router: WaFakeIqRouter,
     deps: IqHandlerDeps
 ): void {
-    // Auto-handle the client's PreKey upload IQ: capture the bundle, ack
-    // with a plain `<iq type="result"/>` so the lib's upload promise
-    // resolves successfully, and unblock any pending bundle waiters.
     router.register({
         label: 'prekey-upload',
         matcher: { xmlns: 'encrypt', type: 'set' },
@@ -200,25 +166,17 @@ export function registerDefaultIqHandlers(
             try {
                 const bundle = parsePreKeyUploadIq(iq)
                 deps.capturePreKeyBundle(bundle)
-            } catch {
-                // Fall through and let the lib see a `result` regardless;
-                // tests can still inspect captured stanzas.
-            }
+            } catch { /* ignore */ }
             return buildIqResult(iq)
         }
     })
 
-    // Reply to `<iq xmlns="encrypt" type="get"><digest/></iq>` with a 404
-    // error so the lib triggers a fresh prekey upload (which we then
-    // capture via the `prekey-upload` handler above).
     router.register({
         label: 'signal-digest',
         matcher: { xmlns: 'encrypt', type: 'get', childTag: 'digest' },
         respond: (iq) => buildIqError(iq, { code: 404, text: 'item-not-found' })
     })
 
-    // Auto-respond to the media_conn IQ (`<iq xmlns="w:m" type="set"><media_conn/></iq>`)
-    // by pointing the lib at our HTTPS listener.
     router.register({
         label: 'media-conn',
         matcher: { xmlns: 'w:m', type: 'set', childTag: 'media_conn' },
@@ -246,7 +204,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // Auto-respond to `<iq xmlns="w:sync:app:state" type="set"><sync>...</sync></iq>`.
     router.register({
         label: 'app-state-sync',
         matcher: { xmlns: 'w:sync:app:state', type: 'set' },
@@ -269,7 +226,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // Global usync handler.
     router.register({
         label: 'usync',
         matcher: { xmlns: 'usync', type: 'get', childTag: 'usync' },
@@ -283,7 +239,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // Global prekey-fetch handler.
     router.register({
         label: 'prekey-fetch',
         matcher: { xmlns: 'encrypt', type: 'get', childTag: 'key' },
@@ -317,7 +272,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // Global w:g2 group-metadata handler.
     router.register({
         label: 'group-metadata',
         matcher: { xmlns: 'w:g2', type: 'get', childTag: 'query' },
@@ -334,39 +288,30 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // ─── Tier 1: lifecycle / bring-up handlers ────────────────
-
-    // `<iq xmlns="abt" type="get"><props .../></iq>` — AB props
     router.register({
         label: 'abprops',
         matcher: { xmlns: 'abt', type: 'get', childTag: 'props' },
         respond: (iq) => buildAbPropsResult(iq, deps.abPropsInput)
     })
 
-    // `<iq xmlns="w:p" type="get"/>` — keepalive ping.
     router.register({
         label: 'whatsapp-ping',
         matcher: { xmlns: 'w:p', type: 'get' },
         respond: (iq) => buildIqResult(iq)
     })
 
-    // `<iq xmlns="urn:xmpp:ping" type="get"/>` — XMPP ping.
     router.register({
         label: 'xmpp-ping',
         matcher: { xmlns: 'urn:xmpp:ping', type: 'get' },
         respond: (iq) => buildIqResult(iq)
     })
 
-    // `<iq xmlns="encrypt" type="set"><rotate>...</rotate></iq>` —
-    // signed prekey rotation.
     router.register({
         label: 'signed-prekey-rotate',
         matcher: { xmlns: 'encrypt', type: 'set', childTag: 'rotate' },
         respond: (iq) => buildIqResult(iq)
     })
 
-    // `<iq xmlns="md" type="set"><remove-companion-device .../></iq>` —
-    // logout / unpair.
     router.register({
         label: 'remove-companion-device',
         matcher: { xmlns: 'md', type: 'set', childTag: 'remove-companion-device' },
@@ -376,9 +321,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // ─── Tier 2: group operations ─────────────────────────────
-
-    // `<iq xmlns="w:g2" type="set"><create subject=...><participant .../></create></iq>`
     router.register({
         label: 'group-create',
         matcher: { xmlns: 'w:g2', type: 'set', childTag: 'create' },
@@ -428,7 +370,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // Participant changes — `add | remove | promote | demote`.
     for (const action of ['add', 'remove', 'promote', 'demote'] as const) {
         router.register({
             label: `group-${action}`,
@@ -453,8 +394,6 @@ export function registerDefaultIqHandlers(
                             (peer) => !removed.has(peer.jid)
                         )
                     }
-                    // promote/demote don't change the participant
-                    // list, only roles — we don't track roles yet.
                 }
                 deps.notifyGroupOp({
                     action: parsed.action,
@@ -466,7 +405,6 @@ export function registerDefaultIqHandlers(
         })
     }
 
-    // setSubject
     router.register({
         label: 'group-subject',
         matcher: { xmlns: 'w:g2', type: 'set', childTag: 'subject' },
@@ -484,7 +422,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // setDescription
     router.register({
         label: 'group-description',
         matcher: { xmlns: 'w:g2', type: 'set', childTag: 'description' },
@@ -502,7 +439,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // leaveGroup
     router.register({
         label: 'group-leave',
         matcher: { xmlns: 'w:g2', type: 'set', childTag: 'leave' },
@@ -516,10 +452,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // ─── Tier 2: privacy + blocklist ──────────────────────────
-
-    // `<iq xmlns="privacy" type="get"><privacy/></iq>` — full
-    // settings query (no `<list>` child).
     router.register({
         label: 'privacy-get',
         matcher: { xmlns: 'privacy', type: 'get', childTag: 'privacy' },
@@ -536,7 +468,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // `<iq xmlns="privacy" type="set"><privacy><category .../></privacy></iq>`
     router.register({
         label: 'privacy-set',
         matcher: { xmlns: 'privacy', type: 'set', childTag: 'privacy' },
@@ -549,14 +480,12 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // `<iq xmlns="blocklist" type="get"/>` — list query
     router.register({
         label: 'blocklist-get',
         matcher: { xmlns: 'blocklist', type: 'get' },
         respond: (iq) => buildBlocklistResult(iq, [...deps.blocklistJids])
     })
 
-    // `<iq xmlns="blocklist" type="set"><item jid=... action="..."/></iq>`
     router.register({
         label: 'blocklist-set',
         matcher: { xmlns: 'blocklist', type: 'set' },
@@ -571,8 +500,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // `<iq xmlns="privacy" type="set"><tokens><token jid t type/></tokens></iq>` —
-    // trusted-contact privacy token issue.
     router.register({
         label: 'privacy-token-issue',
         matcher: { xmlns: 'privacy', type: 'set', childTag: 'tokens' },
@@ -588,16 +515,12 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // `<iq xmlns="newsletter" type="get"><my_addons limit="1"/></iq>` —
-    // dirty-bit driven newsletter metadata sync.
     router.register({
         label: 'newsletter-my-addons',
         matcher: { xmlns: 'newsletter', type: 'get', childTag: 'my_addons' },
         respond: (iq) => buildNewsletterMyAddonsResult(iq)
     })
 
-    // `<iq xmlns="urn:xmpp:whatsapp:dirty" type="set"><clean .../></iq>` —
-    // dirty bits clear.
     router.register({
         label: 'dirty-bits-clear',
         matcher: { xmlns: 'urn:xmpp:whatsapp:dirty', type: 'set' },
@@ -610,9 +533,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // ─── Tier 3: profile / status / business ──────────────────
-
-    // `<iq xmlns="w:profile:picture" type="get" target=<jid>><picture .../></iq>`
     router.register({
         label: 'profile-picture-get',
         matcher: { xmlns: 'w:profile:picture', type: 'get' },
@@ -627,7 +547,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // `<iq xmlns="w:profile:picture" type="set"><picture type="image">[bytes]</picture></iq>`
     router.register({
         label: 'profile-picture-set',
         matcher: { xmlns: 'w:profile:picture', type: 'set' },
@@ -642,7 +561,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // `<iq xmlns="status" type="set"><status>...</status></iq>`
     router.register({
         label: 'status-set',
         matcher: { xmlns: 'status', type: 'set' },
@@ -656,7 +574,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // `<iq xmlns="w:biz" type="get"><business_profile><profile jid=.../></business_profile></iq>`
     router.register({
         label: 'business-profile-get',
         matcher: { xmlns: 'w:biz', type: 'get', childTag: 'business_profile' },
@@ -671,7 +588,6 @@ export function registerDefaultIqHandlers(
         }
     })
 
-    // `<iq xmlns="w:biz" type="set"><business_profile .../></iq>` — edit
     router.register({
         label: 'business-profile-set',
         matcher: { xmlns: 'w:biz', type: 'set', childTag: 'business_profile' },

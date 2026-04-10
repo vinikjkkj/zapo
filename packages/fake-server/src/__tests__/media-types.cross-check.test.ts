@@ -1,21 +1,3 @@
-/**
- * Phase 26 cross-check: every media type round-trips through the
- * fake server's HTTPS listener.
- *
- * One parameterized test per media type (image / video / audio /
- * ptt / document / sticker). Each iteration:
- *   1. Generates random plaintext bytes.
- *   2. Publishes them as a media blob (the fake server runs the
- *      lib's real `WaMediaCrypto.encryptBytes`).
- *   3. Sends a Message proto with the matching media field via the
- *      FakePeer convenience helper.
- *   4. Waits for the lib's `message` event.
- *   5. Calls `client.mediaTransfer.downloadAndDecrypt(...)` and
- *      asserts the bytes match the original plaintext.
- *
- * NOTE: imports zapo-js via the cross-check helper.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 

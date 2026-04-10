@@ -1,23 +1,3 @@
-/**
- * Phase 8 cross-check: end-to-end Signal-encrypted message exchange.
- *
- * Scenario:
- *   1. Real `WaClient` connects to the fake server (XX handshake).
- *   2. Server pushes `<notification type="encrypt"><count value="0"/>`.
- *   3. Lib reacts by sending the PreKey upload IQ.
- *   4. Fake server captures the bundle, replies with `<iq type="result"/>`.
- *   5. Test asks the fake server to create a `FakePeer` that uses the
- *      captured bundle to run X3DH.
- *   6. The peer encrypts a `conversation: 'hello'` message into a
- *      PreKeySignalMessage, wraps it in `<message><enc type="pkmsg"/>`,
- *      and pushes it.
- *   7. The lib decrypts via its real Signal layer and emits the `message`
- *      event with the decoded `proto.IMessage`.
- *
- * NOTE: this file is allowed to import zapo-js directly because it is a
- * cross-check test that drives the lib end-to-end.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -54,8 +34,6 @@ test('fake peer encrypts a Signal message and the lib emits message event', asyn
         await client.connect()
         const pipeline = await server.waitForAuthenticatedPipeline()
 
-        // Trigger the lib to upload its prekeys; the server-side handler
-        // captures the bundle automatically.
         await server.triggerPreKeyUpload(pipeline)
 
         const peer = await server.createFakePeer(

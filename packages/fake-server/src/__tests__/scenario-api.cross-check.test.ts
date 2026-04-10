@@ -1,14 +1,3 @@
-/**
- * End-to-end exercise of the Scenario / expectIq test API against a real
- * WaClient. This is the Phase 3 acceptance test: it proves that a test
- * author can drive the fake server through declarative scenarios and
- * inspect what the client did via expectIq, without having to know
- * anything about the underlying pipeline / handshake / framing.
- *
- * NOTE: this file is allowed to import zapo-js directly because it is the
- * cross-check test that drives the lib through the fake server end-to-end.
- */
-
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -29,7 +18,6 @@ test('scenario.afterAuth fires once the noise handshake completes', async () => 
     const { client } = createZapoClient(server, { sessionId: 'scenario-after-auth' })
     try {
         await client.connect()
-        // Give the pipeline microtask a tick to land the auth event.
         await new Promise((resolve) => setTimeout(resolve, 100))
         assert.equal(authHits, 1)
     } finally {
