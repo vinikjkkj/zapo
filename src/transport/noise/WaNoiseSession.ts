@@ -12,7 +12,7 @@ import {
 } from '@transport/noise/constants'
 import { buildLoginPayload, buildRegistrationPayload } from '@transport/noise/WaClientPayload'
 import { WaFrameCodec } from '@transport/noise/WaFrameCodec'
-import { verifyNoiseCertificateChain } from '@transport/noise/WaNoiseCert'
+import { verifyNoiseCertificateChain, type WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
 import { WaNoiseHandshake } from '@transport/noise/WaNoiseHandshake'
 import type { WaNoiseSocket } from '@transport/noise/WaNoiseSocket'
 import type { WaNoiseConfig } from '@transport/types'
@@ -75,6 +75,7 @@ export class WaNoiseSession {
     private closedError: Error | null = null
     private noiseSocket: WaNoiseSocket | null = null
     private serverStaticKey: Uint8Array | null = null
+    private trustedRootCa: WaNoiseRootCa | undefined = undefined
     private readonly handshakeFrameTimeoutMs = WA_DEFAULTS.CONNECT_TIMEOUT_MS
 
     public constructor(
@@ -103,6 +104,7 @@ export class WaNoiseSession {
             resolveHandshakePayload(config)
         ])
         const verifyCertificates = config.verifyCertificateChain !== false
+        this.trustedRootCa = config.trustedRootCa
 
         if (config.serverStaticKey && config.serverStaticKey.length === 32) {
             this.logger.info('noise session attempting resume handshake (IK)')
@@ -235,6 +237,7 @@ export class WaNoiseSession {
         this.closedError = null
         this.noiseSocket = null
         this.serverStaticKey = null
+        this.trustedRootCa = undefined
         this.writeChain = Promise.resolve()
         this.readChain = Promise.resolve()
     }
@@ -416,7 +419,7 @@ export class WaNoiseSession {
 
         const certificate = await handshake.decrypt(serverHello.payload)
         if (verifyCertificates) {
-            await verifyNoiseCertificateChain(certificate, serverStatic)
+            await verifyNoiseCertificateChain(certificate, serverStatic, this.trustedRootCa)
             this.logger.trace('noise certificate chain verified')
         }
         this.serverStaticKey = serverStatic

@@ -13,6 +13,7 @@
             "zapo-js/crypto": ["src/crypto/index.ts"],
             "zapo-js/media": ["src/media/index.ts"],
             "zapo-js/util": ["src/util/index.ts"],
+            "zapo-js/transport": ["src/transport/index.ts"],
             "@appstate": ["src/appstate/index.ts"],
             "@appstate/*": ["src/appstate/*"],
             "@auth": ["src/auth/index.ts"],

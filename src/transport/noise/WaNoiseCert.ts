@@ -13,6 +13,18 @@ interface ParsedNoiseCertificate {
     readonly signature: Uint8Array
 }
 
+export interface WaNoiseRootCa {
+    /** Raw 32-byte X25519 public key (without version prefix). */
+    readonly publicKey: Uint8Array
+    /** Serial number that intermediate certs issued by this root must claim. */
+    readonly serial: number
+}
+
+const PRODUCTION_ROOT_CA: WaNoiseRootCa = {
+    publicKey: hexToBytes(ROOT_CA_PUBLIC_KEY_HEX),
+    serial: ROOT_CA_SERIAL
+}
+
 async function verifySignalVariant(
     serializedPublicKey: Uint8Array,
     message: Uint8Array,
@@ -59,14 +71,14 @@ function parseNoiseCertificate(
     }
 }
 
-function rootPublicKeySerialized(): Uint8Array {
-    const raw = hexToBytes(ROOT_CA_PUBLIC_KEY_HEX)
-    return toSerializedPubKey(raw)
+function rootPublicKeySerialized(rootCa: WaNoiseRootCa): Uint8Array {
+    return toSerializedPubKey(rootCa.publicKey)
 }
 
 export async function verifyNoiseCertificateChain(
     certificateChain: Uint8Array,
-    serverStatic: Uint8Array
+    serverStatic: Uint8Array,
+    rootCa: WaNoiseRootCa = PRODUCTION_ROOT_CA
 ): Promise<void> {
     const chain = proto.CertChain.decode(certificateChain)
     if (!chain.leaf || !chain.intermediate) {
@@ -74,11 +86,11 @@ export async function verifyNoiseCertificateChain(
     }
 
     const intermediate = parseNoiseCertificate(chain.intermediate)
-    if (intermediate.issuerSerial !== ROOT_CA_SERIAL) {
+    if (intermediate.issuerSerial !== rootCa.serial) {
         throw new Error('intermediate certificate issuer mismatch')
     }
 
-    const rootKey = rootPublicKeySerialized()
+    const rootKey = rootPublicKeySerialized(rootCa)
     const validIntermediate = await verifySignalVariant(
         rootKey,
         intermediate.details,

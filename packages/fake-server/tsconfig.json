@@ -1,0 +1,10 @@
+{
+    "extends": ["../../tsconfig.packages.json", "../tsconfig.paths.json"],
+    "compilerOptions": {
+        "types": ["node"],
+        "rootDir": "../..",
+        "noEmit": true
+    },
+    "include": ["src", "bench"],
+    "exclude": ["dist", "node_modules"]
+}

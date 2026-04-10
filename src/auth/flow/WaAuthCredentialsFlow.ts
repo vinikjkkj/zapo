@@ -10,7 +10,7 @@ import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { toProxyAgent, toProxyDispatcher } from '@transport/proxy'
-import type { WaCommsConfig } from '@transport/types'
+import type { WaCommsConfig, WaNoiseTrustedRootCa } from '@transport/types'
 import { toError } from '@util/primitives'
 
 interface WaAuthCredentialsFlowArgs {
@@ -65,7 +65,9 @@ export function buildCommsConfig(
     clientOptions: Pick<
         WaAuthClientOptions,
         'deviceBrowser' | 'deviceOsDisplayName' | 'requireFullSync' | 'version'
-    >
+    > & {
+        readonly noiseTrustedRootCa?: WaNoiseTrustedRootCa
+    }
 ): WaCommsConfig {
     const meJid = credentials.meJid
     const registered = meJid !== null && meJid !== undefined
@@ -92,6 +94,7 @@ export function buildCommsConfig(
             isRegistered: registered,
             serverStaticKey: credentials.serverStaticKey,
             routingInfo: credentials.routingInfo,
+            trustedRootCa: clientOptions.noiseTrustedRootCa,
             loginPayloadConfig: loginIdentity
                 ? {
                       username: loginIdentity.username,

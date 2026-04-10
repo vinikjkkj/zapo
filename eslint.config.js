@@ -36,7 +36,7 @@ module.exports = [
         }
     },
     {
-        files: ['packages/*/src/**/*.ts'],
+        files: ['packages/*/src/**/*.ts', 'packages/*/bench/**/*.ts'],
         languageOptions: {
             parserOptions: {
                 tsconfigRootDir: __dirname,
@@ -46,7 +46,8 @@ module.exports = [
                     './packages/store-postgres/tsconfig.json',
                     './packages/store-redis/tsconfig.json',
                     './packages/store-mongo/tsconfig.json',
-                    './packages/media-utils/tsconfig.json'
+                    './packages/media-utils/tsconfig.json',
+                    './packages/fake-server/tsconfig.json'
                 ]
             }
         }
@@ -78,7 +79,8 @@ module.exports = [
                         './packages/store-postgres/tsconfig.json',
                         './packages/store-redis/tsconfig.json',
                         './packages/store-mongo/tsconfig.json',
-                        './packages/media-utils/tsconfig.json'
+                        './packages/media-utils/tsconfig.json',
+                        './packages/fake-server/tsconfig.json'
                     ]
                 }
             }
@@ -125,6 +127,41 @@ module.exports = [
     },
     {
         files: ['src/proto.ts', 'src/__tests__/index.test.ts'],
+        rules: {
+            'no-restricted-imports': 'off'
+        }
+    },
+    {
+        files: [
+            'packages/fake-server/src/infra/**/*.ts',
+            'packages/fake-server/src/protocol/**/*.ts',
+            'packages/fake-server/src/state/**/*.ts',
+            'packages/fake-server/src/api/**/*.ts'
+        ],
+        rules: {
+            'no-restricted-imports': [
+                'error',
+                {
+                    patterns: [
+                        {
+                            group: ['zapo-js', 'zapo-js/*'],
+                            message:
+                                'fake-server Layer 2/3 must not import zapo-js. Add the primitive to src/transport/ and import from there.'
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        // Cross-check tests intentionally drive the fake server side-by-side
+        // with the real zapo-js side to validate that they interoperate.
+        // The firewall is relaxed here because crossing it is the entire
+        // purpose of these tests.
+        files: [
+            'packages/fake-server/src/**/*.cross-check.test.ts',
+            'packages/fake-server/src/**/__tests__/helpers/**/*.ts'
+        ],
         rules: {
             'no-restricted-imports': 'off'
         }

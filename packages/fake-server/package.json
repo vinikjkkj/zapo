@@ -1,0 +1,41 @@
+{
+    "name": "@zapo-js/fake-server",
+    "version": "0.0.1",
+    "private": true,
+    "description": "Fake WhatsApp Web server used to test zapo-js",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "bin": {
+        "fake-wa-server": "./dist/cli.js"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.build.cjs.json",
+        "typecheck": "tsc --noEmit",
+        "test": "node --import tsx --test --test-concurrency=1 \"src/**/__tests__/**/*.test.ts\"",
+        "cli": "node --import tsx src/cli.ts",
+        "bench:messaging": "node --expose-gc --import tsx bench/messaging.bench.ts"
+    },
+    "peerDependencies": {
+        "zapo-js": ">=0.1.0"
+    },
+    "dependencies": {
+        "ws": "^8.18.0"
+    },
+    "devDependencies": {
+        "@types/ws": "^8.18.1",
+        "zapo-js": "file:../.."
+    },
+    "engines": {
+        "node": ">=20.9.0"
+    }
+}
