@@ -54,7 +54,7 @@ export class WaFakeWsServer {
             throw new Error('fake ws server is already listening')
         }
 
-        const httpServer = createServer((req, res) => {
+        const httpServer = createServer(async (req, res) => {
             const handler = this.httpRequestHandler
             if (!handler) {
                 res.statusCode = 404
@@ -62,15 +62,12 @@ export class WaFakeWsServer {
                 return
             }
             try {
-                const result = handler(req, res)
-                if (result instanceof Promise) {
-                    result.catch((error) => {
-                        if (!res.headersSent) {
-                            res.statusCode = 500
-                        }
-                        res.end(error instanceof Error ? error.message : String(error))
-                    })
-                }
+                await Promise.resolve(handler(req, res)).catch((error) => {
+                    if (!res.headersSent) {
+                        res.statusCode = 500
+                    }
+                    res.end(error instanceof Error ? error.message : String(error))
+                })
             } catch (error) {
                 if (!res.headersSent) {
                     res.statusCode = 500

@@ -49,7 +49,12 @@ export class WaFakeConnection {
                 this.handlers.onError?.(new Error('received unexpected text frame'))
                 return
             }
-            const frame = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer)
+            const frame =
+                data instanceof Uint8Array
+                    ? data
+                    : Array.isArray(data)
+                      ? new Uint8Array(Buffer.concat(data))
+                      : new Uint8Array(data as ArrayBuffer)
             this.handlers.onFrame?.(frame)
         })
 

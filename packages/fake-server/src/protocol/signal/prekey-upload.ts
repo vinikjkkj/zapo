@@ -136,7 +136,7 @@ function requireBytes(content: BinaryNode['content'] | undefined, label: string)
 function readBigEndianInt(bytes: Uint8Array): number {
     let value = 0
     for (let i = 0; i < bytes.byteLength; i += 1) {
-        value = (value << 8) | bytes[i]
+        value = value * 256 + bytes[i]
     }
     return value
 }
