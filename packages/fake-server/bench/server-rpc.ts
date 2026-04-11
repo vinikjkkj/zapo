@@ -197,6 +197,30 @@ export class ServerRpc {
         return (await this.call('dispenserMisses')) as number
     }
 
+    public async startProfiling(options: {
+        cpu?: boolean
+        heap?: boolean
+        outDir?: string
+    }): Promise<void> {
+        await this.call('startProfiling', options)
+    }
+
+    public async stopProfiling(options: {
+        cpu?: boolean
+        heap?: boolean
+        outDir?: string
+    }): Promise<{ cpuPath?: string; heapPath?: string }> {
+        return (await this.call('stopProfiling', options)) as {
+            cpuPath?: string
+            heapPath?: string
+        }
+    }
+
+    public async takeSnapshot(label: string, outDir?: string): Promise<string> {
+        const result = (await this.call('takeSnapshot', { label, outDir })) as { path: string }
+        return result.path
+    }
+
     public async stop(): Promise<void> {
         try {
             await this.call('stop')

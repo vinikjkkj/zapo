@@ -191,7 +191,7 @@ function readProfilerOptions(args: ReadonlySet<string>): ProfilerOptions {
  * level allocations are captured by the heap timeline.
  */
 class BenchProfiler {
-    private readonly options: ProfilerOptions
+    public readonly options: ProfilerOptions
     private session: inspector.Session | null = null
     private active = false
 
@@ -917,6 +917,16 @@ async function mainSeparateProcess(
     await rpc.spawn()
     await rpc.start()
 
+    const serverProfilingOpts = {
+        cpu: profiler.options.cpu,
+        heap: profiler.options.heap,
+        outDir: profiler.options.outDir
+    }
+    if (serverProfilingOpts.cpu || serverProfilingOpts.heap) {
+        await rpc.startProfiling(serverProfilingOpts)
+        console.log('[server] profiling started')
+    }
+
     const authStore = new InMemoryAuthStore()
     const store = createStore({
         backends: { mem: AUTH_BACKEND(authStore) as never },
@@ -979,6 +989,10 @@ async function mainSeparateProcess(
 
     if (argSet.has('--snapshot')) {
         await profiler.takeHeapSnapshot('start').catch((err) => console.error('[snapshot]', err))
+        await rpc.takeSnapshot('server-start', profiler.options.outDir).then(
+            (p) => console.log(`[server:snapshot] saved ${p}`),
+            (err) => console.error('[server:snapshot]', err)
+        )
     }
 
     let contacts: readonly AbstractContactFixture[] = []
@@ -1014,6 +1028,19 @@ async function mainSeparateProcess(
     return {
         results,
         cleanup: async () => {
+            if (serverProfilingOpts.cpu || serverProfilingOpts.heap) {
+                const paths = await rpc
+                    .stopProfiling(serverProfilingOpts)
+                    .catch((): { cpuPath?: string; heapPath?: string } => ({}))
+                if (paths.cpuPath) console.log(`[server:cpu] saved ${paths.cpuPath}`)
+                if (paths.heapPath) console.log(`[server:heap] saved ${paths.heapPath}`)
+            }
+            if (argSet.has('--snapshot')) {
+                await rpc.takeSnapshot('server-end', profiler.options.outDir).then(
+                    (p) => console.log(`[server:snapshot] saved ${p}`),
+                    () => undefined
+                )
+            }
             await client.disconnect().catch(() => undefined)
             await rpc.stop()
         }

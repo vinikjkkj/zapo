@@ -535,7 +535,7 @@ export class FakeWaServer {
         pipeline: WaFakeConnectionPipeline
     ): Promise<FakePeer> {
         const peer = await FakePeer.create(options, this.buildFakePeerDeps(pipeline))
-        this.registries.peerRegistry.set(peer.jid, peer)
+        this.registries.registerPeer(peer)
         return peer
     }
 
@@ -568,7 +568,7 @@ export class FakeWaServer {
                 },
                 this.buildFakePeerDeps(pipeline)
             )
-            this.registries.peerRegistry.set(peer.jid, peer)
+            this.registries.registerPeer(peer)
             peers.push(peer)
         }
         return peers

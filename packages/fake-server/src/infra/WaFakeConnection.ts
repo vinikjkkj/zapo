@@ -54,7 +54,7 @@ export class WaFakeConnection {
                     ? data
                     : Array.isArray(data)
                       ? new Uint8Array(Buffer.concat(data))
-                      : new Uint8Array(data as ArrayBuffer)
+                      : new Uint8Array(data)
             this.handlers.onFrame?.(frame)
         })
 

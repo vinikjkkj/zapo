@@ -82,6 +82,7 @@ export function toDeviceIdPart(deviceJid: string): number {
 
 export class ServerRegistries {
     public readonly peerRegistry = new Map<string, FakePeer>()
+    private readonly deviceIdsByUser = new Map<string, number[]>()
     public readonly groupRegistry = new Map<string, MutableFakeGroup>()
     public privacySettings: FakePrivacySettingsState = FAKE_DEFAULT_PRIVACY_SETTINGS
     public readonly blocklistJids = new Set<string>()
@@ -274,14 +275,21 @@ export class ServerRegistries {
         }
     }
 
-    public lookupDeviceIdsForUser(userJid: string): readonly number[] {
-        const deviceIds: number[] = []
-        for (const peer of this.peerRegistry.values()) {
-            if (toUserJidPart(peer.jid) !== userJid) continue
-            deviceIds.push(toDeviceIdPart(peer.jid))
+    public registerPeer(peer: FakePeer): void {
+        this.peerRegistry.set(peer.jid, peer)
+        const userJid = toUserJidPart(peer.jid)
+        const deviceId = toDeviceIdPart(peer.jid)
+        const ids = this.deviceIdsByUser.get(userJid)
+        if (ids) {
+            ids.push(deviceId)
+            ids.sort((a, b) => a - b)
+        } else {
+            this.deviceIdsByUser.set(userJid, [deviceId])
         }
-        deviceIds.sort((a, b) => a - b)
-        return deviceIds
+    }
+
+    public lookupDeviceIdsForUser(userJid: string): readonly number[] {
+        return this.deviceIdsByUser.get(userJid) ?? []
     }
 
     public notifyProfilePictureSet(op: CapturedProfilePictureSet): void {
