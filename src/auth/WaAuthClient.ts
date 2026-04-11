@@ -90,7 +90,8 @@ export class WaAuthClient {
                 emitPairingCode: (code) => this.callbacks.onPairingCode?.(code),
                 emitPairingRefresh: (forceManual) => this.callbacks.onPairingRefresh?.(forceManual),
                 emitPaired: (credentials) => this.callbacks.onPaired?.(credentials)
-            }
+            },
+            dangerous: options.dangerous
         })
     }
 
@@ -114,7 +115,9 @@ export class WaAuthClient {
                 logger: this.logger,
                 authStore: this.authStore,
                 signalStore: this.signalStore,
-                preKeyStore: this.preKeyStore
+                preKeyStore: this.preKeyStore,
+                skipSignedPreKeySignatureVerification:
+                    this.options.dangerous?.disableSignedPreKeySignatureVerification
             })
             this.logger.info('auth client credentials ready', {
                 registered:
@@ -126,7 +129,10 @@ export class WaAuthClient {
 
     public buildCommsConfig(
         socketOptions: WaAuthSocketOptions,
-        overrides: { readonly noiseTrustedRootCa?: WaNoiseTrustedRootCa } = {}
+        overrides: {
+            readonly noiseTrustedRootCa?: WaNoiseTrustedRootCa
+            readonly disableNoiseCertificateChainVerification?: boolean
+        } = {}
     ) {
         this.logger.trace('auth client building comms config')
         return buildCommsConfig(this.logger, this.requireCredentials(), socketOptions, {
@@ -134,7 +140,10 @@ export class WaAuthClient {
             deviceOsDisplayName: this.options.deviceOsDisplayName,
             requireFullSync: this.options.requireFullSync,
             version: this.options.version,
-            noiseTrustedRootCa: overrides.noiseTrustedRootCa
+            noiseTrustedRootCa: overrides.noiseTrustedRootCa,
+            disableNoiseCertificateChainVerification:
+                overrides.disableNoiseCertificateChainVerification ??
+                this.options.dangerous?.disableNoiseCertificateChainVerification
         })
     }
 

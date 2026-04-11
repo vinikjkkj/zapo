@@ -1,5 +1,10 @@
 import type { AppStateCollectionName } from '@appstate/types'
-import type { WaAuthClientOptions, WaAuthCredentials, WaAuthSocketOptions } from '@auth/types'
+import type {
+    WaAuthClientOptions,
+    WaAuthCredentials,
+    WaAuthDangerousOptions,
+    WaAuthSocketOptions
+} from '@auth/types'
 import type { WaMediaProcessor } from '@media/processor'
 import type { WaDecodedAddon } from '@message/addon-crypto'
 import type { WaMessagePublishOptions } from '@message/types'
@@ -57,11 +62,39 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
     readonly logoutStoreClear?: WaLogoutStoreClearOptions
     readonly media?: WaMediaOptions
     /**
-     * Escape hatches intended exclusively for tests against a fake server.
-     * **Do not enable in production.** Each flag here disables a security check
-     * the production code path enforces.
+     * Test-only overrides intended for running against a fake server.
+     *
+     * These hooks **do not** bypass any security checks — they only swap in
+     * test fixtures (e.g. a different root CA) so the full verification code
+     * path still runs end-to-end. If you actually need to skip a check, use
+     * `dangerous` instead.
      */
     readonly testHooks?: WaClientTestHooks
+    /**
+     * Dangerous escape hatches. **Do not enable in production.** Each flag here
+     * disables a security check the production code path enforces.
+     */
+    readonly dangerous?: WaClientDangerousOptions
+}
+
+export interface WaClientDangerousOptions extends WaAuthDangerousOptions {
+    /**
+     * Skip the XEdDSA signature check on incoming group sender-key messages.
+     * Ciphertexts will be decrypted even if the trailing signature does not
+     * verify against the stored sender signing public key.
+     */
+    readonly disableSenderKeySignatureVerification?: boolean
+    /**
+     * Skip HMAC verification across the app-state sync pipeline: per-mutation
+     * value and index MACs, snapshot MACs, and patch MACs. Tampered server
+     * payloads will be accepted as long as the ciphertext decrypts cleanly.
+     */
+    readonly disableAppStateMacVerification?: boolean
+    /**
+     * Skip the truncated HMAC-SHA256 check on encrypted media payloads
+     * during download. Tampered ciphertexts will still be decrypted.
+     */
+    readonly disableMediaMacVerification?: boolean
 }
 
 export interface WaClientTestHooks {

@@ -239,7 +239,8 @@ export class WaMediaCrypto {
         mediaKey: Uint8Array,
         ciphertextHmac: Uint8Array,
         expectedFileSha256?: Uint8Array,
-        expectedFileEncSha256?: Uint8Array
+        expectedFileEncSha256?: Uint8Array,
+        skipMacVerification = false
     ): Promise<WaMediaDecryptionResult> {
         if (ciphertextHmac.byteLength < HMAC_TRUNCATED_SIZE) {
             throw new Error(`ciphertext too short: ${ciphertextHmac.byteLength}`)
@@ -264,10 +265,12 @@ export class WaMediaCrypto {
         const expectedMac = ciphertextHmac.subarray(ciphertextHmac.byteLength - HMAC_TRUNCATED_SIZE)
         const ivCiphertext = concatBytes([keys.iv, ciphertext])
 
-        const mac = await hmacSign(hmacKey, ivCiphertext)
-        const signature = mac.subarray(0, HMAC_TRUNCATED_SIZE)
-        if (!uint8TimingSafeEqual(signature, expectedMac)) {
-            throw new Error('media MAC mismatch')
+        if (!skipMacVerification) {
+            const mac = await hmacSign(hmacKey, ivCiphertext)
+            const signature = mac.subarray(0, HMAC_TRUNCATED_SIZE)
+            if (!uint8TimingSafeEqual(signature, expectedMac)) {
+                throw new Error('media MAC mismatch')
+            }
         }
 
         const plaintext = await aesCbcDecrypt(aesKey, keys.iv, ciphertext)
@@ -661,9 +664,11 @@ async function pumpDecryption(
             throw new Error(`ciphertext too short: ${trailing.byteLength}`)
         }
 
-        const signature = hmac.digest().subarray(0, HMAC_TRUNCATED_SIZE)
-        if (!uint8TimingSafeEqual(signature, trailing)) {
-            throw new Error('media MAC mismatch')
+        if (!options.skipMacVerification) {
+            const signature = hmac.digest().subarray(0, HMAC_TRUNCATED_SIZE)
+            if (!uint8TimingSafeEqual(signature, trailing)) {
+                throw new Error('media MAC mismatch')
+            }
         }
 
         if (pending.byteLength < AES_BLOCK_SIZE || pending.byteLength % AES_BLOCK_SIZE !== 0) {

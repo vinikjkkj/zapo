@@ -3,7 +3,7 @@ import {
     createCompanionHello,
     normalizeCustomPairingCode
 } from '@auth/pairing/pairing-code-crypto'
-import type { WaAuthCredentials } from '@auth/types'
+import type { WaAuthCredentials, WaAuthDangerousOptions } from '@auth/types'
 import { randomBytesAsync } from '@crypto'
 import type { SignalKeyPair } from '@crypto/curves/types'
 import type { Logger } from '@infra/log/types'
@@ -69,6 +69,7 @@ interface WaPairingFlowOptions {
         readonly emitPairingRefresh: (forceManual: boolean) => void
         readonly emitPaired: (credentials: WaAuthCredentials) => void
     }
+    readonly dangerous?: WaAuthDangerousOptions
 }
 
 export class WaPairingFlow {
@@ -298,13 +299,15 @@ export class WaPairingFlow {
         )
         const accountType = wrappedIdentity.accountType ?? proto.ADVEncryptionType.E2EE
         const isHosted = accountType === proto.ADVEncryptionType.HOSTED
-        const hmacInput = isHosted
-            ? concatBytes([ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE, wrappedDetails])
-            : wrappedDetails
-        const expectedHmac = await computeAdvIdentityHmac(credentials.advSecretKey, hmacInput)
-        if (!uint8Equal(expectedHmac, wrappedHmac)) {
-            this.opts.logger.error('pair-success hmac mismatch')
-            throw new Error('pair-success HMAC validation failed')
+        if (this.opts.dangerous?.disablePairSuccessHmacVerification !== true) {
+            const hmacInput = isHosted
+                ? concatBytes([ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE, wrappedDetails])
+                : wrappedDetails
+            const expectedHmac = await computeAdvIdentityHmac(credentials.advSecretKey, hmacInput)
+            if (!uint8Equal(expectedHmac, wrappedHmac)) {
+                this.opts.logger.error('pair-success hmac mismatch')
+                throw new Error('pair-success HMAC validation failed')
+            }
         }
 
         const { signedIdentity, keyIndex, responseIdentityBytes } =
@@ -370,16 +373,18 @@ export class WaPairingFlow {
             'ADVSignedDeviceIdentity.accountSignatureKey'
         )
         const localIdentity = credentials.registrationInfo.identityKeyPair
-        const validAccountSignature = await verifyDeviceIdentityAccountSignature(
-            details,
-            accountSignature,
-            localIdentity.pubKey,
-            accountSignatureKey,
-            isHosted
-        )
-        if (!validAccountSignature) {
-            this.opts.logger.error('pair-success account signature invalid')
-            throw new Error('pair-success account signature validation failed')
+        if (this.opts.dangerous?.disableAdvSignatureVerification !== true) {
+            const validAccountSignature = await verifyDeviceIdentityAccountSignature(
+                details,
+                accountSignature,
+                localIdentity.pubKey,
+                accountSignatureKey,
+                isHosted
+            )
+            if (!validAccountSignature) {
+                this.opts.logger.error('pair-success account signature invalid')
+                throw new Error('pair-success account signature validation failed')
+            }
         }
 
         signedIdentity.deviceSignature = await generateDeviceSignature(
