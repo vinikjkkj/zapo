@@ -26,8 +26,9 @@ export {
     sha512,
     toRawPubKey,
     toSerializedPubKey,
-    X25519
+    X25519,
+    xeddsaSign,
+    xeddsaVerify
 } from 'zapo-js/crypto'
 export type { CryptoKey, SignalKeyPair } from 'zapo-js/crypto'
 export { WaMediaCrypto } from 'zapo-js/media'
-export { signSignalMessage, verifySignalSignature } from 'zapo-js/signal'

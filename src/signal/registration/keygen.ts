@@ -1,7 +1,6 @@
-import { randomIntAsync } from '@crypto'
+import { randomIntAsync, xeddsaSign } from '@crypto'
 import { toSerializedPubKey } from '@crypto/core/keys'
 import { X25519 } from '@crypto/curves/X25519'
-import { signSignalMessage } from '@signal/crypto/WaAdvSignature'
 import type { PreKeyRecord, RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
 
 export async function generateRegistrationInfo(): Promise<RegistrationInfo> {
@@ -29,7 +28,7 @@ export async function generateSignedPreKey(
 ): Promise<SignedPreKeyRecord> {
     const keyPair = await X25519.generateKeyPair()
     const serializedPubKey = toSerializedPubKey(keyPair.pubKey)
-    const signature = await signSignalMessage(signingPrivateKey, serializedPubKey)
+    const signature = await xeddsaSign(signingPrivateKey, serializedPubKey)
     return {
         keyId,
         keyPair,

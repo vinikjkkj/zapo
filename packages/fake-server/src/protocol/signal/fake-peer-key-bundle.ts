@@ -1,11 +1,6 @@
 /** Generates Signal prekey bundles for fake peers. */
 
-import {
-    type SignalKeyPair,
-    signSignalMessage,
-    toSerializedPubKey,
-    X25519
-} from '../../transport/crypto'
+import { type SignalKeyPair, toSerializedPubKey, X25519, xeddsaSign } from '../../transport/crypto'
 
 export interface FakePeerKeyBundle {
     readonly registrationId: number
@@ -36,10 +31,7 @@ export async function generateFakePeerKeyBundle(
     const signedPreKeyKeyPair = await X25519.generateKeyPair()
     const signedPreKeyId = options.signedPreKeyId ?? 1
     const signedPreKeySerialized = toSerializedPubKey(signedPreKeyKeyPair.pubKey)
-    const signedPreKeySignature = await signSignalMessage(
-        identityKeyPair.privKey,
-        signedPreKeySerialized
-    )
+    const signedPreKeySignature = await xeddsaSign(identityKeyPair.privKey, signedPreKeySerialized)
 
     const oneTimeCount = options.oneTimePreKeyCount ?? 4
     const firstId = options.firstOneTimePreKeyId ?? 1

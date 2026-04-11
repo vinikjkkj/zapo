@@ -6,8 +6,9 @@ import {
     hmacSign,
     importAesCbcKey,
     importHmacKey,
+    toRawPubKey,
     toSerializedPubKey,
-    verifySignalSignature
+    xeddsaVerify
 } from '../../transport/crypto'
 import { proto } from '../../transport/protos'
 
@@ -88,7 +89,7 @@ export class FakePeerGroupRecvSession {
             )
         }
         const sigStart = skmsgBytes.byteLength - SIGNAL_SIGNATURE_LENGTH
-        // verifySignalSignature mutates the signature buffer; isolate with copies.
+        // xeddsaVerify mutates the signature buffer; isolate with copies.
         const versionedContent = skmsgBytes.subarray(0, sigStart).slice()
         const signature = skmsgBytes.subarray(sigStart).slice()
         const protoBody = versionedContent.subarray(1)
@@ -109,8 +110,8 @@ export class FakePeerGroupRecvSession {
             )
         }
 
-        const validSignature = await verifySignalSignature(
-            record.signingPublicKey,
+        const validSignature = await xeddsaVerify(
+            toRawPubKey(record.signingPublicKey),
             versionedContent,
             signature
         )

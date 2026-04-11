@@ -31,3 +31,4 @@ export {
     aesCtrEncrypt,
     aesCtrDecrypt
 } from '@crypto/core/primitives'
+export { xeddsaSign, xeddsaVerify } from '@crypto/core/xeddsa'

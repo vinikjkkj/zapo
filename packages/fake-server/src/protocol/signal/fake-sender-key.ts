@@ -9,9 +9,9 @@ import {
     prependVersion,
     randomBytesAsync,
     type SignalKeyPair,
-    signSignalMessage,
     toSerializedPubKey,
-    X25519
+    X25519,
+    xeddsaSign
 } from '../../transport/crypto'
 import { proto } from '../../transport/protos'
 
@@ -78,7 +78,7 @@ export class FakeSenderKey {
         }).finish()
         const versioned = prependVersion(senderKeyMessage, SIGNAL_GROUP_VERSION)
 
-        const signature = await signSignalMessage(this.state.signingKeyPair.privKey, versioned)
+        const signature = await xeddsaSign(this.state.signingKeyPair.privKey, versioned)
 
         const finalCiphertext = new Uint8Array(versioned.byteLength + signature.byteLength)
         finalCiphertext.set(versioned, 0)

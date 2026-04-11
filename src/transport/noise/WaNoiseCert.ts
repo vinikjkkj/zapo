@@ -1,5 +1,4 @@
-import { Ed25519, toSerializedPubKey } from '@crypto'
-import { montgomeryToEdwardsPublic } from '@crypto/curves/X25519'
+import { xeddsaVerify } from '@crypto'
 import { proto } from '@proto'
 import { ROOT_CA_PUBLIC_KEY_HEX, ROOT_CA_SERIAL } from '@transport/noise/constants'
 import { assertByteLength, decodeProtoBytes, hexToBytes, uint8Equal } from '@util/bytes'
@@ -23,27 +22,6 @@ export interface WaNoiseRootCa {
 const PRODUCTION_ROOT_CA: WaNoiseRootCa = {
     publicKey: hexToBytes(ROOT_CA_PUBLIC_KEY_HEX),
     serial: ROOT_CA_SERIAL
-}
-
-async function verifySignalVariant(
-    serializedPublicKey: Uint8Array,
-    message: Uint8Array,
-    signatureInput: Uint8Array
-): Promise<boolean> {
-    const publicKey = toSerializedPubKey(serializedPublicKey)
-    if (signatureInput.length !== 64) {
-        return false
-    }
-    const signature = new Uint8Array(signatureInput)
-    const lastByte = signature[63]
-    if ((lastByte & 0x60) !== 0) {
-        return false
-    }
-    const signBit = lastByte & 0x80
-    signature[63] = lastByte & 0x7f
-
-    const edwardsPublicKey = montgomeryToEdwardsPublic(publicKey.subarray(1), signBit)
-    return Ed25519.verify(message, signature, edwardsPublicKey)
 }
 
 function parseNoiseCertificate(
@@ -71,10 +49,6 @@ function parseNoiseCertificate(
     }
 }
 
-function rootPublicKeySerialized(rootCa: WaNoiseRootCa): Uint8Array {
-    return toSerializedPubKey(rootCa.publicKey)
-}
-
 export async function verifyNoiseCertificateChain(
     certificateChain: Uint8Array,
     serverStatic: Uint8Array,
@@ -90,9 +64,8 @@ export async function verifyNoiseCertificateChain(
         throw new Error('intermediate certificate issuer mismatch')
     }
 
-    const rootKey = rootPublicKeySerialized(rootCa)
-    const validIntermediate = await verifySignalVariant(
-        rootKey,
+    const validIntermediate = await xeddsaVerify(
+        rootCa.publicKey,
         intermediate.details,
         intermediate.signature
     )
@@ -105,12 +78,7 @@ export async function verifyNoiseCertificateChain(
         throw new Error('leaf certificate issuer mismatch')
     }
 
-    const intermediatePublicSerialized = toSerializedPubKey(intermediate.key)
-    const validLeaf = await verifySignalVariant(
-        intermediatePublicSerialized,
-        leaf.details,
-        leaf.signature
-    )
+    const validLeaf = await xeddsaVerify(intermediate.key, leaf.details, leaf.signature)
     if (!validLeaf) {
         throw new Error('leaf certificate signature is invalid')
     }

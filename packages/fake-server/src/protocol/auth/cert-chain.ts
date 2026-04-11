@@ -1,6 +1,6 @@
 /** Fake noise certificate chain generator for handshake tests. */
 
-import { signSignalMessage, X25519 } from '../../transport/crypto'
+import { X25519, xeddsaSign } from '../../transport/crypto'
 import { proto } from '../../transport/protos'
 
 export interface FakeNoiseRootCa {
@@ -42,17 +42,14 @@ export async function buildFakeCertChain(
         issuerSerial: input.root.serial,
         key: intermediateKeyPair.pubKey
     }).finish()
-    const intermediateSignature = await signSignalMessage(
-        input.root.privateKey,
-        intermediateDetails
-    )
+    const intermediateSignature = await xeddsaSign(input.root.privateKey, intermediateDetails)
 
     const leafDetails = proto.CertChain.NoiseCertificate.Details.encode({
         serial: leafSerial,
         issuerSerial: intermediateSerial,
         key: input.leafKey
     }).finish()
-    const leafSignature = await signSignalMessage(intermediateKeyPair.privKey, leafDetails)
+    const leafSignature = await xeddsaSign(intermediateKeyPair.privKey, leafDetails)
 
     const encoded = proto.CertChain.encode({
         intermediate: {

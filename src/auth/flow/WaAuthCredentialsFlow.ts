@@ -1,10 +1,9 @@
 import type { WaAuthClientOptions, WaAuthCredentials, WaAuthSocketOptions } from '@auth/types'
-import { randomBytesAsync } from '@crypto'
+import { randomBytesAsync, toRawPubKey, xeddsaVerify } from '@crypto'
 import { toSerializedPubKey } from '@crypto/core/keys'
 import { X25519 } from '@crypto/curves/X25519'
 import type { Logger } from '@infra/log/types'
 import { getLoginIdentity } from '@protocol/jid'
-import { verifySignalSignature } from '@signal/crypto/WaAdvSignature'
 import { createAndStoreInitialKeys } from '@signal/registration/utils'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
@@ -158,8 +157,8 @@ async function hasValidSignedPreKey(
 ): Promise<boolean> {
     try {
         const serializedPubKey = toSerializedPubKey(credentials.signedPreKey.keyPair.pubKey)
-        const valid = await verifySignalSignature(
-            credentials.registrationInfo.identityKeyPair.pubKey,
+        const valid = await xeddsaVerify(
+            toRawPubKey(credentials.registrationInfo.identityKeyPair.pubKey),
             serializedPubKey,
             credentials.signedPreKey.signature
         )

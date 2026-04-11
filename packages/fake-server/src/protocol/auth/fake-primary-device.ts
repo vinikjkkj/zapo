@@ -4,8 +4,8 @@ import {
     hmacSign,
     importHmacKey,
     type SignalKeyPair,
-    signSignalMessage,
-    X25519
+    X25519,
+    xeddsaSign
 } from '../../transport/crypto'
 import { proto } from '../../transport/protos'
 
@@ -50,10 +50,7 @@ export async function buildAdvSignedDeviceIdentity(
         advDeviceIdentity,
         input.companionIdentityPublicKey
     ])
-    const accountSignature = await signSignalMessage(
-        input.primary.identityKeyPair.privKey,
-        messageToSign
-    )
+    const accountSignature = await xeddsaSign(input.primary.identityKeyPair.privKey, messageToSign)
 
     const signedIdentity = proto.ADVSignedDeviceIdentity.encode({
         details: advDeviceIdentity,

@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { toSerializedPubKey, X25519 } from '@crypto'
+import { toRawPubKey, toSerializedPubKey, X25519, xeddsaSign, xeddsaVerify } from '@crypto'
 import {
     ADV_PREFIX_ACCOUNT_SIGNATURE,
     ADV_PREFIX_DEVICE_SIGNATURE,
     computeAdvIdentityHmac,
     generateDeviceSignature,
-    signSignalMessage,
-    verifyDeviceIdentityAccountSignature,
-    verifySignalSignature
+    verifyDeviceIdentityAccountSignature
 } from '@signal/crypto/WaAdvSignature'
 import { concatBytes, uint8Equal } from '@util/bytes'
 
@@ -21,41 +19,35 @@ function makeBytes(length: number, seed = 0): Uint8Array {
     return out
 }
 
-test('signal signature generation and verification handles valid and invalid signatures', async () => {
+test('xeddsa sign/verify handles valid and invalid signatures', async () => {
     const keyPair = await X25519.generateKeyPair()
     const message = makeBytes(48, 3)
 
-    const signature = await signSignalMessage(keyPair.privKey, message)
+    const signature = await xeddsaSign(keyPair.privKey, message)
     assert.equal(signature.length, 64)
 
     const signatureLastByteBeforeVerify = signature[63]
-    const verified = await verifySignalSignature(
-        toSerializedPubKey(keyPair.pubKey),
-        message,
-        signature
-    )
+    const verified = await xeddsaVerify(keyPair.pubKey, message, signature)
     assert.equal(verified, true)
     assert.equal(signature[63], signatureLastByteBeforeVerify)
 
     const tamperedSignature = new Uint8Array(signature)
     tamperedSignature[0] ^= 0x01
-    assert.equal(
-        await verifySignalSignature(toSerializedPubKey(keyPair.pubKey), message, tamperedSignature),
-        false
-    )
-    assert.equal(
-        await verifySignalSignature(
-            toSerializedPubKey(keyPair.pubKey),
-            message,
-            new Uint8Array(63)
-        ),
-        false
-    )
+    assert.equal(await xeddsaVerify(keyPair.pubKey, message, tamperedSignature), false)
+    assert.equal(await xeddsaVerify(keyPair.pubKey, message, new Uint8Array(63)), false)
 
     await assert.rejects(
-        () => signSignalMessage(new Uint8Array(31), message),
+        () => xeddsaSign(new Uint8Array(31), message),
         /invalid curve25519 private key length 31/
     )
+})
+
+test('xeddsa verify works with serialized (versioned) public keys via toRawPubKey', async () => {
+    const keyPair = await X25519.generateKeyPair()
+    const message = makeBytes(48, 3)
+    const signature = await xeddsaSign(keyPair.privKey, message)
+    const serialized = toSerializedPubKey(keyPair.pubKey)
+    assert.equal(await xeddsaVerify(toRawPubKey(serialized), message, signature), true)
 })
 
 test('adv account/device signature helpers generate verifiable payload signatures', async () => {
@@ -66,7 +58,7 @@ test('adv account/device signature helpers generate verifiable payload signature
     const accountPub = toSerializedPubKey(accountKeyPair.pubKey)
 
     const accountMessage = concatBytes([ADV_PREFIX_ACCOUNT_SIGNATURE, details, identityPub])
-    const accountSignature = await signSignalMessage(accountKeyPair.privKey, accountMessage)
+    const accountSignature = await xeddsaSign(accountKeyPair.privKey, accountMessage)
     assert.equal(
         await verifyDeviceIdentityAccountSignature(
             details,
@@ -94,7 +86,7 @@ test('adv account/device signature helpers generate verifiable payload signature
         identityKeyPair.pubKey,
         accountPub
     ])
-    assert.equal(await verifySignalSignature(identityPub, deviceMessage, deviceSignature), true)
+    assert.equal(await xeddsaVerify(toRawPubKey(identityPub), deviceMessage, deviceSignature), true)
 })
 
 test('adv identity hmac is deterministic for same key and details', async () => {

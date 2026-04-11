@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { toSerializedPubKey } from '@crypto'
-import { verifySignalSignature } from '@signal/crypto/WaAdvSignature'
+import { toSerializedPubKey, xeddsaVerify } from '@crypto'
 import {
     generatePreKeyPair,
     generateRegistrationId,
@@ -39,8 +38,8 @@ test('registration key generation creates prekeys and signed prekeys with valid 
     assert.equal(signedPreKey.uploaded, false)
     assert.equal(signedPreKey.signature.length, 64)
     assert.equal(
-        await verifySignalSignature(
-            toSerializedPubKey(registration.identityKeyPair.pubKey),
+        await xeddsaVerify(
+            registration.identityKeyPair.pubKey,
             signedPreKeyPub,
             signedPreKey.signature
         ),

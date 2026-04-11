@@ -5,15 +5,17 @@ import {
     prependVersion,
     randomBytesAsync,
     randomIntAsync,
+    toRawPubKey,
     toSerializedPubKey,
-    X25519
+    X25519,
+    xeddsaSign,
+    xeddsaVerify
 } from '@crypto'
 import { StoreLock } from '@infra/perf/StoreLock'
 import { type Proto, proto } from '@proto'
 import { signalAddressKey } from '@protocol/jid'
 import { SIGNAL_SIGNATURE_LENGTH } from '@signal/api/constants'
 import { SIGNAL_GROUP_VERSION } from '@signal/constants'
-import { signSignalMessage, verifySignalSignature } from '@signal/crypto/WaAdvSignature'
 import { deriveSenderKeyMsgKey, selectMessageKey } from '@signal/group/SenderKeyChain'
 import { parseDistributionPayload, parseSenderKeyMessage } from '@signal/group/SenderKeyCodec'
 import type { SenderKeyRecord, SignalAddress } from '@signal/types'
@@ -110,7 +112,7 @@ export class SenderKeyManager {
                 ciphertext: messagePayload
             }).finish()
             const versionedContent = prependVersion(senderKeyMessage, SIGNAL_GROUP_VERSION)
-            const signature = await signSignalMessage(senderKey.signingPrivateKey, versionedContent)
+            const signature = await xeddsaSign(senderKey.signingPrivateKey, versionedContent)
             if (signature.length !== SIGNAL_SIGNATURE_LENGTH) {
                 throw new Error(`invalid sender key signature length ${signature.length}`)
             }
@@ -247,8 +249,8 @@ export class SenderKeyManager {
             const signature = parsed.versionContentMac.subarray(
                 parsed.versionContentMac.length - SIGNAL_SIGNATURE_LENGTH
             )
-            const validSignature = await verifySignalSignature(
-                senderKey.signingPublicKey,
+            const validSignature = await xeddsaVerify(
+                toRawPubKey(senderKey.signingPublicKey),
                 signedContent,
                 signature
             )

@@ -1,17 +1,12 @@
-import { Ed25519, hmacSign, importHmacKey, randomBytesAsync, sha512, toRawPubKey } from '@crypto'
+import { hmacSign, importHmacKey, toRawPubKey, xeddsaSign, xeddsaVerify } from '@crypto'
 import type { SignalKeyPair } from '@crypto/curves/types'
-import { clampCurvePrivateKeyInPlace, montgomeryToEdwardsPublic } from '@crypto/curves/X25519'
-import { encodeExtendedPoint, scalarMultBase } from '@crypto/math/edwards'
-import { bigIntToBytesLE, bytesToBigIntLE } from '@crypto/math/le'
-import { modGroup } from '@crypto/math/mod'
 import {
     ADV_PREFIX_ACCOUNT_SIGNATURE,
     ADV_PREFIX_DEVICE_SIGNATURE,
     ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE,
-    ADV_PREFIX_HOSTED_DEVICE_SIGNATURE,
-    SIGNAL_PREFIX_SIGNATURE_RANDOM
+    ADV_PREFIX_HOSTED_DEVICE_SIGNATURE
 } from '@signal/crypto/constants'
-import { assertByteLength, concatBytes } from '@util/bytes'
+import { concatBytes } from '@util/bytes'
 
 export {
     ADV_PREFIX_ACCOUNT_SIGNATURE,
@@ -19,62 +14,6 @@ export {
     ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE,
     ADV_PREFIX_HOSTED_DEVICE_SIGNATURE
 } from '@signal/crypto/constants'
-
-export async function verifySignalSignature(
-    publicKey: Uint8Array,
-    message: Uint8Array,
-    signature: Uint8Array
-): Promise<boolean> {
-    if (signature.length !== 64) {
-        return false
-    }
-    if ((signature[63] & 0x60) !== 0) {
-        return false
-    }
-
-    const signatureLastByteIndex = 63
-    const originalSignatureLastByte = signature[signatureLastByteIndex]
-    const signBit = originalSignatureLastByte & 0x80
-    signature[signatureLastByteIndex] = originalSignatureLastByte & 0x7f
-
-    const curvePublic = toRawPubKey(publicKey)
-    const edPublic = montgomeryToEdwardsPublic(curvePublic, signBit)
-    try {
-        return await Ed25519.verify(message, signature, edPublic)
-    } finally {
-        signature[signatureLastByteIndex] = originalSignatureLastByte
-    }
-}
-
-export async function signSignalMessage(
-    privateKey: Uint8Array,
-    message: Uint8Array
-): Promise<Uint8Array> {
-    assertByteLength(privateKey, 32, `invalid curve25519 private key length ${privateKey.length}`)
-
-    const clampedPrivateKey = clampCurvePrivateKeyInPlace(privateKey)
-    const privateScalar = bytesToBigIntLE(clampedPrivateKey)
-    const encodedPublic = encodeExtendedPoint(scalarMultBase(privateScalar))
-    const pubKeySignBit = encodedPublic[31] & 0x80
-
-    const randomSuffix = await randomBytesAsync(64)
-    const hashInput = concatBytes([
-        SIGNAL_PREFIX_SIGNATURE_RANDOM,
-        clampedPrivateKey,
-        message,
-        randomSuffix
-    ])
-    const r = modGroup(bytesToBigIntLE(await sha512(hashInput)))
-    const encodedR = encodeExtendedPoint(scalarMultBase(r))
-
-    const hInput = concatBytes([encodedR, encodedPublic, message])
-    const h = modGroup(bytesToBigIntLE(await sha512(hInput)))
-    const s = modGroup(r + h * privateScalar)
-
-    const encodedS = bigIntToBytesLE(s, 32)
-    encodedS[31] = (encodedS[31] & 0x7f) | pubKeySignBit
-    return concatBytes([encodedR, encodedS])
-}
 
 export async function verifyDeviceIdentityAccountSignature(
     details: Uint8Array,
@@ -85,7 +24,7 @@ export async function verifyDeviceIdentityAccountSignature(
 ): Promise<boolean> {
     const prefix = isHosted ? ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE : ADV_PREFIX_ACCOUNT_SIGNATURE
     const message = concatBytes([prefix, details, identityPublicKey])
-    return verifySignalSignature(accountSignatureKey, message, accountSignature)
+    return xeddsaVerify(toRawPubKey(accountSignatureKey), message, accountSignature)
 }
 
 export async function generateDeviceSignature(
@@ -96,7 +35,7 @@ export async function generateDeviceSignature(
 ): Promise<Uint8Array> {
     const prefix = isHosted ? ADV_PREFIX_HOSTED_DEVICE_SIGNATURE : ADV_PREFIX_DEVICE_SIGNATURE
     const message = concatBytes([prefix, details, identityKeyPair.pubKey, accountSignatureKey])
-    return signSignalMessage(identityKeyPair.privKey, message)
+    return xeddsaSign(identityKeyPair.privKey, message)
 }
 
 export async function computeAdvIdentityHmac(
