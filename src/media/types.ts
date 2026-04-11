@@ -25,6 +25,7 @@ export interface WaMediaTransferClientOptions {
     readonly defaultHeaders?: Readonly<Record<string, string>>
     readonly defaultUploadAgent?: WaProxyAgent
     readonly defaultDownloadAgent?: WaProxyAgent
+    readonly skipMacVerification?: boolean
 }
 
 export interface WaMediaDerivedKeys {
@@ -82,4 +83,5 @@ export interface WaMediaDecryptReadableOptions {
     readonly mediaKey: Uint8Array
     readonly expectedFileSha256?: Uint8Array
     readonly expectedFileEncSha256?: Uint8Array
+    readonly skipMacVerification?: boolean
 }

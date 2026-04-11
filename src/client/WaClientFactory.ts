@@ -394,7 +394,8 @@ export function buildWaClientDependencies(input: {
         logger,
         defaultTimeoutMs: options.mediaTimeoutMs,
         defaultUploadAgent: toProxyAgent(options.proxy?.mediaUpload),
-        defaultDownloadAgent: toProxyAgent(options.proxy?.mediaDownload)
+        defaultDownloadAgent: toProxyAgent(options.proxy?.mediaDownload),
+        skipMacVerification: options.dangerous?.disableMediaMacVerification
     })
     const mediaMessageBuildOptions: WaMediaMessageOptions = {
         logger,
@@ -424,7 +425,8 @@ export function buildWaClientDependencies(input: {
     })
     const senderKeyManager = new SenderKeyManager(sessionStore.senderKey, {
         getFutureMessagesMax: () =>
-            abPropsCoordinator.getConfigValue('web_signal_future_messages_max')
+            abPropsCoordinator.getConfigValue('web_signal_future_messages_max'),
+        skipSignatureVerification: options.dangerous?.disableSenderKeySignatureVerification
     })
     const signalProtocol = new SignalProtocol(
         {
@@ -479,7 +481,8 @@ export function buildWaClientDependencies(input: {
             deviceOsDisplayName: options.deviceOsDisplayName,
             devicePlatform: options.devicePlatform,
             requireFullSync: options.requireFullSync,
-            version: options.version
+            version: options.version,
+            dangerous: options.dangerous
         },
         {
             logger,
@@ -656,7 +659,8 @@ export function buildWaClientDependencies(input: {
         store: sessionStore.appState,
         onMissingKeys: async ({ keyIds }) => {
             await messageDispatch.requestAppStateSyncKeys(keyIds)
-        }
+        },
+        skipMacVerification: options.dangerous?.disableAppStateMacVerification
     })
 
     const appStateMutations = new WaAppStateMutationCoordinator({

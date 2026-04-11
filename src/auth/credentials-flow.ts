@@ -17,6 +17,7 @@ interface WaAuthCredentialsFlowArgs {
     readonly authStore: WaAuthStore
     readonly signalStore: WaSignalStore
     readonly preKeyStore: WaPreKeyStore
+    readonly skipSignedPreKeySignatureVerification?: boolean
 }
 
 export async function loadOrCreateCredentials(
@@ -35,7 +36,12 @@ export async function loadOrCreateCredentials(
         hasServerStaticKey:
             existing.serverStaticKey !== null && existing.serverStaticKey !== undefined
     })
-    if (!existing.meJid && !(await hasValidSignedPreKey(args.logger, existing))) {
+    const skipSignedPreKeyCheck = args.skipSignedPreKeySignatureVerification === true
+    if (
+        !existing.meJid &&
+        !skipSignedPreKeyCheck &&
+        !(await hasValidSignedPreKey(args.logger, existing))
+    ) {
         args.logger.warn('signed pre-key is invalid, regenerating credentials')
         const fresh = await createFreshAndPersistCredentials(args)
         args.logger.info('regenerated credentials due to invalid signed pre-key')
@@ -66,6 +72,7 @@ export function buildCommsConfig(
         'deviceBrowser' | 'deviceOsDisplayName' | 'requireFullSync' | 'version'
     > & {
         readonly noiseTrustedRootCa?: WaNoiseTrustedRootCa
+        readonly disableNoiseCertificateChainVerification?: boolean
     }
 ): WaCommsConfig {
     const meJid = credentials.meJid
@@ -94,6 +101,9 @@ export function buildCommsConfig(
             serverStaticKey: credentials.serverStaticKey,
             routingInfo: credentials.routingInfo,
             trustedRootCa: clientOptions.noiseTrustedRootCa,
+            verifyCertificateChain: clientOptions.disableNoiseCertificateChainVerification
+                ? false
+                : undefined,
             loginPayloadConfig: loginIdentity
                 ? {
                       username: loginIdentity.username,

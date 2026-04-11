@@ -285,7 +285,9 @@ export class WaConnectionManager {
             registered: credentials.meJid !== null && credentials.meJid !== undefined
         })
         const commsConfig = this.authClient.buildCommsConfig(this.options, {
-            noiseTrustedRootCa: this.options.testHooks?.noiseRootCa
+            noiseTrustedRootCa: this.options.testHooks?.noiseRootCa,
+            disableNoiseCertificateChainVerification:
+                this.options.dangerous?.disableNoiseCertificateChainVerification
         })
         const comms = new WaComms(commsConfig, this.logger)
         this.pendingComms = comms

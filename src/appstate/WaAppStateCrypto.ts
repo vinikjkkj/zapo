@@ -63,13 +63,22 @@ const DEFAULT_DERIVED_KEYS_CACHE_MAX_SIZE = 256
 export class WaAppStateCrypto {
     private readonly derivedKeysCache: Map<string, WaAppStateDerivedKeys>
     private readonly derivedKeysCacheMaxSize: number
+    private readonly skipMacVerification: boolean
 
-    public constructor(derivedKeysCacheMaxSize = DEFAULT_DERIVED_KEYS_CACHE_MAX_SIZE) {
+    public constructor(
+        derivedKeysCacheMaxSize = DEFAULT_DERIVED_KEYS_CACHE_MAX_SIZE,
+        skipMacVerification = false
+    ) {
         this.derivedKeysCache = new Map()
         this.derivedKeysCacheMaxSize = normalizeNonNegativeInteger(
             derivedKeysCacheMaxSize,
             DEFAULT_DERIVED_KEYS_CACHE_MAX_SIZE
         )
+        this.skipMacVerification = skipMacVerification
+    }
+
+    public get isMacVerificationSkipped(): boolean {
+        return this.skipMacVerification
     }
 
     public clearCache(): void {
@@ -204,14 +213,16 @@ export class WaAppStateCrypto {
             args.valueBlob.byteLength - APP_STATE_VALUE_MAC_LENGTH
         )
 
-        const associatedData = this.generateAssociatedData(args.operation, args.keyId)
-        const expectedMac = await this.generateValueMac(
-            derivedKeys.valueMacHmacKey,
-            associatedData,
-            cipherWithIv
-        )
-        if (!uint8TimingSafeEqual(mac, expectedMac)) {
-            throw new Error('mutation value MAC mismatch')
+        if (!this.skipMacVerification) {
+            const associatedData = this.generateAssociatedData(args.operation, args.keyId)
+            const expectedMac = await this.generateValueMac(
+                derivedKeys.valueMacHmacKey,
+                associatedData,
+                cipherWithIv
+            )
+            if (!uint8TimingSafeEqual(mac, expectedMac)) {
+                throw new Error('mutation value MAC mismatch')
+            }
         }
 
         const plaintext = await aesCbcDecrypt(derivedKeys.valueEncryptionAesKey, iv, cipherText)
@@ -223,12 +234,14 @@ export class WaAppStateCrypto {
             throw new Error('missing sync action version')
         }
 
-        const generatedIndexMac = await this.generateIndexMac(
-            derivedKeys.indexHmacKey,
-            syncActionData.index
-        )
-        if (!uint8TimingSafeEqual(generatedIndexMac, args.indexMac)) {
-            throw new Error('mutation index MAC mismatch')
+        if (!this.skipMacVerification) {
+            const generatedIndexMac = await this.generateIndexMac(
+                derivedKeys.indexHmacKey,
+                syncActionData.index
+            )
+            if (!uint8TimingSafeEqual(generatedIndexMac, args.indexMac)) {
+                throw new Error('mutation index MAC mismatch')
+            }
         }
 
         return {

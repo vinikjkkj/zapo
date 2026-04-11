@@ -61,13 +61,18 @@ export class SenderKeyManager {
     private readonly store: WaSenderKeyStore
     private readonly senderLock = new StoreLock()
     private readonly getFutureMessagesMax: (() => number) | undefined
+    private readonly skipSignatureVerification: boolean
 
     public constructor(
         store: WaSenderKeyStore,
-        options?: { readonly getFutureMessagesMax?: () => number }
+        options?: {
+            readonly getFutureMessagesMax?: () => number
+            readonly skipSignatureVerification?: boolean
+        }
     ) {
         this.store = store
         this.getFutureMessagesMax = options?.getFutureMessagesMax
+        this.skipSignatureVerification = options?.skipSignatureVerification === true
     }
 
     public async prepareGroupEncryption(
@@ -242,20 +247,22 @@ export class SenderKeyManager {
                 throw new Error('sender key iteration mismatch')
             }
 
-            const signedContent = parsed.versionContentMac.subarray(
-                0,
-                parsed.versionContentMac.length - SIGNAL_SIGNATURE_LENGTH
-            )
-            const signature = parsed.versionContentMac.subarray(
-                parsed.versionContentMac.length - SIGNAL_SIGNATURE_LENGTH
-            )
-            const validSignature = await xeddsaVerify(
-                toRawPubKey(senderKey.signingPublicKey),
-                signedContent,
-                signature
-            )
-            if (!validSignature) {
-                throw new Error('invalid sender key signature')
+            if (!this.skipSignatureVerification) {
+                const signedContent = parsed.versionContentMac.subarray(
+                    0,
+                    parsed.versionContentMac.length - SIGNAL_SIGNATURE_LENGTH
+                )
+                const signature = parsed.versionContentMac.subarray(
+                    parsed.versionContentMac.length - SIGNAL_SIGNATURE_LENGTH
+                )
+                const validSignature = await xeddsaVerify(
+                    toRawPubKey(senderKey.signingPublicKey),
+                    signedContent,
+                    signature
+                )
+                if (!validSignature) {
+                    throw new Error('invalid sender key signature')
+                }
             }
 
             const selected = await selectMessageKey(

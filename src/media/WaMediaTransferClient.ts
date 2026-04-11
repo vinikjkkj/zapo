@@ -101,6 +101,7 @@ export class WaMediaTransferClient {
     private readonly defaultHeaders: Readonly<Record<string, string>>
     private readonly defaultUploadAgent: WaMediaTransferClientOptions['defaultUploadAgent']
     private readonly defaultDownloadAgent: WaMediaTransferClientOptions['defaultDownloadAgent']
+    private readonly skipMacVerification: boolean
 
     public constructor(options: WaMediaTransferClientOptions = {}) {
         this.logger = options.logger
@@ -110,6 +111,7 @@ export class WaMediaTransferClient {
         this.defaultHeaders = normalizeHeaderRecord(options.defaultHeaders)
         this.defaultUploadAgent = options.defaultUploadAgent
         this.defaultDownloadAgent = options.defaultDownloadAgent
+        this.skipMacVerification = options.skipMacVerification === true
     }
 
     public async downloadStream(request: StreamDownloadRequest): Promise<StreamTransferResponse> {
@@ -252,7 +254,8 @@ export class WaMediaTransferClient {
             mediaType: request.mediaType,
             mediaKey: request.mediaKey,
             expectedFileSha256: request.fileSha256,
-            expectedFileEncSha256: request.fileEncSha256
+            expectedFileEncSha256: request.fileEncSha256,
+            skipMacVerification: this.skipMacVerification
         })
         decrypted.metadata.catch(() => undefined)
         this.logger?.debug('media encrypted download stream ready', {

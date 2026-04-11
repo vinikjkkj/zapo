@@ -1,5 +1,10 @@
 import type { AppStateCollectionName } from '@appstate/types'
-import type { WaAuthClientOptions, WaAuthCredentials, WaAuthSocketOptions } from '@auth/types'
+import type {
+    WaAuthClientOptions,
+    WaAuthCredentials,
+    WaAuthDangerousOptions,
+    WaAuthSocketOptions
+} from '@auth/types'
 import type { WaMediaProcessor } from '@media/processor'
 import type { WaDecodedAddon } from '@message/addon-crypto'
 import type { WaMessagePublishOptions } from '@message/types'
@@ -62,6 +67,37 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      * the production code path enforces.
      */
     readonly testHooks?: WaClientTestHooks
+    /**
+     * Dangerous escape hatches. **Do not enable in production.** Each flag here
+     * disables a security check the production code path enforces.
+     */
+    readonly dangerous?: WaClientDangerousOptions
+}
+
+export interface WaClientDangerousOptions extends WaAuthDangerousOptions {
+    /**
+     * Skip the noise certificate-chain verification during the handshake.
+     * The server's static key will be accepted without proof that it was
+     * issued by a trusted root.
+     */
+    readonly disableNoiseCertificateChainVerification?: boolean
+    /**
+     * Skip the XEdDSA signature check on incoming group sender-key messages.
+     * Ciphertexts will be decrypted even if the trailing signature does not
+     * verify against the stored sender signing public key.
+     */
+    readonly disableSenderKeySignatureVerification?: boolean
+    /**
+     * Skip HMAC verification across the app-state sync pipeline: per-mutation
+     * value and index MACs, snapshot MACs, and patch MACs. Tampered server
+     * payloads will be accepted as long as the ciphertext decrypts cleanly.
+     */
+    readonly disableAppStateMacVerification?: boolean
+    /**
+     * Skip the truncated HMAC-SHA256 check on encrypted media payloads
+     * during download. Tampered ciphertexts will still be decrypted.
+     */
+    readonly disableMediaMacVerification?: boolean
 }
 
 export interface WaClientTestHooks {

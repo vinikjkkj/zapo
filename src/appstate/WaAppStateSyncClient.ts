@@ -59,6 +59,7 @@ interface WaAppStateSyncClientOptions {
     readonly hostDomain?: string
     readonly defaultTimeoutMs?: number
     readonly onMissingKeys?: (event: WaAppStateMissingKeysEvent) => Promise<void>
+    readonly skipMacVerification?: boolean
 }
 
 export class WaAppStateMissingKeyError extends Error {
@@ -102,7 +103,7 @@ export class WaAppStateSyncClient {
         this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.APP_STATE_SYNC_TIMEOUT_MS
         this.onMissingKeys = options.onMissingKeys
 
-        this.crypto = new WaAppStateCrypto()
+        this.crypto = new WaAppStateCrypto(undefined, options.skipMacVerification === true)
         this.syncContext = null
         this.syncPromise = null
     }
@@ -849,14 +850,16 @@ export class WaAppStateSyncClient {
             ltHashInputIndex += 1
         }
         const ltHash = await this.crypto.ltHashAdd(APP_STATE_EMPTY_LT_HASH, ltHashInput)
-        const expectedSnapshotMac = await this.crypto.generateSnapshotMac(
-            keyData,
-            ltHash,
-            version,
-            collection
-        )
-        if (!uint8Equal(expectedSnapshotMac, snapshot.mac as Uint8Array)) {
-            throw new Error(`snapshot MAC mismatch for ${collection}`)
+        if (!this.crypto.isMacVerificationSkipped) {
+            const expectedSnapshotMac = await this.crypto.generateSnapshotMac(
+                keyData,
+                ltHash,
+                version,
+                collection
+            )
+            if (!uint8Equal(expectedSnapshotMac, snapshot.mac as Uint8Array)) {
+                throw new Error(`snapshot MAC mismatch for ${collection}`)
+            }
         }
         this.setCollectionState(collection, version, ltHash, indexValueMap)
         return mutations
@@ -1080,6 +1083,9 @@ export class WaAppStateSyncClient {
         nextHash: Uint8Array,
         valueMacs: readonly Uint8Array[]
     ): Promise<void> {
+        if (this.crypto.isMacVerificationSkipped) {
+            return
+        }
         const snapshotMac = decodeProtoBytes(patch.snapshotMac, `patch.snapshotMac (${collection})`)
         const expectedSnapshotMac = await this.crypto.generateSnapshotMac(
             patchKeyData,
