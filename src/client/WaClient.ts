@@ -638,13 +638,18 @@ export class WaClient extends EventEmitter {
 
     public async requestPairingCode(
         phoneNumber: string,
-        shouldShowPushNotification = false
+        shouldShowPushNotification = false,
+        customCode?: string
     ): Promise<string> {
         if (!this.connectionManager.isConnected() || !this.authClient.getCurrentCredentials()) {
             throw new Error('client is not connected')
         }
         this.logger.debug('wa client request pairing code')
-        return this.authClient.requestPairingCode(phoneNumber, shouldShowPushNotification)
+        return this.authClient.requestPairingCode(
+            phoneNumber,
+            shouldShowPushNotification,
+            customCode
+        )
     }
 
     public async fetchPairingCountryCodeIso(): Promise<string> {
