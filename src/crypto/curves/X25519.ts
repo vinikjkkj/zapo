@@ -1,10 +1,13 @@
-import { webcrypto } from 'node:crypto'
+import { createPrivateKey, createPublicKey, diffieHellman, webcrypto } from 'node:crypto'
 
-import { X25519_PKCS8_PREFIX } from '@crypto/curves/constants'
+import { X25519_PKCS8_PREFIX, X25519_SPKI_PREFIX } from '@crypto/curves/constants'
 import { pkcs8FromRawPrivate, type SignalKeyPair, type SubtleKeyPair } from '@crypto/curves/types'
 import { FE_ONE } from '@crypto/math/constants'
 import { fe, feAdd, feFromBytes, feInv, feMul, fePack, feSub } from '@crypto/math/fe'
 import { assertByteLength, decodeBase64Url, toBytesView } from '@util/bytes'
+import { isBunRuntime } from '@util/runtime'
+
+const IS_BUN = isBunRuntime()
 
 // Pre-allocated temps for montgomeryToEdwardsPublic (safe: single-threaded)
 const _mx = fe()
@@ -79,6 +82,23 @@ export class X25519 {
     static async scalarMult(privKey: Uint8Array, pubKey: Uint8Array): Promise<Uint8Array> {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
         assertByteLength(pubKey, 32, 'x25519 public key must be 32 bytes')
+
+        // TODO: When Bun supports deriveBits with X25519 change to Async Web Crypto API
+        // https://github.com/oven-sh/bun/pull/29152
+        if (IS_BUN) {
+            const spki = new Uint8Array(X25519_SPKI_PREFIX.length + 32)
+            spki.set(X25519_SPKI_PREFIX, 0)
+            spki.set(pubKey, X25519_SPKI_PREFIX.length)
+            const shared = diffieHellman({
+                privateKey: createPrivateKey({
+                    key: pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, privKey) as Buffer,
+                    format: 'der',
+                    type: 'pkcs8'
+                }),
+                publicKey: createPublicKey({ key: spki as Buffer, format: 'der', type: 'spki' })
+            })
+            return toBytesView(shared)
+        }
 
         const [privateKey, publicKey] = await Promise.all([
             webcrypto.subtle.importKey(
