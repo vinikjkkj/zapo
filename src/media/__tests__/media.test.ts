@@ -181,6 +181,64 @@ test('media crypto encrypt/decrypt bytes round-trip and hash validation', async 
     )
 })
 
+test('media crypto decryptBytes rejects tampered MAC by default and bypasses it when skip is set', async () => {
+    const mediaKey = await WaMediaCrypto.generateMediaKey()
+    const plaintext = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])
+    const encrypted = await WaMediaCrypto.encryptBytes('image', mediaKey, plaintext)
+
+    const tampered = new Uint8Array(encrypted.ciphertextHmac)
+    tampered[tampered.length - 1] ^= 0x01
+
+    await assert.rejects(
+        () => WaMediaCrypto.decryptBytes('image', mediaKey, tampered),
+        /media MAC mismatch/
+    )
+
+    const bypassed = await WaMediaCrypto.decryptBytes(
+        'image',
+        mediaKey,
+        tampered,
+        undefined,
+        undefined,
+        true
+    )
+    assert.deepEqual(bypassed.plaintext, plaintext)
+})
+
+test('media crypto decryptReadable rejects tampered MAC by default and bypasses it when skip is set', async () => {
+    const mediaKey = await WaMediaCrypto.generateMediaKey()
+    const plaintext = createPatternBytes(4_096)
+    const encryptedReadable = await WaMediaCrypto.encryptReadable(
+        'audio',
+        mediaKey,
+        createChunkedReadable(plaintext, [1_024])
+    )
+    const [ciphertext] = await Promise.all([
+        readAllFromStream(encryptedReadable.encrypted),
+        encryptedReadable.metadata
+    ])
+
+    const tampered = new Uint8Array(ciphertext)
+    tampered[tampered.length - 1] ^= 0x01
+
+    const strictDecrypt = await WaMediaCrypto.decryptReadable(
+        createChunkedReadable(tampered, [1_024]),
+        { mediaType: 'audio', mediaKey }
+    )
+    await assert.rejects(() => readAllFromStream(strictDecrypt.plaintext), /media MAC mismatch/)
+    await assert.rejects(() => strictDecrypt.metadata, /media MAC mismatch/)
+
+    const bypassDecrypt = await WaMediaCrypto.decryptReadable(
+        createChunkedReadable(tampered, [1_024]),
+        { mediaType: 'audio', mediaKey, skipMacVerification: true }
+    )
+    const [bypassedBytes] = await Promise.all([
+        readAllFromStream(bypassDecrypt.plaintext),
+        bypassDecrypt.metadata
+    ])
+    assert.deepEqual(bypassedBytes, plaintext)
+})
+
 test('media crypto encryptReadable matches byte encryption for large payloads', async () => {
     const mediaKey = await WaMediaCrypto.generateMediaKey()
     const plaintext = createPatternBytes(200_000)

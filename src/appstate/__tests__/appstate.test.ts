@@ -165,6 +165,82 @@ test('appstate crypto encrypts/decrypts mutation and computes hash transitions',
     assert.equal(updated.hash.length, APP_STATE_EMPTY_LT_HASH.length)
 })
 
+test('appstate crypto rejects tampered value and index MACs by default', async () => {
+    const crypto = new WaAppStateCrypto()
+    const keyId = new Uint8Array([0, 1, 2, 3, 4, 5])
+    const keyData = new Uint8Array(32).fill(9)
+
+    const encrypted = await crypto.encryptMutation({
+        operation: proto.SyncdMutation.SyncdOperation.SET,
+        keyId,
+        keyData,
+        index: 'chat:1',
+        value: { timestamp: 123 },
+        version: 1,
+        iv: new Uint8Array(16).fill(1)
+    })
+
+    const tamperedValueBlob = new Uint8Array(encrypted.valueBlob)
+    tamperedValueBlob[tamperedValueBlob.length - 1] ^= 0x01
+    await assert.rejects(
+        () =>
+            crypto.decryptMutation({
+                operation: proto.SyncdMutation.SyncdOperation.SET,
+                keyId,
+                keyData,
+                indexMac: encrypted.indexMac,
+                valueBlob: tamperedValueBlob
+            }),
+        /mutation value MAC mismatch/
+    )
+
+    const tamperedIndexMac = new Uint8Array(encrypted.indexMac)
+    tamperedIndexMac[0] ^= 0x01
+    await assert.rejects(
+        () =>
+            crypto.decryptMutation({
+                operation: proto.SyncdMutation.SyncdOperation.SET,
+                keyId,
+                keyData,
+                indexMac: tamperedIndexMac,
+                valueBlob: encrypted.valueBlob
+            }),
+        /mutation index MAC mismatch/
+    )
+})
+
+test('appstate crypto bypasses value and index MAC checks when skipMacVerification is set', async () => {
+    const crypto = new WaAppStateCrypto(undefined, true)
+    const keyId = new Uint8Array([0, 1, 2, 3, 4, 5])
+    const keyData = new Uint8Array(32).fill(9)
+
+    const encrypted = await crypto.encryptMutation({
+        operation: proto.SyncdMutation.SyncdOperation.SET,
+        keyId,
+        keyData,
+        index: 'chat:1',
+        value: { timestamp: 123 },
+        version: 1,
+        iv: new Uint8Array(16).fill(1)
+    })
+
+    const tamperedValueBlob = new Uint8Array(encrypted.valueBlob)
+    tamperedValueBlob[tamperedValueBlob.length - 1] ^= 0x01
+    const tamperedIndexMac = new Uint8Array(encrypted.indexMac)
+    tamperedIndexMac[0] ^= 0x01
+
+    const decrypted = await crypto.decryptMutation({
+        operation: proto.SyncdMutation.SyncdOperation.SET,
+        keyId,
+        keyData,
+        indexMac: tamperedIndexMac,
+        valueBlob: tamperedValueBlob
+    })
+    assert.equal(decrypted.index, 'chat:1')
+    assert.equal(decrypted.version, 1)
+    assert.equal(crypto.isMacVerificationSkipped, true)
+})
+
 test('appstate sync client builds outgoing patch without inline version field', async () => {
     const store = new WaAppStateMemoryStore()
     const key = {

@@ -748,11 +748,13 @@ export class WaAppStateSyncClient {
         if (!snapshot.version?.version) {
             throw new Error(`snapshot for ${collection} is missing version`)
         }
-        if (!snapshot.mac) {
-            throw new Error(`snapshot for ${collection} is missing mac`)
-        }
-        if (!snapshot.keyId?.id) {
-            throw new Error(`snapshot for ${collection} is missing keyId`)
+        if (!this.crypto.isMacVerificationSkipped) {
+            if (!snapshot.mac) {
+                throw new Error(`snapshot for ${collection} is missing mac`)
+            }
+            if (!snapshot.keyId?.id) {
+                throw new Error(`snapshot for ${collection} is missing keyId`)
+            }
         }
         return snapshot
     }
@@ -778,14 +780,16 @@ export class WaAppStateSyncClient {
         if (!patch.version?.version) {
             throw new Error(`patch for ${collection} is missing version`)
         }
-        if (!patch.snapshotMac) {
-            throw new Error(`patch for ${collection} is missing snapshotMac`)
-        }
-        if (!patch.patchMac) {
-            throw new Error(`patch for ${collection} is missing patchMac`)
-        }
-        if (!patch.keyId?.id) {
-            throw new Error(`patch for ${collection} is missing keyId`)
+        if (!this.crypto.isMacVerificationSkipped) {
+            if (!patch.snapshotMac) {
+                throw new Error(`patch for ${collection} is missing snapshotMac`)
+            }
+            if (!patch.patchMac) {
+                throw new Error(`patch for ${collection} is missing patchMac`)
+            }
+            if (!patch.keyId?.id) {
+                throw new Error(`patch for ${collection} is missing keyId`)
+            }
         }
         if (patch.mutations && patch.mutations.length > 0 && patch.externalMutations) {
             throw new Error(`patch for ${collection} has inline and external mutations together`)
@@ -810,14 +814,17 @@ export class WaAppStateSyncClient {
             snapshot.version?.version,
             `snapshot.version.version (${collection})`
         )
-        const keyId = decodeProtoBytes(snapshot.keyId?.id, `snapshot.keyId.id (${collection})`)
-        const keyData = await this.getKeyData(keyId)
-        if (!keyData) {
-            throw new WaAppStateMissingKeyError(
-                `missing snapshot key ${bytesToHex(keyId)} for ${collection}`,
-                keyId,
-                collection
-            )
+        let keyData: Uint8Array | null = null
+        if (!this.crypto.isMacVerificationSkipped) {
+            const keyId = decodeProtoBytes(snapshot.keyId?.id, `snapshot.keyId.id (${collection})`)
+            keyData = await this.getKeyData(keyId)
+            if (!keyData) {
+                throw new WaAppStateMissingKeyError(
+                    `missing snapshot key ${bytesToHex(keyId)} for ${collection}`,
+                    keyId,
+                    collection
+                )
+            }
         }
 
         const indexValueMap = new Map<string, Uint8Array>()
@@ -850,7 +857,7 @@ export class WaAppStateSyncClient {
             ltHashInputIndex += 1
         }
         const ltHash = await this.crypto.ltHashAdd(APP_STATE_EMPTY_LT_HASH, ltHashInput)
-        if (!this.crypto.isMacVerificationSkipped) {
+        if (keyData !== null) {
             const expectedSnapshotMac = await this.crypto.generateSnapshotMac(
                 keyData,
                 ltHash,
@@ -880,14 +887,17 @@ export class WaAppStateSyncClient {
             )
         }
 
-        const patchKeyId = decodeProtoBytes(patch.keyId?.id, `patch.keyId.id (${collection})`)
-        const patchKeyData = await this.getKeyData(patchKeyId)
-        if (!patchKeyData) {
-            throw new WaAppStateMissingKeyError(
-                `missing patch key ${bytesToHex(patchKeyId)} for ${collection}`,
-                patchKeyId,
-                collection
-            )
+        let patchKeyData: Uint8Array | null = null
+        if (!this.crypto.isMacVerificationSkipped) {
+            const patchKeyId = decodeProtoBytes(patch.keyId?.id, `patch.keyId.id (${collection})`)
+            patchKeyData = await this.getKeyData(patchKeyId)
+            if (!patchKeyData) {
+                throw new WaAppStateMissingKeyError(
+                    `missing patch key ${bytesToHex(patchKeyId)} for ${collection}`,
+                    patchKeyId,
+                    collection
+                )
+            }
         }
 
         const decryptedMutations = await this.decryptPatchMutations(collection, patch)
@@ -908,14 +918,16 @@ export class WaAppStateSyncClient {
             macMutations,
             collection
         )
-        await this.assertPatchMacsMatch(
-            patch,
-            collection,
-            patchKeyData,
-            patchVersion,
-            nextState.hash,
-            valueMacs
-        )
+        if (patchKeyData !== null) {
+            await this.assertPatchMacsMatch(
+                patch,
+                collection,
+                patchKeyData,
+                patchVersion,
+                nextState.hash,
+                valueMacs
+            )
+        }
         this.setCollectionState(collection, patchVersion, nextState.hash, nextState.indexValueMap)
         return decryptedMutations
     }
@@ -1083,9 +1095,6 @@ export class WaAppStateSyncClient {
         nextHash: Uint8Array,
         valueMacs: readonly Uint8Array[]
     ): Promise<void> {
-        if (this.crypto.isMacVerificationSkipped) {
-            return
-        }
         const snapshotMac = decodeProtoBytes(patch.snapshotMac, `patch.snapshotMac (${collection})`)
         const expectedSnapshotMac = await this.crypto.generateSnapshotMac(
             patchKeyData,

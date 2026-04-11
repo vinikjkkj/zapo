@@ -50,6 +50,12 @@ export interface WaAuthClientOptions {
 
 export interface WaAuthDangerousOptions {
     /**
+     * Skip the noise certificate-chain verification during the handshake.
+     * The server's static key will be accepted without proof that it was
+     * issued by a trusted root.
+     */
+    readonly disableNoiseCertificateChainVerification?: boolean
+    /**
      * Skip the XEdDSA account-signature check on the `pair-success` ADV
      * identity payload, which normally proves the primary device signed off
      * on this companion.

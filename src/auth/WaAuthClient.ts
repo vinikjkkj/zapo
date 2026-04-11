@@ -142,7 +142,8 @@ export class WaAuthClient {
             version: this.options.version,
             noiseTrustedRootCa: overrides.noiseTrustedRootCa,
             disableNoiseCertificateChainVerification:
-                overrides.disableNoiseCertificateChainVerification
+                overrides.disableNoiseCertificateChainVerification ??
+                this.options.dangerous?.disableNoiseCertificateChainVerification
         })
     }
 

@@ -178,3 +178,43 @@ test('sender key manager handles distribution, encryption/decryption and validat
         /invalid sender key signature/
     )
 })
+
+test('sender key manager bypasses signature check when skipSignatureVerification is set', async () => {
+    const senderStore = new SenderKeyMemoryStore()
+    const receiverStore = new SenderKeyMemoryStore()
+    const senderManager = new SenderKeyManager(senderStore)
+    const receiverStrict = new SenderKeyManager(receiverStore)
+    const receiverSkipping = new SenderKeyManager(receiverStore, {
+        skipSignatureVerification: true
+    })
+    const groupId = '120363000000000000@g.us'
+    const sender = makeAddress('5511777777777', 0)
+    const plaintext = makeBytes(24, 7)
+
+    const prepared = await senderManager.prepareGroupEncryption(groupId, sender, plaintext)
+    await receiverStrict.processSenderKeyDistributionPayload(
+        groupId,
+        sender,
+        prepared.distributionMessage.axolotlSenderKeyDistributionMessage!
+    )
+
+    const tamperedCiphertext = new Uint8Array(prepared.ciphertext.ciphertext)
+    tamperedCiphertext[tamperedCiphertext.length - 1] ^= 0x01
+
+    await assert.rejects(
+        () =>
+            receiverStrict.decryptGroupMessage({
+                groupId,
+                sender,
+                ciphertext: tamperedCiphertext
+            }),
+        /invalid sender key signature/
+    )
+
+    const decrypted = await receiverSkipping.decryptGroupMessage({
+        groupId,
+        sender,
+        ciphertext: tamperedCiphertext
+    })
+    assert.deepEqual(decrypted, plaintext)
+})

@@ -62,9 +62,12 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
     readonly logoutStoreClear?: WaLogoutStoreClearOptions
     readonly media?: WaMediaOptions
     /**
-     * Escape hatches intended exclusively for tests against a fake server.
-     * **Do not enable in production.** Each flag here disables a security check
-     * the production code path enforces.
+     * Test-only overrides intended for running against a fake server.
+     *
+     * These hooks **do not** bypass any security checks — they only swap in
+     * test fixtures (e.g. a different root CA) so the full verification code
+     * path still runs end-to-end. If you actually need to skip a check, use
+     * `dangerous` instead.
      */
     readonly testHooks?: WaClientTestHooks
     /**
@@ -75,12 +78,6 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
 }
 
 export interface WaClientDangerousOptions extends WaAuthDangerousOptions {
-    /**
-     * Skip the noise certificate-chain verification during the handshake.
-     * The server's static key will be accepted without proof that it was
-     * issued by a trusted root.
-     */
-    readonly disableNoiseCertificateChainVerification?: boolean
     /**
      * Skip the XEdDSA signature check on incoming group sender-key messages.
      * Ciphertexts will be decrypted even if the trailing signature does not
