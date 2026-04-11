@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { PBKDF2_ITERATIONS } from '@auth/pairing/constants'
-import { completeCompanionFinish, createCompanionHello } from '@auth/pairing/WaPairingCodeCrypto'
+import {
+    completeCompanionFinish,
+    createCompanionHello,
+    PBKDF2_ITERATIONS
+} from '@auth/pairing/pairing-code-crypto'
 import { WaQrFlow } from '@auth/pairing/WaQrFlow'
 import type { Logger } from '@infra/log/types'
 

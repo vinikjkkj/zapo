@@ -1,4 +1,3 @@
-import { CROCKFORD_ALPHABET, PBKDF2_ITERATIONS } from '@auth/pairing/constants'
 import {
     aesCtrDecrypt,
     aesCtrEncrypt,
@@ -12,6 +11,9 @@ import type { SignalKeyPair } from '@crypto/curves/types'
 import { X25519 } from '@crypto/curves/X25519'
 import { WA_PAIRING_KDF_INFO } from '@protocol/constants'
 import { concatBytes, TEXT_ENCODER } from '@util/bytes'
+
+export const CROCKFORD_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTVWXYZ'
+export const PBKDF2_ITERATIONS = 2 << 16
 
 function bytesToCrockford(bytes: Uint8Array): string {
     let bitCount = 0
@@ -31,18 +33,39 @@ function bytesToCrockford(bytes: Uint8Array): string {
     return out
 }
 
-export async function createCompanionHello(): Promise<{
+export function normalizeCustomPairingCode(input: string): string {
+    const stripped = input.replace(/-/g, '').toUpperCase()
+    if (stripped.length !== 8) {
+        throw new Error(`custom pairing code must be 8 characters, got ${stripped.length}`)
+    }
+    for (let i = 0; i < stripped.length; i += 1) {
+        if (CROCKFORD_ALPHABET.indexOf(stripped[i]) < 0) {
+            throw new Error(
+                `custom pairing code contains invalid character "${stripped[i]}" (allowed: ${CROCKFORD_ALPHABET})`
+            )
+        }
+    }
+    return stripped
+}
+
+export async function createCompanionHello(
+    options: {
+        readonly customCode?: string
+    } = {}
+): Promise<{
     readonly pairingCode: string
     readonly companionEphemeralKeyPair: SignalKeyPair
     readonly wrappedCompanionEphemeralPub: Uint8Array
 }> {
-    const [codeBytes, companionEphemeralKeyPair, salt, counter] = await Promise.all([
-        randomBytesAsync(5),
+    const normalizedCustomCode =
+        options.customCode !== undefined ? normalizeCustomPairingCode(options.customCode) : null
+    const [companionEphemeralKeyPair, salt, counter, codeBytes] = await Promise.all([
         X25519.generateKeyPair(),
         randomBytesAsync(32),
-        randomBytesAsync(16)
+        randomBytesAsync(16),
+        normalizedCustomCode !== null ? Promise.resolve(null) : randomBytesAsync(5)
     ])
-    const pairingCode = bytesToCrockford(codeBytes)
+    const pairingCode = normalizedCustomCode ?? bytesToCrockford(codeBytes!)
     const cipher = await pbkdf2DeriveAesCtrKey(
         TEXT_ENCODER.encode(pairingCode),
         salt,

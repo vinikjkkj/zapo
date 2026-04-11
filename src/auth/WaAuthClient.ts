@@ -2,7 +2,7 @@ import {
     buildCommsConfig,
     loadOrCreateCredentials,
     persistCredentials
-} from '@auth/flow/WaAuthCredentialsFlow'
+} from '@auth/credentials-flow'
 import { WaPairingFlow } from '@auth/pairing/WaPairingFlow'
 import { WaQrFlow } from '@auth/pairing/WaQrFlow'
 import type {
@@ -256,12 +256,13 @@ export class WaAuthClient {
 
     public async requestPairingCode(
         phoneNumber: string,
-        shouldShowPushNotification = false
+        shouldShowPushNotification = false,
+        customCode?: string
     ): Promise<string> {
         this.requireCredentials()
         this.logger.info('auth client requesting pairing code')
         return this.runHandled(() =>
-            this.pairingFlow.requestPairingCode(phoneNumber, shouldShowPushNotification)
+            this.pairingFlow.requestPairingCode(phoneNumber, shouldShowPushNotification, customCode)
         )
     }
 

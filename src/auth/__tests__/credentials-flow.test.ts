@@ -6,7 +6,7 @@ import {
     buildCommsConfig,
     loadOrCreateCredentials,
     persistCredentials
-} from '@auth/flow/WaAuthCredentialsFlow'
+} from '@auth/credentials-flow'
 import type { WaAuthCredentials } from '@auth/types'
 import type { Logger } from '@infra/log/types'
 import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'

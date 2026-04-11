@@ -1,9 +1,14 @@
-import { completeCompanionFinish, createCompanionHello } from '@auth/pairing/WaPairingCodeCrypto'
+import {
+    completeCompanionFinish,
+    createCompanionHello,
+    normalizeCustomPairingCode
+} from '@auth/pairing/pairing-code-crypto'
 import type { WaAuthCredentials } from '@auth/types'
 import { randomBytesAsync } from '@crypto'
 import type { SignalKeyPair } from '@crypto/curves/types'
 import type { Logger } from '@infra/log/types'
 import { proto } from '@proto'
+import { getWaBrowserDisplayName } from '@protocol/browser'
 import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_SIGNALING } from '@protocol/constants'
 import { parsePhoneJid } from '@protocol/jid'
 import {
@@ -86,28 +91,22 @@ export class WaPairingFlow {
 
     public async requestPairingCode(
         phoneNumber: string,
-        shouldShowPushNotification = false
+        shouldShowPushNotification = false,
+        customCode?: string
     ): Promise<string> {
         this.opts.logger.info('requesting pairing code', {
-            shouldShowPushNotification
+            shouldShowPushNotification,
+            hasCustomCode: customCode !== undefined
         })
+        const normalizedCustomCode =
+            customCode !== undefined ? normalizeCustomPairingCode(customCode) : undefined
         const credentials = this.requireCredentials()
         const phoneJid = parsePhoneJid(phoneNumber)
         const [companionHello, refreshedCredentials] = await Promise.all([
-            createCompanionHello(),
+            createCompanionHello({ customCode: normalizedCustomCode }),
             this.rotateAdvSecret(credentials)
         ])
-        const browser = this.opts.device.browser
-        const browserDisplayName =
-            {
-                chrome: 'Chrome',
-                firefox: 'Firefox',
-                ie: 'IE',
-                opera: 'Opera',
-                safari: 'Safari',
-                edge: 'Edge',
-                chromium: 'Chromium'
-            }[browser.trim().toLowerCase()] ?? browser
+        const browserDisplayName = getWaBrowserDisplayName(this.opts.device.browser)
 
         const response = await this.opts.socket.query(
             buildCompanionHelloRequestNode({
