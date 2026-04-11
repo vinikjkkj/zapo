@@ -464,7 +464,9 @@ export class SignalDeviceSyncApi {
         }
 
         const parsedNormalizedUser = splitJid(normalizedUserJid)
-        const parsedRawUser = splitJid(rawUserJid)
+        const rawAtIndex = rawUserJid.indexOf('@')
+        const rawServer =
+            rawAtIndex >= 1 ? rawUserJid.slice(rawAtIndex + 1) : parsedNormalizedUser.server
         const dedup = new Set<string>()
         for (const deviceNode of getNodeChildrenByTag(deviceListNode, 'device')) {
             const parsedId = deviceNode.attrs.id
@@ -477,7 +479,7 @@ export class SignalDeviceSyncApi {
                 isHostedDeviceId(parsedId) || deviceNode.attrs.is_hosted === 'true'
             dedup.add(
                 buildDeviceJid(parsedNormalizedUser.user, parsedNormalizedUser.server, parsedId, {
-                    rawServer: parsedRawUser.server,
+                    rawServer,
                     isHosted: isHostedDevice
                 })
             )
