@@ -60,7 +60,12 @@ export function normalizeRecipientJid(to: string): string {
 
 function isJidType(jid: string, type: string): boolean {
     const atIndex = jid.length - type.length - 1
-    return atIndex >= 1 && jid.charCodeAt(atIndex) === 64 && jid.endsWith(type)
+    return (
+        atIndex >= 1 &&
+        jid.charCodeAt(atIndex) === 64 &&
+        jid.indexOf('@') === atIndex &&
+        jid.endsWith(type)
+    )
 }
 
 export function isLidJid(jid: string): boolean {
@@ -140,7 +145,7 @@ export function toUserJid(
     const canonicalize = options.canonicalizeSignalServer === true
     if (!canonicalize) {
         const atIndex = jid.indexOf('@')
-        if (atIndex >= 1) {
+        if (atIndex >= 1 && atIndex < jid.length - 1) {
             const colonIndex = jid.indexOf(':', 0)
             if (colonIndex === -1 || colonIndex > atIndex) {
                 return jid
@@ -179,7 +184,7 @@ export function isHostedDeviceJid(jid: string): boolean {
         return true
     }
     const atIndex = jid.indexOf('@')
-    if (atIndex < 1) return false
+    if (atIndex < 1 || atIndex >= jid.length - 1) return false
     const colonIndex = jid.indexOf(':')
     if (colonIndex < 0 || colonIndex >= atIndex - 1) return false
     let deviceId = 0

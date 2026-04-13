@@ -16,7 +16,7 @@ export async function computePhashV2(participants: readonly string[]): Promise<s
 
 function toPhashCanonicalWid(jid: string): string {
     const atIndex = jid.indexOf('@')
-    if (atIndex < 1) return jid
+    if (atIndex < 1 || atIndex >= jid.length - 1) return jid
     const colonIndex = jid.indexOf(':', 0)
     const userEnd = colonIndex >= 0 && colonIndex < atIndex ? colonIndex : atIndex
     const hasZeroAgent =
