@@ -34,12 +34,12 @@ import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
 import {
     isGroupJid,
+    isLidJid,
     normalizeDeviceJid,
     normalizeRecipientJid,
     parseJidFull,
     parseSignalAddressFromJid,
     signalAddressKey,
-    splitJid,
     toUserJid
 } from '@protocol/jid'
 import type { OutboundRetryTracker } from '@retry/tracker'
@@ -712,16 +712,8 @@ export class WaMessageDispatchCoordinator {
         groupJid: string
     ): GroupAddressingMode {
         for (let index = 0; index < participantUserJids.length; index += 1) {
-            const participantJid = participantUserJids[index]
-            try {
-                if (splitJid(participantJid).server === 'lid') {
-                    return 'lid'
-                }
-            } catch (error) {
-                this.logger.trace(
-                    'ignoring malformed participant jid in addressing mode resolution',
-                    { participantJid, message: toError(error).message }
-                )
+            if (isLidJid(participantUserJids[index])) {
+                return 'lid'
             }
         }
 

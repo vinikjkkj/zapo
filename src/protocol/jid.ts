@@ -60,7 +60,16 @@ export function normalizeRecipientJid(to: string): string {
 
 function isJidType(jid: string, type: string): boolean {
     const atIndex = jid.length - type.length - 1
-    return atIndex >= 1 && jid.charCodeAt(atIndex) === 64 && jid.endsWith(type)
+    return (
+        atIndex >= 1 &&
+        jid.charCodeAt(atIndex) === 64 &&
+        jid.indexOf('@') === atIndex &&
+        jid.endsWith(type)
+    )
+}
+
+export function isLidJid(jid: string): boolean {
+    return isJidType(jid, WA_DEFAULTS.LID_SERVER)
 }
 
 export function isGroupJid(jid: string): boolean {
@@ -88,8 +97,14 @@ export function parseSignalAddressFromJid(jid: string): SignalAddress {
     if (colonIndex === -1 || colonIndex > atIndex) {
         return { user: jid.slice(0, atIndex), server, device: 0 }
     }
-    const device = Number.parseInt(jid.slice(colonIndex + 1, atIndex), 10)
-    if (!Number.isFinite(device) || device < 0) throw new Error(`invalid jid device: ${jid}`)
+    if (colonIndex >= atIndex - 1) throw new Error(`invalid jid device: ${jid}`)
+    let device = 0
+    for (let i = colonIndex + 1; i < atIndex; i += 1) {
+        const digit = jid.charCodeAt(i) - 48
+        if (digit < 0 || digit > 9) throw new Error(`invalid jid device: ${jid}`)
+        device = device * 10 + digit
+        if (device > Number.MAX_SAFE_INTEGER) throw new Error(`invalid jid device: ${jid}`)
+    }
     return { user: jid.slice(0, colonIndex), server, device }
 }
 
@@ -127,14 +142,23 @@ export function toUserJid(
         readonly hostDomain?: string
     } = {}
 ): string {
+    const canonicalize = options.canonicalizeSignalServer === true
+    if (!canonicalize) {
+        const atIndex = jid.indexOf('@')
+        if (atIndex >= 1 && atIndex < jid.length - 1) {
+            const colonIndex = jid.indexOf(':', 0)
+            if (colonIndex === -1 || colonIndex > atIndex) {
+                return jid
+            }
+        }
+    }
     const address = parseSignalAddressFromJid(jid)
-    const server =
-        options.canonicalizeSignalServer === true
-            ? canonicalizeSignalServer(
-                  address.server ?? WA_DEFAULTS.HOST_DOMAIN,
-                  options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
-              )
-            : address.server
+    const server = canonicalize
+        ? canonicalizeSignalServer(
+              address.server ?? WA_DEFAULTS.HOST_DOMAIN,
+              options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
+          )
+        : address.server
     return `${address.user}@${server}`
 }
 
@@ -153,16 +177,24 @@ export function isHostedServer(server: string): boolean {
 }
 
 export function isHostedDeviceJid(jid: string): boolean {
-    const { user, server } = splitJid(jid)
-    if (isHostedServer(server)) {
+    if (
+        isJidType(jid, WA_DEFAULTS.HOSTED_SERVER) ||
+        isJidType(jid, WA_DEFAULTS.HOSTED_LID_SERVER)
+    ) {
         return true
     }
-    const colonIndex = user.indexOf(':')
-    if (colonIndex < 0) {
-        return false
+    const atIndex = jid.indexOf('@')
+    if (atIndex < 1 || atIndex >= jid.length - 1) return false
+    const colonIndex = jid.indexOf(':')
+    if (colonIndex < 0 || colonIndex >= atIndex - 1) return false
+    let deviceId = 0
+    for (let i = colonIndex + 1; i < atIndex; i += 1) {
+        const digit = jid.charCodeAt(i) - 48
+        if (digit < 0 || digit > 9) return false
+        deviceId = deviceId * 10 + digit
+        if (deviceId > Number.MAX_SAFE_INTEGER) return false
     }
-    const deviceId = Number.parseInt(user.slice(colonIndex + 1), 10)
-    return Number.isSafeInteger(deviceId) && isHostedDeviceId(deviceId)
+    return isHostedDeviceId(deviceId)
 }
 
 export function buildDeviceJid(

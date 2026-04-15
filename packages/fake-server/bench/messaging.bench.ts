@@ -917,14 +917,17 @@ async function mainSeparateProcess(
     await rpc.spawn()
     await rpc.start()
 
+    const skipServerProf = argSet.has('--no-server-prof')
     const serverProfilingOpts = {
-        cpu: profiler.options.cpu,
-        heap: profiler.options.heap,
+        cpu: skipServerProf ? false : profiler.options.cpu,
+        heap: skipServerProf ? false : profiler.options.heap,
         outDir: profiler.options.outDir
     }
     if (serverProfilingOpts.cpu || serverProfilingOpts.heap) {
         await rpc.startProfiling(serverProfilingOpts)
         console.log('[server] profiling started')
+    } else if (skipServerProf) {
+        console.log('[server] profiling skipped (--no-server-prof)')
     }
 
     const authStore = new InMemoryAuthStore()
