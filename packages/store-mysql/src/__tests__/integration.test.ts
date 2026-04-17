@@ -55,10 +55,9 @@ async function makeSessionRecord(seed: number): Promise<SignalSessionRecord> {
         },
         recvChains: [
             {
-                ratchetPubKey: toSerializedPubKey(recvRatchet.pubKey),
-                nextMsgIndex: 0,
-                chainKey: new Uint8Array(32).fill((12 + seed) & 0xff),
-                unusedMsgKeys: []
+                senderRatchetKey: toSerializedPubKey(recvRatchet.pubKey),
+                chainKey: { index: 0, key: new Uint8Array(32).fill((12 + seed) & 0xff) },
+                messageKeys: []
             }
         ],
         initialExchangeInfo: {

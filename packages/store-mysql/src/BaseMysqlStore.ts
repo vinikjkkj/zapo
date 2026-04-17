@@ -10,6 +10,7 @@ export abstract class BaseMysqlStore {
     protected readonly tablePrefix: string
     private readonly migrationDomains: readonly WaMysqlMigrationDomain[]
     private migrationPromise: Promise<void> | null
+    private migrationDone = false
 
     protected constructor(
         options: WaMysqlStorageOptions,
@@ -27,16 +28,21 @@ export abstract class BaseMysqlStore {
         return `\`${this.tablePrefix}${name}\``
     }
 
-    protected async ensureReady(): Promise<void> {
+    protected ensureReady(): Promise<void> | void {
+        if (this.migrationDone) return
         if (!this.migrationPromise) {
             this.migrationPromise = ensureMysqlMigrations(
                 this.pool,
                 this.migrationDomains,
                 this.tablePrefix
-            ).catch((err) => {
-                this.migrationPromise = null
-                throw err
-            })
+            )
+                .then(() => {
+                    this.migrationDone = true
+                })
+                .catch((err) => {
+                    this.migrationPromise = null
+                    throw err
+                })
         }
         return this.migrationPromise
     }
@@ -59,5 +65,6 @@ export abstract class BaseMysqlStore {
 
     public async destroy(): Promise<void> {
         this.migrationPromise = null
+        this.migrationDone = false
     }
 }

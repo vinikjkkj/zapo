@@ -1,4 +1,5 @@
 import type { SignalKeyPair } from '@crypto/curves/types'
+import type { Proto } from '@proto'
 
 export interface RegistrationInfo {
     readonly registrationId: number
@@ -45,8 +46,15 @@ export interface SignalRecvChain {
     readonly ratchetPubKey: Uint8Array
     readonly nextMsgIndex: number
     readonly chainKey: Uint8Array
-    readonly unusedMsgKeys: readonly SignalMessageKey[]
+    readonly unusedMsgKeys: readonly Proto.SessionStructure.Chain.IMessageKey[]
 }
+
+/**
+ * Raw protobuf recv chain kept as-is to avoid eager decode.
+ * Use {@link decodeSignalRecvChain} only for the chain that
+ * actually needs to be read/modified.
+ */
+export type RawSignalRecvChain = Proto.SessionStructure.IChain
 
 export interface SignalSendChain {
     readonly ratchetKey: SignalSerializedKeyPair
@@ -65,15 +73,21 @@ export interface SignalSessionSnapshot {
     readonly remote: SignalPeer
     readonly rootKey: Uint8Array
     readonly sendChain: SignalSendChain
-    readonly recvChains: readonly SignalRecvChain[]
+    readonly recvChains: readonly RawSignalRecvChain[]
     readonly initialExchangeInfo: SignalInitialExchangeInfo | null
     readonly prevSendChainHighestIndex: number
     readonly aliceBaseKey: Uint8Array | null
 }
 
 export interface SignalSessionRecord extends SignalSessionSnapshot {
-    readonly prevSessions: readonly SignalSessionSnapshot[]
+    readonly prevSessions: readonly RawSignalSessionSnapshot[]
 }
+
+/**
+ * Raw protobuf session snapshot kept as-is to avoid eager decode.
+ * Only decoded on demand in rare fallback paths (session mismatch).
+ */
+export type RawSignalSessionSnapshot = Proto.ISessionStructure
 
 export interface SignalPreKeyBundle {
     readonly regId: number

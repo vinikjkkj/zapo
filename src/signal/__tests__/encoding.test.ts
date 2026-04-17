@@ -57,10 +57,9 @@ async function createSessionRecord(): Promise<SignalSessionRecord> {
         },
         recvChains: [
             {
-                ratchetPubKey: toSerializedPubKey(recvRatchetPair.pubKey),
-                nextMsgIndex: 5,
-                chainKey: makeBytes(32, 65),
-                unusedMsgKeys: [
+                senderRatchetKey: toSerializedPubKey(recvRatchetPair.pubKey),
+                chainKey: { index: 5, key: makeBytes(32, 65) },
+                messageKeys: [
                     {
                         index: 4,
                         cipherKey: makeBytes(32, 97),
@@ -138,7 +137,7 @@ test('sqlite signal helpers encode/decode signal sessions', async () => {
     assert.equal(decoded.remote.regId, session.remote.regId)
     assert.equal(decoded.sendChain.nextMsgIndex, session.sendChain.nextMsgIndex)
     assert.equal(decoded.recvChains.length, 1)
-    assert.equal(decoded.recvChains[0].unusedMsgKeys.length, 1)
+    assert.equal(decoded.recvChains[0].messageKeys!.length, 1)
 
     const invalidRecord = proto.RecordStructure.encode({
         currentSession: {

@@ -121,10 +121,9 @@ test('memory signal/sender-key/appstate stores cover key workflows', async () =>
         rootKey: new Uint8Array(32),
         recvChains: [
             {
-                ratchetPubKey: new Uint8Array(33),
-                nextMsgIndex: 0,
-                chainKey: new Uint8Array(32),
-                unusedMsgKeys: []
+                senderRatchetKey: new Uint8Array(33),
+                chainKey: { index: 0, key: new Uint8Array(32) },
+                messageKeys: []
             }
         ],
         sendChain: {
@@ -136,7 +135,7 @@ test('memory signal/sender-key/appstate stores cover key workflows', async () =>
         prevSendChainHighestIndex: 0,
         aliceBaseKey: null,
         prevSessions: []
-    } as const
+    }
     await sessionStore.setSession(addressA, sessionA)
     assert.deepEqual(await sessionStore.getSessionsBatch([]), [])
     assert.deepEqual(await sessionStore.getSessionsBatch([addressA, addressB]), [sessionA, null])

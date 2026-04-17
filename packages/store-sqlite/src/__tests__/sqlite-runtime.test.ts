@@ -8,7 +8,13 @@ import { APP_STATE_EMPTY_LT_HASH } from 'zapo-js/appstate'
 import { toSerializedPubKey, X25519 } from 'zapo-js/crypto'
 import { WA_APP_STATE_COLLECTIONS } from 'zapo-js/protocol'
 import type { WaRetryOutboundMessageRecord } from 'zapo-js/retry'
-import type { SenderKeyRecord, SignalAddress, SignalSessionRecord } from 'zapo-js/signal'
+import {
+    decodeSignalSessionRecord,
+    encodeSignalSessionRecord,
+    type SenderKeyRecord,
+    type SignalAddress,
+    type SignalSessionRecord
+} from 'zapo-js/signal'
 
 import { WaAppStateSqliteStore } from '../appstate.store'
 import type { WaSqliteConnection } from '../connection'
@@ -68,7 +74,7 @@ async function makeSessionRecord(seed = 0): Promise<SignalSessionRecord> {
         X25519.generateKeyPair()
     ])
 
-    return {
+    const record: SignalSessionRecord = {
         local: {
             regId: 100 + seed,
             pubKey: toSerializedPubKey(localIdentity.pubKey)
@@ -88,10 +94,9 @@ async function makeSessionRecord(seed = 0): Promise<SignalSessionRecord> {
         },
         recvChains: [
             {
-                ratchetPubKey: toSerializedPubKey(recvRatchet.pubKey),
-                nextMsgIndex: 0,
-                chainKey: makeBytes(32, 3 + seed),
-                unusedMsgKeys: []
+                senderRatchetKey: toSerializedPubKey(recvRatchet.pubKey),
+                chainKey: { index: 0, key: makeBytes(32, 3 + seed) },
+                messageKeys: []
             }
         ],
         initialExchangeInfo: {
@@ -103,6 +108,9 @@ async function makeSessionRecord(seed = 0): Promise<SignalSessionRecord> {
         aliceBaseKey: toSerializedPubKey(baseKey.pubKey),
         prevSessions: []
     }
+    // Round-trip through encode→decode to normalize protobuf instances,
+    // so deepStrictEqual comparisons match the store's output format.
+    return decodeSignalSessionRecord(encodeSignalSessionRecord(record))
 }
 
 test('sqlite appstate store handles sync keys, collection state and session scoping', async () => {

@@ -1,6 +1,7 @@
 type StoreTask<T> = () => Promise<T>
 
 export class StoreLock {
+    private static readonly _noop = (): undefined => undefined
     private readonly chains = new Map<string, Promise<void>>()
     private closed = false
 
@@ -25,16 +26,16 @@ export class StoreLock {
                 current = Promise.reject(error)
             }
         }
-        const tracker = current.then(
-            () => undefined,
-            () => undefined
-        )
+        const tracker = current.then(StoreLock._noop, StoreLock._noop)
         this.chains.set(key, tracker)
-        void tracker.finally(() => {
-            if (this.chains.get(key) === tracker) {
-                this.chains.delete(key)
+        tracker.then(
+            () => {
+                if (this.chains.get(key) === tracker) this.chains.delete(key)
+            },
+            () => {
+                if (this.chains.get(key) === tracker) this.chains.delete(key)
             }
-        })
+        )
         return current
     }
 

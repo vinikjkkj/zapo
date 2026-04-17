@@ -1,7 +1,9 @@
 import { hkdfSplit, toRawPubKey, toSerializedPubKey, X25519 } from '@crypto'
 import { SIGNAL_PREFIX } from '@signal/constants'
+import { decodeSignalSessionSnapshot, encodeSignalSessionSnapshot } from '@signal/encoding'
 import type {
-    SignalRecvChain,
+    RawSignalRecvChain,
+    RawSignalSessionSnapshot,
     SignalSerializedKeyPair,
     SignalSessionRecord,
     SignalSessionSnapshot
@@ -45,15 +47,15 @@ export function findMatchingSession(
         return session
     }
     for (let index = 0; index < session.prevSessions.length; index += 1) {
-        const previousSession = session.prevSessions[index]
-        if (
-            !previousSession.aliceBaseKey ||
-            !uint8Equal(previousSession.aliceBaseKey, serializedBaseKey)
-        ) {
+        const rawPrev = session.prevSessions[index]
+        if (!rawPrev.aliceBaseKey || !uint8Equal(rawPrev.aliceBaseKey, serializedBaseKey)) {
             continue
         }
 
-        const prevSessions: SignalSessionSnapshot[] = [detachSession(session)]
+        const decoded = decodeSignalSessionSnapshot(rawPrev, `prevSessions[${index}]`)
+        const prevSessions: RawSignalSessionSnapshot[] = [
+            encodeSignalSessionSnapshot(detachSession(session))
+        ]
         for (let i = 0; i < session.prevSessions.length; i += 1) {
             if (i !== index) {
                 prevSessions.push(session.prevSessions[i])
@@ -61,7 +63,7 @@ export function findMatchingSession(
         }
 
         return {
-            ...previousSession,
+            ...decoded,
             prevSessions
         }
     }
@@ -116,11 +118,10 @@ export async function initiateSessionOutgoing(
     ])
     const [rootKey, chainKey] = await hkdfSplit(secret, null, 'WhisperText')
 
-    const recvChain: SignalRecvChain = {
-        ratchetPubKey: remoteRatchetKey,
-        nextMsgIndex: 0,
-        chainKey,
-        unusedMsgKeys: []
+    const recvChain: RawSignalRecvChain = {
+        senderRatchetKey: remoteRatchetKey,
+        chainKey: { index: 0, key: chainKey },
+        messageKeys: []
     }
     const sendRatchet = await generateSerializedKeyPair()
     const sendRatchetResult = await calculateRatchet(rootKey, sendRatchet, remoteRatchetKey)

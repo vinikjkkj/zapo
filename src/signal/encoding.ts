@@ -148,7 +148,9 @@ export function decodeSignalSignedPreKeyRow(row: SignalSignedPreKeyRow): SignedP
     }
 }
 
-function encodeSignalSessionSnapshot(session: SignalSessionSnapshot): Proto.ISessionStructure {
+export function encodeSignalSessionSnapshot(
+    session: SignalSessionSnapshot
+): Proto.ISessionStructure {
     return {
         sessionVersion: 3,
         localRegistrationId: session.local.regId,
@@ -158,12 +160,7 @@ function encodeSignalSessionSnapshot(session: SignalSessionSnapshot): Proto.ISes
         rootKey: session.rootKey,
         previousCounter: session.prevSendChainHighestIndex,
         senderChain: encodeSignalSendChain(session.sendChain),
-        receiverChains: (() => {
-            const src = session.recvChains
-            const arr = new Array<Proto.SessionStructure.IChain>(src.length)
-            for (let i = 0; i < src.length; i += 1) arr[i] = encodeSignalRecvChain(src[i])
-            return arr
-        })(),
+        receiverChains: session.recvChains as Proto.SessionStructure.IChain[],
         pendingPreKey: session.initialExchangeInfo
             ? {
                   preKeyId: session.initialExchangeInfo.remoteOneTimeId ?? undefined,
@@ -187,31 +184,18 @@ function encodeSignalSendChain(chain: SignalSendChain): Proto.SessionStructure.I
     }
 }
 
-function encodeSignalRecvChain(chain: SignalRecvChain): Proto.SessionStructure.IChain {
+export function encodeSignalRecvChain(chain: SignalRecvChain): Proto.SessionStructure.IChain {
     return {
         senderRatchetKey: chain.ratchetPubKey,
         chainKey: {
             index: chain.nextMsgIndex,
             key: chain.chainKey
         },
-        messageKeys: (() => {
-            const src = chain.unusedMsgKeys ?? []
-            const arr = new Array<Proto.SessionStructure.Chain.IMessageKey>(src.length)
-            for (let i = 0; i < src.length; i += 1) {
-                const messageKey = src[i]
-                arr[i] = {
-                    index: messageKey.index,
-                    cipherKey: messageKey.cipherKey,
-                    macKey: messageKey.macKey,
-                    iv: messageKey.iv
-                }
-            }
-            return arr
-        })()
+        messageKeys: chain.unusedMsgKeys as Proto.SessionStructure.Chain.IMessageKey[]
     }
 }
 
-function decodeSignalMessageKey(
+export function decodeSignalMessageKey(
     messageKey: Proto.SessionStructure.Chain.IMessageKey,
     field: string
 ): SignalMessageKey {
@@ -229,7 +213,7 @@ function decodeSignalMessageKey(
     }
 }
 
-function decodeSignalRecvChain(
+export function decodeSignalRecvChain(
     chain: Proto.SessionStructure.IChain,
     field: string
 ): SignalRecvChain {
@@ -253,13 +237,7 @@ function decodeSignalRecvChain(
         ratchetPubKey,
         nextMsgIndex: asNumber(chainKey.index, `${field}.chainKey.index`),
         chainKey: chainKeyBytes,
-        unusedMsgKeys: (() => {
-            const src = chain.messageKeys ?? []
-            const arr = new Array<SignalMessageKey>(src.length)
-            for (let i = 0; i < src.length; i += 1)
-                arr[i] = decodeSignalMessageKey(src[i], `${field}.messageKeys[${i}]`)
-            return arr
-        })()
+        unusedMsgKeys: chain.messageKeys ?? []
     }
 }
 
@@ -305,7 +283,7 @@ function decodeSignalSendChain(
     }
 }
 
-function decodeSignalSessionSnapshot(
+export function decodeSignalSessionSnapshot(
     session: Proto.ISessionStructure,
     field: string
 ): SignalSessionSnapshot {
@@ -357,13 +335,7 @@ function decodeSignalSessionSnapshot(
         },
         rootKey,
         sendChain: decodeSignalSendChain(senderChain, `${field}.senderChain`),
-        recvChains: (() => {
-            const src = session.receiverChains ?? []
-            const arr = new Array<SignalRecvChain>(src.length)
-            for (let i = 0; i < src.length; i += 1)
-                arr[i] = decodeSignalRecvChain(src[i], `${field}.receiverChains[${i}]`)
-            return arr
-        })(),
+        recvChains: session.receiverChains ?? [],
         initialExchangeInfo: pendingPreKey
             ? {
                   remoteOneTimeId:
@@ -385,12 +357,7 @@ function decodeSignalSessionSnapshot(
 export function encodeSignalSessionRecord(record: SignalSessionRecord): Uint8Array {
     return proto.RecordStructure.encode({
         currentSession: encodeSignalSessionSnapshot(record),
-        previousSessions: (() => {
-            const src = record.prevSessions
-            const arr = new Array<Proto.ISessionStructure>(src.length)
-            for (let i = 0; i < src.length; i += 1) arr[i] = encodeSignalSessionSnapshot(src[i])
-            return arr
-        })()
+        previousSessions: record.prevSessions as Proto.ISessionStructure[]
     }).finish()
 }
 
@@ -405,16 +372,7 @@ export function decodeSignalSessionRecord(raw: unknown): SignalSessionRecord {
     )
     return {
         ...current,
-        prevSessions: (() => {
-            const src = decoded.previousSessions ?? []
-            const arr = new Array<SignalSessionSnapshot>(src.length)
-            for (let i = 0; i < src.length; i += 1)
-                arr[i] = decodeSignalSessionSnapshot(
-                    src[i],
-                    `signal_sessions.previousSessions[${i}]`
-                )
-            return arr
-        })()
+        prevSessions: decoded.previousSessions ?? []
     }
 }
 

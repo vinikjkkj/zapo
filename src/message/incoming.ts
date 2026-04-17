@@ -74,20 +74,6 @@ function buildIncomingEventRawNode(node: BinaryNode): BinaryNode {
     }
 }
 
-function buildBaseIncomingEvent(node: BinaryNode): {
-    readonly rawNode: BinaryNode
-    readonly stanzaId?: string
-    readonly chatJid?: string
-    readonly stanzaType?: string
-} {
-    return {
-        rawNode: buildIncomingEventRawNode(node),
-        stanzaId: node.attrs.id,
-        chatJid: node.attrs.from,
-        stanzaType: node.attrs.type
-    }
-}
-
 function pickSenderKeyDistributionPayload(
     message: proto.IMessage
 ): { readonly groupId: string; readonly payload: Uint8Array } | null {
@@ -257,7 +243,10 @@ async function decryptAndProcessEncNode(
         if (shouldEmitIncomingMessage(message)) {
             const chatJid = node.attrs.from
             options.emitIncomingMessage?.({
-                ...buildBaseIncomingEvent(node),
+                rawNode: buildIncomingEventRawNode(node),
+                stanzaId: node.attrs.id,
+                chatJid,
+                stanzaType: node.attrs.type,
                 timestampSeconds: parseOptionalInt(node.attrs.t),
                 senderJid,
                 encryptionType: encType,
@@ -277,7 +266,10 @@ async function decryptAndProcessEncNode(
             message: toError(error).message
         })
         options.emitUnhandledStanza?.({
-            ...buildBaseIncomingEvent(node),
+            rawNode: buildIncomingEventRawNode(node),
+            stanzaId: node.attrs.id,
+            chatJid: node.attrs.from,
+            stanzaType: node.attrs.type,
             reason: `message.decrypt_failed.${encType}`
         })
         return { success: false, encType, error }
@@ -314,7 +306,10 @@ export async function handleIncomingMessageAck(
                 case 'skmsg': {
                     if (!senderJid || !node.attrs.from || !options.senderKeyManager) {
                         options.emitUnhandledStanza?.({
-                            ...buildBaseIncomingEvent(node),
+                            rawNode: buildIncomingEventRawNode(node),
+                            stanzaId: node.attrs.id,
+                            chatJid: node.attrs.from,
+                            stanzaType: node.attrs.type,
                             reason: 'message.skmsg.missing_group_context'
                         })
                         continue

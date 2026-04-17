@@ -19,6 +19,13 @@ import {
     SIGNAL_VERSION
 } from '@signal/constants'
 import {
+    decodeSignalMessageKey,
+    decodeSignalRecvChain,
+    decodeSignalSessionSnapshot,
+    encodeSignalRecvChain,
+    encodeSignalSessionSnapshot
+} from '@signal/encoding'
+import {
     calculateRatchet,
     detachSession,
     generateSerializedKeyPair,
@@ -27,6 +34,7 @@ import {
 import type {
     ParsedPreKeySignalMessage,
     ParsedSignalMessage,
+    RawSignalRecvChain,
     SignalMessageKey,
     SignalRecvChain,
     SignalSessionRecord
@@ -89,7 +97,7 @@ export async function selectMessageKey(
         if (idx === -1) {
             throw new Error('duplicate message')
         }
-        const messageKey = unused[idx]
+        const messageKey = decodeSignalMessageKey(unused[idx], `unusedMsgKeys[${idx}]`)
         const nextUnused = removeAt(unused, idx)
         return {
             messageKey,
@@ -128,7 +136,12 @@ export async function selectMessageKey(
         if (overflow > 0) {
             overflow -= 1
         } else {
-            nextUnused.push(currentMessageKey)
+            nextUnused.push({
+                index: currentMessageKey.index,
+                cipherKey: currentMessageKey.cipherKey,
+                macKey: currentMessageKey.macKey,
+                iv: currentMessageKey.iv
+            })
         }
         const derived = await deriveMsgKeyFromState(counter, chainState)
         currentMessageKey = derived.messageKey
@@ -250,13 +263,17 @@ export async function decryptMsg(
         }
     } catch (error) {
         for (let i = 0; i < session.prevSessions.length; i += 1) {
-            const prevSession = snapshotToRecord(session.prevSessions[i])
+            const decodedPrev = decodeSignalSessionSnapshot(
+                session.prevSessions[i],
+                `prevSessions[${i}]`
+            )
+            const prevSession = snapshotToRecord(decodedPrev)
             try {
                 const [updatedPrev, plaintext] = await decryptMsgFromSession(prevSession, parsed)
                 const updatedSession = {
                     ...updatedPrev,
                     prevSessions: [
-                        detachSession(session),
+                        encodeSignalSessionSnapshot(detachSession(session)),
                         ...session.prevSessions.slice(0, i),
                         ...session.prevSessions.slice(i + 1)
                     ]
@@ -286,9 +303,10 @@ export async function decryptMsgFromSession(
     message: ParsedSignalMessage | ParsedPreKeySignalMessage
 ): Promise<readonly [SignalSessionRecord, Uint8Array]> {
     const ratchetPubKey = toSerializedPubKey(message.ratchetPubKey)
-    const recvChainIndex = session.recvChains.findIndex((entry) =>
-        uint8Equal(entry.ratchetPubKey, ratchetPubKey)
-    )
+    const recvChainIndex = session.recvChains.findIndex((raw) => {
+        const key = raw.senderRatchetKey
+        return key !== null && key !== undefined && uint8Equal(key, ratchetPubKey)
+    })
     let selectedMessageKey: SignalMessageKey
     let updatedSession: SignalSessionRecord
 
@@ -315,8 +333,9 @@ export async function decryptMsgFromSession(
             newSendRatchet,
             ratchetPubKey
         )
-        const nextRecvChains = session.recvChains.slice(-MAX_TRACKED_RECV_CHAINS)
-        nextRecvChains.push(selected.updatedChain)
+        const nextRecvChains: RawSignalRecvChain[] =
+            session.recvChains.slice(-MAX_TRACKED_RECV_CHAINS)
+        nextRecvChains.push(encodeSignalRecvChain(selected.updatedChain))
         updatedSession = {
             ...session,
             rootKey: sendRatchet.rootKey,
@@ -330,10 +349,14 @@ export async function decryptMsgFromSession(
             prevSendChainHighestIndex: Math.max(session.sendChain.nextMsgIndex - 1, 0)
         }
     } else {
-        const selected = await selectMessageKey(session.recvChains[recvChainIndex], message.counter)
+        const decoded = decodeSignalRecvChain(
+            session.recvChains[recvChainIndex],
+            `recvChains[${recvChainIndex}]`
+        )
+        const selected = await selectMessageKey(decoded, message.counter)
         selectedMessageKey = selected.messageKey
-        const nextRecvChains = session.recvChains.slice()
-        nextRecvChains[recvChainIndex] = selected.updatedChain
+        const nextRecvChains: RawSignalRecvChain[] = session.recvChains.slice()
+        nextRecvChains[recvChainIndex] = encodeSignalRecvChain(selected.updatedChain)
         updatedSession = {
             ...session,
             recvChains: nextRecvChains

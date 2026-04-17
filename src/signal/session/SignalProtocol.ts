@@ -3,6 +3,7 @@ import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
 import { StoreLock } from '@infra/perf/StoreLock'
 import { MAX_PREV_SESSIONS } from '@signal/constants'
+import { encodeSignalSessionSnapshot } from '@signal/encoding'
 import {
     decryptMsg,
     decryptMsgFromSession,
@@ -338,7 +339,7 @@ export class SignalProtocol {
             ? {
                   ...incoming,
                   prevSessions: [
-                      detachSession(currentSession),
+                      encodeSignalSessionSnapshot(detachSession(currentSession)),
                       ...currentSession.prevSessions.slice(0, MAX_PREV_SESSIONS - 1)
                   ]
               }
