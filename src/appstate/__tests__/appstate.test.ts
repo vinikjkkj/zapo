@@ -473,3 +473,25 @@ test('appstate sync client marks empty successful bootstrap as initialized for n
     assert.deepEqual(returnSnapshotByCall, ['true', 'false'])
     assert.deepEqual(versionByCall, ['0', '0'])
 })
+
+test('ensureInitialSyncKey mints a 32-byte key with fingerprint when store is empty', async () => {
+    const store = new WaAppStateMemoryStore()
+    const client = new WaAppStateSyncClient({
+        logger: createNoopLogger(),
+        query: async () => ({ tag: 'iq', attrs: {} }),
+        store
+    })
+
+    assert.equal(await store.getActiveSyncKey(), null)
+    const first = await client.ensureInitialSyncKey()
+    assert.equal(first.keyId.length, 2)
+    assert.equal(first.keyData.length, 32)
+    assert.ok(first.fingerprint)
+    assert.equal(first.fingerprint?.currentIndex, 0)
+    assert.deepEqual(first.fingerprint?.deviceIndexes, [0])
+    assert.ok(typeof first.fingerprint?.rawId === 'number')
+
+    const second = await client.ensureInitialSyncKey()
+    assert.deepEqual(second.keyId, first.keyId)
+    assert.deepEqual(second.keyData, first.keyData)
+})

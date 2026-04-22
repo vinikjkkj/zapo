@@ -4,6 +4,7 @@ import type { AppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
 import type { GroupParticipantsCache } from '@client/messaging/participants'
 import type { WaGroupEvent, WaSendMessageOptions, WaSignalMessagePublishInput } from '@client/types'
 import { randomBytesAsync, sha256 } from '@crypto'
+import { md5Bytes } from '@crypto/core/primitives'
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { ensureMessageSecret } from '@message'
@@ -85,6 +86,7 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
     readonly onDirectMessageSent: (recipientJid: string) => void
     readonly getIcdcHashLength?: () => number
+    readonly mobileMessageIdFormat?: boolean
 }
 
 type GroupAddressingMode = 'pn' | 'lid'
@@ -120,6 +122,7 @@ export class WaMessageDispatchCoordinator {
     private readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
     private readonly onDirectMessageSent: (recipientJid: string) => void
     private readonly getIcdcHashLength: (() => number) | undefined
+    private readonly mobileMessageIdFormat: boolean
     private readonly icdcDedup = new PromiseDedup()
     private readonly privacyTokenDedup = new PromiseDedup()
     private readonly distributionDedup = new PromiseDedup()
@@ -146,6 +149,7 @@ export class WaMessageDispatchCoordinator {
         this.resolvePrivacyTokenNode = options.resolvePrivacyTokenNode
         this.onDirectMessageSent = options.onDirectMessageSent
         this.getIcdcHashLength = options.getIcdcHashLength
+        this.mobileMessageIdFormat = options.mobileMessageIdFormat ?? false
     }
 
     public async publishMessageNode(
@@ -1134,14 +1138,24 @@ export class WaMessageDispatchCoordinator {
     private async generateOutgoingMessageId(): Promise<string> {
         try {
             const meUserJid = toUserJid(this.requireCurrentMeJid('sendMessage'))
-            const timestampSeconds = Math.floor(Date.now() / 1_000)
             const timestampBytes = new Uint8Array(8)
-            new DataView(
+            const dv = new DataView(
                 timestampBytes.buffer,
                 timestampBytes.byteOffset,
                 timestampBytes.byteLength
-            ).setBigUint64(0, BigInt(timestampSeconds), false)
-
+            )
+            if (this.mobileMessageIdFormat) {
+                dv.setBigUint64(0, BigInt(Date.now()), false)
+                const entropy = concatBytes([
+                    timestampBytes,
+                    TEXT_ENCODER.encode(meUserJid),
+                    await randomBytesAsync(16)
+                ])
+                const digest = md5Bytes(entropy)
+                digest[0] = 0xac
+                return bytesToHex(digest).toUpperCase()
+            }
+            dv.setBigUint64(0, BigInt(Math.floor(Date.now() / 1_000)), false)
             const entropy = concatBytes([
                 timestampBytes,
                 TEXT_ENCODER.encode(meUserJid),
@@ -1150,9 +1164,14 @@ export class WaMessageDispatchCoordinator {
             const digest = await sha256(entropy)
             return `3EB0${bytesToHex(digest.subarray(0, 9)).toUpperCase()}`
         } catch (error) {
-            this.logger.warn('failed to generate sha256 message id, falling back to random id', {
+            this.logger.warn('failed to generate message id, falling back to random', {
                 message: toError(error).message
             })
+            if (this.mobileMessageIdFormat) {
+                const bytes = await randomBytesAsync(16)
+                bytes[0] = 0xac
+                return bytesToHex(bytes).toUpperCase()
+            }
             return `3EB0${bytesToHex(await randomBytesAsync(8)).toUpperCase()}`
         }
     }
@@ -1186,10 +1205,10 @@ export class WaMessageDispatchCoordinator {
         }
     }
 
-    private getEncodedSignedDeviceIdentity(): Uint8Array {
+    private getEncodedSignedDeviceIdentity(): Uint8Array | undefined {
         const signedIdentity = this.getCurrentSignedIdentity()
         if (!signedIdentity) {
-            throw new Error('missing signed identity for pkmsg fanout')
+            return undefined
         }
         return proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
     }

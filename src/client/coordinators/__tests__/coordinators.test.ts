@@ -98,7 +98,11 @@ function createGroupEvent(input: {
 }
 
 function createMessageDispatchCoordinator(
-    participantsStore: WaParticipantsMemoryStore
+    participantsStore: WaParticipantsMemoryStore,
+    overrides?: {
+        readonly getCurrentMeJid?: () => string | null
+        readonly mobileMessageIdFormat?: boolean
+    }
 ): WaMessageDispatchCoordinator {
     const participantsCache = createGroupParticipantsCache({
         participantsStore,
@@ -124,11 +128,12 @@ function createMessageDispatchCoordinator(
         messageSecretStore: {
             set: async (_id: string, _entry: { secret: Uint8Array; senderJid: string }) => {}
         } as never,
-        getCurrentMeJid: () => null,
+        getCurrentMeJid: overrides?.getCurrentMeJid ?? (() => null),
         getCurrentMeLid: () => null,
         getCurrentSignedIdentity: () => null,
         resolvePrivacyTokenNode: async () => null,
-        onDirectMessageSent: () => undefined
+        onDirectMessageSent: () => undefined,
+        mobileMessageIdFormat: overrides?.mobileMessageIdFormat
     })
 }
 
@@ -606,6 +611,48 @@ test('message dispatch coordinator handles linked and modify participant cache e
     )
     assert.equal(await participantsStore.getGroupParticipants('uncached@g.us'), null)
 
+    await participantsStore.destroy()
+})
+
+test('mobile message id format: AC + 30 hex chars uppercase', async () => {
+    const participantsStore = new WaParticipantsMemoryStore(60_000)
+    const coordinator = createMessageDispatchCoordinator(participantsStore, {
+        getCurrentMeJid: () => '5596965746475@s.whatsapp.net',
+        mobileMessageIdFormat: true
+    })
+    const gen = coordinator as unknown as {
+        generateOutgoingMessageId(): Promise<string>
+    }
+    const seen = new Set<string>()
+    for (let i = 0; i < 5; i += 1) {
+        const id = await gen.generateOutgoingMessageId()
+        assert.match(id, /^AC[0-9A-F]{30}$/, `id '${id}' does not match mobile format`)
+        seen.add(id)
+    }
+    assert.equal(seen.size, 5)
+    await participantsStore.destroy()
+})
+
+test('web message id format stays 3EB0 + 18 hex chars when mobile flag unset', async () => {
+    const participantsStore = new WaParticipantsMemoryStore(60_000)
+    const coordinator = createMessageDispatchCoordinator(participantsStore, {
+        getCurrentMeJid: () => '5596965746475@s.whatsapp.net'
+    })
+    const gen = coordinator as unknown as {
+        generateOutgoingMessageId(): Promise<string>
+    }
+    const id = await gen.generateOutgoingMessageId()
+    assert.match(id, /^3EB0[0-9A-F]{18}$/, `id '${id}' does not match web format`)
+    await participantsStore.destroy()
+})
+
+test('encoded signed device identity returns undefined on primary (no blob stored)', async () => {
+    const participantsStore = new WaParticipantsMemoryStore(60_000)
+    const coordinator = createMessageDispatchCoordinator(participantsStore)
+    const accessor = coordinator as unknown as {
+        getEncodedSignedDeviceIdentity(): Uint8Array | undefined
+    }
+    assert.equal(accessor.getEncodedSignedDeviceIdentity(), undefined)
     await participantsStore.destroy()
 })
 

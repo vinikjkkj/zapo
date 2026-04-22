@@ -16,6 +16,7 @@ import type {
     WaAppStateSyncResult
 } from '@appstate/types'
 import { WaAppStateCrypto } from '@appstate/WaAppStateCrypto'
+import { randomBytesAsync, randomIntAsync } from '@crypto'
 import type { Logger } from '@infra/log/types'
 import { proto, type Proto } from '@proto'
 import {
@@ -60,6 +61,7 @@ interface WaAppStateSyncClientOptions {
     readonly defaultTimeoutMs?: number
     readonly onMissingKeys?: (event: WaAppStateMissingKeysEvent) => Promise<void>
     readonly skipMacVerification?: boolean
+    readonly mobilePrimary?: boolean
 }
 
 export class WaAppStateMissingKeyError extends Error {
@@ -87,6 +89,7 @@ export class WaAppStateSyncClient {
     private readonly defaultTimeoutMs: number
     private readonly onMissingKeys?: (event: WaAppStateMissingKeysEvent) => Promise<void>
     private readonly crypto: WaAppStateCrypto
+    private readonly mobilePrimary: boolean
     private syncContext: {
         readonly keys: Map<string, Uint8Array | null>
         readonly collections: Map<AppStateCollectionName, WaAppStateCollectionStoreState>
@@ -104,6 +107,7 @@ export class WaAppStateSyncClient {
         this.onMissingKeys = options.onMissingKeys
 
         this.crypto = new WaAppStateCrypto(undefined, options.skipMacVerification === true)
+        this.mobilePrimary = options.mobilePrimary ?? false
         this.syncContext = null
         this.syncPromise = null
     }
@@ -111,6 +115,29 @@ export class WaAppStateSyncClient {
     public async exportState(): Promise<WaAppStateStoreData> {
         this.logger.trace('app-state export requested')
         return this.store.exportData()
+    }
+
+    public async ensureInitialSyncKey(): Promise<WaAppStateSyncKey> {
+        const existing = await this.store.getActiveSyncKey()
+        if (existing) {
+            return existing
+        }
+        const keyIdBytes = await randomBytesAsync(2)
+        const keyData = await randomBytesAsync(32)
+        const rawId = await randomIntAsync(0, 0xffff_ffff)
+        const key: WaAppStateSyncKey = {
+            keyId: keyIdBytes,
+            keyData,
+            timestamp: Date.now(),
+            fingerprint: { rawId, currentIndex: 0, deviceIndexes: [0] }
+        }
+        await this.store.upsertSyncKeys([key])
+        this.crypto.clearCache()
+        this.logger.info('app-state initial sync key generated (mobile primary)', {
+            keyId: bytesToHex(keyIdBytes),
+            rawId
+        })
+        return key
     }
 
     public async importSyncKeys(keys: readonly WaAppStateSyncKey[]): Promise<number> {
@@ -439,7 +466,7 @@ export class WaAppStateSyncClient {
             content: [
                 {
                     tag: WA_NODE_TAGS.SYNC,
-                    attrs: {},
+                    attrs: this.mobilePrimary ? { data_namespace: '3' } : {},
                     content: collectionNodes
                 }
             ]

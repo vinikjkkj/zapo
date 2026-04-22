@@ -32,6 +32,7 @@ export const WA_NODE_TAGS = Object.freeze({
     DESCRIPTION: 'description',
     MY_ADDONS: 'my_addons',
     KEY: 'key',
+    OP: 'op',
     REGISTRATION: 'registration',
     TYPE: 'type',
     IDENTITY: 'identity',

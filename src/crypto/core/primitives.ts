@@ -33,7 +33,7 @@ export async function sha512(value: Uint8Array): Promise<Uint8Array> {
     return digestBytes('SHA-512', value)
 }
 
-export function md5Bytes(input: string): Uint8Array {
+export function md5Bytes(input: string | Uint8Array): Uint8Array {
     return toBytesView(createHash('md5').update(input).digest())
 }
 

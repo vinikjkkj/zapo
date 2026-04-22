@@ -3,7 +3,7 @@ import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/cons
 import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
 
-import { createNodeIdGenerator, type NodeIdGenerator } from './helpers'
+import { createMobileNodeIdGenerator, createNodeIdGenerator, type NodeIdGenerator } from './helpers'
 
 interface PendingNodeQuery {
     readonly resolve: (value: BinaryNode) => void
@@ -16,6 +16,7 @@ interface WaNodeOrchestratorOptions {
     readonly sendNode: (node: BinaryNode) => Promise<void>
     readonly defaultTimeoutMs?: number
     readonly hostDomain?: string
+    readonly mobileIqIdFormat?: boolean
 }
 
 export class WaNodeOrchestrator {
@@ -23,6 +24,7 @@ export class WaNodeOrchestrator {
     private readonly sendNodeFn: (node: BinaryNode) => Promise<void>
     private readonly defaultTimeoutMs: number
     private readonly hostDomain: string
+    private readonly mobileIqIdFormat: boolean
     private idGenerator: NodeIdGenerator | null
     private idGeneratorReady: Promise<NodeIdGenerator> | null
     private readonly pendingQueries: Map<string, PendingNodeQuery>
@@ -32,6 +34,7 @@ export class WaNodeOrchestrator {
         this.sendNodeFn = options.sendNode
         this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.NODE_QUERY_TIMEOUT_MS
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
+        this.mobileIqIdFormat = options.mobileIqIdFormat === true
         this.idGenerator = null
         this.idGeneratorReady = null
         this.pendingQueries = new Map()
@@ -165,6 +168,13 @@ export class WaNodeOrchestrator {
 
     private async getIdGenerator(): Promise<NodeIdGenerator> {
         if (this.idGenerator) {
+            return this.idGenerator
+        }
+        if (this.mobileIqIdFormat) {
+            this.idGenerator = createMobileNodeIdGenerator()
+            this.logger.debug('generated stanza prefix (mobile)', {
+                prefix: this.idGenerator.prefix
+            })
             return this.idGenerator
         }
         if (!this.idGeneratorReady) {

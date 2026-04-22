@@ -186,3 +186,15 @@ export async function createNodeIdGenerator(): Promise<NodeIdGenerator> {
         }
     }
 }
+
+export function createMobileNodeIdGenerator(): NodeIdGenerator {
+    let counter = 0
+    return {
+        prefix: '0',
+        next(): string {
+            const id = `0${counter.toString(16)}`
+            counter = (counter + 1) & 0xffff
+            return id
+        }
+    }
+}

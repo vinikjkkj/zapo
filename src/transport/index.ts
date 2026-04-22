@@ -36,4 +36,10 @@ export { WaWebSocket } from '@transport/WaWebSocket'
 export { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 export { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 export { WaNodeTransport } from '@transport/node/WaNodeTransport'
+export { WaMobileTcpSocket, WaMobileTcpSocketCtor } from '@transport/node/WaMobileTcpSocket'
+export { buildMobileLoginPayload } from '@transport/noise/WaMobileClientPayload'
+export type {
+    WaMobileLoginPayloadConfig,
+    WaMobileTransportDeviceInfo
+} from '@transport/noise/WaMobileClientPayload'
 export { assertIqResult, buildIqNode, parseIqError, queryWithContext } from '@transport/node/query'

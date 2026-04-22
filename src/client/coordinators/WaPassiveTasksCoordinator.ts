@@ -1,3 +1,4 @@
+import type { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import type { WaAuthCredentials } from '@auth/types'
 import type { Logger } from '@infra/log/types'
 import { WA_DEFAULTS } from '@protocol/constants'
@@ -44,6 +45,8 @@ export class WaPassiveTasksCoordinator {
     private readonly signedPreKeyRotationIntervalMs: number
     private readonly signedPreKeyServerErrorBackoffMs: number
     private readonly runtime: WaPassiveTasksRuntime
+    private readonly mobilePrimary: boolean
+    private readonly appStateSync?: WaAppStateSyncClient
     private passiveTasksPromise: Promise<void> | null
 
     public constructor(options: {
@@ -55,6 +58,8 @@ export class WaPassiveTasksCoordinator {
         readonly signedPreKeyRotationIntervalMs?: number
         readonly signedPreKeyServerErrorBackoffMs?: number
         readonly runtime: WaPassiveTasksRuntime
+        readonly mobilePrimary?: boolean
+        readonly appStateSync?: WaAppStateSyncClient
     }) {
         this.logger = options.logger
         this.signalStore = options.signalStore
@@ -66,6 +71,8 @@ export class WaPassiveTasksCoordinator {
         this.signedPreKeyServerErrorBackoffMs =
             options.signedPreKeyServerErrorBackoffMs ?? SIGNAL_SIGNED_PREKEY_SERVER_ERROR_BACKOFF_MS
         this.runtime = options.runtime
+        this.mobilePrimary = options.mobilePrimary ?? false
+        this.appStateSync = options.appStateSync
         this.passiveTasksPromise = null
     }
 
@@ -113,6 +120,14 @@ export class WaPassiveTasksCoordinator {
         }
 
         this.runtime.syncAbProps()
+
+        if (this.mobilePrimary && this.appStateSync) {
+            await this.appStateSync.ensureInitialSyncKey().catch((error) => {
+                this.logger.warn('app-state initial key generation failed', {
+                    message: toError(error).message
+                })
+            })
+        }
 
         await this.runtime.sendPresenceAvailable().catch((error) => {
             this.logger.warn('presence available send failed', {
@@ -197,7 +212,12 @@ export class WaPassiveTasksCoordinator {
         }
 
         const lastPreKeyId = preKeys[preKeys.length - 1].keyId
-        const uploadNode = buildPreKeyUploadIq(registrationInfo, signedPreKey, preKeys)
+        const uploadNode = buildPreKeyUploadIq(
+            registrationInfo,
+            signedPreKey,
+            preKeys,
+            this.mobilePrimary ? { opMode: 'set' } : undefined
+        )
         const response = await this.runtime.queryWithContext(
             'prekeys.upload',
             uploadNode,

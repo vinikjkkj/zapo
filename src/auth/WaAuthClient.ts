@@ -140,6 +140,7 @@ export class WaAuthClient {
             deviceOsDisplayName: this.options.deviceOsDisplayName,
             requireFullSync: this.options.requireFullSync,
             version: this.options.version,
+            mobileTransport: this.options.mobileTransport,
             noiseTrustedRootCa: overrides.noiseTrustedRootCa,
             disableNoiseCertificateChainVerification:
                 overrides.disableNoiseCertificateChainVerification ??

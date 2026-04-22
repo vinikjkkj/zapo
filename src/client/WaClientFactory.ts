@@ -377,7 +377,8 @@ export function buildWaClientDependencies(input: {
         sendNode: async (node) => nodeTransport.sendNode(node),
         logger,
         defaultTimeoutMs: options.nodeQueryTimeoutMs,
-        hostDomain: WA_DEFAULTS.HOST_DOMAIN
+        hostDomain: WA_DEFAULTS.HOST_DOMAIN,
+        mobileIqIdFormat: options.mobileTransport !== undefined
     })
     const keepAlive = new WaKeepAlive({
         logger,
@@ -482,7 +483,8 @@ export function buildWaClientDependencies(input: {
             devicePlatform: options.devicePlatform,
             requireFullSync: options.requireFullSync,
             version: options.version,
-            dangerous: options.dangerous
+            dangerous: options.dangerous,
+            mobileTransport: options.mobileTransport
         },
         {
             logger,
@@ -631,7 +633,8 @@ export function buildWaClientDependencies(input: {
                 })
             )
         },
-        getIcdcHashLength: () => abPropsCoordinator.getConfigValue('md_icdc_hash_length')
+        getIcdcHashLength: () => abPropsCoordinator.getConfigValue('md_icdc_hash_length'),
+        mobileMessageIdFormat: options.mobileTransport !== undefined
     })
 
     const retryCoordinator = new WaRetryCoordinator({
@@ -660,7 +663,8 @@ export function buildWaClientDependencies(input: {
         onMissingKeys: async ({ keyIds }) => {
             await messageDispatch.requestAppStateSyncKeys(keyIds)
         },
-        skipMacVerification: options.dangerous?.disableAppStateMacVerification
+        skipMacVerification: options.dangerous?.disableAppStateMacVerification,
+        mobilePrimary: options.mobileTransport !== undefined
     })
 
     const appStateMutations = new WaAppStateMutationCoordinator({
@@ -1056,7 +1060,9 @@ export function buildWaClientDependencies(input: {
             receiptQueue,
             getCurrentCredentials,
             abPropsCoordinator
-        })
+        }),
+        mobilePrimary: options.mobileTransport !== undefined,
+        appStateSync
     })
 
     return {

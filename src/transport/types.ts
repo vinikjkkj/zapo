@@ -36,6 +36,7 @@ export interface WaSocketConfig {
     readonly dispatcher?: WaProxyDispatcher
     readonly agent?: WaProxyAgent
     readonly timeoutIntervalMs?: number
+    readonly rawWebSocketConstructor?: RawWebSocketConstructor
 }
 
 export interface WaSocketHandlers {

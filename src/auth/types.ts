@@ -1,7 +1,10 @@
 import type { SignalKeyPair } from '@crypto/curves/types'
 import type { Proto } from '@proto'
 import type { RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
+import type { WaMobileTransportDeviceInfo } from '@transport/noise/WaMobileClientPayload'
 import type { WaCommsConfig, WaProxyTransport } from '@transport/types'
+
+export type { WaMobileTransportDeviceInfo } from '@transport/noise/WaMobileClientPayload'
 
 export interface WaAuthCredentials {
     readonly noiseKeyPair: SignalKeyPair
@@ -46,6 +49,16 @@ export interface WaAuthClientOptions {
     readonly requireFullSync?: boolean
     readonly version?: string
     readonly dangerous?: WaAuthDangerousOptions
+    readonly mobileTransport?: WaMobileTransportOptions
+}
+
+export interface WaMobileTransportOptions {
+    readonly deviceInfo: WaMobileTransportDeviceInfo
+    readonly tcpUrl?: string
+    readonly passive?: boolean
+    readonly pushName?: string
+    readonly yearClass?: number
+    readonly memClass?: number
 }
 
 export interface WaAuthDangerousOptions {

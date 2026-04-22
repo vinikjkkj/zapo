@@ -72,7 +72,9 @@ export class WaComms {
                 protocols: this.config.protocols,
                 dispatcher: this.config.dispatcher,
                 agent: this.config.agent,
-                timeoutIntervalMs: this.config.timeoutIntervalMs
+                headers: this.config.headers,
+                timeoutIntervalMs: this.config.timeoutIntervalMs,
+                rawWebSocketConstructor: this.config.rawWebSocketConstructor
             },
             logger
         )

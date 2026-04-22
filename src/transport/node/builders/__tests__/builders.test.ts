@@ -955,6 +955,27 @@ test('prekeys builders include expected key material and targets', () => {
 
     assert.equal(upload.tag, 'iq')
     assert.equal(upload.attrs.type, 'set')
+    assert.ok(Array.isArray(upload.content))
+    assert.notEqual(upload.content[0].tag, 'op')
+
+    const uploadMobile = buildPreKeyUploadIq(
+        registrationInfo,
+        signedPreKey,
+        [
+            {
+                keyId: 12,
+                keyPair: {
+                    pubKey: new Uint8Array(32).fill(7),
+                    privKey: new Uint8Array(32).fill(8)
+                },
+                uploaded: false
+            }
+        ],
+        { opMode: 'set' }
+    )
+    assert.ok(Array.isArray(uploadMobile.content))
+    assert.equal(uploadMobile.content[0].tag, 'op')
+    assert.equal(uploadMobile.content[0].attrs.mode, 'set')
 
     const fetch = buildMissingPreKeysFetchIq([
         {

@@ -3,6 +3,7 @@ import { SIGNAL_KEY_BUNDLE_TYPE_BYTES } from '@signal/api/constants'
 import type { SignalMissingPreKeysTarget } from '@signal/api/SignalMissingPreKeysSyncApi'
 import type { PreKeyRecord, RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
 import { buildIqNode } from '@transport/node/query'
+import type { BinaryNode } from '@transport/types'
 import { intToBytes } from '@util/bytes'
 
 function buildSignedPreKeyNode(signedPreKey: SignedPreKeyRecord) {
@@ -32,9 +33,17 @@ function buildSignedPreKeyNode(signedPreKey: SignedPreKeyRecord) {
 export function buildPreKeyUploadIq(
     registrationInfo: RegistrationInfo,
     signedPreKey: SignedPreKeyRecord,
-    preKeys: readonly PreKeyRecord[]
+    preKeys: readonly PreKeyRecord[],
+    options?: { readonly opMode?: 'set' | 'add' }
 ) {
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, [
+    const children: BinaryNode[] = []
+    if (options?.opMode) {
+        children.push({
+            tag: WA_NODE_TAGS.OP,
+            attrs: { mode: options.opMode }
+        })
+    }
+    children.push(
         {
             tag: WA_NODE_TAGS.REGISTRATION,
             attrs: {},
@@ -71,7 +80,8 @@ export function buildPreKeyUploadIq(
             }))
         },
         buildSignedPreKeyNode(signedPreKey)
-    ])
+    )
+    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, children)
 }
 
 export function buildSignedPreKeyRotateIq(signedPreKey: SignedPreKeyRecord) {

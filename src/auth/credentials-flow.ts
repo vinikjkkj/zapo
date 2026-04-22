@@ -8,6 +8,8 @@ import { createAndStoreInitialKeys } from '@signal/registration/utils'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
+import { WaMobileTcpSocketCtor } from '@transport/node/WaMobileTcpSocket'
+import { buildMobileLoginPayload } from '@transport/noise/WaMobileClientPayload'
 import { toProxyAgent, toProxyDispatcher } from '@transport/proxy'
 import type { WaCommsConfig, WaNoiseTrustedRootCa } from '@transport/types'
 import { toError } from '@util/primitives'
@@ -69,7 +71,7 @@ export function buildCommsConfig(
     socketOptions: WaAuthSocketOptions,
     clientOptions: Pick<
         WaAuthClientOptions,
-        'deviceBrowser' | 'deviceOsDisplayName' | 'requireFullSync' | 'version'
+        'deviceBrowser' | 'deviceOsDisplayName' | 'requireFullSync' | 'version' | 'mobileTransport'
     > & {
         readonly noiseTrustedRootCa?: WaNoiseTrustedRootCa
         readonly disableNoiseCertificateChainVerification?: boolean
@@ -79,11 +81,54 @@ export function buildCommsConfig(
     const registered = meJid !== null && meJid !== undefined
     const loginIdentity = registered ? getLoginIdentity(meJid) : null
     const wsProxy = socketOptions.proxy?.ws
+    const mobileTransport = clientOptions.mobileTransport
     logger.debug('building comms config from credentials', {
         registered,
         hasServerStaticKey:
-            credentials.serverStaticKey !== null && credentials.serverStaticKey !== undefined
+            credentials.serverStaticKey !== null && credentials.serverStaticKey !== undefined,
+        mobile: Boolean(mobileTransport)
     })
+
+    if (mobileTransport) {
+        if (wsProxy) {
+            throw new Error(
+                'mobileTransport does not support socketOptions.proxy.ws — remove the proxy option or open an issue to add TCP proxy support'
+            )
+        }
+        if (!loginIdentity) {
+            throw new Error(
+                'mobileTransport requires registered credentials (meJid) — run the mobile bridge flow first'
+            )
+        }
+        const loginPayload = buildMobileLoginPayload({
+            username: loginIdentity.username,
+            device: loginIdentity.device,
+            passive: mobileTransport.passive ?? false,
+            deviceInfo: mobileTransport.deviceInfo,
+            pushName: mobileTransport.pushName,
+            yearClass: mobileTransport.yearClass,
+            memClass: mobileTransport.memClass
+        })
+        return {
+            url: mobileTransport.tcpUrl ?? 'tcp://g.whatsapp.net:443',
+            rawWebSocketConstructor: WaMobileTcpSocketCtor,
+            connectTimeoutMs: socketOptions.connectTimeoutMs,
+            reconnectIntervalMs: socketOptions.reconnectIntervalMs,
+            timeoutIntervalMs: socketOptions.timeoutIntervalMs,
+            maxReconnectAttempts: socketOptions.maxReconnectAttempts,
+            noise: {
+                clientStaticKeyPair: credentials.noiseKeyPair,
+                isRegistered: true,
+                serverStaticKey: credentials.serverStaticKey,
+                routingInfo: credentials.routingInfo,
+                trustedRootCa: clientOptions.noiseTrustedRootCa,
+                verifyCertificateChain: clientOptions.disableNoiseCertificateChainVerification
+                    ? false
+                    : undefined,
+                loginPayload
+            }
+        }
+    }
 
     return {
         url: socketOptions.url,

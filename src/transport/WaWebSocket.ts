@@ -107,6 +107,7 @@ export class WaWebSocket {
     private readonly socketUrls: readonly string[]
     private readonly logger: Logger
     private readonly webSocketCtor: RawWebSocketConstructor
+    private readonly customWebSocketCtor: boolean
     private readonly socketRuntime: SocketRuntime
     private readonly connectingSockets: Set<RawWebSocket>
     private handlers: WaSocketHandlers
@@ -121,7 +122,8 @@ export class WaWebSocket {
         })
         this.socketUrls = resolveSocketUrls(config)
         this.logger = logger
-        this.webSocketCtor = resolveWebSocketConstructor()
+        this.webSocketCtor = config.rawWebSocketConstructor ?? resolveWebSocketConstructor()
+        this.customWebSocketCtor = Boolean(config.rawWebSocketConstructor)
         this.socketRuntime = resolveSocketRuntime()
         this.connectingSockets = new Set<RawWebSocket>()
         this.handlers = {}
@@ -502,6 +504,13 @@ export class WaWebSocket {
         const headers = this.config.headers
         const dispatcher = this.config.dispatcher
         const agent = this.config.agent
+        if (this.customWebSocketCtor) {
+            return new this.webSocketCtor(url, this.config.protocols, {
+                headers,
+                dispatcher,
+                agent
+            })
+        }
         let hasHeaders = false
         if (headers) {
             for (const key in headers) {
