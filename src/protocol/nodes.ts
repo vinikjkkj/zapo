@@ -88,5 +88,6 @@ export const WA_XMLNS = Object.freeze({
     NEWSLETTER: 'newsletter',
     XMPP_PING: 'urn:xmpp:ping',
     WHATSAPP_PING: 'w:p',
-    ABPROPS: 'abt'
+    ABPROPS: 'abt',
+    MEX: 'w:mex'
 } as const)
