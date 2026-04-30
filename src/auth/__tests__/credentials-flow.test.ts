@@ -164,3 +164,61 @@ test('buildCommsConfig maps ws proxy agent when provided', () => {
     assert.equal(config.agent, wsAgent)
     wsAgent.destroy()
 })
+
+test('buildCommsConfig falls back to credentials.deviceInfo when mobileTransport option is absent', () => {
+    const credentials: WaAuthCredentials = {
+        ...createCredentials(),
+        deviceInfo: {
+            manufacturer: 'Google',
+            device: 'panther',
+            osVersion: '14',
+            osBuildNumber: 'AP3A',
+            appVersion: '2.26.15.11'
+        },
+        pushName: 'tester',
+        yearClass: 2022,
+        memClass: 4096
+    }
+    const config = buildCommsConfig(
+        createLogger(),
+        credentials,
+        { url: 'wss://web.whatsapp.com/ws/chat' },
+        { requireFullSync: false }
+    )
+    assert.equal(config.url, 'tcp://g.whatsapp.net:443')
+    assert.ok(config.rawWebSocketConstructor, 'expected mobile raw socket ctor')
+    assert.equal(config.noise?.isRegistered, true)
+    assert.ok(config.noise?.loginPayload, 'expected login payload')
+})
+
+test('buildCommsConfig prefers explicit mobileTransport option over credentials.deviceInfo', () => {
+    const credentials: WaAuthCredentials = {
+        ...createCredentials(),
+        deviceInfo: {
+            manufacturer: 'Google',
+            device: 'panther',
+            osVersion: '14',
+            osBuildNumber: 'AP3A',
+            appVersion: '2.26.15.11'
+        }
+    }
+    const config = buildCommsConfig(
+        createLogger(),
+        credentials,
+        { url: 'wss://web.whatsapp.com/ws/chat' },
+        {
+            requireFullSync: false,
+            mobileTransport: {
+                deviceInfo: {
+                    manufacturer: 'Xiaomi',
+                    device: 'redfin',
+                    osVersion: '13',
+                    osBuildNumber: 'TQ3A',
+                    appVersion: '2.26.16.0'
+                },
+                tcpUrl: 'tcp://override.example:443'
+            }
+        }
+    )
+    assert.equal(config.url, 'tcp://override.example:443')
+})

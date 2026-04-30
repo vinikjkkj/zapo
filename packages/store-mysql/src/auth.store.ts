@@ -22,7 +22,8 @@ export class WaAuthMysqlStore extends BaseMysqlStore implements WaAuthStore {
                     me_jid, me_lid, me_display_name, companion_enc_static,
                     platform, server_static_key, server_has_prekeys, routing_info,
                     last_success_ts, props_version, ab_props_version,
-                    connection_location, account_creation_ts
+                    connection_location, account_creation_ts,
+                    device_info, push_name, year_class, mem_class
              FROM ${this.t('auth_credentials')}
              WHERE session_id = ?`,
                 [this.sessionId]
@@ -72,7 +73,14 @@ export class WaAuthMysqlStore extends BaseMysqlStore implements WaAuthStore {
                 row.ab_props_version !== null ? Number(row.ab_props_version) : undefined,
             connectionLocation: (row.connection_location as string | null) ?? undefined,
             accountCreationTs:
-                row.account_creation_ts !== null ? Number(row.account_creation_ts) : undefined
+                row.account_creation_ts !== null ? Number(row.account_creation_ts) : undefined,
+            deviceInfo:
+                typeof row.device_info === 'string'
+                    ? (JSON.parse(row.device_info) as WaAuthCredentials['deviceInfo'])
+                    : undefined,
+            pushName: (row.push_name as string | null) ?? undefined,
+            yearClass: row.year_class !== null ? Number(row.year_class) : undefined,
+            memClass: row.mem_class !== null ? Number(row.mem_class) : undefined
         }
     }
 
@@ -87,8 +95,9 @@ export class WaAuthMysqlStore extends BaseMysqlStore implements WaAuthStore {
                 me_jid, me_lid, me_display_name, companion_enc_static,
                 platform, server_static_key, server_has_prekeys, routing_info,
                 last_success_ts, props_version, ab_props_version,
-                connection_location, account_creation_ts
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                connection_location, account_creation_ts,
+                device_info, push_name, year_class, mem_class
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 noise_pub_key = VALUES(noise_pub_key),
                 noise_priv_key = VALUES(noise_priv_key),
@@ -113,7 +122,11 @@ export class WaAuthMysqlStore extends BaseMysqlStore implements WaAuthStore {
                 props_version = VALUES(props_version),
                 ab_props_version = VALUES(ab_props_version),
                 connection_location = VALUES(connection_location),
-                account_creation_ts = VALUES(account_creation_ts)`,
+                account_creation_ts = VALUES(account_creation_ts),
+                device_info = VALUES(device_info),
+                push_name = VALUES(push_name),
+                year_class = VALUES(year_class),
+                mem_class = VALUES(mem_class)`,
             [
                 this.sessionId,
                 credentials.noiseKeyPair.pubKey,
@@ -145,7 +158,11 @@ export class WaAuthMysqlStore extends BaseMysqlStore implements WaAuthStore {
                 credentials.propsVersion ?? null,
                 credentials.abPropsVersion ?? null,
                 credentials.connectionLocation ?? null,
-                credentials.accountCreationTs ?? null
+                credentials.accountCreationTs ?? null,
+                credentials.deviceInfo ? JSON.stringify(credentials.deviceInfo) : null,
+                credentials.pushName ?? null,
+                credentials.yearClass ?? null,
+                credentials.memClass ?? null
             ]
         )
     }

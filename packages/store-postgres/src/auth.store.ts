@@ -23,7 +23,8 @@ export class WaAuthPgStore extends BasePgStore implements WaAuthStore {
                     me_jid, me_lid, me_display_name, companion_enc_static,
                     platform, server_static_key, server_has_prekeys, routing_info,
                     last_success_ts, props_version, ab_props_version,
-                    connection_location, account_creation_ts
+                    connection_location, account_creation_ts,
+                    device_info, push_name, year_class, mem_class
              FROM ${this.t('auth_credentials')}
              WHERE session_id = $1`,
                 values: [this.sessionId]
@@ -73,7 +74,14 @@ export class WaAuthPgStore extends BasePgStore implements WaAuthStore {
                 row.ab_props_version !== null ? Number(row.ab_props_version) : undefined,
             connectionLocation: (row.connection_location as string | null) ?? undefined,
             accountCreationTs:
-                row.account_creation_ts !== null ? Number(row.account_creation_ts) : undefined
+                row.account_creation_ts !== null ? Number(row.account_creation_ts) : undefined,
+            deviceInfo:
+                typeof row.device_info === 'string'
+                    ? (JSON.parse(row.device_info) as WaAuthCredentials['deviceInfo'])
+                    : undefined,
+            pushName: (row.push_name as string | null) ?? undefined,
+            yearClass: row.year_class !== null ? Number(row.year_class) : undefined,
+            memClass: row.mem_class !== null ? Number(row.mem_class) : undefined
         }
     }
 
@@ -89,8 +97,9 @@ export class WaAuthPgStore extends BasePgStore implements WaAuthStore {
                 me_jid, me_lid, me_display_name, companion_enc_static,
                 platform, server_static_key, server_has_prekeys, routing_info,
                 last_success_ts, props_version, ab_props_version,
-                connection_location, account_creation_ts
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+                connection_location, account_creation_ts,
+                device_info, push_name, year_class, mem_class
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
             ON CONFLICT (session_id) DO UPDATE SET
                 noise_pub_key = EXCLUDED.noise_pub_key,
                 noise_priv_key = EXCLUDED.noise_priv_key,
@@ -115,7 +124,11 @@ export class WaAuthPgStore extends BasePgStore implements WaAuthStore {
                 props_version = EXCLUDED.props_version,
                 ab_props_version = EXCLUDED.ab_props_version,
                 connection_location = EXCLUDED.connection_location,
-                account_creation_ts = EXCLUDED.account_creation_ts`,
+                account_creation_ts = EXCLUDED.account_creation_ts,
+                device_info = EXCLUDED.device_info,
+                push_name = EXCLUDED.push_name,
+                year_class = EXCLUDED.year_class,
+                mem_class = EXCLUDED.mem_class`,
             values: [
                 this.sessionId,
                 credentials.noiseKeyPair.pubKey,
@@ -143,7 +156,11 @@ export class WaAuthPgStore extends BasePgStore implements WaAuthStore {
                 credentials.propsVersion ?? null,
                 credentials.abPropsVersion ?? null,
                 credentials.connectionLocation ?? null,
-                credentials.accountCreationTs ?? null
+                credentials.accountCreationTs ?? null,
+                credentials.deviceInfo ? JSON.stringify(credentials.deviceInfo) : null,
+                credentials.pushName ?? null,
+                credentials.yearClass ?? null,
+                credentials.memClass ?? null
             ]
         })
     }

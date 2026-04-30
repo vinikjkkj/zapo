@@ -25,6 +25,10 @@ export interface WaAuthCredentials {
     readonly abPropsVersion?: number
     readonly connectionLocation?: string
     readonly accountCreationTs?: number
+    readonly deviceInfo?: WaMobileTransportDeviceInfo
+    readonly pushName?: string
+    readonly yearClass?: number
+    readonly memClass?: number
 }
 
 export type WaAuthSocketOptions = Pick<

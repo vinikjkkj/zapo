@@ -298,6 +298,17 @@ const MIGRATIONS: readonly Migration[] = [
                 INDEX idx_message_secrets_expires (session_id, expires_at_ms)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `
+    },
+    {
+        name: '0011_auth_credentials_mobile_transport',
+        domain: 'auth',
+        sql: `
+            ALTER TABLE \`__PREFIX__auth_credentials\`
+                ADD COLUMN device_info LONGTEXT,
+                ADD COLUMN push_name VARCHAR(255),
+                ADD COLUMN year_class BIGINT,
+                ADD COLUMN mem_class BIGINT
+        `
     }
 ]
 

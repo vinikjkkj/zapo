@@ -1,4 +1,9 @@
-import type { WaAuthClientOptions, WaAuthCredentials, WaAuthSocketOptions } from '@auth/types'
+import type {
+    WaAuthClientOptions,
+    WaAuthCredentials,
+    WaAuthSocketOptions,
+    WaMobileTransportOptions
+} from '@auth/types'
 import { randomBytesAsync, toRawPubKey, xeddsaVerify } from '@crypto'
 import { toSerializedPubKey } from '@crypto/core/keys'
 import { X25519 } from '@crypto/curves/X25519'
@@ -65,6 +70,18 @@ export async function persistCredentials(
     await args.authStore.save(credentials)
 }
 
+function mobileTransportFromCredentials(
+    credentials: WaAuthCredentials
+): WaMobileTransportOptions | undefined {
+    if (!credentials.deviceInfo) return undefined
+    return {
+        deviceInfo: credentials.deviceInfo,
+        ...(credentials.pushName !== undefined ? { pushName: credentials.pushName } : {}),
+        ...(credentials.yearClass !== undefined ? { yearClass: credentials.yearClass } : {}),
+        ...(credentials.memClass !== undefined ? { memClass: credentials.memClass } : {})
+    }
+}
+
 export function buildCommsConfig(
     logger: Logger,
     credentials: WaAuthCredentials,
@@ -81,15 +98,25 @@ export function buildCommsConfig(
     const registered = meJid !== null && meJid !== undefined
     const loginIdentity = registered ? getLoginIdentity(meJid) : null
     const wsProxy = socketOptions.proxy?.ws
-    const mobileTransport = clientOptions.mobileTransport
+    // Resolve the effective mobile transport: explicit option wins, otherwise
+    // synthesize one from persisted credentials.deviceInfo so a registered
+    // mobile session boots in mobile mode without the caller re-passing
+    // deviceInfo on every `new WaClient(...)` call.
+    const effectiveMobileTransport =
+        clientOptions.mobileTransport ?? mobileTransportFromCredentials(credentials)
     logger.debug('building comms config from credentials', {
         registered,
         hasServerStaticKey:
             credentials.serverStaticKey !== null && credentials.serverStaticKey !== undefined,
-        mobile: Boolean(mobileTransport)
+        mobile: Boolean(effectiveMobileTransport),
+        mobileSource: clientOptions.mobileTransport
+            ? 'option'
+            : effectiveMobileTransport
+              ? 'credentials'
+              : 'none'
     })
 
-    if (mobileTransport) {
+    if (effectiveMobileTransport) {
         if (wsProxy) {
             throw new Error(
                 'mobileTransport does not support socketOptions.proxy.ws — remove the proxy option or open an issue to add TCP proxy support'
@@ -103,14 +130,14 @@ export function buildCommsConfig(
         const loginPayload = buildMobileLoginPayload({
             username: loginIdentity.username,
             device: loginIdentity.device,
-            passive: mobileTransport.passive ?? false,
-            deviceInfo: mobileTransport.deviceInfo,
-            pushName: mobileTransport.pushName,
-            yearClass: mobileTransport.yearClass,
-            memClass: mobileTransport.memClass
+            passive: effectiveMobileTransport.passive ?? false,
+            deviceInfo: effectiveMobileTransport.deviceInfo,
+            pushName: effectiveMobileTransport.pushName,
+            yearClass: effectiveMobileTransport.yearClass,
+            memClass: effectiveMobileTransport.memClass
         })
         return {
-            url: mobileTransport.tcpUrl ?? 'tcp://g.whatsapp.net:443',
+            url: effectiveMobileTransport.tcpUrl ?? 'tcp://g.whatsapp.net:443',
             rawWebSocketConstructor: WaMobileTcpSocketCtor,
             connectTimeoutMs: socketOptions.connectTimeoutMs,
             reconnectIntervalMs: socketOptions.reconnectIntervalMs,

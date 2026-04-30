@@ -104,7 +104,15 @@ export class WaAuthRedisStore extends BaseRedisStore implements WaAuthStore {
             accountCreationTs:
                 toStringOrNull(data.account_creation_ts) !== null
                     ? Number(data.account_creation_ts)
-                    : undefined
+                    : undefined,
+            deviceInfo:
+                toStringOrNull(data.device_info) !== null
+                    ? (JSON.parse(data.device_info) as WaAuthCredentials['deviceInfo'])
+                    : undefined,
+            pushName: toStringOrNull(data.push_name) ?? undefined,
+            yearClass:
+                toStringOrNull(data.year_class) !== null ? Number(data.year_class) : undefined,
+            memClass: toStringOrNull(data.mem_class) !== null ? Number(data.mem_class) : undefined
         }
     }
 
@@ -144,6 +152,18 @@ export class WaAuthRedisStore extends BaseRedisStore implements WaAuthStore {
         }
         if (credentials.accountCreationTs !== undefined) {
             fields.account_creation_ts = String(credentials.accountCreationTs)
+        }
+        if (credentials.deviceInfo !== undefined) {
+            fields.device_info = JSON.stringify(credentials.deviceInfo)
+        }
+        if (credentials.pushName !== undefined) {
+            fields.push_name = credentials.pushName
+        }
+        if (credentials.yearClass !== undefined) {
+            fields.year_class = String(credentials.yearClass)
+        }
+        if (credentials.memClass !== undefined) {
+            fields.mem_class = String(credentials.memClass)
         }
 
         const pipeline = this.redis.pipeline()
