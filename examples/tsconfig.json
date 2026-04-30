@@ -30,6 +30,7 @@
             "@transport/*": ["src/transport/*"],
             "@util/*": ["src/util/*"],
             "zapo-js": ["src/index.ts"],
+            "zapo-js/proto": ["src/proto.ts"],
             "zapo-js/*": ["src/*/index.ts"],
             "@zapo-js/*": ["packages/*/src"]
         }

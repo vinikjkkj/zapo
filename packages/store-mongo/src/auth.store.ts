@@ -33,6 +33,10 @@ interface AuthDoc {
     ab_props_version: number | null
     connection_location: string | null
     account_creation_ts: number | null
+    device_info?: WaAuthCredentials['deviceInfo'] | null
+    push_name?: string | null
+    year_class?: number | null
+    mem_class?: number | null
 }
 
 const COLLECTION = 'auth_credentials'
@@ -91,7 +95,17 @@ export class WaAuthMongoStore extends BaseMongoStore implements WaAuthStore {
                 doc.ab_props_version !== null ? Number(doc.ab_props_version) : undefined,
             connectionLocation: doc.connection_location ?? undefined,
             accountCreationTs:
-                doc.account_creation_ts !== null ? Number(doc.account_creation_ts) : undefined
+                doc.account_creation_ts !== null ? Number(doc.account_creation_ts) : undefined,
+            deviceInfo: doc.device_info ?? undefined,
+            pushName: doc.push_name ?? undefined,
+            yearClass:
+                doc.year_class === null || doc.year_class === undefined
+                    ? undefined
+                    : Number(doc.year_class),
+            memClass:
+                doc.mem_class === null || doc.mem_class === undefined
+                    ? undefined
+                    : Number(doc.mem_class)
         }
     }
 
@@ -138,7 +152,11 @@ export class WaAuthMongoStore extends BaseMongoStore implements WaAuthStore {
                     props_version: credentials.propsVersion ?? null,
                     ab_props_version: credentials.abPropsVersion ?? null,
                     connection_location: credentials.connectionLocation ?? null,
-                    account_creation_ts: credentials.accountCreationTs ?? null
+                    account_creation_ts: credentials.accountCreationTs ?? null,
+                    device_info: credentials.deviceInfo ?? null,
+                    push_name: credentials.pushName ?? null,
+                    year_class: credentials.yearClass ?? null,
+                    mem_class: credentials.memClass ?? null
                 }
             },
             { upsert: true }

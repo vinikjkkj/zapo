@@ -314,6 +314,16 @@ const MIGRATIONS: readonly Migration[] = [
             CREATE INDEX IF NOT EXISTS "__PREFIX__idx_message_secrets_expires"
                 ON "__PREFIX__message_secrets_cache" (session_id, expires_at_ms)
         `
+    },
+    {
+        name: '0011_auth_credentials_mobile_transport',
+        domain: 'auth',
+        sql: `
+            ALTER TABLE "__PREFIX__auth_credentials" ADD COLUMN IF NOT EXISTS device_info TEXT;
+            ALTER TABLE "__PREFIX__auth_credentials" ADD COLUMN IF NOT EXISTS push_name TEXT;
+            ALTER TABLE "__PREFIX__auth_credentials" ADD COLUMN IF NOT EXISTS year_class BIGINT;
+            ALTER TABLE "__PREFIX__auth_credentials" ADD COLUMN IF NOT EXISTS mem_class BIGINT
+        `
     }
 ]
 

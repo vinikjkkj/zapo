@@ -45,7 +45,11 @@ export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
                 props_version,
                 ab_props_version,
                 connection_location,
-                account_creation_ts
+                account_creation_ts,
+                device_info,
+                push_name,
+                year_class,
+                mem_class
             FROM auth_credentials
             WHERE session_id = ?`,
             [this.options.sessionId]
@@ -56,6 +60,7 @@ export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
         }
 
         const signedIdentityBytes = asOptionalBytes(row.signed_identity)
+        const deviceInfoJson = asOptionalString(row.device_info)
 
         return {
             noiseKeyPair: {
@@ -94,7 +99,13 @@ export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
             propsVersion: asOptionalNumber(row.props_version),
             abPropsVersion: asOptionalNumber(row.ab_props_version),
             connectionLocation: asOptionalString(row.connection_location),
-            accountCreationTs: asOptionalNumber(row.account_creation_ts)
+            accountCreationTs: asOptionalNumber(row.account_creation_ts),
+            deviceInfo: deviceInfoJson
+                ? (JSON.parse(deviceInfoJson) as WaAuthCredentials['deviceInfo'])
+                : undefined,
+            pushName: asOptionalString(row.push_name),
+            yearClass: asOptionalNumber(row.year_class),
+            memClass: asOptionalNumber(row.mem_class)
         }
     }
 
@@ -126,9 +137,13 @@ export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
                     props_version,
                     ab_props_version,
                     connection_location,
-                    account_creation_ts
+                    account_creation_ts,
+                    device_info,
+                    push_name,
+                    year_class,
+                    mem_class
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 ON CONFLICT(session_id) DO UPDATE SET
                     noise_pub_key=excluded.noise_pub_key,
@@ -154,7 +169,11 @@ export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
                     props_version=excluded.props_version,
                     ab_props_version=excluded.ab_props_version,
                     connection_location=excluded.connection_location,
-                    account_creation_ts=excluded.account_creation_ts`,
+                    account_creation_ts=excluded.account_creation_ts,
+                    device_info=excluded.device_info,
+                    push_name=excluded.push_name,
+                    year_class=excluded.year_class,
+                    mem_class=excluded.mem_class`,
                 [
                     this.options.sessionId,
                     credentials.noiseKeyPair.pubKey,
@@ -186,7 +205,11 @@ export class WaAuthSqliteStore extends BaseSqliteStore implements WaAuthStore {
                     credentials.propsVersion ?? null,
                     credentials.abPropsVersion ?? null,
                     credentials.connectionLocation ?? null,
-                    credentials.accountCreationTs ?? null
+                    credentials.accountCreationTs ?? null,
+                    credentials.deviceInfo ? JSON.stringify(credentials.deviceInfo) : null,
+                    credentials.pushName ?? null,
+                    credentials.yearClass ?? null,
+                    credentials.memClass ?? null
                 ]
             )
         })

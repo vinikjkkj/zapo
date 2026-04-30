@@ -347,6 +347,18 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
                     ON message_secrets_cache (session_id, expires_at_ms);
             `)
         }
+    },
+    {
+        id: '0011_auth_credentials_mobile_transport',
+        domain: 'auth',
+        up: (db) => {
+            db.exec(`
+                ALTER TABLE auth_credentials ADD COLUMN device_info TEXT;
+                ALTER TABLE auth_credentials ADD COLUMN push_name TEXT;
+                ALTER TABLE auth_credentials ADD COLUMN year_class INTEGER;
+                ALTER TABLE auth_credentials ADD COLUMN mem_class INTEGER;
+            `)
+        }
     }
 ]
 
