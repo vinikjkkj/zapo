@@ -193,6 +193,29 @@ jobs:
             - name: run sqlite tests
               run: npm test -w packages/store-sqlite
 
+    test-migrate:
+        runs-on: ubuntu-latest
+        needs: test-core
+
+        steps:
+            - name: checkout repository
+              uses: actions/checkout@v4
+
+            - name: setup node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: install dependencies
+              run: npm ci
+
+            - name: build
+              run: npm run build && npx turbo run build --filter=@zapo-js/store-migrate
+
+            - name: run migrate tests
+              run: npm test -w packages/store-migrate
+
     test-mysql:
         runs-on: ubuntu-latest
         needs: test-core
