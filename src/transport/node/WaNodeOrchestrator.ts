@@ -110,8 +110,12 @@ export class WaNodeOrchestrator {
         await this.sendNodeFn(outbound)
     }
 
-    public async query(node: BinaryNode, timeoutMs = this.defaultTimeoutMs): Promise<BinaryNode> {
-        const outbound = await this.withAutoId(node)
+    public async query(
+        node: BinaryNode,
+        timeoutMs = this.defaultTimeoutMs,
+        options: { readonly useSystemId?: boolean } = {}
+    ): Promise<BinaryNode> {
+        const outbound = await this.withAutoId(node, options.useSystemId === true)
         const id = outbound.attrs.id
         if (!id) {
             throw new Error('query node id is required')
@@ -151,12 +155,14 @@ export class WaNodeOrchestrator {
         })
     }
 
-    private async withAutoId(node: BinaryNode): Promise<BinaryNode> {
+    private async withAutoId(node: BinaryNode, useSystemId = false): Promise<BinaryNode> {
         if (node.attrs.id) {
             return node
         }
-        const generatedId = (await this.getIdGenerator()).next()
-        this.logger.trace('generated stanza id', { id: generatedId })
+        const generator = await this.getIdGenerator()
+        const generatedId =
+            useSystemId && generator.nextSystem ? generator.nextSystem() : generator.next()
+        this.logger.trace('generated stanza id', { id: generatedId, system: useSystemId })
         return {
             ...node,
             attrs: {

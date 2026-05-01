@@ -10,6 +10,7 @@ const NODE_ID_PREFIX_SEED = new Uint8Array(4)
 export interface NodeIdGenerator {
     readonly prefix: string
     next(): string
+    nextSystem?(): string
 }
 
 export function getNodeChildren(node: BinaryNode): readonly BinaryNode[] {
@@ -188,13 +189,18 @@ export async function createNodeIdGenerator(): Promise<NodeIdGenerator> {
 }
 
 export function createMobileNodeIdGenerator(): NodeIdGenerator {
-    let counter = 0
+    let featureCounter = 0
+    let systemCounter = 0
     return {
         prefix: '0',
         next(): string {
-            const id = `0${counter.toString(16)}`
-            counter = (counter + 1) & 0xffff
+            const id = `0${featureCounter.toString(16)}`
+            featureCounter = (featureCounter + 1) & 0xffff
             return id
+        },
+        nextSystem(): string {
+            systemCounter = (systemCounter + 1) & 0xffff
+            return systemCounter.toString(16)
         }
     }
 }

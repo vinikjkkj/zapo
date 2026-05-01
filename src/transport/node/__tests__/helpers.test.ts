@@ -31,3 +31,23 @@ test('createMobileNodeIdGenerator wraps at 65536', () => {
     assert.equal(gen.next(), '0ffff')
     assert.equal(gen.next(), '00')
 })
+
+test('createMobileNodeIdGenerator nextSystem produces pure-hex ids without prefix', () => {
+    const gen = createMobileNodeIdGenerator()
+    assert.equal(typeof gen.nextSystem, 'function')
+    const ids: string[] = []
+    for (let i = 0; i < 260; i++) ids.push(gen.nextSystem!())
+    assert.equal(ids[0], '1')
+    assert.equal(ids[14], 'f')
+    assert.equal(ids[15], '10')
+    assert.equal(ids[254], 'ff')
+    assert.equal(ids[255], '100')
+})
+
+test('createMobileNodeIdGenerator next and nextSystem track independent counters', () => {
+    const gen = createMobileNodeIdGenerator()
+    assert.equal(gen.next(), '00')
+    assert.equal(gen.nextSystem!(), '1')
+    assert.equal(gen.next(), '01')
+    assert.equal(gen.nextSystem!(), '2')
+})

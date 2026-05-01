@@ -33,16 +33,9 @@ function buildSignedPreKeyNode(signedPreKey: SignedPreKeyRecord) {
 export function buildPreKeyUploadIq(
     registrationInfo: RegistrationInfo,
     signedPreKey: SignedPreKeyRecord,
-    preKeys: readonly PreKeyRecord[],
-    options?: { readonly opMode?: 'set' | 'add' }
+    preKeys: readonly PreKeyRecord[]
 ) {
     const children: BinaryNode[] = []
-    if (options?.opMode) {
-        children.push({
-            tag: WA_NODE_TAGS.OP,
-            attrs: { mode: options.opMode }
-        })
-    }
     children.push(
         {
             tag: WA_NODE_TAGS.REGISTRATION,

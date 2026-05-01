@@ -95,12 +95,17 @@ interface WaClientBase {
 
 interface WaClientBuildRuntime {
     readonly sendNode: (node: BinaryNode) => Promise<void>
-    readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
+    readonly query: (
+        node: BinaryNode,
+        timeoutMs?: number,
+        options?: { readonly useSystemId?: boolean }
+    ) => Promise<BinaryNode>
     readonly queryWithContext: (
         context: string,
         node: BinaryNode,
         timeoutMs?: number,
-        contextData?: Readonly<Record<string, unknown>>
+        contextData?: Readonly<Record<string, unknown>>,
+        options?: { readonly useSystemId?: boolean }
     ) => Promise<BinaryNode>
     readonly syncAppState: () => Promise<void>
     readonly syncAppStateWithOptions: (
@@ -321,7 +326,8 @@ function createPassiveTasksRuntime(input: {
         context: string,
         node: BinaryNode,
         timeoutMs?: number,
-        contextData?: Readonly<Record<string, unknown>>
+        contextData?: Readonly<Record<string, unknown>>,
+        options?: { readonly useSystemId?: boolean }
     ) => Promise<BinaryNode>
     readonly authClient: WaAuthClient
     readonly nodeOrchestrator: WaNodeOrchestrator
@@ -438,9 +444,12 @@ export function buildWaClientDependencies(input: {
         },
         logger
     )
+    const signalSystemQuery: WaClientBuildRuntime['query'] = (node, timeoutMs) =>
+        runtime.query(node, timeoutMs, { useSystemId: true })
+
     const signalDigestSync = new SignalDigestSyncApi({
         logger,
-        query: runtime.query,
+        query: signalSystemQuery,
         signalStore: sessionStore.signal,
         preKeyStore: sessionStore.preKey,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
@@ -455,24 +464,24 @@ export function buildWaClientDependencies(input: {
     })
     const signalIdentitySync = new SignalIdentitySyncApi({
         logger,
-        query: runtime.query,
+        query: signalSystemQuery,
         identityStore: sessionStore.identity,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
     const signalMissingPreKeysSync = new SignalMissingPreKeysSyncApi({
         logger,
-        query: runtime.query,
+        query: signalSystemQuery,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
     const signalRotateKey = new SignalRotateKeyApi({
         logger,
-        query: runtime.query,
+        query: signalSystemQuery,
         signalStore: sessionStore.signal,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
     const signalSessionSync = new SignalSessionSyncApi({
         logger,
-        query: runtime.query,
+        query: signalSystemQuery,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
 
