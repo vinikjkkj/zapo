@@ -229,8 +229,8 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
         runtime,
         offlineResume: {
             trackOfflineStanza() {},
-            handleOfflinePreview(messageCount: number) {
-                previewCounts.push(messageCount)
+            handleOfflinePreview(stanzaCount: number) {
+                previewCounts.push(stanzaCount)
             },
             handleOfflineComplete() {
                 offlineCompleteCalls += 1
@@ -251,7 +251,7 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
             {
                 tag: 'offline_preview',
                 attrs: {
-                    count: '1',
+                    count: '5',
                     message: '3',
                     t: '123'
                 }
@@ -259,13 +259,13 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
             {
                 tag: 'offline',
                 attrs: {
-                    count: '3'
+                    count: '5'
                 }
             }
         ]
     })
 
-    assert.deepEqual(previewCounts, [3])
+    assert.deepEqual(previewCounts, [5])
     assert.equal(offlineCompleteCalls, 1)
     assert.equal(notifications.length, 2)
     assert.deepEqual(notifications[0], {
@@ -279,7 +279,7 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
                 {
                     tag: 'offline_preview',
                     attrs: {
-                        count: '1',
+                        count: '5',
                         message: '3',
                         t: '123'
                     }
@@ -287,7 +287,7 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
                 {
                     tag: 'offline',
                     attrs: {
-                        count: '3'
+                        count: '5'
                     }
                 }
             ]
@@ -298,7 +298,7 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
         notificationType: 'ib.offline_preview',
         classification: 'info_bulletin',
         details: {
-            count: 1,
+            count: 5,
             message: 3,
             receipt: undefined,
             notification: undefined,
@@ -316,7 +316,7 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
                 {
                     tag: 'offline_preview',
                     attrs: {
-                        count: '1',
+                        count: '5',
                         message: '3',
                         t: '123'
                     }
@@ -324,7 +324,7 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
                 {
                     tag: 'offline',
                     attrs: {
-                        count: '3'
+                        count: '5'
                     }
                 }
             ]
@@ -335,7 +335,7 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
         notificationType: 'ib.offline',
         classification: 'info_bulletin',
         details: {
-            count: 3,
+            count: 5,
             message: undefined,
             receipt: undefined,
             notification: undefined,
