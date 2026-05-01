@@ -4,10 +4,16 @@ import test from 'node:test'
 import {
     createIncomingFailureHandler,
     createIncomingNotificationHandler,
-    createIncomingReceiptHandler
+    createIncomingReceiptHandler,
+    createIncomingRegistrationNotificationHandler
 } from '@client/incoming'
+import type { WaAccountTakeoverNoticeEvent, WaRegistrationCodeEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
-import { WA_DISCONNECT_REASONS } from '@protocol/constants'
+import {
+    WA_DISCONNECT_REASONS,
+    WA_NOTIFICATION_TYPES,
+    WA_REGISTRATION_NOTIFICATION_TAGS
+} from '@protocol/constants'
 import type { BinaryNode } from '@transport/types'
 
 function createLogger(): Logger {
@@ -186,6 +192,133 @@ test('failure handler maps auth reasons to logout disconnect flow', async () => 
             code: 401
         }
     ])
+})
+
+test('registration notification handler emits registration_code event and acks', async () => {
+    const sent: BinaryNode[] = []
+    const codes: WaRegistrationCodeEvent[] = []
+    const takeovers: WaAccountTakeoverNoticeEvent[] = []
+    const handler = createIncomingRegistrationNotificationHandler({
+        logger: createLogger(),
+        sendNode: async (node) => {
+            sent.push(node)
+        },
+        emitRegistrationCode: (event) => {
+            codes.push(event)
+        },
+        emitAccountTakeoverNotice: (event) => {
+            takeovers.push(event)
+        }
+    })
+
+    const handled = await handler({
+        tag: 'notification',
+        attrs: {
+            id: 'reg-1',
+            from: 's.whatsapp.net',
+            type: WA_NOTIFICATION_TYPES.REGISTRATION
+        },
+        content: [
+            {
+                tag: WA_REGISTRATION_NOTIFICATION_TAGS.WA_OLD_REGISTRATION,
+                attrs: {
+                    code: '987654',
+                    expiry_t: '1700000123',
+                    device_id: 'OTHER_DEVICE'
+                }
+            }
+        ]
+    })
+
+    assert.equal(handled, true)
+    assert.equal(codes.length, 1)
+    assert.equal(codes[0].code, '987654')
+    assert.equal(codes[0].expiryTimestampMs, 1700000123 * 1000)
+    assert.equal(codes[0].fromDeviceId, 'OTHER_DEVICE')
+    assert.equal(takeovers.length, 0)
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].tag, 'ack')
+    assert.equal(sent[0].attrs.type, WA_NOTIFICATION_TYPES.REGISTRATION)
+    assert.equal(sent[0].attrs.id, 'reg-1')
+    assert.equal(sent[0].attrs.class, 'notification')
+})
+
+test('registration notification handler emits account_takeover_notice for device_logout child', async () => {
+    const sent: BinaryNode[] = []
+    const codes: WaRegistrationCodeEvent[] = []
+    const takeovers: WaAccountTakeoverNoticeEvent[] = []
+    const handler = createIncomingRegistrationNotificationHandler({
+        logger: createLogger(),
+        sendNode: async (node) => {
+            sent.push(node)
+        },
+        emitRegistrationCode: (event) => {
+            codes.push(event)
+        },
+        emitAccountTakeoverNotice: (event) => {
+            takeovers.push(event)
+        }
+    })
+
+    const handled = await handler({
+        tag: 'notification',
+        attrs: {
+            id: 'reg-2',
+            from: 's.whatsapp.net',
+            type: WA_NOTIFICATION_TYPES.REGISTRATION
+        },
+        content: [
+            {
+                tag: WA_REGISTRATION_NOTIFICATION_TAGS.DEVICE_LOGOUT,
+                attrs: {
+                    id: 'logout-xyz',
+                    t: '1700000456'
+                }
+            }
+        ]
+    })
+
+    assert.equal(handled, true)
+    assert.equal(codes.length, 0)
+    assert.equal(takeovers.length, 1)
+    assert.equal(takeovers[0].serverToken, 'logout-xyz')
+    assert.equal(takeovers[0].attemptTimestampMs, 1700000456 * 1000)
+    assert.equal(sent.length, 1)
+})
+
+test('registration notification handler defers to default handler for unrecognized payloads', async () => {
+    const sent: BinaryNode[] = []
+    const codes: WaRegistrationCodeEvent[] = []
+    const takeovers: WaAccountTakeoverNoticeEvent[] = []
+    const handler = createIncomingRegistrationNotificationHandler({
+        logger: createLogger(),
+        sendNode: async (node) => {
+            sent.push(node)
+        },
+        emitRegistrationCode: (event) => {
+            codes.push(event)
+        },
+        emitAccountTakeoverNotice: (event) => {
+            takeovers.push(event)
+        }
+    })
+
+    const handledOther = await handler({
+        tag: 'notification',
+        attrs: { id: 'x', from: 's.whatsapp.net', type: 'server_sync' }
+    })
+    assert.equal(handledOther, false)
+
+    const handledUnknownChild = await handler({
+        tag: 'notification',
+        attrs: { id: 'r', from: 's.whatsapp.net', type: WA_NOTIFICATION_TYPES.REGISTRATION },
+        content: [{ tag: 'unknown', attrs: {} }]
+    })
+    assert.equal(handledUnknownChild, false)
+
+    assert.equal(codes.length, 0)
+    assert.equal(takeovers.length, 0)
+    assert.equal(sent.length, 0)
 })
 
 test('failure handler maps disconnect-only reasons without clearing credentials', async () => {

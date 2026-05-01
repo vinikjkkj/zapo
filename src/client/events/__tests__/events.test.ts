@@ -4,7 +4,12 @@ import test from 'node:test'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { parseGroupNotificationEvents } from '@client/events/group'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
-import { WA_NOTIFICATION_TYPES, WA_PRIVACY_TOKEN_TAGS } from '@protocol/constants'
+import { parseRegistrationNotification } from '@client/events/registration'
+import {
+    WA_NOTIFICATION_TYPES,
+    WA_PRIVACY_TOKEN_TAGS,
+    WA_REGISTRATION_NOTIFICATION_TAGS
+} from '@protocol/constants'
 
 test('chat event parser maps app-state mutation to chat actions', () => {
     const parsed = parseChatEventFromAppStateMutation({
@@ -119,6 +124,97 @@ test('privacy token parser keeps valid token entries and skips malformed payload
     assert.equal(parsed[0].type, 'trusted_contact')
     assert.equal(parsed[0].timestampS, 42)
     assert.deepEqual(parsed[0].tokenBytes, validTokenBytes)
+})
+
+test('registration parser extracts wa_old_registration code with expiry and from-device id', () => {
+    const parsed = parseRegistrationNotification({
+        tag: 'notification',
+        attrs: {
+            type: WA_NOTIFICATION_TYPES.REGISTRATION,
+            id: 'r-1',
+            from: 's.whatsapp.net'
+        },
+        content: [
+            {
+                tag: WA_REGISTRATION_NOTIFICATION_TAGS.WA_OLD_REGISTRATION,
+                attrs: {
+                    code: '123456',
+                    expiry_t: '1730000000',
+                    device_id: 'AAAAAAAAAAAAAAAAAAAAAA'
+                }
+            }
+        ]
+    })
+
+    assert.ok(parsed)
+    assert.equal(parsed?.kind, 'registration_code')
+    if (parsed?.kind === 'registration_code') {
+        assert.equal(parsed.code, '123456')
+        assert.equal(parsed.expiryTimestampMs, 1730000000 * 1000)
+        assert.equal(parsed.fromDeviceId, 'AAAAAAAAAAAAAAAAAAAAAA')
+    }
+})
+
+test('registration parser extracts account_takeover_notice from device_logout child', () => {
+    const parsed = parseRegistrationNotification({
+        tag: 'notification',
+        attrs: { type: WA_NOTIFICATION_TYPES.REGISTRATION },
+        content: [
+            {
+                tag: WA_REGISTRATION_NOTIFICATION_TAGS.DEVICE_LOGOUT,
+                attrs: {
+                    id: 'logout-1',
+                    t: '1700000000',
+                    device: 'iPhone 15',
+                    new_device_platform: 'iphone',
+                    new_device_app_version: '24.10.0'
+                }
+            }
+        ]
+    })
+
+    assert.ok(parsed)
+    assert.equal(parsed?.kind, 'account_takeover_notice')
+    if (parsed?.kind === 'account_takeover_notice') {
+        assert.equal(parsed.serverToken, 'logout-1')
+        assert.equal(parsed.attemptTimestampMs, 1700000000 * 1000)
+        assert.equal(parsed.newDeviceName, 'iPhone 15')
+        assert.equal(parsed.newDevicePlatform, 'iphone')
+        assert.equal(parsed.newDeviceAppVersion, '24.10.0')
+    }
+})
+
+test('registration parser returns null when child tag is unknown or attrs are missing', () => {
+    assert.equal(
+        parseRegistrationNotification({
+            tag: 'notification',
+            attrs: { type: WA_NOTIFICATION_TYPES.REGISTRATION },
+            content: [{ tag: 'unknown_child', attrs: {} }]
+        }),
+        null
+    )
+
+    assert.equal(
+        parseRegistrationNotification({
+            tag: 'notification',
+            attrs: { type: WA_NOTIFICATION_TYPES.REGISTRATION },
+            content: [
+                {
+                    tag: WA_REGISTRATION_NOTIFICATION_TAGS.WA_OLD_REGISTRATION,
+                    attrs: { code: '123456', expiry_t: '1' }
+                }
+            ]
+        }),
+        null
+    )
+
+    assert.equal(
+        parseRegistrationNotification({
+            tag: 'notification',
+            attrs: { type: WA_NOTIFICATION_TYPES.REGISTRATION }
+        }),
+        null
+    )
 })
 
 test('privacy token parser rejects non-numeric token timestamp', () => {

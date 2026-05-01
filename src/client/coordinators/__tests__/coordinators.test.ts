@@ -58,6 +58,8 @@ function createIncomingRuntime() {
             emitIncomingFailure: () => undefined,
             emitIncomingErrorStanza: () => undefined,
             emitIncomingNotification: () => undefined,
+            emitRegistrationCode: () => undefined,
+            emitAccountTakeoverNotice: () => undefined,
             emitGroupEvent: () => undefined,
             emitUnhandledIncomingNode: (event: unknown) => {
                 unhandled.push(event)

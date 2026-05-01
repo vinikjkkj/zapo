@@ -298,6 +298,8 @@ function createIncomingNodeRuntime(input: {
         emitIncomingFailure: (event) => emitEvent('failure', event),
         emitIncomingErrorStanza: (event) => emitEvent('stanza_error', event),
         emitIncomingNotification: (event) => emitEvent('notification', event),
+        emitRegistrationCode: (event) => emitEvent('registration_code_received', event),
+        emitAccountTakeoverNotice: (event) => emitEvent('account_takeover_notice', event),
         emitGroupEvent: (event) => {
             emitEvent('group_event', event)
             void messageDispatch.mutateParticipantsCacheFromGroupEvent(event).catch((error) => {

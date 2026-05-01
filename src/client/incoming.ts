@@ -1,11 +1,14 @@
 import { parseGroupNotificationEvents } from '@client/events/group'
+import { parseRegistrationNotification } from '@client/events/registration'
 import type {
+    WaAccountTakeoverNoticeEvent,
     WaGroupEvent,
     WaIncomingBaseEvent,
     WaIncomingFailureEvent,
     WaIncomingNotificationEvent,
     WaIncomingReceiptEvent,
-    WaIncomingUnhandledStanzaEvent
+    WaIncomingUnhandledStanzaEvent,
+    WaRegistrationCodeEvent
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { WA_DISCONNECT_REASONS, WA_NODE_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
@@ -47,6 +50,11 @@ type IncomingNotificationHandlerOptions = IncomingAckRuntime & {
 type IncomingGroupNotificationHandlerOptions = IncomingAckRuntime & {
     readonly emitGroupEvent: (event: WaGroupEvent) => void
     readonly emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) => void
+}
+
+type IncomingRegistrationNotificationHandlerOptions = IncomingAckRuntime & {
+    readonly emitRegistrationCode: (event: WaRegistrationCodeEvent) => void
+    readonly emitAccountTakeoverNotice: (event: WaAccountTakeoverNoticeEvent) => void
 }
 
 const FAILURE_REASON_TO_DISCONNECT: Readonly<Record<number, WaDisconnectReason>> = {
@@ -316,6 +324,50 @@ export function createIncomingNotificationHandler(
                 })
             })
         }
+        return true
+    }
+}
+
+export function createIncomingRegistrationNotificationHandler(
+    options: IncomingRegistrationNotificationHandlerOptions
+): (node: BinaryNode) => Promise<boolean> {
+    return async (node: BinaryNode): Promise<boolean> => {
+        if (node.attrs.type !== WA_NOTIFICATION_TYPES.REGISTRATION) {
+            return false
+        }
+
+        const parsed = parseRegistrationNotification(node)
+        if (!parsed) {
+            return false
+        }
+
+        const baseEvent = createIncomingBaseEvent(node)
+        if (parsed.kind === 'registration_code') {
+            options.emitRegistrationCode({
+                ...baseEvent,
+                code: parsed.code,
+                expiryTimestampMs: parsed.expiryTimestampMs,
+                fromDeviceId: parsed.fromDeviceId
+            })
+        } else {
+            options.emitAccountTakeoverNotice({
+                ...baseEvent,
+                serverToken: parsed.serverToken,
+                attemptTimestampMs: parsed.attemptTimestampMs,
+                newDeviceName: parsed.newDeviceName,
+                newDevicePlatform: parsed.newDevicePlatform,
+                newDeviceAppVersion: parsed.newDeviceAppVersion
+            })
+        }
+
+        await sendSafeAck(
+            options.logger,
+            options.sendNode,
+            buildAckNode({
+                kind: 'notification',
+                node
+            })
+        )
         return true
     }
 }

@@ -236,6 +236,20 @@ export interface WaIncomingNotificationEvent extends WaIncomingBaseEvent {
     readonly details?: Readonly<Record<string, unknown>>
 }
 
+export interface WaRegistrationCodeEvent extends WaIncomingBaseEvent {
+    readonly code: string
+    readonly expiryTimestampMs: number
+    readonly fromDeviceId: string
+}
+
+export interface WaAccountTakeoverNoticeEvent extends WaIncomingBaseEvent {
+    readonly serverToken: string
+    readonly attemptTimestampMs: number
+    readonly newDeviceName?: string
+    readonly newDevicePlatform?: string
+    readonly newDeviceAppVersion?: string
+}
+
 export type WaAddonKind = 'reaction' | 'poll_vote' | 'event_response' | 'comment'
 
 export interface WaIncomingAddonEvent extends WaIncomingBaseEvent {
@@ -446,6 +460,8 @@ export interface WaClientEventMap {
     readonly chatstate: (event: WaIncomingChatstateEvent) => void
     readonly call: (event: WaIncomingCallEvent) => void
     readonly notification: (event: WaIncomingNotificationEvent) => void
+    readonly registration_code_received: (event: WaRegistrationCodeEvent) => void
+    readonly account_takeover_notice: (event: WaAccountTakeoverNoticeEvent) => void
     readonly failure: (event: WaIncomingFailureEvent) => void
     readonly stanza_error: (event: WaIncomingBaseEvent) => void
     readonly stanza_unhandled: (event: WaIncomingUnhandledStanzaEvent) => void
