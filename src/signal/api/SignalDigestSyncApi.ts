@@ -1,4 +1,5 @@
 import { sha1 } from '@crypto'
+import { toRawPubKey } from '@crypto/core/keys'
 import type { Logger } from '@infra/log/types'
 import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
 import { decodeExactLength, parseUint } from '@signal/api/codec'
@@ -168,7 +169,12 @@ export class SignalDigestSyncApi {
                 preKeyCount: digest.preKeyIds.length
             }
         }
-        if (!uint8Equal(registrationInfo.identityKeyPair.pubKey, digest.identity)) {
+        if (
+            !uint8Equal(
+                toRawPubKey(registrationInfo.identityKeyPair.pubKey),
+                toRawPubKey(digest.identity)
+            )
+        ) {
             return {
                 valid: false,
                 shouldReupload: true,
@@ -178,7 +184,10 @@ export class SignalDigestSyncApi {
         }
         if (
             signedPreKey.keyId !== digest.signedKey.id ||
-            !uint8Equal(signedPreKey.keyPair.pubKey, digest.signedKey.publicKey) ||
+            !uint8Equal(
+                toRawPubKey(signedPreKey.keyPair.pubKey),
+                toRawPubKey(digest.signedKey.publicKey)
+            ) ||
             !uint8Equal(signedPreKey.signature, digest.signedKey.signature)
         ) {
             return {
@@ -191,8 +200,8 @@ export class SignalDigestSyncApi {
 
         const preKeys = await this.preKeyStore.getPreKeysById(digest.preKeyIds)
         const bytesToHash: Uint8Array[] = [
-            registrationInfo.identityKeyPair.pubKey,
-            signedPreKey.keyPair.pubKey,
+            toRawPubKey(registrationInfo.identityKeyPair.pubKey),
+            toRawPubKey(signedPreKey.keyPair.pubKey),
             signedPreKey.signature
         ]
         for (let index = 0; index < preKeys.length; index += 1) {
@@ -205,7 +214,7 @@ export class SignalDigestSyncApi {
                     preKeyCount: digest.preKeyIds.length
                 }
             }
-            bytesToHash.push(preKey.keyPair.pubKey)
+            bytesToHash.push(toRawPubKey(preKey.keyPair.pubKey))
         }
 
         const localHash = (await sha1(concatBytes(bytesToHash))).subarray(0, digest.hash.byteLength)
