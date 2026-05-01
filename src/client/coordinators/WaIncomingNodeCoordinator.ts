@@ -7,10 +7,12 @@ import {
     createIncomingGroupNotificationHandler,
     createIncomingNotificationHandler,
     createIncomingReceiptHandler,
+    createIncomingRegistrationNotificationHandler,
     createInfoBulletinNotificationEvent,
     createUnhandledIncomingNodeEvent
 } from '@client/incoming'
 import type {
+    WaAccountTakeoverNoticeEvent,
     WaGroupEvent,
     WaIncomingBaseEvent,
     WaIncomingCallEvent,
@@ -21,7 +23,8 @@ import type {
     WaIncomingNotificationEvent,
     WaIncomingPresenceEvent,
     WaIncomingReceiptEvent,
-    WaIncomingUnhandledStanzaEvent
+    WaIncomingUnhandledStanzaEvent,
+    WaRegistrationCodeEvent
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import {
@@ -70,6 +73,8 @@ interface WaIncomingNodeRuntime {
     readonly emitIncomingFailure: (event: WaIncomingFailureEvent) => void
     readonly emitIncomingErrorStanza: (event: WaIncomingBaseEvent) => void
     readonly emitIncomingNotification: (event: WaIncomingNotificationEvent) => void
+    readonly emitRegistrationCode: (event: WaRegistrationCodeEvent) => void
+    readonly emitAccountTakeoverNotice: (event: WaAccountTakeoverNoticeEvent) => void
     readonly emitGroupEvent: (event: WaGroupEvent) => void
     readonly emitUnhandledIncomingNode: (event: WaIncomingUnhandledStanzaEvent) => void
     readonly syncAppState: () => Promise<void>
@@ -256,6 +261,16 @@ export class WaIncomingNodeCoordinator {
                 sendNode: runtime.sendNode,
                 emitGroupEvent: runtime.emitGroupEvent,
                 emitUnhandledStanza: runtime.emitUnhandledIncomingNode
+            })
+        })
+        this.registerIncomingHandler({
+            tag: WA_NODE_TAGS.NOTIFICATION,
+            subtype: WA_NOTIFICATION_TYPES.REGISTRATION,
+            handler: createIncomingRegistrationNotificationHandler({
+                logger: this.logger,
+                sendNode: runtime.sendNode,
+                emitRegistrationCode: runtime.emitRegistrationCode,
+                emitAccountTakeoverNotice: runtime.emitAccountTakeoverNotice
             })
         })
         this.registerIncomingHandler({

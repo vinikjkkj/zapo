@@ -42,7 +42,11 @@ export {
     WA_DIRTY_TYPES,
     WA_SUPPORTED_DIRTY_TYPES
 } from '@protocol/dirty'
-export { WA_GROUP_NOTIFICATION_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/notification'
+export {
+    WA_GROUP_NOTIFICATION_TAGS,
+    WA_NOTIFICATION_TYPES,
+    WA_REGISTRATION_NOTIFICATION_TAGS
+} from '@protocol/notification'
 export {
     WA_PRIVACY_TOKEN_NOTIFICATION_TYPE,
     WA_PRIVACY_TOKEN_TAGS,
