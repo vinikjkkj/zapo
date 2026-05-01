@@ -24,7 +24,8 @@ type WaPassiveTasksRuntime = {
         context: string,
         node: BinaryNode,
         timeoutMs?: number,
-        contextData?: Readonly<Record<string, unknown>>
+        contextData?: Readonly<Record<string, unknown>>,
+        options?: { readonly useSystemId?: boolean }
     ) => Promise<BinaryNode>
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly persistServerHasPreKeys: (serverHasPreKeys: boolean) => Promise<void>
@@ -212,12 +213,7 @@ export class WaPassiveTasksCoordinator {
         }
 
         const lastPreKeyId = preKeys[preKeys.length - 1].keyId
-        const uploadNode = buildPreKeyUploadIq(
-            registrationInfo,
-            signedPreKey,
-            preKeys,
-            this.mobilePrimary ? { opMode: 'set' } : undefined
-        )
+        const uploadNode = buildPreKeyUploadIq(registrationInfo, signedPreKey, preKeys)
         const response = await this.runtime.queryWithContext(
             'prekeys.upload',
             uploadNode,
@@ -225,7 +221,8 @@ export class WaPassiveTasksCoordinator {
             {
                 count: preKeys.length,
                 lastPreKeyId
-            }
+            },
+            this.mobilePrimary ? { useSystemId: true } : undefined
         )
         if (response.attrs.type === 'result') {
             // Mark uploaded key first so the serverHasPreKeys flag never commits ahead of local key progress.

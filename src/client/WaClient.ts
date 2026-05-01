@@ -178,7 +178,7 @@ export class WaClient extends EventEmitter {
             base,
             runtime: {
                 sendNode: (node) => this.sendNode(node),
-                query: (node, timeoutMs) => this.query(node, timeoutMs),
+                query: (node, timeoutMs, options) => this.query(node, timeoutMs, options),
                 queryWithContext: this.queryWithContext.bind(this),
                 syncAppState: () => this.syncAppState().then(() => {}),
                 syncAppStateWithOptions: (syncOptions) => this.syncAppState(syncOptions),
@@ -270,13 +270,14 @@ export class WaClient extends EventEmitter {
 
     public async query(
         node: BinaryNode,
-        timeoutMs: number = this.options.iqTimeoutMs ?? WA_DEFAULTS.IQ_TIMEOUT_MS
+        timeoutMs: number = this.options.iqTimeoutMs ?? WA_DEFAULTS.IQ_TIMEOUT_MS,
+        options: { readonly useSystemId?: boolean } = {}
     ): Promise<BinaryNode> {
         if (!this.connectionManager.isConnected()) {
             throw new Error('client is not connected')
         }
         this.logger.debug('wa client query', { tag: node.tag, id: node.attrs.id, timeoutMs })
-        return this.nodeOrchestrator.query(node, timeoutMs)
+        return this.nodeOrchestrator.query(node, timeoutMs, options)
     }
 
     public registerIncomingHandler(registration: WaIncomingNodeHandlerRegistration): () => void {
@@ -570,10 +571,11 @@ export class WaClient extends EventEmitter {
         context: string,
         node: BinaryNode,
         timeoutMs: number = this.options.iqTimeoutMs ?? WA_DEFAULTS.IQ_TIMEOUT_MS,
-        contextData: Readonly<Record<string, unknown>> = {}
+        contextData: Readonly<Record<string, unknown>> = {},
+        options: { readonly useSystemId?: boolean } = {}
     ): Promise<BinaryNode> {
         return queryNodeWithContext(
-            async (queryNode, queryTimeoutMs) => this.query(queryNode, queryTimeoutMs),
+            async (queryNode, queryTimeoutMs) => this.query(queryNode, queryTimeoutMs, options),
             this.logger,
             context,
             node,

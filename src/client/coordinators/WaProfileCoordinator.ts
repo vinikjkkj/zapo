@@ -60,7 +60,8 @@ interface WaProfileCoordinatorOptions {
         context: string,
         node: BinaryNode,
         timeoutMs?: number,
-        contextData?: Readonly<Record<string, unknown>>
+        contextData?: Readonly<Record<string, unknown>>,
+        options?: { readonly useSystemId?: boolean }
     ) => Promise<BinaryNode>
     readonly generateSid: () => Promise<string>
 }
@@ -252,7 +253,9 @@ export function createProfileCoordinator(
 
         setStatus: async (text) => {
             const node = buildSetStatusIq(text)
-            const result = await queryWithContext('profile.setStatus', node)
+            const result = await queryWithContext('profile.setStatus', node, undefined, undefined, {
+                useSystemId: true
+            })
             assertIqResult(result, 'profile.setStatus')
         },
 

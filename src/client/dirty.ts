@@ -35,7 +35,8 @@ interface WaDirtySyncRuntime {
         context: string,
         node: BinaryNode,
         timeoutMs?: number,
-        contextData?: Readonly<Record<string, unknown>>
+        contextData?: Readonly<Record<string, unknown>>,
+        options?: { readonly useSystemId?: boolean }
     ) => Promise<BinaryNode>
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly syncAppState: () => Promise<void>
@@ -373,7 +374,8 @@ async function clearDirtyBits(
             WA_DEFAULTS.IQ_TIMEOUT_MS,
             {
                 count: dirtyBits.length
-            }
+            },
+            { useSystemId: true }
         )
         runtime.logger.info('dirty bits cleared', {
             count: dirtyBits.length
