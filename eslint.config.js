@@ -46,6 +46,7 @@ module.exports = [
                     './packages/store-postgres/tsconfig.json',
                     './packages/store-redis/tsconfig.json',
                     './packages/store-mongo/tsconfig.json',
+                    './packages/store-migrate/tsconfig.json',
                     './packages/media-utils/tsconfig.json',
                     './packages/fake-server/tsconfig.json'
                 ]
@@ -79,6 +80,7 @@ module.exports = [
                         './packages/store-postgres/tsconfig.json',
                         './packages/store-redis/tsconfig.json',
                         './packages/store-mongo/tsconfig.json',
+                        './packages/store-migrate/tsconfig.json',
                         './packages/media-utils/tsconfig.json',
                         './packages/fake-server/tsconfig.json'
                     ]
