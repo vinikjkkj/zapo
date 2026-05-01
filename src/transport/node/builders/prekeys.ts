@@ -1,3 +1,4 @@
+import { toRawPubKey } from '@crypto/core/keys'
 import { WA_DEFAULTS, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
 import { SIGNAL_KEY_BUNDLE_TYPE_BYTES } from '@signal/api/constants'
 import type { SignalMissingPreKeysTarget } from '@signal/api/SignalMissingPreKeysSyncApi'
@@ -19,7 +20,7 @@ function buildSignedPreKeyNode(signedPreKey: SignedPreKeyRecord) {
             {
                 tag: WA_NODE_TAGS.VALUE,
                 attrs: {},
-                content: signedPreKey.keyPair.pubKey
+                content: toRawPubKey(signedPreKey.keyPair.pubKey)
             },
             {
                 tag: WA_NODE_TAGS.SIGNATURE,
@@ -38,6 +39,11 @@ export function buildPreKeyUploadIq(
     const children: BinaryNode[] = []
     children.push(
         {
+            tag: WA_NODE_TAGS.IDENTITY,
+            attrs: {},
+            content: toRawPubKey(registrationInfo.identityKeyPair.pubKey)
+        },
+        {
             tag: WA_NODE_TAGS.REGISTRATION,
             attrs: {},
             content: intToBytes(4, registrationInfo.registrationId)
@@ -46,11 +52,6 @@ export function buildPreKeyUploadIq(
             tag: WA_NODE_TAGS.TYPE,
             attrs: {},
             content: SIGNAL_KEY_BUNDLE_TYPE_BYTES
-        },
-        {
-            tag: WA_NODE_TAGS.IDENTITY,
-            attrs: {},
-            content: registrationInfo.identityKeyPair.pubKey
         },
         {
             tag: WA_NODE_TAGS.LIST,
@@ -67,7 +68,7 @@ export function buildPreKeyUploadIq(
                     {
                         tag: WA_NODE_TAGS.VALUE,
                         attrs: {},
-                        content: record.keyPair.pubKey
+                        content: toRawPubKey(record.keyPair.pubKey)
                     }
                 ]
             }))
