@@ -394,11 +394,13 @@ export class WaIncomingNodeCoordinator {
                 )
                 if (child.tag === 'offline_preview') {
                     this.offlineResume.handleOfflinePreview(
-                        parseOptionalInt(child.attrs.message) ?? 0
+                        parseOptionalInt(child.attrs.count) ?? 0
                     )
                 }
                 if (child.tag === 'offline') {
-                    this.offlineResume.handleOfflineComplete()
+                    this.offlineResume.handleOfflineComplete(
+                        parseOptionalInt(child.attrs.count) ?? 0
+                    )
                 }
                 handled = true
             }

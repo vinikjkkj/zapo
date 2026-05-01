@@ -458,8 +458,8 @@ export interface WaClientEventMap {
 
 export interface WaOfflineResumeEvent {
     readonly status: 'resuming' | 'complete'
-    readonly totalMessages: number
-    readonly remainingMessages: number
+    readonly totalStanzas: number
+    readonly remainingStanzas: number
     readonly forced: boolean
 }
 

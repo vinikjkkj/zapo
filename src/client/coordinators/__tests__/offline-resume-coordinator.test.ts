@@ -23,9 +23,7 @@ async function flushMicrotasks(): Promise<void> {
     await Promise.resolve()
 }
 
-test('offline resume coordinator emits preview event and requests offline batches', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] })
-
+test('offline resume coordinator emits preview event and requests a single offline batch', async () => {
     const sentNodes: BinaryNode[] = []
     const emittedEvents: WaOfflineResumeEvent[] = []
     const coordinator = new WaOfflineResumeCoordinator({
@@ -41,24 +39,23 @@ test('offline resume coordinator emits preview event and requests offline batche
     })
 
     coordinator.handleOfflinePreview(3)
+    await flushMicrotasks()
 
     assert.equal(coordinator.isResuming, true)
     assert.deepEqual(emittedEvents, [
         {
             status: 'resuming',
-            totalMessages: 3,
-            remainingMessages: 3,
+            totalStanzas: 3,
+            remainingStanzas: 3,
             forced: false
         }
     ])
-
-    t.mock.timers.tick(100)
-    await flushMicrotasks()
-
     assert.deepEqual(sentNodes, [buildOfflineBatchNode(200)])
+
+    coordinator.reset()
 })
 
-test('offline resume coordinator decrements pending messages and force completes on timeout', async (t) => {
+test('offline resume coordinator decrements pending stanzas and force completes on timeout', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] })
 
     const emittedEvents: WaOfflineResumeEvent[] = []
@@ -80,8 +77,8 @@ test('offline resume coordinator decrements pending messages and force completes
     assert.equal(coordinator.isComplete, true)
     assert.deepEqual(emittedEvents[1], {
         status: 'complete',
-        totalMessages: 2,
-        remainingMessages: 1,
+        totalStanzas: 2,
+        remainingStanzas: 1,
         forced: true
     })
 })
@@ -100,13 +97,13 @@ test('offline resume coordinator completes when offline completion bulletin arri
 
     coordinator.handleOfflinePreview(1)
     coordinator.trackOfflineStanza()
-    coordinator.handleOfflineComplete()
+    coordinator.handleOfflineComplete(1)
 
     assert.equal(coordinator.isComplete, true)
     assert.deepEqual(emittedEvents[1], {
         status: 'complete',
-        totalMessages: 1,
-        remainingMessages: 0,
+        totalStanzas: 1,
+        remainingStanzas: 0,
         forced: false
     })
 })
