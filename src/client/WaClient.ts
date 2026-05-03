@@ -12,6 +12,7 @@ import type { WaConnectionManager } from '@client/connection/WaConnectionManager
 import type { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { WaBusinessCoordinator } from '@client/coordinators/WaBusinessCoordinator'
+import type { WaEmailCoordinator } from '@client/coordinators/WaEmailCoordinator'
 import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator'
 import type { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
@@ -123,6 +124,7 @@ export class WaClient extends EventEmitter {
     public readonly privacyCoordinator!: WaPrivacyCoordinator
     public readonly profileCoordinator!: WaProfileCoordinator
     public readonly businessCoordinator!: WaBusinessCoordinator
+    public readonly emailCoordinator!: WaEmailCoordinator
     private readonly passiveTasks!: WaPassiveTasksCoordinator
     private readonly keepAlive!: WaKeepAlive
     private readonly receiptQueue!: WaReceiptQueue
@@ -712,6 +714,9 @@ export class WaClient extends EventEmitter {
     }
     public get business(): WaBusinessCoordinator {
         return this.businessCoordinator
+    }
+    public get email(): WaEmailCoordinator {
+        return this.emailCoordinator
     }
 
     public async logout(reason: WaLogoutReason = WA_LOGOUT_REASONS.USER_INITIATED): Promise<void> {

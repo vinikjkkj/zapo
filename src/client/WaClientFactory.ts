@@ -10,6 +10,10 @@ import {
     type WaBusinessCoordinator
 } from '@client/coordinators/WaBusinessCoordinator'
 import {
+    createEmailCoordinator,
+    type WaEmailCoordinator
+} from '@client/coordinators/WaEmailCoordinator'
+import {
     createGroupCoordinator,
     type WaGroupCoordinator
 } from '@client/coordinators/WaGroupCoordinator'
@@ -149,6 +153,7 @@ interface WaClientDependencies {
     readonly privacyCoordinator: WaPrivacyCoordinator
     readonly profileCoordinator: WaProfileCoordinator
     readonly businessCoordinator: WaBusinessCoordinator
+    readonly emailCoordinator: WaEmailCoordinator
     readonly receiptQueue: WaReceiptQueue
     readonly connectionManager: WaConnectionManager
     readonly trustedContactToken: WaTrustedContactTokenCoordinator
@@ -539,6 +544,10 @@ export function buildWaClientDependencies(input: {
     })
 
     const businessCoordinator = createBusinessCoordinator({
+        queryWithContext: runtime.queryWithContext
+    })
+
+    const emailCoordinator = createEmailCoordinator({
         queryWithContext: runtime.queryWithContext
     })
 
@@ -1103,6 +1112,7 @@ export function buildWaClientDependencies(input: {
         privacyCoordinator,
         profileCoordinator,
         businessCoordinator,
+        emailCoordinator,
         receiptQueue,
         connectionManager,
         trustedContactToken,

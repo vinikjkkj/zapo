@@ -64,6 +64,14 @@ export {
 export type { WaPrivacyCategory, WaPrivacySettingName, WaPrivacyValue } from '@protocol/privacy'
 export { WA_DEFAULTS } from '@protocol/defaults'
 export {
+    WA_EMAIL_CONTEXTS,
+    WA_EMAIL_ERROR_CODES,
+    WA_EMAIL_LIMITS,
+    WA_EMAIL_TAGS,
+    WA_EMAIL_XMLNS
+} from '@protocol/email'
+export type { WaEmailContext, WaEmailErrorCode } from '@protocol/email'
+export {
     AB_PROP_CONFIGS,
     resolveAbPropNameByCode,
     WA_ABPROPS_PROTOCOL_VERSION,

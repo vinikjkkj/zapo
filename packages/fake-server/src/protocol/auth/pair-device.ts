@@ -1,4 +1,4 @@
-/** Pairing IQ builders/parsers (source: `WAWebHandlePairDevice*`, `/deobfuscated`). */
+/** Pairing IQ builders/parsers (source: `WAWebHandlePairDevice*`, `/wa-web`). */
 
 import type { BinaryNode } from '../../transport/codec'
 
