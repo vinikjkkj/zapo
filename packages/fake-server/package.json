@@ -1,7 +1,6 @@
 {
     "name": "@zapo-js/fake-server",
-    "version": "0.0.1",
-    "private": true,
+    "version": "0.3.0",
     "description": "Fake WhatsApp Web server used to test zapo-js",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -18,6 +17,9 @@
     "files": [
         "dist"
     ],
+    "publishConfig": {
+        "access": "public"
+    },
     "scripts": {
         "build": "tsc -p tsconfig.build.cjs.json",
         "typecheck": "tsc --noEmit",

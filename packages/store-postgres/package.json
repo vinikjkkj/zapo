@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/store-postgres",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "PostgreSQL store provider for zapo-js",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
