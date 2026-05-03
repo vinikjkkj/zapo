@@ -6,7 +6,8 @@ node_modules
 example.js
 AGENTS.md
 logs.txt
-deobfuscated
+wa-web
+wa-mob
 coverage
 *.heap**
 *.cpuprofile

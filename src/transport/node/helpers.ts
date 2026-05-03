@@ -153,6 +153,13 @@ export function decodeNodeContentUtf8OrBytes(
     throw new Error(`node ${field} has no binary content`)
 }
 
+export function getNodeTextContent(node: BinaryNode): string | undefined {
+    const content = node.content
+    if (content instanceof Uint8Array) return TEXT_DECODER.decode(content)
+    if (typeof content === 'string') return content
+    return undefined
+}
+
 export function decodeNodeContentBase64OrBytes(
     value: BinaryNode['content'],
     field: string

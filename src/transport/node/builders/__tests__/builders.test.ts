@@ -3,6 +3,9 @@ import test from 'node:test'
 
 import {
     WA_DEFAULTS,
+    WA_EMAIL_CONTEXTS,
+    WA_EMAIL_TAGS,
+    WA_EMAIL_XMLNS,
     WA_NODE_TAGS,
     WA_PRIVACY_CATEGORIES,
     WA_PRIVACY_TAGS,
@@ -22,6 +25,13 @@ import {
     buildNewsletterMetadataSyncIq
 } from '@transport/node/builders/account-sync'
 import { buildRemoveCompanionDeviceIq } from '@transport/node/builders/device'
+import {
+    buildConfirmEmailIq,
+    buildGetEmailIq,
+    buildRequestEmailVerificationCodeIq,
+    buildSetEmailIq,
+    buildVerifyEmailCodeIq
+} from '@transport/node/builders/email'
 import { buildAckNode, buildIqResultNode, buildReceiptNode } from '@transport/node/builders/global'
 import {
     buildCreateGroupIq,
@@ -1050,4 +1060,83 @@ test('message builders include edit mediatype and meta node when provided', () =
     })
     assert.ok(Array.isArray(retry.content))
     assert.equal(retry.content[0].attrs.mediatype, 'document')
+})
+
+test('email builders produce account namespace iq stanzas', () => {
+    const get = buildGetEmailIq()
+    assert.equal(get.attrs.type, 'get')
+    assert.equal(get.attrs.to, WA_DEFAULTS.HOST_DOMAIN)
+    assert.equal(get.attrs.xmlns, WA_EMAIL_XMLNS)
+    assert.ok(Array.isArray(get.content))
+    assert.equal(get.content[0].tag, WA_EMAIL_TAGS.EMAIL)
+    assert.equal(get.content[0].content, undefined)
+
+    const setNoCtx = buildSetEmailIq('foo@bar.com')
+    assert.equal(setNoCtx.attrs.type, 'set')
+    assert.equal(setNoCtx.attrs.xmlns, WA_EMAIL_XMLNS)
+    assert.ok(Array.isArray(setNoCtx.content))
+    const setEmailNode = setNoCtx.content[0]
+    assert.equal(setEmailNode.tag, WA_EMAIL_TAGS.EMAIL)
+    assert.ok(Array.isArray(setEmailNode.content))
+    assert.equal(setEmailNode.content.length, 1)
+    assert.equal(setEmailNode.content[0].tag, WA_EMAIL_TAGS.EMAIL_ADDRESS)
+    assert.equal(setEmailNode.content[0].content, 'foo@bar.com')
+
+    const setWithCtx = buildSetEmailIq('a@b.co', WA_EMAIL_CONTEXTS.ONBOARDING)
+    assert.ok(Array.isArray(setWithCtx.content))
+    assert.ok(Array.isArray(setWithCtx.content[0].content))
+    const ctxChildren = setWithCtx.content[0].content
+    assert.equal(ctxChildren.length, 2)
+    assert.equal(ctxChildren[0].tag, WA_EMAIL_TAGS.CONTEXT)
+    assert.equal(ctxChildren[0].content, 'onboarding')
+    assert.equal(ctxChildren[1].tag, WA_EMAIL_TAGS.EMAIL_ADDRESS)
+
+    assert.throws(() => buildSetEmailIq(''), /email length must be between/)
+    assert.throws(() => buildSetEmailIq('x'.repeat(321)), /email length must be between/)
+
+    const requestCode = buildRequestEmailVerificationCodeIq({
+        languageCode: 'pt',
+        localeCode: 'BR'
+    })
+    assert.equal(requestCode.attrs.type, 'set')
+    assert.ok(Array.isArray(requestCode.content))
+    const verifyEmail = requestCode.content[0]
+    assert.equal(verifyEmail.tag, WA_EMAIL_TAGS.VERIFY_EMAIL)
+    assert.ok(Array.isArray(verifyEmail.content))
+    assert.equal(verifyEmail.content[0].tag, WA_EMAIL_TAGS.LG)
+    assert.equal(verifyEmail.content[0].content, 'pt')
+    assert.equal(verifyEmail.content[1].tag, WA_EMAIL_TAGS.LC)
+    assert.equal(verifyEmail.content[1].content, 'BR')
+
+    assert.throws(
+        () => buildRequestEmailVerificationCodeIq({ languageCode: 'p', localeCode: 'BR' }),
+        /languageCode/
+    )
+    assert.throws(
+        () => buildRequestEmailVerificationCodeIq({ languageCode: 'pt', localeCode: 'BRAA' }),
+        /localeCode/
+    )
+
+    const verify = buildVerifyEmailCodeIq('123456')
+    assert.equal(verify.attrs.type, 'set')
+    assert.ok(Array.isArray(verify.content))
+    const verifyChild = verify.content[0]
+    assert.equal(verifyChild.tag, WA_EMAIL_TAGS.VERIFY_EMAIL)
+    assert.ok(Array.isArray(verifyChild.content))
+    assert.equal(verifyChild.content[0].tag, WA_EMAIL_TAGS.CODE)
+    assert.equal(verifyChild.content[0].content, '123456')
+
+    assert.throws(() => buildVerifyEmailCodeIq('12345'), /6 chars/)
+
+    const confirmNoCtx = buildConfirmEmailIq()
+    assert.equal(confirmNoCtx.attrs.type, 'set')
+    assert.ok(Array.isArray(confirmNoCtx.content))
+    assert.equal(confirmNoCtx.content[0].tag, WA_EMAIL_TAGS.CONFIRM_EMAIL)
+    assert.equal(confirmNoCtx.content[0].content, undefined)
+
+    const confirmWithCtx = buildConfirmEmailIq(WA_EMAIL_CONTEXTS.SETTINGS)
+    assert.ok(Array.isArray(confirmWithCtx.content))
+    assert.ok(Array.isArray(confirmWithCtx.content[0].content))
+    assert.equal(confirmWithCtx.content[0].content[0].tag, WA_EMAIL_TAGS.CONTEXT)
+    assert.equal(confirmWithCtx.content[0].content[0].content, 'settings')
 })

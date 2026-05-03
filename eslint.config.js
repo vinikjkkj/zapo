@@ -8,7 +8,8 @@ module.exports = [
         ignores: [
             'dist/**',
             'packages/*/dist/**',
-            'deobfuscated/**',
+            'wa-web/**',
+            'wa-mob/**',
             'coverage/**',
             'proto/index.js',
             'proto/index.d.ts',

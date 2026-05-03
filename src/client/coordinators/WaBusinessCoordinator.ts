@@ -7,10 +7,9 @@ import {
     buildUpdateCoverPhotoIq,
     type WaEditBusinessProfileInput
 } from '@transport/node/builders/business'
-import { findNodeChild, getNodeChildren } from '@transport/node/helpers'
+import { findNodeChild, getNodeChildren, getNodeTextContent } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
-import { TEXT_DECODER } from '@util/bytes'
 import { longToNumber } from '@util/primitives'
 
 export interface WaBusinessCategory {
@@ -82,13 +81,6 @@ interface WaBusinessCoordinatorOptions {
     ) => Promise<BinaryNode>
 }
 
-function readTextContent(node: BinaryNode): string | undefined {
-    const content = node.content
-    if (content instanceof Uint8Array) return TEXT_DECODER.decode(content)
-    if (typeof content === 'string') return content
-    return undefined
-}
-
 function parseBusinessProfiles(result: BinaryNode): readonly WaBusinessProfileResult[] {
     const bizNode = findNodeChild(result, 'business_profile')
     if (!bizNode) {
@@ -133,7 +125,7 @@ function parseBusinessProfiles(result: BinaryNode): readonly WaBusinessProfileRe
 
         for (let j = 0; j < children.length; j += 1) {
             const child = children[j]
-            const text = readTextContent(child)
+            const text = getNodeTextContent(child)
 
             switch (child.tag) {
                 case 'description':
@@ -189,7 +181,7 @@ function parseBusinessCategories(node: BinaryNode): WaBusinessCategory[] {
         if (child.tag !== 'category') continue
         const id = child.attrs.id as string | undefined
         if (!id) continue
-        categories[count] = { id, name: readTextContent(child) ?? '' }
+        categories[count] = { id, name: getNodeTextContent(child) ?? '' }
         count += 1
     }
     categories.length = count
@@ -229,7 +221,7 @@ function parseProfileOptions(node: BinaryNode): Record<string, string> {
     const options: Record<string, string> = {}
     for (let i = 0; i < children.length; i += 1) {
         const child = children[i]
-        const text = readTextContent(child)
+        const text = getNodeTextContent(child)
         if (text !== undefined) {
             options[child.tag] = text
         }
