@@ -3,12 +3,9 @@
 import {
     aesCbcDecrypt,
     aesCbcEncrypt,
-    type CryptoKey,
     hkdf,
-    hmacSign,
-    importAesCbcKey,
-    importHmacKey,
-    importHmacSha512Key,
+    hmacSha256Sign,
+    hmacSha512Sign,
     randomBytesAsync
 } from '../../transport/crypto'
 import { proto, type Proto } from '../../transport/protos'
@@ -30,11 +27,11 @@ const KDF_INFO_PATCH_INTEGRITY = 'WhatsApp Patch Integrity'
 export const APP_STATE_EMPTY_LT_HASH = new Uint8Array(APP_STATE_LT_HASH_SIZE)
 
 export interface FakeAppStateDerivedKeys {
-    readonly indexHmacKey: CryptoKey
-    readonly valueEncryptionAesKey: CryptoKey
-    readonly valueMacHmacKey: CryptoKey
-    readonly snapshotMacHmacKey: CryptoKey
-    readonly patchMacHmacKey: CryptoKey
+    readonly indexHmacKey: Uint8Array
+    readonly valueEncryptionAesKey: Uint8Array
+    readonly valueMacHmacKey: Uint8Array
+    readonly snapshotMacHmacKey: Uint8Array
+    readonly patchMacHmacKey: Uint8Array
 }
 
 export interface FakeAppStateEncryptedMutation {
@@ -61,45 +58,24 @@ export class FakeAppStateCrypto {
             KDF_INFO_MUTATION_KEYS,
             APP_STATE_DERIVED_KEY_LENGTH
         )
-        const [
-            indexHmacKey,
-            valueEncryptionAesKey,
-            valueMacHmacKey,
-            snapshotMacHmacKey,
-            patchMacHmacKey
-        ] = await Promise.all([
-            importHmacKey(derived.subarray(0, APP_STATE_DERIVED_INDEX_KEY_END)),
-            importAesCbcKey(
-                derived.subarray(
-                    APP_STATE_DERIVED_INDEX_KEY_END,
-                    APP_STATE_DERIVED_VALUE_ENCRYPTION_KEY_END
-                )
-            ),
-            importHmacSha512Key(
-                derived.subarray(
-                    APP_STATE_DERIVED_VALUE_ENCRYPTION_KEY_END,
-                    APP_STATE_DERIVED_VALUE_MAC_KEY_END
-                )
-            ),
-            importHmacKey(
-                derived.subarray(
-                    APP_STATE_DERIVED_VALUE_MAC_KEY_END,
-                    APP_STATE_DERIVED_SNAPSHOT_MAC_KEY_END
-                )
-            ),
-            importHmacKey(
-                derived.subarray(
-                    APP_STATE_DERIVED_SNAPSHOT_MAC_KEY_END,
-                    APP_STATE_DERIVED_PATCH_MAC_KEY_END
-                )
-            )
-        ])
         return {
-            indexHmacKey,
-            valueEncryptionAesKey,
-            valueMacHmacKey,
-            snapshotMacHmacKey,
-            patchMacHmacKey
+            indexHmacKey: derived.subarray(0, APP_STATE_DERIVED_INDEX_KEY_END),
+            valueEncryptionAesKey: derived.subarray(
+                APP_STATE_DERIVED_INDEX_KEY_END,
+                APP_STATE_DERIVED_VALUE_ENCRYPTION_KEY_END
+            ),
+            valueMacHmacKey: derived.subarray(
+                APP_STATE_DERIVED_VALUE_ENCRYPTION_KEY_END,
+                APP_STATE_DERIVED_VALUE_MAC_KEY_END
+            ),
+            snapshotMacHmacKey: derived.subarray(
+                APP_STATE_DERIVED_VALUE_MAC_KEY_END,
+                APP_STATE_DERIVED_SNAPSHOT_MAC_KEY_END
+            ),
+            patchMacHmacKey: derived.subarray(
+                APP_STATE_DERIVED_SNAPSHOT_MAC_KEY_END,
+                APP_STATE_DERIVED_PATCH_MAC_KEY_END
+            )
         }
     }
 
@@ -120,7 +96,7 @@ export class FakeAppStateCrypto {
             throw new Error(`invalid IV length ${iv.byteLength}`)
         }
 
-        const indexMac = await hmacSign(derivedKeys.indexHmacKey, indexBytes)
+        const indexMac = await hmacSha256Sign(derivedKeys.indexHmacKey, indexBytes)
         const cipherText = await aesCbcEncrypt(derivedKeys.valueEncryptionAesKey, iv, encoded)
         const cipherWithIv = concatBytes([iv, cipherText])
         const associatedData = generateAssociatedData(input.operation, input.keyId)
@@ -178,7 +154,10 @@ export class FakeAppStateCrypto {
         if (syncActionData.version === null || syncActionData.version === undefined) {
             throw new Error('missing sync action version')
         }
-        const generatedIndexMac = await hmacSign(derivedKeys.indexHmacKey, syncActionData.index)
+        const generatedIndexMac = await hmacSha256Sign(
+            derivedKeys.indexHmacKey,
+            syncActionData.index
+        )
         if (!uint8Equal(generatedIndexMac, input.indexMac)) {
             throw new Error('mutation index MAC mismatch')
         }
@@ -203,7 +182,7 @@ export class FakeAppStateCrypto {
             intToBytesBe(8, version),
             new TextEncoder().encode(collectionName)
         ])
-        return hmacSign(derivedKeys.snapshotMacHmacKey, payload)
+        return hmacSha256Sign(derivedKeys.snapshotMacHmacKey, payload)
     }
 
     public async generatePatchMac(
@@ -220,7 +199,7 @@ export class FakeAppStateCrypto {
             intToBytesBe(8, version),
             new TextEncoder().encode(collectionName)
         ])
-        return hmacSign(derivedKeys.patchMacHmacKey, payload)
+        return hmacSha256Sign(derivedKeys.patchMacHmacKey, payload)
     }
 
     public async ltHashAdd(
@@ -259,13 +238,13 @@ export class FakeAppStateCrypto {
     }
 
     private async generateValueMac(
-        valueMacHmacKey: CryptoKey,
+        valueMacHmacKey: Uint8Array,
         associatedData: Uint8Array,
         cipherWithIv: Uint8Array
     ): Promise<Uint8Array> {
         const octetLength = new Uint8Array(APP_STATE_MAC_OCTET_LENGTH)
         octetLength[octetLength.length - 1] = associatedData.byteLength & 0xff
-        const full = await hmacSign(
+        const full = await hmacSha512Sign(
             valueMacHmacKey,
             concatBytes([associatedData, cipherWithIv, octetLength])
         )

@@ -7,15 +7,7 @@ import { join } from 'node:path'
 import { PassThrough, type Readable, type Writable } from 'node:stream'
 
 import { hkdf } from '@crypto/core/hkdf'
-import {
-    aesCbcDecrypt,
-    aesCbcEncrypt,
-    type CryptoKey,
-    hmacSign,
-    importAesCbcKey,
-    importHmacKey,
-    sha256
-} from '@crypto/core/primitives'
+import { aesCbcDecrypt, aesCbcEncrypt, hmacSha256Sign, sha256 } from '@crypto/core/primitives'
 import { randomBytesAsync } from '@crypto/core/random'
 import {
     ENC_KEY_END,
@@ -54,7 +46,7 @@ const AES_BLOCK_SIZE = 16
 const PKCS7_FULL_BLOCK = new Uint8Array(AES_BLOCK_SIZE).fill(AES_BLOCK_SIZE)
 
 async function aesCbcEncryptChunk(
-    key: CryptoKey,
+    key: Uint8Array,
     iv: Uint8Array,
     chunk: Uint8Array,
     isFinal: boolean
@@ -74,7 +66,7 @@ async function aesCbcEncryptChunk(
 }
 
 async function aesCbcDecryptChunk(
-    key: CryptoKey,
+    key: Uint8Array,
     iv: Uint8Array,
     ciphertext: Uint8Array,
     isFinal: boolean
@@ -98,8 +90,7 @@ async function computeFirstFrameSidecar(
 ): Promise<Uint8Array> {
     const aligned = Math.ceil(firstFrameLength / AES_BLOCK_SIZE) * AES_BLOCK_SIZE
     const slice = ivCiphertext.subarray(0, IV_SIZE + aligned)
-    const key = await importHmacKey(macKey)
-    const digest = await hmacSign(key, slice)
+    const digest = await hmacSha256Sign(macKey, slice)
     return digest.subarray(0, SIDECAR_HMAC_SIZE)
 }
 
@@ -192,14 +183,10 @@ export class WaMediaCrypto {
         options?: { readonly sidecar?: boolean; readonly firstFrameLength?: number }
     ): Promise<WaMediaEncryptionResult> {
         const keys = await WaMediaCrypto.deriveKeys(mediaType, mediaKey)
-        const [aesKey, hmacKey] = await Promise.all([
-            importAesCbcKey(keys.encKey),
-            importHmacKey(keys.macKey)
-        ])
-        const ciphertext = await aesCbcEncrypt(aesKey, keys.iv, plaintext)
+        const ciphertext = await aesCbcEncrypt(keys.encKey, keys.iv, plaintext)
         const ivCiphertext = concatBytes([keys.iv, ciphertext])
 
-        const mac = await hmacSign(hmacKey, ivCiphertext)
+        const mac = await hmacSha256Sign(keys.macKey, ivCiphertext)
         const signature = mac.subarray(0, HMAC_TRUNCATED_SIZE)
         const ciphertextHmac = concatBytes([ciphertext, signature])
 
@@ -254,10 +241,6 @@ export class WaMediaCrypto {
         }
 
         const keys = await WaMediaCrypto.deriveKeys(mediaType, mediaKey)
-        const [aesKey, hmacKey] = await Promise.all([
-            importAesCbcKey(keys.encKey),
-            importHmacKey(keys.macKey)
-        ])
         const ciphertext = ciphertextHmac.subarray(
             0,
             ciphertextHmac.byteLength - HMAC_TRUNCATED_SIZE
@@ -266,14 +249,14 @@ export class WaMediaCrypto {
         const ivCiphertext = concatBytes([keys.iv, ciphertext])
 
         if (!skipMacVerification) {
-            const mac = await hmacSign(hmacKey, ivCiphertext)
+            const mac = await hmacSha256Sign(keys.macKey, ivCiphertext)
             const signature = mac.subarray(0, HMAC_TRUNCATED_SIZE)
             if (!uint8TimingSafeEqual(signature, expectedMac)) {
                 throw new Error('media MAC mismatch')
             }
         }
 
-        const plaintext = await aesCbcDecrypt(aesKey, keys.iv, ciphertext)
+        const plaintext = await aesCbcDecrypt(keys.encKey, keys.iv, ciphertext)
         const fileSha256 = await sha256(plaintext)
         if (expectedFileSha256 && !uint8Equal(fileSha256, expectedFileSha256)) {
             throw new Error('plaintext file hash mismatch')
@@ -365,7 +348,7 @@ async function pumpEncryption(
     readonly streamingSidecar?: Uint8Array
     readonly firstFrameSidecar?: Uint8Array
 }> {
-    const aesKey = await importAesCbcKey(keys.encKey)
+    const aesKey = keys.encKey
     const plainHash = createHash('sha256')
     const encHash = createHash('sha256')
     const hmac = createHmac('sha256', keys.macKey)
@@ -445,8 +428,7 @@ async function pumpEncryption(
         let firstFrameSidecar: Uint8Array | undefined
         if (ffTarget > 0) {
             const ivCiphertextSlice = concatBytes(ffChunks)
-            const ffKey = await importHmacKey(keys.macKey)
-            const ffDigest = await hmacSign(ffKey, ivCiphertextSlice)
+            const ffDigest = await hmacSha256Sign(keys.macKey, ivCiphertextSlice)
             firstFrameSidecar = ffDigest.subarray(0, SIDECAR_HMAC_SIZE)
         }
 
@@ -505,7 +487,7 @@ async function pumpEncryptionToWritable(
     readonly streamingSidecar?: Uint8Array
     readonly firstFrameSidecar?: Uint8Array
 }> {
-    const aesKey = await importAesCbcKey(keys.encKey)
+    const aesKey = keys.encKey
     const plainHash = createHash('sha256')
     const encHash = createHash('sha256')
     const hmac = createHmac('sha256', keys.macKey)
@@ -585,8 +567,7 @@ async function pumpEncryptionToWritable(
         let firstFrameSidecar: Uint8Array | undefined
         if (ffTarget > 0) {
             const ivCiphertextSlice = concatBytes(ffChunks)
-            const ffKey = await importHmacKey(keys.macKey)
-            const ffDigest = await hmacSign(ffKey, ivCiphertextSlice)
+            const ffDigest = await hmacSha256Sign(keys.macKey, ivCiphertextSlice)
             firstFrameSidecar = ffDigest.subarray(0, SIDECAR_HMAC_SIZE)
         }
 
@@ -610,7 +591,7 @@ async function pumpDecryption(
     keys: WaMediaDerivedKeys,
     options: WaMediaDecryptReadableOptions
 ): Promise<{ readonly fileSha256: Uint8Array; readonly fileEncSha256: Uint8Array }> {
-    const aesKey = await importAesCbcKey(keys.encKey)
+    const aesKey = keys.encKey
     const plainHash = createHash('sha256')
     const encHash = createHash('sha256')
     const hmac = createHmac('sha256', keys.macKey)

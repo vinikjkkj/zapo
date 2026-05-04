@@ -1,4 +1,4 @@
-import { hmacSign, importHmacKey, toRawPubKey, xeddsaSign, xeddsaVerify } from '@crypto'
+import { hmacSha256Sign, toRawPubKey, xeddsaSign, xeddsaVerify } from '@crypto'
 import type { SignalKeyPair } from '@crypto/curves/types'
 import {
     ADV_PREFIX_ACCOUNT_SIGNATURE,
@@ -38,10 +38,9 @@ export async function generateDeviceSignature(
     return xeddsaSign(identityKeyPair.privKey, message)
 }
 
-export async function computeAdvIdentityHmac(
+export function computeAdvIdentityHmac(
     secretKey: Uint8Array,
     details: Uint8Array
 ): Promise<Uint8Array> {
-    const key = await importHmacKey(secretKey)
-    return hmacSign(key, details)
+    return hmacSha256Sign(secretKey, details)
 }

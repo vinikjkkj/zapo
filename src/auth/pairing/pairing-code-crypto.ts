@@ -3,8 +3,7 @@ import {
     aesCtrEncrypt,
     aesGcmEncrypt,
     hkdf,
-    importAesGcmKey,
-    pbkdf2DeriveAesCtrKey,
+    pbkdf2Sha256,
     randomBytesAsync
 } from '@crypto'
 import type { SignalKeyPair } from '@crypto/curves/types'
@@ -14,6 +13,7 @@ import { concatBytes, TEXT_ENCODER } from '@util/bytes'
 
 export const CROCKFORD_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTVWXYZ'
 export const PBKDF2_ITERATIONS = 2 << 16
+const PAIRING_AES_KEY_BYTES = 32
 
 function bytesToCrockford(bytes: Uint8Array): string {
     let bitCount = 0
@@ -66,12 +66,13 @@ export async function createCompanionHello(
         normalizedCustomCode !== null ? Promise.resolve(null) : randomBytesAsync(5)
     ])
     const pairingCode = normalizedCustomCode ?? bytesToCrockford(codeBytes!)
-    const cipher = await pbkdf2DeriveAesCtrKey(
+    const cipherKey = await pbkdf2Sha256(
         TEXT_ENCODER.encode(pairingCode),
         salt,
-        PBKDF2_ITERATIONS
+        PBKDF2_ITERATIONS,
+        PAIRING_AES_KEY_BYTES
     )
-    const encrypted = await aesCtrEncrypt(cipher, counter, companionEphemeralKeyPair.pubKey)
+    const encrypted = await aesCtrEncrypt(cipherKey, counter, companionEphemeralKeyPair.pubKey)
 
     return {
         pairingCode,
@@ -94,13 +95,14 @@ export async function completeCompanionFinish(args: {
     if (args.wrappedPrimaryEphemeralPub.length <= 48) {
         throw new Error('invalid wrapped primary payload')
     }
-    const pairingCipher = await pbkdf2DeriveAesCtrKey(
+    const pairingCipherKey = await pbkdf2Sha256(
         TEXT_ENCODER.encode(args.pairingCode),
         args.wrappedPrimaryEphemeralPub.subarray(0, 32),
-        PBKDF2_ITERATIONS
+        PBKDF2_ITERATIONS,
+        PAIRING_AES_KEY_BYTES
     )
     const primaryEphemeralPub = await aesCtrDecrypt(
-        pairingCipher,
+        pairingCipherKey,
         args.wrappedPrimaryEphemeralPub.subarray(32, 48),
         args.wrappedPrimaryEphemeralPub.subarray(48)
     )
@@ -115,13 +117,12 @@ export async function completeCompanionFinish(args: {
         randomBytesAsync(12)
     ])
 
-    const bundleEncryptionKeyRaw = await hkdf(
+    const bundleEncryptionKey = await hkdf(
         sharedEphemeral,
         bundleSalt,
         WA_PAIRING_KDF_INFO.LINK_CODE_BUNDLE,
         32
     )
-    const bundleEncryptionKey = await importAesGcmKey(bundleEncryptionKeyRaw, ['encrypt'])
 
     const plaintextBundle = concatBytes([
         args.registrationIdentityKeyPair.pubKey,

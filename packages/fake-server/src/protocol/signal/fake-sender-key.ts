@@ -3,9 +3,7 @@
 import {
     aesCbcEncrypt,
     hkdf,
-    hmacSign,
-    importAesCbcKey,
-    importHmacKey,
+    hmacSha256Sign,
     prependVersion,
     randomBytesAsync,
     type SignalKeyPair,
@@ -68,8 +66,7 @@ export class FakeSenderKey {
         )
 
         const { iv, cipherKey } = splitSenderKeyMessageSeed(messageKey.seed)
-        const cipherKeyHandle = await importAesCbcKey(cipherKey)
-        const ciphertext = await aesCbcEncrypt(cipherKeyHandle, iv, plaintext)
+        const ciphertext = await aesCbcEncrypt(cipherKey, iv, plaintext)
 
         const senderKeyMessage = proto.SenderKeyMessage.encode({
             id: this.state.id,
@@ -120,10 +117,9 @@ async function deriveSenderKeyMessageKey(
     readonly messageKey: DerivedSenderKeyMessage
     readonly nextChainKey: Uint8Array
 }> {
-    const hmacKey = await importHmacKey(chainKey)
     const [messageInputKey, nextChainRaw] = await Promise.all([
-        hmacSign(hmacKey, MESSAGE_KEY_LABEL),
-        hmacSign(hmacKey, CHAIN_KEY_LABEL)
+        hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL),
+        hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
     ])
     const seed = await hkdf(messageInputKey, null, WHISPER_GROUP_INFO, 50)
     return {

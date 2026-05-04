@@ -5,7 +5,7 @@ import test from 'node:test'
 
 import { WaNoiseHandshake } from 'zapo-js/transport'
 
-import { aesGcmDecrypt, aesGcmEncrypt, type CryptoKey, X25519 } from '../../transport/crypto'
+import { aesGcmDecrypt, aesGcmEncrypt, X25519 } from '../../transport/crypto'
 import { proto } from '../../transport/protos'
 import { WaFakeNoiseHandshake } from '../WaFakeNoiseHandshake'
 
@@ -20,7 +20,7 @@ function buildNonce(counter: number): Uint8Array {
 }
 
 function encryptWithKey(
-    key: CryptoKey,
+    key: Uint8Array,
     counter: number,
     plaintext: Uint8Array
 ): Promise<Uint8Array> {
@@ -28,7 +28,7 @@ function encryptWithKey(
 }
 
 function decryptWithKey(
-    key: CryptoKey,
+    key: Uint8Array,
     counter: number,
     ciphertext: Uint8Array
 ): Promise<Uint8Array> {

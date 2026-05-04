@@ -1,11 +1,8 @@
 import {
     aesCbcDecrypt,
     aesCbcEncrypt,
-    type CryptoKey,
     hkdf,
-    hmacSign,
-    importAesCbcKey,
-    importHmacKey,
+    hmacSha256Sign,
     prependVersion,
     toSerializedPubKey
 } from '@crypto'
@@ -54,11 +51,6 @@ export interface DecryptOutcome {
     } | null
 }
 
-interface DerivedChainState {
-    readonly chainKey: Uint8Array
-    readonly hmacKey: CryptoKey
-}
-
 export function splitMsgKey(index: number, bytes: Uint8Array): SignalMessageKey {
     if (bytes.length < 80) {
         throw new Error('invalid message key length')
@@ -75,12 +67,7 @@ export async function deriveMsgKey(
     index: number,
     chainKey: Uint8Array
 ): Promise<{ readonly nextChainKey: Uint8Array; readonly messageKey: SignalMessageKey }> {
-    const state = await createDerivedChainState(chainKey)
-    const derived = await deriveMsgKeyFromState(index, state)
-    return {
-        nextChainKey: derived.nextState.chainKey,
-        messageKey: derived.messageKey
-    }
+    return deriveMsgKeyFromChainKey(index, chainKey)
 }
 
 export async function selectMessageKey(
@@ -110,17 +97,17 @@ export async function selectMessageKey(
         }
     }
 
-    let chainState = await createDerivedChainState(chain.chainKey)
-    const first = await deriveMsgKeyFromState(chain.nextMsgIndex, chainState)
+    let chainKey = chain.chainKey
+    const first = await deriveMsgKeyFromChainKey(chain.nextMsgIndex, chainKey)
     let currentMessageKey = first.messageKey
-    chainState = first.nextState
+    chainKey = first.nextChainKey
     if (delta === 0) {
         return {
             messageKey: currentMessageKey,
             updatedChain: {
                 ratchetPubKey: chain.ratchetPubKey,
                 nextMsgIndex: targetCounter + 1,
-                chainKey: chainState.chainKey,
+                chainKey,
                 unusedMsgKeys: unused
             }
         }
@@ -143,9 +130,9 @@ export async function selectMessageKey(
                 iv: currentMessageKey.iv
             })
         }
-        const derived = await deriveMsgKeyFromState(counter, chainState)
+        const derived = await deriveMsgKeyFromChainKey(counter, chainKey)
         currentMessageKey = derived.messageKey
-        chainState = derived.nextState
+        chainKey = derived.nextChainKey
     }
 
     return {
@@ -153,39 +140,24 @@ export async function selectMessageKey(
         updatedChain: {
             ratchetPubKey: chain.ratchetPubKey,
             nextMsgIndex: targetCounter + 1,
-            chainKey: chainState.chainKey,
+            chainKey,
             unusedMsgKeys: nextUnused
         }
     }
 }
 
-async function createDerivedChainState(chainKey: Uint8Array): Promise<DerivedChainState> {
-    return {
-        chainKey,
-        hmacKey: await importHmacKey(chainKey)
-    }
-}
-
-async function deriveMsgKeyFromState(
+async function deriveMsgKeyFromChainKey(
     index: number,
-    state: DerivedChainState
-): Promise<{ readonly nextState: DerivedChainState; readonly messageKey: SignalMessageKey }> {
-    const nextChainRawPromise = hmacSign(state.hmacKey, CHAIN_KEY_LABEL)
-    const messageInputKeyPromise = hmacSign(state.hmacKey, MESSAGE_KEY_LABEL)
+    chainKey: Uint8Array
+): Promise<{ readonly nextChainKey: Uint8Array; readonly messageKey: SignalMessageKey }> {
     const [nextChainRaw, messageInputKey] = await Promise.all([
-        nextChainRawPromise,
-        messageInputKeyPromise
+        hmacSha256Sign(chainKey, CHAIN_KEY_LABEL),
+        hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
     ])
     const nextChainKey = nextChainRaw.subarray(0, 32)
-    const [nextHmacKey, expanded] = await Promise.all([
-        importHmacKey(nextChainKey),
-        hkdf(messageInputKey, null, 'WhisperMessageKeys', 80)
-    ])
+    const expanded = await hkdf(messageInputKey, null, 'WhisperMessageKeys', 80)
     return {
-        nextState: {
-            chainKey: nextChainKey,
-            hmacKey: nextHmacKey
-        },
+        nextChainKey,
         messageKey: splitMsgKey(index, expanded)
     }
 }
@@ -198,11 +170,7 @@ export async function encryptMsg(
         session.sendChain.nextMsgIndex,
         session.sendChain.chainKey
     )
-    const [cipherKey, macKey] = await Promise.all([
-        importAesCbcKey(messageKey.cipherKey),
-        importHmacKey(messageKey.macKey)
-    ])
-    const ciphertext = await aesCbcEncrypt(cipherKey, messageKey.iv, plaintext)
+    const ciphertext = await aesCbcEncrypt(messageKey.cipherKey, messageKey.iv, plaintext)
 
     const signalPayload = proto.SignalMessage.encode({
         ratchetKey: session.sendChain.ratchetKey.pubKey,
@@ -216,7 +184,7 @@ export async function encryptMsg(
         session.remote.pubKey,
         versionedSignalPayload
     ])
-    const mac = await hmacSign(macKey, macInput)
+    const mac = await hmacSha256Sign(messageKey.macKey, macInput)
     const signalMessage = concatBytes([versionedSignalPayload, mac.subarray(0, SIGNAL_MAC_SIZE)])
 
     let type: 'msg' | 'pkmsg' = 'msg'
@@ -363,10 +331,6 @@ export async function decryptMsgFromSession(
         }
     }
 
-    const [cipherKey, macKey] = await Promise.all([
-        importAesCbcKey(selectedMessageKey.cipherKey),
-        importHmacKey(selectedMessageKey.macKey)
-    ])
     const payloadWithoutMac = message.versionContentMac.subarray(
         0,
         message.versionContentMac.length - SIGNAL_MAC_SIZE
@@ -376,7 +340,7 @@ export async function decryptMsgFromSession(
         session.local.pubKey,
         payloadWithoutMac
     ])
-    const expectedMac = await hmacSign(macKey, expectedMacInput)
+    const expectedMac = await hmacSha256Sign(selectedMessageKey.macKey, expectedMacInput)
     const receivedMac = message.versionContentMac.subarray(
         message.versionContentMac.length - SIGNAL_MAC_SIZE
     )
@@ -384,6 +348,10 @@ export async function decryptMsgFromSession(
         throw new Error('invalid message mac')
     }
 
-    const plaintext = await aesCbcDecrypt(cipherKey, selectedMessageKey.iv, message.ciphertext)
+    const plaintext = await aesCbcDecrypt(
+        selectedMessageKey.cipherKey,
+        selectedMessageKey.iv,
+        message.ciphertext
+    )
     return [updatedSession, plaintext]
 }

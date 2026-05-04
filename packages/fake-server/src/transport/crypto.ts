@@ -14,11 +14,8 @@ export {
     Ed25519,
     hkdf,
     hkdfSplit,
-    hmacSign,
-    importAesCbcKey,
-    importAesGcmKey,
-    importHmacKey,
-    importHmacSha512Key,
+    hmacSha256Sign,
+    hmacSha512Sign,
     prependVersion,
     randomBytesAsync,
     readVersionedContent,
@@ -30,5 +27,5 @@ export {
     xeddsaSign,
     xeddsaVerify
 } from 'zapo-js/crypto'
-export type { CryptoKey, SignalKeyPair } from 'zapo-js/crypto'
+export type { SignalKeyPair } from 'zapo-js/crypto'
 export { WaMediaCrypto } from 'zapo-js/media'

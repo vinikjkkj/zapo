@@ -1,27 +1,18 @@
-import { webcrypto } from 'node:crypto'
+import { hkdfSync } from 'node:crypto'
 
 import { EMPTY_BYTES, TEXT_ENCODER, toBytesView } from '@util/bytes'
 
-export async function hkdf(
+export function hkdf(
     ikm: Uint8Array,
     salt: Uint8Array | null,
     info: Uint8Array | string,
     outLength: number
 ): Promise<Uint8Array> {
-    const key = await webcrypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits'])
     const infoBytes =
         typeof info === 'string' ? (info === '' ? EMPTY_BYTES : TEXT_ENCODER.encode(info)) : info
-    const bits = await webcrypto.subtle.deriveBits(
-        {
-            name: 'HKDF',
-            hash: 'SHA-256',
-            salt: salt ?? EMPTY_BYTES,
-            info: infoBytes
-        },
-        key,
-        outLength * 8
+    return Promise.resolve(
+        toBytesView(hkdfSync('sha256', ikm, salt ?? EMPTY_BYTES, infoBytes, outLength))
     )
-    return toBytesView(bits)
 }
 
 export async function hkdfSplit(

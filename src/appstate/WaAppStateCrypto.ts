@@ -15,11 +15,8 @@ import { hkdf } from '@crypto/core/hkdf'
 import {
     aesCbcDecrypt,
     aesCbcEncrypt,
-    type CryptoKey,
-    hmacSign,
-    importAesCbcKey,
-    importHmacKey,
-    importHmacSha512Key
+    hmacSha256Sign,
+    hmacSha512Sign
 } from '@crypto/core/primitives'
 import { randomBytesAsync } from '@crypto/core/random'
 import { proto, type Proto } from '@proto'
@@ -37,11 +34,11 @@ import { setBoundedMapEntry } from '@util/collections'
 import { normalizeNonNegativeInteger } from '@util/primitives'
 
 interface WaAppStateDerivedKeys {
-    readonly indexHmacKey: CryptoKey
-    readonly valueEncryptionAesKey: CryptoKey
-    readonly valueMacHmacKey: CryptoKey
-    readonly snapshotMacHmacKey: CryptoKey
-    readonly patchMacHmacKey: CryptoKey
+    readonly indexHmacKey: Uint8Array
+    readonly valueEncryptionAesKey: Uint8Array
+    readonly valueMacHmacKey: Uint8Array
+    readonly snapshotMacHmacKey: Uint8Array
+    readonly patchMacHmacKey: Uint8Array
 }
 
 interface WaAppStateEncryptedMutation {
@@ -99,55 +96,31 @@ export class WaAppStateCrypto {
             WA_APP_STATE_KDF_INFO.MUTATION_KEYS,
             APP_STATE_DERIVED_KEY_LENGTH
         )
-        const [
-            indexHmacKey,
-            valueEncryptionAesKey,
-            valueMacHmacKey,
-            snapshotMacHmacKey,
-            patchMacHmacKey
-        ] = await Promise.all([
-            importHmacKey(derived.subarray(0, APP_STATE_DERIVED_INDEX_KEY_END)),
-            importAesCbcKey(
-                derived.subarray(
-                    APP_STATE_DERIVED_INDEX_KEY_END,
-                    APP_STATE_DERIVED_VALUE_ENCRYPTION_KEY_END
-                )
-            ),
-            importHmacSha512Key(
-                derived.subarray(
-                    APP_STATE_DERIVED_VALUE_ENCRYPTION_KEY_END,
-                    APP_STATE_DERIVED_VALUE_MAC_KEY_END
-                )
-            ),
-            importHmacKey(
-                derived.subarray(
-                    APP_STATE_DERIVED_VALUE_MAC_KEY_END,
-                    APP_STATE_DERIVED_SNAPSHOT_MAC_KEY_END
-                )
-            ),
-            importHmacKey(
-                derived.subarray(
-                    APP_STATE_DERIVED_SNAPSHOT_MAC_KEY_END,
-                    APP_STATE_DERIVED_PATCH_MAC_KEY_END
-                )
-            )
-        ])
         const keys: WaAppStateDerivedKeys = {
-            indexHmacKey,
-            valueEncryptionAesKey,
-            valueMacHmacKey,
-            snapshotMacHmacKey,
-            patchMacHmacKey
+            indexHmacKey: derived.subarray(0, APP_STATE_DERIVED_INDEX_KEY_END),
+            valueEncryptionAesKey: derived.subarray(
+                APP_STATE_DERIVED_INDEX_KEY_END,
+                APP_STATE_DERIVED_VALUE_ENCRYPTION_KEY_END
+            ),
+            valueMacHmacKey: derived.subarray(
+                APP_STATE_DERIVED_VALUE_ENCRYPTION_KEY_END,
+                APP_STATE_DERIVED_VALUE_MAC_KEY_END
+            ),
+            snapshotMacHmacKey: derived.subarray(
+                APP_STATE_DERIVED_VALUE_MAC_KEY_END,
+                APP_STATE_DERIVED_SNAPSHOT_MAC_KEY_END
+            ),
+            patchMacHmacKey: derived.subarray(
+                APP_STATE_DERIVED_SNAPSHOT_MAC_KEY_END,
+                APP_STATE_DERIVED_PATCH_MAC_KEY_END
+            )
         }
         this.touchDerivedKeysCacheEntry(cacheKey, keys)
         return keys
     }
 
-    public async generateIndexMac(
-        indexHmacKey: CryptoKey,
-        indexBytes: Uint8Array
-    ): Promise<Uint8Array> {
-        return hmacSign(indexHmacKey, indexBytes)
+    public generateIndexMac(indexHmacKey: Uint8Array, indexBytes: Uint8Array): Promise<Uint8Array> {
+        return hmacSha256Sign(indexHmacKey, indexBytes)
     }
 
     public async encryptMutation(args: {
@@ -265,7 +238,7 @@ export class WaAppStateCrypto {
             intToBytes(8, version),
             TEXT_ENCODER.encode(collectionName)
         ])
-        return hmacSign(derivedKeys.snapshotMacHmacKey, payload)
+        return hmacSha256Sign(derivedKeys.snapshotMacHmacKey, payload)
     }
 
     public async generatePatchMac(
@@ -282,7 +255,7 @@ export class WaAppStateCrypto {
             intToBytes(8, version),
             TEXT_ENCODER.encode(collectionName)
         ])
-        return hmacSign(derivedKeys.patchMacHmacKey, payload)
+        return hmacSha256Sign(derivedKeys.patchMacHmacKey, payload)
     }
 
     public async ltHashAdd(
@@ -377,13 +350,13 @@ export class WaAppStateCrypto {
     }
 
     private async generateValueMac(
-        valueMacHmacKey: CryptoKey,
+        valueMacHmacKey: Uint8Array,
         associatedData: Uint8Array,
         cipherWithIv: Uint8Array
     ): Promise<Uint8Array> {
         const octetLength = new Uint8Array(APP_STATE_MAC_OCTET_LENGTH)
         octetLength[octetLength.length - 1] = associatedData.byteLength & 0xff
-        const full = await hmacSign(
+        const full = await hmacSha512Sign(
             valueMacHmacKey,
             concatBytes([associatedData, cipherWithIv, octetLength])
         )

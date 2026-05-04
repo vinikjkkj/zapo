@@ -1,14 +1,6 @@
 import assert from 'node:assert/strict'
 
-import {
-    aesGcmDecrypt,
-    aesGcmEncrypt,
-    hkdf,
-    hmacSign,
-    importAesGcmKey,
-    importHmacKey,
-    sha256
-} from '@crypto/core'
+import { aesGcmDecrypt, aesGcmEncrypt, hkdf, hmacSha256Sign, sha256 } from '@crypto/core'
 import { toError } from '@util/primitives'
 
 import {
@@ -139,14 +131,12 @@ async function runBench(): Promise<void> {
     const plaintext = buildPatternBytes(config.payloadBytes)
     const nonce = buildPatternBytes(12)
 
-    const aesKeyRaw = buildPatternBytes(32)
-    const aesKey = await importAesGcmKey(aesKeyRaw, ['encrypt', 'decrypt'])
+    const aesKey = buildPatternBytes(32)
     const ciphertext = await aesGcmEncrypt(aesKey, nonce, plaintext)
     const decrypted = await aesGcmDecrypt(aesKey, nonce, ciphertext)
     assert.deepEqual(decrypted, plaintext)
 
-    const hmacKeyRaw = buildPatternBytes(32)
-    const hmacKey = await importHmacKey(hmacKeyRaw)
+    const hmacKey = buildPatternBytes(32)
 
     const results: TimedBenchmarkResult[] = []
     let validation: TimedBenchmarkValidationSummary | null = null
@@ -189,7 +179,7 @@ async function runBench(): Promise<void> {
 
     const runHmacOps = async (): Promise<void> => {
         for (let operation = 0; operation < config.operationsPerIteration; operation += 1) {
-            const signature = await hmacSign(hmacKey, plaintext)
+            const signature = await hmacSha256Sign(hmacKey, plaintext)
             if (signature.byteLength !== 32) {
                 throw new Error('hmac result mismatch')
             }

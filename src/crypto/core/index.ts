@@ -14,21 +14,18 @@ export {
 export { buildNonce } from '@crypto/core/nonce'
 export { randomBytesAsync, randomFillAsync, randomIntAsync } from '@crypto/core/random'
 export {
-    type CryptoKey,
     sha1,
     sha256,
     sha512,
-    importAesGcmKey,
+    md5Bytes,
     aesGcmEncrypt,
     aesGcmDecrypt,
-    importAesCbcKey,
     aesCbcEncrypt,
     aesCbcDecrypt,
-    importHmacKey,
-    importHmacSha512Key,
-    hmacSign,
-    pbkdf2DeriveAesCtrKey,
     aesCtrEncrypt,
-    aesCtrDecrypt
+    aesCtrDecrypt,
+    hmacSha256Sign,
+    hmacSha512Sign,
+    pbkdf2Sha256
 } from '@crypto/core/primitives'
 export { xeddsaSign, xeddsaVerify } from '@crypto/core/xeddsa'

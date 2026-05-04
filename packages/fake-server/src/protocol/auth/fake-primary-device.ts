@@ -1,12 +1,6 @@
 /** Fake primary-device identity/signature helpers for pairing. */
 
-import {
-    hmacSign,
-    importHmacKey,
-    type SignalKeyPair,
-    X25519,
-    xeddsaSign
-} from '../../transport/crypto'
+import { hmacSha256Sign, type SignalKeyPair, X25519, xeddsaSign } from '../../transport/crypto'
 import { proto } from '../../transport/protos'
 
 const ADV_PREFIX_ACCOUNT_SIGNATURE = new Uint8Array([0x06, 0x00])
@@ -58,8 +52,7 @@ export async function buildAdvSignedDeviceIdentity(
         accountSignature
     }).finish()
 
-    const hmacKey = await importHmacKey(input.advSecretKey)
-    const hmac = await hmacSign(hmacKey, signedIdentity)
+    const hmac = await hmacSha256Sign(input.advSecretKey, signedIdentity)
 
     const wrapped = proto.ADVSignedDeviceIdentityHMAC.encode({
         details: signedIdentity,

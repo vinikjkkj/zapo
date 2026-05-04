@@ -1,14 +1,14 @@
 /** Post-handshake Noise transport (AES-GCM with direction-specific counters). */
 
-import { aesGcmDecrypt, aesGcmEncrypt, type CryptoKey } from '../transport/crypto'
+import { aesGcmDecrypt, aesGcmEncrypt } from '../transport/crypto'
 
 export class WaFakeTransport {
-    private readonly recvKey: CryptoKey
-    private readonly sendKey: CryptoKey
+    private readonly recvKey: Uint8Array
+    private readonly sendKey: Uint8Array
     private sendCounter = 0
     private recvCounter = 0
 
-    public constructor(keys: { readonly recvKey: CryptoKey; readonly sendKey: CryptoKey }) {
+    public constructor(keys: { readonly recvKey: Uint8Array; readonly sendKey: Uint8Array }) {
         this.recvKey = keys.recvKey
         this.sendKey = keys.sendKey
     }

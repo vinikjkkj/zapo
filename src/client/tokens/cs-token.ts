@@ -1,35 +1,34 @@
-import { type CryptoKey, hmacSign, importHmacKey } from '@crypto/core'
+import { hmacSha256Sign } from '@crypto/core'
 import { TEXT_ENCODER } from '@util/bytes'
 import { setBoundedMapEntry } from '@util/collections'
 
 const CS_TOKEN_CACHE_MAX = 5
 
 export class CsTokenGenerator {
-    private cachedKey: CryptoKey | null
     private cachedSalt: Uint8Array | null
     private readonly cache: Map<string, Uint8Array>
 
     public constructor() {
-        this.cachedKey = null
         this.cachedSalt = null
         this.cache = new Map()
     }
 
     public async generate(nctSalt: Uint8Array, accountLid: string): Promise<Uint8Array> {
+        if (!this.isSameSalt(nctSalt)) {
+            this.cachedSalt = nctSalt
+            this.cache.clear()
+        }
         const cached = this.cache.get(accountLid)
-        if (cached && this.isSameSalt(nctSalt)) {
+        if (cached) {
             return cached
         }
 
-        const key = await this.resolveKey(nctSalt)
-        const result = await hmacSign(key, TEXT_ENCODER.encode(accountLid))
-
+        const result = await hmacSha256Sign(nctSalt, TEXT_ENCODER.encode(accountLid))
         setBoundedMapEntry(this.cache, accountLid, result, CS_TOKEN_CACHE_MAX)
         return result
     }
 
     public invalidate(): void {
-        this.cachedKey = null
         this.cachedSalt = null
         this.cache.clear()
     }
@@ -44,15 +43,5 @@ export class CsTokenGenerator {
             }
         }
         return true
-    }
-
-    private async resolveKey(salt: Uint8Array): Promise<CryptoKey> {
-        if (this.cachedKey && this.isSameSalt(salt)) {
-            return this.cachedKey
-        }
-        this.cachedKey = await importHmacKey(salt)
-        this.cachedSalt = salt
-        this.cache.clear()
-        return this.cachedKey
     }
 }

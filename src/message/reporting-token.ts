@@ -1,4 +1,4 @@
-import { hkdf, hmacSign, importHmacKey } from '@crypto'
+import { hkdf, hmacSha256Sign } from '@crypto'
 import { proto, type Proto } from '@proto'
 import type { BinaryNode } from '@transport/types'
 import { base64ToBytesChecked, concatBytes, EMPTY_BYTES, TEXT_ENCODER } from '@util/bytes'
@@ -110,11 +110,9 @@ export async function buildReportingTokenArtifacts(
         secretInfo,
         WA_REPORTING_TOKEN_KEY_BYTES
     )
-    const hmacKey = await importHmacKey(reportingTokenKey)
-    const reportingToken = (await hmacSign(hmacKey, reportingTokenContent)).subarray(
-        0,
-        WA_REPORTING_TOKEN_BYTES
-    )
+    const reportingToken = (
+        await hmacSha256Sign(reportingTokenKey, reportingTokenContent)
+    ).subarray(0, WA_REPORTING_TOKEN_BYTES)
 
     const version = input.version ?? WA_REPORTING_TOKEN_VERSION
     return {
