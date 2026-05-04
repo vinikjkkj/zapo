@@ -14,16 +14,19 @@ export class CsTokenGenerator {
     }
 
     public async generate(nctSalt: Uint8Array, accountLid: string): Promise<Uint8Array> {
+        if (this.isSameSalt(nctSalt)) {
+            const cached = this.cache.get(accountLid)
+            if (cached) {
+                return cached
+            }
+        }
+
+        const result = await hmacSha256Sign(nctSalt, TEXT_ENCODER.encode(accountLid))
+
         if (!this.isSameSalt(nctSalt)) {
             this.cachedSalt = nctSalt
             this.cache.clear()
         }
-        const cached = this.cache.get(accountLid)
-        if (cached) {
-            return cached
-        }
-
-        const result = await hmacSha256Sign(nctSalt, TEXT_ENCODER.encode(accountLid))
         setBoundedMapEntry(this.cache, accountLid, result, CS_TOKEN_CACHE_MAX)
         return result
     }
