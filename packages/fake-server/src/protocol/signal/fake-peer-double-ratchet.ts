@@ -140,6 +140,7 @@ export class FakePeerDoubleRatchet {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async encrypt(
         plaintext: Uint8Array
     ): Promise<{ readonly type: 'pkmsg' | 'msg'; readonly ciphertext: Uint8Array }> {

@@ -110,6 +110,7 @@ interface DerivedSenderKeyMessage {
     readonly seed: Uint8Array
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 async function deriveSenderKeyMessageKey(
     iteration: number,
     chainKey: Uint8Array

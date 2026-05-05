@@ -69,6 +69,7 @@ export function deriveMsgKey(
     return deriveMsgKeyFromChainKey(index, chainKey)
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function selectMessageKey(
     chain: SignalRecvChain,
     targetCounter: number
@@ -159,6 +160,7 @@ function deriveMsgKeyFromChainKey(
     }
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function encryptMsg(
     session: SignalSessionRecord,
     plaintext: Uint8Array

@@ -13,12 +13,14 @@ export class WaFakeTransport {
         this.sendKey = keys.sendKey
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async encryptFrame(plaintext: Uint8Array): Promise<Uint8Array> {
         const nonce = buildAesGcmNonce(this.sendCounter)
         this.sendCounter += 1
         return aesGcmEncrypt(this.sendKey, nonce, plaintext)
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async decryptFrame(ciphertext: Uint8Array): Promise<Uint8Array> {
         const nonce = buildAesGcmNonce(this.recvCounter)
         this.recvCounter += 1

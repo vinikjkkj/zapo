@@ -108,6 +108,7 @@ export class FakeAppStateCrypto {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async decryptMutation(input: {
         readonly operation: 'set' | 'remove'
         readonly keyId: Uint8Array
@@ -162,6 +163,7 @@ export class FakeAppStateCrypto {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async generateSnapshotMac(
         keyData: Uint8Array,
         ltHash: Uint8Array,
@@ -177,6 +179,7 @@ export class FakeAppStateCrypto {
         return hmacSha256Sign(derivedKeys.snapshotMacHmacKey, payload)
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async generatePatchMac(
         keyData: Uint8Array,
         snapshotMac: Uint8Array,
@@ -194,6 +197,7 @@ export class FakeAppStateCrypto {
         return hmacSha256Sign(derivedKeys.patchMacHmacKey, payload)
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async ltHashAdd(
         base: Uint8Array,
         addValues: readonly Uint8Array[]
@@ -201,6 +205,7 @@ export class FakeAppStateCrypto {
         return this.ltHashApply(base, addValues, (left, right) => left + right)
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async ltHashSubtract(
         base: Uint8Array,
         removeValues: readonly Uint8Array[]

@@ -146,6 +146,7 @@ export class WaNoiseSession {
         return result
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async pushWireChunk(chunk: Uint8Array): Promise<readonly Uint8Array[]> {
         const codec = this.frameCodec
         if (!codec) {
@@ -477,6 +478,7 @@ export class WaNoiseSession {
         })
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     private async decodeBufferedPostHandshakeFrames(): Promise<void> {
         if (!this.noiseSocket || this.handshakeInboxHead >= this.handshakeInbox.length) {
             return

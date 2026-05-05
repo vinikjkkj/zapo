@@ -43,6 +43,7 @@ export async function ensureMessageSecret(message: Proto.IMessage): Promise<Prot
     }
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function createUseCaseSecret(input: {
     readonly messageSecret: Uint8Array | ArrayBuffer | ArrayBufferView
     readonly stanzaId: string

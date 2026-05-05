@@ -91,6 +91,7 @@ export class WaComms {
             onClose: async (info) => {
                 await this.onSocketClosed(info)
             },
+            // eslint-disable-next-line @typescript-eslint/require-await
             onError: async (error) => {
                 this.logger.warn('socket runtime error', { message: error.message })
             },
@@ -316,6 +317,7 @@ export class WaComms {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     private async onSocketClosed(info: SocketCloseInfo): Promise<void> {
         this.connected = false
         this.noiseSession?.onSocketClosed(new Error(`socket closed (${info.code}:${info.reason})`))
@@ -423,6 +425,7 @@ export class WaComms {
         this.drainWaiters((waiter) => waiter.resolve())
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     private async flushPendingFrames(): Promise<void> {
         if (!this.handlingRequests || !this.stanzaHandler || this.pendingFrames.length === 0) {
             return

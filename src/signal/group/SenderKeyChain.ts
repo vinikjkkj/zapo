@@ -19,6 +19,7 @@ export interface SenderKeyMessageKeySelection {
     readonly updatedRecord: SenderKeyRecord
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function selectMessageKey(
     senderKey: SenderKeyRecord,
     targetIteration: number,

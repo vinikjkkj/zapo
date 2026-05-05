@@ -170,6 +170,7 @@ export class WaMediaCrypto {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     static async encryptBytes(
         mediaType: MediaCryptoType,
         mediaKey: Uint8Array,
@@ -213,6 +214,7 @@ export class WaMediaCrypto {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     static async decryptBytes(
         mediaType: MediaCryptoType,
         mediaKey: Uint8Array,
@@ -257,6 +259,7 @@ export class WaMediaCrypto {
         return { plaintext, fileSha256, fileEncSha256 }
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     static async encryptReadable(
         mediaType: MediaCryptoType,
         mediaKey: Uint8Array,
@@ -307,6 +310,7 @@ export class WaMediaCrypto {
         await unlink(filePath).catch(() => undefined)
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     static async decryptReadable(
         encrypted: Readable,
         options: WaMediaDecryptReadableOptions
