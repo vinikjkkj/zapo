@@ -3,9 +3,7 @@
 import {
     aesCbcDecrypt,
     hkdf,
-    hmacSign,
-    importAesCbcKey,
-    importHmacKey,
+    hmacSha256Sign,
     toRawPubKey,
     toSerializedPubKey,
     xeddsaVerify
@@ -130,10 +128,9 @@ export class FakePeerGroupRecvSession {
         let seed: Uint8Array | null = null
         let iteration = record.nextIteration
         while (iteration <= targetIteration) {
-            const hmacKeyHandle = await importHmacKey(chainKey)
             const [nextChainRaw, messageInputKey] = await Promise.all([
-                hmacSign(hmacKeyHandle, CHAIN_KEY_LABEL),
-                hmacSign(hmacKeyHandle, MESSAGE_KEY_LABEL)
+                hmacSha256Sign(chainKey, CHAIN_KEY_LABEL),
+                hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
             ])
             const messageSeed = await hkdf(messageInputKey, null, WHISPER_GROUP_INFO, 50)
             if (iteration === targetIteration) {
@@ -150,8 +147,7 @@ export class FakePeerGroupRecvSession {
 
         const iv = seed.subarray(0, 16)
         const keyBytes = seed.subarray(16, 48)
-        const cipherKey = await importAesCbcKey(keyBytes)
-        const padded = await aesCbcDecrypt(cipherKey, iv, decoded.ciphertext)
+        const padded = await aesCbcDecrypt(keyBytes, iv, decoded.ciphertext)
         return unpadPkcs7(padded)
     }
 }

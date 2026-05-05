@@ -1,19 +1,12 @@
 /** Responder-side Noise handshake primitives for fake server pipelines. */
 
-import {
-    aesGcmDecrypt,
-    aesGcmEncrypt,
-    type CryptoKey,
-    hkdfSplit,
-    importAesGcmKey,
-    sha256
-} from '../transport/crypto'
+import { aesGcmDecrypt, aesGcmEncrypt, hkdfSplit, sha256 } from '../transport/crypto'
 
 const EMPTY = new Uint8Array(0)
 
 export interface WaFakeNoiseHandshakeFinishKeys {
-    readonly recvKey: CryptoKey
-    readonly sendKey: CryptoKey
+    readonly recvKey: Uint8Array
+    readonly sendKey: Uint8Array
     readonly recvKeyBytes: Uint8Array
     readonly sendKeyBytes: Uint8Array
 }
@@ -21,14 +14,14 @@ export interface WaFakeNoiseHandshakeFinishKeys {
 export class WaFakeNoiseHandshake {
     private hash: Uint8Array = EMPTY
     private chainingKey: Uint8Array = EMPTY
-    private cipherKey: CryptoKey | null = null
+    private cipherKey: Uint8Array | null = null
     private nonceCounter = 0
 
     public async start(name: Uint8Array, prologue: Uint8Array): Promise<void> {
         const initialHash = name.byteLength === 32 ? name : await sha256(name)
         this.hash = initialHash
         this.chainingKey = initialHash
-        this.cipherKey = await importAesGcmKey(initialHash, ['encrypt', 'decrypt'])
+        this.cipherKey = initialHash
         this.nonceCounter = 0
         await this.authenticate(prologue)
     }
@@ -43,7 +36,7 @@ export class WaFakeNoiseHandshake {
     public async mixIntoKey(input: Uint8Array): Promise<void> {
         const [nextChainingKey, nextCipherMaterial] = await hkdfSplit(input, this.chainingKey, '')
         this.chainingKey = nextChainingKey
-        this.cipherKey = await importAesGcmKey(nextCipherMaterial, ['encrypt', 'decrypt'])
+        this.cipherKey = nextCipherMaterial
         this.nonceCounter = 0
     }
 
@@ -72,13 +65,9 @@ export class WaFakeNoiseHandshake {
     /** Derives transport keys (`first -> recv`, `second -> send` for responder role). */
     public async finish(): Promise<WaFakeNoiseHandshakeFinishKeys> {
         const [first, second] = await hkdfSplit(EMPTY, this.chainingKey, '')
-        const [recvKey, sendKey] = await Promise.all([
-            importAesGcmKey(first, ['decrypt']),
-            importAesGcmKey(second, ['encrypt'])
-        ])
         return {
-            recvKey,
-            sendKey,
+            recvKey: first,
+            sendKey: second,
             recvKeyBytes: first,
             sendKeyBytes: second
         }

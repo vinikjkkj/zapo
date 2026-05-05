@@ -1,12 +1,12 @@
-import { aesGcmDecrypt, aesGcmEncrypt, buildNonce, type CryptoKey } from '@crypto'
+import { aesGcmDecrypt, aesGcmEncrypt, buildNonce } from '@crypto'
 
 export class WaNoiseSocket {
-    private readonly encryptKey: CryptoKey
-    private readonly decryptKey: CryptoKey
+    private readonly encryptKey: Uint8Array
+    private readonly decryptKey: Uint8Array
     private writeCounter: number
     private readCounter: number
 
-    public constructor(encryptKey: CryptoKey, decryptKey: CryptoKey) {
+    public constructor(encryptKey: Uint8Array, decryptKey: Uint8Array) {
         this.encryptKey = encryptKey
         this.decryptKey = decryptKey
         this.writeCounter = 0

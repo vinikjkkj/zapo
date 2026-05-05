@@ -1,5 +1,5 @@
 import type { WaAddonKind } from '@client/types'
-import { aesGcmDecrypt, aesGcmEncrypt, importAesGcmKey, sha256 } from '@crypto'
+import { aesGcmDecrypt, aesGcmEncrypt, sha256 } from '@crypto'
 import { unwrapMessage } from '@message/content'
 import {
     assertMessageSecret,
@@ -56,10 +56,9 @@ export async function encryptAddonPayload(input: {
         modificationSender: input.modificationSender,
         modificationType: input.modificationType
     })
-    const key = await importAesGcmKey(secret, ['encrypt'])
     const iv = assertAddonIv(input.iv)
     const additionalData = resolveAddonAdditionalData(input)
-    return aesGcmEncrypt(key, iv, toBytesView(input.payload), additionalData)
+    return aesGcmEncrypt(secret, iv, toBytesView(input.payload), additionalData)
 }
 
 export async function decryptAddonPayload(input: {
@@ -79,10 +78,9 @@ export async function decryptAddonPayload(input: {
         modificationSender: input.modificationSender,
         modificationType: input.modificationType
     })
-    const key = await importAesGcmKey(secret, ['decrypt'])
     const iv = assertAddonIv(input.iv)
     const additionalData = resolveAddonAdditionalData(input)
-    return aesGcmDecrypt(key, iv, toBytesView(input.ciphertext), additionalData)
+    return aesGcmDecrypt(secret, iv, toBytesView(input.ciphertext), additionalData)
 }
 
 export interface WaIdentifiedEncAddon {

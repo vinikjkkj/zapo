@@ -5,9 +5,7 @@ import {
     aesCbcEncrypt,
     hkdf,
     hkdfSplit,
-    hmacSign,
-    importAesCbcKey,
-    importHmacKey,
+    hmacSha256Sign,
     prependVersion,
     type SignalKeyPair,
     toRawPubKey,
@@ -162,11 +160,7 @@ export class FakePeerDoubleRatchet {
             this.sendChain.nextIndex,
             this.sendChain.chainKey
         )
-        const [cipherKey, macKey] = await Promise.all([
-            importAesCbcKey(messageKey.cipherKey),
-            importHmacKey(messageKey.macKey)
-        ])
-        const ciphertext = await aesCbcEncrypt(cipherKey, messageKey.iv, plaintext)
+        const ciphertext = await aesCbcEncrypt(messageKey.cipherKey, messageKey.iv, plaintext)
         const signalPayload = proto.SignalMessage.encode({
             ratchetKey: this.sendChain.ratchetPubSerialized,
             counter: messageKey.index,
@@ -179,7 +173,7 @@ export class FakePeerDoubleRatchet {
             this.remoteIdentityPubSerialized,
             versioned
         ])
-        const fullMac = await hmacSign(macKey, macInput)
+        const fullMac = await hmacSha256Sign(messageKey.macKey, macInput)
         const mac = fullMac.subarray(0, SIGNAL_MAC_SIZE)
         const inner = concatBytes([versioned, mac])
 
@@ -388,15 +382,13 @@ export class FakePeerDoubleRatchet {
             this.localIdentityPubSerialized,
             versionedBody
         ])
-        const macKeyHandle = await importHmacKey(messageKey.macKey)
-        const expectedFullMac = await hmacSign(macKeyHandle, macInput)
+        const expectedFullMac = await hmacSha256Sign(messageKey.macKey, macInput)
         const expectedMac = expectedFullMac.subarray(0, SIGNAL_MAC_SIZE)
         if (!uint8Equal(expectedMac, macBytes)) {
             throw new FakePeerDoubleRatchetError('signal message MAC mismatch')
         }
 
-        const cipherKeyHandle = await importAesCbcKey(messageKey.cipherKey)
-        const padded = await aesCbcDecrypt(cipherKeyHandle, messageKey.iv, ciphertext)
+        const padded = await aesCbcDecrypt(messageKey.cipherKey, messageKey.iv, ciphertext)
         return unpadPkcs7(padded)
     }
 
@@ -465,10 +457,9 @@ async function deriveMessageKey(
     index: number,
     chainKey: Uint8Array
 ): Promise<{ readonly nextChainKey: Uint8Array; readonly messageKey: DerivedMessageKey }> {
-    const hmacKey = await importHmacKey(chainKey)
     const [messageInputKey, nextChainRaw] = await Promise.all([
-        hmacSign(hmacKey, MESSAGE_KEY_LABEL),
-        hmacSign(hmacKey, CHAIN_KEY_LABEL)
+        hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL),
+        hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
     ])
     const expanded = await hkdf(messageInputKey, null, 'WhisperMessageKeys', 80)
     return {

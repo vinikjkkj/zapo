@@ -1,36 +1,33 @@
 /**
- * Low-level crypto primitives using WebCrypto API
+ * Low-level crypto primitives backed by node:crypto sync APIs.
+ *
+ * Promise<T> signatures keep the facade async-first while the work runs sync
+ * under the hood. Keys are passed as raw bytes — no opaque key handles in the API.
  */
 
-import { createHash, webcrypto } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, createHmac, pbkdf2 } from 'node:crypto'
+import { promisify } from 'node:util'
 
-import { EMPTY_BYTES, toBytesView } from '@util/bytes'
+import { concatBytes, EMPTY_BYTES, toBytesView } from '@util/bytes'
 
-/**
- * Re-exported CryptoKey type so consumers don't need to import from 'node:crypto'
- */
-export type CryptoKey = webcrypto.CryptoKey
+const AES_GCM_TAG_LENGTH = 16
 
-type HashAlgorithm = 'SHA-1' | 'SHA-256' | 'SHA-512'
-
-async function digestBytes(algorithm: HashAlgorithm, value: Uint8Array): Promise<Uint8Array> {
-    return toBytesView(await webcrypto.subtle.digest(algorithm, value))
-}
+const pbkdf2Async = promisify(pbkdf2)
 
 // ============================================
 // Hash functions
 // ============================================
 
-export async function sha256(value: Uint8Array): Promise<Uint8Array> {
-    return digestBytes('SHA-256', value)
+export function sha1(value: Uint8Array): Promise<Uint8Array> {
+    return Promise.resolve(toBytesView(createHash('sha1').update(value).digest()))
 }
 
-export async function sha1(value: Uint8Array): Promise<Uint8Array> {
-    return digestBytes('SHA-1', value)
+export function sha256(value: Uint8Array): Promise<Uint8Array> {
+    return Promise.resolve(toBytesView(createHash('sha256').update(value).digest()))
 }
 
-export async function sha512(value: Uint8Array): Promise<Uint8Array> {
-    return digestBytes('SHA-512', value)
+export function sha512(value: Uint8Array): Promise<Uint8Array> {
+    return Promise.resolve(toBytesView(createHash('sha512').update(value).digest()))
 }
 
 export function md5Bytes(input: string | Uint8Array): Uint8Array {
@@ -41,139 +38,129 @@ export function md5Bytes(input: string | Uint8Array): Uint8Array {
 // AES-GCM (for Noise protocol)
 // ============================================
 
-export async function importAesGcmKey(
-    raw: Uint8Array,
-    usages: ('encrypt' | 'decrypt')[]
-): Promise<webcrypto.CryptoKey> {
-    return webcrypto.subtle.importKey('raw', raw, 'AES-GCM', false, usages)
-}
-
-export async function aesGcmEncrypt(
-    key: webcrypto.CryptoKey,
+export function aesGcmEncrypt(
+    key: Uint8Array,
     nonce: Uint8Array,
     plaintext: Uint8Array,
     aad: Uint8Array = EMPTY_BYTES
 ): Promise<Uint8Array> {
-    return toBytesView(
-        await webcrypto.subtle.encrypt(
-            { name: 'AES-GCM', iv: nonce, additionalData: aad },
-            key,
-            plaintext
-        )
-    )
+    const cipher = createCipheriv('aes-256-gcm', key, nonce)
+    if (aad.length > 0) {
+        cipher.setAAD(aad)
+    }
+    const head = cipher.update(plaintext)
+    const tail = cipher.final()
+    const tag = cipher.getAuthTag()
+    return Promise.resolve(concatBytes([head, tail, tag]))
 }
 
-export async function aesGcmDecrypt(
-    key: webcrypto.CryptoKey,
+export function aesGcmDecrypt(
+    key: Uint8Array,
     nonce: Uint8Array,
     ciphertext: Uint8Array,
     aad: Uint8Array = EMPTY_BYTES
 ): Promise<Uint8Array> {
-    return toBytesView(
-        await webcrypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: nonce, additionalData: aad },
-            key,
-            ciphertext
-        )
-    )
+    const tagOffset = ciphertext.length - AES_GCM_TAG_LENGTH
+    const tag = ciphertext.subarray(tagOffset)
+    const ct = ciphertext.subarray(0, tagOffset)
+    const decipher = createDecipheriv('aes-256-gcm', key, nonce)
+    if (aad.length > 0) {
+        decipher.setAAD(aad)
+    }
+    decipher.setAuthTag(tag)
+    const head = decipher.update(ct)
+    const tail = decipher.final()
+    if (tail.length === 0) {
+        return Promise.resolve(toBytesView(head))
+    }
+    return Promise.resolve(concatBytes([head, tail]))
 }
 
 // ============================================
 // AES-CBC (for Signal protocol)
 // ============================================
 
-export async function importAesCbcKey(keyBytes: Uint8Array): Promise<webcrypto.CryptoKey> {
-    return webcrypto.subtle.importKey('raw', keyBytes, { name: 'AES-CBC', length: 256 }, false, [
-        'encrypt',
-        'decrypt'
-    ])
-}
-
-export async function aesCbcEncrypt(
-    key: webcrypto.CryptoKey,
+export function aesCbcEncrypt(
+    key: Uint8Array,
     iv: Uint8Array,
     plaintext: Uint8Array
 ): Promise<Uint8Array> {
-    return toBytesView(await webcrypto.subtle.encrypt({ name: 'AES-CBC', iv }, key, plaintext))
+    const cipher = createCipheriv('aes-256-cbc', key, iv)
+    const head = cipher.update(plaintext)
+    const tail = cipher.final()
+    if (tail.length === 0) {
+        return Promise.resolve(toBytesView(head))
+    }
+    return Promise.resolve(concatBytes([head, tail]))
 }
 
-export async function aesCbcDecrypt(
-    key: webcrypto.CryptoKey,
+export function aesCbcDecrypt(
+    key: Uint8Array,
     iv: Uint8Array,
     ciphertext: Uint8Array
 ): Promise<Uint8Array> {
-    return toBytesView(await webcrypto.subtle.decrypt({ name: 'AES-CBC', iv }, key, ciphertext))
-}
-
-// ============================================
-// HMAC-SHA256 (for Signal protocol)
-// ============================================
-
-export async function importHmacKey(keyBytes: Uint8Array): Promise<webcrypto.CryptoKey> {
-    return webcrypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, [
-        'sign'
-    ])
-}
-
-export async function importHmacSha512Key(keyBytes: Uint8Array): Promise<webcrypto.CryptoKey> {
-    return webcrypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-512' }, false, [
-        'sign'
-    ])
-}
-
-export async function hmacSign(key: webcrypto.CryptoKey, data: Uint8Array): Promise<Uint8Array> {
-    return toBytesView(await webcrypto.subtle.sign('HMAC', key, data))
-}
-
-// ============================================
-// PBKDF2 → AES-CTR (for pairing code crypto)
-// ============================================
-
-export async function pbkdf2DeriveAesCtrKey(
-    password: Uint8Array,
-    salt: Uint8Array,
-    iterations: number
-): Promise<CryptoKey> {
-    const imported = await webcrypto.subtle.importKey('raw', password, { name: 'PBKDF2' }, false, [
-        'deriveKey'
-    ])
-    return webcrypto.subtle.deriveKey(
-        {
-            name: 'PBKDF2',
-            hash: 'SHA-256',
-            salt,
-            iterations
-        },
-        imported,
-        {
-            name: 'AES-CTR',
-            length: 256
-        },
-        false,
-        ['encrypt', 'decrypt']
-    )
+    const decipher = createDecipheriv('aes-256-cbc', key, iv)
+    const head = decipher.update(ciphertext)
+    const tail = decipher.final()
+    if (tail.length === 0) {
+        return Promise.resolve(toBytesView(head))
+    }
+    return Promise.resolve(concatBytes([head, tail]))
 }
 
 // ============================================
 // AES-CTR (for pairing code crypto)
 // ============================================
 
-export async function aesCtrEncrypt(
-    key: CryptoKey,
+export function aesCtrEncrypt(
+    key: Uint8Array,
     counter: Uint8Array,
     plaintext: Uint8Array
 ): Promise<Uint8Array> {
-    return toBytesView(
-        await webcrypto.subtle.encrypt({ name: 'AES-CTR', counter, length: 64 }, key, plaintext)
-    )
+    const cipher = createCipheriv('aes-256-ctr', key, counter)
+    const head = cipher.update(plaintext)
+    const tail = cipher.final()
+    if (tail.length === 0) {
+        return Promise.resolve(toBytesView(head))
+    }
+    return Promise.resolve(concatBytes([head, tail]))
 }
 
-export async function aesCtrDecrypt(
-    key: CryptoKey,
+export function aesCtrDecrypt(
+    key: Uint8Array,
     counter: Uint8Array,
     ciphertext: Uint8Array
 ): Promise<Uint8Array> {
-    return toBytesView(
-        await webcrypto.subtle.decrypt({ name: 'AES-CTR', counter, length: 64 }, key, ciphertext)
-    )
+    const decipher = createDecipheriv('aes-256-ctr', key, counter)
+    const head = decipher.update(ciphertext)
+    const tail = decipher.final()
+    if (tail.length === 0) {
+        return Promise.resolve(toBytesView(head))
+    }
+    return Promise.resolve(concatBytes([head, tail]))
+}
+
+// ============================================
+// HMAC (for Signal protocol, app-state, reporting tokens, etc.)
+// ============================================
+
+export function hmacSha256Sign(key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+    return Promise.resolve(toBytesView(createHmac('sha256', key).update(data).digest()))
+}
+
+export function hmacSha512Sign(key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+    return Promise.resolve(toBytesView(createHmac('sha512', key).update(data).digest()))
+}
+
+// ============================================
+// PBKDF2-SHA256 (for pairing code crypto)
+// ============================================
+
+export async function pbkdf2Sha256(
+    password: Uint8Array,
+    salt: Uint8Array,
+    iterations: number,
+    length: number
+): Promise<Uint8Array> {
+    return toBytesView(await pbkdf2Async(password, salt, iterations, length, 'sha256'))
 }

@@ -1,7 +1,6 @@
 import {
     aesCbcDecrypt,
     aesCbcEncrypt,
-    importAesCbcKey,
     prependVersion,
     randomBytesAsync,
     randomIntAsync,
@@ -44,17 +43,14 @@ function extractAesCbcParams(seed: Uint8Array): {
     }
 }
 
-async function aesCbcEncryptFromSeed(seed: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> {
+function aesCbcEncryptFromSeed(seed: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> {
     const { keyBytes, iv } = extractAesCbcParams(seed)
-    return aesCbcEncrypt(await importAesCbcKey(keyBytes), iv, plaintext)
+    return aesCbcEncrypt(keyBytes, iv, plaintext)
 }
 
-async function aesCbcDecryptFromSeed(
-    seed: Uint8Array,
-    ciphertext: Uint8Array
-): Promise<Uint8Array> {
+function aesCbcDecryptFromSeed(seed: Uint8Array, ciphertext: Uint8Array): Promise<Uint8Array> {
     const { keyBytes, iv } = extractAesCbcParams(seed)
-    return aesCbcDecrypt(await importAesCbcKey(keyBytes), iv, ciphertext)
+    return aesCbcDecrypt(keyBytes, iv, ciphertext)
 }
 
 export class SenderKeyManager {

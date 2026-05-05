@@ -1,19 +1,11 @@
-import {
-    aesGcmDecrypt,
-    aesGcmEncrypt,
-    buildNonce,
-    type CryptoKey,
-    hkdfSplit,
-    importAesGcmKey,
-    sha256
-} from '@crypto'
+import { aesGcmDecrypt, aesGcmEncrypt, buildNonce, hkdfSplit, sha256 } from '@crypto'
 import { WaNoiseSocket } from '@transport/noise/WaNoiseSocket'
 import { concatBytes, EMPTY_BYTES } from '@util/bytes'
 
 export class WaNoiseHandshake {
     private handshakeHash: Uint8Array
     private chainingKey: Uint8Array
-    private cipherKey: CryptoKey | null
+    private cipherKey: Uint8Array | null
     private nonce: number
 
     public constructor() {
@@ -27,7 +19,7 @@ export class WaNoiseHandshake {
         const hashInput = protocolName.length === 32 ? protocolName : await sha256(protocolName)
         this.handshakeHash = hashInput
         this.chainingKey = hashInput
-        this.cipherKey = await importAesGcmKey(this.handshakeHash, ['encrypt', 'decrypt'])
+        this.cipherKey = this.handshakeHash
         await this.authenticate(prologue)
     }
 
@@ -39,7 +31,7 @@ export class WaNoiseHandshake {
         this.nonce = 0
         const [newChainingKey, nextCipherKey] = await hkdfSplit(keyMaterial, this.chainingKey, '')
         this.chainingKey = newChainingKey
-        this.cipherKey = await importAesGcmKey(nextCipherKey, ['encrypt', 'decrypt'])
+        this.cipherKey = nextCipherKey
     }
 
     public async encrypt(plaintext: Uint8Array): Promise<Uint8Array> {
@@ -63,11 +55,7 @@ export class WaNoiseHandshake {
     }
 
     public async finish(): Promise<WaNoiseSocket> {
-        const [writeKeyRaw, readKeyRaw] = await hkdfSplit(EMPTY_BYTES, this.chainingKey, '')
-        const [writeKey, readKey] = await Promise.all([
-            importAesGcmKey(writeKeyRaw, ['encrypt']),
-            importAesGcmKey(readKeyRaw, ['decrypt'])
-        ])
+        const [writeKey, readKey] = await hkdfSplit(EMPTY_BYTES, this.chainingKey, '')
         this.handshakeHash = EMPTY_BYTES
         this.chainingKey = EMPTY_BYTES
         this.cipherKey = null

@@ -1,13 +1,13 @@
-import { createPrivateKey, createPublicKey, diffieHellman, webcrypto } from 'node:crypto'
+import { createPrivateKey, createPublicKey, diffieHellman, generateKeyPair } from 'node:crypto'
+import { promisify } from 'node:util'
+
+const generateKeyPairAsync = promisify(generateKeyPair)
 
 import { X25519_PKCS8_PREFIX, X25519_SPKI_PREFIX } from '@crypto/curves/constants'
-import { pkcs8FromRawPrivate, type SignalKeyPair, type SubtleKeyPair } from '@crypto/curves/types'
+import { pkcs8FromRawPrivate, type SignalKeyPair } from '@crypto/curves/types'
 import { FE_ONE } from '@crypto/math/constants'
 import { fe, feAdd, feFromBytes, feInv, feMul, fePack, feSub } from '@crypto/math/fe'
-import { assertByteLength, decodeBase64Url, toBytesView } from '@util/bytes'
-import { isBunRuntime } from '@util/runtime'
-
-const IS_BUN = isBunRuntime()
+import { assertByteLength, concatBytes, decodeBase64Url, toBytesView } from '@util/bytes'
 
 // Pre-allocated temps for montgomeryToEdwardsPublic (safe: single-threaded)
 const _mx = fe()
@@ -51,70 +51,51 @@ export function montgomeryToEdwardsPublic(curvePublicKey: Uint8Array, signBit: n
     return encoded
 }
 
+function x25519PrivateKeyObject(privKey: Uint8Array) {
+    return createPrivateKey({
+        key: pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, privKey) as Buffer,
+        format: 'der',
+        type: 'pkcs8'
+    })
+}
+
+function x25519PublicKeyObject(pubKey: Uint8Array) {
+    return createPublicKey({
+        key: concatBytes([X25519_SPKI_PREFIX, pubKey]) as Buffer,
+        format: 'der',
+        type: 'spki'
+    })
+}
+
 export class X25519 {
     static async generateKeyPair(): Promise<SignalKeyPair> {
-        const keys = (await webcrypto.subtle.generateKey({ name: 'X25519' }, true, [
-            'deriveBits'
-        ])) as SubtleKeyPair
-        const privateJwk = await webcrypto.subtle.exportKey('jwk', keys.privateKey)
+        const { privateKey } = await generateKeyPairAsync('x25519')
+        const jwk = privateKey.export({ format: 'jwk' })
         return {
-            pubKey: decodeBase64Url(privateJwk.x, 'x25519 public key'),
-            privKey: decodeBase64Url(privateJwk.d, 'x25519 private key')
+            pubKey: decodeBase64Url(jwk.x, 'x25519 public key'),
+            privKey: decodeBase64Url(jwk.d, 'x25519 private key')
         }
     }
 
     static async keyPairFromPrivateKey(privKey: Uint8Array): Promise<SignalKeyPair> {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
-        const privateKey = await webcrypto.subtle.importKey(
-            'pkcs8',
-            pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, privKey),
-            { name: 'X25519' },
-            true,
-            ['deriveBits']
-        )
-        const privateJwk = await webcrypto.subtle.exportKey('jwk', privateKey)
+        const jwk = x25519PrivateKeyObject(privKey).export({ format: 'jwk' })
         return {
-            pubKey: decodeBase64Url(privateJwk.x, 'x25519 public key'),
-            privKey: decodeBase64Url(privateJwk.d, 'x25519 private key')
+            pubKey: decodeBase64Url(jwk.x, 'x25519 public key'),
+            privKey
         }
     }
 
     static async scalarMult(privKey: Uint8Array, pubKey: Uint8Array): Promise<Uint8Array> {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
         assertByteLength(pubKey, 32, 'x25519 public key must be 32 bytes')
-
-        // TODO: When Bun supports deriveBits with X25519 change to Async Web Crypto API
-        // https://github.com/oven-sh/bun/pull/29152
-        if (IS_BUN) {
-            const spki = new Uint8Array(X25519_SPKI_PREFIX.length + 32)
-            spki.set(X25519_SPKI_PREFIX, 0)
-            spki.set(pubKey, X25519_SPKI_PREFIX.length)
-            const shared = diffieHellman({
-                privateKey: createPrivateKey({
-                    key: pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, privKey) as Buffer,
-                    format: 'der',
-                    type: 'pkcs8'
-                }),
-                publicKey: createPublicKey({ key: spki as Buffer, format: 'der', type: 'spki' })
-            })
-            return toBytesView(shared)
-        }
-
-        const [privateKey, publicKey] = await Promise.all([
-            webcrypto.subtle.importKey(
-                'pkcs8',
-                pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, privKey),
-                { name: 'X25519' },
-                false,
-                ['deriveBits']
-            ),
-            webcrypto.subtle.importKey('raw', pubKey, { name: 'X25519' }, false, [])
-        ])
-        const sharedBits = await webcrypto.subtle.deriveBits(
-            { name: 'X25519', public: publicKey },
-            privateKey,
-            256
+        return Promise.resolve(
+            toBytesView(
+                diffieHellman({
+                    privateKey: x25519PrivateKeyObject(privKey),
+                    publicKey: x25519PublicKeyObject(pubKey)
+                })
+            )
         )
-        return toBytesView(sharedBits)
     }
 }

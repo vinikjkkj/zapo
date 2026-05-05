@@ -331,7 +331,7 @@ test('addon crypto helpers encrypt/decrypt payloads and validate aad', async () 
                 iv,
                 additionalData: new Uint8Array([1, 2, 3])
             }),
-        /The operation failed|decrypt/i
+        /The operation failed|decrypt|unable to authenticate/i
     )
 
     await assert.rejects(

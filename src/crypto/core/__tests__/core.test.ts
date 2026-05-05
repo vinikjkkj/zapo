@@ -10,14 +10,7 @@ import {
     versionByte
 } from '@crypto/core/keys'
 import { buildNonce } from '@crypto/core/nonce'
-import {
-    aesGcmDecrypt,
-    aesGcmEncrypt,
-    hmacSign,
-    importAesGcmKey,
-    importHmacKey,
-    sha256
-} from '@crypto/core/primitives'
+import { aesGcmDecrypt, aesGcmEncrypt, hmacSha256Sign, sha256 } from '@crypto/core/primitives'
 import { randomBytesAsync, randomFillAsync, randomIntAsync } from '@crypto/core/random'
 import { assertByteLength, bytesToBase64UrlSafe, decodeBase64Url } from '@util/bytes'
 
@@ -54,17 +47,16 @@ test('nonce and versioned key helpers enforce protocol constraints', () => {
 
 test('primitive crypto functions encrypt/decrypt and sign deterministically', async () => {
     const keyRaw = new Uint8Array(32).fill(4)
-    const key = await importAesGcmKey(keyRaw, ['encrypt', 'decrypt'])
     const nonce = new Uint8Array(12).fill(5)
     const plaintext = new Uint8Array([1, 2, 3, 4, 5])
 
-    const ciphertext = await aesGcmEncrypt(key, nonce, plaintext)
-    const decrypted = await aesGcmDecrypt(key, nonce, ciphertext)
+    const ciphertext = await aesGcmEncrypt(keyRaw, nonce, plaintext)
+    const decrypted = await aesGcmDecrypt(keyRaw, nonce, ciphertext)
     assert.deepEqual(decrypted, plaintext)
 
-    const hmacKey = await importHmacKey(new Uint8Array(32).fill(6))
-    const sig1 = await hmacSign(hmacKey, new Uint8Array([1, 2]))
-    const sig2 = await hmacSign(hmacKey, new Uint8Array([1, 2]))
+    const hmacKey = new Uint8Array(32).fill(6)
+    const sig1 = await hmacSha256Sign(hmacKey, new Uint8Array([1, 2]))
+    const sig2 = await hmacSha256Sign(hmacKey, new Uint8Array([1, 2]))
     assert.deepEqual(sig1, sig2)
 
     const digest = await sha256(new Uint8Array([7]))
