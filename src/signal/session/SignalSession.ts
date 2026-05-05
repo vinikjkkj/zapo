@@ -210,6 +210,6 @@ export function toSerializedKeyPair(pair: {
     }
 }
 
-export function ecdh(privateKey: Uint8Array, publicKey: Uint8Array): Promise<Uint8Array> {
-    return X25519.scalarMult(privateKey, toRawPubKey(publicKey))
+export async function ecdh(privateKey: Uint8Array, publicKey: Uint8Array): Promise<Uint8Array> {
+    return await X25519.scalarMult(privateKey, toRawPubKey(publicKey))
 }
