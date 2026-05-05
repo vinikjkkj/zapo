@@ -150,18 +150,14 @@ export class WaFakeConnectionPipeline {
 
     private async handleXxClientHello(clientEphemeralPub: Uint8Array): Promise<void> {
         const handshake = new WaFakeNoiseHandshake()
-        await handshake.start(NOISE_XX_NAME, PROLOGUE)
-        await handshake.authenticate(clientEphemeralPub)
+        handshake.start(NOISE_XX_NAME, PROLOGUE)
+        handshake.authenticate(clientEphemeralPub)
 
         const serverEphemeral = await X25519.generateKeyPair()
-        await handshake.authenticate(serverEphemeral.pubKey)
-        await handshake.mixIntoKey(
-            await X25519.scalarMult(serverEphemeral.privKey, clientEphemeralPub)
-        )
-        const encryptedServerStatic = await handshake.encrypt(
-            this.config.serverStaticKeyPair.pubKey
-        )
-        await handshake.mixIntoKey(
+        handshake.authenticate(serverEphemeral.pubKey)
+        handshake.mixIntoKey(await X25519.scalarMult(serverEphemeral.privKey, clientEphemeralPub))
+        const encryptedServerStatic = handshake.encrypt(this.config.serverStaticKeyPair.pubKey)
+        handshake.mixIntoKey(
             await X25519.scalarMult(this.config.serverStaticKeyPair.privKey, clientEphemeralPub)
         )
 
@@ -169,7 +165,7 @@ export class WaFakeConnectionPipeline {
             root: this.config.rootCa,
             leafKey: this.config.serverStaticKeyPair.pubKey
         })
-        const encryptedCertPayload = await handshake.encrypt(certChain.encoded)
+        const encryptedCertPayload = handshake.encrypt(certChain.encoded)
 
         const serverHello = proto.HandshakeMessage.encode({
             serverHello: {
@@ -203,32 +199,32 @@ export class WaFakeConnectionPipeline {
         const encryptedClientPayload = clientHello.payload
 
         const handshake = new WaFakeNoiseHandshake()
-        await handshake.start(NOISE_IK_NAME, PROLOGUE)
-        await handshake.authenticate(this.config.serverStaticKeyPair.pubKey)
-        await handshake.authenticate(clientEphemeralPub)
-        await handshake.mixIntoKey(
+        handshake.start(NOISE_IK_NAME, PROLOGUE)
+        handshake.authenticate(this.config.serverStaticKeyPair.pubKey)
+        handshake.authenticate(clientEphemeralPub)
+        handshake.mixIntoKey(
             await X25519.scalarMult(this.config.serverStaticKeyPair.privKey, clientEphemeralPub)
         )
-        const clientStaticKey = await handshake.decrypt(encryptedClientStatic)
-        await handshake.mixIntoKey(
+        const clientStaticKey = handshake.decrypt(encryptedClientStatic)
+        handshake.mixIntoKey(
             await X25519.scalarMult(this.config.serverStaticKeyPair.privKey, clientStaticKey)
         )
-        const clientPayloadBytes = await handshake.decrypt(encryptedClientPayload)
+        const clientPayloadBytes = handshake.decrypt(encryptedClientPayload)
         const clientPayload = parseClientPayload(clientPayloadBytes)
 
         const serverEphemeral = await X25519.generateKeyPair()
-        await handshake.authenticate(serverEphemeral.pubKey)
-        await handshake.mixIntoKey(
-            await X25519.scalarMult(serverEphemeral.privKey, clientEphemeralPub)
-        )
-        await handshake.mixIntoKey(
-            await X25519.scalarMult(serverEphemeral.privKey, clientStaticKey)
-        )
+        handshake.authenticate(serverEphemeral.pubKey)
+        const [dhEphem, dhStatic] = await Promise.all([
+            X25519.scalarMult(serverEphemeral.privKey, clientEphemeralPub),
+            X25519.scalarMult(serverEphemeral.privKey, clientStaticKey)
+        ])
+        handshake.mixIntoKey(dhEphem)
+        handshake.mixIntoKey(dhStatic)
         const certChain = await buildFakeCertChain({
             root: this.config.rootCa,
             leafKey: this.config.serverStaticKeyPair.pubKey
         })
-        const encryptedCertPayload = await handshake.encrypt(certChain.encoded)
+        const encryptedCertPayload = handshake.encrypt(certChain.encoded)
 
         const serverHello = proto.HandshakeMessage.encode({
             serverHello: {
@@ -239,7 +235,7 @@ export class WaFakeConnectionPipeline {
 
         this.frameSocket.sendFrame(serverHello)
 
-        const keys = await handshake.finish()
+        const keys = handshake.finish()
         const transport = new WaFakeTransport({
             recvKey: keys.recvKey,
             sendKey: keys.sendKey
@@ -260,14 +256,14 @@ export class WaFakeConnectionPipeline {
         if (!clientFinish?.static || !clientFinish.payload) {
             throw new Error('ClientFinish missing static/payload')
         }
-        const clientStaticKey = await handshake.decrypt(clientFinish.static)
-        await handshake.mixIntoKey(
+        const clientStaticKey = handshake.decrypt(clientFinish.static)
+        handshake.mixIntoKey(
             await X25519.scalarMult(serverEphemeralKeyPair.privKey, clientStaticKey)
         )
-        const clientPayloadBytes = await handshake.decrypt(clientFinish.payload)
+        const clientPayloadBytes = handshake.decrypt(clientFinish.payload)
         const clientPayload = parseClientPayload(clientPayloadBytes)
 
-        const keys = await handshake.finish()
+        const keys = handshake.finish()
         const transport = new WaFakeTransport({
             recvKey: keys.recvKey,
             sendKey: keys.sendKey

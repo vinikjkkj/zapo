@@ -106,7 +106,8 @@ module.exports = [
             ],
             'n/prefer-node-protocol': 'error',
             'n/no-extraneous-import': 'error',
-            'import/no-unresolved': 'error'
+            'import/no-unresolved': 'error',
+            '@typescript-eslint/await-thenable': 'error'
         }
     },
     {

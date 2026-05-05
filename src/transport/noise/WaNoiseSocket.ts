@@ -17,12 +17,12 @@ export class WaNoiseSocket {
         this.readCounter = 0
     }
 
-    public encrypt(frame: Uint8Array, additionalData?: Uint8Array): Promise<Uint8Array> {
+    public encrypt(frame: Uint8Array, additionalData?: Uint8Array): Uint8Array {
         writeNonceCounter(this.writeNonceScratch, this.writeCounter++)
         return aesGcmEncrypt(this.encryptKey, this.writeNonceScratch, frame, additionalData)
     }
 
-    public decrypt(frame: Uint8Array, additionalData?: Uint8Array): Promise<Uint8Array> {
+    public decrypt(frame: Uint8Array, additionalData?: Uint8Array): Uint8Array {
         writeNonceCounter(this.readNonceScratch, this.readCounter++)
         return aesGcmDecrypt(this.decryptKey, this.readNonceScratch, frame, additionalData)
     }

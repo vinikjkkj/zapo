@@ -65,7 +65,6 @@ export class WaNoiseSession {
     private readonly sendWire: (payload: Uint8Array) => Promise<void>
     private readonly logger: Logger
     private writeChain: Promise<void> = Promise.resolve()
-    private readChain: Promise<void> = Promise.resolve()
     private frameCodec: WaFrameCodec | null = null
     private handshakeInbox: Uint8Array[] = []
     private handshakeInboxHead = 0
@@ -139,15 +138,7 @@ export class WaNoiseSession {
         if (!socket || !codec) {
             return Promise.reject(new Error('noise session is not established'))
         }
-        let encryptPromise: Promise<Uint8Array>
-        try {
-            encryptPromise = socket.encrypt(frame)
-        } catch (error) {
-            return Promise.reject(error)
-        }
-        const result = this.writeChain
-            .then(() => encryptPromise)
-            .then((encrypted) => codec.encodeFrame(encrypted))
+        const result = this.writeChain.then(() => codec.encodeFrame(socket.encrypt(frame)))
         this.writeChain = result.then(
             () => {},
             () => {}
@@ -186,14 +177,7 @@ export class WaNoiseSession {
         }
 
         if (frames.length > 0) {
-            const decryptBatch = this.decryptFramesBatch(this.noiseSocket, frames)
-            this.readChain = this.readChain
-                .then(() => decryptBatch)
-                .then(
-                    () => {},
-                    () => {}
-                )
-            const decrypted = await decryptBatch
+            const decrypted = this.decryptFramesBatch(this.noiseSocket, frames)
             for (let i = 0; i < decrypted.length; i++) {
                 out.push(decrypted[i])
             }
@@ -213,18 +197,15 @@ export class WaNoiseSession {
         }
     }
 
-    private async decryptFramesBatch(
+    private decryptFramesBatch(
         socket: WaNoiseSocket,
         frames: readonly Uint8Array[]
-    ): Promise<readonly Uint8Array[]> {
-        if (frames.length === 1) {
-            return [await socket.decrypt(frames[0])]
-        }
-        const pending = new Array<Promise<Uint8Array>>(frames.length)
+    ): readonly Uint8Array[] {
+        const out = new Array<Uint8Array>(frames.length)
         for (let i = 0; i < frames.length; i++) {
-            pending[i] = socket.decrypt(frames[i])
+            out[i] = socket.decrypt(frames[i])
         }
-        return Promise.all(pending)
+        return out
     }
 
     public reset(): void {
@@ -239,7 +220,6 @@ export class WaNoiseSession {
         this.serverStaticKey = null
         this.trustedRootCa = undefined
         this.writeChain = Promise.resolve()
-        this.readChain = Promise.resolve()
     }
 
     public getServerStaticKey(): Uint8Array | null {
@@ -255,8 +235,8 @@ export class WaNoiseSession {
     ): Promise<WaNoiseSocket> {
         this.logger.trace('noise full handshake: send client hello')
         const handshake = new WaNoiseHandshake()
-        await handshake.start(NOISE_XX_NAME, protocolHeader)
-        await handshake.authenticate(ephemeralKeyPair.pubKey)
+        handshake.start(NOISE_XX_NAME, protocolHeader)
+        handshake.authenticate(ephemeralKeyPair.pubKey)
 
         const clientHello = proto.HandshakeMessage.encode({
             clientHello: {
@@ -316,20 +296,20 @@ export class WaNoiseSession {
     > {
         this.logger.trace('noise resume handshake: send IK client hello')
         const handshake = new WaNoiseHandshake()
-        await handshake.start(NOISE_IK_NAME, protocolHeader)
-        await handshake.authenticate(serverStaticKey)
-        await handshake.authenticate(ephemeralKeyPair.pubKey)
+        handshake.start(NOISE_IK_NAME, protocolHeader)
+        handshake.authenticate(serverStaticKey)
+        handshake.authenticate(ephemeralKeyPair.pubKey)
 
         const [agreement1, agreement2] = await Promise.all([
             X25519.scalarMult(ephemeralKeyPair.privKey, serverStaticKey),
             X25519.scalarMult(clientStaticKeyPair.privKey, serverStaticKey)
         ])
 
-        await handshake.mixIntoKey(agreement1)
-        const encryptedClientStatic = await handshake.encrypt(clientStaticKeyPair.pubKey)
+        handshake.mixIntoKey(agreement1)
+        const encryptedClientStatic = handshake.encrypt(clientStaticKeyPair.pubKey)
 
-        await handshake.mixIntoKey(agreement2)
-        const encryptedPayload = await handshake.encrypt(payload)
+        handshake.mixIntoKey(agreement2)
+        const encryptedPayload = handshake.encrypt(payload)
 
         const clientHello = proto.HandshakeMessage.encode({
             clientHello: {
@@ -356,20 +336,20 @@ export class WaNoiseSession {
             throw new Error('noise resume handshake missing certificate payload')
         }
         const serverEphemeral = serverHello.ephemeral
-        await handshake.authenticate(serverEphemeral)
+        handshake.authenticate(serverEphemeral)
 
         const [dh1, dh2] = await Promise.all([
             X25519.scalarMult(ephemeralKeyPair.privKey, serverEphemeral),
             X25519.scalarMult(clientStaticKeyPair.privKey, serverEphemeral)
         ])
 
-        await handshake.mixIntoKey(dh1)
-        await handshake.mixIntoKey(dh2)
+        handshake.mixIntoKey(dh1)
+        handshake.mixIntoKey(dh2)
 
-        await handshake.decrypt(serverHello.payload)
+        handshake.decrypt(serverHello.payload)
         this.serverStaticKey = serverStaticKey
         this.logger.info('noise resume handshake successful without fallback')
-        return { socket: await handshake.finish(), serverHelloFrame: null }
+        return { socket: handshake.finish(), serverHelloFrame: null }
     }
 
     private async resumeHandshakeWithFallback(
@@ -381,8 +361,8 @@ export class WaNoiseSession {
         verifyCertificates: boolean
     ): Promise<WaNoiseSocket> {
         const fallback = new WaNoiseHandshake()
-        await fallback.start(NOISE_XX_FALLBACK_NAME, protocolHeader)
-        await fallback.authenticate(ephemeralKeyPair.pubKey)
+        fallback.start(NOISE_XX_FALLBACK_NAME, protocolHeader)
+        fallback.authenticate(ephemeralKeyPair.pubKey)
         return this.continueFullHandshake(
             fallback,
             serverHelloFrame,
@@ -409,26 +389,22 @@ export class WaNoiseSession {
         }
 
         const serverEphemeral = serverHello.ephemeral
-        await handshake.authenticate(serverEphemeral)
-        await handshake.mixIntoKey(
-            await X25519.scalarMult(ephemeralKeyPair.privKey, serverEphemeral)
-        )
+        handshake.authenticate(serverEphemeral)
+        handshake.mixIntoKey(await X25519.scalarMult(ephemeralKeyPair.privKey, serverEphemeral))
 
-        const serverStatic = await handshake.decrypt(serverHello.static)
-        await handshake.mixIntoKey(await X25519.scalarMult(ephemeralKeyPair.privKey, serverStatic))
+        const serverStatic = handshake.decrypt(serverHello.static)
+        handshake.mixIntoKey(await X25519.scalarMult(ephemeralKeyPair.privKey, serverStatic))
 
-        const certificate = await handshake.decrypt(serverHello.payload)
+        const certificate = handshake.decrypt(serverHello.payload)
         if (verifyCertificates) {
             await verifyNoiseCertificateChain(certificate, serverStatic, this.trustedRootCa)
             this.logger.trace('noise certificate chain verified')
         }
         this.serverStaticKey = serverStatic
 
-        const encryptedClientStatic = await handshake.encrypt(clientStaticKeyPair.pubKey)
-        await handshake.mixIntoKey(
-            await X25519.scalarMult(clientStaticKeyPair.privKey, serverEphemeral)
-        )
-        const encryptedPayload = await handshake.encrypt(payload)
+        const encryptedClientStatic = handshake.encrypt(clientStaticKeyPair.pubKey)
+        handshake.mixIntoKey(await X25519.scalarMult(clientStaticKeyPair.privKey, serverEphemeral))
+        const encryptedPayload = handshake.encrypt(payload)
 
         const clientFinish = proto.HandshakeMessage.encode({
             clientFinish: {
@@ -511,14 +487,7 @@ export class WaNoiseSession {
         const start = this.handshakeInboxHead
         const frames = this.handshakeInbox.slice(start)
         if (frames.length > 0) {
-            const decryptBatch = this.decryptFramesBatch(this.noiseSocket, frames)
-            this.readChain = this.readChain
-                .then(() => decryptBatch)
-                .then(
-                    () => {},
-                    () => {}
-                )
-            const decrypted = await decryptBatch
+            const decrypted = this.decryptFramesBatch(this.noiseSocket, frames)
             for (let i = 0; i < decrypted.length; i++) {
                 this.pendingDecryptedFrames.push(decrypted[i])
             }

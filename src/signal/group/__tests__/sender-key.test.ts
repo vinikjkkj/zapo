@@ -44,7 +44,7 @@ function makeSenderKeyRecord(seed = 0): SenderKeyRecord {
 test('sender key chain derives message keys and handles stale/future counters', async () => {
     const senderKey = makeSenderKeyRecord(11)
 
-    const derived = await deriveSenderKeyMsgKey(0, senderKey.chainKey)
+    const derived = deriveSenderKeyMsgKey(0, senderKey.chainKey)
     assert.equal(derived.nextChainKey.length, 32)
     assert.equal(derived.messageKey.iteration, 0)
     assert.equal(derived.messageKey.seed.length, 50)

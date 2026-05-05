@@ -128,11 +128,9 @@ export class FakePeerGroupRecvSession {
         let seed: Uint8Array | null = null
         let iteration = record.nextIteration
         while (iteration <= targetIteration) {
-            const [nextChainRaw, messageInputKey] = await Promise.all([
-                hmacSha256Sign(chainKey, CHAIN_KEY_LABEL),
-                hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
-            ])
-            const messageSeed = await hkdf(messageInputKey, null, WHISPER_GROUP_INFO, 50)
+            const nextChainRaw = hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
+            const messageInputKey = hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
+            const messageSeed = hkdf(messageInputKey, null, WHISPER_GROUP_INFO, 50)
             if (iteration === targetIteration) {
                 seed = messageSeed
             }
@@ -147,7 +145,7 @@ export class FakePeerGroupRecvSession {
 
         const iv = seed.subarray(0, 16)
         const keyBytes = seed.subarray(16, 48)
-        const padded = await aesCbcDecrypt(keyBytes, iv, decoded.ciphertext)
+        const padded = aesCbcDecrypt(keyBytes, iv, decoded.ciphertext)
         return unpadPkcs7(padded)
     }
 }

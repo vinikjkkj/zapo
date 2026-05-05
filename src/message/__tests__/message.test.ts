@@ -204,7 +204,7 @@ test('padding and phash generation cover success and edge paths', async () => {
     assert.deepEqual(unpadded, new Uint8Array([10, 11]))
     assert.throws(() => unpadPkcs7(new Uint8Array([])), /empty bytes/)
 
-    const hash = await computePhashV2(['5511:0@c.us', '5511:2@s.whatsapp.net'])
+    const hash = computePhashV2(['5511:0@c.us', '5511:2@s.whatsapp.net'])
     assert.match(hash, /^2:/)
 })
 
@@ -351,15 +351,15 @@ test('computeDeviceKeyHash produces deterministic 8-byte hash from identity keys
     const key2 = new Uint8Array(33).fill(2)
     key2[0] = 5
 
-    const hash1 = await computeDeviceKeyHash([key1, key2])
-    const hash2 = await computeDeviceKeyHash([key1, key2])
+    const hash1 = computeDeviceKeyHash([key1, key2])
+    const hash2 = computeDeviceKeyHash([key1, key2])
     assert.equal(hash1.byteLength, 8)
     assert.deepEqual(hash1, hash2)
 
-    const hashDiff = await computeDeviceKeyHash([key2, key1])
+    const hashDiff = computeDeviceKeyHash([key2, key1])
     assert.notDeepEqual(hash1, hashDiff)
 
-    const emptyHash = await computeDeviceKeyHash([])
+    const emptyHash = computeDeviceKeyHash([])
     assert.equal(emptyHash.byteLength, 8)
     assert.deepEqual(emptyHash, new Uint8Array(8))
 })

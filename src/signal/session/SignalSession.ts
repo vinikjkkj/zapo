@@ -108,7 +108,7 @@ export async function initiateSessionOutgoing(
         baseDh,
         ...(oneTimeDh ? [oneTimeDh] : [])
     ])
-    const [rootKey, chainKey] = await hkdfSplit(secret, null, 'WhisperText')
+    const [rootKey, chainKey] = hkdfSplit(secret, null, 'WhisperText')
 
     const recvChain: RawSignalRecvChain = {
         senderRatchetKey: remoteRatchetKey,
@@ -163,7 +163,7 @@ export async function initiateSessionIncoming(
         signedDh,
         ...(oneTimeDh ? [oneTimeDh] : [])
     ])
-    const [rootKey, chainKey] = await hkdfSplit(secret, null, 'WhisperText')
+    const [rootKey, chainKey] = hkdfSplit(secret, null, 'WhisperText')
 
     return {
         local: { regId: local.regId, pubKey: local.staticKeyPair.pubKey },
@@ -188,7 +188,7 @@ export async function calculateRatchet(
     remoteRatchetPubKey: Uint8Array
 ): Promise<{ readonly rootKey: Uint8Array; readonly chainKey: Uint8Array }> {
     const sharedSecret = await ecdh(localRatchet.privKey, remoteRatchetPubKey)
-    const [nextRootKey, chainKey] = await hkdfSplit(sharedSecret, rootKey, 'WhisperRatchet')
+    const [nextRootKey, chainKey] = hkdfSplit(sharedSecret, rootKey, 'WhisperRatchet')
     return {
         rootKey: nextRootKey,
         chainKey
@@ -210,6 +210,6 @@ export function toSerializedKeyPair(pair: {
     }
 }
 
-export async function ecdh(privateKey: Uint8Array, publicKey: Uint8Array): Promise<Uint8Array> {
+export function ecdh(privateKey: Uint8Array, publicKey: Uint8Array): Promise<Uint8Array> {
     return X25519.scalarMult(privateKey, toRawPubKey(publicKey))
 }

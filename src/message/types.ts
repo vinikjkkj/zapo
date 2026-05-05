@@ -73,12 +73,14 @@ interface WaSendAudioMessage extends WaSendMediaBase, UserMediaFields<Proto.Mess
 }
 
 interface WaSendDocumentMessage
-    extends WaSendMediaBase, UserMediaFields<Proto.Message.IDocumentMessage> {
+    extends WaSendMediaBase,
+        UserMediaFields<Proto.Message.IDocumentMessage> {
     readonly type: 'document'
 }
 
 interface WaSendStickerMessage
-    extends WaSendMediaBaseOptionalMime, UserMediaFields<Proto.Message.IStickerMessage> {
+    extends WaSendMediaBaseOptionalMime,
+        UserMediaFields<Proto.Message.IStickerMessage> {
     readonly type: 'sticker'
 }
 

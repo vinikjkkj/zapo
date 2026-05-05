@@ -159,7 +159,7 @@ test('signal serializer key loaders require signed and one-time prekeys from sto
 
 test('signal ratchet derives keys, selects future message keys and rejects duplicates', async () => {
     const chainKey = makeBytes(32, 40)
-    const derived = await deriveMsgKey(0, chainKey)
+    const derived = deriveMsgKey(0, chainKey)
     assert.equal(derived.nextChainKey.length, 32)
     assert.equal(derived.messageKey.cipherKey.length, 32)
     assert.equal(derived.messageKey.macKey.length, 32)

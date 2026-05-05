@@ -7,7 +7,7 @@ test('crypto barrel exports primary APIs', async () => {
     const bytes = await randomBytesAsync(16)
     assert.equal(bytes.length, 16)
 
-    const derived = await hkdf(new Uint8Array(32).fill(1), null, 'info', 32)
+    const derived = hkdf(new Uint8Array(32).fill(1), null, 'info', 32)
     assert.equal(derived.length, 32)
 
     const x = await X25519.generateKeyPair()

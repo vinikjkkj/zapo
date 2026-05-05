@@ -230,7 +230,7 @@ export async function resolvePollOptionNames(
     const hashToName = new Map<string, string>()
     for (const option of options) {
         if (!option.optionName) continue
-        const hash = await sha256(TEXT_ENCODER.encode(option.optionName))
+        const hash = sha256(TEXT_ENCODER.encode(option.optionName))
         hashToName.set(bytesToHex(hash), option.optionName)
     }
 

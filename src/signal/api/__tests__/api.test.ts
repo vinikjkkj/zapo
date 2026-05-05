@@ -84,15 +84,13 @@ test('signal digest api validates key bundle hash and maps digest mismatch reaso
     await signalStore.setSignedPreKey(signedPreKey)
     await Promise.all(preKeys.map((record) => preKeyStore.putPreKey(record)))
 
-    const digestHash = (
-        await sha1(
-            concatBytes([
-                registration.identityKeyPair.pubKey,
-                signedPreKey.keyPair.pubKey,
-                signedPreKey.signature,
-                ...preKeys.map((record) => record.keyPair.pubKey)
-            ])
-        )
+    const digestHash = sha1(
+        concatBytes([
+            registration.identityKeyPair.pubKey,
+            signedPreKey.keyPair.pubKey,
+            signedPreKey.signature,
+            ...preKeys.map((record) => record.keyPair.pubKey)
+        ])
     ).subarray(0, 20)
 
     const digestNode: BinaryNode = {
@@ -195,15 +193,13 @@ test('signal digest api accepts prefetched local key bundle context', async () =
     const registration = await generateRegistrationInfo()
     const signedPreKey = await generateSignedPreKey(6, registration.identityKeyPair.privKey)
     const preKey = await generatePreKeyPair(21)
-    const digestHash = (
-        await sha1(
-            concatBytes([
-                registration.identityKeyPair.pubKey,
-                signedPreKey.keyPair.pubKey,
-                signedPreKey.signature,
-                preKey.keyPair.pubKey
-            ])
-        )
+    const digestHash = sha1(
+        concatBytes([
+            registration.identityKeyPair.pubKey,
+            signedPreKey.keyPair.pubKey,
+            signedPreKey.signature,
+            preKey.keyPair.pubKey
+        ])
     ).subarray(0, 20)
 
     const digestNode: BinaryNode = {

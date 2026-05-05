@@ -31,18 +31,18 @@ test('cs token generator caches by account and salt and supports invalidation', 
     const saltA = new Uint8Array([1, 2, 3, 4, 5])
     const saltB = new Uint8Array([1, 2, 3, 4, 6])
 
-    const first = await generator.generate(saltA, '12345@lid')
-    const cached = await generator.generate(saltA, '12345@lid')
+    const first = generator.generate(saltA, '12345@lid')
+    const cached = generator.generate(saltA, '12345@lid')
     assert.strictEqual(cached, first)
 
-    const otherAccount = await generator.generate(saltA, '99999@lid')
+    const otherAccount = generator.generate(saltA, '99999@lid')
     assert.notStrictEqual(otherAccount, first)
 
-    const changedSalt = await generator.generate(saltB, '12345@lid')
+    const changedSalt = generator.generate(saltB, '12345@lid')
     assert.notStrictEqual(changedSalt, first)
 
     generator.invalidate()
-    const afterInvalidate = await generator.generate(saltA, '12345@lid')
+    const afterInvalidate = generator.generate(saltA, '12345@lid')
     assert.notStrictEqual(afterInvalidate, first)
     assert.deepEqual(afterInvalidate, first)
 })

@@ -17,54 +17,54 @@ export class WaFakeNoiseHandshake {
     private cipherKey: Uint8Array | null = null
     private nonceCounter = 0
 
-    public async start(name: Uint8Array, prologue: Uint8Array): Promise<void> {
-        const initialHash = name.byteLength === 32 ? name : await sha256(name)
+    public start(name: Uint8Array, prologue: Uint8Array): void {
+        const initialHash = name.byteLength === 32 ? name : sha256(name)
         this.hash = initialHash
         this.chainingKey = initialHash
         this.cipherKey = initialHash
         this.nonceCounter = 0
-        await this.authenticate(prologue)
+        this.authenticate(prologue)
     }
 
-    public async authenticate(data: Uint8Array): Promise<void> {
+    public authenticate(data: Uint8Array): void {
         const concatenated = new Uint8Array(this.hash.byteLength + data.byteLength)
         concatenated.set(this.hash, 0)
         concatenated.set(data, this.hash.byteLength)
-        this.hash = await sha256(concatenated)
+        this.hash = sha256(concatenated)
     }
 
-    public async mixIntoKey(input: Uint8Array): Promise<void> {
-        const [nextChainingKey, nextCipherMaterial] = await hkdfSplit(input, this.chainingKey, '')
+    public mixIntoKey(input: Uint8Array): void {
+        const [nextChainingKey, nextCipherMaterial] = hkdfSplit(input, this.chainingKey, '')
         this.chainingKey = nextChainingKey
         this.cipherKey = nextCipherMaterial
         this.nonceCounter = 0
     }
 
-    public async encrypt(plaintext: Uint8Array): Promise<Uint8Array> {
+    public encrypt(plaintext: Uint8Array): Uint8Array {
         if (!this.cipherKey) {
             throw new Error('noise handshake encrypt called before key was derived')
         }
         const iv = this.buildNonceIv()
         this.nonceCounter += 1
-        const ciphertext = await aesGcmEncrypt(this.cipherKey, iv, plaintext, this.hash)
-        await this.authenticate(ciphertext)
+        const ciphertext = aesGcmEncrypt(this.cipherKey, iv, plaintext, this.hash)
+        this.authenticate(ciphertext)
         return ciphertext
     }
 
-    public async decrypt(ciphertext: Uint8Array): Promise<Uint8Array> {
+    public decrypt(ciphertext: Uint8Array): Uint8Array {
         if (!this.cipherKey) {
             throw new Error('noise handshake decrypt called before key was derived')
         }
         const iv = this.buildNonceIv()
         this.nonceCounter += 1
-        const plaintext = await aesGcmDecrypt(this.cipherKey, iv, ciphertext, this.hash)
-        await this.authenticate(ciphertext)
+        const plaintext = aesGcmDecrypt(this.cipherKey, iv, ciphertext, this.hash)
+        this.authenticate(ciphertext)
         return plaintext
     }
 
     /** Derives transport keys (`first -> recv`, `second -> send` for responder role). */
-    public async finish(): Promise<WaFakeNoiseHandshakeFinishKeys> {
-        const [first, second] = await hkdfSplit(EMPTY, this.chainingKey, '')
+    public finish(): WaFakeNoiseHandshakeFinishKeys {
+        const [first, second] = hkdfSplit(EMPTY, this.chainingKey, '')
         return {
             recvKey: first,
             sendKey: second,

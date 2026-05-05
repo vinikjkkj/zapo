@@ -15,15 +15,11 @@ const CHAR_S = 0x73
 const MAX_PARTICIPANTS = 2048
 const PER_WID_BYTES = 96
 
-// Module scratch reused across calls. Safe because every call's sync
-// prep + `sha256(parts).update(...)` consumes the bytes before the
-// awaited `Promise.resolve(...)` yields — the next call's overwrite
-// can't reach an in-flight digest.
 const SCRATCH = new Uint8Array(MAX_PARTICIPANTS * PER_WID_BYTES)
 const OFFSETS = new Uint32Array(MAX_PARTICIPANTS + 1)
 const ORDER = new Uint32Array(MAX_PARTICIPANTS)
 
-export async function computePhashV2(participants: readonly string[]): Promise<string> {
+export function computePhashV2(participants: readonly string[]): string {
     if (participants.length === 0) return '2:'
     const n = participants.length
     if (n > MAX_PARTICIPANTS) {
@@ -51,7 +47,7 @@ export async function computePhashV2(participants: readonly string[]): Promise<s
         const idx = ORDER[i]
         parts[i] = SCRATCH.subarray(OFFSETS[idx], OFFSETS[idx + 1])
     }
-    const digest = await sha256(parts)
+    const digest = sha256(parts)
     return `2:${bytesToBase64(digest.subarray(0, PHASH_DIGEST_PREFIX))}`
 }
 

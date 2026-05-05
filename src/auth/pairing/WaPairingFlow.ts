@@ -303,7 +303,7 @@ export class WaPairingFlow {
             const hmacInput = isHosted
                 ? concatBytes([ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE, wrappedDetails])
                 : wrappedDetails
-            const expectedHmac = await computeAdvIdentityHmac(credentials.advSecretKey, hmacInput)
+            const expectedHmac = computeAdvIdentityHmac(credentials.advSecretKey, hmacInput)
             if (!uint8Equal(expectedHmac, wrappedHmac)) {
                 this.opts.logger.error('pair-success hmac mismatch')
                 throw new Error('pair-success HMAC validation failed')

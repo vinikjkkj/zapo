@@ -217,7 +217,7 @@ export class SignalDigestSyncApi {
             bytesToHash.push(toRawPubKey(preKey.keyPair.pubKey))
         }
 
-        const localHash = (await sha1(bytesToHash)).subarray(0, digest.hash.byteLength)
+        const localHash = sha1(bytesToHash).subarray(0, digest.hash.byteLength)
         if (!uint8Equal(localHash, digest.hash)) {
             return {
                 valid: false,

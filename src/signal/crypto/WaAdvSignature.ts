@@ -38,9 +38,6 @@ export async function generateDeviceSignature(
     return xeddsaSign(identityKeyPair.privKey, message)
 }
 
-export function computeAdvIdentityHmac(
-    secretKey: Uint8Array,
-    details: Uint8Array
-): Promise<Uint8Array> {
+export function computeAdvIdentityHmac(secretKey: Uint8Array, details: Uint8Array): Uint8Array {
     return hmacSha256Sign(secretKey, details)
 }

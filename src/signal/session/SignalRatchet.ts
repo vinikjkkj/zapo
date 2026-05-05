@@ -62,10 +62,10 @@ export function splitMsgKey(index: number, bytes: Uint8Array): SignalMessageKey 
     }
 }
 
-export async function deriveMsgKey(
+export function deriveMsgKey(
     index: number,
     chainKey: Uint8Array
-): Promise<{ readonly nextChainKey: Uint8Array; readonly messageKey: SignalMessageKey }> {
+): { readonly nextChainKey: Uint8Array; readonly messageKey: SignalMessageKey } {
     return deriveMsgKeyFromChainKey(index, chainKey)
 }
 
@@ -97,7 +97,7 @@ export async function selectMessageKey(
     }
 
     let chainKey = chain.chainKey
-    const first = await deriveMsgKeyFromChainKey(chain.nextMsgIndex, chainKey)
+    const first = deriveMsgKeyFromChainKey(chain.nextMsgIndex, chainKey)
     let currentMessageKey = first.messageKey
     chainKey = first.nextChainKey
     if (delta === 0) {
@@ -129,7 +129,7 @@ export async function selectMessageKey(
                 iv: currentMessageKey.iv
             })
         }
-        const derived = await deriveMsgKeyFromChainKey(counter, chainKey)
+        const derived = deriveMsgKeyFromChainKey(counter, chainKey)
         currentMessageKey = derived.messageKey
         chainKey = derived.nextChainKey
     }
@@ -145,16 +145,14 @@ export async function selectMessageKey(
     }
 }
 
-async function deriveMsgKeyFromChainKey(
+function deriveMsgKeyFromChainKey(
     index: number,
     chainKey: Uint8Array
-): Promise<{ readonly nextChainKey: Uint8Array; readonly messageKey: SignalMessageKey }> {
-    const [nextChainRaw, messageInputKey] = await Promise.all([
-        hmacSha256Sign(chainKey, CHAIN_KEY_LABEL),
-        hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
-    ])
+): { readonly nextChainKey: Uint8Array; readonly messageKey: SignalMessageKey } {
+    const nextChainRaw = hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
+    const messageInputKey = hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
     const nextChainKey = nextChainRaw.subarray(0, 32)
-    const expanded = await hkdf(messageInputKey, null, 'WhisperMessageKeys', 80)
+    const expanded = hkdf(messageInputKey, null, 'WhisperMessageKeys', 80)
     return {
         nextChainKey,
         messageKey: splitMsgKey(index, expanded)
@@ -165,11 +163,11 @@ export async function encryptMsg(
     session: SignalSessionRecord,
     plaintext: Uint8Array
 ): Promise<readonly [SignalSessionRecord, { type: 'msg' | 'pkmsg'; ciphertext: Uint8Array }]> {
-    const { nextChainKey, messageKey } = await deriveMsgKey(
+    const { nextChainKey, messageKey } = deriveMsgKey(
         session.sendChain.nextMsgIndex,
         session.sendChain.chainKey
     )
-    const ciphertext = await aesCbcEncrypt(messageKey.cipherKey, messageKey.iv, plaintext)
+    const ciphertext = aesCbcEncrypt(messageKey.cipherKey, messageKey.iv, plaintext)
 
     const signalPayload = proto.SignalMessage.encode({
         ratchetKey: session.sendChain.ratchetKey.pubKey,
@@ -178,7 +176,7 @@ export async function encryptMsg(
         ciphertext
     }).finish()
     const versionedSignalPayload = prependVersion(signalPayload, SIGNAL_VERSION)
-    const mac = await hmacSha256Sign(messageKey.macKey, [
+    const mac = hmacSha256Sign(messageKey.macKey, [
         session.local.pubKey,
         session.remote.pubKey,
         versionedSignalPayload
@@ -333,7 +331,7 @@ export async function decryptMsgFromSession(
         0,
         message.versionContentMac.length - SIGNAL_MAC_SIZE
     )
-    const expectedMac = await hmacSha256Sign(selectedMessageKey.macKey, [
+    const expectedMac = hmacSha256Sign(selectedMessageKey.macKey, [
         session.remote.pubKey,
         session.local.pubKey,
         payloadWithoutMac
@@ -345,7 +343,7 @@ export async function decryptMsgFromSession(
         throw new Error('invalid message mac')
     }
 
-    const plaintext = await aesCbcDecrypt(
+    const plaintext = aesCbcDecrypt(
         selectedMessageKey.cipherKey,
         selectedMessageKey.iv,
         message.ciphertext
