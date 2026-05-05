@@ -5,6 +5,9 @@ export function buildNonce(counter: number): Uint8Array {
 }
 
 export function writeNonceCounter(out: Uint8Array, counter: number): void {
+    if (out.length < 12) {
+        throw new Error(`nonce buffer must be at least 12 bytes, got ${out.length}`)
+    }
     if (counter > 0xffffffff) {
         throw new Error('nonce counter overflow: exceeds uint32 range')
     }

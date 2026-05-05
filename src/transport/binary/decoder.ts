@@ -99,6 +99,9 @@ function parsePacked(reader: ByteReader, alphabet: readonly string[]): string {
     const odd = (lengthByte & 0x80) !== 0
     const byteCount = lengthByte & 0x7f
     const outLength = byteCount * 2 - (odd ? 1 : 0)
+    if (outLength < 0) {
+        throw new Error(`invalid packed length byte 0x${lengthByte.toString(16)}`)
+    }
 
     let outIndex = 0
     for (let i = 0; i < byteCount; i += 1) {

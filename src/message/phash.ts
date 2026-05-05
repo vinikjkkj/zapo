@@ -33,7 +33,13 @@ export async function computePhashV2(participants: readonly string[]): Promise<s
     let off = 0
     for (let i = 0; i < n; i += 1) {
         OFFSETS[i] = off
-        off = writeCanonicalUtf8(SCRATCH, off, participants[i])
+        const nextOff = writeCanonicalUtf8(SCRATCH, off, participants[i])
+        if (nextOff > SCRATCH.length) {
+            throw new Error(
+                `phash canonical buffer overflow at participant ${i}: needs ${nextOff} bytes, scratch is ${SCRATCH.length}`
+            )
+        }
+        off = nextOff
     }
     OFFSETS[n] = off
 
