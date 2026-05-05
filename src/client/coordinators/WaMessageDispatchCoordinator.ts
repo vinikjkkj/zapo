@@ -61,7 +61,7 @@ import {
     buildMetaNode
 } from '@transport/node/builders/message'
 import type { BinaryNode } from '@transport/types'
-import { bytesToHex, concatBytes, TEXT_ENCODER } from '@util/bytes'
+import { bytesToHex, TEXT_ENCODER } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 interface WaMessageDispatchCoordinatorOptions {
@@ -1146,22 +1146,20 @@ export class WaMessageDispatchCoordinator {
             )
             if (this.mobileMessageIdFormat) {
                 dv.setBigUint64(0, BigInt(Date.now()), false)
-                const entropy = concatBytes([
+                const digest = md5Bytes([
                     timestampBytes,
                     TEXT_ENCODER.encode(meUserJid),
                     await randomBytesAsync(16)
                 ])
-                const digest = md5Bytes(entropy)
                 digest[0] = 0xac
                 return bytesToHex(digest).toUpperCase()
             }
             dv.setBigUint64(0, BigInt(Math.floor(Date.now() / 1_000)), false)
-            const entropy = concatBytes([
+            const digest = await sha256([
                 timestampBytes,
                 TEXT_ENCODER.encode(meUserJid),
                 await randomBytesAsync(8)
             ])
-            const digest = await sha256(entropy)
             return `3EB0${bytesToHex(digest.subarray(0, 9)).toUpperCase()}`
         } catch (error) {
             this.logger.warn('failed to generate message id, falling back to random', {

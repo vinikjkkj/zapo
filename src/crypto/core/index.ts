@@ -11,7 +11,7 @@ export {
     prependVersion,
     readVersionedContent
 } from '@crypto/core/keys'
-export { buildNonce } from '@crypto/core/nonce'
+export { buildNonce, writeNonceCounter } from '@crypto/core/nonce'
 export { randomBytesAsync, randomFillAsync, randomIntAsync } from '@crypto/core/random'
 export {
     sha1,

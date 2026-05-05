@@ -17,7 +17,6 @@ import {
     requireSignedPreKey
 } from '@signal/session/SignalSerializer'
 import {
-    detachSession,
     findMatchingSession,
     generateSerializedKeyPair,
     initiateSessionIncoming,
@@ -339,7 +338,7 @@ export class SignalProtocol {
             ? {
                   ...incoming,
                   prevSessions: [
-                      encodeSignalSessionSnapshot(detachSession(currentSession)),
+                      encodeSignalSessionSnapshot(currentSession),
                       ...currentSession.prevSessions.slice(0, MAX_PREV_SESSIONS - 1)
                   ]
               }

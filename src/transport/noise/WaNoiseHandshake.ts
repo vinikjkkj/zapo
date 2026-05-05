@@ -1,6 +1,6 @@
 import { aesGcmDecrypt, aesGcmEncrypt, buildNonce, hkdfSplit, sha256 } from '@crypto'
 import { WaNoiseSocket } from '@transport/noise/WaNoiseSocket'
-import { concatBytes, EMPTY_BYTES } from '@util/bytes'
+import { EMPTY_BYTES } from '@util/bytes'
 
 export class WaNoiseHandshake {
     private handshakeHash: Uint8Array
@@ -24,7 +24,7 @@ export class WaNoiseHandshake {
     }
 
     public async authenticate(data: Uint8Array): Promise<void> {
-        this.handshakeHash = await sha256(concatBytes([this.handshakeHash, data]))
+        this.handshakeHash = await sha256([this.handshakeHash, data])
     }
 
     public async mixIntoKey(keyMaterial: Uint8Array): Promise<void> {

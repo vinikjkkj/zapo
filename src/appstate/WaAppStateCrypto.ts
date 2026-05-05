@@ -233,12 +233,11 @@ export class WaAppStateCrypto {
         collectionName: string
     ): Promise<Uint8Array> {
         const derivedKeys = await this.deriveKeys(keyData)
-        const payload = concatBytes([
+        return hmacSha256Sign(derivedKeys.snapshotMacHmacKey, [
             ltHash,
             intToBytes(8, version),
             TEXT_ENCODER.encode(collectionName)
         ])
-        return hmacSha256Sign(derivedKeys.snapshotMacHmacKey, payload)
     }
 
     public async generatePatchMac(
@@ -249,13 +248,12 @@ export class WaAppStateCrypto {
         collectionName: string
     ): Promise<Uint8Array> {
         const derivedKeys = await this.deriveKeys(keyData)
-        const payload = concatBytes([
+        return hmacSha256Sign(derivedKeys.patchMacHmacKey, [
             snapshotMac,
             ...valueMacs,
             intToBytes(8, version),
             TEXT_ENCODER.encode(collectionName)
         ])
-        return hmacSha256Sign(derivedKeys.patchMacHmacKey, payload)
     }
 
     public async ltHashAdd(

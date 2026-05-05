@@ -114,10 +114,10 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
     const messageB = new Uint8Array([0xff, 0xee, 0xdd])
 
     const ctFromServer = await encryptWithKey(serverKeys.sendKey, 0, messageA)
-    const decodedByClient = await clientSocket.decrypt(buildNonce(0), ctFromServer)
+    const decodedByClient = await clientSocket.decrypt(ctFromServer)
     assert.deepEqual(Array.from(decodedByClient), Array.from(messageA))
 
-    const ctFromClient = await clientSocket.encrypt(buildNonce(0), messageB)
+    const ctFromClient = await clientSocket.encrypt(messageB)
     const decodedByServer = await decryptWithKey(serverKeys.recvKey, 0, ctFromClient)
     assert.deepEqual(Array.from(decodedByServer), Array.from(messageB))
 })
