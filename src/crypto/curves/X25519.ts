@@ -23,7 +23,17 @@ const diffieHellmanWithCallback = diffieHellman as unknown as (
     callback: DiffieHellmanCallback
 ) => void
 
-const SUPPORTS_DH_CALLBACK = (() => {
+type DiffieHellmanAsync = (options: {
+    privateKey: KeyObject
+    publicKey: KeyObject
+}) => Promise<Buffer>
+
+let diffieHellmanAsync: DiffieHellmanAsync | null = null
+let diffieHellmanAsyncProbed = false
+
+function resolveDiffieHellmanAsync(): DiffieHellmanAsync | null {
+    if (diffieHellmanAsyncProbed) return diffieHellmanAsync
+    diffieHellmanAsyncProbed = true
     try {
         const probe = generateKeyPairSync('x25519')
         const result = (
@@ -32,13 +42,14 @@ const SUPPORTS_DH_CALLBACK = (() => {
                 cb: DiffieHellmanCallback
             ) => Buffer | undefined
         )({ privateKey: probe.privateKey, publicKey: probe.publicKey }, () => {})
-        return result === undefined
+        if (result === undefined) {
+            diffieHellmanAsync = promisify(diffieHellmanWithCallback) as DiffieHellmanAsync
+        }
     } catch {
-        return false
+        // callback form not supported by this runtime; stay on sync path
     }
-})()
-
-const diffieHellmanAsync = SUPPORTS_DH_CALLBACK ? promisify(diffieHellmanWithCallback) : null
+    return diffieHellmanAsync
+}
 
 // Pre-allocated temps for montgomeryToEdwardsPublic (safe: single-threaded)
 const _mx = fe()
@@ -124,8 +135,9 @@ export class X25519 {
             privateKey: x25519PrivateKeyObject(privKey),
             publicKey: x25519PublicKeyObject(pubKey)
         }
-        if (diffieHellmanAsync) {
-            return toBytesView(await diffieHellmanAsync(opts))
+        const dhAsync = resolveDiffieHellmanAsync()
+        if (dhAsync) {
+            return toBytesView(await dhAsync(opts))
         }
         return toBytesView(diffieHellman(opts))
     }
