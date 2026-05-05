@@ -84,12 +84,6 @@ async function runXxHandshake(): Promise<{
     return { clientSocket, serverTransport }
 }
 
-function buildNonce(counter: number): Uint8Array {
-    const nonce = new Uint8Array(12)
-    new DataView(nonce.buffer).setUint32(8, counter, false)
-    return nonce
-}
-
 test('post-handshake transport: server encrypts, client decrypts (3 frames in a row)', async () => {
     const { clientSocket, serverTransport } = await runXxHandshake()
 
@@ -101,7 +95,7 @@ test('post-handshake transport: server encrypts, client decrypts (3 frames in a 
 
     for (let i = 0; i < messages.length; i += 1) {
         const ct = await serverTransport.encryptFrame(messages[i])
-        const decoded = await clientSocket.decrypt(buildNonce(i), ct)
+        const decoded = await clientSocket.decrypt(ct)
         assert.deepEqual(Array.from(decoded), Array.from(messages[i]))
     }
 })
@@ -116,7 +110,7 @@ test('post-handshake transport: client encrypts, server decrypts (3 frames in a 
     ]
 
     for (let i = 0; i < messages.length; i += 1) {
-        const ct = await clientSocket.encrypt(buildNonce(i), messages[i])
+        const ct = await clientSocket.encrypt(messages[i])
         const decoded = await serverTransport.decryptFrame(ct)
         assert.deepEqual(Array.from(decoded), Array.from(messages[i]))
     }
@@ -129,11 +123,11 @@ test('post-handshake transport: bidirectional interleaved frames stay aligned', 
     const ctsFromClient: Uint8Array[] = []
     for (let i = 0; i < 4; i += 1) {
         ctsFromServer.push(await serverTransport.encryptFrame(new Uint8Array([0x10 + i])))
-        ctsFromClient.push(await clientSocket.encrypt(buildNonce(i), new Uint8Array([0x20 + i])))
+        ctsFromClient.push(await clientSocket.encrypt(new Uint8Array([0x20 + i])))
     }
 
     for (let i = 0; i < 4; i += 1) {
-        const fromServer = await clientSocket.decrypt(buildNonce(i), ctsFromServer[i])
+        const fromServer = await clientSocket.decrypt(ctsFromServer[i])
         const fromClient = await serverTransport.decryptFrame(ctsFromClient[i])
         assert.deepEqual(Array.from(fromServer), [0x10 + i])
         assert.deepEqual(Array.from(fromClient), [0x20 + i])

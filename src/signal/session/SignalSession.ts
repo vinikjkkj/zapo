@@ -29,12 +29,6 @@ export function snapshotToRecord(snapshot: SignalSessionSnapshot): SignalSession
     }
 }
 
-export function detachSession(session: SignalSessionRecord): SignalSessionSnapshot {
-    const { prevSessions, ...snapshot } = session
-    void prevSessions
-    return snapshot
-}
-
 export function findMatchingSession(
     session: SignalSessionRecord | null,
     sessionBaseKey: Uint8Array
@@ -53,9 +47,7 @@ export function findMatchingSession(
         }
 
         const decoded = decodeSignalSessionSnapshot(rawPrev, `prevSessions[${index}]`)
-        const prevSessions: RawSignalSessionSnapshot[] = [
-            encodeSignalSessionSnapshot(detachSession(session))
-        ]
+        const prevSessions: RawSignalSessionSnapshot[] = [encodeSignalSessionSnapshot(session)]
         for (let i = 0; i < session.prevSessions.length; i += 1) {
             if (i !== index) {
                 prevSessions.push(session.prevSessions[i])

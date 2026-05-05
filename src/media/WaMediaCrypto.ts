@@ -85,12 +85,12 @@ async function aesCbcDecryptChunk(
 
 async function computeFirstFrameSidecar(
     macKey: Uint8Array,
-    ivCiphertext: Uint8Array,
+    iv: Uint8Array,
+    ciphertext: Uint8Array,
     firstFrameLength: number
 ): Promise<Uint8Array> {
     const aligned = Math.ceil(firstFrameLength / AES_BLOCK_SIZE) * AES_BLOCK_SIZE
-    const slice = ivCiphertext.subarray(0, IV_SIZE + aligned)
-    const digest = await hmacSha256Sign(macKey, slice)
+    const digest = await hmacSha256Sign(macKey, [iv, ciphertext.subarray(0, aligned)])
     return digest.subarray(0, SIDECAR_HMAC_SIZE)
 }
 
@@ -184,9 +184,8 @@ export class WaMediaCrypto {
     ): Promise<WaMediaEncryptionResult> {
         const keys = await WaMediaCrypto.deriveKeys(mediaType, mediaKey)
         const ciphertext = await aesCbcEncrypt(keys.encKey, keys.iv, plaintext)
-        const ivCiphertext = concatBytes([keys.iv, ciphertext])
 
-        const mac = await hmacSha256Sign(keys.macKey, ivCiphertext)
+        const mac = await hmacSha256Sign(keys.macKey, [keys.iv, ciphertext])
         const signature = mac.subarray(0, HMAC_TRUNCATED_SIZE)
         const ciphertextHmac = concatBytes([ciphertext, signature])
 
@@ -203,7 +202,8 @@ export class WaMediaCrypto {
             options?.firstFrameLength !== undefined
                 ? await computeFirstFrameSidecar(
                       keys.macKey,
-                      ivCiphertext,
+                      keys.iv,
+                      ciphertext,
                       options.firstFrameLength
                   )
                 : undefined
@@ -246,10 +246,9 @@ export class WaMediaCrypto {
             ciphertextHmac.byteLength - HMAC_TRUNCATED_SIZE
         )
         const expectedMac = ciphertextHmac.subarray(ciphertextHmac.byteLength - HMAC_TRUNCATED_SIZE)
-        const ivCiphertext = concatBytes([keys.iv, ciphertext])
 
         if (!skipMacVerification) {
-            const mac = await hmacSha256Sign(keys.macKey, ivCiphertext)
+            const mac = await hmacSha256Sign(keys.macKey, [keys.iv, ciphertext])
             const signature = mac.subarray(0, HMAC_TRUNCATED_SIZE)
             if (!uint8TimingSafeEqual(signature, expectedMac)) {
                 throw new Error('media MAC mismatch')
@@ -427,8 +426,7 @@ async function pumpEncryption(
 
         let firstFrameSidecar: Uint8Array | undefined
         if (ffTarget > 0) {
-            const ivCiphertextSlice = concatBytes(ffChunks)
-            const ffDigest = await hmacSha256Sign(keys.macKey, ivCiphertextSlice)
+            const ffDigest = await hmacSha256Sign(keys.macKey, ffChunks)
             firstFrameSidecar = ffDigest.subarray(0, SIDECAR_HMAC_SIZE)
         }
 
@@ -566,8 +564,7 @@ async function pumpEncryptionToWritable(
 
         let firstFrameSidecar: Uint8Array | undefined
         if (ffTarget > 0) {
-            const ivCiphertextSlice = concatBytes(ffChunks)
-            const ffDigest = await hmacSha256Sign(keys.macKey, ivCiphertextSlice)
+            const ffDigest = await hmacSha256Sign(keys.macKey, ffChunks)
             firstFrameSidecar = ffDigest.subarray(0, SIDECAR_HMAC_SIZE)
         }
 

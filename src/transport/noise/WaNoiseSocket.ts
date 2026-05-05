@@ -1,39 +1,29 @@
-import { aesGcmDecrypt, aesGcmEncrypt, buildNonce } from '@crypto'
+import { createSecretKey, type KeyObject } from 'node:crypto'
+
+import { aesGcmDecrypt, aesGcmEncrypt, writeNonceCounter } from '@crypto'
 
 export class WaNoiseSocket {
-    private readonly encryptKey: Uint8Array
-    private readonly decryptKey: Uint8Array
+    private readonly encryptKey: KeyObject
+    private readonly decryptKey: KeyObject
     private writeCounter: number
     private readCounter: number
+    private readonly writeNonceScratch: Uint8Array = new Uint8Array(12)
+    private readonly readNonceScratch: Uint8Array = new Uint8Array(12)
 
     public constructor(encryptKey: Uint8Array, decryptKey: Uint8Array) {
-        this.encryptKey = encryptKey
-        this.decryptKey = decryptKey
+        this.encryptKey = createSecretKey(encryptKey)
+        this.decryptKey = createSecretKey(decryptKey)
         this.writeCounter = 0
         this.readCounter = 0
     }
 
-    public reserveWriteNonce(): Uint8Array {
-        return buildNonce(this.writeCounter++)
+    public encrypt(frame: Uint8Array, additionalData?: Uint8Array): Promise<Uint8Array> {
+        writeNonceCounter(this.writeNonceScratch, this.writeCounter++)
+        return aesGcmEncrypt(this.encryptKey, this.writeNonceScratch, frame, additionalData)
     }
 
-    public encrypt(
-        nonce: Uint8Array,
-        frame: Uint8Array,
-        additionalData?: Uint8Array
-    ): Promise<Uint8Array> {
-        return aesGcmEncrypt(this.encryptKey, nonce, frame, additionalData)
-    }
-
-    public reserveReadNonce(): Uint8Array {
-        return buildNonce(this.readCounter++)
-    }
-
-    public decrypt(
-        nonce: Uint8Array,
-        frame: Uint8Array,
-        additionalData?: Uint8Array
-    ): Promise<Uint8Array> {
-        return aesGcmDecrypt(this.decryptKey, nonce, frame, additionalData)
+    public decrypt(frame: Uint8Array, additionalData?: Uint8Array): Promise<Uint8Array> {
+        writeNonceCounter(this.readNonceScratch, this.readCounter++)
+        return aesGcmDecrypt(this.decryptKey, this.readNonceScratch, frame, additionalData)
     }
 }

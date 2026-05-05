@@ -24,7 +24,6 @@ import {
 } from '@signal/encoding'
 import {
     calculateRatchet,
-    detachSession,
     generateSerializedKeyPair,
     snapshotToRecord
 } from '@signal/session/SignalSession'
@@ -179,12 +178,11 @@ export async function encryptMsg(
         ciphertext
     }).finish()
     const versionedSignalPayload = prependVersion(signalPayload, SIGNAL_VERSION)
-    const macInput = concatBytes([
+    const mac = await hmacSha256Sign(messageKey.macKey, [
         session.local.pubKey,
         session.remote.pubKey,
         versionedSignalPayload
     ])
-    const mac = await hmacSha256Sign(messageKey.macKey, macInput)
     const signalMessage = concatBytes([versionedSignalPayload, mac.subarray(0, SIGNAL_MAC_SIZE)])
 
     let type: 'msg' | 'pkmsg' = 'msg'
@@ -241,7 +239,7 @@ export async function decryptMsg(
                 const updatedSession = {
                     ...updatedPrev,
                     prevSessions: [
-                        encodeSignalSessionSnapshot(detachSession(session)),
+                        encodeSignalSessionSnapshot(session),
                         ...session.prevSessions.slice(0, i),
                         ...session.prevSessions.slice(i + 1)
                     ]
@@ -335,12 +333,11 @@ export async function decryptMsgFromSession(
         0,
         message.versionContentMac.length - SIGNAL_MAC_SIZE
     )
-    const expectedMacInput = concatBytes([
+    const expectedMac = await hmacSha256Sign(selectedMessageKey.macKey, [
         session.remote.pubKey,
         session.local.pubKey,
         payloadWithoutMac
     ])
-    const expectedMac = await hmacSha256Sign(selectedMessageKey.macKey, expectedMacInput)
     const receivedMac = message.versionContentMac.subarray(
         message.versionContentMac.length - SIGNAL_MAC_SIZE
     )

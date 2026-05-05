@@ -21,7 +21,7 @@ import {
 } from '@transport/node/helpers'
 import { parseIqError } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
-import { concatBytes, uint8Equal } from '@util/bytes'
+import { uint8Equal } from '@util/bytes'
 
 interface SignalDigestSyncApiOptions {
     readonly logger: Logger
@@ -217,7 +217,7 @@ export class SignalDigestSyncApi {
             bytesToHash.push(toRawPubKey(preKey.keyPair.pubKey))
         }
 
-        const localHash = (await sha1(concatBytes(bytesToHash))).subarray(0, digest.hash.byteLength)
+        const localHash = (await sha1(bytesToHash)).subarray(0, digest.hash.byteLength)
         if (!uint8Equal(localHash, digest.hash)) {
             return {
                 valid: false,

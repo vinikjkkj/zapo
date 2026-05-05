@@ -3,7 +3,6 @@ import type { Proto } from '@proto'
 import { parseSignalAddressFromJid } from '@protocol/jid'
 import type { SignalAddress } from '@signal/types'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
-import { concatBytes } from '@util/bytes'
 
 const ICDC_DEFAULT_HASH_LENGTH = 8
 const ICDC_FRESHNESS_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1_000
@@ -27,8 +26,7 @@ export async function computeDeviceKeyHash(
         rawKeys[i] =
             identityKeys[i].byteLength === 33 ? toRawPubKey(identityKeys[i]) : identityKeys[i]
     }
-    const combined = concatBytes(rawKeys)
-    const hash = await sha256(combined)
+    const hash = await sha256(rawKeys)
     return hash.subarray(0, length)
 }
 

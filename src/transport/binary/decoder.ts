@@ -87,31 +87,39 @@ class ByteReader {
     }
 }
 
+// Reusable scratch buffer for nibble/hex unpack. Max output is
+// `(0x7f) * 2 = 254` bytes (length byte holds the packed-byte count in
+// its low 7 bits, each byte unpacks to ≤2 chars). Single-threaded JS +
+// non-reentrant decoder makes module-level reuse safe — `TextDecoder`
+// copies into the returned string before we touch the buffer again.
+const PACKED_SCRATCH = new Uint8Array(256)
+
 function parsePacked(reader: ByteReader, alphabet: readonly string[]): string {
     const lengthByte = reader.readUint8()
     const odd = (lengthByte & 0x80) !== 0
     const byteCount = lengthByte & 0x7f
     const outLength = byteCount * 2 - (odd ? 1 : 0)
+    if (outLength < 0) {
+        throw new Error(`invalid packed length byte 0x${lengthByte.toString(16)}`)
+    }
 
-    const buf = new Uint8Array(outLength)
     let outIndex = 0
-
     for (let i = 0; i < byteCount; i += 1) {
         const packed = reader.readUint8()
         const high = (packed >>> 4) & 0x0f
         const low = packed & 0x0f
 
         if (outIndex < outLength) {
-            buf[outIndex] = alphabet[high].charCodeAt(0)
+            PACKED_SCRATCH[outIndex] = alphabet[high].charCodeAt(0)
             outIndex += 1
         }
         if (outIndex < outLength) {
-            buf[outIndex] = alphabet[low].charCodeAt(0)
+            PACKED_SCRATCH[outIndex] = alphabet[low].charCodeAt(0)
             outIndex += 1
         }
     }
 
-    return TEXT_DECODER.decode(buf)
+    return TEXT_DECODER.decode(PACKED_SCRATCH.subarray(0, outLength))
 }
 
 function readBinary(reader: ByteReader, token: number): Uint8Array {

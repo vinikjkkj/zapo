@@ -141,7 +141,7 @@ export class WaNoiseSession {
         }
         let encryptPromise: Promise<Uint8Array>
         try {
-            encryptPromise = socket.encrypt(socket.reserveWriteNonce(), frame)
+            encryptPromise = socket.encrypt(frame)
         } catch (error) {
             return Promise.reject(error)
         }
@@ -218,11 +218,11 @@ export class WaNoiseSession {
         frames: readonly Uint8Array[]
     ): Promise<readonly Uint8Array[]> {
         if (frames.length === 1) {
-            return [await socket.decrypt(socket.reserveReadNonce(), frames[0])]
+            return [await socket.decrypt(frames[0])]
         }
         const pending = new Array<Promise<Uint8Array>>(frames.length)
         for (let i = 0; i < frames.length; i++) {
-            pending[i] = socket.decrypt(socket.reserveReadNonce(), frames[i])
+            pending[i] = socket.decrypt(frames[i])
         }
         return Promise.all(pending)
     }
