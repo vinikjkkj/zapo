@@ -132,8 +132,8 @@ async function runBench(): Promise<void> {
     const nonce = buildPatternBytes(12)
 
     const aesKey = buildPatternBytes(32)
-    const ciphertext = await aesGcmEncrypt(aesKey, nonce, plaintext)
-    const decrypted = await aesGcmDecrypt(aesKey, nonce, ciphertext)
+    const ciphertext = aesGcmEncrypt(aesKey, nonce, plaintext)
+    const decrypted = aesGcmDecrypt(aesKey, nonce, ciphertext)
     assert.deepEqual(decrypted, plaintext)
 
     const hmacKey = buildPatternBytes(32)
@@ -143,7 +143,7 @@ async function runBench(): Promise<void> {
 
     const runHkdfOps = async (): Promise<void> => {
         for (let operation = 0; operation < config.operationsPerIteration; operation += 1) {
-            const output = await hkdf(ikm, salt, hkdfInfo, 32)
+            const output = hkdf(ikm, salt, hkdfInfo, 32)
             if (output.byteLength !== 32) {
                 throw new Error('hkdf result mismatch')
             }
@@ -152,7 +152,7 @@ async function runBench(): Promise<void> {
 
     const runShaOps = async (): Promise<void> => {
         for (let operation = 0; operation < config.operationsPerIteration; operation += 1) {
-            const digest = await sha256(plaintext)
+            const digest = sha256(plaintext)
             if (digest.byteLength !== 32) {
                 throw new Error('sha256 result mismatch')
             }
@@ -161,7 +161,7 @@ async function runBench(): Promise<void> {
 
     const runEncryptOps = async (): Promise<void> => {
         for (let operation = 0; operation < config.operationsPerIteration; operation += 1) {
-            const encrypted = await aesGcmEncrypt(aesKey, nonce, plaintext)
+            const encrypted = aesGcmEncrypt(aesKey, nonce, plaintext)
             if (encrypted.byteLength !== ciphertext.byteLength) {
                 throw new Error('aes encrypt result mismatch')
             }
@@ -170,7 +170,7 @@ async function runBench(): Promise<void> {
 
     const runDecryptOps = async (): Promise<void> => {
         for (let operation = 0; operation < config.operationsPerIteration; operation += 1) {
-            const decryptedResult = await aesGcmDecrypt(aesKey, nonce, ciphertext)
+            const decryptedResult = aesGcmDecrypt(aesKey, nonce, ciphertext)
             if (decryptedResult.byteLength !== plaintext.byteLength) {
                 throw new Error('aes decrypt result mismatch')
             }
@@ -179,7 +179,7 @@ async function runBench(): Promise<void> {
 
     const runHmacOps = async (): Promise<void> => {
         for (let operation = 0; operation < config.operationsPerIteration; operation += 1) {
-            const signature = await hmacSha256Sign(hmacKey, plaintext)
+            const signature = hmacSha256Sign(hmacKey, plaintext)
             if (signature.byteLength !== 32) {
                 throw new Error('hmac result mismatch')
             }

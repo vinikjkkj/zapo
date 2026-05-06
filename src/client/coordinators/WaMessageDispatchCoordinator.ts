@@ -477,16 +477,14 @@ export class WaMessageDispatchCoordinator {
             phashTargets[index] = resolvedFanoutTargets[index].jid
         }
         phashTargets[resolvedFanoutTargets.length] = senderForPhash
-        const [localPhash, reportingArtifacts] = await Promise.all([
-            computePhashV2(phashTargets),
-            this.tryBuildReportingTokenArtifacts({
-                message,
-                stanzaId: sendOptions.id,
-                senderUserJid: toUserJid(senderForPhash),
-                remoteJid: groupJid,
-                context: 'group_direct'
-            })
-        ])
+        const localPhash = computePhashV2(phashTargets)
+        const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
+            message,
+            stanzaId: sendOptions.id,
+            senderUserJid: toUserJid(senderForPhash),
+            remoteJid: groupJid,
+            context: 'group_direct'
+        })
         const messageNode = buildDirectMessageFanoutNode({
             to: groupJid,
             type,
@@ -609,16 +607,14 @@ export class WaMessageDispatchCoordinator {
             phashTargets[index] = fanoutDeviceJids[index]
         }
         phashTargets[fanoutDeviceJids.length] = senderJid
-        const [localPhash, reportingArtifacts] = await Promise.all([
-            computePhashV2(phashTargets),
-            this.tryBuildReportingTokenArtifacts({
-                message,
-                stanzaId: sendOptions.id,
-                senderUserJid: toUserJid(senderJid),
-                remoteJid: groupJid,
-                context: 'group_sender_key'
-            })
-        ])
+        const localPhash = computePhashV2(phashTargets)
+        const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
+            message,
+            stanzaId: sendOptions.id,
+            senderUserJid: toUserJid(senderJid),
+            remoteJid: groupJid,
+            context: 'group_sender_key'
+        })
         const messageNode = buildGroupSenderKeyMessageNode({
             to: groupJid,
             type,
@@ -1155,7 +1151,7 @@ export class WaMessageDispatchCoordinator {
                 return bytesToHex(digest).toUpperCase()
             }
             dv.setBigUint64(0, BigInt(Math.floor(Date.now() / 1_000)), false)
-            const digest = await sha256([
+            const digest = sha256([
                 timestampBytes,
                 TEXT_ENCODER.encode(meUserJid),
                 await randomBytesAsync(8)

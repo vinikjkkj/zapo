@@ -13,10 +13,10 @@ export interface IcdcMeta {
     readonly timestamp: number | undefined
 }
 
-export async function computeDeviceKeyHash(
+export function computeDeviceKeyHash(
     identityKeys: readonly Uint8Array[],
     hashLength?: number
-): Promise<Uint8Array> {
+): Uint8Array {
     const length = hashLength ?? ICDC_DEFAULT_HASH_LENGTH
     if (identityKeys.length === 0) {
         return new Uint8Array(length)
@@ -26,7 +26,7 @@ export async function computeDeviceKeyHash(
         rawKeys[i] =
             identityKeys[i].byteLength === 33 ? toRawPubKey(identityKeys[i]) : identityKeys[i]
     }
-    const hash = await sha256(rawKeys)
+    const hash = sha256(rawKeys)
     return hash.subarray(0, length)
 }
 
@@ -61,7 +61,7 @@ export async function resolveIcdcMeta(
     if (keys.length === 0) {
         return null
     }
-    const keyHash = await computeDeviceKeyHash(keys, hashLength)
+    const keyHash = computeDeviceKeyHash(keys, hashLength)
     const timestamp =
         updatedAtMs !== undefined && Date.now() - updatedAtMs < ICDC_FRESHNESS_THRESHOLD_MS
             ? Math.floor(updatedAtMs / 1_000)

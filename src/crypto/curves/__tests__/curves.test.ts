@@ -21,7 +21,7 @@ test('x25519 scalar multiplication is symmetric between peers', async () => {
 
 test('x25519 key derivation from private key is stable', async () => {
     const pair = await X25519.generateKeyPair()
-    const derived = await X25519.keyPairFromPrivateKey(pair.privKey)
+    const derived = X25519.keyPairFromPrivateKey(pair.privKey)
 
     assert.deepEqual(derived.privKey, pair.privKey)
     assert.deepEqual(derived.pubKey, pair.pubKey)

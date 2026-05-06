@@ -18,12 +18,12 @@ test('hkdf derivation and split are deterministic with same inputs', async () =>
     const ikm = new Uint8Array(32).fill(1)
     const salt = new Uint8Array(32).fill(2)
 
-    const one = await hkdf(ikm, salt, 'info', 32)
-    const two = await hkdf(ikm, salt, 'info', 32)
+    const one = hkdf(ikm, salt, 'info', 32)
+    const two = hkdf(ikm, salt, 'info', 32)
     assert.deepEqual(one, two)
     assert.equal(one.length, 32)
 
-    const [left, right] = await hkdfSplit(ikm, salt, 'split-info')
+    const [left, right] = hkdfSplit(ikm, salt, 'split-info')
     assert.equal(left.length, 32)
     assert.equal(right.length, 32)
     assert.notDeepEqual(left, right)
@@ -50,16 +50,16 @@ test('primitive crypto functions encrypt/decrypt and sign deterministically', as
     const nonce = new Uint8Array(12).fill(5)
     const plaintext = new Uint8Array([1, 2, 3, 4, 5])
 
-    const ciphertext = await aesGcmEncrypt(keyRaw, nonce, plaintext)
-    const decrypted = await aesGcmDecrypt(keyRaw, nonce, ciphertext)
+    const ciphertext = aesGcmEncrypt(keyRaw, nonce, plaintext)
+    const decrypted = aesGcmDecrypt(keyRaw, nonce, ciphertext)
     assert.deepEqual(decrypted, plaintext)
 
     const hmacKey = new Uint8Array(32).fill(6)
-    const sig1 = await hmacSha256Sign(hmacKey, new Uint8Array([1, 2]))
-    const sig2 = await hmacSha256Sign(hmacKey, new Uint8Array([1, 2]))
+    const sig1 = hmacSha256Sign(hmacKey, new Uint8Array([1, 2]))
+    const sig2 = hmacSha256Sign(hmacKey, new Uint8Array([1, 2]))
     assert.deepEqual(sig1, sig2)
 
-    const digest = await sha256(new Uint8Array([7]))
+    const digest = sha256(new Uint8Array([7]))
     assert.equal(digest.length, 32)
 })
 

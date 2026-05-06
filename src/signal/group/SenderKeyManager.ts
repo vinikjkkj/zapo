@@ -43,12 +43,12 @@ function extractAesCbcParams(seed: Uint8Array): {
     }
 }
 
-function aesCbcEncryptFromSeed(seed: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> {
+function aesCbcEncryptFromSeed(seed: Uint8Array, plaintext: Uint8Array): Uint8Array {
     const { keyBytes, iv } = extractAesCbcParams(seed)
     return aesCbcEncrypt(keyBytes, iv, plaintext)
 }
 
-function aesCbcDecryptFromSeed(seed: Uint8Array, ciphertext: Uint8Array): Promise<Uint8Array> {
+function aesCbcDecryptFromSeed(seed: Uint8Array, ciphertext: Uint8Array): Uint8Array {
     const { keyBytes, iv } = extractAesCbcParams(seed)
     return aesCbcDecrypt(keyBytes, iv, ciphertext)
 }
@@ -85,7 +85,7 @@ export class SenderKeyManager {
             if (!senderKey.signingPrivateKey) {
                 throw new Error('sender private signing key is missing')
             }
-            const derived = await deriveSenderKeyMsgKey(senderKey.iteration, senderKey.chainKey)
+            const derived = deriveSenderKeyMsgKey(senderKey.iteration, senderKey.chainKey)
             await this.store.upsertSenderKey({
                 ...senderKey,
                 chainKey: derived.nextChainKey,
@@ -106,7 +106,7 @@ export class SenderKeyManager {
                 )
             }
 
-            const messagePayload = await aesCbcEncryptFromSeed(derived.messageKey.seed, plaintext)
+            const messagePayload = aesCbcEncryptFromSeed(derived.messageKey.seed, plaintext)
             const senderKeyMessage = proto.SenderKeyMessage.encode({
                 id: senderKey.keyId,
                 iteration: derived.messageKey.iteration,
@@ -267,10 +267,7 @@ export class SenderKeyManager {
                 this.getFutureMessagesMax?.()
             )
             // Keep decrypt + persist ordered: failed decrypt must not advance sender-key state.
-            const plaintext = await aesCbcDecryptFromSeed(
-                selected.messageKey.seed,
-                parsed.ciphertext
-            )
+            const plaintext = aesCbcDecryptFromSeed(selected.messageKey.seed, parsed.ciphertext)
             await this.store.upsertSenderKey(selected.updatedRecord)
             return plaintext
         })

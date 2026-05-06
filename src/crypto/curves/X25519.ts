@@ -1,4 +1,11 @@
-import { createPrivateKey, createPublicKey, diffieHellman, generateKeyPair } from 'node:crypto'
+import {
+    createPrivateKey,
+    createPublicKey,
+    diffieHellman,
+    generateKeyPair,
+    generateKeyPairSync,
+    type KeyObject
+} from 'node:crypto'
 import { promisify } from 'node:util'
 
 const generateKeyPairAsync = promisify(generateKeyPair)
@@ -8,6 +15,41 @@ import { pkcs8FromRawPrivate, type SignalKeyPair } from '@crypto/curves/types'
 import { FE_ONE } from '@crypto/math/constants'
 import { fe, feAdd, feFromBytes, feInv, feMul, fePack, feSub } from '@crypto/math/fe'
 import { assertByteLength, concatBytes, decodeBase64Url, toBytesView } from '@util/bytes'
+
+type DiffieHellmanCallback = (err: Error | null, secret: Buffer) => void
+
+const diffieHellmanWithCallback = diffieHellman as unknown as (
+    options: { privateKey: KeyObject; publicKey: KeyObject },
+    callback: DiffieHellmanCallback
+) => void
+
+type DiffieHellmanAsync = (options: {
+    privateKey: KeyObject
+    publicKey: KeyObject
+}) => Promise<Buffer>
+
+let diffieHellmanAsync: DiffieHellmanAsync | null = null
+let diffieHellmanAsyncProbed = false
+
+function resolveDiffieHellmanAsync(): DiffieHellmanAsync | null {
+    if (diffieHellmanAsyncProbed) return diffieHellmanAsync
+    diffieHellmanAsyncProbed = true
+    try {
+        const probe = generateKeyPairSync('x25519')
+        const result = (
+            diffieHellman as unknown as (
+                opts: { privateKey: KeyObject; publicKey: KeyObject },
+                cb: DiffieHellmanCallback
+            ) => Buffer | undefined
+        )({ privateKey: probe.privateKey, publicKey: probe.publicKey }, () => {})
+        if (result === undefined) {
+            diffieHellmanAsync = promisify(diffieHellmanWithCallback) as DiffieHellmanAsync
+        }
+    } catch {
+        // callback form not supported by this runtime; stay on sync path
+    }
+    return diffieHellmanAsync
+}
 
 // Pre-allocated temps for montgomeryToEdwardsPublic (safe: single-threaded)
 const _mx = fe()
@@ -77,7 +119,7 @@ export class X25519 {
         }
     }
 
-    static async keyPairFromPrivateKey(privKey: Uint8Array): Promise<SignalKeyPair> {
+    static keyPairFromPrivateKey(privKey: Uint8Array): SignalKeyPair {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
         const jwk = x25519PrivateKeyObject(privKey).export({ format: 'jwk' })
         return {
@@ -89,13 +131,14 @@ export class X25519 {
     static async scalarMult(privKey: Uint8Array, pubKey: Uint8Array): Promise<Uint8Array> {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
         assertByteLength(pubKey, 32, 'x25519 public key must be 32 bytes')
-        return Promise.resolve(
-            toBytesView(
-                diffieHellman({
-                    privateKey: x25519PrivateKeyObject(privKey),
-                    publicKey: x25519PublicKeyObject(pubKey)
-                })
-            )
-        )
+        const opts = {
+            privateKey: x25519PrivateKeyObject(privKey),
+            publicKey: x25519PublicKeyObject(pubKey)
+        }
+        const dhAsync = resolveDiffieHellmanAsync()
+        if (dhAsync) {
+            return toBytesView(await dhAsync(opts))
+        }
+        return toBytesView(diffieHellman(opts))
     }
 }

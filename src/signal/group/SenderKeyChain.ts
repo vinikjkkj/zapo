@@ -19,6 +19,7 @@ export interface SenderKeyMessageKeySelection {
     readonly updatedRecord: SenderKeyRecord
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function selectMessageKey(
     senderKey: SenderKeyRecord,
     targetIteration: number,
@@ -48,7 +49,7 @@ export async function selectMessageKey(
     }
 
     let chainKey = ensureChainKey(senderKey.chainKey)
-    const firstDerived = await deriveSenderKeyMsgKeyFromChainKey(senderKey.iteration, chainKey)
+    const firstDerived = deriveSenderKeyMsgKeyFromChainKey(senderKey.iteration, chainKey)
     chainKey = firstDerived.nextChainKey
     let messageKey = firstDerived.messageKey
     if (delta === 0) {
@@ -77,7 +78,7 @@ export async function selectMessageKey(
             nextUnused.push(messageKey)
         }
 
-        const derived = await deriveSenderKeyMsgKeyFromChainKey(iteration, chainKey)
+        const derived = deriveSenderKeyMsgKeyFromChainKey(iteration, chainKey)
         chainKey = derived.nextChainKey
         messageKey = derived.messageKey
     }
@@ -93,10 +94,10 @@ export async function selectMessageKey(
     }
 }
 
-export async function deriveSenderKeyMsgKey(
+export function deriveSenderKeyMsgKey(
     iteration: number,
     chainKey: Uint8Array
-): Promise<SenderKeyMessageKeyDerivation> {
+): SenderKeyMessageKeyDerivation {
     return deriveSenderKeyMsgKeyFromChainKey(iteration, ensureChainKey(chainKey))
 }
 
@@ -105,16 +106,14 @@ function ensureChainKey(chainKey: Uint8Array): Uint8Array {
     return chainKey
 }
 
-async function deriveSenderKeyMsgKeyFromChainKey(
+function deriveSenderKeyMsgKeyFromChainKey(
     iteration: number,
     chainKey: Uint8Array
-): Promise<SenderKeyMessageKeyDerivation> {
-    const [nextChainRaw, messageInputKey] = await Promise.all([
-        hmacSha256Sign(chainKey, CHAIN_KEY_LABEL),
-        hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
-    ])
+): SenderKeyMessageKeyDerivation {
+    const nextChainRaw = hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
+    const messageInputKey = hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
     const nextChainKey = nextChainRaw.subarray(0, 32)
-    const messageSeed = await hkdf(messageInputKey, null, WHISPER_GROUP_INFO, 50)
+    const messageSeed = hkdf(messageInputKey, null, WHISPER_GROUP_INFO, 50)
     return {
         nextChainKey,
         messageKey: {

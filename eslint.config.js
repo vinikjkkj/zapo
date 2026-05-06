@@ -106,7 +106,21 @@ module.exports = [
             ],
             'n/prefer-node-protocol': 'error',
             'n/no-extraneous-import': 'error',
-            'import/no-unresolved': 'error'
+            'import/no-unresolved': 'error',
+            '@typescript-eslint/await-thenable': 'error',
+            '@typescript-eslint/require-await': 'error'
+        }
+    },
+    {
+        files: [
+            'src/store/**/*.ts',
+            'packages/store-*/**/*.ts',
+            'src/**/__tests__/**/*.ts',
+            'packages/**/__tests__/**/*.ts',
+            'bench/**/*.ts'
+        ],
+        rules: {
+            '@typescript-eslint/require-await': 'off'
         }
     },
     {

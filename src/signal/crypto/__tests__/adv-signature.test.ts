@@ -93,8 +93,8 @@ test('adv identity hmac is deterministic for same key and details', async () => 
     const secretKey = makeBytes(32, 1)
     const details = makeBytes(64, 11)
 
-    const left = await computeAdvIdentityHmac(secretKey, details)
-    const right = await computeAdvIdentityHmac(secretKey, details)
+    const left = computeAdvIdentityHmac(secretKey, details)
+    const right = computeAdvIdentityHmac(secretKey, details)
 
     assert.equal(left.length, right.length)
     assert.equal(uint8Equal(left, right), true)

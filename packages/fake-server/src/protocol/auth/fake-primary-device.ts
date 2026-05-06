@@ -52,7 +52,7 @@ export async function buildAdvSignedDeviceIdentity(
         accountSignature
     }).finish()
 
-    const hmac = await hmacSha256Sign(input.advSecretKey, signedIdentity)
+    const hmac = hmacSha256Sign(input.advSecretKey, signedIdentity)
 
     const wrapped = proto.ADVSignedDeviceIdentityHMAC.encode({
         details: signedIdentity,

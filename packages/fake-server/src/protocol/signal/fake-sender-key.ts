@@ -66,7 +66,7 @@ export class FakeSenderKey {
         )
 
         const { iv, cipherKey } = splitSenderKeyMessageSeed(messageKey.seed)
-        const ciphertext = await aesCbcEncrypt(cipherKey, iv, plaintext)
+        const ciphertext = aesCbcEncrypt(cipherKey, iv, plaintext)
 
         const senderKeyMessage = proto.SenderKeyMessage.encode({
             id: this.state.id,
@@ -110,6 +110,7 @@ interface DerivedSenderKeyMessage {
     readonly seed: Uint8Array
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 async function deriveSenderKeyMessageKey(
     iteration: number,
     chainKey: Uint8Array
@@ -117,11 +118,9 @@ async function deriveSenderKeyMessageKey(
     readonly messageKey: DerivedSenderKeyMessage
     readonly nextChainKey: Uint8Array
 }> {
-    const [messageInputKey, nextChainRaw] = await Promise.all([
-        hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL),
-        hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
-    ])
-    const seed = await hkdf(messageInputKey, null, WHISPER_GROUP_INFO, 50)
+    const messageInputKey = hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
+    const nextChainRaw = hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
+    const seed = hkdf(messageInputKey, null, WHISPER_GROUP_INFO, 50)
     return {
         messageKey: { iteration, seed },
         nextChainKey: nextChainRaw.subarray(0, 32)

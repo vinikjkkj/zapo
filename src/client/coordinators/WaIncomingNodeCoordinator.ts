@@ -299,6 +299,7 @@ export class WaIncomingNodeCoordinator {
         })
         this.registerIncomingHandler({
             tag: 'presence',
+            // eslint-disable-next-line @typescript-eslint/require-await
             handler: async (node) => {
                 runtime.emitIncomingPresence(createIncomingBaseEvent(node))
                 return true
@@ -306,6 +307,7 @@ export class WaIncomingNodeCoordinator {
         })
         this.registerIncomingHandler({
             tag: 'chatstate',
+            // eslint-disable-next-line @typescript-eslint/require-await
             handler: async (node) => {
                 runtime.emitIncomingChatstate({
                     ...createIncomingBaseEvent(node),
@@ -316,6 +318,7 @@ export class WaIncomingNodeCoordinator {
         })
         this.registerIncomingHandler({
             tag: 'call',
+            // eslint-disable-next-line @typescript-eslint/require-await
             handler: async (node) => {
                 runtime.emitIncomingCall(createIncomingBaseEvent(node))
                 return true
@@ -333,6 +336,7 @@ export class WaIncomingNodeCoordinator {
         })
         this.registerIncomingHandler({
             tag: WA_NODE_TAGS.ERROR,
+            // eslint-disable-next-line @typescript-eslint/require-await
             handler: async (node) => {
                 runtime.emitIncomingErrorStanza(createIncomingBaseEvent(node))
                 return true

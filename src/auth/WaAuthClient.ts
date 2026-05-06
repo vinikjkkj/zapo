@@ -148,6 +148,7 @@ export class WaAuthClient {
         })
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async clearTransientState(): Promise<void> {
         this.logger.trace('auth client clear transient state')
         this.qrFlow.clear()

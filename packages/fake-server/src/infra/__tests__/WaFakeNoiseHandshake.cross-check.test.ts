@@ -19,19 +19,11 @@ function buildNonce(counter: number): Uint8Array {
     return nonce
 }
 
-function encryptWithKey(
-    key: Uint8Array,
-    counter: number,
-    plaintext: Uint8Array
-): Promise<Uint8Array> {
+function encryptWithKey(key: Uint8Array, counter: number, plaintext: Uint8Array): Uint8Array {
     return aesGcmEncrypt(key, buildNonce(counter), plaintext)
 }
 
-function decryptWithKey(
-    key: Uint8Array,
-    counter: number,
-    ciphertext: Uint8Array
-): Promise<Uint8Array> {
+function decryptWithKey(key: Uint8Array, counter: number, ciphertext: Uint8Array): Uint8Array {
     return aesGcmDecrypt(key, buildNonce(counter), ciphertext)
 }
 
@@ -39,15 +31,15 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
     const client = new WaNoiseHandshake()
     const server = new WaFakeNoiseHandshake()
 
-    await client.start(NOISE_XX_NAME, PROLOGUE)
-    await server.start(NOISE_XX_NAME, PROLOGUE)
+    client.start(NOISE_XX_NAME, PROLOGUE)
+    server.start(NOISE_XX_NAME, PROLOGUE)
 
     const clientEphemeral = await X25519.generateKeyPair()
     const serverEphemeral = await X25519.generateKeyPair()
     const serverStatic = await X25519.generateKeyPair()
     const clientStatic = await X25519.generateKeyPair()
 
-    await client.authenticate(clientEphemeral.pubKey)
+    client.authenticate(clientEphemeral.pubKey)
     const clientHello = proto.HandshakeMessage.encode({
         clientHello: { ephemeral: clientEphemeral.pubKey }
     }).finish()
@@ -58,13 +50,13 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
         throw new Error('expected client hello with ephemeral')
     }
     const clientEphemeralPub = clientHelloMsg.ephemeral
-    await server.authenticate(clientEphemeralPub)
+    server.authenticate(clientEphemeralPub)
 
-    await server.authenticate(serverEphemeral.pubKey)
-    await server.mixIntoKey(await X25519.scalarMult(serverEphemeral.privKey, clientEphemeralPub)) // ee
-    const encryptedServerStatic = await server.encrypt(serverStatic.pubKey) // s
-    await server.mixIntoKey(await X25519.scalarMult(serverStatic.privKey, clientEphemeralPub)) // es
-    const encryptedCertPayload = await server.encrypt(new Uint8Array([0x01, 0x02, 0x03]))
+    server.authenticate(serverEphemeral.pubKey)
+    server.mixIntoKey(await X25519.scalarMult(serverEphemeral.privKey, clientEphemeralPub)) // ee
+    const encryptedServerStatic = server.encrypt(serverStatic.pubKey) // s
+    server.mixIntoKey(await X25519.scalarMult(serverStatic.privKey, clientEphemeralPub)) // es
+    const encryptedCertPayload = server.encrypt(new Uint8Array([0x01, 0x02, 0x03]))
     const serverHello = proto.HandshakeMessage.encode({
         serverHello: {
             ephemeral: serverEphemeral.pubKey,
@@ -78,17 +70,17 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
     if (!sh?.ephemeral || !sh.static || !sh.payload) {
         throw new Error('expected server hello with ephemeral/static/payload')
     }
-    await client.authenticate(sh.ephemeral)
-    await client.mixIntoKey(await X25519.scalarMult(clientEphemeral.privKey, sh.ephemeral))
-    const decryptedServerStatic = await client.decrypt(sh.static)
+    client.authenticate(sh.ephemeral)
+    client.mixIntoKey(await X25519.scalarMult(clientEphemeral.privKey, sh.ephemeral))
+    const decryptedServerStatic = client.decrypt(sh.static)
     assert.deepEqual(Array.from(decryptedServerStatic), Array.from(serverStatic.pubKey))
-    await client.mixIntoKey(await X25519.scalarMult(clientEphemeral.privKey, decryptedServerStatic))
-    const decryptedPayload = await client.decrypt(sh.payload)
+    client.mixIntoKey(await X25519.scalarMult(clientEphemeral.privKey, decryptedServerStatic))
+    const decryptedPayload = client.decrypt(sh.payload)
     assert.deepEqual(Array.from(decryptedPayload), [0x01, 0x02, 0x03])
 
-    const encryptedClientStatic = await client.encrypt(clientStatic.pubKey)
-    await client.mixIntoKey(await X25519.scalarMult(clientStatic.privKey, serverEphemeral.pubKey))
-    const encryptedClientPayload = await client.encrypt(new Uint8Array([0xaa, 0xbb]))
+    const encryptedClientStatic = client.encrypt(clientStatic.pubKey)
+    client.mixIntoKey(await X25519.scalarMult(clientStatic.privKey, serverEphemeral.pubKey))
+    const encryptedClientPayload = client.encrypt(new Uint8Array([0xaa, 0xbb]))
     const clientFinish = proto.HandshakeMessage.encode({
         clientFinish: {
             static: encryptedClientStatic,
@@ -101,23 +93,23 @@ test('XX handshake: client (lib) and server (fake) agree on transport keys', asy
     if (!cf?.static || !cf.payload) {
         throw new Error('expected client finish with static/payload')
     }
-    const decryptedClientStatic = await server.decrypt(cf.static)
+    const decryptedClientStatic = server.decrypt(cf.static)
     assert.deepEqual(Array.from(decryptedClientStatic), Array.from(clientStatic.pubKey))
-    await server.mixIntoKey(await X25519.scalarMult(serverEphemeral.privKey, decryptedClientStatic))
-    const decryptedClientFinishPayload = await server.decrypt(cf.payload)
+    server.mixIntoKey(await X25519.scalarMult(serverEphemeral.privKey, decryptedClientStatic))
+    const decryptedClientFinishPayload = server.decrypt(cf.payload)
     assert.deepEqual(Array.from(decryptedClientFinishPayload), [0xaa, 0xbb])
 
-    const clientSocket = await client.finish()
-    const serverKeys = await server.finish()
+    const clientSocket = client.finish()
+    const serverKeys = server.finish()
 
     const messageA = new Uint8Array([0x10, 0x20, 0x30])
     const messageB = new Uint8Array([0xff, 0xee, 0xdd])
 
-    const ctFromServer = await encryptWithKey(serverKeys.sendKey, 0, messageA)
-    const decodedByClient = await clientSocket.decrypt(ctFromServer)
+    const ctFromServer = encryptWithKey(serverKeys.sendKey, 0, messageA)
+    const decodedByClient = clientSocket.decrypt(ctFromServer)
     assert.deepEqual(Array.from(decodedByClient), Array.from(messageA))
 
-    const ctFromClient = await clientSocket.encrypt(messageB)
-    const decodedByServer = await decryptWithKey(serverKeys.recvKey, 0, ctFromClient)
+    const ctFromClient = clientSocket.encrypt(messageB)
+    const decodedByServer = decryptWithKey(serverKeys.recvKey, 0, ctFromClient)
     assert.deepEqual(Array.from(decodedByServer), Array.from(messageB))
 })

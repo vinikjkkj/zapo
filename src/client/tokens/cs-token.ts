@@ -13,7 +13,7 @@ export class CsTokenGenerator {
         this.cache = new Map()
     }
 
-    public async generate(nctSalt: Uint8Array, accountLid: string): Promise<Uint8Array> {
+    public generate(nctSalt: Uint8Array, accountLid: string): Uint8Array {
         if (this.isSameSalt(nctSalt)) {
             const cached = this.cache.get(accountLid)
             if (cached) {
@@ -21,7 +21,7 @@ export class CsTokenGenerator {
             }
         }
 
-        const result = await hmacSha256Sign(nctSalt, TEXT_ENCODER.encode(accountLid))
+        const result = hmacSha256Sign(nctSalt, TEXT_ENCODER.encode(accountLid))
 
         if (!this.isSameSalt(nctSalt)) {
             this.cachedSalt = nctSalt

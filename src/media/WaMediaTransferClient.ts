@@ -309,6 +309,7 @@ export class WaMediaTransferClient {
                         ok: status >= 200 && status < 300,
                         headers,
                         body: res,
+                        // eslint-disable-next-line @typescript-eslint/require-await
                         cancel: async () => {
                             res.destroy()
                         }
@@ -388,6 +389,7 @@ export class WaMediaTransferClient {
                     fileEncSha256: encrypted.fileEncSha256,
                     plaintextLength: request.plaintext.byteLength
                 }),
+                // eslint-disable-next-line @typescript-eslint/require-await
                 cleanup: async () => undefined
             }
         }

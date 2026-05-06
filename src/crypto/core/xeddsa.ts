@@ -47,13 +47,11 @@ export async function xeddsaSign(privateKey: Uint8Array, message: Uint8Array): P
 
     const randomSuffix = await randomBytesAsync(64)
     const r = modGroup(
-        bytesToBigIntLE(
-            await sha512([PREFIX_SIGNATURE_RANDOM, clampedPrivateKey, message, randomSuffix])
-        )
+        bytesToBigIntLE(sha512([PREFIX_SIGNATURE_RANDOM, clampedPrivateKey, message, randomSuffix]))
     )
     const encodedR = encodeExtendedPoint(scalarMultBase(r))
 
-    const h = modGroup(bytesToBigIntLE(await sha512([encodedR, encodedPublic, message])))
+    const h = modGroup(bytesToBigIntLE(sha512([encodedR, encodedPublic, message])))
     const s = modGroup(r + h * privateScalar)
 
     const encodedS = bigIntToBytesLE(s, 32)

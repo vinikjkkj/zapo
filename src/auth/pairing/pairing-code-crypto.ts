@@ -72,7 +72,7 @@ export async function createCompanionHello(
         PBKDF2_ITERATIONS,
         PAIRING_AES_KEY_BYTES
     )
-    const encrypted = await aesCtrEncrypt(cipherKey, counter, companionEphemeralKeyPair.pubKey)
+    const encrypted = aesCtrEncrypt(cipherKey, counter, companionEphemeralKeyPair.pubKey)
 
     return {
         pairingCode,
@@ -101,7 +101,7 @@ export async function completeCompanionFinish(args: {
         PBKDF2_ITERATIONS,
         PAIRING_AES_KEY_BYTES
     )
-    const primaryEphemeralPub = await aesCtrDecrypt(
+    const primaryEphemeralPub = aesCtrDecrypt(
         pairingCipherKey,
         args.wrappedPrimaryEphemeralPub.subarray(32, 48),
         args.wrappedPrimaryEphemeralPub.subarray(48)
@@ -110,14 +110,17 @@ export async function completeCompanionFinish(args: {
         throw new Error('empty primary ephemeral public key')
     }
 
-    const [sharedEphemeral, bundleSalt, bundleSecret, bundleIv] = await Promise.all([
-        X25519.scalarMult(args.companionEphemeralPrivKey, primaryEphemeralPub),
-        randomBytesAsync(32),
-        randomBytesAsync(32),
-        randomBytesAsync(12)
-    ])
+    const [sharedEphemeral, sharedIdentity, bundleSalt, bundleSecret, bundleIv] = await Promise.all(
+        [
+            X25519.scalarMult(args.companionEphemeralPrivKey, primaryEphemeralPub),
+            X25519.scalarMult(args.registrationIdentityKeyPair.privKey, args.primaryIdentityPub),
+            randomBytesAsync(32),
+            randomBytesAsync(32),
+            randomBytesAsync(12)
+        ]
+    )
 
-    const bundleEncryptionKey = await hkdf(
+    const bundleEncryptionKey = hkdf(
         sharedEphemeral,
         bundleSalt,
         WA_PAIRING_KDF_INFO.LINK_CODE_BUNDLE,
@@ -129,13 +132,10 @@ export async function completeCompanionFinish(args: {
         args.primaryIdentityPub,
         bundleSecret
     ])
-    const [encryptedBundle, sharedIdentity] = await Promise.all([
-        aesGcmEncrypt(bundleEncryptionKey, bundleIv, plaintextBundle),
-        X25519.scalarMult(args.registrationIdentityKeyPair.privKey, args.primaryIdentityPub)
-    ])
+    const encryptedBundle = aesGcmEncrypt(bundleEncryptionKey, bundleIv, plaintextBundle)
     const wrappedKeyBundle = concatBytes([bundleSalt, bundleIv, encryptedBundle])
     const advMaterial = concatBytes([sharedEphemeral, sharedIdentity, bundleSecret])
-    const advSecret = await hkdf(advMaterial, null, WA_PAIRING_KDF_INFO.ADV_SECRET, 32)
+    const advSecret = hkdf(advMaterial, null, WA_PAIRING_KDF_INFO.ADV_SECRET, 32)
 
     return {
         wrappedKeyBundle,

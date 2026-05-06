@@ -114,7 +114,7 @@ export class FakePeerDoubleRatchet {
         const sharedParts: Uint8Array[] = [SIGNAL_PREFIX_FF, dh1, dh2, dh3]
         if (dh4) sharedParts.push(dh4)
         const shared = concatBytes(sharedParts)
-        const [rootKey, _chainKey] = await hkdfSplit(shared, null, 'WhisperText')
+        const [rootKey, _chainKey] = hkdfSplit(shared, null, 'WhisperText')
         void _chainKey
 
         const sendRatchet = await X25519.generateKeyPair()
@@ -122,11 +122,7 @@ export class FakePeerDoubleRatchet {
             sendRatchet.privKey,
             toRawPubKey(remoteSigned)
         )
-        const [nextRootKey, sendChainKey] = await hkdfSplit(
-            ratchetSecret,
-            rootKey,
-            'WhisperRatchet'
-        )
+        const [nextRootKey, sendChainKey] = hkdfSplit(ratchetSecret, rootKey, 'WhisperRatchet')
 
         this.rootKey = nextRootKey
         this.remoteIdentityPubSerialized = remoteIdentity
@@ -144,6 +140,7 @@ export class FakePeerDoubleRatchet {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async encrypt(
         plaintext: Uint8Array
     ): Promise<{ readonly type: 'pkmsg' | 'msg'; readonly ciphertext: Uint8Array }> {
@@ -156,11 +153,11 @@ export class FakePeerDoubleRatchet {
             throw new FakePeerDoubleRatchetError('remote identity not set')
         }
 
-        const { nextChainKey, messageKey } = await deriveMessageKey(
+        const { nextChainKey, messageKey } = deriveMessageKey(
             this.sendChain.nextIndex,
             this.sendChain.chainKey
         )
-        const ciphertext = await aesCbcEncrypt(messageKey.cipherKey, messageKey.iv, plaintext)
+        const ciphertext = aesCbcEncrypt(messageKey.cipherKey, messageKey.iv, plaintext)
         const signalPayload = proto.SignalMessage.encode({
             ratchetKey: this.sendChain.ratchetPubSerialized,
             counter: messageKey.index,
@@ -173,7 +170,7 @@ export class FakePeerDoubleRatchet {
             this.remoteIdentityPubSerialized,
             versioned
         ])
-        const fullMac = await hmacSha256Sign(messageKey.macKey, macInput)
+        const fullMac = hmacSha256Sign(messageKey.macKey, macInput)
         const mac = fullMac.subarray(0, SIGNAL_MAC_SIZE)
         const inner = concatBytes([versioned, mac])
 
@@ -243,7 +240,7 @@ export class FakePeerDoubleRatchet {
         if (dh4) sharedParts.push(dh4)
         const shared = concatBytes(sharedParts)
 
-        const [rootKey, chainKey] = await hkdfSplit(shared, null, 'WhisperText')
+        const [rootKey, chainKey] = hkdfSplit(shared, null, 'WhisperText')
         this.remoteIdentityPubSerialized = toSerializedPubKey(remoteIdentity)
         this.rootKey = rootKey
         this.bootstrapChainKey = chainKey
@@ -287,7 +284,7 @@ export class FakePeerDoubleRatchet {
                 this.keyBundle.signedPreKey.keyPair.privKey,
                 toRawPubKey(ratchetKey)
             )
-            const [nextRootKey, recvChainKey] = await hkdfSplit(
+            const [nextRootKey, recvChainKey] = hkdfSplit(
                 ratchetShared,
                 this.rootKey,
                 'WhisperRatchet'
@@ -344,7 +341,7 @@ export class FakePeerDoubleRatchet {
             const newlyStashed: UnusedMessageKey[] = []
             let walkIndex = this.recvChain.nextIndex
             while (walkIndex <= counter) {
-                const derived = await deriveMessageKeyFromChain(chainKey)
+                const derived = deriveMessageKeyFromChain(chainKey)
                 chainKey = derived.nextChainKey
                 if (walkIndex === counter) {
                     messageKey = derived.messageKey
@@ -382,13 +379,13 @@ export class FakePeerDoubleRatchet {
             this.localIdentityPubSerialized,
             versionedBody
         ])
-        const expectedFullMac = await hmacSha256Sign(messageKey.macKey, macInput)
+        const expectedFullMac = hmacSha256Sign(messageKey.macKey, macInput)
         const expectedMac = expectedFullMac.subarray(0, SIGNAL_MAC_SIZE)
         if (!uint8Equal(expectedMac, macBytes)) {
             throw new FakePeerDoubleRatchetError('signal message MAC mismatch')
         }
 
-        const padded = await aesCbcDecrypt(messageKey.cipherKey, messageKey.iv, ciphertext)
+        const padded = aesCbcDecrypt(messageKey.cipherKey, messageKey.iv, ciphertext)
         return unpadPkcs7(padded)
     }
 
@@ -406,11 +403,7 @@ export class FakePeerDoubleRatchet {
             this.sendChain.ratchetKeyPair.privKey,
             remoteRatchetRaw
         )
-        const [nextRootKey, recvChainKey] = await hkdfSplit(
-            ratchetShared,
-            this.rootKey,
-            'WhisperRatchet'
-        )
+        const [nextRootKey, recvChainKey] = hkdfSplit(ratchetShared, this.rootKey, 'WhisperRatchet')
         this.rootKey = nextRootKey
         this.recvChain = {
             ratchetPubKey: toSerializedPubKey(remoteRatchetPub),
@@ -430,11 +423,7 @@ export class FakePeerDoubleRatchet {
             newRatchet.privKey,
             toRawPubKey(remoteRatchetPub)
         )
-        const [nextRootKey, sendChainKey] = await hkdfSplit(
-            ratchetShared,
-            this.rootKey,
-            'WhisperRatchet'
-        )
+        const [nextRootKey, sendChainKey] = hkdfSplit(ratchetShared, this.rootKey, 'WhisperRatchet')
         this.rootKey = nextRootKey
         this.sendChain = {
             ratchetKeyPair: newRatchet,
@@ -453,15 +442,13 @@ interface DerivedMessageKey {
     readonly iv: Uint8Array
 }
 
-async function deriveMessageKey(
+function deriveMessageKey(
     index: number,
     chainKey: Uint8Array
-): Promise<{ readonly nextChainKey: Uint8Array; readonly messageKey: DerivedMessageKey }> {
-    const [messageInputKey, nextChainRaw] = await Promise.all([
-        hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL),
-        hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
-    ])
-    const expanded = await hkdf(messageInputKey, null, 'WhisperMessageKeys', 80)
+): { readonly nextChainKey: Uint8Array; readonly messageKey: DerivedMessageKey } {
+    const messageInputKey = hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
+    const nextChainRaw = hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
+    const expanded = hkdf(messageInputKey, null, 'WhisperMessageKeys', 80)
     return {
         nextChainKey: nextChainRaw.subarray(0, 32),
         messageKey: {
@@ -473,11 +460,11 @@ async function deriveMessageKey(
     }
 }
 
-async function deriveMessageKeyFromChain(chainKey: Uint8Array): Promise<{
+function deriveMessageKeyFromChain(chainKey: Uint8Array): {
     readonly nextChainKey: Uint8Array
     readonly messageKey: { cipherKey: Uint8Array; macKey: Uint8Array; iv: Uint8Array }
-}> {
-    const result = await deriveMessageKey(0, chainKey)
+} {
+    const result = deriveMessageKey(0, chainKey)
     return {
         nextChainKey: result.nextChainKey,
         messageKey: {

@@ -51,13 +51,8 @@ export interface FakeAppStateMutationInput {
 }
 
 export class FakeAppStateCrypto {
-    public async deriveKeys(keyData: Uint8Array): Promise<FakeAppStateDerivedKeys> {
-        const derived = await hkdf(
-            keyData,
-            null,
-            KDF_INFO_MUTATION_KEYS,
-            APP_STATE_DERIVED_KEY_LENGTH
-        )
+    public deriveKeys(keyData: Uint8Array): FakeAppStateDerivedKeys {
+        const derived = hkdf(keyData, null, KDF_INFO_MUTATION_KEYS, APP_STATE_DERIVED_KEY_LENGTH)
         return {
             indexHmacKey: derived.subarray(0, APP_STATE_DERIVED_INDEX_KEY_END),
             valueEncryptionAesKey: derived.subarray(
@@ -82,7 +77,7 @@ export class FakeAppStateCrypto {
     public async encryptMutation(
         input: FakeAppStateMutationInput
     ): Promise<FakeAppStateEncryptedMutation> {
-        const derivedKeys = await this.deriveKeys(input.keyData)
+        const derivedKeys = this.deriveKeys(input.keyData)
         const indexBytes = new TextEncoder().encode(input.index)
         const encoded = proto.SyncActionData.encode({
             index: indexBytes,
@@ -96,11 +91,11 @@ export class FakeAppStateCrypto {
             throw new Error(`invalid IV length ${iv.byteLength}`)
         }
 
-        const indexMac = await hmacSha256Sign(derivedKeys.indexHmacKey, indexBytes)
-        const cipherText = await aesCbcEncrypt(derivedKeys.valueEncryptionAesKey, iv, encoded)
+        const indexMac = hmacSha256Sign(derivedKeys.indexHmacKey, indexBytes)
+        const cipherText = aesCbcEncrypt(derivedKeys.valueEncryptionAesKey, iv, encoded)
         const cipherWithIv = concatBytes([iv, cipherText])
         const associatedData = generateAssociatedData(input.operation, input.keyId)
-        const valueMac = await this.generateValueMac(
+        const valueMac = this.generateValueMac(
             derivedKeys.valueMacHmacKey,
             associatedData,
             cipherWithIv
@@ -113,6 +108,7 @@ export class FakeAppStateCrypto {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async decryptMutation(input: {
         readonly operation: 'set' | 'remove'
         readonly keyId: Uint8Array
@@ -129,7 +125,7 @@ export class FakeAppStateCrypto {
         if (input.valueBlob.byteLength < APP_STATE_IV_LENGTH + APP_STATE_VALUE_MAC_LENGTH) {
             throw new Error('invalid mutation value blob')
         }
-        const derivedKeys = await this.deriveKeys(input.keyData)
+        const derivedKeys = this.deriveKeys(input.keyData)
         const iv = input.valueBlob.subarray(0, APP_STATE_IV_LENGTH)
         const macStart = input.valueBlob.byteLength - APP_STATE_VALUE_MAC_LENGTH
         const valueMac = input.valueBlob.subarray(macStart)
@@ -137,7 +133,7 @@ export class FakeAppStateCrypto {
         const cipherWithIv = input.valueBlob.subarray(0, macStart)
 
         const associatedData = generateAssociatedData(input.operation, input.keyId)
-        const expectedMac = await this.generateValueMac(
+        const expectedMac = this.generateValueMac(
             derivedKeys.valueMacHmacKey,
             associatedData,
             cipherWithIv
@@ -146,7 +142,7 @@ export class FakeAppStateCrypto {
             throw new Error('mutation value MAC mismatch')
         }
 
-        const plaintext = await aesCbcDecrypt(derivedKeys.valueEncryptionAesKey, iv, cipherText)
+        const plaintext = aesCbcDecrypt(derivedKeys.valueEncryptionAesKey, iv, cipherText)
         const syncActionData = proto.SyncActionData.decode(plaintext)
         if (!syncActionData.index) {
             throw new Error('missing sync action index')
@@ -154,10 +150,7 @@ export class FakeAppStateCrypto {
         if (syncActionData.version === null || syncActionData.version === undefined) {
             throw new Error('missing sync action version')
         }
-        const generatedIndexMac = await hmacSha256Sign(
-            derivedKeys.indexHmacKey,
-            syncActionData.index
-        )
+        const generatedIndexMac = hmacSha256Sign(derivedKeys.indexHmacKey, syncActionData.index)
         if (!uint8Equal(generatedIndexMac, input.indexMac)) {
             throw new Error('mutation index MAC mismatch')
         }
@@ -170,13 +163,14 @@ export class FakeAppStateCrypto {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async generateSnapshotMac(
         keyData: Uint8Array,
         ltHash: Uint8Array,
         version: number,
         collectionName: string
     ): Promise<Uint8Array> {
-        const derivedKeys = await this.deriveKeys(keyData)
+        const derivedKeys = this.deriveKeys(keyData)
         const payload = concatBytes([
             ltHash,
             intToBytesBe(8, version),
@@ -185,6 +179,7 @@ export class FakeAppStateCrypto {
         return hmacSha256Sign(derivedKeys.snapshotMacHmacKey, payload)
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async generatePatchMac(
         keyData: Uint8Array,
         snapshotMac: Uint8Array,
@@ -192,7 +187,7 @@ export class FakeAppStateCrypto {
         version: number,
         collectionName: string
     ): Promise<Uint8Array> {
-        const derivedKeys = await this.deriveKeys(keyData)
+        const derivedKeys = this.deriveKeys(keyData)
         const payload = concatBytes([
             snapshotMac,
             ...valueMacs,
@@ -202,6 +197,7 @@ export class FakeAppStateCrypto {
         return hmacSha256Sign(derivedKeys.patchMacHmacKey, payload)
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async ltHashAdd(
         base: Uint8Array,
         addValues: readonly Uint8Array[]
@@ -209,6 +205,7 @@ export class FakeAppStateCrypto {
         return this.ltHashApply(base, addValues, (left, right) => left + right)
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async ltHashSubtract(
         base: Uint8Array,
         removeValues: readonly Uint8Array[]
@@ -216,18 +213,16 @@ export class FakeAppStateCrypto {
         return this.ltHashApply(base, removeValues, (left, right) => left - right)
     }
 
-    private async ltHashApply(
+    private ltHashApply(
         base: Uint8Array,
         values: readonly Uint8Array[],
         combine: (left: number, right: number) => number
-    ): Promise<Uint8Array> {
+    ): Uint8Array {
         if (values.length === 0) {
             return base.slice()
         }
-        const expandedValues = await Promise.all(
-            values.map((value) =>
-                hkdf(value, null, KDF_INFO_PATCH_INTEGRITY, APP_STATE_LT_HASH_SIZE)
-            )
+        const expandedValues = values.map((value) =>
+            hkdf(value, null, KDF_INFO_PATCH_INTEGRITY, APP_STATE_LT_HASH_SIZE)
         )
         const out = new Uint8Array(base.byteLength)
         pointwise(base, expandedValues[0], combine, out)
@@ -237,14 +232,14 @@ export class FakeAppStateCrypto {
         return out
     }
 
-    private async generateValueMac(
+    private generateValueMac(
         valueMacHmacKey: Uint8Array,
         associatedData: Uint8Array,
         cipherWithIv: Uint8Array
-    ): Promise<Uint8Array> {
+    ): Uint8Array {
         const octetLength = new Uint8Array(APP_STATE_MAC_OCTET_LENGTH)
         octetLength[octetLength.length - 1] = associatedData.byteLength & 0xff
-        const full = await hmacSha512Sign(
+        const full = hmacSha512Sign(
             valueMacHmacKey,
             concatBytes([associatedData, cipherWithIv, octetLength])
         )

@@ -276,8 +276,9 @@ test('promise dedup deduplicates re-entrant calls for the same key', async () =>
     const outerValue = await outer
     assert.equal(outerValue, 1)
     assert.equal(calls, 1)
-    assert.ok(nested)
-    const nestedValue = await nested
+    const nestedPromise = nested as Promise<number> | null
+    if (!nestedPromise) throw new Error('nested promise not set')
+    const nestedValue = await nestedPromise
     assert.equal(nestedValue, 1)
 })
 

@@ -41,7 +41,7 @@ export class Ed25519 {
         }
     }
 
-    static async keyPairFromPrivateKey(privKey: Uint8Array): Promise<SignalKeyPair> {
+    static keyPairFromPrivateKey(privKey: Uint8Array): SignalKeyPair {
         assertByteLength(privKey, 32, 'ed25519 private key must be 32 bytes')
         const jwk = ed25519PrivateKeyObject(privKey).export({ format: 'jwk' })
         return {

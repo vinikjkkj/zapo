@@ -80,6 +80,7 @@ export interface BuildReportingTokenArtifactsResult {
 let reportingTokenConfigSpec: ReportingTokenConfigSpec | null = null
 const reportingTokenConfigCache = new Map<number, ReportingTokenConfig>()
 
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function buildReportingTokenArtifacts(
     input: BuildReportingTokenNodeInput
 ): Promise<BuildReportingTokenArtifactsResult | null> {
@@ -104,15 +105,11 @@ export async function buildReportingTokenArtifacts(
     const secretInfo = TEXT_ENCODER.encode(
         stanzaId + input.senderUserJid + input.remoteJid + WA_REPORTING_TOKEN_USE_CASE
     )
-    const reportingTokenKey = await hkdf(
-        messageSecret,
-        null,
-        secretInfo,
-        WA_REPORTING_TOKEN_KEY_BYTES
+    const reportingTokenKey = hkdf(messageSecret, null, secretInfo, WA_REPORTING_TOKEN_KEY_BYTES)
+    const reportingToken = hmacSha256Sign(reportingTokenKey, reportingTokenContent).subarray(
+        0,
+        WA_REPORTING_TOKEN_BYTES
     )
-    const reportingToken = (
-        await hmacSha256Sign(reportingTokenKey, reportingTokenContent)
-    ).subarray(0, WA_REPORTING_TOKEN_BYTES)
 
     const version = input.version ?? WA_REPORTING_TOKEN_VERSION
     return {

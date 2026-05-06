@@ -128,7 +128,7 @@ export class WaTrustedContactTokenCoordinator {
             return null
         }
 
-        const hash = await this.csTokenGenerator.generate(nctSalt, meLid)
+        const hash = this.csTokenGenerator.generate(nctSalt, meLid)
         return buildCsTokenMessageNode(hash)
     }
 

@@ -230,6 +230,7 @@ export class WaWebSocket {
         })
     }
 
+    // eslint-disable-next-line @typescript-eslint/require-await
     public async send(data: string | ArrayBuffer | Uint8Array): Promise<void> {
         const socket = this.socket
         if (!socket || socket.readyState !== WA_READY_STATES.OPEN) {
