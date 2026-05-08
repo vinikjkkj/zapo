@@ -40,6 +40,17 @@ export const AB_PROP_CONFIGS = Object.freeze({
     enable_mention_everyone_syncd_sender: prop(24244, 'bool', false),
     username_contact_syncd_support_enable: prop(17614, 'bool', false),
 
+    // --- newsletter ToS / NUX notice ids ---
+    newsletter_tos_notice_id: prop(3810, 'string', '20601216'),
+    newsletter_tos_notice_id_smb_web: prop(5597, 'string', '20601216'),
+    newsletter_creation_tos_id: prop(3834, 'string', '20601217'),
+    newsletter_creation_tos_id_smb_web: prop(5598, 'string', '20601217'),
+    newsletter_admin_invite_tos_id: prop(6498, 'string', '20610101'),
+    newsletter_admin_invite_tos_id_smb_web: prop(6536, 'string', '20610104'),
+    newsletter_creation_nux_id: prop(3835, 'string', '20601218'),
+    newsletter_nux_notice_id: prop(15255, 'string', '20610210'),
+    newsletter_admin_invite_nux_id: prop(15256, 'string', '20610220'),
+
     // --- message sending / encryption ---
     after_read_sending_enabled: prop(7293, 'bool', false),
     after_read_fallback_duration: prop(7294, 'int', 86_400),

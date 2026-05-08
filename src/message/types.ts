@@ -24,6 +24,20 @@ export interface WaMessagePublishResult {
     readonly attempts: number
     readonly ackNode: BinaryNode
     readonly ack: WaMessageAckMetadata
+    readonly upload?: WaMessageUploadInfo
+}
+
+export interface WaMessageUploadInfo {
+    readonly url: string
+    readonly directPath: string
+    readonly fileSha256: Uint8Array
+    readonly fileLength: number
+    readonly metadataUrl?: string
+}
+
+export interface WaMessageBuildResult {
+    readonly message: Proto.IMessage
+    readonly upload?: WaMessageUploadInfo
 }
 
 type MediaInput = Uint8Array | ArrayBuffer | Readable | string

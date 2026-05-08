@@ -26,3 +26,29 @@ export const MEDIA_UPLOAD_PATHS: Readonly<
     ptt: '/mms/ptt',
     ptv: '/mms/video'
 })
+
+export type NewsletterMediaKind =
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'document'
+    | 'sticker'
+    | 'sticker-pack'
+    | 'gif'
+    | 'ptt'
+    | 'ptv'
+    | 'thumbnail-link'
+
+export const NEWSLETTER_MEDIA_UPLOAD_PATHS: Readonly<Record<NewsletterMediaKind, string>> =
+    Object.freeze({
+        image: '/newsletter/newsletter-image',
+        video: '/newsletter/newsletter-video',
+        audio: '/newsletter/newsletter-audio',
+        document: '/newsletter/newsletter-document',
+        sticker: '/newsletter/newsletter-sticker',
+        'sticker-pack': '/newsletter/newsletter-sticker-pack',
+        gif: '/newsletter/newsletter-gif',
+        ptt: '/newsletter/newsletter-ptt',
+        ptv: '/newsletter/newsletter-ptv',
+        'thumbnail-link': '/newsletter/newsletter-thumbnail-link'
+    })

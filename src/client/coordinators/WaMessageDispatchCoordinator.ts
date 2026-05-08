@@ -25,6 +25,7 @@ import {
 } from '@message/reporting-token'
 import type {
     WaEncryptedMessageInput,
+    WaMessageBuildResult,
     WaMessagePublishOptions,
     WaMessagePublishResult,
     WaSendMessageContent,
@@ -36,6 +37,7 @@ import { WA_DEFAULTS } from '@protocol/constants'
 import {
     isGroupJid,
     isLidJid,
+    isNewsletterJid,
     normalizeDeviceJid,
     normalizeRecipientJid,
     parseJidFull,
@@ -72,7 +74,7 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly fanoutResolver: DeviceFanoutResolver
     readonly participantsCache: GroupParticipantsCache
     readonly appStateSyncKeyProtocol: AppStateSyncKeyProtocol
-    readonly buildMessageContent: (content: WaSendMessageContent) => Promise<Proto.IMessage>
+    readonly buildMessageContent: (content: WaSendMessageContent) => Promise<WaMessageBuildResult>
     readonly senderKeyManager: SenderKeyManager
     readonly signalProtocol: SignalProtocol
     readonly signalStore: WaSignalStore
@@ -85,6 +87,11 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly getCurrentSignedIdentity: () => Proto.IADVSignedDeviceIdentity | null | undefined
     readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
     readonly onDirectMessageSent: (recipientJid: string) => void
+    readonly sendNewsletterMessage?: (
+        newsletterJid: string,
+        content: WaSendMessageContent,
+        options: WaSendMessageOptions
+    ) => Promise<WaMessagePublishResult>
     readonly getIcdcHashLength?: () => number
     readonly mobileMessageIdFormat?: boolean
 }
@@ -105,7 +112,9 @@ export class WaMessageDispatchCoordinator {
     private readonly fanoutResolver: DeviceFanoutResolver
     private readonly participantsCache: GroupParticipantsCache
     private readonly appStateSyncKeyProtocol: AppStateSyncKeyProtocol
-    private readonly buildMessageContent: (content: WaSendMessageContent) => Promise<Proto.IMessage>
+    private readonly buildMessageContent: (
+        content: WaSendMessageContent
+    ) => Promise<WaMessageBuildResult>
     private readonly senderKeyManager: SenderKeyManager
     private readonly signalProtocol: SignalProtocol
     private readonly signalStore: WaSignalStore
@@ -121,6 +130,13 @@ export class WaMessageDispatchCoordinator {
         | undefined
     private readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
     private readonly onDirectMessageSent: (recipientJid: string) => void
+    private readonly sendNewsletterMessage:
+        | ((
+              newsletterJid: string,
+              content: WaSendMessageContent,
+              options: WaSendMessageOptions
+          ) => Promise<WaMessagePublishResult>)
+        | undefined
     private readonly getIcdcHashLength: (() => number) | undefined
     private readonly mobileMessageIdFormat: boolean
     private readonly icdcDedup = new PromiseDedup()
@@ -148,6 +164,7 @@ export class WaMessageDispatchCoordinator {
         this.getCurrentSignedIdentity = options.getCurrentSignedIdentity
         this.resolvePrivacyTokenNode = options.resolvePrivacyTokenNode
         this.onDirectMessageSent = options.onDirectMessageSent
+        this.sendNewsletterMessage = options.sendNewsletterMessage
         this.getIcdcHashLength = options.getIcdcHashLength
         this.mobileMessageIdFormat = options.mobileMessageIdFormat ?? false
     }
@@ -273,10 +290,19 @@ export class WaMessageDispatchCoordinator {
         options: WaSendMessageOptions = {}
     ): Promise<WaMessagePublishResult> {
         const recipientJid = normalizeRecipientJid(to)
-        const [message, sendOptions] = await Promise.all([
+        if (isNewsletterJid(recipientJid)) {
+            if (!this.sendNewsletterMessage) {
+                throw new Error('newsletter sendMessage requires sendNewsletterMessage dependency')
+            }
+            const sendOptions = await this.withResolvedMessageId(options)
+            return this.sendNewsletterMessage(recipientJid, content, sendOptions)
+        }
+        const [built, sendOptions] = await Promise.all([
             this.buildMessageContent(content),
             this.withResolvedMessageId(options)
         ])
+        const message = built.message
+        const upload = built.upload
         const messageWithSecret = await ensureMessageSecret(message)
         const rawSecret = messageWithSecret.messageContextInfo?.messageSecret
         if (
@@ -322,44 +348,41 @@ export class WaMessageDispatchCoordinator {
         const metaAttrs = resolveMetaAttrs(messageWithIcdc)
         const metaNode = metaAttrs ? buildMetaNode(metaAttrs as Record<string, string>) : undefined
 
-        if (isGroup) {
-            if (this.shouldUseGroupDirectPath(messageWithIcdc)) {
-                return this.publishGroupDirectMessage(
-                    recipientJid,
-                    messageWithIcdc,
-                    plaintext,
-                    type,
-                    sendOptions,
-                    {},
-                    edit,
-                    mediatype,
-                    metaNode
-                )
-            }
-            return this.publishGroupSenderKeyMessage(
-                recipientJid,
-                messageWithIcdc,
-                plaintext,
-                type,
-                sendOptions,
-                {},
-                edit,
-                mediatype,
-                metaNode
-            )
-        }
-
-        const directRecipientJid = toUserJid(recipientJid)
-        return this.publishDirectSignalMessageWithFanout(
-            directRecipientJid,
-            messageWithIcdc,
-            plaintext,
-            type,
-            sendOptions,
-            edit,
-            mediatype,
-            metaNode
-        )
+        const publishResult = isGroup
+            ? this.shouldUseGroupDirectPath(messageWithIcdc)
+                ? await this.publishGroupDirectMessage(
+                      recipientJid,
+                      messageWithIcdc,
+                      plaintext,
+                      type,
+                      sendOptions,
+                      {},
+                      edit,
+                      mediatype,
+                      metaNode
+                  )
+                : await this.publishGroupSenderKeyMessage(
+                      recipientJid,
+                      messageWithIcdc,
+                      plaintext,
+                      type,
+                      sendOptions,
+                      {},
+                      edit,
+                      mediatype,
+                      metaNode
+                  )
+            : await this.publishDirectSignalMessageWithFanout(
+                  toUserJid(recipientJid),
+                  messageWithIcdc,
+                  plaintext,
+                  type,
+                  sendOptions,
+                  edit,
+                  mediatype,
+                  metaNode
+              )
+        return upload ? { ...publishResult, upload } : publishResult
     }
 
     public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
@@ -1131,7 +1154,7 @@ export class WaMessageDispatchCoordinator {
         }
     }
 
-    private async generateOutgoingMessageId(): Promise<string> {
+    public async generateOutgoingMessageId(): Promise<string> {
         try {
             const meUserJid = toUserJid(this.requireCurrentMeJid('sendMessage'))
             const timestampBytes = new Uint8Array(8)

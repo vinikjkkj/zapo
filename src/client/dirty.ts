@@ -41,6 +41,7 @@ interface WaDirtySyncRuntime {
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly syncAppState: () => Promise<void>
     readonly generateUsyncSid: () => Promise<string>
+    readonly newsletterListSubscribed?: () => Promise<unknown>
 }
 
 const SUPPORTED_DIRTY_TYPES = new Set<string>(WA_SUPPORTED_DIRTY_TYPES)
@@ -320,14 +321,21 @@ async function syncGroupsDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {
 }
 
 async function syncNewsletterMetadataDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {
-    runtime.logger.info(
-        'newsletter_metadata dirty bit received (GraphQL/MEX sync intentionally disabled)'
-    )
     await runtime.queryWithContext(
         'dirty.newsletter_metadata',
         buildNewsletterMetadataSyncIq(),
         WA_DEFAULTS.IQ_TIMEOUT_MS
     )
+    if (runtime.newsletterListSubscribed) {
+        try {
+            await runtime.newsletterListSubscribed()
+        } catch (error) {
+            runtime.logger.warn('newsletter_metadata MEX sync failed', {
+                message: toError(error).message
+            })
+            throw error
+        }
+    }
 }
 
 function resolveAccountSyncDeviceTargets(credentials: WaAuthCredentials | null): readonly string[] {

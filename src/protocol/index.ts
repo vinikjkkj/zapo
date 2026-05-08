@@ -8,6 +8,7 @@ export {
     isHostedDeviceJid,
     isHostedServer,
     isGroupJid,
+    isNewsletterJid,
     normalizeDeviceJid,
     normalizeRecipientJid,
     parsePhoneJid,

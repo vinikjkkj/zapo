@@ -1,10 +1,20 @@
-import type { WaIncomingMessageEvent, WaIncomingUnhandledStanzaEvent } from '@client/types'
+import type {
+    WaIncomingMessageEvent,
+    WaIncomingNewsletterReactionEvent,
+    WaIncomingUnhandledStanzaEvent
+} from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { unwrapDeviceSentMessage } from '@message/device-sent'
+import { processIncomingNewsletterMessage } from '@message/newsletter'
 import { unpadPkcs7 } from '@message/padding'
 import { proto } from '@proto'
 import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES } from '@protocol/constants'
-import { isBroadcastJid, isGroupJid, parseSignalAddressFromJid } from '@protocol/jid'
+import {
+    isBroadcastJid,
+    isGroupJid,
+    isNewsletterJid,
+    parseSignalAddressFromJid
+} from '@protocol/jid'
 import type { WaRetryDecryptFailureContext } from '@retry/types'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
@@ -25,6 +35,7 @@ interface WaIncomingMessageAckHandlerOptions {
         error: unknown
     ) => Promise<boolean>
     readonly emitIncomingMessage?: (event: WaIncomingMessageEvent) => void
+    readonly emitNewsletterReaction?: (event: WaIncomingNewsletterReactionEvent) => void
     readonly emitUnhandledStanza?: (event: WaIncomingUnhandledStanzaEvent) => void
 }
 
@@ -284,6 +295,11 @@ export async function handleIncomingMessageAck(
         return false
     }
 
+    const from = node.attrs.from
+    if (from && isNewsletterJid(from)) {
+        return handleIncomingNewsletterMessage(node, options)
+    }
+
     let shouldSendStandardReceipt = true
     const nodeContent = node.content
     if (Array.isArray(nodeContent) && nodeContent.length > 0) {
@@ -377,7 +393,6 @@ export async function handleIncomingMessageAck(
     }
 
     const id = node.attrs.id
-    const from = node.attrs.from
     if (!id || !from) {
         options.logger.warn('incoming message missing required attrs for ack/receipt', {
             hasId: Boolean(id),
@@ -422,5 +437,42 @@ export async function handleIncomingMessageAck(
         participant: receiptNode.attrs.participant
     })
     await options.sendNode(receiptNode)
+    return true
+}
+
+async function handleIncomingNewsletterMessage(
+    node: BinaryNode,
+    options: WaIncomingMessageAckHandlerOptions
+): Promise<boolean> {
+    processIncomingNewsletterMessage(node, {
+        logger: options.logger,
+        emitIncomingMessage: options.emitIncomingMessage,
+        emitNewsletterReaction: options.emitNewsletterReaction,
+        emitUnhandledStanza: options.emitUnhandledStanza
+    })
+
+    const id = node.attrs.id
+    const from = node.attrs.from
+    if (!id || !from) {
+        options.logger.warn('incoming newsletter message missing required attrs for ack', {
+            hasId: Boolean(id),
+            hasFrom: Boolean(from),
+            type: node.attrs.type
+        })
+        return true
+    }
+
+    const ackNode = buildAckNode({
+        kind: 'message',
+        node,
+        id,
+        to: from
+    })
+    options.logger.debug('sending inbound newsletter message ack', {
+        id,
+        to: from,
+        type: ackNode.attrs.type
+    })
+    await options.sendNode(ackNode)
     return true
 }

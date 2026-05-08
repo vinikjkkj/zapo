@@ -663,3 +663,60 @@ test('clearStoredState respects logoutStoreClear domain toggles', async () => {
         'threads'
     ])
 })
+
+test('uploadNewsletterMedia builds plaintext URL and parses response', async () => {
+    const { uploadNewsletterMedia } = await import('@client/newsletter/media-upload')
+    const captured: { url?: string; method?: string; body?: Uint8Array } = {}
+    const responseBody = new TextEncoder().encode(
+        JSON.stringify({
+            url: 'https://media.example/blob',
+            direct_path: '/v/abc/def',
+            handle: 'HANDLE-1',
+            metadata_url: 'https://meta.example/m'
+        })
+    )
+    const mediaTransfer = {
+        uploadStream: async (request: { url: string; method?: string; body: Uint8Array }) => {
+            captured.url = request.url
+            captured.method = request.method
+            captured.body = request.body
+            return {
+                url: request.url,
+                status: 200,
+                ok: true,
+                headers: {},
+                body: null
+            }
+        },
+        readResponseBytes: async () => responseBody
+    } as unknown as Parameters<typeof uploadNewsletterMedia>[0]['mediaTransfer']
+
+    const result = await uploadNewsletterMedia(
+        { mediaTransfer, logger: createLogger() },
+        {
+            mediaKind: 'image',
+            media: new Uint8Array([1, 2, 3, 4]),
+            mimetype: 'image/jpeg',
+            mediaConn: {
+                auth: 'AUTH-TOKEN',
+                expiresAtMs: Date.now() + 60_000,
+                hosts: [{ hostname: 'mmg.whatsapp.net', isFallback: false }]
+            }
+        }
+    )
+
+    assert.ok(captured.url)
+    assert.match(
+        captured.url ?? '',
+        /^https:\/\/mmg\.whatsapp\.net\/newsletter\/newsletter-image\//
+    )
+    assert.match(captured.url ?? '', /\?auth=AUTH-TOKEN&token=/)
+    assert.equal(captured.method, 'POST')
+    assert.deepEqual(captured.body, new Uint8Array([1, 2, 3, 4]))
+    assert.equal(result.url, 'https://media.example/blob')
+    assert.equal(result.directPath, '/v/abc/def')
+    assert.equal(result.handle, 'HANDLE-1')
+    assert.equal(result.metadataUrl, 'https://meta.example/m')
+    assert.equal(result.fileLength, 4)
+    assert.equal(result.fileSha256.byteLength, 32)
+})

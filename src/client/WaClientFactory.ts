@@ -19,6 +19,10 @@ import {
 } from '@client/coordinators/WaGroupCoordinator'
 import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
+import {
+    createNewsletterCoordinator,
+    type WaNewsletterCoordinator
+} from '@client/coordinators/WaNewsletterCoordinator'
 import { WaOfflineResumeCoordinator } from '@client/coordinators/WaOfflineResumeCoordinator'
 import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import {
@@ -51,7 +55,8 @@ import type {
     WaClientEventMap,
     WaClientOptions,
     WaIncomingMessageEvent,
-    WaIncomingUnhandledStanzaEvent
+    WaIncomingUnhandledStanzaEvent,
+    WaNewsletterEventAction
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaConn } from '@media/types'
@@ -62,11 +67,12 @@ import {
     getWaCompanionPlatformId,
     WA_DEFAULTS,
     WA_DISCONNECT_REASONS,
+    WA_NEWSLETTER_NOTIFICATION_TAGS,
     WA_NODE_TAGS,
     WA_NOTIFICATION_TYPES,
     WA_PRIVACY_TOKEN_NOTIFICATION_TYPE
 } from '@protocol/constants'
-import { parseSignalAddressFromJid, toUserJid } from '@protocol/jid'
+import { isNewsletterJid, parseSignalAddressFromJid, toUserJid } from '@protocol/jid'
 import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
 import { createOutboundRetryTracker } from '@retry/tracker'
 import type { WaRetryDecryptFailureContext } from '@retry/types'
@@ -150,6 +156,7 @@ interface WaClientDependencies {
     readonly incomingNode: WaIncomingNodeCoordinator
     readonly passiveTasks: WaPassiveTasksCoordinator
     readonly groupCoordinator: WaGroupCoordinator
+    readonly newsletterCoordinator: WaNewsletterCoordinator
     readonly privacyCoordinator: WaPrivacyCoordinator
     readonly profileCoordinator: WaProfileCoordinator
     readonly businessCoordinator: WaBusinessCoordinator
@@ -534,6 +541,18 @@ export function buildWaClientDependencies(input: {
         queryWithContext: runtime.queryWithContext
     })
 
+    const newsletterCoordinator = createNewsletterCoordinator({
+        mexSocket: { query: runtime.query },
+        sendNode: runtime.sendNode,
+        publishMessageNode: (node, opts) => messageDispatch.publishMessageNode(node, opts),
+        queryWithContext: runtime.queryWithContext,
+        generateStanzaId: () => messageDispatch.generateOutgoingMessageId(),
+        mediaTransfer,
+        getMediaConn: () => getClientMediaConn(mediaMessageBuildOptions),
+        getAbPropString: (name) => abPropsCoordinator.getConfigValue<string>(name),
+        logger
+    })
+
     const privacyCoordinator = createPrivacyCoordinator({
         queryWithContext: runtime.queryWithContext
     })
@@ -653,6 +672,10 @@ export function buildWaClientDependencies(input: {
                 })
             )
         },
+        sendNewsletterMessage: (newsletterJid, content, sendOptions) =>
+            newsletterCoordinator.sendMessage(newsletterJid, content, {
+                stanzaId: sendOptions.id
+            }),
         getIcdcHashLength: () => abPropsCoordinator.getConfigValue('md_icdc_hash_length'),
         mobileMessageIdFormat: options.mobileTransport !== undefined
     })
@@ -768,6 +791,7 @@ export function buildWaClientDependencies(input: {
                 .handleIncomingMessageEvent(event)
                 .catch((err) => runtime.handleError(toError(err)))
         },
+        emitNewsletterReaction: (event) => runtime.emitEvent('newsletter_reaction', event),
         emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) =>
             runtime.emitEvent('stanza_unhandled', event)
     }
@@ -779,7 +803,8 @@ export function buildWaClientDependencies(input: {
                 queryWithContext: runtime.queryWithContext,
                 getCurrentCredentials,
                 syncAppState: runtime.syncAppState,
-                generateUsyncSid
+                generateUsyncSid,
+                newsletterListSubscribed: () => newsletterCoordinator.listSubscribed()
             },
             dirtyBits
         )
@@ -813,6 +838,35 @@ export function buildWaClientDependencies(input: {
             handleClientDirtyBits,
             incomingMessageAckOptions
         })
+    })
+
+    incomingNode.registerIncomingHandler({
+        tag: WA_NODE_TAGS.NOTIFICATION,
+        subtype: WA_NOTIFICATION_TYPES.NEWSLETTER,
+        prepend: true,
+        // eslint-disable-next-line @typescript-eslint/require-await
+        handler: async (node) => {
+            const newsletterJid = node.attrs.from
+            if (!newsletterJid || !isNewsletterJid(newsletterJid)) {
+                return false
+            }
+            const firstChild = getFirstNodeChild(node)
+            const childTag = firstChild?.tag
+            const action: WaNewsletterEventAction =
+                childTag === WA_NEWSLETTER_NOTIFICATION_TAGS.LIVE_UPDATES
+                    ? 'live_updates'
+                    : 'unknown'
+            runtime.emitEvent('newsletter_event', {
+                rawNode: node,
+                stanzaId: node.attrs.id,
+                chatJid: newsletterJid,
+                stanzaType: node.attrs.type,
+                newsletterJid,
+                action,
+                subType: childTag
+            })
+            return false
+        }
     })
 
     incomingNode.registerIncomingHandler({
@@ -1109,6 +1163,7 @@ export function buildWaClientDependencies(input: {
         incomingNode,
         passiveTasks,
         groupCoordinator,
+        newsletterCoordinator,
         privacyCoordinator,
         profileCoordinator,
         businessCoordinator,

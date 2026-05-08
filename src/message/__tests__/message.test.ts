@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import type {
+    WaIncomingMessageEvent,
+    WaIncomingNewsletterReactionEvent,
+    WaIncomingUnhandledStanzaEvent
+} from '@client/types'
+import { createNoopLogger } from '@infra/log/types'
 import {
     describeAckNode,
     isAckOrReceiptNode,
@@ -17,6 +23,7 @@ import {
 } from '@message/content'
 import { unwrapDeviceSentMessage, wrapDeviceSentMessage } from '@message/device-sent'
 import { computeDeviceKeyHash, injectDeviceListMetadata } from '@message/icdc'
+import { processIncomingNewsletterMessage } from '@message/newsletter'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/padding'
 import { computePhashV2 } from '@message/phash'
 import { buildReportingTokenArtifacts } from '@message/reporting-token'
@@ -26,6 +33,7 @@ import {
     ensureMessageSecret,
     WA_USE_CASE_SECRET_MODIFICATION_TYPES
 } from '@message/use-case-secret'
+import { proto } from '@proto'
 
 test('ack helpers classify receipt and retryability correctly', () => {
     const ackNode = { tag: 'ack', attrs: { id: '1', type: 'error', code: '500' } }
@@ -386,4 +394,185 @@ test('injectDeviceListMetadata sets sender and recipient fields', () => {
 
     const unchanged = injectDeviceListMetadata(msg, null, null)
     assert.equal(unchanged, msg)
+})
+
+const NEWSLETTER_LOGGER = createNoopLogger()
+
+test('processIncomingNewsletterMessage decodes plaintext message and emits event', () => {
+    const plaintextBytes = proto.Message.encode({ conversation: 'hello channel' }).finish()
+    const node = {
+        tag: 'message',
+        attrs: {
+            id: 'STANZA1',
+            from: '120363025343298869@newsletter',
+            type: 'text',
+            t: '1700000000',
+            server_id: '12345',
+            is_sender: 'true'
+        },
+        content: [
+            {
+                tag: 'plaintext',
+                attrs: {},
+                content: plaintextBytes
+            }
+        ]
+    }
+
+    let emitted: WaIncomingMessageEvent | null = null
+    let unhandled: WaIncomingUnhandledStanzaEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitIncomingMessage: (event) => {
+            emitted = event
+        },
+        emitUnhandledStanza: (event) => {
+            unhandled = event
+        }
+    })
+
+    assert.equal(unhandled, null)
+    assert.ok(emitted)
+    const event = emitted as unknown as WaIncomingMessageEvent
+    assert.equal(event.chatJid, '120363025343298869@newsletter')
+    assert.equal(event.senderJid, '120363025343298869@newsletter')
+    assert.equal(event.encryptionType, 'plaintext')
+    assert.equal(event.isNewsletterChat, true)
+    assert.equal(event.isGroupChat, false)
+    assert.equal(event.isBroadcastChat, false)
+    assert.equal(event.timestampSeconds, 1700000000)
+    assert.equal(event.serverId, 12345)
+    assert.equal(event.isSender, true)
+    assert.equal(event.message?.conversation, 'hello channel')
+})
+
+test('processIncomingNewsletterMessage emits unhandled when plaintext is missing', () => {
+    const node = {
+        tag: 'message',
+        attrs: {
+            id: 'STANZA2',
+            from: '120363025343298869@newsletter',
+            type: 'text'
+        },
+        content: []
+    }
+
+    let emitted = 0
+    let unhandled: WaIncomingUnhandledStanzaEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitIncomingMessage: () => {
+            emitted += 1
+        },
+        emitUnhandledStanza: (event) => {
+            unhandled = event
+        }
+    })
+
+    assert.equal(emitted, 0)
+    assert.ok(unhandled)
+    assert.equal(
+        (unhandled as unknown as WaIncomingUnhandledStanzaEvent).reason,
+        'newsletter.missing_plaintext'
+    )
+})
+
+test('processIncomingNewsletterMessage emits reaction event with parent server_id', () => {
+    const node = {
+        tag: 'message',
+        attrs: {
+            id: 'REACT1',
+            from: '120363025343298869@newsletter',
+            type: 'reaction',
+            server_id: '42',
+            t: '1700000000'
+        },
+        content: [
+            {
+                tag: 'reaction',
+                attrs: { code: '1f44d' }
+            }
+        ]
+    }
+
+    let reactionEvent: WaIncomingNewsletterReactionEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterReaction: (event) => {
+            reactionEvent = event
+        }
+    })
+
+    assert.ok(reactionEvent)
+    const event = reactionEvent as unknown as WaIncomingNewsletterReactionEvent
+    assert.equal(event.parentMessageServerId, 42)
+    assert.equal(event.reactionCode, '1f44d')
+    assert.equal(event.revoked, false)
+    assert.equal(event.timestampSeconds, 1700000000)
+})
+
+test('processIncomingNewsletterMessage emits reaction_revoke with revoked flag', () => {
+    const node = {
+        tag: 'message',
+        attrs: {
+            id: 'REACT2',
+            from: '120363025343298869@newsletter',
+            type: 'reaction_revoke',
+            server_id: '42'
+        },
+        content: [
+            {
+                tag: 'reaction',
+                attrs: { code: '' }
+            }
+        ]
+    }
+
+    let reactionEvent: WaIncomingNewsletterReactionEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterReaction: (event) => {
+            reactionEvent = event
+        }
+    })
+
+    assert.ok(reactionEvent)
+    assert.equal((reactionEvent as unknown as WaIncomingNewsletterReactionEvent).revoked, true)
+})
+
+test('processIncomingNewsletterMessage emits unhandled on decode failure', () => {
+    const node = {
+        tag: 'message',
+        attrs: {
+            id: 'STANZA3',
+            from: '120363025343298869@newsletter',
+            type: 'text'
+        },
+        content: [
+            {
+                tag: 'plaintext',
+                attrs: {},
+                content: new Uint8Array([0xff, 0xff, 0xff, 0xff, 0xff])
+            }
+        ]
+    }
+
+    let emitted = 0
+    let unhandled: WaIncomingUnhandledStanzaEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitIncomingMessage: () => {
+            emitted += 1
+        },
+        emitUnhandledStanza: (event) => {
+            unhandled = event
+        }
+    })
+
+    assert.equal(emitted, 0)
+    assert.ok(unhandled)
+    assert.equal(
+        (unhandled as unknown as WaIncomingUnhandledStanzaEvent).reason,
+        'newsletter.decode_failed'
+    )
 })

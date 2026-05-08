@@ -16,6 +16,7 @@ import type { WaEmailCoordinator } from '@client/coordinators/WaEmailCoordinator
 import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator'
 import type { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
+import type { WaNewsletterCoordinator } from '@client/coordinators/WaNewsletterCoordinator'
 import type { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordinator'
 import type { WaProfileCoordinator } from '@client/coordinators/WaProfileCoordinator'
@@ -121,6 +122,7 @@ export class WaClient extends EventEmitter {
     public readonly messageDispatch!: WaMessageDispatchCoordinator
     public readonly messageClient!: WaMessageClient
     public readonly groupCoordinator!: WaGroupCoordinator
+    public readonly newsletterCoordinator!: WaNewsletterCoordinator
     public readonly privacyCoordinator!: WaPrivacyCoordinator
     public readonly profileCoordinator!: WaProfileCoordinator
     public readonly businessCoordinator!: WaBusinessCoordinator
@@ -705,6 +707,9 @@ export class WaClient extends EventEmitter {
     }
     public get group(): WaGroupCoordinator {
         return this.groupCoordinator
+    }
+    public get newsletter(): WaNewsletterCoordinator {
+        return this.newsletterCoordinator
     }
     public get privacy(): WaPrivacyCoordinator {
         return this.privacyCoordinator

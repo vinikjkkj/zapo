@@ -44,6 +44,7 @@ export {
 } from '@protocol/dirty'
 export {
     WA_GROUP_NOTIFICATION_TAGS,
+    WA_NEWSLETTER_NOTIFICATION_TAGS,
     WA_NOTIFICATION_TYPES,
     WA_REGISTRATION_NOTIFICATION_TAGS
 } from '@protocol/notification'
@@ -80,3 +81,21 @@ export {
 export type { AbPropConfigEntry, AbPropName, AbPropType, AbPropValue } from '@protocol/abprops'
 export { WA_GROUP_PARTICIPANT_TYPES, type WaGroupSetting } from '@protocol/group'
 export { WA_USYNC_CONTEXTS, WA_USYNC_DEFAULTS, WA_USYNC_MODES } from '@protocol/usync'
+export {
+    WA_NEWSLETTER_FETCH_KEY_TYPES,
+    WA_NEWSLETTER_MUTE_TYPES,
+    WA_NEWSLETTER_MUTE_VALUES,
+    WA_NEWSLETTER_PICTURE_TYPES,
+    WA_NEWSLETTER_RECEIVE_TYPES,
+    WA_NEWSLETTER_ROLES,
+    WA_NEWSLETTER_SEND_TYPES,
+    WA_NEWSLETTER_STATE_TYPES,
+    WA_NEWSLETTER_VERIFICATION_STATES,
+    WA_NEWSLETTER_VIEW_ROLES
+} from '@protocol/newsletter'
+export type {
+    WaNewsletterReceiveType,
+    WaNewsletterRole,
+    WaNewsletterSendType,
+    WaNewsletterStateType
+} from '@protocol/newsletter'

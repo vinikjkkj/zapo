@@ -1,14 +1,15 @@
+import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { open, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Readable } from 'node:stream'
+import { type Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 import type { WaMediaOptions } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import type { WaSendMediaMessage } from '@message/types'
-import { toBytesView } from '@util/bytes'
+import { toBytesView, toChunkBytes } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 export interface ProcessedMediaFields {
@@ -129,6 +130,58 @@ async function streamToTempFile(source: Readable): Promise<string> {
 
 export async function cleanupTempFile(filePath: string): Promise<void> {
     await unlink(filePath).catch(() => undefined)
+}
+
+export interface StreamFileMetrics {
+    readonly fileSha256: Uint8Array
+    readonly byteLength: number
+}
+
+function createSha256SizeMeter(): {
+    readonly transform: Transform
+    readonly finalize: () => StreamFileMetrics
+} {
+    const hash = createHash('sha256')
+    let byteLength = 0
+    const transform = new Transform({
+        transform(chunk, _enc, cb) {
+            const bytes = chunk instanceof Uint8Array ? chunk : toChunkBytes(chunk)
+            hash.update(bytes)
+            byteLength += bytes.byteLength
+            cb(null, bytes)
+        }
+    })
+    return {
+        transform,
+        finalize: () => ({ fileSha256: toBytesView(hash.digest()), byteLength })
+    }
+}
+
+export async function streamToTempFileWithSha256(
+    source: Readable
+): Promise<StreamFileMetrics & { readonly filePath: string }> {
+    const filePath = join(
+        tmpdir(),
+        `zapo-media-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    )
+    const meter = createSha256SizeMeter()
+    try {
+        await pipeline(source, meter.transform, createWriteStream(filePath))
+    } catch (error) {
+        await unlink(filePath).catch(() => undefined)
+        throw error
+    }
+    return { filePath, ...meter.finalize() }
+}
+
+export async function hashFileWithSha256(filePath: string): Promise<StreamFileMetrics> {
+    const meter = createSha256SizeMeter()
+    await pipeline(createReadStream(filePath), meter.transform, async (chunks) => {
+        for await (const chunk of chunks) {
+            void chunk
+        }
+    })
+    return meter.finalize()
 }
 
 export interface ResolvedMediaInputs {

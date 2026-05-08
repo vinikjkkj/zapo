@@ -1140,3 +1140,164 @@ test('email builders produce account namespace iq stanzas', () => {
     assert.equal(confirmWithCtx.content[0].content[0].tag, WA_EMAIL_TAGS.CONTEXT)
     assert.equal(confirmWithCtx.content[0].content[0].content, 'settings')
 })
+
+test('buildNewsletterMessageNode covers every message kind variant', async () => {
+    const { buildNewsletterMessageNode, buildNewsletterViewReceiptNode } =
+        await import('@transport/node/builders/newsletter')
+    const to = '120363025343298869@newsletter'
+
+    const text = buildNewsletterMessageNode({
+        kind: 'text',
+        to,
+        id: 'S1',
+        plaintext: new Uint8Array([1, 2, 3])
+    })
+    assert.equal(text.attrs.type, 'text')
+    assert.equal(text.attrs.id, 'S1')
+    assert.ok(Array.isArray(text.content))
+    assert.equal(text.content[0].tag, WA_NODE_TAGS.PLAINTEXT)
+    assert.deepEqual(text.content[0].content, new Uint8Array([1, 2, 3]))
+
+    const media = buildNewsletterMessageNode({
+        kind: 'media',
+        to,
+        id: 'S2',
+        plaintext: new Uint8Array([9]),
+        mediaType: 'image'
+    })
+    assert.equal(media.attrs.type, 'media')
+    assert.ok(Array.isArray(media.content))
+    assert.equal(media.content[0].attrs.mediatype, 'image')
+
+    const editText = buildNewsletterMessageNode({
+        kind: 'edit-text',
+        to,
+        parentMessageId: 'PARENT1',
+        plaintext: new Uint8Array([1])
+    })
+    assert.equal(editText.attrs.id, 'PARENT1')
+    assert.equal(editText.attrs.edit, '3')
+    assert.equal(editText.attrs.type, 'text')
+
+    const editMedia = buildNewsletterMessageNode({
+        kind: 'edit-media',
+        to,
+        parentMessageId: 'PARENT2',
+        plaintext: new Uint8Array([2]),
+        mediaType: 'image'
+    })
+    assert.equal(editMedia.attrs.edit, '3')
+    assert.equal(editMedia.attrs.type, 'media')
+
+    const reaction = buildNewsletterMessageNode({
+        kind: 'reaction',
+        to,
+        id: 'S3',
+        parentMessageServerId: 99,
+        reactionCode: '1f44d'
+    })
+    assert.equal(reaction.attrs.type, 'reaction')
+    assert.equal(reaction.attrs.server_id, '99')
+    assert.ok(Array.isArray(reaction.content))
+    assert.equal(reaction.content[0].tag, 'reaction')
+    assert.equal(reaction.content[0].attrs.code, '1f44d')
+
+    const revoke = buildNewsletterMessageNode({
+        kind: 'revoke',
+        to,
+        originalMessageId: 'ORIG-MSG-1'
+    })
+    assert.equal(revoke.attrs.id, 'ORIG-MSG-1')
+    assert.equal(revoke.attrs.type, 'text')
+    assert.equal(revoke.attrs.edit, '8')
+    assert.equal(revoke.attrs.server_id, undefined)
+    assert.ok(Array.isArray(revoke.content))
+    assert.equal(revoke.content[0].tag, 'plaintext')
+    assert.equal(revoke.content[0].content, undefined)
+
+    const pollCreate = buildNewsletterMessageNode({
+        kind: 'poll-creation',
+        to,
+        id: 'PC1',
+        plaintext: new Uint8Array([3])
+    })
+    assert.equal(pollCreate.attrs.type, 'poll')
+    assert.ok(Array.isArray(pollCreate.content))
+    assert.equal(pollCreate.content[0].tag, 'plaintext')
+    assert.equal(pollCreate.content[1].attrs.polltype, 'creation')
+
+    const pollVote = buildNewsletterMessageNode({
+        kind: 'poll-vote',
+        to,
+        id: 'PV1',
+        parentMessageServerId: 99,
+        votes: [new Uint8Array([1, 1]), new Uint8Array([2, 2])]
+    })
+    assert.equal(pollVote.attrs.server_id, '99')
+    assert.ok(Array.isArray(pollVote.content))
+    assert.equal(pollVote.content[0].tag, 'votes')
+    assert.ok(Array.isArray(pollVote.content[0].content))
+    assert.equal(pollVote.content[0].content.length, 2)
+    assert.equal(pollVote.content[1].tag, 'meta')
+    assert.equal(pollVote.content[1].attrs.polltype, 'vote')
+
+    assert.throws(
+        () =>
+            buildNewsletterMessageNode({
+                kind: 'poll-vote',
+                to,
+                id: 'PVERR',
+                parentMessageServerId: 1,
+                votes: []
+            }),
+        /at least one vote/
+    )
+
+    const receipt = buildNewsletterViewReceiptNode({
+        to,
+        id: 'R1',
+        itemServerIds: [10, 20]
+    })
+    assert.equal(receipt.attrs.type, 'view')
+    assert.ok(Array.isArray(receipt.content))
+    assert.equal(receipt.content[0].tag, 'list')
+    assert.ok(Array.isArray(receipt.content[0].content))
+    assert.equal(receipt.content[0].content.length, 2)
+    assert.equal(receipt.content[0].content[0].attrs.server_id, '10')
+    assert.throws(
+        () =>
+            buildNewsletterViewReceiptNode({
+                to,
+                id: 'R2',
+                itemServerIds: []
+            }),
+        /at least one item/
+    )
+})
+
+test('newsletter fetch IQs build the right history/update stanzas', async () => {
+    const { buildNewsletterMessagesIq, buildNewsletterMessageUpdatesIq } =
+        await import('@transport/node/builders/newsletter')
+
+    const fetchMessages = buildNewsletterMessagesIq({
+        newsletterJid: '120363025343298869@newsletter',
+        count: 50,
+        before: 1234
+    })
+    assert.equal(fetchMessages.attrs.type, 'get')
+    assert.equal(fetchMessages.attrs.xmlns, 'newsletter')
+    assert.ok(Array.isArray(fetchMessages.content))
+    assert.equal(fetchMessages.content[0].tag, 'messages')
+    assert.equal(fetchMessages.content[0].attrs.jid, '120363025343298869@newsletter')
+    assert.equal(fetchMessages.content[0].attrs.count, '50')
+    assert.equal(fetchMessages.content[0].attrs.before, '1234')
+
+    const fetchUpdates = buildNewsletterMessageUpdatesIq({
+        newsletterJid: '120363025343298869@newsletter',
+        count: 100,
+        since: 1700000000
+    })
+    assert.ok(Array.isArray(fetchUpdates.content))
+    assert.equal(fetchUpdates.content[0].tag, 'message_updates')
+    assert.equal(fetchUpdates.content[0].attrs.since, '1700000000')
+})

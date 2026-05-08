@@ -18,8 +18,12 @@ import type { MediaCryptoType, WaMediaConn } from '@media/types'
 import { WaMediaCrypto } from '@media/WaMediaCrypto'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { isSendMediaMessage } from '@message/content'
-import type { WaSendMediaMessage, WaSendMessageContent } from '@message/types'
-import type { Proto } from '@proto'
+import type {
+    WaMessageBuildResult,
+    WaMessageUploadInfo,
+    WaSendMediaMessage,
+    WaSendMessageContent
+} from '@message/types'
 import { WA_DEFAULTS } from '@protocol/constants'
 import { buildMediaConnIq } from '@transport/node/builders/media'
 import type { BinaryNode } from '@transport/types'
@@ -44,11 +48,9 @@ export interface WaMediaMessageOptions {
 export async function buildMediaMessageContent(
     options: WaMediaMessageOptions,
     content: WaSendMessageContent
-): Promise<Proto.IMessage> {
+): Promise<WaMessageBuildResult> {
     if (typeof content === 'string') {
-        return {
-            conversation: content
-        }
+        return { message: { conversation: content } }
     }
     if (isSendMediaMessage(content)) {
         return buildMediaMessage(options, content)
@@ -56,7 +58,7 @@ export async function buildMediaMessageContent(
     if (!content || typeof content !== 'object') {
         throw new Error('invalid message content')
     }
-    return content
+    return { message: content }
 }
 
 export async function getMediaConn(
@@ -97,7 +99,7 @@ function resolveMimetype(content: WaSendMediaMessage): string {
 async function buildMediaMessage(
     options: WaMediaMessageOptions,
     content: WaSendMediaMessage
-): Promise<Proto.IMessage> {
+): Promise<WaMessageBuildResult> {
     const needsTempFile =
         hasMediaProcessingTasks(options.media, content) ||
         (content.type === 'sticker' && content.firstFrameLength === undefined)
@@ -148,6 +150,13 @@ async function buildMediaMessage(
             mediaKeyTimestamp,
             mimetype: resolveMimetype(content)
         }
+        const uploadSummary: WaMessageUploadInfo = {
+            url: uploaded.url,
+            directPath: uploaded.directPath,
+            fileSha256: uploaded.fileSha256,
+            fileLength: uploaded.fileLength,
+            metadataUrl: uploaded.metadataUrl
+        }
 
         function spread(c: WaSendMediaMessage): Record<string, unknown> {
             const result: Record<string, unknown> = {}
@@ -167,74 +176,93 @@ async function buildMediaMessage(
         switch (content.type) {
             case 'image':
                 return {
-                    imageMessage: {
-                        ...spread(content),
-                        ...uploadedFields,
-                        width: content.width ?? processed.width,
-                        height: content.height ?? processed.height,
-                        jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail
+                    upload: uploadSummary,
+                    message: {
+                        imageMessage: {
+                            ...spread(content),
+                            ...uploadedFields,
+                            width: content.width ?? processed.width,
+                            height: content.height ?? processed.height,
+                            jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail
+                        }
                     }
                 }
             case 'video':
                 return {
-                    videoMessage: {
-                        ...spread(content),
-                        ...uploadedFields,
-                        seconds: content.seconds ?? processed.seconds,
-                        width: content.width ?? processed.width,
-                        height: content.height ?? processed.height,
-                        jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail,
-                        streamingSidecar: uploaded.streamingSidecar,
-                        metadataUrl: uploaded.metadataUrl
+                    upload: uploadSummary,
+                    message: {
+                        videoMessage: {
+                            ...spread(content),
+                            ...uploadedFields,
+                            seconds: content.seconds ?? processed.seconds,
+                            width: content.width ?? processed.width,
+                            height: content.height ?? processed.height,
+                            jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail,
+                            streamingSidecar: uploaded.streamingSidecar,
+                            metadataUrl: uploaded.metadataUrl
+                        }
                     }
                 }
             case 'ptv':
                 return {
-                    ptvMessage: {
-                        ...spread(content),
-                        ...uploadedFields,
-                        seconds: content.seconds ?? processed.seconds,
-                        width: content.width ?? processed.width,
-                        height: content.height ?? processed.height,
-                        jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail,
-                        streamingSidecar: uploaded.streamingSidecar
+                    upload: uploadSummary,
+                    message: {
+                        ptvMessage: {
+                            ...spread(content),
+                            ...uploadedFields,
+                            seconds: content.seconds ?? processed.seconds,
+                            width: content.width ?? processed.width,
+                            height: content.height ?? processed.height,
+                            jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail,
+                            streamingSidecar: uploaded.streamingSidecar
+                        }
                     }
                 }
             case 'audio':
                 return {
-                    audioMessage: {
-                        ...spread(content),
-                        ...uploadedFields,
-                        seconds: content.seconds ?? processed.seconds,
-                        streamingSidecar: uploaded.streamingSidecar,
-                        waveform: content.waveform ?? processed.waveform
+                    upload: uploadSummary,
+                    message: {
+                        audioMessage: {
+                            ...spread(content),
+                            ...uploadedFields,
+                            seconds: content.seconds ?? processed.seconds,
+                            streamingSidecar: uploaded.streamingSidecar,
+                            waveform: content.waveform ?? processed.waveform
+                        }
                     }
                 }
             case 'document':
                 return {
-                    documentMessage: {
-                        ...spread(content),
-                        ...uploadedFields,
-                        fileName: content.fileName ?? 'file',
-                        title: content.title ?? content.fileName ?? undefined,
-                        jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail
+                    upload: uploadSummary,
+                    message: {
+                        documentMessage: {
+                            ...spread(content),
+                            ...uploadedFields,
+                            fileName: content.fileName ?? 'file',
+                            title: content.title ?? content.fileName ?? undefined,
+                            jpegThumbnail: content.jpegThumbnail ?? processed.jpegThumbnail
+                        }
                     }
                 }
             case 'sticker':
                 return {
-                    stickerMessage: {
-                        ...spread(content),
-                        ...uploadedFields,
-                        width: content.width ?? processed.width,
-                        height: content.height ?? processed.height,
-                        pngThumbnail: content.pngThumbnail ?? processed.pngThumbnail,
-                        isAnimated:
-                            content.isAnimated ??
-                            processed.isAnimated ??
-                            firstFrameLength !== undefined,
-                        firstFrameLength: content.firstFrameLength ?? uploaded.firstFrameLength,
-                        firstFrameSidecar: content.firstFrameSidecar ?? uploaded.firstFrameSidecar,
-                        stickerSentTs: content.stickerSentTs ?? Date.now()
+                    upload: uploadSummary,
+                    message: {
+                        stickerMessage: {
+                            ...spread(content),
+                            ...uploadedFields,
+                            width: content.width ?? processed.width,
+                            height: content.height ?? processed.height,
+                            pngThumbnail: content.pngThumbnail ?? processed.pngThumbnail,
+                            isAnimated:
+                                content.isAnimated ??
+                                processed.isAnimated ??
+                                firstFrameLength !== undefined,
+                            firstFrameLength: content.firstFrameLength ?? uploaded.firstFrameLength,
+                            firstFrameSidecar:
+                                content.firstFrameSidecar ?? uploaded.firstFrameSidecar,
+                            stickerSentTs: content.stickerSentTs ?? Date.now()
+                        }
                     }
                 }
             default:

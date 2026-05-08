@@ -120,7 +120,7 @@ function createMessageDispatchCoordinator(
         fanoutResolver: {} as never,
         participantsCache,
         appStateSyncKeyProtocol: {} as never,
-        buildMessageContent: async () => ({}),
+        buildMessageContent: async () => ({ message: {} }),
         senderKeyManager: {} as never,
         signalProtocol: {} as never,
         signalStore: {} as never,

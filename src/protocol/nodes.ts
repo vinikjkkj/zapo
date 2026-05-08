@@ -62,7 +62,8 @@ export const WA_NODE_TAGS = Object.freeze({
     EPHEMERAL: 'ephemeral',
     MEMBERSHIP_APPROVAL_MODE: 'membership_approval_mode',
     GROUP_JOIN: 'group_join',
-    ABPROPS: 'abprops'
+    ABPROPS: 'abprops',
+    PLAINTEXT: 'plaintext'
 } as const)
 
 export const WA_IQ_TYPES = Object.freeze({
@@ -86,6 +87,7 @@ export const WA_XMLNS = Object.freeze({
     STATUS: 'status',
     GROUPS: 'w:g2',
     NEWSLETTER: 'newsletter',
+    TOS: 'tos',
     XMPP_PING: 'urn:xmpp:ping',
     WHATSAPP_PING: 'w:p',
     ABPROPS: 'abt',

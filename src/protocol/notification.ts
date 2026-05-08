@@ -3,7 +3,12 @@ export const WA_NOTIFICATION_TYPES = Object.freeze({
     ENCRYPT: 'encrypt',
     DEVICES: 'devices',
     SERVER: 'server',
-    REGISTRATION: 'registration'
+    REGISTRATION: 'registration',
+    NEWSLETTER: 'newsletter'
+} as const)
+
+export const WA_NEWSLETTER_NOTIFICATION_TAGS = Object.freeze({
+    LIVE_UPDATES: 'live_updates'
 } as const)
 
 export const WA_REGISTRATION_NOTIFICATION_TAGS = Object.freeze({

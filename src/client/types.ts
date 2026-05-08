@@ -209,6 +209,9 @@ export interface WaIncomingMessageEvent extends WaIncomingBaseEvent {
     readonly encryptionType?: string
     readonly isGroupChat: boolean
     readonly isBroadcastChat: boolean
+    readonly isNewsletterChat?: boolean
+    readonly serverId?: number
+    readonly isSender?: boolean
     readonly plaintext?: Uint8Array
     readonly message?: Proto.IMessage
 }
@@ -269,6 +272,27 @@ export interface WaIncomingFailureEvent extends WaIncomingBaseEvent {
 
 export interface WaIncomingUnhandledStanzaEvent extends WaIncomingBaseEvent {
     readonly reason: string
+}
+
+export interface WaIncomingNewsletterReactionEvent extends WaIncomingBaseEvent {
+    readonly timestampSeconds?: number
+    readonly parentMessageServerId?: number
+    readonly reactionCode?: string
+    readonly revoked: boolean
+}
+
+export type WaNewsletterEventAction =
+    | 'subscribers_count_change'
+    | 'live_updates'
+    | 'membership_revoke'
+    | 'admin_metadata_update'
+    | 'unknown'
+
+export interface WaIncomingNewsletterEvent extends WaIncomingBaseEvent {
+    readonly newsletterJid: string
+    readonly action: WaNewsletterEventAction
+    readonly subType?: string
+    readonly details?: Readonly<Record<string, unknown>>
 }
 
 export type WaGroupEventAction =
@@ -456,6 +480,8 @@ export interface WaClientEventMap {
     readonly message_addon: (event: WaIncomingAddonEvent) => void
     readonly message_protocol: (event: WaIncomingProtocolMessageEvent) => void
     readonly message_receipt: (event: WaIncomingReceiptEvent) => void
+    readonly newsletter_reaction: (event: WaIncomingNewsletterReactionEvent) => void
+    readonly newsletter_event: (event: WaIncomingNewsletterEvent) => void
     readonly presence: (event: WaIncomingPresenceEvent) => void
     readonly chatstate: (event: WaIncomingChatstateEvent) => void
     readonly call: (event: WaIncomingCallEvent) => void

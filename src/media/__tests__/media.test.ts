@@ -447,7 +447,7 @@ test('media message builder supports text passthrough and conn caching', async (
         },
         'hello'
     )
-    assert.equal(asMessage.conversation, 'hello')
+    assert.equal(asMessage.message.conversation, 'hello')
 
     const fetched = await getMediaConn(
         {
@@ -504,7 +504,7 @@ test('media message builder uploads ptv bytes and maps upload response fields', 
         readonly contentLength?: number
     }[] = []
 
-    const message = await buildMediaMessageContent(
+    const { message } = await buildMediaMessageContent(
         {
             logger,
             mediaTransfer: {
@@ -559,7 +559,7 @@ test('media message builder continues probe extraction when thumbnail generation
     }
     const encoder = new TextEncoder()
 
-    const message = await buildMediaMessageContent(
+    const { message } = await buildMediaMessageContent(
         {
             logger,
             mediaTransfer: {
@@ -606,7 +606,7 @@ test('media message builder fills only missing probe fields', async () => {
     const logger = createLogger()
     const encoder = new TextEncoder()
 
-    const message = await buildMediaMessageContent(
+    const { message } = await buildMediaMessageContent(
         {
             logger,
             mediaTransfer: {
@@ -650,7 +650,7 @@ test('media message builder reuses streamed media across processor steps', async
     const encoder = new TextEncoder()
     const calls: Array<{ readonly step: string; readonly isStream: boolean }> = []
 
-    const message = await buildMediaMessageContent(
+    const { message } = await buildMediaMessageContent(
         {
             logger,
             mediaTransfer: {
@@ -713,7 +713,7 @@ test('media message builder supports file path input for upload and processing',
     await writeFile(filePath, new Uint8Array([1, 2, 3, 4]))
 
     try {
-        const message = await buildMediaMessageContent(
+        const { message } = await buildMediaMessageContent(
             {
                 logger,
                 mediaTransfer: {

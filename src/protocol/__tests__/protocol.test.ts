@@ -26,6 +26,7 @@ import {
     isHostedDeviceId,
     isHostedDeviceJid,
     isHostedServer,
+    isNewsletterJid,
     normalizeDeviceJid,
     normalizeRecipientJid,
     parsePhoneJid,
@@ -58,6 +59,9 @@ test('jid type detection and device handling', () => {
     assert.equal(isGroupJid('123@g.us'), true)
     assert.equal(isBroadcastJid('abc@broadcast'), true)
     assert.equal(isGroupOrBroadcastJid('abc@broadcast'), true)
+    assert.equal(isNewsletterJid('120363025343298869@newsletter'), true)
+    assert.equal(isNewsletterJid('120363025343298869@s.whatsapp.net'), false)
+    assert.equal(isNewsletterJid('@newsletter'), false)
 
     assert.deepEqual(parseSignalAddressFromJid('5511:3@s.whatsapp.net'), {
         user: '5511',

@@ -40,6 +40,7 @@ export const WA_STANZA_MSG_TYPES = Object.freeze({
 export const WA_EDIT_ATTRS = Object.freeze({
     MESSAGE_EDIT: '1',
     PIN_IN_CHAT: '2',
+    NEWSLETTER_EDIT: '3',
     SENDER_REVOKE: '7',
     ADMIN_REVOKE: '8'
 } as const)

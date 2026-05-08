@@ -13,6 +13,42 @@ export type {
     WaPrivacyDisallowedListResult,
     WaPrivacySettings
 } from '@client/coordinators/WaPrivacyCoordinator'
+export type {
+    WaNewsletterAdminInfo,
+    WaNewsletterAdminInviteInput,
+    WaNewsletterAdminInviteResult,
+    WaNewsletterAdminProfile,
+    WaNewsletterCapabilityExposure,
+    WaNewsletterCoordinator,
+    WaNewsletterCreateInput,
+    WaNewsletterDehydratedMetadata,
+    WaNewsletterDirectoryCategoriesPreviewOptions,
+    WaNewsletterDirectoryCategoryPreview,
+    WaNewsletterDirectoryListOptions,
+    WaNewsletterDirectoryResults,
+    WaNewsletterDirectorySearchOptions,
+    WaNewsletterDirectoryView,
+    WaNewsletterFetchOptions,
+    WaNewsletterFollower,
+    WaNewsletterFollowersOptions,
+    WaNewsletterFollowersPage,
+    WaNewsletterMetadata,
+    WaNewsletterMexEnvelope,
+    WaNewsletterMuteInput,
+    WaNewsletterPicture,
+    WaNewsletterPollVoter,
+    WaNewsletterReactInput,
+    WaNewsletterReactionSenders,
+    WaNewsletterRecommendedOptions,
+    WaNewsletterRevokeInput,
+    WaNewsletterSendOptions,
+    WaNewsletterSendResult,
+    WaNewsletterSimilarOptions,
+    WaNewsletterUpdateInput,
+    WaNewsletterViewReceiptInput,
+    WaNewsletterVotePollInput,
+    WaPageInfo
+} from '@client/coordinators/WaNewsletterCoordinator'
 export type { WaAuthCredentials } from '@auth/types'
 export { ConsoleLogger } from '@infra/log/ConsoleLogger'
 export { PinoLogger, createPinoLogger } from '@infra/log/PinoLogger'
