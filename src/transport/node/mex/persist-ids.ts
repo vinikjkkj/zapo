@@ -131,5 +131,9 @@ export const WA_MEX_PERSIST_IDS = Object.freeze({
     NewsletterLogExposures: Object.freeze({
         docId: '25260800823586918',
         clientDocId: '25260800823586918'
+    }),
+    CommunityFetchAllSubgroups: Object.freeze({
+        docId: '9935467776504344',
+        clientDocId: '9935467776504344'
     })
 }) satisfies Readonly<Record<string, WaMexPersistId>>

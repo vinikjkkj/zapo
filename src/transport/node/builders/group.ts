@@ -3,11 +3,19 @@ import { WA_XMLNS } from '@protocol/nodes'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
-export function buildCreateGroupIq(input: {
+export interface BuildCreateGroupIqInput {
     readonly subject: string
     readonly participants: readonly string[]
     readonly description?: string
-}): BinaryNode {
+    readonly linkedParentJid?: string
+    readonly parent?:
+        | true
+        | { readonly defaultMembershipApprovalMode?: 'request_required' | undefined }
+    readonly allowNonAdminSubGroupCreation?: boolean
+    readonly createGeneralChat?: boolean
+}
+
+export function buildCreateGroupIq(input: BuildCreateGroupIqInput): BinaryNode {
     const children: BinaryNode[] = input.participants.map((jid) => ({
         tag: 'participant',
         attrs: { jid }
@@ -19,6 +27,29 @@ export function buildCreateGroupIq(input: {
             attrs: { id: `${Date.now()}` },
             content: [{ tag: 'body', attrs: {}, content: input.description }]
         })
+    }
+
+    if (input.parent !== undefined) {
+        const parentAttrs: Record<string, string> = {}
+        if (
+            input.parent !== true &&
+            input.parent.defaultMembershipApprovalMode === 'request_required'
+        ) {
+            parentAttrs.default_membership_approval_mode = 'request_required'
+        }
+        children.push({ tag: 'parent', attrs: parentAttrs })
+    }
+
+    if (input.linkedParentJid) {
+        children.push({ tag: 'linked_parent', attrs: { jid: input.linkedParentJid } })
+    }
+
+    if (input.allowNonAdminSubGroupCreation) {
+        children.push({ tag: 'allow_non_admin_sub_group_creation', attrs: {} })
+    }
+
+    if (input.createGeneralChat) {
+        children.push({ tag: 'create_general_chat', attrs: {} })
     }
 
     return buildIqNode('set', WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [

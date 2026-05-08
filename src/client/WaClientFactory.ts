@@ -538,7 +538,8 @@ export function buildWaClientDependencies(input: {
     const getCurrentSignedIdentity = () => getCurrentCredentials()?.signedIdentity
 
     const groupCoordinator = createGroupCoordinator({
-        queryWithContext: runtime.queryWithContext
+        queryWithContext: runtime.queryWithContext,
+        mexSocket: { query: runtime.query }
     })
 
     const newsletterCoordinator = createNewsletterCoordinator({

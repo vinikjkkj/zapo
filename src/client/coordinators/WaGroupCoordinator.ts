@@ -3,15 +3,24 @@ import { WA_DEFAULTS } from '@protocol/defaults'
 import { WA_GROUP_PARTICIPANT_TYPES, type WaGroupSetting } from '@protocol/group'
 import { WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
 import {
+    buildDeactivateCommunityIq,
+    buildLinkedGroupsParticipantsIq,
+    buildLinkSubGroupsIq,
+    buildUnlinkSubGroupsIq
+} from '@transport/node/builders/community'
+import {
     buildCreateGroupIq,
     buildGroupParticipantChangeIq,
     buildLeaveGroupIq
 } from '@transport/node/builders/group'
 import {
     findNodeChild,
+    getNodeChildrenByTag,
     getNodeChildrenByTagFromChildren,
     hasNodeChild
 } from '@transport/node/helpers'
+import { dispatchMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
+import { WA_MEX_PERSIST_IDS } from '@transport/node/mex/persist-ids'
 import { assertIqResult, buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -36,11 +45,58 @@ export interface WaGroupMetadata {
     readonly announce: boolean
     readonly ephemeral?: number
     readonly size?: number
+    readonly isParentGroup: boolean
+    readonly isClosedCommunity: boolean
+    readonly defaultSubgroup: boolean
+    readonly generalSubgroup: boolean
+    readonly hiddenSubgroup: boolean
+    readonly allowNonAdminSubGroupCreation: boolean
+    readonly linkedParentJid?: string
     readonly participants: readonly WaGroupParticipant[]
 }
 
 export interface WaGroupCreateOptions {
     readonly description?: string
+    readonly linkedParentJid?: string
+}
+
+export interface WaCommunityCreateOptions {
+    readonly description?: string
+    readonly membershipApprovalMode?: 'open' | 'request_required'
+    readonly allowNonAdminSubGroupCreation?: boolean
+    readonly createGeneralChat?: boolean
+}
+
+export interface WaCommunitySubGroupResult {
+    readonly jid: string
+    readonly error?: number
+}
+
+export interface WaLinkSubGroupsResult {
+    readonly linkedJids: readonly string[]
+    readonly failed: readonly WaCommunitySubGroupResult[]
+}
+
+export interface WaUnlinkSubGroupsResult {
+    readonly unlinkedJids: readonly string[]
+    readonly failed: readonly WaCommunitySubGroupResult[]
+}
+
+export interface WaCommunitySubGroup {
+    readonly jid: string
+    readonly subject?: string
+    readonly subjectTime?: number
+    readonly defaultSubgroup: boolean
+    readonly generalSubgroup: boolean
+    readonly hiddenSubgroup: boolean
+    readonly membershipApprovalMode: boolean
+    readonly pendingMembershipRequests: number
+}
+
+export interface WaCommunitySubGroupsResult {
+    readonly communityJid: string
+    readonly announcementGroup: WaCommunitySubGroup | null
+    readonly subGroups: readonly WaCommunitySubGroup[]
 }
 
 interface WaGroupCoordinatorOptions {
@@ -50,6 +106,7 @@ interface WaGroupCoordinatorOptions {
         timeoutMs?: number,
         contextData?: Readonly<Record<string, unknown>>
     ) => Promise<BinaryNode>
+    readonly mexSocket?: WaMexQuerySocket
 }
 
 export interface WaGroupCoordinator {
@@ -91,6 +148,24 @@ export interface WaGroupCoordinator {
     readonly leaveGroup: (groupJids: readonly string[]) => Promise<BinaryNode>
     readonly revokeInvite: (groupJid: string) => Promise<BinaryNode>
     readonly joinGroupViaInvite: (code: string) => Promise<BinaryNode>
+    readonly createCommunity: (
+        subject: string,
+        options?: WaCommunityCreateOptions
+    ) => Promise<WaGroupMetadata>
+    readonly deactivateCommunity: (communityJid: string) => Promise<void>
+    readonly linkSubGroups: (
+        communityJid: string,
+        subGroupJids: readonly string[]
+    ) => Promise<WaLinkSubGroupsResult>
+    readonly unlinkSubGroups: (
+        communityJid: string,
+        subGroupJids: readonly string[],
+        options?: { readonly removeOrphanedMembers?: boolean }
+    ) => Promise<WaUnlinkSubGroupsResult>
+    readonly queryLinkedGroupsParticipants: (
+        communityJid: string
+    ) => Promise<readonly WaGroupParticipant[]>
+    readonly fetchSubGroups: (communityJid: string) => Promise<WaCommunitySubGroupsResult>
 }
 
 type WaGroupParticipantChangeAction = 'add' | 'remove' | 'promote' | 'demote'
@@ -139,6 +214,9 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
         ? Number(ephemeralNode.attrs.expiration)
         : undefined
 
+    const parentNode = findNodeChild(target, 'parent')
+    const linkedParentNode = findNodeChild(target, 'linked_parent')
+
     return {
         jid: attrs.id ?? attrs.jid ?? '',
         subject: attrs.subject ?? '',
@@ -153,6 +231,14 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
         announce: hasNodeChild(target, WA_NODE_TAGS.ANNOUNCEMENT),
         ephemeral,
         size: attrs.size ? Number(attrs.size) : undefined,
+        isParentGroup: parentNode !== undefined,
+        isClosedCommunity:
+            parentNode?.attrs.default_membership_approval_mode === 'request_required',
+        defaultSubgroup: hasNodeChild(target, 'default_sub_group'),
+        generalSubgroup: hasNodeChild(target, 'general_chat'),
+        hiddenSubgroup: hasNodeChild(target, 'hidden_group'),
+        allowNonAdminSubGroupCreation: hasNodeChild(target, 'allow_non_admin_sub_group_creation'),
+        linkedParentJid: linkedParentNode?.attrs.jid ?? parentNode?.attrs.jid,
         participants: parseGroupParticipants(target)
     }
 }
@@ -163,11 +249,48 @@ const SETTING_TAGS: Readonly<
     announcement: { on: 'announcement', off: 'not_announcement' },
     restrict: { on: 'locked', off: 'unlocked' },
     ephemeral: { on: 'ephemeral', off: 'not_ephemeral' },
-    membership_approval_mode: { on: 'membership_approval_mode', off: 'membership_approval_mode' }
+    membership_approval_mode: { on: 'membership_approval_mode', off: 'membership_approval_mode' },
+    allow_non_admin_sub_group_creation: {
+        on: 'allow_non_admin_sub_group_creation',
+        off: 'not_allow_non_admin_sub_group_creation'
+    }
+}
+
+interface MexSubGroupNode {
+    readonly id?: string
+    readonly subject?: { readonly value?: string; readonly creation_time?: string | number }
+    readonly properties?: {
+        readonly general_chat?: boolean | null
+        readonly membership_approval_mode_enabled?: boolean | null
+        readonly hidden_group?: boolean | null
+    } | null
+    readonly membership_approval_requests?: { readonly total_count?: string | number } | null
+}
+
+interface MexFetchAllSubgroupsResult {
+    readonly xwa2_group_query_by_id?: {
+        readonly default_sub_group?: MexSubGroupNode | null
+        readonly sub_groups?: { readonly edges?: readonly { readonly node?: MexSubGroupNode }[] }
+    } | null
+}
+
+function parseSubGroupNode(node: MexSubGroupNode, defaultSubgroup: boolean): WaCommunitySubGroup {
+    const totalCount = node.membership_approval_requests?.total_count
+    const creationTime = node.subject?.creation_time
+    return {
+        jid: node.id ?? '',
+        subject: node.subject?.value,
+        subjectTime: creationTime !== undefined ? Number(creationTime) : undefined,
+        defaultSubgroup,
+        generalSubgroup: node.properties?.general_chat === true,
+        hiddenSubgroup: node.properties?.hidden_group === true,
+        membershipApprovalMode: node.properties?.membership_approval_mode_enabled === true,
+        pendingMembershipRequests: totalCount !== undefined ? Number(totalCount) : 0
+    }
 }
 
 export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGroupCoordinator {
-    const { queryWithContext } = options
+    const { queryWithContext, mexSocket } = options
 
     const changeParticipants = async (
         action: WaGroupParticipantChangeAction,
@@ -232,7 +355,8 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             const node = buildCreateGroupIq({
                 subject,
                 participants,
-                description: opts?.description
+                description: opts?.description,
+                linkedParentJid: opts?.linkedParentJid
             })
             const result = await queryWithContext('group.create', node)
             assertIqResult(result, 'group.create')
@@ -322,6 +446,118 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             const result = await queryWithContext('group.joinViaInvite', node)
             assertIqResult(result, 'group.joinViaInvite')
             return result
+        },
+
+        createCommunity: async (subject, opts) => {
+            const node = buildCreateGroupIq({
+                subject,
+                participants: [],
+                description: opts?.description,
+                parent:
+                    opts?.membershipApprovalMode === 'open'
+                        ? true
+                        : { defaultMembershipApprovalMode: 'request_required' },
+                allowNonAdminSubGroupCreation: opts?.allowNonAdminSubGroupCreation,
+                createGeneralChat: opts?.createGeneralChat
+            })
+            const result = await queryWithContext('community.create', node)
+            assertIqResult(result, 'community.create')
+            return parseGroupMetadata(result)
+        },
+
+        deactivateCommunity: async (communityJid) => {
+            const node = buildDeactivateCommunityIq(communityJid)
+            const result = await queryWithContext('community.deactivate', node)
+            assertIqResult(result, 'community.deactivate')
+        },
+
+        linkSubGroups: async (communityJid, subGroupJids) => {
+            const node = buildLinkSubGroupsIq({
+                communityJid,
+                subGroups: subGroupJids.map((jid) => ({ jid }))
+            })
+            const result = await queryWithContext('community.linkSubGroups', node)
+            assertIqResult(result, 'community.linkSubGroups')
+
+            const linksNode = findNodeChild(result, 'links')
+            const linkNode = linksNode ? findNodeChild(linksNode, 'link') : undefined
+            const groupNodes = linkNode ? getNodeChildrenByTag(linkNode, 'group') : []
+            const linkedJids: string[] = []
+            const failed: WaCommunitySubGroupResult[] = []
+            for (const groupNode of groupNodes) {
+                const jid = groupNode.attrs.jid
+                if (!jid) continue
+                const errorAttr = findNodeChild(groupNode, 'error')?.attrs.code
+                if (errorAttr !== undefined) {
+                    failed.push({ jid, error: Number(errorAttr) })
+                } else {
+                    linkedJids.push(jid)
+                }
+            }
+            return { linkedJids, failed }
+        },
+
+        unlinkSubGroups: async (communityJid, subGroupJids, options) => {
+            const node = buildUnlinkSubGroupsIq({
+                communityJid,
+                subGroupJids,
+                removeOrphanedMembers: options?.removeOrphanedMembers
+            })
+            const result = await queryWithContext('community.unlinkSubGroups', node)
+            assertIqResult(result, 'community.unlinkSubGroups')
+
+            const unlinkNode = findNodeChild(result, 'unlink')
+            const groupNodes = unlinkNode ? getNodeChildrenByTag(unlinkNode, 'group') : []
+            const unlinkedJids: string[] = []
+            const failed: WaCommunitySubGroupResult[] = []
+            for (const groupNode of groupNodes) {
+                const jid = groupNode.attrs.jid
+                if (!jid) continue
+                const errorAttr = findNodeChild(groupNode, 'error')?.attrs.code
+                if (errorAttr !== undefined) {
+                    failed.push({ jid, error: Number(errorAttr) })
+                } else {
+                    unlinkedJids.push(jid)
+                }
+            }
+            return { unlinkedJids, failed }
+        },
+
+        queryLinkedGroupsParticipants: async (communityJid) => {
+            const node = buildLinkedGroupsParticipantsIq(communityJid)
+            const result = await queryWithContext('community.linkedGroupsParticipants', node)
+            assertIqResult(result, 'community.linkedGroupsParticipants')
+            const container = findNodeChild(result, 'linked_groups_participants')
+            return container ? parseGroupParticipants(container) : []
+        },
+
+        fetchSubGroups: async (communityJid) => {
+            if (!mexSocket) {
+                throw new Error('community.fetchSubGroups requires a mex transport')
+            }
+            const { data } = await dispatchMexQuery(mexSocket, {
+                docId: WA_MEX_PERSIST_IDS.CommunityFetchAllSubgroups.docId,
+                clientDocId: WA_MEX_PERSIST_IDS.CommunityFetchAllSubgroups.clientDocId,
+                opName: 'CommunityFetchAllSubgroups',
+                variables: {
+                    group_id: communityJid,
+                    query_context: 'PRIMARY',
+                    sub_group_hint: null
+                }
+            })
+            const envelope = (data ?? {}) as MexFetchAllSubgroupsResult
+            const groupQuery = envelope.xwa2_group_query_by_id
+            const announcementNode = groupQuery?.default_sub_group
+            const announcementGroup = announcementNode
+                ? parseSubGroupNode(announcementNode, true)
+                : null
+            const edges = groupQuery?.sub_groups?.edges ?? []
+            const subGroups: WaCommunitySubGroup[] = []
+            for (const edge of edges) {
+                if (!edge?.node) continue
+                subGroups.push(parseSubGroupNode(edge.node, false))
+            }
+            return { communityJid, announcementGroup, subGroups }
         }
     }
 }

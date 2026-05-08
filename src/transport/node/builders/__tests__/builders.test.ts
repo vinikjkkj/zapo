@@ -24,6 +24,12 @@ import {
     buildGroupsDirtySyncIq,
     buildNewsletterMetadataSyncIq
 } from '@transport/node/builders/account-sync'
+import {
+    buildDeactivateCommunityIq,
+    buildLinkedGroupsParticipantsIq,
+    buildLinkSubGroupsIq,
+    buildUnlinkSubGroupsIq
+} from '@transport/node/builders/community'
 import { buildRemoveCompanionDeviceIq } from '@transport/node/builders/device'
 import {
     buildConfirmEmailIq,
@@ -285,6 +291,92 @@ test('group builders support create participant updates and leave', () => {
     assert.equal(leave.attrs.type, 'set')
     assert.ok(Array.isArray(leave.content))
     assert.equal(leave.content[0].tag, 'leave')
+})
+
+test('group create accepts community/subgroup options', () => {
+    const community = buildCreateGroupIq({
+        subject: 'My Community',
+        participants: [],
+        parent: { defaultMembershipApprovalMode: 'request_required' },
+        allowNonAdminSubGroupCreation: true,
+        createGeneralChat: true
+    })
+    const create = (community.content as BinaryNode[])[0]
+    const children = create.content as BinaryNode[]
+    const parent = children.find((c) => c.tag === 'parent')
+    assert.ok(parent)
+    assert.equal(parent.attrs.default_membership_approval_mode, 'request_required')
+    assert.ok(children.find((c) => c.tag === 'allow_non_admin_sub_group_creation'))
+    assert.ok(children.find((c) => c.tag === 'create_general_chat'))
+
+    const openCommunity = buildCreateGroupIq({
+        subject: 'Open',
+        participants: [],
+        parent: true
+    })
+    const openParent = ((openCommunity.content as BinaryNode[])[0].content as BinaryNode[]).find(
+        (c) => c.tag === 'parent'
+    )
+    assert.ok(openParent)
+    assert.equal(openParent.attrs.default_membership_approval_mode, undefined)
+
+    const subgroup = buildCreateGroupIq({
+        subject: 'Sub',
+        participants: ['5511999999999@s.whatsapp.net'],
+        linkedParentJid: 'parent@g.us'
+    })
+    const linkedParent = ((subgroup.content as BinaryNode[])[0].content as BinaryNode[]).find(
+        (c) => c.tag === 'linked_parent'
+    )
+    assert.ok(linkedParent)
+    assert.equal(linkedParent.attrs.jid, 'parent@g.us')
+})
+
+test('community builders shape link/unlink/delete/linked-participants iqs', () => {
+    const link = buildLinkSubGroupsIq({
+        communityJid: 'parent@g.us',
+        subGroups: [{ jid: 'a@g.us' }, { jid: 'b@g.us', hidden: true }]
+    })
+    assert.equal(link.attrs.to, 'parent@g.us')
+    assert.equal(link.attrs.type, 'set')
+    const links = (link.content as BinaryNode[])[0]
+    assert.equal(links.tag, 'links')
+    const linkChild = (links.content as BinaryNode[])[0]
+    assert.equal(linkChild.attrs.link_type, 'sub_group')
+    const groups = linkChild.content as BinaryNode[]
+    assert.equal(groups.length, 2)
+    assert.equal(groups[0].attrs.jid, 'a@g.us')
+    assert.equal((groups[0].content as BinaryNode[] | undefined)?.length, undefined)
+    const hiddenChildren = groups[1].content as BinaryNode[]
+    assert.equal(hiddenChildren[0].tag, 'hidden_group')
+
+    assert.throws(() => buildLinkSubGroupsIq({ communityJid: 'p@g.us', subGroups: [] }))
+
+    const unlink = buildUnlinkSubGroupsIq({
+        communityJid: 'parent@g.us',
+        subGroupJids: ['a@g.us', 'b@g.us'],
+        removeOrphanedMembers: true
+    })
+    const unlinkRoot = (unlink.content as BinaryNode[])[0]
+    assert.equal(unlinkRoot.tag, 'unlink')
+    assert.equal(unlinkRoot.attrs.unlink_type, 'sub_group')
+    const unlinkGroups = unlinkRoot.content as BinaryNode[]
+    assert.equal(unlinkGroups[0].attrs.remove_orphaned_members, 'true')
+
+    const unlinkNoOrphan = buildUnlinkSubGroupsIq({
+        communityJid: 'parent@g.us',
+        subGroupJids: ['x@g.us']
+    })
+    const noOrphanGroup = ((unlinkNoOrphan.content as BinaryNode[])[0].content as BinaryNode[])[0]
+    assert.equal(noOrphanGroup.attrs.remove_orphaned_members, undefined)
+
+    const deactivate = buildDeactivateCommunityIq('parent@g.us')
+    assert.equal(deactivate.attrs.to, 'parent@g.us')
+    assert.equal((deactivate.content as BinaryNode[])[0].tag, 'delete_parent')
+
+    const linkedParticipants = buildLinkedGroupsParticipantsIq('parent@g.us')
+    assert.equal(linkedParticipants.attrs.type, 'get')
+    assert.equal((linkedParticipants.content as BinaryNode[])[0].tag, 'linked_groups_participants')
 })
 
 test('message builders create fanout nodes and validate participant requirements', () => {
