@@ -48,7 +48,8 @@ module.exports = [
                     './packages/store-redis/tsconfig.json',
                     './packages/store-mongo/tsconfig.json',
                     './packages/media-utils/tsconfig.json',
-                    './packages/fake-server/tsconfig.json'
+                    './packages/fake-server/tsconfig.json',
+                    './packages/mcp-server/tsconfig.json'
                 ]
             }
         }
@@ -81,7 +82,8 @@ module.exports = [
                         './packages/store-redis/tsconfig.json',
                         './packages/store-mongo/tsconfig.json',
                         './packages/media-utils/tsconfig.json',
-                        './packages/fake-server/tsconfig.json'
+                        './packages/fake-server/tsconfig.json',
+                        './packages/mcp-server/tsconfig.json'
                     ]
                 }
             }
@@ -115,6 +117,7 @@ module.exports = [
         files: [
             'src/store/**/*.ts',
             'packages/store-*/**/*.ts',
+            'packages/mcp-server/src/**/*.ts',
             'src/**/__tests__/**/*.ts',
             'packages/**/__tests__/**/*.ts',
             'bench/**/*.ts'
