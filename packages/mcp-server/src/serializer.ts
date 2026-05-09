@@ -159,4 +159,3 @@ const decode = (value: unknown, depth: number): unknown => {
     }
     return out
 }
-

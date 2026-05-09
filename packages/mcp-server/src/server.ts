@@ -209,10 +209,10 @@ const readJsonBody = (req: IncomingMessage): Promise<unknown> => {
         // Connection went away mid-upload (client closed, network reset, ...).
         // Without these handlers neither `end` nor `error` necessarily fires
         // and the Promise hangs the request handler forever.
-        req.on('aborted', () =>
-            settle(() => reject(new Error('request aborted by client')))
+        req.on('aborted', () => settle(() => reject(new Error('request aborted by client'))))
+        req.on('close', () =>
+            settle(() => reject(new Error('request closed before body finished')))
         )
-        req.on('close', () => settle(() => reject(new Error('request closed before body finished'))))
     })
 }
 

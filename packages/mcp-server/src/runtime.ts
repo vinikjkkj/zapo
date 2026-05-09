@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path'
 
 import { createSqliteStore } from '@zapo-js/store-sqlite'
 import { createStore, type Logger, type LogLevel, WaClient, type WaStore } from 'zapo-js'
-import { toError } from 'zapo-js/util'
+import { hexToBytes, resolvePositive, toError } from 'zapo-js/util'
 
 import { encodeForJson } from './serializer'
 
@@ -141,8 +141,7 @@ class BufferedTeeLogger implements Logger {
         }
         const ts = Date.now()
         const iso = new Date(ts).toISOString()
-        const safeCtx =
-            context && Object.keys(context).length > 0 ? safeStringify(context) : null
+        const safeCtx = context && Object.keys(context).length > 0 ? safeStringify(context) : null
         const ctxStr = safeCtx ? ` ${safeCtx}` : ''
         process.stderr.write(`[${iso}] ${level} ${message}${ctxStr}\n`)
 
@@ -269,16 +268,24 @@ export const buildRuntimeConfigFromEnv = (env = process.env): RuntimeConfig => {
         : resolve(process.cwd(), '.auth', 'state.sqlite')
     const sessionId = env.MCP_SESSION_ID ?? 'default_2'
     const logLevel = resolveLogLevel(env.MCP_LOG_LEVEL)
-    const bufferSize = parsePositiveInt(env.MCP_EVENT_BUFFER_SIZE) ?? DEFAULT_BUFFER_SIZE
+    const bufferSize = parseEnvPositiveInt(
+        env.MCP_EVENT_BUFFER_SIZE,
+        'MCP_EVENT_BUFFER_SIZE',
+        DEFAULT_BUFFER_SIZE
+    )
     const captureNoisyEvents = env.MCP_CAPTURE_TRANSPORT === '1'
     const historyEnabled = env.MCP_HISTORY_DISABLED !== '1'
     const chatSocketUrls = parseUrlList(env.MCP_CHAT_SOCKET_URLS)
     const noiseRootCa = parseNoiseRootCa(env.MCP_FAKE_NOISE_PUBKEY_HEX, env.MCP_FAKE_NOISE_SERIAL)
-    const logBufferSize = parsePositiveInt(env.MCP_LOG_BUFFER_SIZE) ?? DEFAULT_LOG_BUFFER_SIZE
+    const logBufferSize = parseEnvPositiveInt(
+        env.MCP_LOG_BUFFER_SIZE,
+        'MCP_LOG_BUFFER_SIZE',
+        DEFAULT_LOG_BUFFER_SIZE
+    )
     const logFilePath = env.MCP_LOG_FILE ? resolve(env.MCP_LOG_FILE) : undefined
     const transport = parseTransportMode(env.MCP_TRANSPORT)
     const httpHost = env.MCP_HTTP_HOST ?? '127.0.0.1'
-    const httpPort = parsePositiveInt(env.MCP_HTTP_PORT) ?? 3737
+    const httpPort = parseEnvPositiveInt(env.MCP_HTTP_PORT, 'MCP_HTTP_PORT', 3737)
     const httpPath = env.MCP_HTTP_PATH ?? '/mcp'
     return {
         authPath,
@@ -322,22 +329,12 @@ const parseNoiseRootCa = (
     if (!pubkeyHex || !serialRaw) return undefined
     const cleaned = pubkeyHex.trim()
     if (cleaned.length === 0) return undefined
-    if (cleaned.length % 2 !== 0) {
-        throw new Error('MCP_FAKE_NOISE_PUBKEY_HEX must be even-length hex')
-    }
-    const bytes = new Uint8Array(cleaned.length / 2)
-    for (let i = 0; i < bytes.length; i += 1) {
-        const byte = Number.parseInt(cleaned.slice(i * 2, i * 2 + 2), 16)
-        if (Number.isNaN(byte)) {
-            throw new Error('MCP_FAKE_NOISE_PUBKEY_HEX contains non-hex characters')
-        }
-        bytes[i] = byte
-    }
+    const publicKey = hexToBytes(cleaned)
     const serial = Number.parseInt(serialRaw.trim(), 10)
     if (!Number.isFinite(serial)) {
         throw new Error('MCP_FAKE_NOISE_SERIAL must be a number')
     }
-    return { publicKey: bytes, serial }
+    return { publicKey, serial }
 }
 
 const resolveLogLevel = (raw: string | undefined): LogLevel => {
@@ -353,11 +350,10 @@ const resolveLogLevel = (raw: string | undefined): LogLevel => {
     }
 }
 
-const parsePositiveInt = (raw: string | undefined): number | null => {
-    if (!raw) return null
+const parseEnvPositiveInt = (raw: string | undefined, name: string, fallback: number): number => {
+    if (!raw) return fallback
     const parsed = Number.parseInt(raw, 10)
-    if (!Number.isFinite(parsed) || parsed <= 0) return null
-    return parsed
+    return resolvePositive(Number.isFinite(parsed) ? parsed : Number.NaN, fallback, name)
 }
 
 export class McpRuntime {
