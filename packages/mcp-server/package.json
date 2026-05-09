@@ -24,7 +24,8 @@
         "build": "tsc -p tsconfig.build.cjs.json",
         "typecheck": "tsc --noEmit",
         "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\"",
-        "start": "node --import tsx src/bin.ts"
+        "start": "node --import tsx src/bin.ts",
+        "dev": "cross-env MCP_TRANSPORT=http MCP_AUTH_PATH=../../.auth/state.sqlite node --watch --import tsx src/bin.ts"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
@@ -43,6 +44,7 @@
         "@zapo-js/fake-server": "file:../fake-server",
         "@zapo-js/store-sqlite": "file:../store-sqlite",
         "better-sqlite3": "^12.6.2",
+        "cross-env": "^7.0.3",
         "zapo-js": "file:../.."
     },
     "engines": {

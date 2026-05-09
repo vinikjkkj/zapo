@@ -437,6 +437,9 @@ export class McpRuntime {
             providers: {
                 auth: 'sqlite',
                 signal: 'sqlite',
+                preKey: 'sqlite',
+                session: 'sqlite',
+                identity: 'sqlite',
                 senderKey: 'sqlite',
                 appState: 'sqlite',
                 messages: 'sqlite',
