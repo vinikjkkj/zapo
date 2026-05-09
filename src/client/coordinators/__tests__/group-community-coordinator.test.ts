@@ -244,7 +244,7 @@ test('fetchSubGroups parses default + linked subgroups via mex', async () => {
     assert.equal(result.subGroups[0].generalSubgroup, true)
     assert.equal(result.subGroups[0].pendingMembershipRequests, 2)
     assert.equal(result.subGroups[1].hiddenSubgroup, true)
-    assert.equal(result.subGroups[1].membershipApprovalMode, true)
+    assert.equal(result.subGroups[1].membershipApprovalEnabled, true)
 
     const queryNode = mexCalls[0].content?.[0] as BinaryNode | undefined
     assert.ok(queryNode)

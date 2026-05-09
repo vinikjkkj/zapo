@@ -89,7 +89,7 @@ export interface WaCommunitySubGroup {
     readonly defaultSubgroup: boolean
     readonly generalSubgroup: boolean
     readonly hiddenSubgroup: boolean
-    readonly membershipApprovalMode: boolean
+    readonly membershipApprovalEnabled: boolean
     readonly pendingMembershipRequests: number
 }
 
@@ -287,7 +287,7 @@ function parseSubGroupNode(node: MexSubGroupNode, defaultSubgroup: boolean): WaC
         defaultSubgroup,
         generalSubgroup: node.properties?.general_chat === true,
         hiddenSubgroup: node.properties?.hidden_group === true,
-        membershipApprovalMode: node.properties?.membership_approval_mode_enabled === true,
+        membershipApprovalEnabled: node.properties?.membership_approval_mode_enabled === true,
         pendingMembershipRequests: totalCount !== undefined ? Number(totalCount) : 0
     }
 }
