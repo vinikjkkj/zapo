@@ -5,6 +5,8 @@ import {
     type ServerResponse
 } from 'node:http'
 
+import { toError } from 'zapo-js/util'
+
 import { buildRuntimeConfigFromEnv, McpRuntime, type RuntimeConfig } from './runtime'
 import { encodeForJson } from './serializer'
 import { type ToolDefinition, TOOLS } from './tools'
@@ -120,10 +122,10 @@ const buildMcpServer = (
                 ]
             }
         } catch (error) {
-            const err = error as Error
+            const err = toError(error)
             runtime.getLogger().warn('tool handler failed', {
                 tool: tool.name,
-                message: err?.message ?? String(error)
+                message: err.message
             })
             return {
                 isError: true,
@@ -133,9 +135,9 @@ const buildMcpServer = (
                         text: JSON.stringify(
                             encodeForJson({
                                 error: {
-                                    name: err?.name ?? 'Error',
-                                    message: err?.message ?? String(error),
-                                    stack: err?.stack
+                                    name: err.name,
+                                    message: err.message,
+                                    stack: err.stack
                                 }
                             }),
                             null,
@@ -253,7 +255,7 @@ const runHttpTransport = async (
             body = await readJsonBody(req)
         } catch (error) {
             res.writeHead(400, { 'content-type': 'application/json' }).end(
-                JSON.stringify({ error: 'invalid json body', message: (error as Error).message })
+                JSON.stringify({ error: 'invalid json body', message: toError(error).message })
             )
             return
         }
@@ -275,12 +277,11 @@ const runHttpTransport = async (
             await server.connect(transport)
             await transport.handleRequest(req, res, body)
         } catch (error) {
-            runtime.getLogger().warn('http request failed', {
-                message: (error as Error)?.message ?? String(error)
-            })
+            const err = toError(error)
+            runtime.getLogger().warn('http request failed', { message: err.message })
             if (!res.headersSent) {
                 res.writeHead(500, { 'content-type': 'application/json' }).end(
-                    JSON.stringify({ error: 'internal', message: (error as Error)?.message })
+                    JSON.stringify({ error: 'internal', message: err.message })
                 )
             }
         }

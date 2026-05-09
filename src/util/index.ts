@@ -1,4 +1,11 @@
-export { bytesToHex, hexToBytes, toBytesView, uint8Equal } from '@util/bytes'
+export {
+    base64ToBytes,
+    bytesToBase64,
+    bytesToHex,
+    hexToBytes,
+    toBytesView,
+    uint8Equal
+} from '@util/bytes'
 export {
     asBytes,
     asNumber,
@@ -10,5 +17,5 @@ export {
     toBoolOrUndef
 } from '@util/coercion'
 export { normalizeQueryLimit } from '@util/collections'
-export { toSafeNumber } from '@util/primitives'
+export { toError, toSafeNumber } from '@util/primitives'
 export { isBunRuntime } from '@util/runtime'

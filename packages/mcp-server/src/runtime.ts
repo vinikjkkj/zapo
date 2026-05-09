@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path'
 
 import { createSqliteStore } from '@zapo-js/store-sqlite'
 import { createStore, type Logger, type LogLevel, WaClient, type WaStore } from 'zapo-js'
+import { toError } from 'zapo-js/util'
 
 import { encodeForJson } from './serializer'
 
@@ -58,7 +59,7 @@ class BufferedTeeLogger implements Logger {
                 })
             } catch (err) {
                 process.stderr.write(
-                    `[mcp] disabling log file mirror, could not open ${filePath}: ${(err as Error).message}\n`
+                    `[mcp] disabling log file mirror, could not open ${filePath}: ${toError(err).message}\n`
                 )
                 this.fileStream = null
             }
@@ -180,7 +181,7 @@ const safeStringify = (value: unknown): string => {
     try {
         return JSON.stringify(encodeForJson(value))
     } catch (err) {
-        return JSON.stringify({ $stringifyError: (err as Error).message })
+        return JSON.stringify({ $stringifyError: toError(err).message })
     }
 }
 
@@ -486,7 +487,7 @@ export class McpRuntime {
                 await this.client.disconnect()
             } catch (error) {
                 this.logger.warn('disconnect during destroy failed', {
-                    message: (error as Error)?.message ?? String(error)
+                    message: toError(error).message
                 })
             }
             this.detachListeners()
@@ -497,7 +498,7 @@ export class McpRuntime {
                 await this.store.destroy()
             } catch (error) {
                 this.logger.warn('store destroy failed', {
-                    message: (error as Error)?.message ?? String(error)
+                    message: toError(error).message
                 })
             }
             this.store = null

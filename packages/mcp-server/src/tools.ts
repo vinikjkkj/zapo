@@ -1,4 +1,5 @@
 import * as ZapoLib from 'zapo-js'
+import { toError } from 'zapo-js/util'
 
 import type { McpRuntime } from './runtime'
 import { decodeFromJson, encodeForJson } from './serializer'
@@ -87,7 +88,7 @@ const callTool: ToolDefinition = {
                     ;(invoked as Promise<unknown>).catch((error: unknown) => {
                         runtime.getLogger().warn('noAwait call rejected', {
                             path,
-                            message: (error as Error)?.message ?? String(error)
+                            message: toError(error).message
                         })
                     })
                 }
@@ -375,7 +376,7 @@ const lifecycleTool: ToolDefinition = {
                     try {
                         state = client.getState()
                     } catch (error) {
-                        state = { error: (error as Error)?.message ?? String(error) }
+                        state = { error: toError(error).message }
                     }
                 }
                 return {

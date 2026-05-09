@@ -12,6 +12,8 @@
  *   "[Circular]"                   - Cycle marker
  */
 
+import { base64ToBytes, bytesToBase64 } from 'zapo-js/util'
+
 const BYTES = '$bytes'
 const BIGINT = '$bigint'
 const DATE = '$date'
@@ -158,11 +160,3 @@ const decode = (value: unknown, depth: number): unknown => {
     return out
 }
 
-const bytesToBase64 = (bytes: Uint8Array): string => {
-    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
-}
-
-const base64ToBytes = (s: string): Uint8Array => {
-    const buf = Buffer.from(s, 'base64')
-    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
-}
