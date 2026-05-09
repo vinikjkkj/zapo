@@ -1,0 +1,14 @@
+{
+    "extends": ["../../tsconfig.packages.json", "../tsconfig.build.paths.json"],
+    "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist",
+        "noEmit": false,
+        "types": ["node"],
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true
+    },
+    "include": ["src"],
+    "exclude": ["src/**/__tests__/**"]
+}

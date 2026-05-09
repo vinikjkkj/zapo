@@ -38,7 +38,8 @@
             "@store/*": ["src/store/*"],
             "@transport": ["src/transport/index.ts"],
             "@transport/*": ["src/transport/*"],
-            "@util/*": ["src/util/*"]
+            "@util/*": ["src/util/*"],
+            "@zapo-js/*": ["packages/*/src"]
         }
     }
 }
