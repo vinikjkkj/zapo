@@ -217,8 +217,11 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
     const parentNode = findNodeChild(target, 'parent')
     const linkedParentNode = findNodeChild(target, 'linked_parent')
 
+    const rawJid = attrs.id ?? attrs.jid ?? ''
+    const jid = rawJid && !rawJid.includes('@') ? `${rawJid}@${WA_DEFAULTS.GROUP_SERVER}` : rawJid
+
     return {
-        jid: attrs.id ?? attrs.jid ?? '',
+        jid,
         subject: attrs.subject ?? '',
         subjectOwner: attrs.s_o ?? attrs.subject_owner,
         subjectTime: attrs.s_t ? Number(attrs.s_t) : undefined,
@@ -541,8 +544,8 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
                 opName: 'CommunityFetchAllSubgroups',
                 variables: {
                     group_id: communityJid,
-                    query_context: 'PRIMARY',
-                    sub_group_hint: null
+                    query_context: 'INTERACTIVE',
+                    sub_group_hint_id: undefined
                 }
             })
             const envelope = (data ?? {}) as MexFetchAllSubgroupsResult

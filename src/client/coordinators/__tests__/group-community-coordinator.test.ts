@@ -251,7 +251,7 @@ test('fetchSubGroups parses default + linked subgroups via mex', async () => {
     assert.equal(queryNode.attrs.query_id, '9935467776504344')
     const body = JSON.parse(queryNode.content as string)
     assert.equal(body.variables.group_id, 'parent@g.us')
-    assert.equal(body.variables.query_context, 'PRIMARY')
+    assert.equal(body.variables.query_context, 'INTERACTIVE')
 })
 
 test('fetchSubGroups throws when mex transport not configured', async () => {
