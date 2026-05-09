@@ -247,6 +247,9 @@ export interface BuildNewsletterMessageUpdatesIqInput {
 export function buildNewsletterMessageUpdatesIq(
     input: BuildNewsletterMessageUpdatesIqInput
 ): BinaryNode {
+    if (input.before === undefined && input.after === undefined) {
+        throw new Error('newsletter message updates require before or after')
+    }
     const attrs: Record<string, string> = {
         count: String(input.count)
     }

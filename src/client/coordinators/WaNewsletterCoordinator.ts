@@ -30,6 +30,7 @@ export type {
     WaNewsletterFollower,
     WaNewsletterFollowersOptions,
     WaNewsletterFollowersPage,
+    WaNewsletterInsightMetricRequest,
     WaNewsletterMetadata,
     WaNewsletterMexEnvelope,
     WaNewsletterMuteInput,

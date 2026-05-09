@@ -38,6 +38,12 @@ export interface WaNewsletterFetchOptions {
     readonly viewRole?: keyof typeof WA_NEWSLETTER_VIEW_ROLES
 }
 
+export interface WaNewsletterInsightMetricRequest {
+    readonly id: number
+    readonly type: string
+    readonly group_by?: { readonly number_of_days?: number }
+}
+
 export interface WaNewsletterDirectorySearchOptions {
     readonly searchText?: string
     readonly startCursor?: string
