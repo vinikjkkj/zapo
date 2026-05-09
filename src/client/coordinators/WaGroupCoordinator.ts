@@ -9,9 +9,13 @@ import {
     buildUnlinkSubGroupsIq
 } from '@transport/node/builders/community'
 import {
+    buildCancelMembershipRequestsIq,
     buildCreateGroupIq,
+    buildGetMembershipApprovalRequestsIq,
     buildGroupParticipantChangeIq,
-    buildLeaveGroupIq
+    buildJoinLinkedGroupIq,
+    buildLeaveGroupIq,
+    buildMembershipRequestsActionIq
 } from '@transport/node/builders/group'
 import {
     findNodeChild,
@@ -29,6 +33,11 @@ export interface WaGroupParticipant {
     readonly type: string
     readonly isAdmin: boolean
     readonly isSuperAdmin: boolean
+    readonly lid?: string
+    readonly phoneNumber?: string
+    readonly displayName?: string
+    readonly username?: string
+    readonly expirationSeconds?: number
 }
 
 export interface WaGroupMetadata {
@@ -44,15 +53,46 @@ export interface WaGroupMetadata {
     readonly restrict: boolean
     readonly announce: boolean
     readonly ephemeral?: number
+    readonly ephemeralTrigger?: number
     readonly size?: number
+    readonly addressingMode?: 'lid' | 'pn'
     readonly isParentGroup: boolean
     readonly isClosedCommunity: boolean
     readonly defaultSubgroup: boolean
     readonly generalSubgroup: boolean
     readonly hiddenSubgroup: boolean
     readonly allowNonAdminSubGroupCreation: boolean
+    readonly membershipApprovalEnabled: boolean
+    readonly noFrequentlyForwarded: boolean
+    readonly support: boolean
+    readonly suspended: boolean
+    readonly incognito: boolean
+    readonly allowAdminReports: boolean
+    readonly autoAddDisabled: boolean
+    readonly groupHistory: boolean
+    readonly capi: boolean
+    readonly groupSafetyCheck: boolean
+    readonly participantLabelEnabled: boolean
+    readonly limitSharingEnabled: boolean
+    readonly evolutionVersion?: number
+    readonly memberAddMode?: string
+    readonly memberLinkMode?: string
+    readonly memberShareGroupHistoryMode?: string
+    readonly growthLockedExpiration?: number
+    readonly appealStatus?: 'approved' | 'in_review' | 'none' | 'rejected'
+    readonly appealUpdateTime?: number
     readonly linkedParentJid?: string
     readonly participants: readonly WaGroupParticipant[]
+}
+
+export interface WaMembershipRequest {
+    readonly jid: string
+    readonly requestor?: string
+    readonly requestorPhone?: string
+    readonly requestorUsername?: string
+    readonly parentGroupJid?: string
+    readonly requestTime: number
+    readonly requestMethod?: string
 }
 
 export interface WaGroupCreateOptions {
@@ -166,6 +206,26 @@ export interface WaGroupCoordinator {
         communityJid: string
     ) => Promise<readonly WaGroupParticipant[]>
     readonly fetchSubGroups: (communityJid: string) => Promise<WaCommunitySubGroupsResult>
+    readonly queryMembershipApprovalRequests: (
+        groupJid: string
+    ) => Promise<readonly WaMembershipRequest[]>
+    readonly approveMembershipRequests: (
+        groupJid: string,
+        participantJids: readonly string[]
+    ) => Promise<void>
+    readonly rejectMembershipRequests: (
+        groupJid: string,
+        participantJids: readonly string[]
+    ) => Promise<void>
+    readonly cancelMembershipRequests: (
+        groupJid: string,
+        participantJids: readonly string[]
+    ) => Promise<void>
+    readonly joinLinkedGroup: (
+        communityJid: string,
+        subGroupJid: string,
+        options?: { readonly type?: string }
+    ) => Promise<BinaryNode>
 }
 
 type WaGroupParticipantChangeAction = 'add' | 'remove' | 'promote' | 'demote'
@@ -186,12 +246,51 @@ function parseGroupParticipants(node: BinaryNode): readonly WaGroupParticipant[]
             isAdmin:
                 type === WA_GROUP_PARTICIPANT_TYPES.ADMIN ||
                 type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN,
-            isSuperAdmin: type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN
+            isSuperAdmin: type === WA_GROUP_PARTICIPANT_TYPES.SUPERADMIN,
+            lid: participant.lidJid,
+            phoneNumber: participant.phoneJid,
+            displayName: participant.displayName,
+            username: participant.username,
+            expirationSeconds: participant.expirationSeconds
         }
         participantsCount += 1
     }
     participants.length = participantsCount
     return participants
+}
+
+function readChildText(node: BinaryNode | undefined): string | undefined {
+    if (!node) return undefined
+    const content = node.content
+    if (typeof content === 'string') return content
+    if (content instanceof Uint8Array) return new TextDecoder().decode(content)
+    return undefined
+}
+
+const APPEAL_STATUSES = new Set(['approved', 'in_review', 'none', 'rejected'])
+
+function parseMembershipApprovalRequests(node: BinaryNode): readonly WaMembershipRequest[] {
+    const container = findNodeChild(node, 'membership_approval_requests')
+    if (!container) return []
+    const requestNodes = getNodeChildrenByTag(container, 'membership_approval_request')
+    const requests: WaMembershipRequest[] = []
+    for (const requestNode of requestNodes) {
+        const jid = requestNode.attrs.jid
+        if (!jid) continue
+        const requestTime = requestNode.attrs.request_time
+            ? Number(requestNode.attrs.request_time)
+            : 0
+        requests.push({
+            jid,
+            requestor: requestNode.attrs.requestor,
+            requestorPhone: requestNode.attrs.requestor_pn,
+            requestorUsername: requestNode.attrs.requestor_username,
+            parentGroupJid: requestNode.attrs.parent_group_jid,
+            requestTime,
+            requestMethod: requestNode.attrs.request_method
+        })
+    }
+    return requests
 }
 
 function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
@@ -213,9 +312,27 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
     const ephemeral = ephemeralNode?.attrs.expiration
         ? Number(ephemeralNode.attrs.expiration)
         : undefined
+    const ephemeralTrigger = ephemeralNode?.attrs.trigger
+        ? Number(ephemeralNode.attrs.trigger)
+        : undefined
 
     const parentNode = findNodeChild(target, 'parent')
     const linkedParentNode = findNodeChild(target, 'linked_parent')
+
+    const membershipApprovalNode = findNodeChild(target, WA_NODE_TAGS.MEMBERSHIP_APPROVAL_MODE)
+    const groupJoinNode = membershipApprovalNode
+        ? findNodeChild(membershipApprovalNode, WA_NODE_TAGS.GROUP_JOIN)
+        : undefined
+
+    const growthLockedNode = findNodeChild(target, 'growth_locked')
+    const appealStatusNode = findNodeChild(target, 'appeal_status')
+    const appealStatusType = appealStatusNode?.attrs.type
+    const appealUpdateTimeNode = findNodeChild(target, 'appeal_update_time')
+    const evolutionVersionNode = findNodeChild(target, 'evolution_version')
+
+    const addressingModeRaw = attrs.addressing_mode
+    const addressingMode: 'lid' | 'pn' | undefined =
+        addressingModeRaw === 'lid' ? 'lid' : addressingModeRaw === 'pn' ? 'pn' : undefined
 
     const rawJid = attrs.id ?? attrs.jid ?? ''
     const jid = rawJid && !rawJid.includes('@') ? `${rawJid}@${WA_DEFAULTS.GROUP_SERVER}` : rawJid
@@ -233,7 +350,9 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
         restrict: hasNodeChild(target, WA_NODE_TAGS.LOCKED),
         announce: hasNodeChild(target, WA_NODE_TAGS.ANNOUNCEMENT),
         ephemeral,
+        ephemeralTrigger,
         size: attrs.size ? Number(attrs.size) : undefined,
+        addressingMode,
         isParentGroup: parentNode !== undefined,
         isClosedCommunity:
             parentNode?.attrs.default_membership_approval_mode === 'request_required',
@@ -241,6 +360,36 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
         generalSubgroup: hasNodeChild(target, 'general_chat'),
         hiddenSubgroup: hasNodeChild(target, 'hidden_group'),
         allowNonAdminSubGroupCreation: hasNodeChild(target, 'allow_non_admin_sub_group_creation'),
+        membershipApprovalEnabled: groupJoinNode?.attrs.state === 'on',
+        noFrequentlyForwarded: hasNodeChild(target, 'no_frequently_forwarded'),
+        support: hasNodeChild(target, 'support'),
+        suspended: hasNodeChild(target, 'suspended'),
+        incognito: hasNodeChild(target, 'incognito'),
+        allowAdminReports: hasNodeChild(target, 'allow_admin_reports'),
+        autoAddDisabled: hasNodeChild(target, 'auto_add_disabled'),
+        groupHistory: hasNodeChild(target, 'group_history'),
+        capi: hasNodeChild(target, 'capi'),
+        groupSafetyCheck: hasNodeChild(target, 'group_safety_check'),
+        participantLabelEnabled: hasNodeChild(target, 'participant_label_enabled'),
+        limitSharingEnabled: hasNodeChild(target, 'limit_sharing_enabled'),
+        evolutionVersion: evolutionVersionNode?.attrs.value
+            ? Number(evolutionVersionNode.attrs.value)
+            : undefined,
+        memberAddMode: readChildText(findNodeChild(target, 'member_add_mode')),
+        memberLinkMode: readChildText(findNodeChild(target, 'member_link_mode')),
+        memberShareGroupHistoryMode: readChildText(
+            findNodeChild(target, 'member_share_group_history_mode')
+        ),
+        growthLockedExpiration: growthLockedNode?.attrs.expiration
+            ? Number(growthLockedNode.attrs.expiration)
+            : undefined,
+        appealStatus:
+            appealStatusType && APPEAL_STATUSES.has(appealStatusType)
+                ? (appealStatusType as 'approved' | 'in_review' | 'none' | 'rejected')
+                : undefined,
+        appealUpdateTime: appealUpdateTimeNode?.attrs.value
+            ? Number(appealUpdateTimeNode.attrs.value)
+            : undefined,
         linkedParentJid: linkedParentNode?.attrs.jid ?? parentNode?.attrs.jid,
         participants: parseGroupParticipants(target)
     }
@@ -561,6 +710,42 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
                 subGroups.push(parseSubGroupNode(edge.node, false))
             }
             return { communityJid, announcementGroup, subGroups }
+        },
+
+        queryMembershipApprovalRequests: async (groupJid) => {
+            const node = buildGetMembershipApprovalRequestsIq(groupJid)
+            const result = await queryWithContext('group.membershipRequests', node)
+            assertIqResult(result, 'group.membershipRequests')
+            return parseMembershipApprovalRequests(result)
+        },
+
+        approveMembershipRequests: async (groupJid, participantJids) => {
+            const node = buildMembershipRequestsActionIq({ groupJid, approve: participantJids })
+            const result = await queryWithContext('group.membershipRequests.approve', node)
+            assertIqResult(result, 'group.membershipRequests.approve')
+        },
+
+        rejectMembershipRequests: async (groupJid, participantJids) => {
+            const node = buildMembershipRequestsActionIq({ groupJid, reject: participantJids })
+            const result = await queryWithContext('group.membershipRequests.reject', node)
+            assertIqResult(result, 'group.membershipRequests.reject')
+        },
+
+        cancelMembershipRequests: async (groupJid, participantJids) => {
+            const node = buildCancelMembershipRequestsIq({ groupJid, participantJids })
+            const result = await queryWithContext('group.membershipRequests.cancel', node)
+            assertIqResult(result, 'group.membershipRequests.cancel')
+        },
+
+        joinLinkedGroup: async (communityJid, subGroupJid, options) => {
+            const node = buildJoinLinkedGroupIq({
+                groupJid: communityJid,
+                subGroupJid,
+                type: options?.type
+            })
+            const result = await queryWithContext('community.joinLinkedGroup', node)
+            assertIqResult(result, 'community.joinLinkedGroup')
+            return result
         }
     }
 }

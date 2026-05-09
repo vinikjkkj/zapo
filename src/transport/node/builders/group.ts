@@ -92,3 +92,72 @@ export function buildLeaveGroupIq(groupJids: readonly string[]): BinaryNode {
         }
     ])
 }
+
+export function buildGetMembershipApprovalRequestsIq(groupJid: string): BinaryNode {
+    return buildIqNode('get', groupJid, WA_XMLNS.GROUPS, [
+        { tag: 'membership_approval_requests', attrs: {} }
+    ])
+}
+
+export function buildMembershipRequestsActionIq(input: {
+    readonly groupJid: string
+    readonly approve?: readonly string[]
+    readonly reject?: readonly string[]
+}): BinaryNode {
+    const approve = input.approve ?? []
+    const reject = input.reject ?? []
+    if (approve.length === 0 && reject.length === 0) {
+        throw new Error('membership_requests_action requires at least one approve or reject jid')
+    }
+    const children: BinaryNode[] = []
+    if (approve.length > 0) {
+        children.push({
+            tag: 'approve',
+            attrs: {},
+            content: approve.map((jid) => ({ tag: 'participant', attrs: { jid } }))
+        })
+    }
+    if (reject.length > 0) {
+        children.push({
+            tag: 'reject',
+            attrs: {},
+            content: reject.map((jid) => ({ tag: 'participant', attrs: { jid } }))
+        })
+    }
+    return buildIqNode('set', input.groupJid, WA_XMLNS.GROUPS, [
+        { tag: 'membership_requests_action', attrs: {}, content: children }
+    ])
+}
+
+export function buildCancelMembershipRequestsIq(input: {
+    readonly groupJid: string
+    readonly participantJids: readonly string[]
+}): BinaryNode {
+    if (input.participantJids.length === 0) {
+        throw new Error('cancel_membership_requests requires at least one participant')
+    }
+    return buildIqNode('set', input.groupJid, WA_XMLNS.GROUPS, [
+        {
+            tag: 'cancel_membership_requests',
+            attrs: {},
+            content: input.participantJids.map((jid) => ({
+                tag: 'participant',
+                attrs: { jid }
+            }))
+        }
+    ])
+}
+
+export function buildJoinLinkedGroupIq(input: {
+    readonly groupJid: string
+    readonly subGroupJid: string
+    readonly type?: string
+}): BinaryNode {
+    const attrs: Record<string, string> = { jid: input.subGroupJid }
+    if (input.type) {
+        attrs.type = input.type
+    }
+    return buildIqNode('set', input.groupJid, WA_XMLNS.GROUPS, [
+        { tag: 'join_linked_group', attrs }
+    ])
+}
