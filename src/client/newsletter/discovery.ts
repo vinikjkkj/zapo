@@ -81,7 +81,8 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                 fetch_viewer_metadata: opts?.fetchViewerMetadata ?? true,
                 fetch_full_image: opts?.fetchFullImage ?? keyType !== 'INVITE',
                 fetch_creation_time: opts?.fetchCreationTime ?? true,
-                fetch_wamo_sub: opts?.fetchWamoSub ?? false
+                fetch_wamo_sub: opts?.fetchWamoSub ?? false,
+                fetch_status_metadata: false
             }
         )
         if (!data?.xwa2_newsletter) {
@@ -98,7 +99,8 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
             const data = await runMex<{
                 readonly xwa2_newsletter_subscribed?: readonly MexNewsletterEnvelope[]
             } | null>(deps, WA_MEX_PERSIST_IDS.NewsletterFetchAll, 'NewsletterFetchAll', {
-                fetch_wamo_sub: opts?.fetchWamoSub ?? false
+                fetch_wamo_sub: opts?.fetchWamoSub ?? false,
+                fetch_status_metadata: false
             })
             const list = data?.xwa2_newsletter_subscribed ?? []
             return list.map(parseNewsletterMetadata)
@@ -114,7 +116,8 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                         categories: opts?.categories ?? [],
                         limit: opts?.limit ?? 100,
                         start_cursor: opts?.startCursor
-                    }
+                    },
+                    fetch_status_metadata: false
                 }
             )
             return parseDirectorySearch(envelope)
@@ -128,7 +131,8 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                     input: {
                         limit: opts?.limit ?? 25,
                         country_codes: opts?.countryCodes ?? []
-                    }
+                    },
+                    fetch_status_metadata: false
                 }
             )
             return parseRecommended(envelope)
@@ -143,7 +147,8 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                         newsletter_id: newsletterJid,
                         limit: opts?.limit ?? 10,
                         country_codes: opts?.countryCodes ?? []
-                    }
+                    },
+                    fetch_status_metadata: false
                 }
             )
             return parseSimilar(envelope)
@@ -162,7 +167,8 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                         },
                         limit: opts.limit ?? 25,
                         start_cursor: opts.startCursor
-                    }
+                    },
+                    fetch_status_metadata: false
                 }
             )
             return parseDirectoryList(envelope)
@@ -177,7 +183,8 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                         categories: opts.categories,
                         country_code: opts.countryCode || undefined,
                         per_category_limit: opts.perCategoryLimit ?? 10
-                    }
+                    },
+                    fetch_status_metadata: false
                 }
             )
             return parseDirectoryCategoriesPreview(envelope)

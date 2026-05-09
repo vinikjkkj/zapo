@@ -1387,9 +1387,21 @@ test('newsletter fetch IQs build the right history/update stanzas', async () => 
     const fetchUpdates = buildNewsletterMessageUpdatesIq({
         newsletterJid: '120363025343298869@newsletter',
         count: 100,
-        since: 1700000000
+        since: 1700000000,
+        after: 50
     })
     assert.ok(Array.isArray(fetchUpdates.content))
     assert.equal(fetchUpdates.content[0].tag, 'message_updates')
     assert.equal(fetchUpdates.content[0].attrs.since, '1700000000')
+    assert.equal(fetchUpdates.content[0].attrs.after, '50')
+
+    assert.throws(
+        () =>
+            buildNewsletterMessageUpdatesIq({
+                newsletterJid: '120363025343298869@newsletter',
+                count: 100,
+                since: 1700000000
+            }),
+        /before or after/
+    )
 })

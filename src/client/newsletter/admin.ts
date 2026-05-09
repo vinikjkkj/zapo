@@ -23,6 +23,7 @@ import type {
     WaNewsletterCreateInput,
     WaNewsletterFollowersOptions,
     WaNewsletterFollowersPage,
+    WaNewsletterInsightMetricRequest,
     WaNewsletterMetadata,
     WaNewsletterMexEnvelope,
     WaNewsletterPollVoter,
@@ -36,6 +37,7 @@ import {
     type WaTosQueryResult
 } from '@transport/node/builders/tos'
 import { WA_MEX_PERSIST_IDS } from '@transport/node/mex/persist-ids'
+import { assertIqResult } from '@transport/node/query'
 import { bytesToBase64 } from '@util/bytes'
 
 export interface WaNewsletterAdminOps {
@@ -53,7 +55,7 @@ export interface WaNewsletterAdminOps {
     ) => Promise<WaNewsletterFollowersPage>
     readonly fetchInsights: (
         newsletterJid: string,
-        metrics?: readonly string[]
+        metrics: readonly WaNewsletterInsightMetricRequest[]
     ) => Promise<WaNewsletterMexEnvelope>
     readonly fetchReports: () => Promise<WaNewsletterMexEnvelope>
     readonly fetchPendingInvites: (newsletterJid: string) => Promise<readonly string[]>
@@ -156,18 +158,22 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
             )
             return parseFollowers(envelope)
         },
-        fetchInsights: (newsletterJid, metrics) =>
-            runMexEnvelope(
+        fetchInsights: (newsletterJid, metrics) => {
+            if (metrics.length === 0) {
+                throw new Error('newsletter fetchInsights requires at least one metric request')
+            }
+            return runMexEnvelope(
                 deps,
                 WA_MEX_PERSIST_IDS.NewsletterFetchInsights,
                 'NewsletterFetchInsights',
                 {
                     input: {
                         newsletter_id: newsletterJid,
-                        metrics: metrics ?? []
+                        metrics
                     }
                 }
-            ),
+            )
+        },
         fetchReports: () =>
             runMexEnvelope(
                 deps,
@@ -215,7 +221,7 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
                 {
                     input: {
                         id: input.newsletterJid,
-                        server_id: input.messageServerId
+                        server_id: String(input.messageServerId)
                     }
                 }
             )
@@ -298,13 +304,18 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
                 'newsletter.query_tos',
                 buildTosQueryIq(noticeIds)
             )
+            assertIqResult(response, 'newsletter.query_tos')
             return parseTosQueryResponse(response)
         },
         acceptTos: async (noticeIds) => {
             if (!deps.queryWithContext) {
                 throw new Error('newsletter acceptTos requires queryWithContext')
             }
-            await deps.queryWithContext('newsletter.accept_tos', buildTosUpdateIq(noticeIds))
+            const response = await deps.queryWithContext(
+                'newsletter.accept_tos',
+                buildTosUpdateIq(noticeIds)
+            )
+            assertIqResult(response, 'newsletter.accept_tos')
         }
     }
 }
