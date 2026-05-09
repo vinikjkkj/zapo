@@ -174,7 +174,13 @@ const readJsonBody = (req: IncomingMessage): Promise<unknown> => {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = []
         let total = 0
+        let settled = false
         const MAX_BODY = 8 * 1024 * 1024
+        const settle = (fn: () => void): void => {
+            if (settled) return
+            settled = true
+            fn()
+        }
         req.on('data', (chunk: Buffer) => {
             total += chunk.length
             if (total > MAX_BODY) {
@@ -184,20 +190,31 @@ const readJsonBody = (req: IncomingMessage): Promise<unknown> => {
             chunks.push(chunk)
         })
         req.on('end', () => {
-            const raw = Buffer.concat(chunks).toString('utf8')
-            if (raw.length === 0) {
-                resolve(undefined)
-                return
-            }
-            try {
-                resolve(JSON.parse(raw))
-            } catch (error) {
-                reject(error instanceof Error ? error : new Error(String(error)))
-            }
+            settle(() => {
+                const raw = Buffer.concat(chunks).toString('utf8')
+                if (raw.length === 0) {
+                    resolve(undefined)
+                    return
+                }
+                try {
+                    resolve(JSON.parse(raw))
+                } catch (error) {
+                    reject(error instanceof Error ? error : new Error(String(error)))
+                }
+            })
         })
-        req.on('error', reject)
+        req.on('error', (err) => settle(() => reject(err)))
+        // Connection went away mid-upload (client closed, network reset, ...).
+        // Without these handlers neither `end` nor `error` necessarily fires
+        // and the Promise hangs the request handler forever.
+        req.on('aborted', () =>
+            settle(() => reject(new Error('request aborted by client')))
+        )
+        req.on('close', () => settle(() => reject(new Error('request closed before body finished'))))
     })
 }
+
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['127.0.0.1', 'localhost', '::1'])
 
 const runHttpTransport = async (
     sdk: SdkBundle,
@@ -206,6 +223,16 @@ const runHttpTransport = async (
     config: Pick<RuntimeConfig, 'httpHost' | 'httpPort' | 'httpPath'>
 ): Promise<{ shutdown: () => Promise<void>; httpServer: NodeHttpServer }> => {
     const route = config.httpPath
+    if (!LOOPBACK_HOSTS.has(config.httpHost)) {
+        // The HTTP transport has no auth and the `call` tool exposes the entire
+        // WaClient + zapo-js surface. Binding to a non-loopback interface puts
+        // that on the network — definitely not what you want by accident.
+        runtime.getLogger().warn('mcp http transport bound to non-loopback host without auth', {
+            host: config.httpHost,
+            port: config.httpPort,
+            advice: 'switch back to MCP_HTTP_HOST=127.0.0.1 unless you have a reverse proxy enforcing auth'
+        })
+    }
     const httpServer = createHttpServer(async (req, res) => {
         const url = req.url ?? ''
         const pathOnly = url.split('?')[0]
@@ -231,6 +258,13 @@ const runHttpTransport = async (
             return
         }
 
+        // Stateless on purpose: each request gets a fresh Server + transport
+        // pair. The actual MCP session state (WaClient, event/log buffers) is
+        // shared via the singleton `runtime`, so request-scoped objects only
+        // carry protocol plumbing. This also makes nodemon-style restarts
+        // free of session-id bookkeeping (no client to invalidate). If we
+        // ever want true MCP `mcp-session-id` resume we'd swap to a session
+        // map keyed by sessionIdGenerator + that header.
         const server = buildMcpServer(sdk, runtime, options)
         const transport = new sdk.StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
         res.on('close', () => {

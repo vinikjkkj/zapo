@@ -1,4 +1,4 @@
-import { createWriteStream, type WriteStream } from 'node:fs'
+import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
@@ -49,10 +49,19 @@ class BufferedTeeLogger implements Logger {
         this.minPriority = LOG_LEVEL_PRIORITY[level]
         this.bufferLimit = bufferLimit > 0 ? bufferLimit : DEFAULT_LOG_BUFFER_SIZE
         if (filePath) {
-            this.fileStream = createWriteStream(filePath, { flags: 'a' })
-            this.fileStream.on('error', (err) => {
-                process.stderr.write(`[mcp] log file write error: ${err.message}\n`)
-            })
+            try {
+                mkdirSync(dirname(filePath), { recursive: true })
+                this.fileStream = createWriteStream(filePath, { flags: 'a' })
+                this.fileStream.on('error', (err) => {
+                    process.stderr.write(`[mcp] log file write error: ${err.message}\n`)
+                    this.fileStream = null
+                })
+            } catch (err) {
+                process.stderr.write(
+                    `[mcp] disabling log file mirror, could not open ${filePath}: ${(err as Error).message}\n`
+                )
+                this.fileStream = null
+            }
         }
     }
 
@@ -131,8 +140,9 @@ class BufferedTeeLogger implements Logger {
         }
         const ts = Date.now()
         const iso = new Date(ts).toISOString()
-        const ctxStr =
-            context && Object.keys(context).length > 0 ? ` ${JSON.stringify(context)}` : ''
+        const safeCtx =
+            context && Object.keys(context).length > 0 ? safeStringify(context) : null
+        const ctxStr = safeCtx ? ` ${safeCtx}` : ''
         process.stderr.write(`[${iso}] ${level} ${message}${ctxStr}\n`)
 
         const entry: LogEntry = {
@@ -150,10 +160,27 @@ class BufferedTeeLogger implements Logger {
         }
 
         if (this.fileStream) {
-            this.fileStream.write(
-                `${JSON.stringify({ ts: iso, level, message, context: entry.context })}\n`
-            )
+            const line = safeStringify({
+                ts: iso,
+                level,
+                message,
+                context: entry.context
+            })
+            this.fileStream.write(`${line}\n`)
         }
+    }
+}
+
+/**
+ * JSON.stringify-safe wrapper. Routes through encodeForJson so BigInt, Uint8Array,
+ * cycles and other non-JSON values turn into the runtime's marker shape instead of
+ * throwing — a logger that crashes on log payload is worse than a noisy log.
+ */
+const safeStringify = (value: unknown): string => {
+    try {
+        return JSON.stringify(encodeForJson(value))
+    } catch (err) {
+        return JSON.stringify({ $stringifyError: (err as Error).message })
     }
 }
 
@@ -340,6 +367,7 @@ export class McpRuntime {
     private client: WaClient | null = null
     private store: WaStore | null = null
     private listenersDetach: Array<() => void> = []
+    private clientInitPromise: Promise<WaClient> | null = null
 
     public constructor(config: RuntimeConfig) {
         this.config = config
@@ -387,10 +415,20 @@ export class McpRuntime {
         return this.logger
     }
 
-    public async ensureClient(): Promise<WaClient> {
+    public ensureClient(): Promise<WaClient> {
         if (this.client) {
-            return this.client
+            return Promise.resolve(this.client)
         }
+        if (this.clientInitPromise) {
+            return this.clientInitPromise
+        }
+        this.clientInitPromise = this.initClient().finally(() => {
+            this.clientInitPromise = null
+        })
+        return this.clientInitPromise
+    }
+
+    private async initClient(): Promise<WaClient> {
         await mkdir(dirname(this.config.authPath), { recursive: true })
         this.store = createStore({
             backends: {

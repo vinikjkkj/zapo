@@ -510,11 +510,16 @@ const resolvePath = (
     for (let i = 0; i < parts.length; i += 1) {
         const key = parts[i]
         if (key.length === 0) {
-            throw new Error(`call: empty segment at index ${i} in path "${path}"`)
+            throw new Error(`path: empty segment at index ${i} in "${path}"`)
+        }
+        if (FORBIDDEN_PATH_SEGMENTS.has(key)) {
+            throw new Error(
+                `path: segment "${key}" at index ${i} is not allowed (prototype-chain traversal)`
+            )
         }
         if (current === null || current === undefined) {
             throw new Error(
-                `call: cannot read "${key}" on null/undefined at "${parts.slice(0, i).join('.')}"`
+                `path: cannot read "${key}" on null/undefined at "${parts.slice(0, i).join('.')}"`
             )
         }
         parent = current
@@ -523,6 +528,19 @@ const resolvePath = (
     }
     return { parent, value: current, lastKey }
 }
+
+/**
+ * Walking arbitrary string keys against a JS object would happily traverse the
+ * prototype chain — `__proto__`, `constructor`, `prototype` are all accessible
+ * and dangerous (prototype pollution, escape from intended object surface).
+ * The runtime is local-only today but the HTTP transport could be exposed,
+ * so block these keys at the resolver.
+ */
+const FORBIDDEN_PATH_SEGMENTS: ReadonlySet<string> = new Set([
+    '__proto__',
+    'prototype',
+    'constructor'
+])
 
 interface MemberDescriptor {
     readonly name: string

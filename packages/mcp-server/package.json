@@ -27,21 +27,15 @@
         "start": "node --import tsx src/bin.ts"
     },
     "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.29.0"
-    },
-    "peerDependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@zapo-js/store-sqlite": ">=0.1.0",
-        "better-sqlite3": ">=11.0.0",
         "zapo-js": ">=0.1.0"
     },
+    "peerDependencies": {
+        "better-sqlite3": ">=11.0.0"
+    },
     "peerDependenciesMeta": {
-        "@zapo-js/store-sqlite": {
-            "optional": true
-        },
         "better-sqlite3": {
-            "optional": true
-        },
-        "zapo-js": {
             "optional": true
         }
     },
