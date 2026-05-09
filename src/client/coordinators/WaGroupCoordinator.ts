@@ -21,6 +21,7 @@ import {
     findNodeChild,
     getNodeChildrenByTag,
     getNodeChildrenByTagFromChildren,
+    getNodeTextContent,
     hasNodeChild
 } from '@transport/node/helpers'
 import { dispatchMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
@@ -259,14 +260,6 @@ function parseGroupParticipants(node: BinaryNode): readonly WaGroupParticipant[]
     return participants
 }
 
-function readChildText(node: BinaryNode | undefined): string | undefined {
-    if (!node) return undefined
-    const content = node.content
-    if (typeof content === 'string') return content
-    if (content instanceof Uint8Array) return new TextDecoder().decode(content)
-    return undefined
-}
-
 const APPEAL_STATUSES = new Set(['approved', 'in_review', 'none', 'rejected'])
 
 function parseMembershipApprovalRequests(node: BinaryNode): readonly WaMembershipRequest[] {
@@ -329,6 +322,9 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
     const appealStatusType = appealStatusNode?.attrs.type
     const appealUpdateTimeNode = findNodeChild(target, 'appeal_update_time')
     const evolutionVersionNode = findNodeChild(target, 'evolution_version')
+    const memberAddModeNode = findNodeChild(target, 'member_add_mode')
+    const memberLinkModeNode = findNodeChild(target, 'member_link_mode')
+    const memberShareNode = findNodeChild(target, 'member_share_group_history_mode')
 
     const addressingModeRaw = attrs.addressing_mode
     const addressingMode: 'lid' | 'pn' | undefined =
@@ -375,11 +371,11 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
         evolutionVersion: evolutionVersionNode?.attrs.value
             ? Number(evolutionVersionNode.attrs.value)
             : undefined,
-        memberAddMode: readChildText(findNodeChild(target, 'member_add_mode')),
-        memberLinkMode: readChildText(findNodeChild(target, 'member_link_mode')),
-        memberShareGroupHistoryMode: readChildText(
-            findNodeChild(target, 'member_share_group_history_mode')
-        ),
+        memberAddMode: memberAddModeNode ? getNodeTextContent(memberAddModeNode) : undefined,
+        memberLinkMode: memberLinkModeNode ? getNodeTextContent(memberLinkModeNode) : undefined,
+        memberShareGroupHistoryMode: memberShareNode
+            ? getNodeTextContent(memberShareNode)
+            : undefined,
         growthLockedExpiration: growthLockedNode?.attrs.expiration
             ? Number(growthLockedNode.attrs.expiration)
             : undefined,

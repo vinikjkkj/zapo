@@ -259,3 +259,149 @@ test('fetchSubGroups throws when mex transport not configured', async () => {
     const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
     await assert.rejects(() => coordinator.fetchSubGroups('parent@g.us'), /mex transport/)
 })
+
+test('queryGroupMetadata extracts the extended field set', async () => {
+    const groupResponse: BinaryNode = {
+        tag: 'iq',
+        attrs: { type: 'result', id: '1' },
+        content: [
+            {
+                tag: 'group',
+                attrs: {
+                    id: '120363@g.us',
+                    subject: 'Sample',
+                    addressing_mode: 'lid',
+                    creator: 'creator@lid',
+                    creation: '1700000000',
+                    s_t: '1700000010',
+                    s_o: 'subjowner@lid',
+                    size: '5'
+                },
+                content: [
+                    { tag: 'announcement', attrs: {} },
+                    { tag: 'no_frequently_forwarded', attrs: {} },
+                    { tag: 'incognito', attrs: {} },
+                    {
+                        tag: 'ephemeral',
+                        attrs: { expiration: '604800', trigger: '4' }
+                    },
+                    {
+                        tag: 'membership_approval_mode',
+                        attrs: {},
+                        content: [{ tag: 'group_join', attrs: { state: 'on' } }]
+                    },
+                    {
+                        tag: 'growth_locked',
+                        attrs: { type: 'invite', expiration: '1700099999' }
+                    },
+                    { tag: 'appeal_status', attrs: { type: 'in_review' } },
+                    { tag: 'appeal_update_time', attrs: { value: '1700000050' } },
+                    { tag: 'evolution_version', attrs: { value: '7' } },
+                    { tag: 'member_add_mode', attrs: {}, content: 'admin_add' },
+                    {
+                        tag: 'member_share_group_history_mode',
+                        attrs: {},
+                        content: 'all_member_share'
+                    },
+                    {
+                        tag: 'participant',
+                        attrs: {
+                            jid: '111@lid',
+                            type: 'admin',
+                            phone_number: '5511999999999@s.whatsapp.net',
+                            display_name: 'Alice'
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+    const mock = createMockQuery([groupResponse])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    const meta = await coordinator.queryGroupMetadata('120363@g.us')
+
+    assert.equal(meta.addressingMode, 'lid')
+    assert.equal(meta.announce, true)
+    assert.equal(meta.noFrequentlyForwarded, true)
+    assert.equal(meta.incognito, true)
+    assert.equal(meta.ephemeral, 604800)
+    assert.equal(meta.ephemeralTrigger, 4)
+    assert.equal(meta.membershipApprovalEnabled, true)
+    assert.equal(meta.growthLockedExpiration, 1700099999)
+    assert.equal(meta.appealStatus, 'in_review')
+    assert.equal(meta.appealUpdateTime, 1700000050)
+    assert.equal(meta.evolutionVersion, 7)
+    assert.equal(meta.memberAddMode, 'admin_add')
+    assert.equal(meta.memberShareGroupHistoryMode, 'all_member_share')
+    assert.equal(meta.participants.length, 1)
+    assert.equal(meta.participants[0].phoneNumber, '5511999999999@s.whatsapp.net')
+    assert.equal(meta.participants[0].displayName, 'Alice')
+    assert.equal(meta.participants[0].isAdmin, true)
+})
+
+test('queryMembershipApprovalRequests parses pending requests', async () => {
+    const response: BinaryNode = iqResult([
+        {
+            tag: 'membership_approval_requests',
+            attrs: {},
+            content: [
+                {
+                    tag: 'membership_approval_request',
+                    attrs: {
+                        jid: 'requester1@lid',
+                        request_time: '1700000000',
+                        request_method: 'invitelink'
+                    }
+                },
+                {
+                    tag: 'membership_approval_request',
+                    attrs: {
+                        jid: 'requester2@lid',
+                        requestor: 'inviter@lid',
+                        requestor_pn: '5511000000000@s.whatsapp.net',
+                        request_time: '1700000005'
+                    }
+                }
+            ]
+        }
+    ])
+    const mock = createMockQuery([response])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    const requests = await coordinator.queryMembershipApprovalRequests('parent@g.us')
+    assert.equal(requests.length, 2)
+    assert.equal(requests[0].jid, 'requester1@lid')
+    assert.equal(requests[0].requestMethod, 'invitelink')
+    assert.equal(requests[1].requestor, 'inviter@lid')
+    assert.equal(requests[1].requestorPhone, '5511000000000@s.whatsapp.net')
+    assert.equal(requests[1].requestTime, 1700000005)
+})
+
+test('approve/reject/cancel/joinLinkedGroup send the correct stanza shape', async () => {
+    const mock = createMockQuery([iqResult(), iqResult(), iqResult(), iqResult()])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    await coordinator.approveMembershipRequests('parent@g.us', ['a@lid'])
+    await coordinator.rejectMembershipRequests('parent@g.us', ['b@lid'])
+    await coordinator.cancelMembershipRequests('parent@g.us', ['c@lid'])
+    await coordinator.joinLinkedGroup('parent@g.us', 'sub@g.us')
+
+    const approveRoot = (mock.calls[0].node.content as BinaryNode[])[0]
+    assert.equal(approveRoot.tag, 'membership_requests_action')
+    const approveChild = (approveRoot.content as BinaryNode[]).find((c) => c.tag === 'approve')
+    assert.ok(approveChild)
+    assert.equal((approveChild.content as BinaryNode[])[0].attrs.jid, 'a@lid')
+
+    const rejectRoot = (mock.calls[1].node.content as BinaryNode[])[0]
+    const rejectChild = (rejectRoot.content as BinaryNode[]).find((c) => c.tag === 'reject')
+    assert.equal((rejectChild?.content as BinaryNode[])[0].attrs.jid, 'b@lid')
+
+    const cancelRoot = (mock.calls[2].node.content as BinaryNode[])[0]
+    assert.equal(cancelRoot.tag, 'cancel_membership_requests')
+    assert.equal((cancelRoot.content as BinaryNode[])[0].attrs.jid, 'c@lid')
+
+    const joinRoot = (mock.calls[3].node.content as BinaryNode[])[0]
+    assert.equal(joinRoot.tag, 'join_linked_group')
+    assert.equal(joinRoot.attrs.jid, 'sub@g.us')
+})

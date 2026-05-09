@@ -40,9 +40,13 @@ import {
 } from '@transport/node/builders/email'
 import { buildAckNode, buildIqResultNode, buildReceiptNode } from '@transport/node/builders/global'
 import {
+    buildCancelMembershipRequestsIq,
     buildCreateGroupIq,
+    buildGetMembershipApprovalRequestsIq,
     buildGroupParticipantChangeIq,
-    buildLeaveGroupIq
+    buildJoinLinkedGroupIq,
+    buildLeaveGroupIq,
+    buildMembershipRequestsActionIq
 } from '@transport/node/builders/group'
 import {
     buildDirectMessageFanoutNode,
@@ -291,6 +295,57 @@ test('group builders support create participant updates and leave', () => {
     assert.equal(leave.attrs.type, 'set')
     assert.ok(Array.isArray(leave.content))
     assert.equal(leave.content[0].tag, 'leave')
+})
+
+test('membership approval + join-linked-group builders shape iqs', () => {
+    const list = buildGetMembershipApprovalRequestsIq('parent@g.us')
+    assert.equal(list.attrs.to, 'parent@g.us')
+    assert.equal(list.attrs.type, 'get')
+    assert.equal((list.content as BinaryNode[])[0].tag, 'membership_approval_requests')
+
+    const action = buildMembershipRequestsActionIq({
+        groupJid: 'parent@g.us',
+        approve: ['a@s.whatsapp.net'],
+        reject: ['b@s.whatsapp.net', 'c@s.whatsapp.net']
+    })
+    const actionRoot = (action.content as BinaryNode[])[0]
+    assert.equal(actionRoot.tag, 'membership_requests_action')
+    const actionChildren = actionRoot.content as BinaryNode[]
+    const approveNode = actionChildren.find((n) => n.tag === 'approve')
+    const rejectNode = actionChildren.find((n) => n.tag === 'reject')
+    assert.equal((approveNode?.content as BinaryNode[]).length, 1)
+    assert.equal((rejectNode?.content as BinaryNode[]).length, 2)
+
+    assert.throws(
+        () => buildMembershipRequestsActionIq({ groupJid: 'p@g.us' }),
+        /approve or reject/
+    )
+
+    const cancel = buildCancelMembershipRequestsIq({
+        groupJid: 'parent@g.us',
+        participantJids: ['x@s.whatsapp.net']
+    })
+    assert.equal((cancel.content as BinaryNode[])[0].tag, 'cancel_membership_requests')
+    assert.throws(
+        () => buildCancelMembershipRequestsIq({ groupJid: 'p@g.us', participantJids: [] }),
+        /at least one participant/
+    )
+
+    const join = buildJoinLinkedGroupIq({
+        groupJid: 'parent@g.us',
+        subGroupJid: 'sub@g.us',
+        type: 'community'
+    })
+    const joinRoot = (join.content as BinaryNode[])[0]
+    assert.equal(joinRoot.tag, 'join_linked_group')
+    assert.equal(joinRoot.attrs.jid, 'sub@g.us')
+    assert.equal(joinRoot.attrs.type, 'community')
+
+    const joinNoType = buildJoinLinkedGroupIq({
+        groupJid: 'parent@g.us',
+        subGroupJid: 'sub@g.us'
+    })
+    assert.equal((joinNoType.content as BinaryNode[])[0].attrs.type, undefined)
 })
 
 test('group create accepts community/subgroup options', () => {
