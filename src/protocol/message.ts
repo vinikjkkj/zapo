@@ -25,6 +25,13 @@ export const WA_MESSAGE_TYPES = Object.freeze({
     RECEIPT_TYPE_RETRY: 'retry'
 } as const)
 
+export type WaOutboundReceiptType =
+    | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_READ
+    | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_READ_SELF
+    | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_PLAYED
+    | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_PLAYED_SELF
+    | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_INACTIVE
+
 export const WA_RETRYABLE_ACK_CODES = Object.freeze(['408', '429', '500', '503'] as const)
 
 export const WA_STANZA_MSG_TYPES = Object.freeze({

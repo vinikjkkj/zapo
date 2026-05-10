@@ -6,6 +6,7 @@ import { parseChatstateNode } from '@client/events/chatstate'
 import { parseGroupNotificationEvents } from '@client/events/group'
 import { parsePresenceNode } from '@client/events/presence'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
+import { aggregateReceiptTargets } from '@client/events/receipt'
 import { parseRegistrationNotification } from '@client/events/registration'
 import {
     WA_NOTIFICATION_TYPES,
@@ -369,6 +370,45 @@ test('presence parser distinguishes user/group variants and last-seen flavors', 
         }),
         { type: 'available' }
     )
+})
+
+test('aggregateReceiptTargets groups by chat and sender, batching same-author ids', () => {
+    const groups = aggregateReceiptTargets([
+        { chatJid: 'peer@s.whatsapp.net', id: 'A1', isGroupChat: false },
+        { chatJid: 'peer@s.whatsapp.net', id: 'A2', isGroupChat: false }
+    ])
+    assert.deepEqual(groups, [
+        { jid: 'peer@s.whatsapp.net', participant: undefined, ids: ['A1', 'A2'] }
+    ])
+
+    const groupReceipts = aggregateReceiptTargets([
+        { chatJid: 'group@g.us', id: 'B1', senderJid: 'alice@s.whatsapp.net', isGroupChat: true },
+        { chatJid: 'group@g.us', id: 'B2', senderJid: 'alice@s.whatsapp.net', isGroupChat: true },
+        { chatJid: 'group@g.us', id: 'B3', senderJid: 'bob@s.whatsapp.net', isGroupChat: true }
+    ])
+    assert.deepEqual(groupReceipts, [
+        { jid: 'group@g.us', participant: 'alice@s.whatsapp.net', ids: ['B1', 'B2'] },
+        { jid: 'group@g.us', participant: 'bob@s.whatsapp.net', ids: ['B3'] }
+    ])
+
+    const mixed = aggregateReceiptTargets([
+        { chatJid: 'peer@s.whatsapp.net', id: 'C1', isGroupChat: false },
+        { chatJid: 'group@g.us', id: 'C2', senderJid: 'alice@s.whatsapp.net', isGroupChat: true }
+    ])
+    assert.deepEqual(mixed, [
+        { jid: 'peer@s.whatsapp.net', participant: undefined, ids: ['C1'] },
+        { jid: 'group@g.us', participant: 'alice@s.whatsapp.net', ids: ['C2'] }
+    ])
+
+    const inferred = aggregateReceiptTargets([
+        { chatJid: 'group2@g.us', id: 'D1', senderJid: 'carol@s.whatsapp.net' }
+    ])
+    assert.equal(inferred[0].participant, 'carol@s.whatsapp.net')
+
+    const noSender = aggregateReceiptTargets([
+        { chatJid: 'group3@g.us', id: 'E1', isGroupChat: true }
+    ])
+    assert.equal(noSender[0].participant, undefined)
 })
 
 test('privacy token parser rejects non-numeric token timestamp', () => {

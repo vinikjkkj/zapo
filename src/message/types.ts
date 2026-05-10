@@ -1,6 +1,7 @@
 import type { Readable } from 'node:stream'
 
 import type { Proto } from '@proto'
+import type { WaOutboundReceiptType } from '@protocol/message'
 import type { BinaryNode } from '@transport/types'
 
 export interface WaMessagePublishOptions {
@@ -127,7 +128,7 @@ export interface WaEncryptedMessageInput {
 export interface WaSendReceiptInput {
     readonly to: string
     readonly id: string
-    readonly type?: string
+    readonly type?: WaOutboundReceiptType
     readonly participant?: string
     readonly recipient?: string
     readonly category?: string
@@ -137,3 +138,5 @@ export interface WaSendReceiptInput {
     readonly listIds?: readonly string[]
     readonly content?: readonly BinaryNode[]
 }
+
+export type WaSendReceiptOptions = Omit<WaSendReceiptInput, 'to' | 'id' | 'listIds'>

@@ -22,6 +22,7 @@ import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordin
 import type { WaProfileCoordinator } from '@client/coordinators/WaProfileCoordinator'
 import type { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
+import { aggregateReceiptTargets } from '@client/events/receipt'
 import { processHistorySyncNotification } from '@client/history-sync'
 import { persistIncomingMailboxEntities } from '@client/mailbox'
 import {
@@ -53,7 +54,8 @@ import {
 import type {
     WaMessagePublishResult,
     WaSendMessageContent,
-    WaSendReceiptInput
+    WaSendReceiptInput,
+    WaSendReceiptOptions
 } from '@message/types'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
@@ -765,7 +767,62 @@ export class WaClient extends EventEmitter {
         assertIqResult(result, 'client.logout')
     }
 
-    public sendReceipt(input: WaSendReceiptInput): Promise<void> {
+    public sendReceipt(
+        target: WaIncomingMessageEvent | readonly WaIncomingMessageEvent[],
+        options?: WaSendReceiptOptions
+    ): Promise<void>
+    public sendReceipt(
+        jid: string,
+        ids: string | readonly string[],
+        options?: WaSendReceiptOptions
+    ): Promise<void>
+    public async sendReceipt(
+        first: string | WaIncomingMessageEvent | readonly WaIncomingMessageEvent[],
+        second?: string | readonly string[] | WaSendReceiptOptions,
+        third?: WaSendReceiptOptions
+    ): Promise<void> {
+        if (typeof first === 'string') {
+            const ids = second as string | readonly string[]
+            await this.dispatchReceipt(first, ids, third ?? {})
+            return
+        }
+        const events = Array.isArray(first) ? first : [first as WaIncomingMessageEvent]
+        const options = (second as WaSendReceiptOptions | undefined) ?? {}
+        const targets = events.map((event) => {
+            if (!event.chatJid || !event.stanzaId) {
+                throw new Error('sendReceipt event is missing chatJid or stanzaId')
+            }
+            return {
+                chatJid: event.chatJid,
+                id: event.stanzaId,
+                senderJid: event.senderJid,
+                isGroupChat: event.isGroupChat
+            }
+        })
+        for (const group of aggregateReceiptTargets(targets)) {
+            await this.dispatchReceipt(group.jid, group.ids, {
+                ...options,
+                participant: options.participant ?? group.participant
+            })
+        }
+    }
+
+    private dispatchReceipt(
+        jid: string,
+        ids: string | readonly string[],
+        options: WaSendReceiptOptions
+    ): Promise<void> {
+        const idArray = typeof ids === 'string' ? [ids] : ids
+        if (idArray.length === 0) {
+            throw new Error('sendReceipt requires at least one message id')
+        }
+        const [id, ...rest] = idArray
+        const input: WaSendReceiptInput = {
+            ...options,
+            to: jid,
+            id,
+            listIds: rest.length > 0 ? rest : undefined
+        }
         return this.messageDispatch.sendReceipt(input)
     }
 

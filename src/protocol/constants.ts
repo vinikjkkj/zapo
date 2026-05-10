@@ -26,6 +26,7 @@ export {
     WA_RETRYABLE_ACK_CODES,
     WA_STANZA_MSG_TYPES
 } from '@protocol/message'
+export type { WaOutboundReceiptType } from '@protocol/message'
 export {
     WA_APP_STATE_COLLECTIONS,
     WA_APP_STATE_COLLECTION_STATES,
