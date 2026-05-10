@@ -77,8 +77,16 @@ import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { WaThreadStore } from '@store/contracts/thread.store'
 import { NOOP_MESSAGE_SECRET_STORE } from '@store/noop.store'
 import type { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
+import {
+    buildChatstateNode,
+    type BuildChatstateNodeInput
+} from '@transport/node/builders/chatstate'
 import { buildRemoveCompanionDeviceIq } from '@transport/node/builders/device'
-import { buildPresenceNode } from '@transport/node/builders/presence'
+import {
+    buildPresenceNode,
+    buildPresenceSubscribeNode,
+    type BuildPresenceSubscribeNodeInput
+} from '@transport/node/builders/presence'
 import { assertIqResult, queryWithContext as queryNodeWithContext } from '@transport/node/query'
 import type { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import type { WaNodeTransport } from '@transport/node/WaNodeTransport'
@@ -270,6 +278,25 @@ export class WaClient extends EventEmitter {
             buildPresenceNode({ type, name: credentials?.meDisplayName ?? undefined }),
             false
         )
+    }
+
+    public async sendChatstate(
+        jid: string,
+        options: Omit<BuildChatstateNodeInput, 'jid'>
+    ): Promise<void> {
+        await this.nodeOrchestrator.sendNode(buildChatstateNode({ jid, ...options }), false)
+    }
+
+    /**
+     * Subscribes to presence updates (online/offline + chatstate) for a chat.
+     * The subscription is per-jid and lives only for the current connection;
+     * after a reconnect the caller must re-subscribe to keep receiving events.
+     */
+    public async subscribePresence(
+        jid: string,
+        options?: Omit<BuildPresenceSubscribeNodeInput, 'jid'>
+    ): Promise<void> {
+        await this.nodeOrchestrator.sendNode(buildPresenceSubscribeNode({ jid, ...options }), false)
     }
 
     public async query(

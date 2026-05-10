@@ -49,6 +49,12 @@ export {
     WA_REGISTRATION_NOTIFICATION_TAGS
 } from '@protocol/notification'
 export {
+    WA_CHATSTATE_MEDIA,
+    WA_PRESENCE_LAST_SENTINELS,
+    WA_PRESENCE_TYPES
+} from '@protocol/presence'
+export type { WaChatstateMedia, WaPresenceLastSentinel, WaPresenceType } from '@protocol/presence'
+export {
     WA_PRIVACY_TOKEN_NOTIFICATION_TYPE,
     WA_PRIVACY_TOKEN_TAGS,
     WA_PRIVACY_TOKEN_TYPES,

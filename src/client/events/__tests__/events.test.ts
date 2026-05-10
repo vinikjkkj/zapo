@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
+import { parseChatstateNode } from '@client/events/chatstate'
 import { parseGroupNotificationEvents } from '@client/events/group'
+import { parsePresenceNode } from '@client/events/presence'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
 import { parseRegistrationNotification } from '@client/events/registration'
 import {
@@ -214,6 +216,158 @@ test('registration parser returns null when child tag is unknown or attrs are mi
             attrs: { type: WA_NOTIFICATION_TYPES.REGISTRATION }
         }),
         null
+    )
+})
+
+test('chatstate parser extracts state, media and participant', () => {
+    const composing = parseChatstateNode({
+        tag: 'chatstate',
+        attrs: { from: 'group@g.us', participant: 'peer@s.whatsapp.net' },
+        content: [{ tag: 'composing', attrs: {} }]
+    })
+    assert.deepEqual(composing, {
+        state: 'composing',
+        participantJid: 'peer@s.whatsapp.net'
+    })
+
+    const recording = parseChatstateNode({
+        tag: 'chatstate',
+        attrs: { from: 'peer@s.whatsapp.net' },
+        content: [{ tag: 'composing', attrs: { media: 'audio' } }]
+    })
+    assert.deepEqual(recording, { state: 'composing', media: 'audio' })
+
+    const paused = parseChatstateNode({
+        tag: 'chatstate',
+        attrs: { from: 'peer@s.whatsapp.net' },
+        content: [{ tag: 'paused', attrs: {} }]
+    })
+    assert.deepEqual(paused, { state: 'paused' })
+
+    assert.equal(
+        parseChatstateNode({
+            tag: 'chatstate',
+            attrs: { from: 'peer@s.whatsapp.net' }
+        }),
+        null
+    )
+    assert.equal(
+        parseChatstateNode({
+            tag: 'chatstate',
+            attrs: { from: 'peer@s.whatsapp.net' },
+            content: [{ tag: 'unknown', attrs: {} }]
+        }),
+        null
+    )
+})
+
+test('presence parser distinguishes user/group variants and last-seen flavors', () => {
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net', type: 'available' }
+        }),
+        { type: 'available' }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net' }
+        }),
+        { type: 'available' }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net', type: 'unavailable', last: '1700000000' }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'timestamp', unixSeconds: 1700000000 } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net', type: 'unavailable', last: '0' }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'timestamp', unixSeconds: 0 } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net', type: 'unavailable', last: 'deny' }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'privacy_denied' } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net', type: 'unavailable', last: 'none' }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'never_online' } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net', type: 'unavailable', last: 'error' }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'unknown' } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'group@g.us', count: '7' }
+        }),
+        { type: 'available', groupOnlineCount: 7 }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'group@g.us', type: 'unavailable' }
+        }),
+        { type: 'unavailable', groupOnlineCount: 0 }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net', type: 'unavailable', last: '10foo' }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'unknown' } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net', type: 'unavailable', last: '-1' }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'unknown' } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: {
+                from: 'peer@s.whatsapp.net',
+                type: 'unavailable',
+                last: '99999999999999999999'
+            }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'unknown' } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'group@g.us', count: '7foo' }
+        }),
+        { type: 'available' }
     )
 })
 
