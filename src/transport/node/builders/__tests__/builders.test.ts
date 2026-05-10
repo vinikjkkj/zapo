@@ -24,6 +24,7 @@ import {
     buildGroupsDirtySyncIq,
     buildNewsletterMetadataSyncIq
 } from '@transport/node/builders/account-sync'
+import { buildChatstateNode } from '@transport/node/builders/chatstate'
 import {
     buildDeactivateCommunityIq,
     buildLinkedGroupsParticipantsIq,
@@ -65,7 +66,7 @@ import {
     buildPreKeyUploadIq,
     buildSignedPreKeyRotateIq
 } from '@transport/node/builders/prekeys'
-import { buildPresenceNode } from '@transport/node/builders/presence'
+import { buildPresenceNode, buildPresenceSubscribeNode } from '@transport/node/builders/presence'
 import {
     buildBlocklistChangeIq,
     buildGetBlocklistIq,
@@ -106,6 +107,54 @@ test('presence and offline builders generate expected lightweight nodes', () => 
         attrs: { count: '200' },
         content: undefined
     })
+})
+
+test('chatstate builder composes composing/paused with optional media and rejects unsupported jids', () => {
+    const composing = buildChatstateNode({
+        jid: '5511999999999@s.whatsapp.net',
+        state: 'composing'
+    })
+    assert.deepEqual(composing, {
+        tag: 'chatstate',
+        attrs: { to: '5511999999999@s.whatsapp.net' },
+        content: [{ tag: 'composing', attrs: {} }]
+    })
+
+    const recording = buildChatstateNode({
+        jid: '5511999999999@s.whatsapp.net',
+        state: 'composing',
+        media: 'audio'
+    })
+    assert.deepEqual(recording.content, [{ tag: 'composing', attrs: { media: 'audio' } }])
+
+    const paused = buildChatstateNode({ jid: 'group@g.us', state: 'paused' })
+    assert.deepEqual(paused.content, [{ tag: 'paused', attrs: {} }])
+
+    assert.throws(() => buildChatstateNode({ jid: '12345@newsletter', state: 'composing' }))
+    assert.throws(() => buildChatstateNode({ jid: '12345@broadcast', state: 'composing' }))
+    assert.throws(() => buildChatstateNode({ jid: 'group@g.us', state: 'paused', media: 'audio' }))
+})
+
+test('presence subscribe builder emits subscribe stanza with optional name/context', () => {
+    const subscribe = buildPresenceSubscribeNode({ jid: '5511999999999@s.whatsapp.net' })
+    assert.deepEqual(subscribe, {
+        tag: 'presence',
+        attrs: { type: 'subscribe', to: '5511999999999@s.whatsapp.net' }
+    })
+
+    const subscribeWithExtras = buildPresenceSubscribeNode({
+        jid: '5511999999999@s.whatsapp.net',
+        name: 'Vinicius',
+        context: 'group@g.us'
+    })
+    assert.deepEqual(subscribeWithExtras.attrs, {
+        type: 'subscribe',
+        to: '5511999999999@s.whatsapp.net',
+        name: 'Vinicius',
+        context: 'group@g.us'
+    })
+
+    assert.throws(() => buildPresenceSubscribeNode({ jid: '12345@newsletter' }))
 })
 
 test('usync builder composes query/list nodes with defaults and overrides', () => {

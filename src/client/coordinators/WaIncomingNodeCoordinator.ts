@@ -1,6 +1,8 @@
 import type { WaSuccessPersistAttributes } from '@auth/types'
 import type { WaOfflineResumeCoordinator } from '@client/coordinators/WaOfflineResumeCoordinator'
 import type { WaDirtyBit } from '@client/dirty'
+import { parseChatstateNode } from '@client/events/chatstate'
+import { parsePresenceNode } from '@client/events/presence'
 import {
     createIncomingBaseEvent,
     createIncomingFailureHandler,
@@ -298,20 +300,27 @@ export class WaIncomingNodeCoordinator {
             })
         })
         this.registerIncomingHandler({
-            tag: 'presence',
+            tag: WA_NODE_TAGS.PRESENCE,
             // eslint-disable-next-line @typescript-eslint/require-await
             handler: async (node) => {
-                runtime.emitIncomingPresence(createIncomingBaseEvent(node))
+                runtime.emitIncomingPresence({
+                    ...createIncomingBaseEvent(node),
+                    ...parsePresenceNode(node)
+                })
                 return true
             }
         })
         this.registerIncomingHandler({
-            tag: 'chatstate',
+            tag: WA_NODE_TAGS.CHATSTATE,
             // eslint-disable-next-line @typescript-eslint/require-await
             handler: async (node) => {
+                const parsed = parseChatstateNode(node)
+                if (!parsed) {
+                    return false
+                }
                 runtime.emitIncomingChatstate({
                     ...createIncomingBaseEvent(node),
-                    participantJid: node.attrs.participant
+                    ...parsed
                 })
                 return true
             }

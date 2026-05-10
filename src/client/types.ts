@@ -5,12 +5,14 @@ import type {
     WaAuthDangerousOptions,
     WaAuthSocketOptions
 } from '@auth/types'
+import type { IncomingPresenceType, PresenceLastSeen } from '@client/events/presence'
 import type { WaMediaProcessor } from '@media/processor'
 import type { WaDecodedAddon } from '@message/addon-crypto'
 import type { WaMessagePublishOptions } from '@message/types'
 import type { Proto } from '@proto'
 import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
 import type { WaStore } from '@store/types'
+import type { ChatstateMedia, ChatstateState } from '@transport/node/builders/chatstate'
 import type { BinaryNode, WaProxyTransport } from '@transport/types'
 
 export interface WaClientProxyOptions {
@@ -225,9 +227,15 @@ export interface WaIncomingReceiptEvent extends WaIncomingBaseEvent {
     readonly recipientJid?: string
 }
 
-export interface WaIncomingPresenceEvent extends WaIncomingBaseEvent {}
+export interface WaIncomingPresenceEvent extends WaIncomingBaseEvent {
+    readonly type: IncomingPresenceType
+    readonly lastSeen?: PresenceLastSeen
+    readonly groupOnlineCount?: number
+}
 
 export interface WaIncomingChatstateEvent extends WaIncomingBaseEvent {
+    readonly state: ChatstateState
+    readonly media?: ChatstateMedia
     readonly participantJid?: string
 }
 

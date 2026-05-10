@@ -63,7 +63,11 @@ export const WA_NODE_TAGS = Object.freeze({
     MEMBERSHIP_APPROVAL_MODE: 'membership_approval_mode',
     GROUP_JOIN: 'group_join',
     ABPROPS: 'abprops',
-    PLAINTEXT: 'plaintext'
+    PLAINTEXT: 'plaintext',
+    PRESENCE: 'presence',
+    CHATSTATE: 'chatstate',
+    COMPOSING: 'composing',
+    PAUSED: 'paused'
 } as const)
 
 export const WA_IQ_TYPES = Object.freeze({
