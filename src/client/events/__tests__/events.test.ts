@@ -333,6 +333,42 @@ test('presence parser distinguishes user/group variants and last-seen flavors', 
         }),
         { type: 'unavailable', groupOnlineCount: 0 }
     )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net', type: 'unavailable', last: '10foo' }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'unknown' } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'peer@s.whatsapp.net', type: 'unavailable', last: '-1' }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'unknown' } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: {
+                from: 'peer@s.whatsapp.net',
+                type: 'unavailable',
+                last: '99999999999999999999'
+            }
+        }),
+        { type: 'unavailable', lastSeen: { kind: 'unknown' } }
+    )
+
+    assert.deepEqual(
+        parsePresenceNode({
+            tag: 'presence',
+            attrs: { from: 'group@g.us', count: '7foo' }
+        }),
+        { type: 'available' }
+    )
 })
 
 test('privacy token parser rejects non-numeric token timestamp', () => {

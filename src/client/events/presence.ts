@@ -1,6 +1,7 @@
 import { isGroupJid } from '@protocol/jid'
 import { WA_PRESENCE_LAST_SENTINELS, WA_PRESENCE_TYPES } from '@protocol/presence'
 import type { BinaryNode } from '@transport/types'
+import { parseOptionalInt } from '@util/primitives'
 
 export type IncomingPresenceType =
     | typeof WA_PRESENCE_TYPES.AVAILABLE
@@ -28,19 +29,11 @@ function parseLastSeen(value: string): PresenceLastSeen {
     if (value === WA_PRESENCE_LAST_SENTINELS.ERROR) {
         return { kind: 'unknown' }
     }
-    const unixSeconds = Number.parseInt(value, 10)
-    if (!Number.isFinite(unixSeconds)) {
+    const unixSeconds = parseOptionalInt(value)
+    if (unixSeconds === undefined) {
         return { kind: 'unknown' }
     }
     return { kind: 'timestamp', unixSeconds }
-}
-
-function parseGroupOnlineCount(value: string): number | undefined {
-    const count = Number.parseInt(value, 10)
-    if (!Number.isFinite(count) || count < 0) {
-        return undefined
-    }
-    return count
 }
 
 export function parsePresenceNode(node: BinaryNode): ParsedPresence {
@@ -58,11 +51,9 @@ export function parsePresenceNode(node: BinaryNode): ParsedPresence {
     } = { type }
 
     if (isGroup) {
-        if (node.attrs.count !== undefined) {
-            const count = parseGroupOnlineCount(node.attrs.count)
-            if (count !== undefined) {
-                result.groupOnlineCount = count
-            }
+        const count = parseOptionalInt(node.attrs.count)
+        if (count !== undefined) {
+            result.groupOnlineCount = count
         } else if (type === WA_PRESENCE_TYPES.UNAVAILABLE) {
             result.groupOnlineCount = 0
         }

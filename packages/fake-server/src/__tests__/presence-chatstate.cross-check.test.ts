@@ -26,6 +26,9 @@ test('fake server pushes presence stanzas and the lib emits enriched presence ev
             5_000
         )
         client.on('presence', (event) => {
+            if (event.chatJid !== peerJid && event.chatJid !== groupJid) {
+                return
+            }
             events.push({
                 chatJid: event.chatJid,
                 type: event.type,
@@ -90,6 +93,9 @@ test('fake server pushes chatstate stanzas and the lib emits enriched chatstate 
             5_000
         )
         client.on('chatstate', (event) => {
+            if (event.chatJid !== peerJid) {
+                return
+            }
             events.push({ chatJid: event.chatJid, state: event.state, media: event.media })
             if (events.length >= 2) {
                 clearTimeout(timer)
