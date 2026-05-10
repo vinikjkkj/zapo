@@ -2,13 +2,17 @@ import { createReadStream } from 'node:fs'
 import type { Readable } from 'node:stream'
 
 import {
+    assertMediaUploadStatus,
+    buildMediaUploadUrl,
     cleanupTempFile,
     hasMediaProcessingTasks,
     isReadableStream,
+    parseMediaUploadJsonBody,
     parseWebpAnimation,
     readFileHead,
     resolveMediaInputs,
-    runMediaProcessor
+    runMediaProcessor,
+    selectMediaUploadHost
 } from '@client/media'
 import type { WaMediaOptions } from '@client/types'
 import type { Logger } from '@infra/log/types'
@@ -27,8 +31,6 @@ import type {
 import { WA_DEFAULTS } from '@protocol/constants'
 import { buildMediaConnIq } from '@transport/node/builders/media'
 import type { BinaryNode } from '@transport/types'
-import { bytesToBase64UrlSafe, TEXT_DECODER } from '@util/bytes'
-import { toError } from '@util/primitives'
 
 export interface WaMediaMessageOptions {
     readonly logger: Logger
@@ -290,18 +292,12 @@ interface UploadResult {
     readonly firstFrameLength?: number
 }
 
-function buildUploadUrl(
-    host: string,
-    uploadType: MediaCryptoType,
-    auth: string,
-    fileEncSha256: Uint8Array
-): string {
-    const hashToken = bytesToBase64UrlSafe(fileEncSha256)
+function resolveUploadPath(uploadType: MediaCryptoType): string {
     const uploadPath = MEDIA_UPLOAD_PATHS[uploadType as keyof typeof MEDIA_UPLOAD_PATHS]
     if (!uploadPath) {
         throw new Error(`unknown media upload type: ${String(uploadType)}`)
     }
-    return `https://${host}${uploadPath}/${hashToken}?auth=${encodeURIComponent(auth)}&token=${encodeURIComponent(hashToken)}`
+    return uploadPath
 }
 
 function parseUploadResponse(
@@ -312,19 +308,12 @@ function parseUploadResponse(
     readonly directPath: string
     readonly metadataUrl?: string
 } {
-    if (status < 200 || status >= 300) {
-        throw new Error(`media upload failed with status ${status}`)
-    }
-    let parsed: {
+    assertMediaUploadStatus(status, 'media upload')
+    const parsed = parseMediaUploadJsonBody<{
         readonly url?: string
         readonly direct_path?: string
         readonly metadata_url?: string
-    }
-    try {
-        parsed = JSON.parse(TEXT_DECODER.decode(body)) as typeof parsed
-    } catch (error) {
-        throw new Error(`media upload returned invalid json: ${toError(error).message}`)
-    }
+    }>(body, 'media upload')
     if (!parsed.url || !parsed.direct_path) {
         throw new Error('media upload response missing url/direct_path')
     }
@@ -350,11 +339,10 @@ async function uploadMediaBytes(
         }),
         getMediaConn(options)
     ])
-    const selectedHost =
-        mediaConn.hosts.find((host) => !host.isFallback)?.hostname ?? mediaConn.hosts[0].hostname
-    const uploadUrl = buildUploadUrl(
+    const selectedHost = selectMediaUploadHost(mediaConn)
+    const uploadUrl = buildMediaUploadUrl(
         selectedHost,
-        uploadType,
+        resolveUploadPath(uploadType),
         mediaConn.auth,
         encrypted.fileEncSha256
     )
@@ -400,12 +388,10 @@ async function uploadMediaStream(
     let readStream: ReturnType<typeof createReadStream> | undefined
     try {
         const mediaConn = await getMediaConn(options)
-        const selectedHost =
-            mediaConn.hosts.find((host) => !host.isFallback)?.hostname ??
-            mediaConn.hosts[0].hostname
-        const uploadUrl = buildUploadUrl(
+        const selectedHost = selectMediaUploadHost(mediaConn)
+        const uploadUrl = buildMediaUploadUrl(
             selectedHost,
-            uploadType,
+            resolveUploadPath(uploadType),
             mediaConn.auth,
             encResult.fileEncSha256
         )

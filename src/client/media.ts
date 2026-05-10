@@ -7,9 +7,12 @@ import { type Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 import type { WaMediaOptions } from '@client/types'
+import { randomIntAsync, sha256 } from '@crypto/core'
 import type { Logger } from '@infra/log/types'
+import type { WaMediaConn } from '@media/types'
+import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import type { WaSendMediaMessage } from '@message/types'
-import { toBytesView, toChunkBytes } from '@util/bytes'
+import { bytesToBase64UrlSafe, TEXT_DECODER, toBytesView, toChunkBytes } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 export interface ProcessedMediaFields {
@@ -182,6 +185,140 @@ export async function hashFileWithSha256(filePath: string): Promise<StreamFileMe
         }
     })
     return meter.finalize()
+}
+
+export type WaUploadMediaSource = Uint8Array | string | Readable
+
+interface PreparedPlaintextUploadSource {
+    readonly fileSha256: Uint8Array
+    readonly byteLength: number
+    readonly body: Uint8Array | Readable
+    readonly cleanup?: () => Promise<void>
+}
+
+async function preparePlaintextUploadSource(
+    media: WaUploadMediaSource
+): Promise<PreparedPlaintextUploadSource> {
+    if (media instanceof Uint8Array) {
+        return { fileSha256: sha256(media), byteLength: media.byteLength, body: media }
+    }
+    if (typeof media === 'string') {
+        const metrics = await hashFileWithSha256(media)
+        return {
+            fileSha256: metrics.fileSha256,
+            byteLength: metrics.byteLength,
+            body: createReadStream(media)
+        }
+    }
+    if (isReadableStream(media)) {
+        const result = await streamToTempFileWithSha256(media)
+        return {
+            fileSha256: result.fileSha256,
+            byteLength: result.byteLength,
+            body: createReadStream(result.filePath),
+            cleanup: () => cleanupTempFile(result.filePath)
+        }
+    }
+    throw new Error('media upload received unsupported source type')
+}
+
+// node:crypto randomInt caps max at 2**48 - 1; well within JS safe integer range.
+const MEDIA_UPLOAD_ID_MAX = 281_474_976_710_655
+
+export async function generateMediaUploadId(): Promise<string> {
+    const value = await randomIntAsync(0, MEDIA_UPLOAD_ID_MAX)
+    return value.toString(10)
+}
+
+export function selectMediaUploadHost(mediaConn: WaMediaConn): string {
+    return mediaConn.hosts.find((host) => !host.isFallback)?.hostname ?? mediaConn.hosts[0].hostname
+}
+
+export function buildMediaUploadUrl(
+    host: string,
+    path: string,
+    auth: string,
+    fileSha256: Uint8Array,
+    mediaId?: string
+): string {
+    const hashToken = bytesToBase64UrlSafe(fileSha256)
+    const base = `https://${host}${path}/${hashToken}?auth=${encodeURIComponent(auth)}&token=${encodeURIComponent(hashToken)}`
+    return mediaId !== undefined ? `${base}&media_id=${mediaId}` : base
+}
+
+export function assertMediaUploadStatus(status: number, label: string): void {
+    if (status < 200 || status >= 300) {
+        throw new Error(`${label} failed with status ${status}`)
+    }
+}
+
+export function parseMediaUploadJsonBody<T>(body: Uint8Array, label: string): T {
+    try {
+        return JSON.parse(TEXT_DECODER.decode(body)) as T
+    } catch (error) {
+        throw new Error(`${label} returned invalid json: ${toError(error).message}`)
+    }
+}
+
+export interface PlaintextMediaUploadDeps {
+    readonly mediaTransfer: WaMediaTransferClient
+    readonly mediaConn: WaMediaConn
+    readonly logger: Logger
+}
+
+export interface PlaintextMediaUploadInput {
+    readonly source: WaUploadMediaSource
+    readonly path: string
+    readonly mimetype?: string
+    readonly logLabel?: string
+}
+
+export interface PlaintextMediaUploadResult {
+    readonly responseBytes: Uint8Array
+    readonly status: number
+    readonly fileSha256: Uint8Array
+    readonly byteLength: number
+    readonly mediaId: string
+}
+
+export async function performPlaintextMediaUpload(
+    deps: PlaintextMediaUploadDeps,
+    input: PlaintextMediaUploadInput
+): Promise<PlaintextMediaUploadResult> {
+    const prepared = await preparePlaintextUploadSource(input.source)
+    try {
+        const host = selectMediaUploadHost(deps.mediaConn)
+        const mediaId = await generateMediaUploadId()
+        const url = buildMediaUploadUrl(
+            host,
+            input.path,
+            deps.mediaConn.auth,
+            prepared.fileSha256,
+            mediaId
+        )
+        deps.logger.debug(input.logLabel ?? 'sending media upload', {
+            host,
+            path: input.path,
+            size: prepared.byteLength
+        })
+        const response = await deps.mediaTransfer.uploadStream({
+            url,
+            method: 'POST',
+            body: prepared.body,
+            contentLength: prepared.byteLength,
+            contentType: input.mimetype
+        })
+        const responseBytes = await deps.mediaTransfer.readResponseBytes(response)
+        return {
+            responseBytes,
+            status: response.status,
+            fileSha256: prepared.fileSha256,
+            byteLength: prepared.byteLength,
+            mediaId
+        }
+    } finally {
+        await prepared.cleanup?.()
+    }
 }
 
 export interface ResolvedMediaInputs {

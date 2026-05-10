@@ -665,7 +665,7 @@ test('clearStoredState respects logoutStoreClear domain toggles', async () => {
 })
 
 test('uploadNewsletterMedia builds plaintext URL and parses response', async () => {
-    const { uploadNewsletterMedia } = await import('@client/newsletter/media-upload')
+    const { uploadNewsletterMedia } = await import('@client/newsletter/content')
     const captured: { url?: string; method?: string; body?: Uint8Array } = {}
     const responseBody = new TextEncoder().encode(
         JSON.stringify({

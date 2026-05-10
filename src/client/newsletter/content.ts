@@ -1,16 +1,94 @@
 import type { Readable } from 'node:stream'
 
 import {
-    uploadNewsletterMedia,
-    type WaNewsletterUploadResult
-} from '@client/newsletter/media-upload'
+    assertMediaUploadStatus,
+    parseMediaUploadJsonBody,
+    performPlaintextMediaUpload,
+    type WaUploadMediaSource
+} from '@client/media'
 import type { Logger } from '@infra/log/types'
-import type { NewsletterMediaKind } from '@media/constants'
+import { NEWSLETTER_MEDIA_UPLOAD_PATHS, type NewsletterMediaKind } from '@media/constants'
 import type { WaMediaConn } from '@media/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { isSendMediaMessage, resolveMessageTypeAttr } from '@message/content'
 import type { WaSendMediaMessage, WaSendMessageContent } from '@message/types'
 import { proto, type Proto } from '@proto'
+import { base64ToBytes } from '@util/bytes'
+
+export type WaNewsletterUploadMedia = WaUploadMediaSource
+
+export interface WaNewsletterUploadInput {
+    readonly mediaKind: NewsletterMediaKind
+    readonly media: WaNewsletterUploadMedia
+    readonly mimetype: string
+    readonly mediaConn: WaMediaConn
+}
+
+export interface WaNewsletterUploadResult {
+    readonly url: string
+    readonly directPath: string
+    readonly handle?: string
+    readonly metadataUrl?: string
+    readonly thumbnailDirectPath?: string
+    readonly thumbnailSha256?: Uint8Array
+    readonly fileSha256: Uint8Array
+    readonly fileLength: number
+    readonly mediaId: string
+}
+
+interface NewsletterUploadResponseJson {
+    readonly url?: string
+    readonly direct_path?: string
+    readonly handle?: string
+    readonly metadata_url?: string
+    readonly thumbnail_info?: {
+        readonly thumbnail_direct_path?: string
+        readonly thumbnail_sha256?: string
+    }
+}
+
+export async function uploadNewsletterMedia(
+    options: {
+        readonly mediaTransfer: WaMediaTransferClient
+        readonly logger: Logger
+    },
+    input: WaNewsletterUploadInput
+): Promise<WaNewsletterUploadResult> {
+    const upload = await performPlaintextMediaUpload(
+        {
+            mediaTransfer: options.mediaTransfer,
+            mediaConn: input.mediaConn,
+            logger: options.logger
+        },
+        {
+            source: input.media,
+            path: NEWSLETTER_MEDIA_UPLOAD_PATHS[input.mediaKind],
+            mimetype: input.mimetype,
+            logLabel: 'sending newsletter media upload'
+        }
+    )
+    assertMediaUploadStatus(upload.status, 'newsletter media upload')
+    const parsed = parseMediaUploadJsonBody<NewsletterUploadResponseJson>(
+        upload.responseBytes,
+        'newsletter media upload'
+    )
+    if (!parsed.url || !parsed.direct_path) {
+        throw new Error('newsletter media upload response missing url/direct_path')
+    }
+    return {
+        url: parsed.url,
+        directPath: parsed.direct_path,
+        handle: parsed.handle,
+        metadataUrl: parsed.metadata_url,
+        thumbnailDirectPath: parsed.thumbnail_info?.thumbnail_direct_path,
+        thumbnailSha256: parsed.thumbnail_info?.thumbnail_sha256
+            ? base64ToBytes(parsed.thumbnail_info.thumbnail_sha256)
+            : undefined,
+        fileSha256: upload.fileSha256,
+        fileLength: upload.byteLength,
+        mediaId: upload.mediaId
+    }
+}
 
 export type WaNewsletterContentKind = 'text' | 'media' | 'poll-creation'
 

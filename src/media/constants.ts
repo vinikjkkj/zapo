@@ -39,6 +39,8 @@ export type NewsletterMediaKind =
     | 'ptv'
     | 'thumbnail-link'
 
+export const BIZ_COVER_PHOTO_UPLOAD_PATH = '/pps/biz-cover-photo'
+
 export const NEWSLETTER_MEDIA_UPLOAD_PATHS: Readonly<Record<NewsletterMediaKind, string>> =
     Object.freeze({
         image: '/newsletter/newsletter-image',

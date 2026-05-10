@@ -1,3 +1,13 @@
+import {
+    assertMediaUploadStatus,
+    parseMediaUploadJsonBody,
+    performPlaintextMediaUpload,
+    type WaUploadMediaSource
+} from '@client/media'
+import type { Logger } from '@infra/log/types'
+import { BIZ_COVER_PHOTO_UPLOAD_PATH } from '@media/constants'
+import type { WaMediaConn } from '@media/types'
+import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { proto } from '@proto'
 import {
     buildDeleteCoverPhotoIq,
@@ -68,7 +78,7 @@ export interface WaBusinessCoordinator {
     ) => Promise<readonly WaBusinessProfileResult[]>
     readonly editBusinessProfile: (input: WaEditBusinessProfileInput) => Promise<void>
     readonly getVerifiedName: (jid: string) => Promise<WaVerifiedNameResult | null>
-    readonly updateCoverPhoto: (id: string, timestamp: string, token: string) => Promise<void>
+    readonly updateCoverPhoto: (media: WaUploadMediaSource) => Promise<void>
     readonly deleteCoverPhoto: (id: string) => Promise<void>
 }
 
@@ -79,6 +89,9 @@ interface WaBusinessCoordinatorOptions {
         timeoutMs?: number,
         contextData?: Readonly<Record<string, unknown>>
     ) => Promise<BinaryNode>
+    readonly mediaTransfer: WaMediaTransferClient
+    readonly getMediaConn: () => Promise<WaMediaConn>
+    readonly logger: Logger
 }
 
 function parseBusinessProfiles(result: BinaryNode): readonly WaBusinessProfileResult[] {
@@ -295,7 +308,7 @@ function parseVerifiedName(result: BinaryNode): WaVerifiedNameResult | null {
 export function createBusinessCoordinator(
     options: WaBusinessCoordinatorOptions
 ): WaBusinessCoordinator {
-    const { queryWithContext } = options
+    const { queryWithContext, mediaTransfer, getMediaConn, logger } = options
 
     return {
         getBusinessProfile: async (jids) => {
@@ -323,10 +336,28 @@ export function createBusinessCoordinator(
             return parseVerifiedName(result)
         },
 
-        updateCoverPhoto: async (id, timestamp, token) => {
-            const node = buildUpdateCoverPhotoIq(id, timestamp, token)
+        updateCoverPhoto: async (media) => {
+            const mediaConn = await getMediaConn()
+            const upload = await performPlaintextMediaUpload(
+                { mediaTransfer, mediaConn, logger },
+                {
+                    source: media,
+                    path: BIZ_COVER_PHOTO_UPLOAD_PATH,
+                    logLabel: 'sending business cover photo upload'
+                }
+            )
+            assertMediaUploadStatus(upload.status, 'business cover photo upload')
+            const parsed = parseMediaUploadJsonBody<{
+                readonly fbid?: string
+                readonly ts?: string
+                readonly meta_hmac?: string
+            }>(upload.responseBytes, 'business cover photo upload')
+            if (!parsed.fbid || !parsed.ts || !parsed.meta_hmac) {
+                throw new Error('business cover photo upload response missing fbid/ts/meta_hmac')
+            }
+            const node = buildUpdateCoverPhotoIq(parsed.fbid, parsed.ts, parsed.meta_hmac)
             const result = await queryWithContext('business.updateCoverPhoto', node, undefined, {
-                id
+                id: parsed.fbid
             })
             assertIqResult(result, 'business.updateCoverPhoto')
         },

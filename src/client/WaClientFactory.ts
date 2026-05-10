@@ -564,7 +564,10 @@ export function buildWaClientDependencies(input: {
     })
 
     const businessCoordinator = createBusinessCoordinator({
-        queryWithContext: runtime.queryWithContext
+        queryWithContext: runtime.queryWithContext,
+        mediaTransfer,
+        getMediaConn: () => getClientMediaConn(mediaMessageBuildOptions),
+        logger
     })
 
     const emailCoordinator = createEmailCoordinator({
