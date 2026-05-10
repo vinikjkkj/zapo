@@ -97,7 +97,8 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly sendNewsletterMessage?: (
         newsletterJid: string,
         content: WaSendMessageContent,
-        options: WaSendMessageOptions
+        options: WaSendMessageOptions,
+        contextInfo: WaSendContextInfo | null
     ) => Promise<WaMessagePublishResult>
     readonly getIcdcHashLength?: () => number
     readonly mobileMessageIdFormat?: boolean
@@ -141,7 +142,8 @@ export class WaMessageDispatchCoordinator {
         | ((
               newsletterJid: string,
               content: WaSendMessageContent,
-              options: WaSendMessageOptions
+              options: WaSendMessageOptions,
+              contextInfo: WaSendContextInfo | null
           ) => Promise<WaMessagePublishResult>)
         | undefined
     private readonly getIcdcHashLength: (() => number) | undefined
@@ -301,8 +303,16 @@ export class WaMessageDispatchCoordinator {
             if (!this.sendNewsletterMessage) {
                 throw new Error('newsletter sendMessage requires sendNewsletterMessage dependency')
             }
+            const newsletterCtx = resolveSendContextInfo({
+                contentLevel: pickContentContextInfo(content),
+                optionsLevel: options.contextInfo,
+                quote: options.quote,
+                forward: options.forward,
+                mentions: options.mentions
+            })
+            assertNewsletterContextInfoCompatible(newsletterCtx)
             const sendOptions = await this.withResolvedMessageId(options)
-            return this.sendNewsletterMessage(recipientJid, content, sendOptions)
+            return this.sendNewsletterMessage(recipientJid, content, sendOptions, newsletterCtx)
         }
         const [built, sendOptions] = await Promise.all([
             this.buildMessageContent(content),
@@ -1287,4 +1297,18 @@ function pickContentContextInfo(content: WaSendMessageContent): WaSendContextInf
         return content.contextInfo
     }
     return undefined
+}
+
+function assertNewsletterContextInfoCompatible(ctx: WaSendContextInfo | null): void {
+    if (!ctx) return
+    const unsupported: string[] = []
+    if (ctx.quotedMessageId !== undefined) unsupported.push('quote')
+    if (ctx.mentionedJids?.length) unsupported.push('mentions')
+    if (ctx.isSpoiler === true) unsupported.push('isSpoiler')
+    if (ctx.groupSubject !== undefined || ctx.parentGroupJid !== undefined) {
+        unsupported.push('group invite reply (groupSubject/parentGroupJid)')
+    }
+    if (unsupported.length > 0) {
+        throw new Error(`newsletter sends do not support: ${unsupported.join(', ')}`)
+    }
 }

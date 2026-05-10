@@ -11,6 +11,7 @@ import { NEWSLETTER_MEDIA_UPLOAD_PATHS, type NewsletterMediaKind } from '@media/
 import type { WaMediaConn } from '@media/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { isSendMediaMessage, isSendTextMessage, resolveMessageTypeAttr } from '@message/content'
+import { applyContextInfo, type WaSendContextInfo } from '@message/context-info'
 import type { WaSendMediaMessage, WaSendMessageContent } from '@message/types'
 import { proto, type Proto } from '@proto'
 import { base64ToBytes } from '@util/bytes'
@@ -199,10 +200,11 @@ function toUploadMedia(media: WaSendMediaMessage['media']): Uint8Array | string 
 
 export async function buildNewsletterMessageContent(
     options: BuildNewsletterContentOptions,
-    content: WaSendMessageContent
+    content: WaSendMessageContent,
+    ctx?: WaSendContextInfo | null
 ): Promise<WaNewsletterBuiltContent> {
     if (typeof content === 'string') {
-        const message: Proto.IMessage = { conversation: content }
+        const message = applyContextInfo({ conversation: content }, ctx)
         return {
             kind: 'text',
             plaintext: proto.Message.encode(message).finish(),
@@ -212,7 +214,7 @@ export async function buildNewsletterMessageContent(
     }
 
     if (isSendTextMessage(content)) {
-        const message: Proto.IMessage = { extendedTextMessage: { text: content.text } }
+        const message = applyContextInfo({ extendedTextMessage: { text: content.text } }, ctx)
         return {
             kind: 'text',
             plaintext: proto.Message.encode(message).finish(),
@@ -245,7 +247,7 @@ export async function buildNewsletterMessageContent(
                 mediaConn
             }
         )
-        const message = buildMediaProtoMessage(content, upload)
+        const message = applyContextInfo(buildMediaProtoMessage(content, upload), ctx)
         return {
             kind: 'media',
             plaintext: proto.Message.encode(message).finish(),
@@ -254,7 +256,7 @@ export async function buildNewsletterMessageContent(
         }
     }
 
-    const protoMessage = content
+    const protoMessage = applyContextInfo(content, ctx)
     const messageTypeAttr = resolveMessageTypeAttr(protoMessage)
     const isPollCreation = messageTypeAttr === 'poll' && Boolean(protoMessage.pollCreationMessage)
     const mediaTypeAttr = pickMediaTypeFromMessage(protoMessage)

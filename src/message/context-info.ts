@@ -82,8 +82,23 @@ export function applyContextInfo(
     if (!target) {
         throw new Error('cannot apply contextInfo: no compatible submessage found')
     }
-    target.contextInfo = { ...(target.contextInfo ?? undefined), ...proto }
+    target.contextInfo = { ...target.contextInfo, ...proto }
     return next
+}
+
+function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | null {
+    for (const key of Object.keys(message)) {
+        const value = (message as Record<string, unknown>)[key]
+        if (
+            value &&
+            typeof value === 'object' &&
+            !Array.isArray(value) &&
+            !(value instanceof Uint8Array)
+        ) {
+            return value as ContextInfoCarrier
+        }
+    }
+    return null
 }
 
 type WaQuoteSource =
@@ -139,21 +154,6 @@ export function resolveSendContextInfo(input: WaSendContextResolveInput): WaSend
     }
 
     return hasAnyKey(ctx) ? ctx : null
-}
-
-function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | null {
-    for (const key of Object.keys(message)) {
-        const value = (message as Record<string, unknown>)[key]
-        if (
-            value &&
-            typeof value === 'object' &&
-            !Array.isArray(value) &&
-            !(value instanceof Uint8Array)
-        ) {
-            return value as ContextInfoCarrier
-        }
-    }
-    return null
 }
 
 function hasAnyKey(value: object): boolean {

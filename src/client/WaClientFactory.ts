@@ -676,9 +676,10 @@ export function buildWaClientDependencies(input: {
                 })
             )
         },
-        sendNewsletterMessage: (newsletterJid, content, sendOptions) =>
+        sendNewsletterMessage: (newsletterJid, content, sendOptions, contextInfo) =>
             newsletterCoordinator.sendMessage(newsletterJid, content, {
-                stanzaId: sendOptions.id
+                stanzaId: sendOptions.id,
+                contextInfo
             }),
         getIcdcHashLength: () => abPropsCoordinator.getConfigValue('md_icdc_hash_length'),
         mobileMessageIdFormat: options.mobileTransport !== undefined

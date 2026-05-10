@@ -14,6 +14,7 @@ import type {
 } from '@client/newsletter/types'
 import type { WaMediaConn } from '@media/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
+import type { WaSendContextInfo } from '@message/context-info'
 import type {
     WaMessagePublishOptions,
     WaMessagePublishResult,
@@ -84,7 +85,8 @@ export interface WaNewsletterMessagingOps {
 
 async function buildContent(
     deps: WaNewsletterMessagingDeps,
-    content: WaSendMessageContent
+    content: WaSendMessageContent,
+    ctx?: WaSendContextInfo | null
 ): Promise<WaNewsletterBuiltContent> {
     return buildNewsletterMessageContent(
         {
@@ -92,7 +94,8 @@ async function buildContent(
             mediaTransfer: deps.mediaTransfer,
             getMediaConn: deps.getMediaConn
         },
-        content
+        content,
+        ctx
     )
 }
 
@@ -176,7 +179,7 @@ export function createMessagingOps(deps: WaNewsletterMessagingDeps): WaNewslette
             sendOptions
         ): Promise<WaNewsletterSendResult> => {
             const stanzaId = await resolveStanzaId(sendOptions?.stanzaId)
-            const built = await buildContent(deps, content)
+            const built = await buildContent(deps, content, sendOptions?.contextInfo)
             const node = buildDispatchNode(newsletterJid, stanzaId, built, null)
             const result = await deps.publishMessageNode(node)
             return { ...result, upload: toUploadSummary(built) }

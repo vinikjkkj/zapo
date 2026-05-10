@@ -1,3 +1,4 @@
+import type { WaSendContextInfo } from '@message/context-info'
 import type { WaMessagePublishResult } from '@message/types'
 import type {
     WA_NEWSLETTER_VIEW_ROLES,
@@ -117,6 +118,7 @@ export interface WaNewsletterAdminInviteResult {
 
 export interface WaNewsletterSendOptions {
     readonly stanzaId?: string
+    readonly contextInfo?: WaSendContextInfo | null
 }
 
 export type WaNewsletterSendResult = WaMessagePublishResult
