@@ -54,6 +54,7 @@ import {
 import type {
     WaMessagePublishResult,
     WaSendMessageContent,
+    WaSendReceiptEventOptions,
     WaSendReceiptInput,
     WaSendReceiptOptions
 } from '@message/types'
@@ -769,7 +770,7 @@ export class WaClient extends EventEmitter {
 
     public sendReceipt(
         target: WaIncomingMessageEvent | readonly WaIncomingMessageEvent[],
-        options?: WaSendReceiptOptions
+        options?: WaSendReceiptEventOptions
     ): Promise<void>
     public sendReceipt(
         jid: string,
@@ -778,7 +779,7 @@ export class WaClient extends EventEmitter {
     ): Promise<void>
     public async sendReceipt(
         first: string | WaIncomingMessageEvent | readonly WaIncomingMessageEvent[],
-        second?: string | readonly string[] | WaSendReceiptOptions,
+        second?: string | readonly string[] | WaSendReceiptEventOptions,
         third?: WaSendReceiptOptions
     ): Promise<void> {
         if (typeof first === 'string') {
@@ -787,7 +788,7 @@ export class WaClient extends EventEmitter {
             return
         }
         const events = Array.isArray(first) ? first : [first as WaIncomingMessageEvent]
-        const options = (second as WaSendReceiptOptions | undefined) ?? {}
+        const options = (second as WaSendReceiptEventOptions | undefined) ?? {}
         const targets = events.map((event) => {
             if (!event.chatJid || !event.stanzaId) {
                 throw new Error('sendReceipt event is missing chatJid or stanzaId')
@@ -796,13 +797,14 @@ export class WaClient extends EventEmitter {
                 chatJid: event.chatJid,
                 id: event.stanzaId,
                 senderJid: event.senderJid,
-                isGroupChat: event.isGroupChat
+                isGroupChat: event.isGroupChat,
+                isBroadcastChat: event.isBroadcastChat
             }
         })
         for (const group of aggregateReceiptTargets(targets)) {
             await this.dispatchReceipt(group.jid, group.ids, {
                 ...options,
-                participant: options.participant ?? group.participant
+                participant: group.participant
             })
         }
     }

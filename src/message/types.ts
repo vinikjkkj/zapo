@@ -140,3 +140,5 @@ export interface WaSendReceiptInput {
 }
 
 export type WaSendReceiptOptions = Omit<WaSendReceiptInput, 'to' | 'id' | 'listIds'>
+
+export type WaSendReceiptEventOptions = Omit<WaSendReceiptOptions, 'participant'>

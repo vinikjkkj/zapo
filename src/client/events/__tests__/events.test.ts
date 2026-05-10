@@ -409,6 +409,22 @@ test('aggregateReceiptTargets groups by chat and sender, batching same-author id
         { chatJid: 'group3@g.us', id: 'E1', isGroupChat: true }
     ])
     assert.equal(noSender[0].participant, undefined)
+
+    const broadcastInferred = aggregateReceiptTargets([
+        { chatJid: 'list@broadcast', id: 'F1', senderJid: 'dave@s.whatsapp.net' }
+    ])
+    assert.equal(broadcastInferred[0].participant, 'dave@s.whatsapp.net')
+
+    const broadcastExplicit = aggregateReceiptTargets([
+        {
+            chatJid: 'list@broadcast',
+            id: 'G1',
+            senderJid: 'erin@s.whatsapp.net',
+            isBroadcastChat: true,
+            isGroupChat: false
+        }
+    ])
+    assert.equal(broadcastExplicit[0].participant, 'erin@s.whatsapp.net')
 })
 
 test('privacy token parser rejects non-numeric token timestamp', () => {
