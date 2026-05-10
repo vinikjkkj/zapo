@@ -177,16 +177,6 @@ export async function streamToTempFileWithSha256(
     return { filePath, ...meter.finalize() }
 }
 
-export async function hashFileWithSha256(filePath: string): Promise<StreamFileMetrics> {
-    const meter = createSha256SizeMeter()
-    await pipeline(createReadStream(filePath), meter.transform, async (chunks) => {
-        for await (const chunk of chunks) {
-            void chunk
-        }
-    })
-    return meter.finalize()
-}
-
 export type WaUploadMediaSource = Uint8Array | string | Readable
 
 interface PreparedPlaintextUploadSource {
@@ -203,11 +193,12 @@ async function preparePlaintextUploadSource(
         return { fileSha256: sha256(media), byteLength: media.byteLength, body: media }
     }
     if (typeof media === 'string') {
-        const metrics = await hashFileWithSha256(media)
+        const result = await streamToTempFileWithSha256(createReadStream(media))
         return {
-            fileSha256: metrics.fileSha256,
-            byteLength: metrics.byteLength,
-            body: createReadStream(media)
+            fileSha256: result.fileSha256,
+            byteLength: result.byteLength,
+            body: createReadStream(result.filePath),
+            cleanup: () => cleanupTempFile(result.filePath)
         }
     }
     if (isReadableStream(media)) {

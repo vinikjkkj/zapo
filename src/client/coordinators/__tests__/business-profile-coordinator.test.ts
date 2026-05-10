@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
+import { unlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Readable } from 'node:stream'
 import test from 'node:test'
 
 import { createBusinessCoordinator } from '@client/coordinators/WaBusinessCoordinator'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { proto } from '@proto'
 import { WA_XMLNS } from '@protocol/constants'
@@ -17,15 +21,6 @@ function createIqResult(content?: readonly BinaryNode[]): BinaryNode {
     }
 }
 
-const NOOP_LOGGER: Logger = {
-    level: 'error',
-    trace: () => {},
-    debug: () => {},
-    info: () => {},
-    warn: () => {},
-    error: () => {}
-}
-
 type CoordinatorDeps = Parameters<typeof createBusinessCoordinator>[0]
 
 function makeBusinessCoordinator(overrides: Partial<CoordinatorDeps> = {}) {
@@ -35,7 +30,7 @@ function makeBusinessCoordinator(overrides: Partial<CoordinatorDeps> = {}) {
         getMediaConn: () => {
             throw new Error('getMediaConn not stubbed in this test')
         },
-        logger: NOOP_LOGGER,
+        logger: createNoopLogger('error'),
         ...overrides
     })
 }
@@ -475,6 +470,26 @@ test('updateCoverPhoto throws on non-2xx status', async () => {
 test('updateCoverPhoto throws on invalid json body', async () => {
     const coordinator = makeUploadStub('not-json', 200)
     await assert.rejects(() => coordinator.updateCoverPhoto(new Uint8Array([1])), /invalid json/)
+})
+
+test('updateCoverPhoto accepts a file path source', async () => {
+    const filePath = join(tmpdir(), `zapo-cover-test-${Date.now()}-${Math.random()}.bin`)
+    await writeFile(filePath, new Uint8Array([10, 20, 30, 40, 50]))
+    try {
+        const coordinator = makeUploadStub(
+            JSON.stringify({ fbid: 'p-1', ts: '1700000000', meta_hmac: 't-1' })
+        )
+        await coordinator.updateCoverPhoto(filePath)
+    } finally {
+        await unlink(filePath).catch(() => undefined)
+    }
+})
+
+test('updateCoverPhoto accepts a Readable source', async () => {
+    const coordinator = makeUploadStub(
+        JSON.stringify({ fbid: 'p-2', ts: '1700000001', meta_hmac: 't-2' })
+    )
+    await coordinator.updateCoverPhoto(Readable.from([new Uint8Array([1, 2, 3, 4])]))
 })
 
 test('business coordinator parses empty description and guards NaN lat/lng', async () => {
