@@ -1,4 +1,4 @@
-import type { WaSendMediaMessage } from '@message/types'
+import type { WaSendMediaMessage, WaSendTextMessage } from '@message/types'
 import { proto, type Proto } from '@proto'
 import {
     WA_EDIT_ATTRS,
@@ -10,6 +10,16 @@ import {
 
 export function isSendMediaMessage(content: unknown): content is WaSendMediaMessage {
     return !!content && typeof content === 'object' && 'type' in content && 'media' in content
+}
+
+export function isSendTextMessage(content: unknown): content is WaSendTextMessage {
+    return (
+        !!content &&
+        typeof content === 'object' &&
+        'type' in content &&
+        (content as { type: unknown }).type === 'text' &&
+        'text' in content
+    )
 }
 
 export function unwrapMessage(message: Proto.IMessage): Proto.IMessage {

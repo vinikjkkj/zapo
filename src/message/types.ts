@@ -1,5 +1,6 @@
 import type { Readable } from 'node:stream'
 
+import type { WaSendContextInfo } from '@message/context-info'
 import type { Proto } from '@proto'
 import type { WaOutboundReceiptType } from '@protocol/message'
 import type { BinaryNode } from '@transport/types'
@@ -54,6 +55,7 @@ type MediaFieldsFilledByBuilder =
     | 'mediaKeyTimestamp'
     | 'streamingSidecar'
     | 'metadataUrl'
+    | 'contextInfo'
 
 type UserMediaFields<T> = {
     readonly [K in keyof Omit<T, MediaFieldsFilledByBuilder>]?: T[K]
@@ -63,12 +65,20 @@ interface WaSendMediaBase {
     readonly media: MediaInput
     readonly mimetype: string
     readonly fileLength?: number
+    readonly contextInfo?: WaSendContextInfo
 }
 
 interface WaSendMediaBaseOptionalMime {
     readonly media: MediaInput
     readonly mimetype?: string
     readonly fileLength?: number
+    readonly contextInfo?: WaSendContextInfo
+}
+
+export interface WaSendTextMessage {
+    readonly type: 'text'
+    readonly text: string
+    readonly contextInfo?: WaSendContextInfo
 }
 
 interface WaSendImageMessage extends WaSendMediaBase, UserMediaFields<Proto.Message.IImageMessage> {
@@ -105,7 +115,7 @@ export type WaSendMediaMessage =
     | WaSendDocumentMessage
     | WaSendStickerMessage
 
-export type WaSendMessageContent = string | Proto.IMessage | WaSendMediaMessage
+export type WaSendMessageContent = string | WaSendTextMessage | Proto.IMessage | WaSendMediaMessage
 
 export interface WaEncryptedMessageInput {
     readonly to: string

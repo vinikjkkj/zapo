@@ -21,7 +21,7 @@ import { MEDIA_CONN_CACHE_GRACE_MS, MEDIA_UPLOAD_PATHS } from '@media/constants'
 import type { MediaCryptoType, WaMediaConn } from '@media/types'
 import { WaMediaCrypto } from '@media/WaMediaCrypto'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
-import { isSendMediaMessage } from '@message/content'
+import { isSendMediaMessage, isSendTextMessage } from '@message/content'
 import type {
     WaMessageBuildResult,
     WaMessageUploadInfo,
@@ -53,6 +53,9 @@ export async function buildMediaMessageContent(
 ): Promise<WaMessageBuildResult> {
     if (typeof content === 'string') {
         return { message: { conversation: content } }
+    }
+    if (isSendTextMessage(content)) {
+        return { message: { extendedTextMessage: { text: content.text } } }
     }
     if (isSendMediaMessage(content)) {
         return buildMediaMessage(options, content)

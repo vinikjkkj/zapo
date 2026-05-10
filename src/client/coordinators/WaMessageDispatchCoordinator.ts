@@ -9,12 +9,19 @@ import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { ensureMessageSecret } from '@message'
 import {
+    isSendMediaMessage,
+    isSendTextMessage,
     needsSecretPersistence,
     resolveEditAttr,
     resolveEncMediaType,
     resolveMessageTypeAttr,
     resolveMetaAttrs
 } from '@message/content'
+import {
+    applyContextInfo,
+    resolveSendContextInfo,
+    type WaSendContextInfo
+} from '@message/context-info'
 import { wrapDeviceSentMessage } from '@message/device-sent'
 import { type IcdcMeta, injectDeviceListMetadata, resolveIcdcMeta } from '@message/icdc'
 import { writeRandomPadMax16 } from '@message/padding'
@@ -301,7 +308,14 @@ export class WaMessageDispatchCoordinator {
             this.buildMessageContent(content),
             this.withResolvedMessageId(options)
         ])
-        const message = built.message
+        const ctx = resolveSendContextInfo({
+            contentLevel: pickContentContextInfo(content),
+            optionsLevel: options.contextInfo,
+            quote: options.quote,
+            forward: options.forward,
+            mentions: options.mentions
+        })
+        const message = ctx ? applyContextInfo(built.message, ctx) : built.message
         const upload = built.upload
         const messageWithSecret = await ensureMessageSecret(message)
         const rawSecret = messageWithSecret.messageContextInfo?.messageSecret
@@ -1265,4 +1279,12 @@ export class WaMessageDispatchCoordinator {
         }
         throw new Error(`${context} requires registered meJid`)
     }
+}
+
+function pickContentContextInfo(content: WaSendMessageContent): WaSendContextInfo | undefined {
+    if (typeof content !== 'object' || content === null) return undefined
+    if (isSendTextMessage(content) || isSendMediaMessage(content)) {
+        return content.contextInfo
+    }
+    return undefined
 }

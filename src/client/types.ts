@@ -8,6 +8,7 @@ import type {
 import type { IncomingPresenceType, PresenceLastSeen } from '@client/events/presence'
 import type { WaMediaProcessor } from '@media/processor'
 import type { WaDecodedAddon } from '@message/addon-crypto'
+import type { WaQuoteRef, WaSendContextInfo } from '@message/context-info'
 import type { WaMessagePublishOptions } from '@message/types'
 import type { Proto } from '@proto'
 import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
@@ -166,6 +167,10 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
     readonly id?: string
     readonly expectedIdentity?: Uint8Array
     readonly subtype?: string
+    readonly contextInfo?: WaSendContextInfo
+    readonly quote?: WaIncomingMessageEvent | WaQuoteRef
+    readonly forward?: boolean | { readonly score?: number }
+    readonly mentions?: readonly string[]
 }
 
 export interface WaClearChatOptions {

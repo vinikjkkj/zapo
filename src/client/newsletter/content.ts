@@ -10,7 +10,7 @@ import type { Logger } from '@infra/log/types'
 import { NEWSLETTER_MEDIA_UPLOAD_PATHS, type NewsletterMediaKind } from '@media/constants'
 import type { WaMediaConn } from '@media/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
-import { isSendMediaMessage, resolveMessageTypeAttr } from '@message/content'
+import { isSendMediaMessage, isSendTextMessage, resolveMessageTypeAttr } from '@message/content'
 import type { WaSendMediaMessage, WaSendMessageContent } from '@message/types'
 import { proto, type Proto } from '@proto'
 import { base64ToBytes } from '@util/bytes'
@@ -203,6 +203,16 @@ export async function buildNewsletterMessageContent(
 ): Promise<WaNewsletterBuiltContent> {
     if (typeof content === 'string') {
         const message: Proto.IMessage = { conversation: content }
+        return {
+            kind: 'text',
+            plaintext: proto.Message.encode(message).finish(),
+            mediaType: null,
+            upload: null
+        }
+    }
+
+    if (isSendTextMessage(content)) {
+        const message: Proto.IMessage = { extendedTextMessage: { text: content.text } }
         return {
             kind: 'text',
             plaintext: proto.Message.encode(message).finish(),
