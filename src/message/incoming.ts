@@ -210,6 +210,67 @@ interface DecryptEncNodeResult {
     readonly error?: unknown
 }
 
+function processMsmsgEncNode(
+    node: BinaryNode,
+    encNode: BinaryNode,
+    senderJid: string | undefined,
+    options: WaIncomingMessageAckHandlerOptions
+): DecryptEncNodeResult {
+    try {
+        const payload = decodeNodeContentBase64OrBytes(encNode.content, 'message.enc')
+        const decoded = proto.MessageSecretMessage.decode(payload)
+        if (!decoded.encIv || !decoded.encPayload) {
+            options.logger.warn('msmsg payload missing encIv/encPayload', {
+                id: node.attrs.id,
+                from: node.attrs.from
+            })
+            options.emitUnhandledStanza?.({
+                rawNode: buildIncomingEventRawNode(node),
+                stanzaId: node.attrs.id,
+                chatJid: node.attrs.from,
+                stanzaType: node.attrs.type,
+                reason: 'message.msmsg.missing_payload'
+            })
+            return { success: false, encType: 'msmsg' }
+        }
+        const message: proto.IMessage = {
+            secretEncryptedMessage: {
+                encIv: decoded.encIv,
+                encPayload: decoded.encPayload
+            }
+        }
+        const chatJid = node.attrs.from
+        options.emitIncomingMessage?.({
+            rawNode: buildIncomingEventRawNode(node),
+            stanzaId: node.attrs.id,
+            chatJid,
+            stanzaType: node.attrs.type,
+            timestampSeconds: parseOptionalInt(node.attrs.t),
+            senderJid,
+            encryptionType: 'msmsg',
+            isGroupChat: chatJid ? isGroupJid(chatJid) : false,
+            isBroadcastChat: chatJid ? isBroadcastJid(chatJid) : false,
+            plaintext: payload,
+            message
+        })
+        return { success: true, encType: 'msmsg' }
+    } catch (error) {
+        options.logger.warn('failed to decode msmsg payload', {
+            id: node.attrs.id,
+            from: node.attrs.from,
+            message: toError(error).message
+        })
+        options.emitUnhandledStanza?.({
+            rawNode: buildIncomingEventRawNode(node),
+            stanzaId: node.attrs.id,
+            chatJid: node.attrs.from,
+            stanzaType: node.attrs.type,
+            reason: 'message.msmsg.decode_failed'
+        })
+        return { success: false, encType: 'msmsg', error }
+    }
+}
+
 async function decryptAndProcessEncNode(
     node: BinaryNode,
     encNode: BinaryNode,
@@ -364,6 +425,14 @@ export async function handleIncomingMessageAck(
                                 ciphertext
                             })
                     )
+                    break
+                }
+                case 'msmsg': {
+                    // Bot streaming chunk: payload is a MessageSecretMessage proto
+                    // (encIv + encPayload), not a Signal envelope. The actual
+                    // decryption uses the parent prompt's messageSecret and is
+                    // performed downstream by `tryDecryptBotChunk`.
+                    result = processMsmsgEncNode(node, child, senderJid, options)
                     break
                 }
                 default:

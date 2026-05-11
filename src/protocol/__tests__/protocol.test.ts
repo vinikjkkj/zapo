@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { AB_PROP_CONFIGS, resolveAbPropNameByCode } from '@protocol/abprops'
+import { WA_BOT_KNOWN_JIDS, WA_BOT_MSG_EDIT_TYPES, WA_BOT_NODE_ATTRS } from '@protocol/bot'
 import {
     getWaCompanionPlatformId,
     getWaMediaHkdfInfo,
@@ -20,6 +21,7 @@ import {
     canonicalizeSignalJid,
     canonicalizeSignalServer,
     getLoginIdentity,
+    isBotJid,
     isBroadcastJid,
     isGroupJid,
     isGroupOrBroadcastJid,
@@ -88,6 +90,15 @@ test('jid type detection and device handling', () => {
     assert.equal(isHostedServer('hosted'), true)
     assert.equal(isHostedServer('hosted.lid'), true)
     assert.equal(isHostedServer('lid'), false)
+
+    assert.equal(isBotJid('867051314767696@bot'), true)
+    assert.equal(isBotJid('867051314767696:0@bot'), true)
+    assert.equal(isBotJid('123@s.whatsapp.net'), false)
+    assert.equal(WA_BOT_KNOWN_JIDS.META_AI_FBID, '867051314767696@bot')
+    assert.equal(WA_BOT_KNOWN_JIDS.META_AI_PN, '13135550002@s.whatsapp.net')
+    assert.equal(WA_BOT_MSG_EDIT_TYPES.FIRST, 'first')
+    assert.equal(WA_BOT_MSG_EDIT_TYPES.LAST, 'last')
+    assert.equal(WA_BOT_NODE_ATTRS.EDIT_TARGET_ID, 'edit_target_id')
     assert.equal(isHostedDeviceId(99), true)
     assert.equal(isHostedDeviceId(3), false)
     assert.equal(isHostedDeviceJid('5511:99@hosted.lid'), true)

@@ -11,6 +11,7 @@ export const WA_DEFAULTS = Object.freeze({
     MSGR_SERVER: 'msgr',
     INTEROP_SERVER: 'interop',
     NEWSLETTER_SERVER: 'newsletter',
+    BOT_SERVER: 'bot',
     DEVICE_BROWSER: WA_BROWSERS.FIREFOX,
     DEVICE_PLATFORM: getWaCompanionPlatformId(WA_BROWSERS.FIREFOX),
     CHAT_SOCKET_URLS: ['wss://web.whatsapp.com/ws/chat', 'wss://web.whatsapp.com:5222/ws/chat'],

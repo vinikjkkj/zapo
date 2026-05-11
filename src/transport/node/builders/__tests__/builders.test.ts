@@ -6,6 +6,7 @@ import {
     WA_EMAIL_CONTEXTS,
     WA_EMAIL_TAGS,
     WA_EMAIL_XMLNS,
+    WA_MESSAGE_TAGS,
     WA_NODE_TAGS,
     WA_PRIVACY_CATEGORIES,
     WA_PRIVACY_TAGS,
@@ -24,6 +25,7 @@ import {
     buildGroupsDirtySyncIq,
     buildNewsletterMetadataSyncIq
 } from '@transport/node/builders/account-sync'
+import { buildBotListIq } from '@transport/node/builders/bot'
 import { buildChatstateNode } from '@transport/node/builders/chatstate'
 import {
     buildDeactivateCommunityIq,
@@ -1541,4 +1543,57 @@ test('newsletter fetch IQs build the right history/update stanzas', async () => 
             }),
         /before or after/
     )
+})
+
+test('group sender key message attaches a <bot> sidecar after <meta> for bot mentions', () => {
+    const participant = {
+        jid: '5511999999999:2@lid',
+        encType: 'msg' as const,
+        ciphertext: new Uint8Array([1, 2, 3])
+    }
+    const botSidecar = {
+        jid: '867051314767696@bot',
+        encType: 'pkmsg' as const,
+        ciphertext: new Uint8Array([4, 5, 6])
+    }
+    const metaNode = { tag: 'meta', attrs: { foo: 'bar' } }
+
+    const node = buildGroupSenderKeyMessageNode({
+        to: '123@g.us',
+        type: 'text',
+        id: 'g1',
+        phash: 'ph',
+        addressingMode: 'lid',
+        groupCiphertext: new Uint8Array([9, 9, 9]),
+        participants: [participant],
+        botParticipants: [botSidecar],
+        metaNode
+    })
+
+    const content = node.content as readonly BinaryNode[]
+    const tags = content.map((c) => c.tag)
+    const skmsgIndex = tags.indexOf(WA_MESSAGE_TAGS.ENC)
+    const metaIndex = tags.indexOf('meta')
+    const botIndex = tags.indexOf(WA_NODE_TAGS.BOT)
+    assert.ok(skmsgIndex >= 0 && metaIndex > skmsgIndex && botIndex > metaIndex)
+    const botEnvelope = content[botIndex]
+    assert.ok(Array.isArray(botEnvelope.content))
+    const botTo = botEnvelope.content[0]
+    assert.equal(botTo.tag, 'to')
+    assert.equal(botTo.attrs.jid, '867051314767696@bot')
+})
+
+test('bot list builder targets s.whatsapp.net with xmlns="bot"', () => {
+    const node = buildBotListIq()
+    assert.equal(node.tag, WA_NODE_TAGS.IQ)
+    assert.equal(node.attrs.type, 'get')
+    assert.equal(node.attrs.to, WA_DEFAULTS.HOST_DOMAIN)
+    assert.equal(node.attrs.xmlns, 'bot')
+    assert.ok(Array.isArray(node.content))
+    assert.equal(node.content[0].tag, 'bot')
+    assert.equal(node.content[0].attrs.v, '2')
+
+    const v3 = buildBotListIq('3')
+    assert.ok(Array.isArray(v3.content))
+    assert.equal(v3.content[0].attrs.v, '3')
 })

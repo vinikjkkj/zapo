@@ -25,6 +25,9 @@ type DirectMessageFanoutInput = {
 type GroupMessageFanoutInput = DirectMessageFanoutInput & {
     readonly phash?: string
     readonly addressingMode?: 'pn' | 'lid'
+    // `<bot>` sidecar for group bot mentions; direct 1:1 routes the bot
+    // device through `<participants>` instead.
+    readonly botParticipants?: readonly EncryptedParticipant[]
 }
 
 type GroupSenderKeyMessageInput = GroupMessageFanoutInput & {
@@ -89,6 +92,20 @@ function buildMessageAttrs(input: {
     return attrs
 }
 
+function buildEncryptedToNode(p: EncryptedParticipant, mediatype?: string): BinaryNode {
+    return {
+        tag: 'to',
+        attrs: { jid: p.jid },
+        content: [
+            {
+                tag: WA_MESSAGE_TAGS.ENC,
+                attrs: buildEncAttrs(p.encType, mediatype),
+                content: p.ciphertext
+            }
+        ]
+    }
+}
+
 function pushOptionalNodes(
     content: BinaryNode[],
     input: {
@@ -97,6 +114,8 @@ function pushOptionalNodes(
         readonly privacyTokenNode?: BinaryNode
         readonly metaNode?: BinaryNode
         readonly buttonAddonNode?: BinaryNode
+        readonly botParticipants?: readonly EncryptedParticipant[]
+        readonly mediatype?: string
     }
 ): void {
     if (input.deviceIdentity) {
@@ -108,6 +127,13 @@ function pushOptionalNodes(
     }
     if (input.metaNode) {
         content.push(input.metaNode)
+    }
+    if (input.botParticipants && input.botParticipants.length > 0) {
+        content.push({
+            tag: WA_NODE_TAGS.BOT,
+            attrs: {},
+            content: input.botParticipants.map((p) => buildEncryptedToNode(p, input.mediatype))
+        })
     }
     if (input.reportingNode) {
         content.push(input.reportingNode)
@@ -156,19 +182,7 @@ export function buildDirectMessageFanoutNode(input: GroupMessageFanoutInput): Bi
         {
             tag: WA_NODE_TAGS.PARTICIPANTS,
             attrs: {},
-            content: input.participants.map((participant) => ({
-                tag: 'to',
-                attrs: {
-                    jid: participant.jid
-                },
-                content: [
-                    {
-                        tag: WA_MESSAGE_TAGS.ENC,
-                        attrs: buildEncAttrs(participant.encType, input.mediatype),
-                        content: participant.ciphertext
-                    }
-                ]
-            }))
+            content: input.participants.map((p) => buildEncryptedToNode(p, input.mediatype))
         }
     ]
     pushOptionalNodes(content, input)
@@ -188,19 +202,7 @@ export function buildGroupSenderKeyMessageNode(input: GroupSenderKeyMessageInput
         content.push({
             tag: WA_NODE_TAGS.PARTICIPANTS,
             attrs: {},
-            content: input.participants.map((participant) => ({
-                tag: 'to',
-                attrs: {
-                    jid: participant.jid
-                },
-                content: [
-                    {
-                        tag: WA_MESSAGE_TAGS.ENC,
-                        attrs: buildEncAttrs(participant.encType, input.mediatype),
-                        content: participant.ciphertext
-                    }
-                ]
-            }))
+            content: input.participants.map((p) => buildEncryptedToNode(p, input.mediatype))
         })
     }
     content.push({

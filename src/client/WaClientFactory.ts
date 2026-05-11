@@ -5,6 +5,7 @@ import { WaConnectionManager } from '@client/connection/WaConnectionManager'
 import { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import { WaAbPropsCoordinator } from '@client/coordinators/WaAbPropsCoordinator'
 import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
+import { createBotCoordinator, type WaBotCoordinator } from '@client/coordinators/WaBotCoordinator'
 import {
     createBusinessCoordinator,
     type WaBusinessCoordinator
@@ -160,6 +161,7 @@ interface WaClientDependencies {
     readonly privacyCoordinator: WaPrivacyCoordinator
     readonly profileCoordinator: WaProfileCoordinator
     readonly businessCoordinator: WaBusinessCoordinator
+    readonly botCoordinator: WaBotCoordinator
     readonly emailCoordinator: WaEmailCoordinator
     readonly receiptQueue: WaReceiptQueue
     readonly connectionManager: WaConnectionManager
@@ -703,6 +705,14 @@ export function buildWaClientDependencies(input: {
         getCurrentSignedIdentity
     })
 
+    const botCoordinator = createBotCoordinator({
+        queryWithContext: runtime.queryWithContext,
+        buildMessageContent: async (content) =>
+            buildMediaMessageContent(mediaMessageBuildOptions, content),
+        sendMessage: (to, content, sendOptions) =>
+            messageDispatch.sendMessage(to, content, sendOptions ?? {})
+    })
+
     const appStateSync = new WaAppStateSyncClient({
         logger,
         query: runtime.query,
@@ -1173,6 +1183,7 @@ export function buildWaClientDependencies(input: {
         privacyCoordinator,
         profileCoordinator,
         businessCoordinator,
+        botCoordinator,
         emailCoordinator,
         receiptQueue,
         connectionManager,

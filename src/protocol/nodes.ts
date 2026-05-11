@@ -70,7 +70,9 @@ export const WA_NODE_TAGS = Object.freeze({
     PAUSED: 'paused',
     BIZ: 'biz',
     INTERACTIVE: 'interactive',
-    NATIVE_FLOW: 'native_flow'
+    NATIVE_FLOW: 'native_flow',
+    BOT: 'bot',
+    META: 'meta'
 } as const)
 
 export const WA_IQ_TYPES = Object.freeze({
@@ -98,5 +100,6 @@ export const WA_XMLNS = Object.freeze({
     XMPP_PING: 'urn:xmpp:ping',
     WHATSAPP_PING: 'w:p',
     ABPROPS: 'abt',
-    MEX: 'w:mex'
+    MEX: 'w:mex',
+    BOT: 'bot'
 } as const)

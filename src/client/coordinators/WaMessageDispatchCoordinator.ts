@@ -8,6 +8,7 @@ import { md5Bytes } from '@crypto/core/primitives'
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { ensureMessageSecret } from '@message'
+import { buildBotInvokeProtoCopy, extractInvokedBotJid, genBotMsgSecret } from '@message/bot'
 import {
     isSendMediaMessage,
     isSendTextMessage,
@@ -43,6 +44,7 @@ import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
 import {
+    isBotJid,
     isGroupJid,
     isLidJid,
     isNewsletterJid,
@@ -620,6 +622,73 @@ export class WaMessageDispatchCoordinator {
         return result
     }
 
+    // Returns null on any failure so the group send still goes out unchanged.
+    private async buildBotSidecarParticipant(message: Proto.IMessage): Promise<{
+        readonly jid: string
+        readonly encType: 'msg' | 'pkmsg'
+        readonly ciphertext: Uint8Array
+    } | null> {
+        const botJid = extractInvokedBotJid(message)
+        if (!botJid) return null
+
+        let address: SignalAddress
+        try {
+            address = parseSignalAddressFromJid(botJid)
+        } catch (error) {
+            this.logger.warn('bot sidecar: failed to parse bot jid', {
+                botJid,
+                message: toError(error).message
+            })
+            return null
+        }
+
+        let resolvedTargets: readonly SignalResolvedSessionTarget[]
+        try {
+            resolvedTargets = await this.sessionResolver.ensureSessionsBatch([botJid])
+        } catch (error) {
+            this.logger.warn('bot sidecar: signal session sync failed', {
+                botJid,
+                message: toError(error).message
+            })
+            return null
+        }
+        if (resolvedTargets.length === 0) {
+            this.logger.warn('bot sidecar: signal session not established', { botJid })
+            return null
+        }
+
+        // The bot seeds its streaming-response keys from this HKDF derivation.
+        const parentMessageSecret = message.messageContextInfo?.messageSecret
+        const botMessageSecret =
+            parentMessageSecret && parentMessageSecret.byteLength > 0
+                ? genBotMsgSecret(parentMessageSecret)
+                : undefined
+        const botCopy = buildBotInvokeProtoCopy(message, botMessageSecret)
+        const botPlaintext = await writeRandomPadMax16(proto.Message.encode(botCopy).finish())
+        try {
+            const [encrypted] = await this.signalProtocol.encryptMessagesBatch(
+                [{ address, plaintext: botPlaintext }],
+                resolvedTargets.map((target) => ({
+                    address: target.address,
+                    session: target.session
+                }))
+            )
+            if (!encrypted) return null
+            this.logger.debug('bot sidecar encrypted', { botJid, encType: encrypted.type })
+            return {
+                jid: botJid,
+                encType: encrypted.type,
+                ciphertext: encrypted.ciphertext
+            }
+        } catch (error) {
+            this.logger.warn('bot sidecar: encryption failed', {
+                botJid,
+                message: toError(error).message
+            })
+            return null
+        }
+    }
+
     private async publishGroupSenderKeyMessage(
         groupJid: string,
         message: Proto.IMessage,
@@ -678,6 +747,7 @@ export class WaMessageDispatchCoordinator {
             remoteJid: groupJid,
             context: 'group_sender_key'
         })
+        const botSidecar = await this.buildBotSidecarParticipant(message)
         const messageNode = buildGroupSenderKeyMessageNode({
             to: groupJid,
             type,
@@ -687,13 +757,15 @@ export class WaMessageDispatchCoordinator {
             addressingMode,
             groupCiphertext: groupCiphertext.ciphertext,
             participants: distributionParticipants,
-            deviceIdentity: shouldAttachDeviceIdentity
-                ? this.getEncodedSignedDeviceIdentity()
-                : undefined,
+            deviceIdentity:
+                shouldAttachDeviceIdentity || botSidecar?.encType === 'pkmsg'
+                    ? this.getEncodedSignedDeviceIdentity()
+                    : undefined,
             reportingNode: reportingArtifacts?.node ?? undefined,
             metaNode,
             buttonAddonNode,
-            mediatype
+            mediatype,
+            botParticipants: botSidecar ? [botSidecar] : undefined
         })
 
         const replayPayload: WaRetryReplayPayload = {
@@ -1101,18 +1173,23 @@ export class WaMessageDispatchCoordinator {
             encryptRequests,
             prefetchedSessions
         )
+        const isBotRecipient = isBotJid(recipientJid)
         const participants: {
             readonly jid: string
             readonly encType: 'msg' | 'pkmsg'
             readonly ciphertext: Uint8Array
-        }[] = new Array(participantRequests.length)
+        }[] = []
         for (let index = 0; index < participantRequests.length; index += 1) {
             const request = participantRequests[index]
-            participants[index] = {
+            const entry = {
                 jid: request.target.jid,
                 encType: encryptedParticipants[index].type,
                 ciphertext: encryptedParticipants[index].ciphertext
             }
+            // wa-web direct 1:1 to bot puts the bot device alongside self devices
+            // inside `<participants>`; the `<bot>` envelope is only used for group
+            // mentions (the sidecar copy) or for bot feedback / revoke flows.
+            participants.push(entry)
         }
 
         let shouldAttachDeviceIdentity = false
@@ -1133,16 +1210,18 @@ export class WaMessageDispatchCoordinator {
             context: 'direct_fanout'
         })
         let privacyTokenNode: BinaryNode | undefined
-        try {
-            privacyTokenNode =
-                (await this.privacyTokenDedup.run(`pt:${recipientUserJid}`, () =>
-                    this.resolvePrivacyTokenNode(recipientUserJid)
-                )) ?? undefined
-        } catch (error) {
-            this.logger.warn('privacy token resolution failed', {
-                to: recipientUserJid,
-                message: toError(error).message
-            })
+        if (!isBotRecipient) {
+            try {
+                privacyTokenNode =
+                    (await this.privacyTokenDedup.run(`pt:${recipientUserJid}`, () =>
+                        this.resolvePrivacyTokenNode(recipientUserJid)
+                    )) ?? undefined
+            } catch (error) {
+                this.logger.warn('privacy token resolution failed', {
+                    to: recipientUserJid,
+                    message: toError(error).message
+                })
+            }
         }
         const messageNode = buildDirectMessageFanoutNode({
             to: recipientJid,

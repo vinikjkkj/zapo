@@ -11,6 +11,7 @@ import type { WaAuthClient } from '@auth/WaAuthClient'
 import type { WaConnectionManager } from '@client/connection/WaConnectionManager'
 import type { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
+import type { WaBotCoordinator } from '@client/coordinators/WaBotCoordinator'
 import type { WaBusinessCoordinator } from '@client/coordinators/WaBusinessCoordinator'
 import type { WaEmailCoordinator } from '@client/coordinators/WaEmailCoordinator'
 import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator'
@@ -33,6 +34,7 @@ import type {
     WaClientEventMap,
     WaClientOptions,
     WaIncomingAddonEvent,
+    WaIncomingBotChunkEvent,
     WaIncomingMessageEvent,
     WaIncomingNodeHandlerRegistration,
     WaIncomingProtocolMessageEvent,
@@ -51,6 +53,8 @@ import {
     resolvePollOptionNames,
     shouldUseAddonAdditionalData
 } from '@message/addon-crypto'
+import { decryptBotChunk } from '@message/bot'
+import { unwrapMessage } from '@message/content'
 import type {
     WaMessagePublishResult,
     WaSendMessageContent,
@@ -60,8 +64,16 @@ import type {
 } from '@message/types'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
-import { WA_APP_STATE_COLLECTION_STATES, WA_DEFAULTS } from '@protocol/constants'
-import { normalizeDeviceJid, parsePhoneJid, toUserJid } from '@protocol/jid'
+import {
+    WA_APP_STATE_COLLECTION_STATES,
+    WA_BOT_MSG_EDIT_TYPES,
+    WA_BOT_NODE_ATTRS,
+    WA_DEFAULTS,
+    WA_META_NODE_ATTRS_BOT,
+    WA_NODE_TAGS,
+    type WaBotMsgEditType
+} from '@protocol/constants'
+import { isBotJid, normalizeDeviceJid, parsePhoneJid, toUserJid } from '@protocol/jid'
 import { WA_LOGOUT_REASONS, type WaLogoutReason } from '@protocol/stream'
 import type { SignalDeviceSyncApi, SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
@@ -90,6 +102,7 @@ import {
     buildPresenceSubscribeNode,
     type BuildPresenceSubscribeNodeInput
 } from '@transport/node/builders/presence'
+import { findNodeChild } from '@transport/node/helpers'
 import { assertIqResult, queryWithContext as queryNodeWithContext } from '@transport/node/query'
 import type { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import type { WaNodeTransport } from '@transport/node/WaNodeTransport'
@@ -137,6 +150,7 @@ export class WaClient extends EventEmitter {
     public readonly privacyCoordinator!: WaPrivacyCoordinator
     public readonly profileCoordinator!: WaProfileCoordinator
     public readonly businessCoordinator!: WaBusinessCoordinator
+    public readonly botCoordinator!: WaBotCoordinator
     public readonly emailCoordinator!: WaEmailCoordinator
     private readonly passiveTasks!: WaPassiveTasksCoordinator
     private readonly keepAlive!: WaKeepAlive
@@ -352,6 +366,16 @@ export class WaClient extends EventEmitter {
             if (this.options.addons?.autoDecrypt && event.message) {
                 void this.tryDecryptAddon(event).catch((err) => {
                     this.logger.warn('addon auto-decrypt failed', {
+                        id: event.stanzaId,
+                        message: toError(err).message
+                    })
+                })
+            }
+            // Decode unconditionally — chunks whose parent prompt we never sent
+            // are skipped by the secret-store lookup downstream.
+            if (event.message) {
+                void this.tryDecryptBotChunk(event).catch((err) => {
+                    this.logger.warn('bot chunk auto-decrypt failed', {
                         id: event.stanzaId,
                         message: toError(err).message
                     })
@@ -750,6 +774,9 @@ export class WaClient extends EventEmitter {
     public get business(): WaBusinessCoordinator {
         return this.businessCoordinator
     }
+    public get bot(): WaBotCoordinator {
+        return this.botCoordinator
+    }
     public get email(): WaEmailCoordinator {
         return this.emailCoordinator
     }
@@ -1046,6 +1073,136 @@ export class WaClient extends EventEmitter {
             raw: message
         }
         this.emit('message_addon', addonEvent)
+    }
+
+    private async tryDecryptBotChunk(event: WaIncomingMessageEvent): Promise<void> {
+        const message = event.message
+        if (!message) return
+
+        const inner = unwrapMessage(message)
+        const sec = inner.secretEncryptedMessage
+        if (!sec || !sec.encIv || !sec.encPayload) return
+
+        const botNode = findNodeChild(event.rawNode, WA_NODE_TAGS.BOT)
+        if (!botNode) return
+
+        const metaNode = findNodeChild(event.rawNode, WA_NODE_TAGS.META)
+        // msmsg chunks omit targetMessageKey; the prompt id lives in <meta target_id>
+        const targetMessageId =
+            sec.targetMessageKey?.id ?? metaNode?.attrs[WA_META_NODE_ATTRS_BOT.TARGET_ID]
+        if (!targetMessageId) return
+
+        const editAttr = botNode.attrs[WA_BOT_NODE_ATTRS.EDIT]
+        const editType = (
+            editAttr === WA_BOT_MSG_EDIT_TYPES.FIRST ||
+            editAttr === WA_BOT_MSG_EDIT_TYPES.INNER ||
+            editAttr === WA_BOT_MSG_EDIT_TYPES.LAST ||
+            editAttr === WA_BOT_MSG_EDIT_TYPES.FULL
+                ? editAttr
+                : WA_BOT_MSG_EDIT_TYPES.FULL
+        ) as WaBotMsgEditType
+        const editTargetId = botNode.attrs[WA_BOT_NODE_ATTRS.EDIT_TARGET_ID] || undefined
+
+        const useEditTargetSalt =
+            editType === WA_BOT_MSG_EDIT_TYPES.INNER || editType === WA_BOT_MSG_EDIT_TYPES.LAST
+        const saltId = useEditTargetSalt ? editTargetId : event.stanzaId
+        if (!saltId) {
+            this.logger.debug('bot chunk missing salt id', {
+                id: event.stanzaId,
+                editType,
+                hasEditTargetId: !!editTargetId
+            })
+            return
+        }
+
+        const senderJid = event.senderJid
+        if (!senderJid) {
+            this.logger.debug('bot chunk missing sender jid', { id: event.stanzaId })
+            return
+        }
+
+        const metaTargetSenderJid = metaNode?.attrs[WA_META_NODE_ATTRS_BOT.TARGET_SENDER_JID]
+        const credentials = this.authClient.getCurrentCredentials()
+        const isFbidBotChat = event.chatJid ? isBotJid(event.chatJid) : false
+        // FBID bot (`*@bot`) keys on user LID; legacy PN bot keys on user PN
+        const meFallbackJid = isFbidBotChat
+            ? (credentials?.meLid ?? credentials?.meJid)
+            : credentials?.meJid
+        const targetSenderJid = metaTargetSenderJid
+            ? toUserJid(metaTargetSenderJid)
+            : meFallbackJid
+              ? toUserJid(meFallbackJid)
+              : undefined
+        if (!targetSenderJid) {
+            this.logger.debug('bot chunk missing target sender jid (no me jid)', {
+                id: event.stanzaId,
+                isFbidBotChat
+            })
+            return
+        }
+
+        const parentEntry = await resolveParentMessageSecret(
+            targetMessageId,
+            this.messageSecretStore,
+            this.messageStore
+        )
+        if (!parentEntry) {
+            this.logger.debug('bot chunk parent message secret not found', {
+                id: event.stanzaId,
+                targetId: targetMessageId
+            })
+            return
+        }
+
+        let plaintext: Uint8Array
+        try {
+            plaintext = decryptBotChunk({
+                parentMessageSecret: parentEntry.secret,
+                saltId,
+                targetSenderJid,
+                authorJid: toUserJid(senderJid),
+                encIv: sec.encIv,
+                encPayload: sec.encPayload
+            })
+        } catch (error) {
+            this.logger.warn('failed to decrypt bot chunk', {
+                id: event.stanzaId,
+                targetId: targetMessageId,
+                editType,
+                message: toError(error).message
+            })
+            return
+        }
+
+        let decoded: Proto.IMessage
+        try {
+            // msmsg payloads are not PKCS7-padded (unlike Signal messages);
+            // wa-web decodes the gcm plaintext directly as a proto Message.
+            decoded = proto.Message.decode(plaintext)
+        } catch (error) {
+            this.logger.warn('failed to decode decrypted bot chunk', {
+                id: event.stanzaId,
+                targetId: targetMessageId,
+                message: toError(error).message
+            })
+            return
+        }
+
+        const chunkEvent: WaIncomingBotChunkEvent = {
+            rawNode: event.rawNode,
+            stanzaId: event.stanzaId,
+            chatJid: event.chatJid,
+            stanzaType: event.stanzaType,
+            senderJid,
+            targetMessageId,
+            editType,
+            editTargetId,
+            saltId,
+            plaintext,
+            message: decoded,
+            raw: message
+        }
+        this.emit('message_bot_chunk', chunkEvent)
     }
 
     private tryEnterIncomingHandler(): boolean {

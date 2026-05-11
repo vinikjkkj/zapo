@@ -73,6 +73,18 @@ export {
 export type { WaPrivacyCategory, WaPrivacySettingName, WaPrivacyValue } from '@protocol/privacy'
 export { WA_DEFAULTS } from '@protocol/defaults'
 export {
+    WA_BIZ_BOT_TYPES,
+    WA_BOT_DEFAULT_CAPABILITIES,
+    WA_BOT_HKDF_INFO,
+    WA_BOT_KNOWN_JIDS,
+    WA_BOT_MSG_BODY_TYPES,
+    WA_BOT_MSG_EDIT_TYPES,
+    WA_BOT_MSG_SECRET_BYTES,
+    WA_BOT_NODE_ATTRS,
+    WA_META_NODE_ATTRS_BOT
+} from '@protocol/bot'
+export type { WaBizBotType, WaBotMsgBodyType, WaBotMsgEditType } from '@protocol/bot'
+export {
     WA_EMAIL_CONTEXTS,
     WA_EMAIL_ERROR_CODES,
     WA_EMAIL_LIMITS,

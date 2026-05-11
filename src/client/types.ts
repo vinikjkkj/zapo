@@ -11,6 +11,7 @@ import type { WaDecodedAddon } from '@message/addon-crypto'
 import type { WaQuoteRef, WaSendContextInfo } from '@message/context-info'
 import type { WaMessagePublishOptions } from '@message/types'
 import type { Proto } from '@proto'
+import type { WaBotMsgEditType } from '@protocol/bot'
 import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
 import type { WaStore } from '@store/types'
 import type { ChatstateMedia, ChatstateState } from '@transport/node/builders/chatstate'
@@ -273,6 +274,17 @@ export interface WaIncomingAddonEvent extends WaIncomingBaseEvent {
     readonly targetMessageId: string
     readonly senderJid: string
     readonly decrypted: WaDecodedAddon
+    readonly raw: Proto.IMessage
+}
+
+export interface WaIncomingBotChunkEvent extends WaIncomingBaseEvent {
+    readonly senderJid: string
+    readonly targetMessageId: string
+    readonly editType: WaBotMsgEditType
+    readonly editTargetId?: string
+    readonly saltId: string
+    readonly plaintext: Uint8Array
+    readonly message: Proto.IMessage
     readonly raw: Proto.IMessage
 }
 
@@ -586,6 +598,7 @@ export interface WaClientEventMap {
     }) => void
     readonly message: (event: WaIncomingMessageEvent) => void
     readonly message_addon: (event: WaIncomingAddonEvent) => void
+    readonly message_bot_chunk: (event: WaIncomingBotChunkEvent) => void
     readonly message_protocol: (event: WaIncomingProtocolMessageEvent) => void
     readonly message_receipt: (event: WaIncomingReceiptEvent) => void
     readonly newsletter_reaction: (event: WaIncomingNewsletterReactionEvent) => void
