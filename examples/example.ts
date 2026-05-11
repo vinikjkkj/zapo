@@ -156,6 +156,10 @@ async function startSession(client: WaClient): Promise<void> {
         })
         console.log(`[incoming_message] pong enviado para ${to}`)
     })
+    client.on('message_bot_chunk', (event) => {
+        console.log('[message_bot_chunk] chunk de mensagens recebida:')
+        console.dir(event, { depth: null })
+    })
     client.on('group_event', (event) => {
         console.log('[group_event] evento de grupo recebido:')
         console.dir(event, { depth: null })

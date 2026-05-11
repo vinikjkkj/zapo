@@ -305,11 +305,11 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
             const rawMessageSecret = resolveStore<WaMessageSecretStore>(
                 id,
                 backends,
-                cacheProviders.messageSecret ?? 'none',
+                cacheProviders.messageSecret ?? 'memory',
                 'messageSecret',
                 'caches',
                 () =>
-                    cacheProviders.messageSecret === 'memory'
+                    cacheProviders.messageSecret === 'memory' || !cacheProviders.messageSecret
                         ? new WaMessageSecretMemoryStore(cacheTtlsMs.messageSecret, {
                               maxSecrets: ml.messageSecrets
                           })

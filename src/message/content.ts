@@ -109,7 +109,11 @@ export function needsSecretPersistence(message: Proto.IMessage): boolean {
         msg.pollCreationMessageV4 ||
         msg.pollCreationMessageV5 ||
         msg.pollCreationMessageV6 ||
-        msg.eventMessage
+        msg.eventMessage ||
+        // botMetadata sits on the top-level MessageContextInfo even when the
+        // prompt body is wrapped (e.g. in `botInvokeMessage`); check both.
+        message.messageContextInfo?.botMetadata ||
+        msg.messageContextInfo?.botMetadata
     )
 }
 

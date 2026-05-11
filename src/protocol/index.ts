@@ -4,6 +4,7 @@ export {
     canonicalizeSignalJid,
     canonicalizeSignalServer,
     getLoginIdentity,
+    isBotJid,
     isHostedDeviceId,
     isHostedDeviceJid,
     isHostedServer,

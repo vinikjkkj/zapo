@@ -10,7 +10,8 @@ const KNOWN_SERVERS: Record<string, string> = {
     [WA_DEFAULTS.HOSTED_LID_SERVER]: WA_DEFAULTS.HOSTED_LID_SERVER,
     [WA_DEFAULTS.MSGR_SERVER]: WA_DEFAULTS.MSGR_SERVER,
     [WA_DEFAULTS.INTEROP_SERVER]: WA_DEFAULTS.INTEROP_SERVER,
-    [WA_DEFAULTS.NEWSLETTER_SERVER]: WA_DEFAULTS.NEWSLETTER_SERVER
+    [WA_DEFAULTS.NEWSLETTER_SERVER]: WA_DEFAULTS.NEWSLETTER_SERVER,
+    [WA_DEFAULTS.BOT_SERVER]: WA_DEFAULTS.BOT_SERVER
 }
 
 /**
@@ -71,6 +72,10 @@ function isJidType(jid: string, type: string): boolean {
 
 export function isLidJid(jid: string): boolean {
     return isJidType(jid, WA_DEFAULTS.LID_SERVER)
+}
+
+export function isBotJid(jid: string): boolean {
+    return isJidType(jid, WA_DEFAULTS.BOT_SERVER)
 }
 
 export function isGroupJid(jid: string): boolean {

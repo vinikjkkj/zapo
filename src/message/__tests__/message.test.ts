@@ -13,9 +13,20 @@ import {
     isNegativeAckNode,
     isRetryableNegativeAck
 } from '@message/ack'
-import { decryptAddonPayload, encryptAddonPayload } from '@message/addon-crypto'
+import {
+    buildAddonAdditionalData,
+    decryptAddonPayload,
+    encryptAddonPayload
+} from '@message/addon-crypto'
+import {
+    attachBotMetadata,
+    decryptBotChunk,
+    deriveBotChunkKey,
+    genBotMsgSecret
+} from '@message/bot'
 import {
     isSendMediaMessage,
+    needsSecretPersistence,
     resolveButtonAddonKind,
     resolveEditAttr,
     resolveEncMediaType,
@@ -381,6 +392,147 @@ test('addon crypto helpers encrypt/decrypt payloads and validate aad', async () 
             }),
         /addon iv must be 12 bytes/
     )
+})
+
+test('bot message-secret derivation matches HKDF("Bot Message") and is deterministic', () => {
+    const parent = new Uint8Array(32).fill(11)
+    const left = genBotMsgSecret(parent)
+    const right = genBotMsgSecret(parent)
+    assert.equal(left.byteLength, 32)
+    assert.deepEqual(left, right)
+    const otherParent = new Uint8Array(32).fill(12)
+    assert.notDeepEqual(left, genBotMsgSecret(otherParent))
+    assert.throws(() => genBotMsgSecret(new Uint8Array(31)), /must be 32 bytes/)
+})
+
+test('bot chunk key derivation depends on salt id, target sender, and author', () => {
+    const botMsgSecret = new Uint8Array(32).fill(33)
+    const base = {
+        botMsgSecret,
+        saltId: 'CHUNK-1',
+        targetSenderJid: '867051314767696@bot',
+        authorJid: '551100000000@s.whatsapp.net'
+    } as const
+    const a = deriveBotChunkKey(base)
+    const b = deriveBotChunkKey(base)
+    assert.equal(a.byteLength, 32)
+    assert.deepEqual(a, b)
+    assert.notDeepEqual(a, deriveBotChunkKey({ ...base, saltId: 'CHUNK-2' }))
+    assert.notDeepEqual(a, deriveBotChunkKey({ ...base, targetSenderJid: '1273596044787272@bot' }))
+    assert.notDeepEqual(a, deriveBotChunkKey({ ...base, authorJid: '551199999999@s.whatsapp.net' }))
+    assert.throws(() => deriveBotChunkKey({ ...base, saltId: '' }), /salt id/)
+})
+
+test('decryptBotChunk reverses an HKDF/AES-GCM round trip', async () => {
+    const { aesGcmEncrypt } = await import('@crypto')
+    const parent = new Uint8Array(32).fill(7)
+    const saltId = 'CHUNK-1'
+    const targetSenderJid = '867051314767696@bot'
+    const authorJid = '551100000000@s.whatsapp.net'
+    const botMsgSecret = genBotMsgSecret(parent)
+    const key = deriveBotChunkKey({ botMsgSecret, saltId, targetSenderJid, authorJid })
+    const iv = new Uint8Array(12).fill(2)
+    const plaintext = new Uint8Array([1, 2, 3, 4, 5])
+    const aad = buildAddonAdditionalData(saltId, authorJid)
+    const ciphertext = aesGcmEncrypt(key, iv, plaintext, aad)
+
+    const decrypted = decryptBotChunk({
+        parentMessageSecret: parent,
+        saltId,
+        targetSenderJid,
+        authorJid,
+        encIv: iv,
+        encPayload: ciphertext
+    })
+    assert.deepEqual(decrypted, plaintext)
+
+    assert.throws(
+        () =>
+            decryptBotChunk({
+                parentMessageSecret: parent,
+                saltId: 'OTHER',
+                targetSenderJid,
+                authorJid,
+                encIv: iv,
+                encPayload: ciphertext
+            }),
+        /authenticate|auth|tag|decrypt/i
+    )
+})
+
+test('needsSecretPersistence flags polls, events, and bot prompts (with botMetadata)', () => {
+    assert.equal(needsSecretPersistence({ conversation: 'plain text' }), false)
+    assert.equal(needsSecretPersistence({ pollCreationMessage: {} }), true)
+    assert.equal(needsSecretPersistence({ pollCreationMessageV3: {} }), true)
+    assert.equal(needsSecretPersistence({ eventMessage: {} }), true)
+
+    // bot prompt: presence of botMetadata signals we'll need the secret to
+    // decrypt the bot's streaming reply later
+    assert.equal(
+        needsSecretPersistence({
+            conversation: 'oi meta',
+            messageContextInfo: { botMetadata: { invokerJid: '5511@lid' } }
+        }),
+        true
+    )
+
+    // botMetadata survives unwrap of deviceSentMessage
+    assert.equal(
+        needsSecretPersistence({
+            deviceSentMessage: {
+                destinationJid: 'x@bot',
+                message: {
+                    conversation: 'oi',
+                    messageContextInfo: { botMetadata: { personaId: 'p' } }
+                }
+            }
+        }),
+        true
+    )
+
+    // botInvokeMessage wraps the prompt body but botMetadata stays at the
+    // top-level messageContextInfo; checker must look at both levels
+    assert.equal(
+        needsSecretPersistence({
+            messageContextInfo: { botMetadata: { invokerJid: '5511@lid' } },
+            botInvokeMessage: {
+                message: {
+                    extendedTextMessage: { text: '@bot oi' }
+                }
+            }
+        }),
+        true
+    )
+})
+
+test('attachBotMetadata sets MessageContextInfo.botMetadata fields', () => {
+    const base = { conversation: 'hi' }
+    const noop = attachBotMetadata(base, {})
+    assert.equal(noop, base)
+
+    const enriched = attachBotMetadata(base, {
+        personaId: 'p-meta',
+        invokerJid: '5511000000000@lid'
+    })
+    assert.equal(enriched.conversation, 'hi')
+    assert.equal(enriched.messageContextInfo?.botMetadata?.personaId, 'p-meta')
+    assert.equal(enriched.messageContextInfo?.botMetadata?.invokerJid, '5511000000000@lid')
+
+    const withCaps = attachBotMetadata(base, { capabilities: [1, 2, 3] })
+    assert.deepEqual(
+        withCaps.messageContextInfo?.botMetadata?.capabilityMetadata?.capabilities,
+        [1, 2, 3]
+    )
+
+    const preserved = attachBotMetadata(
+        {
+            conversation: 'hi',
+            messageContextInfo: { messageSecret: new Uint8Array(32).fill(1) }
+        },
+        { personaId: 'x' }
+    )
+    assert.deepEqual(preserved.messageContextInfo?.messageSecret, new Uint8Array(32).fill(1))
+    assert.equal(preserved.messageContextInfo?.botMetadata?.personaId, 'x')
 })
 
 test('computeDeviceKeyHash produces deterministic 8-byte hash from identity keys', async () => {
