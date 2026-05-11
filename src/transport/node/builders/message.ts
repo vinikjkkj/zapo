@@ -124,23 +124,23 @@ export function buildButtonAddonNode(kind: WaButtonAddonKind): BinaryNode {
     const inner: BinaryNode =
         kind === 'list'
             ? {
-                  tag: 'list',
+                  tag: WA_NODE_TAGS.LIST,
                   attrs: { type: 'product_list', v: '2' },
                   content: undefined
               }
             : {
-                  tag: 'interactive',
-                  attrs: { type: 'native_flow', v: '1' },
+                  tag: WA_NODE_TAGS.INTERACTIVE,
+                  attrs: { type: WA_NODE_TAGS.NATIVE_FLOW, v: '1' },
                   content: [
                       {
-                          tag: 'native_flow',
+                          tag: WA_NODE_TAGS.NATIVE_FLOW,
                           attrs: { v: '9', name: 'mixed' },
                           content: undefined
                       }
                   ]
               }
     return {
-        tag: 'biz',
+        tag: WA_NODE_TAGS.BIZ,
         attrs: {},
         content: [inner]
     }

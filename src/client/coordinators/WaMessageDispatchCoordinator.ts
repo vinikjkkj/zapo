@@ -370,6 +370,9 @@ export class WaMessageDispatchCoordinator {
         const plaintext = await writeRandomPadMax16(proto.Message.encode(messageWithIcdc).finish())
         const buttonAddonKind = resolveButtonAddonKind(messageWithIcdc)
         const buttonAddonNode = buttonAddonKind ? buildButtonAddonNode(buttonAddonKind) : undefined
+        // when a <biz> companion is attached the stanza must advertise type=text and
+        // omit enc.mediatype; sending type=media + mediatype=list/button alongside the
+        // companion is rejected by the server as SMAX_INVALID (479).
         const type = buttonAddonKind ? 'text' : resolveMessageTypeAttr(messageWithIcdc)
         const edit = resolveEditAttr(messageWithIcdc, sendOptions.subtype) ?? undefined
         const mediatype = buttonAddonKind

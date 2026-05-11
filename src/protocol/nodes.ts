@@ -67,7 +67,10 @@ export const WA_NODE_TAGS = Object.freeze({
     PRESENCE: 'presence',
     CHATSTATE: 'chatstate',
     COMPOSING: 'composing',
-    PAUSED: 'paused'
+    PAUSED: 'paused',
+    BIZ: 'biz',
+    INTERACTIVE: 'interactive',
+    NATIVE_FLOW: 'native_flow'
 } as const)
 
 export const WA_IQ_TYPES = Object.freeze({
