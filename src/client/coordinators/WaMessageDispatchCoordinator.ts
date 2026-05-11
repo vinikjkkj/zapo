@@ -12,6 +12,7 @@ import {
     isSendMediaMessage,
     isSendTextMessage,
     needsSecretPersistence,
+    resolveButtonAddonKind,
     resolveEditAttr,
     resolveEncMediaType,
     resolveMessageTypeAttr,
@@ -65,6 +66,7 @@ import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { encodeBinaryNode } from '@transport/binary'
 import {
+    buildButtonAddonNode,
     buildDirectMessageFanoutNode,
     buildGroupSenderKeyMessageNode,
     buildMetaNode
@@ -366,9 +368,13 @@ export class WaMessageDispatchCoordinator {
         )
 
         const plaintext = await writeRandomPadMax16(proto.Message.encode(messageWithIcdc).finish())
-        const type = resolveMessageTypeAttr(messageWithIcdc)
+        const buttonAddonKind = resolveButtonAddonKind(messageWithIcdc)
+        const buttonAddonNode = buttonAddonKind ? buildButtonAddonNode(buttonAddonKind) : undefined
+        const type = buttonAddonKind ? 'text' : resolveMessageTypeAttr(messageWithIcdc)
         const edit = resolveEditAttr(messageWithIcdc, sendOptions.subtype) ?? undefined
-        const mediatype = resolveEncMediaType(messageWithIcdc) ?? undefined
+        const mediatype = buttonAddonKind
+            ? undefined
+            : (resolveEncMediaType(messageWithIcdc) ?? undefined)
         const metaAttrs = resolveMetaAttrs(messageWithIcdc)
         const metaNode = metaAttrs ? buildMetaNode(metaAttrs as Record<string, string>) : undefined
 
@@ -383,7 +389,8 @@ export class WaMessageDispatchCoordinator {
                       {},
                       edit,
                       mediatype,
-                      metaNode
+                      metaNode,
+                      buttonAddonNode
                   )
                 : await this.publishGroupSenderKeyMessage(
                       recipientJid,
@@ -394,7 +401,8 @@ export class WaMessageDispatchCoordinator {
                       {},
                       edit,
                       mediatype,
-                      metaNode
+                      metaNode,
+                      buttonAddonNode
                   )
             : await this.publishDirectSignalMessageWithFanout(
                   toUserJid(recipientJid),
@@ -404,7 +412,8 @@ export class WaMessageDispatchCoordinator {
                   sendOptions,
                   edit,
                   mediatype,
-                  metaNode
+                  metaNode,
+                  buttonAddonNode
               )
         return upload ? { ...publishResult, upload } : publishResult
     }
@@ -459,7 +468,8 @@ export class WaMessageDispatchCoordinator {
         retryContext: GroupSendRetryContext = {},
         edit?: string,
         mediatype?: string,
-        metaNode?: BinaryNode
+        metaNode?: BinaryNode,
+        buttonAddonNode?: BinaryNode
     ): Promise<WaMessagePublishResult> {
         const sendOptions = await this.withResolvedMessageId(options)
         const meJid = this.requireCurrentMeJid('sendMessage')
@@ -545,6 +555,7 @@ export class WaMessageDispatchCoordinator {
                 : undefined,
             reportingNode: reportingArtifacts?.node ?? undefined,
             metaNode,
+            buttonAddonNode,
             mediatype
         })
         const replayPayload: WaRetryReplayPayload = {
@@ -599,7 +610,8 @@ export class WaMessageDispatchCoordinator {
                 },
                 edit,
                 mediatype,
-                metaNode
+                metaNode,
+                buttonAddonNode
             )
         }
         return result
@@ -614,7 +626,8 @@ export class WaMessageDispatchCoordinator {
         retryContext: GroupSendRetryContext = {},
         edit?: string,
         mediatype?: string,
-        metaNode?: BinaryNode
+        metaNode?: BinaryNode,
+        buttonAddonNode?: BinaryNode
     ): Promise<WaMessagePublishResult> {
         const sendOptions = await this.withResolvedMessageId(options)
         const meJid = this.requireCurrentMeJid('sendMessage')
@@ -676,6 +689,7 @@ export class WaMessageDispatchCoordinator {
                 : undefined,
             reportingNode: reportingArtifacts?.node ?? undefined,
             metaNode,
+            buttonAddonNode,
             mediatype
         })
 
@@ -748,7 +762,8 @@ export class WaMessageDispatchCoordinator {
                 },
                 edit,
                 mediatype,
-                metaNode
+                metaNode,
+                buttonAddonNode
             )
         }
         return result
@@ -959,7 +974,8 @@ export class WaMessageDispatchCoordinator {
         options: WaSendMessageOptions,
         edit?: string,
         mediatype?: string,
-        metaNode?: BinaryNode
+        metaNode?: BinaryNode,
+        buttonAddonNode?: BinaryNode
     ): Promise<WaMessagePublishResult> {
         const sendOptions = await this.withResolvedMessageId(options)
         const meJid = this.requireCurrentMeJid('sendMessage')
@@ -1135,6 +1151,7 @@ export class WaMessageDispatchCoordinator {
             reportingNode: reportingArtifacts?.node ?? undefined,
             privacyTokenNode,
             metaNode,
+            buttonAddonNode,
             mediatype
         })
 

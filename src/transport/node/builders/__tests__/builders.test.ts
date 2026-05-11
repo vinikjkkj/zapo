@@ -50,6 +50,7 @@ import {
     buildMembershipRequestsActionIq
 } from '@transport/node/builders/group'
 import {
+    buildButtonAddonNode,
     buildDirectMessageFanoutNode,
     buildGroupRetryMessageNode,
     buildGroupSenderKeyMessageNode,
@@ -570,6 +571,38 @@ test('message builders create fanout nodes and validate participant requirements
         throw new Error('expected retry receipt content array')
     }
     assert.equal(inboundRetry.content[0].attrs.t, '10')
+
+    const listAddon = buildButtonAddonNode('list')
+    assert.equal(listAddon.tag, 'biz')
+    if (!Array.isArray(listAddon.content)) throw new Error('expected biz children')
+    assert.equal(listAddon.content[0].tag, 'list')
+    assert.equal(listAddon.content[0].attrs.type, 'product_list')
+    assert.equal(listAddon.content[0].attrs.v, '2')
+
+    const interactiveAddon = buildButtonAddonNode('interactive')
+    assert.equal(interactiveAddon.tag, 'biz')
+    if (!Array.isArray(interactiveAddon.content)) throw new Error('expected biz children')
+    const interactiveChild = interactiveAddon.content[0]
+    assert.equal(interactiveChild.tag, 'interactive')
+    assert.equal(interactiveChild.attrs.type, 'native_flow')
+    assert.equal(interactiveChild.attrs.v, '1')
+    if (!Array.isArray(interactiveChild.content)) {
+        throw new Error('expected native_flow child')
+    }
+    assert.equal(interactiveChild.content[0].tag, 'native_flow')
+    assert.equal(interactiveChild.content[0].attrs.name, 'mixed')
+
+    const fanoutWithAddon = buildDirectMessageFanoutNode({
+        to: '5511@s.whatsapp.net',
+        type: 'text',
+        id: 'btn-1',
+        participants: [participant],
+        buttonAddonNode: interactiveAddon
+    })
+    const addonChild = Array.isArray(fanoutWithAddon.content)
+        ? fanoutWithAddon.content.find((child) => child.tag === 'biz')
+        : null
+    assert.ok(addonChild)
 })
 
 test('privacy token builders create iq and message token nodes', () => {

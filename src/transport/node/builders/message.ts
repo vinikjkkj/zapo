@@ -1,3 +1,4 @@
+import type { WaButtonAddonKind } from '@message/content'
 import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NODE_TAGS } from '@protocol/constants'
 import type { BinaryNode } from '@transport/types'
 
@@ -17,6 +18,7 @@ type DirectMessageFanoutInput = {
     readonly reportingNode?: BinaryNode
     readonly privacyTokenNode?: BinaryNode
     readonly metaNode?: BinaryNode
+    readonly buttonAddonNode?: BinaryNode
     readonly mediatype?: string
 }
 
@@ -94,6 +96,7 @@ function pushOptionalNodes(
         readonly reportingNode?: BinaryNode
         readonly privacyTokenNode?: BinaryNode
         readonly metaNode?: BinaryNode
+        readonly buttonAddonNode?: BinaryNode
     }
 ): void {
     if (input.deviceIdentity) {
@@ -111,6 +114,35 @@ function pushOptionalNodes(
     }
     if (input.privacyTokenNode) {
         content.push(input.privacyTokenNode)
+    }
+    if (input.buttonAddonNode) {
+        content.push(input.buttonAddonNode)
+    }
+}
+
+export function buildButtonAddonNode(kind: WaButtonAddonKind): BinaryNode {
+    const inner: BinaryNode =
+        kind === 'list'
+            ? {
+                  tag: 'list',
+                  attrs: { type: 'product_list', v: '2' },
+                  content: undefined
+              }
+            : {
+                  tag: 'interactive',
+                  attrs: { type: 'native_flow', v: '1' },
+                  content: [
+                      {
+                          tag: 'native_flow',
+                          attrs: { v: '9', name: 'mixed' },
+                          content: undefined
+                      }
+                  ]
+              }
+    return {
+        tag: 'biz',
+        attrs: {},
+        content: [inner]
     }
 }
 

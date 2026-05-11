@@ -16,6 +16,7 @@ import {
 import { decryptAddonPayload, encryptAddonPayload } from '@message/addon-crypto'
 import {
     isSendMediaMessage,
+    resolveButtonAddonKind,
     resolveEditAttr,
     resolveEncMediaType,
     resolveMessageTypeAttr,
@@ -93,6 +94,35 @@ test('content helpers detect media payload and resolve message type', () => {
             ephemeralMessage: { message: { viewOnceMessage: { message: { imageMessage: {} } } } }
         }),
         'media'
+    )
+})
+
+test('resolveButtonAddonKind classifies list/interactive incl. documentWithCaption wrap', () => {
+    assert.equal(resolveButtonAddonKind({ listMessage: {} }), 'list')
+    assert.equal(resolveButtonAddonKind({ buttonsMessage: {} }), 'interactive')
+    assert.equal(
+        resolveButtonAddonKind({ interactiveMessage: { nativeFlowMessage: {} } }),
+        'interactive'
+    )
+    assert.equal(resolveButtonAddonKind({ interactiveMessage: {} }), null)
+    assert.equal(resolveButtonAddonKind({ conversation: 'hi' }), null)
+    assert.equal(
+        resolveButtonAddonKind({ documentWithCaptionMessage: { message: { listMessage: {} } } }),
+        'list'
+    )
+    assert.equal(
+        resolveButtonAddonKind({
+            documentWithCaptionMessage: {
+                message: { interactiveMessage: { nativeFlowMessage: {} } }
+            }
+        }),
+        'interactive'
+    )
+    assert.equal(
+        resolveButtonAddonKind({
+            ephemeralMessage: { message: { listMessage: {} } }
+        }),
+        'list'
     )
 })
 

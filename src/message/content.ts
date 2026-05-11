@@ -202,6 +202,15 @@ export function resolveEncMediaType(message: Proto.IMessage): string | null {
     return null
 }
 
+export type WaButtonAddonKind = 'list' | 'interactive'
+
+export function resolveButtonAddonKind(message: Proto.IMessage): WaButtonAddonKind | null {
+    const msg = unwrapMessage(message)
+    if (msg.listMessage) return 'list'
+    if (msg.buttonsMessage || msg.interactiveMessage?.nativeFlowMessage) return 'interactive'
+    return null
+}
+
 export interface MessageMetaAttrs {
     readonly polltype?: string
     readonly event_type?: string
