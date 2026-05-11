@@ -289,6 +289,23 @@ test('bot coordinator sendPrompt mention path throws when bot jid cannot be reso
     )
 })
 
+test('bot coordinator sendPrompt direct path ignores opts.botJid to avoid misroute', async () => {
+    let captured: string | undefined
+    const coordinator = createBotCoordinator({
+        queryWithContext: async () => createIqResult(),
+        buildMessageContent: async () => ({ message: { conversation: 'hi' } }),
+        sendMessage: async (to) => {
+            captured = to
+            return fakePublishResult('msg-direct-override')
+        }
+    })
+
+    // caller addresses META_AI directly but tries to override with MANUS via opts.botJid;
+    // the direct chat target wins so the prompt cannot be misrouted to another bot.
+    await coordinator.sendPrompt(META_AI_FBID, 'hi', { botJid: MANUS_FBID })
+    assert.equal(captured, META_AI_FBID)
+})
+
 test('bot coordinator sendPrompt throws when target is not a bot and botJid is missing', async () => {
     const coordinator = createBotCoordinator({
         queryWithContext: async () => createIqResult(),

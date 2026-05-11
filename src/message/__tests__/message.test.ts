@@ -22,6 +22,7 @@ import {
     attachBotMetadata,
     decryptBotChunk,
     deriveBotChunkKey,
+    extractInvokedBotJid,
     genBotMsgSecret
 } from '@message/bot'
 import {
@@ -533,6 +534,65 @@ test('attachBotMetadata sets MessageContextInfo.botMetadata fields', () => {
     )
     assert.deepEqual(preserved.messageContextInfo?.messageSecret, new Uint8Array(32).fill(1))
     assert.equal(preserved.messageContextInfo?.botMetadata?.personaId, 'x')
+})
+
+test('extractInvokedBotJid finds the bot mention across text and media bodies', () => {
+    const BOT = '867051314767696@bot'
+    // text body
+    assert.equal(
+        extractInvokedBotJid({
+            botInvokeMessage: {
+                message: {
+                    extendedTextMessage: { text: '@x oi', contextInfo: { mentionedJid: [BOT] } }
+                }
+            }
+        }),
+        BOT
+    )
+    // image caption mention
+    assert.equal(
+        extractInvokedBotJid({
+            botInvokeMessage: {
+                message: {
+                    imageMessage: {
+                        caption: '@x olha',
+                        contextInfo: { mentionedJid: ['5511@s.whatsapp.net', BOT] }
+                    }
+                }
+            }
+        }),
+        BOT
+    )
+    // video and document carriers
+    assert.equal(
+        extractInvokedBotJid({
+            botInvokeMessage: {
+                message: { videoMessage: { contextInfo: { mentionedJid: [BOT] } } }
+            }
+        }),
+        BOT
+    )
+    assert.equal(
+        extractInvokedBotJid({
+            botInvokeMessage: {
+                message: { documentMessage: { contextInfo: { mentionedJid: [BOT] } } }
+            }
+        }),
+        BOT
+    )
+    // no bot in mentions
+    assert.equal(
+        extractInvokedBotJid({
+            botInvokeMessage: {
+                message: {
+                    extendedTextMessage: { contextInfo: { mentionedJid: ['5511@s.whatsapp.net'] } }
+                }
+            }
+        }),
+        null
+    )
+    // not a bot invoke envelope at all
+    assert.equal(extractInvokedBotJid({ conversation: 'oi' }), null)
 })
 
 test('computeDeviceKeyHash produces deterministic 8-byte hash from identity keys', async () => {

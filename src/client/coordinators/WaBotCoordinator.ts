@@ -127,14 +127,16 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
         },
 
         sendPrompt: async (to, content, opts = {}) => {
-            const botJid = opts.botJid ?? (isBotJid(to) ? to : undefined)
+            // `to` wins when it is a @bot jid — caller chose a specific bot; ignore
+            // opts.botJid so it cannot misroute the prompt to a different bot.
+            const isDirect = isBotJid(to)
+            const botJid = isDirect ? to : opts.botJid
             if (!botJid) {
                 throw new Error(
                     'bot.sendPrompt: opts.botJid is required when `to` is not a @bot jid'
                 )
             }
             const fbidBotJid = normalizeBotJidToFbid(botJid)
-            const isDirect = isBotJid(to)
             const { message: baseMessage } = await buildMessageContent(content)
 
             if (isDirect) {
