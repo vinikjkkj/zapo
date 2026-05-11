@@ -61,6 +61,7 @@ function createIncomingRuntime() {
             emitRegistrationCode: () => undefined,
             emitAccountTakeoverNotice: () => undefined,
             emitGroupEvent: () => undefined,
+            emitBusinessEvent: () => undefined,
             emitUnhandledIncomingNode: (event: unknown) => {
                 unhandled.push(event)
             },

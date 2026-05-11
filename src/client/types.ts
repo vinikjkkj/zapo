@@ -382,6 +382,101 @@ export interface WaGroupEventSubgroupSuggestion {
     readonly reason?: string
 }
 
+export type WaBusinessEventAction =
+    | 'verified_name_update'
+    | 'verified_name_stale'
+    | 'business_removed'
+    | 'profile_update'
+    | 'product_update'
+    | 'collection_update'
+    | 'subscriptions_update'
+
+export interface WaBusinessCategory {
+    readonly id: string
+    readonly name: string
+}
+
+export interface WaBusinessHoursEntry {
+    readonly dayOfWeek: string
+    readonly mode: string
+    readonly openTime?: number
+    readonly closeTime?: number
+}
+
+export interface WaBusinessHours {
+    readonly timezone?: string
+    readonly config: readonly WaBusinessHoursEntry[]
+}
+
+export interface WaBusinessWebsite {
+    readonly url: string
+}
+
+export interface WaBusinessProfileResult {
+    readonly jid: string
+    readonly tag?: string
+    readonly description?: string
+    readonly address?: string
+    readonly email?: string
+    readonly websites?: readonly WaBusinessWebsite[]
+    readonly categories?: readonly WaBusinessCategory[]
+    readonly businessHours?: WaBusinessHours
+    readonly latitude?: number
+    readonly longitude?: number
+    readonly profileOptions?: Readonly<Record<string, string>>
+}
+
+export interface WaVerifiedNamePrivacyMode {
+    readonly actualActors: number
+    readonly hostStorage: number
+    readonly privacyModeTs: number
+}
+
+export interface WaVerifiedNameResult {
+    readonly name?: string
+    readonly level?: string
+    readonly serial?: string
+    readonly isApi: boolean
+    readonly isSmb: boolean
+    readonly privacyMode?: WaVerifiedNamePrivacyMode
+}
+
+export interface WaBusinessCollectionUpdate {
+    readonly id: string
+    readonly reviewStatus?: string
+    readonly rejectReason?: string
+    readonly commerceUrl?: string
+}
+
+export interface WaBusinessSubscription {
+    readonly id: string
+    readonly status: string
+    readonly tier?: number
+    readonly source?: string
+    readonly startTime?: number
+    readonly creationTime?: number
+    readonly expirationDate?: number
+}
+
+export interface WaBusinessFeatureFlag {
+    readonly name: string
+    readonly enabled: boolean
+    readonly expirationTime?: number
+    readonly limit?: number
+}
+
+export interface WaBusinessEvent extends WaIncomingBaseEvent {
+    readonly action: WaBusinessEventAction
+    readonly timestampSeconds?: number
+    readonly bizJid?: string
+    readonly bizHash?: string
+    readonly verifiedName?: WaVerifiedNameResult
+    readonly productIds?: readonly string[]
+    readonly collections?: readonly WaBusinessCollectionUpdate[]
+    readonly subscriptions?: readonly WaBusinessSubscription[]
+    readonly featureFlags?: readonly WaBusinessFeatureFlag[]
+}
+
 export interface WaGroupEvent extends WaIncomingBaseEvent {
     readonly rawActionNode: BinaryNode
     readonly groupJid?: string
@@ -505,6 +600,7 @@ export interface WaClientEventMap {
     readonly stanza_error: (event: WaIncomingBaseEvent) => void
     readonly stanza_unhandled: (event: WaIncomingUnhandledStanzaEvent) => void
     readonly group_event: (event: WaGroupEvent) => void
+    readonly business_event: (event: WaBusinessEvent) => void
     readonly chat_event: (event: WaChatEvent) => void
     readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void
     readonly privacy_token_update: (event: WaPrivacyTokenUpdateEvent) => void

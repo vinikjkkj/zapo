@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { parseBusinessNotificationEvents } from '@client/events/business'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { parseChatstateNode } from '@client/events/chatstate'
 import { parseGroupNotificationEvents } from '@client/events/group'
@@ -8,7 +9,9 @@ import { parsePresenceNode } from '@client/events/presence'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
 import { aggregateReceiptTargets } from '@client/events/receipt'
 import { parseRegistrationNotification } from '@client/events/registration'
+import { proto } from '@proto'
 import {
+    WA_BUSINESS_NOTIFICATION_TAGS,
     WA_NOTIFICATION_TYPES,
     WA_PRIVACY_TOKEN_TAGS,
     WA_REGISTRATION_NOTIFICATION_TAGS
@@ -425,6 +428,266 @@ test('aggregateReceiptTargets groups by chat and sender, batching same-author id
         }
     ])
     assert.equal(broadcastExplicit[0].participant, 'erin@s.whatsapp.net')
+})
+
+function buildVerifiedNameCertBytes(opts: {
+    serial?: number
+    issuer?: string
+    verifiedName?: string
+}): Uint8Array {
+    const details = proto.VerifiedNameCertificate.Details.encode({
+        serial: opts.serial,
+        issuer: opts.issuer,
+        verifiedName: opts.verifiedName
+    }).finish()
+    return proto.VerifiedNameCertificate.encode({ details }).finish()
+}
+
+function bizNotification(content: readonly unknown[], extraAttrs: Record<string, string> = {}) {
+    return {
+        tag: 'notification',
+        attrs: {
+            type: WA_NOTIFICATION_TYPES.BUSINESS,
+            id: 'n-1',
+            from: '5511999999999@s.whatsapp.net',
+            t: '1700000000',
+            ...extraAttrs
+        },
+        content
+    } as Parameters<typeof parseBusinessNotificationEvents>[0]
+}
+
+test('business parser returns empty when notification is not type=business', () => {
+    const parsed = parseBusinessNotificationEvents({
+        tag: 'notification',
+        attrs: { type: 'other' }
+    })
+    assert.equal(parsed.events.length, 0)
+    assert.equal(parsed.unhandled.length, 0)
+})
+
+test('business parser handles verified_name with jid + inline certificate', () => {
+    const certBytes = buildVerifiedNameCertBytes({
+        serial: 99,
+        issuer: 'smb:wa',
+        verifiedName: 'Acme'
+    })
+    const parsed = parseBusinessNotificationEvents(
+        bizNotification([
+            {
+                tag: WA_BUSINESS_NOTIFICATION_TAGS.VERIFIED_NAME,
+                attrs: {
+                    jid: '5511999999999@s.whatsapp.net',
+                    verified_level: 'high',
+                    actual_actors: '0',
+                    host_storage: '1',
+                    privacy_mode_ts: '1700000000'
+                },
+                content: certBytes
+            }
+        ])
+    )
+    assert.equal(parsed.events.length, 1)
+    const event = parsed.events[0]
+    assert.equal(event.action, 'verified_name_update')
+    assert.equal(event.bizJid, '5511999999999@s.whatsapp.net')
+    assert.equal(event.timestampSeconds, 1700000000)
+    assert.equal(event.verifiedName?.name, 'Acme')
+    assert.equal(event.verifiedName?.isSmb, true)
+    assert.equal(event.verifiedName?.isApi, false)
+    assert.deepEqual(event.verifiedName?.privacyMode, {
+        actualActors: 0,
+        hostStorage: 1,
+        privacyModeTs: 1700000000
+    })
+})
+
+test('business parser handles verified_name with hash (stale)', () => {
+    const parsed = parseBusinessNotificationEvents(
+        bizNotification([
+            {
+                tag: WA_BUSINESS_NOTIFICATION_TAGS.VERIFIED_NAME,
+                attrs: { hash: 'abc123' }
+            }
+        ])
+    )
+    assert.equal(parsed.events.length, 1)
+    assert.equal(parsed.events[0].action, 'verified_name_stale')
+    assert.equal(parsed.events[0].bizHash, 'abc123')
+    assert.equal(parsed.events[0].bizJid, undefined)
+})
+
+test('business parser handles remove with jid and remove with hash', () => {
+    const byJid = parseBusinessNotificationEvents(
+        bizNotification([
+            {
+                tag: WA_BUSINESS_NOTIFICATION_TAGS.REMOVE,
+                attrs: { jid: '5511999999999@s.whatsapp.net' }
+            }
+        ])
+    )
+    assert.equal(byJid.events[0].action, 'business_removed')
+    assert.equal(byJid.events[0].bizJid, '5511999999999@s.whatsapp.net')
+
+    const byHash = parseBusinessNotificationEvents(
+        bizNotification([{ tag: WA_BUSINESS_NOTIFICATION_TAGS.REMOVE, attrs: { hash: 'xyz' } }])
+    )
+    assert.equal(byHash.events[0].action, 'business_removed')
+    assert.equal(byHash.events[0].bizHash, 'xyz')
+})
+
+test('business parser handles profile (signal-only) and profile by hash', () => {
+    const byFrom = parseBusinessNotificationEvents(
+        bizNotification([{ tag: WA_BUSINESS_NOTIFICATION_TAGS.PROFILE, attrs: {} }])
+    )
+    assert.equal(byFrom.events[0].action, 'profile_update')
+    assert.equal(byFrom.events[0].bizJid, '5511999999999@s.whatsapp.net')
+    assert.equal(byFrom.events[0].bizHash, undefined)
+
+    const byHash = parseBusinessNotificationEvents(
+        bizNotification([{ tag: WA_BUSINESS_NOTIFICATION_TAGS.PROFILE, attrs: { hash: 'h1' } }])
+    )
+    assert.equal(byHash.events[0].action, 'profile_update')
+    assert.equal(byHash.events[0].bizHash, 'h1')
+    assert.equal(byHash.events[0].bizJid, undefined)
+})
+
+test('business parser handles product_catalog with product children', () => {
+    const parsed = parseBusinessNotificationEvents(
+        bizNotification([
+            {
+                tag: WA_BUSINESS_NOTIFICATION_TAGS.PRODUCT_CATALOG,
+                attrs: {},
+                content: [
+                    {
+                        tag: 'product',
+                        attrs: {},
+                        content: [{ tag: 'id', attrs: {}, content: 'P1' }]
+                    },
+                    {
+                        tag: 'product',
+                        attrs: {},
+                        content: [{ tag: 'id', attrs: {}, content: 'P2' }]
+                    }
+                ]
+            }
+        ])
+    )
+    assert.equal(parsed.events.length, 1)
+    assert.equal(parsed.events[0].action, 'product_update')
+    assert.deepEqual(parsed.events[0].productIds, ['P1', 'P2'])
+})
+
+test('business parser handles product_catalog with collection children + status_info', () => {
+    const parsed = parseBusinessNotificationEvents(
+        bizNotification([
+            {
+                tag: WA_BUSINESS_NOTIFICATION_TAGS.PRODUCT_CATALOG,
+                attrs: {},
+                content: [
+                    {
+                        tag: 'collection',
+                        attrs: { id: 'C1' },
+                        content: [
+                            {
+                                tag: 'status_info',
+                                attrs: {},
+                                content: [
+                                    { tag: 'status', attrs: {}, content: 'REJECTED' },
+                                    { tag: 'reject_reason', attrs: {}, content: 'policy' },
+                                    {
+                                        tag: 'commerce_url',
+                                        attrs: {},
+                                        content: 'https://wa.me/c/1'
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ])
+    )
+    assert.equal(parsed.events[0].action, 'collection_update')
+    assert.deepEqual(parsed.events[0].collections, [
+        {
+            id: 'C1',
+            reviewStatus: 'REJECTED',
+            rejectReason: 'policy',
+            commerceUrl: 'https://wa.me/c/1'
+        }
+    ])
+})
+
+test('business parser handles subscriptions + feature_flags together', () => {
+    const parsed = parseBusinessNotificationEvents(
+        bizNotification([
+            {
+                tag: WA_BUSINESS_NOTIFICATION_TAGS.SUBSCRIPTIONS,
+                attrs: {},
+                content: [
+                    {
+                        tag: 'subscription',
+                        attrs: {
+                            id: 'AURA',
+                            status: 'active',
+                            subscription_tier: '1',
+                            source: 'AURA',
+                            subscription_start_time: '1700000000',
+                            subscription_creation_time: '1699999000',
+                            subscription_end_time: '1800000000'
+                        }
+                    }
+                ]
+            },
+            {
+                tag: WA_BUSINESS_NOTIFICATION_TAGS.FEATURE_FLAGS,
+                attrs: {},
+                content: [
+                    {
+                        tag: 'feature_flag',
+                        attrs: {
+                            name: 'NEW_CHATS_LIMIT',
+                            enabled: 'true',
+                            limit: '50',
+                            expiration_time: '1800000000'
+                        }
+                    }
+                ]
+            }
+        ])
+    )
+    assert.equal(parsed.events.length, 1)
+    const event = parsed.events[0]
+    assert.equal(event.action, 'subscriptions_update')
+    assert.deepEqual(event.subscriptions, [
+        {
+            id: 'AURA',
+            status: 'active',
+            tier: 1,
+            source: 'AURA',
+            startTime: 1700000000,
+            creationTime: 1699999000,
+            expirationDate: 1800000000
+        }
+    ])
+    assert.deepEqual(event.featureFlags, [
+        {
+            name: 'NEW_CHATS_LIMIT',
+            enabled: true,
+            limit: 50,
+            expirationTime: 1800000000
+        }
+    ])
+})
+
+test('business parser emits unhandled for deferred smax-rpc subtypes', () => {
+    const parsed = parseBusinessNotificationEvents(
+        bizNotification([{ tag: 'ctwa_suggestion', attrs: {} }])
+    )
+    assert.equal(parsed.events.length, 0)
+    assert.equal(parsed.unhandled.length, 1)
+    assert.match(parsed.unhandled[0].reason, /ctwa_suggestion\.not_supported/)
 })
 
 test('privacy token parser rejects non-numeric token timestamp', () => {

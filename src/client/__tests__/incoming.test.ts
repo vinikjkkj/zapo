@@ -2,14 +2,21 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+    createIncomingBusinessNotificationHandler,
     createIncomingFailureHandler,
     createIncomingNotificationHandler,
     createIncomingReceiptHandler,
     createIncomingRegistrationNotificationHandler
 } from '@client/incoming'
-import type { WaAccountTakeoverNoticeEvent, WaRegistrationCodeEvent } from '@client/types'
+import type {
+    WaAccountTakeoverNoticeEvent,
+    WaBusinessEvent,
+    WaIncomingUnhandledStanzaEvent,
+    WaRegistrationCodeEvent
+} from '@client/types'
 import type { Logger } from '@infra/log/types'
 import {
+    WA_BUSINESS_NOTIFICATION_TAGS,
     WA_DISCONNECT_REASONS,
     WA_NOTIFICATION_TYPES,
     WA_REGISTRATION_NOTIFICATION_TAGS
@@ -319,6 +326,106 @@ test('registration notification handler defers to default handler for unrecogniz
     assert.equal(codes.length, 0)
     assert.equal(takeovers.length, 0)
     assert.equal(sent.length, 0)
+})
+
+test('business notification handler emits business_event and acks with type=business', async () => {
+    const sent: BinaryNode[] = []
+    const events: WaBusinessEvent[] = []
+    const unhandled: WaIncomingUnhandledStanzaEvent[] = []
+    const handler = createIncomingBusinessNotificationHandler({
+        logger: createLogger(),
+        sendNode: async (node) => {
+            sent.push(node)
+        },
+        emitBusinessEvent: (event) => {
+            events.push(event)
+        },
+        emitUnhandledStanza: (event) => {
+            unhandled.push(event)
+        }
+    })
+
+    const handled = await handler({
+        tag: 'notification',
+        attrs: {
+            id: 'biz-1',
+            from: '5511999999999@s.whatsapp.net',
+            type: WA_NOTIFICATION_TYPES.BUSINESS,
+            t: '1700000000'
+        },
+        content: [
+            {
+                tag: WA_BUSINESS_NOTIFICATION_TAGS.REMOVE,
+                attrs: { jid: '5511999999999@s.whatsapp.net' }
+            }
+        ]
+    })
+
+    assert.equal(handled, true)
+    assert.equal(events.length, 1)
+    assert.equal(events[0].action, 'business_removed')
+    assert.equal(events[0].bizJid, '5511999999999@s.whatsapp.net')
+    assert.equal(unhandled.length, 0)
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].tag, 'ack')
+    assert.equal(sent[0].attrs.class, 'notification')
+    assert.equal(sent[0].attrs.type, WA_NOTIFICATION_TYPES.BUSINESS)
+    assert.equal(sent[0].attrs.id, 'biz-1')
+    assert.equal('participant' in sent[0].attrs, false)
+})
+
+test('business notification handler defers when notification type is not business', async () => {
+    const sent: BinaryNode[] = []
+    const events: WaBusinessEvent[] = []
+    const handler = createIncomingBusinessNotificationHandler({
+        logger: createLogger(),
+        sendNode: async (node) => {
+            sent.push(node)
+        },
+        emitBusinessEvent: (event) => {
+            events.push(event)
+        },
+        emitUnhandledStanza: () => undefined
+    })
+
+    const handled = await handler({
+        tag: 'notification',
+        attrs: { id: 'x', type: 'server_sync' }
+    })
+
+    assert.equal(handled, false)
+    assert.equal(events.length, 0)
+    assert.equal(sent.length, 0)
+})
+
+test('business notification handler emits unhandled stanza for deferred subtype', async () => {
+    const sent: BinaryNode[] = []
+    const events: WaBusinessEvent[] = []
+    const unhandled: WaIncomingUnhandledStanzaEvent[] = []
+    const handler = createIncomingBusinessNotificationHandler({
+        logger: createLogger(),
+        sendNode: async (node) => {
+            sent.push(node)
+        },
+        emitBusinessEvent: (event) => {
+            events.push(event)
+        },
+        emitUnhandledStanza: (event) => {
+            unhandled.push(event)
+        }
+    })
+
+    await handler({
+        tag: 'notification',
+        attrs: { id: 'biz-2', from: 's.whatsapp.net', type: WA_NOTIFICATION_TYPES.BUSINESS },
+        content: [{ tag: 'mm_campaign', attrs: {} }]
+    })
+
+    assert.equal(events.length, 0)
+    assert.equal(unhandled.length, 1)
+    assert.match(unhandled[0].reason, /mm_campaign\.not_supported/)
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].tag, 'ack')
 })
 
 test('failure handler maps disconnect-only reasons without clearing credentials', async () => {

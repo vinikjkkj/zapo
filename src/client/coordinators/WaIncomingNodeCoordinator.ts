@@ -5,6 +5,7 @@ import { parseChatstateNode } from '@client/events/chatstate'
 import { parsePresenceNode } from '@client/events/presence'
 import {
     createIncomingBaseEvent,
+    createIncomingBusinessNotificationHandler,
     createIncomingFailureHandler,
     createIncomingGroupNotificationHandler,
     createIncomingNotificationHandler,
@@ -15,6 +16,7 @@ import {
 } from '@client/incoming'
 import type {
     WaAccountTakeoverNoticeEvent,
+    WaBusinessEvent,
     WaGroupEvent,
     WaIncomingBaseEvent,
     WaIncomingCallEvent,
@@ -78,6 +80,7 @@ interface WaIncomingNodeRuntime {
     readonly emitRegistrationCode: (event: WaRegistrationCodeEvent) => void
     readonly emitAccountTakeoverNotice: (event: WaAccountTakeoverNoticeEvent) => void
     readonly emitGroupEvent: (event: WaGroupEvent) => void
+    readonly emitBusinessEvent: (event: WaBusinessEvent) => void
     readonly emitUnhandledIncomingNode: (event: WaIncomingUnhandledStanzaEvent) => void
     readonly syncAppState: () => Promise<void>
     readonly stopComms: () => void
@@ -262,6 +265,16 @@ export class WaIncomingNodeCoordinator {
                 logger: this.logger,
                 sendNode: runtime.sendNode,
                 emitGroupEvent: runtime.emitGroupEvent,
+                emitUnhandledStanza: runtime.emitUnhandledIncomingNode
+            })
+        })
+        this.registerIncomingHandler({
+            tag: WA_NODE_TAGS.NOTIFICATION,
+            subtype: WA_NOTIFICATION_TYPES.BUSINESS,
+            handler: createIncomingBusinessNotificationHandler({
+                logger: this.logger,
+                sendNode: runtime.sendNode,
+                emitBusinessEvent: runtime.emitBusinessEvent,
                 emitUnhandledStanza: runtime.emitUnhandledIncomingNode
             })
         })

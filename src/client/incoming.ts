@@ -1,7 +1,9 @@
+import { parseBusinessNotificationEvents } from '@client/events/business'
 import { parseGroupNotificationEvents } from '@client/events/group'
 import { parseRegistrationNotification } from '@client/events/registration'
 import type {
     WaAccountTakeoverNoticeEvent,
+    WaBusinessEvent,
     WaGroupEvent,
     WaIncomingBaseEvent,
     WaIncomingFailureEvent,
@@ -52,6 +54,11 @@ type IncomingGroupNotificationHandlerOptions = IncomingAckRuntime & {
     readonly emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) => void
 }
 
+type IncomingBusinessNotificationHandlerOptions = IncomingAckRuntime & {
+    readonly emitBusinessEvent: (event: WaBusinessEvent) => void
+    readonly emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) => void
+}
+
 type IncomingRegistrationNotificationHandlerOptions = IncomingAckRuntime & {
     readonly emitRegistrationCode: (event: WaRegistrationCodeEvent) => void
     readonly emitAccountTakeoverNotice: (event: WaAccountTakeoverNoticeEvent) => void
@@ -86,13 +93,7 @@ const CORE_NOTIFICATION_TYPES = new Set<string>([
     'mex'
 ])
 
-const OUT_OF_SCOPE_NOTIFICATION_TYPES = new Set<string>([
-    'business',
-    'pay',
-    'psa',
-    'waffle',
-    'hosted'
-])
+const OUT_OF_SCOPE_NOTIFICATION_TYPES = new Set<string>(['pay', 'psa', 'waffle', 'hosted'])
 
 const NOTIFICATION_TYPES_WITH_PARTICIPANT_ACK = new Set<string>(['mediaretry', 'psa'])
 const NOTIFICATION_TYPES_WITHOUT_TYPE_ACK = new Set<string>(['encrypt', 'devices'])
@@ -360,6 +361,40 @@ export function createIncomingRegistrationNotificationHandler(
             })
         }
 
+        await sendSafeAck(
+            options.logger,
+            options.sendNode,
+            buildAckNode({
+                kind: 'notification',
+                node
+            })
+        )
+        return true
+    }
+}
+
+export function createIncomingBusinessNotificationHandler(
+    options: IncomingBusinessNotificationHandlerOptions
+): (node: BinaryNode) => Promise<boolean> {
+    return async (node: BinaryNode): Promise<boolean> => {
+        if (node.attrs.type !== WA_NOTIFICATION_TYPES.BUSINESS) {
+            return false
+        }
+
+        const baseEvent = createIncomingBaseEvent(node)
+        const parsed = parseBusinessNotificationEvents(node)
+        for (const event of parsed.events) {
+            options.emitBusinessEvent(event)
+        }
+        for (const unhandled of parsed.unhandled) {
+            options.emitUnhandledStanza(unhandled)
+        }
+        if (parsed.events.length === 0 && parsed.unhandled.length === 0) {
+            options.emitUnhandledStanza({
+                ...baseEvent,
+                reason: `notification.${WA_NOTIFICATION_TYPES.BUSINESS}.empty`
+            })
+        }
         await sendSafeAck(
             options.logger,
             options.sendNode,
