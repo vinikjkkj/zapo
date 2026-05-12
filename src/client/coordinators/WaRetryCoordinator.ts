@@ -6,7 +6,8 @@ import {
     isGroupOrBroadcastJid,
     normalizeDeviceJid,
     parseJidFull,
-    type parseSignalAddressFromJid
+    type parseSignalAddressFromJid,
+    toUserJid
 } from '@protocol/jid'
 import {
     MAX_RETRY_ATTEMPTS,
@@ -264,11 +265,12 @@ export class WaRetryCoordinator {
         context: WaRetryDecryptFailureContext,
         prepared: RetryDecryptFailurePreparation
     ): Promise<void> {
+        const recipient = context.recipient ?? this.resolvePeerRetryRecipient(context)
         const retryReceiptNode = buildRetryReceiptNode({
             stanzaId: context.stanzaId,
             to: context.from,
             participant: context.participant,
-            recipient: context.recipient,
+            recipient,
             originalMsgId: context.stanzaId,
             retryCount: prepared.retryCount,
             t: prepared.timestamp,
@@ -282,10 +284,31 @@ export class WaRetryCoordinator {
             id: context.stanzaId,
             to: context.from,
             participant: context.participant,
+            recipient,
             retryCount: prepared.retryCount,
             reason: prepared.retryReason,
             withKeys: prepared.retryKeys !== undefined
         })
+    }
+
+    private resolvePeerRetryRecipient(context: WaRetryDecryptFailureContext): string | undefined {
+        if (!context.participant) {
+            return undefined
+        }
+        const meLid = this.getCurrentMeLid()
+        if (!meLid) {
+            return undefined
+        }
+        try {
+            const participantUser = toUserJid(context.participant)
+            const meUserLid = toUserJid(meLid)
+            if (participantUser !== meUserLid) {
+                return undefined
+            }
+            return meUserLid
+        } catch {
+            return undefined
+        }
     }
 
     private async handleParsedRetryRequest(

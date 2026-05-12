@@ -65,3 +65,21 @@ export const WA_APP_STATE_CHAT_MUTATION_SPECS = Object.freeze({
     },
     LOCK_CHAT: { collection: WA_APP_STATE_COLLECTIONS.REGULAR_LOW, action: 'lock', version: 7 }
 } as const)
+
+export const WA_APP_STATE_ACCOUNT_MUTATION_SPECS = Object.freeze({
+    STATUS_PRIVACY: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_HIGH,
+        action: 'status_privacy',
+        version: 7
+    },
+    USER_STATUS_MUTE: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR_HIGH,
+        action: 'userStatusMute',
+        version: 7
+    },
+    BUSINESS_BROADCAST_LIST: {
+        collection: WA_APP_STATE_COLLECTIONS.REGULAR,
+        action: 'business_broadcast_list',
+        version: 1
+    }
+} as const)

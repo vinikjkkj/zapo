@@ -558,6 +558,51 @@ export interface WaChatEvent {
     readonly deviceAgentId?: string
 }
 
+export interface WaStatusPrivacyEntry {
+    readonly mode: number | null
+    readonly userJids: readonly string[]
+    readonly shareToFB?: boolean
+    readonly shareToIG?: boolean
+}
+
+export interface WaBroadcastListMembershipEntry {
+    readonly lidJid: string
+    readonly pnJid?: string
+}
+
+interface WaAccountEventBase {
+    readonly source: WaChatEventSource
+    readonly collection: AppStateCollectionName
+    readonly operation: 'set' | 'remove'
+    readonly mutationIndex: string
+    readonly indexAction: string
+    readonly indexParts: readonly string[]
+    readonly timestamp: number
+    readonly version: number
+}
+
+export type WaAccountEvent =
+    | (WaAccountEventBase & {
+          readonly action: 'status_privacy'
+          readonly settings: WaStatusPrivacyEntry
+      })
+    | (WaAccountEventBase & {
+          readonly action: 'user_status_mute'
+          readonly targetJid: string
+          readonly muted: boolean | null
+      })
+    | (WaAccountEventBase & {
+          readonly action: 'business_broadcast_list_set'
+          readonly listId: string
+          readonly listName: string
+          readonly participants: readonly WaBroadcastListMembershipEntry[]
+          readonly labelIds: readonly string[]
+      })
+    | (WaAccountEventBase & {
+          readonly action: 'business_broadcast_list_remove'
+          readonly listId: string
+      })
+
 export type WaConnectionEvent =
     | {
           readonly status: 'open'
@@ -615,6 +660,7 @@ export interface WaClientEventMap {
     readonly group_event: (event: WaGroupEvent) => void
     readonly business_event: (event: WaBusinessEvent) => void
     readonly chat_event: (event: WaChatEvent) => void
+    readonly account_event: (event: WaAccountEvent) => void
     readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void
     readonly privacy_token_update: (event: WaPrivacyTokenUpdateEvent) => void
     readonly offline_resume: (event: WaOfflineResumeEvent) => void

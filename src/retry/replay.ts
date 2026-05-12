@@ -5,6 +5,7 @@ import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import {
     isGroupOrBroadcastJid,
+    isStatusBroadcastJid,
     normalizeDeviceJid,
     parseJidFull,
     type parseSignalAddressFromJid,
@@ -19,7 +20,7 @@ import type {
 } from '@retry/types'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import { decodeBinaryNode } from '@transport/binary'
-import { buildGroupRetryMessageNode } from '@transport/node/builders/message'
+import { buildGroupRetryMessageNode, buildMetaNode } from '@transport/node/builders/message'
 import { findNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
@@ -145,18 +146,21 @@ export class WaRetryReplayService {
             deviceIdentity = proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
         }
 
+        // status retries echo `<meta status_setting>` and omit `addressing_mode`.
+        const isStatus = isStatusBroadcastJid(payload.to)
+        const metaNode = isStatus ? buildMetaNode({ status_setting: 'contacts' }) : undefined
         const retryNode = buildGroupRetryMessageNode({
             to: payload.to,
             type: payload.type,
             id: outbound.messageId,
             requesterJid,
-            addressingMode: requesterAddress.server === 'lid' ? 'lid' : 'pn',
+            addressingMode: isStatus ? undefined : requesterAddress.server === 'lid' ? 'lid' : 'pn',
             encType: encrypted.type,
             ciphertext: encrypted.ciphertext,
             retryCount,
-            deviceIdentity
+            deviceIdentity,
+            metaNode
         })
-
         await this.options.messageClient.sendMessageNode(retryNode)
         return 'resent'
     }

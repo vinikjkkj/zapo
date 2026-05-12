@@ -11,8 +11,9 @@ import type {
     WaDeleteMessageForMeOptions
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
-import type { Proto } from '@proto'
+import { proto, type Proto } from '@proto'
 import {
+    WA_APP_STATE_ACCOUNT_MUTATION_SPECS,
     WA_APP_STATE_CHAT_MUTATION_SPECS,
     WA_APP_STATE_COLLECTION_STATES
 } from '@protocol/constants'
@@ -26,6 +27,10 @@ import {
 import type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
 import { resolvePositive } from '@util/coercion'
 import { toError } from '@util/primitives'
+
+type StatusDistributionMode = Proto.SyncActionValue.StatusPrivacyAction.StatusDistributionMode
+type StatusDistributionModeKey =
+    keyof typeof proto.SyncActionValue.StatusPrivacyAction.StatusDistributionMode
 
 const WA_APP_STATE_MUTATION_FLUSH_SUCCESS_STATES = new Set<string>([
     WA_APP_STATE_COLLECTION_STATES.SUCCESS,
@@ -43,6 +48,28 @@ interface WaAppStateMutationCoordinatorOptions {
 
 type WaAppStateChatMutationSpec =
     (typeof WA_APP_STATE_CHAT_MUTATION_SPECS)[keyof typeof WA_APP_STATE_CHAT_MUTATION_SPECS]
+
+type WaAppStateAccountMutationSpec =
+    (typeof WA_APP_STATE_ACCOUNT_MUTATION_SPECS)[keyof typeof WA_APP_STATE_ACCOUNT_MUTATION_SPECS]
+
+export interface WaSetStatusPrivacyInput {
+    readonly mode: StatusDistributionModeKey | StatusDistributionMode
+    readonly userJids?: readonly string[]
+    readonly shareToFB?: boolean
+    readonly shareToIG?: boolean
+}
+
+export interface WaBroadcastListParticipant {
+    readonly lidJid: string
+    readonly pnJid?: string
+}
+
+export interface WaSetBroadcastListInput {
+    readonly id: string
+    readonly listName: string
+    readonly participants: readonly WaBroadcastListParticipant[]
+    readonly labelIds?: readonly string[]
+}
 
 export class WaAppStateMutationCoordinator {
     private readonly logger: Logger
@@ -437,6 +464,109 @@ export class WaAppStateMutationCoordinator {
                 ...input.value,
                 timestamp: input.timestamp
             },
+            version: input.spec.version,
+            timestamp: input.timestamp
+        }
+    }
+
+    public async setStatusPrivacy(input: WaSetStatusPrivacyInput): Promise<void> {
+        const modeValue =
+            typeof input.mode === 'number'
+                ? input.mode
+                : proto.SyncActionValue.StatusPrivacyAction.StatusDistributionMode[input.mode]
+        const userJid = input.userJids ? [...input.userJids] : []
+        const value: Proto.ISyncActionValue = {
+            statusPrivacy: {
+                mode: modeValue,
+                userJid,
+                ...(input.shareToFB === undefined ? {} : { shareToFB: input.shareToFB }),
+                ...(input.shareToIG === undefined ? {} : { shareToIG: input.shareToIG })
+            }
+        }
+        const timestamp = Date.now()
+        await this.enqueueAndFlush([
+            this.createAccountSetMutation({
+                spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.STATUS_PRIVACY,
+                indexArgs: [],
+                value,
+                timestamp
+            })
+        ])
+    }
+
+    public async setUserStatusMute(jid: string, muted: boolean): Promise<void> {
+        const indexJid = this.normalizeChatMutationJid(jid)
+        const timestamp = Date.now()
+        await this.enqueueAndFlush([
+            this.createAccountSetMutation({
+                spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.USER_STATUS_MUTE,
+                indexArgs: [indexJid],
+                value: { userStatusMuteAction: { muted } },
+                timestamp
+            })
+        ])
+    }
+
+    public async setBroadcastList(input: WaSetBroadcastListInput): Promise<void> {
+        const participants = input.participants.map((entry) => ({
+            lidJid: entry.lidJid,
+            ...(entry.pnJid === undefined ? {} : { pnJid: entry.pnJid })
+        }))
+        const value: Proto.ISyncActionValue = {
+            businessBroadcastListAction: {
+                participants,
+                listName: input.listName,
+                labelIds: input.labelIds ? [...input.labelIds] : []
+            }
+        }
+        const timestamp = Date.now()
+        await this.enqueueAndFlush([
+            this.createAccountSetMutation({
+                spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.BUSINESS_BROADCAST_LIST,
+                indexArgs: [input.id],
+                value,
+                timestamp
+            })
+        ])
+    }
+
+    public async removeBroadcastList(id: string): Promise<void> {
+        const timestamp = Date.now()
+        await this.enqueueAndFlush([
+            this.createAccountRemoveMutation({
+                spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.BUSINESS_BROADCAST_LIST,
+                indexArgs: [id],
+                timestamp
+            })
+        ])
+    }
+
+    private createAccountSetMutation(input: {
+        readonly spec: WaAppStateAccountMutationSpec
+        readonly indexArgs: readonly string[]
+        readonly value: Proto.ISyncActionValue
+        readonly timestamp: number
+    }): WaAppStateMutationInput {
+        return {
+            collection: input.spec.collection,
+            operation: 'set',
+            index: JSON.stringify([input.spec.action, ...input.indexArgs]),
+            value: { ...input.value, timestamp: input.timestamp },
+            version: input.spec.version,
+            timestamp: input.timestamp
+        }
+    }
+
+    private createAccountRemoveMutation(input: {
+        readonly spec: WaAppStateAccountMutationSpec
+        readonly indexArgs: readonly string[]
+        readonly timestamp: number
+    }): WaAppStateMutationInput {
+        return {
+            collection: input.spec.collection,
+            operation: 'remove',
+            index: JSON.stringify([input.spec.action, ...input.indexArgs]),
+            previousValue: { timestamp: input.timestamp },
             version: input.spec.version,
             timestamp: input.timestamp
         }

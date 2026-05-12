@@ -1097,6 +1097,103 @@ test('app-state mutation coordinator emits delete-message-for-me mutation and va
     )
 })
 
+test('app-state mutation coordinator emits status_privacy account mutation', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.setStatusPrivacy({
+        mode: 'CONTACTS',
+        shareToFB: true
+    })
+
+    assert.equal(syncCalls.length, 1)
+    assert.equal(syncCalls[0].length, 1)
+    const mutation = syncCalls[0][0]
+    assert.equal(mutation.collection, 'regular_high')
+    assert.equal(mutation.operation, 'set')
+    assert.deepEqual(JSON.parse(mutation.index), ['status_privacy'])
+    if (mutation.operation !== 'set') throw new Error('status_privacy must be set')
+    assert.equal(typeof mutation.value.statusPrivacy?.mode, 'number')
+    assert.equal(mutation.value.statusPrivacy?.shareToFB, true)
+    assert.deepEqual(mutation.value.statusPrivacy?.userJid, [])
+})
+
+test('app-state mutation coordinator emits userStatusMute mutation with target jid', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.setUserStatusMute('5511000000000:3@s.whatsapp.net', true)
+
+    assert.equal(syncCalls.length, 1)
+    const mutation = syncCalls[0][0]
+    assert.equal(mutation.collection, 'regular_high')
+    assert.deepEqual(JSON.parse(mutation.index), ['userStatusMute', '5511000000000@s.whatsapp.net'])
+    if (mutation.operation !== 'set') throw new Error('userStatusMute must be set')
+    assert.equal(mutation.value.userStatusMuteAction?.muted, true)
+})
+
+test('app-state mutation coordinator emits business_broadcast_list set/remove pair', async () => {
+    const messageStore = new WaMessageMemoryStore()
+    const syncCalls: (readonly WaAppStateMutationInput[])[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        logger: createLogger(),
+        messageStore,
+        syncAppState: async (options = {}) => {
+            const pendingMutations = options.pendingMutations ?? []
+            syncCalls.push(pendingMutations)
+            return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+        }
+    })
+
+    await coordinator.setBroadcastList({
+        id: 'list-1',
+        listName: 'Friends',
+        participants: [{ lidJid: 'a@lid', pnJid: 'a@s.whatsapp.net' }, { lidJid: 'b@lid' }],
+        labelIds: ['L1']
+    })
+
+    assert.equal(syncCalls.length, 1)
+    const setMutation = syncCalls[0][0]
+    assert.equal(setMutation.collection, 'regular')
+    assert.deepEqual(JSON.parse(setMutation.index), ['business_broadcast_list', 'list-1'])
+    if (setMutation.operation !== 'set') {
+        throw new Error('business_broadcast_list must be set on create')
+    }
+    const action = setMutation.value.businessBroadcastListAction
+    assert.equal(action?.listName, 'Friends')
+    assert.equal(action?.participants?.length, 2)
+    assert.equal(action?.participants?.[0]?.lidJid, 'a@lid')
+    assert.equal(action?.participants?.[0]?.pnJid, 'a@s.whatsapp.net')
+    assert.equal(action?.participants?.[1]?.lidJid, 'b@lid')
+    assert.equal(action?.participants?.[1]?.pnJid, undefined)
+    assert.deepEqual(action?.labelIds, ['L1'])
+
+    await coordinator.removeBroadcastList('list-1')
+
+    assert.equal(syncCalls.length, 2)
+    const removeMutation = syncCalls[1][0]
+    assert.equal(removeMutation.operation, 'remove')
+    assert.deepEqual(JSON.parse(removeMutation.index), ['business_broadcast_list', 'list-1'])
+})
+
 function createPassiveTasksCoordinator(overrides: {
     readonly takeDanglingReceipts: () => BinaryNode[]
     readonly sendNodeDirect: (node: BinaryNode) => Promise<void>

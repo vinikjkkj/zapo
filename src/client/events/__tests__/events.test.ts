@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { parseAccountEventFromAppStateMutation } from '@client/events/account'
 import { parseBusinessNotificationEvents } from '@client/events/business'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { parseChatstateNode } from '@client/events/chatstate'
@@ -40,6 +41,90 @@ test('chat event parser maps app-state mutation to chat actions', () => {
     assert.equal(parsed?.action, 'mute')
     assert.equal(parsed?.chatJid, '5511@s.whatsapp.net')
     assert.equal(parsed?.muted, true)
+})
+
+test('account event parser maps statusPrivacy / userStatusMute / business broadcast list', () => {
+    const privacy = parseAccountEventFromAppStateMutation({
+        collection: 'regular_high',
+        operation: 'set',
+        source: 'patch',
+        index: JSON.stringify(['status_privacy']),
+        value: {
+            statusPrivacy: { mode: 1, userJid: ['a@lid', 'b@lid'], shareToFB: true }
+        },
+        version: 7,
+        indexMac: new Uint8Array(),
+        valueMac: new Uint8Array(),
+        keyId: new Uint8Array(),
+        timestamp: 1
+    })
+    assert.equal(privacy?.action, 'status_privacy')
+    if (privacy?.action === 'status_privacy') {
+        assert.equal(privacy.settings.mode, 1)
+        assert.deepEqual(privacy.settings.userJids, ['a@lid', 'b@lid'])
+        assert.equal(privacy.settings.shareToFB, true)
+    }
+
+    const mute = parseAccountEventFromAppStateMutation({
+        collection: 'regular_high',
+        operation: 'set',
+        source: 'patch',
+        index: JSON.stringify(['userStatusMute', 'someone@lid']),
+        value: { userStatusMuteAction: { muted: true } },
+        version: 7,
+        indexMac: new Uint8Array(),
+        valueMac: new Uint8Array(),
+        keyId: new Uint8Array(),
+        timestamp: 2
+    })
+    assert.equal(mute?.action, 'user_status_mute')
+    if (mute?.action === 'user_status_mute') {
+        assert.equal(mute.targetJid, 'someone@lid')
+        assert.equal(mute.muted, true)
+    }
+
+    const listSet = parseAccountEventFromAppStateMutation({
+        collection: 'regular',
+        operation: 'set',
+        source: 'patch',
+        index: JSON.stringify(['business_broadcast_list', 'list-1']),
+        value: {
+            businessBroadcastListAction: {
+                listName: 'List One',
+                participants: [{ lidJid: 'x@lid', pnJid: 'x@s.whatsapp.net' }],
+                labelIds: ['L1']
+            }
+        },
+        version: 1,
+        indexMac: new Uint8Array(),
+        valueMac: new Uint8Array(),
+        keyId: new Uint8Array(),
+        timestamp: 3
+    })
+    assert.equal(listSet?.action, 'business_broadcast_list_set')
+    if (listSet?.action === 'business_broadcast_list_set') {
+        assert.equal(listSet.listId, 'list-1')
+        assert.equal(listSet.listName, 'List One')
+        assert.equal(listSet.participants.length, 1)
+        assert.deepEqual(listSet.labelIds, ['L1'])
+    }
+
+    const listRemove = parseAccountEventFromAppStateMutation({
+        collection: 'regular',
+        operation: 'remove',
+        source: 'patch',
+        index: JSON.stringify(['business_broadcast_list', 'list-2']),
+        value: null,
+        version: 1,
+        indexMac: new Uint8Array(),
+        valueMac: new Uint8Array(),
+        keyId: new Uint8Array(),
+        timestamp: 4
+    })
+    assert.equal(listRemove?.action, 'business_broadcast_list_remove')
+    if (listRemove?.action === 'business_broadcast_list_remove') {
+        assert.equal(listRemove.listId, 'list-2')
+    }
 })
 
 test('group notification parser handles supported and unsupported actions', () => {

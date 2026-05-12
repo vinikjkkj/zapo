@@ -12,6 +12,7 @@ import type { WaConnectionManager } from '@client/connection/WaConnectionManager
 import type { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { WaBotCoordinator } from '@client/coordinators/WaBotCoordinator'
+import type { WaBroadcastListCoordinator } from '@client/coordinators/WaBroadcastListCoordinator'
 import type { WaBusinessCoordinator } from '@client/coordinators/WaBusinessCoordinator'
 import type { WaEmailCoordinator } from '@client/coordinators/WaEmailCoordinator'
 import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator'
@@ -21,7 +22,9 @@ import type { WaNewsletterCoordinator } from '@client/coordinators/WaNewsletterC
 import type { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordinator'
 import type { WaProfileCoordinator } from '@client/coordinators/WaProfileCoordinator'
+import type { WaStatusCoordinator } from '@client/coordinators/WaStatusCoordinator'
 import type { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
+import { parseAccountEventFromAppStateMutation } from '@client/events/account'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { aggregateReceiptTargets } from '@client/events/receipt'
 import { processHistorySyncNotification } from '@client/history-sync'
@@ -146,6 +149,8 @@ export class WaClient extends EventEmitter {
     public readonly messageDispatch!: WaMessageDispatchCoordinator
     public readonly messageClient!: WaMessageClient
     public readonly groupCoordinator!: WaGroupCoordinator
+    public readonly statusCoordinator!: WaStatusCoordinator
+    public readonly broadcastListCoordinator!: WaBroadcastListCoordinator
     public readonly newsletterCoordinator!: WaNewsletterCoordinator
     public readonly privacyCoordinator!: WaPrivacyCoordinator
     public readonly profileCoordinator!: WaProfileCoordinator
@@ -762,6 +767,12 @@ export class WaClient extends EventEmitter {
     public get group(): WaGroupCoordinator {
         return this.groupCoordinator
     }
+    public get status(): WaStatusCoordinator {
+        return this.statusCoordinator
+    }
+    public get broadcastList(): WaBroadcastListCoordinator {
+        return this.broadcastListCoordinator
+    }
     public get newsletter(): WaNewsletterCoordinator {
         return this.newsletterCoordinator
     }
@@ -931,6 +942,11 @@ export class WaClient extends EventEmitter {
                 }
                 try {
                     this.handleNctSaltMutation(mutation)
+                    const accountEvent = parseAccountEventFromAppStateMutation(mutation)
+                    if (accountEvent) {
+                        this.emit('account_event', accountEvent)
+                        continue
+                    }
                     const event = parseChatEventFromAppStateMutation(mutation)
                     if (!event) {
                         continue

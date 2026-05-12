@@ -86,6 +86,10 @@ export function isBroadcastJid(jid: string): boolean {
     return isJidType(jid, WA_DEFAULTS.BROADCAST_SERVER)
 }
 
+export function isStatusBroadcastJid(jid: string): boolean {
+    return jid === WA_DEFAULTS.STATUS_BROADCAST_JID
+}
+
 export function isNewsletterJid(jid: string): boolean {
     return isJidType(jid, WA_DEFAULTS.NEWSLETTER_SERVER)
 }

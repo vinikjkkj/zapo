@@ -28,6 +28,7 @@ export {
 } from '@protocol/message'
 export type { WaOutboundReceiptType } from '@protocol/message'
 export {
+    WA_APP_STATE_ACCOUNT_MUTATION_SPECS,
     WA_APP_STATE_COLLECTIONS,
     WA_APP_STATE_COLLECTION_STATES,
     WA_APP_STATE_CHAT_MUTATION_SPECS,
@@ -84,6 +85,8 @@ export {
     WA_META_NODE_ATTRS_BOT
 } from '@protocol/bot'
 export type { WaBizBotType, WaBotMsgBodyType, WaBotMsgEditType } from '@protocol/bot'
+export { WA_STATUS_DISTRIBUTION_SETTINGS } from '@protocol/status'
+export type { WaStatusDistributionSetting } from '@protocol/status'
 export {
     WA_EMAIL_CONTEXTS,
     WA_EMAIL_ERROR_CODES,

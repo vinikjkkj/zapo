@@ -4,8 +4,8 @@ import type { BinaryNode } from '@transport/types'
 
 interface EncryptedParticipant {
     readonly jid: string
-    readonly encType: 'msg' | 'pkmsg'
-    readonly ciphertext: Uint8Array
+    readonly encType?: 'msg' | 'pkmsg'
+    readonly ciphertext?: Uint8Array
 }
 
 type DirectMessageFanoutInput = {
@@ -39,12 +39,14 @@ type GroupRetryMessageInput = {
     readonly type: string
     readonly id: string
     readonly requesterJid: string
-    readonly addressingMode: 'pn' | 'lid'
+    // omit `addressing_mode` for status@broadcast retries.
+    readonly addressingMode?: 'pn' | 'lid'
     readonly encType: 'msg' | 'pkmsg'
     readonly ciphertext: Uint8Array
     readonly retryCount: number
     readonly deviceIdentity?: Uint8Array
     readonly mediatype?: string
+    readonly metaNode?: BinaryNode
 }
 
 function buildEncAttrs(
@@ -93,6 +95,10 @@ function buildMessageAttrs(input: {
 }
 
 function buildEncryptedToNode(p: EncryptedParticipant, mediatype?: string): BinaryNode {
+    // Status broadcast viewers without ciphertext get a bare `<to jid>`.
+    if (!p.encType || !p.ciphertext) {
+        return { tag: 'to', attrs: { jid: p.jid } }
+    }
     return {
         tag: 'to',
         attrs: { jid: p.jid },
@@ -220,13 +226,15 @@ export function buildGroupSenderKeyMessageNode(input: GroupSenderKeyMessageInput
 }
 
 export function buildGroupRetryMessageNode(input: GroupRetryMessageInput): BinaryNode {
-    const content: BinaryNode[] = [
-        {
-            tag: WA_MESSAGE_TAGS.ENC,
-            attrs: buildEncAttrs(input.encType, input.mediatype, input.retryCount),
-            content: input.ciphertext
-        }
-    ]
+    const content: BinaryNode[] = []
+    if (input.metaNode) {
+        content.push(input.metaNode)
+    }
+    content.push({
+        tag: WA_MESSAGE_TAGS.ENC,
+        attrs: buildEncAttrs(input.encType, input.mediatype, input.retryCount),
+        content: input.ciphertext
+    })
     if (input.deviceIdentity) {
         content.push({
             tag: WA_NODE_TAGS.DEVICE_IDENTITY,
@@ -235,15 +243,18 @@ export function buildGroupRetryMessageNode(input: GroupRetryMessageInput): Binar
         })
     }
 
+    const attrs: Record<string, string> = {
+        to: input.to,
+        type: input.type,
+        id: input.id,
+        participant: input.requesterJid
+    }
+    if (input.addressingMode) {
+        attrs.addressing_mode = input.addressingMode
+    }
     return {
         tag: WA_MESSAGE_TAGS.MESSAGE,
-        attrs: {
-            to: input.to,
-            type: input.type,
-            id: input.id,
-            participant: input.requesterJid,
-            addressing_mode: input.addressingMode
-        },
+        attrs,
         content
     }
 }

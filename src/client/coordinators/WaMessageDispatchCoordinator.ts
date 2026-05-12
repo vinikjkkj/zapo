@@ -42,7 +42,7 @@ import type {
 } from '@message/types'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
-import { WA_DEFAULTS } from '@protocol/constants'
+import { WA_DEFAULTS, type WaStatusDistributionSetting } from '@protocol/constants'
 import {
     isBotJid,
     isGroupJid,
@@ -433,6 +433,233 @@ export class WaMessageDispatchCoordinator {
 
     public async sendReceipt(input: WaSendReceiptInput): Promise<void> {
         await this.messageClient.sendReceipt(input)
+    }
+
+    public async publishStatusMessage(input: {
+        readonly message: Proto.IMessage
+        readonly recipients: readonly string[]
+        readonly statusSetting?: WaStatusDistributionSetting
+        readonly options?: WaSendMessageOptions
+    }): Promise<WaMessagePublishResult> {
+        if (input.recipients.length === 0) {
+            throw new Error('publishStatusMessage requires at least one recipient')
+        }
+        this.requireCurrentMeJid('publishStatusMessage')
+        const meLid = this.getCurrentMeLid()
+        if (!meLid) {
+            throw new Error('publishStatusMessage requires current me lid')
+        }
+        const senderJid = normalizeDeviceJid(meLid)
+        const meUserLid = toUserJid(meLid)
+        const seen = new Set<string>()
+        const recipientsWithSelf: string[] = []
+        for (const jid of input.recipients) {
+            if (seen.has(jid)) continue
+            seen.add(jid)
+            recipientsWithSelf.push(jid)
+        }
+        if (!seen.has(meUserLid)) {
+            recipientsWithSelf.push(meUserLid)
+        }
+        const statusSetting = input.statusSetting ?? 'contacts'
+        return this.publishSenderKeyFanout({
+            groupJid: WA_DEFAULTS.STATUS_BROADCAST_JID,
+            senderJid,
+            recipients: recipientsWithSelf,
+            message: input.message,
+            options: input.options ?? {},
+            logTag: 'status',
+            // Bare `<to jid=user>` ack hints route the skmsg through primary
+            // devices that already hold the sender key.
+            customize: async ({
+                fanoutDeviceJids,
+                distributionParticipants,
+                messageWithSecret,
+                sendOptions
+            }) => {
+                const distributedAddressKeys = new Set<string>()
+                for (let i = 0; i < distributionParticipants.length; i += 1) {
+                    distributedAddressKeys.add(
+                        signalAddressKey(distributionParticipants[i].address)
+                    )
+                }
+                const ackHints: { readonly jid: string }[] = []
+                const seenAck = new Set<string>()
+                for (let i = 0; i < fanoutDeviceJids.length; i += 1) {
+                    const deviceJid = fanoutDeviceJids[i]
+                    const address = parseSignalAddressFromJid(deviceJid)
+                    if (distributedAddressKeys.has(signalAddressKey(address))) continue
+                    if (address.device !== 0) continue
+                    const userJid = toUserJid(deviceJid)
+                    if (seenAck.has(userJid)) continue
+                    seenAck.add(userJid)
+                    ackHints.push({ jid: userJid })
+                }
+                const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
+                    message: messageWithSecret,
+                    stanzaId: sendOptions.id,
+                    senderUserJid: toUserJid(senderJid),
+                    remoteJid: WA_DEFAULTS.STATUS_BROADCAST_JID,
+                    context: 'status'
+                })
+                return {
+                    extraParticipants: ackHints,
+                    metaNode: buildMetaNode({ status_setting: statusSetting }),
+                    reportingNode: reportingArtifacts?.node
+                }
+            }
+        })
+    }
+
+    public async publishBroadcastListMessage(input: {
+        readonly listJid: string
+        readonly message: Proto.IMessage
+        readonly recipients: readonly string[]
+        readonly options?: WaSendMessageOptions
+    }): Promise<WaMessagePublishResult> {
+        if (input.recipients.length === 0) {
+            throw new Error('publishBroadcastListMessage requires at least one recipient')
+        }
+        const meJid = this.requireCurrentMeJid('publishBroadcastListMessage')
+        const senderJid = normalizeDeviceJid(meJid)
+        return this.publishSenderKeyFanout({
+            groupJid: input.listJid,
+            senderJid,
+            recipients: input.recipients,
+            message: input.message,
+            options: input.options ?? {},
+            logTag: 'broadcast list',
+            customize: ({ fanoutDeviceJids }) => {
+                const phashTargets = new Array<string>(fanoutDeviceJids.length + 1)
+                for (let i = 0; i < fanoutDeviceJids.length; i += 1) {
+                    phashTargets[i] = fanoutDeviceJids[i]
+                }
+                phashTargets[fanoutDeviceJids.length] = senderJid
+                return Promise.resolve({ phash: computePhashV2(phashTargets) })
+            }
+        })
+    }
+
+    private async publishSenderKeyFanout(input: {
+        readonly groupJid: string
+        readonly senderJid: string
+        readonly recipients: readonly string[]
+        readonly message: Proto.IMessage
+        readonly options: WaSendMessageOptions
+        readonly logTag: string
+        readonly customize?: (fanout: {
+            readonly fanoutDeviceJids: readonly string[]
+            readonly distributionParticipants: readonly {
+                readonly jid: string
+                readonly address: SignalAddress
+                readonly encType: 'msg' | 'pkmsg'
+                readonly ciphertext: Uint8Array
+            }[]
+            readonly messageWithSecret: Proto.IMessage
+            readonly sendOptions: WaSendMessageOptions
+        }) => Promise<{
+            readonly extraParticipants?: readonly { readonly jid: string }[]
+            readonly metaNode?: BinaryNode
+            readonly reportingNode?: BinaryNode
+            readonly phash?: string
+        }>
+    }): Promise<WaMessagePublishResult> {
+        const sendOptions = await this.withResolvedMessageId(input.options)
+        const sender = parseSignalAddressFromJid(input.senderJid)
+        const messageWithSecret = await ensureMessageSecret(input.message)
+        const plaintext = await writeRandomPadMax16(
+            proto.Message.encode(messageWithSecret).finish()
+        )
+        const {
+            distributionMessage,
+            ciphertext: groupCiphertext,
+            keyId: senderKeyId
+        } = await this.senderKeyManager.prepareGroupEncryption(input.groupJid, sender, plaintext)
+        const { fanoutDeviceJids, distributionParticipants } =
+            await this.encryptGroupDistributionParticipants(
+                input.groupJid,
+                senderKeyId,
+                distributionMessage,
+                input.recipients
+            )
+        let shouldAttachDeviceIdentity = false
+        for (let i = 0; i < distributionParticipants.length; i += 1) {
+            if (distributionParticipants[i].encType === 'pkmsg') {
+                shouldAttachDeviceIdentity = true
+                break
+            }
+        }
+        const extras = input.customize
+            ? await input.customize({
+                  fanoutDeviceJids,
+                  distributionParticipants,
+                  messageWithSecret,
+                  sendOptions
+              })
+            : {}
+        const participants: {
+            readonly jid: string
+            readonly encType?: 'msg' | 'pkmsg'
+            readonly ciphertext?: Uint8Array
+        }[] = distributionParticipants.map((p) => ({
+            jid: p.jid,
+            encType: p.encType,
+            ciphertext: p.ciphertext
+        }))
+        if (extras.extraParticipants) {
+            for (const entry of extras.extraParticipants) {
+                participants.push(entry)
+            }
+        }
+        const messageNode = buildGroupSenderKeyMessageNode({
+            to: input.groupJid,
+            type: resolveMessageTypeAttr(messageWithSecret),
+            id: sendOptions.id,
+            phash: extras.phash,
+            edit: resolveEditAttr(messageWithSecret, sendOptions.subtype) ?? undefined,
+            mediatype: resolveEncMediaType(messageWithSecret) ?? undefined,
+            groupCiphertext: groupCiphertext.ciphertext,
+            participants,
+            deviceIdentity: shouldAttachDeviceIdentity
+                ? this.getEncodedSignedDeviceIdentity()
+                : undefined,
+            metaNode: extras.metaNode,
+            reportingNode: extras.reportingNode
+        })
+        const replayPayload: WaRetryReplayPayload = {
+            mode: 'plaintext',
+            to: input.groupJid,
+            type: messageNode.attrs.type,
+            plaintext
+        }
+        const result = await this.retryTracker.track(
+            {
+                messageIdHint: sendOptions.id ?? messageNode.attrs.id,
+                toJid: input.groupJid,
+                type: messageNode.attrs.type,
+                replayPayload,
+                eligibleRequesterDeviceJids: undefined
+            },
+            async () => this.messageClient.publishNode(messageNode, sendOptions)
+        )
+        const distributedAddresses = new Array<SignalAddress>(distributionParticipants.length)
+        for (let i = 0; i < distributionParticipants.length; i += 1) {
+            distributedAddresses[i] = distributionParticipants[i].address
+        }
+        try {
+            await this.senderKeyManager.markSenderKeyDistributed(
+                input.groupJid,
+                senderKeyId,
+                distributedAddresses
+            )
+        } catch (error) {
+            this.logger.warn(`failed to mark ${input.logTag} sender key distribution targets`, {
+                groupJid: input.groupJid,
+                participants: distributedAddresses.length,
+                message: toError(error).message
+            })
+        }
+        return result
     }
 
     public async requestAppStateSyncKeys(

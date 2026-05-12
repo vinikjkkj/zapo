@@ -7,6 +7,10 @@ import { WaAbPropsCoordinator } from '@client/coordinators/WaAbPropsCoordinator'
 import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import { createBotCoordinator, type WaBotCoordinator } from '@client/coordinators/WaBotCoordinator'
 import {
+    createBroadcastListCoordinator,
+    type WaBroadcastListCoordinator
+} from '@client/coordinators/WaBroadcastListCoordinator'
+import {
     createBusinessCoordinator,
     type WaBusinessCoordinator
 } from '@client/coordinators/WaBusinessCoordinator'
@@ -35,6 +39,10 @@ import {
     type WaProfileCoordinator
 } from '@client/coordinators/WaProfileCoordinator'
 import { WaRetryCoordinator } from '@client/coordinators/WaRetryCoordinator'
+import {
+    createStatusCoordinator,
+    type WaStatusCoordinator
+} from '@client/coordinators/WaStatusCoordinator'
 import {
     createStreamControlHandler,
     type WaStreamControlHandler
@@ -157,6 +165,8 @@ interface WaClientDependencies {
     readonly incomingNode: WaIncomingNodeCoordinator
     readonly passiveTasks: WaPassiveTasksCoordinator
     readonly groupCoordinator: WaGroupCoordinator
+    readonly statusCoordinator: WaStatusCoordinator
+    readonly broadcastListCoordinator: WaBroadcastListCoordinator
     readonly newsletterCoordinator: WaNewsletterCoordinator
     readonly privacyCoordinator: WaPrivacyCoordinator
     readonly profileCoordinator: WaProfileCoordinator
@@ -732,6 +742,20 @@ export function buildWaClientDependencies(input: {
         syncAppState: runtime.syncAppStateWithOptions
     })
 
+    const statusCoordinator = createStatusCoordinator({
+        appStateMutations,
+        buildMessageContent: async (content) =>
+            buildMediaMessageContent(mediaMessageBuildOptions, content),
+        publishStatusMessage: (input) => messageDispatch.publishStatusMessage(input)
+    })
+
+    const broadcastListCoordinator = createBroadcastListCoordinator({
+        appStateMutations,
+        buildMessageContent: async (content) =>
+            buildMediaMessageContent(mediaMessageBuildOptions, content),
+        publishBroadcastListMessage: (input) => messageDispatch.publishBroadcastListMessage(input)
+    })
+
     connectionManager = new WaConnectionManager({
         logger,
         options,
@@ -1179,6 +1203,8 @@ export function buildWaClientDependencies(input: {
         incomingNode,
         passiveTasks,
         groupCoordinator,
+        statusCoordinator,
+        broadcastListCoordinator,
         newsletterCoordinator,
         privacyCoordinator,
         profileCoordinator,
