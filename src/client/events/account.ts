@@ -30,7 +30,7 @@ export function parseAccountEventFromAppStateMutation(
         version: mutation.version
     } as const
 
-    if (value?.statusPrivacy) {
+    if (parsedIndex.action === 'status_privacy' && value?.statusPrivacy) {
         const settings = value.statusPrivacy
         const userJid = Array.isArray(settings.userJid) ? [...settings.userJid] : []
         const entry: WaStatusPrivacyEntry = {
@@ -46,7 +46,7 @@ export function parseAccountEventFromAppStateMutation(
         return { ...base, action: 'status_privacy', settings: entry }
     }
 
-    if (value?.userStatusMuteAction) {
+    if (parsedIndex.action === 'userStatusMute' && value?.userStatusMuteAction) {
         const targetJid = parsedIndex.parts[1]
         if (!targetJid) {
             return null
@@ -71,12 +71,15 @@ export function parseAccountEventFromAppStateMutation(
         if (!action) {
             return null
         }
-        const participants: WaBroadcastListMembershipEntry[] = (action.participants ?? []).map(
-            (entry) => ({
-                lidJid: entry.lidJid ?? '',
+        const participants: WaBroadcastListMembershipEntry[] = (action.participants ?? [])
+            .filter(
+                (entry): entry is { readonly lidJid: string; readonly pnJid?: string } =>
+                    typeof entry.lidJid === 'string' && entry.lidJid.length > 0
+            )
+            .map((entry) => ({
+                lidJid: entry.lidJid,
                 ...(entry.pnJid ? { pnJid: entry.pnJid } : {})
-            })
-        )
+            }))
         return {
             ...base,
             action: 'business_broadcast_list_set',

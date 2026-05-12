@@ -474,6 +474,9 @@ export class WaAppStateMutationCoordinator {
             typeof input.mode === 'number'
                 ? input.mode
                 : proto.SyncActionValue.StatusPrivacyAction.StatusDistributionMode[input.mode]
+        if (typeof modeValue !== 'number' || !Number.isInteger(modeValue)) {
+            throw new Error(`setStatusPrivacy: invalid mode ${String(input.mode)}`)
+        }
         const userJid = input.userJids ? [...input.userJids] : []
         const value: Proto.ISyncActionValue = {
             statusPrivacy: {
@@ -496,6 +499,9 @@ export class WaAppStateMutationCoordinator {
 
     public async setUserStatusMute(jid: string, muted: boolean): Promise<void> {
         const indexJid = this.normalizeChatMutationJid(jid)
+        if (isGroupOrBroadcastJid(indexJid)) {
+            throw new Error(`setUserStatusMute requires a user jid, got ${jid}`)
+        }
         const timestamp = Date.now()
         await this.enqueueAndFlush([
             this.createAccountSetMutation({

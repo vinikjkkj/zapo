@@ -469,6 +469,7 @@ export class WaMessageDispatchCoordinator {
             message: input.message,
             options: input.options ?? {},
             logTag: 'status',
+            replayStatusSetting: statusSetting,
             // Bare `<to jid=user>` ack hints route the skmsg through primary
             // devices that already hold the sender key.
             customize: async ({
@@ -547,6 +548,7 @@ export class WaMessageDispatchCoordinator {
         readonly message: Proto.IMessage
         readonly options: WaSendMessageOptions
         readonly logTag: string
+        readonly replayStatusSetting?: string
         readonly customize?: (fanout: {
             readonly fanoutDeviceJids: readonly string[]
             readonly distributionParticipants: readonly {
@@ -630,7 +632,8 @@ export class WaMessageDispatchCoordinator {
             mode: 'plaintext',
             to: input.groupJid,
             type: messageNode.attrs.type,
-            plaintext
+            plaintext,
+            ...(input.replayStatusSetting ? { statusSetting: input.replayStatusSetting } : {})
         }
         const result = await this.retryTracker.track(
             {

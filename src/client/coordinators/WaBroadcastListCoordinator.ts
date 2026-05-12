@@ -3,15 +3,16 @@ import type {
     WaSetBroadcastListInput
 } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { WaSendMessageOptions } from '@client/types'
-import type { WaMessagePublishResult, WaSendMessageContent } from '@message/types'
+import type {
+    WaMessageBuildResult,
+    WaMessagePublishResult,
+    WaSendMessageContent
+} from '@message/types'
 import type { Proto } from '@proto'
 
 export interface WaBroadcastListCoordinatorOptions {
     readonly appStateMutations: WaAppStateMutationCoordinator
-    readonly buildMessageContent: (content: WaSendMessageContent) => Promise<{
-        readonly message: Proto.IMessage
-        readonly upload?: unknown
-    }>
+    readonly buildMessageContent: (content: WaSendMessageContent) => Promise<WaMessageBuildResult>
     readonly publishBroadcastListMessage: (input: {
         readonly listJid: string
         readonly message: Proto.IMessage
@@ -43,12 +44,13 @@ export function createBroadcastListCoordinator(
         removeList: (id) => options.appStateMutations.removeBroadcastList(id),
         sendMessage: async (input) => {
             const built = await options.buildMessageContent(input.content)
-            return options.publishBroadcastListMessage({
+            const published = await options.publishBroadcastListMessage({
                 listJid: input.listJid,
                 message: built.message,
                 recipients: input.recipients,
                 options: input.options
             })
+            return built.upload ? { ...published, upload: built.upload } : published
         }
     }
 }

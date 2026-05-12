@@ -358,6 +358,59 @@ test('retry replay service handles group plaintext retries and pkmsg identity gu
     assert.equal(sendNodeCalls[0].content[0].attrs.count, '1')
 })
 
+test('retry replay service emits status@broadcast retry with meta and no addressing_mode', async () => {
+    const sendNodeCalls: BinaryNode[] = []
+    const service = new WaRetryReplayService({
+        logger: createLogger(),
+        messageClient: {
+            sendEncrypted: async () => undefined,
+            sendMessageNode: async (node: BinaryNode) => {
+                sendNodeCalls.push(node)
+            }
+        } as unknown as WaMessageClient,
+        signalProtocol: {
+            encryptMessage: async () => ({
+                type: 'msg' as const,
+                ciphertext: new Uint8Array([1, 2, 3])
+            })
+        } as unknown as SignalProtocol,
+        getCurrentMeJid: () => null,
+        getCurrentMeLid: () => null,
+        getCurrentSignedIdentity: () => null
+    })
+
+    const now = Date.now()
+    const outbound: WaRetryOutboundMessageRecord = {
+        messageId: 'm-status-1',
+        toJid: 'status@broadcast',
+        messageType: 'text',
+        replayMode: 'plaintext',
+        replayPayload: {
+            mode: 'plaintext',
+            to: 'status@broadcast',
+            type: 'text',
+            plaintext: new Uint8Array([1, 2, 3, 4]),
+            statusSetting: 'denylist'
+        },
+        state: 'pending',
+        createdAtMs: now,
+        updatedAtMs: now,
+        expiresAtMs: now + 60_000
+    }
+    const result = await service.resendOutboundMessage(outbound, '5511:43@lid', 1)
+    assert.equal(result, 'resent')
+    assert.equal(sendNodeCalls.length, 1)
+    const node = sendNodeCalls[0]
+    assert.equal(node.attrs.to, 'status@broadcast')
+    assert.equal(node.attrs.participant, '5511:43@lid')
+    assert.equal(node.attrs.addressing_mode, undefined)
+    assert.ok(Array.isArray(node.content))
+    assert.equal(node.content[0].tag, 'meta')
+    assert.equal(node.content[0].attrs.status_setting, 'denylist')
+    assert.equal(node.content[1].tag, 'enc')
+    assert.equal(node.content[1].attrs.count, '1')
+})
+
 test('retry replay service handles encrypted mode eligibility', async () => {
     const sendEncryptedCalls: Array<Record<string, unknown>> = []
     const service = new WaRetryReplayService({

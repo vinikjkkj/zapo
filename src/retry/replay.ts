@@ -148,7 +148,9 @@ export class WaRetryReplayService {
 
         // status retries echo `<meta status_setting>` and omit `addressing_mode`.
         const isStatus = isStatusBroadcastJid(payload.to)
-        const metaNode = isStatus ? buildMetaNode({ status_setting: 'contacts' }) : undefined
+        const metaNode = isStatus
+            ? buildMetaNode({ status_setting: payload.statusSetting ?? 'contacts' })
+            : undefined
         const retryNode = buildGroupRetryMessageNode({
             to: payload.to,
             type: payload.type,

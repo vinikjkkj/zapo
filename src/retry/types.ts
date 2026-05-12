@@ -49,6 +49,9 @@ export interface WaRetryPlaintextReplayPayload {
     readonly to: string
     readonly type: string
     readonly plaintext: Uint8Array
+    // status@broadcast routing metadata to echo on retry; preserves the
+    // original audience (contacts / allowlist / denylist / close_friends).
+    readonly statusSetting?: string
 }
 
 export interface WaRetryEncryptedReplayPayload {

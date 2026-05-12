@@ -95,9 +95,12 @@ function buildMessageAttrs(input: {
 }
 
 function buildEncryptedToNode(p: EncryptedParticipant, mediatype?: string): BinaryNode {
-    // Status broadcast viewers without ciphertext get a bare `<to jid>`.
-    if (!p.encType || !p.ciphertext) {
+    // Status broadcast viewers without an encrypted payload get a bare `<to jid>`.
+    if (!p.encType && !p.ciphertext) {
         return { tag: 'to', attrs: { jid: p.jid } }
+    }
+    if (!p.encType || !p.ciphertext) {
+        throw new Error(`invalid encrypted participant payload for ${p.jid}`)
     }
     return {
         tag: 'to',

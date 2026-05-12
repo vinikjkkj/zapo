@@ -3,17 +3,18 @@ import type {
     WaSetStatusPrivacyInput
 } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { WaSendMessageOptions } from '@client/types'
-import type { WaMessagePublishResult, WaSendMessageContent } from '@message/types'
+import type {
+    WaMessageBuildResult,
+    WaMessagePublishResult,
+    WaSendMessageContent
+} from '@message/types'
 import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/defaults'
 import type { WaStatusDistributionSetting } from '@protocol/status'
 
 export interface WaStatusCoordinatorOptions {
     readonly appStateMutations: WaAppStateMutationCoordinator
-    readonly buildMessageContent: (content: WaSendMessageContent) => Promise<{
-        readonly message: Proto.IMessage
-        readonly upload?: unknown
-    }>
+    readonly buildMessageContent: (content: WaSendMessageContent) => Promise<WaMessageBuildResult>
     readonly publishStatusMessage: (input: {
         readonly message: Proto.IMessage
         readonly recipients: readonly string[]
@@ -57,12 +58,13 @@ export function createStatusCoordinator(options: WaStatusCoordinatorOptions): Wa
                           }
                       }
                     : built.message
-            return options.publishStatusMessage({
+            const published = await options.publishStatusMessage({
                 message,
                 recipients: input.recipients,
                 statusSetting: input.statusSetting,
                 options: input.options
             })
+            return built.upload ? { ...published, upload: built.upload } : published
         },
         revokeStatus: async (input) => {
             const message: Proto.IMessage = {

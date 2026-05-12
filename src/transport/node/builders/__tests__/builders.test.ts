@@ -557,6 +557,25 @@ test('message builders create fanout nodes and validate participant requirements
     assert.equal(retryNode.content[0].attrs.type, 'msg')
     assert.equal(retryNode.content[0].attrs.count, '2')
 
+    const statusRetry = buildGroupRetryMessageNode({
+        to: 'status@broadcast',
+        type: 'text',
+        id: 'id-status',
+        requesterJid: '5511:3@lid',
+        encType: 'pkmsg',
+        ciphertext: new Uint8Array([1]),
+        retryCount: 1,
+        metaNode: buildMetaNode({ status_setting: 'denylist' })
+    })
+    // status@broadcast retries omit `addressing_mode`
+    assert.equal(statusRetry.attrs.addressing_mode, undefined)
+    if (!Array.isArray(statusRetry.content)) {
+        throw new Error('expected status retry content array')
+    }
+    assert.equal(statusRetry.content[0].tag, 'meta')
+    assert.equal(statusRetry.content[0].attrs.status_setting, 'denylist')
+    assert.equal(statusRetry.content[1].tag, 'enc')
+
     const inboundRetry = buildReceiptNode({
         kind: 'retry',
         node: {
