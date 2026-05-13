@@ -435,6 +435,21 @@ export class WaMessageDispatchCoordinator {
         await this.messageClient.sendReceipt(input)
     }
 
+    public async publishProtocolMessageToDevice(
+        deviceJid: string,
+        protocolMessage: Proto.Message.IProtocolMessage,
+        options?: { readonly id?: string }
+    ): Promise<WaMessagePublishResult> {
+        return this.publishSignalMessage({
+            to: deviceJid,
+            plaintext: proto.Message.encode({ protocolMessage }).finish(),
+            id: options?.id,
+            type: 'text',
+            category: 'peer',
+            pushPriority: 'high'
+        })
+    }
+
     public async publishStatusMessage(input: {
         readonly message: Proto.IMessage
         readonly recipients: readonly string[]

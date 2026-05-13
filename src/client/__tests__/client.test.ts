@@ -356,7 +356,8 @@ test('buildWaClientDependencies wires privacy coordinator', () => {
         handleError: (_error: Error) => undefined,
         handleIncomingFrame: async (_frame: Uint8Array) => undefined,
         clearStoredState: async () => undefined,
-        resumeIncomingEvents: () => undefined
+        resumeIncomingEvents: () => undefined,
+        subscribeProtocolMessage: () => () => undefined
     }
 
     const dependencies = buildWaClientDependencies({ base, runtime })
@@ -398,7 +399,8 @@ test('buildWaClientDependencies wires trusted contact token AB prop overrides', 
         handleError: (_error: Error) => undefined,
         handleIncomingFrame: async (_frame: Uint8Array) => undefined,
         clearStoredState: async () => undefined,
-        resumeIncomingEvents: () => undefined
+        resumeIncomingEvents: () => undefined,
+        subscribeProtocolMessage: () => () => undefined
     }
 
     const dependencies = buildWaClientDependencies({ base, runtime })

@@ -6,6 +6,7 @@ import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
 import { createGroupParticipantsCache } from '@client/messaging/participants'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import { proto } from '@proto'
 import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
 
 function createLogger(): Logger {
@@ -167,13 +168,13 @@ test('group participants cache mutates membership from events', async () => {
 })
 
 test('app-state sync key protocol requests keys from peer devices and dedupes key ids', async () => {
-    const published: { readonly to: string; readonly type?: string }[] = []
+    const published: { readonly to: string; readonly protocolType?: number | null }[] = []
 
     const protocol = createAppStateSyncKeyProtocol({
-        publishSignalMessage: async (input) => {
+        publishProtocolMessageToDevice: async (deviceJid, protocolMessage) => {
             published.push({
-                to: input.to,
-                type: input.type
+                to: deviceJid,
+                protocolType: protocolMessage.type
             })
             return {
                 id: 'msg-id',
@@ -209,5 +210,10 @@ test('app-state sync key protocol requests keys from peer devices and dedupes ke
         '551100000000:3@s.whatsapp.net'
     ])
     assert.equal(published.length, 2)
-    assert.ok(published.every((entry) => entry.type === 'protocol'))
+    assert.ok(
+        published.every(
+            (entry) =>
+                entry.protocolType === proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_REQUEST
+        )
+    )
 })

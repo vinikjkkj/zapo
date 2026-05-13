@@ -64,6 +64,7 @@ import type {
     WaClientEventMap,
     WaClientOptions,
     WaIncomingMessageEvent,
+    WaIncomingProtocolMessageEvent,
     WaIncomingUnhandledStanzaEvent,
     WaNewsletterEventAction
 } from '@client/types'
@@ -71,6 +72,10 @@ import type { Logger } from '@infra/log/types'
 import type { WaMediaConn } from '@media/types'
 import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { handleIncomingMessageAck } from '@message/incoming'
+import {
+    createPeerDataOperationRequester,
+    type PeerDataOperationRequester
+} from '@message/peer-data-operation'
 import { WaMessageClient } from '@message/WaMessageClient'
 import {
     getWaCompanionPlatformId,
@@ -139,6 +144,9 @@ interface WaClientBuildRuntime {
     readonly handleIncomingFrame: (frame: Uint8Array) => Promise<void>
     readonly clearStoredState: () => Promise<void>
     readonly resumeIncomingEvents: () => void
+    readonly subscribeProtocolMessage: (
+        handler: (event: WaIncomingProtocolMessageEvent) => void
+    ) => () => void
 }
 
 interface WaClientDependencies {
@@ -177,6 +185,7 @@ interface WaClientDependencies {
     readonly connectionManager: WaConnectionManager
     readonly trustedContactToken: WaTrustedContactTokenCoordinator
     readonly abPropsCoordinator: WaAbPropsCoordinator
+    readonly peerDataOperation: PeerDataOperationRequester
 }
 
 function assertProxyTransport(value: unknown, path: string): void {
@@ -651,8 +660,8 @@ export function buildWaClientDependencies(input: {
     let messageDispatch!: WaMessageDispatchCoordinator
 
     const appStateSyncKeyProtocol = createAppStateSyncKeyProtocol({
-        publishSignalMessage: (signalInput, publishOptions) =>
-            messageDispatch.publishSignalMessage(signalInput, publishOptions),
+        publishProtocolMessageToDevice: (deviceJid, protocolMessage, opts) =>
+            messageDispatch.publishProtocolMessageToDevice(deviceJid, protocolMessage, opts),
         fanoutResolver,
         getCurrentMeJid,
         getCurrentMeLid,
@@ -1161,6 +1170,15 @@ export function buildWaClientDependencies(input: {
         }
     })
 
+    const peerDataOperation = createPeerDataOperationRequester({
+        logger,
+        publishProtocolMessageToDevice: (deviceJid, protocolMessage, opts) =>
+            messageDispatch.publishProtocolMessageToDevice(deviceJid, protocolMessage, opts),
+        getCurrentMeJid,
+        generateOutgoingMessageId: () => messageDispatch.generateOutgoingMessageId(),
+        subscribeToProtocolMessage: runtime.subscribeProtocolMessage
+    })
+
     passiveTasks = new WaPassiveTasksCoordinator({
         logger,
         signalStore: sessionStore.signal,
@@ -1214,6 +1232,7 @@ export function buildWaClientDependencies(input: {
         receiptQueue,
         connectionManager,
         trustedContactToken,
-        abPropsCoordinator
+        abPropsCoordinator,
+        peerDataOperation
     }
 }

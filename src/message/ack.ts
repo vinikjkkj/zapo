@@ -12,6 +12,9 @@ export function isNegativeAckNode(node: BinaryNode): boolean {
     if (node.tag !== WA_MESSAGE_TAGS.ACK) {
         return false
     }
+    if (node.attrs.error) {
+        return true
+    }
     const ackType = node.attrs.type
     const ackClass = node.attrs.class
     return (
@@ -37,6 +40,7 @@ export function describeAckNode(node: BinaryNode): string {
     const type = node.attrs.type
     const ackClass = node.attrs.class
     const code = node.attrs.code
+    const error = node.attrs.error
     if (id) {
         description += ` id=${id}`
     }
@@ -48,6 +52,9 @@ export function describeAckNode(node: BinaryNode): string {
     }
     if (code) {
         description += ` code=${code}`
+    }
+    if (error) {
+        description += ` error=${error}`
     }
     return description
 }

@@ -58,6 +58,7 @@ import {
 } from '@message/addon-crypto'
 import { decryptBotChunk } from '@message/bot'
 import { unwrapMessage } from '@message/content'
+import type { PeerDataOperationRequester } from '@message/peer-data-operation'
 import type {
     WaMessagePublishResult,
     WaSendMessageContent,
@@ -162,6 +163,7 @@ export class WaClient extends EventEmitter {
     private readonly receiptQueue!: WaReceiptQueue
     private readonly connectionManager!: WaConnectionManager
     private readonly trustedContactToken!: WaTrustedContactTokenCoordinator
+    private readonly peerDataOperation!: PeerDataOperationRequester
     private readonly writeBehind!: WriteBehindPersistence
     private connectPromise: Promise<void> | null = null
     private acceptingIncomingEvents = true
@@ -226,6 +228,12 @@ export class WaClient extends EventEmitter {
                 clearStoredState: this.clearStoredState.bind(this),
                 resumeIncomingEvents: () => {
                     this.acceptingIncomingEvents = true
+                },
+                subscribeProtocolMessage: (handler) => {
+                    this.on('message_protocol', handler)
+                    return () => {
+                        this.off('message_protocol', handler)
+                    }
                 }
             }
         })

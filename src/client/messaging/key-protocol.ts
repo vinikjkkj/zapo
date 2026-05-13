@@ -1,16 +1,15 @@
 import type { WaAppStateSyncKey } from '@appstate/types'
 import type { DeviceFanoutResolver } from '@client/messaging/fanout'
-import type { WaSignalMessagePublishInput } from '@client/types'
 import type { Logger } from '@infra/log/types'
-import { writeRandomPadMax16 } from '@message/padding'
-import type { WaMessagePublishOptions, WaMessagePublishResult } from '@message/types'
+import type { WaMessagePublishResult } from '@message/types'
 import { type Proto, proto } from '@proto'
 import { normalizeDeviceJid } from '@protocol/jid'
 import { bytesToHex } from '@util/bytes'
 
-type PublishSignalMessageFn = (
-    input: WaSignalMessagePublishInput,
-    options?: WaMessagePublishOptions
+export type PublishProtocolMessageToDeviceFn = (
+    deviceJid: string,
+    protocolMessage: Proto.Message.IProtocolMessage,
+    options?: { readonly id?: string }
 ) => Promise<WaMessagePublishResult>
 
 export type AppStateSyncKeyProtocol = {
@@ -23,14 +22,19 @@ export type AppStateSyncKeyProtocol = {
 }
 
 export function createAppStateSyncKeyProtocol(options: {
-    readonly publishSignalMessage: PublishSignalMessageFn
+    readonly publishProtocolMessageToDevice: PublishProtocolMessageToDeviceFn
     readonly fanoutResolver: DeviceFanoutResolver
     readonly getCurrentMeJid: () => string | null | undefined
     readonly getCurrentMeLid: () => string | null | undefined
     readonly logger: Logger
 }): AppStateSyncKeyProtocol {
-    const { publishSignalMessage, fanoutResolver, getCurrentMeJid, getCurrentMeLid, logger } =
-        options
+    const {
+        publishProtocolMessageToDevice,
+        fanoutResolver,
+        getCurrentMeJid,
+        getCurrentMeLid,
+        logger
+    } = options
 
     const requireCurrentIdentity = (context: string): void => {
         const meJid = getCurrentMeJid()
@@ -39,24 +43,6 @@ export function createAppStateSyncKeyProtocol(options: {
             return
         }
         throw new Error(`${context} requires registered identity`)
-    }
-
-    const publishProtocolMessageToDevice = async (
-        deviceJid: string,
-        protocolMessage: proto.Message.IProtocolMessage
-    ): Promise<void> => {
-        const plaintext = await writeRandomPadMax16(
-            proto.Message.encode({
-                protocolMessage
-            }).finish()
-        )
-        await publishSignalMessage({
-            to: deviceJid,
-            plaintext,
-            type: 'protocol',
-            category: 'peer',
-            pushPriority: 'high'
-        })
     }
 
     const requestKeys = async (keyIds: readonly Uint8Array[]): Promise<readonly string[]> => {
