@@ -105,13 +105,13 @@ export function createPeerDataOperationRequester(
 
     const publish = async (
         type: Proto.Message.PeerDataOperationRequestType,
-        body: Proto.Message.IPeerDataOperationRequestMessage
+        body: Proto.Message.IPeerDataOperationRequestMessage,
+        id: string
     ): Promise<string> => {
         const meJid = getCurrentMeJid()
         if (!meJid) {
             throw new Error('peer data operation requires current me jid')
         }
-        const id = await generateOutgoingMessageId()
         const result = await publishProtocolMessageToDevice(
             toUserJid(meJid),
             buildRequestProtocolMessage(type, body),
@@ -122,9 +122,11 @@ export function createPeerDataOperationRequester(
 
     return {
         request: async (type, body, requestOptions) => {
-            const messageId = await publish(type, body)
+            const messageId = await generateOutgoingMessageId()
             const timeoutMs = requestOptions?.timeoutMs ?? defaultTimeoutMs
-            return new Promise((resolve, reject) => {
+            return new Promise<
+                readonly Proto.Message.PeerDataOperationRequestResponseMessage.IPeerDataOperationResult[]
+            >((resolve, reject) => {
                 const timeout = setTimeout(() => {
                     if (!pending.delete(messageId)) {
                         return
@@ -138,9 +140,6 @@ export function createPeerDataOperationRequester(
                 }, timeoutMs)
                 const entry: PendingPdo = { resolve, reject, timeout }
                 setBoundedMapEntry(pending, messageId, entry, maxPending, (evictedKey, evicted) => {
-                    if (evictedKey === messageId) {
-                        return
-                    }
                     clearTimeout(evicted.timeout)
                     logger.warn('pdo pending entry evicted: capacity reached', {
                         evictedId: evictedKey,
@@ -152,8 +151,17 @@ export function createPeerDataOperationRequester(
                         )
                     )
                 })
+                publish(type, body, messageId).catch((error) => {
+                    clearTimeout(timeout)
+                    if (pending.delete(messageId)) {
+                        reject(error instanceof Error ? error : new Error(String(error)))
+                    }
+                })
             })
         },
-        send: async (type, body) => ({ messageId: await publish(type, body) })
+        send: async (type, body) => {
+            const messageId = await generateOutgoingMessageId()
+            return { messageId: await publish(type, body, messageId) }
+        }
     }
 }
