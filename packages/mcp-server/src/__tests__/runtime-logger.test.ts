@@ -55,6 +55,39 @@ test('BufferedTeeLogger respects bufferLimit by dropping oldest entries', () => 
     )
 })
 
+test('listLogs filters by q substring across message + context', () => {
+    const runtime = new McpRuntime(baseConfig())
+    const logger = runtime.getLogger()
+    logger.info('boot', { sessionId: 'abc' })
+    logger.warn('publish failed', { id: 'XYZ123' })
+    logger.error('publish failed', { id: 'qqq' })
+
+    const byMessage = runtime.listLogs({ q: 'PUBLISH' })
+    assert.equal(byMessage.length, 2)
+
+    const byContext = runtime.listLogs({ q: 'xyz' })
+    assert.equal(byContext.length, 1)
+    assert.equal(byContext[0].message, 'publish failed')
+
+    const none = runtime.listLogs({ q: 'no-such-thing' })
+    assert.equal(none.length, 0)
+})
+
+test('listLogs supports case-insensitive regex via q + regex flag', () => {
+    const runtime = new McpRuntime(baseConfig())
+    const logger = runtime.getLogger()
+    logger.info('order 42 processed')
+    logger.info('order ab processed')
+    logger.error('boom')
+
+    const matches = runtime.listLogs({ q: 'ORDER \\d+', regex: true })
+    assert.equal(matches.length, 1)
+    assert.equal(matches[0].message, 'order 42 processed')
+
+    const malformed = runtime.listLogs({ q: '(unclosed', regex: true })
+    assert.equal(malformed.length, 0)
+})
+
 test('BufferedTeeLogger mirrors entries to the configured log file as JSONL', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mcp-log-'))
     const logFilePath = join(dir, 'out.log')

@@ -180,7 +180,9 @@ const eventsTool: ToolDefinition = {
     description:
         'Read recent buffered WaClient events. Filter by types and/or sequence id. ' +
         'Use this to wait for QR codes, pairing codes, incoming messages, group events, etc. ' +
-        'Each event has a monotonic seq — pass `since: <seq>` next call to fetch only newer ones.',
+        'Each event has a monotonic seq — pass `since: <seq>` next call to fetch only newer ones. ' +
+        'Use `q` for case-insensitive substring search across `type + JSON.stringify(payload)`; ' +
+        '`regex: true` to treat `q` as a regex pattern (case-insensitive).',
     inputSchema: {
         type: 'object',
         properties: {
@@ -201,6 +203,15 @@ const eventsTool: ToolDefinition = {
             drain: {
                 type: 'boolean',
                 description: 'If true, returned events are removed from the buffer.'
+            },
+            q: {
+                type: 'string',
+                description:
+                    'Filter by substring (case-insensitive) of the event type + stringified payload.'
+            },
+            regex: {
+                type: 'boolean',
+                description: 'Treat `q` as a regex pattern (case-insensitive).'
             }
         },
         additionalProperties: false
@@ -238,7 +249,9 @@ const logsTool: ToolDefinition = {
         'Read recent buffered log entries from the WaClient/MCP runtime logger. ' +
         'Each entry has a monotonic seq, timestampMs, level, message and optional context object. ' +
         'Pass `since: <seq>` to fetch only newer entries on the next call. ' +
-        'Logs are also written to stderr and (if MCP_LOG_FILE is set) appended to that file as JSONL.',
+        'Logs are also written to stderr and (if MCP_LOG_FILE is set) appended to that file as JSONL. ' +
+        'Use `q` for case-insensitive substring search across the message + stringified context; ' +
+        '`regex: true` to treat `q` as a regex pattern (case-insensitive).',
     inputSchema: {
         type: 'object',
         properties: {
@@ -258,6 +271,15 @@ const logsTool: ToolDefinition = {
             drain: {
                 type: 'boolean',
                 description: 'If true, returned entries are removed from the buffer.'
+            },
+            q: {
+                type: 'string',
+                description:
+                    'Substring (case-insensitive) matched against `message + JSON.stringify(context)`.'
+            },
+            regex: {
+                type: 'boolean',
+                description: 'Treat `q` as a regex pattern (case-insensitive).'
             }
         },
         additionalProperties: false
@@ -437,7 +459,14 @@ const parseInspectInput = (
 
 const parseEventsInput = (
     input: unknown
-): { types?: readonly string[]; since?: number; limit?: number; drain?: boolean } => {
+): {
+    types?: readonly string[]
+    since?: number
+    limit?: number
+    drain?: boolean
+    q?: string
+    regex?: boolean
+} => {
     const obj = (input ?? {}) as Record<string, unknown>
     const types =
         Array.isArray(obj.types) && obj.types.every((t) => typeof t === 'string')
@@ -446,7 +475,9 @@ const parseEventsInput = (
     const since = typeof obj.since === 'number' ? obj.since : undefined
     const limit = typeof obj.limit === 'number' ? obj.limit : undefined
     const drain = obj.drain === true
-    return { types, since, limit, drain }
+    const q = typeof obj.q === 'string' ? obj.q : undefined
+    const regex = obj.regex === true
+    return { types, since, limit, drain, q, regex }
 }
 
 const parseLogsInput = (
@@ -456,6 +487,8 @@ const parseLogsInput = (
     since?: number
     limit?: number
     drain?: boolean
+    q?: string
+    regex?: boolean
 } => {
     const obj = (input ?? {}) as Record<string, unknown>
     let levels: readonly ('trace' | 'debug' | 'info' | 'warn' | 'error')[] | undefined
@@ -479,7 +512,9 @@ const parseLogsInput = (
     const since = typeof obj.since === 'number' ? obj.since : undefined
     const limit = typeof obj.limit === 'number' ? obj.limit : undefined
     const drain = obj.drain === true
-    return { levels, since, limit, drain }
+    const q = typeof obj.q === 'string' ? obj.q : undefined
+    const regex = obj.regex === true
+    return { levels, since, limit, drain, q, regex }
 }
 
 const parseLifecycleInput = (input: unknown): 'status' | 'start' | 'destroy' => {
