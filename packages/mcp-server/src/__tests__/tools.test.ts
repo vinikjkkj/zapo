@@ -39,9 +39,18 @@ class FakeClient {
     }
 }
 
-const buildFakeRuntime = (client: FakeClient): McpRuntime => {
+interface SpyableFakeRuntime extends McpRuntime {
+    readonly __lastEventsFilter: { value: Record<string, unknown> | null }
+    readonly __lastLogsFilter: { value: Record<string, unknown> | null }
+    __pushLog(entry: LogEntry): void
+    __pushEvent(entry: BufferedEvent): void
+}
+
+const buildFakeRuntime = (client: FakeClient): SpyableFakeRuntime => {
     const events: BufferedEvent[] = []
     const logs: LogEntry[] = []
+    const lastEventsFilter = { value: null as Record<string, unknown> | null }
+    const lastLogsFilter = { value: null as Record<string, unknown> | null }
     const config: RuntimeConfig = {
         authPath: '/tmp/test.sqlite',
         sessionId: 'test',
@@ -67,7 +76,10 @@ const buildFakeRuntime = (client: FakeClient): McpRuntime => {
         ensureClient: async () => client,
         getClient: () => client,
         async destroyClient() {},
-        listEvents: () => events,
+        listEvents: (filter: Record<string, unknown> = {}) => {
+            lastEventsFilter.value = filter
+            return events
+        },
         clearEvents: () => {
             const n = events.length
             events.length = 0
@@ -80,8 +92,11 @@ const buildFakeRuntime = (client: FakeClient): McpRuntime => {
                 limit?: number
                 levels?: readonly string[]
                 drain?: boolean
+                q?: string
+                regex?: boolean
             } = {}
         ) => {
+            lastLogsFilter.value = filter as Record<string, unknown>
             const lvSet = filter.levels && filter.levels.length > 0 ? new Set(filter.levels) : null
             const since = filter.since ?? 0
             const limit = filter.limit && filter.limit > 0 ? filter.limit : 100
@@ -103,15 +118,17 @@ const buildFakeRuntime = (client: FakeClient): McpRuntime => {
         bufferLogsSize: () => logs.length,
         async closeLogFile() {},
         resetSequences: () => undefined,
-        // test-only helpers: push synthetic entries
+        // test-only helpers: push synthetic entries + read last filter
         __pushLog: (entry: LogEntry) => {
             logs.push(entry)
         },
         __pushEvent: (entry: BufferedEvent) => {
             events.push(entry)
-        }
+        },
+        __lastEventsFilter: lastEventsFilter,
+        __lastLogsFilter: lastLogsFilter
     }
-    return fake as unknown as McpRuntime
+    return fake as unknown as SpyableFakeRuntime
 }
 
 const findTool = (name: string) => {
@@ -328,6 +345,48 @@ test('logs tool rejects invalid levels', async () => {
     const runtime = buildFakeRuntime(new FakeClient())
     const tool = findTool('logs')
     await assert.rejects(() => tool.handler({ levels: ['fatal'] }, runtime), /invalid level/)
+})
+
+test('logs tool forwards q and regex to runtime.listLogs', async () => {
+    const runtime = buildFakeRuntime(new FakeClient())
+    const tool = findTool('logs')
+    await tool.handler({ q: 'boom', regex: true, limit: 5 }, runtime)
+    const captured = runtime.__lastLogsFilter.value
+    assert.ok(captured, 'logs filter must be captured')
+    assert.equal(captured.q, 'boom')
+    assert.equal(captured.regex, true)
+    assert.equal(captured.limit, 5)
+})
+
+test('logs tool omits q/regex when not provided', async () => {
+    const runtime = buildFakeRuntime(new FakeClient())
+    const tool = findTool('logs')
+    await tool.handler({}, runtime)
+    const captured = runtime.__lastLogsFilter.value
+    assert.ok(captured)
+    assert.equal(captured.q, undefined)
+    assert.equal(captured.regex, false)
+})
+
+test('events tool forwards q and regex to runtime.listEvents', async () => {
+    const runtime = buildFakeRuntime(new FakeClient())
+    const tool = findTool('events')
+    await tool.handler({ q: '3EB0', regex: true, types: ['message'] }, runtime)
+    const captured = runtime.__lastEventsFilter.value
+    assert.ok(captured, 'events filter must be captured')
+    assert.equal(captured.q, '3EB0')
+    assert.equal(captured.regex, true)
+    assert.deepStrictEqual(captured.types, ['message'])
+})
+
+test('events tool omits q/regex when not provided', async () => {
+    const runtime = buildFakeRuntime(new FakeClient())
+    const tool = findTool('events')
+    await tool.handler({}, runtime)
+    const captured = runtime.__lastEventsFilter.value
+    assert.ok(captured)
+    assert.equal(captured.q, undefined)
+    assert.equal(captured.regex, false)
 })
 
 test('logs_clear tool drops every entry', async () => {
