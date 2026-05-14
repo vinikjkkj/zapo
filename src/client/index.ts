@@ -13,6 +13,14 @@ export type {
     WaDeleteMessageForMeOptions,
     WaHistorySyncChunkEvent,
     WaHistorySyncOptions,
+    WaIncomingBaseEvent,
+    WaIncomingCallEvent,
+    WaIncomingChatstateEvent,
+    WaIncomingFailureEvent,
+    WaIncomingNotificationEvent,
+    WaIncomingPresenceEvent,
+    WaIncomingReceiptEvent,
+    WaIncomingUnhandledStanzaEvent,
     WaLogoutStoreClearOptions,
     WaWriteBehindOptions
 } from '@client/types'

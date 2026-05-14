@@ -5,6 +5,14 @@ export type {
     WaClientProxyOptions,
     WaHistorySyncChunkEvent,
     WaHistorySyncOptions,
+    WaIncomingBaseEvent,
+    WaIncomingCallEvent,
+    WaIncomingChatstateEvent,
+    WaIncomingFailureEvent,
+    WaIncomingNotificationEvent,
+    WaIncomingPresenceEvent,
+    WaIncomingReceiptEvent,
+    WaIncomingUnhandledStanzaEvent,
     WaWriteBehindOptions
 } from '@client'
 export type {
