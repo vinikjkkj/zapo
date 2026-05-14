@@ -108,7 +108,9 @@ export function parseCollectionState(node: BinaryNode): AppStateCollectionState 
     }
     if (
         code === WA_APP_STATE_ERROR_CODES.BAD_REQUEST ||
-        code === WA_APP_STATE_ERROR_CODES.NOT_FOUND
+        code === WA_APP_STATE_ERROR_CODES.NOT_FOUND ||
+        code === WA_APP_STATE_ERROR_CODES.NOT_ALLOWED ||
+        code === WA_APP_STATE_ERROR_CODES.NOT_ACCEPTABLE
     ) {
         return WA_APP_STATE_COLLECTION_STATES.ERROR_FATAL
     }

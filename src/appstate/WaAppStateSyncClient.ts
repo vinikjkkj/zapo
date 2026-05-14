@@ -1166,7 +1166,7 @@ export class WaAppStateSyncClient {
 
         const encryptedResults = await Promise.all(
             pendingMutations.map(async (mutation) => {
-                const value = mutation.operation === 'set' ? mutation.value : mutation.previousValue
+                const value = mutation.operation === 'set' ? mutation.value : null
                 const operationCode =
                     mutation.operation === 'remove'
                         ? proto.SyncdMutation.SyncdOperation.REMOVE
@@ -1225,15 +1225,13 @@ export class WaAppStateSyncClient {
             collection
         )
         const deviceIndex = this.resolveDeviceIndex()
-        const clientDebugData = this.buildPatchClientDebugData()
 
         const encodedPatch = proto.SyncdPatch.encode({
             mutations: encryptedMutations,
             snapshotMac,
             patchMac,
             keyId: { id: activeKey.keyId },
-            ...(deviceIndex === undefined ? {} : { deviceIndex }),
-            clientDebugData
+            ...(deviceIndex === undefined ? {} : { deviceIndex })
         }).finish()
 
         return {
@@ -1261,13 +1259,6 @@ export class WaAppStateSyncClient {
             void error
             return undefined
         }
-    }
-
-    private buildPatchClientDebugData(): Uint8Array {
-        return proto.PatchDebugData.encode({
-            isSenderPrimary: false,
-            senderPlatform: proto.PatchDebugData.Platform.WEB
-        }).finish()
     }
 
     private async computeNextCollectionState(

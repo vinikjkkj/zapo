@@ -19,7 +19,9 @@ export const WA_APP_STATE_COLLECTION_STATES = Object.freeze({
 export const WA_APP_STATE_ERROR_CODES = Object.freeze({
     CONFLICT: '409',
     BAD_REQUEST: '400',
-    NOT_FOUND: '404'
+    NOT_FOUND: '404',
+    NOT_ALLOWED: '405',
+    NOT_ACCEPTABLE: '406'
 } as const)
 
 export const WA_APP_STATE_SYNC_DATA_TYPE = Object.freeze({
