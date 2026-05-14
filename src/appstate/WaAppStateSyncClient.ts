@@ -764,7 +764,8 @@ export class WaAppStateSyncClient {
                     const decodedMutations = proto.SyncdMutations.decode(patchBytes)
                     readyPatch = {
                         ...readyPatch,
-                        mutations: decodedMutations.mutations ?? []
+                        mutations: decodedMutations.mutations ?? [],
+                        externalMutations: undefined
                     }
                 }
                 return this.validatePatch(payload.collection, readyPatch)

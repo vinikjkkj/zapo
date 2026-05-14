@@ -4,7 +4,14 @@ import type { Logger } from '@infra/log/types'
 import type { WaProxyAgent } from '@transport/types'
 
 export type MediaKind = 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'ptv'
-export type MediaCryptoType = MediaKind | 'ptt' | 'gif' | 'history' | 'md-app-state'
+export type MediaCryptoType =
+    | MediaKind
+    | 'ptt'
+    | 'gif'
+    | 'history'
+    | 'md-app-state'
+    | 'md-msg-hist'
+    | 'xma-image'
 
 export interface WaMediaConnHost {
     readonly hostname: string

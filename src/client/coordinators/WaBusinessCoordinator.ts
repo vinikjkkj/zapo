@@ -7,7 +7,7 @@ import {
 } from '@client/media'
 import type { WaBusinessProfileResult, WaVerifiedNameResult } from '@client/types'
 import type { Logger } from '@infra/log/types'
-import { BIZ_COVER_PHOTO_UPLOAD_PATH } from '@media/constants'
+import { PPS_UPLOAD_PATHS } from '@media/constants'
 import type { WaMediaConn } from '@media/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import {
@@ -105,7 +105,7 @@ export function createBusinessCoordinator(
                 { mediaTransfer, mediaConn, logger },
                 {
                     source: media,
-                    path: BIZ_COVER_PHOTO_UPLOAD_PATH,
+                    path: PPS_UPLOAD_PATHS['biz-cover-photo'],
                     logLabel: 'sending business cover photo upload'
                 }
             )

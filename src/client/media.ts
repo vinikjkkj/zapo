@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
-import { open, unlink } from 'node:fs/promises'
+import { open, stat, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Readable, Transform } from 'node:stream'
@@ -193,6 +193,7 @@ async function preparePlaintextUploadSource(
         return { fileSha256: sha256(media), byteLength: media.byteLength, body: media }
     }
     if (typeof media === 'string') {
+        await assertReadableFile(media)
         const result = await streamToTempFileWithSha256(createReadStream(media))
         return {
             fileSha256: result.fileSha256,
@@ -318,11 +319,27 @@ export interface ResolvedMediaInputs {
     readonly tempFilePath?: string
 }
 
+async function assertReadableFile(filePath: string): Promise<void> {
+    try {
+        const stats = await stat(filePath)
+        if (!stats.isFile()) {
+            throw new Error(`media path is not a regular file: ${filePath}`)
+        }
+    } catch (error) {
+        const err = toError(error)
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+            throw new Error(`media file not found: ${filePath}`)
+        }
+        throw err
+    }
+}
+
 export async function resolveMediaInputs(
     shouldProcess: boolean,
     raw: Uint8Array | ArrayBuffer | Readable | string
 ): Promise<ResolvedMediaInputs> {
     if (typeof raw === 'string') {
+        await assertReadableFile(raw)
         return {
             processorInput: raw,
             uploadMedia: createReadStream(raw)

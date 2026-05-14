@@ -10,6 +10,14 @@ import { parseWebpAnimation, runMediaProcessor } from '@client/media'
 import { buildMediaMessageContent, getMediaConn } from '@client/messages'
 import type { Logger } from '@infra/log/types'
 import { parseMediaConnResponse } from '@media/conn'
+import {
+    MEDIA_UPLOAD_PATHS,
+    type MediaUploadKind,
+    NEWSLETTER_MEDIA_UPLOAD_PATHS,
+    type NewsletterMediaKind,
+    PPS_UPLOAD_PATHS,
+    type PpsUploadKind
+} from '@media/constants'
 import { WaMediaCrypto } from '@media/WaMediaCrypto'
 import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import type { BinaryNode } from '@transport/types'
@@ -1073,5 +1081,69 @@ test('media transfer client uploads readable stream through optional got agent',
         await new Promise<void>((resolve) => {
             server.close(() => resolve())
         })
+    }
+})
+
+test('MEDIA_UPLOAD_PATHS covers all wa-web /mms paths under /mms prefix', () => {
+    const expected: Record<MediaUploadKind, string> = {
+        image: '/mms/image',
+        video: '/mms/video',
+        audio: '/mms/audio',
+        document: '/mms/document',
+        sticker: '/mms/sticker',
+        gif: '/mms/gif',
+        ptt: '/mms/ptt',
+        ptv: '/mms/video',
+        'ads-image': '/mms/ads-image',
+        'ads-video': '/mms/ads-video',
+        'group-history': '/mms/group-history',
+        'md-app-state': '/mms/md-app-state',
+        'md-msg-hist': '/mms/md-msg-hist',
+        'music-artwork': '/mms/music-artwork',
+        'newsletter-music-artwork': '/mms/newsletter-music-artwork',
+        'sticker-pack': '/mms/sticker-pack',
+        'thumbnail-document': '/mms/thumbnail-document',
+        'thumbnail-image': '/mms/thumbnail-image',
+        'thumbnail-link': '/mms/thumbnail-link',
+        'thumbnail-sticker-pack': '/mms/thumbnail-sticker-pack',
+        'thumbnail-video': '/mms/thumbnail-video',
+        'waffle-image': '/mms/waffle-image',
+        'waffle-video': '/mms/waffle-video'
+    }
+    assert.deepEqual(MEDIA_UPLOAD_PATHS, expected)
+    for (const key of Object.keys(MEDIA_UPLOAD_PATHS) as MediaUploadKind[]) {
+        assert.ok(
+            MEDIA_UPLOAD_PATHS[key].startsWith('/mms/'),
+            `${key} should start with /mms/, got ${MEDIA_UPLOAD_PATHS[key]}`
+        )
+    }
+})
+
+test('PPS_UPLOAD_PATHS exposes profile and biz cover photo paths', () => {
+    const expected: Record<PpsUploadKind, string> = {
+        photo: '/pps/photo',
+        'biz-cover-photo': '/pps/biz-cover-photo'
+    }
+    assert.deepEqual(PPS_UPLOAD_PATHS, expected)
+})
+
+test('NEWSLETTER_MEDIA_UPLOAD_PATHS keys are under /newsletter prefix', () => {
+    const kinds: readonly NewsletterMediaKind[] = [
+        'image',
+        'video',
+        'audio',
+        'document',
+        'sticker',
+        'sticker-pack',
+        'gif',
+        'ptt',
+        'ptv',
+        'thumbnail-link'
+    ]
+    for (const kind of kinds) {
+        assert.ok(
+            NEWSLETTER_MEDIA_UPLOAD_PATHS[kind].startsWith('/newsletter/newsletter-'),
+            `${kind} should start with /newsletter/newsletter-, got ${NEWSLETTER_MEDIA_UPLOAD_PATHS[kind]}`
+        )
     }
 })

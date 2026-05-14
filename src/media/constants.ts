@@ -14,9 +14,32 @@ export const HMAC_TRUNCATED_SIZE = 10
 export const SIDECAR_CHUNK_SIZE = 65_536
 export const SIDECAR_HMAC_SIZE = 10
 
-export const MEDIA_UPLOAD_PATHS: Readonly<
-    Record<'image' | 'video' | 'audio' | 'document' | 'sticker' | 'gif' | 'ptt' | 'ptv', string>
-> = Object.freeze({
+export type MediaUploadKind =
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'document'
+    | 'sticker'
+    | 'gif'
+    | 'ptt'
+    | 'ptv'
+    | 'ads-image'
+    | 'ads-video'
+    | 'group-history'
+    | 'md-app-state'
+    | 'md-msg-hist'
+    | 'music-artwork'
+    | 'newsletter-music-artwork'
+    | 'sticker-pack'
+    | 'thumbnail-document'
+    | 'thumbnail-image'
+    | 'thumbnail-link'
+    | 'thumbnail-sticker-pack'
+    | 'thumbnail-video'
+    | 'waffle-image'
+    | 'waffle-video'
+
+export const MEDIA_UPLOAD_PATHS: Readonly<Record<MediaUploadKind, string>> = Object.freeze({
     image: '/mms/image',
     video: '/mms/video',
     audio: '/mms/audio',
@@ -24,7 +47,22 @@ export const MEDIA_UPLOAD_PATHS: Readonly<
     sticker: '/mms/sticker',
     gif: '/mms/gif',
     ptt: '/mms/ptt',
-    ptv: '/mms/video'
+    ptv: '/mms/video',
+    'ads-image': '/mms/ads-image',
+    'ads-video': '/mms/ads-video',
+    'group-history': '/mms/group-history',
+    'md-app-state': '/mms/md-app-state',
+    'md-msg-hist': '/mms/md-msg-hist',
+    'music-artwork': '/mms/music-artwork',
+    'newsletter-music-artwork': '/mms/newsletter-music-artwork',
+    'sticker-pack': '/mms/sticker-pack',
+    'thumbnail-document': '/mms/thumbnail-document',
+    'thumbnail-image': '/mms/thumbnail-image',
+    'thumbnail-link': '/mms/thumbnail-link',
+    'thumbnail-sticker-pack': '/mms/thumbnail-sticker-pack',
+    'thumbnail-video': '/mms/thumbnail-video',
+    'waffle-image': '/mms/waffle-image',
+    'waffle-video': '/mms/waffle-video'
 })
 
 export type NewsletterMediaKind =
@@ -39,7 +77,12 @@ export type NewsletterMediaKind =
     | 'ptv'
     | 'thumbnail-link'
 
-export const BIZ_COVER_PHOTO_UPLOAD_PATH = '/pps/biz-cover-photo'
+export type PpsUploadKind = 'photo' | 'biz-cover-photo'
+
+export const PPS_UPLOAD_PATHS: Readonly<Record<PpsUploadKind, string>> = Object.freeze({
+    photo: '/pps/photo',
+    'biz-cover-photo': '/pps/biz-cover-photo'
+})
 
 export const NEWSLETTER_MEDIA_UPLOAD_PATHS: Readonly<Record<NewsletterMediaKind, string>> =
     Object.freeze({

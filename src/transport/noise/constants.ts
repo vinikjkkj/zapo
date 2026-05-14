@@ -1,6 +1,6 @@
 import { TEXT_ENCODER } from '@util/bytes'
 
-export const DEFAULT_VERSION_BASE = '2.3000.1039498983'
+export const DEFAULT_VERSION_BASE = '2.3000.1034748654'
 export const WA_PROTO_HEADER = new Uint8Array([87, 65, 6, 3])
 export const NOISE_XX_NAME = TEXT_ENCODER.encode('Noise_XX_25519_AESGCM_SHA256\0\0\0\0')
 export const NOISE_IK_NAME = TEXT_ENCODER.encode('Noise_IK_25519_AESGCM_SHA256\0\0\0\0')
