@@ -62,7 +62,8 @@ export namespace waproto {
 	}
 	enum ADVEncryptionType {
 		E2EE = 0,
-		HOSTED = 1
+		HOSTED = 1,
+		NON_E2EE = 2
 	}
 	interface IADVKeyIndexList {
 		rawId?: (number|null)
@@ -165,7 +166,8 @@ export namespace waproto {
 				CREATE_IMAGE = 1,
 				ANIMATE_PHOTO = 2,
 				ANALYZE_FILE = 3,
-				COLLABORATE = 4
+				COLLABORATE = 4,
+				OPEN_GREETING_CARD = 5
 			}
 		}
 	}
@@ -526,6 +528,21 @@ export namespace waproto {
 		public static encode(m: waproto.IAIRichResponseUnifiedResponse, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AIRichResponseUnifiedResponse
 	}
+	enum AISubscriptionRequestType {
+		UNSPECIFIED = 0,
+		THINK_HARD = 1,
+		IMAGE_GEN = 2,
+		VIDEO_GEN = 3
+	}
+	interface IAISubscriptionUpsellMetadata {
+		requestType?: (waproto.AISubscriptionRequestType|null)
+	}
+	class AISubscriptionUpsellMetadata implements IAISubscriptionUpsellMetadata {
+		constructor(p?: waproto.IAISubscriptionUpsellMetadata)
+		public requestType?: (waproto.AISubscriptionRequestType|null)
+		public static encode(m: waproto.IAISubscriptionUpsellMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AISubscriptionUpsellMetadata
+	}
 	interface IAIThreadInfo {
 		serverInfo?: (waproto.AIThreadInfo.IAIThreadServerInfo|null)
 		clientInfo?: (waproto.AIThreadInfo.IAIThreadClientInfo|null)
@@ -581,6 +598,21 @@ export namespace waproto {
 		public isUsernameDeleted?: (boolean|null)
 		public static encode(m: waproto.IAccount, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Account
+	}
+	interface IAccountLinkingOpaqueData {
+		accesstoken?: (string|null)
+		fbid?: (string|null)
+		nonce?: (string|null)
+		encryptedPassword?: (string|null)
+	}
+	class AccountLinkingOpaqueData implements IAccountLinkingOpaqueData {
+		constructor(p?: waproto.IAccountLinkingOpaqueData)
+		public accesstoken?: (string|null)
+		public fbid?: (string|null)
+		public nonce?: (string|null)
+		public encryptedPassword?: (string|null)
+		public static encode(m: waproto.IAccountLinkingOpaqueData, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.AccountLinkingOpaqueData
 	}
 	interface IActionLink {
 		url?: (string|null)
@@ -713,6 +745,24 @@ export namespace waproto {
 			WAFFLE = 1
 		}
 	}
+	interface IBotAgentDeepLinkMetadata {
+		token?: (string|null)
+	}
+	class BotAgentDeepLinkMetadata implements IBotAgentDeepLinkMetadata {
+		constructor(p?: waproto.IBotAgentDeepLinkMetadata)
+		public token?: (string|null)
+		public static encode(m: waproto.IBotAgentDeepLinkMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotAgentDeepLinkMetadata
+	}
+	interface IBotAgentMetadata {
+		deepLinkMetadata?: (waproto.IBotAgentDeepLinkMetadata|null)
+	}
+	class BotAgentMetadata implements IBotAgentMetadata {
+		constructor(p?: waproto.IBotAgentMetadata)
+		public deepLinkMetadata?: (waproto.IBotAgentDeepLinkMetadata|null)
+		public static encode(m: waproto.IBotAgentMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotAgentMetadata
+	}
 	interface IBotCapabilityMetadata {
 		capabilities?: (waproto.BotCapabilityMetadata.BotCapabilityType[]|null)
 	}
@@ -782,8 +832,24 @@ export namespace waproto {
 			RICH_RESPONSE_UR_BLOKS_ENABLED = 55,
 			RICH_RESPONSE_INLINE_LINKS_ENABLED = 56,
 			RICH_RESPONSE_UR_IMAGINE_VIDEO = 57,
-			JSON_PATCH_STREAMING = 58
+			JSON_PATCH_STREAMING = 58,
+			AI_TAB_FORCE_CLIPPY = 59,
+			UNIFIED_RESPONSE_EMBEDDED_SCREENS = 60,
+			AI_SUBSCRIPTION_ENABLED = 61
 		}
+	}
+	interface IBotCommandMetadata {
+		commandName?: (string|null)
+		commandDescription?: (string|null)
+		commandPrompt?: (string|null)
+	}
+	class BotCommandMetadata implements IBotCommandMetadata {
+		constructor(p?: waproto.IBotCommandMetadata)
+		public commandName?: (string|null)
+		public commandDescription?: (string|null)
+		public commandPrompt?: (string|null)
+		public static encode(m: waproto.IBotCommandMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotCommandMetadata
 	}
 	interface IBotDocumentMessageMetadata {
 		pluginType?: (waproto.BotDocumentMessageMetadata.DocumentPluginType|null)
@@ -1189,6 +1255,9 @@ export namespace waproto {
 		botRenderingConfigMetadata?: (waproto.IBotRenderingConfigMetadata|null)
 		botInfrastructureDiagnostics?: (waproto.IBotInfrastructureDiagnostics|null)
 		aiMediaCollectionMetadata?: (waproto.IAIMediaCollectionMetadata|null)
+		commandMetadata?: (waproto.IBotCommandMetadata|null)
+		resolvedToolCallMetadata?: (waproto.IBotResolvedToolCallMetadata|null)
+		subscriptionUpsellMetadata?: (waproto.IAISubscriptionUpsellMetadata|null)
 		internalMetadata?: (Uint8Array|null)
 	}
 	class BotMetadata implements IBotMetadata {
@@ -1230,6 +1299,9 @@ export namespace waproto {
 		public botRenderingConfigMetadata?: (waproto.IBotRenderingConfigMetadata|null)
 		public botInfrastructureDiagnostics?: (waproto.IBotInfrastructureDiagnostics|null)
 		public aiMediaCollectionMetadata?: (waproto.IAIMediaCollectionMetadata|null)
+		public commandMetadata?: (waproto.IBotCommandMetadata|null)
+		public resolvedToolCallMetadata?: (waproto.IBotResolvedToolCallMetadata|null)
+		public subscriptionUpsellMetadata?: (waproto.IAISubscriptionUpsellMetadata|null)
 		public internalMetadata?: (Uint8Array|null)
 		public static encode(m: waproto.IBotMetadata, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotMetadata
@@ -1281,7 +1353,8 @@ export namespace waproto {
 		WEB_INTRO_PANEL = 46,
 		WEB_NAVIGATION_BAR = 47,
 		GROUP_MEMBER = 54,
-		CHATLIST_SEARCH = 55
+		CHATLIST_SEARCH = 55,
+		NEW_CHAT_LIST = 56
 	}
 	interface IBotMetricsMetadata {
 		destinationId?: (string|null)
@@ -1621,6 +1694,17 @@ export namespace waproto {
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotRenderingMetadata.Keyword
 		}
 	}
+	interface IBotResolvedToolCallMetadata {
+		toolCallId?: (string|null)
+		resolutionDataSerialized?: (string|null)
+	}
+	class BotResolvedToolCallMetadata implements IBotResolvedToolCallMetadata {
+		constructor(p?: waproto.IBotResolvedToolCallMetadata)
+		public toolCallId?: (string|null)
+		public resolutionDataSerialized?: (string|null)
+		public static encode(m: waproto.IBotResolvedToolCallMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotResolvedToolCallMetadata
+	}
 	interface IBotSessionMetadata {
 		sessionId?: (string|null)
 		sessionSource?: (waproto.BotSessionSource|null)
@@ -1765,6 +1849,29 @@ export namespace waproto {
 			public static encode(m: waproto.BotUnifiedResponseMutation.ISideBySideMetadata, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.BotUnifiedResponseMutation.SideBySideMetadata
 		}
+	}
+	enum COMMAND_COMMAND_TYPE {
+		EVERYONE = 1,
+		SILENT = 2,
+		AI = 3,
+		AI_IMAGINE = 4
+	}
+	enum CONSUMER_APPLICATION_EXTENDED_TEXT_MESSAGE_PREVIEW_TYPE {
+		NONE = 0,
+		VIDEO = 1
+	}
+	enum CONSUMER_APPLICATION_METADATA_SPECIAL_TEXT_SIZE {
+		SMALL = 1,
+		MEDIUM = 2,
+		LARGE = 3
+	}
+	enum CONSUMER_APPLICATION_STATUS_TEXT_MESAGE_FONT_TYPE {
+		SANS_SERIF = 0,
+		SERIF = 1,
+		NORICAN_REGULAR = 2,
+		BRYNDAN_WRITE = 3,
+		BEBASNEUE_REGULAR = 4,
+		OSWALD_HEAVY = 5
 	}
 	interface ICallLogRecord {
 		callResult?: (waproto.CallLogRecord.CallResult|null)
@@ -1997,6 +2104,7 @@ export namespace waproto {
 		isSyncdPureLidSession?: (boolean|null)
 		isSyncdSnapshotRecoveryEnabled?: (boolean|null)
 		isHsThumbnailSyncEnabled?: (boolean|null)
+		subscriptionSyncPayload?: (Uint8Array|null)
 	}
 	class ClientPairingProps implements IClientPairingProps {
 		constructor(p?: waproto.IClientPairingProps)
@@ -2004,6 +2112,7 @@ export namespace waproto {
 		public isSyncdPureLidSession?: (boolean|null)
 		public isSyncdSnapshotRecoveryEnabled?: (boolean|null)
 		public isHsThumbnailSyncEnabled?: (boolean|null)
+		public subscriptionSyncPayload?: (Uint8Array|null)
 		public static encode(m: waproto.IClientPairingProps, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPairingProps
 	}
@@ -2043,6 +2152,7 @@ export namespace waproto {
 		preacksCount?: (number|null)
 		processingQueueSize?: (number|null)
 		pairedPeripherals?: (string[]|null)
+		testIsolationId?: (Uint8Array|null)
 	}
 	class ClientPayload implements IClientPayload {
 		constructor(p?: waproto.IClientPayload)
@@ -2081,6 +2191,7 @@ export namespace waproto {
 		public preacksCount?: (number|null)
 		public processingQueueSize?: (number|null)
 		public pairedPeripherals: string[]
+		public testIsolationId?: (Uint8Array|null)
 		public static encode(m: waproto.IClientPayload, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload
 	}
@@ -2207,6 +2318,7 @@ export namespace waproto {
 			deviceExpId?: (string|null)
 			deviceType?: (waproto.ClientPayload.UserAgent.DeviceType|null)
 			deviceModelType?: (string|null)
+			distributionChannel?: (waproto.ClientPayload.UserAgent.DistributionChannel|null)
 		}
 		class UserAgent implements IUserAgent {
 			constructor(p?: waproto.ClientPayload.IUserAgent)
@@ -2226,6 +2338,7 @@ export namespace waproto {
 			public deviceExpId?: (string|null)
 			public deviceType?: (waproto.ClientPayload.UserAgent.DeviceType|null)
 			public deviceModelType?: (string|null)
+			public distributionChannel?: (waproto.ClientPayload.UserAgent.DistributionChannel|null)
 			public static encode(m: waproto.ClientPayload.IUserAgent, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ClientPayload.UserAgent
 		}
@@ -2253,6 +2366,12 @@ export namespace waproto {
 				DESKTOP = 2,
 				WEARABLE = 3,
 				VR = 4
+			}
+			enum DistributionChannel {
+				APPSTORE = 0,
+				WEBSITE = 1,
+				TESTFLIGHT = 2,
+				INTERNAL = 3
 			}
 			enum Platform {
 				ANDROID = 0,
@@ -2368,6 +2487,34 @@ export namespace waproto {
 		CRITICAL_BLOCK = 4,
 		CRITICAL_UNBLOCK_LOW = 5
 	}
+	interface ICombinedFingerprint {
+		version?: (number|null)
+		localFingerprint?: (waproto.IFingerprintData|null)
+		remoteFingerprint?: (waproto.IFingerprintData|null)
+	}
+	class CombinedFingerprint implements ICombinedFingerprint {
+		constructor(p?: waproto.ICombinedFingerprint)
+		public version?: (number|null)
+		public localFingerprint?: (waproto.IFingerprintData|null)
+		public remoteFingerprint?: (waproto.IFingerprintData|null)
+		public static encode(m: waproto.ICombinedFingerprint, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.CombinedFingerprint
+	}
+	interface ICommand {
+		commandType?: (waproto.COMMAND_COMMAND_TYPE|null)
+		offset?: (number|null)
+		length?: (number|null)
+		validationToken?: (string|null)
+	}
+	class Command implements ICommand {
+		constructor(p?: waproto.ICommand)
+		public commandType?: (waproto.COMMAND_COMMAND_TYPE|null)
+		public offset?: (number|null)
+		public length?: (number|null)
+		public validationToken?: (string|null)
+		public static encode(m: waproto.ICommand, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Command
+	}
 	interface ICommentMetadata {
 		commentParentKey?: (waproto.IMessageKey|null)
 		replyCount?: (number|null)
@@ -2411,6 +2558,440 @@ export namespace waproto {
 		public version?: (number|null)
 		public static encode(m: waproto.IConfig, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Config
+	}
+	interface IConsumerApplication {
+		payload?: (waproto.ConsumerApplication.IPayload|null)
+		metadata?: (waproto.ConsumerApplication.IMetadata|null)
+	}
+	class ConsumerApplication implements IConsumerApplication {
+		constructor(p?: waproto.IConsumerApplication)
+		public payload?: (waproto.ConsumerApplication.IPayload|null)
+		public metadata?: (waproto.ConsumerApplication.IMetadata|null)
+		public static encode(m: waproto.IConsumerApplication, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication
+	}
+	namespace ConsumerApplication {
+		interface IApplicationData {
+			revoke?: (waproto.ConsumerApplication.IRevokeMessage|null)
+		}
+		class ApplicationData implements IApplicationData {
+			constructor(p?: waproto.ConsumerApplication.IApplicationData)
+			public revoke?: (waproto.ConsumerApplication.IRevokeMessage|null)
+			public applicationContent?: "revoke"
+			public static encode(m: waproto.ConsumerApplication.IApplicationData, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.ApplicationData
+		}
+		interface IAudioMessage {
+			audio?: (waproto.ISubProtocol|null)
+			ptt?: (boolean|null)
+		}
+		class AudioMessage implements IAudioMessage {
+			constructor(p?: waproto.ConsumerApplication.IAudioMessage)
+			public audio?: (waproto.ISubProtocol|null)
+			public ptt?: (boolean|null)
+			public static encode(m: waproto.ConsumerApplication.IAudioMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.AudioMessage
+		}
+		interface IContactMessage {
+			contact?: (waproto.ISubProtocol|null)
+		}
+		class ContactMessage implements IContactMessage {
+			constructor(p?: waproto.ConsumerApplication.IContactMessage)
+			public contact?: (waproto.ISubProtocol|null)
+			public static encode(m: waproto.ConsumerApplication.IContactMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.ContactMessage
+		}
+		interface IContactsArrayMessage {
+			displayName?: (string|null)
+			contacts?: (waproto.ConsumerApplication.IContactMessage[]|null)
+		}
+		class ContactsArrayMessage implements IContactsArrayMessage {
+			constructor(p?: waproto.ConsumerApplication.IContactsArrayMessage)
+			public displayName?: (string|null)
+			public contacts: waproto.ConsumerApplication.IContactMessage[]
+			public static encode(m: waproto.ConsumerApplication.IContactsArrayMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.ContactsArrayMessage
+		}
+		interface IContent {
+			messageText?: (waproto.IMessageText|null)
+			imageMessage?: (waproto.ConsumerApplication.IImageMessage|null)
+			contactMessage?: (waproto.ConsumerApplication.IContactMessage|null)
+			locationMessage?: (waproto.ConsumerApplication.ILocationMessage|null)
+			extendedTextMessage?: (waproto.ConsumerApplication.IExtendedTextMessage|null)
+			statusTextMessage?: (waproto.ConsumerApplication.IStatusTextMesage|null)
+			documentMessage?: (waproto.ConsumerApplication.IDocumentMessage|null)
+			audioMessage?: (waproto.ConsumerApplication.IAudioMessage|null)
+			videoMessage?: (waproto.ConsumerApplication.IVideoMessage|null)
+			contactsArrayMessage?: (waproto.ConsumerApplication.IContactsArrayMessage|null)
+			liveLocationMessage?: (waproto.ConsumerApplication.ILiveLocationMessage|null)
+			stickerMessage?: (waproto.ConsumerApplication.IStickerMessage|null)
+			groupInviteMessage?: (waproto.ConsumerApplication.IGroupInviteMessage|null)
+			viewOnceMessage?: (waproto.ConsumerApplication.IViewOnceMessage|null)
+			reactionMessage?: (waproto.ConsumerApplication.IReactionMessage|null)
+			pollCreationMessage?: (waproto.ConsumerApplication.IPollCreationMessage|null)
+			pollUpdateMessage?: (waproto.ConsumerApplication.IPollUpdateMessage|null)
+			editMessage?: (waproto.ConsumerApplication.IEditMessage|null)
+		}
+		class Content implements IContent {
+			constructor(p?: waproto.ConsumerApplication.IContent)
+			public messageText?: (waproto.IMessageText|null)
+			public imageMessage?: (waproto.ConsumerApplication.IImageMessage|null)
+			public contactMessage?: (waproto.ConsumerApplication.IContactMessage|null)
+			public locationMessage?: (waproto.ConsumerApplication.ILocationMessage|null)
+			public extendedTextMessage?: (waproto.ConsumerApplication.IExtendedTextMessage|null)
+			public statusTextMessage?: (waproto.ConsumerApplication.IStatusTextMesage|null)
+			public documentMessage?: (waproto.ConsumerApplication.IDocumentMessage|null)
+			public audioMessage?: (waproto.ConsumerApplication.IAudioMessage|null)
+			public videoMessage?: (waproto.ConsumerApplication.IVideoMessage|null)
+			public contactsArrayMessage?: (waproto.ConsumerApplication.IContactsArrayMessage|null)
+			public liveLocationMessage?: (waproto.ConsumerApplication.ILiveLocationMessage|null)
+			public stickerMessage?: (waproto.ConsumerApplication.IStickerMessage|null)
+			public groupInviteMessage?: (waproto.ConsumerApplication.IGroupInviteMessage|null)
+			public viewOnceMessage?: (waproto.ConsumerApplication.IViewOnceMessage|null)
+			public reactionMessage?: (waproto.ConsumerApplication.IReactionMessage|null)
+			public pollCreationMessage?: (waproto.ConsumerApplication.IPollCreationMessage|null)
+			public pollUpdateMessage?: (waproto.ConsumerApplication.IPollUpdateMessage|null)
+			public editMessage?: (waproto.ConsumerApplication.IEditMessage|null)
+			public content?: ("messageText"|"imageMessage"|"contactMessage"|"locationMessage"|"extendedTextMessage"|"statusTextMessage"|"documentMessage"|"audioMessage"|"videoMessage"|"contactsArrayMessage"|"liveLocationMessage"|"stickerMessage"|"groupInviteMessage"|"viewOnceMessage"|"reactionMessage"|"pollCreationMessage"|"pollUpdateMessage"|"editMessage")
+			public static encode(m: waproto.ConsumerApplication.IContent, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.Content
+		}
+		interface IDocumentMessage {
+			document?: (waproto.ISubProtocol|null)
+			fileName?: (string|null)
+		}
+		class DocumentMessage implements IDocumentMessage {
+			constructor(p?: waproto.ConsumerApplication.IDocumentMessage)
+			public document?: (waproto.ISubProtocol|null)
+			public fileName?: (string|null)
+			public static encode(m: waproto.ConsumerApplication.IDocumentMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.DocumentMessage
+		}
+		interface IEditMessage {
+			key?: (waproto.IMessageKey|null)
+			message?: (waproto.IMessageText|null)
+			timestampMs?: (number|Long|null)
+		}
+		class EditMessage implements IEditMessage {
+			constructor(p?: waproto.ConsumerApplication.IEditMessage)
+			public key?: (waproto.IMessageKey|null)
+			public message?: (waproto.IMessageText|null)
+			public timestampMs?: (number|Long|null)
+			public static encode(m: waproto.ConsumerApplication.IEditMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.EditMessage
+		}
+		interface IExtendedTextMessage {
+			text?: (waproto.IMessageText|null)
+			matchedText?: (string|null)
+			canonicalUrl?: (string|null)
+			description?: (string|null)
+			title?: (string|null)
+			thumbnail?: (waproto.ISubProtocol|null)
+			previewType?: (waproto.CONSUMER_APPLICATION_EXTENDED_TEXT_MESSAGE_PREVIEW_TYPE|null)
+		}
+		class ExtendedTextMessage implements IExtendedTextMessage {
+			constructor(p?: waproto.ConsumerApplication.IExtendedTextMessage)
+			public text?: (waproto.IMessageText|null)
+			public matchedText?: (string|null)
+			public canonicalUrl?: (string|null)
+			public description?: (string|null)
+			public title?: (string|null)
+			public thumbnail?: (waproto.ISubProtocol|null)
+			public previewType?: (waproto.CONSUMER_APPLICATION_EXTENDED_TEXT_MESSAGE_PREVIEW_TYPE|null)
+			public static encode(m: waproto.ConsumerApplication.IExtendedTextMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.ExtendedTextMessage
+		}
+		interface IGroupInviteMessage {
+			groupJid?: (string|null)
+			inviteCode?: (string|null)
+			inviteExpiration?: (number|Long|null)
+			groupName?: (string|null)
+			jpegThumbnail?: (Uint8Array|null)
+			caption?: (waproto.IMessageText|null)
+		}
+		class GroupInviteMessage implements IGroupInviteMessage {
+			constructor(p?: waproto.ConsumerApplication.IGroupInviteMessage)
+			public groupJid?: (string|null)
+			public inviteCode?: (string|null)
+			public inviteExpiration?: (number|Long|null)
+			public groupName?: (string|null)
+			public jpegThumbnail?: (Uint8Array|null)
+			public caption?: (waproto.IMessageText|null)
+			public static encode(m: waproto.ConsumerApplication.IGroupInviteMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.GroupInviteMessage
+		}
+		interface IImageMessage {
+			image?: (waproto.ISubProtocol|null)
+			caption?: (waproto.IMessageText|null)
+		}
+		class ImageMessage implements IImageMessage {
+			constructor(p?: waproto.ConsumerApplication.IImageMessage)
+			public image?: (waproto.ISubProtocol|null)
+			public caption?: (waproto.IMessageText|null)
+			public static encode(m: waproto.ConsumerApplication.IImageMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.ImageMessage
+		}
+		interface IInteractiveAnnotation {
+			polygonVertices?: (waproto.ConsumerApplication.IPoint[]|null)
+			location?: (waproto.ConsumerApplication.ILocation|null)
+		}
+		class InteractiveAnnotation implements IInteractiveAnnotation {
+			constructor(p?: waproto.ConsumerApplication.IInteractiveAnnotation)
+			public polygonVertices: waproto.ConsumerApplication.IPoint[]
+			public location?: (waproto.ConsumerApplication.ILocation|null)
+			public action?: "location"
+			public static encode(m: waproto.ConsumerApplication.IInteractiveAnnotation, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.InteractiveAnnotation
+		}
+		interface ILiveLocationMessage {
+			location?: (waproto.ConsumerApplication.ILocation|null)
+			accuracyInMeters?: (number|null)
+			speedInMps?: (number|null)
+			degreesClockwiseFromMagneticNorth?: (number|null)
+			caption?: (waproto.IMessageText|null)
+			sequenceNumber?: (number|Long|null)
+			timeOffset?: (number|null)
+		}
+		class LiveLocationMessage implements ILiveLocationMessage {
+			constructor(p?: waproto.ConsumerApplication.ILiveLocationMessage)
+			public location?: (waproto.ConsumerApplication.ILocation|null)
+			public accuracyInMeters?: (number|null)
+			public speedInMps?: (number|null)
+			public degreesClockwiseFromMagneticNorth?: (number|null)
+			public caption?: (waproto.IMessageText|null)
+			public sequenceNumber?: (number|Long|null)
+			public timeOffset?: (number|null)
+			public static encode(m: waproto.ConsumerApplication.ILiveLocationMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.LiveLocationMessage
+		}
+		interface ILocation {
+			degreesLatitude?: (number|null)
+			degreesLongitude?: (number|null)
+			name?: (string|null)
+		}
+		class Location implements ILocation {
+			constructor(p?: waproto.ConsumerApplication.ILocation)
+			public degreesLatitude?: (number|null)
+			public degreesLongitude?: (number|null)
+			public name?: (string|null)
+			public static encode(m: waproto.ConsumerApplication.ILocation, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.Location
+		}
+		interface ILocationMessage {
+			location?: (waproto.ConsumerApplication.ILocation|null)
+			address?: (string|null)
+		}
+		class LocationMessage implements ILocationMessage {
+			constructor(p?: waproto.ConsumerApplication.ILocationMessage)
+			public location?: (waproto.ConsumerApplication.ILocation|null)
+			public address?: (string|null)
+			public static encode(m: waproto.ConsumerApplication.ILocationMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.LocationMessage
+		}
+		interface IMediaPayload {
+			protocol?: (waproto.ISubProtocol|null)
+		}
+		class MediaPayload implements IMediaPayload {
+			constructor(p?: waproto.ConsumerApplication.IMediaPayload)
+			public protocol?: (waproto.ISubProtocol|null)
+			public static encode(m: waproto.ConsumerApplication.IMediaPayload, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.MediaPayload
+		}
+		interface IMetadata {
+			specialTextSize?: (waproto.CONSUMER_APPLICATION_METADATA_SPECIAL_TEXT_SIZE|null)
+		}
+		class Metadata implements IMetadata {
+			constructor(p?: waproto.ConsumerApplication.IMetadata)
+			public specialTextSize?: (waproto.CONSUMER_APPLICATION_METADATA_SPECIAL_TEXT_SIZE|null)
+			public static encode(m: waproto.ConsumerApplication.IMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.Metadata
+		}
+		interface IOption {
+			optionName?: (string|null)
+		}
+		class Option implements IOption {
+			constructor(p?: waproto.ConsumerApplication.IOption)
+			public optionName?: (string|null)
+			public static encode(m: waproto.ConsumerApplication.IOption, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.Option
+		}
+		interface IPayload {
+			content?: (waproto.ConsumerApplication.IContent|null)
+			applicationData?: (waproto.ConsumerApplication.IApplicationData|null)
+			signal?: (waproto.ConsumerApplication.ISignal|null)
+			subProtocol?: (waproto.ConsumerApplication.ISubProtocolPayload|null)
+		}
+		class Payload implements IPayload {
+			constructor(p?: waproto.ConsumerApplication.IPayload)
+			public content?: (waproto.ConsumerApplication.IContent|null)
+			public applicationData?: (waproto.ConsumerApplication.IApplicationData|null)
+			public signal?: (waproto.ConsumerApplication.ISignal|null)
+			public subProtocol?: (waproto.ConsumerApplication.ISubProtocolPayload|null)
+			public payload?: ("content"|"applicationData"|"signal"|"subProtocol")
+			public static encode(m: waproto.ConsumerApplication.IPayload, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.Payload
+		}
+		interface IPoint {
+			x?: (number|null)
+			y?: (number|null)
+		}
+		class Point implements IPoint {
+			constructor(p?: waproto.ConsumerApplication.IPoint)
+			public x?: (number|null)
+			public y?: (number|null)
+			public static encode(m: waproto.ConsumerApplication.IPoint, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.Point
+		}
+		interface IPollAddOptionMessage {
+			pollOption?: (waproto.ConsumerApplication.IOption[]|null)
+		}
+		class PollAddOptionMessage implements IPollAddOptionMessage {
+			constructor(p?: waproto.ConsumerApplication.IPollAddOptionMessage)
+			public pollOption: waproto.ConsumerApplication.IOption[]
+			public static encode(m: waproto.ConsumerApplication.IPollAddOptionMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.PollAddOptionMessage
+		}
+		interface IPollCreationMessage {
+			encKey?: (Uint8Array|null)
+			name?: (string|null)
+			options?: (waproto.ConsumerApplication.IOption[]|null)
+			selectableOptionsCount?: (number|null)
+		}
+		class PollCreationMessage implements IPollCreationMessage {
+			constructor(p?: waproto.ConsumerApplication.IPollCreationMessage)
+			public encKey?: (Uint8Array|null)
+			public name?: (string|null)
+			public options: waproto.ConsumerApplication.IOption[]
+			public selectableOptionsCount?: (number|null)
+			public static encode(m: waproto.ConsumerApplication.IPollCreationMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.PollCreationMessage
+		}
+		interface IPollEncValue {
+			encPayload?: (Uint8Array|null)
+			encIv?: (Uint8Array|null)
+		}
+		class PollEncValue implements IPollEncValue {
+			constructor(p?: waproto.ConsumerApplication.IPollEncValue)
+			public encPayload?: (Uint8Array|null)
+			public encIv?: (Uint8Array|null)
+			public static encode(m: waproto.ConsumerApplication.IPollEncValue, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.PollEncValue
+		}
+		interface IPollUpdateMessage {
+			pollCreationMessageKey?: (waproto.IMessageKey|null)
+			vote?: (waproto.ConsumerApplication.IPollEncValue|null)
+			addOption?: (waproto.ConsumerApplication.IPollEncValue|null)
+		}
+		class PollUpdateMessage implements IPollUpdateMessage {
+			constructor(p?: waproto.ConsumerApplication.IPollUpdateMessage)
+			public pollCreationMessageKey?: (waproto.IMessageKey|null)
+			public vote?: (waproto.ConsumerApplication.IPollEncValue|null)
+			public addOption?: (waproto.ConsumerApplication.IPollEncValue|null)
+			public static encode(m: waproto.ConsumerApplication.IPollUpdateMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.PollUpdateMessage
+		}
+		interface IPollVoteMessage {
+			selectedOptions?: (Uint8Array[]|null)
+			senderTimestampMs?: (number|Long|null)
+		}
+		class PollVoteMessage implements IPollVoteMessage {
+			constructor(p?: waproto.ConsumerApplication.IPollVoteMessage)
+			public selectedOptions: Uint8Array[]
+			public senderTimestampMs?: (number|Long|null)
+			public static encode(m: waproto.ConsumerApplication.IPollVoteMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.PollVoteMessage
+		}
+		interface IReactionMessage {
+			key?: (waproto.IMessageKey|null)
+			text?: (string|null)
+			groupingKey?: (string|null)
+			senderTimestampMs?: (number|Long|null)
+			reactionMetadataDataclassData?: (string|null)
+			style?: (number|null)
+		}
+		class ReactionMessage implements IReactionMessage {
+			constructor(p?: waproto.ConsumerApplication.IReactionMessage)
+			public key?: (waproto.IMessageKey|null)
+			public text?: (string|null)
+			public groupingKey?: (string|null)
+			public senderTimestampMs?: (number|Long|null)
+			public reactionMetadataDataclassData?: (string|null)
+			public style?: (number|null)
+			public static encode(m: waproto.ConsumerApplication.IReactionMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.ReactionMessage
+		}
+		interface IRevokeMessage {
+			key?: (waproto.IMessageKey|null)
+		}
+		class RevokeMessage implements IRevokeMessage {
+			constructor(p?: waproto.ConsumerApplication.IRevokeMessage)
+			public key?: (waproto.IMessageKey|null)
+			public static encode(m: waproto.ConsumerApplication.IRevokeMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.RevokeMessage
+		}
+		interface ISignal {
+		}
+		class Signal implements ISignal {
+			constructor(p?: waproto.ConsumerApplication.ISignal)
+			public static encode(m: waproto.ConsumerApplication.ISignal, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.Signal
+		}
+		interface IStatusTextMesage {
+			text?: (waproto.ConsumerApplication.IExtendedTextMessage|null)
+			textArgb?: (number|null)
+			backgroundArgb?: (number|null)
+			font?: (waproto.CONSUMER_APPLICATION_STATUS_TEXT_MESAGE_FONT_TYPE|null)
+		}
+		class StatusTextMesage implements IStatusTextMesage {
+			constructor(p?: waproto.ConsumerApplication.IStatusTextMesage)
+			public text?: (waproto.ConsumerApplication.IExtendedTextMessage|null)
+			public textArgb?: (number|null)
+			public backgroundArgb?: (number|null)
+			public font?: (waproto.CONSUMER_APPLICATION_STATUS_TEXT_MESAGE_FONT_TYPE|null)
+			public static encode(m: waproto.ConsumerApplication.IStatusTextMesage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.StatusTextMesage
+		}
+		interface IStickerMessage {
+			sticker?: (waproto.ISubProtocol|null)
+		}
+		class StickerMessage implements IStickerMessage {
+			constructor(p?: waproto.ConsumerApplication.IStickerMessage)
+			public sticker?: (waproto.ISubProtocol|null)
+			public static encode(m: waproto.ConsumerApplication.IStickerMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.StickerMessage
+		}
+		interface ISubProtocolPayload {
+			futureProof?: (waproto.FUTURE_PROOF_BEHAVIOR|null)
+		}
+		class SubProtocolPayload implements ISubProtocolPayload {
+			constructor(p?: waproto.ConsumerApplication.ISubProtocolPayload)
+			public futureProof?: (waproto.FUTURE_PROOF_BEHAVIOR|null)
+			public static encode(m: waproto.ConsumerApplication.ISubProtocolPayload, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.SubProtocolPayload
+		}
+		interface IVideoMessage {
+			video?: (waproto.ISubProtocol|null)
+			caption?: (waproto.IMessageText|null)
+		}
+		class VideoMessage implements IVideoMessage {
+			constructor(p?: waproto.ConsumerApplication.IVideoMessage)
+			public video?: (waproto.ISubProtocol|null)
+			public caption?: (waproto.IMessageText|null)
+			public static encode(m: waproto.ConsumerApplication.IVideoMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.VideoMessage
+		}
+		interface IViewOnceMessage {
+			imageMessage?: (waproto.ConsumerApplication.IImageMessage|null)
+			videoMessage?: (waproto.ConsumerApplication.IVideoMessage|null)
+		}
+		class ViewOnceMessage implements IViewOnceMessage {
+			constructor(p?: waproto.ConsumerApplication.IViewOnceMessage)
+			public imageMessage?: (waproto.ConsumerApplication.IImageMessage|null)
+			public videoMessage?: (waproto.ConsumerApplication.IVideoMessage|null)
+			public viewOnceContent?: ("imageMessage"|"videoMessage")
+			public static encode(m: waproto.ConsumerApplication.IViewOnceMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ConsumerApplication.ViewOnceMessage
+		}
 	}
 	interface IContextInfo {
 		stanzaId?: (string|null)
@@ -2472,6 +3053,9 @@ export namespace waproto {
 		mediaDomainInfo?: (waproto.IMediaDomainInfo|null)
 		partiallySelectedContent?: (waproto.ContextInfo.IPartiallySelectedContent|null)
 		afterReadDuration?: (number|null)
+		crossAppSource?: (waproto.ContextInfo.CrossAppSource|null)
+		businessInteractionPills?: (waproto.ContextInfo.IBusinessInteractionPills|null)
+		posterStatusId?: (string|null)
 	}
 	class ContextInfo implements IContextInfo {
 		constructor(p?: waproto.IContextInfo)
@@ -2534,6 +3118,9 @@ export namespace waproto {
 		public mediaDomainInfo?: (waproto.IMediaDomainInfo|null)
 		public partiallySelectedContent?: (waproto.ContextInfo.IPartiallySelectedContent|null)
 		public afterReadDuration?: (number|null)
+		public crossAppSource?: (waproto.ContextInfo.CrossAppSource|null)
+		public businessInteractionPills?: (waproto.ContextInfo.IBusinessInteractionPills|null)
+		public posterStatusId?: (string|null)
 		public static encode(m: waproto.IContextInfo, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo
 	}
@@ -2560,6 +3147,53 @@ export namespace waproto {
 				VIDEO = 2
 			}
 		}
+		interface IBusinessInteractionPills {
+			businessJid?: (string|null)
+			pills?: (waproto.ContextInfo.BusinessInteractionPills.IPill[]|null)
+			entryPoint?: (waproto.ContextInfo.BusinessInteractionPills.EntryPoint|null)
+		}
+		class BusinessInteractionPills implements IBusinessInteractionPills {
+			constructor(p?: waproto.ContextInfo.IBusinessInteractionPills)
+			public businessJid?: (string|null)
+			public pills: waproto.ContextInfo.BusinessInteractionPills.IPill[]
+			public entryPoint?: (waproto.ContextInfo.BusinessInteractionPills.EntryPoint|null)
+			public static encode(m: waproto.ContextInfo.IBusinessInteractionPills, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.BusinessInteractionPills
+		}
+		namespace BusinessInteractionPills {
+			enum EntryPoint {
+				ENTRY_POINT_UNKNOWN = 0,
+				P2P_LINK_SHARE = 1,
+				CONTACT_CARD_SHARING = 2,
+				PHONE_NUMBER = 3,
+				STATUS = 4,
+				IN_THREAD_CONTEXT_CARD = 5
+			}
+			interface IPill {
+				pillType?: (waproto.ContextInfo.BusinessInteractionPills.PillType|null)
+				actionUrl?: (string|null)
+			}
+			class Pill implements IPill {
+				constructor(p?: waproto.ContextInfo.BusinessInteractionPills.IPill)
+				public pillType?: (waproto.ContextInfo.BusinessInteractionPills.PillType|null)
+				public actionUrl?: (string|null)
+				public static encode(m: waproto.ContextInfo.BusinessInteractionPills.IPill, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.BusinessInteractionPills.Pill
+			}
+			enum PillType {
+				UNKNOWN = 0,
+				VIEW_BUSINESS = 1,
+				CHAT = 2,
+				CALL = 3,
+				CATALOG = 4,
+				CHANNEL = 5,
+				BOOK_APPOINTMENT = 6,
+				OFFERS = 7,
+				BESTSELLERS = 8,
+				MENU = 9,
+				ABOUT = 10
+			}
+		}
 		interface IBusinessMessageForwardInfo {
 			businessOwnerJid?: (string|null)
 		}
@@ -2568,6 +3202,11 @@ export namespace waproto {
 			public businessOwnerJid?: (string|null)
 			public static encode(m: waproto.ContextInfo.IBusinessMessageForwardInfo, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.BusinessMessageForwardInfo
+		}
+		enum CrossAppSource {
+			CROSS_APP_SOURCE_UNKNOWN = 0,
+			CROSS_APP_SOURCE_INSTAGRAM = 1,
+			CROSS_APP_SOURCE_FACEBOOK = 2
 		}
 		interface IDataSharingContext {
 			showMmDisclosure?: (boolean|null)
@@ -2635,6 +3274,11 @@ export namespace waproto {
 			adType?: (waproto.ContextInfo.ExternalAdReplyInfo.AdType|null)
 			wtwaWebsiteUrl?: (string|null)
 			adPreviewUrl?: (string|null)
+			containsCtwaFlowsAutoReply?: (boolean|null)
+			agmThumbnailStrategy?: (number|null)
+			agmTitleStrategy?: (number|null)
+			agmSubtitleStrategy?: (number|null)
+			agmHeaderInteractionStrategy?: (number|null)
 		}
 		class ExternalAdReplyInfo implements IExternalAdReplyInfo {
 			constructor(p?: waproto.ContextInfo.IExternalAdReplyInfo)
@@ -2665,6 +3309,11 @@ export namespace waproto {
 			public adType?: (waproto.ContextInfo.ExternalAdReplyInfo.AdType|null)
 			public wtwaWebsiteUrl?: (string|null)
 			public adPreviewUrl?: (string|null)
+			public containsCtwaFlowsAutoReply?: (boolean|null)
+			public agmThumbnailStrategy?: (number|null)
+			public agmTitleStrategy?: (number|null)
+			public agmSubtitleStrategy?: (number|null)
+			public agmHeaderInteractionStrategy?: (number|null)
 			public static encode(m: waproto.ContextInfo.IExternalAdReplyInfo, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ContextInfo.ExternalAdReplyInfo
 		}
@@ -2869,6 +3518,13 @@ export namespace waproto {
 		limitSharingInitiatedByMe?: (boolean|null)
 		maibaAiThreadEnabled?: (boolean|null)
 		isMarketingMessageThread?: (boolean|null)
+		isSenderNewAccount?: (boolean|null)
+		afterReadDuration?: (number|null)
+		isSenderSuspicious?: (boolean|null)
+		appealStatus?: (waproto.Conversation.GroupAppealStatus|null)
+		appealUpdateTime?: (number|Long|null)
+		authAgentParentCompanyName?: (string|null)
+		authAgentObaPhoneNumber?: (string|null)
 	}
 	class Conversation implements IConversation {
 		constructor(p?: waproto.IConversation)
@@ -2927,6 +3583,13 @@ export namespace waproto {
 		public limitSharingInitiatedByMe?: (boolean|null)
 		public maibaAiThreadEnabled?: (boolean|null)
 		public isMarketingMessageThread?: (boolean|null)
+		public isSenderNewAccount?: (boolean|null)
+		public afterReadDuration?: (number|null)
+		public isSenderSuspicious?: (boolean|null)
+		public appealStatus?: (waproto.Conversation.GroupAppealStatus|null)
+		public appealUpdateTime?: (number|Long|null)
+		public authAgentParentCompanyName?: (string|null)
+		public authAgentObaPhoneNumber?: (string|null)
 		public static encode(m: waproto.IConversation, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Conversation
 	}
@@ -2936,6 +3599,12 @@ export namespace waproto {
 			COMPLETE_AND_NO_MORE_MESSAGE_REMAIN_ON_PRIMARY = 1,
 			COMPLETE_ON_DEMAND_SYNC_BUT_MORE_MSG_REMAIN_ON_PRIMARY = 2,
 			COMPLETE_ON_DEMAND_SYNC_WITH_MORE_MSG_ON_PRIMARY_BUT_NO_ACCESS = 3
+		}
+		enum GroupAppealStatus {
+			NO_APPEAL = 0,
+			APPEAL_IN_REVIEW = 1,
+			APPEAL_APPROVED = 2,
+			APPEAL_REJECTED = 3
 		}
 	}
 	interface IDeviceCapabilities {
@@ -2977,11 +3646,17 @@ export namespace waproto {
 		interface IBusinessBroadcast {
 			importListEnabled?: (boolean|null)
 			companionSupportEnabled?: (boolean|null)
+			campaignSyncEnabled?: (boolean|null)
+			insightsSyncEnabled?: (boolean|null)
+			recipientLimit?: (number|null)
 		}
 		class BusinessBroadcast implements IBusinessBroadcast {
 			constructor(p?: waproto.DeviceCapabilities.IBusinessBroadcast)
 			public importListEnabled?: (boolean|null)
 			public companionSupportEnabled?: (boolean|null)
+			public campaignSyncEnabled?: (boolean|null)
+			public insightsSyncEnabled?: (boolean|null)
+			public recipientLimit?: (number|null)
 			public static encode(m: waproto.DeviceCapabilities.IBusinessBroadcast, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceCapabilities.BusinessBroadcast
 		}
@@ -3106,6 +3781,8 @@ export namespace waproto {
 			initialSyncMaxMessagesPerChat?: (number|null)
 			supportManusHistory?: (boolean|null)
 			supportHatchHistory?: (boolean|null)
+			supportedBotChannelFbids?: (string[]|null)
+			supportInlineContacts?: (boolean|null)
 		}
 		class HistorySyncConfig implements IHistorySyncConfig {
 			constructor(p?: waproto.DeviceProps.IHistorySyncConfig)
@@ -3131,6 +3808,8 @@ export namespace waproto {
 			public initialSyncMaxMessagesPerChat?: (number|null)
 			public supportManusHistory?: (boolean|null)
 			public supportHatchHistory?: (boolean|null)
+			public supportedBotChannelFbids: string[]
+			public supportInlineContacts?: (boolean|null)
 			public static encode(m: waproto.DeviceProps.IHistorySyncConfig, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.DeviceProps.HistorySyncConfig
 		}
@@ -3327,6 +4006,11 @@ export namespace waproto {
 		public static encode(m: waproto.IExternalBlobReference, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ExternalBlobReference
 	}
+	enum FUTURE_PROOF_BEHAVIOR {
+		PLACEHOLDER = 0,
+		NO_PLACEHOLDER = 1,
+		IGNORE = 2
+	}
 	interface IField {
 		minVersion?: (number|null)
 		maxVersion?: (number|null)
@@ -3343,6 +4027,25 @@ export namespace waproto {
 		public subfield: { [k: string]: waproto.IField }
 		public static encode(m: waproto.IField, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Field
+	}
+	interface IFingerprintData {
+		publicKey?: (Uint8Array|null)
+		pnIdentifier?: (Uint8Array|null)
+		lidIdentifier?: (Uint8Array|null)
+		usernameIdentifier?: (Uint8Array|null)
+		hostedState?: (waproto.HostedState|null)
+		hashedPublicKey?: (Uint8Array|null)
+	}
+	class FingerprintData implements IFingerprintData {
+		constructor(p?: waproto.IFingerprintData)
+		public publicKey?: (Uint8Array|null)
+		public pnIdentifier?: (Uint8Array|null)
+		public lidIdentifier?: (Uint8Array|null)
+		public usernameIdentifier?: (Uint8Array|null)
+		public hostedState?: (waproto.HostedState|null)
+		public hashedPublicKey?: (Uint8Array|null)
+		public static encode(m: waproto.IFingerprintData, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.FingerprintData
 	}
 	interface IForwardedAIBotMessageInfo {
 		botName?: (string|null)
@@ -3404,6 +4107,21 @@ export namespace waproto {
 		public static encode(m: waproto.IGlobalSettings, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GlobalSettings
 	}
+	interface IGroupHistory {
+		messages?: (waproto.IWebMessageInfo[]|null)
+		uncountedAssociatedMessageLists?: (waproto.IUnCountedAssociatedMessageList[]|null)
+		commentMessages?: (waproto.IWebMessageInfo[]|null)
+		outOfWindowPinnedMessages?: (waproto.IWebMessageInfo[]|null)
+	}
+	class GroupHistory implements IGroupHistory {
+		constructor(p?: waproto.IGroupHistory)
+		public messages: waproto.IWebMessageInfo[]
+		public uncountedAssociatedMessageLists: waproto.IUnCountedAssociatedMessageList[]
+		public commentMessages: waproto.IWebMessageInfo[]
+		public outOfWindowPinnedMessages: waproto.IWebMessageInfo[]
+		public static encode(m: waproto.IGroupHistory, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupHistory
+	}
 	interface IGroupHistoryBundleInfo {
 		deprecatedMessageHistoryBundle?: (waproto.Message.IMessageHistoryBundle|null)
 		processState?: (waproto.GroupHistoryBundleInfo.ProcessState|null)
@@ -3434,6 +4152,21 @@ export namespace waproto {
 		public editedAfterReceivedAsHistory?: (boolean|null)
 		public static encode(m: waproto.IGroupHistoryIndividualMessageInfo, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupHistoryIndividualMessageInfo
+	}
+	interface IGroupHistoryWithMessageBytes {
+		messages?: (waproto.IWebMessageInfoWithMessageBytes[]|null)
+		uncountedAssociatedMessageLists?: (waproto.IUnCountedAssociatedMessageListWithMessageBytes[]|null)
+		commentMessages?: (waproto.IWebMessageInfoWithMessageBytes[]|null)
+		outOfWindowPinnedMessages?: (waproto.IWebMessageInfoWithMessageBytes[]|null)
+	}
+	class GroupHistoryWithMessageBytes implements IGroupHistoryWithMessageBytes {
+		constructor(p?: waproto.IGroupHistoryWithMessageBytes)
+		public messages: waproto.IWebMessageInfoWithMessageBytes[]
+		public uncountedAssociatedMessageLists: waproto.IUnCountedAssociatedMessageListWithMessageBytes[]
+		public commentMessages: waproto.IWebMessageInfoWithMessageBytes[]
+		public outOfWindowPinnedMessages: waproto.IWebMessageInfoWithMessageBytes[]
+		public static encode(m: waproto.IGroupHistoryWithMessageBytes, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupHistoryWithMessageBytes
 	}
 	interface IGroupMention {
 		groupJid?: (string|null)
@@ -3466,6 +4199,28 @@ export namespace waproto {
 			SUPERADMIN = 2
 		}
 	}
+	interface IGroupRootKeyShare {
+		keys?: (waproto.IGroupRootKeyShareEntry[]|null)
+	}
+	class GroupRootKeyShare implements IGroupRootKeyShare {
+		constructor(p?: waproto.IGroupRootKeyShare)
+		public keys: waproto.IGroupRootKeyShareEntry[]
+		public static encode(m: waproto.IGroupRootKeyShare, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupRootKeyShare
+	}
+	interface IGroupRootKeyShareEntry {
+		groupRootKey?: (Uint8Array|null)
+		keyId?: (string|null)
+		expiryTimestampMs?: (number|Long|null)
+	}
+	class GroupRootKeyShareEntry implements IGroupRootKeyShareEntry {
+		constructor(p?: waproto.IGroupRootKeyShareEntry)
+		public groupRootKey?: (Uint8Array|null)
+		public keyId?: (string|null)
+		public expiryTimestampMs?: (number|Long|null)
+		public static encode(m: waproto.IGroupRootKeyShareEntry, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.GroupRootKeyShareEntry
+	}
 	interface IHandshakeMessage {
 		clientHello?: (waproto.HandshakeMessage.IClientHello|null)
 		serverHello?: (waproto.HandshakeMessage.IServerHello|null)
@@ -3484,12 +4239,16 @@ export namespace waproto {
 			"static"?: (Uint8Array|null)
 			payload?: (Uint8Array|null)
 			extendedCiphertext?: (Uint8Array|null)
+			paddedBytes?: (Uint8Array|null)
+			simulateXxkemFs?: (boolean|null)
 		}
 		class ClientFinish implements IClientFinish {
 			constructor(p?: waproto.HandshakeMessage.IClientFinish)
 			public static?: (Uint8Array|null)
 			public payload?: (Uint8Array|null)
 			public extendedCiphertext?: (Uint8Array|null)
+			public paddedBytes?: (Uint8Array|null)
+			public simulateXxkemFs?: (boolean|null)
 			public static encode(m: waproto.HandshakeMessage.IClientFinish, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HandshakeMessage.ClientFinish
 		}
@@ -3499,6 +4258,11 @@ export namespace waproto {
 			payload?: (Uint8Array|null)
 			useExtended?: (boolean|null)
 			extendedCiphertext?: (Uint8Array|null)
+			paddedBytes?: (Uint8Array|null)
+			sendServerHelloPaddedBytes?: (boolean|null)
+			simulateXxkemFs?: (boolean|null)
+			pqMode?: (waproto.HandshakeMessage.HandshakePqMode|null)
+			extendedEphemeral?: (Uint8Array|null)
 		}
 		class ClientHello implements IClientHello {
 			constructor(p?: waproto.HandshakeMessage.IClientHello)
@@ -3507,14 +4271,32 @@ export namespace waproto {
 			public payload?: (Uint8Array|null)
 			public useExtended?: (boolean|null)
 			public extendedCiphertext?: (Uint8Array|null)
+			public paddedBytes?: (Uint8Array|null)
+			public sendServerHelloPaddedBytes?: (boolean|null)
+			public simulateXxkemFs?: (boolean|null)
+			public pqMode?: (waproto.HandshakeMessage.HandshakePqMode|null)
+			public extendedEphemeral?: (Uint8Array|null)
 			public static encode(m: waproto.HandshakeMessage.IClientHello, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HandshakeMessage.ClientHello
+		}
+		enum HandshakePqMode {
+			HANDSHAKE_PQ_MODE_UNKNOWN = 0,
+			XXKEM = 1,
+			XXKEM_FS = 2,
+			WA_CLASSICAL = 3,
+			WA_PQ = 4,
+			IKKEM = 5,
+			IKKEM_FS = 6,
+			XXKEM_2 = 7,
+			IKKEM_2 = 8
 		}
 		interface IServerHello {
 			ephemeral?: (Uint8Array|null)
 			"static"?: (Uint8Array|null)
 			payload?: (Uint8Array|null)
 			extendedStatic?: (Uint8Array|null)
+			paddingBytes?: (Uint8Array|null)
+			extendedCiphertext?: (Uint8Array|null)
 		}
 		class ServerHello implements IServerHello {
 			constructor(p?: waproto.HandshakeMessage.IServerHello)
@@ -3522,6 +4304,8 @@ export namespace waproto {
 			public static?: (Uint8Array|null)
 			public payload?: (Uint8Array|null)
 			public extendedStatic?: (Uint8Array|null)
+			public paddingBytes?: (Uint8Array|null)
+			public extendedCiphertext?: (Uint8Array|null)
 			public static encode(m: waproto.HandshakeMessage.IServerHello, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HandshakeMessage.ServerHello
 		}
@@ -3545,6 +4329,8 @@ export namespace waproto {
 		shareableChatIdentifierEncryptionKey?: (Uint8Array|null)
 		accounts?: (waproto.IAccount[]|null)
 		nctSalt?: (Uint8Array|null)
+		inlineContacts?: (waproto.IInlineContact[]|null)
+		inlineContactsProvided?: (boolean|null)
 	}
 	class HistorySync implements IHistorySync {
 		constructor(p?: waproto.IHistorySync)
@@ -3566,6 +4352,8 @@ export namespace waproto {
 		public shareableChatIdentifierEncryptionKey?: (Uint8Array|null)
 		public accounts: waproto.IAccount[]
 		public nctSalt?: (Uint8Array|null)
+		public inlineContacts: waproto.IInlineContact[]
+		public inlineContactsProvided?: (boolean|null)
 		public static encode(m: waproto.IHistorySync, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HistorySync
 	}
@@ -3594,6 +4382,10 @@ export namespace waproto {
 		public msgOrderId?: (number|Long|null)
 		public static encode(m: waproto.IHistorySyncMsg, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.HistorySyncMsg
+	}
+	enum HostedState {
+		E2EE = 0,
+		HOSTED = 1
 	}
 	interface IHydratedTemplateButton {
 		index?: (number|null)
@@ -3750,6 +4542,23 @@ export namespace waproto {
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.InThreadSurveyMetadata.InThreadSurveyQuestion
 		}
 	}
+	interface IInlineContact {
+		pnJid?: (string|null)
+		lidJid?: (string|null)
+		fullName?: (string|null)
+		firstName?: (string|null)
+		username?: (string|null)
+	}
+	class InlineContact implements IInlineContact {
+		constructor(p?: waproto.IInlineContact)
+		public pnJid?: (string|null)
+		public lidJid?: (string|null)
+		public fullName?: (string|null)
+		public firstName?: (string|null)
+		public username?: (string|null)
+		public static encode(m: waproto.IInlineContact, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.InlineContact
+	}
 	interface IInteractiveAnnotation {
 		polygonVertices?: (waproto.IPoint[]|null)
 		shouldSkipConfirmation?: (boolean|null)
@@ -3904,8 +4713,7 @@ export namespace waproto {
 			UNKNOWN = 0,
 			CHAT_SETTING = 1,
 			BIZ_SUPPORTS_FB_HOSTING = 2,
-			UNKNOWN_GROUP = 3,
-			DEPRECATION = 4
+			UNKNOWN_GROUP = 3
 		}
 	}
 	interface ILocalizedName {
@@ -3934,6 +4742,9 @@ export namespace waproto {
 		public static encode(m: waproto.ILocation, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Location
 	}
+	enum MENTION_MENTION_TYPE {
+		PROFILE = 0
+	}
 	interface IMediaData {
 		localPath?: (string|null)
 	}
@@ -3953,6 +4764,79 @@ export namespace waproto {
 		public e2EeMediaKey?: (Uint8Array|null)
 		public static encode(m: waproto.IMediaDomainInfo, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaDomainInfo
+	}
+	interface IMediaEntry {
+		fileSha256?: (Uint8Array|null)
+		mediaKey?: (Uint8Array|null)
+		fileEncSha256?: (Uint8Array|null)
+		directPath?: (string|null)
+		mediaKeyTimestamp?: (number|Long|null)
+		serverMediaType?: (string|null)
+		uploadToken?: (Uint8Array|null)
+		validatedTimestamp?: (Uint8Array|null)
+		sidecar?: (Uint8Array|null)
+		objectId?: (string|null)
+		fbid?: (string|null)
+		downloadableThumbnail?: (waproto.MediaEntry.IDownloadableThumbnail|null)
+		handle?: (string|null)
+		filename?: (string|null)
+		progressiveJpegDetails?: (waproto.MediaEntry.IProgressiveJpegDetails|null)
+		size?: (number|Long|null)
+		lastDownloadAttemptTimestamp?: (number|Long|null)
+	}
+	class MediaEntry implements IMediaEntry {
+		constructor(p?: waproto.IMediaEntry)
+		public fileSha256?: (Uint8Array|null)
+		public mediaKey?: (Uint8Array|null)
+		public fileEncSha256?: (Uint8Array|null)
+		public directPath?: (string|null)
+		public mediaKeyTimestamp?: (number|Long|null)
+		public serverMediaType?: (string|null)
+		public uploadToken?: (Uint8Array|null)
+		public validatedTimestamp?: (Uint8Array|null)
+		public sidecar?: (Uint8Array|null)
+		public objectId?: (string|null)
+		public fbid?: (string|null)
+		public downloadableThumbnail?: (waproto.MediaEntry.IDownloadableThumbnail|null)
+		public handle?: (string|null)
+		public filename?: (string|null)
+		public progressiveJpegDetails?: (waproto.MediaEntry.IProgressiveJpegDetails|null)
+		public size?: (number|Long|null)
+		public lastDownloadAttemptTimestamp?: (number|Long|null)
+		public static encode(m: waproto.IMediaEntry, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaEntry
+	}
+	namespace MediaEntry {
+		interface IDownloadableThumbnail {
+			fileSha256?: (Uint8Array|null)
+			fileEncSha256?: (Uint8Array|null)
+			directPath?: (string|null)
+			mediaKey?: (Uint8Array|null)
+			mediaKeyTimestamp?: (number|Long|null)
+			objectId?: (string|null)
+		}
+		class DownloadableThumbnail implements IDownloadableThumbnail {
+			constructor(p?: waproto.MediaEntry.IDownloadableThumbnail)
+			public fileSha256?: (Uint8Array|null)
+			public fileEncSha256?: (Uint8Array|null)
+			public directPath?: (string|null)
+			public mediaKey?: (Uint8Array|null)
+			public mediaKeyTimestamp?: (number|Long|null)
+			public objectId?: (string|null)
+			public static encode(m: waproto.MediaEntry.IDownloadableThumbnail, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaEntry.DownloadableThumbnail
+		}
+		interface IProgressiveJpegDetails {
+			scanLengths?: (number[]|null)
+			sidecar?: (Uint8Array|null)
+		}
+		class ProgressiveJpegDetails implements IProgressiveJpegDetails {
+			constructor(p?: waproto.MediaEntry.IProgressiveJpegDetails)
+			public scanLengths: number[]
+			public sidecar?: (Uint8Array|null)
+			public static encode(m: waproto.MediaEntry.IProgressiveJpegDetails, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MediaEntry.ProgressiveJpegDetails
+		}
 	}
 	enum MediaKeyDomain {
 		MEDIA_KEY_DOMAIN_UNKNOWN = 0,
@@ -4010,6 +4894,21 @@ export namespace waproto {
 		public labelTimestamp?: (number|Long|null)
 		public static encode(m: waproto.IMemberLabel, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MemberLabel
+	}
+	interface IMention {
+		mentionType?: (waproto.MENTION_MENTION_TYPE|null)
+		mentionedJid?: (string|null)
+		offset?: (number|null)
+		length?: (number|null)
+	}
+	class Mention implements IMention {
+		constructor(p?: waproto.IMention)
+		public mentionType?: (waproto.MENTION_MENTION_TYPE|null)
+		public mentionedJid?: (string|null)
+		public offset?: (number|null)
+		public length?: (number|null)
+		public static encode(m: waproto.IMention, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Mention
 	}
 	interface IMessage {
 		conversation?: (string|null)
@@ -4113,6 +5012,10 @@ export namespace waproto {
 		pollCreationMessageV6?: (waproto.Message.IPollCreationMessage|null)
 		conditionalRevealMessage?: (waproto.Message.IConditionalRevealMessage|null)
 		pollAddOptionMessage?: (waproto.Message.IPollAddOptionMessage|null)
+		eventInviteMessage?: (waproto.Message.IEventInviteMessage|null)
+		groupRootKeyShare?: (waproto.IGroupRootKeyShare|null)
+		p2PPaymentReminderNotification?: (waproto.Message.IP2PPaymentReminderNotification|null)
+		splitPaymentMessage?: (waproto.Message.ISplitPaymentMessage|null)
 	}
 	class Message implements IMessage {
 		constructor(p?: waproto.IMessage)
@@ -4217,6 +5120,10 @@ export namespace waproto {
 		public pollCreationMessageV6?: (waproto.Message.IPollCreationMessage|null)
 		public conditionalRevealMessage?: (waproto.Message.IConditionalRevealMessage|null)
 		public pollAddOptionMessage?: (waproto.Message.IPollAddOptionMessage|null)
+		public eventInviteMessage?: (waproto.Message.IEventInviteMessage|null)
+		public groupRootKeyShare?: (waproto.IGroupRootKeyShare|null)
+		public p2PPaymentReminderNotification?: (waproto.Message.IP2PPaymentReminderNotification|null)
+		public splitPaymentMessage?: (waproto.Message.ISplitPaymentMessage|null)
 		public static encode(m: waproto.IMessage, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message
 	}
@@ -4567,6 +5474,78 @@ export namespace waproto {
 			public static encode(m: waproto.Message.IChat, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.Chat
 		}
+		interface IChatCustomImageWallpaper {
+			directPath?: (string|null)
+			mediaKey?: (Uint8Array|null)
+			fileEncSha256?: (Uint8Array|null)
+			fileSha256?: (Uint8Array|null)
+			dimLevel?: (number|null)
+		}
+		class ChatCustomImageWallpaper implements IChatCustomImageWallpaper {
+			constructor(p?: waproto.Message.IChatCustomImageWallpaper)
+			public directPath?: (string|null)
+			public mediaKey?: (Uint8Array|null)
+			public fileEncSha256?: (Uint8Array|null)
+			public fileSha256?: (Uint8Array|null)
+			public dimLevel?: (number|null)
+			public static encode(m: waproto.Message.IChatCustomImageWallpaper, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ChatCustomImageWallpaper
+		}
+		interface IChatDefaultWallpaper {
+			isDoodleEnabled?: (boolean|null)
+		}
+		class ChatDefaultWallpaper implements IChatDefaultWallpaper {
+			constructor(p?: waproto.Message.IChatDefaultWallpaper)
+			public isDoodleEnabled?: (boolean|null)
+			public static encode(m: waproto.Message.IChatDefaultWallpaper, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ChatDefaultWallpaper
+		}
+		interface IChatSolidColorWallpaper {
+			colorLight?: (string|null)
+			colorDark?: (string|null)
+			isDoodleEnabled?: (boolean|null)
+		}
+		class ChatSolidColorWallpaper implements IChatSolidColorWallpaper {
+			constructor(p?: waproto.Message.IChatSolidColorWallpaper)
+			public colorLight?: (string|null)
+			public colorDark?: (string|null)
+			public isDoodleEnabled?: (boolean|null)
+			public static encode(m: waproto.Message.IChatSolidColorWallpaper, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ChatSolidColorWallpaper
+		}
+		interface IChatStockImageWallpaper {
+			stockImageId?: (string|null)
+			dimLevel?: (number|null)
+		}
+		class ChatStockImageWallpaper implements IChatStockImageWallpaper {
+			constructor(p?: waproto.Message.IChatStockImageWallpaper)
+			public stockImageId?: (string|null)
+			public dimLevel?: (number|null)
+			public static encode(m: waproto.Message.IChatStockImageWallpaper, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ChatStockImageWallpaper
+		}
+		interface IChatThemeSetting {
+			settingTimestampMs?: (number|Long|null)
+			clearTheme?: (boolean|null)
+			colorSchemeId?: (string|null)
+			defaultWallpaper?: (waproto.Message.IChatDefaultWallpaper|null)
+			solidColor?: (waproto.Message.IChatSolidColorWallpaper|null)
+			stockImage?: (waproto.Message.IChatStockImageWallpaper|null)
+			customImage?: (waproto.Message.IChatCustomImageWallpaper|null)
+		}
+		class ChatThemeSetting implements IChatThemeSetting {
+			constructor(p?: waproto.Message.IChatThemeSetting)
+			public settingTimestampMs?: (number|Long|null)
+			public clearTheme?: (boolean|null)
+			public colorSchemeId?: (string|null)
+			public defaultWallpaper?: (waproto.Message.IChatDefaultWallpaper|null)
+			public solidColor?: (waproto.Message.IChatSolidColorWallpaper|null)
+			public stockImage?: (waproto.Message.IChatStockImageWallpaper|null)
+			public customImage?: (waproto.Message.IChatCustomImageWallpaper|null)
+			public wallpaper?: ("defaultWallpaper"|"solidColor"|"stockImage"|"customImage")
+			public static encode(m: waproto.Message.IChatThemeSetting, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ChatThemeSetting
+		}
 		interface ICloudAPIThreadControlNotification {
 			status?: (waproto.Message.CloudAPIThreadControlNotification.CloudAPIThreadControl|null)
 			senderNotificationTimestampMs?: (number|Long|null)
@@ -4590,7 +5569,8 @@ export namespace waproto {
 			enum CloudAPIThreadControl {
 				UNKNOWN = 0,
 				CONTROL_PASSED = 1,
-				CONTROL_TAKEN = 2
+				CONTROL_TAKEN = 2,
+				INFO = 3
 			}
 			interface ICloudAPIThreadControlNotificationContent {
 				handoffNotificationText?: (string|null)
@@ -4773,6 +5753,29 @@ export namespace waproto {
 			public encIv?: (Uint8Array|null)
 			public static encode(m: waproto.Message.IEncReactionMessage, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.EncReactionMessage
+		}
+		interface IEventInviteMessage {
+			contextInfo?: (waproto.IContextInfo|null)
+			eventId?: (string|null)
+			eventTitle?: (string|null)
+			jpegThumbnail?: (Uint8Array|null)
+			startTime?: (number|Long|null)
+			caption?: (string|null)
+			isCanceled?: (boolean|null)
+			endTime?: (number|Long|null)
+		}
+		class EventInviteMessage implements IEventInviteMessage {
+			constructor(p?: waproto.Message.IEventInviteMessage)
+			public contextInfo?: (waproto.IContextInfo|null)
+			public eventId?: (string|null)
+			public eventTitle?: (string|null)
+			public jpegThumbnail?: (Uint8Array|null)
+			public startTime?: (number|Long|null)
+			public caption?: (string|null)
+			public isCanceled?: (boolean|null)
+			public endTime?: (number|Long|null)
+			public static encode(m: waproto.Message.IEventInviteMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.EventInviteMessage
 		}
 		interface IEventMessage {
 			contextInfo?: (waproto.IContextInfo|null)
@@ -5781,16 +6784,18 @@ export namespace waproto {
 		}
 		interface IMessageHistoryMetadata {
 			historyReceivers?: (string[]|null)
-			oldestMessageTimestamp?: (number|Long|null)
+			oldestMessageTimestampInWindow?: (number|Long|null)
 			messageCount?: (number|Long|null)
 			nonHistoryReceivers?: (string[]|null)
+			oldestMessageTimestampInBundle?: (number|Long|null)
 		}
 		class MessageHistoryMetadata implements IMessageHistoryMetadata {
 			constructor(p?: waproto.Message.IMessageHistoryMetadata)
 			public historyReceivers: string[]
-			public oldestMessageTimestamp?: (number|Long|null)
+			public oldestMessageTimestampInWindow?: (number|Long|null)
 			public messageCount?: (number|Long|null)
 			public nonHistoryReceivers: string[]
+			public oldestMessageTimestampInBundle?: (number|Long|null)
 			public static encode(m: waproto.Message.IMessageHistoryMetadata, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.MessageHistoryMetadata
 		}
@@ -5888,6 +6893,52 @@ export namespace waproto {
 				CATALOG = 1
 			}
 		}
+		interface IP2PPaymentReminderNotification {
+			reminderId?: (string|null)
+			amount?: (waproto.IMoney|null)
+			frequency?: (waproto.Message.P2PPaymentReminderNotification.ReminderFrequency|null)
+			nextReminderTimestamp?: (number|Long|null)
+			expiryTimestamp?: (number|Long|null)
+			state?: (waproto.Message.P2PPaymentReminderNotification.ReminderState|null)
+			description?: (string|null)
+			creatorJid?: (string|null)
+			receiverJid?: (string|null)
+			upiId?: (string|null)
+			createdTimestamp?: (number|Long|null)
+		}
+		class P2PPaymentReminderNotification implements IP2PPaymentReminderNotification {
+			constructor(p?: waproto.Message.IP2PPaymentReminderNotification)
+			public reminderId?: (string|null)
+			public amount?: (waproto.IMoney|null)
+			public frequency?: (waproto.Message.P2PPaymentReminderNotification.ReminderFrequency|null)
+			public nextReminderTimestamp?: (number|Long|null)
+			public expiryTimestamp?: (number|Long|null)
+			public state?: (waproto.Message.P2PPaymentReminderNotification.ReminderState|null)
+			public description?: (string|null)
+			public creatorJid?: (string|null)
+			public receiverJid?: (string|null)
+			public upiId?: (string|null)
+			public createdTimestamp?: (number|Long|null)
+			public static encode(m: waproto.Message.IP2PPaymentReminderNotification, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.P2PPaymentReminderNotification
+		}
+		namespace P2PPaymentReminderNotification {
+			enum ReminderFrequency {
+				UNKNOWN_FREQUENCY = 0,
+				WEEKLY = 1,
+				BIWEEKLY = 2,
+				MONTHLY = 3,
+				CUSTOM = 4
+			}
+			enum ReminderState {
+				UNKNOWN_STATE = 0,
+				ACTIVE = 1,
+				PAUSED = 2,
+				STOPPED = 3,
+				EXPIRED = 4,
+				CANCELLED = 5
+			}
+		}
 		interface IPaymentExtendedMetadata {
 			type?: (number|null)
 			platform?: (string|null)
@@ -5904,6 +6955,7 @@ export namespace waproto {
 			expiryTimestamp?: (number|Long|null)
 			incentiveEligible?: (boolean|null)
 			referralId?: (string|null)
+			inviteType?: (waproto.Message.PaymentInviteMessage.InviteType|null)
 		}
 		class PaymentInviteMessage implements IPaymentInviteMessage {
 			constructor(p?: waproto.Message.IPaymentInviteMessage)
@@ -5911,10 +6963,15 @@ export namespace waproto {
 			public expiryTimestamp?: (number|Long|null)
 			public incentiveEligible?: (boolean|null)
 			public referralId?: (string|null)
+			public inviteType?: (waproto.Message.PaymentInviteMessage.InviteType|null)
 			public static encode(m: waproto.Message.IPaymentInviteMessage, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PaymentInviteMessage
 		}
 		namespace PaymentInviteMessage {
+			enum InviteType {
+				DEFAULT = 0,
+				MAPPER = 1
+			}
 			enum ServiceType {
 				UNKNOWN = 0,
 				FBPAY = 1,
@@ -6087,6 +7144,7 @@ export namespace waproto {
 				onDemandMsgCount?: (number|null)
 				oldestMsgTimestampMs?: (number|Long|null)
 				accountLid?: (string|null)
+				supportInlineResponse?: (boolean|null)
 			}
 			class HistorySyncOnDemandRequest implements IHistorySyncOnDemandRequest {
 				constructor(p?: waproto.Message.PeerDataOperationRequestMessage.IHistorySyncOnDemandRequest)
@@ -6096,6 +7154,7 @@ export namespace waproto {
 				public onDemandMsgCount?: (number|null)
 				public oldestMsgTimestampMs?: (number|Long|null)
 				public accountLid?: (string|null)
+				public supportInlineResponse?: (boolean|null)
 				public static encode(m: waproto.Message.PeerDataOperationRequestMessage.IHistorySyncOnDemandRequest, w?: PbWriter): PbWriter
 				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.PeerDataOperationRequestMessage.HistorySyncOnDemandRequest
 			}
@@ -6277,7 +7336,8 @@ export namespace waproto {
 					GENERIC_ERROR = 3,
 					ERROR_REQUEST_ON_NON_SMB_PRIMARY = 4,
 					ERROR_HOSTED_DEVICE_NOT_CONNECTED = 5,
-					ERROR_HOSTED_DEVICE_LOGIN_TIME_NOT_SET = 6
+					ERROR_HOSTED_DEVICE_LOGIN_TIME_NOT_SET = 6,
+					ERROR_MULTI_PROVIDER_NOT_CONFIGURED = 7
 				}
 				interface IHistorySyncChunkRetryResponse {
 					syncType?: (waproto.Message.HistorySyncType|null)
@@ -6674,6 +7734,7 @@ export namespace waproto {
 			memberLabel?: (waproto.IMemberLabel|null)
 			aiMediaCollectionMessage?: (waproto.IAIMediaCollectionMessage|null)
 			afterReadDuration?: (number|null)
+			chatThemeSetting?: (waproto.Message.IChatThemeSetting|null)
 		}
 		class ProtocolMessage implements IProtocolMessage {
 			constructor(p?: waproto.Message.IProtocolMessage)
@@ -6703,6 +7764,7 @@ export namespace waproto {
 			public memberLabel?: (waproto.IMemberLabel|null)
 			public aiMediaCollectionMessage?: (waproto.IAIMediaCollectionMessage|null)
 			public afterReadDuration?: (number|null)
+			public chatThemeSetting?: (waproto.Message.IChatThemeSetting|null)
 			public static encode(m: waproto.Message.IProtocolMessage, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.ProtocolMessage
 		}
@@ -6735,7 +7797,8 @@ export namespace waproto {
 				AI_QUERY_FANOUT = 29,
 				GROUP_MEMBER_LABEL_CHANGE = 30,
 				AI_MEDIA_COLLECTION_MESSAGE = 31,
-				MESSAGE_UNSCHEDULE = 32
+				MESSAGE_UNSCHEDULE = 32,
+				CHAT_THEME_SETTING = 34
 			}
 		}
 		interface IQuestionResponseMessage {
@@ -6797,11 +7860,13 @@ export namespace waproto {
 		interface IRequestWelcomeMessageMetadata {
 			localChatState?: (waproto.Message.RequestWelcomeMessageMetadata.LocalChatState|null)
 			welcomeTrigger?: (waproto.Message.RequestWelcomeMessageMetadata.WelcomeTrigger|null)
+			botAgentMetadata?: (waproto.IBotAgentMetadata|null)
 		}
 		class RequestWelcomeMessageMetadata implements IRequestWelcomeMessageMetadata {
 			constructor(p?: waproto.Message.IRequestWelcomeMessageMetadata)
 			public localChatState?: (waproto.Message.RequestWelcomeMessageMetadata.LocalChatState|null)
 			public welcomeTrigger?: (waproto.Message.RequestWelcomeMessageMetadata.WelcomeTrigger|null)
+			public botAgentMetadata?: (waproto.IBotAgentMetadata|null)
 			public static encode(m: waproto.Message.IRequestWelcomeMessageMetadata, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.RequestWelcomeMessageMetadata
 		}
@@ -6905,6 +7970,46 @@ export namespace waproto {
 			public static encode(m: waproto.Message.ISenderKeyDistributionMessage, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.SenderKeyDistributionMessage
 		}
+		interface ISplitPaymentMessage {
+			splitId?: (string|null)
+			totalAmount?: (waproto.IMoney|null)
+			description?: (string|null)
+			requesterJid?: (string|null)
+			participants?: (waproto.Message.ISplitPaymentParticipant[]|null)
+			createdAtMs?: (number|Long|null)
+			contextInfo?: (waproto.IContextInfo|null)
+		}
+		class SplitPaymentMessage implements ISplitPaymentMessage {
+			constructor(p?: waproto.Message.ISplitPaymentMessage)
+			public splitId?: (string|null)
+			public totalAmount?: (waproto.IMoney|null)
+			public description?: (string|null)
+			public requesterJid?: (string|null)
+			public participants: waproto.Message.ISplitPaymentParticipant[]
+			public createdAtMs?: (number|Long|null)
+			public contextInfo?: (waproto.IContextInfo|null)
+			public static encode(m: waproto.Message.ISplitPaymentMessage, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.SplitPaymentMessage
+		}
+		interface ISplitPaymentParticipant {
+			jid?: (string|null)
+			amount?: (waproto.IMoney|null)
+			status?: (waproto.Message.SplitPaymentParticipant.SplitPaymentStatus|null)
+		}
+		class SplitPaymentParticipant implements ISplitPaymentParticipant {
+			constructor(p?: waproto.Message.ISplitPaymentParticipant)
+			public jid?: (string|null)
+			public amount?: (waproto.IMoney|null)
+			public status?: (waproto.Message.SplitPaymentParticipant.SplitPaymentStatus|null)
+			public static encode(m: waproto.Message.ISplitPaymentParticipant, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.SplitPaymentParticipant
+		}
+		namespace SplitPaymentParticipant {
+			enum SplitPaymentStatus {
+				PENDING = 0,
+				PAID = 1
+			}
+		}
 		interface IStatusNotificationMessage {
 			responseMessageKey?: (waproto.IMessageKey|null)
 			originalMessageKey?: (waproto.IMessageKey|null)
@@ -6998,6 +8103,7 @@ export namespace waproto {
 			isLottie?: (boolean|null)
 			accessibilityLabel?: (string|null)
 			premium?: (number|null)
+			emojis?: (string|null)
 		}
 		class StickerMessage implements IStickerMessage {
 			constructor(p?: waproto.Message.IStickerMessage)
@@ -7022,6 +8128,7 @@ export namespace waproto {
 			public isLottie?: (boolean|null)
 			public accessibilityLabel?: (string|null)
 			public premium?: (number|null)
+			public emojis?: (string|null)
 			public static encode(m: waproto.Message.IStickerMessage, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Message.StickerMessage
 		}
@@ -7410,6 +8517,7 @@ export namespace waproto {
 		limitSharingV2?: (waproto.ILimitSharing|null)
 		threadId?: (waproto.IThreadID[]|null)
 		weblinkRenderConfig?: (waproto.WebLinkRenderConfig|null)
+		teeBotMetadata?: (Uint8Array|null)
 	}
 	class MessageContextInfo implements IMessageContextInfo {
 		constructor(p?: waproto.IMessageContextInfo)
@@ -7429,6 +8537,7 @@ export namespace waproto {
 		public limitSharingV2?: (waproto.ILimitSharing|null)
 		public threadId: waproto.IThreadID[]
 		public weblinkRenderConfig?: (waproto.WebLinkRenderConfig|null)
+		public teeBotMetadata?: (Uint8Array|null)
 		public static encode(m: waproto.IMessageContextInfo, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageContextInfo
 	}
@@ -7465,6 +8574,21 @@ export namespace waproto {
 		public encPayload?: (Uint8Array|null)
 		public static encode(m: waproto.IMessageSecretMessage, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageSecretMessage
+	}
+	interface IMessageText {
+		text?: (string|null)
+		mentionedJid?: (string[]|null)
+		commands?: (waproto.ICommand[]|null)
+		mentions?: (waproto.IMention[]|null)
+	}
+	class MessageText implements IMessageText {
+		constructor(p?: waproto.IMessageText)
+		public text?: (string|null)
+		public mentionedJid: string[]
+		public commands: waproto.ICommand[]
+		public mentions: waproto.IMention[]
+		public static encode(m: waproto.IMessageText, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.MessageText
 	}
 	interface IMoney {
 		value?: (number|Long|null)
@@ -7730,6 +8854,10 @@ export namespace waproto {
 		BUSINESS_BROADCAST_CAMPAIGN_ACTION = 81,
 		BUSINESS_BROADCAST_INSIGHTS_ACTION = 82,
 		CUSTOMER_DATA_ACTION = 83,
+		SUBSCRIPTIONS_SYNC_V2_ACTION = 84,
+		THREAD_PIN_ACTION = 85,
+		AUTO_ORGANIZE_BUSINESS_CHAT_SETTING = 86,
+		BIZ_AI_SETTINGS_NUDGE_ACTION = 87,
 		SHARE_OWN_PN = 10001,
 		BUSINESS_BROADCAST_ACTION = 10002,
 		AI_THREAD_DELETE_ACTION = 10003
@@ -8233,6 +9361,68 @@ export namespace waproto {
 		public static encode(m: waproto.IPushname, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.Pushname
 	}
+	interface IQP {
+	}
+	class QP implements IQP {
+		constructor(p?: waproto.IQP)
+		public static encode(m: waproto.IQP, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.QP
+	}
+	namespace QP {
+		enum ClauseType {
+			AND = 1,
+			OR = 2,
+			NOR = 3
+		}
+		interface IFilter {
+			filterName?: (string|null)
+			parameters?: (waproto.QP.IFilterParameters[]|null)
+			filterResult?: (waproto.QP.FilterResult|null)
+			clientNotSupportedConfig?: (waproto.QP.FilterClientNotSupportedConfig|null)
+		}
+		class Filter implements IFilter {
+			constructor(p?: waproto.QP.IFilter)
+			public filterName?: (string|null)
+			public parameters: waproto.QP.IFilterParameters[]
+			public filterResult?: (waproto.QP.FilterResult|null)
+			public clientNotSupportedConfig?: (waproto.QP.FilterClientNotSupportedConfig|null)
+			public static encode(m: waproto.QP.IFilter, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.QP.Filter
+		}
+		interface IFilterClause {
+			clauseType?: (waproto.QP.ClauseType|null)
+			clauses?: (waproto.QP.IFilterClause[]|null)
+			filters?: (waproto.QP.IFilter[]|null)
+		}
+		class FilterClause implements IFilterClause {
+			constructor(p?: waproto.QP.IFilterClause)
+			public clauseType?: (waproto.QP.ClauseType|null)
+			public clauses: waproto.QP.IFilterClause[]
+			public filters: waproto.QP.IFilter[]
+			public static encode(m: waproto.QP.IFilterClause, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.QP.FilterClause
+		}
+		enum FilterClientNotSupportedConfig {
+			PASS_BY_DEFAULT = 1,
+			FAIL_BY_DEFAULT = 2
+		}
+		interface IFilterParameters {
+			key?: (string|null)
+			value?: (string|null)
+		}
+		class FilterParameters implements IFilterParameters {
+			constructor(p?: waproto.QP.IFilterParameters)
+			public key?: (string|null)
+			public value?: (string|null)
+			public static encode(m: waproto.QP.IFilterParameters, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.QP.FilterParameters
+		}
+		enum FilterResult {
+			TRUE = 1,
+			FALSE = 2,
+			UNKNOWN = 3
+		}
+	}
 	interface IQuarantinedMessage {
 		originalData?: (Uint8Array|null)
 		extractedText?: (string|null)
@@ -8306,6 +9496,38 @@ export namespace waproto {
 		public reportingTag?: (Uint8Array|null)
 		public static encode(m: waproto.IReportingTokenInfo, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ReportingTokenInfo
+	}
+	interface IRoutingInfo {
+		regionId?: (number[]|null)
+		clusterId?: (number[]|null)
+		taskId?: (number|null)
+		debug?: (boolean|null)
+		tcpBbr?: (boolean|null)
+		tcpKeepalive?: (boolean|null)
+	}
+	class RoutingInfo implements IRoutingInfo {
+		constructor(p?: waproto.IRoutingInfo)
+		public regionId: number[]
+		public clusterId: number[]
+		public taskId?: (number|null)
+		public debug?: (boolean|null)
+		public tcpBbr?: (boolean|null)
+		public tcpKeepalive?: (boolean|null)
+		public static encode(m: waproto.IRoutingInfo, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.RoutingInfo
+	}
+	interface IScheduledMessageMetadata {
+		revealKeyId?: (string|null)
+		revealKey?: (Uint8Array|null)
+		scheduledTime?: (number|Long|null)
+	}
+	class ScheduledMessageMetadata implements IScheduledMessageMetadata {
+		constructor(p?: waproto.IScheduledMessageMetadata)
+		public revealKeyId?: (string|null)
+		public revealKey?: (Uint8Array|null)
+		public scheduledTime?: (number|Long|null)
+		public static encode(m: waproto.IScheduledMessageMetadata, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.ScheduledMessageMetadata
 	}
 	interface ISenderKeyDistributionMessage {
 		id?: (number|null)
@@ -8631,7 +9853,9 @@ export namespace waproto {
 				THREADS = 7,
 				APPLE_MUSIC = 8,
 				SHARECHAT = 9,
-				GOOGLE_PHOTOS = 10
+				GOOGLE_PHOTOS = 10,
+				SOUNDCLOUD = 11,
+				SHAZAM = 12
 			}
 		}
 		interface IGroupStatus {
@@ -8725,7 +9949,8 @@ export namespace waproto {
 			AI_CREATED = 7,
 			LAYOUTS = 8,
 			NEWSLETTER_STATUS = 9,
-			STATUS_CLOSE_SHARING = 10
+			STATUS_CLOSE_SHARING = 10,
+			PAID_PARTNERSHIP = 11
 		}
 	}
 	interface IStatusMentionMessage {
@@ -8782,6 +10007,17 @@ export namespace waproto {
 		public isAvatarSticker?: (boolean|null)
 		public static encode(m: waproto.IStickerMetadata, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.StickerMetadata
+	}
+	interface ISubProtocol {
+		payload?: (Uint8Array|null)
+		version?: (number|null)
+	}
+	class SubProtocol implements ISubProtocol {
+		constructor(p?: waproto.ISubProtocol)
+		public payload?: (Uint8Array|null)
+		public version?: (number|null)
+		public static encode(m: waproto.ISubProtocol, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SubProtocol
 	}
 	interface ISyncActionData {
 		index?: (Uint8Array|null)
@@ -8873,6 +10109,10 @@ export namespace waproto {
 		businessBroadcastCampaignAction?: (waproto.SyncActionValue.IBusinessBroadcastCampaignAction|null)
 		businessBroadcastInsightsAction?: (waproto.SyncActionValue.IBusinessBroadcastInsightsAction|null)
 		customerDataAction?: (waproto.SyncActionValue.ICustomerDataAction|null)
+		subscriptionsSyncV2Action?: (waproto.SyncActionValue.ISubscriptionsSyncV2Action|null)
+		threadPinAction?: (waproto.SyncActionValue.IThreadPinAction|null)
+		autoOrganizeBusinessChatSetting?: (waproto.SyncActionValue.IAutoOrganizeBusinessChatSetting|null)
+		bizAiSettingsNudgeAction?: (waproto.SyncActionValue.IBizAISettingsNudgeAction|null)
 	}
 	class SyncActionValue implements ISyncActionValue {
 		constructor(p?: waproto.ISyncActionValue)
@@ -8950,6 +10190,10 @@ export namespace waproto {
 		public businessBroadcastCampaignAction?: (waproto.SyncActionValue.IBusinessBroadcastCampaignAction|null)
 		public businessBroadcastInsightsAction?: (waproto.SyncActionValue.IBusinessBroadcastInsightsAction|null)
 		public customerDataAction?: (waproto.SyncActionValue.ICustomerDataAction|null)
+		public subscriptionsSyncV2Action?: (waproto.SyncActionValue.ISubscriptionsSyncV2Action|null)
+		public threadPinAction?: (waproto.SyncActionValue.IThreadPinAction|null)
+		public autoOrganizeBusinessChatSetting?: (waproto.SyncActionValue.IAutoOrganizeBusinessChatSetting|null)
+		public bizAiSettingsNudgeAction?: (waproto.SyncActionValue.IBizAISettingsNudgeAction|null)
 		public static encode(m: waproto.ISyncActionValue, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue
 	}
@@ -8996,6 +10240,15 @@ export namespace waproto {
 			public static encode(m: waproto.SyncActionValue.IArchiveChatAction, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ArchiveChatAction
 		}
+		interface IAutoOrganizeBusinessChatSetting {
+			autoOrganize?: (boolean|null)
+		}
+		class AutoOrganizeBusinessChatSetting implements IAutoOrganizeBusinessChatSetting {
+			constructor(p?: waproto.SyncActionValue.IAutoOrganizeBusinessChatSetting)
+			public autoOrganize?: (boolean|null)
+			public static encode(m: waproto.SyncActionValue.IAutoOrganizeBusinessChatSetting, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.AutoOrganizeBusinessChatSetting
+		}
 		interface IAvatarUpdatedAction {
 			eventType?: (waproto.SyncActionValue.AvatarUpdatedAction.AvatarEventType|null)
 			recentAvatarStickers?: (waproto.SyncActionValue.IStickerAction[]|null)
@@ -9012,6 +10265,29 @@ export namespace waproto {
 				UPDATED = 0,
 				CREATED = 1,
 				DELETED = 2
+			}
+		}
+		interface IBizAISettingsNudgeAction {
+			category?: (waproto.SyncActionValue.BizAISettingsNudgeAction.BizAISettingsCategory|null)
+			version?: (number|Long|null)
+			updatedAtMs?: (number|Long|null)
+		}
+		class BizAISettingsNudgeAction implements IBizAISettingsNudgeAction {
+			constructor(p?: waproto.SyncActionValue.IBizAISettingsNudgeAction)
+			public category?: (waproto.SyncActionValue.BizAISettingsNudgeAction.BizAISettingsCategory|null)
+			public version?: (number|Long|null)
+			public updatedAtMs?: (number|Long|null)
+			public static encode(m: waproto.SyncActionValue.IBizAISettingsNudgeAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BizAISettingsNudgeAction
+		}
+		namespace BizAISettingsNudgeAction {
+			enum BizAISettingsCategory {
+				UNKNOWN = 0,
+				INSTRUCTIONS = 1,
+				RESPONSE_SETTINGS = 2,
+				EXAMPLE_RESPONSES = 3,
+				KNOWLEDGE = 4,
+				LEAD_GEN = 5
 			}
 		}
 		interface IBotWelcomeRequestAction {
@@ -9097,6 +10373,7 @@ export namespace waproto {
 			participants?: (waproto.SyncActionValue.IBroadcastListParticipant[]|null)
 			listName?: (string|null)
 			labelIds?: (string[]|null)
+			audienceExpression?: (string|null)
 		}
 		class BusinessBroadcastListAction implements IBusinessBroadcastListAction {
 			constructor(p?: waproto.SyncActionValue.IBusinessBroadcastListAction)
@@ -9104,6 +10381,7 @@ export namespace waproto {
 			public participants: waproto.SyncActionValue.IBroadcastListParticipant[]
 			public listName?: (string|null)
 			public labelIds: string[]
+			public audienceExpression?: (string|null)
 			public static encode(m: waproto.SyncActionValue.IBusinessBroadcastListAction, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.BusinessBroadcastListAction
 		}
@@ -9331,10 +10609,12 @@ export namespace waproto {
 		}
 		interface ILabelAssociationAction {
 			labeled?: (boolean|null)
+			modelMetaData?: (waproto.SyncActionValue.IModelMetadata[]|null)
 		}
 		class LabelAssociationAction implements ILabelAssociationAction {
 			constructor(p?: waproto.SyncActionValue.ILabelAssociationAction)
 			public labeled?: (boolean|null)
+			public modelMetaData: waproto.SyncActionValue.IModelMetadata[]
 			public static encode(m: waproto.SyncActionValue.ILabelAssociationAction, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.LabelAssociationAction
 		}
@@ -9375,7 +10655,8 @@ export namespace waproto {
 				SERVER_ASSIGNED = 7,
 				DRAFTED = 8,
 				AI_HANDOFF = 9,
-				CHANNELS = 10
+				CHANNELS = 10,
+				AI_RESPONDING = 11
 			}
 		}
 		interface ILabelReorderingAction {
@@ -9500,6 +10781,19 @@ export namespace waproto {
 				ACTIVE = 0,
 				INACTIVE = 1
 			}
+		}
+		interface IModelMetadata {
+			modelName?: (string|null)
+			isLatestModel?: (boolean|null)
+			isDetected?: (boolean|null)
+		}
+		class ModelMetadata implements IModelMetadata {
+			constructor(p?: waproto.SyncActionValue.IModelMetadata)
+			public modelName?: (string|null)
+			public isLatestModel?: (boolean|null)
+			public isDetected?: (boolean|null)
+			public static encode(m: waproto.SyncActionValue.IModelMetadata, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ModelMetadata
 		}
 		interface IMusicUserIdAction {
 			musicUserId?: (string|null)
@@ -9724,6 +11018,7 @@ export namespace waproto {
 			keywords?: (string[]|null)
 			count?: (number|null)
 			deleted?: (boolean|null)
+			associatedLabelIds?: (string[]|null)
 		}
 		class QuickReplyAction implements IQuickReplyAction {
 			constructor(p?: waproto.SyncActionValue.IQuickReplyAction)
@@ -9732,6 +11027,7 @@ export namespace waproto {
 			public keywords: string[]
 			public count?: (number|null)
 			public deleted?: (boolean|null)
+			public associatedLabelIds: string[]
 			public static encode(m: waproto.SyncActionValue.IQuickReplyAction, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.QuickReplyAction
 		}
@@ -9785,6 +11081,8 @@ export namespace waproto {
 			isStatusNotificationEnabled?: (boolean|null)
 			statusNotificationToneId?: (number|null)
 			shouldPlaySoundForCallNotification?: (boolean|null)
+			chatThemeId?: (string|null)
+			colorSchemeId?: (string|null)
 		}
 		class SettingsSyncAction implements ISettingsSyncAction {
 			constructor(p?: waproto.SyncActionValue.ISettingsSyncAction)
@@ -9819,6 +11117,8 @@ export namespace waproto {
 			public isStatusNotificationEnabled?: (boolean|null)
 			public statusNotificationToneId?: (number|null)
 			public shouldPlaySoundForCallNotification?: (boolean|null)
+			public chatThemeId?: (string|null)
+			public colorSchemeId?: (string|null)
 			public static encode(m: waproto.SyncActionValue.ISettingsSyncAction, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SettingsSyncAction
 		}
@@ -9866,7 +11166,9 @@ export namespace waproto {
 				IS_GROUP_REACTIONS_NOTIFICATION_ENABLED = 28,
 				IS_STATUS_NOTIFICATION_ENABLED = 29,
 				STATUS_NOTIFICATION_TONE_ID = 30,
-				SHOULD_PLAY_SOUND_FOR_CALL_NOTIFICATION = 31
+				SHOULD_PLAY_SOUND_FOR_CALL_NOTIFICATION = 31,
+				CHAT_THEME_ID = 32,
+				COLOR_SCHEME_ID = 33
 			}
 			enum SettingPlatform {
 				PLATFORM_UNKNOWN = 0,
@@ -9899,6 +11201,8 @@ export namespace waproto {
 			userJid?: (string[]|null)
 			shareToFB?: (boolean|null)
 			shareToIG?: (boolean|null)
+			customLists?: (waproto.SyncActionValue.StatusPrivacyAction.ICustomList[]|null)
+			modes?: (waproto.SyncActionValue.StatusPrivacyAction.StatusDistributionMode[]|null)
 		}
 		class StatusPrivacyAction implements IStatusPrivacyAction {
 			constructor(p?: waproto.SyncActionValue.IStatusPrivacyAction)
@@ -9906,15 +11210,35 @@ export namespace waproto {
 			public userJid: string[]
 			public shareToFB?: (boolean|null)
 			public shareToIG?: (boolean|null)
+			public customLists: waproto.SyncActionValue.StatusPrivacyAction.ICustomList[]
+			public modes: waproto.SyncActionValue.StatusPrivacyAction.StatusDistributionMode[]
 			public static encode(m: waproto.SyncActionValue.IStatusPrivacyAction, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.StatusPrivacyAction
 		}
 		namespace StatusPrivacyAction {
+			interface ICustomList {
+				listId?: (string|null)
+				name?: (string|null)
+				emoji?: (string|null)
+				isSelected?: (boolean|null)
+				userJid?: (string[]|null)
+			}
+			class CustomList implements ICustomList {
+				constructor(p?: waproto.SyncActionValue.StatusPrivacyAction.ICustomList)
+				public listId?: (string|null)
+				public name?: (string|null)
+				public emoji?: (string|null)
+				public isSelected?: (boolean|null)
+				public userJid: string[]
+				public static encode(m: waproto.SyncActionValue.StatusPrivacyAction.ICustomList, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.StatusPrivacyAction.CustomList
+			}
 			enum StatusDistributionMode {
 				ALLOW_LIST = 0,
 				DENY_LIST = 1,
 				CONTACTS = 2,
-				CLOSE_FRIENDS = 3
+				CLOSE_FRIENDS = 3,
+				CUSTOM_LIST = 4
 			}
 		}
 		interface IStickerAction {
@@ -9963,6 +11287,57 @@ export namespace waproto {
 			public static encode(m: waproto.SyncActionValue.ISubscriptionAction, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SubscriptionAction
 		}
+		interface ISubscriptionsSyncV2Action {
+			subscriptions?: (waproto.SyncActionValue.SubscriptionsSyncV2Action.ISubscriptionInfo[]|null)
+			paidFeature?: (waproto.SyncActionValue.SubscriptionsSyncV2Action.IPaidFeature[]|null)
+		}
+		class SubscriptionsSyncV2Action implements ISubscriptionsSyncV2Action {
+			constructor(p?: waproto.SyncActionValue.ISubscriptionsSyncV2Action)
+			public subscriptions: waproto.SyncActionValue.SubscriptionsSyncV2Action.ISubscriptionInfo[]
+			public paidFeature: waproto.SyncActionValue.SubscriptionsSyncV2Action.IPaidFeature[]
+			public static encode(m: waproto.SyncActionValue.ISubscriptionsSyncV2Action, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SubscriptionsSyncV2Action
+		}
+		namespace SubscriptionsSyncV2Action {
+			interface IPaidFeature {
+				name?: (string|null)
+				enabled?: (boolean|null)
+				limit?: (number|null)
+				expirationTime?: (number|Long|null)
+			}
+			class PaidFeature implements IPaidFeature {
+				constructor(p?: waproto.SyncActionValue.SubscriptionsSyncV2Action.IPaidFeature)
+				public name?: (string|null)
+				public enabled?: (boolean|null)
+				public limit?: (number|null)
+				public expirationTime?: (number|Long|null)
+				public static encode(m: waproto.SyncActionValue.SubscriptionsSyncV2Action.IPaidFeature, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SubscriptionsSyncV2Action.PaidFeature
+			}
+			interface ISubscriptionInfo {
+				id?: (string|null)
+				tier?: (number|null)
+				status?: (string|null)
+				startTime?: (number|Long|null)
+				endTime?: (number|Long|null)
+				isPlatformChanged?: (boolean|null)
+				source?: (string|null)
+				creationTime?: (number|Long|null)
+			}
+			class SubscriptionInfo implements ISubscriptionInfo {
+				constructor(p?: waproto.SyncActionValue.SubscriptionsSyncV2Action.ISubscriptionInfo)
+				public id?: (string|null)
+				public tier?: (number|null)
+				public status?: (string|null)
+				public startTime?: (number|Long|null)
+				public endTime?: (number|Long|null)
+				public isPlatformChanged?: (boolean|null)
+				public source?: (string|null)
+				public creationTime?: (number|Long|null)
+				public static encode(m: waproto.SyncActionValue.SubscriptionsSyncV2Action.ISubscriptionInfo, w?: PbWriter): PbWriter
+				public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SubscriptionsSyncV2Action.SubscriptionInfo
+			}
+		}
 		interface ISyncActionMessage {
 			key?: (waproto.IMessageKey|null)
 			timestamp?: (number|Long|null)
@@ -9986,6 +11361,15 @@ export namespace waproto {
 			public messages: waproto.SyncActionValue.ISyncActionMessage[]
 			public static encode(m: waproto.SyncActionValue.ISyncActionMessageRange, w?: PbWriter): PbWriter
 			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.SyncActionMessageRange
+		}
+		interface IThreadPinAction {
+			pinned?: (boolean|null)
+		}
+		class ThreadPinAction implements IThreadPinAction {
+			constructor(p?: waproto.SyncActionValue.IThreadPinAction)
+			public pinned?: (boolean|null)
+			public static encode(m: waproto.SyncActionValue.IThreadPinAction, w?: PbWriter): PbWriter
+			public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncActionValue.ThreadPinAction
 		}
 		interface ITimeFormatAction {
 			isTwentyFourHourFormatEnabled?: (boolean|null)
@@ -10124,6 +11508,19 @@ export namespace waproto {
 		public static encode(m: waproto.ISyncdPatch, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdPatch
 	}
+	interface ISyncdPlainTextRecord {
+		value?: (waproto.ISyncActionData|null)
+		keyId?: (Uint8Array|null)
+		mac?: (Uint8Array|null)
+	}
+	class SyncdPlainTextRecord implements ISyncdPlainTextRecord {
+		constructor(p?: waproto.ISyncdPlainTextRecord)
+		public value?: (waproto.ISyncActionData|null)
+		public keyId?: (Uint8Array|null)
+		public mac?: (Uint8Array|null)
+		public static encode(m: waproto.ISyncdPlainTextRecord, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdPlainTextRecord
+	}
 	interface ISyncdRecord {
 		index?: (waproto.ISyncdIndex|null)
 		value?: (waproto.ISyncdValue|null)
@@ -10151,6 +11548,21 @@ export namespace waproto {
 		public keyId?: (waproto.IKeyId|null)
 		public static encode(m: waproto.ISyncdSnapshot, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdSnapshot
+	}
+	interface ISyncdSnapshotRecovery {
+		version?: (waproto.ISyncdVersion|null)
+		collectionName?: (string|null)
+		mutationRecords?: (waproto.ISyncdPlainTextRecord[]|null)
+		collectionLthash?: (Uint8Array|null)
+	}
+	class SyncdSnapshotRecovery implements ISyncdSnapshotRecovery {
+		constructor(p?: waproto.ISyncdSnapshotRecovery)
+		public version?: (waproto.ISyncdVersion|null)
+		public collectionName?: (string|null)
+		public mutationRecords: waproto.ISyncdPlainTextRecord[]
+		public collectionLthash?: (Uint8Array|null)
+		public static encode(m: waproto.ISyncdSnapshotRecovery, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.SyncdSnapshotRecovery
 	}
 	interface ISyncdValue {
 		blob?: (Uint8Array|null)
@@ -10249,6 +11661,30 @@ export namespace waproto {
 			VIEW_REPLIES = 1,
 			AI_THREAD = 2
 		}
+	}
+	interface IUnCountedAssociatedMessageList {
+		messages?: (waproto.IWebMessageInfo[]|null)
+		parentMessage?: (waproto.IMessageKey|null)
+		associationType?: (waproto.MessageAssociation.AssociationType|null)
+	}
+	class UnCountedAssociatedMessageList implements IUnCountedAssociatedMessageList {
+		constructor(p?: waproto.IUnCountedAssociatedMessageList)
+		public messages: waproto.IWebMessageInfo[]
+		public parentMessage?: (waproto.IMessageKey|null)
+		public associationType?: (waproto.MessageAssociation.AssociationType|null)
+		public static encode(m: waproto.IUnCountedAssociatedMessageList, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.UnCountedAssociatedMessageList
+	}
+	interface IUnCountedAssociatedMessageListWithMessageBytes {
+		messages?: (waproto.IWebMessageInfoWithMessageBytes[]|null)
+		parentMessage?: (waproto.IMessageKey|null)
+	}
+	class UnCountedAssociatedMessageListWithMessageBytes implements IUnCountedAssociatedMessageListWithMessageBytes {
+		constructor(p?: waproto.IUnCountedAssociatedMessageListWithMessageBytes)
+		public messages: waproto.IWebMessageInfoWithMessageBytes[]
+		public parentMessage?: (waproto.IMessageKey|null)
+		public static encode(m: waproto.IUnCountedAssociatedMessageListWithMessageBytes, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.UnCountedAssociatedMessageListWithMessageBytes
 	}
 	interface IUrlTrackingMap {
 		urlTrackingMapElements?: (waproto.UrlTrackingMap.IUrlTrackingMapElement[]|null)
@@ -10569,6 +12005,10 @@ export namespace waproto {
 		quarantinedMessage?: (waproto.IQuarantinedMessage|null)
 		nonJidMentions?: (number|null)
 		hsmTag?: (string|null)
+		ephemeralExpirationTimestamp?: (number|Long|null)
+		scheduledMessageMetadata?: (waproto.IScheduledMessageMetadata|null)
+		decisionId?: (string|null)
+		decisionSources?: (string[]|null)
 	}
 	class WebMessageInfo implements IWebMessageInfo {
 		constructor(p?: waproto.IWebMessageInfo)
@@ -10640,6 +12080,10 @@ export namespace waproto {
 		public quarantinedMessage?: (waproto.IQuarantinedMessage|null)
 		public nonJidMentions?: (number|null)
 		public hsmTag?: (string|null)
+		public ephemeralExpirationTimestamp?: (number|Long|null)
+		public scheduledMessageMetadata?: (waproto.IScheduledMessageMetadata|null)
+		public decisionId?: (string|null)
+		public decisionSources: string[]
 		public static encode(m: waproto.IWebMessageInfo, w?: PbWriter): PbWriter
 		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.WebMessageInfo
 	}
@@ -10882,8 +12326,21 @@ export namespace waproto {
 			QUARANTINED_MESSAGE = 220,
 			GROUP_MEMBER_SHARE_GROUP_HISTORY_MODE = 221,
 			GROUP_OPEN_BOT_ADDED = 222,
-			GROUP_TEE_BOT_ADDED = 223
+			GROUP_TEE_BOT_ADDED = 223,
+			CONTACT_INFO = 224,
+			SCHEDULED_MESSAGE_CREATED = 225
 		}
+	}
+	interface IWebMessageInfoWithMessageBytes {
+		key?: (waproto.IMessageKey|null)
+		messageBytes?: (Uint8Array|null)
+	}
+	class WebMessageInfoWithMessageBytes implements IWebMessageInfoWithMessageBytes {
+		constructor(p?: waproto.IWebMessageInfoWithMessageBytes)
+		public key?: (waproto.IMessageKey|null)
+		public messageBytes?: (Uint8Array|null)
+		public static encode(m: waproto.IWebMessageInfoWithMessageBytes, w?: PbWriter): PbWriter
+		public static decode(r: (PbReader|Uint8Array), l?: number): waproto.WebMessageInfoWithMessageBytes
 	}
 	interface IWebNotificationsInfo {
 		timestamp?: (number|Long|null)

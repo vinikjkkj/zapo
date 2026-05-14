@@ -1,7 +1,7 @@
 syntax = "proto3";
 package waproto;
 
-/// WhatsApp Version: 2.3000.1034621774
+/// WhatsApp Version: 2.3000.1039498983
 
 message ADVDeviceIdentity {
     optional uint32 rawId = 1;
@@ -14,6 +14,7 @@ message ADVDeviceIdentity {
 enum ADVEncryptionType {
     E2EE = 0;
     HOSTED = 1;
+    NON_E2EE = 2;
 }
 message ADVKeyIndexList {
     optional uint32 rawId = 1;
@@ -61,6 +62,7 @@ message AIHomeState {
             ANIMATE_PHOTO = 2;
             ANALYZE_FILE = 3;
             COLLABORATE = 4;
+            OPEN_GREETING_CARD = 5;
         }
     }
     
@@ -247,6 +249,16 @@ message AIRichResponseUnifiedResponse {
     optional bytes data = 1;
 }
 
+enum AISubscriptionRequestType {
+    UNSPECIFIED = 0;
+    THINK_HARD = 1;
+    IMAGE_GEN = 2;
+    VIDEO_GEN = 3;
+}
+message AISubscriptionUpsellMetadata {
+    optional AISubscriptionRequestType requestType = 1;
+}
+
 message AIThreadInfo {
     optional AIThreadServerInfo serverInfo = 1;
     optional AIThreadClientInfo clientInfo = 2;
@@ -272,6 +284,13 @@ message Account {
     optional string username = 2;
     optional string countryCode = 3;
     optional bool isUsernameDeleted = 4;
+}
+
+message AccountLinkingOpaqueData {
+    optional string accesstoken = 1;
+    optional string fbid = 2;
+    optional string nonce = 3;
+    optional string encryptedPassword = 4;
 }
 
 message ActionLink {
@@ -345,6 +364,14 @@ message BotAgeCollectionMetadata {
     }
 }
 
+message BotAgentDeepLinkMetadata {
+    optional string token = 1;
+}
+
+message BotAgentMetadata {
+    optional BotAgentDeepLinkMetadata deepLinkMetadata = 1;
+}
+
 message BotCapabilityMetadata {
     repeated BotCapabilityType capabilities = 1;
     enum BotCapabilityType {
@@ -407,7 +434,16 @@ message BotCapabilityMetadata {
         RICH_RESPONSE_INLINE_LINKS_ENABLED = 56;
         RICH_RESPONSE_UR_IMAGINE_VIDEO = 57;
         JSON_PATCH_STREAMING = 58;
+        AI_TAB_FORCE_CLIPPY = 59;
+        UNIFIED_RESPONSE_EMBEDDED_SCREENS = 60;
+        AI_SUBSCRIPTION_ENABLED = 61;
     }
+}
+
+message BotCommandMetadata {
+    optional string commandName = 1;
+    optional string commandDescription = 2;
+    optional string commandPrompt = 3;
 }
 
 message BotDocumentMessageMetadata {
@@ -641,6 +677,9 @@ message BotMetadata {
     optional BotRenderingConfigMetadata botRenderingConfigMetadata = 36;
     optional BotInfrastructureDiagnostics botInfrastructureDiagnostics = 37;
     optional AIMediaCollectionMetadata aiMediaCollectionMetadata = 38;
+    optional BotCommandMetadata commandMetadata = 39;
+    optional BotResolvedToolCallMetadata resolvedToolCallMetadata = 40;
+    optional AISubscriptionUpsellMetadata subscriptionUpsellMetadata = 41;
     optional bytes internalMetadata = 999;
 }
 
@@ -692,6 +731,7 @@ enum BotMetricsEntryPoint {
     WEB_NAVIGATION_BAR = 47;
     GROUP_MEMBER = 54;
     CHATLIST_SEARCH = 55;
+    NEW_CHAT_LIST = 56;
 }
 message BotMetricsMetadata {
     optional string destinationId = 1;
@@ -878,6 +918,11 @@ message BotRenderingMetadata {
     
 }
 
+message BotResolvedToolCallMetadata {
+    optional string toolCallId = 1;
+    optional string resolutionDataSerialized = 2;
+}
+
 message BotSessionMetadata {
     optional string sessionId = 1;
     optional BotSessionSource sessionSource = 2;
@@ -953,6 +998,29 @@ message BotUnifiedResponseMutation {
     
 }
 
+enum COMMAND_COMMAND_TYPE {
+    EVERYONE = 1;
+    SILENT = 2;
+    AI = 3;
+    AI_IMAGINE = 4;
+}
+enum CONSUMER_APPLICATION_EXTENDED_TEXT_MESSAGE_PREVIEW_TYPE {
+    NONE = 0;
+    VIDEO = 1;
+}
+enum CONSUMER_APPLICATION_METADATA_SPECIAL_TEXT_SIZE {
+    SMALL = 1;
+    MEDIUM = 2;
+    LARGE = 3;
+}
+enum CONSUMER_APPLICATION_STATUS_TEXT_MESAGE_FONT_TYPE {
+    SANS_SERIF = 0;
+    SERIF = 1;
+    NORICAN_REGULAR = 2;
+    BRYNDAN_WRITE = 3;
+    BEBASNEUE_REGULAR = 4;
+    OSWALD_HEAVY = 5;
+}
 message CallLogRecord {
     optional CallResult callResult = 1;
     optional bool isDndMode = 2;
@@ -1074,6 +1142,7 @@ message ClientPairingProps {
     optional bool isSyncdPureLidSession = 2;
     optional bool isSyncdSnapshotRecoveryEnabled = 3;
     optional bool isHsThumbnailSyncEnabled = 4;
+    optional bytes subscriptionSyncPayload = 5;
 }
 
 message ClientPayload {
@@ -1112,6 +1181,7 @@ message ClientPayload {
     optional int32 preacksCount = 45;
     optional int32 processingQueueSize = 46;
     repeated string pairedPeripherals = 47;
+    optional bytes testIsolationId = 48;
     enum AccountType {
         DEFAULT = 0;
         GUEST = 1;
@@ -1207,6 +1277,7 @@ message ClientPayload {
         optional string deviceExpId = 14;
         optional DeviceType deviceType = 15;
         optional string deviceModelType = 16;
+        optional DistributionChannel distributionChannel = 17;
         message AppVersion {
             optional uint32 primary = 1;
             optional uint32 secondary = 2;
@@ -1221,6 +1292,12 @@ message ClientPayload {
             DESKTOP = 2;
             WEARABLE = 3;
             VR = 4;
+        }
+        enum DistributionChannel {
+            APPSTORE = 0;
+            WEBSITE = 1;
+            TESTFLIGHT = 2;
+            INTERNAL = 3;
         }
         enum Platform {
             ANDROID = 0;
@@ -1311,6 +1388,19 @@ enum CollectionName {
     CRITICAL_BLOCK = 4;
     CRITICAL_UNBLOCK_LOW = 5;
 }
+message CombinedFingerprint {
+    optional uint32 version = 1;
+    optional FingerprintData localFingerprint = 2;
+    optional FingerprintData remoteFingerprint = 3;
+}
+
+message Command {
+    optional COMMAND_COMMAND_TYPE commandType = 1;
+    optional uint32 offset = 2;
+    optional uint32 length = 3;
+    optional string validationToken = 4;
+}
+
 message CommentMetadata {
     optional MessageKey commentParentKey = 1;
     optional uint32 replyCount = 2;
@@ -1329,6 +1419,213 @@ message CompanionEphemeralIdentity {
 message Config {
     map<uint32, Field> field = 1;
     optional uint32 version = 2;
+}
+
+message ConsumerApplication {
+    optional Payload payload = 1;
+    optional Metadata metadata = 2;
+    message ApplicationData {
+        oneof applicationContent {
+            ConsumerApplication.RevokeMessage revoke = 1;
+        }
+    }
+    
+    message AudioMessage {
+        optional SubProtocol audio = 1;
+        optional bool ptt = 2;
+    }
+    
+    message ContactMessage {
+        optional SubProtocol contact = 1;
+    }
+    
+    message ContactsArrayMessage {
+        optional string displayName = 1;
+        repeated ConsumerApplication.ContactMessage contacts = 2;
+    }
+    
+    message Content {
+        oneof content {
+            MessageText messageText = 1;
+            ConsumerApplication.ImageMessage imageMessage = 2;
+            ConsumerApplication.ContactMessage contactMessage = 3;
+            ConsumerApplication.LocationMessage locationMessage = 4;
+            ConsumerApplication.ExtendedTextMessage extendedTextMessage = 5;
+            ConsumerApplication.StatusTextMesage statusTextMessage = 6;
+            ConsumerApplication.DocumentMessage documentMessage = 7;
+            ConsumerApplication.AudioMessage audioMessage = 8;
+            ConsumerApplication.VideoMessage videoMessage = 9;
+            ConsumerApplication.ContactsArrayMessage contactsArrayMessage = 10;
+            ConsumerApplication.LiveLocationMessage liveLocationMessage = 11;
+            ConsumerApplication.StickerMessage stickerMessage = 12;
+            ConsumerApplication.GroupInviteMessage groupInviteMessage = 13;
+            ConsumerApplication.ViewOnceMessage viewOnceMessage = 14;
+            ConsumerApplication.ReactionMessage reactionMessage = 16;
+            ConsumerApplication.PollCreationMessage pollCreationMessage = 17;
+            ConsumerApplication.PollUpdateMessage pollUpdateMessage = 18;
+            ConsumerApplication.EditMessage editMessage = 19;
+        }
+    }
+    
+    message DocumentMessage {
+        optional SubProtocol document = 1;
+        optional string fileName = 2;
+    }
+    
+    message EditMessage {
+        optional MessageKey key = 1;
+        optional MessageText message = 2;
+        optional int64 timestampMs = 3;
+    }
+    
+    message ExtendedTextMessage {
+        optional MessageText text = 1;
+        optional string matchedText = 2;
+        optional string canonicalUrl = 3;
+        optional string description = 4;
+        optional string title = 5;
+        optional SubProtocol thumbnail = 6;
+        optional CONSUMER_APPLICATION_EXTENDED_TEXT_MESSAGE_PREVIEW_TYPE previewType = 7;
+    }
+    
+    message GroupInviteMessage {
+        optional string groupJid = 1;
+        optional string inviteCode = 2;
+        optional int64 inviteExpiration = 3;
+        optional string groupName = 4;
+        optional bytes jpegThumbnail = 5;
+        optional MessageText caption = 6;
+    }
+    
+    message ImageMessage {
+        optional SubProtocol image = 1;
+        optional MessageText caption = 2;
+    }
+    
+    message InteractiveAnnotation {
+        repeated ConsumerApplication.Point polygonVertices = 1;
+        oneof action {
+            ConsumerApplication.Location location = 2;
+        }
+    }
+    
+    message LiveLocationMessage {
+        optional ConsumerApplication.Location location = 1;
+        optional uint32 accuracyInMeters = 2;
+        optional float speedInMps = 3;
+        optional uint32 degreesClockwiseFromMagneticNorth = 4;
+        optional MessageText caption = 5;
+        optional int64 sequenceNumber = 6;
+        optional uint32 timeOffset = 7;
+    }
+    
+    message Location {
+        optional double degreesLatitude = 1;
+        optional double degreesLongitude = 2;
+        optional string name = 3;
+    }
+    
+    message LocationMessage {
+        optional ConsumerApplication.Location location = 1;
+        optional string address = 2;
+    }
+    
+    message MediaPayload {
+        optional SubProtocol protocol = 1;
+    }
+    
+    message Metadata {
+        optional CONSUMER_APPLICATION_METADATA_SPECIAL_TEXT_SIZE specialTextSize = 1;
+    }
+    
+    message Option {
+        optional string optionName = 1;
+    }
+    
+    message Payload {
+        oneof payload {
+            ConsumerApplication.Content content = 1;
+            ConsumerApplication.ApplicationData applicationData = 2;
+            ConsumerApplication.Signal signal = 3;
+            ConsumerApplication.SubProtocolPayload subProtocol = 4;
+        }
+    }
+    
+    message Point {
+        optional double x = 1;
+        optional double y = 2;
+    }
+    
+    message PollAddOptionMessage {
+        repeated ConsumerApplication.Option pollOption = 1;
+    }
+    
+    message PollCreationMessage {
+        optional bytes encKey = 1;
+        optional string name = 2;
+        repeated ConsumerApplication.Option options = 3;
+        optional uint32 selectableOptionsCount = 4;
+    }
+    
+    message PollEncValue {
+        optional bytes encPayload = 1;
+        optional bytes encIv = 2;
+    }
+    
+    message PollUpdateMessage {
+        optional MessageKey pollCreationMessageKey = 1;
+        optional ConsumerApplication.PollEncValue vote = 2;
+        optional ConsumerApplication.PollEncValue addOption = 3;
+    }
+    
+    message PollVoteMessage {
+        repeated bytes selectedOptions = 1;
+        optional int64 senderTimestampMs = 2;
+    }
+    
+    message ReactionMessage {
+        optional MessageKey key = 1;
+        optional string text = 2;
+        optional string groupingKey = 3;
+        optional int64 senderTimestampMs = 4;
+        optional string reactionMetadataDataclassData = 5;
+        optional int32 style = 6;
+    }
+    
+    message RevokeMessage {
+        optional MessageKey key = 1;
+    }
+    
+    message Signal {
+    }
+    
+    message StatusTextMesage {
+        optional ConsumerApplication.ExtendedTextMessage text = 1;
+        optional fixed32 textArgb = 6;
+        optional fixed32 backgroundArgb = 7;
+        optional CONSUMER_APPLICATION_STATUS_TEXT_MESAGE_FONT_TYPE font = 8;
+    }
+    
+    message StickerMessage {
+        optional SubProtocol sticker = 1;
+    }
+    
+    message SubProtocolPayload {
+        optional FUTURE_PROOF_BEHAVIOR futureProof = 1;
+    }
+    
+    message VideoMessage {
+        optional SubProtocol video = 1;
+        optional MessageText caption = 2;
+    }
+    
+    message ViewOnceMessage {
+        oneof viewOnceContent {
+            ConsumerApplication.ImageMessage imageMessage = 1;
+            ConsumerApplication.VideoMessage videoMessage = 2;
+        }
+    }
+    
 }
 
 message ContextInfo {
@@ -1391,6 +1688,9 @@ message ContextInfo {
     optional MediaDomainInfo mediaDomainInfo = 74;
     optional PartiallySelectedContent partiallySelectedContent = 75;
     optional uint32 afterReadDuration = 76;
+    optional CrossAppSource crossAppSource = 77;
+    optional BusinessInteractionPills businessInteractionPills = 78;
+    optional string posterStatusId = 79;
     message AdReplyInfo {
         optional string advertiserName = 1;
         optional MediaType mediaType = 2;
@@ -1403,10 +1703,47 @@ message ContextInfo {
         }
     }
     
+    message BusinessInteractionPills {
+        optional string businessJid = 1;
+        repeated Pill pills = 2;
+        optional EntryPoint entryPoint = 3;
+        enum EntryPoint {
+            ENTRY_POINT_UNKNOWN = 0;
+            P2P_LINK_SHARE = 1;
+            CONTACT_CARD_SHARING = 2;
+            PHONE_NUMBER = 3;
+            STATUS = 4;
+            IN_THREAD_CONTEXT_CARD = 5;
+        }
+        message Pill {
+            optional ContextInfo.BusinessInteractionPills.PillType pillType = 1;
+            optional string actionUrl = 2;
+        }
+        
+        enum PillType {
+            UNKNOWN = 0;
+            VIEW_BUSINESS = 1;
+            CHAT = 2;
+            CALL = 3;
+            CATALOG = 4;
+            CHANNEL = 5;
+            BOOK_APPOINTMENT = 6;
+            OFFERS = 7;
+            BESTSELLERS = 8;
+            MENU = 9;
+            ABOUT = 10;
+        }
+    }
+    
     message BusinessMessageForwardInfo {
         optional string businessOwnerJid = 1;
     }
     
+    enum CrossAppSource {
+        CROSS_APP_SOURCE_UNKNOWN = 0;
+        CROSS_APP_SOURCE_INSTAGRAM = 1;
+        CROSS_APP_SOURCE_FACEBOOK = 2;
+    }
     message DataSharingContext {
         optional bool showMmDisclosure = 1;
         optional string encryptedSignalTokenConsented = 2;
@@ -1454,6 +1791,11 @@ message ContextInfo {
         optional AdType adType = 25;
         optional string wtwaWebsiteUrl = 26;
         optional string adPreviewUrl = 27;
+        optional bool containsCtwaFlowsAutoReply = 28;
+        optional int32 agmThumbnailStrategy = 29;
+        optional int32 agmTitleStrategy = 30;
+        optional int32 agmSubtitleStrategy = 31;
+        optional int32 agmHeaderInteractionStrategy = 32;
         enum AdType {
             CTWA = 0;
             CAWC = 1;
@@ -1608,11 +1950,24 @@ message Conversation {
     optional bool limitSharingInitiatedByMe = 53;
     optional bool maibaAiThreadEnabled = 54;
     optional bool isMarketingMessageThread = 55;
+    optional bool isSenderNewAccount = 56;
+    optional uint32 afterReadDuration = 57;
+    optional bool isSenderSuspicious = 58;
+    optional GroupAppealStatus appealStatus = 59;
+    optional uint64 appealUpdateTime = 60;
+    optional string authAgentParentCompanyName = 61;
+    optional string authAgentObaPhoneNumber = 62;
     enum EndOfHistoryTransferType {
         COMPLETE_BUT_MORE_MESSAGES_REMAIN_ON_PRIMARY = 0;
         COMPLETE_AND_NO_MORE_MESSAGE_REMAIN_ON_PRIMARY = 1;
         COMPLETE_ON_DEMAND_SYNC_BUT_MORE_MSG_REMAIN_ON_PRIMARY = 2;
         COMPLETE_ON_DEMAND_SYNC_WITH_MORE_MSG_ON_PRIMARY_BUT_NO_ACCESS = 3;
+    }
+    enum GroupAppealStatus {
+        NO_APPEAL = 0;
+        APPEAL_IN_REVIEW = 1;
+        APPEAL_APPROVED = 2;
+        APPEAL_REJECTED = 3;
     }
 }
 
@@ -1635,6 +1990,9 @@ message DeviceCapabilities {
     message BusinessBroadcast {
         optional bool importListEnabled = 1;
         optional bool companionSupportEnabled = 2;
+        optional bool campaignSyncEnabled = 3;
+        optional bool insightsSyncEnabled = 4;
+        optional int32 recipientLimit = 5;
     }
     
     enum ChatLockSupportLevel {
@@ -1710,6 +2068,8 @@ message DeviceProps {
         optional uint32 initialSyncMaxMessagesPerChat = 20;
         optional bool supportManusHistory = 21;
         optional bool supportHatchHistory = 22;
+        repeated string supportedBotChannelFbids = 23;
+        optional bool supportInlineContacts = 24;
     }
     
     enum PlatformType {
@@ -1826,12 +2186,26 @@ message ExternalBlobReference {
     optional bytes fileEncSha256 = 6;
 }
 
+enum FUTURE_PROOF_BEHAVIOR {
+    PLACEHOLDER = 0;
+    NO_PLACEHOLDER = 1;
+    IGNORE = 2;
+}
 message Field {
     optional uint32 minVersion = 1;
     optional uint32 maxVersion = 2;
     optional uint32 notReportableMinVersion = 3;
     optional bool isMessage = 4;
     map<uint32, Field> subfield = 5;
+}
+
+message FingerprintData {
+    optional bytes publicKey = 1;
+    optional bytes pnIdentifier = 2;
+    optional bytes lidIdentifier = 3;
+    optional bytes usernameIdentifier = 4;
+    optional HostedState hostedState = 5;
+    optional bytes hashedPublicKey = 6;
 }
 
 message ForwardedAIBotMessageInfo {
@@ -1863,6 +2237,13 @@ message GlobalSettings {
     optional int64 chatDbLidMigrationTimestamp = 20;
 }
 
+message GroupHistory {
+    repeated WebMessageInfo messages = 1;
+    repeated UnCountedAssociatedMessageList uncountedAssociatedMessageLists = 2;
+    repeated WebMessageInfo commentMessages = 3;
+    repeated WebMessageInfo outOfWindowPinnedMessages = 4;
+}
+
 message GroupHistoryBundleInfo {
     optional Message.MessageHistoryBundle deprecatedMessageHistoryBundle = 1;
     optional ProcessState processState = 2;
@@ -1878,6 +2259,13 @@ message GroupHistoryBundleInfo {
 message GroupHistoryIndividualMessageInfo {
     optional MessageKey bundleMessageKey = 1;
     optional bool editedAfterReceivedAsHistory = 2;
+}
+
+message GroupHistoryWithMessageBytes {
+    repeated WebMessageInfoWithMessageBytes messages = 1;
+    repeated UnCountedAssociatedMessageListWithMessageBytes uncountedAssociatedMessageLists = 2;
+    repeated WebMessageInfoWithMessageBytes commentMessages = 3;
+    repeated WebMessageInfoWithMessageBytes outOfWindowPinnedMessages = 4;
 }
 
 message GroupMention {
@@ -1896,6 +2284,16 @@ message GroupParticipant {
     }
 }
 
+message GroupRootKeyShare {
+    repeated GroupRootKeyShareEntry keys = 1;
+}
+
+message GroupRootKeyShareEntry {
+    optional bytes groupRootKey = 1;
+    optional string keyId = 2;
+    optional int64 expiryTimestampMs = 3;
+}
+
 message HandshakeMessage {
     optional ClientHello clientHello = 2;
     optional ServerHello serverHello = 3;
@@ -1904,6 +2302,8 @@ message HandshakeMessage {
         optional bytes static = 1;
         optional bytes payload = 2;
         optional bytes extendedCiphertext = 3;
+        optional bytes paddedBytes = 4;
+        optional bool simulateXxkemFs = 5;
     }
     
     message ClientHello {
@@ -1912,13 +2312,31 @@ message HandshakeMessage {
         optional bytes payload = 3;
         optional bool useExtended = 4;
         optional bytes extendedCiphertext = 5;
+        optional bytes paddedBytes = 6;
+        optional bool sendServerHelloPaddedBytes = 7;
+        optional bool simulateXxkemFs = 8;
+        optional HandshakeMessage.HandshakePqMode pqMode = 9;
+        optional bytes extendedEphemeral = 10;
     }
     
+    enum HandshakePqMode {
+        HANDSHAKE_PQ_MODE_UNKNOWN = 0;
+        XXKEM = 1;
+        XXKEM_FS = 2;
+        WA_CLASSICAL = 3;
+        WA_PQ = 4;
+        IKKEM = 5;
+        IKKEM_FS = 6;
+        XXKEM_2 = 7;
+        IKKEM_2 = 8;
+    }
     message ServerHello {
         optional bytes ephemeral = 1;
         optional bytes static = 2;
         optional bytes payload = 3;
         optional bytes extendedStatic = 4;
+        optional bytes paddingBytes = 5;
+        optional bytes extendedCiphertext = 6;
     }
     
 }
@@ -1942,6 +2360,8 @@ message HistorySync {
     optional bytes shareableChatIdentifierEncryptionKey = 17;
     repeated Account accounts = 18;
     optional bytes nctSalt = 19;
+    repeated InlineContact inlineContacts = 20;
+    optional bool inlineContactsProvided = 21;
     enum BotAIWaitListState {
         IN_WAITLIST = 0;
         AI_AVAILABLE = 1;
@@ -1962,6 +2382,10 @@ message HistorySyncMsg {
     optional uint64 msgOrderId = 2;
 }
 
+enum HostedState {
+    E2EE = 0;
+    HOSTED = 1;
+}
 message HydratedTemplateButton {
     optional uint32 index = 4;
     oneof hydratedButton {
@@ -2034,6 +2458,14 @@ message InThreadSurveyMetadata {
         repeated InThreadSurveyMetadata.InThreadSurveyOption questionOptions = 3;
     }
     
+}
+
+message InlineContact {
+    optional string pnJid = 1;
+    optional string lidJid = 2;
+    optional string fullName = 3;
+    optional string firstName = 4;
+    optional string username = 5;
 }
 
 message InteractiveAnnotation {
@@ -2114,7 +2546,6 @@ message LimitSharing {
         CHAT_SETTING = 1;
         BIZ_SUPPORTS_FB_HOSTING = 2;
         UNKNOWN_GROUP = 3;
-        DEPRECATION = 4;
     }
 }
 
@@ -2130,6 +2561,9 @@ message Location {
     optional string name = 3;
 }
 
+enum MENTION_MENTION_TYPE {
+    PROFILE = 0;
+}
 message MediaData {
     optional string localPath = 1;
 }
@@ -2137,6 +2571,40 @@ message MediaData {
 message MediaDomainInfo {
     optional MediaKeyDomain mediaKeyDomain = 1;
     optional bytes e2EeMediaKey = 2;
+}
+
+message MediaEntry {
+    optional bytes fileSha256 = 1;
+    optional bytes mediaKey = 2;
+    optional bytes fileEncSha256 = 3;
+    optional string directPath = 4;
+    optional int64 mediaKeyTimestamp = 5;
+    optional string serverMediaType = 6;
+    optional bytes uploadToken = 7;
+    optional bytes validatedTimestamp = 8;
+    optional bytes sidecar = 9;
+    optional string objectId = 10;
+    optional string fbid = 11;
+    optional DownloadableThumbnail downloadableThumbnail = 12;
+    optional string handle = 13;
+    optional string filename = 14;
+    optional ProgressiveJpegDetails progressiveJpegDetails = 15;
+    optional int64 size = 16;
+    optional int64 lastDownloadAttemptTimestamp = 17;
+    message DownloadableThumbnail {
+        optional bytes fileSha256 = 1;
+        optional bytes fileEncSha256 = 2;
+        optional string directPath = 3;
+        optional bytes mediaKey = 4;
+        optional int64 mediaKeyTimestamp = 5;
+        optional string objectId = 6;
+    }
+    
+    message ProgressiveJpegDetails {
+        repeated uint32 scanLengths = 1;
+        optional bytes sidecar = 2;
+    }
+    
 }
 
 enum MediaKeyDomain {
@@ -2171,6 +2639,13 @@ enum MediaVisibility {
 message MemberLabel {
     optional string label = 1;
     optional int64 labelTimestamp = 2;
+}
+
+message Mention {
+    optional MENTION_MENTION_TYPE mentionType = 1;
+    optional string mentionedJid = 2;
+    optional uint32 offset = 3;
+    optional uint32 length = 4;
 }
 
 message Message {
@@ -2275,6 +2750,10 @@ message Message {
     optional PollCreationMessage pollCreationMessageV6 = 119;
     optional ConditionalRevealMessage conditionalRevealMessage = 120;
     optional PollAddOptionMessage pollAddOptionMessage = 121;
+    optional EventInviteMessage eventInviteMessage = 122;
+    optional GroupRootKeyShare groupRootKeyShare = 123;
+    optional P2PPaymentReminderNotification p2PPaymentReminderNotification = 124;
+    optional SplitPaymentMessage splitPaymentMessage = 125;
     message AlbumMessage {
         optional uint32 expectedImageCount = 2;
         optional uint32 expectedVideoCount = 3;
@@ -2455,6 +2934,41 @@ message Message {
         optional string id = 2;
     }
     
+    message ChatCustomImageWallpaper {
+        optional string directPath = 1;
+        optional bytes mediaKey = 2;
+        optional bytes fileEncSha256 = 3;
+        optional bytes fileSha256 = 4;
+        optional float dimLevel = 5;
+    }
+    
+    message ChatDefaultWallpaper {
+        optional bool isDoodleEnabled = 1;
+    }
+    
+    message ChatSolidColorWallpaper {
+        optional string colorLight = 1;
+        optional string colorDark = 2;
+        optional bool isDoodleEnabled = 3;
+    }
+    
+    message ChatStockImageWallpaper {
+        optional string stockImageId = 1;
+        optional float dimLevel = 2;
+    }
+    
+    message ChatThemeSetting {
+        optional int64 settingTimestampMs = 1;
+        optional bool clearTheme = 2;
+        optional string colorSchemeId = 3;
+        oneof wallpaper {
+            Message.ChatDefaultWallpaper defaultWallpaper = 10;
+            Message.ChatSolidColorWallpaper solidColor = 11;
+            Message.ChatStockImageWallpaper stockImage = 12;
+            Message.ChatCustomImageWallpaper customImage = 13;
+        }
+    }
+    
     message CloudAPIThreadControlNotification {
         optional CloudAPIThreadControl status = 1;
         optional int64 senderNotificationTimestampMs = 2;
@@ -2466,6 +2980,7 @@ message Message {
             UNKNOWN = 0;
             CONTROL_PASSED = 1;
             CONTROL_TAKEN = 2;
+            INFO = 3;
         }
         message CloudAPIThreadControlNotificationContent {
             optional string handoffNotificationText = 1;
@@ -2553,6 +3068,17 @@ message Message {
         optional MessageKey targetMessageKey = 1;
         optional bytes encPayload = 2;
         optional bytes encIv = 3;
+    }
+    
+    message EventInviteMessage {
+        optional ContextInfo contextInfo = 1;
+        optional string eventId = 2;
+        optional string eventTitle = 3;
+        optional bytes jpegThumbnail = 4;
+        optional int64 startTime = 5;
+        optional string caption = 6;
+        optional bool isCanceled = 7;
+        optional int64 endTime = 8;
     }
     
     message EventMessage {
@@ -3081,9 +3607,10 @@ message Message {
     
     message MessageHistoryMetadata {
         repeated string historyReceivers = 1;
-        optional int64 oldestMessageTimestamp = 2;
+        optional int64 oldestMessageTimestampInWindow = 2;
         optional int64 messageCount = 3;
         repeated string nonHistoryReceivers = 4;
+        optional int64 oldestMessageTimestampInBundle = 5;
     }
     
     message MessageHistoryNotice {
@@ -3134,6 +3661,35 @@ message Message {
         }
     }
     
+    message P2PPaymentReminderNotification {
+        optional string reminderId = 1;
+        optional Money amount = 2;
+        optional ReminderFrequency frequency = 3;
+        optional int64 nextReminderTimestamp = 4;
+        optional int64 expiryTimestamp = 5;
+        optional ReminderState state = 6;
+        optional string description = 7;
+        optional string creatorJid = 8;
+        optional string receiverJid = 9;
+        optional string upiId = 10;
+        optional int64 createdTimestamp = 11;
+        enum ReminderFrequency {
+            UNKNOWN_FREQUENCY = 0;
+            WEEKLY = 1;
+            BIWEEKLY = 2;
+            MONTHLY = 3;
+            CUSTOM = 4;
+        }
+        enum ReminderState {
+            UNKNOWN_STATE = 0;
+            ACTIVE = 1;
+            PAUSED = 2;
+            STOPPED = 3;
+            EXPIRED = 4;
+            CANCELLED = 5;
+        }
+    }
+    
     message PaymentExtendedMetadata {
         optional uint32 type = 1;
         optional string platform = 2;
@@ -3144,6 +3700,11 @@ message Message {
         optional int64 expiryTimestamp = 2;
         optional bool incentiveEligible = 3;
         optional string referralId = 4;
+        optional InviteType inviteType = 5;
+        enum InviteType {
+            DEFAULT = 0;
+            MAPPER = 1;
+        }
         enum ServiceType {
             UNKNOWN = 0;
             FBPAY = 1;
@@ -3231,6 +3792,7 @@ message Message {
             optional int32 onDemandMsgCount = 4;
             optional int64 oldestMsgTimestampMs = 5;
             optional string accountLid = 6;
+            optional bool supportInlineResponse = 7;
         }
         
         message PlaceholderMessageResendRequest {
@@ -3317,6 +3879,7 @@ message Message {
                 ERROR_REQUEST_ON_NON_SMB_PRIMARY = 4;
                 ERROR_HOSTED_DEVICE_NOT_CONNECTED = 5;
                 ERROR_HOSTED_DEVICE_LOGIN_TIME_NOT_SET = 6;
+                ERROR_MULTI_PROVIDER_NOT_CONFIGURED = 7;
             }
             message HistorySyncChunkRetryResponse {
                 optional Message.HistorySyncType syncType = 1;
@@ -3536,6 +4099,7 @@ message Message {
         optional MemberLabel memberLabel = 27;
         optional AIMediaCollectionMessage aiMediaCollectionMessage = 28;
         optional uint32 afterReadDuration = 29;
+        optional Message.ChatThemeSetting chatThemeSetting = 30;
         enum Type {
             REVOKE = 0;
             EPHEMERAL_SETTING = 3;
@@ -3565,6 +4129,7 @@ message Message {
             GROUP_MEMBER_LABEL_CHANGE = 30;
             AI_MEDIA_COLLECTION_MESSAGE = 31;
             MESSAGE_UNSCHEDULE = 32;
+            CHAT_THEME_SETTING = 34;
         }
     }
     
@@ -3597,6 +4162,7 @@ message Message {
     message RequestWelcomeMessageMetadata {
         optional LocalChatState localChatState = 1;
         optional WelcomeTrigger welcomeTrigger = 2;
+        optional BotAgentMetadata botAgentMetadata = 3;
         enum LocalChatState {
             EMPTY = 0;
             NON_EMPTY = 1;
@@ -3653,6 +4219,26 @@ message Message {
     message SenderKeyDistributionMessage {
         optional string groupId = 1;
         optional bytes axolotlSenderKeyDistributionMessage = 2;
+    }
+    
+    message SplitPaymentMessage {
+        optional string splitId = 1;
+        optional Money totalAmount = 2;
+        optional string description = 3;
+        optional string requesterJid = 4;
+        repeated Message.SplitPaymentParticipant participants = 5;
+        optional int64 createdAtMs = 6;
+        optional ContextInfo contextInfo = 17;
+    }
+    
+    message SplitPaymentParticipant {
+        optional string jid = 1;
+        optional Money amount = 2;
+        optional SplitPaymentStatus status = 3;
+        enum SplitPaymentStatus {
+            PENDING = 0;
+            PAID = 1;
+        }
     }
     
     message StatusNotificationMessage {
@@ -3714,6 +4300,7 @@ message Message {
         optional bool isLottie = 21;
         optional string accessibilityLabel = 22;
         optional int32 premium = 24;
+        optional string emojis = 25;
     }
     
     message StickerPackMessage {
@@ -3934,6 +4521,7 @@ message MessageContextInfo {
     optional LimitSharing limitSharingV2 = 14;
     repeated ThreadID threadId = 15;
     optional WebLinkRenderConfig weblinkRenderConfig = 16;
+    optional bytes teeBotMetadata = 17;
     enum MessageAddonExpiryType {
         STATIC = 1;
         DEPENDENT_ON_PARENT = 2;
@@ -3951,6 +4539,13 @@ message MessageSecretMessage {
     optional sfixed32 version = 1;
     optional bytes encIv = 2;
     optional bytes encPayload = 3;
+}
+
+message MessageText {
+    optional string text = 1;
+    repeated string mentionedJid = 2;
+    repeated Command commands = 3;
+    repeated Mention mentions = 4;
 }
 
 message Money {
@@ -4124,6 +4719,10 @@ enum MutationProps {
     BUSINESS_BROADCAST_CAMPAIGN_ACTION = 81;
     BUSINESS_BROADCAST_INSIGHTS_ACTION = 82;
     CUSTOMER_DATA_ACTION = 83;
+    SUBSCRIPTIONS_SYNC_V2_ACTION = 84;
+    THREAD_PIN_ACTION = 85;
+    AUTO_ORGANIZE_BUSINESS_CHAT_SETTING = 86;
+    BIZ_AI_SETTINGS_NUDGE_ACTION = 87;
     SHARE_OWN_PN = 10001;
     BUSINESS_BROADCAST_ACTION = 10002;
     AI_THREAD_DELETE_ACTION = 10003;
@@ -4403,6 +5002,41 @@ message Pushname {
     optional string pushname = 2;
 }
 
+message QP {
+    enum ClauseType {
+        AND = 1;
+        OR = 2;
+        NOR = 3;
+    }
+    message Filter {
+        required string filterName = 1;
+        repeated QP.FilterParameters parameters = 2;
+        optional QP.FilterResult filterResult = 3;
+        required QP.FilterClientNotSupportedConfig clientNotSupportedConfig = 4;
+    }
+    
+    message FilterClause {
+        required QP.ClauseType clauseType = 1;
+        repeated QP.FilterClause clauses = 2;
+        repeated QP.Filter filters = 3;
+    }
+    
+    enum FilterClientNotSupportedConfig {
+        PASS_BY_DEFAULT = 1;
+        FAIL_BY_DEFAULT = 2;
+    }
+    message FilterParameters {
+        optional string key = 1;
+        optional string value = 2;
+    }
+    
+    enum FilterResult {
+        TRUE = 1;
+        FALSE = 2;
+        UNKNOWN = 3;
+    }
+}
+
 message QuarantinedMessage {
     optional bytes originalData = 1;
     optional string extractedText = 2;
@@ -4435,6 +5069,21 @@ message Reportable {
 
 message ReportingTokenInfo {
     optional bytes reportingTag = 1;
+}
+
+message RoutingInfo {
+    repeated int32 regionId = 1;
+    repeated int32 clusterId = 2;
+    optional int32 taskId = 3;
+    optional bool debug = 4;
+    optional bool tcpBbr = 5;
+    optional bool tcpKeepalive = 6;
+}
+
+message ScheduledMessageMetadata {
+    optional string revealKeyId = 1;
+    optional bytes revealKey = 2;
+    optional uint64 scheduledTime = 3;
 }
 
 message SenderKeyDistributionMessage {
@@ -4592,6 +5241,8 @@ message StatusAttribution {
             APPLE_MUSIC = 8;
             SHARECHAT = 9;
             GOOGLE_PHOTOS = 10;
+            SOUNDCLOUD = 11;
+            SHAZAM = 12;
         }
     }
     
@@ -4649,6 +5300,7 @@ message StatusAttribution {
         LAYOUTS = 8;
         NEWSLETTER_STATUS = 9;
         STATUS_CLOSE_SHARING = 10;
+        PAID_PARTNERSHIP = 11;
     }
 }
 
@@ -4676,6 +5328,11 @@ message StickerMetadata {
     optional bool isLottie = 12;
     optional string imageHash = 13;
     optional bool isAvatarSticker = 14;
+}
+
+message SubProtocol {
+    optional bytes payload = 1;
+    optional int32 version = 2;
 }
 
 message SyncActionData {
@@ -4760,6 +5417,10 @@ message SyncActionValue {
     optional BusinessBroadcastCampaignAction businessBroadcastCampaignAction = 81;
     optional BusinessBroadcastInsightsAction businessBroadcastInsightsAction = 82;
     optional CustomerDataAction customerDataAction = 83;
+    optional SubscriptionsSyncV2Action subscriptionsSyncV2Action = 84;
+    optional ThreadPinAction threadPinAction = 85;
+    optional AutoOrganizeBusinessChatSetting autoOrganizeBusinessChatSetting = 86;
+    optional BizAISettingsNudgeAction bizAiSettingsNudgeAction = 87;
     message AgentAction {
         optional string name = 1;
         optional int32 deviceID = 2;
@@ -4779,6 +5440,10 @@ message SyncActionValue {
         optional SyncActionValue.SyncActionMessageRange messageRange = 2;
     }
     
+    message AutoOrganizeBusinessChatSetting {
+        optional bool autoOrganize = 1;
+    }
+    
     message AvatarUpdatedAction {
         optional AvatarEventType eventType = 1;
         repeated SyncActionValue.StickerAction recentAvatarStickers = 2;
@@ -4786,6 +5451,20 @@ message SyncActionValue {
             UPDATED = 0;
             CREATED = 1;
             DELETED = 2;
+        }
+    }
+    
+    message BizAISettingsNudgeAction {
+        optional BizAISettingsCategory category = 1;
+        optional int64 version = 2;
+        optional int64 updatedAtMs = 3;
+        enum BizAISettingsCategory {
+            UNKNOWN = 0;
+            INSTRUCTIONS = 1;
+            RESPONSE_SETTINGS = 2;
+            EXAMPLE_RESPONSES = 3;
+            KNOWLEDGE = 4;
+            LEAD_GEN = 5;
         }
     }
     
@@ -4834,6 +5513,7 @@ message SyncActionValue {
         repeated SyncActionValue.BroadcastListParticipant participants = 2;
         optional string listName = 3;
         repeated string labelIds = 4;
+        optional string audienceExpression = 5;
     }
     
     message CallLogAction {
@@ -4939,6 +5619,7 @@ message SyncActionValue {
     
     message LabelAssociationAction {
         optional bool labeled = 1;
+        repeated SyncActionValue.ModelMetadata modelMetaData = 2;
     }
     
     message LabelEditAction {
@@ -4963,6 +5644,7 @@ message SyncActionValue {
             DRAFTED = 8;
             AI_HANDOFF = 9;
             CHANNELS = 10;
+            AI_RESPONDING = 11;
         }
     }
     
@@ -5024,6 +5706,12 @@ message SyncActionValue {
             ACTIVE = 0;
             INACTIVE = 1;
         }
+    }
+    
+    message ModelMetadata {
+        optional string modelName = 1;
+        optional bool isLatestModel = 2;
+        optional bool isDetected = 3;
     }
     
     message MusicUserIdAction {
@@ -5136,6 +5824,7 @@ message SyncActionValue {
         repeated string keywords = 3;
         optional int32 count = 4;
         optional bool deleted = 5;
+        repeated string associatedLabelIds = 6;
     }
     
     message RecentEmojiWeightsAction {
@@ -5178,6 +5867,8 @@ message SyncActionValue {
         optional bool isStatusNotificationEnabled = 29;
         optional int32 statusNotificationToneId = 30;
         optional bool shouldPlaySoundForCallNotification = 31;
+        optional string chatThemeId = 32;
+        optional string colorSchemeId = 33;
         enum DisplayMode {
             DISPLAY_MODE_UNKNOWN = 0;
             ALWAYS = 1;
@@ -5222,6 +5913,8 @@ message SyncActionValue {
             IS_STATUS_NOTIFICATION_ENABLED = 29;
             STATUS_NOTIFICATION_TONE_ID = 30;
             SHOULD_PLAY_SOUND_FOR_CALL_NOTIFICATION = 31;
+            CHAT_THEME_ID = 32;
+            COLOR_SCHEME_ID = 33;
         }
         enum SettingPlatform {
             PLATFORM_UNKNOWN = 0;
@@ -5245,11 +5938,22 @@ message SyncActionValue {
         repeated string userJid = 2;
         optional bool shareToFB = 3;
         optional bool shareToIG = 4;
+        repeated CustomList customLists = 5;
+        repeated StatusDistributionMode modes = 6;
+        message CustomList {
+            optional string listId = 1;
+            optional string name = 2;
+            optional string emoji = 3;
+            optional bool isSelected = 4;
+            repeated string userJid = 5;
+        }
+        
         enum StatusDistributionMode {
             ALLOW_LIST = 0;
             DENY_LIST = 1;
             CONTACTS = 2;
             CLOSE_FRIENDS = 3;
+            CUSTOM_LIST = 4;
         }
     }
     
@@ -5275,6 +5979,29 @@ message SyncActionValue {
         optional int64 expirationDate = 3;
     }
     
+    message SubscriptionsSyncV2Action {
+        repeated SubscriptionInfo subscriptions = 1;
+        repeated PaidFeature paidFeature = 2;
+        message PaidFeature {
+            optional string name = 1;
+            optional bool enabled = 2;
+            optional int32 limit = 3;
+            optional int64 expirationTime = 4;
+        }
+        
+        message SubscriptionInfo {
+            optional string id = 1;
+            optional int32 tier = 2;
+            optional string status = 3;
+            optional int64 startTime = 4;
+            optional int64 endTime = 5;
+            optional bool isPlatformChanged = 6;
+            optional string source = 7;
+            optional int64 creationTime = 8;
+        }
+        
+    }
+    
     message SyncActionMessage {
         optional MessageKey key = 1;
         optional int64 timestamp = 2;
@@ -5284,6 +6011,10 @@ message SyncActionValue {
         optional int64 lastMessageTimestamp = 1;
         optional int64 lastSystemMessageTimestamp = 2;
         repeated SyncActionValue.SyncActionMessage messages = 3;
+    }
+    
+    message ThreadPinAction {
+        optional bool pinned = 1;
     }
     
     message TimeFormatAction {
@@ -5354,6 +6085,12 @@ message SyncdPatch {
     optional bytes clientDebugData = 9;
 }
 
+message SyncdPlainTextRecord {
+    optional SyncActionData value = 1;
+    optional bytes keyId = 2;
+    optional bytes mac = 3;
+}
+
 message SyncdRecord {
     optional SyncdIndex index = 1;
     optional SyncdValue value = 2;
@@ -5365,6 +6102,13 @@ message SyncdSnapshot {
     repeated SyncdRecord records = 2;
     optional bytes mac = 3;
     optional KeyId keyId = 4;
+}
+
+message SyncdSnapshotRecovery {
+    optional SyncdVersion version = 1;
+    optional string collectionName = 2;
+    repeated SyncdPlainTextRecord mutationRecords = 3;
+    optional bytes collectionLthash = 4;
 }
 
 message SyncdValue {
@@ -5412,6 +6156,17 @@ message ThreadID {
         VIEW_REPLIES = 1;
         AI_THREAD = 2;
     }
+}
+
+message UnCountedAssociatedMessageList {
+    repeated WebMessageInfo messages = 1;
+    optional MessageKey parentMessage = 2;
+    optional MessageAssociation.AssociationType associationType = 3;
+}
+
+message UnCountedAssociatedMessageListWithMessageBytes {
+    repeated WebMessageInfoWithMessageBytes messages = 1;
+    optional MessageKey parentMessage = 2;
 }
 
 message UrlTrackingMap {
@@ -5609,6 +6364,10 @@ message WebMessageInfo {
     optional QuarantinedMessage quarantinedMessage = 77;
     optional uint32 nonJidMentions = 78;
     optional string hsmTag = 79;
+    optional uint64 ephemeralExpirationTimestamp = 80;
+    optional ScheduledMessageMetadata scheduledMessageMetadata = 81;
+    optional string decisionId = 82;
+    repeated string decisionSources = 83;
     enum BizPrivacyStatus {
         E2EE = 0;
         FB = 2;
@@ -5848,7 +6607,14 @@ message WebMessageInfo {
         GROUP_MEMBER_SHARE_GROUP_HISTORY_MODE = 221;
         GROUP_OPEN_BOT_ADDED = 222;
         GROUP_TEE_BOT_ADDED = 223;
+        CONTACT_INFO = 224;
+        SCHEDULED_MESSAGE_CREATED = 225;
     }
+}
+
+message WebMessageInfoWithMessageBytes {
+    optional MessageKey key = 1;
+    optional bytes messageBytes = 2;
 }
 
 message WebNotificationsInfo {
