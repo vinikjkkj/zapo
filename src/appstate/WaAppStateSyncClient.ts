@@ -35,6 +35,7 @@ import type {
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { bytesToHex, decodeProtoBytes, uint8Equal } from '@util/bytes'
+import type { ServerClock } from '@util/clock'
 import { longToNumber } from '@util/primitives'
 
 interface OutgoingPatchContext {
@@ -56,6 +57,7 @@ interface WaAppStateSyncClientOptions {
     readonly logger: Logger
     readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
     readonly store: WaAppStateStore
+    readonly serverClock: ServerClock
     readonly getCurrentMeJid?: () => string | null | undefined
     readonly hostDomain?: string
     readonly defaultTimeoutMs?: number
@@ -84,6 +86,7 @@ export class WaAppStateSyncClient {
     private readonly logger: Logger
     private readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
     private readonly store: WaAppStateStore
+    private readonly serverClock: ServerClock
     private readonly getCurrentMeJid?: () => string | null | undefined
     private readonly hostDomain: string
     private readonly defaultTimeoutMs: number
@@ -101,6 +104,7 @@ export class WaAppStateSyncClient {
         this.logger = options.logger
         this.query = options.query
         this.store = options.store
+        this.serverClock = options.serverClock
         this.getCurrentMeJid = options.getCurrentMeJid
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
         this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.APP_STATE_SYNC_TIMEOUT_MS
@@ -128,7 +132,7 @@ export class WaAppStateSyncClient {
         const key: WaAppStateSyncKey = {
             keyId: keyIdBytes,
             keyData,
-            timestamp: Date.now(),
+            timestamp: this.serverClock.nowMs(),
             fingerprint: { rawId, currentIndex: 0, deviceIndexes: [0] }
         }
         await this.store.upsertSyncKeys([key])
@@ -172,7 +176,7 @@ export class WaAppStateSyncClient {
                 keyData,
                 timestamp:
                     item.keyData?.timestamp === null || item.keyData?.timestamp === undefined
-                        ? Date.now()
+                        ? this.serverClock.nowMs()
                         : this.normalizeProtoLong(
                               item.keyData?.timestamp,
                               'appStateSyncKeyShare.keys[].keyData.timestamp'

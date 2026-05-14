@@ -21,6 +21,7 @@ interface WaKeepAliveOptions {
     readonly hostDomain?: string
     readonly jitterRatio?: number
     readonly minJitterMs?: number
+    readonly onClockSkewMs?: (clockSkewMs: number) => void
 }
 
 export class WaKeepAlive {
@@ -33,6 +34,7 @@ export class WaKeepAlive {
     private readonly hostDomain: string
     private readonly jitterRatio: number
     private readonly minJitterMs: number
+    private readonly onClockSkewMs: ((clockSkewMs: number) => void) | undefined
     private timer: NodeJS.Timeout | null
     private generation: number
     private inFlight: boolean
@@ -50,6 +52,7 @@ export class WaKeepAlive {
             options.minJitterMs,
             KEEPALIVE_DEFAULT_MIN_JITTER_MS
         )
+        this.onClockSkewMs = options.onClockSkewMs
         this.timer = null
         this.generation = 0
         this.inFlight = false
@@ -124,10 +127,18 @@ export class WaKeepAlive {
                     xmlns: WA_XMLNS.WHATSAPP_PING
                 }
             }
-            await this.nodeOrchestrator.query(pingNode, this.timeoutMs)
-            this.logger.debug('keepalive ping success', {
-                latencyMs: Date.now() - startedAt
-            })
+            const response = await this.nodeOrchestrator.query(pingNode, this.timeoutMs)
+            const receivedAt = Date.now()
+            const latencyMs = receivedAt - startedAt
+            this.logger.debug('keepalive ping success', { latencyMs })
+            if (this.onClockSkewMs) {
+                const serverT = response.attrs.t ? Number(response.attrs.t) : NaN
+                if (Number.isFinite(serverT) && serverT > 0) {
+                    const halfRttMs = Math.round(latencyMs / 2)
+                    const clockSkewMs = serverT * 1000 - (startedAt + halfRttMs)
+                    this.onClockSkewMs(clockSkewMs)
+                }
+            }
         } catch (error) {
             this.logger.warn('keepalive ping failed, reconnecting socket', {
                 message: toError(error).message

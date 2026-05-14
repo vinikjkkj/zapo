@@ -669,6 +669,7 @@ test('app-state mutation coordinator flushes queued mutations while sync is in-f
     })
 
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -710,6 +711,7 @@ test('app-state mutation coordinator emits pin + archive mutations when pinning 
 
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -749,6 +751,7 @@ test('app-state mutation coordinator flushes only targeted collections for queue
 
     const syncCalls: { readonly collections: readonly string[]; readonly pending: number }[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -788,6 +791,7 @@ test('app-state mutation coordinator includes message range and auto-unpin on ar
 
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -833,6 +837,7 @@ test('app-state mutation coordinator preserves device participant jid in archive
 
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -873,6 +878,7 @@ test('app-state mutation coordinator skips incoming group messages without parti
 
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -903,6 +909,7 @@ test('app-state mutation coordinator keeps pending mutations after blocked flush
     let flushAttempt = 0
 
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -938,6 +945,7 @@ test('app-state mutation coordinator emits read/clear/delete mutations with expe
 
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -982,6 +990,7 @@ test('app-state mutation coordinator emits archive and unpin before lock mutatio
 
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -1008,6 +1017,7 @@ test('app-state mutation coordinator emits star mutation with message-key index'
     const messageStore = new WaMessageMemoryStore()
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -1047,6 +1057,7 @@ test('app-state mutation coordinator emits delete-message-for-me mutation and va
     const messageStore = new WaMessageMemoryStore()
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -1101,6 +1112,7 @@ test('app-state mutation coordinator emits status_privacy account mutation', asy
     const messageStore = new WaMessageMemoryStore()
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -1131,6 +1143,7 @@ test('app-state mutation coordinator emits userStatusMute mutation with target j
     const messageStore = new WaMessageMemoryStore()
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
@@ -1154,6 +1167,7 @@ test('app-state mutation coordinator emits business_broadcast_list set/remove pa
     const messageStore = new WaMessageMemoryStore()
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         messageStore,
         syncAppState: async (options = {}) => {

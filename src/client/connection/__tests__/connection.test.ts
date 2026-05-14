@@ -93,6 +93,18 @@ test('connection manager exposes media cache and clock skew helpers', async () =
     assert.notEqual(manager.getClockSkewMs(), null)
     assert.equal(manager.isConnected(), false)
 
+    manager.setClockSkewMs(1_234, 'test')
+    assert.equal(manager.getClockSkewMs(), 1_234)
+
+    manager.setClockSkewMs(Number.NaN, 'test')
+    assert.equal(manager.getClockSkewMs(), 1_234)
+
+    manager.setClockSkewMs(Number.POSITIVE_INFINITY, 'test')
+    assert.equal(manager.getClockSkewMs(), 1_234)
+
+    manager.setClockSkewMs(-500, 'test')
+    assert.equal(manager.getClockSkewMs(), -500)
+
     await manager.clearStoredCredentials()
     assert.equal(clearedCredentialsCalls, 1)
 })

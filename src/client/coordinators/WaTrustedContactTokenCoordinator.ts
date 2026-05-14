@@ -12,6 +12,7 @@ import {
     buildTcTokenMessageNode
 } from '@transport/node/builders/privacy-token'
 import type { BinaryNode } from '@transport/types'
+import type { ServerClock } from '@util/clock'
 import { toError } from '@util/primitives'
 
 const NCT_SALT_SENTINEL_JID = '__nct_salt__'
@@ -42,6 +43,7 @@ export class WaTrustedContactTokenCoordinator {
     private readonly logger: Logger
     private readonly store: WaPrivacyTokenStore
     private readonly runtime: WaTrustedContactTokenRuntime
+    private readonly serverClock: ServerClock
     private readonly baseConfig: WaTrustedContactTokenConfig
     private readonly getConfigOverrides: (() => Partial<WaTrustedContactTokenConfig>) | undefined
     private readonly csTokenGenerator: CsTokenGenerator
@@ -53,6 +55,7 @@ export class WaTrustedContactTokenCoordinator {
         readonly logger: Logger
         readonly store: WaPrivacyTokenStore
         readonly runtime: WaTrustedContactTokenRuntime
+        readonly serverClock: ServerClock
         readonly durationS?: number
         readonly numBuckets?: number
         readonly senderDurationS?: number
@@ -63,6 +66,7 @@ export class WaTrustedContactTokenCoordinator {
         this.logger = options.logger
         this.store = options.store
         this.runtime = options.runtime
+        this.serverClock = options.serverClock
         const maxDurationS = options.maxDurationS ?? WA_TC_TOKEN_DEFAULTS.MAX_DURATION_S
         this.baseConfig = {
             durationS: clampDuration(
@@ -107,7 +111,7 @@ export class WaTrustedContactTokenCoordinator {
 
     public async resolveTokenForMessage(recipientJid: string): Promise<BinaryNode | null> {
         const record = await this.store.getByJid(recipientJid)
-        const nowS = Math.floor(Date.now() / 1000)
+        const nowS = this.serverClock.nowSeconds()
 
         const config = this.resolveConfig()
         if (
@@ -160,7 +164,7 @@ export class WaTrustedContactTokenCoordinator {
 
     public async maybeIssueSenderToken(recipientJid: string): Promise<void> {
         return this.senderTokenDedup.run(recipientJid, async () => {
-            const nowS = Math.floor(Date.now() / 1000)
+            const nowS = this.serverClock.nowSeconds()
             const record = await this.store.getByJid(recipientJid)
             const senderTimestampS = record?.tcTokenSenderTimestamp
 
@@ -186,7 +190,7 @@ export class WaTrustedContactTokenCoordinator {
             return
         }
 
-        const nowS = Math.floor(Date.now() / 1000)
+        const nowS = this.serverClock.nowSeconds()
         const config = this.resolveConfig()
         if (
             isTokenExpired(

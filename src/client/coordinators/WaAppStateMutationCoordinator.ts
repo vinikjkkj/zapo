@@ -25,6 +25,7 @@ import {
     toUserJid
 } from '@protocol/jid'
 import type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
+import type { ServerClock } from '@util/clock'
 import { resolvePositive } from '@util/coercion'
 import { toError } from '@util/primitives'
 
@@ -43,6 +44,7 @@ interface WaAppStateMutationCoordinatorOptions {
     readonly logger: Logger
     readonly messageStore: WaMessageStore
     readonly syncAppState: (options?: WaAppStateSyncOptions) => Promise<WaAppStateSyncResult>
+    readonly serverClock: ServerClock
     readonly archiveRangeLimit?: number
 }
 
@@ -77,6 +79,7 @@ export class WaAppStateMutationCoordinator {
     private readonly syncAppState: (
         options?: WaAppStateSyncOptions
     ) => Promise<WaAppStateSyncResult>
+    private readonly serverClock: ServerClock
     private readonly archiveRangeLimit: number
     private readonly pendingMutations: Map<string, WaAppStateMutationInput>
     private flushPromise: Promise<void> | null
@@ -85,6 +88,7 @@ export class WaAppStateMutationCoordinator {
         this.logger = options.logger
         this.messageStore = options.messageStore
         this.syncAppState = options.syncAppState
+        this.serverClock = options.serverClock
         this.archiveRangeLimit = resolvePositive(
             options.archiveRangeLimit,
             WA_APP_STATE_ARCHIVE_RANGE_DEFAULT_LIMIT,
@@ -100,7 +104,7 @@ export class WaAppStateMutationCoordinator {
         muteEndTimestampMs?: number
     ): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         const normalizedMuteEnd = muteEndTimestampMs
         if (
             normalizedMuteEnd !== undefined &&
@@ -132,7 +136,7 @@ export class WaAppStateMutationCoordinator {
 
     public async setMessageStar(message: WaAppStateMessageKey, starred: boolean): Promise<void> {
         const messageIndex = this.buildMessageMutationIndex(message)
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         const mutation = this.createSetMutation({
             spec: WA_APP_STATE_CHAT_MUTATION_SPECS.STAR,
             chatIndexJid: messageIndex.chatIndexJid,
@@ -149,7 +153,7 @@ export class WaAppStateMutationCoordinator {
 
     public async setChatRead(chatJid: string, read: boolean): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         const messageRange = await this.buildChatMessageRange(chatIndexJid)
         const mutation = this.createSetMutation({
             spec: WA_APP_STATE_CHAT_MUTATION_SPECS.MARK_CHAT_AS_READ,
@@ -167,7 +171,7 @@ export class WaAppStateMutationCoordinator {
 
     public async setChatPin(chatJid: string, pinned: boolean): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         const pending: WaAppStateMutationInput[] = [
             this.createSetMutation({
                 spec: WA_APP_STATE_CHAT_MUTATION_SPECS.PIN,
@@ -190,7 +194,7 @@ export class WaAppStateMutationCoordinator {
 
     public async setChatArchive(chatJid: string, archived: boolean): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         const pending: WaAppStateMutationInput[] = [
             await this.createArchiveMutation(chatIndexJid, archived, timestamp)
         ]
@@ -215,7 +219,7 @@ export class WaAppStateMutationCoordinator {
 
     public async clearChat(chatJid: string, options: WaClearChatOptions = {}): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         const deleteStarred = options.deleteStarred === true
         const deleteMedia = options.deleteMedia === true
         const messageRange = await this.buildChatMessageRange(chatIndexJid)
@@ -235,7 +239,7 @@ export class WaAppStateMutationCoordinator {
 
     public async deleteChat(chatJid: string, options: WaDeleteChatOptions = {}): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         const deleteMedia = options.deleteMedia === true
         const messageRange = await this.buildChatMessageRange(chatIndexJid)
         const mutation = this.createSetMutation({
@@ -257,7 +261,7 @@ export class WaAppStateMutationCoordinator {
         options: WaDeleteMessageForMeOptions = {}
     ): Promise<void> {
         const messageIndex = this.buildMessageMutationIndex(message)
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         const deleteMedia = options.deleteMedia === true
         const messageTimestampMs = options.messageTimestampMs
         let messageTimestamp: number | undefined
@@ -288,7 +292,7 @@ export class WaAppStateMutationCoordinator {
 
     public async setChatLock(chatJid: string, locked: boolean): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         const pending: WaAppStateMutationInput[] = []
         if (locked) {
             pending.push(await this.createArchiveMutation(chatIndexJid, false, timestamp))
@@ -486,7 +490,7 @@ export class WaAppStateMutationCoordinator {
                 ...(input.shareToIG === undefined ? {} : { shareToIG: input.shareToIG })
             }
         }
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         await this.enqueueAndFlush([
             this.createAccountSetMutation({
                 spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.STATUS_PRIVACY,
@@ -502,7 +506,7 @@ export class WaAppStateMutationCoordinator {
         if (isGroupOrBroadcastJid(indexJid)) {
             throw new Error(`setUserStatusMute requires a user jid, got ${jid}`)
         }
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         await this.enqueueAndFlush([
             this.createAccountSetMutation({
                 spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.USER_STATUS_MUTE,
@@ -525,7 +529,7 @@ export class WaAppStateMutationCoordinator {
                 labelIds: input.labelIds ? [...input.labelIds] : []
             }
         }
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         await this.enqueueAndFlush([
             this.createAccountSetMutation({
                 spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.BUSINESS_BROADCAST_LIST,
@@ -537,7 +541,7 @@ export class WaAppStateMutationCoordinator {
     }
 
     public async removeBroadcastList(id: string): Promise<void> {
-        const timestamp = Date.now()
+        const timestamp = this.serverClock.nowMs()
         await this.enqueueAndFlush([
             this.createAccountRemoveMutation({
                 spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.BUSINESS_BROADCAST_LIST,

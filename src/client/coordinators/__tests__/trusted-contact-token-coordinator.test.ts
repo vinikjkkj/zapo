@@ -55,6 +55,7 @@ test('trusted contact token coordinator uses fresh tc token for message fanout',
     const store = new WaPrivacyTokenMemoryStore()
     const { runtime, queries } = createRuntime()
     const coordinator = new WaTrustedContactTokenCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         store,
         runtime,
@@ -80,6 +81,7 @@ test('trusted contact token coordinator falls back to cs token when tc token is 
     const store = new WaPrivacyTokenMemoryStore()
     const { runtime } = createRuntime()
     const coordinator = new WaTrustedContactTokenCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         store,
         runtime,
@@ -109,6 +111,7 @@ test('trusted contact token coordinator persists incoming trusted tokens and emi
     const store = new WaPrivacyTokenMemoryStore()
     const { runtime, emitted } = createRuntime()
     const coordinator = new WaTrustedContactTokenCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: {
             ...createLogger(),
             warn: (...args) => {
@@ -147,6 +150,7 @@ test('trusted contact token coordinator deduplicates sender token issue and resp
     const store = new WaPrivacyTokenMemoryStore()
     const { runtime, queries } = createRuntime({ queryDelayMs: 20 })
     const coordinator = new WaTrustedContactTokenCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         store,
         runtime,
@@ -170,6 +174,7 @@ test('trusted contact token coordinator reissues token on identity change when s
     const store = new WaPrivacyTokenMemoryStore()
     const { runtime, queries } = createRuntime()
     const coordinator = new WaTrustedContactTokenCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createLogger(),
         store,
         runtime,

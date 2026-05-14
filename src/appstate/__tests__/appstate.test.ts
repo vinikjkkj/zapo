@@ -288,6 +288,7 @@ test('appstate sync client builds outgoing patch without inline version field', 
     const logger = createNoopLogger()
 
     const client = new WaAppStateSyncClient({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger,
         query,
         store,
@@ -372,6 +373,7 @@ test('appstate sync client uploads mutation for persisted empty version zero sta
     const logger = createNoopLogger()
 
     const client = new WaAppStateSyncClient({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger,
         query,
         store,
@@ -445,6 +447,7 @@ test('appstate sync client marks empty successful bootstrap as initialized for n
     const logger = createNoopLogger()
 
     const client = new WaAppStateSyncClient({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger,
         query,
         store,
@@ -477,6 +480,7 @@ test('appstate sync client marks empty successful bootstrap as initialized for n
 test('ensureInitialSyncKey mints a 32-byte key with fingerprint when store is empty', async () => {
     const store = new WaAppStateMemoryStore()
     const client = new WaAppStateSyncClient({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         query: async () => ({ tag: 'iq', attrs: {} }),
         store

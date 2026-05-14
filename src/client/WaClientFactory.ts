@@ -108,6 +108,7 @@ import { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import { WaNodeTransport } from '@transport/node/WaNodeTransport'
 import { isProxyTransport, toProxyAgent } from '@transport/proxy'
 import type { BinaryNode } from '@transport/types'
+import { createServerClock } from '@util/clock'
 import { toError } from '@util/primitives'
 import { getRuntimeOsDisplayName } from '@util/runtime'
 
@@ -414,6 +415,8 @@ export function buildWaClientDependencies(input: {
     let mediaConnCacheFallback: WaMediaConn | null = null
     let scheduleReconnectAfterPairing: () => void = () => undefined
 
+    const serverClock = createServerClock(() => connectionManager?.getClockSkewMs() ?? null)
+
     const nodeTransport = new WaNodeTransport(logger)
     const nodeOrchestrator = new WaNodeOrchestrator({
         sendNode: async (node) => nodeTransport.sendNode(node),
@@ -430,7 +433,8 @@ export function buildWaClientDependencies(input: {
         getIntervalMs: () =>
             abPropsCoordinator.getConfigValue<number>('heartbeat_interval_s') * 1_000,
         timeoutMs: options.deadSocketTimeoutMs,
-        hostDomain: WA_DEFAULTS.HOST_DOMAIN
+        hostDomain: WA_DEFAULTS.HOST_DOMAIN,
+        onClockSkewMs: (clockSkewMs) => connectionManager?.setClockSkewMs(clockSkewMs, 'keepalive')
     })
 
     const mediaTransfer = new WaMediaTransferClient({
@@ -635,6 +639,7 @@ export function buildWaClientDependencies(input: {
             emitEvent: runtime.emitEvent,
             getCurrentMeLid: () => getCurrentMeLid() ?? null
         },
+        serverClock,
         durationS: options.privacyToken?.tcTokenDurationS,
         numBuckets: options.privacyToken?.tcTokenNumBuckets,
         senderDurationS: options.privacyToken?.tcTokenSenderDurationS,
@@ -738,6 +743,7 @@ export function buildWaClientDependencies(input: {
         getCurrentMeJid,
         defaultTimeoutMs: options.appStateSyncTimeoutMs,
         store: sessionStore.appState,
+        serverClock,
         onMissingKeys: async ({ keyIds }) => {
             await messageDispatch.requestAppStateSyncKeys(keyIds)
         },
@@ -748,7 +754,8 @@ export function buildWaClientDependencies(input: {
     const appStateMutations = new WaAppStateMutationCoordinator({
         logger,
         messageStore: sessionStore.messages,
-        syncAppState: runtime.syncAppStateWithOptions
+        syncAppState: runtime.syncAppStateWithOptions,
+        serverClock
     })
 
     const statusCoordinator = createStatusCoordinator({

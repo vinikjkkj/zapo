@@ -142,6 +142,17 @@ export class WaConnectionManager {
         })
     }
 
+    public setClockSkewMs(clockSkewMs: number, source: string): void {
+        if (!Number.isFinite(clockSkewMs)) {
+            return
+        }
+        const previous = this.clockSkewMs
+        this.clockSkewMs = clockSkewMs
+        if (previous === null || Math.abs(previous - clockSkewMs) >= 1_000) {
+            this.logger.debug('clock skew updated', { source, clockSkewMs, previous })
+        }
+    }
+
     private async connectInternal(
         frameHandler: (frame: Uint8Array) => Promise<void>,
         lifecycleGeneration: number
