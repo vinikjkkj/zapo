@@ -320,7 +320,7 @@ test('appstate sync client builds outgoing patch without inline version field', 
         bytesToHex(key.keyId)
     )
     assert.equal(patch.deviceIndex, 3)
-    assert.equal((patch.clientDebugData as Uint8Array)?.length > 0, true)
+    assert.equal(patch.clientDebugData ?? null, null)
 })
 
 test('appstate sync client uploads mutation for persisted empty version zero state', async () => {
