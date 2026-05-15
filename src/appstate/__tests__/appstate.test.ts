@@ -477,6 +477,95 @@ test('appstate sync client marks empty successful bootstrap as initialized for n
     assert.deepEqual(versionByCall, ['0', '0'])
 })
 
+test('appstate sync client inlines external mutations and clears the external reference for validatePatch', async () => {
+    const store = new WaAppStateMemoryStore()
+    const key = {
+        keyId: new Uint8Array([0, 1, 0, 0, 0, 5]),
+        keyData: new Uint8Array(32).fill(7),
+        timestamp: 5
+    }
+    await store.upsertSyncKeys([key])
+
+    const externalSyncdMutations = proto.SyncdMutations.encode({ mutations: [] }).finish()
+
+    const patchBytes = proto.SyncdPatch.encode({
+        version: { version: 1 },
+        externalMutations: {
+            directPath: '/external/patch/blob',
+            mediaKey: new Uint8Array(32).fill(1),
+            fileSha256: new Uint8Array(32).fill(2),
+            fileEncSha256: new Uint8Array(32).fill(3)
+        },
+        keyId: { id: key.keyId }
+    }).finish()
+
+    const query = async (): Promise<BinaryNode> => ({
+        tag: WA_NODE_TAGS.IQ,
+        attrs: { type: WA_IQ_TYPES.RESULT },
+        content: [
+            {
+                tag: WA_NODE_TAGS.SYNC,
+                attrs: {},
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.COLLECTION,
+                        attrs: {
+                            name: WA_APP_STATE_COLLECTIONS.REGULAR_LOW,
+                            version: '1'
+                        },
+                        content: [
+                            {
+                                tag: WA_NODE_TAGS.PATCHES,
+                                attrs: {},
+                                content: [
+                                    {
+                                        tag: WA_NODE_TAGS.PATCH,
+                                        attrs: {},
+                                        content: patchBytes
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    })
+
+    const client = new WaAppStateSyncClient({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
+        logger: createNoopLogger(),
+        query,
+        store,
+        skipMacVerification: true
+    })
+
+    let downloadCalls = 0
+    let observedKind: string | null = null
+    let observedRef: Proto.IExternalBlobReference | null = null
+    const result = await client.sync({
+        collections: [WA_APP_STATE_COLLECTIONS.REGULAR_LOW],
+        downloadExternalBlob: async (_collection, kind, ref) => {
+            downloadCalls += 1
+            observedKind = kind
+            observedRef = ref
+            return externalSyncdMutations
+        }
+    })
+
+    assert.equal(downloadCalls, 1)
+    assert.equal(observedKind, 'patch')
+    assert.equal(
+        bytesToHex((observedRef!.mediaKey as Uint8Array) ?? new Uint8Array()),
+        bytesToHex(new Uint8Array(32).fill(1))
+    )
+    assert.equal(result.collections.length, 1)
+    assert.equal(result.collections[0].collection, WA_APP_STATE_COLLECTIONS.REGULAR_LOW)
+    assert.equal(result.collections[0].state, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+    const persisted = await store.getCollectionState(WA_APP_STATE_COLLECTIONS.REGULAR_LOW)
+    assert.equal(persisted.version, 1)
+})
+
 test('ensureInitialSyncKey mints a 32-byte key with fingerprint when store is empty', async () => {
     const store = new WaAppStateMemoryStore()
     const client = new WaAppStateSyncClient({
