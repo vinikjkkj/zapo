@@ -34,7 +34,7 @@ type WaPassiveTasksRuntime = {
     readonly requeueDanglingReceipt: (node: BinaryNode) => void
     readonly shouldQueueDanglingReceipt: (node: BinaryNode, error: Error) => boolean
     readonly syncAbProps: () => void
-    readonly sendPresenceAvailable: () => Promise<void>
+    readonly sendInitialPresence: () => Promise<void>
 }
 
 export class WaPassiveTasksCoordinator {
@@ -130,8 +130,8 @@ export class WaPassiveTasksCoordinator {
             })
         }
 
-        await this.runtime.sendPresenceAvailable().catch((error) => {
-            this.logger.warn('presence available send failed', {
+        await this.runtime.sendInitialPresence().catch((error) => {
+            this.logger.warn('initial presence send failed', {
                 message: toError(error).message
             })
         })

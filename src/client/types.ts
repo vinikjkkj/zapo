@@ -56,6 +56,15 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
     readonly messageAckTimeoutMs?: number
     readonly messageMaxAttempts?: number
     readonly messageRetryDelayMs?: number
+    /**
+     * Initial presence sent right after the post-connect passive task runs.
+     * - `true` (default): announce the client as online — matches the wa-web
+     *   behavior when the browser tab has focus at login time.
+     * - `false`: announce as unavailable — matches wa-web when the tab is not
+     *   focused (or the Windows app is minimized to tray) at login time. Useful
+     *   for bots/headless sessions that should not appear "online" on connect.
+     */
+    readonly markOnlineOnConnect?: boolean
     readonly writeBehind?: WaWriteBehindOptions
     readonly history?: WaHistorySyncOptions
     readonly chatEvents?: {

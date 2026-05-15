@@ -87,6 +87,7 @@ import {
     WA_PRIVACY_TOKEN_NOTIFICATION_TYPE
 } from '@protocol/constants'
 import { isNewsletterJid, parseSignalAddressFromJid, toUserJid } from '@protocol/jid'
+import { WA_PRESENCE_TYPES } from '@protocol/presence'
 import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
 import { createOutboundRetryTracker } from '@retry/tracker'
 import type { WaRetryDecryptFailureContext } from '@retry/types'
@@ -371,6 +372,7 @@ function createPassiveTasksRuntime(input: {
     readonly receiptQueue: WaReceiptQueue
     readonly getCurrentCredentials: () => ReturnType<WaAuthClient['getCurrentCredentials']>
     readonly abPropsCoordinator: WaAbPropsCoordinator
+    readonly markOnlineOnConnect: boolean
 }): ConstructorParameters<typeof WaPassiveTasksCoordinator>[0]['runtime'] {
     const {
         queryWithContext,
@@ -378,7 +380,8 @@ function createPassiveTasksRuntime(input: {
         nodeOrchestrator,
         receiptQueue,
         getCurrentCredentials,
-        abPropsCoordinator
+        abPropsCoordinator,
+        markOnlineOnConnect
     } = input
 
     return {
@@ -391,12 +394,13 @@ function createPassiveTasksRuntime(input: {
         requeueDanglingReceipt: (node) => receiptQueue.enqueue(node),
         shouldQueueDanglingReceipt: (node, error) => receiptQueue.shouldQueue(node, error),
         syncAbProps: () => abPropsCoordinator.sync(),
-        sendPresenceAvailable: async () => {
+        sendInitialPresence: async () => {
             const credentials = getCurrentCredentials()
-            await nodeOrchestrator.sendNode(
-                buildPresenceNode({ name: credentials?.meDisplayName ?? undefined }),
-                false
-            )
+            const name = credentials?.meDisplayName ?? undefined
+            const node = markOnlineOnConnect
+                ? buildPresenceNode({ name })
+                : buildPresenceNode({ type: WA_PRESENCE_TYPES.UNAVAILABLE, name })
+            await nodeOrchestrator.sendNode(node, false)
         }
     }
 }
@@ -1198,7 +1202,8 @@ export function buildWaClientDependencies(input: {
             nodeOrchestrator,
             receiptQueue,
             getCurrentCredentials,
-            abPropsCoordinator
+            abPropsCoordinator,
+            markOnlineOnConnect: options.markOnlineOnConnect ?? true
         }),
         mobilePrimary: options.mobileTransport !== undefined,
         appStateSync
