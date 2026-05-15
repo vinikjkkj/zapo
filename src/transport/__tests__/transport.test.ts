@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { Logger } from '@infra/log/types'
-import { WA_IQ_TYPES } from '@protocol/nodes'
+import { WA_IQ_TYPES } from '@protocol/constants'
 import { buildIqNode, parseIqError, queryWithContext } from '@transport'
 
 function createLogger(): Logger {
