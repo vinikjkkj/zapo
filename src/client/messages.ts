@@ -487,6 +487,10 @@ async function buildStickerPackMediaMessage(
     content: WaSendStickerPackMessage
 ): Promise<WaMessageBuildResult> {
     validateStickerPackInput(content)
+    if (content.coverThumbnail === undefined) {
+        throw new Error('sticker pack send requires coverThumbnail for non-newsletter recipients')
+    }
+    const coverThumbnail = content.coverThumbnail
 
     const mediaKey = await WaMediaCrypto.generateMediaKey()
     const [bundle, cover] = await Promise.all([
@@ -500,7 +504,7 @@ async function buildStickerPackMediaMessage(
             sidecar: false
         }),
         uploadEncryptedStream(options, {
-            plaintext: openStickerPackInputStream(content.coverThumbnail),
+            plaintext: openStickerPackInputStream(coverThumbnail),
             mediaKey,
             cryptoType: 'thumbnail-sticker-pack',
             uploadPath: MEDIA_UPLOAD_PATHS['thumbnail-sticker-pack'],

@@ -143,7 +143,7 @@ export interface WaSendStickerPackMessage extends UserMediaFields<
     readonly publisher: string
     readonly stickers: readonly WaSendStickerPackStickerInput[]
     readonly trayIcon: WaSendStickerPackTrayIcon
-    readonly coverThumbnail: Uint8Array | string
+    readonly coverThumbnail?: Uint8Array | string
     readonly contextInfo?: WaSendContextInfo
 }
 
