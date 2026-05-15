@@ -1,4 +1,4 @@
-import { WA_DEFAULTS, WA_XMLNS } from '@protocol/constants'
+import { WA_DEFAULTS, WA_IQ_TYPES, WA_XMLNS } from '@protocol/constants'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -27,7 +27,7 @@ export function buildGetBusinessProfileIq(
     jids: readonly string[],
     version: number = WA_BUSINESS_PROFILE_VERSION
 ): BinaryNode {
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
         {
             tag: 'business_profile',
             attrs: { v: `${version}` },
@@ -84,7 +84,7 @@ export function buildEditBusinessProfileIq(input: WaEditBusinessProfileInput): B
         children.push(buildBusinessHoursNode(input.businessHours))
     }
 
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
         {
             tag: 'business_profile',
             attrs: { v: '3', mutation_type: 'delta' },
@@ -125,7 +125,7 @@ function buildBusinessHoursNode(
 }
 
 export function buildGetVerifiedNameIq(jid: string): BinaryNode {
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
         {
             tag: 'verified_name',
             attrs: { jid }
@@ -134,7 +134,7 @@ export function buildGetVerifiedNameIq(jid: string): BinaryNode {
 }
 
 export function buildUpdateCoverPhotoIq(id: string, timestamp: string, token: string): BinaryNode {
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
         {
             tag: 'business_profile',
             attrs: { v: '3', mutation_type: 'delta' },
@@ -149,7 +149,7 @@ export function buildUpdateCoverPhotoIq(id: string, timestamp: string, token: st
 }
 
 export function buildDeleteCoverPhotoIq(id: string): BinaryNode {
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
         {
             tag: 'business_profile',
             attrs: { v: '3', mutation_type: 'delta' },

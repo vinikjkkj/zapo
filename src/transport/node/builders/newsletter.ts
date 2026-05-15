@@ -1,6 +1,6 @@
 import { WA_DEFAULTS } from '@protocol/defaults'
 import { WA_EDIT_ATTRS } from '@protocol/message'
-import { WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
+import { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -187,7 +187,7 @@ export function buildNewsletterViewReceiptNode(input: BuildNewsletterViewReceipt
 }
 
 export function buildNewsletterMetadataIq(): BinaryNode {
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.NEWSLETTER, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.NEWSLETTER, [
         {
             tag: WA_NODE_TAGS.MY_ADDONS,
             attrs: {
@@ -198,7 +198,7 @@ export function buildNewsletterMetadataIq(): BinaryNode {
 }
 
 export function buildNewsletterSubscribeLiveUpdatesIq(newsletterJid: string): BinaryNode {
-    return buildIqNode('set', newsletterJid, WA_XMLNS.NEWSLETTER, [
+    return buildIqNode(WA_IQ_TYPES.SET, newsletterJid, WA_XMLNS.NEWSLETTER, [
         {
             tag: 'live_updates',
             attrs: {}
@@ -228,7 +228,7 @@ export function buildNewsletterMessagesIq(input: BuildNewsletterMessagesIqInput)
     if (input.viewRole) {
         attrs.view_role = input.viewRole
     }
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.NEWSLETTER, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.NEWSLETTER, [
         {
             tag: 'messages',
             attrs
@@ -261,7 +261,7 @@ export function buildNewsletterMessageUpdatesIq(
     } else if (input.after !== undefined) {
         attrs.after = String(input.after)
     }
-    return buildIqNode('get', input.newsletterJid, WA_XMLNS.NEWSLETTER, [
+    return buildIqNode(WA_IQ_TYPES.GET, input.newsletterJid, WA_XMLNS.NEWSLETTER, [
         {
             tag: 'message_updates',
             attrs

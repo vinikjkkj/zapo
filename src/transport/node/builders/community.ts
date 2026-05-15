@@ -1,4 +1,4 @@
-import { WA_XMLNS } from '@protocol/nodes'
+import { WA_IQ_TYPES, WA_XMLNS } from '@protocol/nodes'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -11,7 +11,7 @@ export function buildLinkSubGroupsIq(input: BuildLinkSubGroupsIqInput): BinaryNo
     if (input.subGroups.length === 0) {
         throw new Error('linkSubGroups requires at least one subgroup')
     }
-    return buildIqNode('set', input.communityJid, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.SET, input.communityJid, WA_XMLNS.GROUPS, [
         {
             tag: 'links',
             attrs: {},
@@ -44,7 +44,7 @@ export function buildUnlinkSubGroupsIq(input: BuildUnlinkSubGroupsIqInput): Bina
     if (input.removeOrphanedMembers) {
         groupAttrs.remove_orphaned_members = 'true'
     }
-    return buildIqNode('set', input.communityJid, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.SET, input.communityJid, WA_XMLNS.GROUPS, [
         {
             tag: 'unlink',
             attrs: { unlink_type: 'sub_group' },
@@ -57,11 +57,13 @@ export function buildUnlinkSubGroupsIq(input: BuildUnlinkSubGroupsIqInput): Bina
 }
 
 export function buildDeactivateCommunityIq(communityJid: string): BinaryNode {
-    return buildIqNode('set', communityJid, WA_XMLNS.GROUPS, [{ tag: 'delete_parent', attrs: {} }])
+    return buildIqNode(WA_IQ_TYPES.SET, communityJid, WA_XMLNS.GROUPS, [
+        { tag: 'delete_parent', attrs: {} }
+    ])
 }
 
 export function buildLinkedGroupsParticipantsIq(communityJid: string): BinaryNode {
-    return buildIqNode('get', communityJid, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.GET, communityJid, WA_XMLNS.GROUPS, [
         { tag: 'linked_groups_participants', attrs: {} }
     ])
 }

@@ -232,7 +232,7 @@ export function buildAckNode(input: BuildAckNodeInput): BinaryNode {
     }
 
     const attrs: Record<string, string> = {
-        class: 'receipt'
+        class: WA_MESSAGE_TAGS.RECEIPT
     }
     if (input.retryType) {
         attrs.type = input.typeOverride ?? WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY

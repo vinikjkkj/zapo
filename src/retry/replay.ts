@@ -3,6 +3,7 @@ import { wrapDeviceSentMessage } from '@message/device-sent'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/padding'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
+import { WA_DEFAULTS, WA_NODE_TAGS } from '@protocol/constants'
 import {
     isGroupOrBroadcastJid,
     isStatusBroadcastJid,
@@ -156,7 +157,11 @@ export class WaRetryReplayService {
             type: payload.type,
             id: outbound.messageId,
             requesterJid,
-            addressingMode: isStatus ? undefined : requesterAddress.server === 'lid' ? 'lid' : 'pn',
+            addressingMode: isStatus
+                ? undefined
+                : requesterAddress.server === WA_DEFAULTS.LID_SERVER
+                  ? 'lid'
+                  : 'pn',
             encType: encrypted.type,
             ciphertext: encrypted.ciphertext,
             retryCount,
@@ -254,7 +259,7 @@ export class WaRetryReplayService {
     }
 
     private isOpaqueReplayCompatible(node: BinaryNode, normalizedRequesterJid: string): boolean {
-        const participantsNode = findNodeChild(node, 'participants')
+        const participantsNode = findNodeChild(node, WA_NODE_TAGS.PARTICIPANTS)
         if (participantsNode) {
             const participantsContent = Array.isArray(participantsNode.content)
                 ? participantsNode.content

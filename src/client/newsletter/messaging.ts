@@ -22,6 +22,7 @@ import type {
     WaSendMessageContent
 } from '@message/types'
 import { WA_NEWSLETTER_MUTE_TYPES, WA_NEWSLETTER_MUTE_VALUES } from '@protocol/newsletter'
+import { WA_NEWSLETTER_NOTIFICATION_TAGS } from '@protocol/notification'
 import {
     buildNewsletterMessageNode,
     buildNewsletterMessagesIq,
@@ -277,7 +278,10 @@ export function createMessagingOps(deps: WaNewsletterMessagingDeps): WaNewslette
                 'newsletter.subscribe_live_updates',
                 buildNewsletterSubscribeLiveUpdatesIq(newsletterJid)
             )
-            const liveUpdates = findNodeChild(response, 'live_updates')
+            const liveUpdates = findNodeChild(
+                response,
+                WA_NEWSLETTER_NOTIFICATION_TAGS.LIVE_UPDATES
+            )
             const durationAttr = liveUpdates?.attrs.duration
             const parsed = durationAttr ? Number.parseInt(durationAttr, 10) : NaN
             if (!Number.isFinite(parsed) || parsed < 30 || parsed > 600) {

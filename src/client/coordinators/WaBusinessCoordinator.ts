@@ -10,6 +10,7 @@ import type { Logger } from '@infra/log/types'
 import { PPS_UPLOAD_PATHS } from '@media/constants'
 import type { WaMediaConn } from '@media/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
+import { WA_BUSINESS_NOTIFICATION_TAGS } from '@protocol/notification'
 import {
     buildDeleteCoverPhotoIq,
     buildEditBusinessProfileIq,
@@ -63,7 +64,7 @@ function parseBusinessProfiles(result: BinaryNode): readonly WaBusinessProfileRe
 }
 
 function parseVerifiedName(result: BinaryNode): WaVerifiedNameResult | null {
-    const vnNode = findNodeChild(result, 'verified_name')
+    const vnNode = findNodeChild(result, WA_BUSINESS_NOTIFICATION_TAGS.VERIFIED_NAME)
     if (!vnNode) return null
     return parseVerifiedNameNode(vnNode)
 }

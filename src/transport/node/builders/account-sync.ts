@@ -1,4 +1,10 @@
-import { WA_DEFAULTS, WA_NODE_TAGS, WA_USYNC_CONTEXTS, WA_XMLNS } from '@protocol/constants'
+import {
+    WA_DEFAULTS,
+    WA_IQ_TYPES,
+    WA_NODE_TAGS,
+    WA_USYNC_CONTEXTS,
+    WA_XMLNS
+} from '@protocol/constants'
 import { buildUsyncIq } from '@transport/node/builders/usync'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
@@ -23,7 +29,7 @@ export function buildAccountDevicesSyncIq(userJids: readonly string[], sid: stri
 
 export function buildAccountPictureSyncIq(meJid: string): BinaryNode {
     return buildIqNode(
-        'get',
+        WA_IQ_TYPES.GET,
         WA_DEFAULTS.HOST_DOMAIN,
         WA_XMLNS.PROFILE_PICTURE,
         [
@@ -42,7 +48,7 @@ export function buildAccountPictureSyncIq(meJid: string): BinaryNode {
 }
 
 export function buildAccountPrivacySyncIq(): BinaryNode {
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.PRIVACY, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.PRIVACY, [
         {
             tag: WA_NODE_TAGS.PRIVACY,
             attrs: {}
@@ -51,11 +57,11 @@ export function buildAccountPrivacySyncIq(): BinaryNode {
 }
 
 export function buildAccountBlocklistSyncIq(): BinaryNode {
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BLOCKLIST)
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BLOCKLIST)
 }
 
 export function buildGroupsDirtySyncIq(): BinaryNode {
-    return buildIqNode('get', WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
         {
             tag: WA_NODE_TAGS.PARTICIPATING,
             attrs: {},
@@ -74,7 +80,7 @@ export function buildGroupsDirtySyncIq(): BinaryNode {
 }
 
 export function buildNewsletterMetadataSyncIq(): BinaryNode {
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.NEWSLETTER, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.NEWSLETTER, [
         {
             tag: WA_NODE_TAGS.MY_ADDONS,
             attrs: {
@@ -91,7 +97,7 @@ export function buildClearDirtyBitsIq(
     }[]
 ): BinaryNode {
     return buildIqNode(
-        'set',
+        WA_IQ_TYPES.SET,
         WA_DEFAULTS.HOST_DOMAIN,
         WA_XMLNS.DIRTY_BITS,
         dirtyBits.map((dirtyBit) => ({

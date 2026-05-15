@@ -5,11 +5,12 @@ import {
     WA_EMAIL_XMLNS,
     type WaEmailContext
 } from '@protocol/email'
+import { WA_IQ_TYPES } from '@protocol/nodes'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
 export function buildGetEmailIq(): BinaryNode {
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_EMAIL_XMLNS, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_EMAIL_XMLNS, [
         { tag: WA_EMAIL_TAGS.EMAIL, attrs: {} }
     ])
 }
@@ -25,7 +26,7 @@ export function buildSetEmailIq(email: string, context?: WaEmailContext): Binary
         emailChildren.push({ tag: WA_EMAIL_TAGS.CONTEXT, attrs: {}, content: context })
     }
     emailChildren.push({ tag: WA_EMAIL_TAGS.EMAIL_ADDRESS, attrs: {}, content: email })
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_EMAIL_XMLNS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_EMAIL_XMLNS, [
         { tag: WA_EMAIL_TAGS.EMAIL, attrs: {}, content: emailChildren }
     ])
 }
@@ -40,7 +41,7 @@ export function buildRequestEmailVerificationCodeIq(
 ): BinaryNode {
     assertLocaleField('languageCode', input.languageCode)
     assertLocaleField('localeCode', input.localeCode)
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_EMAIL_XMLNS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_EMAIL_XMLNS, [
         {
             tag: WA_EMAIL_TAGS.VERIFY_EMAIL,
             attrs: {},
@@ -56,7 +57,7 @@ export function buildVerifyEmailCodeIq(code: string): BinaryNode {
     if (code.length !== WA_EMAIL_LIMITS.CODE_LENGTH) {
         throw new Error(`verification code must be exactly ${WA_EMAIL_LIMITS.CODE_LENGTH} chars`)
     }
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_EMAIL_XMLNS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_EMAIL_XMLNS, [
         {
             tag: WA_EMAIL_TAGS.VERIFY_EMAIL,
             attrs: {},
@@ -70,7 +71,7 @@ export function buildConfirmEmailIq(context?: WaEmailContext): BinaryNode {
         context !== undefined
             ? [{ tag: WA_EMAIL_TAGS.CONTEXT, attrs: {}, content: context }]
             : undefined
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_EMAIL_XMLNS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_EMAIL_XMLNS, [
         {
             tag: WA_EMAIL_TAGS.CONFIRM_EMAIL,
             attrs: {},

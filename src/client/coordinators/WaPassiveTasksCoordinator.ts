@@ -1,7 +1,7 @@
 import type { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import type { WaAuthCredentials } from '@auth/types'
 import type { Logger } from '@infra/log/types'
-import { WA_DEFAULTS } from '@protocol/constants'
+import { WA_DEFAULTS, WA_IQ_TYPES } from '@protocol/constants'
 import {
     SIGNAL_SIGNED_PREKEY_ROTATION_INTERVAL_MS,
     SIGNAL_SIGNED_PREKEY_SERVER_ERROR_BACKOFF_MS,
@@ -224,7 +224,7 @@ export class WaPassiveTasksCoordinator {
             },
             this.mobilePrimary ? { useSystemId: true } : undefined
         )
-        if (response.attrs.type === 'result') {
+        if (response.attrs.type === WA_IQ_TYPES.RESULT) {
             // Mark uploaded key first so the serverHasPreKeys flag never commits ahead of local key progress.
             await this.preKeyStore.markKeyAsUploaded(lastPreKeyId)
             await Promise.all([

@@ -6,6 +6,7 @@ import {
     WA_DIRTY_PROTOCOLS,
     WA_DIRTY_TYPES,
     WA_IQ_TYPES,
+    WA_NODE_TAGS,
     WA_SUPPORTED_DIRTY_TYPES
 } from '@protocol/constants'
 import { toUserJid } from '@protocol/jid'
@@ -269,7 +270,7 @@ async function syncAccountPictureDirtyBit(runtime: WaDirtySyncRuntime): Promise<
         { meJid, target: targetJid }
     )
 
-    if (response.tag !== 'iq') {
+    if (response.tag !== WA_NODE_TAGS.IQ) {
         throw new Error(`account_sync.picture returned non-iq node (${response.tag})`)
     }
     if (response.attrs.type === WA_IQ_TYPES.RESULT) {

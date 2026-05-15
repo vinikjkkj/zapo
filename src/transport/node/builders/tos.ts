@@ -1,5 +1,5 @@
 import { WA_DEFAULTS } from '@protocol/defaults'
-import { WA_XMLNS } from '@protocol/nodes'
+import { WA_IQ_TYPES, WA_XMLNS } from '@protocol/nodes'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -14,7 +14,7 @@ export function buildTosQueryIq(noticeIds: readonly string[]): BinaryNode {
     if (noticeIds.length === 0) {
         throw new Error('tos query requires at least one notice id')
     }
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.TOS, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.TOS, [
         {
             tag: 'request',
             attrs: {},
@@ -27,7 +27,7 @@ export function buildTosUpdateIq(noticeIds: readonly string[]): BinaryNode {
     if (noticeIds.length === 0) {
         throw new Error('tos update requires at least one notice id')
     }
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.TOS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.TOS, [
         {
             tag: 'request',
             attrs: { type: 'session_update' },

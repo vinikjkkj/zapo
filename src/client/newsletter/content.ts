@@ -124,13 +124,15 @@ function resolveSendMediaKind(content: WaSendMediaMessage): NewsletterMediaKind 
 }
 
 function pickMediaTypeFromMessage(message: Proto.IMessage): string | null {
-    if (message.imageMessage) return 'image'
-    if (message.videoMessage) return message.videoMessage.gifPlayback ? 'gif' : 'video'
-    if (message.audioMessage) return message.audioMessage.ptt ? 'ptt' : 'audio'
-    if (message.documentMessage) return 'document'
-    if (message.stickerMessage) return 'sticker'
+    if (message.imageMessage) return WA_ENC_MEDIA_TYPES.IMAGE
+    if (message.videoMessage)
+        return message.videoMessage.gifPlayback ? WA_ENC_MEDIA_TYPES.GIF : WA_ENC_MEDIA_TYPES.VIDEO
+    if (message.audioMessage)
+        return message.audioMessage.ptt ? WA_ENC_MEDIA_TYPES.PTT : WA_ENC_MEDIA_TYPES.AUDIO
+    if (message.documentMessage) return WA_ENC_MEDIA_TYPES.DOCUMENT
+    if (message.stickerMessage) return WA_ENC_MEDIA_TYPES.STICKER
     if (message.stickerPackMessage) return WA_ENC_MEDIA_TYPES.STICKER_PACK
-    if (message.ptvMessage) return 'ptv'
+    if (message.ptvMessage) return WA_ENC_MEDIA_TYPES.PTV
     return null
 }
 

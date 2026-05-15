@@ -257,7 +257,7 @@ function parseFeatureFlagsList(node: BinaryNode): readonly WaBusinessFeatureFlag
 function parseProductIds(catalogNode: BinaryNode): readonly string[] {
     const ids: string[] = []
     for (const product of getNodeChildrenByTag(catalogNode, 'product')) {
-        const idNode = findNodeChild(product, 'id')
+        const idNode = findNodeChild(product, WA_NODE_TAGS.ID)
         if (!idNode) continue
         const text = getNodeTextContent(idNode)
         if (text) ids.push(text)

@@ -1,4 +1,4 @@
-import { WA_MESSAGE_TAGS, WA_NODE_TAGS } from '@protocol/constants'
+import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NODE_TAGS } from '@protocol/constants'
 import { normalizeDeviceJid } from '@protocol/jid'
 import type { WaParsedRetryRequest, WaRetryKeyBundle, WaRetryOutboundState } from '@retry/types'
 import { decodeExactLength, parseUint } from '@signal/api/codec'
@@ -144,7 +144,8 @@ export function parseRetryReceiptRequest(
         return null
     }
     const receiptType =
-        node.attrs.type === 'retry' || node.attrs.type === 'enc_rekey_retry'
+        node.attrs.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY ||
+        node.attrs.type === 'enc_rekey_retry'
             ? node.attrs.type
             : null
     if (!receiptType) {

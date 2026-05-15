@@ -1043,8 +1043,8 @@ export function buildWaClientDependencies(input: {
                     rawNode: node,
                     stanzaId: parsed.stanzaId,
                     chatJid: parsed.fromJid,
-                    stanzaType: 'encrypt',
-                    notificationType: 'encrypt',
+                    stanzaType: WA_NOTIFICATION_TYPES.ENCRYPT,
+                    notificationType: WA_NOTIFICATION_TYPES.ENCRYPT,
                     classification: 'core',
                     details: {
                         kind: 'identity_change',
@@ -1118,8 +1118,8 @@ export function buildWaClientDependencies(input: {
                 rawNode: node,
                 stanzaId: parsed.stanzaId,
                 chatJid: parsed.fromJid,
-                stanzaType: 'devices',
-                notificationType: 'devices',
+                stanzaType: WA_NOTIFICATION_TYPES.DEVICES,
+                notificationType: WA_NOTIFICATION_TYPES.DEVICES,
                 classification: 'core',
                 details: {
                     kind: 'device_list_change',

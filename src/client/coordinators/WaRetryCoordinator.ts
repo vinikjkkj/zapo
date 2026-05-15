@@ -1,7 +1,7 @@
 import type { Logger } from '@infra/log/types'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
-import { WA_MESSAGE_TAGS } from '@protocol/constants'
+import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES } from '@protocol/constants'
 import {
     isGroupOrBroadcastJid,
     normalizeDeviceJid,
@@ -223,7 +223,8 @@ export class WaRetryCoordinator {
     private isRetryReceiptNode(node: BinaryNode): boolean {
         return (
             node.tag === WA_MESSAGE_TAGS.RECEIPT &&
-            (node.attrs.type === 'retry' || node.attrs.type === 'enc_rekey_retry')
+            (node.attrs.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY ||
+                node.attrs.type === 'enc_rekey_retry')
         )
     }
 
@@ -870,19 +871,19 @@ export class WaRetryCoordinator {
     }
 
     private mapOutboundStateFromReceiptType(type: string | undefined): WaRetryOutboundState | null {
-        if (type === 'read') {
+        if (type === WA_MESSAGE_TYPES.RECEIPT_TYPE_READ) {
             return 'read'
         }
-        if (type === 'played') {
+        if (type === WA_MESSAGE_TYPES.RECEIPT_TYPE_PLAYED) {
             return 'played'
         }
         if (
             type === undefined ||
             type === '' ||
-            type === 'delivery' ||
-            type === 'sender' ||
-            type === 'inactive' ||
-            type === 'peer_msg'
+            type === WA_MESSAGE_TYPES.RECEIPT_TYPE_DELIVERY ||
+            type === WA_MESSAGE_TYPES.RECEIPT_TYPE_SENDER ||
+            type === WA_MESSAGE_TYPES.RECEIPT_TYPE_INACTIVE ||
+            type === WA_MESSAGE_TYPES.RECEIPT_TYPE_PEER
         ) {
             return 'delivered'
         }

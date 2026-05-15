@@ -1,3 +1,4 @@
+import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
     buildDeleteProfilePictureIq,
     buildGetDisappearingModeUsyncQueryNode,
@@ -67,7 +68,7 @@ interface WaProfileCoordinatorOptions {
 }
 
 function parseProfilePicture(result: BinaryNode): WaProfilePictureResult {
-    const pictureNode = findNodeChild(result, 'picture')
+    const pictureNode = findNodeChild(result, WA_NODE_TAGS.PICTURE)
     if (!pictureNode) {
         return {}
     }
@@ -80,16 +81,16 @@ function parseProfilePicture(result: BinaryNode): WaProfilePictureResult {
 }
 
 function parseSetPictureResult(result: BinaryNode): string | null {
-    const pictureNode = findNodeChild(result, 'picture')
+    const pictureNode = findNodeChild(result, WA_NODE_TAGS.PICTURE)
     return pictureNode?.attrs.id ?? null
 }
 
 function parseUsyncProfiles(result: BinaryNode): readonly WaProfileInfo[] {
-    const usyncNode = findNodeChild(result, 'usync')
+    const usyncNode = findNodeChild(result, WA_NODE_TAGS.USYNC)
     if (!usyncNode) {
         return []
     }
-    const listNode = findNodeChild(usyncNode, 'list')
+    const listNode = findNodeChild(usyncNode, WA_NODE_TAGS.LIST)
     if (!listNode) {
         return []
     }
@@ -100,7 +101,7 @@ function parseUsyncProfiles(result: BinaryNode): readonly WaProfileInfo[] {
 
     for (let i = 0; i < userNodes.length; i += 1) {
         const userNode = userNodes[i]
-        if (userNode.tag !== 'user') {
+        if (userNode.tag !== WA_NODE_TAGS.USER) {
             continue
         }
         const jid = userNode.attrs.jid as string | undefined
@@ -118,7 +119,7 @@ function parseUsyncProfiles(result: BinaryNode): readonly WaProfileInfo[] {
 
         for (let j = 0; j < userContent.length; j += 1) {
             const child = userContent[j]
-            if (child.tag === 'picture') {
+            if (child.tag === WA_NODE_TAGS.PICTURE) {
                 const idAttr = child.attrs.id as string | undefined
                 if (idAttr) {
                     const parsed = Number.parseInt(idAttr, 10)
@@ -152,9 +153,9 @@ function parseUsyncProfiles(result: BinaryNode): readonly WaProfileInfo[] {
 }
 
 function parseUsyncDisappearingModes(result: BinaryNode): readonly WaDisappearingModeResult[] {
-    const usyncNode = findNodeChild(result, 'usync')
+    const usyncNode = findNodeChild(result, WA_NODE_TAGS.USYNC)
     if (!usyncNode) return []
-    const listNode = findNodeChild(usyncNode, 'list')
+    const listNode = findNodeChild(usyncNode, WA_NODE_TAGS.LIST)
     if (!listNode) return []
 
     const userNodes = getNodeChildren(listNode)
@@ -163,7 +164,7 @@ function parseUsyncDisappearingModes(result: BinaryNode): readonly WaDisappearin
 
     for (let i = 0; i < userNodes.length; i += 1) {
         const userNode = userNodes[i]
-        if (userNode.tag !== 'user') continue
+        if (userNode.tag !== WA_NODE_TAGS.USER) continue
         const userContent = userNode.content
         if (!Array.isArray(userContent)) continue
 
@@ -171,7 +172,7 @@ function parseUsyncDisappearingModes(result: BinaryNode): readonly WaDisappearin
             const child = userContent[j]
             if (child.tag !== 'disappearing_mode') continue
 
-            const errorNode = findNodeChild(child, 'error')
+            const errorNode = findNodeChild(child, WA_NODE_TAGS.ERROR)
             if (errorNode) continue
 
             const duration = Number.parseInt((child.attrs.duration as string) ?? '0', 10)

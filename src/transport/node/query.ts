@@ -5,7 +5,7 @@ import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
 
 export function buildIqNode(
-    type: 'get' | 'set',
+    type: typeof WA_IQ_TYPES.GET | typeof WA_IQ_TYPES.SET,
     to: string,
     xmlns: string,
     content?: BinaryNode['content'],

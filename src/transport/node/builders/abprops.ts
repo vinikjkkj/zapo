@@ -1,5 +1,5 @@
 import { WA_ABPROPS_PROTOCOL_VERSION } from '@protocol/abprops'
-import { WA_DEFAULTS, WA_XMLNS } from '@protocol/constants'
+import { WA_DEFAULTS, WA_IQ_TYPES, WA_XMLNS } from '@protocol/constants'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -16,7 +16,7 @@ export function buildGetAbPropsIq(options?: {
     if (options?.refreshId !== undefined && options.refreshId !== null) {
         propsAttrs.refresh_id = `${options.refreshId}`
     }
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.ABPROPS, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.ABPROPS, [
         {
             tag: 'props',
             attrs: propsAttrs

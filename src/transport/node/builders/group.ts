@@ -1,5 +1,5 @@
 import { WA_DEFAULTS } from '@protocol/defaults'
-import { WA_XMLNS } from '@protocol/nodes'
+import { WA_IQ_TYPES, WA_XMLNS } from '@protocol/nodes'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -52,7 +52,7 @@ export function buildCreateGroupIq(input: BuildCreateGroupIqInput): BinaryNode {
         children.push({ tag: 'create_general_chat', attrs: {} })
     }
 
-    return buildIqNode('set', WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
         {
             tag: 'create',
             attrs: { subject: input.subject },
@@ -68,7 +68,7 @@ export function buildGroupParticipantChangeIq(input: {
     readonly action: GroupParticipantAction
     readonly participants: readonly string[]
 }): BinaryNode {
-    return buildIqNode('set', input.groupJid, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.SET, input.groupJid, WA_XMLNS.GROUPS, [
         {
             tag: input.action,
             attrs: {},
@@ -81,7 +81,7 @@ export function buildGroupParticipantChangeIq(input: {
 }
 
 export function buildLeaveGroupIq(groupJids: readonly string[]): BinaryNode {
-    return buildIqNode('set', WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
         {
             tag: 'leave',
             attrs: {},
@@ -94,7 +94,7 @@ export function buildLeaveGroupIq(groupJids: readonly string[]): BinaryNode {
 }
 
 export function buildGetMembershipApprovalRequestsIq(groupJid: string): BinaryNode {
-    return buildIqNode('get', groupJid, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.GET, groupJid, WA_XMLNS.GROUPS, [
         { tag: 'membership_approval_requests', attrs: {} }
     ])
 }
@@ -124,7 +124,7 @@ export function buildMembershipRequestsActionIq(input: {
             content: reject.map((jid) => ({ tag: 'participant', attrs: { jid } }))
         })
     }
-    return buildIqNode('set', input.groupJid, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.SET, input.groupJid, WA_XMLNS.GROUPS, [
         { tag: 'membership_requests_action', attrs: {}, content: children }
     ])
 }
@@ -136,7 +136,7 @@ export function buildCancelMembershipRequestsIq(input: {
     if (input.participantJids.length === 0) {
         throw new Error('cancel_membership_requests requires at least one participant')
     }
-    return buildIqNode('set', input.groupJid, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.SET, input.groupJid, WA_XMLNS.GROUPS, [
         {
             tag: 'cancel_membership_requests',
             attrs: {},
@@ -157,7 +157,7 @@ export function buildJoinLinkedGroupIq(input: {
     if (input.type) {
         attrs.type = input.type
     }
-    return buildIqNode('set', input.groupJid, WA_XMLNS.GROUPS, [
+    return buildIqNode(WA_IQ_TYPES.SET, input.groupJid, WA_XMLNS.GROUPS, [
         { tag: 'join_linked_group', attrs }
     ])
 }

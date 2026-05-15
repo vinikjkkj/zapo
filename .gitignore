@@ -14,3 +14,5 @@ coverage
 /test/
 .claude
 *.log
+___*
+**/___*

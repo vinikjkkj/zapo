@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { Logger } from '@infra/log/types'
+import { WA_IQ_TYPES } from '@protocol/nodes'
 import { buildIqNode, parseIqError, queryWithContext } from '@transport'
 
 function createLogger(): Logger {
@@ -16,7 +17,7 @@ function createLogger(): Logger {
 }
 
 test('transport barrel exports iq helpers with expected behavior', async () => {
-    const iq = buildIqNode('get', 's.whatsapp.net', 'w:test')
+    const iq = buildIqNode(WA_IQ_TYPES.GET, 's.whatsapp.net', 'w:test')
     assert.equal(iq.tag, 'iq')
 
     const parsed = parseIqError({

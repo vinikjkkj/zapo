@@ -13,7 +13,12 @@ import type {
     WaRegistrationCodeEvent
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
-import { WA_DISCONNECT_REASONS, WA_NODE_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
+import {
+    WA_DISCONNECT_REASONS,
+    WA_MESSAGE_TYPES,
+    WA_NODE_TAGS,
+    WA_NOTIFICATION_TYPES
+} from '@protocol/constants'
 import type { WaConnectionCode, WaDisconnectReason } from '@protocol/stream'
 import { buildAckNode } from '@transport/node/builders/global'
 import { getFirstNodeChild, getNodeChildrenNonEmptyAttrValuesByTag } from '@transport/node/helpers'
@@ -217,7 +222,7 @@ export function createIncomingReceiptHandler(
             buildAckNode({
                 kind: 'receipt',
                 node,
-                includeParticipant: receiptType !== 'server-error'
+                includeParticipant: receiptType !== WA_MESSAGE_TYPES.RECEIPT_TYPE_SERVER_ERROR
             })
         )
         return true

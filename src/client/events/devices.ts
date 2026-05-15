@@ -1,4 +1,5 @@
 import { parseSignalAddressFromJid } from '@protocol/jid'
+import { WA_NODE_TAGS } from '@protocol/nodes'
 import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 
@@ -51,7 +52,7 @@ export function parseDeviceNotification(node: BinaryNode): DeviceNotification | 
     const devices: DeviceNotificationDevice[] = []
 
     if (action !== DEVICE_NOTIFICATION_ACTIONS.UPDATE && actionNode) {
-        const deviceNodes = getNodeChildrenByTag(actionNode, 'device')
+        const deviceNodes = getNodeChildrenByTag(actionNode, WA_NODE_TAGS.DEVICE)
         for (let index = 0; index < deviceNodes.length; index += 1) {
             const deviceNode = deviceNodes[index]
             const jidAttr = deviceNode.attrs.jid

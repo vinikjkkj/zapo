@@ -17,6 +17,7 @@ import type {
 import {
     WA_NEWSLETTER_MUTE_TYPES,
     WA_NEWSLETTER_MUTE_VALUES,
+    WA_NEWSLETTER_STATE_TYPES,
     type WaNewsletterRole,
     type WaNewsletterStateType
 } from '@protocol/newsletter'
@@ -127,7 +128,7 @@ export function parseNewsletterMetadata(envelope: MexNewsletterEnvelope): WaNews
 
     return {
         jid: envelope.id ?? '',
-        state: envelope.state?.type ?? 'ACTIVE',
+        state: envelope.state?.type ?? WA_NEWSLETTER_STATE_TYPES.ACTIVE,
         creationTime: toNumber(meta?.creation_time),
         name: meta?.name?.text,
         nameUpdateTime: toNumber(meta?.name?.update_time),

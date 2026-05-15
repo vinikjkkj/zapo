@@ -31,9 +31,6 @@ const JID_U_DOMAIN_TYPE_LID = 0x01
 const JID_U_DOMAIN_TYPE_HOSTED_LID = 0x81
 const JID_U_DOMAIN_TYPE_HOSTED_MASK = 0x80
 const JID_U_DOMAIN_TYPE_LID_MASK = 0x01
-const JID_U_DOMAIN_LID = 'lid'
-const JID_U_DOMAIN_HOSTED = 'hosted'
-const JID_U_DOMAIN_HOSTED_LID = 'hosted.lid'
 
 class ByteReader {
     private readonly data: Uint8Array
@@ -184,14 +181,14 @@ function decodeJidU(reader: ByteReader): string {
 
     let domain: string = WA_DEFAULTS.HOST_DOMAIN
     if (domainType === JID_U_DOMAIN_TYPE_LID) {
-        domain = JID_U_DOMAIN_LID
+        domain = WA_DEFAULTS.LID_SERVER
     } else if (domainType === JID_U_DOMAIN_TYPE_HOSTED_LID) {
-        domain = JID_U_DOMAIN_HOSTED_LID
+        domain = WA_DEFAULTS.HOSTED_LID_SERVER
     } else if (
         (domainType & JID_U_DOMAIN_TYPE_HOSTED_MASK) !== 0 &&
         (domainType & JID_U_DOMAIN_TYPE_LID_MASK) === 0
     ) {
-        domain = JID_U_DOMAIN_HOSTED
+        domain = WA_DEFAULTS.HOSTED_SERVER
     }
 
     if (device > 0) {

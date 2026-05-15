@@ -1,7 +1,8 @@
 import { parseParticipants as parseGroupEventParticipants } from '@client/events/group'
 import { WA_DEFAULTS } from '@protocol/defaults'
 import { WA_GROUP_PARTICIPANT_TYPES, type WaGroupSetting } from '@protocol/group'
-import { WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
+import { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
+import { WA_GROUP_NOTIFICATION_TAGS } from '@protocol/notification'
 import {
     buildDeactivateCommunityIq,
     buildLinkedGroupsParticipantsIq,
@@ -394,13 +395,22 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
 const SETTING_TAGS: Readonly<
     Record<WaGroupSetting, { readonly on: string; readonly off: string }>
 > = {
-    announcement: { on: 'announcement', off: 'not_announcement' },
-    restrict: { on: 'locked', off: 'unlocked' },
-    ephemeral: { on: 'ephemeral', off: 'not_ephemeral' },
-    membership_approval_mode: { on: 'membership_approval_mode', off: 'membership_approval_mode' },
+    announcement: {
+        on: WA_GROUP_NOTIFICATION_TAGS.ANNOUNCEMENT,
+        off: WA_GROUP_NOTIFICATION_TAGS.NOT_ANNOUNCEMENT
+    },
+    restrict: { on: WA_GROUP_NOTIFICATION_TAGS.LOCKED, off: WA_GROUP_NOTIFICATION_TAGS.UNLOCKED },
+    ephemeral: {
+        on: WA_GROUP_NOTIFICATION_TAGS.EPHEMERAL,
+        off: WA_GROUP_NOTIFICATION_TAGS.NOT_EPHEMERAL
+    },
+    membership_approval_mode: {
+        on: WA_GROUP_NOTIFICATION_TAGS.MEMBERSHIP_APPROVAL_MODE,
+        off: WA_GROUP_NOTIFICATION_TAGS.MEMBERSHIP_APPROVAL_MODE
+    },
     allow_non_admin_sub_group_creation: {
-        on: 'allow_non_admin_sub_group_creation',
-        off: 'not_allow_non_admin_sub_group_creation'
+        on: WA_GROUP_NOTIFICATION_TAGS.ALLOW_NON_ADMIN_SUB_GROUP_CREATION,
+        off: WA_GROUP_NOTIFICATION_TAGS.NOT_ALLOW_NON_ADMIN_SUB_GROUP_CREATION
     }
 }
 
@@ -458,7 +468,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
 
     return {
         queryGroupMetadata: async (groupJid) => {
-            const node = buildIqNode('get', groupJid, WA_XMLNS.GROUPS, [
+            const node = buildIqNode(WA_IQ_TYPES.GET, groupJid, WA_XMLNS.GROUPS, [
                 {
                     tag: WA_NODE_TAGS.QUERY,
                     attrs: {}
@@ -470,7 +480,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
         },
 
         queryAllGroups: async () => {
-            const node = buildIqNode('get', WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
+            const node = buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
                 {
                     tag: WA_NODE_TAGS.PARTICIPATING,
                     attrs: {},
@@ -491,7 +501,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
         },
 
         queryGroupInviteInfo: async (code) => {
-            const node = buildIqNode('get', WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
+            const node = buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
                 { tag: WA_NODE_TAGS.INVITE, attrs: { code } }
             ])
             const result = await queryWithContext('group.invite.info', node)
@@ -512,7 +522,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
         },
 
         setSubject: async (groupJid, subject) => {
-            const node = buildIqNode('set', groupJid, WA_XMLNS.GROUPS, [
+            const node = buildIqNode(WA_IQ_TYPES.SET, groupJid, WA_XMLNS.GROUPS, [
                 { tag: WA_NODE_TAGS.SUBJECT, attrs: {}, content: subject }
             ])
             const result = await queryWithContext('group.setSubject', node)
@@ -531,7 +541,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
                 content = [{ tag: WA_NODE_TAGS.BODY, attrs: {}, content: description }]
             }
 
-            const node = buildIqNode('set', groupJid, WA_XMLNS.GROUPS, [
+            const node = buildIqNode(WA_IQ_TYPES.SET, groupJid, WA_XMLNS.GROUPS, [
                 { tag: WA_NODE_TAGS.DESCRIPTION, attrs, content }
             ])
             const result = await queryWithContext('group.setDescription', node)
@@ -552,7 +562,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
                 ]
             }
 
-            const node = buildIqNode('set', groupJid, WA_XMLNS.GROUPS, [
+            const node = buildIqNode(WA_IQ_TYPES.SET, groupJid, WA_XMLNS.GROUPS, [
                 { tag, attrs: {}, ...(content ? { content } : {}) }
             ])
             const result = await queryWithContext('group.setSetting', node)
@@ -579,7 +589,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
         },
 
         revokeInvite: async (groupJid) => {
-            const node = buildIqNode('set', groupJid, WA_XMLNS.GROUPS, [
+            const node = buildIqNode(WA_IQ_TYPES.SET, groupJid, WA_XMLNS.GROUPS, [
                 { tag: WA_NODE_TAGS.INVITE, attrs: {} }
             ])
             const result = await queryWithContext('group.revokeInvite', node)
@@ -588,7 +598,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
         },
 
         joinGroupViaInvite: async (code) => {
-            const node = buildIqNode('set', WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
+            const node = buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
                 { tag: WA_NODE_TAGS.INVITE, attrs: { code } }
             ])
             const result = await queryWithContext('group.joinViaInvite', node)
@@ -629,13 +639,13 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
 
             const linksNode = findNodeChild(result, 'links')
             const linkNode = linksNode ? findNodeChild(linksNode, 'link') : undefined
-            const groupNodes = linkNode ? getNodeChildrenByTag(linkNode, 'group') : []
+            const groupNodes = linkNode ? getNodeChildrenByTag(linkNode, WA_NODE_TAGS.GROUP) : []
             const linkedJids: string[] = []
             const failed: WaCommunitySubGroupResult[] = []
             for (const groupNode of groupNodes) {
                 const jid = groupNode.attrs.jid
                 if (!jid) continue
-                const errorAttr = findNodeChild(groupNode, 'error')?.attrs.code
+                const errorAttr = findNodeChild(groupNode, WA_NODE_TAGS.ERROR)?.attrs.code
                 if (errorAttr !== undefined) {
                     failed.push({ jid, error: Number(errorAttr) })
                 } else {
@@ -655,13 +665,15 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             assertIqResult(result, 'community.unlinkSubGroups')
 
             const unlinkNode = findNodeChild(result, 'unlink')
-            const groupNodes = unlinkNode ? getNodeChildrenByTag(unlinkNode, 'group') : []
+            const groupNodes = unlinkNode
+                ? getNodeChildrenByTag(unlinkNode, WA_NODE_TAGS.GROUP)
+                : []
             const unlinkedJids: string[] = []
             const failed: WaCommunitySubGroupResult[] = []
             for (const groupNode of groupNodes) {
                 const jid = groupNode.attrs.jid
                 if (!jid) continue
-                const errorAttr = findNodeChild(groupNode, 'error')?.attrs.code
+                const errorAttr = findNodeChild(groupNode, WA_NODE_TAGS.ERROR)?.attrs.code
                 if (errorAttr !== undefined) {
                     failed.push({ jid, error: Number(errorAttr) })
                 } else {

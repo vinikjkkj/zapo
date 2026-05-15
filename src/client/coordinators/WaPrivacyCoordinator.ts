@@ -1,3 +1,4 @@
+import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
     WA_PRIVACY_CATEGORY_TO_SETTING,
     WA_PRIVACY_SETTING_TO_CATEGORY,
@@ -75,7 +76,7 @@ function isValidPrivacyValue(value: string): value is WaPrivacyValue {
 }
 
 function parsePrivacySettings(result: BinaryNode): WaPrivacySettings {
-    const privacyNode = findNodeChild(result, 'privacy')
+    const privacyNode = findNodeChild(result, WA_NODE_TAGS.PRIVACY)
     if (!privacyNode) {
         return {}
     }
@@ -110,7 +111,7 @@ function parsePrivacySettings(result: BinaryNode): WaPrivacySettings {
 }
 
 function parseDisallowedList(result: BinaryNode): WaPrivacyDisallowedListResult {
-    const privacyNode = findNodeChild(result, 'privacy')
+    const privacyNode = findNodeChild(result, WA_NODE_TAGS.PRIVACY)
     if (!privacyNode) {
         return { jids: [] }
     }
@@ -138,7 +139,7 @@ function parseDisallowedList(result: BinaryNode): WaPrivacyDisallowedListResult 
 }
 
 function parseBlocklist(result: BinaryNode): WaBlocklistResult {
-    const listNode = findNodeChild(result, 'list')
+    const listNode = findNodeChild(result, WA_NODE_TAGS.LIST)
     if (!listNode) {
         return { jids: [] }
     }

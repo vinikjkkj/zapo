@@ -224,7 +224,7 @@ export class WaMessageClient {
             kind: 'outbound',
             to: input.to,
             id: input.id,
-            type: input.type ?? 'read',
+            type: input.type ?? WA_MESSAGE_TYPES.RECEIPT_TYPE_READ,
             participant: input.participant,
             recipient: input.recipient,
             category: input.category,

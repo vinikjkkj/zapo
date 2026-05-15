@@ -1,5 +1,5 @@
 import { toRawPubKey } from '@crypto/core/keys'
-import { WA_DEFAULTS, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
+import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
 import { SIGNAL_KEY_BUNDLE_TYPE_BYTES } from '@signal/api/constants'
 import type { SignalMissingPreKeysTarget } from '@signal/api/SignalMissingPreKeysSyncApi'
 import type { PreKeyRecord, RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
@@ -75,11 +75,11 @@ export function buildPreKeyUploadIq(
         },
         buildSignedPreKeyNode(signedPreKey)
     )
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, children)
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, children)
 }
 
 export function buildSignedPreKeyRotateIq(signedPreKey: SignedPreKeyRecord) {
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, [
         {
             tag: WA_NODE_TAGS.ROTATE,
             attrs: {},
@@ -89,7 +89,7 @@ export function buildSignedPreKeyRotateIq(signedPreKey: SignedPreKeyRecord) {
 }
 
 export function buildMissingPreKeysFetchIq(users: readonly SignalMissingPreKeysTarget[]) {
-    return buildIqNode('get', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, [
+    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.SIGNAL, [
         {
             tag: WA_NODE_TAGS.KEY_FETCH,
             attrs: {},

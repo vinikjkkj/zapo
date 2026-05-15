@@ -1,6 +1,6 @@
 import { WA_DEFAULTS } from '@protocol/defaults'
 import { toUserJid } from '@protocol/jid'
-import { WA_XMLNS } from '@protocol/nodes'
+import { WA_IQ_TYPES, WA_XMLNS } from '@protocol/nodes'
 import { WA_PRIVACY_TOKEN_TAGS, WA_PRIVACY_TOKEN_TYPES } from '@protocol/privacy-token'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
@@ -12,7 +12,7 @@ export interface BuildPrivacyTokenIqInput {
 }
 
 export function buildPrivacyTokenIqNode(input: BuildPrivacyTokenIqInput): BinaryNode {
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.PRIVACY, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.PRIVACY, [
         {
             tag: WA_PRIVACY_TOKEN_TAGS.TOKENS,
             attrs: {},

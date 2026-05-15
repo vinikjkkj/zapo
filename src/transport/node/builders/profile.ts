@@ -1,4 +1,4 @@
-import { WA_DEFAULTS, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
+import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -17,7 +17,7 @@ export function buildGetProfilePictureIq(
         pictureAttrs.id = existingId
     }
     return buildIqNode(
-        'get',
+        WA_IQ_TYPES.GET,
         WA_DEFAULTS.HOST_DOMAIN,
         WA_XMLNS.PROFILE_PICTURE,
         [
@@ -38,7 +38,7 @@ export function buildSetProfilePictureIq(imageBytes: Uint8Array, targetJid?: str
         attrs.target = targetJid
     }
     return buildIqNode(
-        'set',
+        WA_IQ_TYPES.SET,
         WA_DEFAULTS.HOST_DOMAIN,
         WA_XMLNS.PROFILE_PICTURE,
         [
@@ -57,11 +57,17 @@ export function buildDeleteProfilePictureIq(targetJid?: string): BinaryNode {
     if (targetJid) {
         attrs.target = targetJid
     }
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.PROFILE_PICTURE, undefined, attrs)
+    return buildIqNode(
+        WA_IQ_TYPES.SET,
+        WA_DEFAULTS.HOST_DOMAIN,
+        WA_XMLNS.PROFILE_PICTURE,
+        undefined,
+        attrs
+    )
 }
 
 export function buildSetStatusIq(text: string): BinaryNode {
-    return buildIqNode('set', WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.STATUS, [
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.STATUS, [
         {
             tag: 'status',
             attrs: {},

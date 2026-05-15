@@ -173,7 +173,9 @@ function parseCreateGroupAction(
             defaultSubgroup: findNodeChild(groupNode, 'default_sub_group') !== undefined,
             generalSubgroup: findNodeChild(groupNode, 'general_chat') !== undefined,
             hiddenSubgroup: findNodeChild(groupNode, 'hidden_group') !== undefined,
-            groupSafetyCheck: findNodeChild(groupNode, 'group_safety_check') !== undefined,
+            groupSafetyCheck:
+                findNodeChild(groupNode, WA_GROUP_NOTIFICATION_TAGS.GROUP_SAFETY_CHECK) !==
+                undefined,
             hasCapi: findNodeChild(groupNode, 'capi') !== undefined,
             limitSharingEnabled:
                 findNodeChild(groupNode, WA_GROUP_NOTIFICATION_TAGS.LIMIT_SHARING_ENABLED) !==
@@ -269,7 +271,8 @@ function parseGroupActionNode(
                 }
             }
         case WA_GROUP_NOTIFICATION_TAGS.DESCRIPTION: {
-            const hasDeleteChild = findNodeChild(actionNode, 'delete') !== undefined
+            const hasDeleteChild =
+                findNodeChild(actionNode, WA_GROUP_NOTIFICATION_TAGS.DELETE) !== undefined
             const bodyNode = findNodeChild(actionNode, WA_NODE_TAGS.BODY)
             return {
                 ...baseEvent,

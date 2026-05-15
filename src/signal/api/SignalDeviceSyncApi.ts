@@ -470,7 +470,7 @@ export class SignalDeviceSyncApi {
                 ? rawUserJid.slice(rawAtIndex + 1)
                 : parsedNormalizedUser.server
         const dedup = new Set<string>()
-        for (const deviceNode of getNodeChildrenByTag(deviceListNode, 'device')) {
+        for (const deviceNode of getNodeChildrenByTag(deviceListNode, WA_NODE_TAGS.DEVICE)) {
             const parsedId = deviceNode.attrs.id
                 ? Number.parseInt(deviceNode.attrs.id, 10)
                 : Number.NaN

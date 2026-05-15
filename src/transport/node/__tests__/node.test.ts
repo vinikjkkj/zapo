@@ -94,9 +94,11 @@ test('node helpers parse child collections and binary payloads', () => {
 })
 
 test('iq helper functions build, parse and assert response results', async () => {
-    const iq = buildIqNode('get', 'server', 'w:test', [{ tag: 'x', attrs: {} }], { id: '1' })
+    const iq = buildIqNode(WA_IQ_TYPES.GET, 'server', 'w:test', [{ tag: 'x', attrs: {} }], {
+        id: '1'
+    })
     assert.equal(iq.tag, WA_NODE_TAGS.IQ)
-    assert.equal(iq.attrs.type, 'get')
+    assert.equal(iq.attrs.type, WA_IQ_TYPES.GET)
     assert.equal(iq.attrs.id, '1')
 
     const ok: BinaryNode = { tag: 'iq', attrs: { type: WA_IQ_TYPES.RESULT } }

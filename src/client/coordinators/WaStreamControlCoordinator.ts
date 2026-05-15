@@ -136,7 +136,7 @@ export function createStreamControlHandler(
     return {
         handleStreamControlResult: async (result: WaStreamControlNodeResult) => {
             switch (result.kind) {
-                case 'xmlstreamend':
+                case WA_STREAM_SIGNALING.XML_STREAM_END_TAG:
                     logger.info('received xmlstreamend stanza')
                     return
                 case 'stream_error_code':
@@ -157,14 +157,14 @@ export function createStreamControlHandler(
                     }
                     await resumeSocketDueToStreamError(`stream_error_code_${result.code}`)
                     return
-                case 'stream_error_replaced':
+                case WA_DISCONNECT_REASONS.STREAM_ERROR_REPLACED:
                     logger.warn('received stream:error replaced, stopping client')
                     await disconnectDueToStreamError(
                         WA_DISCONNECT_REASONS.STREAM_ERROR_REPLACED,
                         null
                     )
                     return
-                case 'stream_error_device_removed':
+                case WA_DISCONNECT_REASONS.STREAM_ERROR_DEVICE_REMOVED:
                     logger.warn('received stream:error device removed, logging out')
                     await logoutDueToStreamError(
                         WA_DISCONNECT_REASONS.STREAM_ERROR_DEVICE_REMOVED,
@@ -172,17 +172,17 @@ export function createStreamControlHandler(
                         false
                     )
                     return
-                case 'stream_error_ack':
+                case WA_DISCONNECT_REASONS.STREAM_ERROR_ACK:
                     logger.warn('received stream:error ack', { id: result.id })
                     await resumeSocketDueToStreamError(WA_DISCONNECT_REASONS.STREAM_ERROR_ACK)
                     return
-                case 'stream_error_xml_not_well_formed':
+                case WA_DISCONNECT_REASONS.STREAM_ERROR_XML_NOT_WELL_FORMED:
                     logger.warn('received stream:error xml-not-well-formed')
                     await resumeSocketDueToStreamError(
                         WA_DISCONNECT_REASONS.STREAM_ERROR_XML_NOT_WELL_FORMED
                     )
                     return
-                case 'stream_error_other':
+                case WA_DISCONNECT_REASONS.STREAM_ERROR_OTHER:
                     logger.warn('received stream:error other')
                     await resumeSocketDueToStreamError(WA_DISCONNECT_REASONS.STREAM_ERROR_OTHER)
                     return
