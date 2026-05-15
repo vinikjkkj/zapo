@@ -107,6 +107,46 @@ interface WaSendStickerMessage
     readonly type: 'sticker'
 }
 
+export interface WaSendStickerPackStickerInput {
+    readonly media: Uint8Array | string
+    readonly fileName: string
+    readonly emojis: readonly string[]
+    readonly isAnimated?: boolean
+    readonly isLottie?: boolean
+    readonly mimetype?: string
+}
+
+export interface WaSendStickerPackTrayIcon {
+    readonly media: Uint8Array | string
+    readonly fileName: string
+}
+
+type StickerPackBuilderFilled =
+    | 'stickers'
+    | 'trayIconFileName'
+    | 'thumbnailDirectPath'
+    | 'thumbnailSha256'
+    | 'thumbnailEncSha256'
+    | 'stickerPackSize'
+    | 'imageDataHash'
+    | 'stickerPackOrigin'
+
+export interface WaSendStickerPackMessage extends UserMediaFields<
+    Omit<
+        Proto.Message.IStickerPackMessage,
+        StickerPackBuilderFilled | 'stickerPackId' | 'name' | 'publisher'
+    >
+> {
+    readonly type: 'sticker-pack'
+    readonly stickerPackId: string
+    readonly name: string
+    readonly publisher: string
+    readonly stickers: readonly WaSendStickerPackStickerInput[]
+    readonly trayIcon: WaSendStickerPackTrayIcon
+    readonly coverThumbnail: Uint8Array | string
+    readonly contextInfo?: WaSendContextInfo
+}
+
 export type WaSendMediaMessage =
     | WaSendImageMessage
     | WaSendVideoMessage
@@ -114,6 +154,7 @@ export type WaSendMediaMessage =
     | WaSendAudioMessage
     | WaSendDocumentMessage
     | WaSendStickerMessage
+    | WaSendStickerPackMessage
 
 export type WaSendMessageContent = string | WaSendTextMessage | Proto.IMessage | WaSendMediaMessage
 

@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs'
-import type { Readable } from 'node:stream'
+import { Readable } from 'node:stream'
 
 import {
     assertMediaUploadStatus,
@@ -18,19 +18,28 @@ import type { WaMediaOptions } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { parseMediaConnResponse } from '@media/conn'
 import { MEDIA_CONN_CACHE_GRACE_MS, MEDIA_UPLOAD_PATHS } from '@media/constants'
+import { createStickerPackZipStream } from '@media/sticker-pack'
 import type { MediaCryptoType, WaMediaConn } from '@media/types'
 import { WaMediaCrypto } from '@media/WaMediaCrypto'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { isSendMediaMessage, isSendTextMessage } from '@message/content'
+import {
+    toStickerPackProtoStickers,
+    toStickerPackZipEntries,
+    validateStickerPackInput
+} from '@message/sticker-pack'
 import type {
     WaMessageBuildResult,
     WaMessageUploadInfo,
     WaSendMediaMessage,
-    WaSendMessageContent
+    WaSendMessageContent,
+    WaSendStickerPackMessage
 } from '@message/types'
+import { proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
 import { buildMediaConnIq } from '@transport/node/builders/media'
 import type { BinaryNode } from '@transport/types'
+import { bytesToBase64 } from '@util/bytes'
 
 export interface WaMediaMessageOptions {
     readonly logger: Logger
@@ -85,17 +94,19 @@ export async function getMediaConn(
     return mediaConn
 }
 
-function needsSidecar(content: WaSendMediaMessage): boolean {
+function needsSidecar(content: Exclude<WaSendMediaMessage, WaSendStickerPackMessage>): boolean {
     return content.type === 'video' || content.type === 'ptv' || content.type === 'audio'
 }
 
-function resolveUploadType(content: WaSendMediaMessage): MediaCryptoType {
+function resolveUploadType(
+    content: Exclude<WaSendMediaMessage, WaSendStickerPackMessage>
+): MediaCryptoType {
     if (content.type === 'video' && content.gifPlayback) return 'gif'
     if (content.type === 'audio' && content.ptt) return 'ptt'
     return content.type as MediaCryptoType
 }
 
-function resolveMimetype(content: WaSendMediaMessage): string {
+function resolveMimetype(content: Exclude<WaSendMediaMessage, WaSendStickerPackMessage>): string {
     if (content.mimetype) return content.mimetype
     if (content.type === 'sticker') return 'image/webp'
     throw new Error(`mimetype is required for ${content.type} messages`)
@@ -105,6 +116,9 @@ async function buildMediaMessage(
     options: WaMediaMessageOptions,
     content: WaSendMediaMessage
 ): Promise<WaMessageBuildResult> {
+    if (content.type === 'sticker-pack') {
+        return buildStickerPackMediaMessage(options, content)
+    }
     const needsTempFile =
         hasMediaProcessingTasks(options.media, content) ||
         (content.type === 'sticker' && content.firstFrameLength === undefined)
@@ -329,7 +343,7 @@ function parseUploadResponse(
 
 async function uploadMediaBytes(
     options: WaMediaMessageOptions,
-    content: WaSendMediaMessage,
+    content: Exclude<WaSendMediaMessage, WaSendStickerPackMessage>,
     mediaBytes: Uint8Array,
     firstFrameLength?: number
 ): Promise<UploadResult> {
@@ -376,33 +390,42 @@ async function uploadMediaBytes(
     }
 }
 
-async function uploadMediaStream(
+interface EncryptedStreamUploadInput {
+    readonly plaintext: Readable
+    readonly mediaKey: Uint8Array
+    readonly cryptoType: MediaCryptoType
+    readonly uploadPath: string
+    readonly contentType: string
+    readonly logLabel: string
+    readonly sidecar: boolean
+    readonly firstFrameLength?: number
+}
+
+async function uploadEncryptedStream(
     options: WaMediaMessageOptions,
-    content: WaSendMediaMessage,
-    stream: Readable,
-    firstFrameLength?: number
+    input: EncryptedStreamUploadInput
 ): Promise<UploadResult> {
-    const uploadType = resolveUploadType(content)
-    const mediaKey = await WaMediaCrypto.generateMediaKey()
-    const encResult = await WaMediaCrypto.encryptToFile(uploadType, mediaKey, stream, {
-        sidecar: needsSidecar(content),
-        firstFrameLength
-    })
+    const encResult = await WaMediaCrypto.encryptToFile(
+        input.cryptoType,
+        input.mediaKey,
+        input.plaintext,
+        { sidecar: input.sidecar, firstFrameLength: input.firstFrameLength }
+    )
     let readStream: ReturnType<typeof createReadStream> | undefined
     try {
         const mediaConn = await getMediaConn(options)
         const selectedHost = selectMediaUploadHost(mediaConn)
         const uploadUrl = buildMediaUploadUrl(
             selectedHost,
-            resolveUploadPath(uploadType),
+            input.uploadPath,
             mediaConn.auth,
             encResult.fileEncSha256
         )
 
-        options.logger.debug('sending media stream upload request', {
-            mediaType: content.type,
-            uploadType,
+        options.logger.debug(input.logLabel, {
             host: selectedHost,
+            uploadPath: input.uploadPath,
+            plaintextLength: encResult.plaintextLength,
             encryptedSize: encResult.fileSize
         })
         readStream = createReadStream(encResult.filePath)
@@ -411,19 +434,19 @@ async function uploadMediaStream(
             method: 'POST',
             body: readStream,
             contentLength: encResult.fileSize,
-            contentType: resolveMimetype(content)
+            contentType: input.contentType
         })
         const responseBody = await options.mediaTransfer.readResponseBytes(uploadResponse)
         const parsed = parseUploadResponse(responseBody, uploadResponse.status)
         return {
             ...parsed,
-            mediaKey,
+            mediaKey: input.mediaKey,
             fileSha256: encResult.fileSha256,
             fileEncSha256: encResult.fileEncSha256,
             fileLength: encResult.plaintextLength,
             streamingSidecar: encResult.streamingSidecar,
             firstFrameSidecar: encResult.firstFrameSidecar,
-            firstFrameLength
+            firstFrameLength: input.firstFrameLength
         }
     } finally {
         if (readStream && !readStream.closed) {
@@ -433,5 +456,94 @@ async function uploadMediaStream(
             })
         }
         await WaMediaCrypto.cleanupEncryptedFile(encResult.filePath)
+    }
+}
+
+async function uploadMediaStream(
+    options: WaMediaMessageOptions,
+    content: Exclude<WaSendMediaMessage, WaSendStickerPackMessage>,
+    stream: Readable,
+    firstFrameLength?: number
+): Promise<UploadResult> {
+    const cryptoType = resolveUploadType(content)
+    return uploadEncryptedStream(options, {
+        plaintext: stream,
+        mediaKey: await WaMediaCrypto.generateMediaKey(),
+        cryptoType,
+        uploadPath: resolveUploadPath(cryptoType),
+        contentType: resolveMimetype(content),
+        logLabel: 'sending media stream upload request',
+        sidecar: needsSidecar(content),
+        firstFrameLength
+    })
+}
+
+function openStickerPackInputStream(media: Uint8Array | string): Readable {
+    return typeof media === 'string' ? createReadStream(media) : Readable.from([media])
+}
+
+async function buildStickerPackMediaMessage(
+    options: WaMediaMessageOptions,
+    content: WaSendStickerPackMessage
+): Promise<WaMessageBuildResult> {
+    validateStickerPackInput(content)
+
+    const mediaKey = await WaMediaCrypto.generateMediaKey()
+    const [bundle, cover] = await Promise.all([
+        uploadEncryptedStream(options, {
+            plaintext: createStickerPackZipStream(toStickerPackZipEntries(content)),
+            mediaKey,
+            cryptoType: 'sticker-pack',
+            uploadPath: MEDIA_UPLOAD_PATHS['sticker-pack'],
+            contentType: 'application/zip',
+            logLabel: 'sending sticker pack bundle upload',
+            sidecar: false
+        }),
+        uploadEncryptedStream(options, {
+            plaintext: openStickerPackInputStream(content.coverThumbnail),
+            mediaKey,
+            cryptoType: 'thumbnail-sticker-pack',
+            uploadPath: MEDIA_UPLOAD_PATHS['thumbnail-sticker-pack'],
+            contentType: 'image/jpeg',
+            logLabel: 'sending sticker pack thumbnail upload',
+            sidecar: false
+        })
+    ])
+    if (cover.fileLength === 0) {
+        throw new Error('sticker pack coverThumbnail is empty')
+    }
+
+    return {
+        upload: {
+            url: bundle.url,
+            directPath: bundle.directPath,
+            fileSha256: bundle.fileSha256,
+            fileLength: bundle.fileLength
+        },
+        message: {
+            stickerPackMessage: {
+                stickerPackId: content.stickerPackId,
+                name: content.name,
+                publisher: content.publisher,
+                stickers: toStickerPackProtoStickers(content),
+                fileLength: bundle.fileLength,
+                fileSha256: bundle.fileSha256,
+                fileEncSha256: bundle.fileEncSha256,
+                mediaKey,
+                mediaKeyTimestamp: Math.floor(Date.now() / 1000),
+                directPath: bundle.directPath,
+                thumbnailDirectPath: cover.directPath,
+                thumbnailSha256: cover.fileSha256,
+                thumbnailEncSha256: cover.fileEncSha256,
+                thumbnailWidth: content.thumbnailWidth ?? 252,
+                thumbnailHeight: content.thumbnailHeight ?? 252,
+                trayIconFileName: content.trayIcon.fileName,
+                stickerPackSize: bundle.fileLength,
+                stickerPackOrigin: proto.Message.StickerPackMessage.StickerPackOrigin.USER_CREATED,
+                imageDataHash: bytesToBase64(cover.fileSha256),
+                caption: content.caption,
+                packDescription: content.packDescription
+            }
+        }
     }
 }

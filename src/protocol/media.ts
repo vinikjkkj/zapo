@@ -9,7 +9,9 @@ export const WA_MEDIA_HKDF_INFO = Object.freeze({
     ptt: 'WhatsApp Audio Keys',
     'md-app-state': 'WhatsApp App State Keys',
     'md-msg-hist': 'WhatsApp History Keys',
-    history: 'WhatsApp History Keys'
+    history: 'WhatsApp History Keys',
+    'sticker-pack': 'WhatsApp Sticker Pack Keys',
+    'thumbnail-sticker-pack': 'WhatsApp Sticker Pack Thumbnail Keys'
 } as const)
 
 export const WA_PREVIEW_MEDIA_HKDF_INFO = 'Messenger Preview Keys'

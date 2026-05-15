@@ -9,7 +9,13 @@ import {
 } from '@protocol/constants'
 
 export function isSendMediaMessage(content: unknown): content is WaSendMediaMessage {
-    return !!content && typeof content === 'object' && 'type' in content && 'media' in content
+    if (!content || typeof content !== 'object' || !('type' in content)) {
+        return false
+    }
+    if ('media' in content) {
+        return true
+    }
+    return (content as { type: unknown }).type === 'sticker-pack' && 'stickers' in content
 }
 
 export function isSendTextMessage(content: unknown): content is WaSendTextMessage {
@@ -176,6 +182,7 @@ export function resolveEncMediaType(message: Proto.IMessage): string | null {
 
     if (msg.imageMessage) return WA_ENC_MEDIA_TYPES.IMAGE
     if (msg.stickerMessage) return WA_ENC_MEDIA_TYPES.STICKER
+    if (msg.stickerPackMessage) return WA_ENC_MEDIA_TYPES.STICKER_PACK
     if (msg.locationMessage) {
         return msg.locationMessage.isLive
             ? WA_ENC_MEDIA_TYPES.LIVE_LOCATION

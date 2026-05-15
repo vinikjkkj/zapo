@@ -12,6 +12,8 @@ export type MediaCryptoType =
     | 'md-app-state'
     | 'md-msg-hist'
     | 'xma-image'
+    | 'sticker-pack'
+    | 'thumbnail-sticker-pack'
 
 export interface WaMediaConnHost {
     readonly hostname: string

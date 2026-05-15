@@ -8,12 +8,23 @@ import {
 } from '@client/media'
 import type { Logger } from '@infra/log/types'
 import { NEWSLETTER_MEDIA_UPLOAD_PATHS, type NewsletterMediaKind } from '@media/constants'
+import { createStickerPackZipStream } from '@media/sticker-pack'
 import type { WaMediaConn } from '@media/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { isSendMediaMessage, isSendTextMessage, resolveMessageTypeAttr } from '@message/content'
 import { applyContextInfo, type WaSendContextInfo } from '@message/context-info'
-import type { WaSendMediaMessage, WaSendMessageContent } from '@message/types'
+import {
+    toStickerPackProtoStickers,
+    toStickerPackZipEntries,
+    validateStickerPackInput
+} from '@message/sticker-pack'
+import type {
+    WaSendMediaMessage,
+    WaSendMessageContent,
+    WaSendStickerPackMessage
+} from '@message/types'
 import { proto, type Proto } from '@proto'
+import { WA_ENC_MEDIA_TYPES } from '@protocol/message'
 import { base64ToBytes } from '@util/bytes'
 
 export type WaNewsletterUploadMedia = WaUploadMediaSource
@@ -118,12 +129,13 @@ function pickMediaTypeFromMessage(message: Proto.IMessage): string | null {
     if (message.audioMessage) return message.audioMessage.ptt ? 'ptt' : 'audio'
     if (message.documentMessage) return 'document'
     if (message.stickerMessage) return 'sticker'
+    if (message.stickerPackMessage) return WA_ENC_MEDIA_TYPES.STICKER_PACK
     if (message.ptvMessage) return 'ptv'
     return null
 }
 
 function buildMediaProtoMessage(
-    content: WaSendMediaMessage,
+    content: Exclude<WaSendMediaMessage, WaSendStickerPackMessage>,
     upload: WaNewsletterUploadResult
 ): Proto.IMessage {
     const common = {
@@ -192,7 +204,9 @@ function buildMediaProtoMessage(
     }
 }
 
-function toUploadMedia(media: WaSendMediaMessage['media']): Uint8Array | string | Readable {
+function toUploadMedia(
+    media: Uint8Array | ArrayBuffer | Readable | string
+): Uint8Array | string | Readable {
     if (media instanceof Uint8Array) return media
     if (media instanceof ArrayBuffer) return new Uint8Array(media)
     return media
@@ -230,6 +244,39 @@ export async function buildNewsletterMessageContent(
             )
         }
         const mediaConn = await options.getMediaConn()
+        if (content.type === 'sticker-pack') {
+            validateStickerPackInput(content)
+            const upload = await uploadNewsletterMedia(
+                { mediaTransfer: options.mediaTransfer, logger: options.logger },
+                {
+                    mediaKind: 'sticker-pack',
+                    media: createStickerPackZipStream(toStickerPackZipEntries(content)),
+                    mimetype: 'application/zip',
+                    mediaConn
+                }
+            )
+            const stickerPackMessage: Proto.Message.IStickerPackMessage = {
+                stickerPackId: content.stickerPackId,
+                name: content.name,
+                publisher: content.publisher,
+                stickers: toStickerPackProtoStickers(content),
+                fileLength: upload.fileLength,
+                fileSha256: upload.fileSha256,
+                directPath: upload.directPath,
+                trayIconFileName: content.trayIcon.fileName,
+                stickerPackSize: upload.fileLength,
+                stickerPackOrigin: proto.Message.StickerPackMessage.StickerPackOrigin.USER_CREATED,
+                caption: content.caption,
+                packDescription: content.packDescription
+            }
+            const message = applyContextInfo({ stickerPackMessage }, ctx)
+            return {
+                kind: 'media',
+                plaintext: proto.Message.encode(message).finish(),
+                mediaType: WA_ENC_MEDIA_TYPES.STICKER_PACK,
+                upload
+            }
+        }
         const explicitMimetype = 'mimetype' in content && content.mimetype ? content.mimetype : null
         const resolvedMimetype =
             explicitMimetype ?? (content.type === 'sticker' ? 'image/webp' : null)
