@@ -192,6 +192,11 @@ export interface WaDeleteChatOptions {
     readonly deleteMedia?: boolean
 }
 
+/**
+ * Subset of `proto.IMessageKey` used in app-state events. Field names differ:
+ * `chatJid` aliases `remoteJid`, `participantJid` aliases `participant`. Kept
+ * separate from the proto type because callers want non-optional `id`/`fromMe`.
+ */
 export interface WaAppStateMessageKey {
     readonly chatJid: string
     readonly id: string

@@ -3,20 +3,9 @@ import test from 'node:test'
 
 import { WaOfflineResumeCoordinator } from '@client/coordinators/WaOfflineResumeCoordinator'
 import type { WaOfflineResumeEvent } from '@client/types'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { buildOfflineBatchNode } from '@transport/node/builders/offline'
 import type { BinaryNode } from '@transport/types'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 async function flushMicrotasks(): Promise<void> {
     await Promise.resolve()
@@ -27,7 +16,7 @@ test('offline resume coordinator emits preview event and requests a single offli
     const sentNodes: BinaryNode[] = []
     const emittedEvents: WaOfflineResumeEvent[] = []
     const coordinator = new WaOfflineResumeCoordinator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         runtime: {
             sendNode: async (node) => {
                 sentNodes.push(node)
@@ -60,7 +49,7 @@ test('offline resume coordinator decrements pending stanzas and force completes 
 
     const emittedEvents: WaOfflineResumeEvent[] = []
     const coordinator = new WaOfflineResumeCoordinator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         runtime: {
             sendNode: async () => undefined,
             emitOfflineResume: (event) => {
@@ -86,7 +75,7 @@ test('offline resume coordinator decrements pending stanzas and force completes 
 test('offline resume coordinator completes when offline completion bulletin arrives', () => {
     const emittedEvents: WaOfflineResumeEvent[] = []
     const coordinator = new WaOfflineResumeCoordinator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         runtime: {
             sendNode: async () => undefined,
             emitOfflineResume: (event) => {

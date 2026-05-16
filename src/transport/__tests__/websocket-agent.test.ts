@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import test from 'node:test'
 
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import type { RawWebSocket, WebSocketEventLike } from '@transport/types'
 import { WaWebSocket } from '@transport/WaWebSocket'
 
@@ -13,17 +13,6 @@ interface WsServerLike {
 
 interface OptionalWsModule {
     readonly WebSocketServer: new (options: { readonly server: http.Server }) => WsServerLike
-}
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
 }
 
 async function loadOptionalWsModule(): Promise<OptionalWsModule | null> {
@@ -114,7 +103,7 @@ test(
                 timeoutIntervalMs: 3_000,
                 agent: proxyAgent
             },
-            createLogger()
+            createNoopLogger()
         )
 
         const messagePromise = new Promise<Uint8Array>((resolve, reject) => {
@@ -183,7 +172,7 @@ test(
                 urls: ['ws://good.localtest/socket', 'ws://bad-url/socket'],
                 timeoutIntervalMs: 500
             },
-            createLogger()
+            createNoopLogger()
         )
 
         context.after(async () => {

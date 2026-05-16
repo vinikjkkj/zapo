@@ -153,7 +153,8 @@ export function decodeNodeContentUtf8OrBytes(
     throw new Error(`node ${field} has no binary content`)
 }
 
-export function getNodeTextContent(node: BinaryNode): string | undefined {
+export function getNodeTextContent(node: BinaryNode | null | undefined): string | undefined {
+    if (!node) return undefined
     const content = node.content
     if (content instanceof Uint8Array) return TEXT_DECODER.decode(content)
     if (typeof content === 'string') return content
@@ -176,7 +177,7 @@ export function decodeNodeContentBase64OrBytes(
     throw new Error(`missing binary node content for ${field}`)
 }
 
-export function formatNodeIdPrefixFromSeed(seed: Uint8Array): string {
+function formatNodeIdPrefixFromSeed(seed: Uint8Array): string {
     const left = ((seed[0] << 8) | seed[1]) >>> 0
     const right = ((seed[2] << 8) | seed[3]) >>> 0
     return `${left}.${right}-`

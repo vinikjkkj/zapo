@@ -6,6 +6,11 @@ import type { WaCommsConfig, WaProxyTransport } from '@transport/types'
 
 export type { WaMobileTransportDeviceInfo } from '@transport/noise/WaMobileClientPayload'
 
+/**
+ * @sensitive Contains private key material (`noiseKeyPair`, `signedPreKey`,
+ * `advSecretKey`, `serverStaticKey`, `companionEncStatic`). Never log, serialize
+ * via `JSON.stringify`, or transmit unencrypted. Persist with encryption-at-rest.
+ */
 export interface WaAuthCredentials {
     readonly noiseKeyPair: SignalKeyPair
     readonly registrationInfo: RegistrationInfo

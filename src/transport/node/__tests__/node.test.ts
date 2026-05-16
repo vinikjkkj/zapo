@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger, type Logger } from '@infra/log/types'
 import { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
 import { encodeBinaryNodeStanza } from '@transport/binary'
 import {
@@ -24,17 +24,6 @@ import { formatBinaryNodeAsXml } from '@transport/node/xml'
 import type { BinaryNode } from '@transport/types'
 import type { WaComms } from '@transport/WaComms'
 import { bytesToBase64 } from '@util/bytes'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 async function waitFor(predicate: () => boolean, message: string, maxTurns = 200): Promise<void> {
     for (let turn = 0; turn < maxTurns; turn += 1) {
@@ -118,7 +107,7 @@ test('iq helper functions build, parse and assert response results', async () =>
 
     const warnings: Array<Record<string, unknown>> = []
     const logger: Logger = {
-        ...createLogger(),
+        ...createNoopLogger(),
         warn: (_message, context) => {
             warnings.push(context ?? {})
         }
@@ -145,7 +134,7 @@ test('iq helper functions build, parse and assert response results', async () =>
 test('WaNodeOrchestrator resolves pending queries and handles ping iq', async () => {
     const sentNodes: BinaryNode[] = []
     const orchestrator = new WaNodeOrchestrator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sentNodes.push(node)
         },
@@ -189,7 +178,7 @@ test('WaNodeOrchestrator resolves pending queries and handles ping iq', async ()
 test('WaNodeOrchestrator can send nodes without auto-generated ids', async () => {
     const sentNodes: BinaryNode[] = []
     const orchestrator = new WaNodeOrchestrator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sentNodes.push(node)
         }
@@ -217,7 +206,7 @@ test('WaNodeOrchestrator can send nodes without auto-generated ids', async () =>
 
 test('WaNodeOrchestrator query timeout rejects pending request', async () => {
     const orchestrator = new WaNodeOrchestrator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async () => undefined
     })
 
@@ -238,7 +227,7 @@ test('WaNodeOrchestrator query timeout supports fake timers', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] })
 
     const orchestrator = new WaNodeOrchestrator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async () => undefined
     })
 
@@ -296,7 +285,7 @@ test('WaNodeTransport binds comms and emits frame and node events', async () => 
     const sentFrames: Uint8Array[] = []
     const nodeOut: BinaryNode[] = []
     const frameOut: Uint8Array[] = []
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const transport = new WaNodeTransport(logger)
     transport.on('node_out', (node) => {
         nodeOut.push(node)
@@ -328,7 +317,7 @@ test('WaNodeTransport dispatches incoming frames and handles decode errors', asy
     const nodeIn: BinaryNode[] = []
     const frameIn: Uint8Array[] = []
     const decodeErrors: Error[] = []
-    const transport = new WaNodeTransport(createLogger())
+    const transport = new WaNodeTransport(createNoopLogger())
 
     transport.on('node_in', (node) => {
         nodeIn.push(node)
@@ -365,7 +354,7 @@ test('WaNodeTransport dispatches incoming frames and handles decode errors', asy
 })
 
 test('WaNodeTransport throws when trying to send without comms', async () => {
-    const transport = new WaNodeTransport(createLogger())
+    const transport = new WaNodeTransport(createNoopLogger())
     await assert.rejects(
         () =>
             transport.sendNode({

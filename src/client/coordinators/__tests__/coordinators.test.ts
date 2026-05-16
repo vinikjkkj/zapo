@@ -9,7 +9,7 @@ import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCo
 import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
 import { createGroupParticipantsCache } from '@client/messaging/participants'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import {
     WA_APP_STATE_COLLECTION_STATES,
     WA_CONNECTION_REASONS,
@@ -19,17 +19,6 @@ import {
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
 import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
 import type { BinaryNode } from '@transport/types'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 function createIncomingRuntime() {
     const unhandled: unknown[] = []
@@ -110,11 +99,11 @@ function createMessageDispatchCoordinator(
     const participantsCache = createGroupParticipantsCache({
         participantsStore,
         queryGroupParticipantJids: async () => [],
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     return new WaMessageDispatchCoordinator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageClient: {} as never,
         retryTracker: {} as never,
         sessionResolver: {} as never,
@@ -156,7 +145,7 @@ function buildAppStateSyncResult(
 test('incoming node coordinator supports dynamic handler registration and unregistration', async () => {
     const { runtime, unhandled } = createIncomingRuntime()
     const coordinator = new WaIncomingNodeCoordinator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         runtime,
         offlineResume: {
             trackOfflineStanza() {},
@@ -192,7 +181,7 @@ test('incoming node coordinator tracks offline stanzas before dispatching handle
     const { runtime, unhandled } = createIncomingRuntime()
     let trackedStanzas = 0
     const coordinator = new WaIncomingNodeCoordinator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         runtime,
         offlineResume: {
             trackOfflineStanza() {
@@ -228,7 +217,7 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
     const previewCounts: number[] = []
     let offlineCompleteCalls = 0
     const coordinator = new WaIncomingNodeCoordinator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         runtime,
         offlineResume: {
             trackOfflineStanza() {},
@@ -356,7 +345,7 @@ test('stream control handler runs force-login and resume flows', async () => {
     }> = []
     const connectCalls: string[] = []
     const handler = createStreamControlHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         getComms: () =>
             ({
                 stopComms: async () => {
@@ -423,7 +412,7 @@ test('stream control handler handles force-logout, replaced and device-removed f
     const connectCalls: string[] = []
     let clearCredentialsCalls = 0
     const handler = createStreamControlHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         getComms: () =>
             ({
                 stopComms: async () => {
@@ -670,7 +659,7 @@ test('app-state mutation coordinator flushes queued mutations while sync is in-f
 
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -712,7 +701,7 @@ test('app-state mutation coordinator emits pin + archive mutations when pinning 
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -752,7 +741,7 @@ test('app-state mutation coordinator flushes only targeted collections for queue
     const syncCalls: { readonly collections: readonly string[]; readonly pending: number }[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             syncCalls.push({
@@ -792,7 +781,7 @@ test('app-state mutation coordinator includes message range and auto-unpin on ar
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -838,7 +827,7 @@ test('app-state mutation coordinator preserves device participant jid in archive
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -879,7 +868,7 @@ test('app-state mutation coordinator skips incoming group messages without parti
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -910,7 +899,7 @@ test('app-state mutation coordinator keeps pending mutations after blocked flush
 
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             flushAttempt += 1
@@ -946,7 +935,7 @@ test('app-state mutation coordinator emits read/clear/delete mutations with expe
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -991,7 +980,7 @@ test('app-state mutation coordinator emits archive and unpin before lock mutatio
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -1018,7 +1007,7 @@ test('app-state mutation coordinator emits star mutation with message-key index'
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -1058,7 +1047,7 @@ test('app-state mutation coordinator emits delete-message-for-me mutation and va
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -1113,7 +1102,7 @@ test('app-state mutation coordinator emits status_privacy account mutation', asy
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -1144,7 +1133,7 @@ test('app-state mutation coordinator emits userStatusMute mutation with target j
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -1168,7 +1157,7 @@ test('app-state mutation coordinator emits business_broadcast_list set/remove pa
     const syncCalls: (readonly WaAppStateMutationInput[])[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         messageStore,
         syncAppState: async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
@@ -1216,7 +1205,7 @@ function createPassiveTasksCoordinator(overrides: {
 }): WaPassiveTasksCoordinator {
     const requeued: BinaryNode[] = []
     return new WaPassiveTasksCoordinator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         signalStore: {
             getSignedPreKeyRotationTs: async () => Date.now(),
             setSignedPreKeyRotationTs: async () => undefined,

@@ -9,7 +9,7 @@ import {
     toSerializedPubKey,
     versionByte
 } from '@crypto/core/keys'
-import { buildNonce } from '@crypto/core/nonce'
+import { writeNonceCounter } from '@crypto/core/nonce'
 import { aesGcmDecrypt, aesGcmEncrypt, hmacSha256Sign, sha256 } from '@crypto/core/primitives'
 import { randomBytesAsync, randomFillAsync, randomIntAsync } from '@crypto/core/random'
 import { assertByteLength, bytesToBase64UrlSafe, decodeBase64Url } from '@util/bytes'
@@ -30,8 +30,10 @@ test('hkdf derivation and split are deterministic with same inputs', async () =>
 })
 
 test('nonce and versioned key helpers enforce protocol constraints', () => {
-    assert.deepEqual(buildNonce(0x0102_0304), new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4]))
-    assert.throws(() => buildNonce(0x1_0000_0000), /nonce counter overflow/)
+    const nonce = new Uint8Array(12)
+    writeNonceCounter(nonce, 0x0102_0304)
+    assert.deepEqual(nonce, new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4]))
+    assert.throws(() => writeNonceCounter(nonce, 0x1_0000_0000), /nonce counter overflow/)
 
     const raw = new Uint8Array(32).fill(7)
     const serialized = toSerializedPubKey(raw)

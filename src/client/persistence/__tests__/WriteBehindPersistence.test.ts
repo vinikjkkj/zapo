@@ -2,20 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import type { WaStoredContactRecord } from '@store/contracts/contact.store'
 import type { WaStoredThreadRecord } from '@store/contracts/thread.store'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 test('write-behind merges partial contact upserts for the same jid', async () => {
     let releaseBlock: () => void = () => undefined
@@ -41,7 +30,7 @@ test('write-behind merges partial contact upserts for the same jid', async () =>
                 }
             } as never
         },
-        createLogger()
+        createNoopLogger()
     )
 
     writeBehind.persistContact({
@@ -93,7 +82,7 @@ test('write-behind merges partial thread upserts for the same jid', async () => 
                 upsert: async () => undefined
             } as never
         },
-        createLogger()
+        createNoopLogger()
     )
 
     writeBehind.persistThread({
@@ -141,7 +130,7 @@ test('write-behind flush and destroy expose remaining pending entries', async ()
                 upsert: async () => undefined
             } as never
         },
-        createLogger()
+        createNoopLogger()
     )
 
     writeBehind.persistMessage({

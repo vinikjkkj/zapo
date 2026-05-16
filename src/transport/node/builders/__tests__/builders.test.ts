@@ -20,9 +20,8 @@ import {
     buildAccountBlocklistSyncIq,
     buildAccountDevicesSyncIq,
     buildAccountPictureSyncIq,
-    buildAccountPrivacySyncIq,
     buildClearDirtyBitsIq,
-    buildGroupsDirtySyncIq,
+    buildListParticipatingGroupsIq,
     buildNewsletterMetadataSyncIq
 } from '@transport/node/builders/account-sync'
 import { buildBotListIq } from '@transport/node/builders/bot'
@@ -260,19 +259,14 @@ test('account sync builders generate expected iq structure', () => {
     assert.equal(picture.attrs.type, 'get')
     assert.equal(picture.attrs.target, '5511999999999@s.whatsapp.net')
 
-    const privacy = buildAccountPrivacySyncIq()
-    assert.equal(privacy.attrs.type, 'get')
-    assert.ok(Array.isArray(privacy.content))
-    assert.equal(privacy.content[0].tag, WA_NODE_TAGS.PRIVACY)
-
     const blocklist = buildAccountBlocklistSyncIq()
     assert.equal(blocklist.attrs.type, 'get')
     assert.equal(blocklist.content, undefined)
 
-    const groupsDirty = buildGroupsDirtySyncIq()
-    assert.equal(groupsDirty.attrs.type, 'get')
-    assert.ok(Array.isArray(groupsDirty.content))
-    const participating = groupsDirty.content[0]
+    const groupsList = buildListParticipatingGroupsIq()
+    assert.equal(groupsList.attrs.type, 'get')
+    assert.ok(Array.isArray(groupsList.content))
+    const participating = groupsList.content[0]
     assert.equal(participating.tag, WA_NODE_TAGS.PARTICIPATING)
     assert.ok(Array.isArray(participating.content))
     assert.equal(participating.content.length, 2)

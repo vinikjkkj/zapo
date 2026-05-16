@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { sha1 } from '@crypto'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { WA_IQ_TYPES, WA_NODE_TAGS } from '@protocol/constants'
 import { parseSignalAddressFromJid } from '@protocol/jid'
 import { decodeExactLength, parseUint } from '@signal/api/codec'
@@ -30,17 +30,6 @@ import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 import type { BinaryNode } from '@transport/types'
 import { concatBytes, intToBytes } from '@util/bytes'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 function makeBytes(length: number, seed = 0): Uint8Array {
     const out = new Uint8Array(length)
@@ -151,7 +140,7 @@ test('signal digest api validates key bundle hash and maps digest mismatch reaso
     }
 
     const digestApi = new SignalDigestSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         signalStore,
         preKeyStore,
         query: async () => iqResult([digestNode])
@@ -162,7 +151,7 @@ test('signal digest api validates key bundle hash and maps digest mismatch reaso
     assert.equal(valid.preKeyCount, 2)
 
     const mismatchApi = new SignalDigestSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         signalStore,
         preKeyStore,
         query: async () =>
@@ -264,7 +253,7 @@ test('signal digest api accepts prefetched local key bundle context', async () =
     let getRegistrationInfoCalls = 0
     let getSignedPreKeyCalls = 0
     const digestApi = new SignalDigestSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async () => iqResult([digestNode]),
         signalStore: {
             getRegistrationInfo: async () => {
@@ -297,7 +286,7 @@ test('signal device sync api parses users/devices and reuses cache when still fr
 
     try {
         const api = new SignalDeviceSyncApi({
-            logger: createLogger(),
+            logger: createNoopLogger(),
             deviceListStore,
             query: async () => {
                 queryCalls += 1
@@ -361,7 +350,7 @@ test('signal device sync api deduplicates concurrent syncDeviceList calls for th
 
     try {
         const api = new SignalDeviceSyncApi({
-            logger: createLogger(),
+            logger: createNoopLogger(),
             deviceListStore,
             query: async () => {
                 queryCalls += 1
@@ -425,7 +414,7 @@ test('signal device sync api deduplicates concurrent syncDeviceList calls for th
 
 test('signal device sync api preserves requested users omitted by usync response', async () => {
     const api = new SignalDeviceSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async () =>
             iqResult([
                 {
@@ -479,7 +468,7 @@ test('signal device sync api preserves requested users omitted by usync response
 test('signal device sync api resolves lids by phone jids via usync and returns exists', async () => {
     let capturedRequest: BinaryNode | null = null
     const api = new SignalDeviceSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async (node) => {
             capturedRequest = node
             return iqResult([
@@ -570,7 +559,7 @@ test('signal device sync api resolves lids by phone jids via usync and returns e
 
 test('signal device sync api marks exists=false when contact type is out', async () => {
     const api = new SignalDeviceSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async () =>
             iqResult([
                 {
@@ -617,7 +606,7 @@ test('signal device sync api handles lid node user error and preserves contact e
     }[] = []
     const api = new SignalDeviceSyncApi({
         logger: {
-            ...createLogger(),
+            ...createNoopLogger(),
             warn: (message, context = {}) => {
                 warnings.push({ message, context })
             }
@@ -680,7 +669,7 @@ test('signal device sync api forces exists=false when contact node has error', a
     }[] = []
     const api = new SignalDeviceSyncApi({
         logger: {
-            ...createLogger(),
+            ...createNoopLogger(),
             warn: (message, context = {}) => {
                 warnings.push({ message, context })
             }
@@ -738,7 +727,7 @@ test('signal device sync api forces exists=false when contact node has error', a
 
 test('signal device sync api maps user response by pn_jid when jid differs', async () => {
     const api = new SignalDeviceSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async () =>
             iqResult([
                 {
@@ -789,7 +778,7 @@ test('signal device sync api maps user response by pn_jid when jid differs', asy
 
 test('signal device sync api maps hosted.lid user response to requested lid user', async () => {
     const api = new SignalDeviceSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async () =>
             iqResult([
                 {
@@ -838,7 +827,7 @@ test('signal device sync api maps hosted.lid user response to requested lid user
 test('signal identity sync api parses result list and stores remote identities', async () => {
     const identityStore = new WaIdentityMemoryStore()
     const api = new SignalIdentitySyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         identityStore,
         query: async () =>
             iqResult([
@@ -895,7 +884,7 @@ test('signal identity sync api parses result list and stores remote identities',
 
 test('signal identity sync api maps hosted.lid response jid to requested lid jid', async () => {
     const api = new SignalIdentitySyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async () =>
             iqResult([
                 {
@@ -931,7 +920,7 @@ test('signal identity sync api maps hosted.lid response jid to requested lid jid
 
 test('signal missing-prekeys api parses bundles and preserves per-user errors', async () => {
     const api = new SignalMissingPreKeysSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async () =>
             iqResult([
                 {
@@ -1047,7 +1036,7 @@ test('signal missing-prekeys api parses bundles and preserves per-user errors', 
 
 test('signal missing-prekeys api maps hosted.lid user response to requested lid user', async () => {
     const api = new SignalMissingPreKeysSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async () =>
             iqResult([
                 {
@@ -1121,7 +1110,7 @@ test('signal missing-prekeys api maps hosted.lid user response to requested lid 
 test('signal session sync api merges duplicate targets and returns user errors', async () => {
     let capturedRequest: unknown = null
     const api = new SignalSessionSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async (node) => {
             capturedRequest = node
             return iqResult([
@@ -1218,7 +1207,7 @@ test('signal session sync api maps hosted.lid response to lid request jid', asyn
     const requestedJid = '6116570308623:99@lid'
     const responseJid = '6116570308623:99@hosted.lid'
     const api = new SignalSessionSyncApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         query: async () =>
             iqResult([
                 {
@@ -1280,7 +1269,7 @@ test('signal rotate key api uploads signed prekeys and maps error codes', async 
     await store.setSignedPreKey(await generateSignedPreKey(4, registration.identityKeyPair.privKey))
 
     const successApi = new SignalRotateKeyApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         signalStore: store,
         query: async () => iqResult([])
     })
@@ -1292,7 +1281,7 @@ test('signal rotate key api uploads signed prekeys and maps error codes', async 
     assert.equal(persistedAfterSuccess?.keyId, 5)
 
     const conflictApi = new SignalRotateKeyApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         signalStore: store,
         query: async () => ({
             tag: WA_NODE_TAGS.IQ,
@@ -1310,7 +1299,7 @@ test('signal rotate key api uploads signed prekeys and maps error codes', async 
     assert.equal(conflict.errorCode, 409)
 
     const missingRegistrationApi = new SignalRotateKeyApi({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         signalStore: new WaSignalMemoryStore(),
         query: async () => iqResult([])
     })

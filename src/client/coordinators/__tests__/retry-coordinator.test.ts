@@ -2,21 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { WaRetryCoordinator } from '@client/coordinators/WaRetryCoordinator'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import type { WaRetryOutboundMessageRecord, WaRetryOutboundState } from '@retry/types'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { BinaryNode } from '@transport/types'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 class ControlledRetryStore implements WaRetryStore {
     private record: WaRetryOutboundMessageRecord | null
@@ -175,7 +164,7 @@ test('retry coordinator serializes outbound receipt tracking per message id', as
     })
 
     const coordinator = new WaRetryCoordinator({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         retryStore,
         signalStore: {} as never,
         preKeyStore: {} as never,

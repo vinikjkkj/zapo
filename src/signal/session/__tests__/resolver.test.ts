@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { createSignalSessionResolver } from '@signal/session/resolver'
 import type { SignalPreKeyBundle } from '@signal/types'
 import { delay } from '@util/async'
@@ -9,17 +9,6 @@ import { delay } from '@util/async'
 async function flushMicrotasks(turns = 3): Promise<void> {
     for (let index = 0; index < turns; index += 1) {
         await Promise.resolve()
-    }
-}
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
     }
 }
 
@@ -64,7 +53,7 @@ test('signal session resolver rejects identity mismatch on reasonIdentity sync',
                 bundle: buildBundle(1)
             })
         } as never,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     await assert.rejects(
@@ -148,7 +137,7 @@ test('signal session resolver batch does not fallback to single fetch for partia
                 }
             }
         } as never,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     const resolvedTargets = await resolver.ensureSessionsBatch([
@@ -197,7 +186,7 @@ test('signal session resolver deduplicates concurrent ensureSession for same add
                 }
             }
         } as never,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     const address = {
@@ -271,7 +260,7 @@ test('signal session resolver shares dedup between ensureSession and ensureSessi
                 }
             }
         } as never,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     const single = resolver.ensureSession(address, jid)
@@ -314,7 +303,7 @@ test('signal session resolver keeps stricter identity checks for concurrent call
                 bundle: buildBundle(7)
             })
         } as never,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     const address = {

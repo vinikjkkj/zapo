@@ -1,6 +1,7 @@
 /** Pairing IQ builders/parsers (source: `WAWebHandlePairDevice*`, `/wa-web`). */
 
 import type { BinaryNode } from '../../transport/codec'
+import { decodeBase64Url } from '../../transport/util'
 
 export interface BuildPairDeviceIqInput {
     readonly id?: string
@@ -106,20 +107,9 @@ export function parsePairingQrString(qr: string): ParsedPairingQr {
     const ref = parts.slice(0, parts.length - 4).join(',')
     return {
         ref,
-        noisePublicKey: base64Decode(noisePubB64),
-        identityPublicKey: base64Decode(identityPubB64),
-        advSecretKey: base64Decode(advSecretB64),
+        noisePublicKey: decodeBase64Url(noisePubB64, 'qr.noisePublicKey'),
+        identityPublicKey: decodeBase64Url(identityPubB64, 'qr.identityPublicKey'),
+        advSecretKey: decodeBase64Url(advSecretB64, 'qr.advSecretKey'),
         platform
     }
-}
-
-function base64Decode(input: string): Uint8Array {
-    let normalized = input.replace(/-/g, '+').replace(/_/g, '/')
-    const remainder = normalized.length % 4
-    if (remainder === 2) normalized += '=='
-    else if (remainder === 3) normalized += '='
-    else if (remainder === 1) {
-        throw new Error(`invalid base64 string length: ${input.length}`)
-    }
-    return new Uint8Array(Buffer.from(normalized, 'base64'))
 }

@@ -1001,7 +1001,6 @@ export function buildWaClientDependencies(input: {
 
                 const address = parseSignalAddressFromJid(parsed.fromJid)
 
-                // ignore companion devices (non-primary)
                 if (address.device !== 0) {
                     logger.debug('identity-change: ignoring companion device', {
                         jid: parsed.fromJid
@@ -1009,7 +1008,6 @@ export function buildWaClientDependencies(input: {
                     return true
                 }
 
-                // self-primary identity change → must disconnect
                 const meJid = getCurrentMeJid()
                 if (meJid) {
                     const meUser = toUserJid(meJid)
@@ -1100,7 +1098,6 @@ export function buildWaClientDependencies(input: {
                 }
             }
 
-            // invalidate device list cache so next fanout fetches fresh list
             if (sessionStore.deviceList) {
                 await sessionStore.deviceList.deleteUserDevices(userJid).catch((error) => {
                     logger.warn('devices-notification: invalidate cache failed', {
@@ -1109,7 +1106,6 @@ export function buildWaClientDependencies(input: {
                 })
             }
 
-            // for update notifications, re-sync immediately
             if (parsed.action === DEVICE_NOTIFICATION_ACTIONS.UPDATE) {
                 signalDeviceSync.syncDeviceList([userJid]).catch((error) => {
                     logger.warn('devices-notification: sync device list failed', {
@@ -1160,7 +1156,6 @@ export function buildWaClientDependencies(input: {
         }
     })
 
-    // AB Props: sync after successful login and on server notification
     incomingNode.registerIncomingHandler({
         tag: WA_NODE_TAGS.NOTIFICATION,
         subtype: WA_NOTIFICATION_TYPES.SERVER,

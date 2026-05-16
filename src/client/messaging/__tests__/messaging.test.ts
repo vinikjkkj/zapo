@@ -5,20 +5,9 @@ import { createDeviceFanoutResolver } from '@client/messaging/fanout'
 import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
 import { createGroupParticipantsCache } from '@client/messaging/participants'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
 import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 function createGroupEvent(input: {
     readonly action: WaGroupEventAction
@@ -49,7 +38,7 @@ test('device fanout resolver picks meLid only when recipient is lid', () => {
         signalDeviceSync: {} as never,
         getCurrentMeJid: () => '551100000000:1@s.whatsapp.net',
         getCurrentMeLid: () => '551100000000:1@lid',
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     assert.equal(
@@ -86,7 +75,7 @@ test('device fanout resolver keeps hosted devices in direct fanout', async () =>
         } as never,
         getCurrentMeJid: () => '551100000000:1@s.whatsapp.net',
         getCurrentMeLid: () => '551100000000:1@lid',
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     const fanout = await resolver.resolveDirectFanoutDeviceJids(
@@ -116,7 +105,7 @@ test('device fanout resolver excludes hosted devices in group fanout', async () 
         } as never,
         getCurrentMeJid: () => '551100000000:1@s.whatsapp.net',
         getCurrentMeLid: () => null,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     const fanout = await resolver.resolveGroupParticipantDeviceJids([
@@ -132,7 +121,7 @@ test('group participants cache mutates membership from events', async () => {
         const cache = createGroupParticipantsCache({
             participantsStore,
             queryGroupParticipantJids: async () => [],
-            logger: createLogger()
+            logger: createNoopLogger()
         })
 
         await cache.mutateFromGroupEvent(
@@ -196,7 +185,7 @@ test('app-state sync key protocol requests keys from peer devices and dedupes ke
         } as never,
         getCurrentMeJid: () => '551100000000:1@s.whatsapp.net',
         getCurrentMeLid: () => null,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     const peerDevices = await protocol.requestKeys([

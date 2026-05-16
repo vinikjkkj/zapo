@@ -8,7 +8,7 @@ import test from 'node:test'
 
 import { parseWebpAnimation, runMediaProcessor } from '@client/media'
 import { buildMediaMessageContent, getMediaConn } from '@client/messages'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger, type Logger } from '@infra/log/types'
 import { parseMediaConnResponse } from '@media/conn'
 import {
     MEDIA_UPLOAD_PATHS,
@@ -21,17 +21,6 @@ import {
 import { WaMediaCrypto } from '@media/WaMediaCrypto'
 import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import type { BinaryNode } from '@transport/types'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 function buildMediaConnNode(auth = 'token', ttl = '120'): BinaryNode {
     return {
@@ -347,7 +336,7 @@ test('runMediaProcessor fills image dimensions from thumbnail output when probe 
             media: new Uint8Array([1, 2, 3]),
             mimetype: 'image/jpeg'
         },
-        createLogger()
+        createNoopLogger()
     )
 
     assert.equal(result.width, 123)
@@ -371,7 +360,7 @@ test('runMediaProcessor derives audio seconds from waveform output when probe is
             media: new Uint8Array([1, 2, 3]),
             mimetype: 'audio/ogg'
         },
-        createLogger()
+        createNoopLogger()
     )
 
     assert.equal(result.seconds, 7)
@@ -395,7 +384,7 @@ test('runMediaProcessor handles sticker thumbnails and animated WebP detection',
             type: 'sticker',
             media: webp.bytes
         },
-        createLogger()
+        createNoopLogger()
     )
 
     assert.equal(result.isAnimated, true)
@@ -425,7 +414,7 @@ test('runMediaProcessor skips processing work when the input is unavailable', as
             media: new Uint8Array([1, 2, 3]),
             mimetype: 'audio/ogg'
         },
-        createLogger()
+        createNoopLogger()
     )
 
     assert.deepEqual(result, {})
@@ -433,7 +422,7 @@ test('runMediaProcessor skips processing work when the input is unavailable', as
 })
 
 test('media message builder supports text passthrough and conn caching', async () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     let cache: {
         auth: string
         expiresAtMs: number
@@ -505,7 +494,7 @@ test('media message builder supports text passthrough and conn caching', async (
 })
 
 test('media message builder uploads ptv bytes and maps upload response fields', async () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const encoder = new TextEncoder()
     const uploadedRequests: {
         readonly url: string
@@ -560,7 +549,7 @@ test('media message builder uploads ptv bytes and maps upload response fields', 
 test('media message builder continues probe extraction when thumbnail generation fails', async () => {
     const errors: unknown[] = []
     const logger: Logger = {
-        ...createLogger(),
+        ...createNoopLogger(),
         error: (message, context) => {
             errors.push({ message, context })
         }
@@ -611,7 +600,7 @@ test('media message builder continues probe extraction when thumbnail generation
 })
 
 test('media message builder fills only missing probe fields', async () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const encoder = new TextEncoder()
 
     const { message } = await buildMediaMessageContent(
@@ -654,7 +643,7 @@ test('media message builder fills only missing probe fields', async () => {
 })
 
 test('media message builder reuses streamed media across processor steps', async () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const encoder = new TextEncoder()
     const calls: Array<{ readonly step: string; readonly isStream: boolean }> = []
 
@@ -710,7 +699,7 @@ test('media message builder reuses streamed media across processor steps', async
 })
 
 test('media message builder supports file path input for upload and processing', async () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const encoder = new TextEncoder()
     const filePath = join(
         tmpdir(),
@@ -776,7 +765,7 @@ test('media message builder supports file path input for upload and processing',
 })
 
 test('media message builder propagates upload response errors for byte uploads', async () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const content = {
         type: 'image' as const,
         media: new Uint8Array([1, 2, 3]),
@@ -840,7 +829,7 @@ test('media message builder propagates upload response errors for byte uploads',
 })
 
 test('media message builder cleans encrypted temp file when stream upload fails', async () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const originalCleanup = WaMediaCrypto.cleanupEncryptedFile
     const cleanupPaths: string[] = []
     ;(

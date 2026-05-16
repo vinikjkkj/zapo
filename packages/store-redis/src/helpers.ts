@@ -1,7 +1,7 @@
 import type Redis from 'ioredis'
 import { bytesToHex, hexToBytes, normalizeQueryLimit, toBytesView, uint8Equal } from 'zapo-js/util'
 
-export function toBytes(value: unknown): Uint8Array {
+function toBytes(value: unknown): Uint8Array {
     if (value instanceof Uint8Array) return value
     if (value instanceof ArrayBuffer) return new Uint8Array(value)
     if (ArrayBuffer.isView(value)) return toBytesView(value)
@@ -17,11 +17,6 @@ export function toBytesOrNull(value: unknown): Uint8Array | null {
 export function toStringOrNull(value: string | null | undefined): string | null {
     if (value === null || value === undefined || value.length === 0) return null
     return value
-}
-
-export function toNumberOrNull(value: string | null | undefined): number | null {
-    if (value === null || value === undefined || value.length === 0) return null
-    return Number(value)
 }
 
 const SAFE_PREFIX_RE = /^[A-Za-z0-9_:]*$/

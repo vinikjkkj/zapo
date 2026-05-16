@@ -133,32 +133,20 @@ export function buildGetVerifiedNameIq(jid: string): BinaryNode {
     ])
 }
 
-export function buildUpdateCoverPhotoIq(id: string, timestamp: string, token: string): BinaryNode {
+export function buildCoverPhotoIq(
+    op: 'update' | 'delete',
+    id: string,
+    extras?: { timestamp: string; token: string }
+): BinaryNode {
+    const attrs: Record<string, string> =
+        op === 'update' && extras
+            ? { op, id, ts: extras.timestamp, token: extras.token }
+            : { op, id }
     return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
         {
             tag: 'business_profile',
             attrs: { v: '3', mutation_type: 'delta' },
-            content: [
-                {
-                    tag: 'cover_photo',
-                    attrs: { op: 'update', id, ts: timestamp, token }
-                }
-            ]
-        }
-    ])
-}
-
-export function buildDeleteCoverPhotoIq(id: string): BinaryNode {
-    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
-        {
-            tag: 'business_profile',
-            attrs: { v: '3', mutation_type: 'delta' },
-            content: [
-                {
-                    tag: 'cover_photo',
-                    attrs: { op: 'delete', id }
-                }
-            ]
+            content: [{ tag: 'cover_photo', attrs }]
         }
     ])
 }

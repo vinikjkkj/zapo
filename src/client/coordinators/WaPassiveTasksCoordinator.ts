@@ -30,7 +30,7 @@ type WaPassiveTasksRuntime = {
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly persistServerHasPreKeys: (serverHasPreKeys: boolean) => Promise<void>
     readonly sendNodeDirect: (node: BinaryNode) => Promise<void>
-    readonly takeDanglingReceipts: () => BinaryNode[]
+    readonly takeDanglingReceipts: () => readonly BinaryNode[]
     readonly requeueDanglingReceipt: (node: BinaryNode) => void
     readonly shouldQueueDanglingReceipt: (node: BinaryNode, error: Error) => boolean
     readonly syncAbProps: () => void
@@ -114,7 +114,7 @@ export class WaPassiveTasksCoordinator {
 
     private async runPassiveTasksAfterConnect(): Promise<void> {
         const credentials = this.runtime.getCurrentCredentials()
-        const isRegistered = credentials?.meJid !== null && credentials?.meJid !== undefined
+        const isRegistered = !!credentials?.meJid
         if (!isRegistered) {
             this.logger.trace('passive connect tasks skipped: session is not registered')
             return

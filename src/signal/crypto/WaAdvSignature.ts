@@ -11,8 +11,7 @@ import { concatBytes } from '@util/bytes'
 export {
     ADV_PREFIX_ACCOUNT_SIGNATURE,
     ADV_PREFIX_DEVICE_SIGNATURE,
-    ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE,
-    ADV_PREFIX_HOSTED_DEVICE_SIGNATURE
+    ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE
 } from '@signal/crypto/constants'
 
 export async function verifyDeviceIdentityAccountSignature(

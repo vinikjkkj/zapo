@@ -3,6 +3,7 @@ import { WA_DEFAULTS } from '@protocol/defaults'
 import { WA_GROUP_PARTICIPANT_TYPES, type WaGroupSetting } from '@protocol/group'
 import { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
 import { WA_GROUP_NOTIFICATION_TAGS } from '@protocol/notification'
+import { buildListParticipatingGroupsIq } from '@transport/node/builders/account-sync'
 import {
     buildDeactivateCommunityIq,
     buildLinkedGroupsParticipantsIq,
@@ -480,17 +481,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
         },
 
         queryAllGroups: async () => {
-            const node = buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
-                {
-                    tag: WA_NODE_TAGS.PARTICIPATING,
-                    attrs: {},
-                    content: [
-                        { tag: WA_NODE_TAGS.PARTICIPANTS, attrs: {} },
-                        { tag: WA_NODE_TAGS.DESCRIPTION, attrs: {} }
-                    ]
-                }
-            ])
-            const result = await queryWithContext('group.list', node)
+            const result = await queryWithContext('group.list', buildListParticipatingGroupsIq())
             assertIqResult(result, 'group.list')
             const groupNodes = getNodeChildrenByTagFromChildren(result, WA_NODE_TAGS.GROUP)
             const metadata = new Array<WaGroupMetadata>(groupNodes.length)

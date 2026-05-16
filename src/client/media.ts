@@ -160,7 +160,7 @@ function createSha256SizeMeter(): {
     }
 }
 
-export async function streamToTempFileWithSha256(
+async function streamToTempFileWithSha256(
     source: Readable
 ): Promise<StreamFileMetrics & { readonly filePath: string }> {
     const filePath = join(
@@ -217,7 +217,7 @@ async function preparePlaintextUploadSource(
 // node:crypto randomInt caps max at 2**48 - 1; well within JS safe integer range.
 const MEDIA_UPLOAD_ID_MAX = 281_474_976_710_655
 
-export async function generateMediaUploadId(): Promise<string> {
+async function generateMediaUploadId(): Promise<string> {
     const value = await randomIntAsync(0, MEDIA_UPLOAD_ID_MAX)
     return value.toString(10)
 }

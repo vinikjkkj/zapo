@@ -21,7 +21,8 @@ let started = false
 try {
     execSync(`docker compose -f "${COMPOSE_FILE}" up -d --wait`, {
         stdio: 'inherit',
-        cwd: ROOT_DIR
+        cwd: ROOT_DIR,
+        timeout: 300_000
     })
     started = true
 
@@ -48,7 +49,12 @@ try {
     )
 
     console.log('\nRunning package tests...')
-    execSync('npx turbo run test --force --continue', { stdio: 'inherit', cwd: ROOT_DIR, env })
+    execSync('npx turbo run test --force --continue', {
+        stdio: 'inherit',
+        cwd: ROOT_DIR,
+        env,
+        timeout: 1_800_000
+    })
 } catch {
     failed = true
 } finally {

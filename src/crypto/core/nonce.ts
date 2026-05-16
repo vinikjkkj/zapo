@@ -1,9 +1,3 @@
-export function buildNonce(counter: number): Uint8Array {
-    const nonce = new Uint8Array(12)
-    writeNonceCounter(nonce, counter)
-    return nonce
-}
-
 export function writeNonceCounter(out: Uint8Array, counter: number): void {
     if (out.length < 12) {
         throw new Error(`nonce buffer must be at least 12 bytes, got ${out.length}`)

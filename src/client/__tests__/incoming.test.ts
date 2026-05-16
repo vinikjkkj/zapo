@@ -14,7 +14,7 @@ import type {
     WaIncomingUnhandledStanzaEvent,
     WaRegistrationCodeEvent
 } from '@client/types'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import {
     WA_BUSINESS_NOTIFICATION_TAGS,
     WA_DISCONNECT_REASONS,
@@ -23,21 +23,10 @@ import {
 } from '@protocol/constants'
 import type { BinaryNode } from '@transport/types'
 
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
-
 test('notification ack includes participant only for mediaretry and psa types', async () => {
     const sent: BinaryNode[] = []
     const handler = createIncomingNotificationHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sent.push(node)
         },
@@ -85,7 +74,7 @@ test('notification ack includes participant only for mediaretry and psa types', 
 test('notification ack omits type only for encrypt and devices types', async () => {
     const sent: BinaryNode[] = []
     const handler = createIncomingNotificationHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sent.push(node)
         },
@@ -131,7 +120,7 @@ test('notification ack omits type only for encrypt and devices types', async () 
 test('receipt ack omits participant for server-error receipts', async () => {
     const sent: BinaryNode[] = []
     const handler = createIncomingReceiptHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sent.push(node)
         },
@@ -164,7 +153,7 @@ test('failure handler maps auth reasons to logout disconnect flow', async () => 
     let stopCommsCalls = 0
     let clearStoredCredentialsCalls = 0
     const handler = createIncomingFailureHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         emitIncomingFailure: (event) => {
             emitted.push(event)
         },
@@ -206,7 +195,7 @@ test('registration notification handler emits registration_code event and acks',
     const codes: WaRegistrationCodeEvent[] = []
     const takeovers: WaAccountTakeoverNoticeEvent[] = []
     const handler = createIncomingRegistrationNotificationHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sent.push(node)
         },
@@ -255,7 +244,7 @@ test('registration notification handler emits account_takeover_notice for device
     const codes: WaRegistrationCodeEvent[] = []
     const takeovers: WaAccountTakeoverNoticeEvent[] = []
     const handler = createIncomingRegistrationNotificationHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sent.push(node)
         },
@@ -298,7 +287,7 @@ test('registration notification handler defers to default handler for unrecogniz
     const codes: WaRegistrationCodeEvent[] = []
     const takeovers: WaAccountTakeoverNoticeEvent[] = []
     const handler = createIncomingRegistrationNotificationHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sent.push(node)
         },
@@ -333,7 +322,7 @@ test('business notification handler emits business_event and acks with type=busi
     const events: WaBusinessEvent[] = []
     const unhandled: WaIncomingUnhandledStanzaEvent[] = []
     const handler = createIncomingBusinessNotificationHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sent.push(node)
         },
@@ -378,7 +367,7 @@ test('business notification handler defers when notification type is not busines
     const sent: BinaryNode[] = []
     const events: WaBusinessEvent[] = []
     const handler = createIncomingBusinessNotificationHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sent.push(node)
         },
@@ -403,7 +392,7 @@ test('business notification handler emits unhandled stanza for deferred subtype'
     const events: WaBusinessEvent[] = []
     const unhandled: WaIncomingUnhandledStanzaEvent[] = []
     const handler = createIncomingBusinessNotificationHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sent.push(node)
         },
@@ -437,7 +426,7 @@ test('failure handler maps disconnect-only reasons without clearing credentials'
     let stopCommsCalls = 0
     let clearStoredCredentialsCalls = 0
     const handler = createIncomingFailureHandler({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         emitIncomingFailure: () => undefined,
         stopComms: () => {
             stopCommsCalls += 1

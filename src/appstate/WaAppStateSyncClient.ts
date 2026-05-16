@@ -34,7 +34,7 @@ import type {
 } from '@store/contracts/appstate.store'
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
-import { bytesToHex, decodeProtoBytes, uint8Equal } from '@util/bytes'
+import { bytesToHex, decodeProtoBytes, uint8TimingSafeEqual } from '@util/bytes'
 import type { ServerClock } from '@util/clock'
 import { longToNumber } from '@util/primitives'
 
@@ -66,7 +66,7 @@ interface WaAppStateSyncClientOptions {
     readonly mobilePrimary?: boolean
 }
 
-export class WaAppStateMissingKeyError extends Error {
+class WaAppStateMissingKeyError extends Error {
     public readonly keyId: Uint8Array | null
     public readonly collection: AppStateCollectionName
 
@@ -896,7 +896,7 @@ export class WaAppStateSyncClient {
                 version,
                 collection
             )
-            if (!uint8Equal(expectedSnapshotMac, snapshot.mac as Uint8Array)) {
+            if (!uint8TimingSafeEqual(expectedSnapshotMac, snapshot.mac as Uint8Array)) {
                 throw new Error(`snapshot MAC mismatch for ${collection}`)
             }
         }
@@ -1135,7 +1135,7 @@ export class WaAppStateSyncClient {
             collection
         )
         // non-fatal: wa-mob/wa-web tolerate this — patchMac below covers payload integrity.
-        if (!uint8Equal(expectedSnapshotMac, snapshotMac)) {
+        if (!uint8TimingSafeEqual(expectedSnapshotMac, snapshotMac)) {
             this.logger.warn('patch snapshot MAC mismatch (tolerated)', {
                 collection,
                 patchVersion
@@ -1150,7 +1150,7 @@ export class WaAppStateSyncClient {
             patchVersion,
             collection
         )
-        if (!uint8Equal(expectedPatchMac, patchMac)) {
+        if (!uint8TimingSafeEqual(expectedPatchMac, patchMac)) {
             throw new Error(`patch MAC mismatch for ${collection}`)
         }
     }

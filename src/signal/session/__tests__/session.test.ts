@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { prependVersion } from '@crypto'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
 import { SIGNAL_MAC_SIZE, SIGNAL_VERSION } from '@signal/constants'
 import {
@@ -24,17 +24,6 @@ import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaSessionMemoryStore } from '@store/providers/memory/session.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 import { concatBytes } from '@util/bytes'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 function makeBytes(length: number, seed = 0): Uint8Array {
     const out = new Uint8Array(length)
@@ -183,7 +172,7 @@ test('signal ratchet derives keys, selects future message keys and rejects dupli
 })
 
 test('signal protocol establishes outgoing session and decrypts prekey message on receiver', async () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const aliceStore = new WaSignalMemoryStore()
     const alicePreKeyStore = new WaPreKeyMemoryStore()
     const aliceSessionStore = new WaSessionMemoryStore()
@@ -274,7 +263,7 @@ test('signal protocol throws when decrypting msg without an existing session', a
             session: new WaSessionMemoryStore(),
             identity: new WaIdentityMemoryStore()
         },
-        createLogger()
+        createNoopLogger()
     )
     await assert.rejects(
         () =>
@@ -287,7 +276,7 @@ test('signal protocol throws when decrypting msg without an existing session', a
 })
 
 test('signal protocol serializes decrypt updates for the same address', async () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const aliceStore = new WaSignalMemoryStore()
     const alicePreKeyStore = new WaPreKeyMemoryStore()
     const aliceSessionStore = new WaSessionMemoryStore()
@@ -376,7 +365,7 @@ test('signal protocol serializes decrypt updates for the same address', async ()
 })
 
 test('signal protocol reloads sessions from store even when prefetched sessions are provided', async () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const aliceStore = new WaSignalMemoryStore()
     const alicePreKeyStore = new WaPreKeyMemoryStore()
     const aliceSessionStore = new CountingGetSessionsBatchStore()

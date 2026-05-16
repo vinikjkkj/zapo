@@ -40,6 +40,13 @@ const WA_APP_STATE_MUTATION_FLUSH_SUCCESS_STATES = new Set<string>([
 
 const WA_APP_STATE_ARCHIVE_RANGE_DEFAULT_LIMIT = 256
 
+function serializeMutationIndex(action: string, parts: readonly string[]): string {
+    const arr = new Array<string>(parts.length + 1)
+    arr[0] = action
+    for (let i = 0; i < parts.length; i += 1) arr[i + 1] = parts[i]
+    return JSON.stringify(arr)
+}
+
 interface WaAppStateMutationCoordinatorOptions {
     readonly logger: Logger
     readonly messageStore: WaMessageStore
@@ -560,7 +567,7 @@ export class WaAppStateMutationCoordinator {
         return {
             collection: input.spec.collection,
             operation: 'set',
-            index: JSON.stringify([input.spec.action, ...input.indexArgs]),
+            index: serializeMutationIndex(input.spec.action, input.indexArgs),
             value: { ...input.value, timestamp: input.timestamp },
             version: input.spec.version,
             timestamp: input.timestamp
@@ -575,7 +582,7 @@ export class WaAppStateMutationCoordinator {
         return {
             collection: input.spec.collection,
             operation: 'remove',
-            index: JSON.stringify([input.spec.action, ...input.indexArgs]),
+            index: serializeMutationIndex(input.spec.action, input.indexArgs),
             previousValue: { timestamp: input.timestamp },
             version: input.spec.version,
             timestamp: input.timestamp
@@ -739,7 +746,11 @@ export class WaAppStateMutationCoordinator {
         chatIndexJid: string,
         indexPartsTail: readonly string[]
     ): string {
-        return JSON.stringify([action, chatIndexJid, ...indexPartsTail])
+        const arr = new Array<string>(indexPartsTail.length + 2)
+        arr[0] = action
+        arr[1] = chatIndexJid
+        for (let i = 0; i < indexPartsTail.length; i += 1) arr[i + 2] = indexPartsTail[i]
+        return JSON.stringify(arr)
     }
 
     private describeMutationActions(mutations: readonly WaAppStateMutationInput[]): string {

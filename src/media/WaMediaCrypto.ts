@@ -36,7 +36,6 @@ import {
     EMPTY_BYTES,
     toBytesView,
     toChunkBytes,
-    uint8Equal,
     uint8TimingSafeEqual
 } from '@util/bytes'
 import { toError } from '@util/primitives'
@@ -192,7 +191,7 @@ export class WaMediaCrypto {
 
         if (expectedFileEncSha256) {
             const computedEncHash = sha256(ciphertextHmac)
-            if (!uint8Equal(computedEncHash, expectedFileEncSha256)) {
+            if (!uint8TimingSafeEqual(computedEncHash, expectedFileEncSha256)) {
                 throw new Error('encrypted file hash mismatch')
             }
         }
@@ -214,7 +213,7 @@ export class WaMediaCrypto {
 
         const plaintext = aesCbcDecrypt(keys.encKey, keys.iv, ciphertext)
         const fileSha256 = sha256(plaintext)
-        if (expectedFileSha256 && !uint8Equal(fileSha256, expectedFileSha256)) {
+        if (expectedFileSha256 && !uint8TimingSafeEqual(fileSha256, expectedFileSha256)) {
             throw new Error('plaintext file hash mismatch')
         }
 
@@ -460,11 +459,14 @@ async function pumpDecryption(
         const fileEncSha256 = toBytesView(encHash.digest())
         if (
             options.expectedFileEncSha256 &&
-            !uint8Equal(fileEncSha256, options.expectedFileEncSha256)
+            !uint8TimingSafeEqual(fileEncSha256, options.expectedFileEncSha256)
         ) {
             throw new Error('encrypted file hash mismatch')
         }
-        if (options.expectedFileSha256 && !uint8Equal(fileSha256, options.expectedFileSha256)) {
+        if (
+            options.expectedFileSha256 &&
+            !uint8TimingSafeEqual(fileSha256, options.expectedFileSha256)
+        ) {
             throw new Error('plaintext file hash mismatch')
         }
 

@@ -43,7 +43,7 @@ export class WaReceiptQueue {
         this.danglingReceipts.push(node)
     }
 
-    public take(): BinaryNode[] {
+    public take(): readonly BinaryNode[] {
         if (this.danglingHead >= this.danglingReceipts.length) {
             this.danglingReceipts.length = 0
             this.danglingHead = 0

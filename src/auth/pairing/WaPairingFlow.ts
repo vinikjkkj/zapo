@@ -32,7 +32,7 @@ import {
     hasNodeChild
 } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
-import { concatBytes, decodeProtoBytes, uint8Equal } from '@util/bytes'
+import { concatBytes, decodeProtoBytes, uint8Equal, uint8TimingSafeEqual } from '@util/bytes'
 
 interface ActivePairingSession {
     readonly ref?: Uint8Array
@@ -304,7 +304,7 @@ export class WaPairingFlow {
                 ? concatBytes([ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE, wrappedDetails])
                 : wrappedDetails
             const expectedHmac = computeAdvIdentityHmac(credentials.advSecretKey, hmacInput)
-            if (!uint8Equal(expectedHmac, wrappedHmac)) {
+            if (!uint8TimingSafeEqual(expectedHmac, wrappedHmac)) {
                 this.opts.logger.error('pair-success hmac mismatch')
                 throw new Error('pair-success HMAC validation failed')
             }

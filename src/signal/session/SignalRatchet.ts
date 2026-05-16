@@ -35,7 +35,7 @@ import type {
     SignalRecvChain,
     SignalSessionRecord
 } from '@signal/types'
-import { concatBytes, removeAt, uint8Equal } from '@util/bytes'
+import { concatBytes, removeAt, uint8Equal, uint8TimingSafeEqual } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 const MAX_TRACKED_RECV_CHAINS = 4
@@ -50,7 +50,7 @@ export interface DecryptOutcome {
     } | null
 }
 
-export function splitMsgKey(index: number, bytes: Uint8Array): SignalMessageKey {
+function splitMsgKey(index: number, bytes: Uint8Array): SignalMessageKey {
     if (bytes.length < 80) {
         throw new Error('invalid message key length')
     }
@@ -341,7 +341,7 @@ export async function decryptMsgFromSession(
     const receivedMac = message.versionContentMac.subarray(
         message.versionContentMac.length - SIGNAL_MAC_SIZE
     )
-    if (!uint8Equal(expectedMac.subarray(0, SIGNAL_MAC_SIZE), receivedMac)) {
+    if (!uint8TimingSafeEqual(expectedMac.subarray(0, SIGNAL_MAC_SIZE), receivedMac)) {
         throw new Error('invalid message mac')
     }
 

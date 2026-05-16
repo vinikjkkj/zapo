@@ -1,20 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { handleIncomingMessageAck } from '@message/incoming'
 import type { BinaryNode } from '@transport/types'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 function createEncryptedMessageNode(): BinaryNode {
     return {
@@ -51,7 +40,7 @@ test('incoming message ack suppresses standard receipt when decrypt failure is d
     }> = []
 
     const handled = await handleIncomingMessageAck(createEncryptedMessageNode(), {
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sentNodes.push(node)
         },
@@ -80,7 +69,7 @@ test('incoming message ack falls back to retry receipt when decrypt fails', asyn
     const sentNodes: BinaryNode[] = []
 
     const handled = await handleIncomingMessageAck(createEncryptedMessageNode(), {
-        logger: createLogger(),
+        logger: createNoopLogger(),
         sendNode: async (node) => {
             sentNodes.push(node)
         },

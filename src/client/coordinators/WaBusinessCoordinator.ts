@@ -12,11 +12,10 @@ import type { WaMediaConn } from '@media/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { WA_BUSINESS_NOTIFICATION_TAGS } from '@protocol/notification'
 import {
-    buildDeleteCoverPhotoIq,
+    buildCoverPhotoIq,
     buildEditBusinessProfileIq,
     buildGetBusinessProfileIq,
     buildGetVerifiedNameIq,
-    buildUpdateCoverPhotoIq,
     type WaEditBusinessProfileInput
 } from '@transport/node/builders/business'
 import { findNodeChild, getNodeChildren } from '@transport/node/helpers'
@@ -119,7 +118,10 @@ export function createBusinessCoordinator(
             if (!parsed.fbid || !parsed.ts || !parsed.meta_hmac) {
                 throw new Error('business cover photo upload response missing fbid/ts/meta_hmac')
             }
-            const node = buildUpdateCoverPhotoIq(parsed.fbid, parsed.ts, parsed.meta_hmac)
+            const node = buildCoverPhotoIq('update', parsed.fbid, {
+                timestamp: parsed.ts,
+                token: parsed.meta_hmac
+            })
             const result = await queryWithContext('business.updateCoverPhoto', node, undefined, {
                 id: parsed.fbid
             })
@@ -127,7 +129,7 @@ export function createBusinessCoordinator(
         },
 
         deleteCoverPhoto: async (id) => {
-            const node = buildDeleteCoverPhotoIq(id)
+            const node = buildCoverPhotoIq('delete', id)
             const result = await queryWithContext('business.deleteCoverPhoto', node, undefined, {
                 id
             })

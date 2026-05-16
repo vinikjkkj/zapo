@@ -2,21 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { WaIncomingProtocolMessageEvent } from '@client/types'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { createPeerDataOperationRequester } from '@message/peer-data-operation'
 import type { WaMessagePublishResult } from '@message/types'
 import { proto, type Proto } from '@proto'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 interface PublishedRequest {
     readonly deviceJid: string
@@ -44,7 +33,7 @@ function createHarness(opts?: {
     let counter = 0
 
     const requester = createPeerDataOperationRequester({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         publishProtocolMessageToDevice: async (deviceJid, protocolMessage, options) => {
             const id = options?.id ?? `auto-${counter}`
             counter += 1

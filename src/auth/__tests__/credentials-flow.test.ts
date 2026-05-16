@@ -8,21 +8,10 @@ import {
     persistCredentials
 } from '@auth/credentials-flow'
 import type { WaAuthCredentials } from '@auth/types'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
 import type { WaProxyDispatcher } from '@transport/types'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 function createCredentials(): WaAuthCredentials {
     return {
@@ -69,7 +58,7 @@ test('auth flow persists and restores existing credentials', async () => {
     const preKeyStore = new WaPreKeyMemoryStore()
 
     const loaded = await loadOrCreateCredentials({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         authStore,
         signalStore,
         preKeyStore
@@ -77,7 +66,7 @@ test('auth flow persists and restores existing credentials', async () => {
 
     assert.equal(loaded.meJid, credentials.meJid)
     await persistCredentials(
-        { logger: createLogger(), authStore, signalStore, preKeyStore },
+        { logger: createNoopLogger(), authStore, signalStore, preKeyStore },
         {
             ...loaded,
             meDisplayName: 'Tester'
@@ -87,7 +76,7 @@ test('auth flow persists and restores existing credentials', async () => {
 })
 
 test('buildCommsConfig switches between login and registration payloads', () => {
-    const logger = createLogger()
+    const logger = createNoopLogger()
     const credentials = createCredentials()
     const version = '2.3000.1020607560'
     const wsDispatcher: WaProxyDispatcher = {
@@ -145,7 +134,7 @@ test('buildCommsConfig switches between login and registration payloads', () => 
 test('buildCommsConfig maps ws proxy agent when provided', () => {
     const wsAgent = new http.Agent({ keepAlive: true })
     const config = buildCommsConfig(
-        createLogger(),
+        createNoopLogger(),
         createCredentials(),
         {
             url: 'wss://web.whatsapp.com/ws/chat',
@@ -180,7 +169,7 @@ test('buildCommsConfig falls back to credentials.deviceInfo when mobileTransport
         memClass: 4096
     }
     const config = buildCommsConfig(
-        createLogger(),
+        createNoopLogger(),
         credentials,
         { url: 'wss://web.whatsapp.com/ws/chat' },
         { requireFullSync: false }
@@ -203,7 +192,7 @@ test('buildCommsConfig prefers explicit mobileTransport option over credentials.
         }
     }
     const config = buildCommsConfig(
-        createLogger(),
+        createNoopLogger(),
         credentials,
         { url: 'wss://web.whatsapp.com/ws/chat' },
         {

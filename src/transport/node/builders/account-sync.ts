@@ -47,20 +47,11 @@ export function buildAccountPictureSyncIq(meJid: string): BinaryNode {
     )
 }
 
-export function buildAccountPrivacySyncIq(): BinaryNode {
-    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.PRIVACY, [
-        {
-            tag: WA_NODE_TAGS.PRIVACY,
-            attrs: {}
-        }
-    ])
-}
-
 export function buildAccountBlocklistSyncIq(): BinaryNode {
     return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BLOCKLIST)
 }
 
-export function buildGroupsDirtySyncIq(): BinaryNode {
+export function buildListParticipatingGroupsIq(): BinaryNode {
     return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.GROUP_SERVER, WA_XMLNS.GROUPS, [
         {
             tag: WA_NODE_TAGS.PARTICIPATING,

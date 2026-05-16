@@ -7,18 +7,7 @@ import {
     PBKDF2_ITERATIONS
 } from '@auth/pairing/pairing-code-crypto'
 import { WaQrFlow } from '@auth/pairing/WaQrFlow'
-import type { Logger } from '@infra/log/types'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
+import { createNoopLogger } from '@infra/log/types'
 
 test('pairing code crypto creates valid companion hello payload', async () => {
     const hello = await createCompanionHello()
@@ -74,7 +63,7 @@ test('qr flow emits rotating QR values and can be refreshed', async (t) => {
     }
 
     const qrFlow = new WaQrFlow({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         getCredentials: () => credentials,
         getDevicePlatform: () => '1',
         emitQr: (qr, ttlMs) => {
@@ -125,7 +114,7 @@ test('qr flow keeps hasQr true while emitting last ref', async (t) => {
     let qrFlow: WaQrFlow | null = null
     const hasQrSnapshots: boolean[] = []
     qrFlow = new WaQrFlow({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         getCredentials: () => credentials,
         getDevicePlatform: () => '1',
         emitQr: () => {

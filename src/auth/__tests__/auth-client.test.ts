@@ -3,20 +3,9 @@ import test from 'node:test'
 
 import type { WaAuthCredentials } from '@auth/types'
 import { WaAuthClient } from '@auth/WaAuthClient'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 function createInMemoryAuthStore(initial: WaAuthCredentials | null = null) {
     let current = initial
@@ -48,7 +37,7 @@ test('WaAuthClient creates credentials, persists fields and clears state', async
             deviceOsDisplayName: 'Windows'
         },
         {
-            logger: createLogger(),
+            logger: createNoopLogger(),
             authStore: auth.store,
             signalStore,
             preKeyStore,
@@ -92,7 +81,7 @@ test('WaAuthClient throws when credentials are required but missing', async () =
             deviceBrowser: 'Chrome'
         },
         {
-            logger: createLogger(),
+            logger: createNoopLogger(),
             authStore: auth.store,
             signalStore: new WaSignalMemoryStore(),
             preKeyStore: new WaPreKeyMemoryStore(),

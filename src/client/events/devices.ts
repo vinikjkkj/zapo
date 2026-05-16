@@ -21,8 +21,8 @@ export interface DeviceNotification {
     readonly action: DeviceNotificationAction
     readonly stanzaId: string
     readonly fromJid: string
-    readonly lid: string | undefined
-    readonly hash: string | undefined
+    readonly lid: string | null
+    readonly hash: string | null
     readonly devices: readonly DeviceNotificationDevice[]
 }
 
@@ -88,8 +88,9 @@ export function parseDeviceNotification(node: BinaryNode): DeviceNotification | 
         action,
         stanzaId,
         fromJid,
-        lid: node.attrs.lid,
-        hash: action === DEVICE_NOTIFICATION_ACTIONS.UPDATE ? actionNode?.attrs.hash : undefined,
+        lid: node.attrs.lid ?? null,
+        hash:
+            action === DEVICE_NOTIFICATION_ACTIONS.UPDATE ? (actionNode?.attrs.hash ?? null) : null,
         devices
     }
 }

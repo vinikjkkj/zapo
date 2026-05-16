@@ -141,6 +141,7 @@
         "test:coverage:open": "node -e \"require('node:child_process').execSync(process.platform === 'win32' ? 'start coverage\\\\index.html' : process.platform === 'darwin' ? 'open coverage/index.html' : 'xdg-open coverage/index.html', { stdio: 'inherit' })\"",
         "typecheck": "tsc -p tsconfig.json --noEmit",
         "typecheck:packages": "turbo run typecheck",
+        "typecheck:all": "npm run typecheck && npm run typecheck:packages",
         "lint": "eslint . --ext .ts,.js,.cjs",
         "lint:fix": "eslint . --ext .ts,.js,.cjs --fix",
         "format": "prettier . --write",

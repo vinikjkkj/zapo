@@ -9,27 +9,18 @@ import type {
 } from '@client/types'
 import { WA_GROUP_NOTIFICATION_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
 import { WA_NODE_TAGS } from '@protocol/nodes'
-import { findNodeChild, getNodeChildren, getNodeChildrenByTag } from '@transport/node/helpers'
+import {
+    findNodeChild,
+    getNodeChildren,
+    getNodeChildrenByTag,
+    getNodeTextContent
+} from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
-import { TEXT_DECODER } from '@util/bytes'
 import { parseOptionalInt } from '@util/primitives'
 
 export interface WaParseGroupNotificationResult {
     readonly events: readonly WaGroupEvent[]
     readonly unhandled: readonly WaIncomingUnhandledStanzaEvent[]
-}
-
-function readNodeTextContent(node: BinaryNode | undefined): string | undefined {
-    if (!node) {
-        return undefined
-    }
-    if (typeof node.content === 'string') {
-        return node.content
-    }
-    if (node.content instanceof Uint8Array) {
-        return TEXT_DECODER.decode(node.content)
-    }
-    return undefined
 }
 
 export function parseParticipants(node: BinaryNode): readonly WaGroupEventParticipant[] {
@@ -85,15 +76,15 @@ function parseSubgroupSuggestion(node: BinaryNode): WaGroupEventSubgroupSuggesti
     return {
         groupJid: node.attrs.jid,
         ownerJid: node.attrs.creator,
-        subject: readNodeTextContent(subjectNode),
-        description: readNodeTextContent(descriptionBodyNode),
+        subject: getNodeTextContent(subjectNode),
+        description: getNodeTextContent(descriptionBodyNode),
         timestampSeconds: parseOptionalInt(node.attrs.creation),
         isExistingGroup:
-            readNodeTextContent(isExistingGroupNode) === undefined
+            getNodeTextContent(isExistingGroupNode) === undefined
                 ? undefined
-                : readNodeTextContent(isExistingGroupNode) === 'true',
+                : getNodeTextContent(isExistingGroupNode) === 'true',
         participantCount: participantCountNode
-            ? parseOptionalInt(readNodeTextContent(participantCountNode))
+            ? parseOptionalInt(getNodeTextContent(participantCountNode))
             : undefined,
         reason: node.attrs.reason
     }
@@ -153,7 +144,7 @@ function parseCreateGroupAction(
         participants: parseParticipants(groupNode),
         subject: groupNode.attrs.subject,
         subjectOwnerJid: groupNode.attrs.s_o,
-        description: readNodeTextContent(descriptionBodyNode),
+        description: getNodeTextContent(descriptionBodyNode),
         descriptionId: descriptionNode?.attrs.id,
         reason: actionNode.attrs.reason,
         contextGroupJid: actionNode.attrs.context_group_jid,
@@ -277,7 +268,7 @@ function parseGroupActionNode(
             return {
                 ...baseEvent,
                 action: 'description',
-                description: hasDeleteChild ? undefined : readNodeTextContent(bodyNode),
+                description: hasDeleteChild ? undefined : getNodeTextContent(bodyNode),
                 descriptionId: actionNode.attrs.id,
                 enabled: !hasDeleteChild
             }
@@ -425,7 +416,7 @@ function parseGroupActionNode(
             return {
                 ...baseEvent,
                 action: 'member_add_mode',
-                mode: readNodeTextContent(actionNode)
+                mode: getNodeTextContent(actionNode)
             }
         case WA_GROUP_NOTIFICATION_TAGS.AUTO_ADD_DISABLED:
             return { ...baseEvent, action: 'auto_add_disabled', enabled: true }

@@ -3,7 +3,7 @@ import http from 'node:http'
 import net, { type Socket } from 'node:net'
 import test from 'node:test'
 
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import type { WaProxyDispatcher } from '@transport/types'
 import { WaWebSocket } from '@transport/WaWebSocket'
 
@@ -27,17 +27,6 @@ interface UpstreamServerHandle {
 
 interface OptionalUndiciModule {
     readonly ProxyAgent: new (uri: string) => WaProxyDispatcher & { close?: () => Promise<void> }
-}
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
 }
 
 async function loadOptionalUndiciModule(): Promise<OptionalUndiciModule | null> {
@@ -277,7 +266,7 @@ test('proxy dispatcher routes fetch and ws handshake through local proxy', async
             timeoutIntervalMs: 1_000,
             dispatcher
         },
-        createLogger()
+        createNoopLogger()
     )
 
     await assert.rejects(() => ws.open(), /websocket connect/)

@@ -14,11 +14,11 @@ import {
     buildAccountBlocklistSyncIq,
     buildAccountDevicesSyncIq,
     buildAccountPictureSyncIq,
-    buildAccountPrivacySyncIq,
     buildClearDirtyBitsIq,
-    buildGroupsDirtySyncIq,
+    buildListParticipatingGroupsIq,
     buildNewsletterMetadataSyncIq
 } from '@transport/node/builders/account-sync'
+import { buildGetPrivacySettingsIq } from '@transport/node/builders/privacy'
 import { getNodeChildrenTags } from '@transport/node/helpers'
 import { assertIqResult, parseIqError } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
@@ -299,7 +299,7 @@ async function syncAccountPictureDirtyBit(runtime: WaDirtySyncRuntime): Promise<
 async function syncAccountPrivacyDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {
     await runSyncQuery(runtime, {
         queryContext: 'account_sync.privacy',
-        node: buildAccountPrivacySyncIq(),
+        node: buildGetPrivacySettingsIq(),
         logMessage: 'account_sync privacy synchronized'
     })
 }
@@ -316,7 +316,7 @@ async function syncGroupsDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {
     await runSyncQuery(runtime, {
         queryContext: 'dirty.groups',
         assertContext: 'groups',
-        node: buildGroupsDirtySyncIq(),
+        node: buildListParticipatingGroupsIq(),
         logMessage: 'groups dirty sync completed'
     })
 }

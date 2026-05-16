@@ -75,7 +75,7 @@ interface RawPageInfo {
     readonly endCursor?: string
 }
 
-export function toNumber(value: string | number | null | undefined): number | undefined {
+function toNumber(value: string | number | null | undefined): number | undefined {
     if (value === null || value === undefined) return undefined
     if (typeof value === 'number') return value
     const parsed = Number.parseInt(value, 10)

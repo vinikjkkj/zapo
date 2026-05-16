@@ -1,9 +1,8 @@
 /**
  * Layer 1 — crypto primitives wrapper.
  *
- * Re-exports cryptographic primitives from zapo-js. These are bit-exact
- * implementations with no protocol interpretation, so reusing them does not
- * create the tautology described in AGENTS.md §2.
+ * Re-exports bit-exact cryptographic primitives from zapo-js. No protocol
+ * interpretation, so reusing them does not create a test-vs-impl tautology.
  */
 
 export {

@@ -255,7 +255,9 @@ export class WaRetryCoordinator {
             retryCount,
             retryKeys:
                 retryCount >= RETRY_KEYS_MIN_COUNT
-                    ? await this.buildRetryKeysSection(registrationInfo.identityKeyPair.pubKey)
+                    ? ((await this.buildRetryKeysSection(
+                          registrationInfo.identityKeyPair.pubKey
+                      )) ?? undefined)
                     : undefined,
             retryReason: mapRetryReasonFromError(error),
             timestamp: context.t ?? String(Math.trunc(nowMs / 1000))
@@ -531,16 +533,14 @@ export class WaRetryCoordinator {
         }
     }
 
-    private async buildRetryKeysSection(
-        identity: Uint8Array
-    ): Promise<WaRetryKeyBundle | undefined> {
+    private async buildRetryKeysSection(identity: Uint8Array): Promise<WaRetryKeyBundle | null> {
         const [signedPreKey, preKey] = await Promise.all([
             this.signalStore.getSignedPreKey(),
             this.preKeyStore.getOrGenSinglePreKey(generatePreKeyPair)
         ])
         if (!signedPreKey) {
             this.logger.warn('retry keys section skipped: signed prekey unavailable')
-            return undefined
+            return null
         }
         await this.preKeyStore.markKeyAsUploaded(preKey.keyId)
         const signedIdentity = this.getCurrentSignedIdentity()

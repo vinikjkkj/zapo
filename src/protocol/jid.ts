@@ -62,12 +62,7 @@ export function normalizeRecipientJid(to: string): string {
 
 function isJidType(jid: string, type: string): boolean {
     const atIndex = jid.length - type.length - 1
-    return (
-        atIndex >= 1 &&
-        jid.charCodeAt(atIndex) === 64 &&
-        jid.indexOf('@') === atIndex &&
-        jid.endsWith(type)
-    )
+    return atIndex >= 1 && jid.charCodeAt(atIndex) === 64 && jid.endsWith(type)
 }
 
 export function isLidJid(jid: string): boolean {

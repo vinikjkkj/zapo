@@ -1,15 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { bytesToBase64, bytesToBase64UrlSafe } from '../../../transport/util'
 import { parsePairingQrString } from '../pair-device'
-
-function toBase64Url(bytes: Uint8Array): string {
-    return Buffer.from(bytes)
-        .toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/g, '')
-}
 
 test('parsePairingQrString decodes base64url key fields', () => {
     const noise = new Uint8Array(Array.from({ length: 32 }, (_, index) => (index * 7 + 3) & 0xff))
@@ -22,9 +15,9 @@ test('parsePairingQrString decodes base64url key fields', () => {
 
     const qr = [
         'fake-ref',
-        toBase64Url(noise),
-        toBase64Url(identity),
-        toBase64Url(advSecret),
+        bytesToBase64UrlSafe(noise),
+        bytesToBase64UrlSafe(identity),
+        bytesToBase64UrlSafe(advSecret),
         'IOS'
     ].join(',')
 
@@ -47,9 +40,9 @@ test('parsePairingQrString still decodes classic base64 key fields', () => {
 
     const qr = [
         'fake-ref',
-        Buffer.from(noise).toString('base64'),
-        Buffer.from(identity).toString('base64'),
-        Buffer.from(advSecret).toString('base64'),
+        bytesToBase64(noise),
+        bytesToBase64(identity),
+        bytesToBase64(advSecret),
         'IOS'
     ].join(',')
 
@@ -72,9 +65,9 @@ test('parsePairingQrString supports refs containing commas', () => {
 
     const qr = [
         'ref,with,commas',
-        Buffer.from(noise).toString('base64'),
-        Buffer.from(identity).toString('base64'),
-        Buffer.from(advSecret).toString('base64'),
+        bytesToBase64(noise),
+        bytesToBase64(identity),
+        bytesToBase64(advSecret),
         'IOS'
     ].join(',')
 

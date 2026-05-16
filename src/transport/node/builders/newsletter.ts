@@ -186,17 +186,6 @@ export function buildNewsletterViewReceiptNode(input: BuildNewsletterViewReceipt
     }
 }
 
-export function buildNewsletterMetadataIq(): BinaryNode {
-    return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.NEWSLETTER, [
-        {
-            tag: WA_NODE_TAGS.MY_ADDONS,
-            attrs: {
-                limit: '1'
-            }
-        }
-    ])
-}
-
 export function buildNewsletterSubscribeLiveUpdatesIq(newsletterJid: string): BinaryNode {
     return buildIqNode(WA_IQ_TYPES.SET, newsletterJid, WA_XMLNS.NEWSLETTER, [
         {

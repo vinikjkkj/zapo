@@ -7,22 +7,11 @@ import { processHistorySyncNotification } from '@client/history-sync'
 import type { WaClientOptions } from '@client/types'
 import { WaClient } from '@client/WaClient'
 import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClientFactory'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
 import type { AbPropName } from '@protocol/abprops'
 import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
 import type { BinaryNode } from '@transport/types'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 test('parseDirtyBits filters invalid entries and preserves protocols', () => {
     const parsed = parseDirtyBits(
@@ -40,7 +29,7 @@ test('parseDirtyBits filters invalid entries and preserves protocols', () => {
                 attrs: { type: '', timestamp: 'x' }
             }
         ],
-        createLogger()
+        createNoopLogger()
     )
 
     assert.equal(parsed.length, 1)
@@ -88,7 +77,7 @@ test('history sync processor persists conversations and emits chunk event', asyn
 
     await processHistorySyncNotification(
         {
-            logger: createLogger(),
+            logger: createNoopLogger(),
             mediaTransfer: {
                 downloadAndDecrypt: async () => {
                     throw new Error('should not be called for inline payload')
@@ -158,7 +147,7 @@ test('history sync processor does not emit chunk event when chunk persistence fa
         () =>
             processHistorySyncNotification(
                 {
-                    logger: createLogger(),
+                    logger: createNoopLogger(),
                     mediaTransfer: {
                         downloadAndDecrypt: async () => {
                             throw new Error('should not be called for inline payload')
@@ -210,7 +199,7 @@ test('history sync processor forwards privacy token payloads and nct salt hooks'
 
     await processHistorySyncNotification(
         {
-            logger: createLogger(),
+            logger: createNoopLogger(),
             mediaTransfer: {
                 downloadAndDecrypt: async () => {
                     throw new Error('should not be called for inline payload')
@@ -266,9 +255,9 @@ test('resolveWaClientBase rejects invalid proxy transport shapes', () => {
         }
     } as unknown as WaClientOptions
 
-    assert.throws(() => resolveWaClientBase(invalidWs, createLogger()), /proxy\.ws/)
+    assert.throws(() => resolveWaClientBase(invalidWs, createNoopLogger()), /proxy\.ws/)
     assert.throws(
-        () => resolveWaClientBase(invalidMediaUpload, createLogger()),
+        () => resolveWaClientBase(invalidMediaUpload, createNoopLogger()),
         /proxy\.mediaUpload/
     )
 })
@@ -289,11 +278,11 @@ test('resolveWaClientBase rejects invalid proxy root shapes', () => {
     } as unknown as WaClientOptions
 
     assert.throws(
-        () => resolveWaClientBase(invalidProxyPrimitive, createLogger()),
+        () => resolveWaClientBase(invalidProxyPrimitive, createNoopLogger()),
         /proxy must be an object/
     )
     assert.throws(
-        () => resolveWaClientBase(invalidProxyArray, createLogger()),
+        () => resolveWaClientBase(invalidProxyArray, createNoopLogger()),
         /proxy must be an object/
     )
 })
@@ -318,7 +307,7 @@ test('resolveWaClientBase accepts proxy agent shapes', () => {
         }
     } as unknown as WaClientOptions
 
-    assert.doesNotThrow(() => resolveWaClientBase(options, createLogger()))
+    assert.doesNotThrow(() => resolveWaClientBase(options, createNoopLogger()))
 })
 
 test('buildWaClientDependencies wires privacy coordinator', () => {
@@ -342,7 +331,7 @@ test('buildWaClientDependencies wires privacy coordinator', () => {
         sessionId: 'session'
     } as unknown as WaClientOptions
 
-    const base = resolveWaClientBase(options, createLogger())
+    const base = resolveWaClientBase(options, createNoopLogger())
     const runtime = {
         sendNode: async (_node: BinaryNode) => undefined,
         query: async (_node: BinaryNode) =>
@@ -385,7 +374,7 @@ test('buildWaClientDependencies wires trusted contact token AB prop overrides', 
         sessionId: 'session'
     } as unknown as WaClientOptions
 
-    const base = resolveWaClientBase(options, createLogger())
+    const base = resolveWaClientBase(options, createNoopLogger())
     const runtime = {
         sendNode: async (_node: BinaryNode) => undefined,
         query: async (_node: BinaryNode) =>
@@ -491,7 +480,7 @@ function createClearStoredStateHarness(logoutStoreClear?: {
         receiptQueue: {
             take: () => []
         },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         authClient: {
             clearStoredCredentials: async () => {
                 cleared.push('auth')
@@ -694,7 +683,7 @@ test('uploadNewsletterMedia builds plaintext URL and parses response', async () 
     } as unknown as Parameters<typeof uploadNewsletterMedia>[0]['mediaTransfer']
 
     const result = await uploadNewsletterMedia(
-        { mediaTransfer, logger: createLogger() },
+        { mediaTransfer, logger: createNoopLogger() },
         {
             mediaKind: 'image',
             media: new Uint8Array([1, 2, 3, 4]),

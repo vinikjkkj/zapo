@@ -331,7 +331,7 @@ export class WaAuthClient {
 
     private async updateCredentials(credentials: WaAuthCredentials): Promise<void> {
         this.logger.trace('auth client update credentials', {
-            registered: credentials?.meJid !== null && credentials?.meJid !== undefined
+            registered: !!credentials?.meJid
         })
         this.credentials = credentials
         await persistCredentials(

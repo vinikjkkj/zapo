@@ -1,26 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 test('keepalive issues ping queries when connected and idle', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] })
 
     let queryCount = 0
     const keepAlive = new WaKeepAlive({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         nodeOrchestrator: {
             hasPending: () => false,
             query: async () => {
@@ -52,7 +41,7 @@ test('keepalive asks comms to resume when ping fails', async (t) => {
 
     let resumed = 0
     const keepAlive = new WaKeepAlive({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         nodeOrchestrator: {
             hasPending: () => false,
             query: async () => {
@@ -96,7 +85,7 @@ test('keepalive reports clock skew from ping response with half-RTT compensation
     const latencyMs = 200
 
     const keepAlive = new WaKeepAlive({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         nodeOrchestrator: {
             hasPending: () => false,
             query: async () => {
@@ -136,7 +125,7 @@ test('keepalive skips clock skew update when ping response has no t', async (t) 
 
     const skewUpdates: number[] = []
     const keepAlive = new WaKeepAlive({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         nodeOrchestrator: {
             hasPending: () => false,
             query: async () => ({ tag: 'iq', attrs: { type: 'result' } })
@@ -166,7 +155,7 @@ test('keepalive ignores invalid t attribute', async (t) => {
 
     const skewUpdates: number[] = []
     const keepAlive = new WaKeepAlive({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         nodeOrchestrator: {
             hasPending: () => false,
             query: async () => ({

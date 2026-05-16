@@ -18,12 +18,14 @@ function runNpm(args) {
     const result = npmExecPath
         ? spawnSync(process.execPath, [npmExecPath, ...args], {
               cwd: rootDir,
-              stdio: 'inherit'
+              stdio: 'inherit',
+              timeout: 120_000
           })
         : spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, {
               cwd: rootDir,
               stdio: 'inherit',
-              shell: true
+              shell: true,
+              timeout: 120_000
           })
 
     if (result.status !== 0) {

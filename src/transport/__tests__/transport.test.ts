@@ -1,20 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { WA_IQ_TYPES } from '@protocol/constants'
 import { buildIqNode, parseIqError, queryWithContext } from '@transport'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 test('transport barrel exports iq helpers with expected behavior', async () => {
     const iq = buildIqNode(WA_IQ_TYPES.GET, 's.whatsapp.net', 'w:test')
@@ -33,7 +22,7 @@ test('transport barrel exports iq helpers with expected behavior', async () => {
                 async () => {
                     throw new Error('x')
                 },
-                createLogger(),
+                createNoopLogger(),
                 'ctx',
                 iq,
                 10

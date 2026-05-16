@@ -4,21 +4,10 @@ import test from 'node:test'
 import { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
 import type { ParsedPrivacyToken } from '@client/events/privacy-token'
 import type { WaClientEventMap } from '@client/types'
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { WA_PRIVACY_TOKEN_TYPES } from '@protocol/privacy-token'
 import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
 import type { BinaryNode } from '@transport/types'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 function createRuntime(options?: {
     readonly getCurrentMeLid?: () => string | null
@@ -56,7 +45,7 @@ test('trusted contact token coordinator uses fresh tc token for message fanout',
     const { runtime, queries } = createRuntime()
     const coordinator = new WaTrustedContactTokenCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         store,
         runtime,
         durationS: 60,
@@ -82,7 +71,7 @@ test('trusted contact token coordinator falls back to cs token when tc token is 
     const { runtime } = createRuntime()
     const coordinator = new WaTrustedContactTokenCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         store,
         runtime,
         durationS: 60,
@@ -113,7 +102,7 @@ test('trusted contact token coordinator persists incoming trusted tokens and emi
     const coordinator = new WaTrustedContactTokenCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: {
-            ...createLogger(),
+            ...createNoopLogger(),
             warn: (...args) => {
                 warnings.push(args)
             }
@@ -151,7 +140,7 @@ test('trusted contact token coordinator deduplicates sender token issue and resp
     const { runtime, queries } = createRuntime({ queryDelayMs: 20 })
     const coordinator = new WaTrustedContactTokenCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         store,
         runtime,
         senderDurationS: 120
@@ -175,7 +164,7 @@ test('trusted contact token coordinator reissues token on identity change when s
     const { runtime, queries } = createRuntime()
     const coordinator = new WaTrustedContactTokenCoordinator({
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
-        logger: createLogger(),
+        logger: createNoopLogger(),
         store,
         runtime,
         senderDurationS: 300,

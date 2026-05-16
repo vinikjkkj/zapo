@@ -1,4 +1,4 @@
-import { aesGcmDecrypt, aesGcmEncrypt, buildNonce, hkdfSplit, sha256 } from '@crypto'
+import { aesGcmDecrypt, aesGcmEncrypt, hkdfSplit, sha256, writeNonceCounter } from '@crypto'
 import { WaNoiseSocket } from '@transport/noise/WaNoiseSocket'
 import { EMPTY_BYTES } from '@util/bytes'
 
@@ -7,6 +7,7 @@ export class WaNoiseHandshake {
     private chainingKey: Uint8Array
     private cipherKey: Uint8Array | null
     private nonce: number
+    private readonly nonceScratch: Uint8Array = new Uint8Array(12)
 
     public constructor() {
         this.handshakeHash = EMPTY_BYTES
@@ -38,8 +39,13 @@ export class WaNoiseHandshake {
         if (!this.cipherKey) {
             throw new Error('noise handshake cipher key is not initialized')
         }
-        const nonce = buildNonce(this.nonce++)
-        const ciphertext = aesGcmEncrypt(this.cipherKey, nonce, plaintext, this.handshakeHash)
+        writeNonceCounter(this.nonceScratch, this.nonce++)
+        const ciphertext = aesGcmEncrypt(
+            this.cipherKey,
+            this.nonceScratch,
+            plaintext,
+            this.handshakeHash
+        )
         this.authenticate(ciphertext)
         return ciphertext
     }
@@ -48,8 +54,13 @@ export class WaNoiseHandshake {
         if (!this.cipherKey) {
             throw new Error('noise handshake cipher key is not initialized')
         }
-        const nonce = buildNonce(this.nonce++)
-        const plaintext = aesGcmDecrypt(this.cipherKey, nonce, ciphertext, this.handshakeHash)
+        writeNonceCounter(this.nonceScratch, this.nonce++)
+        const plaintext = aesGcmDecrypt(
+            this.cipherKey,
+            this.nonceScratch,
+            ciphertext,
+            this.handshakeHash
+        )
         this.authenticate(ciphertext)
         return plaintext
     }

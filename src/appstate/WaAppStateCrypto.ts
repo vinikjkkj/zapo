@@ -148,18 +148,18 @@ export class WaAppStateCrypto {
 
         const indexMac = this.generateIndexMac(derivedKeys.indexHmacKey, indexBytes)
         const cipherText = aesCbcEncrypt(derivedKeys.valueEncryptionAesKey, iv, encoded)
-        const cipherWithIv = concatBytes([iv, cipherText])
 
         const associatedData = this.generateAssociatedData(args.operation, args.keyId)
         const valueMac = this.generateValueMac(
             derivedKeys.valueMacHmacKey,
             associatedData,
-            cipherWithIv
+            iv,
+            cipherText
         )
 
         return {
             indexMac,
-            valueBlob: concatBytes([cipherWithIv, valueMac]),
+            valueBlob: concatBytes([iv, cipherText, valueMac]),
             valueMac
         }
     }
@@ -183,17 +183,14 @@ export class WaAppStateCrypto {
             APP_STATE_IV_LENGTH,
             args.valueBlob.byteLength - APP_STATE_VALUE_MAC_LENGTH
         )
-        const cipherWithIv = args.valueBlob.subarray(
-            0,
-            args.valueBlob.byteLength - APP_STATE_VALUE_MAC_LENGTH
-        )
 
         if (!this.skipMacVerification) {
             const associatedData = this.generateAssociatedData(args.operation, args.keyId)
             const expectedMac = this.generateValueMac(
                 derivedKeys.valueMacHmacKey,
                 associatedData,
-                cipherWithIv
+                iv,
+                cipherText
             )
             if (!uint8TimingSafeEqual(mac, expectedMac)) {
                 throw new Error('mutation value MAC mismatch')
@@ -354,13 +351,14 @@ export class WaAppStateCrypto {
     private generateValueMac(
         valueMacHmacKey: Uint8Array,
         associatedData: Uint8Array,
-        cipherWithIv: Uint8Array
+        iv: Uint8Array,
+        cipherText: Uint8Array
     ): Uint8Array {
         const octetLength = new Uint8Array(APP_STATE_MAC_OCTET_LENGTH)
         octetLength[octetLength.length - 1] = associatedData.byteLength & 0xff
         const full = hmacSha512Sign(
             valueMacHmacKey,
-            concatBytes([associatedData, cipherWithIv, octetLength])
+            concatBytes([associatedData, iv, cipherText, octetLength])
         )
         return full.subarray(0, APP_STATE_VALUE_MAC_LENGTH)
     }

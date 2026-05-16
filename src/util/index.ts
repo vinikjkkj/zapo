@@ -1,7 +1,9 @@
 export {
     base64ToBytes,
     bytesToBase64,
+    bytesToBase64UrlSafe,
     bytesToHex,
+    decodeBase64Url,
     hexToBytes,
     toBytesView,
     uint8Equal

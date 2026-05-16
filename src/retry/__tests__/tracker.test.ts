@@ -1,20 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { Logger } from '@infra/log/types'
+import { createNoopLogger } from '@infra/log/types'
 import { createOutboundRetryTracker } from '@retry/tracker'
 import type { WaRetryStore } from '@store/contracts/retry.store'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
 
 test('outbound retry tracker persists once when hinted id matches publish result', async () => {
     const upserts: {
@@ -41,7 +30,7 @@ test('outbound retry tracker persists once when hinted id matches publish result
 
     const tracker = createOutboundRetryTracker({
         retryStore,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     const result = await tracker.track(
@@ -89,7 +78,7 @@ test('outbound retry tracker skips codec when store supports raw replay payloads
 
     const tracker = createOutboundRetryTracker({
         retryStore,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     const replayPayload = {
@@ -140,7 +129,7 @@ test('outbound retry tracker persists publish result when id hint is not provide
 
     const tracker = createOutboundRetryTracker({
         retryStore,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     await tracker.track(
@@ -185,7 +174,7 @@ test('outbound retry tracker persists only publish result when server rewrites i
 
     const tracker = createOutboundRetryTracker({
         retryStore,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     await tracker.track(
@@ -231,7 +220,7 @@ test('outbound retry tracker does not default eligible requester list for group 
 
     const tracker = createOutboundRetryTracker({
         retryStore,
-        logger: createLogger()
+        logger: createNoopLogger()
     })
 
     await tracker.track(

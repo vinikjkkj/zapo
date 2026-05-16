@@ -68,11 +68,10 @@ const IGNORED_SERVER_CATEGORIES = new Set([
     'groupcreation'
 ])
 
+const VALID_PRIVACY_VALUES: ReadonlySet<string> = new Set(Object.values(WA_PRIVACY_VALUES))
+
 function isValidPrivacyValue(value: string): value is WaPrivacyValue {
-    return (
-        value !== WA_PRIVACY_VALUES.ERROR &&
-        Object.values(WA_PRIVACY_VALUES).includes(value as WaPrivacyValue)
-    )
+    return value !== WA_PRIVACY_VALUES.ERROR && VALID_PRIVACY_VALUES.has(value)
 }
 
 function parsePrivacySettings(result: BinaryNode): WaPrivacySettings {

@@ -3,18 +3,7 @@ import test from 'node:test'
 
 import { WaConnectionManager } from '@client/connection/WaConnectionManager'
 import { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
-import type { Logger } from '@infra/log/types'
-
-function createLogger(): Logger {
-    return {
-        level: 'trace',
-        trace: () => undefined,
-        debug: () => undefined,
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined
-    }
-}
+import { createNoopLogger } from '@infra/log/types'
 
 test('receipt queue enforces max size and drains in insertion order', () => {
     const queue = new WaReceiptQueue({ maxSize: 2 })
@@ -54,7 +43,7 @@ test('connection manager exposes media cache and clock skew helpers', async () =
     let clearedCredentialsCalls = 0
 
     const manager = new WaConnectionManager({
-        logger: createLogger(),
+        logger: createNoopLogger(),
         options: {} as never,
         authClient: {
             clearTransientState: async () => undefined

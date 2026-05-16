@@ -1,4 +1,4 @@
-import { type Fe, fe, feFromBigInt } from '@crypto/math/fe'
+import { type Fe, feFromBigInt } from '@crypto/math/fe'
 import type { ExtendedPoint } from '@crypto/math/types'
 
 export const FIELD_P = (1n << 255n) - 19n
@@ -7,7 +7,6 @@ export const GROUP_L = (1n << 252n) + 27742317777372353535851937790883648493n
 export const FE_TWO_D: Fe =
     feFromBigInt(16295367250680780974490674513165176452449235426866156013048779062215315747161n)
 
-export const FE_ZERO: Fe = fe()
 export const FE_ONE: Fe = feFromBigInt(1n)
 
 export const BASE_POINT: ExtendedPoint = Object.freeze({
