@@ -431,13 +431,26 @@ test('business coordinator uploads cover photo bytes and finalizes via IQ', asyn
 
 function makeUploadStub(responseBody: string, status = 200) {
     const transfer = {
-        uploadStream: async (req: { readonly url: string; readonly body: unknown }) => ({
-            status,
-            ok: status >= 200 && status < 300,
-            headers: {},
-            body: null,
-            url: req.url
-        }),
+        uploadStream: async (req: { readonly url: string; readonly body: unknown }) => {
+            // Drain the body stream so the underlying file handle is opened and closed
+            // before the caller cleans up the temp file (otherwise a lazy-opened
+            // stream races with unlink and emits uncaught ENOENT on Linux CI).
+            const body = req.body
+            if (body instanceof Readable) {
+                await new Promise<void>((resolve, reject) => {
+                    body.on('data', () => undefined)
+                        .on('end', () => resolve())
+                        .on('error', (error: Error) => reject(error))
+                })
+            }
+            return {
+                status,
+                ok: status >= 200 && status < 300,
+                headers: {},
+                body: null,
+                url: req.url
+            }
+        },
         readResponseBytes: async () => TEXT_ENCODER.encode(responseBody)
     } as unknown as WaMediaTransferClient
     return makeBusinessCoordinator({
