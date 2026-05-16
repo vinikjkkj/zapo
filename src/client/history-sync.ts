@@ -167,13 +167,9 @@ async function flushPendingWrites(pendingWrites: Promise<void>[]): Promise<void>
     if (pendingWrites.length === 0) {
         return
     }
-    const pendingCount = pendingWrites.length
-    const batch = new Array<Promise<void>>(pendingCount)
-    for (let index = 0; index < pendingCount; index += 1) {
-        batch[index] = pendingWrites[index]
-    }
+    const settled = Promise.all(pendingWrites)
     pendingWrites.length = 0
-    await Promise.all(batch)
+    await settled
 }
 
 async function downloadHistorySyncBlob(

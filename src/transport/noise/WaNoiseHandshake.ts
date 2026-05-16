@@ -30,7 +30,11 @@ export class WaNoiseHandshake {
 
     public mixIntoKey(keyMaterial: Uint8Array): void {
         this.nonce = 0
-        const [newChainingKey, nextCipherKey] = hkdfSplit(keyMaterial, this.chainingKey, '')
+        const [newChainingKey, nextCipherKey] = hkdfSplit(
+            keyMaterial,
+            this.chainingKey,
+            EMPTY_BYTES
+        )
         this.chainingKey = newChainingKey
         this.cipherKey = nextCipherKey
     }
@@ -66,7 +70,7 @@ export class WaNoiseHandshake {
     }
 
     public finish(): WaNoiseSocket {
-        const [writeKey, readKey] = hkdfSplit(EMPTY_BYTES, this.chainingKey, '')
+        const [writeKey, readKey] = hkdfSplit(EMPTY_BYTES, this.chainingKey, EMPTY_BYTES)
         this.handshakeHash = EMPTY_BYTES
         this.chainingKey = EMPTY_BYTES
         this.cipherKey = null

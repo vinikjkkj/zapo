@@ -5,6 +5,7 @@ import type {
 } from '@appstate/types'
 import { proto } from '@proto'
 import { asBytes, asNumber, asOptionalBytes, asString } from '@util/coercion'
+import { toError } from '@util/primitives'
 
 type StoreRow = Readonly<Record<string, unknown>>
 
@@ -27,8 +28,9 @@ export function decodeAppStateFingerprint(
     try {
         return proto.Message.AppStateSyncKeyFingerprint.decode(bytes)
     } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error)
-        throw new Error(`invalid appstate_sync_keys.fingerprint protobuf payload: ${reason}`)
+        throw new Error(
+            `invalid appstate_sync_keys.fingerprint protobuf payload: ${toError(error).message}`
+        )
     }
 }
 

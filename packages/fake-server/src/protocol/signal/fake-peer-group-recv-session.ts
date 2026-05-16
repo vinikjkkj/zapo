@@ -9,12 +9,13 @@ import {
     xeddsaVerify
 } from '../../transport/crypto'
 import { proto } from '../../transport/protos'
+import { TEXT_ENCODER } from '../../transport/util'
 
 const SIGNAL_GROUP_VERSION = 3
 const SIGNAL_SIGNATURE_LENGTH = 64
 const MESSAGE_KEY_LABEL = new Uint8Array([1])
 const CHAIN_KEY_LABEL = new Uint8Array([2])
-const WHISPER_GROUP_INFO = 'WhisperGroup'
+const WHISPER_GROUP_INFO = TEXT_ENCODER.encode('WhisperGroup')
 
 export class FakePeerGroupRecvSessionError extends Error {
     public constructor(message: string) {

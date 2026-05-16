@@ -35,6 +35,7 @@ export class WaConnectionManager {
     private mediaConnCache: WaMediaConn | null
     private connectPromise: Promise<void> | null
     private pairingReconnectPromise: Promise<void> | null
+    private pairingReconnectTimeout: ReturnType<typeof setTimeout> | null
     private frameHandler: ((frame: Uint8Array) => Promise<void>) | null
     private pendingComms: WaComms | null
     private lifecycleGeneration: number
@@ -55,6 +56,7 @@ export class WaConnectionManager {
         this.mediaConnCache = null
         this.connectPromise = null
         this.pairingReconnectPromise = null
+        this.pairingReconnectTimeout = null
         this.frameHandler = null
         this.pendingComms = null
         this.lifecycleGeneration = 0
@@ -83,7 +85,11 @@ export class WaConnectionManager {
 
     public scheduleReconnectAfterPairing(): void {
         this.logger.debug('wa client scheduling reconnect after pairing')
-        setTimeout(() => {
+        if (this.pairingReconnectTimeout) {
+            clearTimeout(this.pairingReconnectTimeout)
+        }
+        this.pairingReconnectTimeout = setTimeout(() => {
+            this.pairingReconnectTimeout = null
             void this.reconnectAsRegisteredAfterPairing().catch((error) => {
                 if (this.isLifecycleSupersededError(error)) {
                     this.logger.trace('pairing reconnect canceled by newer lifecycle')
@@ -254,6 +260,10 @@ export class WaConnectionManager {
         }
 
         this.logger.info('wa client disconnect start')
+        if (this.pairingReconnectTimeout) {
+            clearTimeout(this.pairingReconnectTimeout)
+            this.pairingReconnectTimeout = null
+        }
         this.keepAlive.stop()
         this.nodeOrchestrator.clearPending(new Error('client disconnected'))
         this.clockSkewMs = null

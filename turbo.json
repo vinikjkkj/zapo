@@ -25,6 +25,15 @@
             ]
         },
         "lint": {},
-        "typecheck": {}
+        "typecheck": {
+            "inputs": [
+                "$TURBO_DEFAULT$",
+                "$TURBO_ROOT$/src/**/*.ts",
+                "$TURBO_ROOT$/tsconfig.base.json",
+                "$TURBO_ROOT$/packages/tsconfig.paths.json",
+                "$TURBO_ROOT$/proto/**/*.ts",
+                "$TURBO_ROOT$/proto/**/*.d.ts"
+            ]
+        }
     }
 }

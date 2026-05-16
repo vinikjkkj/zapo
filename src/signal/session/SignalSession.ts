@@ -1,5 +1,5 @@
 import { hkdfSplit, toRawPubKey, toSerializedPubKey, X25519 } from '@crypto'
-import { SIGNAL_PREFIX } from '@signal/constants'
+import { SIGNAL_PREFIX, WHISPER_RATCHET_INFO, WHISPER_TEXT_INFO } from '@signal/constants'
 import { decodeSignalSessionSnapshot, encodeSignalSessionSnapshot } from '@signal/encoding'
 import type {
     RawSignalRecvChain,
@@ -108,7 +108,7 @@ export async function initiateSessionOutgoing(
         baseDh,
         ...(oneTimeDh ? [oneTimeDh] : [])
     ])
-    const [rootKey, chainKey] = hkdfSplit(secret, null, 'WhisperText')
+    const [rootKey, chainKey] = hkdfSplit(secret, null, WHISPER_TEXT_INFO)
 
     const recvChain: RawSignalRecvChain = {
         senderRatchetKey: remoteRatchetKey,
@@ -163,7 +163,7 @@ export async function initiateSessionIncoming(
         signedDh,
         ...(oneTimeDh ? [oneTimeDh] : [])
     ])
-    const [rootKey, chainKey] = hkdfSplit(secret, null, 'WhisperText')
+    const [rootKey, chainKey] = hkdfSplit(secret, null, WHISPER_TEXT_INFO)
 
     return {
         local: { regId: local.regId, pubKey: local.staticKeyPair.pubKey },
@@ -188,7 +188,7 @@ export async function calculateRatchet(
     remoteRatchetPubKey: Uint8Array
 ): Promise<{ readonly rootKey: Uint8Array; readonly chainKey: Uint8Array }> {
     const sharedSecret = await ecdh(localRatchet.privKey, remoteRatchetPubKey)
-    const [nextRootKey, chainKey] = hkdfSplit(sharedSecret, rootKey, 'WhisperRatchet')
+    const [nextRootKey, chainKey] = hkdfSplit(sharedSecret, rootKey, WHISPER_RATCHET_INFO)
     return {
         rootKey: nextRootKey,
         chainKey

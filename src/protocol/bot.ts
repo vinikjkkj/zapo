@@ -1,6 +1,7 @@
 import { proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/defaults'
 import { isBotJid } from '@protocol/jid'
+import { TEXT_ENCODER } from '@util/bytes'
 
 export const WA_BOT_MSG_EDIT_TYPES = Object.freeze({
     FIRST: 'first',
@@ -65,7 +66,7 @@ export const WA_META_NODE_ATTRS_BOT = Object.freeze({
     TARGET_CHAT_JID: 'target_chat_jid'
 } as const)
 
-export const WA_BOT_HKDF_INFO = 'Bot Message'
+export const WA_BOT_HKDF_INFO = TEXT_ENCODER.encode('Bot Message')
 export const WA_BOT_MSG_SECRET_BYTES = 32
 
 // Without a matching Bloks hash, Meta AI silently drops invoke mentions.

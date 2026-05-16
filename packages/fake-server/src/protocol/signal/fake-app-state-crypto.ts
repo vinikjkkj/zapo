@@ -9,6 +9,7 @@ import {
     randomBytesAsync
 } from '../../transport/crypto'
 import { proto, type Proto } from '../../transport/protos'
+import { TEXT_ENCODER } from '../../transport/util'
 
 const APP_STATE_DERIVED_KEY_LENGTH = 160
 const APP_STATE_DERIVED_INDEX_KEY_END = 32
@@ -21,8 +22,8 @@ const APP_STATE_MAC_OCTET_LENGTH = 8
 const APP_STATE_IV_LENGTH = 16
 const APP_STATE_LT_HASH_SIZE = 128
 const APP_STATE_POINT_SIZE = 2
-const KDF_INFO_MUTATION_KEYS = 'WhatsApp Mutation Keys'
-const KDF_INFO_PATCH_INTEGRITY = 'WhatsApp Patch Integrity'
+const KDF_INFO_MUTATION_KEYS = TEXT_ENCODER.encode('WhatsApp Mutation Keys')
+const KDF_INFO_PATCH_INTEGRITY = TEXT_ENCODER.encode('WhatsApp Patch Integrity')
 
 export const APP_STATE_EMPTY_LT_HASH = new Uint8Array(APP_STATE_LT_HASH_SIZE)
 

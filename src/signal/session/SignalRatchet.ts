@@ -13,7 +13,8 @@ import {
     MAX_UNUSED_KEYS,
     MESSAGE_KEY_LABEL,
     SIGNAL_MAC_SIZE,
-    SIGNAL_VERSION
+    SIGNAL_VERSION,
+    WHISPER_MESSAGE_KEYS_INFO
 } from '@signal/constants'
 import {
     decodeSignalMessageKey,
@@ -153,7 +154,7 @@ function deriveMsgKeyFromChainKey(
     const nextChainRaw = hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
     const messageInputKey = hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
     const nextChainKey = nextChainRaw.subarray(0, 32)
-    const expanded = hkdf(messageInputKey, null, 'WhisperMessageKeys', 80)
+    const expanded = hkdf(messageInputKey, null, WHISPER_MESSAGE_KEYS_INFO, 80)
     return {
         nextChainKey,
         messageKey: splitMsgKey(index, expanded)

@@ -1,10 +1,17 @@
 import { randomBytesAsync } from '@crypto'
 
 const RANDOM_PAD_MAX_16_MASK = 0x0f
+const PAD_SEED_BATCH_SIZE = 1024
+
+let padSeedBuffer: Uint8Array | null = null
+let padSeedCursor = 0
 
 export async function writeRandomPadMax16(message: Uint8Array): Promise<Uint8Array> {
-    const padSeed = await randomBytesAsync(1)
-    const padLength = (padSeed[0] & RANDOM_PAD_MAX_16_MASK) + 1
+    if (!padSeedBuffer || padSeedCursor >= padSeedBuffer.length) {
+        padSeedBuffer = await randomBytesAsync(PAD_SEED_BATCH_SIZE)
+        padSeedCursor = 0
+    }
+    const padLength = (padSeedBuffer[padSeedCursor++] & RANDOM_PAD_MAX_16_MASK) + 1
     const out = new Uint8Array(message.length + padLength)
     out.set(message, 0)
     out.fill(padLength, message.length)

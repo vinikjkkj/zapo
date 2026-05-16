@@ -17,13 +17,15 @@ import { assertByteLength, bytesToBase64UrlSafe, decodeBase64Url } from '@util/b
 test('hkdf derivation and split are deterministic with same inputs', async () => {
     const ikm = new Uint8Array(32).fill(1)
     const salt = new Uint8Array(32).fill(2)
+    const info = new TextEncoder().encode('info')
+    const splitInfo = new TextEncoder().encode('split-info')
 
-    const one = hkdf(ikm, salt, 'info', 32)
-    const two = hkdf(ikm, salt, 'info', 32)
+    const one = hkdf(ikm, salt, info, 32)
+    const two = hkdf(ikm, salt, info, 32)
     assert.deepEqual(one, two)
     assert.equal(one.length, 32)
 
-    const [left, right] = hkdfSplit(ikm, salt, 'split-info')
+    const [left, right] = hkdfSplit(ikm, salt, splitInfo)
     assert.equal(left.length, 32)
     assert.equal(right.length, 32)
     assert.notDeepEqual(left, right)

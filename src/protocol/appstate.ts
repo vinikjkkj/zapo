@@ -1,3 +1,5 @@
+import { TEXT_ENCODER } from '@util/bytes'
+
 export const WA_APP_STATE_COLLECTIONS = Object.freeze({
     REGULAR: 'regular',
     REGULAR_LOW: 'regular_low',
@@ -36,8 +38,8 @@ export const WA_APP_STATE_KEY_TYPES = Object.freeze({
 } as const)
 
 export const WA_APP_STATE_KDF_INFO = Object.freeze({
-    MUTATION_KEYS: 'WhatsApp Mutation Keys',
-    PATCH_INTEGRITY: 'WhatsApp Patch Integrity'
+    MUTATION_KEYS: TEXT_ENCODER.encode('WhatsApp Mutation Keys'),
+    PATCH_INTEGRITY: TEXT_ENCODER.encode('WhatsApp Patch Integrity')
 } as const)
 
 export const WA_APP_STATE_CHAT_MUTATION_SPECS = Object.freeze({

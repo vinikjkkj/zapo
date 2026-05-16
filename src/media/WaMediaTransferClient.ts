@@ -397,7 +397,8 @@ export class WaMediaTransferClient {
         const prepared = await WaMediaCrypto.encryptReadable(
             request.mediaType,
             mediaKey,
-            request.plaintext
+            request.plaintext,
+            { expectedFileSize: request.contentLength ?? undefined }
         )
         return {
             body: prepared.encrypted,

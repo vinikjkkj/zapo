@@ -36,7 +36,7 @@ import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { bytesToHex, decodeProtoBytes, uint8TimingSafeEqual } from '@util/bytes'
 import type { ServerClock } from '@util/clock'
-import { longToNumber } from '@util/primitives'
+import { longToNumber, toError } from '@util/primitives'
 
 interface OutgoingPatchContext {
     readonly collection: AppStateCollectionName
@@ -656,10 +656,9 @@ export class WaAppStateSyncClient {
                     error.keyId
                 )
             }
-            const message = error instanceof Error ? error.message : String(error)
             this.logger.warn('app-state collection processing failed', {
                 collection: payload.collection,
-                message
+                message: toError(error).message
             })
             return this.createCollectionOutcome(
                 collection,
@@ -727,7 +726,7 @@ export class WaAppStateSyncClient {
             this.logger.warn('app-state missing key callback failed', {
                 keys: keyIdsHex.length,
                 collections: collections.join(','),
-                message: error instanceof Error ? error.message : String(error)
+                message: toError(error).message
             })
         }
     }
@@ -1314,8 +1313,7 @@ export class WaAppStateSyncClient {
         try {
             return longToNumber(value as number | { toNumber(): number } | null | undefined)
         } catch (error) {
-            const reason = error instanceof Error ? error.message : String(error)
-            throw new Error(`invalid ${field}: ${reason}`)
+            throw new Error(`invalid ${field}: ${toError(error).message}`)
         }
     }
 

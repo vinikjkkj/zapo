@@ -13,6 +13,7 @@ import {
     X25519
 } from '../../transport/crypto'
 import { proto } from '../../transport/protos'
+import { TEXT_ENCODER } from '../../transport/util'
 
 import type { FakePeerKeyBundle } from './fake-peer-key-bundle'
 import type { ClientPreKeyBundle } from './prekey-upload'
@@ -22,6 +23,9 @@ const SIGNAL_MAC_SIZE = 8
 const SIGNAL_PREFIX_FF = new Uint8Array(32).fill(0xff)
 const MESSAGE_KEY_LABEL = new Uint8Array([1])
 const CHAIN_KEY_LABEL = new Uint8Array([2])
+const WHISPER_TEXT_INFO = TEXT_ENCODER.encode('WhisperText')
+const WHISPER_RATCHET_INFO = TEXT_ENCODER.encode('WhisperRatchet')
+const WHISPER_MESSAGE_KEYS_INFO = TEXT_ENCODER.encode('WhisperMessageKeys')
 
 export class FakePeerDoubleRatchetError extends Error {
     public constructor(message: string) {
@@ -114,7 +118,7 @@ export class FakePeerDoubleRatchet {
         const sharedParts: Uint8Array[] = [SIGNAL_PREFIX_FF, dh1, dh2, dh3]
         if (dh4) sharedParts.push(dh4)
         const shared = concatBytes(sharedParts)
-        const [rootKey, _chainKey] = hkdfSplit(shared, null, 'WhisperText')
+        const [rootKey, _chainKey] = hkdfSplit(shared, null, WHISPER_TEXT_INFO)
         void _chainKey
 
         const sendRatchet = await X25519.generateKeyPair()
@@ -122,7 +126,7 @@ export class FakePeerDoubleRatchet {
             sendRatchet.privKey,
             toRawPubKey(remoteSigned)
         )
-        const [nextRootKey, sendChainKey] = hkdfSplit(ratchetSecret, rootKey, 'WhisperRatchet')
+        const [nextRootKey, sendChainKey] = hkdfSplit(ratchetSecret, rootKey, WHISPER_RATCHET_INFO)
 
         this.rootKey = nextRootKey
         this.remoteIdentityPubSerialized = remoteIdentity
@@ -240,7 +244,7 @@ export class FakePeerDoubleRatchet {
         if (dh4) sharedParts.push(dh4)
         const shared = concatBytes(sharedParts)
 
-        const [rootKey, chainKey] = hkdfSplit(shared, null, 'WhisperText')
+        const [rootKey, chainKey] = hkdfSplit(shared, null, WHISPER_TEXT_INFO)
         this.remoteIdentityPubSerialized = toSerializedPubKey(remoteIdentity)
         this.rootKey = rootKey
         this.bootstrapChainKey = chainKey
@@ -287,7 +291,7 @@ export class FakePeerDoubleRatchet {
             const [nextRootKey, recvChainKey] = hkdfSplit(
                 ratchetShared,
                 this.rootKey,
-                'WhisperRatchet'
+                WHISPER_RATCHET_INFO
             )
             this.rootKey = nextRootKey
             this.bootstrapChainKey = null
@@ -403,7 +407,11 @@ export class FakePeerDoubleRatchet {
             this.sendChain.ratchetKeyPair.privKey,
             remoteRatchetRaw
         )
-        const [nextRootKey, recvChainKey] = hkdfSplit(ratchetShared, this.rootKey, 'WhisperRatchet')
+        const [nextRootKey, recvChainKey] = hkdfSplit(
+            ratchetShared,
+            this.rootKey,
+            WHISPER_RATCHET_INFO
+        )
         this.rootKey = nextRootKey
         this.recvChain = {
             ratchetPubKey: toSerializedPubKey(remoteRatchetPub),
@@ -423,7 +431,11 @@ export class FakePeerDoubleRatchet {
             newRatchet.privKey,
             toRawPubKey(remoteRatchetPub)
         )
-        const [nextRootKey, sendChainKey] = hkdfSplit(ratchetShared, this.rootKey, 'WhisperRatchet')
+        const [nextRootKey, sendChainKey] = hkdfSplit(
+            ratchetShared,
+            this.rootKey,
+            WHISPER_RATCHET_INFO
+        )
         this.rootKey = nextRootKey
         this.sendChain = {
             ratchetKeyPair: newRatchet,
@@ -448,7 +460,7 @@ function deriveMessageKey(
 ): { readonly nextChainKey: Uint8Array; readonly messageKey: DerivedMessageKey } {
     const messageInputKey = hmacSha256Sign(chainKey, MESSAGE_KEY_LABEL)
     const nextChainRaw = hmacSha256Sign(chainKey, CHAIN_KEY_LABEL)
-    const expanded = hkdf(messageInputKey, null, 'WhisperMessageKeys', 80)
+    const expanded = hkdf(messageInputKey, null, WHISPER_MESSAGE_KEYS_INFO, 80)
     return {
         nextChainKey: nextChainRaw.subarray(0, 32),
         messageKey: {

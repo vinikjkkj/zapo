@@ -1,3 +1,5 @@
+import { TEXT_ENCODER } from '@util/bytes'
+
 export const WA_SIGNALING = Object.freeze({
     LINK_CODE_STAGE_COMPANION_HELLO: 'companion_hello',
     LINK_CODE_STAGE_GET_COUNTRY_CODE: 'get_country_code',
@@ -8,6 +10,6 @@ export const WA_SIGNALING = Object.freeze({
 } as const)
 
 export const WA_PAIRING_KDF_INFO = Object.freeze({
-    LINK_CODE_BUNDLE: 'link_code_pairing_key_bundle_encryption_key',
-    ADV_SECRET: 'adv_secret'
+    LINK_CODE_BUNDLE: TEXT_ENCODER.encode('link_code_pairing_key_bundle_encryption_key'),
+    ADV_SECRET: TEXT_ENCODER.encode('adv_secret')
 } as const)

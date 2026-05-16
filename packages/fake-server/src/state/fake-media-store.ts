@@ -3,6 +3,7 @@
 import { randomBytes } from 'node:crypto'
 
 import { WaMediaCrypto } from '../transport/crypto'
+import { bytesToHex } from '../transport/util'
 
 export type FakeMediaType =
     | 'image'
@@ -96,7 +97,7 @@ export class FakeMediaStore {
     }
 
     private randomPath(mediaType: FakeMediaType): string {
-        const slug = randomBytes(16).toString('hex')
+        const slug = bytesToHex(randomBytes(16))
         return `/fake-media/${mediaType}/${slug}`
     }
 }

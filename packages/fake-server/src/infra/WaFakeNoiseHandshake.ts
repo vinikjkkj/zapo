@@ -34,7 +34,7 @@ export class WaFakeNoiseHandshake {
     }
 
     public mixIntoKey(input: Uint8Array): void {
-        const [nextChainingKey, nextCipherMaterial] = hkdfSplit(input, this.chainingKey, '')
+        const [nextChainingKey, nextCipherMaterial] = hkdfSplit(input, this.chainingKey, EMPTY)
         this.chainingKey = nextChainingKey
         this.cipherKey = nextCipherMaterial
         this.nonceCounter = 0
@@ -64,7 +64,7 @@ export class WaFakeNoiseHandshake {
 
     /** Derives transport keys (`first -> recv`, `second -> send` for responder role). */
     public finish(): WaFakeNoiseHandshakeFinishKeys {
-        const [first, second] = hkdfSplit(EMPTY, this.chainingKey, '')
+        const [first, second] = hkdfSplit(EMPTY, this.chainingKey, EMPTY)
         return {
             recvKey: first,
             sendKey: second,

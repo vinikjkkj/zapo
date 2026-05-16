@@ -10,4 +10,7 @@ export const SENDER_KEY_FUTURE_MESSAGES_MAX = 20_000
 export const MESSAGE_KEY_LABEL = new Uint8Array([1])
 export const CHAIN_KEY_LABEL = new Uint8Array([2])
 export const WHISPER_GROUP_INFO = TEXT_ENCODER.encode('WhisperGroup')
+export const WHISPER_MESSAGE_KEYS_INFO = TEXT_ENCODER.encode('WhisperMessageKeys')
+export const WHISPER_TEXT_INFO = TEXT_ENCODER.encode('WhisperText')
+export const WHISPER_RATCHET_INFO = TEXT_ENCODER.encode('WhisperRatchet')
 export const SIGNAL_PREFIX = new Uint8Array(32).fill(0xff)

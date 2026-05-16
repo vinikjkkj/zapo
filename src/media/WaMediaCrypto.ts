@@ -148,7 +148,7 @@ export class WaMediaCrypto {
 
         let streamingSidecar: Uint8Array | undefined
         if (options?.sidecar !== false) {
-            const acc = new SidecarAccumulator(keys.macKey)
+            const acc = new SidecarAccumulator(keys.macKey, plaintext.byteLength)
             acc.push(keys.iv)
             acc.push(ciphertext)
             acc.push(signature)
@@ -226,7 +226,11 @@ export class WaMediaCrypto {
         mediaType: MediaCryptoType,
         mediaKey: Uint8Array,
         plaintext: Readable,
-        options?: { readonly sidecar?: boolean; readonly firstFrameLength?: number }
+        options?: {
+            readonly sidecar?: boolean
+            readonly firstFrameLength?: number
+            readonly expectedFileSize?: number
+        }
     ): Promise<WaMediaReadableEncryptionResult> {
         const keys = WaMediaCrypto.deriveKeys(mediaType, mediaKey)
         const encrypted = new PassThrough()
@@ -235,7 +239,8 @@ export class WaMediaCrypto {
             encrypted,
             keys,
             options?.sidecar !== false,
-            options?.firstFrameLength
+            options?.firstFrameLength,
+            options?.expectedFileSize
         )
         return { encrypted, metadata }
     }
@@ -244,7 +249,11 @@ export class WaMediaCrypto {
         mediaType: MediaCryptoType,
         mediaKey: Uint8Array,
         plaintext: Readable,
-        options?: { readonly sidecar?: boolean; readonly firstFrameLength?: number }
+        options?: {
+            readonly sidecar?: boolean
+            readonly firstFrameLength?: number
+            readonly expectedFileSize?: number
+        }
     ): Promise<WaMediaFileEncryptionResult> {
         const keys = WaMediaCrypto.deriveKeys(mediaType, mediaKey)
         const filePath = join(
@@ -258,7 +267,8 @@ export class WaMediaCrypto {
                 output,
                 keys,
                 options?.sidecar !== false,
-                options?.firstFrameLength
+                options?.firstFrameLength,
+                options?.expectedFileSize
             )
             const fileSize = (await stat(filePath)).size
             return { filePath, fileSize, ...metadata }
@@ -297,7 +307,8 @@ async function pumpEncryption(
     output: Writable,
     keys: WaMediaDerivedKeys,
     computeSidecar: boolean,
-    firstFrameLength?: number
+    firstFrameLength?: number,
+    expectedFileSize?: number
 ): Promise<{
     readonly fileSha256: Uint8Array
     readonly fileEncSha256: Uint8Array
@@ -309,7 +320,7 @@ async function pumpEncryption(
     const plainHash = createHash('sha256')
     const encHash = createHash('sha256')
     const hmac = createHmac('sha256', keys.macKey)
-    const sidecar = computeSidecar ? new SidecarAccumulator(keys.macKey) : null
+    const sidecar = computeSidecar ? new SidecarAccumulator(keys.macKey, expectedFileSize) : null
     const ffTarget =
         firstFrameLength !== undefined
             ? IV_SIZE + Math.ceil(firstFrameLength / AES_BLOCK_SIZE) * AES_BLOCK_SIZE
@@ -479,7 +490,7 @@ async function pumpDecryption(
     }
 }
 
-function mediaTypeToHkdfInfo(mediaType: MediaCryptoType): string {
+function mediaTypeToHkdfInfo(mediaType: MediaCryptoType): Uint8Array {
     if (mediaType === 'ptv') {
         return getWaMediaHkdfInfo('video')
     }
