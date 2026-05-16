@@ -133,15 +133,23 @@ export function buildGetVerifiedNameIq(jid: string): BinaryNode {
     ])
 }
 
-export function buildCoverPhotoIq(
-    op: 'update' | 'delete',
-    id: string,
-    extras?: { timestamp: string; token: string }
-): BinaryNode {
+export type BuildCoverPhotoIqInput =
+    | {
+          readonly op: 'update'
+          readonly id: string
+          readonly timestamp: string
+          readonly token: string
+      }
+    | {
+          readonly op: 'delete'
+          readonly id: string
+      }
+
+export function buildCoverPhotoIq(input: BuildCoverPhotoIqInput): BinaryNode {
     const attrs: Record<string, string> =
-        op === 'update' && extras
-            ? { op, id, ts: extras.timestamp, token: extras.token }
-            : { op, id }
+        input.op === 'update'
+            ? { op: 'update', id: input.id, ts: input.timestamp, token: input.token }
+            : { op: 'delete', id: input.id }
     return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BUSINESS, [
         {
             tag: 'business_profile',

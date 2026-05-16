@@ -118,7 +118,9 @@ export function createBusinessCoordinator(
             if (!parsed.fbid || !parsed.ts || !parsed.meta_hmac) {
                 throw new Error('business cover photo upload response missing fbid/ts/meta_hmac')
             }
-            const node = buildCoverPhotoIq('update', parsed.fbid, {
+            const node = buildCoverPhotoIq({
+                op: 'update',
+                id: parsed.fbid,
                 timestamp: parsed.ts,
                 token: parsed.meta_hmac
             })
@@ -129,7 +131,7 @@ export function createBusinessCoordinator(
         },
 
         deleteCoverPhoto: async (id) => {
-            const node = buildCoverPhotoIq('delete', id)
+            const node = buildCoverPhotoIq({ op: 'delete', id })
             const result = await queryWithContext('business.deleteCoverPhoto', node, undefined, {
                 id
             })
