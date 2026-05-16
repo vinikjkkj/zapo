@@ -65,7 +65,8 @@ class SidecarAccumulator {
     constructor(macKey: Uint8Array, estimatedSize = 0) {
         this.macKey = macKey
         this.window = new Uint8Array(IV_SIZE + SIDECAR_CHUNK_SIZE)
-        const estimated = Math.max(Math.ceil(estimatedSize / SIDECAR_CHUNK_SIZE) + 1, 16)
+        const safeEstimate = Number.isFinite(estimatedSize) && estimatedSize > 0 ? estimatedSize : 0
+        const estimated = Math.max(Math.ceil(safeEstimate / SIDECAR_CHUNK_SIZE) + 1, 16)
         this.result = new Uint8Array(estimated * SIDECAR_HMAC_SIZE)
     }
 
