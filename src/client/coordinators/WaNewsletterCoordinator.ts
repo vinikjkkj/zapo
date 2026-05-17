@@ -6,11 +6,8 @@ import {
     type WaNewsletterMessagingOps
 } from '@client/newsletter/messaging'
 import type { WaNewsletterMexDeps } from '@client/newsletter/mex'
-import {
-    type MexNewsletterEnvelope,
-    parseNewsletterMetadata as parseNewsletterMetadataImpl
-} from '@client/newsletter/parse'
-import type { WaNewsletterMetadata } from '@client/newsletter/types'
+
+export { parseNewsletterMetadata } from '@client/newsletter/parse'
 
 export type {
     WaNewsletterAdminInfo,
@@ -64,8 +61,4 @@ export function createNewsletterCoordinator(
         ...createAdminOps(mexDeps),
         ...createMessagingOps(options)
     }
-}
-
-export function parseNewsletterMetadata(envelope: MexNewsletterEnvelope): WaNewsletterMetadata {
-    return parseNewsletterMetadataImpl(envelope)
 }

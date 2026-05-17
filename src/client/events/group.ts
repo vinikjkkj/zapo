@@ -18,7 +18,7 @@ import {
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt } from '@util/primitives'
 
-export interface WaParseGroupNotificationResult {
+interface WaParseGroupNotificationResult {
     readonly events: readonly WaGroupEvent[]
     readonly unhandled: readonly WaIncomingUnhandledStanzaEvent[]
 }

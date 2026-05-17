@@ -1,14 +1,9 @@
 import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NODE_TAGS } from '@protocol/constants'
 import { normalizeDeviceJid } from '@protocol/jid'
 import type { WaParsedRetryRequest, WaRetryKeyBundle, WaRetryOutboundState } from '@retry/types'
-import { decodeExactLength, parseUint } from '@signal/api/codec'
-import {
-    SIGNAL_KEY_DATA_LENGTH,
-    SIGNAL_KEY_ID_LENGTH,
-    SIGNAL_REGISTRATION_ID_LENGTH,
-    SIGNAL_SIGNATURE_LENGTH
-} from '@signal/api/constants'
-import { decodeNodeContentBase64OrBytes, findNodeChildrenByTags } from '@transport/node/helpers'
+import { decodeExactLength, parseSignalKeyBundleFromNode, parseUint } from '@signal/api/codec'
+import { SIGNAL_REGISTRATION_ID_LENGTH } from '@signal/api/constants'
+import { findNodeChildrenByTags } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt } from '@util/primitives'
 
@@ -58,81 +53,12 @@ function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | u
     if (!node) {
         return undefined
     }
-    const [identityNode, signedKeyNode, keyNode, deviceIdentityNode] = findNodeChildrenByTags(
-        node,
-        [WA_NODE_TAGS.IDENTITY, WA_NODE_TAGS.SKEY, WA_NODE_TAGS.KEY, WA_NODE_TAGS.DEVICE_IDENTITY]
-    )
-
-    const identity = requireNode(identityNode, 'retry keys section missing identity or skey')
-    const signedKey = requireNode(signedKeyNode, 'retry keys section missing identity or skey')
-    const [signedKeyIdNode, signedKeyValueNode, signedKeySignatureNode] = findNodeChildrenByTags(
-        signedKey,
-        [WA_NODE_TAGS.ID, WA_NODE_TAGS.VALUE, WA_NODE_TAGS.SIGNATURE]
-    )
-    const signedKeyId = requireNode(signedKeyIdNode, 'retry keys section has incomplete skey')
-    const signedKeyValue = requireNode(signedKeyValueNode, 'retry keys section has incomplete skey')
-    const signedKeySignature = requireNode(
-        signedKeySignatureNode,
-        'retry keys section has incomplete skey'
-    )
-
-    let keyIdNode: BinaryNode | undefined
-    let keyValueNode: BinaryNode | undefined
-    if (keyNode) {
-        const keyNodes = findNodeChildrenByTags(keyNode, [WA_NODE_TAGS.ID, WA_NODE_TAGS.VALUE])
-        keyIdNode = keyNodes[0]
-        keyValueNode = keyNodes[1]
-    }
-    const keyId = keyNode ? requireNode(keyIdNode, 'retry keys section has incomplete key') : null
-    const keyValue = keyNode
-        ? requireNode(keyValueNode, 'retry keys section has incomplete key')
-        : null
+    const parsed = parseSignalKeyBundleFromNode(node, 'retry.keys')
     return {
-        identity: decodeExactLength(
-            identity.content,
-            'retry.keys.identity',
-            SIGNAL_KEY_DATA_LENGTH
-        ),
-        deviceIdentity: deviceIdentityNode
-            ? decodeNodeContentBase64OrBytes(
-                  deviceIdentityNode.content,
-                  'retry.keys.device-identity'
-              )
-            : undefined,
-        key:
-            keyId && keyValue
-                ? {
-                      id: parseUint(
-                          decodeExactLength(
-                              keyId.content,
-                              'retry.keys.key.id',
-                              SIGNAL_KEY_ID_LENGTH
-                          ),
-                          'retry.keys.key.id'
-                      ),
-                      publicKey: decodeExactLength(
-                          keyValue.content,
-                          'retry.keys.key.value',
-                          SIGNAL_KEY_DATA_LENGTH
-                      )
-                  }
-                : undefined,
-        skey: {
-            id: parseUint(
-                decodeExactLength(signedKeyId.content, 'retry.keys.skey.id', SIGNAL_KEY_ID_LENGTH),
-                'retry.keys.skey.id'
-            ),
-            publicKey: decodeExactLength(
-                signedKeyValue.content,
-                'retry.keys.skey.value',
-                SIGNAL_KEY_DATA_LENGTH
-            ),
-            signature: decodeExactLength(
-                signedKeySignature.content,
-                'retry.keys.skey.signature',
-                SIGNAL_SIGNATURE_LENGTH
-            )
-        }
+        identity: parsed.identity,
+        ...(parsed.deviceIdentity ? { deviceIdentity: parsed.deviceIdentity } : {}),
+        ...(parsed.oneTimeKey ? { key: parsed.oneTimeKey } : {}),
+        skey: parsed.signedKey
     }
 }
 

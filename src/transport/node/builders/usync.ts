@@ -7,6 +7,7 @@ import {
     WA_USYNC_MODES,
     WA_XMLNS
 } from '@protocol/constants'
+import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -39,6 +40,14 @@ export function buildUsyncUserNode(input: BuildUsyncUserNodeInput): BinaryNode {
         },
         ...(input.content !== undefined ? { content: input.content } : {})
     }
+}
+
+export function iterateUsyncUsers(result: BinaryNode): readonly BinaryNode[] | null {
+    const usyncNode = findNodeChild(result, WA_NODE_TAGS.USYNC)
+    if (!usyncNode) return null
+    const listNode = findNodeChild(usyncNode, WA_NODE_TAGS.LIST)
+    if (!listNode) return null
+    return getNodeChildrenByTag(listNode, WA_NODE_TAGS.USER)
 }
 
 export function buildUsyncIq(input: BuildUsyncIqInput): BinaryNode {

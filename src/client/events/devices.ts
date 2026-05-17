@@ -12,12 +12,12 @@ export const DEVICE_NOTIFICATION_ACTIONS = Object.freeze({
 export type DeviceNotificationAction =
     (typeof DEVICE_NOTIFICATION_ACTIONS)[keyof typeof DEVICE_NOTIFICATION_ACTIONS]
 
-export interface DeviceNotificationDevice {
+interface DeviceNotificationDevice {
     readonly deviceId: number
     readonly keyIndex: number | null
 }
 
-export interface DeviceNotification {
+interface DeviceNotification {
     readonly action: DeviceNotificationAction
     readonly stanzaId: string
     readonly fromJid: string
@@ -36,15 +36,20 @@ export function parseDeviceNotification(node: BinaryNode): DeviceNotification | 
     let action: DeviceNotificationAction
     let actionNode: BinaryNode | undefined
 
-    if (findNodeChild(node, DEVICE_NOTIFICATION_ACTIONS.REMOVE)) {
+    const removeNode = findNodeChild(node, DEVICE_NOTIFICATION_ACTIONS.REMOVE)
+    const addNode = removeNode ? undefined : findNodeChild(node, DEVICE_NOTIFICATION_ACTIONS.ADD)
+    const updateNode =
+        removeNode || addNode ? undefined : findNodeChild(node, DEVICE_NOTIFICATION_ACTIONS.UPDATE)
+
+    if (removeNode) {
         action = DEVICE_NOTIFICATION_ACTIONS.REMOVE
-        actionNode = findNodeChild(node, DEVICE_NOTIFICATION_ACTIONS.REMOVE)
-    } else if (findNodeChild(node, DEVICE_NOTIFICATION_ACTIONS.ADD)) {
+        actionNode = removeNode
+    } else if (addNode) {
         action = DEVICE_NOTIFICATION_ACTIONS.ADD
-        actionNode = findNodeChild(node, DEVICE_NOTIFICATION_ACTIONS.ADD)
-    } else if (findNodeChild(node, DEVICE_NOTIFICATION_ACTIONS.UPDATE)) {
+        actionNode = addNode
+    } else if (updateNode) {
         action = DEVICE_NOTIFICATION_ACTIONS.UPDATE
-        actionNode = findNodeChild(node, DEVICE_NOTIFICATION_ACTIONS.UPDATE)
+        actionNode = updateNode
     } else {
         return null
     }

@@ -1,7 +1,11 @@
 import type { WaRetryOutboundMessageRecord, WaRetryOutboundState } from '@retry/types'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import { resolvePositive } from '@util/coercion'
-import { resolveCleanupIntervalMs, setBoundedMapEntry } from '@util/collections'
+import {
+    createPeriodicCleanup,
+    type PeriodicCleanupHandle,
+    setBoundedMapEntry
+} from '@util/collections'
 
 interface RetryInboundCounterRecord {
     readonly count: number
@@ -26,7 +30,7 @@ export class WaRetryMemoryStore implements WaRetryStore {
     private readonly ttlMs: number
     private readonly maxOutboundMessages: number
     private readonly maxInboundCounters: number
-    private readonly cleanupTimer: NodeJS.Timeout
+    private readonly cleanup: PeriodicCleanupHandle
 
     public constructor(ttlMs = DEFAULTS.ttlMs, options: WaRetryMemoryStoreOptions = {}) {
         if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -46,10 +50,9 @@ export class WaRetryMemoryStore implements WaRetryStore {
             DEFAULTS.maxInboundCounters,
             'WaRetryMemoryStoreOptions.maxInboundCounters'
         )
-        this.cleanupTimer = setInterval(() => {
+        this.cleanup = createPeriodicCleanup(this.ttlMs, () => {
             void this.cleanupExpired(Date.now())
-        }, resolveCleanupIntervalMs(this.ttlMs))
-        this.cleanupTimer.unref()
+        })
     }
 
     public getTtlMs(): number {
@@ -236,7 +239,7 @@ export class WaRetryMemoryStore implements WaRetryStore {
     }
 
     public async destroy(): Promise<void> {
-        clearInterval(this.cleanupTimer)
+        this.cleanup.destroy()
         await this.clear()
     }
 

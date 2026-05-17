@@ -5,7 +5,7 @@
 
 export const DICT_VERSION = 3
 
-export const SINGLE_BYTE_TOKENS: readonly string[] = [
+export const SINGLE_BYTE_TOKENS = Object.freeze([
     'xmlstreamstart',
     'xmlstreamend',
     's.whatsapp.net',
@@ -241,8 +241,8 @@ export const SINGLE_BYTE_TOKENS: readonly string[] = [
     '1080',
     '03',
     'screen_height'
-] as const
-export const DICTIONARY_0_TOKENS: readonly string[] = [
+] as const)
+export const DICTIONARY_0_TOKENS = Object.freeze([
     'read-self',
     'active',
     'fbns',
@@ -499,8 +499,8 @@ export const DICTIONARY_0_TOKENS: readonly string[] = [
     'catalog_exists',
     '01f',
     'mute_v2'
-] as const
-export const DICTIONARY_1_TOKENS: readonly string[] = [
+] as const)
+export const DICTIONARY_1_TOKENS = Object.freeze([
     'reject',
     'dirty',
     'announcement',
@@ -757,8 +757,8 @@ export const DICTIONARY_1_TOKENS: readonly string[] = [
     'web_md_migration_experience',
     'ptt_conversation_waveform',
     'u_aud_limit_sil_restarts_test1'
-] as const
-export const DICTIONARY_2_TOKENS: readonly string[] = [
+] as const)
+export const DICTIONARY_2_TOKENS = Object.freeze([
     '64',
     'ptt_playback_speed_enabled',
     'web_product_list_message_enabled',
@@ -1015,8 +1015,8 @@ export const DICTIONARY_2_TOKENS: readonly string[] = [
     '1213',
     '1304',
     '1537'
-] as const
-export const DICTIONARY_3_TOKENS: readonly string[] = [
+] as const)
+export const DICTIONARY_3_TOKENS = Object.freeze([
     '1724',
     'profile_picture',
     '1071',
@@ -1273,11 +1273,11 @@ export const DICTIONARY_3_TOKENS: readonly string[] = [
     '1147',
     '1372',
     '1961'
-] as const
+] as const)
 
-export const DICTIONARIES: readonly (readonly string[])[] = [
+export const DICTIONARIES = Object.freeze([
     DICTIONARY_0_TOKENS,
     DICTIONARY_1_TOKENS,
     DICTIONARY_2_TOKENS,
     DICTIONARY_3_TOKENS
-] as const
+] as const)

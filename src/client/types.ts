@@ -15,6 +15,7 @@ import type { WaBotMsgEditType } from '@protocol/bot'
 import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
 import type { WaStore } from '@store/types'
 import type { ChatstateMedia, ChatstateState } from '@transport/node/builders/chatstate'
+import type { WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
 import type { BinaryNode, WaProxyTransport } from '@transport/types'
 
 export interface WaClientProxyOptions {
@@ -120,14 +121,7 @@ export interface WaClientTestHooks {
      * still runs the full certificate-verification code path against a
      * chain signed by a known key — no validation logic is bypassed.
      */
-    readonly noiseRootCa?: WaNoiseRootCaOverride
-}
-
-export interface WaNoiseRootCaOverride {
-    /** Serialized X25519 public key (32 bytes raw, no version prefix). */
-    readonly publicKey: Uint8Array
-    /** Serial number that intermediate certificates issued by this root must declare. */
-    readonly serial: number
+    readonly noiseRootCa?: WaNoiseRootCa
 }
 
 export interface WaMediaOptions {
@@ -259,6 +253,9 @@ export interface WaIncomingChatstateEvent extends WaIncomingBaseEvent {
     readonly participantJid?: string
 }
 
+// TODO: populate with call-specific fields (offer id, call type, from device,
+// audio/video flag, etc.) and update WaIncomingNodeCoordinator's call handler
+// to parse them out of the <call> stanza instead of only passing the base node.
 export interface WaIncomingCallEvent extends WaIncomingBaseEvent {}
 
 export interface WaIncomingNotificationEvent extends WaIncomingBaseEvent {

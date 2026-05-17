@@ -8,7 +8,6 @@ export type {
     WaCommsConfig,
     WaCommsState,
     WaNoiseConfig,
-    WaNoiseTrustedRootCa,
     WaProxyAgent,
     WaProxyDispatcher,
     WaProxyTransport,

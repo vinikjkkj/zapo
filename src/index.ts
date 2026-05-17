@@ -14,7 +14,7 @@ export type {
     WaIncomingReceiptEvent,
     WaIncomingUnhandledStanzaEvent,
     WaWriteBehindOptions
-} from '@client'
+} from '@client/types'
 export type {
     WaBlocklistResult,
     WaPrivacyCoordinator,

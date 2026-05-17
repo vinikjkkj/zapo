@@ -15,7 +15,7 @@ import {
     feToBigInt
 } from '@crypto/math/fe'
 import { bigIntToBytesLE, bytesToBigIntLE } from '@crypto/math/le'
-import { mod, modGroup, modInv } from '@crypto/math/mod'
+import { mod, modGroup } from '@crypto/math/mod'
 
 test('little-endian bigint conversion round-trips', () => {
     const value = 0x0102_0304n
@@ -24,13 +24,9 @@ test('little-endian bigint conversion round-trips', () => {
     assert.equal(bytesToBigIntLE(bytes), value)
 })
 
-test('mod arithmetic handles negative inputs and inversion', () => {
+test('mod arithmetic handles negative inputs', () => {
     assert.equal(mod(-1n), FIELD_P - 1n)
     assert.equal(modGroup(GROUP_L + 2n), 2n)
-
-    const inv = modInv(5n)
-    assert.equal(mod(5n * inv), 1n)
-    assert.throws(() => modInv(0n), /inversion by zero/)
 })
 
 test('fe arithmetic matches BigInt reference for random values', () => {

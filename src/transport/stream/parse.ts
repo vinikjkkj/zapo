@@ -5,8 +5,6 @@ import type { BinaryNode } from '@transport/types'
 import { base64ToBytesChecked } from '@util/bytes'
 import { parseOptionalInt } from '@util/primitives'
 
-const DIGITS_ONLY_RE = /^\d+$/
-
 export type WaStreamControlNodeResult =
     | { readonly kind: 'xmlstreamend' }
     | { readonly kind: 'stream_error_code'; readonly code: number }
@@ -31,12 +29,9 @@ export function parseStreamControlNode(node: BinaryNode): WaStreamControlNodeRes
             : { kind: 'stream_error_device_removed' }
     }
 
-    const codeStr = node.attrs.code
-    if (codeStr && DIGITS_ONLY_RE.test(codeStr)) {
-        const code = Number(codeStr)
-        if (Number.isSafeInteger(code)) {
-            return { kind: 'stream_error_code', code }
-        }
+    const code = parseOptionalInt(node.attrs.code)
+    if (code !== undefined) {
+        return { kind: 'stream_error_code', code }
     }
 
     const ackNode = findNodeChild(node, WA_STREAM_SIGNALING.ACK_TAG)

@@ -5,6 +5,18 @@ export function resolveCleanupIntervalMs(ttlMs: number, maxIntervalMs = 60_000):
     return Math.min(maxIntervalMs, Math.floor(ttlMs / 2))
 }
 
+export interface PeriodicCleanupHandle {
+    readonly destroy: () => void
+}
+
+export function createPeriodicCleanup(ttlMs: number, run: () => void): PeriodicCleanupHandle {
+    const timer = setInterval(run, resolveCleanupIntervalMs(ttlMs))
+    timer.unref?.()
+    return {
+        destroy: () => clearInterval(timer)
+    }
+}
+
 export function normalizeQueryLimit(limit: number | undefined, defaultLimit: number): number {
     if (limit === undefined) {
         return defaultLimit

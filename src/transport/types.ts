@@ -3,6 +3,7 @@ import type { Agent as HttpsAgent } from 'node:https'
 
 import type { SignalKeyPair } from '@crypto/curves/types'
 import type { WaLoginPayloadConfig, WaRegistrationPayloadConfig } from '@transport/noise/types'
+import type { WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
 
 export interface WaProxyDispatcher {
     dispatch(...args: readonly unknown[]): unknown
@@ -71,14 +72,7 @@ export interface WaNoiseConfig {
     readonly routingInfo?: Uint8Array
     readonly protocolHeader?: Uint8Array
     readonly verifyCertificateChain?: boolean
-    readonly trustedRootCa?: WaNoiseTrustedRootCa
-}
-
-export interface WaNoiseTrustedRootCa {
-    /** Raw 32-byte X25519 public key (without version prefix). */
-    readonly publicKey: Uint8Array
-    /** Serial number that intermediate certs issued by this root must claim. */
-    readonly serial: number
+    readonly trustedRootCa?: WaNoiseRootCa
 }
 
 export interface WebSocketEventLike {

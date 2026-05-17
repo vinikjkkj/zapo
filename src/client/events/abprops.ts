@@ -2,7 +2,7 @@ import { findNodeChild, getNodeChildren } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt } from '@util/primitives'
 
-export interface AbPropResponseEntry {
+interface AbPropResponseEntry {
     readonly configCode: number
     readonly configValue: string | null
 }

@@ -96,25 +96,6 @@ export function toSignalAddressParts(address: SignalAddress): SignalAddressParts
     }
 }
 
-export function decodeSignalAddressFromRow(
-    row:
-        | Pick<
-              SenderKeyRow | SenderKeyDistributionRow | SignalSessionRow,
-              'sender_user' | 'sender_server' | 'sender_device'
-          >
-        | {
-              readonly sender_user?: unknown
-              readonly sender_server?: unknown
-              readonly sender_device?: unknown
-          }
-): SignalAddress {
-    return {
-        user: asString(row.sender_user, 'signal.sender_user'),
-        server: asString(row.sender_server, 'signal.sender_server'),
-        device: asNumber(row.sender_device, 'signal.sender_device')
-    }
-}
-
 export function decodeSignalRegistrationRow(row: SignalRegistrationRow): RegistrationInfo {
     return {
         registrationId: asNumber(row.registration_id, 'signal_registration.registration_id'),

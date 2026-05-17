@@ -115,12 +115,8 @@ export function base64ToBytes(value: string): Uint8Array {
     return out
 }
 
-export function base64ToBytesChecked(
-    value: string,
-    field: string,
-    requireNonEmpty = true
-): Uint8Array {
-    if (requireNonEmpty && value.length === 0) {
+export function base64ToBytesChecked(value: string, field: string): Uint8Array {
+    if (value.length === 0) {
         throw new Error(`invalid base64 payload for ${field}`)
     }
     return base64ToBytes(value)

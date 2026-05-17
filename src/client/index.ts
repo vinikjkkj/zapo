@@ -1,26 +1,12 @@
 export { WaClient } from '@client/WaClient'
 export type {
     WaAppStateMessageKey,
-    WaClientProxyOptions,
-    WaClearChatOptions,
     WaChatEvent,
     WaChatEventAction,
     WaChatEventSource,
-    WaClientEventMap,
-    WaClientOptions,
+    WaClearChatOptions,
     WaConnectionEvent,
     WaDeleteChatOptions,
     WaDeleteMessageForMeOptions,
-    WaHistorySyncChunkEvent,
-    WaHistorySyncOptions,
-    WaIncomingBaseEvent,
-    WaIncomingCallEvent,
-    WaIncomingChatstateEvent,
-    WaIncomingFailureEvent,
-    WaIncomingNotificationEvent,
-    WaIncomingPresenceEvent,
-    WaIncomingReceiptEvent,
-    WaIncomingUnhandledStanzaEvent,
-    WaLogoutStoreClearOptions,
-    WaWriteBehindOptions
+    WaLogoutStoreClearOptions
 } from '@client/types'

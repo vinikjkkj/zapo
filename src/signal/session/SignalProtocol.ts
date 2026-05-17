@@ -2,6 +2,7 @@ import { toSerializedPubKey } from '@crypto'
 import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
 import { StoreLock } from '@infra/perf/StoreLock'
+import { signalAddressKey } from '@protocol/jid'
 import { MAX_PREV_SESSIONS } from '@signal/constants'
 import { encodeSignalSessionSnapshot } from '@signal/encoding'
 import {
@@ -36,12 +37,8 @@ import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { uint8Equal } from '@util/bytes'
 
-function signalAddressMapKey(address: SignalAddress): string {
-    return `${address.user}\u0001${address.server ?? ''}\u0001${address.device}`
-}
-
 function signalAddressLockKey(address: SignalAddress): string {
-    return `signal:${signalAddressMapKey(address)}`
+    return `signal:${signalAddressKey(address)}`
 }
 
 interface EstablishOutgoingSessionOptions {
@@ -138,7 +135,7 @@ export class SignalProtocol {
             if (prefetchedSessions && prefetchedSessions.length > 0) {
                 for (let index = 0; index < prefetchedSessions.length; index += 1) {
                     const entry = prefetchedSessions[index]
-                    prefetchedByAddress.set(signalAddressMapKey(entry.address), entry.session)
+                    prefetchedByAddress.set(signalAddressKey(entry.address), entry.session)
                 }
             }
 
@@ -147,7 +144,7 @@ export class SignalProtocol {
             let uniqueAddressCount = 0
             for (let index = 0; index < requests.length; index += 1) {
                 const address = requests[index].address
-                const addressKey = signalAddressMapKey(address)
+                const addressKey = signalAddressKey(address)
                 let isDuplicate = false
                 for (let dedupIndex = 0; dedupIndex < uniqueAddressCount; dedupIndex += 1) {
                     if (uniqueAddressKeys[dedupIndex] === addressKey) {
@@ -196,7 +193,7 @@ export class SignalProtocol {
             for (let index = 0; index < requests.length; index += 1) {
                 const request = requests[index]
                 const address = request.address
-                const addressKey = signalAddressMapKey(address)
+                const addressKey = signalAddressKey(address)
                 const session = latestSessionByAddress.get(addressKey)
                 if (!session) {
                     throw new Error('signal session not found')
