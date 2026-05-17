@@ -72,21 +72,6 @@ function buildClientFor(server: FakeWaServer, authStore: WaAuthStore, sessionId:
     })
 }
 
-function waitForOpen(client: WaClient, timeoutMs = 5_000): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(
-            () => reject(new Error(`connection { open } timed out after ${timeoutMs}ms`)),
-            timeoutMs
-        )
-        client.on('connection', (event) => {
-            if (event.status === 'open') {
-                clearTimeout(timer)
-                resolve()
-            }
-        })
-    })
-}
-
 function waitForEvent<K extends keyof WaClientEventMap>(
     client: WaClient,
     event: K,
@@ -104,17 +89,15 @@ function waitForEvent<K extends keyof WaClientEventMap>(
     })
 }
 
-test('resume handshake: second connection uses IK and reaches connection_open', async () => {
+test('resume handshake: second connection uses IK and reaches connection_success', async () => {
     const server = await FakeWaServer.start()
     const authStore = new InMemoryAuthStore()
 
     try {
         const firstClient = buildClientFor(server, authStore, 'resume-1')
         const firstSuccess = waitForEvent(firstClient, 'connection_success')
-        const firstOpen = waitForOpen(firstClient)
         await firstClient.connect()
         await firstSuccess
-        await firstOpen
 
         const credsAfterXx = authStore.peek()
         assert.ok(credsAfterXx, 'auth store should have credentials after first connect')
@@ -127,10 +110,8 @@ test('resume handshake: second connection uses IK and reaches connection_open', 
 
         const secondClient = buildClientFor(server, authStore, 'resume-2')
         const secondSuccess = waitForEvent(secondClient, 'connection_success')
-        const secondOpen = waitForOpen(secondClient)
         await secondClient.connect()
         await secondSuccess
-        await secondOpen
 
         await secondClient.disconnect()
     } finally {

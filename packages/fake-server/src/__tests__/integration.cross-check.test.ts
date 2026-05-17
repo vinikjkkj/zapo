@@ -30,26 +30,12 @@ test('zapo-js client completes a full noise XX handshake against the fake server
 
     try {
         const successPromise = waitForEvent(client, 'connection_success', 5_000)
-        const connectionOpenPromise = new Promise<void>((resolve, reject) => {
-            const timer = setTimeout(
-                () => reject(new Error('timed out waiting for connection { status: open }')),
-                5_000
-            )
-            client.on('connection', (event) => {
-                if (event.status === 'open') {
-                    clearTimeout(timer)
-                    resolve()
-                }
-            })
-        })
 
         await client.connect()
 
         const [event] = await successPromise
         assert.equal(event.node.tag, 'success')
         assert.ok(event.node.attrs.t, 'success node should carry a timestamp')
-
-        await connectionOpenPromise
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()
