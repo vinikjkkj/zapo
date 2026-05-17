@@ -672,12 +672,15 @@ export class WaClient extends EventEmitter {
         this.connectPromise = this.connectionManager
             .connect((frame) => this.handleIncomingFrame(frame))
             .then(() => {
+                if (!this.authClient.getCurrentCredentials()?.meJid) {
+                    return
+                }
                 this.emit('connection', {
                     status: 'open',
                     reason: 'connected',
                     code: null,
                     isLogout: false,
-                    isNewLogin: this.connectionManager.wasNewLogin()
+                    isNewLogin: false
                 })
             })
             .finally(() => {

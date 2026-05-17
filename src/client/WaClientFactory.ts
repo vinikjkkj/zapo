@@ -784,7 +784,16 @@ export function buildWaClientDependencies(input: {
         nodeOrchestrator,
         nodeTransport,
         getPassiveTasks: () => passiveTasks,
-        clearStoredCredentials: runtime.clearStoredState
+        clearStoredCredentials: runtime.clearStoredState,
+        onPostPairReconnected: () => {
+            runtime.emitEvent('connection', {
+                status: 'open',
+                reason: 'connected',
+                code: null,
+                isLogout: false,
+                isNewLogin: true
+            })
+        }
     })
 
     if (mediaConnCacheFallback !== null) {
@@ -812,12 +821,15 @@ export function buildWaClientDependencies(input: {
     const connectWithClientSideEffects = async (reason: WaConnectionOpenReason): Promise<void> => {
         runtime.resumeIncomingEvents()
         await connectionManager?.connect(runtime.handleIncomingFrame)
+        if (!authClient.getCurrentCredentials()?.meJid) {
+            return
+        }
         runtime.emitEvent('connection', {
             status: 'open',
             reason,
             code: null,
             isLogout: false,
-            isNewLogin: connectionManager?.wasNewLogin() ?? false
+            isNewLogin: false
         })
     }
 

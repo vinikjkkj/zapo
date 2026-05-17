@@ -19,6 +19,7 @@ interface WaConnectionManagerOptions {
     readonly nodeTransport: WaNodeTransport
     readonly getPassiveTasks: () => WaPassiveTasksCoordinator | null
     readonly clearStoredCredentials: () => Promise<void>
+    readonly onPostPairReconnected: () => void
 }
 
 export class WaConnectionManager {
@@ -30,6 +31,7 @@ export class WaConnectionManager {
     private readonly nodeTransport: WaNodeTransport
     private readonly getPassiveTasks: () => WaPassiveTasksCoordinator | null
     private readonly clearStoredCredentialsCallback: () => Promise<void>
+    private readonly onPostPairReconnected: () => void
     private comms: WaComms | null
     private clockSkewMs: number | null
     private mediaConnCache: WaMediaConn | null
@@ -40,7 +42,6 @@ export class WaConnectionManager {
     private pendingComms: WaComms | null
     private lifecycleGeneration: number
     private lifecycleQueue: Promise<void>
-    private lastConnectWasNewLogin = false
 
     public constructor(options: WaConnectionManagerOptions) {
         this.logger = options.logger
@@ -51,6 +52,7 @@ export class WaConnectionManager {
         this.nodeTransport = options.nodeTransport
         this.getPassiveTasks = options.getPassiveTasks
         this.clearStoredCredentialsCallback = options.clearStoredCredentials
+        this.onPostPairReconnected = options.onPostPairReconnected
         this.comms = null
         this.clockSkewMs = null
         this.mediaConnCache = null
@@ -118,10 +120,6 @@ export class WaConnectionManager {
         return !!(this.comms && this.comms.getCommsState().connected)
     }
 
-    public wasNewLogin(): boolean {
-        return this.lastConnectWasNewLogin
-    }
-
     public getComms(): WaComms | null {
         return this.comms
     }
@@ -172,7 +170,6 @@ export class WaConnectionManager {
 
         this.logger.info('wa client connect start')
         let credentials = await this.authClient.loadOrCreateCredentials()
-        this.lastConnectWasNewLogin = !credentials.meJid
         this.assertLifecycleCurrent(lifecycleGeneration, 'connect')
 
         try {
@@ -252,6 +249,8 @@ export class WaConnectionManager {
 
         await this.startCommsWithCredentials(credentials, frameHandler, lifecycleGeneration)
         this.assertLifecycleCurrent(lifecycleGeneration, 'pairing reconnect')
+
+        this.onPostPairReconnected()
     }
 
     private async disconnectInternal(lifecycleGeneration: number): Promise<void> {

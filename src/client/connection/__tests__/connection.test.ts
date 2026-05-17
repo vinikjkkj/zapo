@@ -60,7 +60,8 @@ test('connection manager exposes media cache and clock skew helpers', async () =
         getPassiveTasks: () => null,
         clearStoredCredentials: async () => {
             clearedCredentialsCalls += 1
-        }
+        },
+        onPostPairReconnected: () => undefined
     })
 
     const mediaConn = {
