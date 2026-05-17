@@ -1,4 +1,4 @@
-export * from '@appstate/constants'
+export { APP_STATE_EMPTY_LT_HASH } from '@appstate/constants'
 export type {
     AppStateCollectionName,
     WaAppStateStoreData,

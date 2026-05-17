@@ -29,10 +29,7 @@ import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { aggregateReceiptTargets } from '@client/events/receipt'
 import { processHistorySyncNotification } from '@client/history-sync'
 import { persistIncomingMailboxEntities } from '@client/mailbox'
-import {
-    type WriteBehindDrainResult,
-    WriteBehindPersistence
-} from '@client/persistence/WriteBehindPersistence'
+import { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type {
     WaClientEventMap,
     WaClientOptions,
@@ -876,10 +873,6 @@ export class WaClient extends EventEmitter {
 
     public flushAppStateMutations(): Promise<void> {
         return this.chatCoordinator.flushMutations()
-    }
-
-    public flushWriteBehind(timeoutMs?: number): Promise<WriteBehindDrainResult> {
-        return this.writeBehind.flush(timeoutMs)
     }
 
     public async exportAppState(): Promise<WaAppStateStoreData> {

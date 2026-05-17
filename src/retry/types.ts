@@ -10,8 +10,6 @@ export interface WaRetryKey {
     readonly signature?: Uint8Array
 }
 
-export type WaRetrySignedKey = WaRetryKey & { readonly signature: Uint8Array }
-
 export interface WaRetryKeyBundle {
     readonly identity: Uint8Array
     readonly deviceIdentity?: Uint8Array

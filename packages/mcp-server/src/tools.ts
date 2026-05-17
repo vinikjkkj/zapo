@@ -420,7 +420,7 @@ const lifecycleTool: ToolDefinition = {
     }
 }
 
-export const TOOLS: readonly ToolDefinition[] = [
+export const TOOLS: readonly ToolDefinition[] = Object.freeze([
     callTool,
     inspectTool,
     eventsTool,
@@ -429,7 +429,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     logsClearTool,
     lifecycleTool,
     restartTool
-]
+])
 
 const parseCallInput = (
     input: unknown

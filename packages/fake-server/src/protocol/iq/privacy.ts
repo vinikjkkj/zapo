@@ -22,8 +22,8 @@ export interface FakePrivacySettingsState {
     readonly disallowed: Readonly<Record<FakePrivacyCategoryName, readonly string[]>>
 }
 
-export const FAKE_DEFAULT_PRIVACY_SETTINGS: FakePrivacySettingsState = {
-    settings: {
+export const FAKE_DEFAULT_PRIVACY_SETTINGS: FakePrivacySettingsState = Object.freeze({
+    settings: Object.freeze({
         readreceipts: 'all',
         last: 'all',
         online: 'all',
@@ -33,19 +33,19 @@ export const FAKE_DEFAULT_PRIVACY_SETTINGS: FakePrivacySettingsState = {
         calladd: 'all',
         messages: 'all',
         defense: 'off'
-    },
-    disallowed: {
-        readreceipts: [],
-        last: [],
-        online: [],
-        profile: [],
-        status: [],
-        groupadd: [],
-        calladd: [],
-        messages: [],
-        defense: []
-    }
-}
+    }),
+    disallowed: Object.freeze({
+        readreceipts: Object.freeze([]),
+        last: Object.freeze([]),
+        online: Object.freeze([]),
+        profile: Object.freeze([]),
+        status: Object.freeze([]),
+        groupadd: Object.freeze([]),
+        calladd: Object.freeze([]),
+        messages: Object.freeze([]),
+        defense: Object.freeze([])
+    })
+})
 
 export function buildPrivacySettingsResult(
     iq: BinaryNode,

@@ -21,8 +21,7 @@ export type {
     WaRetryPlaintextReplayPayload,
     WaRetryReceiptType,
     WaRetryReplayPayload,
-    WaRetryStoredReplayPayload,
-    WaRetrySignedKey
+    WaRetryStoredReplayPayload
 } from '@retry/types'
 export { decodeRetryReplayPayload, encodeRetryReplayPayload } from '@retry/codec'
 export {

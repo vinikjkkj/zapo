@@ -16,7 +16,7 @@ export const BINARY_20 = 253
 export const BINARY_32 = 254
 export const NIBBLE_8 = 255
 
-export const NIBBLE_ALPHABET: readonly string[] = [
+export const NIBBLE_ALPHABET = Object.freeze([
     '0',
     '1',
     '2',
@@ -33,8 +33,8 @@ export const NIBBLE_ALPHABET: readonly string[] = [
     '\uFFFD',
     '\uFFFD',
     '\uFFFD'
-]
-export const HEX_ALPHABET: readonly string[] = [
+] as const)
+export const HEX_ALPHABET = Object.freeze([
     '0',
     '1',
     '2',
@@ -51,7 +51,7 @@ export const HEX_ALPHABET: readonly string[] = [
     'D',
     'E',
     'F'
-]
+] as const)
 
 export const SINGLE_BYTE_TOKEN_MAP: ReadonlyMap<string, number> = (() => {
     const map = new Map<string, number>()

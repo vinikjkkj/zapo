@@ -29,12 +29,6 @@ interface SignedPreKeyDoc {
     uploaded: boolean
 }
 
-export interface WaSignalMetaSnapshot {
-    signedPreKeyRotationTs: number | null
-    registrationInfo: RegistrationInfo | null
-    signedPreKey: SignedPreKeyRecord | null
-}
-
 export class WaSignalMongoStore extends BaseMongoStore implements WaSignalStore {
     public constructor(options: WaMongoStorageOptions) {
         super(options)
@@ -124,50 +118,6 @@ export class WaSignalMongoStore extends BaseMongoStore implements WaSignalStore 
     public async getSignedPreKeyRotationTs(): Promise<number | null> {
         const meta = await this.getMeta()
         return meta.signedPreKeyRotationTs
-    }
-
-    // ── Meta ──────────────────────────────────────────────────────────
-
-    public async getSignalMeta(): Promise<WaSignalMetaSnapshot> {
-        await this.ensureIndexes()
-        const metaCol = this.col<MetaDoc>('signal_meta')
-        await metaCol.updateOne(
-            { _id: this.sessionId },
-            {
-                $setOnInsert: {
-                    server_has_prekeys: false,
-                    next_prekey_id: 1,
-                    signed_prekey_rotation_ts: null
-                }
-            },
-            { upsert: true }
-        )
-        const meta = await metaCol.findOne({ _id: this.sessionId })
-        if (!meta) throw new Error('signal meta row not found')
-
-        const regCol = this.col<RegistrationDoc>('signal_registration')
-        const regDoc = await regCol.findOne({ _id: this.sessionId })
-        const registrationInfo: RegistrationInfo | null = regDoc
-            ? {
-                  registrationId: regDoc.registration_id,
-                  identityKeyPair: {
-                      pubKey: fromBinary(regDoc.identity_pub_key),
-                      privKey: fromBinary(regDoc.identity_priv_key)
-                  }
-              }
-            : null
-
-        const signedCol = this.col<SignedPreKeyDoc>('signal_signed_prekey')
-        const signedDoc = await signedCol.findOne({ _id: this.sessionId })
-        const signedPreKey: SignedPreKeyRecord | null = signedDoc
-            ? this.decodeSignedPreKeyDoc(signedDoc)
-            : null
-
-        return {
-            signedPreKeyRotationTs: meta.signed_prekey_rotation_ts,
-            registrationInfo,
-            signedPreKey
-        }
     }
 
     // ── Clear ─────────────────────────────────────────────────────────

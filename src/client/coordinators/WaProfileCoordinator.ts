@@ -8,8 +8,8 @@ import {
     buildSetStatusIq,
     type WaProfilePictureType
 } from '@transport/node/builders/profile'
-import { buildUsyncIq } from '@transport/node/builders/usync'
-import { findNodeChild, getNodeChildren } from '@transport/node/helpers'
+import { buildUsyncIq, iterateUsyncUsers } from '@transport/node/builders/usync'
+import { findNodeChild } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { TEXT_DECODER } from '@util/bytes'
@@ -86,24 +86,12 @@ function parseSetPictureResult(result: BinaryNode): string | null {
 }
 
 function parseUsyncProfiles(result: BinaryNode): readonly WaProfileInfo[] {
-    const usyncNode = findNodeChild(result, WA_NODE_TAGS.USYNC)
-    if (!usyncNode) {
-        return []
-    }
-    const listNode = findNodeChild(usyncNode, WA_NODE_TAGS.LIST)
-    if (!listNode) {
-        return []
-    }
-
-    const userNodes = getNodeChildren(listNode)
+    const userNodes = iterateUsyncUsers(result) ?? []
     const profiles = new Array<WaProfileInfo>(userNodes.length)
     let count = 0
 
     for (let i = 0; i < userNodes.length; i += 1) {
         const userNode = userNodes[i]
-        if (userNode.tag !== WA_NODE_TAGS.USER) {
-            continue
-        }
         const jid = userNode.attrs.jid as string | undefined
         if (!jid) {
             continue
@@ -153,18 +141,12 @@ function parseUsyncProfiles(result: BinaryNode): readonly WaProfileInfo[] {
 }
 
 function parseUsyncDisappearingModes(result: BinaryNode): readonly WaDisappearingModeResult[] {
-    const usyncNode = findNodeChild(result, WA_NODE_TAGS.USYNC)
-    if (!usyncNode) return []
-    const listNode = findNodeChild(usyncNode, WA_NODE_TAGS.LIST)
-    if (!listNode) return []
-
-    const userNodes = getNodeChildren(listNode)
+    const userNodes = iterateUsyncUsers(result) ?? []
     const results = new Array<WaDisappearingModeResult>(userNodes.length)
     let count = 0
 
     for (let i = 0; i < userNodes.length; i += 1) {
         const userNode = userNodes[i]
-        if (userNode.tag !== WA_NODE_TAGS.USER) continue
         const userContent = userNode.content
         if (!Array.isArray(userContent)) continue
 

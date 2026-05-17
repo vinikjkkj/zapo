@@ -15,8 +15,9 @@ import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { WaMobileTcpSocketCtor } from '@transport/node/WaMobileTcpSocket'
 import { buildMobileLoginPayload } from '@transport/noise/WaMobileClientPayload'
+import type { WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
 import { toProxyAgent, toProxyDispatcher } from '@transport/proxy'
-import type { WaCommsConfig, WaNoiseTrustedRootCa } from '@transport/types'
+import type { WaCommsConfig } from '@transport/types'
 import { toError } from '@util/primitives'
 
 interface WaAuthCredentialsFlowArgs {
@@ -90,7 +91,7 @@ export function buildCommsConfig(
         WaAuthClientOptions,
         'deviceBrowser' | 'deviceOsDisplayName' | 'requireFullSync' | 'version' | 'mobileTransport'
     > & {
-        readonly noiseTrustedRootCa?: WaNoiseTrustedRootCa
+        readonly noiseTrustedRootCa?: WaNoiseRootCa
         readonly disableNoiseCertificateChainVerification?: boolean
     }
 ): WaCommsConfig {

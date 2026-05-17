@@ -41,7 +41,6 @@ export interface WaMediaDerivedKeys {
     readonly iv: Uint8Array
     readonly encKey: Uint8Array
     readonly macKey: Uint8Array
-    readonly refKey: Uint8Array
 }
 
 export interface WaMediaEncryptionResult {

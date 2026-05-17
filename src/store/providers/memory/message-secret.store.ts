@@ -3,7 +3,11 @@ import type {
     WaMessageSecretStore
 } from '@store/contracts/message-secret.store'
 import { resolvePositive } from '@util/coercion'
-import { resolveCleanupIntervalMs, setBoundedMapEntry } from '@util/collections'
+import {
+    createPeriodicCleanup,
+    type PeriodicCleanupHandle,
+    setBoundedMapEntry
+} from '@util/collections'
 
 interface CachedEntry {
     readonly secret: Uint8Array
@@ -24,7 +28,7 @@ export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
     private readonly secrets: Map<string, CachedEntry>
     private readonly ttlMs: number
     private readonly maxSecrets: number
-    private readonly cleanupTimer: NodeJS.Timeout
+    private readonly cleanup: PeriodicCleanupHandle
 
     public constructor(ttlMs = DEFAULTS.ttlMs, options: WaMessageSecretMemoryStoreOptions = {}) {
         if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -37,10 +41,9 @@ export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
             DEFAULTS.maxSecrets,
             'WaMessageSecretMemoryStoreOptions.maxSecrets'
         )
-        this.cleanupTimer = setInterval(() => {
+        this.cleanup = createPeriodicCleanup(ttlMs, () => {
             void this.cleanupExpired(Date.now())
-        }, resolveCleanupIntervalMs(ttlMs))
-        this.cleanupTimer.unref()
+        })
     }
 
     public async get(messageId: string, nowMs = Date.now()): Promise<WaMessageSecretEntry | null> {
@@ -120,7 +123,7 @@ export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
     }
 
     public async destroy(): Promise<void> {
-        clearInterval(this.cleanupTimer)
+        this.cleanup.destroy()
         this.secrets.clear()
     }
 }

@@ -33,18 +33,11 @@ export function toRawPubKey(key: Uint8Array): Uint8Array {
 }
 
 /**
- * Creates a version byte from high and low nibbles
- */
-export function versionByte(high: number, low: number): number {
-    return ((high << 4) | low) & 0xff
-}
-
-/**
  * Prepends a version byte to content
  */
 export function prependVersion(content: Uint8Array, version: number): Uint8Array {
     const out = new Uint8Array(1 + content.length)
-    out[0] = versionByte(version, version)
+    out[0] = ((version << 4) | version) & 0xff
     out.set(content, 1)
     return out
 }

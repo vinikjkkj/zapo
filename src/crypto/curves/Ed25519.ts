@@ -41,15 +41,6 @@ export class Ed25519 {
         }
     }
 
-    static keyPairFromPrivateKey(privKey: Uint8Array): SignalKeyPair {
-        assertByteLength(privKey, 32, 'ed25519 private key must be 32 bytes')
-        const jwk = ed25519PrivateKeyObject(privKey).export({ format: 'jwk' })
-        return {
-            pubKey: decodeBase64Url(jwk.x, 'ed25519 public key'),
-            privKey
-        }
-    }
-
     static async sign(message: Uint8Array, privKey: Uint8Array): Promise<Uint8Array> {
         assertByteLength(privKey, 32, 'ed25519 private key must be 32 bytes')
         const sig = await signAsync(null, message, ed25519PrivateKeyObject(privKey))

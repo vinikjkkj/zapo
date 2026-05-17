@@ -3,14 +3,14 @@ import { getFirstNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt } from '@util/primitives'
 
-export interface ParsedRegistrationCode {
+interface ParsedRegistrationCode {
     readonly kind: 'registration_code'
     readonly code: string
     readonly expiryTimestampMs: number
     readonly fromDeviceId: string
 }
 
-export interface ParsedAccountTakeoverNotice {
+interface ParsedAccountTakeoverNotice {
     readonly kind: 'account_takeover_notice'
     readonly serverToken: string
     readonly attemptTimestampMs: number
@@ -19,10 +19,7 @@ export interface ParsedAccountTakeoverNotice {
     readonly newDeviceAppVersion?: string
 }
 
-export type ParsedRegistrationNotification =
-    | ParsedRegistrationCode
-    | ParsedAccountTakeoverNotice
-    | null
+type ParsedRegistrationNotification = ParsedRegistrationCode | ParsedAccountTakeoverNotice | null
 
 export function parseRegistrationNotification(node: BinaryNode): ParsedRegistrationNotification {
     const firstChild = getFirstNodeChild(node)

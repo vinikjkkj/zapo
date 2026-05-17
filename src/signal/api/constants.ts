@@ -1,7 +1,7 @@
 export const SIGNAL_UPLOAD_PREKEYS_COUNT = 812
 export const SIGNAL_SIGNED_PREKEY_ROTATION_INTERVAL_MS = 27 * 24 * 60 * 60 * 1_000
 export const SIGNAL_SIGNED_PREKEY_SERVER_ERROR_BACKOFF_MS = 24 * 60 * 60 * 1_000
-export const SIGNAL_KEY_BUNDLE_TYPE_BYTES = new Uint8Array([5])
+export const SIGNAL_KEY_BUNDLE_TYPE_BYTES: Readonly<Uint8Array> = new Uint8Array([5])
 export const SIGNAL_KEY_BUNDLE_TYPE_LENGTH = 1
 
 export const SIGNAL_REGISTRATION_ID_LENGTH = 4

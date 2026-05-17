@@ -16,7 +16,8 @@ import { getWaCompanionPlatformId, WA_DEFAULTS } from '@protocol/constants'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
-import type { BinaryNode, WaNoiseTrustedRootCa } from '@transport/types'
+import type { WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
+import type { BinaryNode } from '@transport/types'
 import { uint8Equal } from '@util/bytes'
 import { toError } from '@util/primitives'
 import { getRuntimeOsDisplayName } from '@util/runtime'
@@ -130,7 +131,7 @@ export class WaAuthClient {
     public buildCommsConfig(
         socketOptions: WaAuthSocketOptions,
         overrides: {
-            readonly noiseTrustedRootCa?: WaNoiseTrustedRootCa
+            readonly noiseTrustedRootCa?: WaNoiseRootCa
             readonly disableNoiseCertificateChainVerification?: boolean
         } = {}
     ) {

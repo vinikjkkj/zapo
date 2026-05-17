@@ -3,7 +3,11 @@ import type {
     WaParticipantsStore
 } from '@store/contracts/participants.store'
 import { resolvePositive } from '@util/coercion'
-import { resolveCleanupIntervalMs, setBoundedMapEntry } from '@util/collections'
+import {
+    createPeriodicCleanup,
+    type PeriodicCleanupHandle,
+    setBoundedMapEntry
+} from '@util/collections'
 
 interface WaParticipantsMemoryStoreRecord extends WaParticipantsSnapshot {
     readonly expiresAtMs: number
@@ -22,7 +26,7 @@ export class WaParticipantsMemoryStore implements WaParticipantsStore {
     private readonly records: Map<string, WaParticipantsMemoryStoreRecord>
     private readonly ttlMs: number
     private readonly maxGroups: number
-    private readonly cleanupTimer: NodeJS.Timeout
+    private readonly cleanup: PeriodicCleanupHandle
 
     public constructor(ttlMs = DEFAULTS.ttlMs, options: WaParticipantsMemoryStoreOptions = {}) {
         if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -35,10 +39,9 @@ export class WaParticipantsMemoryStore implements WaParticipantsStore {
             DEFAULTS.maxGroups,
             'WaParticipantsMemoryStoreOptions.maxGroups'
         )
-        this.cleanupTimer = setInterval(() => {
+        this.cleanup = createPeriodicCleanup(ttlMs, () => {
             void this.cleanupExpired(Date.now())
-        }, resolveCleanupIntervalMs(ttlMs))
-        this.cleanupTimer.unref()
+        })
     }
 
     public async upsertGroupParticipants(snapshot: WaParticipantsSnapshot): Promise<void> {
@@ -87,7 +90,7 @@ export class WaParticipantsMemoryStore implements WaParticipantsStore {
     }
 
     public async destroy(): Promise<void> {
-        clearInterval(this.cleanupTimer)
+        this.cleanup.destroy()
         await this.clear()
     }
 }

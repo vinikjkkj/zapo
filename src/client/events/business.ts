@@ -24,7 +24,7 @@ import {
 import type { BinaryNode } from '@transport/types'
 import { longToNumber, parseOptionalInt } from '@util/primitives'
 
-export interface WaParseBusinessNotificationResult {
+interface WaParseBusinessNotificationResult {
     readonly events: readonly WaBusinessEvent[]
     readonly unhandled: readonly WaIncomingUnhandledStanzaEvent[]
 }

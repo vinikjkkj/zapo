@@ -128,8 +128,7 @@ export class WaMediaCrypto {
         return {
             iv: expanded.subarray(0, IV_SIZE),
             encKey: expanded.subarray(ENC_KEY_START, ENC_KEY_END),
-            macKey: expanded.subarray(MAC_KEY_START, MAC_KEY_END),
-            refKey: expanded.subarray(MAC_KEY_END, MEDIA_HKDF_SIZE)
+            macKey: expanded.subarray(MAC_KEY_START, MAC_KEY_END)
         }
     }
 

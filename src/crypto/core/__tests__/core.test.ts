@@ -6,8 +6,7 @@ import {
     prependVersion,
     readVersionedContent,
     toRawPubKey,
-    toSerializedPubKey,
-    versionByte
+    toSerializedPubKey
 } from '@crypto/core/keys'
 import { writeNonceCounter } from '@crypto/core/nonce'
 import { aesGcmDecrypt, aesGcmEncrypt, hmacSha256Sign, sha256 } from '@crypto/core/primitives'
@@ -42,9 +41,9 @@ test('nonce and versioned key helpers enforce protocol constraints', () => {
     assert.equal(serialized.length, 33)
     assert.deepEqual(toRawPubKey(serialized), raw)
 
-    assert.equal(versionByte(5, 3), 0x53)
     const payload = new Uint8Array([8, 9, 10])
     const wrapped = prependVersion(payload, 3)
+    assert.equal(wrapped[0], 0x33)
     assert.deepEqual(readVersionedContent(wrapped, 3, 0), payload)
     assert.throws(() => readVersionedContent(new Uint8Array([]), 3, 0), /is empty/)
 })

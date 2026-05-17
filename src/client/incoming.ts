@@ -378,73 +378,75 @@ export function createIncomingRegistrationNotificationHandler(
     }
 }
 
-export function createIncomingBusinessNotificationHandler(
-    options: IncomingBusinessNotificationHandlerOptions
-): (node: BinaryNode) => Promise<boolean> {
+function createIncomingTypedNotificationHandler<TEvent>(opts: {
+    readonly logger: Logger
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly type: string
+    readonly parse: (node: BinaryNode) => {
+        readonly events: readonly TEvent[]
+        readonly unhandled: readonly WaIncomingUnhandledStanzaEvent[]
+    }
+    readonly emit: (event: TEvent) => void
+    readonly emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) => void
+    readonly includeParticipantInAck?: boolean
+}): (node: BinaryNode) => Promise<boolean> {
     return async (node: BinaryNode): Promise<boolean> => {
-        if (node.attrs.type !== WA_NOTIFICATION_TYPES.BUSINESS) {
+        if (node.attrs.type !== opts.type) {
             return false
         }
 
         const baseEvent = createIncomingBaseEvent(node)
-        const parsed = parseBusinessNotificationEvents(node)
+        const parsed = opts.parse(node)
         for (const event of parsed.events) {
-            options.emitBusinessEvent(event)
+            opts.emit(event)
         }
         for (const unhandled of parsed.unhandled) {
-            options.emitUnhandledStanza(unhandled)
+            opts.emitUnhandledStanza(unhandled)
         }
         if (parsed.events.length === 0 && parsed.unhandled.length === 0) {
-            options.emitUnhandledStanza({
+            opts.emitUnhandledStanza({
                 ...baseEvent,
-                reason: `notification.${WA_NOTIFICATION_TYPES.BUSINESS}.empty`
+                reason: `notification.${opts.type}.empty`
             })
         }
         await sendSafeAck(
-            options.logger,
-            options.sendNode,
+            opts.logger,
+            opts.sendNode,
             buildAckNode({
                 kind: 'notification',
-                node
+                node,
+                includeParticipant: opts.includeParticipantInAck
             })
         )
         return true
     }
 }
 
+export function createIncomingBusinessNotificationHandler(
+    options: IncomingBusinessNotificationHandlerOptions
+): (node: BinaryNode) => Promise<boolean> {
+    return createIncomingTypedNotificationHandler({
+        logger: options.logger,
+        sendNode: options.sendNode,
+        type: WA_NOTIFICATION_TYPES.BUSINESS,
+        parse: parseBusinessNotificationEvents,
+        emit: options.emitBusinessEvent,
+        emitUnhandledStanza: options.emitUnhandledStanza
+    })
+}
+
 export function createIncomingGroupNotificationHandler(
     options: IncomingGroupNotificationHandlerOptions
 ): (node: BinaryNode) => Promise<boolean> {
-    return async (node: BinaryNode): Promise<boolean> => {
-        if (node.attrs.type !== WA_NOTIFICATION_TYPES.GROUP) {
-            return false
-        }
-
-        const baseEvent = createIncomingBaseEvent(node)
-        const parsed = parseGroupNotificationEvents(node)
-        for (const event of parsed.events) {
-            options.emitGroupEvent(event)
-        }
-        for (const unhandled of parsed.unhandled) {
-            options.emitUnhandledStanza(unhandled)
-        }
-        if (parsed.events.length === 0 && parsed.unhandled.length === 0) {
-            options.emitUnhandledStanza({
-                ...baseEvent,
-                reason: `notification.${WA_NOTIFICATION_TYPES.GROUP}.empty`
-            })
-        }
-        await sendSafeAck(
-            options.logger,
-            options.sendNode,
-            buildAckNode({
-                kind: 'notification',
-                node,
-                includeParticipant: true
-            })
-        )
-        return true
-    }
+    return createIncomingTypedNotificationHandler({
+        logger: options.logger,
+        sendNode: options.sendNode,
+        type: WA_NOTIFICATION_TYPES.GROUP,
+        parse: parseGroupNotificationEvents,
+        emit: options.emitGroupEvent,
+        emitUnhandledStanza: options.emitUnhandledStanza,
+        includeParticipantInAck: true
+    })
 }
 
 export function createInfoBulletinNotificationEvent(

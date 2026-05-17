@@ -1,6 +1,10 @@
 import type { WaDeviceListSnapshot, WaDeviceListStore } from '@store/contracts/device-list.store'
 import { resolvePositive } from '@util/coercion'
-import { resolveCleanupIntervalMs, setBoundedMapEntry } from '@util/collections'
+import {
+    createPeriodicCleanup,
+    type PeriodicCleanupHandle,
+    setBoundedMapEntry
+} from '@util/collections'
 
 interface WaDeviceListMemoryStoreRecord extends WaDeviceListSnapshot {
     readonly expiresAtMs: number
@@ -19,7 +23,7 @@ export class WaDeviceListMemoryStore implements WaDeviceListStore {
     private readonly records: Map<string, WaDeviceListMemoryStoreRecord>
     private readonly ttlMs: number
     private readonly maxUsers: number
-    private readonly cleanupTimer: NodeJS.Timeout
+    private readonly cleanup: PeriodicCleanupHandle
 
     public constructor(ttlMs = DEFAULTS.ttlMs, options: WaDeviceListMemoryStoreOptions = {}) {
         if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -32,10 +36,9 @@ export class WaDeviceListMemoryStore implements WaDeviceListStore {
             DEFAULTS.maxUsers,
             'WaDeviceListMemoryStoreOptions.maxUsers'
         )
-        this.cleanupTimer = setInterval(() => {
+        this.cleanup = createPeriodicCleanup(ttlMs, () => {
             void this.cleanupExpired(Date.now())
-        }, resolveCleanupIntervalMs(ttlMs))
-        this.cleanupTimer.unref()
+        })
     }
 
     public async upsertUserDevicesBatch(snapshots: readonly WaDeviceListSnapshot[]): Promise<void> {
@@ -94,7 +97,7 @@ export class WaDeviceListMemoryStore implements WaDeviceListStore {
     }
 
     public async destroy(): Promise<void> {
-        clearInterval(this.cleanupTimer)
+        this.cleanup.destroy()
         await this.clear()
     }
 }

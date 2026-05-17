@@ -7,7 +7,6 @@ import { WA_DEFAULTS } from '@protocol/constants'
 import {
     decodeSenderKeyDistributionRow,
     decodeSenderKeyRecord,
-    decodeSignalAddressFromRow,
     decodeSignalPreKeyRow,
     decodeSignalRegistrationRow,
     decodeSignalSessionRecord,
@@ -86,17 +85,6 @@ test('sqlite signal helpers map addresses and primitive rows', () => {
         user: '5511999999999',
         server: WA_DEFAULTS.HOST_DOMAIN,
         device: 0
-    })
-
-    const decodedAddress = decodeSignalAddressFromRow({
-        sender_user: '5511999999999',
-        sender_server: 's.whatsapp.net',
-        sender_device: 3
-    })
-    assert.deepEqual(decodedAddress, {
-        user: '5511999999999',
-        server: 's.whatsapp.net',
-        device: 3
     })
 
     const registration = decodeSignalRegistrationRow({

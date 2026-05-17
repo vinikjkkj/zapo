@@ -25,7 +25,7 @@ const APP_STATE_POINT_SIZE = 2
 const KDF_INFO_MUTATION_KEYS = TEXT_ENCODER.encode('WhatsApp Mutation Keys')
 const KDF_INFO_PATCH_INTEGRITY = TEXT_ENCODER.encode('WhatsApp Patch Integrity')
 
-export const APP_STATE_EMPTY_LT_HASH = new Uint8Array(APP_STATE_LT_HASH_SIZE)
+export const APP_STATE_EMPTY_LT_HASH: Readonly<Uint8Array> = new Uint8Array(APP_STATE_LT_HASH_SIZE)
 
 export interface FakeAppStateDerivedKeys {
     readonly indexHmacKey: Uint8Array

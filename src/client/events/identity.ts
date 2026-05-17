@@ -2,7 +2,7 @@ import { WA_NODE_TAGS } from '@protocol/nodes'
 import { getFirstNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 
-export interface IdentityChangeNotification {
+interface IdentityChangeNotification {
     readonly fromJid: string
     readonly stanzaId: string
     readonly displayName: string | undefined
