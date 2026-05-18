@@ -177,6 +177,113 @@ test('incoming node coordinator supports dynamic handler registration and unregi
     assert.equal(unhandled.length, 1)
 })
 
+test('incoming node coordinator runs stanza filters and acks blocked tags', async () => {
+    const { runtime: baseRuntime, unhandled } = createIncomingRuntime()
+    const sent: BinaryNode[] = []
+    let dispatched = 0
+    const runtime = {
+        ...baseRuntime,
+        sendNode: async (node: BinaryNode) => {
+            sent.push(node)
+        },
+        handleGenericIncomingNode: async () => {
+            dispatched += 1
+            return false
+        }
+    }
+    const coordinator = new WaIncomingNodeCoordinator({
+        logger: createNoopLogger(),
+        runtime,
+        offlineResume: {
+            trackOfflineStanza() {},
+            handleOfflinePreview() {},
+            handleOfflineComplete() {},
+            reset() {},
+            isComplete: false,
+            isResuming: false
+        } as never
+    })
+
+    const calls: BinaryNode[] = []
+    const unregister = coordinator.registerIncomingStanzaFilter((node) => {
+        calls.push(node)
+        return node.attrs.sender_pn === '5511999990000'
+    })
+
+    await coordinator.handleIncomingNode({
+        tag: 'message',
+        attrs: {
+            id: 'MSG1',
+            from: '5511999990000@s.whatsapp.net',
+            sender_pn: '5511999990000'
+        }
+    })
+    assert.equal(calls.length, 1)
+    assert.equal(dispatched, 0)
+    assert.equal(unhandled.length, 0)
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].tag, 'ack')
+    assert.equal(sent[0].attrs.id, 'MSG1')
+    assert.equal(sent[0].attrs.to, '5511999990000@s.whatsapp.net')
+    assert.equal(sent[0].attrs.class, 'message')
+
+    await coordinator.handleIncomingNode({
+        tag: 'message',
+        attrs: { id: 'MSG2', from: '5511888880000@s.whatsapp.net' }
+    })
+    assert.equal(calls.length, 2)
+    assert.equal(sent.length, 1)
+    assert.equal(unhandled.length, 1)
+
+    unregister()
+    await coordinator.handleIncomingNode({
+        tag: 'message',
+        attrs: { id: 'MSG3', from: '5511999990000@s.whatsapp.net', sender_pn: '5511999990000' }
+    })
+    assert.equal(calls.length, 2)
+    assert.equal(unhandled.length, 2)
+})
+
+test('incoming node coordinator stanza filters skip success and failure tags', async () => {
+    const { runtime: baseRuntime } = createIncomingRuntime()
+    let emittedSuccess = 0
+    let failureEmitted = 0
+    const runtime = {
+        ...baseRuntime,
+        emitSuccessNode: () => {
+            emittedSuccess += 1
+        },
+        emitIncomingFailure: () => {
+            failureEmitted += 1
+        }
+    }
+    const coordinator = new WaIncomingNodeCoordinator({
+        logger: createNoopLogger(),
+        runtime,
+        offlineResume: {
+            trackOfflineStanza() {},
+            handleOfflinePreview() {},
+            handleOfflineComplete() {},
+            reset() {},
+            isComplete: false,
+            isResuming: false
+        } as never
+    })
+
+    let filterCalls = 0
+    coordinator.registerIncomingStanzaFilter(() => {
+        filterCalls += 1
+        return true
+    })
+
+    await coordinator.handleIncomingNode({ tag: 'success', attrs: {} })
+    await coordinator.handleIncomingNode({ tag: 'failure', attrs: {} })
+
+    assert.equal(filterCalls, 0)
+    assert.equal(emittedSuccess, 1)
+    assert.equal(failureEmitted, 1)
+})
+
 test('incoming node coordinator tracks offline stanzas before dispatching handlers', async () => {
     const { runtime, unhandled } = createIncomingRuntime()
     let trackedStanzas = 0

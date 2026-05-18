@@ -429,3 +429,50 @@ test('restart tool rejects invalid mode', async () => {
     const tool = findTool('restart')
     await assert.rejects(() => tool.handler({ mode: 'hard' }, runtime), /soft \| process_exit/)
 })
+
+test('eval tool runs source with client + lib in scope and encodes result', async () => {
+    const runtime = buildFakeRuntime(new FakeClient())
+    const tool = findTool('eval')
+    const result = (await tool.handler(
+        { source: 'return await client.multiply(6, 7)' },
+        runtime
+    )) as { kind: string; result: unknown }
+    assert.equal(result.kind, 'eval')
+    assert.equal(result.result, 42)
+
+    const libResult = (await tool.handler(
+        { source: 'return typeof lib.parsePhoneJid' },
+        runtime
+    )) as { result: unknown }
+    assert.equal(libResult.result, 'function')
+
+    const bytesResult = (await tool.handler(
+        { source: 'return await client.roundtrip(new Uint8Array([1,2,3]))' },
+        runtime
+    )) as { result: { $bytes: string } }
+    assert.equal(bytesResult.result.$bytes, 'AQID')
+})
+
+test('eval tool rejects empty source', async () => {
+    const runtime = buildFakeRuntime(new FakeClient())
+    const tool = findTool('eval')
+    await assert.rejects(() => tool.handler({ source: '' }, runtime), /non-empty string/)
+    await assert.rejects(() => tool.handler({}, runtime), /non-empty string/)
+})
+
+test('eval tool fires async source without awaiting when noAwait is set', async () => {
+    const runtime = buildFakeRuntime(new FakeClient())
+    const tool = findTool('eval')
+    const result = (await tool.handler(
+        { source: 'globalThis.__evalStash = await client.multiply(3, 4)', noAwait: true },
+        runtime
+    )) as { kind: string; noAwait: boolean; fired: boolean }
+    assert.equal(result.kind, 'eval')
+    assert.equal(result.noAwait, true)
+    assert.equal(result.fired, true)
+    // Allow the microtask queue to drain so the noAwait promise can mutate globalThis.
+    await new Promise((resolve) => setImmediate(resolve))
+    const stashed = (globalThis as Record<string, unknown>).__evalStash
+    assert.equal(stashed, 12)
+    delete (globalThis as Record<string, unknown>).__evalStash
+})

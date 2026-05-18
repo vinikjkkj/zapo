@@ -221,6 +221,16 @@ export interface WaIncomingNodeHandlerRegistration {
     readonly prepend?: boolean
 }
 
+/**
+ * Predicate evaluated against every inbound stanza. Return `true` to drop the
+ * stanza before any handler runs — the coordinator still sends the appropriate
+ * ack for `message`/`receipt`/`notification` so the server stops re-delivering.
+ *
+ * Stream-control nodes and the connection-critical `success`/`failure` tags
+ * bypass filters to keep the auth flow intact.
+ */
+export type WaIncomingStanzaFilter = (node: BinaryNode) => boolean | Promise<boolean>
+
 export interface WaIncomingBaseEvent {
     readonly rawNode: BinaryNode
     readonly stanzaId?: string

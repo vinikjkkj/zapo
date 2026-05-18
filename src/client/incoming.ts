@@ -15,6 +15,7 @@ import type {
 import type { Logger } from '@infra/log/types'
 import {
     WA_DISCONNECT_REASONS,
+    WA_MESSAGE_TAGS,
     WA_MESSAGE_TYPES,
     WA_NODE_TAGS,
     WA_NOTIFICATION_TYPES
@@ -102,6 +103,47 @@ const OUT_OF_SCOPE_NOTIFICATION_TYPES = new Set<string>(['pay', 'psa', 'waffle',
 
 const NOTIFICATION_TYPES_WITH_PARTICIPANT_ACK = new Set<string>(['mediaretry', 'psa'])
 const NOTIFICATION_TYPES_WITHOUT_TYPE_ACK = new Set<string>(['encrypt', 'devices'])
+const RECEIPT_RETRY_TYPES = new Set<string>(['retry', 'enc_rekey_retry'])
+
+/**
+ * Single source of truth for the ack shape of an inbound stanza. Used by every
+ * regular handler and by short-circuited paths (e.g. a stanza dropped by a
+ * user filter). Returns `null` for tags that are not acked in the normal flow
+ * (presence, chatstate, call, iq, error, ...).
+ */
+export function buildInboundAck(node: BinaryNode): BinaryNode | null {
+    if (node.tag === WA_MESSAGE_TAGS.MESSAGE) {
+        const id = node.attrs.id
+        const from = node.attrs.from
+        if (!id || !from) {
+            return null
+        }
+        return buildAckNode({ kind: 'message', node, id, to: from })
+    }
+    if (node.tag === WA_MESSAGE_TAGS.RECEIPT) {
+        const receiptType = node.attrs.type
+        if (receiptType && RECEIPT_RETRY_TYPES.has(receiptType)) {
+            return buildAckNode({ kind: 'receipt', node, retryType: true })
+        }
+        return buildAckNode({
+            kind: 'receipt',
+            node,
+            includeParticipant: receiptType !== WA_MESSAGE_TYPES.RECEIPT_TYPE_SERVER_ERROR
+        })
+    }
+    if (node.tag === WA_NODE_TAGS.NOTIFICATION) {
+        const type = node.attrs.type ?? ''
+        return buildAckNode({
+            kind: 'notification',
+            node,
+            includeParticipant:
+                type === WA_NOTIFICATION_TYPES.GROUP ||
+                NOTIFICATION_TYPES_WITH_PARTICIPANT_ACK.has(type),
+            includeType: !NOTIFICATION_TYPES_WITHOUT_TYPE_ACK.has(type)
+        })
+    }
+    return null
+}
 
 export function createIncomingBaseEvent(node: BinaryNode): WaIncomingBaseEvent {
     return {
@@ -112,7 +154,7 @@ export function createIncomingBaseEvent(node: BinaryNode): WaIncomingBaseEvent {
     }
 }
 
-async function sendSafeAck(
+export async function sendSafeAck(
     logger: Logger,
     sendNode: (node: BinaryNode) => Promise<void>,
     node: BinaryNode
@@ -203,28 +245,18 @@ export function createIncomingReceiptHandler(
             if (options.handleIncomingRetryReceipt) {
                 await options.handleIncomingRetryReceipt(node)
             } else {
-                await sendSafeAck(
-                    options.logger,
-                    options.sendNode,
-                    buildAckNode({
-                        kind: 'receipt',
-                        node,
-                        retryType: true
-                    })
-                )
+                const ack = buildInboundAck(node)
+                if (ack) {
+                    await sendSafeAck(options.logger, options.sendNode, ack)
+                }
             }
             return true
         }
 
-        await sendSafeAck(
-            options.logger,
-            options.sendNode,
-            buildAckNode({
-                kind: 'receipt',
-                node,
-                includeParticipant: receiptType !== WA_MESSAGE_TYPES.RECEIPT_TYPE_SERVER_ERROR
-            })
-        )
+        const ack = buildInboundAck(node)
+        if (ack) {
+            await sendSafeAck(options.logger, options.sendNode, ack)
+        }
         return true
     }
 }
@@ -261,9 +293,6 @@ export function createIncomingNotificationHandler(
 ): (node: BinaryNode) => Promise<boolean> {
     return async (node: BinaryNode): Promise<boolean> => {
         const notificationType = node.attrs.type ?? ''
-        const includeParticipantInAck =
-            NOTIFICATION_TYPES_WITH_PARTICIPANT_ACK.has(notificationType)
-        const includeTypeInAck = !NOTIFICATION_TYPES_WITHOUT_TYPE_ACK.has(notificationType)
         const classification = classifyNotificationType(notificationType)
         const firstChildTag = getFirstNodeChild(node)?.tag
         const baseEvent = createIncomingBaseEvent(node)
@@ -302,16 +331,10 @@ export function createIncomingNotificationHandler(
             })
         }
 
-        await sendSafeAck(
-            options.logger,
-            options.sendNode,
-            buildAckNode({
-                kind: 'notification',
-                node,
-                includeParticipant: includeParticipantInAck,
-                includeType: includeTypeInAck
-            })
-        )
+        const ack = buildInboundAck(node)
+        if (ack) {
+            await sendSafeAck(options.logger, options.sendNode, ack)
+        }
         if (notificationType === 'server_sync' && serverSyncCollections.length > 0) {
             const collectionsCsv = serverSyncCollections.join(',')
             if (!options.syncAppState) {
@@ -366,14 +389,10 @@ export function createIncomingRegistrationNotificationHandler(
             })
         }
 
-        await sendSafeAck(
-            options.logger,
-            options.sendNode,
-            buildAckNode({
-                kind: 'notification',
-                node
-            })
-        )
+        const ack = buildInboundAck(node)
+        if (ack) {
+            await sendSafeAck(options.logger, options.sendNode, ack)
+        }
         return true
     }
 }
@@ -388,7 +407,6 @@ function createIncomingTypedNotificationHandler<TEvent>(opts: {
     }
     readonly emit: (event: TEvent) => void
     readonly emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) => void
-    readonly includeParticipantInAck?: boolean
 }): (node: BinaryNode) => Promise<boolean> {
     return async (node: BinaryNode): Promise<boolean> => {
         if (node.attrs.type !== opts.type) {
@@ -409,15 +427,10 @@ function createIncomingTypedNotificationHandler<TEvent>(opts: {
                 reason: `notification.${opts.type}.empty`
             })
         }
-        await sendSafeAck(
-            opts.logger,
-            opts.sendNode,
-            buildAckNode({
-                kind: 'notification',
-                node,
-                includeParticipant: opts.includeParticipantInAck
-            })
-        )
+        const ack = buildInboundAck(node)
+        if (ack) {
+            await sendSafeAck(opts.logger, opts.sendNode, ack)
+        }
         return true
     }
 }
@@ -444,8 +457,7 @@ export function createIncomingGroupNotificationHandler(
         type: WA_NOTIFICATION_TYPES.GROUP,
         parse: parseGroupNotificationEvents,
         emit: options.emitGroupEvent,
-        emitUnhandledStanza: options.emitUnhandledStanza,
-        includeParticipantInAck: true
+        emitUnhandledStanza: options.emitUnhandledStanza
     })
 }
 

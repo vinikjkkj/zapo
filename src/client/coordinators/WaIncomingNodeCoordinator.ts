@@ -4,6 +4,7 @@ import type { WaDirtyBit } from '@client/dirty'
 import { parseChatstateNode } from '@client/events/chatstate'
 import { parsePresenceNode } from '@client/events/presence'
 import {
+    buildInboundAck,
     createIncomingBaseEvent,
     createIncomingBusinessNotificationHandler,
     createIncomingFailureHandler,
@@ -12,7 +13,8 @@ import {
     createIncomingReceiptHandler,
     createIncomingRegistrationNotificationHandler,
     createInfoBulletinNotificationEvent,
-    createUnhandledIncomingNodeEvent
+    createUnhandledIncomingNodeEvent,
+    sendSafeAck
 } from '@client/incoming'
 import type {
     WaAccountTakeoverNoticeEvent,
@@ -27,6 +29,7 @@ import type {
     WaIncomingNotificationEvent,
     WaIncomingPresenceEvent,
     WaIncomingReceiptEvent,
+    WaIncomingStanzaFilter,
     WaIncomingUnhandledStanzaEvent,
     WaRegistrationCodeEvent
 } from '@client/types'
@@ -109,6 +112,8 @@ const INFO_BULLETIN_CHILD_TAGS = new Set<string>([
     'client_expiration'
 ])
 
+const FILTER_PROTECTED_TAGS = new Set<string>([WA_NODE_TAGS.SUCCESS, 'failure'])
+
 export class WaIncomingNodeCoordinator {
     private readonly logger: Logger
     private readonly runtime: WaIncomingNodeRuntime
@@ -117,6 +122,7 @@ export class WaIncomingNodeCoordinator {
         string,
         { readonly subtype?: string; readonly handler: WaIncomingNodeHandler }[]
     >
+    private readonly stanzaFilters: WaIncomingStanzaFilter[]
     private mediaConnWarmupPromise: Promise<void> | null
 
     public constructor(options: WaIncomingNodeCoordinatorOptions) {
@@ -124,6 +130,7 @@ export class WaIncomingNodeCoordinator {
         this.runtime = options.runtime
         this.offlineResume = options.offlineResume
         this.nodeHandlerRegistry = new Map()
+        this.stanzaFilters = []
         this.registerDefaultIncomingHandlers()
         this.mediaConnWarmupPromise = null
     }
@@ -142,6 +149,9 @@ export class WaIncomingNodeCoordinator {
             await this.runtime.handleStreamControlResult(streamControlResult)
             return
         }
+        if (await this.applyStanzaFilters(node)) {
+            return
+        }
         if (await this.handleSuccessNode(node)) {
             return
         }
@@ -153,6 +163,44 @@ export class WaIncomingNodeCoordinator {
             return
         }
         this.runtime.emitUnhandledIncomingNode(createUnhandledIncomingNodeEvent(node))
+    }
+
+    public registerIncomingStanzaFilter(filter: WaIncomingStanzaFilter): () => void {
+        this.stanzaFilters.push(filter)
+        return () => {
+            const index = this.stanzaFilters.indexOf(filter)
+            if (index !== -1) {
+                this.stanzaFilters.splice(index, 1)
+            }
+        }
+    }
+
+    private async applyStanzaFilters(node: BinaryNode): Promise<boolean> {
+        if (this.stanzaFilters.length === 0 || FILTER_PROTECTED_TAGS.has(node.tag)) {
+            return false
+        }
+        for (let i = 0; i < this.stanzaFilters.length; i += 1) {
+            let verdict: boolean
+            try {
+                verdict = await this.stanzaFilters[i](node)
+            } catch (error) {
+                this.logger.warn('incoming stanza filter threw', {
+                    tag: node.tag,
+                    id: node.attrs.id,
+                    message: toError(error).message
+                })
+                continue
+            }
+            if (!verdict) {
+                continue
+            }
+            const ack = buildInboundAck(node)
+            if (ack) {
+                await sendSafeAck(this.logger, this.runtime.sendNode, ack)
+            }
+            return true
+        }
+        return false
     }
 
     public registerIncomingHandler(registration: WaIncomingNodeHandlerRegistration): () => void {

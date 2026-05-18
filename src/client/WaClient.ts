@@ -38,6 +38,7 @@ import type {
     WaIncomingMessageEvent,
     WaIncomingNodeHandlerRegistration,
     WaIncomingProtocolMessageEvent,
+    WaIncomingStanzaFilter,
     WaSendMessageOptions
 } from '@client/types'
 import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClientFactory'
@@ -344,6 +345,16 @@ export class WaClient extends EventEmitter {
 
     public unregisterIncomingHandler(registration: WaIncomingNodeHandlerRegistration): boolean {
         return this.incomingNode.unregisterIncomingHandler(registration)
+    }
+
+    /**
+     * Registers a predicate that drops inbound stanzas before any handler runs.
+     * Returning `true` blocks the stanza and sends the protocol ack for
+     * `message`/`receipt`/`notification`. `success`/`failure` always bypass
+     * filters to keep the auth flow intact.
+     */
+    public registerIncomingStanzaFilter(filter: WaIncomingStanzaFilter): () => void {
+        return this.incomingNode.registerIncomingStanzaFilter(filter)
     }
 
     private bindNodeTransportEvents(): void {

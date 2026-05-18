@@ -12,6 +12,7 @@ export type {
     WaIncomingNotificationEvent,
     WaIncomingPresenceEvent,
     WaIncomingReceiptEvent,
+    WaIncomingStanzaFilter,
     WaIncomingUnhandledStanzaEvent,
     WaWriteBehindOptions
 } from '@client/types'

@@ -420,6 +420,54 @@ const lifecycleTool: ToolDefinition = {
     }
 }
 
+const AsyncFunctionCtor = Object.getPrototypeOf(async function () {}).constructor as new (
+    ...args: string[]
+) => (client: unknown, lib: unknown) => Promise<unknown>
+
+const evalTool: ToolDefinition = {
+    name: 'eval',
+    description:
+        'Execute arbitrary JS in the MCP runtime with `client` (WaClient instance) and `lib` ' +
+        '(zapo-js module namespace) in scope. The source is wrapped in an async function — ' +
+        'top-level `await` works. Use `return <expr>` to surface a value; the result is encoded ' +
+        'for JSON ($bytes / $bigint markers). Use `globalThis.<key> = ...` to persist state ' +
+        'between eval calls (e.g. stash an unregister callback returned by ' +
+        'registerIncomingStanzaFilter). When `noAwait: true`, fire-and-forget — the call returns ' +
+        'immediately and rejections go to the runtime logger.',
+    inputSchema: {
+        type: 'object',
+        properties: {
+            source: {
+                type: 'string',
+                description:
+                    'JavaScript statements. Wrapped as `async function (client, lib) { <source> }`.'
+            },
+            noAwait: {
+                type: 'boolean',
+                description: 'Fire-and-forget mode. Defaults to false.'
+            }
+        },
+        required: ['source'],
+        additionalProperties: false
+    },
+    handler: async (input, runtime) => {
+        const { source, noAwait } = parseEvalInput(input)
+        const client = await runtime.ensureClient()
+        const fn = new AsyncFunctionCtor('client', 'lib', source)
+        const invoked = fn(client, ZapoLib)
+        if (noAwait) {
+            invoked.catch((error: unknown) => {
+                runtime.getLogger().warn('eval noAwait rejected', {
+                    message: toError(error).message
+                })
+            })
+            return { kind: 'eval', noAwait: true, fired: true }
+        }
+        const result = await invoked
+        return { kind: 'eval', result: encodeForJson(result) }
+    }
+}
+
 export const TOOLS: readonly ToolDefinition[] = Object.freeze([
     callTool,
     inspectTool,
@@ -428,7 +476,8 @@ export const TOOLS: readonly ToolDefinition[] = Object.freeze([
     logsTool,
     logsClearTool,
     lifecycleTool,
-    restartTool
+    restartTool,
+    evalTool
 ])
 
 const parseCallInput = (
@@ -523,6 +572,17 @@ const parseLifecycleInput = (input: unknown): 'status' | 'start' | 'destroy' => 
         return obj.action
     }
     throw new Error('lifecycle: "action" must be "status" | "start" | "destroy"')
+}
+
+const parseEvalInput = (input: unknown): { source: string; noAwait: boolean } => {
+    if (!input || typeof input !== 'object') {
+        throw new Error('eval: input must be an object')
+    }
+    const obj = input as Record<string, unknown>
+    if (typeof obj.source !== 'string' || obj.source.length === 0) {
+        throw new Error('eval: "source" must be a non-empty string')
+    }
+    return { source: obj.source, noAwait: obj.noAwait === true }
 }
 
 const parseRestartInput = (input: unknown): 'soft' | 'process_exit' => {
