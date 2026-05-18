@@ -242,6 +242,7 @@ const ALL_EVENT_NAMES = [
     'stanza_unhandled',
     'group_event',
     'business_event',
+    'picture_event',
     'chat_event',
     'history_sync_chunk',
     'privacy_token_update',

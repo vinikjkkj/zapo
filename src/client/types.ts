@@ -519,6 +519,17 @@ export interface WaBusinessEvent extends WaIncomingBaseEvent {
     readonly featureFlags?: readonly WaBusinessFeatureFlag[]
 }
 
+export type WaPictureEventAction = 'set' | 'delete' | 'request' | 'set_avatar'
+
+export interface WaPictureEvent extends WaIncomingBaseEvent {
+    readonly action: WaPictureEventAction
+    readonly targetJid?: string
+    readonly authorJid?: string
+    readonly timestampSeconds?: number
+    readonly pictureId?: number
+    readonly contactHash?: string
+}
+
 export interface WaGroupEvent extends WaIncomingBaseEvent {
     readonly rawActionNode: BinaryNode
     readonly groupJid?: string
@@ -689,6 +700,7 @@ export interface WaClientEventMap {
     readonly stanza_unhandled: (event: WaIncomingUnhandledStanzaEvent) => void
     readonly group_event: (event: WaGroupEvent) => void
     readonly business_event: (event: WaBusinessEvent) => void
+    readonly picture_event: (event: WaPictureEvent) => void
     readonly chat_event: (event: WaChatEvent) => void
     readonly account_event: (event: WaAccountEvent) => void
     readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void

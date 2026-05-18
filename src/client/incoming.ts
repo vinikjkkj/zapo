@@ -1,5 +1,6 @@
 import { parseBusinessNotificationEvents } from '@client/events/business'
 import { parseGroupNotificationEvents } from '@client/events/group'
+import { parsePictureNotificationEvents } from '@client/events/picture'
 import { parseRegistrationNotification } from '@client/events/registration'
 import type {
     WaAccountTakeoverNoticeEvent,
@@ -10,6 +11,7 @@ import type {
     WaIncomingNotificationEvent,
     WaIncomingReceiptEvent,
     WaIncomingUnhandledStanzaEvent,
+    WaPictureEvent,
     WaRegistrationCodeEvent
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
@@ -65,6 +67,11 @@ type IncomingBusinessNotificationHandlerOptions = IncomingAckRuntime & {
     readonly emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) => void
 }
 
+type IncomingPictureNotificationHandlerOptions = IncomingAckRuntime & {
+    readonly emitPictureEvent: (event: WaPictureEvent) => void
+    readonly emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) => void
+}
+
 type IncomingRegistrationNotificationHandlerOptions = IncomingAckRuntime & {
     readonly emitRegistrationCode: (event: WaRegistrationCodeEvent) => void
     readonly emitAccountTakeoverNotice: (event: WaAccountTakeoverNoticeEvent) => void
@@ -83,7 +90,6 @@ const DISCONNECT_FAILURE_REASONS = new Set<number>([405, 409, 503])
 
 const CORE_NOTIFICATION_TYPES = new Set<string>([
     'server_sync',
-    'picture',
     'contacts',
     'devices',
     'disappearing_mode',
@@ -458,6 +464,19 @@ export function createIncomingGroupNotificationHandler(
         type: WA_NOTIFICATION_TYPES.GROUP,
         parse: parseGroupNotificationEvents,
         emit: options.emitGroupEvent,
+        emitUnhandledStanza: options.emitUnhandledStanza
+    })
+}
+
+export function createIncomingPictureNotificationHandler(
+    options: IncomingPictureNotificationHandlerOptions
+): (node: BinaryNode) => Promise<boolean> {
+    return createIncomingTypedNotificationHandler({
+        logger: options.logger,
+        sendNode: options.sendNode,
+        type: WA_NOTIFICATION_TYPES.PICTURE,
+        parse: parsePictureNotificationEvents,
+        emit: options.emitPictureEvent,
         emitUnhandledStanza: options.emitUnhandledStanza
     })
 }

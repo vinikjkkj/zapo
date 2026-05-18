@@ -5,7 +5,8 @@ export const WA_NOTIFICATION_TYPES = Object.freeze({
     SERVER: 'server',
     REGISTRATION: 'registration',
     NEWSLETTER: 'newsletter',
-    BUSINESS: 'business'
+    BUSINESS: 'business',
+    PICTURE: 'picture'
 } as const)
 
 export const WA_BUSINESS_NOTIFICATION_TAGS = Object.freeze({

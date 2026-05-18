@@ -349,6 +349,7 @@ function createIncomingNodeRuntime(input: {
             })
         },
         emitBusinessEvent: (event) => emitEvent('business_event', event),
+        emitPictureEvent: (event) => emitEvent('picture_event', event),
         emitUnhandledIncomingNode: (event) => emitEvent('stanza_unhandled', event),
         syncAppState,
         stopComms: () => {

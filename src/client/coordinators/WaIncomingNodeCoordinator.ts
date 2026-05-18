@@ -10,6 +10,7 @@ import {
     createIncomingFailureHandler,
     createIncomingGroupNotificationHandler,
     createIncomingNotificationHandler,
+    createIncomingPictureNotificationHandler,
     createIncomingReceiptHandler,
     createIncomingRegistrationNotificationHandler,
     createInfoBulletinNotificationEvent,
@@ -31,6 +32,7 @@ import type {
     WaIncomingReceiptEvent,
     WaIncomingStanzaFilter,
     WaIncomingUnhandledStanzaEvent,
+    WaPictureEvent,
     WaRegistrationCodeEvent
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
@@ -84,6 +86,7 @@ interface WaIncomingNodeRuntime {
     readonly emitAccountTakeoverNotice: (event: WaAccountTakeoverNoticeEvent) => void
     readonly emitGroupEvent: (event: WaGroupEvent) => void
     readonly emitBusinessEvent: (event: WaBusinessEvent) => void
+    readonly emitPictureEvent: (event: WaPictureEvent) => void
     readonly emitUnhandledIncomingNode: (event: WaIncomingUnhandledStanzaEvent) => void
     readonly syncAppState: () => Promise<void>
     readonly stopComms: () => void
@@ -323,6 +326,16 @@ export class WaIncomingNodeCoordinator {
                 logger: this.logger,
                 sendNode: runtime.sendNode,
                 emitBusinessEvent: runtime.emitBusinessEvent,
+                emitUnhandledStanza: runtime.emitUnhandledIncomingNode
+            })
+        })
+        this.registerIncomingHandler({
+            tag: WA_NODE_TAGS.NOTIFICATION,
+            subtype: WA_NOTIFICATION_TYPES.PICTURE,
+            handler: createIncomingPictureNotificationHandler({
+                logger: this.logger,
+                sendNode: runtime.sendNode,
+                emitPictureEvent: runtime.emitPictureEvent,
                 emitUnhandledStanza: runtime.emitUnhandledIncomingNode
             })
         })
