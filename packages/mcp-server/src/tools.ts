@@ -428,12 +428,14 @@ const evalTool: ToolDefinition = {
     name: 'eval',
     description:
         'Execute arbitrary JS in the MCP runtime with `client` (WaClient instance) and `lib` ' +
-        '(zapo-js module namespace) in scope. The source is wrapped in an async function — ' +
-        'top-level `await` works. Use `return <expr>` to surface a value; the result is encoded ' +
-        'for JSON ($bytes / $bigint markers). Use `globalThis.<key> = ...` to persist state ' +
-        'between eval calls (e.g. stash an unregister callback returned by ' +
-        'registerIncomingStanzaFilter). When `noAwait: true`, fire-and-forget — the call returns ' +
-        'immediately and rejections go to the runtime logger.',
+        '(zapo-js module namespace) in scope. **Disabled by default**: requires ' +
+        '`MCP_EVAL_ENABLED=1` in the MCP process env, otherwise every call is rejected. ' +
+        'The source is wrapped in an async function — top-level `await` works. ' +
+        'Use `return <expr>` to surface a value; the result is encoded for JSON ' +
+        '($bytes / $bigint markers). Use `globalThis.<key> = ...` to persist state between ' +
+        'eval calls (e.g. stash an unregister callback returned by registerIncomingStanzaFilter). ' +
+        'When `noAwait: true`, fire-and-forget — the call returns immediately and rejections ' +
+        'go to the runtime logger.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -451,6 +453,11 @@ const evalTool: ToolDefinition = {
         additionalProperties: false
     },
     handler: async (input, runtime) => {
+        if (process.env.MCP_EVAL_ENABLED !== '1') {
+            throw new Error(
+                'eval tool is disabled; set MCP_EVAL_ENABLED=1 in the MCP process env to enable'
+            )
+        }
         const { source, noAwait } = parseEvalInput(input)
         const client = await runtime.ensureClient()
         const fn = new AsyncFunctionCtor('client', 'lib', source)

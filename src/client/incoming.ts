@@ -106,10 +106,8 @@ const NOTIFICATION_TYPES_WITHOUT_TYPE_ACK = new Set<string>(['encrypt', 'devices
 const RECEIPT_RETRY_TYPES = new Set<string>(['retry', 'enc_rekey_retry'])
 
 /**
- * Single source of truth for the ack shape of an inbound stanza. Used by every
- * regular handler and by short-circuited paths (e.g. a stanza dropped by a
- * user filter). Returns `null` for tags that are not acked in the normal flow
- * (presence, chatstate, call, iq, error, ...).
+ * Builds the inbound ack for `message`/`receipt`/`notification` tags. Returns
+ * `null` for other tags or when required attrs are missing.
  */
 export function buildInboundAck(node: BinaryNode): BinaryNode | null {
     if (node.tag === WA_MESSAGE_TAGS.MESSAGE) {
@@ -121,6 +119,9 @@ export function buildInboundAck(node: BinaryNode): BinaryNode | null {
         return buildAckNode({ kind: 'message', node, id, to: from })
     }
     if (node.tag === WA_MESSAGE_TAGS.RECEIPT) {
+        if (!node.attrs.id || !node.attrs.from) {
+            return null
+        }
         const receiptType = node.attrs.type
         if (receiptType && RECEIPT_RETRY_TYPES.has(receiptType)) {
             return buildAckNode({ kind: 'receipt', node, retryType: true })
