@@ -147,7 +147,6 @@ function parseHtmlMeta(html: string, base: URL): ParsedMeta {
     }
 }
 
-
 function extractHeadSection(html: string): string {
     const closeIdx = html.search(/<\/head\s*>/i)
     if (closeIdx === -1) return html
