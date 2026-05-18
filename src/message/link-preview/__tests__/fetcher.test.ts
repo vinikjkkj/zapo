@@ -220,6 +220,69 @@ test('default fetcher blocks private host', async () => {
     assert.equal(result, null)
 })
 
+test('default fetcher blocks .localhost subdomains (RFC 6761)', async () => {
+    const fetcher = createDefaultLinkPreviewFetcher({
+        mediaTransfer: mockMediaTransfer(() => ({ status: 200 }))
+    })
+    const result = await fetcher.fetch({
+        url: new URL('http://internal.localhost/secret'),
+        matchedText: 'http://internal.localhost/secret',
+        logger: createNoopLogger()
+    })
+    assert.equal(result, null)
+})
+
+test('default fetcher blocks IPv6 link-local addresses without brackets', async () => {
+    const fetcher = createDefaultLinkPreviewFetcher({
+        mediaTransfer: mockMediaTransfer(() => ({ status: 200 }))
+    })
+    const result = await fetcher.fetch({
+        url: new URL('http://[fe80::1]/'),
+        matchedText: 'http://[fe80::1]/',
+        logger: createNoopLogger()
+    })
+    assert.equal(result, null)
+})
+
+test('default fetcher blocks IPv6 unique-local (fc00::/7) addresses', async () => {
+    const fetcher = createDefaultLinkPreviewFetcher({
+        mediaTransfer: mockMediaTransfer(() => ({ status: 200 }))
+    })
+    const result = await fetcher.fetch({
+        url: new URL('http://[fd00::1]/'),
+        matchedText: 'http://[fd00::1]/',
+        logger: createNoopLogger()
+    })
+    assert.equal(result, null)
+})
+
+test('default fetcher drops thumbnail truncated without content-length', async () => {
+    const transfer = mockMediaTransfer((url): MockResponse => {
+        if (url.pathname === '/img.jpg') {
+            return {
+                status: 200,
+                headers: { 'content-type': 'image/jpeg' },
+                body: new Uint8Array(20_000)
+            }
+        }
+        return {
+            status: 200,
+            headers: { 'content-type': 'text/html' },
+            body: '<html><head><meta property="og:image" content="https://example.com/img.jpg"></head></html>'
+        }
+    })
+    const fetcher = createDefaultLinkPreviewFetcher({
+        mediaTransfer: transfer,
+        maxThumbnailBytes: 1024
+    })
+    const result = await fetcher.fetch({
+        url: new URL('https://example.com'),
+        matchedText: 'https://example.com',
+        logger: createNoopLogger()
+    })
+    assert.equal(result?.thumbnail, undefined)
+})
+
 test('default fetcher with allowPrivateHosts permits loopback', async () => {
     const transfer = mockMediaTransfer(() => ({ status: 500 }))
     const fetcher = createDefaultLinkPreviewFetcher({

@@ -19,9 +19,25 @@ test('findFirstLink strips trailing sentence punctuation', () => {
     assert.equal(r?.matchedText, 'https://example.com/path')
 })
 
-test('findFirstLink strips closing paren', () => {
+test('findFirstLink strips unbalanced closing paren', () => {
     const r = findFirstLink('(see https://example.com)')
     assert.equal(r?.matchedText, 'https://example.com')
+})
+
+test('findFirstLink preserves balanced parens inside url', () => {
+    const r = findFirstLink('check https://example.com/a_(b)')
+    assert.equal(r?.matchedText, 'https://example.com/a_(b)')
+})
+
+test('findFirstLink preserves balanced brackets and braces', () => {
+    assert.equal(
+        findFirstLink('https://example.com/path[0]')?.matchedText,
+        'https://example.com/path[0]'
+    )
+    assert.equal(
+        findFirstLink('https://example.com/{x}/y')?.matchedText,
+        'https://example.com/{x}/y'
+    )
 })
 
 test('findFirstLink returns null when no url present', () => {

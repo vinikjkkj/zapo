@@ -6,7 +6,7 @@ import { proto } from '@proto'
 import { toProxyAgent } from '@transport/proxy'
 import type { WaProxyTransport } from '@transport/types'
 import { TEXT_DECODER } from '@util/bytes'
-import { toError } from '@util/primitives'
+import { parseOptionalInt, toError } from '@util/primitives'
 
 import type {
     WaLinkPreviewFetcher,
@@ -130,8 +130,8 @@ function parseHtmlMeta(html: string, base: URL): ParsedMeta {
         extractMetaContent(head, 'property', 'og:image:url') ??
         extractMetaContent(head, 'property', 'og:image') ??
         extractMetaContent(head, 'name', 'twitter:image')
-    const ogImageWidth = parsePositiveInt(extractMetaContent(head, 'property', 'og:image:width'))
-    const ogImageHeight = parsePositiveInt(extractMetaContent(head, 'property', 'og:image:height'))
+    const ogImageWidth = parseOptionalInt(extractMetaContent(head, 'property', 'og:image:width'))
+    const ogImageHeight = parseOptionalInt(extractMetaContent(head, 'property', 'og:image:height'))
     const ogVideo =
         extractMetaContent(head, 'property', 'og:video:secure_url') ??
         extractMetaContent(head, 'property', 'og:video:url') ??
@@ -147,11 +147,6 @@ function parseHtmlMeta(html: string, base: URL): ParsedMeta {
     }
 }
 
-function parsePositiveInt(value: string | undefined): number | undefined {
-    if (value === undefined) return undefined
-    const n = Number.parseInt(value, 10)
-    return Number.isFinite(n) && n > 0 ? n : undefined
-}
 
 function extractHeadSection(html: string): string {
     const closeIdx = html.search(/<\/head\s*>/i)
@@ -242,6 +237,8 @@ async function fetchHtml(url: URL, opts: FetchHtmlInput): Promise<string> {
     if (!/text\/html|application\/xhtml/i.test(result.contentType)) {
         return ''
     }
+    // HTML truncation is tolerable: the regex meta parser only needs the
+    // <head> section, which fits well below maxHtmlBytes for realistic pages.
     return TEXT_DECODER.decode(result.bytes)
 }
 
@@ -306,9 +303,17 @@ async function fetchThumbnail(
         ) {
             return { stream: streamResult.body, contentLength: streamResult.contentLength }
         }
-        const bytes = await readBodyCapped(streamResult.body, opts.maxBytes)
-        if (bytes.byteLength === 0) return undefined
-        return { bytes }
+        const capped = await readBodyCapped(streamResult.body, opts.maxBytes)
+        if (capped.bytes.byteLength === 0) return undefined
+        // If we capped without knowing the real size, the bytes are an
+        // arbitrary prefix of the original image (corrupt JPEG/PNG). Drop it.
+        if (capped.truncated && streamResult.contentLength === undefined) {
+            opts.logger.warn('link preview thumbnail dropped: truncated without content-length', {
+                url: parsed.toString()
+            })
+            return undefined
+        }
+        return { bytes: capped.bytes }
     } catch (error) {
         opts.logger.warn('link preview thumbnail fetch failed', {
             url: parsed.toString(),
@@ -347,11 +352,11 @@ async function httpGetWithRedirects(opts: HttpGetWithRedirectsInput): Promise<Ht
         signal: opts.signal,
         allowPrivateHosts: opts.allowPrivateHosts
     })
-    const bytes = await readBodyCapped(streamResult.body, opts.maxBytes)
+    const capped = await readBodyCapped(streamResult.body, opts.maxBytes)
     return {
         status: streamResult.status,
         contentType: streamResult.contentType,
-        bytes
+        bytes: capped.bytes
     }
 }
 
@@ -414,7 +419,7 @@ async function httpGetStreamWithRedirects(opts: HttpGetStreamInput): Promise<Htt
             continue
         }
         const contentLengthHeader = response.headers['content-length']
-        const contentLength = parsePositiveInt(contentLengthHeader)
+        const contentLength = parseOptionalInt(contentLengthHeader)
         return {
             status: response.status,
             contentType,
@@ -425,19 +430,33 @@ async function httpGetStreamWithRedirects(opts: HttpGetStreamInput): Promise<Htt
     throw new Error(`too many redirects (>${MAX_REDIRECTS})`)
 }
 
-async function readBodyCapped(body: Readable | null, maxBytes: number): Promise<Uint8Array> {
-    if (!body) return new Uint8Array(0)
+interface CappedReadResult {
+    readonly bytes: Uint8Array
+    readonly truncated: boolean
+}
+
+async function readBodyCapped(body: Readable | null, maxBytes: number): Promise<CappedReadResult> {
+    if (!body) return { bytes: new Uint8Array(0), truncated: false }
     const chunks: Uint8Array[] = []
     let total = 0
+    let truncated = false
     try {
         for await (const chunk of body) {
             const view = chunk as Uint8Array
             const room = maxBytes - total
-            if (room <= 0) break
-            const slice = view.byteLength <= room ? view : view.subarray(0, room)
-            chunks.push(slice)
-            total += slice.byteLength
-            if (total >= maxBytes) break
+            if (room <= 0) {
+                truncated = true
+                break
+            }
+            if (view.byteLength <= room) {
+                chunks.push(view)
+                total += view.byteLength
+            } else {
+                chunks.push(view.subarray(0, room))
+                total = maxBytes
+                truncated = true
+                break
+            }
         }
     } finally {
         body.destroy()
@@ -448,7 +467,7 @@ async function readBodyCapped(body: Readable | null, maxBytes: number): Promise<
         out.set(chunk, offset)
         offset += chunk.byteLength
     }
-    return out
+    return { bytes: out, truncated }
 }
 
 const PRIVATE_IPV4 = [
@@ -462,18 +481,24 @@ const PRIVATE_IPV4 = [
 
 function isPrivateHost(hostname: string): boolean {
     const lower = hostname.toLowerCase()
-    if (lower === 'localhost' || lower === '::1') return true
-    if (lower.startsWith('::ffff:')) {
-        return isPrivateHost(lower.slice('::ffff:'.length))
+    // RFC 6761 §6.3: any name in the .localhost domain resolves to loopback.
+    if (lower === 'localhost' || lower.endsWith('.localhost')) return true
+    // URL.hostname strips brackets for IPv6, but tolerate either form.
+    const bare = lower.startsWith('[') && lower.endsWith(']') ? lower.slice(1, -1) : lower
+    if (bare === '::1' || bare === '0:0:0:0:0:0:0:1' || bare === '::') return true
+    if (bare.startsWith('::ffff:')) {
+        return isPrivateHost(bare.slice('::ffff:'.length))
     }
-    if (PRIVATE_IPV4.some((re) => re.test(lower))) return true
-    if (lower.startsWith('[') && lower.endsWith(']')) {
-        const inner = lower.slice(1, -1)
+    if (PRIVATE_IPV4.some((re) => re.test(bare))) return true
+    // IPv6: presence of ':' indicates an address. Match link-local (fe80::/10)
+    // and unique-local (fc00::/7) prefixes.
+    if (bare.includes(':')) {
+        if (bare.startsWith('fc') || bare.startsWith('fd')) return true
         if (
-            inner === '::1' ||
-            inner.startsWith('fc') ||
-            inner.startsWith('fd') ||
-            inner.startsWith('fe80')
+            bare.startsWith('fe8') ||
+            bare.startsWith('fe9') ||
+            bare.startsWith('fea') ||
+            bare.startsWith('feb')
         ) {
             return true
         }

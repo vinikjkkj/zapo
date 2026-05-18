@@ -43,6 +43,7 @@ import { WA_DEFAULTS } from '@protocol/constants'
 import { buildMediaConnIq } from '@transport/node/builders/media'
 import type { BinaryNode } from '@transport/types'
 import { bytesToBase64 } from '@util/bytes'
+import { toError } from '@util/primitives'
 
 export interface WaMediaMessageOptions {
     readonly logger: Logger
@@ -71,15 +72,21 @@ export async function buildMediaMessageContent(
     }
     if (isSendTextMessage(content)) {
         if (options.linkPreviewResolver) {
-            const preview = await options.linkPreviewResolver(content)
-            if (preview !== null) {
-                return {
-                    message: buildExtendedTextWithPreview(
-                        content.text,
-                        preview.resolved,
-                        preview.thumbnailFields
-                    )
+            try {
+                const preview = await options.linkPreviewResolver(content)
+                if (preview !== null) {
+                    return {
+                        message: buildExtendedTextWithPreview(
+                            content.text,
+                            preview.resolved,
+                            preview.thumbnailFields
+                        )
+                    }
                 }
+            } catch (error) {
+                options.logger.warn('link preview resolver failed, sending plain text', {
+                    message: toError(error).message
+                })
             }
         }
         return { message: { extendedTextMessage: { text: content.text } } }

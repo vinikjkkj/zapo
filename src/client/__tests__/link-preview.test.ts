@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { resolveLinkPreview } from '@client/link-preview'
+import { buildMediaMessageContent, type WaMediaMessageOptions } from '@client/messages'
 import { createNoopLogger } from '@infra/log/types'
 import type { WaMediaConn } from '@media/types'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
@@ -227,4 +228,45 @@ test('resolveLinkPreview drops thumbnail on upload failure', async () => {
     assert.equal(r?.resolved.matchedText, 'https://example.com')
     assert.equal(r?.thumbnailFields.thumbnailDirectPath, undefined)
     assert.equal(r?.thumbnailFields.jpegThumbnail, undefined)
+})
+
+function makeBuildOptions(
+    resolver: WaMediaMessageOptions['linkPreviewResolver']
+): WaMediaMessageOptions {
+    return {
+        logger: createNoopLogger(),
+        mediaTransfer: undefined as unknown as WaMediaTransferClient,
+        queryWithContext: async () => ({ tag: 'noop', attrs: {} }),
+        getMediaConnCache: () => null,
+        setMediaConnCache: () => {},
+        linkPreviewResolver: resolver
+    }
+}
+
+test('buildMediaMessageContent falls back to plain extendedTextMessage when resolver throws', async () => {
+    const result = await buildMediaMessageContent(
+        makeBuildOptions(() => {
+            throw new Error('resolver crashed')
+        }),
+        { type: 'text', text: 'see https://example.com' }
+    )
+    assert.deepEqual(result, {
+        message: { extendedTextMessage: { text: 'see https://example.com' } }
+    })
+})
+
+test('buildMediaMessageContent uses resolver output when it returns a preview', async () => {
+    const result = await buildMediaMessageContent(
+        makeBuildOptions(async () => ({
+            resolved: {
+                matchedText: 'https://example.com',
+                title: 'Resolved',
+                previewType: proto.Message.ExtendedTextMessage.PreviewType.NONE
+            },
+            thumbnailFields: {}
+        })),
+        { type: 'text', text: 'see https://example.com' }
+    )
+    assert.equal(result.message.extendedTextMessage?.title, 'Resolved')
+    assert.equal(result.message.extendedTextMessage?.matchedText, 'https://example.com')
 })
