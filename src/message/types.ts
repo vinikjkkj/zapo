@@ -1,6 +1,7 @@
 import type { Readable } from 'node:stream'
 
 import type { WaSendContextInfo } from '@message/context-info'
+import type { WaLinkPreviewOverride } from '@message/link-preview/types'
 import type { Proto } from '@proto'
 import type { WaOutboundReceiptType } from '@protocol/message'
 import type { BinaryNode } from '@transport/types'
@@ -79,6 +80,12 @@ export interface WaSendTextMessage {
     readonly type: 'text'
     readonly text: string
     readonly contextInfo?: WaSendContextInfo
+    /**
+     * Link preview control: `undefined` follows the global `linkPreview.enabled`
+     * default; `false` disables; `true` forces auto-fetch; an object skips the
+     * fetch and uses the provided fields directly.
+     */
+    readonly linkPreview?: boolean | WaLinkPreviewOverride
 }
 
 interface WaSendImageMessage extends WaSendMediaBase, UserMediaFields<Proto.Message.IImageMessage> {

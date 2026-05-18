@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
 
+import type { ResolvedLinkPreviewResult } from '@client/link-preview'
 import {
     assertMediaUploadStatus,
     buildMediaUploadUrl,
@@ -23,6 +24,7 @@ import type { MediaCryptoType, WaMediaConn } from '@media/types'
 import { WaMediaCrypto } from '@media/WaMediaCrypto'
 import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { isSendMediaMessage, isSendTextMessage } from '@message/content'
+import { buildExtendedTextWithPreview } from '@message/link-preview/builder'
 import {
     toStickerPackProtoStickers,
     toStickerPackZipEntries,
@@ -33,7 +35,8 @@ import type {
     WaMessageUploadInfo,
     WaSendMediaMessage,
     WaSendMessageContent,
-    WaSendStickerPackMessage
+    WaSendStickerPackMessage,
+    WaSendTextMessage
 } from '@message/types'
 import { proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
@@ -54,6 +57,9 @@ export interface WaMediaMessageOptions {
     readonly getMediaConnCache: () => WaMediaConn | null
     readonly setMediaConnCache: (mediaConn: WaMediaConn | null) => void
     readonly media?: WaMediaOptions
+    readonly linkPreviewResolver?: (
+        content: WaSendTextMessage
+    ) => Promise<ResolvedLinkPreviewResult | null>
 }
 
 export async function buildMediaMessageContent(
@@ -64,6 +70,18 @@ export async function buildMediaMessageContent(
         return { message: { conversation: content } }
     }
     if (isSendTextMessage(content)) {
+        if (options.linkPreviewResolver) {
+            const preview = await options.linkPreviewResolver(content)
+            if (preview !== null) {
+                return {
+                    message: buildExtendedTextWithPreview(
+                        content.text,
+                        preview.resolved,
+                        preview.thumbnailFields
+                    )
+                }
+            }
+        }
         return { message: { extendedTextMessage: { text: content.text } } }
     }
     if (isSendMediaMessage(content)) {

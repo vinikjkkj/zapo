@@ -52,6 +52,7 @@ import { handleDirtyBits, parseDirtyBits } from '@client/dirty'
 import { DEVICE_NOTIFICATION_ACTIONS, parseDeviceNotification } from '@client/events/devices'
 import { parseIdentityChangeNotification } from '@client/events/identity'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
+import { resolveLinkPreview } from '@client/link-preview'
 import {
     buildMediaMessageContent,
     getMediaConn as getClientMediaConn,
@@ -72,6 +73,7 @@ import type { Logger } from '@infra/log/types'
 import type { WaMediaConn } from '@media/types'
 import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { handleIncomingMessageAck } from '@message/incoming'
+import { createDefaultLinkPreviewFetcher } from '@message/link-preview/fetcher'
 import {
     createPeerDataOperationRequester,
     type PeerDataOperationRequester
@@ -448,6 +450,18 @@ export function buildWaClientDependencies(input: {
         defaultDownloadAgent: toProxyAgent(options.proxy?.mediaDownload),
         skipMacVerification: options.dangerous?.disableMediaMacVerification
     })
+    const linkPreviewOptions = options.linkPreview ?? {}
+    const linkPreviewFetcher =
+        linkPreviewOptions.fetcher ??
+        createDefaultLinkPreviewFetcher({
+            mediaTransfer,
+            userAgent: linkPreviewOptions.userAgent,
+            fetchTimeoutMs: linkPreviewOptions.fetchTimeoutMs,
+            maxHtmlBytes: linkPreviewOptions.maxHtmlBytes,
+            maxThumbnailBytes: linkPreviewOptions.maxThumbnailBytes,
+            allowPrivateHosts: linkPreviewOptions.allowPrivateHosts,
+            proxy: linkPreviewOptions.proxy ?? options.proxy?.linkPreview
+        })
     const mediaMessageBuildOptions: WaMediaMessageOptions = {
         logger,
         mediaTransfer,
@@ -463,7 +477,15 @@ export function buildWaClientDependencies(input: {
             mediaConnCacheFallback = mediaConn
             connectionManager?.setMediaConnCache(mediaConn)
         },
-        media: options.media
+        media: options.media,
+        linkPreviewResolver: (content) =>
+            resolveLinkPreview(content.text, content.linkPreview, {
+                logger,
+                mediaTransfer,
+                getMediaConn: () => getClientMediaConn(mediaMessageBuildOptions),
+                fetcher: linkPreviewFetcher,
+                options: linkPreviewOptions
+            })
     }
 
     const messageClient = new WaMessageClient({

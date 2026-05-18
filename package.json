@@ -172,7 +172,7 @@
         "@types/node": "^22.13.14",
         "@types/ws": "^8.18.1",
         "@typescript-eslint/parser": "^8.56.1",
-        "@vinikjkkj/eslint-config": "^1.0.0",
+        "@vinikjkkj/eslint-config": "1.0.2",
         "argo-codec": "^0.2.1",
         "better-sqlite3": "^12.6.2",
         "c8": "^11.0.0",

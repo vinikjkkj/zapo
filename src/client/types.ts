@@ -9,6 +9,7 @@ import type { IncomingPresenceType, PresenceLastSeen } from '@client/events/pres
 import type { WaMediaProcessor } from '@media/processor'
 import type { WaDecodedAddon } from '@message/addon-crypto'
 import type { WaQuoteRef, WaSendContextInfo } from '@message/context-info'
+import type { WaLinkPreviewOptions } from '@message/link-preview/types'
 import type { WaMessagePublishOptions } from '@message/types'
 import type { Proto } from '@proto'
 import type { WaBotMsgEditType } from '@protocol/bot'
@@ -22,6 +23,13 @@ export interface WaClientProxyOptions {
     readonly ws?: WaProxyTransport
     readonly mediaUpload?: WaProxyTransport
     readonly mediaDownload?: WaProxyTransport
+    /**
+     * Proxy used by the default link preview fetcher when fetching the page
+     * HTML and the og:image bytes. Must be a `WaProxyDispatcher` (e.g. an
+     * undici `ProxyAgent`); the global `fetch` does not consume `http.Agent`.
+     * HQ thumbnail upload reuses `mediaUpload`.
+     */
+    readonly linkPreview?: WaProxyTransport
 }
 
 export interface WaLogoutStoreClearOptions {
@@ -75,6 +83,7 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
     readonly addons?: WaAddonOptions
     readonly logoutStoreClear?: WaLogoutStoreClearOptions
     readonly media?: WaMediaOptions
+    readonly linkPreview?: WaLinkPreviewOptions
     /**
      * Test-only overrides intended for running against a fake server.
      *
