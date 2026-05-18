@@ -1,0 +1,16 @@
+{
+    "extends": ["../../tsconfig.packages.json", "../tsconfig.build.paths.json"],
+    "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist/esm",
+        "module": "ES2020",
+        "moduleResolution": "Node",
+        "noEmit": false,
+        "types": ["node"],
+        "declaration": false,
+        "declarationMap": false,
+        "sourceMap": true
+    },
+    "include": ["src"],
+    "exclude": ["src/**/__tests__/**"]
+}

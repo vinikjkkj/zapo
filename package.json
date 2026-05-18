@@ -119,7 +119,7 @@
         "build:cjs": "tsc -p tsconfig.build.cjs.json && tsc-alias -p tsconfig.build.cjs.json",
         "build:esm": "tsc -p tsconfig.build.esm.json && tsc-alias -p tsconfig.build.esm.json",
         "build:types": "tsc -p tsconfig.build.types.json && tsc-alias -p tsconfig.build.types.json",
-        "build:esm:finalize": "node ./scripts/finalize-esm-build.cjs",
+        "build:esm:finalize": "node ./scripts/finalize-esm-build.cjs --proto-bridge",
         "build": "npm run clean && npm run build:cjs && npm run build:esm && npm run build:types && npm run build:esm:finalize",
         "build:packages": "turbo run build",
         "proto:generate": "node ./scripts/generate-proto.cjs",

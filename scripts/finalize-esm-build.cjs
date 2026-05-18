@@ -8,17 +8,25 @@ const {
 } = require('node:fs')
 const path = require('node:path')
 
-const projectRoot = process.cwd()
+const args = process.argv.slice(2)
+const rootArgIndex = args.indexOf('--root')
+const protoBridge = args.includes('--proto-bridge')
+const projectRoot =
+    rootArgIndex >= 0 && args[rootArgIndex + 1]
+        ? path.resolve(args[rootArgIndex + 1])
+        : process.cwd()
 const esmDir = path.join(projectRoot, 'dist', 'esm')
 const esmScopePath = path.join(esmDir, 'package.json')
-const esmProtoPath = path.join(esmDir, 'proto.js')
 
 mkdirSync(esmDir, { recursive: true })
 
 writeFileSync(esmScopePath, `${JSON.stringify({ type: 'module' }, null, 4)}\n`, 'utf8')
 
-if (!existsSync(esmProtoPath)) {
-    throw new Error(`missing ESM proto bridge at ${esmProtoPath}`)
+if (protoBridge) {
+    const esmProtoPath = path.join(esmDir, 'proto.js')
+    if (!existsSync(esmProtoPath)) {
+        throw new Error(`missing ESM proto bridge at ${esmProtoPath}`)
+    }
 }
 
 for (const filePath of listJsFiles(esmDir)) {
@@ -30,16 +38,19 @@ for (const filePath of listJsFiles(esmDir)) {
     }
 }
 
-writeFileSync(
-    esmProtoPath,
-    [
-        "import protoModule from '../proto.js'",
-        '',
-        'export const proto = protoModule.proto',
-        ''
-    ].join('\n'),
-    'utf8'
-)
+if (protoBridge) {
+    const esmProtoPath = path.join(esmDir, 'proto.js')
+    writeFileSync(
+        esmProtoPath,
+        [
+            "import protoModule from '../proto.js'",
+            '',
+            'export const proto = protoModule.proto',
+            ''
+        ].join('\n'),
+        'utf8'
+    )
+}
 
 function listJsFiles(dirPath) {
     const files = []

@@ -3,6 +3,7 @@
     "version": "0.0.0",
     "description": "MCP server exposing zapo-js WaClient as dynamic tools for end-to-end testing",
     "main": "dist/index.js",
+    "module": "dist/esm/index.js",
     "types": "dist/index.d.ts",
     "bin": {
         "zapo-mcp-server": "./dist/bin.js"
@@ -11,6 +12,7 @@
         ".": {
             "types": "./dist/index.d.ts",
             "require": "./dist/index.js",
+            "import": "./dist/esm/index.js",
             "default": "./dist/index.js"
         }
     },
@@ -21,7 +23,7 @@
         "access": "public"
     },
     "scripts": {
-        "build": "tsc -p tsconfig.build.cjs.json",
+        "build": "tsc -p tsconfig.build.cjs.json && tsc -p tsconfig.build.esm.json && node ../../scripts/finalize-esm-build.cjs",
         "typecheck": "tsc --noEmit",
         "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\"",
         "start": "node --import tsx src/bin.ts",
