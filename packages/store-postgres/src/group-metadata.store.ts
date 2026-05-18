@@ -1,52 +1,54 @@
-import type { WaParticipantsSnapshot, WaParticipantsStore } from 'zapo-js/store'
+import type { WaGroupMetadataSnapshot, WaGroupMetadataStore } from 'zapo-js/store'
 
 import { BasePgStore } from './BasePgStore'
 import { affectedRows, queryFirst } from './helpers'
 import type { WaPgStorageOptions } from './types'
 
-const DEFAULT_PARTICIPANTS_TTL_MS = 5 * 60 * 1000
+const DEFAULT_GROUP_METADATA_TTL_MS = 5 * 60 * 1000
 
-export class WaParticipantsPgStore extends BasePgStore implements WaParticipantsStore {
+export class WaGroupMetadataPgStore extends BasePgStore implements WaGroupMetadataStore {
     private readonly ttlMs: number
 
-    public constructor(options: WaPgStorageOptions, ttlMs = DEFAULT_PARTICIPANTS_TTL_MS) {
+    public constructor(options: WaPgStorageOptions, ttlMs = DEFAULT_GROUP_METADATA_TTL_MS) {
         super(options, ['participants'])
         if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
-            throw new Error('participants ttlMs must be a positive finite number')
+            throw new Error('groupMetadata ttlMs must be a positive finite number')
         }
         this.ttlMs = ttlMs
     }
 
-    public async upsertGroupParticipants(snapshot: WaParticipantsSnapshot): Promise<void> {
+    public async upsertGroupMetadata(snapshot: WaGroupMetadataSnapshot): Promise<void> {
         await this.ensureReady()
         await this.pool.query({
-            name: this.stmtName('participants_upsert'),
+            name: this.stmtName('group_metadata_upsert'),
             text: `INSERT INTO ${this.t('group_participants_cache')} (
-                session_id, group_jid, participants_json, updated_at_ms, expires_at_ms
-            ) VALUES ($1, $2, $3, $4, $5)
+                session_id, group_jid, participants_json, ephemeral, updated_at_ms, expires_at_ms
+            ) VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (session_id, group_jid) DO UPDATE SET
                 participants_json = EXCLUDED.participants_json,
+                ephemeral = EXCLUDED.ephemeral,
                 updated_at_ms = EXCLUDED.updated_at_ms,
                 expires_at_ms = EXCLUDED.expires_at_ms`,
             values: [
                 this.sessionId,
                 snapshot.groupJid,
                 JSON.stringify(snapshot.participants),
+                snapshot.ephemeral ?? null,
                 snapshot.updatedAtMs,
                 snapshot.updatedAtMs + this.ttlMs
             ]
         })
     }
 
-    public async getGroupParticipants(
+    public async getGroupMetadata(
         groupJid: string,
         nowMs = Date.now()
-    ): Promise<WaParticipantsSnapshot | null> {
+    ): Promise<WaGroupMetadataSnapshot | null> {
         await this.ensureReady()
         const row = queryFirst(
             await this.pool.query({
-                name: this.stmtName('participants_get'),
-                text: `SELECT group_jid, participants_json, updated_at_ms, expires_at_ms
+                name: this.stmtName('group_metadata_get'),
+                text: `SELECT group_jid, participants_json, ephemeral, updated_at_ms, expires_at_ms
                  FROM ${this.t('group_participants_cache')}
                  WHERE session_id = $1 AND group_jid = $2`,
                 values: [this.sessionId, groupJid]
@@ -56,7 +58,7 @@ export class WaParticipantsPgStore extends BasePgStore implements WaParticipants
 
         if (Number(row.expires_at_ms) <= nowMs) {
             await this.pool.query({
-                name: this.stmtName('participants_delete_expired'),
+                name: this.stmtName('group_metadata_delete_expired'),
                 text: `DELETE FROM ${this.t('group_participants_cache')}
                  WHERE session_id = $1 AND group_jid = $2 AND expires_at_ms <= $3`,
                 values: [this.sessionId, groupJid, nowMs]
@@ -69,18 +71,20 @@ export class WaParticipantsPgStore extends BasePgStore implements WaParticipants
             throw new Error('group_participants_cache.participants_json must be an array')
         }
 
+        const ephemeral = row.ephemeral === null ? undefined : Number(row.ephemeral)
         return {
             groupJid: String(row.group_jid),
             participants: parsed.map((entry: unknown) => String(entry)),
+            ephemeral,
             updatedAtMs: Number(row.updated_at_ms)
         }
     }
 
-    public async deleteGroupParticipants(groupJid: string): Promise<number> {
+    public async deleteGroupMetadata(groupJid: string): Promise<number> {
         await this.ensureReady()
         return affectedRows(
             await this.pool.query({
-                name: this.stmtName('participants_delete_group'),
+                name: this.stmtName('group_metadata_delete_group'),
                 text: `DELETE FROM ${this.t('group_participants_cache')}
                  WHERE session_id = $1 AND group_jid = $2`,
                 values: [this.sessionId, groupJid]
@@ -92,7 +96,7 @@ export class WaParticipantsPgStore extends BasePgStore implements WaParticipants
         await this.ensureReady()
         return affectedRows(
             await this.pool.query({
-                name: this.stmtName('participants_cleanup'),
+                name: this.stmtName('group_metadata_cleanup'),
                 text: `DELETE FROM ${this.t('group_participants_cache')}
                  WHERE session_id = $1 AND expires_at_ms <= $2`,
                 values: [this.sessionId, nowMs]
@@ -103,7 +107,7 @@ export class WaParticipantsPgStore extends BasePgStore implements WaParticipants
     public async clear(): Promise<void> {
         await this.ensureReady()
         await this.pool.query({
-            name: this.stmtName('participants_clear'),
+            name: this.stmtName('group_metadata_clear'),
             text: `DELETE FROM ${this.t('group_participants_cache')} WHERE session_id = $1`,
             values: [this.sessionId]
         })

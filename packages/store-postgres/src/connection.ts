@@ -324,6 +324,13 @@ const MIGRATIONS: readonly Migration[] = [
             ALTER TABLE "__PREFIX__auth_credentials" ADD COLUMN IF NOT EXISTS year_class BIGINT;
             ALTER TABLE "__PREFIX__auth_credentials" ADD COLUMN IF NOT EXISTS mem_class BIGINT
         `
+    },
+    {
+        name: '0012_group_participants_cache_ephemeral',
+        domain: 'participants',
+        sql: `
+            ALTER TABLE "__PREFIX__group_participants_cache" ADD COLUMN IF NOT EXISTS ephemeral BIGINT
+        `
     }
 ]
 

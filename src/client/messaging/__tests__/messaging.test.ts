@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createDeviceFanoutResolver } from '@client/messaging/fanout'
+import { createGroupMetadataCache } from '@client/messaging/group-metadata'
 import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
-import { createGroupParticipantsCache } from '@client/messaging/participants'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
-import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
+import { WaGroupMetadataMemoryStore } from '@store/providers/memory/group-metadata.store'
 
 function createGroupEvent(input: {
     readonly action: WaGroupEventAction
@@ -115,12 +115,12 @@ test('device fanout resolver excludes hosted devices in group fanout', async () 
     assert.deepEqual(fanout, ['6116570308623:1@lid', '551188888888@s.whatsapp.net'])
 })
 
-test('group participants cache mutates membership from events', async () => {
-    const participantsStore = new WaParticipantsMemoryStore(60_000)
+test('group metadata cache mutates membership from events', async () => {
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
     try {
-        const cache = createGroupParticipantsCache({
-            participantsStore,
-            queryGroupParticipantJids: async () => [],
+        const cache = createGroupMetadataCache({
+            groupMetadataStore,
+            queryGroupMetadata: async () => ({ participants: [] }),
             logger: createNoopLogger()
         })
 
@@ -146,13 +146,77 @@ test('group participants cache mutates membership from events', async () => {
             })
         )
 
-        const cached = await participantsStore.getGroupParticipants('120@g.us')
+        const cached = await groupMetadataStore.getGroupMetadata('120@g.us')
         assert.deepEqual(cached?.participants, [
             '551100000000@s.whatsapp.net',
             '552200000000@s.whatsapp.net'
         ])
     } finally {
-        await participantsStore.destroy()
+        await groupMetadataStore.destroy()
+    }
+})
+
+test('group metadata cache stores and updates ephemeral from events', async () => {
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    try {
+        const cache = createGroupMetadataCache({
+            groupMetadataStore,
+            queryGroupMetadata: async () => ({
+                participants: ['551100000000@s.whatsapp.net'],
+                ephemeral: 86_400
+            }),
+            logger: createNoopLogger()
+        })
+
+        const initial = await cache.resolveParticipantUsers('120@g.us')
+        assert.deepEqual(initial, ['551100000000@s.whatsapp.net'])
+        assert.equal(await cache.getEphemeral('120@g.us'), 86_400)
+
+        await cache.mutateFromGroupEvent({
+            rawNode: { tag: 'notification', attrs: {} },
+            rawActionNode: { tag: 'ephemeral', attrs: {} },
+            action: 'ephemeral',
+            groupJid: '120@g.us',
+            expirationSeconds: 7_776_000
+        } as WaGroupEvent)
+
+        assert.equal(await cache.getEphemeral('120@g.us'), 7_776_000)
+
+        await cache.mutateFromGroupEvent({
+            rawNode: { tag: 'notification', attrs: {} },
+            rawActionNode: { tag: 'ephemeral', attrs: {} },
+            action: 'ephemeral',
+            groupJid: '120@g.us',
+            expirationSeconds: 0
+        } as WaGroupEvent)
+
+        assert.equal(await cache.getEphemeral('120@g.us'), 0)
+    } finally {
+        await groupMetadataStore.destroy()
+    }
+})
+
+test('group metadata cache ignores ephemeral events for uncached groups', async () => {
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    try {
+        const cache = createGroupMetadataCache({
+            groupMetadataStore,
+            queryGroupMetadata: async () => ({ participants: [] }),
+            logger: createNoopLogger()
+        })
+
+        await cache.mutateFromGroupEvent({
+            rawNode: { tag: 'notification', attrs: {} },
+            rawActionNode: { tag: 'ephemeral', attrs: {} },
+            action: 'ephemeral',
+            groupJid: '120@g.us',
+            expirationSeconds: 86_400
+        } as WaGroupEvent)
+
+        assert.equal(await cache.getEphemeral('120@g.us'), null)
+        assert.equal(await groupMetadataStore.getGroupMetadata('120@g.us'), null)
+    } finally {
+        await groupMetadataStore.destroy()
     }
 })
 

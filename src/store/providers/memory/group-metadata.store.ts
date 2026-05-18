@@ -1,7 +1,7 @@
 import type {
-    WaParticipantsSnapshot,
-    WaParticipantsStore
-} from '@store/contracts/participants.store'
+    WaGroupMetadataSnapshot,
+    WaGroupMetadataStore
+} from '@store/contracts/group-metadata.store'
 import { resolvePositive } from '@util/coercion'
 import {
     createPeriodicCleanup,
@@ -9,7 +9,7 @@ import {
     setBoundedMapEntry
 } from '@util/collections'
 
-interface WaParticipantsMemoryStoreRecord extends WaParticipantsSnapshot {
+interface WaGroupMetadataMemoryStoreRecord extends WaGroupMetadataSnapshot {
     readonly expiresAtMs: number
 }
 
@@ -18,33 +18,33 @@ const DEFAULTS = Object.freeze({
     maxGroups: 4_096
 } as const)
 
-export interface WaParticipantsMemoryStoreOptions {
+export interface WaGroupMetadataMemoryStoreOptions {
     readonly maxGroups?: number
 }
 
-export class WaParticipantsMemoryStore implements WaParticipantsStore {
-    private readonly records: Map<string, WaParticipantsMemoryStoreRecord>
+export class WaGroupMetadataMemoryStore implements WaGroupMetadataStore {
+    private readonly records: Map<string, WaGroupMetadataMemoryStoreRecord>
     private readonly ttlMs: number
     private readonly maxGroups: number
     private readonly cleanup: PeriodicCleanupHandle
 
-    public constructor(ttlMs = DEFAULTS.ttlMs, options: WaParticipantsMemoryStoreOptions = {}) {
+    public constructor(ttlMs = DEFAULTS.ttlMs, options: WaGroupMetadataMemoryStoreOptions = {}) {
         if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
-            throw new Error('participants ttlMs must be a positive finite number')
+            throw new Error('groupMetadata ttlMs must be a positive finite number')
         }
         this.records = new Map()
         this.ttlMs = ttlMs
         this.maxGroups = resolvePositive(
             options.maxGroups,
             DEFAULTS.maxGroups,
-            'WaParticipantsMemoryStoreOptions.maxGroups'
+            'WaGroupMetadataMemoryStoreOptions.maxGroups'
         )
         this.cleanup = createPeriodicCleanup(ttlMs, () => {
             void this.cleanupExpired(Date.now())
         })
     }
 
-    public async upsertGroupParticipants(snapshot: WaParticipantsSnapshot): Promise<void> {
+    public async upsertGroupMetadata(snapshot: WaGroupMetadataSnapshot): Promise<void> {
         setBoundedMapEntry(
             this.records,
             snapshot.groupJid,
@@ -56,10 +56,10 @@ export class WaParticipantsMemoryStore implements WaParticipantsStore {
         )
     }
 
-    public async getGroupParticipants(
+    public async getGroupMetadata(
         groupJid: string,
         nowMs = Date.now()
-    ): Promise<WaParticipantsSnapshot | null> {
+    ): Promise<WaGroupMetadataSnapshot | null> {
         const record = this.records.get(groupJid)
         if (!record) {
             return null
@@ -71,7 +71,7 @@ export class WaParticipantsMemoryStore implements WaParticipantsStore {
         return record
     }
 
-    public async deleteGroupParticipants(groupJid: string): Promise<number> {
+    public async deleteGroupMetadata(groupJid: string): Promise<number> {
         return this.records.delete(groupJid) ? 1 : 0
     }
 

@@ -47,7 +47,7 @@ const mockAuthBackend = {
         retry: () => {
             throw new Error('not expected')
         },
-        participants: () => {
+        groupMetadata: () => {
             throw new Error('not expected')
         },
         deviceList: () => {

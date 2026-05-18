@@ -2,10 +2,10 @@ import { WaAppStateSqliteStore } from './appstate.store'
 import { WaAuthSqliteStore } from './auth.store'
 import { WaContactSqliteStore } from './contact.store'
 import { WaDeviceListSqliteStore } from './device-list.store'
+import { WaGroupMetadataSqliteStore } from './group-metadata.store'
 import { WaIdentitySqliteStore } from './identity.store'
 import { WaMessageSecretSqliteStore } from './message-secret.store'
 import { WaMessageSqliteStore } from './message.store'
-import { WaParticipantsSqliteStore } from './participants.store'
 import { WaPreKeySqliteStore } from './pre-key.store'
 import { WaPrivacyTokenSqliteStore } from './privacy-token.store'
 import { WaRetrySqliteStore } from './retry.store'
@@ -28,7 +28,7 @@ export interface WaSqliteStoreConfig {
     readonly batchSizes?: WaSqliteBatchSizeSelection
     readonly cacheTtlMs?: {
         readonly retryMs?: number
-        readonly participantsMs?: number
+        readonly groupMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
@@ -50,7 +50,7 @@ export interface WaSqliteStoreResult {
     }
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetrySqliteStore
-        readonly participants: (sessionId: string) => WaParticipantsSqliteStore
+        readonly groupMetadata: (sessionId: string) => WaGroupMetadataSqliteStore
         readonly deviceList: (sessionId: string) => WaDeviceListSqliteStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretSqliteStore
     }
@@ -58,7 +58,7 @@ export interface WaSqliteStoreResult {
 
 export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreResult {
     const retryTtlMs = config.cacheTtlMs?.retryMs
-    const participantsTtlMs = config.cacheTtlMs?.participantsMs
+    const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const batchSizes = config.batchSizes
@@ -94,8 +94,8 @@ export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreRes
         },
         caches: {
             retry: (sessionId) => new WaRetrySqliteStore(opts(sessionId), retryTtlMs),
-            participants: (sessionId) =>
-                new WaParticipantsSqliteStore(opts(sessionId), participantsTtlMs),
+            groupMetadata: (sessionId) =>
+                new WaGroupMetadataSqliteStore(opts(sessionId), groupMetadataTtlMs),
             deviceList: (sessionId) =>
                 new WaDeviceListSqliteStore(
                     opts(sessionId),

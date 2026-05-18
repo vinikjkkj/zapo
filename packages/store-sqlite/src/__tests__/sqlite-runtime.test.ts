@@ -19,9 +19,9 @@ import {
 import { WaAppStateSqliteStore } from '../appstate.store'
 import type { WaSqliteConnection } from '../connection'
 import { WaDeviceListSqliteStore } from '../device-list.store'
+import { WaGroupMetadataSqliteStore } from '../group-metadata.store'
 import { WaIdentitySqliteStore } from '../identity.store'
 import { WaMessageSecretSqliteStore } from '../message-secret.store'
-import { WaParticipantsSqliteStore } from '../participants.store'
 import { WaPreKeySqliteStore } from '../pre-key.store'
 import { WaRetrySqliteStore } from '../retry.store'
 import { SenderKeySqliteStore } from '../sender-key.store'
@@ -191,7 +191,7 @@ test('sqlite appstate store handles sync keys, collection state and session scop
     }
 })
 
-test('sqlite device-list and participants stores cover batch, expiry, cleanup and invalid payloads', async () => {
+test('sqlite device-list and group-metadata stores cover batch, expiry, cleanup and invalid payloads', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-cache-'))
     const sqlitePath = join(dir, 'state.sqlite')
     const deviceStore = new WaDeviceListSqliteStore(
@@ -199,7 +199,7 @@ test('sqlite device-list and participants stores cover batch, expiry, cleanup an
         100,
         1
     )
-    const participantsStore = new WaParticipantsSqliteStore(
+    const groupMetadataStore = new WaGroupMetadataSqliteStore(
         makeSqliteOptions(sqlitePath, 'session-a'),
         100
     )
@@ -261,25 +261,35 @@ test('sqlite device-list and participants stores cover batch, expiry, cleanup an
             /device_jids_json must be an array/
         )
 
-        await participantsStore.upsertGroupParticipants({
+        await groupMetadataStore.upsertGroupMetadata({
             groupJid: '120@g.us',
             participants: ['5511@s.whatsapp.net', '5522@s.whatsapp.net'],
+            ephemeral: 86_400,
             updatedAtMs: 1000
         })
 
-        const participants = await participantsStore.getGroupParticipants('120@g.us', 1_020)
+        const participants = await groupMetadataStore.getGroupMetadata('120@g.us', 1_020)
         assert.ok(participants)
         assert.equal(participants?.participants.length, 2)
+        assert.equal(participants?.ephemeral, 86_400)
 
-        assert.equal(await participantsStore.deleteGroupParticipants('missing@g.us'), 0)
-        assert.equal(await participantsStore.cleanupExpired(1_200), 1)
+        await groupMetadataStore.upsertGroupMetadata({
+            groupJid: '120@g.us',
+            participants: ['5511@s.whatsapp.net', '5522@s.whatsapp.net'],
+            updatedAtMs: 1_010
+        })
+        const cleared = await groupMetadataStore.getGroupMetadata('120@g.us', 1_020)
+        assert.equal(cleared?.ephemeral, undefined)
 
-        await participantsStore.upsertGroupParticipants({
+        assert.equal(await groupMetadataStore.deleteGroupMetadata('missing@g.us'), 0)
+        assert.equal(await groupMetadataStore.cleanupExpired(1_200), 1)
+
+        await groupMetadataStore.upsertGroupMetadata({
             groupJid: 'bad@g.us',
             participants: ['5511@s.whatsapp.net'],
             updatedAtMs: 2000
         })
-        const participantsDb = await asConnection(participantsStore)
+        const participantsDb = await asConnection(groupMetadataStore)
         participantsDb.run(
             `UPDATE group_participants_cache
              SET participants_json = ?
@@ -287,12 +297,12 @@ test('sqlite device-list and participants stores cover batch, expiry, cleanup an
             ['{"invalid":true}', 'session-a', 'bad@g.us']
         )
         await assert.rejects(
-            () => participantsStore.getGroupParticipants('bad@g.us', 2_010),
+            () => groupMetadataStore.getGroupMetadata('bad@g.us', 2_010),
             /participants_json must be an array/
         )
-        await participantsStore.clear()
+        await groupMetadataStore.clear()
     } finally {
-        await Promise.all([deviceStore.destroy(), participantsStore.destroy()])
+        await Promise.all([deviceStore.destroy(), groupMetadataStore.destroy()])
         await rm(dir, { recursive: true, force: true })
     }
 })

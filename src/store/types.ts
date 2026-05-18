@@ -2,10 +2,10 @@ import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
+import type { WaGroupMetadataStore } from '@store/contracts/group-metadata.store'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
-import type { WaParticipantsStore } from '@store/contracts/participants.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaPrivacyTokenStore } from '@store/contracts/privacy-token.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
@@ -25,7 +25,7 @@ export interface WaStoreSession {
     readonly senderKey: WaSenderKeyStore
     readonly appState: WaAppStateStore
     readonly retry: WaRetryStore
-    readonly participants: WaParticipantsStore
+    readonly groupMetadata: WaGroupMetadataStore
     readonly deviceList: WaDeviceListStore
     readonly messages: WaMessageStore
     readonly messageSecret: WaMessageSecretStore
@@ -58,7 +58,7 @@ export interface WaStoreBackend {
     }
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetryStore
-        readonly participants: (sessionId: string) => WaParticipantsStore
+        readonly groupMetadata: (sessionId: string) => WaGroupMetadataStore
         readonly deviceList: (sessionId: string) => WaDeviceListStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretStore
     }
@@ -84,7 +84,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
     }
     readonly cacheProviders?: {
         readonly retry?: B | 'memory' | 'none'
-        readonly participants?: B | 'memory' | 'none'
+        readonly groupMetadata?: B | 'memory' | 'none'
         readonly deviceList?: B | 'memory' | 'none'
         readonly messageSecret?: B | 'memory' | 'none'
     }
@@ -92,7 +92,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
         readonly limits?: WaStoreMemoryLimitSelection
         readonly cacheTtlMs?: {
             readonly retryMs?: number
-            readonly participantsMs?: number
+            readonly groupMetadataMs?: number
             readonly deviceListMs?: number
             readonly messageSecretMs?: number
         }
@@ -107,7 +107,7 @@ export interface WaStoreMemoryLimitSelection {
     readonly signalRemoteIdentities?: number
     readonly senderKeys?: number
     readonly senderDistributions?: number
-    readonly participantsGroups?: number
+    readonly groupMetadataGroups?: number
     readonly deviceListUsers?: number
     readonly messages?: number
     readonly messageSecrets?: number

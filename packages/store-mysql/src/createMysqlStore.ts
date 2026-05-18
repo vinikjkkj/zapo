@@ -6,10 +6,10 @@ import { MysqlCleanupPoller } from './cleanup'
 import { createMysqlPool } from './connection'
 import { WaContactMysqlStore } from './contact.store'
 import { WaDeviceListMysqlStore } from './device-list.store'
+import { WaGroupMetadataMysqlStore } from './group-metadata.store'
 import { WaIdentityMysqlStore } from './identity.store'
 import { WaMessageSecretMysqlStore } from './message-secret.store'
 import { WaMessageMysqlStore } from './message.store'
-import { WaParticipantsMysqlStore } from './participants.store'
 import { WaPreKeyMysqlStore } from './pre-key.store'
 import { WaPrivacyTokenMysqlStore } from './privacy-token.store'
 import { WaRetryMysqlStore } from './retry.store'
@@ -24,7 +24,7 @@ export interface WaMysqlStoreConfig {
     readonly tablePrefix?: string
     readonly cacheTtlMs?: {
         readonly retryMs?: number
-        readonly participantsMs?: number
+        readonly groupMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
@@ -52,7 +52,7 @@ export interface WaMysqlStoreResult {
     }
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetryMysqlStore
-        readonly participants: (sessionId: string) => WaParticipantsMysqlStore
+        readonly groupMetadata: (sessionId: string) => WaGroupMetadataMysqlStore
         readonly deviceList: (sessionId: string) => WaDeviceListMysqlStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretMysqlStore
     }
@@ -68,7 +68,7 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
     const pool = isPool(config.pool) ? config.pool : createMysqlPool(config.pool)
     const tablePrefix = config.tablePrefix ?? ''
     const retryTtlMs = config.cacheTtlMs?.retryMs
-    const participantsTtlMs = config.cacheTtlMs?.participantsMs
+    const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsPool = !isPool(config.pool)
@@ -98,8 +98,8 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
         },
         caches: {
             retry: (sessionId) => new WaRetryMysqlStore(opts(sessionId), retryTtlMs),
-            participants: (sessionId) =>
-                new WaParticipantsMysqlStore(opts(sessionId), participantsTtlMs),
+            groupMetadata: (sessionId) =>
+                new WaGroupMetadataMysqlStore(opts(sessionId), groupMetadataTtlMs),
             deviceList: (sessionId) => new WaDeviceListMysqlStore(opts(sessionId), deviceListTtlMs),
             messageSecret: (sessionId) =>
                 new WaMessageSecretMysqlStore(opts(sessionId), messageSecretTtlMs)
@@ -109,7 +109,7 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
             const poller = new MysqlCleanupPoller({
                 intervalMs: config.cleanup?.intervalMs,
                 retry: new WaRetryMysqlStore(o, retryTtlMs),
-                participants: new WaParticipantsMysqlStore(o, participantsTtlMs),
+                groupMetadata: new WaGroupMetadataMysqlStore(o, groupMetadataTtlMs),
                 deviceList: new WaDeviceListMysqlStore(o, deviceListTtlMs),
                 messageSecret: new WaMessageSecretMysqlStore(o, messageSecretTtlMs),
                 onError: config.cleanup?.onError

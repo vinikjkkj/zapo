@@ -17,9 +17,9 @@ export type {
 } from '@store/contracts/message-secret.store'
 export type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
 export type {
-    WaParticipantsSnapshot,
-    WaParticipantsStore
-} from '@store/contracts/participants.store'
+    WaGroupMetadataSnapshot,
+    WaGroupMetadataStore
+} from '@store/contracts/group-metadata.store'
 export type {
     WaAppStateCollectionStateUpdate,
     WaAppStateCollectionStoreState,
@@ -43,7 +43,7 @@ export { WaSessionMemoryStore } from '@store/providers/memory/session.store'
 export { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
 export { SenderKeyMemoryStore } from '@store/providers/memory/sender-key.store'
 export { WaRetryMemoryStore } from '@store/providers/memory/retry.store'
-export { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
+export { WaGroupMetadataMemoryStore } from '@store/providers/memory/group-metadata.store'
 export { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
 export { WaContactMemoryStore } from '@store/providers/memory/contact.store'
 export { WaMessageSecretMemoryStore } from '@store/providers/memory/message-secret.store'

@@ -6,10 +6,10 @@ import { PgCleanupPoller } from './cleanup'
 import { createPgPool } from './connection'
 import { WaContactPgStore } from './contact.store'
 import { WaDeviceListPgStore } from './device-list.store'
+import { WaGroupMetadataPgStore } from './group-metadata.store'
 import { WaIdentityPgStore } from './identity.store'
 import { WaMessageSecretPgStore } from './message-secret.store'
 import { WaMessagePgStore } from './message.store'
-import { WaParticipantsPgStore } from './participants.store'
 import { WaPreKeyPgStore } from './pre-key.store'
 import { WaPrivacyTokenPgStore } from './privacy-token.store'
 import { WaRetryPgStore } from './retry.store'
@@ -24,7 +24,7 @@ export interface WaPgStoreConfig {
     readonly tablePrefix?: string
     readonly cacheTtlMs?: {
         readonly retryMs?: number
-        readonly participantsMs?: number
+        readonly groupMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
@@ -51,7 +51,7 @@ export interface WaPgStoreResult {
     }
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetryPgStore
-        readonly participants: (sessionId: string) => WaParticipantsPgStore
+        readonly groupMetadata: (sessionId: string) => WaGroupMetadataPgStore
         readonly deviceList: (sessionId: string) => WaDeviceListPgStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretPgStore
     }
@@ -67,7 +67,7 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
     const pool = isPool(config.pool) ? config.pool : createPgPool(config.pool)
     const tablePrefix = config.tablePrefix ?? ''
     const retryTtlMs = config.cacheTtlMs?.retryMs
-    const participantsTtlMs = config.cacheTtlMs?.participantsMs
+    const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsPool = !isPool(config.pool)
@@ -97,8 +97,8 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
         },
         caches: {
             retry: (sessionId) => new WaRetryPgStore(opts(sessionId), retryTtlMs),
-            participants: (sessionId) =>
-                new WaParticipantsPgStore(opts(sessionId), participantsTtlMs),
+            groupMetadata: (sessionId) =>
+                new WaGroupMetadataPgStore(opts(sessionId), groupMetadataTtlMs),
             deviceList: (sessionId) => new WaDeviceListPgStore(opts(sessionId), deviceListTtlMs),
             messageSecret: (sessionId) =>
                 new WaMessageSecretPgStore(opts(sessionId), messageSecretTtlMs)
@@ -108,7 +108,7 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
             const poller = new PgCleanupPoller({
                 intervalMs: config.cleanup?.intervalMs,
                 retry: new WaRetryPgStore(o, retryTtlMs),
-                participants: new WaParticipantsPgStore(o, participantsTtlMs),
+                groupMetadata: new WaGroupMetadataPgStore(o, groupMetadataTtlMs),
                 deviceList: new WaDeviceListPgStore(o, deviceListTtlMs),
                 messageSecret: new WaMessageSecretPgStore(o, messageSecretTtlMs),
                 onError: config.cleanup?.onError

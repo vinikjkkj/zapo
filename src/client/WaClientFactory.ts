@@ -59,8 +59,8 @@ import {
     type WaMediaMessageOptions
 } from '@client/messages'
 import { createDeviceFanoutResolver } from '@client/messaging/fanout'
+import { createGroupMetadataCache } from '@client/messaging/group-metadata'
 import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
-import { createGroupParticipantsCache } from '@client/messaging/participants'
 import type {
     WaClientEventMap,
     WaClientOptions,
@@ -339,8 +339,8 @@ function createIncomingNodeRuntime(input: {
         emitAccountTakeoverNotice: (event) => emitEvent('account_takeover_notice', event),
         emitGroupEvent: (event) => {
             emitEvent('group_event', event)
-            void messageDispatch.mutateParticipantsCacheFromGroupEvent(event).catch((error) => {
-                logger.warn('failed to mutate participants cache from group event', {
+            void messageDispatch.mutateGroupMetadataCacheFromGroupEvent(event).catch((error) => {
+                logger.warn('failed to mutate group metadata cache from group event', {
                     action: event.action,
                     groupJid: event.groupJid,
                     contextGroupJid: event.contextGroupJid,
@@ -645,15 +645,18 @@ export function buildWaClientDependencies(input: {
         getCurrentMeLid,
         logger
     })
-    const participantsCache = createGroupParticipantsCache({
-        participantsStore: sessionStore.participants,
-        queryGroupParticipantJids: async (groupJid) => {
+    const groupMetadataCache = createGroupMetadataCache({
+        groupMetadataStore: sessionStore.groupMetadata,
+        queryGroupMetadata: async (groupJid) => {
             const metadata = await groupCoordinator.queryGroupMetadata(groupJid)
             const participantJids = new Array<string>(metadata.participants.length)
             for (let index = 0; index < metadata.participants.length; index += 1) {
                 participantJids[index] = metadata.participants[index].jid
             }
-            return participantJids
+            return {
+                participants: participantJids,
+                ephemeral: metadata.ephemeral
+            }
         },
         logger
     })
@@ -706,7 +709,7 @@ export function buildWaClientDependencies(input: {
         retryTracker,
         sessionResolver,
         fanoutResolver,
-        participantsCache,
+        groupMetadataCache,
         appStateSyncKeyProtocol,
         buildMessageContent: async (content) =>
             buildMediaMessageContent(mediaMessageBuildOptions, content),

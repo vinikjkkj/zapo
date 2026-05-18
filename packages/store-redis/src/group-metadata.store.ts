@@ -1,37 +1,43 @@
-import type { WaParticipantsSnapshot, WaParticipantsStore } from 'zapo-js/store'
+import type { WaGroupMetadataSnapshot, WaGroupMetadataStore } from 'zapo-js/store'
 
 import { BaseRedisStore } from './BaseRedisStore'
 import { deleteKeysChunked, scanKeys } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
-const DEFAULT_PARTICIPANTS_TTL_MS = 5 * 60 * 1000
+const DEFAULT_GROUP_METADATA_TTL_MS = 5 * 60 * 1000
 
-export class WaParticipantsRedisStore extends BaseRedisStore implements WaParticipantsStore {
+export class WaGroupMetadataRedisStore extends BaseRedisStore implements WaGroupMetadataStore {
     private readonly ttlMs: number
 
-    public constructor(options: WaRedisStorageOptions, ttlMs = DEFAULT_PARTICIPANTS_TTL_MS) {
+    public constructor(options: WaRedisStorageOptions, ttlMs = DEFAULT_GROUP_METADATA_TTL_MS) {
         super(options)
         if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) {
-            throw new Error('participants ttlMs must be a positive integer')
+            throw new Error('groupMetadata ttlMs must be a positive integer')
         }
         this.ttlMs = ttlMs
     }
 
-    public async upsertGroupParticipants(snapshot: WaParticipantsSnapshot): Promise<void> {
+    public async upsertGroupMetadata(snapshot: WaGroupMetadataSnapshot): Promise<void> {
         const key = this.k('participants', this.sessionId, snapshot.groupJid)
         const pipeline = this.redis.pipeline()
-        pipeline.hset(key, {
+        const fields: Record<string, string> = {
             participants_json: JSON.stringify(snapshot.participants),
             updated_at_ms: String(snapshot.updatedAtMs)
-        })
+        }
+        if (snapshot.ephemeral === undefined) {
+            pipeline.hdel(key, 'ephemeral')
+        } else {
+            fields.ephemeral = String(snapshot.ephemeral)
+        }
+        pipeline.hset(key, fields)
         pipeline.pexpire(key, this.ttlMs)
         await pipeline.exec()
     }
 
-    public async getGroupParticipants(
+    public async getGroupMetadata(
         groupJid: string,
         _nowMs?: number
-    ): Promise<WaParticipantsSnapshot | null> {
+    ): Promise<WaGroupMetadataSnapshot | null> {
         const key = this.k('participants', this.sessionId, groupJid)
         const data = await this.redis.hgetall(key)
         if (!data || Object.keys(data).length === 0) return null
@@ -41,14 +47,16 @@ export class WaParticipantsRedisStore extends BaseRedisStore implements WaPartic
             throw new Error('participants_json must be an array')
         }
 
+        const ephemeral = data.ephemeral === undefined ? undefined : Number(data.ephemeral)
         return {
             groupJid,
             participants: parsed.map((entry: unknown) => String(entry)),
+            ephemeral,
             updatedAtMs: Number(data.updated_at_ms)
         }
     }
 
-    public async deleteGroupParticipants(groupJid: string): Promise<number> {
+    public async deleteGroupMetadata(groupJid: string): Promise<number> {
         const key = this.k('participants', this.sessionId, groupJid)
         return this.redis.del(key)
     }

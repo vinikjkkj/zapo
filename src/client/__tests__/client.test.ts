@@ -320,7 +320,7 @@ test('buildWaClientDependencies wires privacy coordinator', () => {
         threads: {} as never,
         contacts: {} as never,
         retry: {} as never,
-        participants: {} as never,
+        groupMetadata: {} as never,
         deviceList: {} as never,
         privacyToken: {} as never
     }
@@ -363,7 +363,7 @@ test('buildWaClientDependencies wires trusted contact token AB prop overrides', 
         threads: {} as never,
         contacts: {} as never,
         retry: {} as never,
-        participants: {} as never,
+        groupMetadata: {} as never,
         deviceList: {} as never,
         privacyToken: new WaPrivacyTokenMemoryStore()
     }
@@ -461,7 +461,7 @@ function createClearStoredStateHarness(logoutStoreClear?: {
     readonly senderKey?: boolean
     readonly appState?: boolean
     readonly retry?: boolean
-    readonly participants?: boolean
+    readonly groupMetadata?: boolean
     readonly deviceList?: boolean
     readonly messages?: boolean
     readonly threads?: boolean
@@ -501,9 +501,9 @@ function createClearStoredStateHarness(logoutStoreClear?: {
                 cleared.push('messages')
             }
         },
-        participantsStore: {
+        groupMetadataStore: {
             clear: async () => {
-                cleared.push('participants')
+                cleared.push('groupMetadata')
             }
         },
         deviceListStore: {
@@ -570,7 +570,7 @@ test('clearStoredState clears every store domain by default', async () => {
         'contacts',
         'messages',
         'messageSecret',
-        'participants',
+        'groupMetadata',
         'deviceList',
         'retry',
         'signal',
@@ -644,7 +644,7 @@ test('clearStoredState respects logoutStoreClear domain toggles', async () => {
         'contacts',
         'messages',
         'messageSecret',
-        'participants',
+        'groupMetadata',
         'deviceList',
         'signal',
         'preKey',

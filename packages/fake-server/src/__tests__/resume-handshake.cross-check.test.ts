@@ -50,7 +50,7 @@ function buildClientFor(server: FakeWaServer, authStore: WaAuthStore, sessionId:
                 },
                 caches: {
                     retry: noopStore,
-                    participants: noopStore,
+                    groupMetadata: noopStore,
                     deviceList: noopStore,
                     messageSecret: noopStore
                 }

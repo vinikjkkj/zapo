@@ -41,7 +41,7 @@ export interface WaLogoutStoreClearOptions {
     readonly senderKey?: boolean
     readonly appState?: boolean
     readonly retry?: boolean
-    readonly participants?: boolean
+    readonly groupMetadata?: boolean
     readonly deviceList?: boolean
     readonly messages?: boolean
     readonly messageSecret?: boolean
@@ -184,6 +184,7 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
     readonly quote?: WaIncomingMessageEvent | WaQuoteRef
     readonly forward?: boolean | { readonly score?: number }
     readonly mentions?: readonly string[]
+    readonly disableGroupEphemeralAutoInject?: boolean
 }
 
 export interface WaClearChatOptions {

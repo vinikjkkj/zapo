@@ -4,10 +4,10 @@ import { WaAppStateRedisStore } from './appstate.store'
 import { WaAuthRedisStore } from './auth.store'
 import { WaContactRedisStore } from './contact.store'
 import { WaDeviceListRedisStore } from './device-list.store'
+import { WaGroupMetadataRedisStore } from './group-metadata.store'
 import { WaIdentityRedisStore } from './identity.store'
 import { WaMessageSecretRedisStore } from './message-secret.store'
 import { WaMessageRedisStore } from './message.store'
-import { WaParticipantsRedisStore } from './participants.store'
 import { WaPreKeyRedisStore } from './pre-key.store'
 import { WaPrivacyTokenRedisStore } from './privacy-token.store'
 import { WaRetryRedisStore } from './retry.store'
@@ -22,7 +22,7 @@ export interface WaRedisStoreConfig {
     readonly keyPrefix?: string
     readonly cacheTtlMs?: {
         readonly retryMs?: number
-        readonly participantsMs?: number
+        readonly groupMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
@@ -45,7 +45,7 @@ export interface WaRedisStoreResult {
     }
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetryRedisStore
-        readonly participants: (sessionId: string) => WaParticipantsRedisStore
+        readonly groupMetadata: (sessionId: string) => WaGroupMetadataRedisStore
         readonly deviceList: (sessionId: string) => WaDeviceListRedisStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretRedisStore
     }
@@ -60,7 +60,7 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
     const redis = isRedis(config.redis) ? config.redis : new Redis(config.redis)
     const keyPrefix = config.keyPrefix ?? ''
     const retryTtlMs = config.cacheTtlMs?.retryMs
-    const participantsTtlMs = config.cacheTtlMs?.participantsMs
+    const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsRedis = !isRedis(config.redis)
@@ -88,8 +88,8 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
         },
         caches: {
             retry: (sessionId) => new WaRetryRedisStore(opts(sessionId), retryTtlMs),
-            participants: (sessionId) =>
-                new WaParticipantsRedisStore(opts(sessionId), participantsTtlMs),
+            groupMetadata: (sessionId) =>
+                new WaGroupMetadataRedisStore(opts(sessionId), groupMetadataTtlMs),
             deviceList: (sessionId) => new WaDeviceListRedisStore(opts(sessionId), deviceListTtlMs),
             messageSecret: (sessionId) =>
                 new WaMessageSecretRedisStore(opts(sessionId), messageSecretTtlMs)

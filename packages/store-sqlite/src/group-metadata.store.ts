@@ -1,60 +1,64 @@
-import type { WaParticipantsSnapshot, WaParticipantsStore } from 'zapo-js/store'
+import type { WaGroupMetadataSnapshot, WaGroupMetadataStore } from 'zapo-js/store'
 import { asNumber, asString } from 'zapo-js/util'
 
 import { BaseSqliteStore } from './BaseSqliteStore'
 import type { WaSqliteStorageOptions } from './types'
 
-interface ParticipantsRow extends Record<string, unknown> {
+interface GroupMetadataRow extends Record<string, unknown> {
     readonly group_jid: unknown
     readonly participants_json: unknown
+    readonly ephemeral: unknown
     readonly updated_at_ms: unknown
     readonly expires_at_ms: unknown
 }
 
-const DEFAULT_PARTICIPANTS_TTL_MS = 5 * 60 * 1000
+const DEFAULT_GROUP_METADATA_TTL_MS = 5 * 60 * 1000
 
-export class WaParticipantsSqliteStore extends BaseSqliteStore implements WaParticipantsStore {
+export class WaGroupMetadataSqliteStore extends BaseSqliteStore implements WaGroupMetadataStore {
     private readonly ttlMs: number
 
-    public constructor(options: WaSqliteStorageOptions, ttlMs = DEFAULT_PARTICIPANTS_TTL_MS) {
+    public constructor(options: WaSqliteStorageOptions, ttlMs = DEFAULT_GROUP_METADATA_TTL_MS) {
         super(options, ['participants'])
         if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
-            throw new Error('participants ttlMs must be a positive finite number')
+            throw new Error('groupMetadata ttlMs must be a positive finite number')
         }
         this.ttlMs = ttlMs
     }
 
-    public async upsertGroupParticipants(snapshot: WaParticipantsSnapshot): Promise<void> {
+    public async upsertGroupMetadata(snapshot: WaGroupMetadataSnapshot): Promise<void> {
         const db = await this.getConnection()
         db.run(
             `INSERT INTO group_participants_cache (
                 session_id,
                 group_jid,
                 participants_json,
+                ephemeral,
                 updated_at_ms,
                 expires_at_ms
-            ) VALUES (?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id, group_jid) DO UPDATE SET
                 participants_json=excluded.participants_json,
+                ephemeral=excluded.ephemeral,
                 updated_at_ms=excluded.updated_at_ms,
                 expires_at_ms=excluded.expires_at_ms`,
             [
                 this.options.sessionId,
                 snapshot.groupJid,
                 JSON.stringify(snapshot.participants),
+                snapshot.ephemeral ?? null,
                 snapshot.updatedAtMs,
                 snapshot.updatedAtMs + this.ttlMs
             ]
         )
     }
 
-    public async getGroupParticipants(
+    public async getGroupMetadata(
         groupJid: string,
         nowMs = Date.now()
-    ): Promise<WaParticipantsSnapshot | null> {
+    ): Promise<WaGroupMetadataSnapshot | null> {
         const db = await this.getConnection()
-        const row = db.get<ParticipantsRow>(
-            `SELECT group_jid, participants_json, updated_at_ms, expires_at_ms
+        const row = db.get<GroupMetadataRow>(
+            `SELECT group_jid, participants_json, ephemeral, updated_at_ms, expires_at_ms
             FROM group_participants_cache
             WHERE session_id = ? AND group_jid = ?`,
             [this.options.sessionId, groupJid]
@@ -73,14 +77,16 @@ export class WaParticipantsSqliteStore extends BaseSqliteStore implements WaPart
             return null
         }
 
+        const ephemeral = row.ephemeral === null ? undefined : Number(row.ephemeral)
         return {
             groupJid: asString(row.group_jid, 'group_participants_cache.group_jid'),
             participants: decodeParticipants(row.participants_json),
+            ephemeral,
             updatedAtMs: asNumber(row.updated_at_ms, 'group_participants_cache.updated_at_ms')
         }
     }
 
-    public async deleteGroupParticipants(groupJid: string): Promise<number> {
+    public async deleteGroupMetadata(groupJid: string): Promise<number> {
         const db = await this.getConnection()
         db.run(
             `DELETE FROM group_participants_cache

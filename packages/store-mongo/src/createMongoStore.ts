@@ -4,10 +4,10 @@ import { WaAppStateMongoStore } from './appstate.store'
 import { WaAuthMongoStore } from './auth.store'
 import { WaContactMongoStore } from './contact.store'
 import { WaDeviceListMongoStore } from './device-list.store'
+import { WaGroupMetadataMongoStore } from './group-metadata.store'
 import { WaIdentityMongoStore } from './identity.store'
 import { WaMessageSecretMongoStore } from './message-secret.store'
 import { WaMessageMongoStore } from './message.store'
-import { WaParticipantsMongoStore } from './participants.store'
 import { WaPreKeyMongoStore } from './pre-key.store'
 import { WaPrivacyTokenMongoStore } from './privacy-token.store'
 import { WaRetryMongoStore } from './retry.store'
@@ -28,7 +28,7 @@ export interface WaMongoStoreConfig {
     readonly collectionPrefix?: string
     readonly cacheTtlMs?: {
         readonly retryMs?: number
-        readonly participantsMs?: number
+        readonly groupMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
@@ -51,7 +51,7 @@ export interface WaMongoStoreResult {
     }
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetryMongoStore
-        readonly participants: (sessionId: string) => WaParticipantsMongoStore
+        readonly groupMetadata: (sessionId: string) => WaGroupMetadataMongoStore
         readonly deviceList: (sessionId: string) => WaDeviceListMongoStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretMongoStore
     }
@@ -75,7 +75,7 @@ export function createMongoStore(config: WaMongoStoreConfig): WaMongoStoreResult
 
     const collectionPrefix = config.collectionPrefix ?? ''
     const retryTtlMs = config.cacheTtlMs?.retryMs
-    const participantsTtlMs = config.cacheTtlMs?.participantsMs
+    const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
 
@@ -102,8 +102,8 @@ export function createMongoStore(config: WaMongoStoreConfig): WaMongoStoreResult
         },
         caches: {
             retry: (sessionId) => new WaRetryMongoStore(opts(sessionId), retryTtlMs),
-            participants: (sessionId) =>
-                new WaParticipantsMongoStore(opts(sessionId), participantsTtlMs),
+            groupMetadata: (sessionId) =>
+                new WaGroupMetadataMongoStore(opts(sessionId), groupMetadataTtlMs),
             deviceList: (sessionId) => new WaDeviceListMongoStore(opts(sessionId), deviceListTtlMs),
             messageSecret: (sessionId) =>
                 new WaMessageSecretMongoStore(opts(sessionId), messageSecretTtlMs)

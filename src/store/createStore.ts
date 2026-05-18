@@ -2,10 +2,10 @@ import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
+import type { WaGroupMetadataStore } from '@store/contracts/group-metadata.store'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
-import type { WaParticipantsStore } from '@store/contracts/participants.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaPrivacyTokenStore } from '@store/contracts/privacy-token.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
@@ -17,10 +17,10 @@ import { withAppStateLock } from '@store/locks/appstate.lock'
 import { withAuthLock } from '@store/locks/auth.lock'
 import { withContactLock } from '@store/locks/contact.lock'
 import { withDeviceListLock } from '@store/locks/device-list.lock'
+import { withGroupMetadataLock } from '@store/locks/group-metadata.lock'
 import { withIdentityLock } from '@store/locks/identity.lock'
 import { withMessageSecretLock } from '@store/locks/message-secret.lock'
 import { withMessageLock } from '@store/locks/message.lock'
-import { withParticipantsLock } from '@store/locks/participants.lock'
 import { withPreKeyLock } from '@store/locks/pre-key.lock'
 import { withPrivacyTokenLock } from '@store/locks/privacy-token.lock'
 import { withRetryLock } from '@store/locks/retry.lock'
@@ -31,19 +31,19 @@ import { withThreadLock } from '@store/locks/thread.lock'
 import {
     NOOP_CONTACT_STORE,
     NOOP_DEVICE_LIST_STORE,
+    NOOP_GROUP_METADATA_STORE,
     NOOP_MESSAGE_SECRET_STORE,
     NOOP_MESSAGE_STORE,
-    NOOP_PARTICIPANTS_STORE,
     NOOP_RETRY_STORE,
     NOOP_THREAD_STORE
 } from '@store/noop.store'
 import { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
 import { WaContactMemoryStore } from '@store/providers/memory/contact.store'
 import { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
+import { WaGroupMetadataMemoryStore } from '@store/providers/memory/group-metadata.store'
 import { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
 import { WaMessageSecretMemoryStore } from '@store/providers/memory/message-secret.store'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
-import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
 import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
 import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
 import { WaRetryMemoryStore } from '@store/providers/memory/retry.store'
@@ -66,7 +66,7 @@ interface Destroyable {
 
 const DEFAULT_CACHE_TTLS_MS = Object.freeze({
     retryMs: 60 * 1000,
-    participantsMs: 5 * 60 * 1000,
+    groupMetadataMs: 5 * 60 * 1000,
     deviceListMs: 5 * 60 * 1000,
     messageSecretMs: 30 * 60 * 1000
 } as const)
@@ -117,10 +117,10 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
             DEFAULT_CACHE_TTLS_MS.retryMs,
             'memory.cacheTtlMs.retryMs'
         ),
-        participants: resolvePositive(
-            options.memory?.cacheTtlMs?.participantsMs,
-            DEFAULT_CACHE_TTLS_MS.participantsMs,
-            'memory.cacheTtlMs.participantsMs'
+        groupMetadata: resolvePositive(
+            options.memory?.cacheTtlMs?.groupMetadataMs,
+            DEFAULT_CACHE_TTLS_MS.groupMetadataMs,
+            'memory.cacheTtlMs.groupMetadataMs'
         ),
         deviceList: resolvePositive(
             options.memory?.cacheTtlMs?.deviceListMs,
@@ -276,18 +276,18 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                           })
                         : NOOP_RETRY_STORE
             )
-            const rawParticipants = resolveStore<WaParticipantsStore>(
+            const rawGroupMetadata = resolveStore<WaGroupMetadataStore>(
                 id,
                 backends,
-                cacheProviders.participants ?? 'memory',
-                'participants',
+                cacheProviders.groupMetadata ?? 'memory',
+                'groupMetadata',
                 'caches',
                 () =>
-                    cacheProviders.participants === 'memory'
-                        ? new WaParticipantsMemoryStore(cacheTtlsMs.participants, {
-                              maxGroups: ml.participantsGroups
+                    cacheProviders.groupMetadata === 'memory' || !cacheProviders.groupMetadata
+                        ? new WaGroupMetadataMemoryStore(cacheTtlsMs.groupMetadata, {
+                              maxGroups: ml.groupMetadataGroups
                           })
-                        : NOOP_PARTICIPANTS_STORE
+                        : NOOP_GROUP_METADATA_STORE
             )
             const rawDeviceList = resolveStore<WaDeviceListStore>(
                 id,
@@ -324,7 +324,7 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
             const senderKeyStore = withSenderKeyLock(rawSenderKey)
             const appStateStore = withAppStateLock(rawAppState)
             const retryStore = withRetryLock(rawRetry)
-            const participantsStore = withParticipantsLock(rawParticipants)
+            const groupMetadataStore = withGroupMetadataLock(rawGroupMetadata)
             const deviceListStore = withDeviceListLock(rawDeviceList)
             const messageStore = withMessageLock(rawMessages)
             const messageSecretStore = withMessageSecretLock(rawMessageSecret)
@@ -340,13 +340,13 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                 cachesDestroyed = true
                 await Promise.all([
                     retryStore.clear(),
-                    participantsStore.clear(),
+                    groupMetadataStore.clear(),
                     deviceListStore.clear(),
                     messageSecretStore.clear()
                 ])
                 await Promise.all([
                     destroyIfSupported(retryStore),
-                    destroyIfSupported(participantsStore),
+                    destroyIfSupported(groupMetadataStore),
                     destroyIfSupported(deviceListStore),
                     destroyIfSupported(messageSecretStore)
                 ])
@@ -380,7 +380,7 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                 senderKey: senderKeyStore,
                 appState: appStateStore,
                 retry: retryStore,
-                participants: participantsStore,
+                groupMetadata: groupMetadataStore,
                 deviceList: deviceListStore,
                 messages: messageStore,
                 messageSecret: messageSecretStore,

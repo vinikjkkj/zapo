@@ -2,21 +2,30 @@ import type { WaGroupEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { toUserJid } from '@protocol/jid'
-import type { WaParticipantsStore } from '@store/contracts/participants.store'
+import type {
+    WaGroupMetadataSnapshot,
+    WaGroupMetadataStore
+} from '@store/contracts/group-metadata.store'
 import { toError } from '@util/primitives'
 
-export type GroupParticipantsCache = {
+export type GroupMetadataQueryResult = {
+    readonly participants: readonly string[]
+    readonly ephemeral?: number
+}
+
+export type GroupMetadataCache = {
     resolveParticipantUsers(groupJid: string): Promise<readonly string[]>
     refreshParticipantUsers(groupJid: string): Promise<readonly string[]>
+    getEphemeral(groupJid: string): Promise<number | null>
     mutateFromGroupEvent(event: WaGroupEvent): Promise<void>
 }
 
-export function createGroupParticipantsCache(options: {
-    readonly participantsStore: WaParticipantsStore
-    readonly queryGroupParticipantJids: (groupJid: string) => Promise<readonly string[]>
+export function createGroupMetadataCache(options: {
+    readonly groupMetadataStore: WaGroupMetadataStore
+    readonly queryGroupMetadata: (groupJid: string) => Promise<GroupMetadataQueryResult>
     readonly logger: Logger
-}): GroupParticipantsCache {
-    const { participantsStore, queryGroupParticipantJids, logger } = options
+}): GroupMetadataCache {
+    const { groupMetadataStore, queryGroupMetadata, logger } = options
     const dedup = new PromiseDedup()
 
     const sanitizeParticipantUsers = (participants: readonly string[]): readonly string[] => {
@@ -54,15 +63,29 @@ export function createGroupParticipantsCache(options: {
         return true
     }
 
+    const upsertParticipants = async (
+        cached: WaGroupMetadataSnapshot | null,
+        groupJid: string,
+        participants: readonly string[]
+    ): Promise<void> => {
+        await groupMetadataStore.upsertGroupMetadata({
+            groupJid,
+            participants,
+            ephemeral: cached?.ephemeral,
+            updatedAtMs: Date.now()
+        })
+    }
+
     const mergeParticipantUsersIntoCache = async (
         groupJid: string,
-        cachedParticipants: readonly string[],
+        cached: WaGroupMetadataSnapshot,
         participantsToAdd: readonly string[]
     ): Promise<void> => {
         if (participantsToAdd.length === 0) {
             return
         }
 
+        const cachedParticipants = cached.participants
         const nextParticipants = [...cachedParticipants]
         const existing = new Set(cachedParticipants)
         for (const participant of participantsToAdd) {
@@ -77,16 +100,12 @@ export function createGroupParticipantsCache(options: {
             return
         }
 
-        await participantsStore.upsertGroupParticipants({
-            groupJid,
-            participants: nextParticipants,
-            updatedAtMs: Date.now()
-        })
+        await upsertParticipants(cached, groupJid, nextParticipants)
     }
 
     const removeParticipantUsersFromCache = async (
         groupJid: string,
-        cachedParticipants: readonly string[],
+        cached: WaGroupMetadataSnapshot,
         participantsToRemove: readonly string[]
     ): Promise<void> => {
         if (participantsToRemove.length === 0) {
@@ -94,6 +113,7 @@ export function createGroupParticipantsCache(options: {
         }
 
         const removed = new Set(participantsToRemove)
+        const cachedParticipants = cached.participants
         const nextParticipants = cachedParticipants.filter(
             (participant) => !removed.has(participant)
         )
@@ -101,24 +121,21 @@ export function createGroupParticipantsCache(options: {
             return
         }
         if (nextParticipants.length === 0) {
-            await participantsStore.deleteGroupParticipants(groupJid)
+            await groupMetadataStore.deleteGroupMetadata(groupJid)
             return
         }
 
-        await participantsStore.upsertGroupParticipants({
-            groupJid,
-            participants: nextParticipants,
-            updatedAtMs: Date.now()
-        })
+        await upsertParticipants(cached, groupJid, nextParticipants)
     }
 
     const replaceParticipantUsersInCache = async (
         groupJid: string,
-        cachedParticipants: readonly string[],
+        cached: WaGroupMetadataSnapshot,
         participantsToReplace: readonly string[],
         replacementParticipants: readonly string[]
     ): Promise<void> => {
         const toReplace = new Set(participantsToReplace)
+        const cachedParticipants = cached.participants
         const nextParticipants = cachedParticipants.filter(
             (participant) => !toReplace.has(participant)
         )
@@ -135,18 +152,14 @@ export function createGroupParticipantsCache(options: {
             return
         }
         if (nextParticipants.length === 0) {
-            await participantsStore.deleteGroupParticipants(groupJid)
+            await groupMetadataStore.deleteGroupMetadata(groupJid)
             return
         }
 
-        await participantsStore.upsertGroupParticipants({
-            groupJid,
-            participants: nextParticipants,
-            updatedAtMs: Date.now()
-        })
+        await upsertParticipants(cached, groupJid, nextParticipants)
     }
 
-    const resolveGroupJidForParticipantCacheEvent = (event: WaGroupEvent): string | null => {
+    const resolveGroupJidForGroupCacheEvent = (event: WaGroupEvent): string | null => {
         if (event.action === 'linked_group_promote' || event.action === 'linked_group_demote') {
             return event.contextGroupJid ?? event.groupJid ?? null
         }
@@ -171,11 +184,12 @@ export function createGroupParticipantsCache(options: {
 
     const refreshParticipantUsers = (groupJid: string): Promise<readonly string[]> =>
         dedup.run(`refresh:${groupJid}`, async () => {
-            const queried = await queryGroupParticipantJids(groupJid)
-            const participants = sanitizeParticipantUsers(queried)
-            await participantsStore.upsertGroupParticipants({
+            const queried = await queryGroupMetadata(groupJid)
+            const participants = sanitizeParticipantUsers(queried.participants)
+            await groupMetadataStore.upsertGroupMetadata({
                 groupJid,
                 participants,
+                ephemeral: queried.ephemeral,
                 updatedAtMs: Date.now()
             })
             return participants
@@ -183,21 +197,44 @@ export function createGroupParticipantsCache(options: {
 
     const resolveParticipantUsers = (groupJid: string): Promise<readonly string[]> =>
         dedup.run(`resolve:${groupJid}`, async () => {
-            const cached = await participantsStore.getGroupParticipants(groupJid)
+            const cached = await groupMetadataStore.getGroupMetadata(groupJid)
             if (cached && cached.participants.length > 0) {
                 return sanitizeParticipantUsers(cached.participants)
             }
             return refreshParticipantUsers(groupJid)
         })
 
+    const getEphemeral = async (groupJid: string): Promise<number | null> => {
+        const cached = await groupMetadataStore.getGroupMetadata(groupJid)
+        return cached?.ephemeral ?? null
+    }
+
     const mutateFromGroupEvent = async (event: WaGroupEvent): Promise<void> => {
-        const groupJid = resolveGroupJidForParticipantCacheEvent(event)
+        const groupJid = resolveGroupJidForGroupCacheEvent(event)
         if (!groupJid) {
             return
         }
 
         if (event.action === 'delete') {
-            await participantsStore.deleteGroupParticipants(groupJid)
+            await groupMetadataStore.deleteGroupMetadata(groupJid)
+            return
+        }
+
+        if (event.action === 'ephemeral') {
+            const cached = await groupMetadataStore.getGroupMetadata(groupJid)
+            if (!cached) {
+                return
+            }
+            const nextEphemeral = event.expirationSeconds
+            if (cached.ephemeral === nextEphemeral) {
+                return
+            }
+            await groupMetadataStore.upsertGroupMetadata({
+                groupJid,
+                participants: cached.participants,
+                ephemeral: nextEphemeral,
+                updatedAtMs: Date.now()
+            })
             return
         }
 
@@ -206,7 +243,7 @@ export function createGroupParticipantsCache(options: {
             if (participantUsers.length === 0) {
                 return
             }
-            await participantsStore.upsertGroupParticipants({
+            await groupMetadataStore.upsertGroupMetadata({
                 groupJid,
                 participants: participantUsers,
                 updatedAtMs: Date.now()
@@ -214,7 +251,7 @@ export function createGroupParticipantsCache(options: {
             return
         }
 
-        const cached = await participantsStore.getGroupParticipants(groupJid)
+        const cached = await groupMetadataStore.getGroupMetadata(groupJid)
         if (!cached || cached.participants.length === 0) {
             return
         }
@@ -224,6 +261,11 @@ export function createGroupParticipantsCache(options: {
             return
         }
 
+        const cachedWithSanitized: WaGroupMetadataSnapshot = {
+            ...cached,
+            participants: cachedParticipants
+        }
+
         if (
             event.action === 'add' ||
             event.action === 'promote' ||
@@ -231,12 +273,12 @@ export function createGroupParticipantsCache(options: {
             event.action === 'linked_group_promote' ||
             event.action === 'linked_group_demote'
         ) {
-            await mergeParticipantUsersIntoCache(groupJid, cachedParticipants, participantUsers)
+            await mergeParticipantUsersIntoCache(groupJid, cachedWithSanitized, participantUsers)
             return
         }
 
         if (event.action === 'remove') {
-            await removeParticipantUsersFromCache(groupJid, cachedParticipants, participantUsers)
+            await removeParticipantUsersFromCache(groupJid, cachedWithSanitized, participantUsers)
             return
         }
 
@@ -244,7 +286,7 @@ export function createGroupParticipantsCache(options: {
             const authorUsers = event.authorJid ? sanitizeParticipantUsers([event.authorJid]) : []
             await replaceParticipantUsersInCache(
                 groupJid,
-                cachedParticipants,
+                cachedWithSanitized,
                 authorUsers,
                 participantUsers
             )
@@ -254,6 +296,7 @@ export function createGroupParticipantsCache(options: {
     return {
         resolveParticipantUsers,
         refreshParticipantUsers,
+        getEphemeral,
         mutateFromGroupEvent
     }
 }

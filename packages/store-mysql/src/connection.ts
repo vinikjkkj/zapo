@@ -309,6 +309,14 @@ const MIGRATIONS: readonly Migration[] = [
                 ADD COLUMN year_class BIGINT,
                 ADD COLUMN mem_class BIGINT
         `
+    },
+    {
+        name: '0012_group_participants_cache_ephemeral',
+        domain: 'participants',
+        sql: `
+            ALTER TABLE \`__PREFIX__group_participants_cache\`
+                ADD COLUMN ephemeral BIGINT
+        `
     }
 ]
 

@@ -1,7 +1,7 @@
 import type { WaAppStateSyncKey } from '@appstate/types'
 import type { DeviceFanoutResolver } from '@client/messaging/fanout'
+import type { GroupMetadataCache } from '@client/messaging/group-metadata'
 import type { AppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
-import type { GroupParticipantsCache } from '@client/messaging/participants'
 import type { WaGroupEvent, WaSendMessageOptions, WaSignalMessagePublishInput } from '@client/types'
 import { randomBytesAsync, sha256 } from '@crypto'
 import { md5Bytes } from '@crypto/core/primitives'
@@ -83,7 +83,7 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly retryTracker: OutboundRetryTracker
     readonly sessionResolver: SignalSessionResolver
     readonly fanoutResolver: DeviceFanoutResolver
-    readonly participantsCache: GroupParticipantsCache
+    readonly groupMetadataCache: GroupMetadataCache
     readonly appStateSyncKeyProtocol: AppStateSyncKeyProtocol
     readonly buildMessageContent: (content: WaSendMessageContent) => Promise<WaMessageBuildResult>
     readonly senderKeyManager: SenderKeyManager
@@ -122,7 +122,7 @@ export class WaMessageDispatchCoordinator {
     private readonly retryTracker: OutboundRetryTracker
     private readonly sessionResolver: SignalSessionResolver
     private readonly fanoutResolver: DeviceFanoutResolver
-    private readonly participantsCache: GroupParticipantsCache
+    private readonly groupMetadataCache: GroupMetadataCache
     private readonly appStateSyncKeyProtocol: AppStateSyncKeyProtocol
     private readonly buildMessageContent: (
         content: WaSendMessageContent
@@ -162,7 +162,7 @@ export class WaMessageDispatchCoordinator {
         this.retryTracker = options.retryTracker
         this.sessionResolver = options.sessionResolver
         this.fanoutResolver = options.fanoutResolver
-        this.participantsCache = options.participantsCache
+        this.groupMetadataCache = options.groupMetadataCache
         this.appStateSyncKeyProtocol = options.appStateSyncKeyProtocol
         this.buildMessageContent = options.buildMessageContent
         this.senderKeyManager = options.senderKeyManager
@@ -322,9 +322,20 @@ export class WaMessageDispatchCoordinator {
             this.buildMessageContent(content),
             this.withResolvedMessageId(options)
         ])
+        let optionsCtx = options.contextInfo
+        if (
+            isGroupJid(recipientJid) &&
+            optionsCtx?.expirationSeconds === undefined &&
+            !options.disableGroupEphemeralAutoInject
+        ) {
+            const cachedEphemeral = await this.groupMetadataCache.getEphemeral(recipientJid)
+            if (cachedEphemeral !== null && cachedEphemeral > 0) {
+                optionsCtx = { ...optionsCtx, expirationSeconds: cachedEphemeral }
+            }
+        }
         const ctx = resolveSendContextInfo({
             contentLevel: pickContentContextInfo(content),
-            optionsLevel: options.contextInfo,
+            optionsLevel: optionsCtx,
             quote: options.quote,
             forward: options.forward,
             mentions: options.mentions
@@ -694,8 +705,8 @@ export class WaMessageDispatchCoordinator {
         await this.appStateSyncKeyProtocol.sendKeyShare(toDeviceJid, keys, missingKeyIds)
     }
 
-    public async mutateParticipantsCacheFromGroupEvent(event: WaGroupEvent): Promise<void> {
-        await this.participantsCache.mutateFromGroupEvent(event)
+    public async mutateGroupMetadataCacheFromGroupEvent(event: WaGroupEvent): Promise<void> {
+        await this.groupMetadataCache.mutateFromGroupEvent(event)
     }
 
     private shouldUseGroupDirectPath(message: Proto.IMessage): boolean {
@@ -724,8 +735,8 @@ export class WaMessageDispatchCoordinator {
         const sendOptions = await this.withResolvedMessageId(options)
         const meJid = this.requireCurrentMeJid('sendMessage')
         const participantUserJids = retryContext.forceRefreshParticipants
-            ? await this.participantsCache.refreshParticipantUsers(groupJid)
-            : await this.participantsCache.resolveParticipantUsers(groupJid)
+            ? await this.groupMetadataCache.refreshParticipantUsers(groupJid)
+            : await this.groupMetadataCache.resolveParticipantUsers(groupJid)
         const addressingMode =
             retryContext.forceAddressingMode ??
             this.resolveGroupAddressingMode(participantUserJids, groupJid)
@@ -949,8 +960,8 @@ export class WaMessageDispatchCoordinator {
         const sendOptions = await this.withResolvedMessageId(options)
         const meJid = this.requireCurrentMeJid('sendMessage')
         const participantUserJids = retryContext.forceRefreshParticipants
-            ? await this.participantsCache.refreshParticipantUsers(groupJid)
-            : await this.participantsCache.resolveParticipantUsers(groupJid)
+            ? await this.groupMetadataCache.refreshParticipantUsers(groupJid)
+            : await this.groupMetadataCache.resolveParticipantUsers(groupJid)
         const addressingMode =
             retryContext.forceAddressingMode ??
             this.resolveGroupAddressingMode(participantUserJids, groupJid)

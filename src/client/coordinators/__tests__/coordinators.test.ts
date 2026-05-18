@@ -7,7 +7,7 @@ import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCo
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
-import { createGroupParticipantsCache } from '@client/messaging/participants'
+import { createGroupMetadataCache } from '@client/messaging/group-metadata'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import {
@@ -16,8 +16,8 @@ import {
     WA_DISCONNECT_REASONS,
     WA_STREAM_SIGNALING
 } from '@protocol/constants'
+import { WaGroupMetadataMemoryStore } from '@store/providers/memory/group-metadata.store'
 import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
-import { WaParticipantsMemoryStore } from '@store/providers/memory/participants.store'
 import type { BinaryNode } from '@transport/types'
 
 function createIncomingRuntime() {
@@ -91,15 +91,15 @@ function createGroupEvent(input: {
 }
 
 function createMessageDispatchCoordinator(
-    participantsStore: WaParticipantsMemoryStore,
+    groupMetadataStore: WaGroupMetadataMemoryStore,
     overrides?: {
         readonly getCurrentMeJid?: () => string | null
         readonly mobileMessageIdFormat?: boolean
     }
 ): WaMessageDispatchCoordinator {
-    const participantsCache = createGroupParticipantsCache({
-        participantsStore,
-        queryGroupParticipantJids: async () => [],
+    const groupMetadataCache = createGroupMetadataCache({
+        groupMetadataStore,
+        queryGroupMetadata: async () => ({ participants: [] }),
         logger: createNoopLogger()
     })
 
@@ -109,7 +109,7 @@ function createMessageDispatchCoordinator(
         retryTracker: {} as never,
         sessionResolver: {} as never,
         fanoutResolver: {} as never,
-        participantsCache,
+        groupMetadataCache,
         appStateSyncKeyProtocol: {} as never,
         buildMessageContent: async () => ({ message: {} }),
         senderKeyManager: {} as never,
@@ -603,10 +603,10 @@ test('stream control handler handles force-logout, replaced and device-removed f
 })
 
 test('message dispatch coordinator mutates participants cache from group events', async () => {
-    const participantsStore = new WaParticipantsMemoryStore(60_000)
-    const coordinator = createMessageDispatchCoordinator(participantsStore)
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    const coordinator = createMessageDispatchCoordinator(groupMetadataStore)
 
-    await coordinator.mutateParticipantsCacheFromGroupEvent(
+    await coordinator.mutateGroupMetadataCacheFromGroupEvent(
         createGroupEvent({
             action: 'create',
             groupJid: '120@g.us',
@@ -614,62 +614,62 @@ test('message dispatch coordinator mutates participants cache from group events'
         })
     )
 
-    const created = await participantsStore.getGroupParticipants('120@g.us')
+    const created = await groupMetadataStore.getGroupMetadata('120@g.us')
     assert.ok(created)
     assert.deepEqual(created?.participants, [
         '551100000000@s.whatsapp.net',
         '551199999999@s.whatsapp.net'
     ])
 
-    await coordinator.mutateParticipantsCacheFromGroupEvent(
+    await coordinator.mutateGroupMetadataCacheFromGroupEvent(
         createGroupEvent({
             action: 'add',
             groupJid: '120@g.us',
             participants: ['552200000000@s.whatsapp.net']
         })
     )
-    const added = await participantsStore.getGroupParticipants('120@g.us')
+    const added = await groupMetadataStore.getGroupMetadata('120@g.us')
     assert.deepEqual(added?.participants, [
         '551100000000@s.whatsapp.net',
         '551199999999@s.whatsapp.net',
         '552200000000@s.whatsapp.net'
     ])
 
-    await coordinator.mutateParticipantsCacheFromGroupEvent(
+    await coordinator.mutateGroupMetadataCacheFromGroupEvent(
         createGroupEvent({
             action: 'remove',
             groupJid: '120@g.us',
             participants: ['551199999999@s.whatsapp.net']
         })
     )
-    const removed = await participantsStore.getGroupParticipants('120@g.us')
+    const removed = await groupMetadataStore.getGroupMetadata('120@g.us')
     assert.deepEqual(removed?.participants, [
         '551100000000@s.whatsapp.net',
         '552200000000@s.whatsapp.net'
     ])
 
-    await coordinator.mutateParticipantsCacheFromGroupEvent(
+    await coordinator.mutateGroupMetadataCacheFromGroupEvent(
         createGroupEvent({
             action: 'delete',
             groupJid: '120@g.us'
         })
     )
-    assert.equal(await participantsStore.getGroupParticipants('120@g.us'), null)
+    assert.equal(await groupMetadataStore.getGroupMetadata('120@g.us'), null)
 
-    await participantsStore.destroy()
+    await groupMetadataStore.destroy()
 })
 
 test('message dispatch coordinator handles linked and modify participant cache events', async () => {
-    const participantsStore = new WaParticipantsMemoryStore(60_000)
-    const coordinator = createMessageDispatchCoordinator(participantsStore)
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    const coordinator = createMessageDispatchCoordinator(groupMetadataStore)
 
-    await participantsStore.upsertGroupParticipants({
+    await groupMetadataStore.upsertGroupMetadata({
         groupJid: 'child@g.us',
         participants: ['old@s.whatsapp.net', 'keep@s.whatsapp.net'],
         updatedAtMs: Date.now()
     })
 
-    await coordinator.mutateParticipantsCacheFromGroupEvent(
+    await coordinator.mutateGroupMetadataCacheFromGroupEvent(
         createGroupEvent({
             action: 'linked_group_promote',
             groupJid: 'parent@g.us',
@@ -678,15 +678,15 @@ test('message dispatch coordinator handles linked and modify participant cache e
         })
     )
 
-    const linked = await participantsStore.getGroupParticipants('child@g.us')
+    const linked = await groupMetadataStore.getGroupMetadata('child@g.us')
     assert.deepEqual(linked?.participants, [
         'old@s.whatsapp.net',
         'keep@s.whatsapp.net',
         'linked@s.whatsapp.net'
     ])
-    assert.equal(await participantsStore.getGroupParticipants('parent@g.us'), null)
+    assert.equal(await groupMetadataStore.getGroupMetadata('parent@g.us'), null)
 
-    await coordinator.mutateParticipantsCacheFromGroupEvent(
+    await coordinator.mutateGroupMetadataCacheFromGroupEvent(
         createGroupEvent({
             action: 'modify',
             groupJid: 'child@g.us',
@@ -695,28 +695,28 @@ test('message dispatch coordinator handles linked and modify participant cache e
         })
     )
 
-    const modified = await participantsStore.getGroupParticipants('child@g.us')
+    const modified = await groupMetadataStore.getGroupMetadata('child@g.us')
     assert.deepEqual(modified?.participants, [
         'keep@s.whatsapp.net',
         'linked@s.whatsapp.net',
         'new@s.whatsapp.net'
     ])
 
-    await coordinator.mutateParticipantsCacheFromGroupEvent(
+    await coordinator.mutateGroupMetadataCacheFromGroupEvent(
         createGroupEvent({
             action: 'add',
             groupJid: 'uncached@g.us',
             participants: ['5511@s.whatsapp.net']
         })
     )
-    assert.equal(await participantsStore.getGroupParticipants('uncached@g.us'), null)
+    assert.equal(await groupMetadataStore.getGroupMetadata('uncached@g.us'), null)
 
-    await participantsStore.destroy()
+    await groupMetadataStore.destroy()
 })
 
 test('mobile message id format: AC + 30 hex chars uppercase', async () => {
-    const participantsStore = new WaParticipantsMemoryStore(60_000)
-    const coordinator = createMessageDispatchCoordinator(participantsStore, {
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    const coordinator = createMessageDispatchCoordinator(groupMetadataStore, {
         getCurrentMeJid: () => '5596965746475@s.whatsapp.net',
         mobileMessageIdFormat: true
     })
@@ -730,12 +730,12 @@ test('mobile message id format: AC + 30 hex chars uppercase', async () => {
         seen.add(id)
     }
     assert.equal(seen.size, 5)
-    await participantsStore.destroy()
+    await groupMetadataStore.destroy()
 })
 
 test('web message id format stays 3EB0 + 18 hex chars when mobile flag unset', async () => {
-    const participantsStore = new WaParticipantsMemoryStore(60_000)
-    const coordinator = createMessageDispatchCoordinator(participantsStore, {
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    const coordinator = createMessageDispatchCoordinator(groupMetadataStore, {
         getCurrentMeJid: () => '5596965746475@s.whatsapp.net'
     })
     const gen = coordinator as unknown as {
@@ -743,17 +743,17 @@ test('web message id format stays 3EB0 + 18 hex chars when mobile flag unset', a
     }
     const id = await gen.generateOutgoingMessageId()
     assert.match(id, /^3EB0[0-9A-F]{18}$/, `id '${id}' does not match web format`)
-    await participantsStore.destroy()
+    await groupMetadataStore.destroy()
 })
 
 test('encoded signed device identity returns undefined on primary (no blob stored)', async () => {
-    const participantsStore = new WaParticipantsMemoryStore(60_000)
-    const coordinator = createMessageDispatchCoordinator(participantsStore)
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    const coordinator = createMessageDispatchCoordinator(groupMetadataStore)
     const accessor = coordinator as unknown as {
         getEncodedSignedDeviceIdentity(): Uint8Array | undefined
     }
     assert.equal(accessor.getEncodedSignedDeviceIdentity(), undefined)
-    await participantsStore.destroy()
+    await groupMetadataStore.destroy()
 })
 
 test('app-state mutation coordinator flushes queued mutations while sync is in-flight', async () => {

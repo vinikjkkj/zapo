@@ -359,6 +359,15 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
                 ALTER TABLE auth_credentials ADD COLUMN mem_class INTEGER;
             `)
         }
+    },
+    {
+        id: '0012_group_participants_cache_ephemeral',
+        domain: 'participants',
+        up: (db) => {
+            db.exec(`
+                ALTER TABLE group_participants_cache ADD COLUMN ephemeral INTEGER;
+            `)
+        }
     }
 ]
 

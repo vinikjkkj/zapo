@@ -448,25 +448,36 @@ describe('store-postgres integration', { timeout: 60_000 }, () => {
         await messages.clear()
     })
 
-    it('cache stores: participants and device-list basic lifecycle', async (t) => {
+    it('cache stores: group-metadata and device-list basic lifecycle', async (t) => {
         if (!store) return t.skip('ZAPO_TEST_PG_* not set')
 
         const sessionId = nextSessionId('caches')
-        const participants = store.caches.participants(sessionId)
+        const groupMetadata = store.caches.groupMetadata(sessionId)
         const deviceList = store.caches.deviceList(sessionId)
         const now = Date.now()
 
-        await participants.upsertGroupParticipants({
+        await groupMetadata.upsertGroupMetadata({
             groupJid: 'group-1@g.us',
             participants: ['a@s.whatsapp.net', 'b@s.whatsapp.net'],
+            ephemeral: 7_776_000,
             updatedAtMs: now
         })
-        const participantSnapshot = await participants.getGroupParticipants('group-1@g.us', now)
-        assert.ok(participantSnapshot)
-        assert.deepEqual(participantSnapshot.participants, ['a@s.whatsapp.net', 'b@s.whatsapp.net'])
-        assert.equal(await participants.deleteGroupParticipants('group-1@g.us'), 1)
-        assert.equal(await participants.getGroupParticipants('group-1@g.us', now), null)
-        assert.ok((await participants.cleanupExpired(now + 60_000)) >= 0)
+        const metadataSnapshot = await groupMetadata.getGroupMetadata('group-1@g.us', now)
+        assert.ok(metadataSnapshot)
+        assert.deepEqual(metadataSnapshot.participants, ['a@s.whatsapp.net', 'b@s.whatsapp.net'])
+        assert.equal(metadataSnapshot.ephemeral, 7_776_000)
+
+        await groupMetadata.upsertGroupMetadata({
+            groupJid: 'group-1@g.us',
+            participants: ['a@s.whatsapp.net', 'b@s.whatsapp.net'],
+            updatedAtMs: now + 1
+        })
+        const cleared = await groupMetadata.getGroupMetadata('group-1@g.us', now + 1)
+        assert.equal(cleared?.ephemeral, undefined)
+
+        assert.equal(await groupMetadata.deleteGroupMetadata('group-1@g.us'), 1)
+        assert.equal(await groupMetadata.getGroupMetadata('group-1@g.us', now), null)
+        assert.ok((await groupMetadata.cleanupExpired(now + 60_000)) >= 0)
 
         await deviceList.upsertUserDevicesBatch([
             {
@@ -498,7 +509,7 @@ describe('store-postgres integration', { timeout: 60_000 }, () => {
         )
         assert.ok((await deviceList.cleanupExpired(now + 60_000)) >= 0)
 
-        await Promise.all([participants.clear(), deviceList.clear()])
+        await Promise.all([groupMetadata.clear(), deviceList.clear()])
     })
 
     it('cache stores: messageSecret basic lifecycle', async (t) => {

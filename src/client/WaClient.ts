@@ -81,10 +81,10 @@ import type { SignalDeviceSyncApi, SignalLidSyncResult } from '@signal/api/Signa
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
+import type { WaGroupMetadataStore } from '@store/contracts/group-metadata.store'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
-import type { WaParticipantsStore } from '@store/contracts/participants.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaPrivacyTokenStore } from '@store/contracts/privacy-token.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
@@ -127,7 +127,7 @@ export class WaClient extends EventEmitter {
     private readonly contactStore!: WaContactStore
     private readonly messageStore!: WaMessageStore
     private readonly messageSecretStore!: WaMessageSecretStore
-    private readonly participantsStore!: WaParticipantsStore
+    private readonly groupMetadataStore!: WaGroupMetadataStore
     private readonly privacyTokenStore!: WaPrivacyTokenStore
     private readonly deviceListStore!: WaDeviceListStore
     private readonly retryStore!: WaRetryStore
@@ -178,7 +178,7 @@ export class WaClient extends EventEmitter {
         this.contactStore = base.sessionStore.contacts
         this.messageStore = base.sessionStore.messages
         this.messageSecretStore = base.sessionStore.messageSecret
-        this.participantsStore = base.sessionStore.participants
+        this.groupMetadataStore = base.sessionStore.groupMetadata
         this.privacyTokenStore = base.sessionStore.privacyToken
         this.deviceListStore = base.sessionStore.deviceList
         this.retryStore = base.sessionStore.retry
@@ -1030,7 +1030,7 @@ export class WaClient extends EventEmitter {
         if (shouldClear('contacts')) await this.contactStore.clear()
         if (shouldClear('messages')) await this.messageStore.clear()
         if (shouldClear('messageSecret')) await this.messageSecretStore.clear()
-        if (shouldClear('participants')) await this.participantsStore.clear()
+        if (shouldClear('groupMetadata')) await this.groupMetadataStore.clear()
         if (shouldClear('deviceList')) await this.deviceListStore.clear()
         if (shouldClear('retry')) await this.retryStore.clear()
         if (shouldClear('signal')) await this.signalStore.clear()

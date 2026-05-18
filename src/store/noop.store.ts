@@ -2,14 +2,14 @@ import type { WaRetryOutboundMessageRecord } from '@retry/types'
 import type { WaContactStore, WaStoredContactRecord } from '@store/contracts/contact.store'
 import type { WaDeviceListSnapshot, WaDeviceListStore } from '@store/contracts/device-list.store'
 import type {
+    WaGroupMetadataSnapshot,
+    WaGroupMetadataStore
+} from '@store/contracts/group-metadata.store'
+import type {
     WaMessageSecretEntry,
     WaMessageSecretStore
 } from '@store/contracts/message-secret.store'
 import type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
-import type {
-    WaParticipantsSnapshot,
-    WaParticipantsStore
-} from '@store/contracts/participants.store'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/thread.store'
 
@@ -77,13 +77,13 @@ export const NOOP_RETRY_STORE: WaRetryStore = Object.freeze({
     destroy: async (): Promise<void> => {}
 })
 
-export const NOOP_PARTICIPANTS_STORE: WaParticipantsStore = Object.freeze({
-    upsertGroupParticipants: async (_snapshot: WaParticipantsSnapshot): Promise<void> => {},
-    getGroupParticipants: async (
+export const NOOP_GROUP_METADATA_STORE: WaGroupMetadataStore = Object.freeze({
+    upsertGroupMetadata: async (_snapshot: WaGroupMetadataSnapshot): Promise<void> => {},
+    getGroupMetadata: async (
         _groupJid: string,
         _nowMs?: number
-    ): Promise<WaParticipantsSnapshot | null> => null,
-    deleteGroupParticipants: async (_groupJid: string): Promise<number> => 0,
+    ): Promise<WaGroupMetadataSnapshot | null> => null,
+    deleteGroupMetadata: async (_groupJid: string): Promise<number> => 0,
     cleanupExpired: async (_nowMs: number): Promise<number> => 0,
     clear: async (): Promise<void> => {},
     destroy: async (): Promise<void> => {}
