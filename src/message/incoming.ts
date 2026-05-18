@@ -22,7 +22,7 @@ import type { SignalAddress } from '@signal/types'
 import { buildAckNode, buildReceiptNode } from '@transport/node/builders/global'
 import { decodeNodeContentBase64OrBytes, findNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
-import { parseOptionalInt, toError } from '@util/primitives'
+import { longToNumber, parseOptionalInt, toError } from '@util/primitives'
 
 interface WaIncomingMessageAckHandlerOptions {
     readonly logger: Logger
@@ -82,6 +82,43 @@ function buildIncomingEventRawNode(node: BinaryNode): BinaryNode {
         tag: node.tag,
         attrs: node.attrs,
         content: children
+    }
+}
+
+export function buildRecoveredIncomingEvent(
+    webMessageInfo: proto.IWebMessageInfo
+): WaIncomingMessageEvent {
+    const key = webMessageInfo.key ?? {}
+    const chatJid = key.remoteJid ?? undefined
+    const fromMe = key.fromMe === true
+    const participant = key.participant ?? undefined
+    const isGroup = chatJid ? isGroupJid(chatJid) : false
+    const isBroadcast = chatJid ? isBroadcastJid(chatJid) : false
+    const senderJid = fromMe ? undefined : isGroup || isBroadcast ? participant : chatJid
+    const timestampSeconds =
+        webMessageInfo.messageTimestamp !== null && webMessageInfo.messageTimestamp !== undefined
+            ? longToNumber(webMessageInfo.messageTimestamp)
+            : undefined
+    const stanzaId = key.id ?? undefined
+    const rawNode: BinaryNode = {
+        tag: WA_MESSAGE_TAGS.MESSAGE,
+        attrs: {
+            ...(stanzaId !== undefined ? { id: stanzaId } : {}),
+            ...(chatJid !== undefined ? { from: chatJid } : {}),
+            ...(participant !== undefined ? { participant } : {})
+        }
+    }
+    return {
+        rawNode,
+        stanzaId,
+        chatJid,
+        timestampSeconds,
+        senderJid,
+        encryptionType: 'placeholder_recovery',
+        isGroupChat: isGroup,
+        isBroadcastChat: isBroadcast,
+        isSender: fromMe,
+        message: webMessageInfo.message ?? undefined
     }
 }
 

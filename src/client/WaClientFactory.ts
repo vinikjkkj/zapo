@@ -738,6 +738,15 @@ export function buildWaClientDependencies(input: {
         mobileMessageIdFormat: options.mobileTransport !== undefined
     })
 
+    const peerDataOperation = createPeerDataOperationRequester({
+        logger,
+        publishProtocolMessageToDevice: (deviceJid, protocolMessage, opts) =>
+            messageDispatch.publishProtocolMessageToDevice(deviceJid, protocolMessage, opts),
+        getCurrentMeJid,
+        generateOutgoingMessageId: () => messageDispatch.generateOutgoingMessageId(),
+        subscribeToProtocolMessage: runtime.subscribeProtocolMessage
+    })
+
     const retryCoordinator = new WaRetryCoordinator({
         logger,
         retryStore: sessionStore.retry,
@@ -752,7 +761,13 @@ export function buildWaClientDependencies(input: {
         sendNode: runtime.sendNode,
         getCurrentMeJid,
         getCurrentMeLid,
-        getCurrentSignedIdentity
+        getCurrentSignedIdentity,
+        peerDataOperation,
+        emitIncomingMessage: (event) => {
+            void runtime
+                .handleIncomingMessageEvent(event)
+                .catch((err) => runtime.handleError(toError(err)))
+        }
     })
 
     const botCoordinator = createBotCoordinator({
@@ -1208,15 +1223,6 @@ export function buildWaClientDependencies(input: {
             abPropsCoordinator.sync()
             return true
         }
-    })
-
-    const peerDataOperation = createPeerDataOperationRequester({
-        logger,
-        publishProtocolMessageToDevice: (deviceJid, protocolMessage, opts) =>
-            messageDispatch.publishProtocolMessageToDevice(deviceJid, protocolMessage, opts),
-        getCurrentMeJid,
-        generateOutgoingMessageId: () => messageDispatch.generateOutgoingMessageId(),
-        subscribeToProtocolMessage: runtime.subscribeProtocolMessage
     })
 
     passiveTasks = new WaPassiveTasksCoordinator({

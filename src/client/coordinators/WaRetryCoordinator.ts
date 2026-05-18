@@ -1,4 +1,7 @@
+import type { WaIncomingMessageEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import { buildRecoveredIncomingEvent } from '@message/incoming'
+import type { PeerDataOperationRequester } from '@message/peer-data-operation'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES } from '@protocol/constants'
@@ -6,7 +9,7 @@ import {
     isGroupOrBroadcastJid,
     normalizeDeviceJid,
     parseJidFull,
-    type parseSignalAddressFromJid,
+    parseSignalAddressFromJid,
     toUserJid
 } from '@protocol/jid'
 import {
@@ -57,6 +60,8 @@ interface WaRetryCoordinatorOptions {
     readonly getCurrentMeJid: () => string | null | undefined
     readonly getCurrentMeLid: () => string | null | undefined
     readonly getCurrentSignedIdentity: () => Proto.IADVSignedDeviceIdentity | null | undefined
+    readonly peerDataOperation?: PeerDataOperationRequester
+    readonly emitIncomingMessage?: (event: WaIncomingMessageEvent) => void
 }
 
 type RetryAuthorization =
@@ -69,6 +74,7 @@ interface RetryDecryptFailurePreparation {
     readonly retryKeys?: WaRetryKeyBundle
     readonly retryReason: number | undefined
     readonly timestamp: string
+    readonly delegatedToPlaceholderResend: boolean
 }
 
 interface RetryResendPreparation {
@@ -80,6 +86,24 @@ interface RetryResendPreparation {
 
 const RETRY_CLEANUP_INTERVAL_MS = 30_000
 const RETRY_SESSION_BASE_KEY_CACHE_MAX_ENTRIES = 8_192
+
+const PLACEHOLDER_RESEND_RETRY_THRESHOLD = 3
+const PLACEHOLDER_RESEND_BATCH_SIZE = 32
+const PLACEHOLDER_RESEND_DEBOUNCE_MS = 200
+const PLACEHOLDER_RESEND_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+const PLACEHOLDER_RESEND_IN_FLIGHT_MAX = 256
+const PLACEHOLDER_RESEND_SKIP_SUBTYPES = new Set<string>([
+    'bot_unavailable_fanout',
+    'hosted_unavailable_fanout',
+    'view_once_unavailable_fanout'
+])
+
+interface PlaceholderResendQueueItem {
+    readonly remoteJid: string
+    readonly id: string
+    readonly fromMe: boolean
+    readonly participant?: string
+}
 
 interface RetrySessionBaseKeySnapshot {
     readonly baseKey: Uint8Array
@@ -130,6 +154,11 @@ export class WaRetryCoordinator {
     private readonly retryProcessingByMessageId: Map<string, Promise<void>>
     private readonly retrySessionBaseKeys: Map<string, RetrySessionBaseKeySnapshot>
     private nextRetryCleanupAtMs = 0
+    private readonly peerDataOperation: PeerDataOperationRequester | null
+    private readonly emitIncomingMessage: ((event: WaIncomingMessageEvent) => void) | null
+    private readonly placeholderInFlight: Set<string> = new Set()
+    private placeholderQueue: PlaceholderResendQueueItem[] = []
+    private placeholderTimer: ReturnType<typeof setTimeout> | null = null
 
     public constructor(options: WaRetryCoordinatorOptions) {
         this.logger = options.logger
@@ -156,6 +185,8 @@ export class WaRetryCoordinator {
         })
         this.retryProcessingByMessageId = new Map()
         this.retrySessionBaseKeys = new Map()
+        this.peerDataOperation = options.peerDataOperation ?? null
+        this.emitIncomingMessage = options.emitIncomingMessage ?? null
     }
 
     public async onDecryptFailure(
@@ -166,6 +197,9 @@ export class WaRetryCoordinator {
             const prepared = await this.prepareDecryptFailureRetry(context, error)
             if (!prepared) {
                 return false
+            }
+            if (prepared.delegatedToPlaceholderResend) {
+                return true
             }
             await this.sendDecryptFailureRetryReceipt(context, prepared)
             return true
@@ -250,6 +284,18 @@ export class WaRetryCoordinator {
             nowMs,
             expiresAtMs
         )
+        const delegatedToPlaceholderResend =
+            retryCount >= PLACEHOLDER_RESEND_RETRY_THRESHOLD &&
+            this.enqueuePlaceholderResend(context)
+        if (delegatedToPlaceholderResend) {
+            return {
+                registrationId: registrationInfo.registrationId,
+                retryCount,
+                retryReason: mapRetryReasonFromError(error),
+                timestamp: context.t ?? String(Math.trunc(nowMs / 1000)),
+                delegatedToPlaceholderResend: true
+            }
+        }
         return {
             registrationId: registrationInfo.registrationId,
             retryCount,
@@ -260,7 +306,8 @@ export class WaRetryCoordinator {
                       )) ?? undefined)
                     : undefined,
             retryReason: mapRetryReasonFromError(error),
-            timestamp: context.t ?? String(Math.trunc(nowMs / 1000))
+            timestamp: context.t ?? String(Math.trunc(nowMs / 1000)),
+            delegatedToPlaceholderResend: false
         }
     }
 
@@ -980,6 +1027,106 @@ export class WaRetryCoordinator {
                 continue
             }
             this.retrySessionBaseKeys.delete(key)
+        }
+    }
+
+    private isSenderFromOwnAccount(context: WaRetryDecryptFailureContext): boolean {
+        const senderUser = parseSignalAddressFromJid(context.participant ?? context.from).user
+        const meLid = this.getCurrentMeLid()
+        if (meLid && parseSignalAddressFromJid(meLid).user === senderUser) return true
+        const meJid = this.getCurrentMeJid()
+        return !!meJid && parseSignalAddressFromJid(meJid).user === senderUser
+    }
+
+    private enqueuePlaceholderResend(context: WaRetryDecryptFailureContext): boolean {
+        if (!this.peerDataOperation || !this.emitIncomingMessage) {
+            return false
+        }
+        const subtype = context.messageNode.attrs.subtype
+        if (typeof subtype === 'string' && PLACEHOLDER_RESEND_SKIP_SUBTYPES.has(subtype)) {
+            return false
+        }
+        const timestampSeconds = context.t ? Number(context.t) : Date.now() / 1000
+        if (Number.isFinite(timestampSeconds)) {
+            const ageSeconds = Date.now() / 1000 - timestampSeconds
+            if (ageSeconds > PLACEHOLDER_RESEND_MAX_AGE_SECONDS) {
+                return false
+            }
+        }
+        if (this.placeholderInFlight.has(context.stanzaId)) {
+            return true
+        }
+        if (this.placeholderInFlight.size >= PLACEHOLDER_RESEND_IN_FLIGHT_MAX) {
+            this.logger.warn('placeholder resend: in-flight set saturated, dropping enqueue', {
+                id: context.stanzaId,
+                maxInFlight: PLACEHOLDER_RESEND_IN_FLIGHT_MAX
+            })
+            return false
+        }
+        this.placeholderInFlight.add(context.stanzaId)
+        this.placeholderQueue.push({
+            remoteJid: context.from,
+            id: context.stanzaId,
+            fromMe: this.isSenderFromOwnAccount(context),
+            participant: context.participant
+        })
+        if (this.placeholderTimer === null) {
+            this.placeholderTimer = setTimeout(() => {
+                this.placeholderTimer = null
+                void this.flushPlaceholderBatch()
+            }, PLACEHOLDER_RESEND_DEBOUNCE_MS)
+        }
+        return true
+    }
+
+    private async flushPlaceholderBatch(): Promise<void> {
+        const peerDataOperation = this.peerDataOperation
+        const emitIncomingMessage = this.emitIncomingMessage
+        if (!peerDataOperation || !emitIncomingMessage) {
+            this.placeholderQueue = []
+            this.placeholderInFlight.clear()
+            return
+        }
+        while (this.placeholderQueue.length > 0) {
+            const batch = this.placeholderQueue.splice(0, PLACEHOLDER_RESEND_BATCH_SIZE)
+            try {
+                const results = await peerDataOperation.request(
+                    proto.Message.PeerDataOperationRequestType.PLACEHOLDER_MESSAGE_RESEND,
+                    {
+                        placeholderMessageResendRequest: batch.map((item) => ({
+                            messageKey: {
+                                remoteJid: item.remoteJid,
+                                id: item.id,
+                                fromMe: item.fromMe,
+                                participant: item.participant
+                            }
+                        }))
+                    }
+                )
+                for (const result of results) {
+                    const bytes = result.placeholderMessageResendResponse?.webMessageInfoBytes
+                    if (!bytes) {
+                        continue
+                    }
+                    try {
+                        const recovered = proto.WebMessageInfo.decode(bytes)
+                        emitIncomingMessage(buildRecoveredIncomingEvent(recovered))
+                    } catch (error) {
+                        this.logger.warn('placeholder resend: failed to decode WebMessageInfo', {
+                            message: toError(error).message
+                        })
+                    }
+                }
+            } catch (error) {
+                this.logger.warn('placeholder resend: request failed', {
+                    batchSize: batch.length,
+                    message: toError(error).message
+                })
+            } finally {
+                for (const item of batch) {
+                    this.placeholderInFlight.delete(item.id)
+                }
+            }
         }
     }
 }
