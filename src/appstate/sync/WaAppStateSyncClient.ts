@@ -14,7 +14,6 @@ import type {
     WaAppStateMissingKeysEvent,
     WaAppStateMutation,
     WaAppStateMutationInput,
-    WaAppStateStoreData,
     WaAppStateSyncKey,
     WaAppStateSyncOptions,
     WaAppStateSyncResult
@@ -117,11 +116,6 @@ export class WaAppStateSyncClient {
         this.mobilePrimary = options.mobilePrimary ?? false
         this.syncContext = null
         this.syncPromise = null
-    }
-
-    public async exportState(): Promise<WaAppStateStoreData> {
-        this.logger.trace('app-state export requested')
-        return this.store.exportData()
     }
 
     public async ensureInitialSyncKey(): Promise<WaAppStateSyncKey> {

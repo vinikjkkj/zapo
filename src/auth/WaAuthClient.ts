@@ -31,6 +31,7 @@ type WaAuthClientDeps = Readonly<{
         readonly sendNode: (node: BinaryNode) => Promise<void>
         readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
     }
+    readonly isConnected?: () => boolean
     readonly callbacks?: {
         readonly onQr?: (qr: string, ttlMs: number) => void
         readonly onPairingCode?: (code: string) => void
@@ -47,6 +48,7 @@ export class WaAuthClient {
     private readonly authStore: WaAuthStore
     private readonly signalStore: WaSignalStore
     private readonly preKeyStore: WaPreKeyStore
+    private readonly isConnected?: () => boolean
     private readonly qrFlow: WaQrFlow
     private readonly pairingFlow: WaPairingFlow
     private credentials: WaAuthCredentials | null
@@ -70,6 +72,7 @@ export class WaAuthClient {
         this.authStore = deps.authStore
         this.signalStore = deps.signalStore
         this.preKeyStore = deps.preKeyStore
+        this.isConnected = deps.isConnected
         this.credentials = null
 
         this.qrFlow = new WaQrFlow({
@@ -271,6 +274,7 @@ export class WaAuthClient {
         shouldShowPushNotification = true,
         customCode?: string
     ): Promise<string> {
+        this.requireConnected()
         this.requireCredentials()
         this.logger.info('auth client requesting pairing code')
         return this.runHandled(() =>
@@ -279,6 +283,7 @@ export class WaAuthClient {
     }
 
     public async fetchPairingCountryCodeIso(): Promise<string> {
+        this.requireConnected()
         this.requireCredentials()
         this.logger.trace('auth client fetching pairing country code ISO')
         return this.runHandled(() => this.pairingFlow.fetchPairingCountryCodeIso())
@@ -344,6 +349,12 @@ export class WaAuthClient {
             },
             credentials
         )
+    }
+
+    private requireConnected(): void {
+        if (this.isConnected && !this.isConnected()) {
+            throw new Error('client is not connected')
+        }
     }
 
     private requireCredentials(): WaAuthCredentials {

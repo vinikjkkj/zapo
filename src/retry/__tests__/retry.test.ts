@@ -199,9 +199,7 @@ test('retry replay service resends plaintext when requester matches destination 
                 ciphertext: new Uint8Array([9, 9])
             })
         } as unknown as SignalProtocol,
-        getCurrentMeJid: () => null,
-        getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null
+        getCurrentCredentials: () => null
     })
 
     const outbound = buildOutboundRecord('m-plain-1', {
@@ -238,9 +236,7 @@ test('retry replay service accepts raw replay payloads from memory store', async
                 ciphertext: new Uint8Array([4, 4])
             })
         } as unknown as SignalProtocol,
-        getCurrentMeJid: () => null,
-        getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null
+        getCurrentCredentials: () => null
     })
 
     const now = Date.now()
@@ -284,9 +280,7 @@ test('retry replay service returns ineligible on plaintext destination mismatch'
                 ciphertext: new Uint8Array([1])
             })
         } as unknown as SignalProtocol,
-        getCurrentMeJid: () => null,
-        getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null
+        getCurrentCredentials: () => null
     })
 
     const outbound = buildOutboundRecord('m-plain-2', {
@@ -321,9 +315,7 @@ test('retry replay service handles group plaintext retries and pkmsg identity gu
                 ciphertext: new Uint8Array([5, 6, 7])
             })
         } as unknown as SignalProtocol,
-        getCurrentMeJid: () => null,
-        getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null
+        getCurrentCredentials: () => null
     })
 
     const outbound = buildOutboundRecord('m-group-1', {
@@ -374,9 +366,7 @@ test('retry replay service emits status@broadcast retry with meta and no address
                 ciphertext: new Uint8Array([1, 2, 3])
             })
         } as unknown as SignalProtocol,
-        getCurrentMeJid: () => null,
-        getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null
+        getCurrentCredentials: () => null
     })
 
     const now = Date.now()
@@ -427,9 +417,7 @@ test('retry replay service handles encrypted mode eligibility', async () => {
                 ciphertext: new Uint8Array([1])
             })
         } as unknown as SignalProtocol,
-        getCurrentMeJid: () => null,
-        getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null
+        getCurrentCredentials: () => null
     })
 
     const skmsgOutbound = buildOutboundRecord('m-encrypted-skmsg', {
@@ -489,9 +477,7 @@ test('retry replay service handles opaque replay compatibility checks', async ()
                 ciphertext: new Uint8Array([1])
             })
         } as unknown as SignalProtocol,
-        getCurrentMeJid: () => null,
-        getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null
+        getCurrentCredentials: () => null
     })
 
     const compatibleNode: BinaryNode = {

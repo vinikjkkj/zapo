@@ -1,5 +1,6 @@
 import { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'
 import type { WaAppStateSyncOptions, WaAppStateSyncResult } from '@appstate/types'
+import type { WaAuthCredentials } from '@auth/types'
 import { WaAuthClient } from '@auth/WaAuthClient'
 import { WaConnectionManager } from '@client/connection/WaConnectionManager'
 import { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
@@ -153,7 +154,7 @@ interface WaClientBuildRuntime {
     ) => () => void
 }
 
-interface WaClientDependencies {
+export interface WaClientDependencies {
     readonly nodeTransport: WaNodeTransport
     readonly nodeOrchestrator: WaNodeOrchestrator
     readonly keepAlive: WaKeepAlive
@@ -281,7 +282,7 @@ function createIncomingNodeRuntime(input: {
         code: WaConnectionCode | null
     ) => Promise<void>
     readonly clearStoredCredentials: () => Promise<void>
-    readonly getCurrentMeJid: () => string | null | undefined
+    readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly handleClientDirtyBits: (
         dirtyBits: Parameters<typeof handleDirtyBits>[1]
     ) => Promise<void>
@@ -301,7 +302,7 @@ function createIncomingNodeRuntime(input: {
         syncAppState,
         disconnect,
         clearStoredCredentials,
-        getCurrentMeJid,
+        getCurrentCredentials,
         handleClientDirtyBits,
         incomingMessageAckOptions
     } = input
@@ -312,7 +313,8 @@ function createIncomingNodeRuntime(input: {
         emitSuccessNode: (node) => emitEvent('connection_success', { node }),
         updateClockSkewFromSuccess: (serverUnixSeconds) =>
             connectionManager.updateClockSkewFromSuccess(serverUnixSeconds),
-        shouldWarmupMediaConn: () => !!(getCurrentMeJid() && connectionManager.isConnected()),
+        shouldWarmupMediaConn: () =>
+            !!(getCurrentCredentials()?.meJid && connectionManager.isConnected()),
         warmupMediaConn: async () => {
             await getClientMediaConn(mediaMessageBuildOptions, true)
         },
@@ -571,6 +573,7 @@ export function buildWaClientDependencies(input: {
                 sendNode: runtime.sendNode,
                 query: runtime.query
             },
+            isConnected: () => connectionManager?.isConnected() ?? false,
             callbacks: {
                 onQr: (qr, ttlMs) => runtime.emitEvent('auth_qr', { qr, ttlMs }),
                 onPairingCode: (code) => runtime.emitEvent('auth_pairing_code', { code }),
@@ -586,9 +589,6 @@ export function buildWaClientDependencies(input: {
     )
 
     const getCurrentCredentials = authClient.getCurrentCredentials.bind(authClient)
-    const getCurrentMeJid = () => getCurrentCredentials()?.meJid
-    const getCurrentMeLid = () => getCurrentCredentials()?.meLid
-    const getCurrentSignedIdentity = () => getCurrentCredentials()?.signedIdentity
 
     const groupCoordinator = createGroupCoordinator({
         queryWithContext: runtime.queryWithContext,
@@ -641,8 +641,7 @@ export function buildWaClientDependencies(input: {
     })
     const fanoutResolver = createDeviceFanoutResolver({
         signalDeviceSync,
-        getCurrentMeJid,
-        getCurrentMeLid,
+        getCurrentCredentials,
         logger
     })
     const groupMetadataCache = createGroupMetadataCache({
@@ -667,7 +666,7 @@ export function buildWaClientDependencies(input: {
         runtime: {
             queryWithContext: runtime.queryWithContext,
             emitEvent: runtime.emitEvent,
-            getCurrentMeLid: () => getCurrentMeLid() ?? null
+            getCurrentCredentials
         },
         serverClock,
         durationS: options.privacyToken?.tcTokenDurationS,
@@ -698,8 +697,7 @@ export function buildWaClientDependencies(input: {
         publishProtocolMessageToDevice: (deviceJid, protocolMessage, opts) =>
             messageDispatch.publishProtocolMessageToDevice(deviceJid, protocolMessage, opts),
         fanoutResolver,
-        getCurrentMeJid,
-        getCurrentMeLid,
+        getCurrentCredentials,
         logger
     })
 
@@ -720,9 +718,7 @@ export function buildWaClientDependencies(input: {
         identityStore: sessionStore.identity,
         deviceListStore: sessionStore.deviceList,
         messageSecretStore: sessionStore.messageSecret,
-        getCurrentMeJid,
-        getCurrentMeLid,
-        getCurrentSignedIdentity,
+        getCurrentCredentials,
         resolvePrivacyTokenNode: (recipientJid) =>
             trustedContactToken.resolveTokenForMessage(recipientJid),
         onDirectMessageSent: (recipientJid) => {
@@ -746,7 +742,7 @@ export function buildWaClientDependencies(input: {
         logger,
         publishProtocolMessageToDevice: (deviceJid, protocolMessage, opts) =>
             messageDispatch.publishProtocolMessageToDevice(deviceJid, protocolMessage, opts),
-        getCurrentMeJid,
+        getCurrentCredentials,
         generateOutgoingMessageId: () => messageDispatch.generateOutgoingMessageId(),
         subscribeToProtocolMessage: runtime.subscribeProtocolMessage
     })
@@ -763,9 +759,7 @@ export function buildWaClientDependencies(input: {
         signalMissingPreKeysSync,
         messageClient,
         sendNode: runtime.sendNode,
-        getCurrentMeJid,
-        getCurrentMeLid,
-        getCurrentSignedIdentity,
+        getCurrentCredentials,
         peerDataOperation,
         emitIncomingMessage: (event) => {
             void runtime
@@ -785,7 +779,7 @@ export function buildWaClientDependencies(input: {
     const appStateSync = new WaAppStateSyncClient({
         logger,
         query: runtime.query,
-        getCurrentMeJid,
+        getCurrentMeJid: () => getCurrentCredentials()?.meJid,
         defaultTimeoutMs: options.appStateSyncTimeoutMs,
         store: sessionStore.appState,
         serverClock,
@@ -894,7 +888,7 @@ export function buildWaClientDependencies(input: {
     const incomingMessageAckOptions: Parameters<typeof handleIncomingMessageAck>[1] = {
         logger,
         sendNode: runtime.sendNode,
-        getMeJid: getCurrentMeJid,
+        getMeJid: () => getCurrentCredentials()?.meJid,
         signalProtocol,
         senderKeyManager,
         onDecryptFailure: (context: WaRetryDecryptFailureContext, error: unknown) =>
@@ -947,7 +941,7 @@ export function buildWaClientDependencies(input: {
             syncAppState: runtime.syncAppState,
             disconnect: disconnectWithClientSideEffects,
             clearStoredCredentials: clearStoredCredentialsWithClientSideEffects,
-            getCurrentMeJid,
+            getCurrentCredentials,
             handleClientDirtyBits,
             incomingMessageAckOptions
         })
@@ -1061,7 +1055,7 @@ export function buildWaClientDependencies(input: {
                     return true
                 }
 
-                const meJid = getCurrentMeJid()
+                const meJid = getCurrentCredentials()?.meJid
                 if (meJid) {
                     const meUser = toUserJid(meJid)
                     const fromUser = toUserJid(parsed.fromJid)

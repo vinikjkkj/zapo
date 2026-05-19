@@ -1,4 +1,5 @@
 import type { WaAppStateSyncKey } from '@appstate/types'
+import type { WaAuthCredentials } from '@auth/types'
 import type { DeviceFanoutResolver } from '@client/messaging/fanout'
 import type { Logger } from '@infra/log/types'
 import type { WaMessagePublishResult } from '@message/types'
@@ -24,22 +25,15 @@ export type AppStateSyncKeyProtocol = {
 export function createAppStateSyncKeyProtocol(options: {
     readonly publishProtocolMessageToDevice: PublishProtocolMessageToDeviceFn
     readonly fanoutResolver: DeviceFanoutResolver
-    readonly getCurrentMeJid: () => string | null | undefined
-    readonly getCurrentMeLid: () => string | null | undefined
+    readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly logger: Logger
 }): AppStateSyncKeyProtocol {
-    const {
-        publishProtocolMessageToDevice,
-        fanoutResolver,
-        getCurrentMeJid,
-        getCurrentMeLid,
-        logger
-    } = options
+    const { publishProtocolMessageToDevice, fanoutResolver, getCurrentCredentials, logger } =
+        options
 
     const requireCurrentIdentity = (context: string): void => {
-        const meJid = getCurrentMeJid()
-        const meLid = getCurrentMeLid()
-        if (meJid || meLid) {
+        const credentials = getCurrentCredentials()
+        if (credentials?.meJid || credentials?.meLid) {
             return
         }
         throw new Error(`${context} requires registered identity`)

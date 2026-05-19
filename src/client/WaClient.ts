@@ -8,22 +8,16 @@ import type {
 } from '@appstate/types'
 import { downloadExternalBlobReference } from '@appstate/utils'
 import type { WaAuthClient } from '@auth/WaAuthClient'
-import type { WaConnectionManager } from '@client/connection/WaConnectionManager'
-import type { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
 import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { WaBotCoordinator } from '@client/coordinators/WaBotCoordinator'
 import type { WaBroadcastListCoordinator } from '@client/coordinators/WaBroadcastListCoordinator'
 import type { WaBusinessCoordinator } from '@client/coordinators/WaBusinessCoordinator'
 import type { WaEmailCoordinator } from '@client/coordinators/WaEmailCoordinator'
 import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator'
-import type { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
-import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import type { WaNewsletterCoordinator } from '@client/coordinators/WaNewsletterCoordinator'
-import type { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordinator'
 import type { WaProfileCoordinator } from '@client/coordinators/WaProfileCoordinator'
 import type { WaStatusCoordinator } from '@client/coordinators/WaStatusCoordinator'
-import type { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
 import { parseAccountEventFromAppStateMutation } from '@client/events/account'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { aggregateReceiptTargets } from '@client/events/receipt'
@@ -41,7 +35,11 @@ import type {
     WaIncomingStanzaFilter,
     WaSendMessageOptions
 } from '@client/types'
-import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClientFactory'
+import {
+    buildWaClientDependencies,
+    resolveWaClientBase,
+    type WaClientDependencies
+} from '@client/WaClientFactory'
 import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
@@ -56,7 +54,6 @@ import {
 } from '@message/crypto/addon-crypto'
 import { unwrapMessage } from '@message/encode/content'
 import { decryptBotChunk } from '@message/kinds/bot'
-import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import type {
     WaMessagePublishResult,
     WaSendMessageContent,
@@ -77,23 +74,8 @@ import {
 } from '@protocol/constants'
 import { isBotJid, normalizeDeviceJid, parsePhoneJid, toUserJid } from '@protocol/jid'
 import { WA_LOGOUT_REASONS, type WaLogoutReason } from '@protocol/stream'
-import type { SignalDeviceSyncApi, SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
-import type { WaAppStateStore } from '@store/contracts/appstate.store'
-import type { WaContactStore } from '@store/contracts/contact.store'
-import type { WaDeviceListStore } from '@store/contracts/device-list.store'
-import type { WaGroupMetadataStore } from '@store/contracts/group-metadata.store'
-import type { WaIdentityStore } from '@store/contracts/identity.store'
-import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
-import type { WaMessageStore } from '@store/contracts/message.store'
-import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
-import type { WaPrivacyTokenStore } from '@store/contracts/privacy-token.store'
-import type { WaRetryStore } from '@store/contracts/retry.store'
-import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
-import type { WaSessionStore } from '@store/contracts/session.store'
-import type { WaSignalStore } from '@store/contracts/signal.store'
-import type { WaThreadStore } from '@store/contracts/thread.store'
+import type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 import { NOOP_MESSAGE_SECRET_STORE } from '@store/noop.store'
-import type { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 import {
     buildChatstateNode,
     type BuildChatstateNodeInput
@@ -106,8 +88,6 @@ import {
 } from '@transport/node/builders/presence'
 import { findNodeChild } from '@transport/node/helpers'
 import { assertIqResult, queryWithContext as queryNodeWithContext } from '@transport/node/query'
-import type { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
-import type { WaNodeTransport } from '@transport/node/WaNodeTransport'
 import type { BinaryNode } from '@transport/types'
 import { bytesToHex, decodeProtoBytes } from '@util/bytes'
 import { toError } from '@util/primitives'
@@ -123,45 +103,11 @@ const SYNC_RELATED_PROTOCOL_TYPES = new Set<WaIncomingProtocolType>([
 export class WaClient extends EventEmitter {
     private readonly options!: Readonly<WaClientOptions>
     private readonly logger!: Logger
-    private readonly appStateStore!: WaAppStateStore
-    private readonly contactStore!: WaContactStore
-    private readonly messageStore!: WaMessageStore
-    private readonly messageSecretStore!: WaMessageSecretStore
-    private readonly groupMetadataStore!: WaGroupMetadataStore
-    private readonly privacyTokenStore!: WaPrivacyTokenStore
-    private readonly deviceListStore!: WaDeviceListStore
-    private readonly retryStore!: WaRetryStore
-    private readonly signalStore!: WaSignalStore
-    private readonly preKeyStore!: WaPreKeyStore
-    private readonly sessionStore!: WaSessionStore
-    private readonly identityStore!: WaIdentityStore
-    private readonly senderKeyStore!: WaSenderKeyStore
-    private readonly threadStore!: WaThreadStore
-    private readonly authClient!: WaAuthClient
-    private readonly nodeOrchestrator!: WaNodeOrchestrator
-    private readonly nodeTransport!: WaNodeTransport
-    private readonly signalDeviceSync!: SignalDeviceSyncApi
+    private readonly stores!: ReturnType<WaClientOptions['store']['session']>
+    private readonly deps!: WaClientDependencies
     public readonly appStateSync!: WaAppStateSyncClient
-    private readonly chatCoordinator!: WaAppStateMutationCoordinator
-    private readonly incomingNode!: WaIncomingNodeCoordinator
     public readonly mediaTransfer!: WaMediaTransferClient
-    private readonly messageDispatch!: WaMessageDispatchCoordinator
     public readonly messageClient!: WaMessageClient
-    private readonly groupCoordinator!: WaGroupCoordinator
-    private readonly statusCoordinator!: WaStatusCoordinator
-    private readonly broadcastListCoordinator!: WaBroadcastListCoordinator
-    private readonly newsletterCoordinator!: WaNewsletterCoordinator
-    private readonly privacyCoordinator!: WaPrivacyCoordinator
-    private readonly profileCoordinator!: WaProfileCoordinator
-    private readonly businessCoordinator!: WaBusinessCoordinator
-    private readonly botCoordinator!: WaBotCoordinator
-    private readonly emailCoordinator!: WaEmailCoordinator
-    private readonly passiveTasks!: WaPassiveTasksCoordinator
-    private readonly keepAlive!: WaKeepAlive
-    private readonly receiptQueue!: WaReceiptQueue
-    private readonly connectionManager!: WaConnectionManager
-    private readonly trustedContactToken!: WaTrustedContactTokenCoordinator
-    private readonly peerDataOperation!: PeerDataOperationRequester
     private readonly writeBehind!: WriteBehindPersistence
     private connectPromise: Promise<void> | null = null
     private acceptingIncomingEvents = true
@@ -174,25 +120,12 @@ export class WaClient extends EventEmitter {
         const base = resolveWaClientBase(options, logger)
         this.options = base.options
         this.logger = base.logger
-        this.appStateStore = base.sessionStore.appState
-        this.contactStore = base.sessionStore.contacts
-        this.messageStore = base.sessionStore.messages
-        this.messageSecretStore = base.sessionStore.messageSecret
-        this.groupMetadataStore = base.sessionStore.groupMetadata
-        this.privacyTokenStore = base.sessionStore.privacyToken
-        this.deviceListStore = base.sessionStore.deviceList
-        this.retryStore = base.sessionStore.retry
-        this.signalStore = base.sessionStore.signal
-        this.preKeyStore = base.sessionStore.preKey
-        this.sessionStore = base.sessionStore.session
-        this.identityStore = base.sessionStore.identity
-        this.senderKeyStore = base.sessionStore.senderKey
-        this.threadStore = base.sessionStore.threads
+        this.stores = base.sessionStore
         this.writeBehind = new WriteBehindPersistence(
             {
-                messageStore: this.messageStore,
-                threadStore: this.threadStore,
-                contactStore: this.contactStore
+                messageStore: this.stores.messages,
+                threadStore: this.stores.threads,
+                contactStore: this.stores.contacts
             },
             this.logger,
             this.options.writeBehind
@@ -200,7 +133,7 @@ export class WaClient extends EventEmitter {
 
         if (
             this.options.addons?.autoDecrypt &&
-            this.messageSecretStore === NOOP_MESSAGE_SECRET_STORE
+            this.stores.messageSecret === NOOP_MESSAGE_SECRET_STORE
         ) {
             this.logger.warn(
                 'addons.autoDecrypt is enabled but messageSecret cache is noop — ' +
@@ -235,7 +168,10 @@ export class WaClient extends EventEmitter {
                 }
             }
         })
-        Object.assign(this, dependencies)
+        this.deps = dependencies
+        this.appStateSync = dependencies.appStateSync
+        this.mediaTransfer = dependencies.mediaTransfer
+        this.messageClient = dependencies.messageClient
 
         this.bindNodeTransportEvents()
     }
@@ -268,31 +204,31 @@ export class WaClient extends EventEmitter {
     }
 
     public getState() {
-        const connected = this.connectionManager.isConnected()
+        const connected = this.deps.connectionManager.isConnected()
         this.logger.trace('wa client state requested', { connected })
-        return this.authClient.getState(connected)
+        return this.deps.authClient.getState(connected)
     }
 
     public getCredentials() {
-        return this.authClient.getCurrentCredentials()
+        return this.deps.authClient.getCurrentCredentials()
     }
 
     public getClockSkewMs(): number | null {
-        return this.connectionManager.getClockSkewMs()
+        return this.deps.connectionManager.getClockSkewMs()
     }
 
     public async sendNode(node: BinaryNode): Promise<void> {
         try {
-            await this.nodeOrchestrator.sendNode(node)
+            await this.deps.nodeOrchestrator.sendNode(node)
         } catch (error) {
             const normalized = toError(error)
-            if (this.receiptQueue.shouldQueue(node, normalized)) {
-                this.receiptQueue.enqueue(node)
+            if (this.deps.receiptQueue.shouldQueue(node, normalized)) {
+                this.deps.receiptQueue.enqueue(node)
                 this.logger.warn('queued dangling receipt after send failure', {
                     id: node.attrs.id,
                     to: node.attrs.to,
                     message: normalized.message,
-                    queueSize: this.receiptQueue.size()
+                    queueSize: this.deps.receiptQueue.size()
                 })
                 return
             }
@@ -301,8 +237,8 @@ export class WaClient extends EventEmitter {
     }
 
     public async sendPresence(type?: 'available' | 'unavailable'): Promise<void> {
-        const credentials = this.authClient.getCurrentCredentials()
-        await this.nodeOrchestrator.sendNode(
+        const credentials = this.deps.authClient.getCurrentCredentials()
+        await this.deps.nodeOrchestrator.sendNode(
             buildPresenceNode({ type, name: credentials?.meDisplayName ?? undefined }),
             false
         )
@@ -312,7 +248,7 @@ export class WaClient extends EventEmitter {
         jid: string,
         options: Omit<BuildChatstateNodeInput, 'jid'>
     ): Promise<void> {
-        await this.nodeOrchestrator.sendNode(buildChatstateNode({ jid, ...options }), false)
+        await this.deps.nodeOrchestrator.sendNode(buildChatstateNode({ jid, ...options }), false)
     }
 
     /**
@@ -324,7 +260,10 @@ export class WaClient extends EventEmitter {
         jid: string,
         options?: Omit<BuildPresenceSubscribeNodeInput, 'jid'>
     ): Promise<void> {
-        await this.nodeOrchestrator.sendNode(buildPresenceSubscribeNode({ jid, ...options }), false)
+        await this.deps.nodeOrchestrator.sendNode(
+            buildPresenceSubscribeNode({ jid, ...options }),
+            false
+        )
     }
 
     public async query(
@@ -332,19 +271,19 @@ export class WaClient extends EventEmitter {
         timeoutMs: number = this.options.iqTimeoutMs ?? WA_DEFAULTS.IQ_TIMEOUT_MS,
         options: { readonly useSystemId?: boolean } = {}
     ): Promise<BinaryNode> {
-        if (!this.connectionManager.isConnected()) {
+        if (!this.deps.connectionManager.isConnected()) {
             throw new Error('client is not connected')
         }
         this.logger.debug('wa client query', { tag: node.tag, id: node.attrs.id, timeoutMs })
-        return this.nodeOrchestrator.query(node, timeoutMs, options)
+        return this.deps.nodeOrchestrator.query(node, timeoutMs, options)
     }
 
     public registerIncomingHandler(registration: WaIncomingNodeHandlerRegistration): () => void {
-        return this.incomingNode.registerIncomingHandler(registration)
+        return this.deps.incomingNode.registerIncomingHandler(registration)
     }
 
     public unregisterIncomingHandler(registration: WaIncomingNodeHandlerRegistration): boolean {
-        return this.incomingNode.unregisterIncomingHandler(registration)
+        return this.deps.incomingNode.unregisterIncomingHandler(registration)
     }
 
     /**
@@ -354,19 +293,23 @@ export class WaClient extends EventEmitter {
      * filters to keep the auth flow intact.
      */
     public registerIncomingStanzaFilter(filter: WaIncomingStanzaFilter): () => void {
-        return this.incomingNode.registerIncomingStanzaFilter(filter)
+        return this.deps.incomingNode.registerIncomingStanzaFilter(filter)
     }
 
     private bindNodeTransportEvents(): void {
-        this.nodeTransport.on('frame_in', (frame) => this.emit('transport_frame_in', { frame }))
-        this.nodeTransport.on('frame_out', (frame) => this.emit('transport_frame_out', { frame }))
-        this.nodeTransport.on('node_in', (node, frame) =>
+        this.deps.nodeTransport.on('frame_in', (frame) =>
+            this.emit('transport_frame_in', { frame })
+        )
+        this.deps.nodeTransport.on('frame_out', (frame) =>
+            this.emit('transport_frame_out', { frame })
+        )
+        this.deps.nodeTransport.on('node_in', (node, frame) =>
             this.emit('transport_node_in', { node, frame })
         )
-        this.nodeTransport.on('node_out', (node, frame) =>
+        this.deps.nodeTransport.on('node_out', (node, frame) =>
             this.emit('transport_node_out', { node, frame })
         )
-        this.nodeTransport.on('decode_error', (error, frame) => {
+        this.deps.nodeTransport.on('decode_error', (error, frame) => {
             this.emit('transport_decode_error', { error, frame })
             this.handleError(error)
         })
@@ -381,7 +324,7 @@ export class WaClient extends EventEmitter {
             void persistIncomingMailboxEntities({
                 logger: this.logger,
                 writeBehind: this.writeBehind,
-                messageSecretStore: this.messageSecretStore,
+                messageSecretStore: this.stores.messageSecret,
                 event
             })
             if (this.options.addons?.autoDecrypt && event.message) {
@@ -547,7 +490,7 @@ export class WaClient extends EventEmitter {
             return
         }
 
-        const requestedKeys = await this.appStateStore.getSyncKeysBatch(requestedKeyIds)
+        const requestedKeys = await this.stores.appState.getSyncKeysBatch(requestedKeyIds)
         const availableKeys: WaAppStateStoreData['keys'][number][] = []
         const missingKeyIds: Uint8Array[] = []
         for (let i = 0; i < requestedKeys.length; i += 1) {
@@ -560,7 +503,7 @@ export class WaClient extends EventEmitter {
         }
 
         try {
-            await this.messageDispatch.sendAppStateSyncKeyShare(
+            await this.deps.messageDispatch.sendAppStateSyncKeyShare(
                 requesterDeviceJid,
                 availableKeys,
                 missingKeyIds
@@ -606,7 +549,7 @@ export class WaClient extends EventEmitter {
     }
 
     private isOwnAccountDeviceJid(candidateJid: string): boolean {
-        const credentials = this.authClient.getCurrentCredentials()
+        const credentials = this.deps.authClient.getCurrentCredentials()
         if (!credentials) {
             return false
         }
@@ -631,9 +574,9 @@ export class WaClient extends EventEmitter {
                         typeof processHistorySyncNotification
                     >[0]['emitEvent'],
                     onPrivacyTokens: (conversations) =>
-                        this.trustedContactToken.hydrateFromHistorySync(conversations),
+                        this.deps.trustedContactToken.hydrateFromHistorySync(conversations),
                     onNctSalt: (salt) =>
-                        this.trustedContactToken.hydrateNctSaltFromHistorySync(salt)
+                        this.deps.trustedContactToken.hydrateNctSaltFromHistorySync(salt)
                 },
                 notification
             )
@@ -665,8 +608,8 @@ export class WaClient extends EventEmitter {
 
     private async handleIncomingFrame(frame: Uint8Array): Promise<void> {
         try {
-            await this.nodeTransport.dispatchIncomingFrame(frame, async (node) =>
-                this.incomingNode.handleIncomingNode(node)
+            await this.deps.nodeTransport.dispatchIncomingFrame(frame, async (node) =>
+                this.deps.incomingNode.handleIncomingNode(node)
             )
         } catch (error) {
             this.handleError(toError(error))
@@ -680,10 +623,10 @@ export class WaClient extends EventEmitter {
         }
 
         this.acceptingIncomingEvents = true
-        this.connectPromise = this.connectionManager
+        this.connectPromise = this.deps.connectionManager
             .connect((frame) => this.handleIncomingFrame(frame))
             .then(() => {
-                if (!this.authClient.getCurrentCredentials()?.meJid) {
+                if (!this.deps.authClient.getCurrentCredentials()?.meJid) {
                     return
                 }
                 this.emit('connection', {
@@ -710,7 +653,7 @@ export class WaClient extends EventEmitter {
                 remaining: writeBehindFlush.remaining
             })
         }
-        await this.connectionManager.disconnect()
+        await this.deps.connectionManager.disconnect()
         this.emit('connection', {
             status: 'close',
             reason: 'client_disconnected',
@@ -720,34 +663,13 @@ export class WaClient extends EventEmitter {
         })
     }
 
-    public async requestPairingCode(
-        phoneNumber: string,
-        shouldShowPushNotification = true,
-        customCode?: string
-    ): Promise<string> {
-        if (!this.connectionManager.isConnected() || !this.authClient.getCurrentCredentials()) {
-            throw new Error('client is not connected')
-        }
-        this.logger.debug('wa client request pairing code')
-        return this.authClient.requestPairingCode(
-            phoneNumber,
-            shouldShowPushNotification,
-            customCode
-        )
-    }
-
-    public async fetchPairingCountryCodeIso(): Promise<string> {
-        if (!this.connectionManager.isConnected() || !this.authClient.getCurrentCredentials()) {
-            throw new Error('client is not connected')
-        }
-        this.logger.trace('wa client fetch pairing country code iso')
-        return this.authClient.fetchPairingCountryCodeIso()
-    }
-
     public async getLidsByPhoneNumbers(
         phoneNumbers: readonly string[]
     ): Promise<readonly SignalLidSyncResult[]> {
-        if (!this.connectionManager.isConnected() || !this.authClient.getCurrentCredentials()) {
+        if (
+            !this.deps.connectionManager.isConnected() ||
+            !this.deps.authClient.getCurrentCredentials()
+        ) {
             throw new Error('client is not connected')
         }
         const normalizedPhoneJids = new Array<string>(phoneNumbers.length)
@@ -757,7 +679,7 @@ export class WaClient extends EventEmitter {
         this.logger.trace('wa client query lids by phone numbers', {
             phones: normalizedPhoneJids.length
         })
-        return this.signalDeviceSync.queryLidsByPhoneJids(normalizedPhoneJids)
+        return this.deps.signalDeviceSync.queryLidsByPhoneJids(normalizedPhoneJids)
     }
 
     public sendMessage(
@@ -765,13 +687,13 @@ export class WaClient extends EventEmitter {
         content: WaSendMessageContent,
         options: WaSendMessageOptions = {}
     ): Promise<WaMessagePublishResult> {
-        return this.messageDispatch.sendMessage(to, content, options)
+        return this.deps.messageDispatch.sendMessage(to, content, options)
     }
 
     public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
-        await this.messageDispatch.syncSignalSession(jid, reasonIdentity)
+        await this.deps.messageDispatch.syncSignalSession(jid, reasonIdentity)
         if (reasonIdentity) {
-            this.trustedContactToken.reissueOnIdentityChange(jid).catch((err) =>
+            this.deps.trustedContactToken.reissueOnIdentityChange(jid).catch((err) =>
                 this.logger.warn('tc token reissue on identity change failed', {
                     jid,
                     message: toError(err).message
@@ -780,39 +702,42 @@ export class WaClient extends EventEmitter {
         }
     }
 
+    public get auth(): WaAuthClient {
+        return this.deps.authClient
+    }
     public get chat(): WaAppStateMutationCoordinator {
-        return this.chatCoordinator
+        return this.deps.chatCoordinator
     }
     public get group(): WaGroupCoordinator {
-        return this.groupCoordinator
+        return this.deps.groupCoordinator
     }
     public get status(): WaStatusCoordinator {
-        return this.statusCoordinator
+        return this.deps.statusCoordinator
     }
     public get broadcastList(): WaBroadcastListCoordinator {
-        return this.broadcastListCoordinator
+        return this.deps.broadcastListCoordinator
     }
     public get newsletter(): WaNewsletterCoordinator {
-        return this.newsletterCoordinator
+        return this.deps.newsletterCoordinator
     }
     public get privacy(): WaPrivacyCoordinator {
-        return this.privacyCoordinator
+        return this.deps.privacyCoordinator
     }
     public get profile(): WaProfileCoordinator {
-        return this.profileCoordinator
+        return this.deps.profileCoordinator
     }
     public get business(): WaBusinessCoordinator {
-        return this.businessCoordinator
+        return this.deps.businessCoordinator
     }
     public get bot(): WaBotCoordinator {
-        return this.botCoordinator
+        return this.deps.botCoordinator
     }
     public get email(): WaEmailCoordinator {
-        return this.emailCoordinator
+        return this.deps.emailCoordinator
     }
 
     public async logout(reason: WaLogoutReason = WA_LOGOUT_REASONS.USER_INITIATED): Promise<void> {
-        const meJid = this.authClient.getCurrentCredentials()?.meJid
+        const meJid = this.deps.authClient.getCurrentCredentials()?.meJid
         if (!meJid) {
             throw new Error('cannot logout: client is not authenticated')
         }
@@ -882,19 +807,11 @@ export class WaClient extends EventEmitter {
             id,
             listIds: rest.length > 0 ? rest : undefined
         }
-        return this.messageDispatch.sendReceipt(input)
-    }
-
-    public flushAppStateMutations(): Promise<void> {
-        return this.chatCoordinator.flushMutations()
-    }
-
-    public async exportAppState(): Promise<WaAppStateStoreData> {
-        return this.appStateSync.exportState()
+        return this.deps.messageDispatch.sendReceipt(input)
     }
 
     public async syncAppState(options: WaAppStateSyncOptions = {}): Promise<WaAppStateSyncResult> {
-        if (!this.connectionManager.isConnected()) {
+        if (!this.deps.connectionManager.isConnected()) {
             throw new Error('client is not connected')
         }
         const syncResult = await this.executeAppStateSync(options)
@@ -990,13 +907,13 @@ export class WaClient extends EventEmitter {
             return
         }
         if (mutation.operation === 'set' && nctAction.salt) {
-            this.trustedContactToken.handleNctSaltSync(nctAction.salt).catch((err) =>
+            this.deps.trustedContactToken.handleNctSaltSync(nctAction.salt).catch((err) =>
                 this.logger.warn('nct salt sync set failed', {
                     message: toError(err).message
                 })
             )
         } else if (mutation.operation === 'remove') {
-            this.trustedContactToken.handleNctSaltSync(null).catch((err) =>
+            this.deps.trustedContactToken.handleNctSaltSync(null).catch((err) =>
                 this.logger.warn('nct salt sync remove failed', {
                     message: toError(err).message
                 })
@@ -1014,7 +931,7 @@ export class WaClient extends EventEmitter {
                 `clear stored state aborted: write-behind did not fully drain (remaining=${writeBehindDestroy.remaining})`
             )
         }
-        const danglingReceipts = this.receiptQueue.take()
+        const danglingReceipts = this.deps.receiptQueue.take()
         if (danglingReceipts.length > 0) {
             this.logger.debug('cleared dangling receipts while clearing stored state', {
                 count: danglingReceipts.length
@@ -1025,21 +942,21 @@ export class WaClient extends EventEmitter {
         const shouldClear = (key: keyof NonNullable<typeof s>): boolean =>
             s === undefined || s[key] !== false
 
-        if (shouldClear('auth')) await this.authClient.clearStoredCredentials()
-        if (shouldClear('appState')) await this.appStateStore.clear()
-        if (shouldClear('contacts')) await this.contactStore.clear()
-        if (shouldClear('messages')) await this.messageStore.clear()
-        if (shouldClear('messageSecret')) await this.messageSecretStore.clear()
-        if (shouldClear('groupMetadata')) await this.groupMetadataStore.clear()
-        if (shouldClear('deviceList')) await this.deviceListStore.clear()
-        if (shouldClear('retry')) await this.retryStore.clear()
-        if (shouldClear('signal')) await this.signalStore.clear()
-        if (shouldClear('preKey')) await this.preKeyStore.clear()
-        if (shouldClear('session')) await this.sessionStore.clear()
-        if (shouldClear('identity')) await this.identityStore.clear()
-        if (shouldClear('senderKey')) await this.senderKeyStore.clear()
-        if (shouldClear('threads')) await this.threadStore.clear()
-        if (shouldClear('privacyToken')) await this.privacyTokenStore.clear()
+        if (shouldClear('auth')) await this.deps.authClient.clearStoredCredentials()
+        if (shouldClear('appState')) await this.stores.appState.clear()
+        if (shouldClear('contacts')) await this.stores.contacts.clear()
+        if (shouldClear('messages')) await this.stores.messages.clear()
+        if (shouldClear('messageSecret')) await this.stores.messageSecret.clear()
+        if (shouldClear('groupMetadata')) await this.stores.groupMetadata.clear()
+        if (shouldClear('deviceList')) await this.stores.deviceList.clear()
+        if (shouldClear('retry')) await this.stores.retry.clear()
+        if (shouldClear('signal')) await this.stores.signal.clear()
+        if (shouldClear('preKey')) await this.stores.preKey.clear()
+        if (shouldClear('session')) await this.stores.session.clear()
+        if (shouldClear('identity')) await this.stores.identity.clear()
+        if (shouldClear('senderKey')) await this.stores.senderKey.clear()
+        if (shouldClear('threads')) await this.stores.threads.clear()
+        if (shouldClear('privacyToken')) await this.stores.privacyToken.clear()
     }
 
     private async tryDecryptAddon(event: WaIncomingMessageEvent): Promise<void> {
@@ -1054,8 +971,8 @@ export class WaClient extends EventEmitter {
 
         const parentEntry = await resolveParentMessageSecret(
             targetMessageId,
-            this.messageSecretStore,
-            this.messageStore
+            this.stores.messageSecret,
+            this.stores.messages
         )
         if (!parentEntry) {
             this.logger.debug('addon parent message secret not found', {
@@ -1086,7 +1003,7 @@ export class WaClient extends EventEmitter {
             const names = await resolvePollOptionNames(
                 decrypted.pollVote.selectedOptions,
                 targetMessageId,
-                this.messageStore
+                this.stores.messages
             )
             if (names) {
                 decrypted = { ...decrypted, selectedOptionNames: names }
@@ -1153,7 +1070,7 @@ export class WaClient extends EventEmitter {
         }
 
         const metaTargetSenderJid = metaNode?.attrs[WA_META_NODE_ATTRS_BOT.TARGET_SENDER_JID]
-        const credentials = this.authClient.getCurrentCredentials()
+        const credentials = this.deps.authClient.getCurrentCredentials()
         const isFbidBotChat = event.chatJid ? isBotJid(event.chatJid) : false
         // FBID bot (`*@bot`) keys on user LID; legacy PN bot keys on user PN
         const meFallbackJid = isFbidBotChat
@@ -1174,8 +1091,8 @@ export class WaClient extends EventEmitter {
 
         const parentEntry = await resolveParentMessageSecret(
             targetMessageId,
-            this.messageSecretStore,
-            this.messageStore
+            this.stores.messageSecret,
+            this.stores.messages
         )
         if (!parentEntry) {
             this.logger.debug('bot chunk parent message secret not found', {

@@ -36,8 +36,11 @@ function createGroupEvent(input: {
 test('device fanout resolver picks meLid only when recipient is lid', () => {
     const resolver = createDeviceFanoutResolver({
         signalDeviceSync: {} as never,
-        getCurrentMeJid: () => '551100000000:1@s.whatsapp.net',
-        getCurrentMeLid: () => '551100000000:1@lid',
+        getCurrentCredentials: () =>
+            ({
+                meJid: '551100000000:1@s.whatsapp.net',
+                meLid: '551100000000:1@lid'
+            }) as never,
         logger: createNoopLogger()
     })
 
@@ -73,8 +76,11 @@ test('device fanout resolver keeps hosted devices in direct fanout', async () =>
                 }
             ]
         } as never,
-        getCurrentMeJid: () => '551100000000:1@s.whatsapp.net',
-        getCurrentMeLid: () => '551100000000:1@lid',
+        getCurrentCredentials: () =>
+            ({
+                meJid: '551100000000:1@s.whatsapp.net',
+                meLid: '551100000000:1@lid'
+            }) as never,
         logger: createNoopLogger()
     })
 
@@ -103,8 +109,7 @@ test('device fanout resolver excludes hosted devices in group fanout', async () 
                 }
             ]
         } as never,
-        getCurrentMeJid: () => '551100000000:1@s.whatsapp.net',
-        getCurrentMeLid: () => null,
+        getCurrentCredentials: () => ({ meJid: '551100000000:1@s.whatsapp.net' }) as never,
         logger: createNoopLogger()
     })
 
@@ -307,8 +312,7 @@ test('app-state sync key protocol requests keys from peer devices and dedupes ke
                 '551100000000:3@s.whatsapp.net'
             ]
         } as never,
-        getCurrentMeJid: () => '551100000000:1@s.whatsapp.net',
-        getCurrentMeLid: () => null,
+        getCurrentCredentials: () => ({ meJid: '551100000000:1@s.whatsapp.net' }) as never,
         logger: createNoopLogger()
     })
 

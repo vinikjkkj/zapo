@@ -1,3 +1,4 @@
+import type { WaAuthCredentials } from '@auth/types'
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { isHostedDeviceJid, normalizeDeviceJid, splitJid, toUserJid } from '@protocol/jid'
@@ -25,11 +26,10 @@ export type DeviceFanoutResolver = {
 
 export function createDeviceFanoutResolver(options: {
     readonly signalDeviceSync: SignalDeviceSyncApi
-    readonly getCurrentMeJid: () => string | null | undefined
-    readonly getCurrentMeLid: () => string | null | undefined
+    readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly logger: Logger
 }): DeviceFanoutResolver {
-    const { signalDeviceSync, getCurrentMeJid, getCurrentMeLid, logger } = options
+    const { signalDeviceSync, getCurrentCredentials, logger } = options
     const dedup = new PromiseDedup()
 
     const resolveDirectFanoutDeviceJids = async (
@@ -83,7 +83,8 @@ export function createDeviceFanoutResolver(options: {
         participantUserJids: readonly string[]
     ): Promise<readonly string[]> => {
         const meDeviceJids = new Set<string>()
-        const meJid = getCurrentMeJid()
+        const credentials = getCurrentCredentials()
+        const meJid = credentials?.meJid
         if (meJid) {
             try {
                 meDeviceJids.add(normalizeDeviceJid(meJid))
@@ -95,7 +96,7 @@ export function createDeviceFanoutResolver(options: {
             }
         }
 
-        const meLid = getCurrentMeLid()
+        const meLid = credentials?.meLid
         if (meLid && meLid.includes('@')) {
             try {
                 meDeviceJids.add(normalizeDeviceJid(meLid))
@@ -172,7 +173,8 @@ export function createDeviceFanoutResolver(options: {
     }
 
     const resolveOwnPeerDeviceJids = async (): Promise<readonly string[]> => {
-        const meJid = getCurrentMeJid()
+        const credentials = getCurrentCredentials()
+        const meJid = credentials?.meJid
         if (!meJid) {
             throw new Error('resolveOwnPeerDeviceJids requires registered meJid')
         }
@@ -180,7 +182,7 @@ export function createDeviceFanoutResolver(options: {
         const meDevices = new Set<string>()
         meDevices.add(normalizeDeviceJid(meJid))
 
-        const meLid = getCurrentMeLid()
+        const meLid = credentials?.meLid
         if (meLid && meLid.includes('@')) {
             try {
                 meDevices.add(normalizeDeviceJid(meLid))

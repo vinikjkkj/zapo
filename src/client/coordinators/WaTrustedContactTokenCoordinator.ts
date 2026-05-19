@@ -1,3 +1,4 @@
+import type { WaAuthCredentials } from '@auth/types'
 import type { ParsedPrivacyToken } from '@client/events/privacy-token'
 import { CsTokenGenerator } from '@client/tokens/cs-token'
 import { clampDuration, isTokenExpired, shouldSendNewToken } from '@client/tokens/tc-token'
@@ -28,7 +29,7 @@ type WaTrustedContactTokenRuntime = {
         event: K,
         ...args: Parameters<WaClientEventMap[K]>
     ) => void
-    readonly getCurrentMeLid: () => string | null
+    readonly getCurrentCredentials: () => WaAuthCredentials | null
 }
 
 interface WaTrustedContactTokenConfig {
@@ -127,7 +128,7 @@ export class WaTrustedContactTokenCoordinator {
             return null
         }
 
-        const meLid = this.runtime.getCurrentMeLid()
+        const meLid = this.runtime.getCurrentCredentials()?.meLid
         if (!meLid) {
             return null
         }

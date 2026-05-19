@@ -205,9 +205,7 @@ function createPlaceholderHarness(): PlaceholderHarness {
         signalMissingPreKeysSync: {} as never,
         messageClient: {} as never,
         sendNode: async () => undefined,
-        getCurrentMeJid: () => null,
-        getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null,
+        getCurrentCredentials: () => null,
         peerDataOperation,
         emitIncomingMessage: (event) => emitted.push(event)
     })
@@ -395,9 +393,7 @@ test('retry coordinator serializes outbound receipt tracking per message id', as
         signalMissingPreKeysSync: {} as never,
         messageClient: {} as never,
         sendNode: async () => undefined,
-        getCurrentMeJid: () => null,
-        getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null
+        getCurrentCredentials: () => null
     })
 
     const deliveryTracking = coordinator.trackOutboundReceipt(buildReceiptNode('msg-1', 'delivery'))

@@ -10,11 +10,13 @@ import { WaPrivacyTokenMemoryStore } from '@store/memory/privacy-token.store'
 import type { BinaryNode } from '@transport/types'
 
 function createRuntime(options?: {
-    readonly getCurrentMeLid?: () => string | null
+    readonly meLid?: string | null
     readonly queryDelayMs?: number
 }) {
     const queries: { readonly context: string; readonly node: BinaryNode }[] = []
     const emitted: { readonly event: keyof WaClientEventMap; readonly payload: unknown }[] = []
+
+    const meLid = options?.meLid === undefined ? '551199999999:0@lid' : options.meLid
 
     const runtime = {
         queryWithContext: async (context: string, node: BinaryNode) => {
@@ -30,7 +32,7 @@ function createRuntime(options?: {
             event: K,
             ...args: Parameters<WaClientEventMap[K]>
         ) => void,
-        getCurrentMeLid: options?.getCurrentMeLid ?? (() => '551199999999:0@lid')
+        getCurrentCredentials: () => (meLid ? ({ meLid } as never) : null)
     }
 
     return {

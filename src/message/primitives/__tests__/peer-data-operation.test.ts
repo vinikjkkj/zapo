@@ -40,7 +40,7 @@ function createHarness(opts?: {
             published.push({ deviceJid, protocolMessage, id })
             return { id } as WaMessagePublishResult
         },
-        getCurrentMeJid: () => '5511920387975:0@s.whatsapp.net',
+        getCurrentCredentials: () => ({ meJid: '5511920387975:0@s.whatsapp.net' }) as never,
         generateOutgoingMessageId: async () => {
             const id = `msg-${counter}`
             counter += 1

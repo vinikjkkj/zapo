@@ -1,8 +1,9 @@
+import type { WaAuthCredentials } from '@auth/types'
 import type { Logger } from '@infra/log/types'
 import { wrapDeviceSentMessage } from '@message/encode/device-sent'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
 import type { WaMessageClient } from '@message/WaMessageClient'
-import { proto, type Proto } from '@proto'
+import { proto } from '@proto'
 import { WA_DEFAULTS, WA_NODE_TAGS } from '@protocol/constants'
 import {
     isGroupOrBroadcastJid,
@@ -30,9 +31,7 @@ export interface WaRetryReplayServiceOptions {
     readonly logger: Logger
     readonly messageClient: WaMessageClient
     readonly signalProtocol: SignalProtocol
-    readonly getCurrentMeJid: () => string | null | undefined
-    readonly getCurrentMeLid: () => string | null | undefined
-    readonly getCurrentSignedIdentity: () => Proto.IADVSignedDeviceIdentity | null | undefined
+    readonly getCurrentCredentials: () => WaAuthCredentials | null
 }
 
 export type WaRetryResendResult = 'resent' | 'ineligible'
@@ -137,7 +136,7 @@ export class WaRetryReplayService {
         let deviceIdentity: Uint8Array | undefined
 
         if (encrypted.type === 'pkmsg') {
-            const signedIdentity = this.options.getCurrentSignedIdentity()
+            const signedIdentity = this.options.getCurrentCredentials()?.signedIdentity
             if (!signedIdentity) {
                 this.options.logger.warn(
                     'retry request rejected: missing signed identity for pkmsg group retry'
@@ -247,12 +246,11 @@ export class WaRetryReplayService {
 
     private isRequesterCurrentAccount(requesterJid: string): boolean {
         const requesterUser = toUserJid(requesterJid)
-        const meJid = this.options.getCurrentMeJid()
-        if (meJid && toUserJid(meJid) === requesterUser) {
+        const credentials = this.options.getCurrentCredentials()
+        if (credentials?.meJid && toUserJid(credentials.meJid) === requesterUser) {
             return true
         }
-        const meLid = this.options.getCurrentMeLid()
-        if (meLid && toUserJid(meLid) === requesterUser) {
+        if (credentials?.meLid && toUserJid(credentials.meLid) === requesterUser) {
             return true
         }
         return false

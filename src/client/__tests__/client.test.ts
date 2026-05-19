@@ -477,83 +477,87 @@ function createClearStoredStateHarness(logoutStoreClear?: {
         writeBehind: {
             destroy: async () => ({ remaining: 0 })
         },
-        receiptQueue: {
-            take: () => []
-        },
         logger: createNoopLogger(),
-        authClient: {
-            clearStoredCredentials: async () => {
-                cleared.push('auth')
+        deps: {
+            receiptQueue: {
+                take: () => []
+            },
+            authClient: {
+                clearStoredCredentials: async () => {
+                    cleared.push('auth')
+                }
             }
         },
-        appStateStore: {
-            clear: async () => {
-                cleared.push('appState')
-            }
-        },
-        contactStore: {
-            clear: async () => {
-                cleared.push('contacts')
-            }
-        },
-        messageStore: {
-            clear: async () => {
-                cleared.push('messages')
-            }
-        },
-        groupMetadataStore: {
-            clear: async () => {
-                cleared.push('groupMetadata')
-            }
-        },
-        deviceListStore: {
-            clear: async () => {
-                cleared.push('deviceList')
-            }
-        },
-        retryStore: {
-            clear: async () => {
-                cleared.push('retry')
-            }
-        },
-        signalStore: {
-            clear: async () => {
-                cleared.push('signal')
-            }
-        },
-        preKeyStore: {
-            clear: async () => {
-                cleared.push('preKey')
-            }
-        },
-        sessionStore: {
-            clear: async () => {
-                cleared.push('session')
-            }
-        },
-        identityStore: {
-            clear: async () => {
-                cleared.push('identity')
-            }
-        },
-        senderKeyStore: {
-            clear: async () => {
-                cleared.push('senderKey')
-            }
-        },
-        threadStore: {
-            clear: async () => {
-                cleared.push('threads')
-            }
-        },
-        privacyTokenStore: {
-            clear: async () => {
-                cleared.push('privacyToken')
-            }
-        },
-        messageSecretStore: {
-            clear: async () => {
-                cleared.push('messageSecret')
+        stores: {
+            appState: {
+                clear: async () => {
+                    cleared.push('appState')
+                }
+            },
+            contacts: {
+                clear: async () => {
+                    cleared.push('contacts')
+                }
+            },
+            messages: {
+                clear: async () => {
+                    cleared.push('messages')
+                }
+            },
+            groupMetadata: {
+                clear: async () => {
+                    cleared.push('groupMetadata')
+                }
+            },
+            deviceList: {
+                clear: async () => {
+                    cleared.push('deviceList')
+                }
+            },
+            retry: {
+                clear: async () => {
+                    cleared.push('retry')
+                }
+            },
+            signal: {
+                clear: async () => {
+                    cleared.push('signal')
+                }
+            },
+            preKey: {
+                clear: async () => {
+                    cleared.push('preKey')
+                }
+            },
+            session: {
+                clear: async () => {
+                    cleared.push('session')
+                }
+            },
+            identity: {
+                clear: async () => {
+                    cleared.push('identity')
+                }
+            },
+            senderKey: {
+                clear: async () => {
+                    cleared.push('senderKey')
+                }
+            },
+            threads: {
+                clear: async () => {
+                    cleared.push('threads')
+                }
+            },
+            privacyToken: {
+                clear: async () => {
+                    cleared.push('privacyToken')
+                }
+            },
+            messageSecret: {
+                clear: async () => {
+                    cleared.push('messageSecret')
+                }
             }
         }
     }
@@ -588,14 +592,16 @@ test('WaClient.sendPresence sends a presence node without auto-generated id', as
 
     await getSendPresenceMethod().call(
         {
-            authClient: {
-                getCurrentCredentials: () => ({
-                    meDisplayName: 'Vinicius'
-                })
-            },
-            nodeOrchestrator: {
-                sendNode: async (node: BinaryNode, autoId?: boolean) => {
-                    calls.push({ node, autoId })
+            deps: {
+                authClient: {
+                    getCurrentCredentials: () => ({
+                        meDisplayName: 'Vinicius'
+                    })
+                },
+                nodeOrchestrator: {
+                    sendNode: async (node: BinaryNode, autoId?: boolean) => {
+                        calls.push({ node, autoId })
+                    }
                 }
             }
         },
@@ -621,9 +627,11 @@ test('WaClient exposes chat/group/privacy coordinator getters', () => {
     const groupCoordinator = { queryGroupMetadata: async () => ({}) }
     const privacyCoordinator = { getPrivacySettings: async () => ({}) }
     const fakeClient = {
-        chatCoordinator,
-        groupCoordinator,
-        privacyCoordinator
+        deps: {
+            chatCoordinator,
+            groupCoordinator,
+            privacyCoordinator
+        }
     }
 
     assert.equal(getCoordinatorGetterMethod('chat').call(fakeClient), chatCoordinator)

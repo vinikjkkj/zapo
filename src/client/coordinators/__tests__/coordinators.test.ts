@@ -93,7 +93,7 @@ function createGroupEvent(input: {
 function createMessageDispatchCoordinator(
     groupMetadataStore: WaGroupMetadataMemoryStore,
     overrides?: {
-        readonly getCurrentMeJid?: () => string | null
+        readonly meJid?: string
         readonly mobileMessageIdFormat?: boolean
     }
 ): WaMessageDispatchCoordinator {
@@ -121,9 +121,8 @@ function createMessageDispatchCoordinator(
         messageSecretStore: {
             set: async (_id: string, _entry: { secret: Uint8Array; senderJid: string }) => {}
         } as never,
-        getCurrentMeJid: overrides?.getCurrentMeJid ?? (() => null),
-        getCurrentMeLid: () => null,
-        getCurrentSignedIdentity: () => null,
+        getCurrentCredentials: () =>
+            overrides?.meJid ? ({ meJid: overrides.meJid } as never) : null,
         resolvePrivacyTokenNode: async () => null,
         onDirectMessageSent: () => undefined,
         mobileMessageIdFormat: overrides?.mobileMessageIdFormat
@@ -717,7 +716,7 @@ test('message dispatch coordinator handles linked and modify participant cache e
 test('mobile message id format: AC + 30 hex chars uppercase', async () => {
     const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
     const coordinator = createMessageDispatchCoordinator(groupMetadataStore, {
-        getCurrentMeJid: () => '5596965746475@s.whatsapp.net',
+        meJid: '5596965746475@s.whatsapp.net',
         mobileMessageIdFormat: true
     })
     const gen = coordinator as unknown as {
@@ -736,7 +735,7 @@ test('mobile message id format: AC + 30 hex chars uppercase', async () => {
 test('web message id format stays 3EB0 + 18 hex chars when mobile flag unset', async () => {
     const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
     const coordinator = createMessageDispatchCoordinator(groupMetadataStore, {
-        getCurrentMeJid: () => '5596965746475@s.whatsapp.net'
+        meJid: '5596965746475@s.whatsapp.net'
     })
     const gen = coordinator as unknown as {
         generateOutgoingMessageId(): Promise<string>

@@ -1,3 +1,4 @@
+import type { WaAuthCredentials } from '@auth/types'
 import type { PublishProtocolMessageToDeviceFn } from '@client/messaging/key-protocol'
 import type { WaIncomingProtocolMessageEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
@@ -8,7 +9,7 @@ import { setBoundedMapEntry } from '@util/collections'
 export interface PeerDataOperationRequesterOptions {
     readonly logger: Logger
     readonly publishProtocolMessageToDevice: PublishProtocolMessageToDeviceFn
-    readonly getCurrentMeJid: () => string | null | undefined
+    readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly generateOutgoingMessageId: () => Promise<string>
     readonly subscribeToProtocolMessage: (
         handler: (event: WaIncomingProtocolMessageEvent) => void
@@ -61,7 +62,7 @@ export function createPeerDataOperationRequester(
     const {
         logger,
         publishProtocolMessageToDevice,
-        getCurrentMeJid,
+        getCurrentCredentials,
         generateOutgoingMessageId,
         subscribeToProtocolMessage
     } = options
@@ -108,7 +109,7 @@ export function createPeerDataOperationRequester(
         body: Proto.Message.IPeerDataOperationRequestMessage,
         id: string
     ): Promise<string> => {
-        const meJid = getCurrentMeJid()
+        const meJid = getCurrentCredentials()?.meJid
         if (!meJid) {
             throw new Error('peer data operation requires current me jid')
         }
