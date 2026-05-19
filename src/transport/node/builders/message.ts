@@ -15,10 +15,7 @@ type DirectMessageFanoutInput = {
     readonly edit?: string
     readonly participants: readonly EncryptedParticipant[]
     readonly deviceIdentity?: Uint8Array
-    readonly reportingNode?: BinaryNode
-    readonly privacyTokenNode?: BinaryNode
-    readonly metaNode?: BinaryNode
-    readonly buttonAddonNode?: BinaryNode
+    readonly customNodes?: readonly BinaryNode[]
     readonly mediatype?: string
 }
 
@@ -119,10 +116,7 @@ function pushOptionalNodes(
     content: BinaryNode[],
     input: {
         readonly deviceIdentity?: Uint8Array
-        readonly reportingNode?: BinaryNode
-        readonly privacyTokenNode?: BinaryNode
-        readonly metaNode?: BinaryNode
-        readonly buttonAddonNode?: BinaryNode
+        readonly customNodes?: readonly BinaryNode[]
         readonly botParticipants?: readonly EncryptedParticipant[]
         readonly mediatype?: string
     }
@@ -134,8 +128,10 @@ function pushOptionalNodes(
             content: input.deviceIdentity
         })
     }
-    if (input.metaNode) {
-        content.push(input.metaNode)
+    if (input.customNodes) {
+        for (const node of input.customNodes) {
+            content.push(node)
+        }
     }
     if (input.botParticipants && input.botParticipants.length > 0) {
         content.push({
@@ -143,15 +139,6 @@ function pushOptionalNodes(
             attrs: {},
             content: input.botParticipants.map((p) => buildEncryptedToNode(p, input.mediatype))
         })
-    }
-    if (input.reportingNode) {
-        content.push(input.reportingNode)
-    }
-    if (input.privacyTokenNode) {
-        content.push(input.privacyTokenNode)
-    }
-    if (input.buttonAddonNode) {
-        content.push(input.buttonAddonNode)
     }
 }
 

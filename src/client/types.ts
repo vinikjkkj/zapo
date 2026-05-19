@@ -185,6 +185,7 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
     readonly forward?: boolean | { readonly score?: number }
     readonly mentions?: readonly string[]
     readonly disableGroupEphemeralAutoInject?: boolean
+    readonly customNodes?: readonly BinaryNode[]
 }
 
 export interface WaClearChatOptions {

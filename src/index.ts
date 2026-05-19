@@ -171,6 +171,7 @@ export type {
 } from '@message/addons/link-preview/types'
 export type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 export type { WaAuthCredentials } from '@auth/types'
+export type { BinaryNode } from '@transport/types'
 export { ConsoleLogger } from '@infra/log/ConsoleLogger'
 export { PinoLogger, createPinoLogger } from '@infra/log/PinoLogger'
 export type { PinoLoggerOptions } from '@infra/log/PinoLogger'
