@@ -1,0 +1,14 @@
+name: setup node
+description: setup node 22, restore npm cache, run npm ci
+
+runs:
+    using: composite
+    steps:
+        - uses: actions/setup-node@v4
+          with:
+              node-version: 22
+              cache: npm
+
+        - name: install dependencies
+          run: npm ci
+          shell: bash
