@@ -142,20 +142,20 @@ export class WaClient extends EventEmitter {
     private readonly nodeTransport!: WaNodeTransport
     private readonly signalDeviceSync!: SignalDeviceSyncApi
     public readonly appStateSync!: WaAppStateSyncClient
-    public readonly chatCoordinator!: WaAppStateMutationCoordinator
+    private readonly chatCoordinator!: WaAppStateMutationCoordinator
     private readonly incomingNode!: WaIncomingNodeCoordinator
     public readonly mediaTransfer!: WaMediaTransferClient
-    public readonly messageDispatch!: WaMessageDispatchCoordinator
+    private readonly messageDispatch!: WaMessageDispatchCoordinator
     public readonly messageClient!: WaMessageClient
-    public readonly groupCoordinator!: WaGroupCoordinator
-    public readonly statusCoordinator!: WaStatusCoordinator
-    public readonly broadcastListCoordinator!: WaBroadcastListCoordinator
-    public readonly newsletterCoordinator!: WaNewsletterCoordinator
-    public readonly privacyCoordinator!: WaPrivacyCoordinator
-    public readonly profileCoordinator!: WaProfileCoordinator
-    public readonly businessCoordinator!: WaBusinessCoordinator
-    public readonly botCoordinator!: WaBotCoordinator
-    public readonly emailCoordinator!: WaEmailCoordinator
+    private readonly groupCoordinator!: WaGroupCoordinator
+    private readonly statusCoordinator!: WaStatusCoordinator
+    private readonly broadcastListCoordinator!: WaBroadcastListCoordinator
+    private readonly newsletterCoordinator!: WaNewsletterCoordinator
+    private readonly privacyCoordinator!: WaPrivacyCoordinator
+    private readonly profileCoordinator!: WaProfileCoordinator
+    private readonly businessCoordinator!: WaBusinessCoordinator
+    private readonly botCoordinator!: WaBotCoordinator
+    private readonly emailCoordinator!: WaEmailCoordinator
     private readonly passiveTasks!: WaPassiveTasksCoordinator
     private readonly keepAlive!: WaKeepAlive
     private readonly receiptQueue!: WaReceiptQueue

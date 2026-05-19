@@ -5,23 +5,89 @@ export type {
     WaClientProxyOptions,
     WaHistorySyncChunkEvent,
     WaHistorySyncOptions,
-    WaIncomingBaseEvent,
-    WaIncomingCallEvent,
-    WaIncomingChatstateEvent,
-    WaIncomingFailureEvent,
-    WaIncomingNotificationEvent,
-    WaIncomingPresenceEvent,
-    WaIncomingReceiptEvent,
-    WaIncomingStanzaFilter,
-    WaIncomingUnhandledStanzaEvent,
     WaWriteBehindOptions
 } from '@client/types'
 export type {
-    WaBlocklistResult,
-    WaPrivacyCoordinator,
-    WaPrivacyDisallowedListResult,
-    WaPrivacySettings
-} from '@client/coordinators/WaPrivacyCoordinator'
+    WaAccountEvent,
+    WaAccountTakeoverNoticeEvent,
+    WaBroadcastListMembershipEntry,
+    WaBusinessEvent,
+    WaBusinessEventAction,
+    WaBusinessProfileResult,
+    WaChatEvent,
+    WaChatEventAction,
+    WaChatEventSource,
+    WaConnectionEvent,
+    WaGroupEvent,
+    WaGroupEventAction,
+    WaGroupEventLinkedGroup,
+    WaGroupEventMembershipRequest,
+    WaGroupEventParticipant,
+    WaGroupEventSubgroupSuggestion,
+    WaIncomingAddonEvent,
+    WaIncomingBaseEvent,
+    WaIncomingBotChunkEvent,
+    WaIncomingCallEvent,
+    WaIncomingChatstateEvent,
+    WaIncomingFailureEvent,
+    WaIncomingMessageEvent,
+    WaIncomingNewsletterEvent,
+    WaIncomingNewsletterReactionEvent,
+    WaIncomingNodeHandler,
+    WaIncomingNodeHandlerRegistration,
+    WaIncomingNotificationEvent,
+    WaIncomingPresenceEvent,
+    WaIncomingProtocolMessageEvent,
+    WaIncomingReceiptEvent,
+    WaIncomingStanzaFilter,
+    WaIncomingUnhandledStanzaEvent,
+    WaOfflineResumeEvent,
+    WaPictureEvent,
+    WaPictureEventAction,
+    WaPrivacyTokenUpdateEvent,
+    WaRegistrationCodeEvent,
+    WaSendMessageOptions,
+    WaStatusPrivacyEntry,
+    WaVerifiedNameResult,
+    WaAddonKind,
+    WaNewsletterEventAction
+} from '@client/types'
+export type {
+    WaAppStateMutationCoordinator,
+    WaBroadcastListParticipant,
+    WaSetBroadcastListInput,
+    WaSetStatusPrivacyInput
+} from '@client/coordinators/WaAppStateMutationCoordinator'
+export type {
+    WaBotCoordinator,
+    WaBotInfo,
+    WaBotPromptOptions
+} from '@client/coordinators/WaBotCoordinator'
+export type {
+    WaBroadcastListCoordinator,
+    WaSendBroadcastListMessageInput
+} from '@client/coordinators/WaBroadcastListCoordinator'
+export type { WaBusinessCoordinator } from '@client/coordinators/WaBusinessCoordinator'
+export type { WaUploadMediaSource } from '@client/media'
+export type { WaEditBusinessProfileInput } from '@transport/node/builders/business'
+export type {
+    WaEmailCoordinator,
+    WaEmailStatus,
+    WaEmailVerifyCodeResult
+} from '@client/coordinators/WaEmailCoordinator'
+export type {
+    WaCommunityCreateOptions,
+    WaCommunitySubGroup,
+    WaCommunitySubGroupResult,
+    WaCommunitySubGroupsResult,
+    WaGroupCoordinator,
+    WaGroupCreateOptions,
+    WaGroupMetadata,
+    WaGroupParticipant,
+    WaLinkSubGroupsResult,
+    WaMembershipRequest,
+    WaUnlinkSubGroupsResult
+} from '@client/coordinators/WaGroupCoordinator'
 export type {
     WaNewsletterAdminInfo,
     WaNewsletterAdminInviteInput,
@@ -41,6 +107,7 @@ export type {
     WaNewsletterFollower,
     WaNewsletterFollowersOptions,
     WaNewsletterFollowersPage,
+    WaNewsletterInsightMetricRequest,
     WaNewsletterMetadata,
     WaNewsletterMexEnvelope,
     WaNewsletterMuteInput,
@@ -58,6 +125,51 @@ export type {
     WaNewsletterVotePollInput,
     WaPageInfo
 } from '@client/coordinators/WaNewsletterCoordinator'
+export type {
+    WaBlocklistResult,
+    WaPrivacyCoordinator,
+    WaPrivacyDisallowedListResult,
+    WaPrivacySettings
+} from '@client/coordinators/WaPrivacyCoordinator'
+export type {
+    WaDisappearingModeResult,
+    WaProfileCoordinator,
+    WaProfileInfo,
+    WaProfilePictureResult,
+    WaProfileStatusResult
+} from '@client/coordinators/WaProfileCoordinator'
+export type { WaProfilePictureType } from '@transport/node/builders/profile'
+export type {
+    WaSendStatusInput,
+    WaStatusCoordinator
+} from '@client/coordinators/WaStatusCoordinator'
+export type {
+    WaEncryptedMessageInput,
+    WaMessageAckMetadata,
+    WaMessagePublishOptions,
+    WaMessagePublishResult,
+    WaSendMediaMessage,
+    WaSendMessageContent,
+    WaSendReceiptEventOptions,
+    WaSendReceiptInput,
+    WaSendReceiptOptions,
+    WaSendStickerPackMessage,
+    WaSendStickerPackStickerInput,
+    WaSendStickerPackTrayIcon,
+    WaSendTextMessage
+} from '@message/types'
+export type { WaSendContextInfo } from '@message/context-info'
+export type {
+    WaLinkPreviewFetcher,
+    WaLinkPreviewOptions,
+    WaLinkPreviewOverride,
+    WaLinkPreviewResolved,
+    WaLinkPreviewThumbnailBytes,
+    WaLinkPreviewThumbnailInput,
+    WaLinkPreviewThumbnailStream,
+    WaLinkPreviewType
+} from '@message/addons/link-preview/types'
+export type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 export type { WaAuthCredentials } from '@auth/types'
 export { ConsoleLogger } from '@infra/log/ConsoleLogger'
 export { PinoLogger, createPinoLogger } from '@infra/log/PinoLogger'
@@ -89,15 +201,30 @@ export type {
     WaStoreSession,
     WaThreadStore
 } from '@store'
+export { delay } from '@util/async'
 export {
+    buildDeviceJid,
+    canonicalizeSignalJid,
+    canonicalizeSignalServer,
     getLoginIdentity,
     getWaCompanionPlatformId,
     getWaMediaHkdfInfo,
+    isBotJid,
+    isBroadcastJid,
     isGroupJid,
+    isGroupOrBroadcastJid,
+    isHostedDeviceId,
+    isHostedDeviceJid,
+    isHostedServer,
+    isLidJid,
+    isNewsletterJid,
+    isStatusBroadcastJid,
     normalizeDeviceJid,
     normalizeRecipientJid,
+    parseJidFull,
     parsePhoneJid,
     parseSignalAddressFromJid,
+    signalAddressKey,
     splitJid,
     toUserJid,
     WA_ACCOUNT_SYNC_PROTOCOLS,
@@ -134,5 +261,16 @@ export {
     WA_PRIVACY_VALUES,
     WA_XMLNS
 } from '@protocol'
-export type { WaPrivacyCategory, WaPrivacySettingName, WaPrivacyValue } from '@protocol'
+export type {
+    ParsedJid,
+    WaConnectionCode,
+    WaConnectionOpenReason,
+    WaDisconnectReason,
+    WaFailureReasonCode,
+    WaLogoutReason,
+    WaPrivacyCategory,
+    WaPrivacySettingName,
+    WaPrivacyValue,
+    WaStreamErrorCode
+} from '@protocol'
 export { proto } from '@proto'

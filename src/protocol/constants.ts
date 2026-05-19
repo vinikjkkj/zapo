@@ -13,6 +13,7 @@ export type {
     WaConnectionOpenReason,
     WaDisconnectReason,
     WaFailureReasonCode,
+    WaLogoutReason,
     WaStreamErrorCode
 } from '@protocol/stream'
 export { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
