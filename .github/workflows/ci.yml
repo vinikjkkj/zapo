@@ -18,207 +18,144 @@ concurrency:
 jobs:
     lint:
         runs-on: ubuntu-latest
+        timeout-minutes: 10
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: run lint
-              run: npm run lint
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - run: npm run lint
 
     format:
         runs-on: ubuntu-latest
+        timeout-minutes: 10
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: run format check
-              run: npm run format:check
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - run: npm run format:check
 
     typecheck:
         runs-on: ubuntu-latest
+        timeout-minutes: 10
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - run: npm run typecheck
 
-            - name: setup node
-              uses: actions/setup-node@v4
+    build-core:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+
+        steps:
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - run: npm run build
+            - uses: actions/upload-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: run typecheck
-              run: npm run typecheck
+                  name: core-build
+                  path: dist/
+                  retention-days: 1
+                  if-no-files-found: error
 
     typecheck-packages:
         runs-on: ubuntu-latest
+        timeout-minutes: 15
+        needs: build-core
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: build core
-              run: npm run build
-
-            - name: run package typecheck
-              run: npm run typecheck:packages
+                  name: core-build
+                  path: dist/
+            - run: npm run typecheck:packages
 
     test-core:
         runs-on: ubuntu-latest
+        timeout-minutes: 15
+        needs: build-core
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: build core
-              run: npm run build
-
-            - name: run core tests
-              run: npm test
+                  name: core-build
+                  path: dist/
+            - run: npm test
 
     test-fake-server:
         runs-on: ubuntu-latest
-        needs: test-core
+        timeout-minutes: 15
+        needs: build-core
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: build
-              run: npm run build && npx turbo run build --filter=@zapo-js/fake-server
-
-            - name: run fake-server tests
-              run: npm test -w packages/fake-server
+                  name: core-build
+                  path: dist/
+            - run: npx turbo run build --filter=@zapo-js/fake-server
+            - run: npm test -w packages/fake-server
 
     test-media-utils:
         runs-on: ubuntu-latest
-        needs: test-core
+        timeout-minutes: 15
+        needs: build-core
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
+                  name: core-build
+                  path: dist/
 
             - name: install ffmpeg and ffprobe
               run: |
                   sudo apt-get update
                   sudo apt-get install -y ffmpeg
-                  ffmpeg -version
-                  ffprobe -version
 
-            - name: install dependencies
-              run: npm ci
-
-            - name: build
-              run: npm run build && npx turbo run build --filter=@zapo-js/media-utils
-
-            - name: run media-utils tests
-              run: npm test -w packages/media-utils
+            - run: npx turbo run build --filter=@zapo-js/media-utils
+            - run: npm test -w packages/media-utils
 
     test-sqlite:
         runs-on: ubuntu-latest
-        needs: test-core
+        timeout-minutes: 15
+        needs: build-core
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: build
-              run: npm run build && npx turbo run build --filter=@zapo-js/store-sqlite
-
-            - name: run sqlite tests
-              run: npm test -w packages/store-sqlite
+                  name: core-build
+                  path: dist/
+            - run: npx turbo run build --filter=@zapo-js/store-sqlite
+            - run: npm test -w packages/store-sqlite
 
     test-mcp-server:
         runs-on: ubuntu-latest
-        needs: test-core
+        timeout-minutes: 15
+        needs: build-core
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: build
-              run: npm run build && npx turbo run build --filter=@zapo-js/fake-server --filter=@zapo-js/store-sqlite --filter=@zapo-js/mcp-server
-
-            - name: run mcp-server tests
-              run: npm test -w packages/mcp-server
+                  name: core-build
+                  path: dist/
+            - run: npx turbo run build --filter=@zapo-js/fake-server --filter=@zapo-js/store-sqlite --filter=@zapo-js/mcp-server
+            - run: npm test -w packages/mcp-server
 
     test-mysql:
         runs-on: ubuntu-latest
-        needs: test-core
+        timeout-minutes: 15
+        needs: build-core
 
         services:
             mysql:
@@ -234,23 +171,14 @@ jobs:
                     --health-retries=10
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: build
-              run: npm run build && npx turbo run build --filter=@zapo-js/store-mysql
-
-            - name: run mysql tests
-              run: npm test -w packages/store-mysql
+                  name: core-build
+                  path: dist/
+            - run: npx turbo run build --filter=@zapo-js/store-mysql
+            - run: npm test -w packages/store-mysql
               env:
                   ZAPO_TEST_MYSQL_HOST: localhost
                   ZAPO_TEST_MYSQL_PORT: '3306'
@@ -260,7 +188,8 @@ jobs:
 
     test-postgres:
         runs-on: ubuntu-latest
-        needs: test-core
+        timeout-minutes: 15
+        needs: build-core
 
         services:
             postgres:
@@ -276,23 +205,14 @@ jobs:
                     --health-retries=10
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: build
-              run: npm run build && npx turbo run build --filter=@zapo-js/store-postgres
-
-            - name: run postgres tests
-              run: npm test -w packages/store-postgres
+                  name: core-build
+                  path: dist/
+            - run: npx turbo run build --filter=@zapo-js/store-postgres
+            - run: npm test -w packages/store-postgres
               env:
                   ZAPO_TEST_PG_HOST: localhost
                   ZAPO_TEST_PG_PORT: '5432'
@@ -302,7 +222,8 @@ jobs:
 
     test-redis:
         runs-on: ubuntu-latest
-        needs: test-core
+        timeout-minutes: 15
+        needs: build-core
 
         services:
             redis:
@@ -315,30 +236,22 @@ jobs:
                     --health-retries=10
 
         steps:
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: build
-              run: npm run build && npx turbo run build --filter=@zapo-js/store-redis
-
-            - name: run redis tests
-              run: npm test -w packages/store-redis
+                  name: core-build
+                  path: dist/
+            - run: npx turbo run build --filter=@zapo-js/store-redis
+            - run: npm test -w packages/store-redis
               env:
                   ZAPO_TEST_REDIS_HOST: localhost
                   ZAPO_TEST_REDIS_PORT: '6379'
 
     test-mongo:
         runs-on: ubuntu-latest
-        needs: test-core
+        timeout-minutes: 15
+        needs: build-core
 
         steps:
             - name: start mongo replica set
@@ -348,23 +261,41 @@ jobs:
                     sleep 1
                   done
 
-            - name: checkout repository
-              uses: actions/checkout@v4
-
-            - name: setup node
-              uses: actions/setup-node@v4
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
               with:
-                  node-version: 22
-                  cache: npm
-
-            - name: install dependencies
-              run: npm ci
-
-            - name: build
-              run: npm run build && npx turbo run build --filter=@zapo-js/store-mongo
-
-            - name: run mongo tests
-              run: npm test -w packages/store-mongo
+                  name: core-build
+                  path: dist/
+            - run: npx turbo run build --filter=@zapo-js/store-mongo
+            - run: npm test -w packages/store-mongo
               env:
                   ZAPO_TEST_MONGO_HOST: localhost
                   ZAPO_TEST_MONGO_PORT: '27017'
+
+    all-checks:
+        name: all checks
+        if: always()
+        runs-on: ubuntu-latest
+        timeout-minutes: 1
+        needs:
+            - lint
+            - format
+            - typecheck
+            - build-core
+            - typecheck-packages
+            - test-core
+            - test-fake-server
+            - test-media-utils
+            - test-sqlite
+            - test-mcp-server
+            - test-mysql
+            - test-postgres
+            - test-redis
+            - test-mongo
+
+        steps:
+            - name: verify all needs succeeded
+              if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+              run: exit 1
+            - run: echo "all checks passed"
