@@ -2,7 +2,7 @@ name: pr-auto-label
 
 on:
     pull_request_target:
-        types: [opened, edited, synchronize]
+        types: [opened, edited, reopened]
 
 permissions:
     pull-requests: write
@@ -17,18 +17,37 @@ jobs:
             - uses: actions/github-script@v7
               with:
                   script: |
+                      const TYPES = ['feat', 'fix', 'perf', 'refactor', 'docs', 'test', 'chore', 'build', 'ci', 'style', 'deps', 'revert'];
+
                       const match = context.payload.pull_request.title.match(/^(\w+)(\([^)]+\))?(!)?:/);
                       if (!match) {
                           core.info('PR title is not conventional commit format, skipping');
                           return;
                       }
                       const [, type, , breaking] = match;
-                      const labels = [type];
-                      if (breaking) labels.push('breaking');
-                      await github.rest.issues.addLabels({
+
+                      if (!TYPES.includes(type)) {
+                          core.info(`Type '${type}' not in allow-list, skipping`);
+                          return;
+                      }
+
+                      const { data: current } = await github.rest.issues.listLabelsOnIssue({
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           issue_number: context.payload.pull_request.number,
-                          labels,
                       });
-                      core.info(`Applied: ${labels.join(', ')}`);
+
+                      const preserved = current
+                          .map(l => l.name)
+                          .filter(name => !TYPES.includes(name) && name !== 'breaking');
+
+                      const next = [type];
+                      if (breaking) next.push('breaking');
+
+                      await github.rest.issues.setLabels({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: context.payload.pull_request.number,
+                          labels: [...preserved, ...next],
+                      });
+                      core.info(`Applied: ${next.join(', ')}`);
