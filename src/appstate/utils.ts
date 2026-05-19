@@ -1,5 +1,5 @@
 import type { AppStateCollectionName, WaAppStateSyncKey } from '@appstate/types'
-import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
+import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { Proto } from '@proto'
 import { WA_APP_STATE_COLLECTIONS, WA_APP_STATE_KEY_TYPES } from '@protocol/constants'
 import { decodeProtoBytes } from '@util/bytes'

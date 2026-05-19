@@ -6,7 +6,7 @@ import type { ParsedPrivacyToken } from '@client/events/privacy-token'
 import type { WaClientEventMap } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import { WA_PRIVACY_TOKEN_TYPES } from '@protocol/privacy-token'
-import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
+import { WaPrivacyTokenMemoryStore } from '@store/memory/privacy-token.store'
 import type { BinaryNode } from '@transport/types'
 
 function createRuntime(options?: {

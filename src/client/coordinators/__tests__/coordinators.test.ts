@@ -16,8 +16,8 @@ import {
     WA_DISCONNECT_REASONS,
     WA_STREAM_SIGNALING
 } from '@protocol/constants'
-import { WaGroupMetadataMemoryStore } from '@store/providers/memory/group-metadata.store'
-import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
+import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
+import { WaMessageMemoryStore } from '@store/memory/message.store'
 import type { BinaryNode } from '@transport/types'
 
 function createIncomingRuntime() {

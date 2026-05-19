@@ -8,8 +8,8 @@ import {
 import type { WaBusinessProfileResult, WaVerifiedNameResult } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { PPS_UPLOAD_PATHS } from '@media/constants'
+import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { WaMediaConn } from '@media/types'
-import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import { WA_BUSINESS_NOTIFICATION_TAGS } from '@protocol/notification'
 import {
     buildCoverPhotoIq,

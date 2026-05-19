@@ -1,6 +1,6 @@
 import { hkdfSplit, toRawPubKey, toSerializedPubKey, X25519 } from '@crypto'
 import { SIGNAL_PREFIX, WHISPER_RATCHET_INFO, WHISPER_TEXT_INFO } from '@signal/constants'
-import { decodeSignalSessionSnapshot, encodeSignalSessionSnapshot } from '@signal/encoding'
+import { decodeSignalSessionSnapshot, encodeSignalSessionSnapshot } from '@signal/session/encoding'
 import type {
     RawSignalRecvChain,
     RawSignalSessionSnapshot,

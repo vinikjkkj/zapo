@@ -1,5 +1,5 @@
 import type { WaStoredMessageRecord } from '@store/contracts/message.store'
-import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
+import { WaMessageMemoryStore } from '@store/memory/message.store'
 import { toError } from '@util/primitives'
 
 import {

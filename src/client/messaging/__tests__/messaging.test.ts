@@ -7,7 +7,7 @@ import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
-import { WaGroupMetadataMemoryStore } from '@store/providers/memory/group-metadata.store'
+import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
 
 function createGroupEvent(input: {
     readonly action: WaGroupEventAction

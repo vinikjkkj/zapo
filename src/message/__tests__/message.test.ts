@@ -8,23 +8,19 @@ import type {
 } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import {
-    describeAckNode,
-    isAckOrReceiptNode,
-    isNegativeAckNode,
-    isRetryableNegativeAck
-} from '@message/ack'
-import {
     buildAddonAdditionalData,
     decryptAddonPayload,
     encryptAddonPayload
-} from '@message/addon-crypto'
+} from '@message/crypto/addon-crypto'
+import { computeDeviceKeyHash, injectDeviceListMetadata } from '@message/crypto/icdc'
+import { computePhashV2 } from '@message/crypto/phash'
+import { buildReportingTokenArtifacts } from '@message/crypto/reporting-token'
 import {
-    attachBotMetadata,
-    decryptBotChunk,
-    deriveBotChunkKey,
-    extractInvokedBotJid,
-    genBotMsgSecret
-} from '@message/bot'
+    assertMessageSecret,
+    createUseCaseSecret,
+    ensureMessageSecret,
+    WA_USE_CASE_SECRET_MODIFICATION_TYPES
+} from '@message/crypto/use-case-secret'
 import {
     isSendMediaMessage,
     needsSecretPersistence,
@@ -33,19 +29,23 @@ import {
     resolveEncMediaType,
     resolveMessageTypeAttr,
     resolveMetaAttrs
-} from '@message/content'
-import { unwrapDeviceSentMessage, wrapDeviceSentMessage } from '@message/device-sent'
-import { computeDeviceKeyHash, injectDeviceListMetadata } from '@message/icdc'
-import { processIncomingNewsletterMessage } from '@message/newsletter'
-import { unpadPkcs7, writeRandomPadMax16 } from '@message/padding'
-import { computePhashV2 } from '@message/phash'
-import { buildReportingTokenArtifacts } from '@message/reporting-token'
+} from '@message/encode/content'
+import { unwrapDeviceSentMessage, wrapDeviceSentMessage } from '@message/encode/device-sent'
+import { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
 import {
-    assertMessageSecret,
-    createUseCaseSecret,
-    ensureMessageSecret,
-    WA_USE_CASE_SECRET_MODIFICATION_TYPES
-} from '@message/use-case-secret'
+    attachBotMetadata,
+    decryptBotChunk,
+    deriveBotChunkKey,
+    extractInvokedBotJid,
+    genBotMsgSecret
+} from '@message/kinds/bot'
+import { processIncomingNewsletterMessage } from '@message/kinds/newsletter'
+import {
+    describeAckNode,
+    isAckOrReceiptNode,
+    isNegativeAckNode,
+    isRetryableNegativeAck
+} from '@message/primitives/ack'
 import { proto } from '@proto'
 
 test('ack helpers classify receipt and retryability correctly', () => {

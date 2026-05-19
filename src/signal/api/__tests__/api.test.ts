@@ -24,10 +24,10 @@ import {
     generateRegistrationInfo,
     generateSignedPreKey
 } from '@signal/registration/keygen'
-import { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
-import { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
-import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
-import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
+import { WaDeviceListMemoryStore } from '@store/memory/device-list.store'
+import { WaIdentityMemoryStore } from '@store/memory/identity.store'
+import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
+import { WaSignalMemoryStore } from '@store/memory/signal.store'
 import type { BinaryNode } from '@transport/types'
 import { concatBytes, intToBytes } from '@util/bytes'
 

@@ -1,4 +1,4 @@
-import { createUnhandledIncomingNodeEvent } from '@client/incoming'
+import { createUnhandledIncomingNodeEvent } from '@client/events/incoming'
 import type {
     WaGroupEvent,
     WaGroupEventLinkedGroup,

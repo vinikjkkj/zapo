@@ -4,18 +4,18 @@ import test from 'node:test'
 import { toSerializedPubKey, X25519 } from '@crypto'
 import { proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
+import { decodeStoreCount, toSignalAddressParts } from '@signal/encoding'
 import {
     decodeSenderKeyDistributionRow,
     decodeSenderKeyRecord,
+    encodeSenderKeyRecord
+} from '@signal/group/encoding'
+import {
     decodeSignalPreKeyRow,
     decodeSignalRegistrationRow,
-    decodeSignalSessionRecord,
-    decodeSignalSignedPreKeyRow,
-    decodeStoreCount,
-    encodeSenderKeyRecord,
-    encodeSignalSessionRecord,
-    toSignalAddressParts
-} from '@signal/encoding'
+    decodeSignalSignedPreKeyRow
+} from '@signal/registration/encoding'
+import { decodeSignalSessionRecord, encodeSignalSessionRecord } from '@signal/session/encoding'
 import type { SignalAddress, SignalSessionRecord } from '@signal/types'
 
 function makeBytes(length: number, seed = 0): Uint8Array {

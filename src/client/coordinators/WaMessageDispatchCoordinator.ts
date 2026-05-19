@@ -8,7 +8,17 @@ import { md5Bytes } from '@crypto/core/primitives'
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { ensureMessageSecret } from '@message'
-import { buildBotInvokeProtoCopy, extractInvokedBotJid, genBotMsgSecret } from '@message/bot'
+import {
+    applyContextInfo,
+    resolveSendContextInfo,
+    type WaSendContextInfo
+} from '@message/context-info'
+import { type IcdcMeta, injectDeviceListMetadata, resolveIcdcMeta } from '@message/crypto/icdc'
+import { computePhashV2 } from '@message/crypto/phash'
+import {
+    buildReportingTokenArtifacts,
+    type BuildReportingTokenArtifactsResult
+} from '@message/crypto/reporting-token'
 import {
     isSendMediaMessage,
     isSendTextMessage,
@@ -18,20 +28,10 @@ import {
     resolveEncMediaType,
     resolveMessageTypeAttr,
     resolveMetaAttrs
-} from '@message/content'
-import {
-    applyContextInfo,
-    resolveSendContextInfo,
-    type WaSendContextInfo
-} from '@message/context-info'
-import { wrapDeviceSentMessage } from '@message/device-sent'
-import { type IcdcMeta, injectDeviceListMetadata, resolveIcdcMeta } from '@message/icdc'
-import { writeRandomPadMax16 } from '@message/padding'
-import { computePhashV2 } from '@message/phash'
-import {
-    buildReportingTokenArtifacts,
-    type BuildReportingTokenArtifactsResult
-} from '@message/reporting-token'
+} from '@message/encode/content'
+import { wrapDeviceSentMessage } from '@message/encode/device-sent'
+import { writeRandomPadMax16 } from '@message/encode/padding'
+import { buildBotInvokeProtoCopy, extractInvokedBotJid, genBotMsgSecret } from '@message/kinds/bot'
 import type {
     WaEncryptedMessageInput,
     WaMessageBuildResult,

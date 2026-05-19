@@ -22,7 +22,7 @@ import {
     decodeSignalSessionSnapshot,
     encodeSignalRecvChain,
     encodeSignalSessionSnapshot
-} from '@signal/encoding'
+} from '@signal/session/encoding'
 import {
     calculateRatchet,
     generateSerializedKeyPair,

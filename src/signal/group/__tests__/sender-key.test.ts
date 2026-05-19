@@ -9,7 +9,7 @@ import { deriveSenderKeyMsgKey, selectMessageKey } from '@signal/group/SenderKey
 import { parseDistributionPayload, parseSenderKeyMessage } from '@signal/group/SenderKeyCodec'
 import { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import type { SenderKeyRecord, SignalAddress } from '@signal/types'
-import { SenderKeyMemoryStore } from '@store/providers/memory/sender-key.store'
+import { SenderKeyMemoryStore } from '@store/memory/sender-key.store'
 import { concatBytes } from '@util/bytes'
 
 function makeBytes(length: number, seed = 0): Uint8Array {

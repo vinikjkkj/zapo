@@ -7,7 +7,7 @@ import {
     createIncomingNotificationHandler,
     createIncomingReceiptHandler,
     createIncomingRegistrationNotificationHandler
-} from '@client/incoming'
+} from '@client/events/incoming'
 import type {
     WaAccountTakeoverNoticeEvent,
     WaBusinessEvent,

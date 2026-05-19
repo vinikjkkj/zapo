@@ -12,8 +12,8 @@ import type {
     WaNewsletterViewReceiptInput,
     WaNewsletterVotePollInput
 } from '@client/newsletter/types'
+import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { WaMediaConn } from '@media/types'
-import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
 import type { WaSendContextInfo } from '@message/context-info'
 import type {
     WaMessagePublishOptions,

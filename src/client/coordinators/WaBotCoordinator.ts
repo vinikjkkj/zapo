@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 
 import type { WaSendMessageOptions } from '@client/types'
-import { attachBotMetadata, attachBotThread } from '@message/bot'
 import { applyContextInfo } from '@message/context-info'
+import { attachBotMetadata, attachBotThread } from '@message/kinds/bot'
 import type {
     WaMessageBuildResult,
     WaMessagePublishResult,

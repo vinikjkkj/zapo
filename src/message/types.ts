@@ -1,7 +1,7 @@
 import type { Readable } from 'node:stream'
 
+import type { WaLinkPreviewOverride } from '@message/addons/link-preview/types'
 import type { WaSendContextInfo } from '@message/context-info'
-import type { WaLinkPreviewOverride } from '@message/link-preview/types'
 import type { Proto } from '@proto'
 import type { WaOutboundReceiptType } from '@protocol/message'
 import type { BinaryNode } from '@transport/types'

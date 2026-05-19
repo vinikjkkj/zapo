@@ -9,8 +9,8 @@ import {
     generateSignedPreKey
 } from '@signal/registration/keygen'
 import { createAndStoreInitialKeys } from '@signal/registration/utils'
-import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
-import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
+import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
+import { WaSignalMemoryStore } from '@store/memory/signal.store'
 
 test('registration id generation stays within expected signal range', async () => {
     for (let index = 0; index < 32; index += 1) {

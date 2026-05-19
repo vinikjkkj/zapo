@@ -4,7 +4,7 @@ import {
     isAckOrReceiptNode,
     isNegativeAckNode,
     isRetryableNegativeAck
-} from '@message/ack'
+} from '@message/primitives/ack'
 import type {
     WaEncryptedMessageInput,
     WaMessageAckMetadata,

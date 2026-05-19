@@ -4,8 +4,8 @@ import test from 'node:test'
 import type { WaAuthCredentials } from '@auth/types'
 import { WaAuthClient } from '@auth/WaAuthClient'
 import { createNoopLogger } from '@infra/log/types'
-import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
-import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
+import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
+import { WaSignalMemoryStore } from '@store/memory/signal.store'
 
 function createInMemoryAuthStore(initial: WaAuthCredentials | null = null) {
     let current = initial

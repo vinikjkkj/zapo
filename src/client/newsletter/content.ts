@@ -8,16 +8,20 @@ import {
 } from '@client/media'
 import type { Logger } from '@infra/log/types'
 import { NEWSLETTER_MEDIA_UPLOAD_PATHS, type NewsletterMediaKind } from '@media/constants'
-import { createStickerPackZipStream } from '@media/sticker-pack'
+import { createStickerPackZipStream } from '@media/sticker/sticker-pack'
+import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { WaMediaConn } from '@media/types'
-import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
-import { isSendMediaMessage, isSendTextMessage, resolveMessageTypeAttr } from '@message/content'
 import { applyContextInfo, type WaSendContextInfo } from '@message/context-info'
+import {
+    isSendMediaMessage,
+    isSendTextMessage,
+    resolveMessageTypeAttr
+} from '@message/encode/content'
 import {
     toStickerPackProtoStickers,
     toStickerPackZipEntries,
     validateStickerPackInput
-} from '@message/sticker-pack'
+} from '@message/kinds/sticker-pack'
 import type {
     WaSendMediaMessage,
     WaSendMessageContent,

@@ -1,5 +1,5 @@
+import { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'
 import type { WaAppStateSyncOptions, WaAppStateSyncResult } from '@appstate/types'
-import { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import { WaAuthClient } from '@auth/WaAuthClient'
 import { WaConnectionManager } from '@client/connection/WaConnectionManager'
 import { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
@@ -48,19 +48,19 @@ import {
     type WaStreamControlHandler
 } from '@client/coordinators/WaStreamControlCoordinator'
 import { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
-import { handleDirtyBits, parseDirtyBits } from '@client/dirty'
 import { DEVICE_NOTIFICATION_ACTIONS, parseDeviceNotification } from '@client/events/devices'
+import { handleDirtyBits, parseDirtyBits } from '@client/events/dirty'
 import { parseIdentityChangeNotification } from '@client/events/identity'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
-import { resolveLinkPreview } from '@client/link-preview'
+import { createDeviceFanoutResolver } from '@client/messaging/fanout'
+import { createGroupMetadataCache } from '@client/messaging/group-metadata'
+import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
+import { resolveLinkPreview } from '@client/messaging/link-preview'
 import {
     buildMediaMessageContent,
     getMediaConn as getClientMediaConn,
     type WaMediaMessageOptions
-} from '@client/messages'
-import { createDeviceFanoutResolver } from '@client/messaging/fanout'
-import { createGroupMetadataCache } from '@client/messaging/group-metadata'
-import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
+} from '@client/messaging/messages'
 import type {
     WaClientEventMap,
     WaClientOptions,
@@ -70,14 +70,14 @@ import type {
     WaNewsletterEventAction
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { WaMediaConn } from '@media/types'
-import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
-import { handleIncomingMessageAck } from '@message/incoming'
-import { createDefaultLinkPreviewFetcher } from '@message/link-preview/fetcher'
+import { createDefaultLinkPreviewFetcher } from '@message/addons/link-preview/fetcher'
+import { handleIncomingMessageAck } from '@message/primitives/incoming'
 import {
     createPeerDataOperationRequester,
     type PeerDataOperationRequester
-} from '@message/peer-data-operation'
+} from '@message/primitives/peer-data-operation'
 import { WaMessageClient } from '@message/WaMessageClient'
 import {
     getWaCompanionPlatformId,

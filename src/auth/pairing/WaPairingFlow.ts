@@ -16,7 +16,7 @@ import {
     computeAdvIdentityHmac,
     generateDeviceSignature,
     verifyDeviceIdentityAccountSignature
-} from '@signal/crypto/WaAdvSignature'
+} from '@signal/attestation/WaAdvSignature'
 import { buildAckNode, buildIqResultNode } from '@transport/node/builders/global'
 import {
     buildCompanionFinishRequestNode,

@@ -2,15 +2,15 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { gzipSync } from 'node:zlib'
 
-import { parseDirtyBits } from '@client/dirty'
-import { processHistorySyncNotification } from '@client/history-sync'
+import { parseDirtyBits } from '@client/events/dirty'
+import { processHistorySyncNotification } from '@client/persistence/history-sync'
 import type { WaClientOptions } from '@client/types'
 import { WaClient } from '@client/WaClient'
 import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClientFactory'
 import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
 import type { AbPropName } from '@protocol/abprops'
-import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
+import { WaPrivacyTokenMemoryStore } from '@store/memory/privacy-token.store'
 import type { BinaryNode } from '@transport/types'
 
 test('parseDirtyBits filters invalid entries and preserves protocols', () => {

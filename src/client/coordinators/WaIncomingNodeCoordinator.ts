@@ -1,8 +1,7 @@
 import type { WaSuccessPersistAttributes } from '@auth/types'
 import type { WaOfflineResumeCoordinator } from '@client/coordinators/WaOfflineResumeCoordinator'
-import type { WaDirtyBit } from '@client/dirty'
 import { parseChatstateNode } from '@client/events/chatstate'
-import { parsePresenceNode } from '@client/events/presence'
+import type { WaDirtyBit } from '@client/events/dirty'
 import {
     buildInboundAck,
     createIncomingBaseEvent,
@@ -16,7 +15,8 @@ import {
     createInfoBulletinNotificationEvent,
     createUnhandledIncomingNodeEvent,
     sendSafeAck
-} from '@client/incoming'
+} from '@client/events/incoming'
+import { parsePresenceNode } from '@client/events/presence'
 import type {
     WaAccountTakeoverNoticeEvent,
     WaBusinessEvent,

@@ -4,7 +4,7 @@ import test from 'node:test'
 import { WaRetryCoordinator } from '@client/coordinators/WaRetryCoordinator'
 import type { WaIncomingMessageEvent } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
-import type { PeerDataOperationRequester } from '@message/peer-data-operation'
+import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import { proto, type Proto } from '@proto'
 import type {
     WaRetryDecryptFailureContext,

@@ -1,12 +1,12 @@
 import { EventEmitter } from 'node:events'
 
+import type { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'
 import type {
     WaAppStateStoreData,
     WaAppStateSyncOptions,
     WaAppStateSyncResult
 } from '@appstate/types'
 import { downloadExternalBlobReference } from '@appstate/utils'
-import type { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
 import type { WaAuthClient } from '@auth/WaAuthClient'
 import type { WaConnectionManager } from '@client/connection/WaConnectionManager'
 import type { WaReceiptQueue } from '@client/connection/WaReceiptQueue'
@@ -27,8 +27,8 @@ import type { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTr
 import { parseAccountEventFromAppStateMutation } from '@client/events/account'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { aggregateReceiptTargets } from '@client/events/receipt'
-import { processHistorySyncNotification } from '@client/history-sync'
-import { persistIncomingMailboxEntities } from '@client/mailbox'
+import { processHistorySyncNotification } from '@client/persistence/history-sync'
+import { persistIncomingMailboxEntities } from '@client/persistence/mailbox'
 import { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type {
     WaClientEventMap,
@@ -44,7 +44,7 @@ import type {
 import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClientFactory'
 import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
-import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
+import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import {
     buildAddonAdditionalData,
     decodeAddonPlaintext,
@@ -53,10 +53,10 @@ import {
     resolveParentMessageSecret,
     resolvePollOptionNames,
     shouldUseAddonAdditionalData
-} from '@message/addon-crypto'
-import { decryptBotChunk } from '@message/bot'
-import { unwrapMessage } from '@message/content'
-import type { PeerDataOperationRequester } from '@message/peer-data-operation'
+} from '@message/crypto/addon-crypto'
+import { unwrapMessage } from '@message/encode/content'
+import { decryptBotChunk } from '@message/kinds/bot'
+import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import type {
     WaMessagePublishResult,
     WaSendMessageContent,

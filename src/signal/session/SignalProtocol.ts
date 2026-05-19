@@ -4,7 +4,7 @@ import type { Logger } from '@infra/log/types'
 import { StoreLock } from '@infra/perf/StoreLock'
 import { signalAddressKey } from '@protocol/jid'
 import { MAX_PREV_SESSIONS } from '@signal/constants'
-import { encodeSignalSessionSnapshot } from '@signal/encoding'
+import { encodeSignalSessionSnapshot } from '@signal/session/encoding'
 import {
     decryptMsg,
     decryptMsgFromSession,

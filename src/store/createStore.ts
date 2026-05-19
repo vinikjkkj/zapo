@@ -28,6 +28,20 @@ import { withSenderKeyLock } from '@store/locks/sender-key.lock'
 import { withSessionLock } from '@store/locks/session.lock'
 import { withSignalLock } from '@store/locks/signal.lock'
 import { withThreadLock } from '@store/locks/thread.lock'
+import { WaAppStateMemoryStore } from '@store/memory/appstate.store'
+import { WaContactMemoryStore } from '@store/memory/contact.store'
+import { WaDeviceListMemoryStore } from '@store/memory/device-list.store'
+import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
+import { WaIdentityMemoryStore } from '@store/memory/identity.store'
+import { WaMessageSecretMemoryStore } from '@store/memory/message-secret.store'
+import { WaMessageMemoryStore } from '@store/memory/message.store'
+import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
+import { WaPrivacyTokenMemoryStore } from '@store/memory/privacy-token.store'
+import { WaRetryMemoryStore } from '@store/memory/retry.store'
+import { SenderKeyMemoryStore } from '@store/memory/sender-key.store'
+import { WaSessionMemoryStore } from '@store/memory/session.store'
+import { WaSignalMemoryStore } from '@store/memory/signal.store'
+import { WaThreadMemoryStore } from '@store/memory/thread.store'
 import {
     NOOP_CONTACT_STORE,
     NOOP_DEVICE_LIST_STORE,
@@ -37,20 +51,6 @@ import {
     NOOP_RETRY_STORE,
     NOOP_THREAD_STORE
 } from '@store/noop.store'
-import { WaAppStateMemoryStore } from '@store/providers/memory/appstate.store'
-import { WaContactMemoryStore } from '@store/providers/memory/contact.store'
-import { WaDeviceListMemoryStore } from '@store/providers/memory/device-list.store'
-import { WaGroupMetadataMemoryStore } from '@store/providers/memory/group-metadata.store'
-import { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
-import { WaMessageSecretMemoryStore } from '@store/providers/memory/message-secret.store'
-import { WaMessageMemoryStore } from '@store/providers/memory/message.store'
-import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
-import { WaPrivacyTokenMemoryStore } from '@store/providers/memory/privacy-token.store'
-import { WaRetryMemoryStore } from '@store/providers/memory/retry.store'
-import { SenderKeyMemoryStore } from '@store/providers/memory/sender-key.store'
-import { WaSessionMemoryStore } from '@store/providers/memory/session.store'
-import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
-import { WaThreadMemoryStore } from '@store/providers/memory/thread.store'
 import type {
     WaCreateStoreOptions,
     WaStore,

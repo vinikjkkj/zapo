@@ -1,6 +1,6 @@
 import type { Logger } from '@infra/log/types'
-import { wrapDeviceSentMessage } from '@message/device-sent'
-import { unpadPkcs7, writeRandomPadMax16 } from '@message/padding'
+import { wrapDeviceSentMessage } from '@message/encode/device-sent'
+import { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS, WA_NODE_TAGS } from '@protocol/constants'

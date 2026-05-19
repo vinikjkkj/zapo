@@ -1,4 +1,4 @@
-import type { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
+import type { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'
 import type { WaAuthCredentials } from '@auth/types'
 import type { Logger } from '@infra/log/types'
 import { WA_DEFAULTS, WA_IQ_TYPES } from '@protocol/constants'

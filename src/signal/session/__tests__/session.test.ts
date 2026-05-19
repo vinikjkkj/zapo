@@ -19,10 +19,10 @@ import {
     requireSignedPreKey
 } from '@signal/session/SignalSerializer'
 import type { SignalAddress, SignalRecvChain, SignalSessionRecord } from '@signal/types'
-import { WaIdentityMemoryStore } from '@store/providers/memory/identity.store'
-import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
-import { WaSessionMemoryStore } from '@store/providers/memory/session.store'
-import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
+import { WaIdentityMemoryStore } from '@store/memory/identity.store'
+import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
+import { WaSessionMemoryStore } from '@store/memory/session.store'
+import { WaSignalMemoryStore } from '@store/memory/signal.store'
 import { concatBytes } from '@util/bytes'
 
 function makeBytes(length: number, seed = 0): Uint8Array {

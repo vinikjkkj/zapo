@@ -6,7 +6,7 @@
     "module": "dist/esm/index.js",
     "types": "dist/index.d.ts",
     "bin": {
-        "fake-wa-server": "./dist/cli.js"
+        "fake-wa-server": "./dist/bin.js"
     },
     "exports": {
         ".": {
@@ -26,7 +26,7 @@
         "build": "tsc -p tsconfig.build.cjs.json && tsc -p tsconfig.build.esm.json && node ../../scripts/finalize-esm-build.cjs",
         "typecheck": "tsc --noEmit",
         "test": "node --import tsx --test --test-concurrency=1 \"src/**/__tests__/**/*.test.ts\"",
-        "cli": "node --import tsx src/cli.ts",
+        "cli": "node --import tsx src/bin.ts",
         "bench:messaging": "node --expose-gc --import tsx bench/messaging.bench.ts"
     },
     "peerDependencies": {

@@ -9,8 +9,8 @@ import {
 } from '@auth/credentials-flow'
 import type { WaAuthCredentials } from '@auth/types'
 import { createNoopLogger } from '@infra/log/types'
-import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
-import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
+import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
+import { WaSignalMemoryStore } from '@store/memory/signal.store'
 import type { WaProxyDispatcher } from '@transport/types'
 
 function createCredentials(): WaAuthCredentials {

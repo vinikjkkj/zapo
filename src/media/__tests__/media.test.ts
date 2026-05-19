@@ -7,9 +7,8 @@ import { Readable } from 'node:stream'
 import test from 'node:test'
 
 import { parseWebpAnimation, runMediaProcessor } from '@client/media'
-import { buildMediaMessageContent, getMediaConn } from '@client/messages'
+import { buildMediaMessageContent, getMediaConn } from '@client/messaging/messages'
 import { createNoopLogger, type Logger } from '@infra/log/types'
-import { parseMediaConnResponse } from '@media/conn'
 import {
     MEDIA_UPLOAD_PATHS,
     type MediaUploadKind,
@@ -18,8 +17,9 @@ import {
     PPS_UPLOAD_PATHS,
     type PpsUploadKind
 } from '@media/constants'
-import { WaMediaCrypto } from '@media/WaMediaCrypto'
-import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
+import { WaMediaCrypto } from '@media/crypto/WaMediaCrypto'
+import { parseMediaConnResponse } from '@media/transfer/conn'
+import { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { BinaryNode } from '@transport/types'
 
 function buildMediaConnNode(auth = 'token', ttl = '120'): BinaryNode {

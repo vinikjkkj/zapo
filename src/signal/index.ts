@@ -9,28 +9,34 @@ export {
 } from '@signal/types'
 export type { SignalSessionRecord } from '@signal/types'
 export {
-    decodeSignalPreKeyRow,
-    decodeSignalRegistrationRow,
+    decodeStoreCount,
+    toSignalAddressParts,
+    type SignalAddressParts,
+    type StoreCountRow
+} from '@signal/encoding'
+export {
     decodeSignalRemoteIdentity,
     decodeSignalSessionRecord,
-    decodeSignalSignedPreKeyRow,
-    decodeSenderKeyDistributionRow,
-    decodeSenderKeyRecord,
-    decodeStoreCount,
-    encodeSenderKeyRecord,
     encodeSignalSessionRecord,
-    toSignalAddressParts,
-    type SenderKeyDistributionRow,
-    type SenderKeyRow,
-    type SignalAddressParts,
     type SignalIdentityRow,
+    type SignalSessionRow
+} from '@signal/session/encoding'
+export {
+    decodeSignalPreKeyRow,
+    decodeSignalRegistrationRow,
+    decodeSignalSignedPreKeyRow,
     type SignalMetaRow,
     type SignalPreKeyRow,
     type SignalRegistrationRow,
-    type SignalSessionRow,
-    type SignalSignedPreKeyRow,
-    type StoreCountRow
-} from '@signal/encoding'
+    type SignalSignedPreKeyRow
+} from '@signal/registration/encoding'
+export {
+    decodeSenderKeyDistributionRow,
+    decodeSenderKeyRecord,
+    encodeSenderKeyRecord,
+    type SenderKeyDistributionRow,
+    type SenderKeyRow
+} from '@signal/group/encoding'
 export {
     generatePreKeyPair,
     generateRegistrationId,

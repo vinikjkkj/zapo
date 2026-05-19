@@ -1,5 +1,5 @@
-export { WaMediaTransferClient } from '@media/WaMediaTransferClient'
-export { parseMediaConnResponse } from '@media/conn'
+export { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
+export { parseMediaConnResponse } from '@media/transfer/conn'
 export {
     DEFAULT_MEDIA_HOSTS,
     MEDIA_UPLOAD_PATHS,
@@ -8,7 +8,7 @@ export {
 } from '@media/constants'
 export type { MediaUploadKind, NewsletterMediaKind, PpsUploadKind } from '@media/constants'
 export type { MediaCryptoType, MediaKind, WaMediaConn } from '@media/types'
-export { WaMediaCrypto } from '@media/WaMediaCrypto'
+export { WaMediaCrypto } from '@media/crypto/WaMediaCrypto'
 export type {
     WaMediaProcessor,
     WaMediaProcessorImageResult,

@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { resolveLinkPreview } from '@client/link-preview'
-import { buildMediaMessageContent, type WaMediaMessageOptions } from '@client/messages'
+import { resolveLinkPreview } from '@client/messaging/link-preview'
+import { buildMediaMessageContent, type WaMediaMessageOptions } from '@client/messaging/messages'
 import { createNoopLogger } from '@infra/log/types'
+import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { WaMediaConn } from '@media/types'
-import type { WaMediaTransferClient } from '@media/WaMediaTransferClient'
-import type { WaLinkPreviewFetcher, WaLinkPreviewResolved } from '@message/link-preview/types'
+import type {
+    WaLinkPreviewFetcher,
+    WaLinkPreviewResolved
+} from '@message/addons/link-preview/types'
 import { proto } from '@proto'
 import { TEXT_ENCODER } from '@util/bytes'
 

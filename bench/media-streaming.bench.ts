@@ -3,7 +3,7 @@ import { once } from 'node:events'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
 
-import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
+import { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { toChunkBytes } from '@util/bytes'
 import { toError } from '@util/primitives'
 

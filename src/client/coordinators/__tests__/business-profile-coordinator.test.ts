@@ -7,7 +7,7 @@ import test from 'node:test'
 
 import { createBusinessCoordinator } from '@client/coordinators/WaBusinessCoordinator'
 import { createNoopLogger } from '@infra/log/types'
-import { WaMediaTransferClient } from '@media/WaMediaTransferClient'
+import { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { proto } from '@proto'
 import { WA_XMLNS } from '@protocol/constants'
 import type { BinaryNode } from '@transport/types'

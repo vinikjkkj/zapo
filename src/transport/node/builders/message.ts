@@ -1,4 +1,4 @@
-import type { WaButtonAddonKind } from '@message/content'
+import type { WaButtonAddonKind } from '@message/encode/content'
 import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NODE_TAGS } from '@protocol/constants'
 import type { BinaryNode } from '@transport/types'
 

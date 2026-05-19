@@ -10,8 +10,8 @@ export {
     decodeAppStateFingerprint,
     decodeAppStateCollections,
     decodeAppStateSyncKeys
-} from '@appstate/encoding'
+} from '@appstate/parsers/encoding'
 export * from '@appstate/utils'
-export { WaAppStateCrypto } from '@appstate/WaAppStateCrypto'
-export { parseSyncResponse } from '@appstate/response-parser'
-export { WaAppStateSyncClient } from '@appstate/WaAppStateSyncClient'
+export { WaAppStateCrypto } from '@appstate/crypto/WaAppStateCrypto'
+export { parseSyncResponse } from '@appstate/parsers/response-parser'
+export { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'

@@ -11,8 +11,8 @@ import {
     SIGNAL_VERSION,
     WHISPER_GROUP_INFO
 } from '@signal/constants'
-import { WaPreKeyMemoryStore } from '@store/providers/memory/pre-key.store'
-import { WaSignalMemoryStore } from '@store/providers/memory/signal.store'
+import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
+import { WaSignalMemoryStore } from '@store/memory/signal.store'
 
 test('signal constants expose expected protocol invariants', () => {
     assert.equal(SIGNAL_VERSION, 3)
