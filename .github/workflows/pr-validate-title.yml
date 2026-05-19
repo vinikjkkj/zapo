@@ -15,6 +15,7 @@ jobs:
 
         steps:
             - uses: amannn/action-semantic-pull-request@v5
+              id: lint
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
@@ -31,3 +32,25 @@ jobs:
                       style
                       deps
                       revert
+
+            - if: always() && steps.lint.outputs.error_message != null
+              uses: marocchino/sticky-pull-request-comment@v2
+              with:
+                  header: pr-title-lint-error
+                  message: |
+                      ❌ **PR title must follow [Conventional Commits](https://www.conventionalcommits.org/)**
+
+                      Allowed types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `chore`, `build`, `ci`, `style`, `deps`, `revert`
+
+                      Format: `type(scope): description` or `type!: description` for breaking changes
+
+                      **Error:**
+                      ```
+                      ${{ steps.lint.outputs.error_message }}
+                      ```
+
+            - if: steps.lint.outputs.error_message == null
+              uses: marocchino/sticky-pull-request-comment@v2
+              with:
+                  header: pr-title-lint-error
+                  delete: true
