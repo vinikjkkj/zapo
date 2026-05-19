@@ -115,6 +115,16 @@ interface GroupSendRetryContext {
     readonly forceAddressingMode?: GroupAddressingMode
 }
 
+interface WaOutboundEnvelope {
+    readonly message: Proto.IMessage
+    readonly plaintext: Uint8Array
+    readonly type: string
+    readonly edit?: string
+    readonly mediatype?: string
+    readonly customNodes?: readonly BinaryNode[]
+    readonly sendOptions: WaSendMessageOptions
+}
+
 export class WaMessageDispatchCoordinator {
     private readonly deps: WaMessageDispatchCoordinatorOptions
     private readonly mobileMessageIdFormat: boolean
@@ -344,44 +354,30 @@ export class WaMessageDispatchCoordinator {
             : (resolveEncMediaType(messageWithIcdc) ?? undefined)
         const metaAttrs = resolveMetaAttrs(messageWithIcdc)
         const metaNode = metaAttrs ? buildMetaNode(metaAttrs as Record<string, string>) : undefined
+        const customNodes: BinaryNode[] = []
+        if (metaNode) customNodes.push(metaNode)
+        if (buttonAddonNode) customNodes.push(buttonAddonNode)
+        if (options.customNodes) {
+            for (const node of options.customNodes) {
+                customNodes.push(node)
+            }
+        }
+
+        const envelope: WaOutboundEnvelope = {
+            message: messageWithIcdc,
+            plaintext,
+            type,
+            edit,
+            mediatype,
+            customNodes: customNodes.length > 0 ? customNodes : undefined,
+            sendOptions
+        }
 
         const publishResult = isGroup
             ? this.shouldUseGroupDirectPath(messageWithIcdc)
-                ? await this.publishGroupDirectMessage(
-                      recipientJid,
-                      messageWithIcdc,
-                      plaintext,
-                      type,
-                      sendOptions,
-                      {},
-                      edit,
-                      mediatype,
-                      metaNode,
-                      buttonAddonNode
-                  )
-                : await this.publishGroupSenderKeyMessage(
-                      recipientJid,
-                      messageWithIcdc,
-                      plaintext,
-                      type,
-                      sendOptions,
-                      {},
-                      edit,
-                      mediatype,
-                      metaNode,
-                      buttonAddonNode
-                  )
-            : await this.publishDirectSignalMessageWithFanout(
-                  toUserJid(recipientJid),
-                  messageWithIcdc,
-                  plaintext,
-                  type,
-                  sendOptions,
-                  edit,
-                  mediatype,
-                  metaNode,
-                  buttonAddonNode
-              )
+                ? await this.publishGroupDirectMessage(recipientJid, envelope)
+                : await this.publishGroupSenderKeyMessage(recipientJid, envelope)
+            : await this.publishDirectSignalMessageWithFanout(toUserJid(recipientJid), envelope)
         return upload ? { ...publishResult, upload } : publishResult
     }
 
@@ -480,10 +476,11 @@ export class WaMessageDispatchCoordinator {
                     remoteJid: WA_DEFAULTS.STATUS_BROADCAST_JID,
                     context: 'status'
                 })
+                const customNodes: BinaryNode[] = [buildMetaNode({ status_setting: statusSetting })]
+                if (reportingArtifacts?.node) customNodes.push(reportingArtifacts.node)
                 return {
                     extraParticipants: ackHints,
-                    metaNode: buildMetaNode({ status_setting: statusSetting }),
-                    reportingNode: reportingArtifacts?.node
+                    customNodes
                 }
             }
         })
@@ -538,8 +535,7 @@ export class WaMessageDispatchCoordinator {
             readonly sendOptions: WaSendMessageOptions
         }) => Promise<{
             readonly extraParticipants?: readonly { readonly jid: string }[]
-            readonly metaNode?: BinaryNode
-            readonly reportingNode?: BinaryNode
+            readonly customNodes?: readonly BinaryNode[]
             readonly phash?: string
         }>
     }): Promise<WaMessagePublishResult> {
@@ -606,8 +602,7 @@ export class WaMessageDispatchCoordinator {
             deviceIdentity: shouldAttachDeviceIdentity
                 ? this.getEncodedSignedDeviceIdentity()
                 : undefined,
-            metaNode: extras.metaNode,
-            reportingNode: extras.reportingNode
+            customNodes: extras.customNodes
         })
         const replayPayload: WaRetryReplayPayload = {
             mode: 'plaintext',
@@ -680,17 +675,10 @@ export class WaMessageDispatchCoordinator {
 
     private async publishGroupDirectMessage(
         groupJid: string,
-        message: Proto.IMessage,
-        plaintext: Uint8Array,
-        type: string,
-        options: WaSendMessageOptions,
-        retryContext: GroupSendRetryContext = {},
-        edit?: string,
-        mediatype?: string,
-        metaNode?: BinaryNode,
-        buttonAddonNode?: BinaryNode
+        envelope: WaOutboundEnvelope,
+        retryContext: GroupSendRetryContext = {}
     ): Promise<WaMessagePublishResult> {
-        const sendOptions = await this.withResolvedMessageId(options)
+        const { message, plaintext, type, edit, mediatype, sendOptions } = envelope
         const meJid = this.requireCurrentMeJid('sendMessage')
         const participantUserJids = retryContext.forceRefreshParticipants
             ? await this.deps.groupMetadataCache.refreshParticipantUsers(groupJid)
@@ -761,6 +749,8 @@ export class WaMessageDispatchCoordinator {
             remoteJid: groupJid,
             context: 'group_direct'
         })
+        const customNodes: BinaryNode[] = envelope.customNodes ? [...envelope.customNodes] : []
+        if (reportingArtifacts?.node) customNodes.push(reportingArtifacts.node)
         const messageNode = buildDirectMessageFanoutNode({
             to: groupJid,
             type,
@@ -772,9 +762,7 @@ export class WaMessageDispatchCoordinator {
             deviceIdentity: shouldAttachDeviceIdentity
                 ? this.getEncodedSignedDeviceIdentity()
                 : undefined,
-            reportingNode: reportingArtifacts?.node ?? undefined,
-            metaNode,
-            buttonAddonNode,
+            customNodes: customNodes.length > 0 ? customNodes : undefined,
             mediatype
         })
         const replayPayload: WaRetryReplayPayload = {
@@ -815,22 +803,15 @@ export class WaMessageDispatchCoordinator {
             })
             return this.publishGroupDirectMessage(
                 groupJid,
-                message,
-                plaintext,
-                type,
                 {
-                    ...sendOptions,
-                    id: result.id
+                    ...envelope,
+                    sendOptions: { ...sendOptions, id: result.id }
                 },
                 {
                     retried: true,
                     forceRefreshParticipants: true,
                     forceAddressingMode: serverAddressingMode
-                },
-                edit,
-                mediatype,
-                metaNode,
-                buttonAddonNode
+                }
             )
         }
         return result
@@ -905,17 +886,10 @@ export class WaMessageDispatchCoordinator {
 
     private async publishGroupSenderKeyMessage(
         groupJid: string,
-        message: Proto.IMessage,
-        plaintext: Uint8Array,
-        type: string,
-        options: WaSendMessageOptions,
-        retryContext: GroupSendRetryContext = {},
-        edit?: string,
-        mediatype?: string,
-        metaNode?: BinaryNode,
-        buttonAddonNode?: BinaryNode
+        envelope: WaOutboundEnvelope,
+        retryContext: GroupSendRetryContext = {}
     ): Promise<WaMessagePublishResult> {
-        const sendOptions = await this.withResolvedMessageId(options)
+        const { message, plaintext, type, edit, mediatype, sendOptions } = envelope
         const meJid = this.requireCurrentMeJid('sendMessage')
         const participantUserJids = retryContext.forceRefreshParticipants
             ? await this.deps.groupMetadataCache.refreshParticipantUsers(groupJid)
@@ -962,6 +936,8 @@ export class WaMessageDispatchCoordinator {
             context: 'group_sender_key'
         })
         const botSidecar = await this.buildBotSidecarParticipant(message)
+        const customNodes: BinaryNode[] = envelope.customNodes ? [...envelope.customNodes] : []
+        if (reportingArtifacts?.node) customNodes.push(reportingArtifacts.node)
         const messageNode = buildGroupSenderKeyMessageNode({
             to: groupJid,
             type,
@@ -975,9 +951,7 @@ export class WaMessageDispatchCoordinator {
                 shouldAttachDeviceIdentity || botSidecar?.encType === 'pkmsg'
                     ? this.getEncodedSignedDeviceIdentity()
                     : undefined,
-            reportingNode: reportingArtifacts?.node ?? undefined,
-            metaNode,
-            buttonAddonNode,
+            customNodes: customNodes.length > 0 ? customNodes : undefined,
             mediatype,
             botParticipants: botSidecar ? [botSidecar] : undefined
         })
@@ -1037,22 +1011,15 @@ export class WaMessageDispatchCoordinator {
             })
             return this.publishGroupSenderKeyMessage(
                 groupJid,
-                message,
-                plaintext,
-                type,
                 {
-                    ...sendOptions,
-                    id: result.id
+                    ...envelope,
+                    sendOptions: { ...sendOptions, id: result.id }
                 },
                 {
                     retried: true,
                     forceRefreshParticipants: true,
                     forceAddressingMode: serverAddressingMode
-                },
-                edit,
-                mediatype,
-                metaNode,
-                buttonAddonNode
+                }
             )
         }
         return result
@@ -1260,16 +1227,9 @@ export class WaMessageDispatchCoordinator {
 
     private async publishDirectSignalMessageWithFanout(
         recipientJid: string,
-        message: Proto.IMessage,
-        plaintext: Uint8Array,
-        type: string,
-        options: WaSendMessageOptions,
-        edit?: string,
-        mediatype?: string,
-        metaNode?: BinaryNode,
-        buttonAddonNode?: BinaryNode
+        envelope: WaOutboundEnvelope
     ): Promise<WaMessagePublishResult> {
-        const sendOptions = await this.withResolvedMessageId(options)
+        const { message, plaintext, type, edit, mediatype, sendOptions } = envelope
         const meJid = this.requireCurrentMeJid('sendMessage')
         const meLid = this.deps.getCurrentCredentials()?.meLid
         const selfDeviceJidForRecipient = this.deps.fanoutResolver.resolveSelfDeviceJidForRecipient(
@@ -1440,6 +1400,9 @@ export class WaMessageDispatchCoordinator {
                 })
             }
         }
+        const customNodes: BinaryNode[] = envelope.customNodes ? [...envelope.customNodes] : []
+        if (reportingArtifacts?.node) customNodes.push(reportingArtifacts.node)
+        if (privacyTokenNode) customNodes.push(privacyTokenNode)
         const messageNode = buildDirectMessageFanoutNode({
             to: recipientJid,
             type,
@@ -1447,10 +1410,7 @@ export class WaMessageDispatchCoordinator {
             edit,
             participants,
             deviceIdentity,
-            reportingNode: reportingArtifacts?.node ?? undefined,
-            privacyTokenNode,
-            metaNode,
-            buttonAddonNode,
+            customNodes: customNodes.length > 0 ? customNodes : undefined,
             mediatype
         })
 

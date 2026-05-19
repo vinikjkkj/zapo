@@ -492,22 +492,24 @@ test('message builders create fanout nodes and validate participant requirements
         type: 'text',
         id: 'm1',
         participants: [participant],
-        reportingNode: {
-            tag: 'reporting',
-            attrs: {},
-            content: [
-                {
-                    tag: 'reporting_token',
-                    attrs: { v: '2' },
-                    content: new Uint8Array([9])
-                }
-            ]
-        },
-        privacyTokenNode: {
-            tag: WA_PRIVACY_TOKEN_TAGS.TC_TOKEN,
-            attrs: {},
-            content: new Uint8Array([4])
-        }
+        customNodes: [
+            {
+                tag: 'reporting',
+                attrs: {},
+                content: [
+                    {
+                        tag: 'reporting_token',
+                        attrs: { v: '2' },
+                        content: new Uint8Array([9])
+                    }
+                ]
+            },
+            {
+                tag: WA_PRIVACY_TOKEN_TAGS.TC_TOKEN,
+                attrs: {},
+                content: new Uint8Array([4])
+            }
+        ]
     })
 
     assert.equal(node.tag, 'message')
@@ -612,7 +614,7 @@ test('message builders create fanout nodes and validate participant requirements
         type: 'text',
         id: 'btn-1',
         participants: [participant],
-        buttonAddonNode: interactiveAddon
+        customNodes: [interactiveAddon]
     })
     const addonChild = Array.isArray(fanoutWithAddon.content)
         ? fanoutWithAddon.content.find((child) => child.tag === 'biz')
@@ -743,17 +745,19 @@ test('message builders cover group and inbound receipt branches', () => {
             }
         ],
         deviceIdentity: new Uint8Array([2, 3]),
-        reportingNode: {
-            tag: 'reporting',
-            attrs: {},
-            content: [
-                {
-                    tag: 'reporting_token',
-                    attrs: { v: '2' },
-                    content: new Uint8Array([1, 2])
-                }
-            ]
-        }
+        customNodes: [
+            {
+                tag: 'reporting',
+                attrs: {},
+                content: [
+                    {
+                        tag: 'reporting_token',
+                        attrs: { v: '2' },
+                        content: new Uint8Array([1, 2])
+                    }
+                ]
+            }
+        ]
     })
     assert.equal(groupWithParticipants.attrs.addressing_mode, 'pn')
     assert.ok(Array.isArray(groupWithParticipants.content))
@@ -1260,7 +1264,7 @@ test('message builders include edit mediatype and meta node when provided', () =
         id: 'p1',
         edit: '7',
         participants: [participant],
-        metaNode: meta,
+        customNodes: [meta],
         mediatype: 'image'
     })
     assert.equal(direct.attrs.edit, '7')
@@ -1280,7 +1284,7 @@ test('message builders include edit mediatype and meta node when provided', () =
         edit: '1',
         groupCiphertext: new Uint8Array([2]),
         participants: [participant],
-        metaNode: buildMetaNode({ event_type: 'creation' }),
+        customNodes: [buildMetaNode({ event_type: 'creation' })],
         mediatype: 'video'
     })
     assert.equal(group.attrs.edit, '1')
@@ -1580,7 +1584,7 @@ test('group sender key message attaches a <bot> sidecar after <meta> for bot men
         groupCiphertext: new Uint8Array([9, 9, 9]),
         participants: [participant],
         botParticipants: [botSidecar],
-        metaNode
+        customNodes: [metaNode]
     })
 
     const content = node.content as readonly BinaryNode[]
