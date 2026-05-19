@@ -328,7 +328,7 @@ export class WaMessageDispatchCoordinator {
             optionsCtx?.expirationSeconds === undefined &&
             !options.disableGroupEphemeralAutoInject
         ) {
-            const cachedEphemeral = await this.groupMetadataCache.getEphemeral(recipientJid)
+            const cachedEphemeral = await this.groupMetadataCache.resolveEphemeral(recipientJid)
             if (cachedEphemeral !== null && cachedEphemeral > 0) {
                 optionsCtx = { ...optionsCtx, expirationSeconds: cachedEphemeral }
             }

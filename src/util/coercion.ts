@@ -2,11 +2,11 @@ import { toBytesView } from './bytes'
 import { toSafeNumber } from './primitives'
 
 export function asNumber(value: unknown, field: string): number {
-    if (typeof value === 'bigint') {
-        return toSafeNumber(Number(value), field)
-    }
     if (typeof value === 'number') {
         return toSafeNumber(value, field)
+    }
+    if (typeof value === 'bigint') {
+        return toSafeNumber(Number(value), field)
     }
     throw new Error(`invalid number value for ${field}`)
 }

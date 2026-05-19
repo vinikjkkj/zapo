@@ -17,6 +17,7 @@ export type GroupMetadataCache = {
     resolveParticipantUsers(groupJid: string): Promise<readonly string[]>
     refreshParticipantUsers(groupJid: string): Promise<readonly string[]>
     getEphemeral(groupJid: string): Promise<number | null>
+    resolveEphemeral(groupJid: string): Promise<number | null>
     mutateFromGroupEvent(event: WaGroupEvent): Promise<void>
 }
 
@@ -209,6 +210,16 @@ export function createGroupMetadataCache(options: {
         return cached?.ephemeral ?? null
     }
 
+    const resolveEphemeral = async (groupJid: string): Promise<number | null> => {
+        const cached = await groupMetadataStore.getGroupMetadata(groupJid)
+        if (cached) {
+            return cached.ephemeral ?? null
+        }
+        await refreshParticipantUsers(groupJid)
+        const refreshed = await groupMetadataStore.getGroupMetadata(groupJid)
+        return refreshed?.ephemeral ?? null
+    }
+
     const mutateFromGroupEvent = async (event: WaGroupEvent): Promise<void> => {
         const groupJid = resolveGroupJidForGroupCacheEvent(event)
         if (!groupJid) {
@@ -243,9 +254,11 @@ export function createGroupMetadataCache(options: {
             if (participantUsers.length === 0) {
                 return
             }
+            const existing = await groupMetadataStore.getGroupMetadata(groupJid)
             await groupMetadataStore.upsertGroupMetadata({
                 groupJid,
                 participants: participantUsers,
+                ephemeral: existing?.ephemeral,
                 updatedAtMs: Date.now()
             })
             return
@@ -297,6 +310,7 @@ export function createGroupMetadataCache(options: {
         resolveParticipantUsers,
         refreshParticipantUsers,
         getEphemeral,
+        resolveEphemeral,
         mutateFromGroupEvent
     }
 }

@@ -220,6 +220,66 @@ test('group metadata cache ignores ephemeral events for uncached groups', async 
     }
 })
 
+test('group metadata cache resolveEphemeral refreshes on cold cache', async () => {
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    let queryCalls = 0
+    try {
+        const cache = createGroupMetadataCache({
+            groupMetadataStore,
+            queryGroupMetadata: async () => {
+                queryCalls += 1
+                return {
+                    participants: ['551100000000@s.whatsapp.net'],
+                    ephemeral: 86_400
+                }
+            },
+            logger: createNoopLogger()
+        })
+
+        assert.equal(await cache.getEphemeral('120@g.us'), null)
+        assert.equal(queryCalls, 0)
+
+        assert.equal(await cache.resolveEphemeral('120@g.us'), 86_400)
+        assert.equal(queryCalls, 1)
+
+        assert.equal(await cache.resolveEphemeral('120@g.us'), 86_400)
+        assert.equal(queryCalls, 1)
+    } finally {
+        await groupMetadataStore.destroy()
+    }
+})
+
+test('group metadata cache create event preserves cached ephemeral', async () => {
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    try {
+        const cache = createGroupMetadataCache({
+            groupMetadataStore,
+            queryGroupMetadata: async () => ({
+                participants: ['551100000000@s.whatsapp.net'],
+                ephemeral: 86_400
+            }),
+            logger: createNoopLogger()
+        })
+
+        await cache.resolveParticipantUsers('120@g.us')
+        assert.equal(await cache.getEphemeral('120@g.us'), 86_400)
+
+        await cache.mutateFromGroupEvent({
+            rawNode: { tag: 'notification', attrs: {} },
+            rawActionNode: { tag: 'create', attrs: {} },
+            action: 'create',
+            groupJid: '120@g.us',
+            participants: [{ jid: '552200000000@s.whatsapp.net' }]
+        } as WaGroupEvent)
+
+        const after = await groupMetadataStore.getGroupMetadata('120@g.us')
+        assert.equal(after?.ephemeral, 86_400)
+        assert.deepEqual(after?.participants, ['552200000000@s.whatsapp.net'])
+    } finally {
+        await groupMetadataStore.destroy()
+    }
+})
+
 test('app-state sync key protocol requests keys from peer devices and dedupes key ids', async () => {
     const published: { readonly to: string; readonly protocolType?: number | null }[] = []
 

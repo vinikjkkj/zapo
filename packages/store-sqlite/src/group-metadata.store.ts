@@ -77,7 +77,10 @@ export class WaGroupMetadataSqliteStore extends BaseSqliteStore implements WaGro
             return null
         }
 
-        const ephemeral = row.ephemeral === null ? undefined : Number(row.ephemeral)
+        const ephemeral =
+            row.ephemeral === null
+                ? undefined
+                : asNumber(row.ephemeral, 'group_participants_cache.ephemeral')
         return {
             groupJid: asString(row.group_jid, 'group_participants_cache.group_jid'),
             participants: decodeParticipants(row.participants_json),
