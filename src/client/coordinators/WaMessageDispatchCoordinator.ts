@@ -694,12 +694,24 @@ export class WaMessageDispatchCoordinator {
         }
         const resolvedFanoutTargets =
             await this.deps.sessionResolver.ensureSessionsBatch(fanoutDeviceJids)
+        const resolvedNormalizedJids = new Set<string>()
+        for (let index = 0; index < resolvedFanoutTargets.length; index += 1) {
+            resolvedNormalizedJids.add(resolvedFanoutTargets[index].jid)
+        }
         const uniqueNormalizedFanoutJids = new Set<string>()
         for (let index = 0; index < fanoutDeviceJids.length; index += 1) {
             uniqueNormalizedFanoutJids.add(normalizeDeviceJid(fanoutDeviceJids[index]))
         }
-        if (resolvedFanoutTargets.length !== uniqueNormalizedFanoutJids.size) {
-            throw new Error('group direct send resolved incomplete signal sessions')
+        for (const expected of uniqueNormalizedFanoutJids) {
+            if (!resolvedNormalizedJids.has(expected)) {
+                this.deps.logger.warn(
+                    'group direct fanout dropping device without signal session',
+                    { groupJid, device: expected }
+                )
+            }
+        }
+        if (resolvedFanoutTargets.length === 0) {
+            throw new Error('group direct send resolved no signal sessions')
         }
         const participantEncryptRequests: {
             readonly address: SignalAddress
@@ -1281,15 +1293,35 @@ export class WaMessageDispatchCoordinator {
             const target = resolvedFanoutTargets[index]
             resolvedFanoutTargetsByJid.set(normalizeDeviceJid(target.jid), target)
         }
+        const liveTargets: typeof targets = []
         for (let index = 0; index < targets.length; index += 1) {
-            if (!resolvedFanoutTargetsByJid.has(targets[index].normalizedJid)) {
-                throw new Error('direct fanout missing signal sessions for one or more targets')
+            const target = targets[index]
+            if (resolvedFanoutTargetsByJid.has(target.normalizedJid)) {
+                liveTargets.push(target)
+                continue
             }
+            const isPrimaryRecipient =
+                target.userJid === recipientUserJid && target.normalizedJid === target.userJid
+            const logContext = { to: recipientJid, device: target.jid }
+            if (isPrimaryRecipient) {
+                this.deps.logger.error(
+                    'direct fanout dropping primary recipient device without signal session',
+                    logContext
+                )
+            } else {
+                this.deps.logger.warn(
+                    'direct fanout dropping device without signal session',
+                    logContext
+                )
+            }
+        }
+        if (liveTargets.length === 0) {
+            throw new Error('direct fanout missing signal sessions for all targets')
         }
 
         let hasSelfDeviceFanout = false
-        for (let index = 0; index < targets.length; index += 1) {
-            if (targets[index].userJid === meUserJid) {
+        for (let index = 0; index < liveTargets.length; index += 1) {
+            if (liveTargets[index].userJid === meUserJid) {
                 hasSelfDeviceFanout = true
                 break
             }
@@ -1301,18 +1333,15 @@ export class WaMessageDispatchCoordinator {
             : null
 
         const participantRequests: {
-            readonly target: (typeof targets)[number]
+            readonly target: (typeof liveTargets)[number]
             readonly address: SignalAddress
             readonly session: SignalResolvedSessionTarget['session']
             readonly expectedIdentity?: Uint8Array
             readonly plaintext: Uint8Array
-        }[] = new Array(targets.length)
-        for (let index = 0; index < targets.length; index += 1) {
-            const target = targets[index]
-            const resolvedTarget = resolvedFanoutTargetsByJid.get(target.normalizedJid)
-            if (!resolvedTarget) {
-                throw new Error('direct fanout missing signal session for target')
-            }
+        }[] = new Array(liveTargets.length)
+        for (let index = 0; index < liveTargets.length; index += 1) {
+            const target = liveTargets[index]
+            const resolvedTarget = resolvedFanoutTargetsByJid.get(target.normalizedJid)!
             participantRequests[index] = {
                 target,
                 address: resolvedTarget.address,
