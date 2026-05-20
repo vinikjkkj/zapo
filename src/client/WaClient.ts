@@ -459,10 +459,8 @@ export class WaClient extends EventEmitter {
             return
         }
 
-        const requesterRaw = event.senderJid
-            ? applyDeviceToJid(event.senderJid, event.senderDevice)
-            : event.chatJid
-        if (!requesterRaw) {
+        const requesterSource = event.senderJid ?? event.chatJid
+        if (!requesterSource) {
             this.logger.warn('incoming app-state key request missing sender jid', {
                 id: event.stanzaId
             })
@@ -471,11 +469,14 @@ export class WaClient extends EventEmitter {
 
         let requesterDeviceJid: string
         try {
+            const requesterRaw = event.senderJid
+                ? applyDeviceToJid(event.senderJid, event.senderDevice)
+                : requesterSource
             requesterDeviceJid = normalizeDeviceJid(requesterRaw)
         } catch (error) {
             this.logger.warn('incoming app-state key request has malformed sender jid', {
                 id: event.stanzaId,
-                from: requesterRaw,
+                from: requesterSource,
                 message: toError(error).message
             })
             return

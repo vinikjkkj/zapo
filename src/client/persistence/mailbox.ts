@@ -20,7 +20,8 @@ function persistContacts(
     nowMs: number
 ): void {
     const senderJid = event.senderJid
-    const participantJid = event.rawNode.attrs.participant
+    const rawParticipant = event.rawNode.attrs.participant
+    const participantJid = rawParticipant ? toUserJid(rawParticipant) : undefined
     if (!senderJid && !participantJid) {
         return
     }

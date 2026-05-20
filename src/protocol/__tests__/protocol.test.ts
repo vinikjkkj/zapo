@@ -17,6 +17,7 @@ import {
     WA_PRIVACY_VALUES
 } from '@protocol/constants'
 import {
+    applyDeviceToJid,
     buildDeviceJid,
     canonicalizeSignalJid,
     canonicalizeSignalServer,
@@ -84,6 +85,12 @@ test('jid type detection and device handling', () => {
     assert.equal(toUserJid('5511:3@s.whatsapp.net'), '5511@s.whatsapp.net')
     assert.equal(normalizeDeviceJid('5511:0@s.whatsapp.net'), '5511@s.whatsapp.net')
     assert.equal(normalizeDeviceJid('5511:5@s.whatsapp.net'), '5511:5@s.whatsapp.net')
+
+    assert.equal(applyDeviceToJid('5511@s.whatsapp.net', undefined), '5511@s.whatsapp.net')
+    assert.equal(applyDeviceToJid('5511@s.whatsapp.net', 0), '5511@s.whatsapp.net')
+    assert.equal(applyDeviceToJid('5511@s.whatsapp.net', 5), '5511:5@s.whatsapp.net')
+    assert.equal(applyDeviceToJid('5511@lid', 65), '5511:65@lid')
+    assert.equal(applyDeviceToJid('5511@s.whatsapp.net', 99), '5511:99@s.whatsapp.net')
 
     assert.equal(canonicalizeSignalServer('hosted'), 's.whatsapp.net')
     assert.equal(canonicalizeSignalServer('hosted.lid'), 'lid')

@@ -41,6 +41,28 @@ interface WaIncomingMessageAckHandlerOptions {
     readonly emitUnhandledStanza?: (event: WaIncomingUnhandledStanzaEvent) => void
 }
 
+interface MessageIdentityAttrs {
+    readonly senderAlt: string | undefined
+    readonly senderUsername: string | undefined
+    readonly recipientJid: string | undefined
+    readonly recipientAlt: string | undefined
+    readonly pushName: string | undefined
+}
+
+function extractMessageIdentityAttrs(attrs: BinaryNode['attrs']): MessageIdentityAttrs {
+    const rawAlt =
+        attrs.participant_pn ?? attrs.sender_pn ?? attrs.participant_lid ?? attrs.sender_lid
+    const rawRecipientAlt = attrs.peer_recipient_pn ?? attrs.peer_recipient_lid
+    const rawRecipient = attrs.recipient
+    return {
+        senderAlt: rawAlt ? toUserJid(rawAlt) : undefined,
+        senderUsername: attrs.participant_username ?? attrs.username,
+        recipientJid: rawRecipient ? toUserJid(rawRecipient) : undefined,
+        recipientAlt: rawRecipientAlt ? toUserJid(rawRecipientAlt) : undefined,
+        pushName: attrs.notify
+    }
+}
+
 function pickNextRetryCount(node: BinaryNode): number {
     const retryNode = findNodeChild(node, 'retry')
     const parsed = parseOptionalInt(retryNode?.attrs.count)
@@ -284,13 +306,7 @@ function processMsmsgEncNode(
         }
         const chatJid = node.attrs.from
         const sender = senderJid ? parseJidFull(senderJid) : null
-        const rawAlt =
-            node.attrs.participant_pn ??
-            node.attrs.sender_pn ??
-            node.attrs.participant_lid ??
-            node.attrs.sender_lid
-        const rawRecipientAlt = node.attrs.peer_recipient_pn ?? node.attrs.peer_recipient_lid
-        const rawRecipient = node.attrs.recipient
+        const identity = extractMessageIdentityAttrs(node.attrs)
         options.emitIncomingMessage?.({
             rawNode: buildIncomingEventRawNode(node),
             stanzaId: node.attrs.id,
@@ -298,12 +314,8 @@ function processMsmsgEncNode(
             stanzaType: node.attrs.type,
             timestampSeconds: parseOptionalInt(node.attrs.t),
             senderJid: sender?.userJid,
-            senderAlt: rawAlt ? toUserJid(rawAlt) : undefined,
             senderDevice: sender?.address.device,
-            senderUsername: node.attrs.participant_username ?? node.attrs.username,
-            recipientJid: rawRecipient ? toUserJid(rawRecipient) : undefined,
-            recipientAlt: rawRecipientAlt ? toUserJid(rawRecipientAlt) : undefined,
-            pushName: node.attrs.notify,
+            ...identity,
             encryptionType: 'msmsg',
             isGroupChat: chatJid ? isGroupJid(chatJid) : false,
             isBroadcastChat: chatJid ? isBroadcastJid(chatJid) : false,
@@ -371,13 +383,7 @@ async function decryptAndProcessEncNode(
         }
         if (shouldEmitIncomingMessage(message)) {
             const chatJid = node.attrs.from
-            const rawAlt =
-                node.attrs.participant_pn ??
-                node.attrs.sender_pn ??
-                node.attrs.participant_lid ??
-                node.attrs.sender_lid
-            const rawRecipientAlt = node.attrs.peer_recipient_pn ?? node.attrs.peer_recipient_lid
-            const rawRecipient = node.attrs.recipient
+            const identity = extractMessageIdentityAttrs(node.attrs)
             options.emitIncomingMessage?.({
                 rawNode: buildIncomingEventRawNode(node),
                 stanzaId: node.attrs.id,
@@ -385,12 +391,8 @@ async function decryptAndProcessEncNode(
                 stanzaType: node.attrs.type,
                 timestampSeconds: parseOptionalInt(node.attrs.t),
                 senderJid: `${senderAddress.user}@${senderAddress.server}`,
-                senderAlt: rawAlt ? toUserJid(rawAlt) : undefined,
                 senderDevice: senderAddress.device,
-                senderUsername: node.attrs.participant_username ?? node.attrs.username,
-                recipientJid: rawRecipient ? toUserJid(rawRecipient) : undefined,
-                recipientAlt: rawRecipientAlt ? toUserJid(rawRecipientAlt) : undefined,
-                pushName: node.attrs.notify,
+                ...identity,
                 encryptionType: encType,
                 isGroupChat: chatJid ? isGroupJid(chatJid) : false,
                 isBroadcastChat: chatJid ? isBroadcastJid(chatJid) : false,
