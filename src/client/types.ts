@@ -243,6 +243,12 @@ export interface WaIncomingBaseEvent {
 export interface WaIncomingMessageEvent extends WaIncomingBaseEvent {
     readonly timestampSeconds?: number
     readonly senderJid?: string
+    readonly senderAlt?: string
+    readonly senderDevice?: number
+    readonly senderUsername?: string
+    readonly recipientJid?: string
+    readonly recipientAlt?: string
+    readonly pushName?: string
     readonly encryptionType?: string
     readonly isGroupChat: boolean
     readonly isBroadcastChat: boolean

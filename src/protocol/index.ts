@@ -1,5 +1,6 @@
 export * from '@protocol/constants'
 export {
+    applyDeviceToJid,
     buildDeviceJid,
     canonicalizeSignalJid,
     canonicalizeSignalServer,

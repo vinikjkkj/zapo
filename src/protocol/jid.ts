@@ -182,6 +182,12 @@ export function normalizeDeviceJid(jid: string): string {
     return `${address.user}:${address.device}@${address.server}`
 }
 
+export function applyDeviceToJid(userJid: string, device: number | undefined): string {
+    if (!device) return userJid
+    const address = parseSignalAddressFromJid(userJid)
+    return buildDeviceJid(address.user, address.server ?? WA_DEFAULTS.HOST_DOMAIN, device)
+}
+
 export function isHostedDeviceId(deviceId: number): boolean {
     return deviceId === WA_DEFAULTS.HOSTED_DEVICE_ID
 }

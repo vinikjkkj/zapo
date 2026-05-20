@@ -13,7 +13,9 @@ import {
     isBroadcastJid,
     isGroupJid,
     isNewsletterJid,
-    parseSignalAddressFromJid
+    parseJidFull,
+    parseSignalAddressFromJid,
+    toUserJid
 } from '@protocol/jid'
 import type { WaRetryDecryptFailureContext } from '@retry/types'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
@@ -94,7 +96,10 @@ export function buildRecoveredIncomingEvent(
     const participant = key.participant ?? undefined
     const isGroup = chatJid ? isGroupJid(chatJid) : false
     const isBroadcast = chatJid ? isBroadcastJid(chatJid) : false
-    const senderJid = fromMe ? undefined : isGroup || isBroadcast ? participant : chatJid
+    const rawSender = fromMe ? undefined : isGroup || isBroadcast ? participant : chatJid
+    const sender = rawSender ? parseJidFull(rawSender) : null
+    const senderJid = sender?.userJid
+    const senderDevice = sender?.address.device
     const timestampSeconds =
         webMessageInfo.messageTimestamp !== null && webMessageInfo.messageTimestamp !== undefined
             ? longToNumber(webMessageInfo.messageTimestamp)
@@ -114,6 +119,7 @@ export function buildRecoveredIncomingEvent(
         chatJid,
         timestampSeconds,
         senderJid,
+        senderDevice,
         encryptionType: 'placeholder_recovery',
         isGroupChat: isGroup,
         isBroadcastChat: isBroadcast,
@@ -277,13 +283,27 @@ function processMsmsgEncNode(
             }
         }
         const chatJid = node.attrs.from
+        const sender = senderJid ? parseJidFull(senderJid) : null
+        const rawAlt =
+            node.attrs.participant_pn ??
+            node.attrs.sender_pn ??
+            node.attrs.participant_lid ??
+            node.attrs.sender_lid
+        const rawRecipientAlt = node.attrs.peer_recipient_pn ?? node.attrs.peer_recipient_lid
+        const rawRecipient = node.attrs.recipient
         options.emitIncomingMessage?.({
             rawNode: buildIncomingEventRawNode(node),
             stanzaId: node.attrs.id,
             chatJid,
             stanzaType: node.attrs.type,
             timestampSeconds: parseOptionalInt(node.attrs.t),
-            senderJid,
+            senderJid: sender?.userJid,
+            senderAlt: rawAlt ? toUserJid(rawAlt) : undefined,
+            senderDevice: sender?.address.device,
+            senderUsername: node.attrs.participant_username ?? node.attrs.username,
+            recipientJid: rawRecipient ? toUserJid(rawRecipient) : undefined,
+            recipientAlt: rawRecipientAlt ? toUserJid(rawRecipientAlt) : undefined,
+            pushName: node.attrs.notify,
             encryptionType: 'msmsg',
             isGroupChat: chatJid ? isGroupJid(chatJid) : false,
             isBroadcastChat: chatJid ? isBroadcastJid(chatJid) : false,
@@ -351,13 +371,26 @@ async function decryptAndProcessEncNode(
         }
         if (shouldEmitIncomingMessage(message)) {
             const chatJid = node.attrs.from
+            const rawAlt =
+                node.attrs.participant_pn ??
+                node.attrs.sender_pn ??
+                node.attrs.participant_lid ??
+                node.attrs.sender_lid
+            const rawRecipientAlt = node.attrs.peer_recipient_pn ?? node.attrs.peer_recipient_lid
+            const rawRecipient = node.attrs.recipient
             options.emitIncomingMessage?.({
                 rawNode: buildIncomingEventRawNode(node),
                 stanzaId: node.attrs.id,
                 chatJid,
                 stanzaType: node.attrs.type,
                 timestampSeconds: parseOptionalInt(node.attrs.t),
-                senderJid,
+                senderJid: `${senderAddress.user}@${senderAddress.server}`,
+                senderAlt: rawAlt ? toUserJid(rawAlt) : undefined,
+                senderDevice: senderAddress.device,
+                senderUsername: node.attrs.participant_username ?? node.attrs.username,
+                recipientJid: rawRecipient ? toUserJid(rawRecipient) : undefined,
+                recipientAlt: rawRecipientAlt ? toUserJid(rawRecipientAlt) : undefined,
+                pushName: node.attrs.notify,
                 encryptionType: encType,
                 isGroupChat: chatJid ? isGroupJid(chatJid) : false,
                 isBroadcastChat: chatJid ? isBroadcastJid(chatJid) : false,
