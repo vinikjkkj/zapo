@@ -302,12 +302,14 @@ export async function computeWaveformWithFfmpeg(
 export interface NormalizeVoiceNoteOptions {
     readonly bitRate?: number
     readonly sampleRate?: number
+    readonly application?: 'voip' | 'audio'
     readonly ffmpegPath?: string
     readonly onWarning?: FfmpegWarnFn
 }
 
-const VOICE_NOTE_DEFAULT_BITRATE = 16_000
-const VOICE_NOTE_DEFAULT_SAMPLE_RATE = 16_000
+const VOICE_NOTE_DEFAULT_BITRATE = 64_000
+const VOICE_NOTE_DEFAULT_SAMPLE_RATE = 48_000
+const VOICE_NOTE_DEFAULT_APPLICATION = 'audio'
 
 export async function normalizeVoiceNoteWithFfmpeg(
     input: WaMediaProcessorInput,
@@ -319,6 +321,7 @@ export async function normalizeVoiceNoteWithFfmpeg(
     const useFile = typeof input === 'string'
     const bitRate = options.bitRate ?? VOICE_NOTE_DEFAULT_BITRATE
     const sampleRate = options.sampleRate ?? VOICE_NOTE_DEFAULT_SAMPLE_RATE
+    const application = options.application ?? VOICE_NOTE_DEFAULT_APPLICATION
 
     const args = [
         '-hide_banner',
@@ -336,7 +339,7 @@ export async function normalizeVoiceNoteWithFfmpeg(
         '-ac',
         '1',
         '-application',
-        'voip',
+        application,
         '-frame_duration',
         '20',
         '-avoid_negative_ts',

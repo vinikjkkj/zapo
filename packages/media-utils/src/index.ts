@@ -45,6 +45,7 @@ export function createMediaProcessor(options?: WaMediaProcessorOptions): WaMedia
             return normalizeVoiceNoteWithFfmpeg(input, {
                 bitRate: opts.voiceNoteBitRate,
                 sampleRate: opts.voiceNoteSampleRate,
+                application: opts.voiceNoteApplication,
                 ffmpegPath: opts.ffmpegPath,
                 onWarning: warn
             })

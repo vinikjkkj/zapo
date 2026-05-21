@@ -6,5 +6,6 @@ export interface WaMediaProcessorOptions {
     readonly waveformPoints?: number
     readonly voiceNoteBitRate?: number
     readonly voiceNoteSampleRate?: number
+    readonly voiceNoteApplication?: 'voip' | 'audio'
     readonly onWarning?: (message: string) => void
 }
