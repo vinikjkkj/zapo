@@ -149,7 +149,7 @@ jobs:
               with:
                   name: core-build
                   path: dist/
-            - run: npx turbo run build --filter=@zapo-js/fake-server --filter=@zapo-js/store-sqlite --filter=@zapo-js/mcp-server
+            - run: npx turbo run build --filter=@zapo-js/fake-server --filter=@zapo-js/store-sqlite --filter=@zapo-js/media-utils --filter=@zapo-js/mcp-server
             - run: npm test -w packages/mcp-server
 
     test-mysql:
