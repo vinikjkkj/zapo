@@ -89,6 +89,7 @@ describe('createMediaProcessor', () => {
         assert.equal(typeof processor.generateVideoThumbnail, 'function')
         assert.equal(typeof processor.probeMedia, 'function')
         assert.equal(typeof processor.computeWaveform, 'function')
+        assert.equal(typeof processor.normalizeVoiceNote, 'function')
     })
 
     it('generateImageThumbnail respects options override', async () => {
@@ -222,6 +223,60 @@ describe('createMediaProcessor', () => {
             const processor = createMediaProcessor()
             const result = await processor.generateVideoThumbnail!(new Uint8Array([1, 2, 3]), 320)
             assert.equal(result, null)
+        }
+    )
+
+    it('normalizeVoiceNote returns null when ffmpeg is missing', async () => {
+        const processor = createMediaProcessor({
+            ffmpegPath: `missing-ffmpeg-${Date.now()}`
+        })
+        const result = await processor.normalizeVoiceNote!(new Uint8Array([1, 2, 3]))
+        assert.equal(result, null)
+    })
+
+    it(
+        'normalizeVoiceNote produces an OGG/Opus stream from a path input',
+        { skip: !hasFFmpeg() },
+        async () => {
+            const audioPath = createTempAudioFile()
+            try {
+                const processor = createMediaProcessor()
+                const stream = await processor.normalizeVoiceNote!(audioPath)
+                assert.notEqual(stream, null)
+                const chunks: Buffer[] = []
+                for await (const chunk of stream!) chunks.push(chunk as Buffer)
+                const bytes = Buffer.concat(chunks)
+                assert.ok(bytes.byteLength > 0)
+                // OggS magic
+                assert.equal(bytes[0], 0x4f)
+                assert.equal(bytes[1], 0x67)
+                assert.equal(bytes[2], 0x67)
+                assert.equal(bytes[3], 0x53)
+            } finally {
+                await unlink(audioPath).catch(() => undefined)
+            }
+        }
+    )
+
+    it(
+        'normalizeVoiceNote accepts a Readable input via stdin streaming',
+        { skip: !hasFFmpeg() },
+        async () => {
+            const audioPath = createTempAudioFile()
+            try {
+                const { createReadStream } = await import('node:fs')
+                const processor = createMediaProcessor()
+                const stream = await processor.normalizeVoiceNote!(createReadStream(audioPath))
+                assert.notEqual(stream, null)
+                const chunks: Buffer[] = []
+                for await (const chunk of stream!) chunks.push(chunk as Buffer)
+                const bytes = Buffer.concat(chunks)
+                assert.ok(bytes.byteLength > 0)
+                assert.equal(bytes[0], 0x4f)
+                assert.equal(bytes[1], 0x67)
+            } finally {
+                await unlink(audioPath).catch(() => undefined)
+            }
         }
     )
 })

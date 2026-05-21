@@ -299,6 +299,100 @@ export async function computeWaveformWithFfmpeg(
     })
 }
 
+export interface NormalizeVoiceNoteOptions {
+    readonly bitRate?: number
+    readonly sampleRate?: number
+    readonly ffmpegPath?: string
+    readonly onWarning?: FfmpegWarnFn
+}
+
+const VOICE_NOTE_DEFAULT_BITRATE = 16_000
+const VOICE_NOTE_DEFAULT_SAMPLE_RATE = 16_000
+
+export async function normalizeVoiceNoteWithFfmpeg(
+    input: WaMediaProcessorInput,
+    options: NormalizeVoiceNoteOptions = {}
+): Promise<Readable | null> {
+    const bin = options.ffmpegPath ?? 'ffmpeg'
+    if (!(await hasBin(bin, 'ffmpeg', options.onWarning))) return null
+
+    const useFile = typeof input === 'string'
+    const bitRate = options.bitRate ?? VOICE_NOTE_DEFAULT_BITRATE
+    const sampleRate = options.sampleRate ?? VOICE_NOTE_DEFAULT_SAMPLE_RATE
+
+    const args = [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-i',
+        useFile ? input : 'pipe:0',
+        '-vn',
+        '-c:a',
+        'libopus',
+        '-b:a',
+        String(bitRate),
+        '-ar',
+        String(sampleRate),
+        '-ac',
+        '1',
+        '-application',
+        'voip',
+        '-frame_duration',
+        '20',
+        '-avoid_negative_ts',
+        'make_zero',
+        '-map_metadata',
+        '-1',
+        '-f',
+        'ogg',
+        'pipe:1'
+    ]
+
+    const proc = spawn(bin, args, {
+        stdio: [useFile ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+        timeout: 60_000
+    })
+
+    const stderrChunks: Buffer[] = []
+    proc.stderr!.on('data', (chunk: Buffer) => {
+        stderrChunks.push(chunk)
+    })
+
+    let inputStream: Readable | undefined
+    if (!useFile) {
+        inputStream = inputToReadable(input)
+        const onSourceError = (err: Error): void => {
+            if (proc.exitCode === null) proc.kill('SIGKILL')
+            proc.stdout!.destroy(err)
+        }
+        inputStream.on('error', onSourceError)
+        proc.stdin!.on('error', () => inputStream!.destroy())
+        inputStream.pipe(proc.stdin!)
+    }
+
+    proc.on('error', (err) => {
+        proc.stdout!.destroy(err)
+        inputStream?.destroy()
+    })
+    proc.on('close', (code) => {
+        if (code !== 0 && !proc.stdout!.destroyed) {
+            const stderr = Buffer.concat(stderrChunks).toString('utf8').trim().slice(-500)
+            proc.stdout!.destroy(
+                new Error(
+                    `ffmpeg voice-note normalize exited ${code}${stderr ? `: ${stderr}` : ''}`
+                )
+            )
+        }
+    })
+
+    proc.stdout!.on('close', () => {
+        if (proc.exitCode === null) proc.kill('SIGKILL')
+        inputStream?.destroy()
+    })
+
+    return proc.stdout!
+}
+
 function scaleAndNormalize(raw: number[], points: number): Uint8Array {
     const scaled = new Float32Array(points)
     if (raw.length <= points) {

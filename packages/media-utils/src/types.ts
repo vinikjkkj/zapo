@@ -4,5 +4,7 @@ export interface WaMediaProcessorOptions {
     readonly imageThumbMaxEdge?: number
     readonly imageThumbQuality?: number
     readonly waveformPoints?: number
+    readonly voiceNoteBitRate?: number
+    readonly voiceNoteSampleRate?: number
     readonly onWarning?: (message: string) => void
 }

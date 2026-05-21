@@ -413,6 +413,18 @@ function shouldGenerateWaveform(
     )
 }
 
+export function shouldNormalizeVoiceNote(
+    media: WaMediaOptions | undefined,
+    content: WaSendMediaMessage
+): boolean {
+    return (
+        !!media?.processor?.normalizeVoiceNote &&
+        media.normalizeVoiceNote === true &&
+        content.type === 'audio' &&
+        content.ptt === true
+    )
+}
+
 function shouldGenerateStickerThumbnail(
     media: WaMediaOptions | undefined,
     content: WaSendMediaMessage

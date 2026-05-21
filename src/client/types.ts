@@ -139,6 +139,7 @@ export interface WaMediaOptions {
     readonly generateProbe?: boolean
     readonly generateWaveform?: boolean
     readonly generateStickerThumbnail?: boolean
+    readonly normalizeVoiceNote?: boolean
 }
 
 export interface WaAddonOptions {

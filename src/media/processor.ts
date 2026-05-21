@@ -42,6 +42,8 @@ export interface WaMediaProcessor {
         input: WaMediaProcessorInput
     ) => Promise<WaMediaProcessorWaveformResult | null>
 
+    readonly normalizeVoiceNote?: (input: WaMediaProcessorInput) => Promise<Readable | null>
+
     readonly generateStickerThumbnail?: (
         input: WaMediaProcessorInput,
         maxEdge: number

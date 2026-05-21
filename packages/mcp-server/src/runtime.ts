@@ -2,6 +2,7 @@ import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
+import { createMediaProcessor } from '@zapo-js/media-utils'
 import { createSqliteStore } from '@zapo-js/store-sqlite'
 import { createStore, type Logger, type LogLevel, WaClient, type WaStore } from 'zapo-js'
 import { hexToBytes, resolvePositive, toError } from 'zapo-js/util'
@@ -493,6 +494,11 @@ export class McpRuntime {
                 },
                 nodeQueryTimeoutMs: 30_000,
                 chatSocketUrls: this.config.chatSocketUrls,
+                media: {
+                    processor: createMediaProcessor({
+                        onWarning: (message) => this.logger.warn(message)
+                    })
+                },
                 testHooks: this.config.noiseRootCa
                     ? { noiseRootCa: this.config.noiseRootCa }
                     : undefined
