@@ -147,16 +147,19 @@ async function buildMediaMessage(
     if (content.type === 'sticker-pack') {
         return buildStickerPackMediaMessage(options, content)
     }
-    if (
-        content.type === 'audio' &&
-        shouldNormalizeVoiceNote(options.media, content) &&
-        options.media?.processor?.normalizeVoiceNote
-    ) {
+    if (shouldNormalizeVoiceNote(options.media, content)) {
         const sourceInput =
             content.media instanceof ArrayBuffer ? toBytesView(content.media) : content.media
-        const normalizedStream = await options.media.processor.normalizeVoiceNote(sourceInput)
-        if (normalizedStream) {
-            content = { ...content, media: normalizedStream, mimetype: VOICE_NOTE_MIMETYPE }
+        try {
+            const normalizedStream =
+                await options.media!.processor!.normalizeVoiceNote!(sourceInput)
+            if (normalizedStream) {
+                content = { ...content, media: normalizedStream, mimetype: VOICE_NOTE_MIMETYPE }
+            }
+        } catch (error) {
+            options.logger.warn('voice note normalize failed, sending original media', {
+                message: toError(error).message
+            })
         }
     }
     const needsTempFile =

@@ -416,7 +416,7 @@ function shouldGenerateWaveform(
 export function shouldNormalizeVoiceNote(
     media: WaMediaOptions | undefined,
     content: WaSendMediaMessage
-): boolean {
+): content is WaSendMediaMessage & { type: 'audio' } {
     return (
         !!media?.processor?.normalizeVoiceNote &&
         media.normalizeVoiceNote === true &&
