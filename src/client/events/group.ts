@@ -112,6 +112,7 @@ function createBaseGroupEvent(
         stanzaId: notificationNode.attrs.id,
         chatJid: notificationNode.attrs.from,
         stanzaType: notificationNode.attrs.type,
+        offline: notificationNode.attrs.offline !== undefined,
         groupJid: notificationNode.attrs.from,
         authorJid: notificationNode.attrs.participant,
         timestampSeconds: parseOptionalInt(notificationNode.attrs.t)

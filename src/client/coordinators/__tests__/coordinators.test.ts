@@ -408,6 +408,7 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
         stanzaId: 'ib-1',
         chatJid: 's.whatsapp.net',
         stanzaType: undefined,
+        offline: false,
         notificationType: 'ib.offline_preview',
         classification: 'info_bulletin',
         details: {
@@ -445,6 +446,7 @@ test('incoming node coordinator emits info bulletin notifications and forwards o
         stanzaId: 'ib-1',
         chatJid: 's.whatsapp.net',
         stanzaType: undefined,
+        offline: false,
         notificationType: 'ib.offline',
         classification: 'info_bulletin',
         details: {

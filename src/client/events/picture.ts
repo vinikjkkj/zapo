@@ -29,6 +29,7 @@ export function parsePictureNotificationEvents(node: BinaryNode): WaParsePicture
             stanzaId: node.attrs.id,
             chatJid: node.attrs.from,
             stanzaType: node.attrs.type,
+            offline: node.attrs.offline !== undefined,
             action,
             targetJid: actionNode.attrs.jid,
             authorJid: actionNode.attrs.author,

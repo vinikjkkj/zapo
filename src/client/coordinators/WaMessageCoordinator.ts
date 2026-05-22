@@ -225,6 +225,7 @@ export class WaMessageCoordinator {
             stanzaId: event.stanzaId,
             chatJid: event.chatJid,
             stanzaType: event.stanzaType,
+            offline: event.offline,
             kind: addon.kind,
             targetMessageId,
             senderJid: modificationSender,

@@ -294,6 +294,7 @@ function processMsmsgEncNode(
                 stanzaId: node.attrs.id,
                 chatJid: node.attrs.from,
                 stanzaType: node.attrs.type,
+                offline: node.attrs.offline !== undefined,
                 reason: 'message.msmsg.missing_payload'
             })
             return { success: false, encType: 'msmsg' }
@@ -312,6 +313,7 @@ function processMsmsgEncNode(
             stanzaId: node.attrs.id,
             chatJid,
             stanzaType: node.attrs.type,
+            offline: node.attrs.offline !== undefined,
             timestampSeconds: parseOptionalInt(node.attrs.t),
             senderJid: sender?.userJid,
             senderDevice: sender?.address.device,
@@ -334,6 +336,7 @@ function processMsmsgEncNode(
             stanzaId: node.attrs.id,
             chatJid: node.attrs.from,
             stanzaType: node.attrs.type,
+            offline: node.attrs.offline !== undefined,
             reason: 'message.msmsg.decode_failed'
         })
         return { success: false, encType: 'msmsg', error }
@@ -389,6 +392,7 @@ async function decryptAndProcessEncNode(
                 stanzaId: node.attrs.id,
                 chatJid,
                 stanzaType: node.attrs.type,
+                offline: node.attrs.offline !== undefined,
                 timestampSeconds: parseOptionalInt(node.attrs.t),
                 senderJid: `${senderAddress.user}@${senderAddress.server}`,
                 senderDevice: senderAddress.device,
@@ -414,6 +418,7 @@ async function decryptAndProcessEncNode(
             stanzaId: node.attrs.id,
             chatJid: node.attrs.from,
             stanzaType: node.attrs.type,
+            offline: node.attrs.offline !== undefined,
             reason: `message.decrypt_failed.${encType}`
         })
         return { success: false, encType, error }
@@ -459,6 +464,7 @@ export async function handleIncomingMessageAck(
                             stanzaId: node.attrs.id,
                             chatJid: node.attrs.from,
                             stanzaType: node.attrs.type,
+                            offline: node.attrs.offline !== undefined,
                             reason: 'message.skmsg.missing_group_context'
                         })
                         continue

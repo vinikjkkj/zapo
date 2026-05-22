@@ -157,7 +157,8 @@ export function createIncomingBaseEvent(node: BinaryNode): WaIncomingBaseEvent {
         rawNode: node,
         stanzaId: node.attrs.id,
         chatJid: node.attrs.from,
-        stanzaType: node.attrs.type
+        stanzaType: node.attrs.type,
+        offline: node.attrs.offline !== undefined
     }
 }
 

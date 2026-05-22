@@ -305,6 +305,7 @@ function createBaseBusinessEvent(notificationNode: BinaryNode): Omit<WaBusinessE
         stanzaId: notificationNode.attrs.id,
         chatJid: notificationNode.attrs.from,
         stanzaType: notificationNode.attrs.type,
+        offline: notificationNode.attrs.offline !== undefined,
         timestampSeconds: parseOptionalInt(notificationNode.attrs.t)
     }
 }

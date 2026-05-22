@@ -40,6 +40,7 @@ export function processIncomingNewsletterMessage(
             stanzaId: node.attrs.id,
             chatJid,
             stanzaType: messageType,
+            offline: node.attrs.offline !== undefined,
             reason: 'newsletter.missing_plaintext'
         })
         return
@@ -62,6 +63,7 @@ export function processIncomingNewsletterMessage(
             stanzaId: node.attrs.id,
             chatJid,
             stanzaType: messageType,
+            offline: node.attrs.offline !== undefined,
             reason: 'newsletter.decode_failed'
         })
         return
@@ -72,6 +74,7 @@ export function processIncomingNewsletterMessage(
         stanzaId: node.attrs.id,
         chatJid,
         stanzaType: messageType,
+        offline: node.attrs.offline !== undefined,
         timestampSeconds: parseOptionalInt(node.attrs.t),
         senderJid: chatJid,
         encryptionType: 'plaintext',
@@ -98,6 +101,7 @@ function emitReactionEvent(
             stanzaId: node.attrs.id,
             chatJid,
             stanzaType: node.attrs.type,
+            offline: node.attrs.offline !== undefined,
             reason: 'newsletter.missing_reaction'
         })
         return
@@ -107,6 +111,7 @@ function emitReactionEvent(
         stanzaId: node.attrs.id,
         chatJid,
         stanzaType: node.attrs.type,
+        offline: node.attrs.offline !== undefined,
         timestampSeconds: parseOptionalInt(node.attrs.t),
         parentMessageServerId: parseOptionalInt(node.attrs.server_id),
         reactionCode: reactionNode.attrs.code,
