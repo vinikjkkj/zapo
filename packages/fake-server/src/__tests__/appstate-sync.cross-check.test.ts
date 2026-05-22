@@ -47,7 +47,7 @@ test('server_sync notification triggers a full app-state sync IQ round-trip', as
             `expected regular_high in sync IQ, got ${requestedNames.join(',')}`
         )
 
-        await client.syncAppState()
+        await client.chat.sync()
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()

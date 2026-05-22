@@ -215,6 +215,12 @@ export interface WaDeleteMessageForMeOptions {
     readonly messageTimestampMs?: number
 }
 
+export interface WaDownloadMediaOptions {
+    readonly maxBytes?: number
+    readonly timeoutMs?: number
+    readonly signal?: AbortSignal
+}
+
 export type WaIncomingNodeHandler = (node: BinaryNode) => Promise<boolean>
 
 export interface WaIncomingNodeHandlerRegistration {

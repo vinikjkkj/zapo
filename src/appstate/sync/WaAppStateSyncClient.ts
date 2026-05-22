@@ -28,7 +28,7 @@ import {
     WA_NODE_TAGS,
     WA_XMLNS
 } from '@protocol/constants'
-import { parseSignalAddressFromJid } from '@protocol/jid'
+import { applyDeviceToJid, normalizeDeviceJid, parseSignalAddressFromJid } from '@protocol/jid'
 import type {
     WaAppStateCollectionStateUpdate,
     WaAppStateCollectionStoreState,
@@ -55,6 +55,13 @@ interface MacMutation {
 
 type DecryptedPatchMutation = WaAppStateMutation & { operationCode: number }
 
+export interface IncomingKeyEventContext {
+    readonly stanzaId?: string
+    readonly chatJid?: string
+    readonly senderJid?: string
+    readonly senderDevice?: number
+}
+
 interface WaAppStateSyncClientOptions {
     readonly logger: Logger
     readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
@@ -66,6 +73,13 @@ interface WaAppStateSyncClientOptions {
     readonly onMissingKeys?: (event: WaAppStateMissingKeysEvent) => Promise<void>
     readonly skipMacVerification?: boolean
     readonly mobilePrimary?: boolean
+    readonly isOwnAccountDevice?: (deviceJid: string) => boolean
+    readonly sendKeyShare?: (
+        toDeviceJid: string,
+        keys: readonly WaAppStateSyncKey[],
+        missingKeyIds: readonly Uint8Array[]
+    ) => Promise<void>
+    readonly triggerSync?: () => Promise<void>
 }
 
 class WaAppStateMissingKeyError extends Error {
@@ -93,6 +107,13 @@ export class WaAppStateSyncClient {
     private readonly hostDomain: string
     private readonly defaultTimeoutMs: number
     private readonly onMissingKeys?: (event: WaAppStateMissingKeysEvent) => Promise<void>
+    private readonly isOwnAccountDevice?: (deviceJid: string) => boolean
+    private readonly sendKeyShare?: (
+        toDeviceJid: string,
+        keys: readonly WaAppStateSyncKey[],
+        missingKeyIds: readonly Uint8Array[]
+    ) => Promise<void>
+    private readonly triggerSync?: () => Promise<void>
     private readonly crypto: WaAppStateCrypto
     private readonly mobilePrimary: boolean
     private syncContext: {
@@ -111,6 +132,9 @@ export class WaAppStateSyncClient {
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
         this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.APP_STATE_SYNC_TIMEOUT_MS
         this.onMissingKeys = options.onMissingKeys
+        this.isOwnAccountDevice = options.isOwnAccountDevice
+        this.sendKeyShare = options.sendKeyShare
+        this.triggerSync = options.triggerSync
 
         this.crypto = new WaAppStateCrypto(undefined, options.skipMacVerification === true)
         this.mobilePrimary = options.mobilePrimary ?? false
@@ -149,6 +173,159 @@ export class WaAppStateSyncClient {
             this.logger.info('app-state sync keys persisted', { inserted })
         }
         return inserted
+    }
+
+    public async handleIncomingKeyShare(
+        context: IncomingKeyEventContext,
+        protocolMessage: Proto.Message.IProtocolMessage
+    ): Promise<void> {
+        const share = protocolMessage.appStateSyncKeyShare
+        if (!share) {
+            this.logger.warn('incoming app-state key share protocol message without payload', {
+                id: context.stanzaId,
+                from: context.chatJid
+            })
+            return
+        }
+
+        try {
+            const imported = await this.importSyncKeyShare(share)
+            this.logger.info('imported app-state sync key share from protocol message', {
+                id: context.stanzaId,
+                from: context.chatJid,
+                imported
+            })
+            if (imported > 0 && this.triggerSync) {
+                void this.triggerSync().catch((error) => {
+                    this.logger.warn('failed to sync app-state after key share import', {
+                        id: context.stanzaId,
+                        from: context.chatJid,
+                        message: toError(error).message
+                    })
+                })
+            }
+        } catch (error) {
+            this.logger.warn('failed to import app-state sync key share from protocol message', {
+                id: context.stanzaId,
+                from: context.chatJid,
+                message: toError(error).message
+            })
+        }
+    }
+
+    public async handleIncomingKeyRequest(
+        context: IncomingKeyEventContext,
+        protocolMessage: Proto.Message.IProtocolMessage
+    ): Promise<void> {
+        const request = protocolMessage.appStateSyncKeyRequest
+        if (!request) {
+            this.logger.warn('incoming app-state key request protocol message without payload', {
+                id: context.stanzaId,
+                from: context.chatJid
+            })
+            return
+        }
+
+        const requesterSource = context.senderJid ?? context.chatJid
+        if (!requesterSource) {
+            this.logger.warn('incoming app-state key request missing sender jid', {
+                id: context.stanzaId
+            })
+            return
+        }
+
+        let requesterDeviceJid: string
+        try {
+            const requesterRaw = context.senderJid
+                ? applyDeviceToJid(context.senderJid, context.senderDevice)
+                : requesterSource
+            requesterDeviceJid = normalizeDeviceJid(requesterRaw)
+        } catch (error) {
+            this.logger.warn('incoming app-state key request has malformed sender jid', {
+                id: context.stanzaId,
+                from: requesterSource,
+                message: toError(error).message
+            })
+            return
+        }
+
+        if (this.isOwnAccountDevice && !this.isOwnAccountDevice(requesterDeviceJid)) {
+            this.logger.warn('incoming app-state key request ignored: sender is not own account', {
+                id: context.stanzaId,
+                from: requesterDeviceJid
+            })
+            return
+        }
+
+        const requestedKeyIds = this.extractKeyRequestIds(request)
+        if (requestedKeyIds.length === 0) {
+            this.logger.warn('incoming app-state key request has no valid key ids', {
+                id: context.stanzaId,
+                from: requesterDeviceJid
+            })
+            return
+        }
+
+        if (!this.sendKeyShare) {
+            this.logger.warn('incoming app-state key request received but no sendKeyShare wired', {
+                id: context.stanzaId,
+                from: requesterDeviceJid
+            })
+            return
+        }
+
+        const requestedKeys = await this.store.getSyncKeysBatch(requestedKeyIds)
+        const availableKeys: WaAppStateSyncKey[] = []
+        const missingKeyIds: Uint8Array[] = []
+        for (let i = 0; i < requestedKeys.length; i += 1) {
+            const key = requestedKeys[i]
+            if (key !== null) {
+                availableKeys.push(key)
+            } else {
+                missingKeyIds.push(requestedKeyIds[i])
+            }
+        }
+
+        try {
+            await this.sendKeyShare(requesterDeviceJid, availableKeys, missingKeyIds)
+            this.logger.info('responded to app-state key request', {
+                id: context.stanzaId,
+                to: requesterDeviceJid,
+                requested: requestedKeyIds.length,
+                shared: availableKeys.length,
+                missing: missingKeyIds.length
+            })
+        } catch (error) {
+            this.logger.warn('failed to respond to app-state key request', {
+                id: context.stanzaId,
+                to: requesterDeviceJid,
+                requested: requestedKeyIds.length,
+                shared: availableKeys.length,
+                missing: missingKeyIds.length,
+                message: toError(error).message
+            })
+        }
+    }
+
+    private extractKeyRequestIds(
+        request: Proto.Message.IAppStateSyncKeyRequest
+    ): readonly Uint8Array[] {
+        const deduped = new Map<string, Uint8Array>()
+        for (const key of request.keyIds ?? []) {
+            try {
+                const keyId = decodeProtoBytes(key.keyId, 'appStateSyncKeyRequest.keyIds[].keyId')
+                const keyHex = bytesToHex(keyId)
+                if (deduped.has(keyHex)) {
+                    continue
+                }
+                deduped.set(keyHex, keyId)
+            } catch (error) {
+                this.logger.trace('ignoring malformed app-state key id request entry', {
+                    message: toError(error).message
+                })
+            }
+        }
+        return [...deduped.values()]
     }
 
     public async importSyncKeyShare(share: Proto.Message.IAppStateSyncKeyShare): Promise<number> {

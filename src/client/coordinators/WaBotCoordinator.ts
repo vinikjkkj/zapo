@@ -1,8 +1,16 @@
 import { randomUUID } from 'node:crypto'
 
-import type { WaSendMessageOptions } from '@client/types'
+import type { WaAuthCredentials } from '@auth/types'
+import type {
+    WaIncomingBotChunkEvent,
+    WaIncomingMessageEvent,
+    WaSendMessageOptions
+} from '@client/types'
+import type { Logger } from '@infra/log/types'
 import { applyContextInfo } from '@message/context-info'
-import { attachBotMetadata, attachBotThread } from '@message/kinds/bot'
+import { resolveParentMessageSecret } from '@message/crypto/addon-crypto'
+import { unwrapMessage } from '@message/encode/content'
+import { attachBotMetadata, attachBotThread, decryptBotChunk } from '@message/kinds/bot'
 import type {
     WaMessageBuildResult,
     WaMessagePublishResult,
@@ -15,12 +23,22 @@ import {
     WA_BOT_DEFAULT_CAPABILITIES,
     WA_BOT_RENDERING_PIXEL_DENSITY
 } from '@protocol/bot'
-import { WA_DEFAULTS, WA_NODE_TAGS } from '@protocol/constants'
-import { isBotJid } from '@protocol/jid'
+import {
+    WA_BOT_MSG_EDIT_TYPES,
+    WA_BOT_NODE_ATTRS,
+    WA_DEFAULTS,
+    WA_META_NODE_ATTRS_BOT,
+    WA_NODE_TAGS,
+    type WaBotMsgEditType
+} from '@protocol/constants'
+import { isBotJid, toUserJid } from '@protocol/jid'
+import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
+import type { WaMessageStore } from '@store/contracts/message.store'
 import { buildBotListIq } from '@transport/node/builders/bot'
 import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
+import { toError } from '@util/primitives'
 
 export interface WaBotInfo {
     readonly jid: string
@@ -51,9 +69,11 @@ export interface WaBotCoordinator {
         content: WaSendMessageContent,
         options?: WaBotPromptOptions
     ) => Promise<WaMessagePublishResult>
+    readonly tryDecryptChunk: (event: WaIncomingMessageEvent) => Promise<void>
 }
 
 interface WaBotCoordinatorOptions {
+    readonly logger: Logger
     readonly queryWithContext: (
         context: string,
         node: BinaryNode,
@@ -66,6 +86,10 @@ interface WaBotCoordinatorOptions {
         content: WaSendMessageContent,
         options?: WaSendMessageOptions
     ) => Promise<WaMessagePublishResult>
+    readonly messageStore: WaMessageStore
+    readonly messageSecretStore: WaMessageSecretStore
+    readonly getCurrentCredentials: () => WaAuthCredentials | null
+    readonly emitBotChunk: (event: WaIncomingBotChunkEvent) => void
 }
 
 function deriveFbidJid(jid: string, personaId: string): string {
@@ -116,7 +140,16 @@ function normalizeBotJidToFbid(botJid: string): string {
 }
 
 export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoordinator {
-    const { queryWithContext, buildMessageContent, sendMessage } = options
+    const {
+        logger,
+        queryWithContext,
+        buildMessageContent,
+        sendMessage,
+        messageStore,
+        messageSecretStore,
+        getCurrentCredentials,
+        emitBotChunk
+    } = options
 
     return {
         listBots: async () => {
@@ -183,6 +216,135 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
                 botInvokeMessage: { message: inner }
             }
             return sendMessage(to, wrapped, opts)
+        },
+
+        tryDecryptChunk: async (event) => {
+            const message = event.message
+            if (!message) return
+
+            const inner = unwrapMessage(message)
+            const sec = inner.secretEncryptedMessage
+            if (!sec || !sec.encIv || !sec.encPayload) return
+
+            const botNode = findNodeChild(event.rawNode, WA_NODE_TAGS.BOT)
+            if (!botNode) return
+
+            const metaNode = findNodeChild(event.rawNode, WA_NODE_TAGS.META)
+            // msmsg chunks omit targetMessageKey; the prompt id lives in <meta target_id>
+            const targetMessageId =
+                sec.targetMessageKey?.id ?? metaNode?.attrs[WA_META_NODE_ATTRS_BOT.TARGET_ID]
+            if (!targetMessageId) return
+
+            const editAttr = botNode.attrs[WA_BOT_NODE_ATTRS.EDIT]
+            const editType = (
+                editAttr === WA_BOT_MSG_EDIT_TYPES.FIRST ||
+                editAttr === WA_BOT_MSG_EDIT_TYPES.INNER ||
+                editAttr === WA_BOT_MSG_EDIT_TYPES.LAST ||
+                editAttr === WA_BOT_MSG_EDIT_TYPES.FULL
+                    ? editAttr
+                    : WA_BOT_MSG_EDIT_TYPES.FULL
+            ) as WaBotMsgEditType
+            const editTargetId = botNode.attrs[WA_BOT_NODE_ATTRS.EDIT_TARGET_ID] || undefined
+
+            const useEditTargetSalt =
+                editType === WA_BOT_MSG_EDIT_TYPES.INNER || editType === WA_BOT_MSG_EDIT_TYPES.LAST
+            const saltId = useEditTargetSalt ? editTargetId : event.stanzaId
+            if (!saltId) {
+                logger.debug('bot chunk missing salt id', {
+                    id: event.stanzaId,
+                    editType,
+                    hasEditTargetId: !!editTargetId
+                })
+                return
+            }
+
+            const senderJid = event.senderJid
+            if (!senderJid) {
+                logger.debug('bot chunk missing sender jid', { id: event.stanzaId })
+                return
+            }
+
+            const metaTargetSenderJid = metaNode?.attrs[WA_META_NODE_ATTRS_BOT.TARGET_SENDER_JID]
+            const credentials = getCurrentCredentials()
+            const isFbidBotChat = event.chatJid ? isBotJid(event.chatJid) : false
+            // FBID bot (`*@bot`) keys on user LID; legacy PN bot keys on user PN
+            const meFallbackJid = isFbidBotChat
+                ? (credentials?.meLid ?? credentials?.meJid)
+                : credentials?.meJid
+            const targetSenderJid = metaTargetSenderJid
+                ? toUserJid(metaTargetSenderJid)
+                : meFallbackJid
+                  ? toUserJid(meFallbackJid)
+                  : undefined
+            if (!targetSenderJid) {
+                logger.debug('bot chunk missing target sender jid (no me jid)', {
+                    id: event.stanzaId,
+                    isFbidBotChat
+                })
+                return
+            }
+
+            const parentEntry = await resolveParentMessageSecret(
+                targetMessageId,
+                messageSecretStore,
+                messageStore
+            )
+            if (!parentEntry) {
+                logger.debug('bot chunk parent message secret not found', {
+                    id: event.stanzaId,
+                    targetId: targetMessageId
+                })
+                return
+            }
+
+            let plaintext: Uint8Array
+            try {
+                plaintext = decryptBotChunk({
+                    parentMessageSecret: parentEntry.secret,
+                    saltId,
+                    targetSenderJid,
+                    authorJid: toUserJid(senderJid),
+                    encIv: sec.encIv,
+                    encPayload: sec.encPayload
+                })
+            } catch (error) {
+                logger.warn('failed to decrypt bot chunk', {
+                    id: event.stanzaId,
+                    targetId: targetMessageId,
+                    editType,
+                    message: toError(error).message
+                })
+                return
+            }
+
+            let decoded: Proto.IMessage
+            try {
+                // msmsg payloads are not PKCS7-padded (unlike Signal messages);
+                // wa-web decodes the gcm plaintext directly as a proto Message.
+                decoded = proto.Message.decode(plaintext)
+            } catch (error) {
+                logger.warn('failed to decode decrypted bot chunk', {
+                    id: event.stanzaId,
+                    targetId: targetMessageId,
+                    message: toError(error).message
+                })
+                return
+            }
+
+            emitBotChunk({
+                rawNode: event.rawNode,
+                stanzaId: event.stanzaId,
+                chatJid: event.chatJid,
+                stanzaType: event.stanzaType,
+                senderJid,
+                targetMessageId,
+                editType,
+                editTargetId,
+                saltId,
+                plaintext,
+                message: decoded,
+                raw: message
+            })
         }
     }
 }

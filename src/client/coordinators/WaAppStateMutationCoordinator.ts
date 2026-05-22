@@ -1,16 +1,23 @@
+import type { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'
 import type {
     AppStateCollectionName,
     WaAppStateMutationInput,
     WaAppStateSyncOptions,
     WaAppStateSyncResult
 } from '@appstate/types'
+import { downloadExternalBlobReference } from '@appstate/utils'
+import { parseAccountEventFromAppStateMutation } from '@client/events/account'
+import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import type {
+    WaAccountEvent,
     WaAppStateMessageKey,
+    WaChatEvent,
     WaClearChatOptions,
     WaDeleteChatOptions,
     WaDeleteMessageForMeOptions
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { proto, type Proto } from '@proto'
 import {
     WA_APP_STATE_ACCOUNT_MUTATION_SPECS,
@@ -50,9 +57,15 @@ function serializeMutationIndex(action: string, parts: readonly string[]): strin
 interface WaAppStateMutationCoordinatorOptions {
     readonly logger: Logger
     readonly messageStore: WaMessageStore
-    readonly syncAppState: (options?: WaAppStateSyncOptions) => Promise<WaAppStateSyncResult>
+    readonly appStateSync: WaAppStateSyncClient
+    readonly mediaTransfer: WaMediaTransferClient
+    readonly isConnected: () => boolean
     readonly serverClock: ServerClock
     readonly archiveRangeLimit?: number
+    readonly emitChatEvent?: (event: WaChatEvent) => void
+    readonly emitAccountEvent?: (event: WaAccountEvent) => void
+    readonly emitSnapshotMutations?: boolean
+    readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
 }
 
 type WaAppStateChatMutationSpec =
@@ -83,26 +96,142 @@ export interface WaSetBroadcastListInput {
 export class WaAppStateMutationCoordinator {
     private readonly logger: Logger
     private readonly messageStore: WaMessageStore
-    private readonly syncAppState: (
-        options?: WaAppStateSyncOptions
-    ) => Promise<WaAppStateSyncResult>
+    private readonly appStateSync: WaAppStateSyncClient
+    private readonly mediaTransfer: WaMediaTransferClient
+    private readonly isConnected: () => boolean
     private readonly serverClock: ServerClock
     private readonly archiveRangeLimit: number
+    private readonly emitChatEvent?: (event: WaChatEvent) => void
+    private readonly emitAccountEvent?: (event: WaAccountEvent) => void
+    private readonly emitSnapshotMutations: boolean
+    private readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
     private readonly pendingMutations: Map<string, WaAppStateMutationInput>
     private flushPromise: Promise<void> | null
 
     public constructor(options: WaAppStateMutationCoordinatorOptions) {
         this.logger = options.logger
         this.messageStore = options.messageStore
-        this.syncAppState = options.syncAppState
+        this.appStateSync = options.appStateSync
+        this.mediaTransfer = options.mediaTransfer
+        this.isConnected = options.isConnected
         this.serverClock = options.serverClock
         this.archiveRangeLimit = resolvePositive(
             options.archiveRangeLimit,
             WA_APP_STATE_ARCHIVE_RANGE_DEFAULT_LIMIT,
             'WaAppStateMutationCoordinatorOptions.archiveRangeLimit'
         )
+        this.emitChatEvent = options.emitChatEvent
+        this.emitAccountEvent = options.emitAccountEvent
+        this.emitSnapshotMutations = options.emitSnapshotMutations === true
+        this.nctSaltSink = options.nctSaltSink
         this.pendingMutations = new Map()
         this.flushPromise = null
+    }
+
+    public async sync(options: WaAppStateSyncOptions = {}): Promise<WaAppStateSyncResult> {
+        if (!this.isConnected()) {
+            throw new Error('client is not connected')
+        }
+        const syncOptions: WaAppStateSyncOptions = options.downloadExternalBlob
+            ? options
+            : {
+                  ...options,
+                  downloadExternalBlob: async (_collection, _kind, reference) =>
+                      downloadExternalBlobReference(this.mediaTransfer, reference)
+              }
+        const syncResult = await this.appStateSync.sync(syncOptions)
+        const blockedCollections = this.getBlockedCollections(syncResult)
+        if (blockedCollections.length > 0) {
+            this.logger.warn('app-state sync has blocked collections', {
+                blockedCollections: blockedCollections.join(',')
+            })
+        }
+        this.emitEventsFromSyncResult(syncResult)
+        return syncResult
+    }
+
+    public getBlockedCollections(syncResult: WaAppStateSyncResult): readonly string[] {
+        const blocked: string[] = []
+        for (const entry of syncResult.collections) {
+            if (entry.state === WA_APP_STATE_COLLECTION_STATES.BLOCKED) {
+                blocked.push(entry.collection)
+            }
+        }
+        return blocked
+    }
+
+    public emitEventsFromSyncResult(syncResult: WaAppStateSyncResult): void {
+        for (const collectionResult of syncResult.collections) {
+            const mutations = collectionResult.mutations ?? []
+            const lastMutationIndexByKey = new Map<string, number>()
+            for (let mutationIndex = 0; mutationIndex < mutations.length; mutationIndex += 1) {
+                const mutation = mutations[mutationIndex]
+                if (!this.emitSnapshotMutations && mutation.source === 'snapshot') {
+                    continue
+                }
+                lastMutationIndexByKey.set(
+                    `${mutation.collection}\u0001${mutation.index}`,
+                    mutationIndex
+                )
+            }
+
+            for (let mutationIndex = 0; mutationIndex < mutations.length; mutationIndex += 1) {
+                const mutation = mutations[mutationIndex]
+                if (!this.emitSnapshotMutations && mutation.source === 'snapshot') {
+                    continue
+                }
+                const coalesceKey = `${mutation.collection}\u0001${mutation.index}`
+                if (lastMutationIndexByKey.get(coalesceKey) !== mutationIndex) {
+                    continue
+                }
+                try {
+                    this.handleNctSaltMutation(mutation)
+                    const accountEvent = parseAccountEventFromAppStateMutation(mutation)
+                    if (accountEvent) {
+                        this.emitAccountEvent?.(accountEvent)
+                        continue
+                    }
+                    const chatEvent = parseChatEventFromAppStateMutation(mutation)
+                    if (!chatEvent) {
+                        continue
+                    }
+                    this.emitChatEvent?.(chatEvent)
+                } catch (error) {
+                    this.logger.debug('failed to parse chat event from app-state mutation', {
+                        collection: mutation.collection,
+                        source: mutation.source,
+                        index: mutation.index,
+                        message: toError(error).message
+                    })
+                }
+            }
+        }
+    }
+
+    private handleNctSaltMutation(mutation: {
+        readonly operation: 'set' | 'remove'
+        readonly value: {
+            readonly nctSaltSyncAction?: { readonly salt?: Uint8Array | null } | null
+        } | null
+    }): void {
+        if (!this.nctSaltSink) return
+        const nctAction = mutation.value?.nctSaltSyncAction
+        if (!nctAction) {
+            return
+        }
+        if (mutation.operation === 'set' && nctAction.salt) {
+            this.nctSaltSink(nctAction.salt).catch((err) =>
+                this.logger.warn('nct salt sync set failed', {
+                    message: toError(err).message
+                })
+            )
+        } else if (mutation.operation === 'remove') {
+            this.nctSaltSink(null).catch((err) =>
+                this.logger.warn('nct salt sync remove failed', {
+                    message: toError(err).message
+                })
+            )
+        }
     }
 
     public async setChatMute(
@@ -396,7 +525,7 @@ export class WaAppStateMutationCoordinator {
                     seenCollections.add(mutation.collection)
                     collections.push(mutation.collection)
                 }
-                syncResult = await this.syncAppState({
+                syncResult = await this.sync({
                     collections,
                     pendingMutations: batch
                 })

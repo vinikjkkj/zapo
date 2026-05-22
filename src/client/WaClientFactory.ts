@@ -24,6 +24,11 @@ import {
     type WaGroupCoordinator
 } from '@client/coordinators/WaGroupCoordinator'
 import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
+import {
+    createLowLevelCoordinator,
+    type WaLowLevelCoordinator
+} from '@client/coordinators/WaLowLevelCoordinator'
+import { WaMessageCoordinator } from '@client/coordinators/WaMessageCoordinator'
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import {
     createNewsletterCoordinator,
@@ -31,6 +36,10 @@ import {
 } from '@client/coordinators/WaNewsletterCoordinator'
 import { WaOfflineResumeCoordinator } from '@client/coordinators/WaOfflineResumeCoordinator'
 import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
+import {
+    createPresenceCoordinator,
+    type WaPresenceCoordinator
+} from '@client/coordinators/WaPresenceCoordinator'
 import {
     createPrivacyCoordinator,
     type WaPrivacyCoordinator
@@ -171,11 +180,14 @@ export interface WaClientDependencies {
     readonly signalSessionSync: SignalSessionSyncApi
     readonly authClient: WaAuthClient
     readonly messageDispatch: WaMessageDispatchCoordinator
+    readonly messageCoordinator: WaMessageCoordinator
+    readonly presenceCoordinator: WaPresenceCoordinator
     readonly retryCoordinator: WaRetryCoordinator
     readonly appStateSync: WaAppStateSyncClient
     readonly chatCoordinator: WaAppStateMutationCoordinator
     readonly streamControl: WaStreamControlHandler
     readonly incomingNode: WaIncomingNodeCoordinator
+    readonly lowLevelCoordinator: WaLowLevelCoordinator
     readonly passiveTasks: WaPassiveTasksCoordinator
     readonly groupCoordinator: WaGroupCoordinator
     readonly statusCoordinator: WaStatusCoordinator
@@ -738,6 +750,21 @@ export function buildWaClientDependencies(input: {
         mobileMessageIdFormat: options.mobileTransport !== undefined
     })
 
+    const messageCoordinator = new WaMessageCoordinator({
+        messageDispatch,
+        mediaTransfer,
+        logger,
+        messageStore: sessionStore.messages,
+        messageSecretStore: sessionStore.messageSecret,
+        trustedContactToken,
+        emitAddon: (event) => runtime.emitEvent('message_addon', event)
+    })
+
+    const presenceCoordinator = createPresenceCoordinator({
+        sendNode: (node) => nodeOrchestrator.sendNode(node, false),
+        getCurrentCredentials
+    })
+
     const peerDataOperation = createPeerDataOperationRequester({
         logger,
         publishProtocolMessageToDevice: (deviceJid, protocolMessage, opts) =>
@@ -769,11 +796,16 @@ export function buildWaClientDependencies(input: {
     })
 
     const botCoordinator = createBotCoordinator({
+        logger,
         queryWithContext: runtime.queryWithContext,
         buildMessageContent: async (content) =>
             buildMediaMessageContent(mediaMessageBuildOptions, content),
         sendMessage: (to, content, sendOptions) =>
-            messageDispatch.sendMessage(to, content, sendOptions ?? {})
+            messageDispatch.sendMessage(to, content, sendOptions ?? {}),
+        messageStore: sessionStore.messages,
+        messageSecretStore: sessionStore.messageSecret,
+        getCurrentCredentials,
+        emitBotChunk: (event) => runtime.emitEvent('message_bot_chunk', event)
     })
 
     const appStateSync = new WaAppStateSyncClient({
@@ -787,14 +819,34 @@ export function buildWaClientDependencies(input: {
             await messageDispatch.requestAppStateSyncKeys(keyIds)
         },
         skipMacVerification: options.dangerous?.disableAppStateMacVerification,
-        mobilePrimary: options.mobileTransport !== undefined
+        mobilePrimary: options.mobileTransport !== undefined,
+        isOwnAccountDevice: (deviceJid) => {
+            const credentials = getCurrentCredentials()
+            if (!credentials) return false
+            const candidateUser = toUserJid(deviceJid)
+            return (
+                (!!credentials.meJid && toUserJid(credentials.meJid) === candidateUser) ||
+                (!!credentials.meLid && toUserJid(credentials.meLid) === candidateUser)
+            )
+        },
+        sendKeyShare: (toDeviceJid, keys, missingKeyIds) =>
+            messageDispatch.sendAppStateSyncKeyShare(toDeviceJid, keys, missingKeyIds),
+        triggerSync: async () => {
+            await runtime.syncAppState()
+        }
     })
 
     const appStateMutations = new WaAppStateMutationCoordinator({
         logger,
         messageStore: sessionStore.messages,
-        syncAppState: runtime.syncAppStateWithOptions,
-        serverClock
+        appStateSync,
+        mediaTransfer,
+        isConnected: () => connectionManager?.isConnected() ?? false,
+        serverClock,
+        emitSnapshotMutations: options.chatEvents?.emitSnapshotMutations === true,
+        emitChatEvent: (event) => runtime.emitEvent('chat_event', event),
+        emitAccountEvent: (event) => runtime.emitEvent('account_event', event),
+        nctSaltSink: (salt) => trustedContactToken.handleNctSaltSync(salt)
     })
 
     const statusCoordinator = createStatusCoordinator({
@@ -1242,6 +1294,15 @@ export function buildWaClientDependencies(input: {
         appStateSync
     })
 
+    const lowLevelCoordinator = createLowLevelCoordinator({
+        logger,
+        nodeOrchestrator,
+        incomingNode,
+        receiptQueue,
+        isConnected: () => connectionManager?.isConnected() ?? false,
+        defaultIqTimeoutMs: options.iqTimeoutMs
+    })
+
     return {
         nodeTransport,
         nodeOrchestrator,
@@ -1259,11 +1320,14 @@ export function buildWaClientDependencies(input: {
         signalSessionSync,
         authClient,
         messageDispatch,
+        messageCoordinator,
+        presenceCoordinator,
         retryCoordinator,
         appStateSync,
         chatCoordinator: appStateMutations,
         streamControl,
         incomingNode,
+        lowLevelCoordinator,
         passiveTasks,
         groupCoordinator,
         statusCoordinator,

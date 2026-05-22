@@ -60,7 +60,7 @@ test('paired client.sendMessage fans out to all devices of a multi-device peer',
         const device0Promise = peers[0].expectMessage({ timeoutMs: 8_000 })
         const device1Promise = peers[1].expectMessage({ timeoutMs: 8_000 })
 
-        await client.sendMessage(userJid, { conversation: expectedText })
+        await client.message.send(userJid, { conversation: expectedText })
 
         const stanza = await stanzaPromise
         assert.equal(stanza.tag, 'message')

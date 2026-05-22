@@ -145,13 +145,7 @@ for (const testCase of cases) {
             assert.ok(descriptor.directPath, 'directPath should be set')
             assert.ok(descriptor.mediaKey, 'mediaKey should be set')
 
-            const downloaded = await client.mediaTransfer.downloadAndDecrypt({
-                directPath: descriptor.directPath,
-                mediaType: testCase.mediaType,
-                mediaKey: descriptor.mediaKey,
-                fileSha256: descriptor.fileSha256 as Uint8Array,
-                fileEncSha256: descriptor.fileEncSha256 as Uint8Array
-            })
+            const downloaded = await client.message.downloadBytes(event)
             assert.equal(downloaded.byteLength, plaintext.byteLength)
             for (let index = 0; index < plaintext.byteLength; index += 1) {
                 if (downloaded[index] !== plaintext[index]) {

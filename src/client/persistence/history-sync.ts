@@ -7,7 +7,7 @@ import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { proto, type Proto } from '@proto'
 import { decodeProtoBytes, toBytesView } from '@util/bytes'
-import { longToNumber } from '@util/primitives'
+import { longToNumber, toError } from '@util/primitives'
 
 const unzipAsync = promisify(unzip)
 
@@ -36,6 +36,21 @@ interface WaHistorySyncDeps {
         }[]
     ) => Promise<void>
     readonly onNctSalt?: (salt: Uint8Array) => Promise<void>
+}
+
+export async function runHistorySyncNotification(
+    deps: WaHistorySyncDeps,
+    notification: Proto.Message.IHistorySyncNotification
+): Promise<void> {
+    try {
+        await processHistorySyncNotification(deps, notification)
+    } catch (error) {
+        deps.logger.warn('failed to process history sync notification', {
+            syncType: notification.syncType,
+            chunkOrder: notification.chunkOrder,
+            message: toError(error).message
+        })
+    }
 }
 
 export async function processHistorySyncNotification(

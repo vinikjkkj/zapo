@@ -80,7 +80,7 @@ test('bidirectional 1:1 ping-pong (peer\u2192client\u2192peer\u2192client\u2192p
         assert.equal(round1Event.message?.conversation, 'peer-to-client #1')
 
         const round2ReceivedByPeer = peer.expectMessage({ timeoutMs: 8_000 })
-        await client.sendMessage(peerJid, { conversation: 'client-to-peer #1' })
+        await client.message.send(peerJid, { conversation: 'client-to-peer #1' })
         const round2 = await round2ReceivedByPeer
         assert.equal(round2.message.conversation, 'client-to-peer #1')
 
@@ -93,7 +93,7 @@ test('bidirectional 1:1 ping-pong (peer\u2192client\u2192peer\u2192client\u2192p
         assert.equal(round3Event.message?.conversation, 'peer-to-client #2')
 
         const round4ReceivedByPeer = peer.expectMessage({ timeoutMs: 8_000 })
-        await client.sendMessage(peerJid, { conversation: 'client-to-peer #2' })
+        await client.message.send(peerJid, { conversation: 'client-to-peer #2' })
         const round4 = await round4ReceivedByPeer
         assert.equal(round4.message.conversation, 'client-to-peer #2')
 
@@ -153,7 +153,7 @@ test('bidirectional 1:1 starting with the lib (client\u2192peer\u2192client\u219
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
         const round1Promise = peer.expectMessage({ timeoutMs: 8_000 })
-        await client.sendMessage(peerJid, { conversation: 'lib first #1' })
+        await client.message.send(peerJid, { conversation: 'lib first #1' })
         const round1 = await round1Promise
         assert.equal(round1.message.conversation, 'lib first #1')
         assert.equal(round1.encType, 'pkmsg')
@@ -167,7 +167,7 @@ test('bidirectional 1:1 starting with the lib (client\u2192peer\u2192client\u219
         assert.equal(round2.message?.conversation, 'peer reply #1')
 
         const round3Promise = peer.expectMessage({ timeoutMs: 8_000 })
-        await client.sendMessage(peerJid, { conversation: 'lib reply #2' })
+        await client.message.send(peerJid, { conversation: 'lib reply #2' })
         const round3 = await round3Promise
         assert.equal(round3.message.conversation, 'lib reply #2')
 
