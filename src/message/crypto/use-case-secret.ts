@@ -11,7 +11,9 @@ export const WA_USE_CASE_SECRET_MODIFICATION_TYPES = Object.freeze({
     REPORT_TOKEN: 'Report Token',
     EVENT_RESPONSE: 'Event Response',
     EVENT_EDIT_ENCRYPTED: 'Event Edit',
-    MESSAGE_EDIT: 'Message Edit'
+    MESSAGE_EDIT: 'Message Edit',
+    POLL_EDIT_ENCRYPTED: 'Poll Edit',
+    POLL_ADD_OPTION: 'Poll Add Option'
 } as const)
 
 export function assertMessageSecret(

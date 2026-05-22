@@ -306,7 +306,15 @@ export interface WaAccountTakeoverNoticeEvent extends WaIncomingBaseEvent {
     readonly newDeviceAppVersion?: string
 }
 
-export type WaAddonKind = 'reaction' | 'poll_vote' | 'event_response' | 'comment'
+export type WaAddonKind =
+    | 'reaction'
+    | 'poll_vote'
+    | 'event_response'
+    | 'comment'
+    | 'message_edit'
+    | 'event_edit'
+    | 'poll_edit'
+    | 'poll_add_option'
 
 export interface WaIncomingAddonEvent extends WaIncomingBaseEvent {
     readonly kind: WaAddonKind

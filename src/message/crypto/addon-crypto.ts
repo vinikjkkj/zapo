@@ -151,7 +151,58 @@ export function identifyEncryptedAddon(message: Proto.IMessage): WaIdentifiedEnc
         }
     }
 
+    if (msg.secretEncryptedMessage) {
+        const { targetMessageKey, encPayload, encIv, secretEncType } = msg.secretEncryptedMessage
+        if (
+            targetMessageKey?.id &&
+            encPayload &&
+            encIv &&
+            encIv.byteLength === WA_ADDON_ENCRYPTION_NONCE_BYTES
+        ) {
+            const mapped = mapSecretEncType(secretEncType)
+            if (mapped) {
+                return {
+                    kind: mapped.kind,
+                    targetMessageKey,
+                    encPayload,
+                    encIv,
+                    modificationType: mapped.modificationType,
+                    raw: message
+                }
+            }
+        }
+    }
+
     return null
+}
+
+function mapSecretEncType(
+    secretEncType: Proto.Message.SecretEncryptedMessage.SecretEncType | null | undefined
+): { kind: WaAddonKind; modificationType: ModificationType } | null {
+    switch (secretEncType) {
+        case proto.Message.SecretEncryptedMessage.SecretEncType.MESSAGE_EDIT:
+            return {
+                kind: 'message_edit',
+                modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.MESSAGE_EDIT
+            }
+        case proto.Message.SecretEncryptedMessage.SecretEncType.EVENT_EDIT:
+            return {
+                kind: 'event_edit',
+                modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.EVENT_EDIT_ENCRYPTED
+            }
+        case proto.Message.SecretEncryptedMessage.SecretEncType.POLL_EDIT:
+            return {
+                kind: 'poll_edit',
+                modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.POLL_EDIT_ENCRYPTED
+            }
+        case proto.Message.SecretEncryptedMessage.SecretEncType.POLL_ADD_OPTION:
+            return {
+                kind: 'poll_add_option',
+                modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.POLL_ADD_OPTION
+            }
+        default:
+            return null
+    }
 }
 
 export type WaDecodedAddon =
@@ -166,6 +217,10 @@ export type WaDecodedAddon =
           readonly eventResponse: Proto.Message.IEventResponseMessage
       }
     | { readonly kind: 'comment'; readonly comment: Proto.Message.ICommentMessage }
+    | { readonly kind: 'message_edit'; readonly message: Proto.IMessage }
+    | { readonly kind: 'event_edit'; readonly message: Proto.IMessage }
+    | { readonly kind: 'poll_edit'; readonly message: Proto.IMessage }
+    | { readonly kind: 'poll_add_option'; readonly message: Proto.IMessage }
 
 export function decodeAddonPlaintext(kind: WaAddonKind, plaintext: Uint8Array): WaDecodedAddon {
     switch (kind) {
@@ -181,6 +236,11 @@ export function decodeAddonPlaintext(kind: WaAddonKind, plaintext: Uint8Array): 
             return { kind, eventResponse: proto.Message.EventResponseMessage.decode(plaintext) }
         case 'comment':
             return { kind, comment: proto.Message.CommentMessage.decode(plaintext) }
+        case 'message_edit':
+        case 'event_edit':
+        case 'poll_edit':
+        case 'poll_add_option':
+            return { kind, message: proto.Message.decode(plaintext) }
     }
 }
 
