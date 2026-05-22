@@ -336,6 +336,7 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
                 stanzaId: event.stanzaId,
                 chatJid: event.chatJid,
                 stanzaType: event.stanzaType,
+                offline: event.offline,
                 senderJid,
                 targetMessageId,
                 editType,

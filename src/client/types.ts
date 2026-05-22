@@ -245,6 +245,7 @@ export interface WaIncomingBaseEvent {
     readonly stanzaId?: string
     readonly chatJid?: string
     readonly stanzaType?: string
+    readonly offline?: boolean
 }
 
 export interface WaIncomingMessageEvent extends WaIncomingBaseEvent {

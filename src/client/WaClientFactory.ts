@@ -1020,6 +1020,7 @@ export function buildWaClientDependencies(input: {
                 stanzaId: node.attrs.id,
                 chatJid: newsletterJid,
                 stanzaType: node.attrs.type,
+                offline: node.attrs.offline !== undefined,
                 newsletterJid,
                 action,
                 subType: childTag
@@ -1145,6 +1146,7 @@ export function buildWaClientDependencies(input: {
                     stanzaId: parsed.stanzaId,
                     chatJid: parsed.fromJid,
                     stanzaType: WA_NOTIFICATION_TYPES.ENCRYPT,
+                    offline: node.attrs.offline !== undefined,
                     notificationType: WA_NOTIFICATION_TYPES.ENCRYPT,
                     classification: 'core',
                     details: {
@@ -1218,6 +1220,7 @@ export function buildWaClientDependencies(input: {
                 stanzaId: parsed.stanzaId,
                 chatJid: parsed.fromJid,
                 stanzaType: WA_NOTIFICATION_TYPES.DEVICES,
+                offline: node.attrs.offline !== undefined,
                 notificationType: WA_NOTIFICATION_TYPES.DEVICES,
                 classification: 'core',
                 details: {
