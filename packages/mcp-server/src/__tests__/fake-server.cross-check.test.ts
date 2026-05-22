@@ -184,7 +184,7 @@ test('mcp runtime drives pairing + send/receive against fake-server', async () =
         const peerExpect = peer.expectMessage({ timeoutMs: 8_000 })
         const sendResult = (await callTool.handler(
             {
-                path: 'sendMessage',
+                path: 'message.send',
                 args: [PEER_JID, { conversation: 'hello via mcp call tool' }]
             },
             runtime
