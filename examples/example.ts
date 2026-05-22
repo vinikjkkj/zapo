@@ -149,7 +149,7 @@ async function startSession(client: WaClient): Promise<void> {
         const nowSeconds = Date.now() / 1_000
         const deltaSeconds =
             event.timestampSeconds === undefined ? 0 : nowSeconds - event.timestampSeconds
-        await client.sendMessage(to, {
+        await client.message.send(to, {
             extendedTextMessage: {
                 text: `pong ${deltaSeconds.toFixed(3)}`
             }

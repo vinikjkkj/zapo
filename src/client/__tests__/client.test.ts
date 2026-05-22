@@ -436,17 +436,6 @@ function getClearStoredStateMethod() {
     ).clearStoredState
 }
 
-function getSendPresenceMethod() {
-    return (
-        WaClient.prototype as unknown as {
-            readonly sendPresence: (
-                this: unknown,
-                type?: 'available' | 'unavailable'
-            ) => Promise<void>
-        }
-    ).sendPresence
-}
-
 function getCoordinatorGetterMethod(name: 'chat' | 'group' | 'privacy') {
     const descriptor = Object.getOwnPropertyDescriptor(WaClient.prototype, name)
     if (!descriptor?.get) {
@@ -584,41 +573,6 @@ test('clearStoredState clears every store domain by default', async () => {
         'senderKey',
         'threads',
         'privacyToken'
-    ])
-})
-
-test('WaClient.sendPresence sends a presence node without auto-generated id', async () => {
-    const calls: Array<{ readonly node: BinaryNode; readonly autoId: boolean | undefined }> = []
-
-    await getSendPresenceMethod().call(
-        {
-            deps: {
-                authClient: {
-                    getCurrentCredentials: () => ({
-                        meDisplayName: 'Vinicius'
-                    })
-                },
-                nodeOrchestrator: {
-                    sendNode: async (node: BinaryNode, autoId?: boolean) => {
-                        calls.push({ node, autoId })
-                    }
-                }
-            }
-        },
-        'available'
-    )
-
-    assert.deepEqual(calls, [
-        {
-            node: {
-                tag: 'presence',
-                attrs: {
-                    type: 'available',
-                    name: 'Vinicius'
-                }
-            },
-            autoId: false
-        }
     ])
 })
 

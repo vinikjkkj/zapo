@@ -1,0 +1,53 @@
+import type { WaAuthCredentials } from '@auth/types'
+import {
+    buildChatstateNode,
+    type BuildChatstateNodeInput
+} from '@transport/node/builders/chatstate'
+import {
+    buildPresenceNode,
+    buildPresenceSubscribeNode,
+    type BuildPresenceSubscribeNodeInput
+} from '@transport/node/builders/presence'
+import type { BinaryNode } from '@transport/types'
+
+export interface WaPresenceCoordinator {
+    readonly send: (type?: 'available' | 'unavailable') => Promise<void>
+    readonly sendChatstate: (
+        jid: string,
+        options: Omit<BuildChatstateNodeInput, 'jid'>
+    ) => Promise<void>
+    /**
+     * Subscribes to presence updates (online/offline + chatstate) for a chat.
+     * The subscription is per-jid and lives only for the current connection;
+     * after a reconnect the caller must re-subscribe to keep receiving events.
+     */
+    readonly subscribe: (
+        jid: string,
+        options?: Omit<BuildPresenceSubscribeNodeInput, 'jid'>
+    ) => Promise<void>
+}
+
+interface WaPresenceCoordinatorOptions {
+    readonly sendNode: (node: BinaryNode) => Promise<void>
+    readonly getCurrentCredentials: () => WaAuthCredentials | null
+}
+
+export function createPresenceCoordinator(
+    options: WaPresenceCoordinatorOptions
+): WaPresenceCoordinator {
+    const { sendNode, getCurrentCredentials } = options
+    return {
+        send: async (type) => {
+            const credentials = getCurrentCredentials()
+            await sendNode(
+                buildPresenceNode({ type, name: credentials?.meDisplayName ?? undefined })
+            )
+        },
+        sendChatstate: async (jid, opts) => {
+            await sendNode(buildChatstateNode({ jid, ...opts }))
+        },
+        subscribe: async (jid, opts) => {
+            await sendNode(buildPresenceSubscribeNode({ jid, ...opts }))
+        }
+    }
+}

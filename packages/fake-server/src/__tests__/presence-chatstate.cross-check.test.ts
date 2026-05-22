@@ -143,16 +143,16 @@ test('the lib sends presence subscribe and chatstate stanzas the server captures
             { tag: 'presence', type: 'subscribe', to: peerJid },
             { timeoutMs: 2_000 }
         )
-        await client.subscribePresence(peerJid)
+        await client.presence.subscribe(peerJid)
         await subscribePromise
 
-        await client.sendChatstate(peerJid, { state: 'composing' })
-        await client.sendChatstate(peerJid, { state: 'composing', media: 'audio' })
+        await client.presence.sendChatstate(peerJid, { state: 'composing' })
+        await client.presence.sendChatstate(peerJid, { state: 'composing', media: 'audio' })
         const pausedPromise = server.expectStanza(
             { tag: 'chatstate', to: peerJid, childTag: 'paused' },
             { timeoutMs: 2_000 }
         )
-        await client.sendChatstate(peerJid, { state: 'paused' })
+        await client.presence.sendChatstate(peerJid, { state: 'paused' })
         await pausedPromise
 
         const chatstates = server

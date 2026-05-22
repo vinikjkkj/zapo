@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { WaAppStateMutationInput, WaAppStateSyncResult } from '@appstate/types'
+import type { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'
+import type {
+    WaAppStateMutationInput,
+    WaAppStateSyncOptions,
+    WaAppStateSyncResult
+} from '@appstate/types'
 import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
@@ -10,6 +15,7 @@ import { createStreamControlHandler } from '@client/coordinators/WaStreamControl
 import { createGroupMetadataCache } from '@client/messaging/group-metadata'
 import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
+import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import {
     WA_APP_STATE_COLLECTION_STATES,
     WA_CONNECTION_REASONS,
@@ -19,6 +25,14 @@ import {
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
 import { WaMessageMemoryStore } from '@store/memory/message.store'
 import type { BinaryNode } from '@transport/types'
+
+function fakeSyncImpl(impl: (options?: WaAppStateSyncOptions) => Promise<WaAppStateSyncResult>) {
+    return {
+        appStateSync: { sync: impl } as unknown as WaAppStateSyncClient,
+        mediaTransfer: {} as unknown as WaMediaTransferClient,
+        isConnected: () => true
+    } as const
+}
 
 function createIncomingRuntime() {
     const unhandled: unknown[] = []
@@ -768,7 +782,7 @@ test('app-state mutation coordinator flushes queued mutations while sync is in-f
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             if (syncCalls.length === 1) {
@@ -780,7 +794,7 @@ test('app-state mutation coordinator flushes queued mutations while sync is in-f
                 })
             }
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     const firstMutation = coordinator.setChatMute('551100000000@s.whatsapp.net', false)
@@ -810,11 +824,11 @@ test('app-state mutation coordinator emits pin + archive mutations when pinning 
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.setChatPin('551100000000@s.whatsapp.net', true)
@@ -850,7 +864,7 @@ test('app-state mutation coordinator flushes only targeted collections for queue
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             syncCalls.push({
                 collections: options.collections ?? [],
                 pending: options.pendingMutations?.length ?? 0
@@ -859,7 +873,7 @@ test('app-state mutation coordinator flushes only targeted collections for queue
                 options.pendingMutations ?? [],
                 WA_APP_STATE_COLLECTION_STATES.SUCCESS
             )
-        }
+        })
     })
 
     await coordinator.setChatPin('551100000000@s.whatsapp.net', true)
@@ -890,11 +904,11 @@ test('app-state mutation coordinator includes message range and auto-unpin on ar
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.setChatArchive('120@g.us', true)
@@ -936,11 +950,11 @@ test('app-state mutation coordinator preserves device participant jid in archive
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.setChatArchive('120@g.us', false)
@@ -977,11 +991,11 @@ test('app-state mutation coordinator skips incoming group messages without parti
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.setChatArchive('120@g.us', false)
@@ -1008,7 +1022,7 @@ test('app-state mutation coordinator keeps pending mutations after blocked flush
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             flushAttempt += 1
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
@@ -1018,7 +1032,7 @@ test('app-state mutation coordinator keeps pending mutations after blocked flush
                     ? WA_APP_STATE_COLLECTION_STATES.BLOCKED
                     : WA_APP_STATE_COLLECTION_STATES.SUCCESS
             )
-        }
+        })
     })
 
     await assert.rejects(coordinator.setChatMute('551100000000@s.whatsapp.net', false))
@@ -1044,11 +1058,11 @@ test('app-state mutation coordinator emits read/clear/delete mutations with expe
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.setChatRead('551100000000@s.whatsapp.net', true)
@@ -1089,11 +1103,11 @@ test('app-state mutation coordinator emits archive and unpin before lock mutatio
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.setChatLock('551100000000@s.whatsapp.net', true)
@@ -1116,11 +1130,11 @@ test('app-state mutation coordinator emits star mutation with message-key index'
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.setMessageStar(
@@ -1156,11 +1170,11 @@ test('app-state mutation coordinator emits delete-message-for-me mutation and va
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.deleteMessageForMe(
@@ -1211,11 +1225,11 @@ test('app-state mutation coordinator emits status_privacy account mutation', asy
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.setStatusPrivacy({
@@ -1242,11 +1256,11 @@ test('app-state mutation coordinator emits userStatusMute mutation with target j
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.setUserStatusMute('5511000000000:3@s.whatsapp.net', true)
@@ -1266,11 +1280,11 @@ test('app-state mutation coordinator emits business_broadcast_list set/remove pa
         serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
         logger: createNoopLogger(),
         messageStore,
-        syncAppState: async (options = {}) => {
+        ...fakeSyncImpl(async (options = {}) => {
             const pendingMutations = options.pendingMutations ?? []
             syncCalls.push(pendingMutations)
             return buildAppStateSyncResult(pendingMutations, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
-        }
+        })
     })
 
     await coordinator.setBroadcastList({

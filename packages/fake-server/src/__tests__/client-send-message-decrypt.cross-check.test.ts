@@ -54,13 +54,13 @@ test('paired client.sendMessage is decrypted by the fake peer', async () => {
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
         const firstReceivedPromise = peer.expectMessage({ timeoutMs: 5_000 })
-        await client.sendMessage(peerJid, { conversation: 'hello peer from real client' })
+        await client.message.send(peerJid, { conversation: 'hello peer from real client' })
         const first = await firstReceivedPromise
         assert.equal(first.encType, 'pkmsg')
         assert.equal(first.message.conversation, 'hello peer from real client')
 
         const secondReceivedPromise = peer.expectMessage({ timeoutMs: 5_000 })
-        await client.sendMessage(peerJid, { conversation: 'second one' })
+        await client.message.send(peerJid, { conversation: 'second one' })
         const second = await secondReceivedPromise
         assert.equal(second.encType, 'pkmsg')
         assert.equal(second.message.conversation, 'second one')

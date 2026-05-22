@@ -3,10 +3,21 @@ import test from 'node:test'
 
 import { createBotCoordinator } from '@client/coordinators/WaBotCoordinator'
 import type { WaSendMessageOptions } from '@client/types'
+import { createNoopLogger } from '@infra/log/types'
 import type { WaMessagePublishResult, WaSendMessageContent } from '@message/types'
 import type { Proto } from '@proto'
 import { WA_BOT_DEFAULT_CAPABILITIES } from '@protocol/bot'
+import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
+import type { WaMessageStore } from '@store/contracts/message.store'
 import type { BinaryNode } from '@transport/types'
+
+const decryptDepsStub = {
+    logger: createNoopLogger(),
+    messageStore: null as unknown as WaMessageStore,
+    messageSecretStore: null as unknown as WaMessageSecretStore,
+    getCurrentCredentials: () => null,
+    emitBotChunk: () => undefined
+}
 
 function createIqResult(content?: readonly BinaryNode[]): BinaryNode {
     return {
@@ -33,6 +44,7 @@ const MANUS_FBID = '1807055946647696@bot'
 test('bot coordinator listBots emits the expected IQ and parses sections', async () => {
     const calls: BinaryNode[] = []
     const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
         queryWithContext: async (_context, node) => {
             calls.push(node)
             return createIqResult([
@@ -105,6 +117,7 @@ test('bot coordinator listBots emits the expected IQ and parses sections', async
 
 test('bot coordinator listBots derives fbidJid from personaId for PN bots', async () => {
     const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
         queryWithContext: async () =>
             createIqResult([
                 {
@@ -144,6 +157,7 @@ test('bot coordinator sendPrompt direct path attaches default capabilities + per
         readonly options?: WaSendMessageOptions
     }> = []
     const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async (content) => {
             if (typeof content !== 'string') throw new Error('expected string content in test')
@@ -178,6 +192,7 @@ test('bot coordinator sendPrompt direct path attaches default capabilities + per
 test('bot coordinator sendPrompt direct path accepts custom capabilities override', async () => {
     let captured: Proto.IMessage | undefined
     const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async (content) => ({
             message:
@@ -203,6 +218,7 @@ test('bot coordinator sendPrompt direct path accepts custom capabilities overrid
 test('bot coordinator sendPrompt mention path wraps text in botInvokeMessage with mention metadata', async () => {
     const sends: Array<{ readonly to: string; readonly content: Proto.IMessage }> = []
     const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async (content) => ({
             message:
@@ -251,6 +267,7 @@ test('bot coordinator sendPrompt mention path wraps text in botInvokeMessage wit
 test('bot coordinator sendPrompt mention path resolves Meta AI PN jid to FBID', async () => {
     const sends: Array<{ readonly content: Proto.IMessage }> = []
     const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async (content) => ({
             message:
@@ -273,6 +290,7 @@ test('bot coordinator sendPrompt mention path resolves Meta AI PN jid to FBID', 
 
 test('bot coordinator sendPrompt mention path throws when bot jid cannot be resolved to FBID', async () => {
     const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async (content) => ({
             message:
@@ -292,6 +310,7 @@ test('bot coordinator sendPrompt mention path throws when bot jid cannot be reso
 test('bot coordinator sendPrompt direct path ignores opts.botJid to avoid misroute', async () => {
     let captured: string | undefined
     const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async () => ({ message: { conversation: 'hi' } }),
         sendMessage: async (to) => {
@@ -308,6 +327,7 @@ test('bot coordinator sendPrompt direct path ignores opts.botJid to avoid misrou
 
 test('bot coordinator sendPrompt throws when target is not a bot and botJid is missing', async () => {
     const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async () => ({ message: {} }),
         sendMessage: noopSendMessage
@@ -319,6 +339,7 @@ test('bot coordinator sendPrompt throws when target is not a bot and botJid is m
 test('bot coordinator sendPrompt mention path injects mention metadata into image contextInfo', async () => {
     const sends: Array<{ readonly content: Proto.IMessage }> = []
     const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
         queryWithContext: async () => createIqResult(),
         buildMessageContent: async () => ({
             message: {

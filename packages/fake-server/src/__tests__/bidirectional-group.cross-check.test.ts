@@ -95,7 +95,7 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
             timeoutMs: 8_000,
             senderJid: meJid
         })
-        await client.sendMessage(groupJid, { conversation: 'lib-group #1' })
+        await client.message.send(groupJid, { conversation: 'lib-group #1' })
         const round2 = await round2Promise
         assert.equal(round2.encType, 'skmsg')
         assert.equal(round2.message.conversation, 'lib-group #1')
@@ -112,7 +112,7 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
             timeoutMs: 8_000,
             senderJid: meJid
         })
-        await client.sendMessage(groupJid, { conversation: 'lib-group #2' })
+        await client.message.send(groupJid, { conversation: 'lib-group #2' })
         const round4 = await round4Promise
         assert.equal(round4.encType, 'skmsg')
         assert.equal(round4.message.conversation, 'lib-group #2')

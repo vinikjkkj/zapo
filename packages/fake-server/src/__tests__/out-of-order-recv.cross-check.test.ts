@@ -58,7 +58,7 @@ test('fake peer decrypts out-of-order msgs (counter 0,2,1,3) via the unused-keys
             server.expectStanza({ tag: 'message', to: peerJid }, { timeoutMs: 8_000 })
         ]
         for (const text of messages) {
-            await client.sendMessage(peerJid, { conversation: text })
+            await client.message.send(peerJid, { conversation: text })
         }
         const stanzas = await Promise.all(stanzaPromises)
         assert.equal(stanzas.length, 4)

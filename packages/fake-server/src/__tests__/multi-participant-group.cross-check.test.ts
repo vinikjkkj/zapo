@@ -89,7 +89,7 @@ test('paired client.sendMessage to a 3-participant group fans out via the regist
             senderJid: meJid
         })
 
-        await client.sendMessage(groupJid, { conversation: text })
+        await client.message.send(groupJid, { conversation: text })
 
         const stanza = await stanzaPromise
         const children: readonly BinaryNode[] = Array.isArray(stanza.content) ? stanza.content : []

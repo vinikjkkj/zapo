@@ -3,10 +3,12 @@ export type {
     WaClientEventMap,
     WaClientOptions,
     WaClientProxyOptions,
+    WaDownloadMediaOptions,
     WaHistorySyncChunkEvent,
     WaHistorySyncOptions,
     WaWriteBehindOptions
 } from '@client/types'
+export type { WaMessageCoordinator } from '@client/coordinators/WaMessageCoordinator'
 export type {
     WaAccountEvent,
     WaAccountTakeoverNoticeEvent,

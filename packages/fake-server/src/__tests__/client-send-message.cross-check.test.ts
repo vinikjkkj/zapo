@@ -70,7 +70,7 @@ test('paired client.sendMessage reaches the wire as a real <message> stanza', as
             { timeoutMs: 5_000 }
         )
 
-        await client.sendMessage(peerJid, {
+        await client.message.send(peerJid, {
             extendedTextMessage: { text: 'hello peer from real client' }
         })
 

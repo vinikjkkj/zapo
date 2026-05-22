@@ -101,7 +101,7 @@ test('paired client.sendMessage to a @lid peer is decrypted by the fake peer', a
         await server.triggerPreKeyUpload(pipelineAfterPair)
 
         const decryptedPromise = peer.expectMessage({ timeoutMs: 8_000 })
-        await client.sendMessage(lidJid, { conversation: outboundText })
+        await client.message.send(lidJid, { conversation: outboundText })
         const decrypted = await decryptedPromise
         assert.equal(decrypted.message.conversation, outboundText)
         assert.equal(decrypted.encType, 'pkmsg')

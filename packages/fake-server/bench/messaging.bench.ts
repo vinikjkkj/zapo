@@ -633,7 +633,7 @@ async function scenarioSend1to1(
         const promises = new Array<Promise<unknown>>(messages)
         for (let i = 0; i < messages; i += 1) {
             const contact = contacts[i % contacts.length]
-            promises[i] = client.sendMessage(contact.userJid, {
+            promises[i] = client.message.send(contact.userJid, {
                 conversation: `bench send ${i}`
             })
         }
@@ -715,13 +715,13 @@ async function scenarioSendGroup(
     // Warm up: send 1 message to each group OUTSIDE the timed window
     // so the SKDM fanout cost (1 pkmsg per member) is amortised.
     for (const group of groups) {
-        await client.sendMessage(group.groupJid, { conversation: 'warmup' })
+        await client.message.send(group.groupJid, { conversation: 'warmup' })
     }
     return runScenario('SEND group', messages, async () => {
         const promises = new Array<Promise<unknown>>(messages)
         for (let i = 0; i < messages; i += 1) {
             const group = groups[i % groups.length]
-            promises[i] = client.sendMessage(group.groupJid, {
+            promises[i] = client.message.send(group.groupJid, {
                 conversation: `bench gsend ${i}`
             })
         }

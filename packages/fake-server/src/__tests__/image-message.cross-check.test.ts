@@ -76,13 +76,7 @@ test('fake peer pushes an imageMessage and the lib downloads + decrypts the atta
         assert.ok(imageMessage.directPath, 'directPath should be set')
         assert.ok(imageMessage.mediaKey, 'mediaKey should be set')
 
-        const downloaded = await client.mediaTransfer.downloadAndDecrypt({
-            directPath: imageMessage.directPath,
-            mediaType: 'image',
-            mediaKey: imageMessage.mediaKey,
-            fileSha256: imageMessage.fileSha256 as Uint8Array,
-            fileEncSha256: imageMessage.fileEncSha256 as Uint8Array
-        })
+        const downloaded = await client.message.downloadBytes(event)
 
         assert.equal(downloaded.byteLength, plaintext.byteLength)
         for (let index = 0; index < plaintext.byteLength; index += 1) {

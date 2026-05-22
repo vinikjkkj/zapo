@@ -61,7 +61,7 @@ test('paired client.sendMessage to a group is decrypted by the fake peer', async
             timeoutMs: 8_000,
             senderJid: meJid
         })
-        await client.sendMessage(groupJid, { conversation: 'hello group from real client' })
+        await client.message.send(groupJid, { conversation: 'hello group from real client' })
         const received = await groupReceivedPromise
         assert.equal(received.encType, 'skmsg')
         assert.equal(received.message.conversation, 'hello group from real client')

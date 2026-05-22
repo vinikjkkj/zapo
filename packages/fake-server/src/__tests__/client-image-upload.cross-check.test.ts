@@ -63,7 +63,7 @@ test('paired client.sendMessage uploads an image to the fake media HTTPS listene
             { timeoutMs: 8_000 }
         )
 
-        await client.sendMessage(peerJid, {
+        await client.message.send(peerJid, {
             type: 'image',
             media: plaintext,
             mimetype: 'image/jpeg',
