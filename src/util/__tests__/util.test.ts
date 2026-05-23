@@ -32,7 +32,10 @@ import {
     asOptionalString,
     asString,
     resolvePositive,
-    toBoolOrUndef
+    toBoolOrUndef,
+    tryAsNumber,
+    tryAsRecord,
+    tryAsString
 } from '@util/coercion'
 import {
     normalizeQueryLimit,
@@ -122,6 +125,33 @@ test('coercion helpers validate primitive and bytes types', () => {
     assert.equal(resolvePositive(2, 1, 'x'), 2)
     assert.equal(resolvePositive(undefined, 3, 'x'), 3)
     assert.throws(() => resolvePositive(0, 3, 'x'), /positive safe integer/)
+})
+
+test('lenient coercion (tryAs*) handles missing, empty and wrong-typed inputs', () => {
+    // tryAsString: empty/whitespace/non-string → null
+    assert.equal(tryAsString('hi'), 'hi')
+    assert.equal(tryAsString(''), null)
+    assert.equal(tryAsString(undefined), null)
+    assert.equal(tryAsString(null), null)
+    assert.equal(tryAsString(42), null)
+
+    // tryAsNumber: empty/whitespace strings must not collapse to 0
+    assert.equal(tryAsNumber(42), 42)
+    assert.equal(tryAsNumber('42'), 42)
+    assert.equal(tryAsNumber('  7  '), 7)
+    assert.equal(tryAsNumber(''), null)
+    assert.equal(tryAsNumber('   '), null)
+    assert.equal(tryAsNumber('abc'), null)
+    assert.equal(tryAsNumber(undefined), null)
+    assert.equal(tryAsNumber(Number.NaN), null)
+    assert.equal(tryAsNumber(Number.POSITIVE_INFINITY), null)
+
+    // tryAsRecord: arrays/null/primitives → null; plain object → passes
+    assert.deepEqual(tryAsRecord({ a: 1 }), { a: 1 })
+    assert.equal(tryAsRecord(null), null)
+    assert.equal(tryAsRecord([1, 2]), null)
+    assert.equal(tryAsRecord('x'), null)
+    assert.equal(tryAsRecord(undefined), null)
 })
 
 test('collections helpers enforce bounds and limits', () => {

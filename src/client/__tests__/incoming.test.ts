@@ -31,6 +31,7 @@ test('notification ack includes participant only for mediaretry and psa types', 
             sent.push(node)
         },
         emitIncomingNotification: () => undefined,
+        emitMexNotification: () => undefined,
         emitUnhandledStanza: () => undefined
     })
 
@@ -79,6 +80,7 @@ test('notification ack omits type only for encrypt and devices types', async () 
             sent.push(node)
         },
         emitIncomingNotification: () => undefined,
+        emitMexNotification: () => undefined,
         emitUnhandledStanza: () => undefined
     })
 

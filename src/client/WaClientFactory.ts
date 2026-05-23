@@ -349,6 +349,7 @@ function createIncomingNodeRuntime(input: {
         emitIncomingFailure: (event) => emitEvent('failure', event),
         emitIncomingErrorStanza: (event) => emitEvent('stanza_error', event),
         emitIncomingNotification: (event) => emitEvent('notification', event),
+        emitMexNotification: (event) => emitEvent('mex_notification', event),
         emitRegistrationCode: (event) => emitEvent('registration_code_received', event),
         emitAccountTakeoverNotice: (event) => emitEvent('account_takeover_notice', event),
         emitGroupEvent: (event) => {
