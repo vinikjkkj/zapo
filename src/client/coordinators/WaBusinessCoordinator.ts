@@ -10,6 +10,7 @@ import type { Logger } from '@infra/log/types'
 import { PPS_UPLOAD_PATHS } from '@media/constants'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { WaMediaConn } from '@media/types'
+import { WA_NODE_TAGS } from '@protocol/nodes'
 import { WA_BUSINESS_NOTIFICATION_TAGS } from '@protocol/notification'
 import {
     buildCoverPhotoIq,
@@ -92,8 +93,8 @@ function parseUsyncVerifiedNames(result: BinaryNode): readonly WaVerifiedNameBat
         const userNode = userNodes[i]
         const jid = userNode.attrs.jid as string | undefined
         if (!jid) continue
-        const businessNode = findNodeChild(userNode, 'business')
-        const errorNode = businessNode ? findNodeChild(businessNode, 'error') : undefined
+        const businessNode = findNodeChild(userNode, WA_NODE_TAGS.BUSINESS)
+        const errorNode = businessNode ? findNodeChild(businessNode, WA_NODE_TAGS.ERROR) : undefined
         const vnNode =
             businessNode && !errorNode
                 ? findNodeChild(businessNode, WA_BUSINESS_NOTIFICATION_TAGS.VERIFIED_NAME)

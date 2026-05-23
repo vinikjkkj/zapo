@@ -278,7 +278,7 @@ function parseCollectionUpdates(catalogNode: BinaryNode): readonly WaBusinessCol
         } = { id }
         const statusInfo = findNodeChild(collection, 'status_info')
         if (statusInfo) {
-            const statusNode = findNodeChild(statusInfo, 'status')
+            const statusNode = findNodeChild(statusInfo, WA_NODE_TAGS.STATUS)
             if (statusNode) {
                 const text = getNodeTextContent(statusNode)
                 if (text) entry.reviewStatus = text

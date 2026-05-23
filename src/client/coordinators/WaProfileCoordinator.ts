@@ -162,7 +162,7 @@ function parseUsyncProfiles(result: BinaryNode): readonly WaProfileInfo[] {
                 if (pictureId !== undefined) {
                     info.pictureId = pictureId
                 }
-            } else if (child.tag === 'status') {
+            } else if (child.tag === WA_NODE_TAGS.STATUS) {
                 const code = child.attrs.code as string | undefined
                 if (parseOptionalInt(code) === 401) {
                     info.status = ''
@@ -191,7 +191,7 @@ function parseUsyncDisappearingModes(result: BinaryNode): readonly WaDisappearin
 
         for (let j = 0; j < userContent.length; j += 1) {
             const child = userContent[j]
-            if (child.tag !== 'disappearing_mode') continue
+            if (child.tag !== WA_NODE_TAGS.DISAPPEARING_MODE) continue
 
             const errorNode = findNodeChild(child, WA_NODE_TAGS.ERROR)
             if (errorNode) continue
@@ -234,7 +234,7 @@ function parseUsyncTextStatuses(result: BinaryNode): readonly WaTextStatusResult
             lastUpdateTime: null
         }
 
-        const textStatusNode = findNodeChild(userNode, 'text_status')
+        const textStatusNode = findNodeChild(userNode, WA_NODE_TAGS.TEXT_STATUS)
         if (textStatusNode && !findNodeChild(textStatusNode, WA_NODE_TAGS.ERROR)) {
             const emojiNode = findNodeChild(textStatusNode, 'emoji')
             entry = {
@@ -268,7 +268,7 @@ function parseUsyncUsernames(result: BinaryNode): readonly WaUsernameResult[] {
         const jid = userNode.attrs.jid as string | undefined
         if (!jid) continue
 
-        const usernameNode = findNodeChild(userNode, 'username')
+        const usernameNode = findNodeChild(userNode, WA_NODE_TAGS.USERNAME)
         const hasUsernameError =
             usernameNode && findNodeChild(usernameNode, WA_NODE_TAGS.ERROR) !== undefined
         const username =

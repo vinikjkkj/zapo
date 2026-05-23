@@ -1,4 +1,5 @@
-import { WA_DEFAULTS, WA_IQ_TYPES, WA_XMLNS } from '@protocol/constants'
+import { WA_BUSINESS_NOTIFICATION_TAGS } from '@protocol/notification'
+import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -147,9 +148,9 @@ export type BuildCoverPhotoIqInput =
 
 export function buildGetBusinessUsyncQueryNode(): BinaryNode {
     return {
-        tag: 'business',
+        tag: WA_NODE_TAGS.BUSINESS,
         attrs: {},
-        content: [{ tag: 'verified_name', attrs: {} }]
+        content: [{ tag: WA_BUSINESS_NOTIFICATION_TAGS.VERIFIED_NAME, attrs: {} }]
     }
 }
 

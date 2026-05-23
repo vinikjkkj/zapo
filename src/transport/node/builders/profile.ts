@@ -69,7 +69,7 @@ export function buildDeleteProfilePictureIq(targetJid?: string): BinaryNode {
 export function buildSetStatusIq(text: string): BinaryNode {
     return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.STATUS, [
         {
-            tag: 'status',
+            tag: WA_NODE_TAGS.STATUS,
             attrs: {},
             content: text
         }
@@ -78,21 +78,21 @@ export function buildSetStatusIq(text: string): BinaryNode {
 
 export function buildGetDisappearingModeUsyncQueryNode(): BinaryNode {
     return {
-        tag: 'disappearing_mode',
+        tag: WA_NODE_TAGS.DISAPPEARING_MODE,
         attrs: {}
     }
 }
 
 export function buildGetTextStatusUsyncQueryNode(): BinaryNode {
     return {
-        tag: 'text_status',
+        tag: WA_NODE_TAGS.TEXT_STATUS,
         attrs: {}
     }
 }
 
 export function buildGetUsernameUsyncQueryNode(): BinaryNode {
     return {
-        tag: 'username',
+        tag: WA_NODE_TAGS.USERNAME,
         attrs: {}
     }
 }
@@ -104,7 +104,7 @@ export function buildGetStatusUsyncQueryNodes(): readonly BinaryNode[] {
             attrs: {}
         },
         {
-            tag: 'status',
+            tag: WA_NODE_TAGS.STATUS,
             attrs: {}
         },
         {
