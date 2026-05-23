@@ -1,5 +1,6 @@
 import { parseBusinessNotificationEvents } from '@client/events/business'
 import { parseGroupNotificationEvents } from '@client/events/group'
+import { parseMexNotification } from '@client/events/mex-notification'
 import { parsePictureNotificationEvents } from '@client/events/picture'
 import { parseRegistrationNotification } from '@client/events/registration'
 import type {
@@ -11,6 +12,7 @@ import type {
     WaIncomingNotificationEvent,
     WaIncomingReceiptEvent,
     WaIncomingUnhandledStanzaEvent,
+    WaMexNotificationEvent,
     WaPictureEvent,
     WaRegistrationCodeEvent
 } from '@client/types'
@@ -53,6 +55,7 @@ type IncomingFailureHandlerOptions = {
 
 type IncomingNotificationHandlerOptions = IncomingAckRuntime & {
     readonly emitIncomingNotification: (event: WaIncomingNotificationEvent) => void
+    readonly emitMexNotification: (event: WaMexNotificationEvent) => void
     readonly emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) => void
     readonly syncAppState?: () => Promise<void>
 }
@@ -326,6 +329,18 @@ export function createIncomingNotificationHandler(
             classification,
             details
         })
+
+        if (notificationType === 'mex') {
+            const parsed = parseMexNotification(node)
+            if (parsed) {
+                options.emitMexNotification({ ...baseEvent, ...parsed })
+            } else {
+                options.emitUnhandledStanza({
+                    ...baseEvent,
+                    reason: 'notification.mex.parse_failed'
+                })
+            }
+        }
 
         if (classification === 'out_of_scope') {
             options.emitUnhandledStanza({

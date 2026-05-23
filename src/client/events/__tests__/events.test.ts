@@ -6,6 +6,7 @@ import { parseBusinessNotificationEvents } from '@client/events/business'
 import { parseChatEventFromAppStateMutation } from '@client/events/chat'
 import { parseChatstateNode } from '@client/events/chatstate'
 import { parseGroupNotificationEvents } from '@client/events/group'
+import { parseMexNotification } from '@client/events/mex-notification'
 import { parsePresenceNode } from '@client/events/presence'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
 import { aggregateReceiptTargets } from '@client/events/receipt'
@@ -17,6 +18,7 @@ import {
     WA_PRIVACY_TOKEN_TAGS,
     WA_REGISTRATION_NOTIFICATION_TAGS
 } from '@protocol/constants'
+import type { BinaryNode } from '@transport/types'
 
 test('chat event parser maps app-state mutation to chat actions', () => {
     const parsed = parseChatEventFromAppStateMutation({
@@ -799,5 +801,200 @@ test('privacy token parser rejects non-numeric token timestamp', () => {
                 ]
             }),
         /privacy_token\.t/
+    )
+})
+
+function mexUpdate(opName: string, body: unknown): BinaryNode {
+    return {
+        tag: 'notification',
+        attrs: { id: 'N1', type: 'mex', from: 's.whatsapp.net' },
+        content: [
+            {
+                tag: 'update',
+                attrs: { op_name: opName },
+                content: JSON.stringify(body)
+            }
+        ]
+    }
+}
+
+test('parseMexNotification: UsernameSetNotification → username_set', () => {
+    const parsed = parseMexNotification(
+        mexUpdate('UsernameSetNotification', {
+            data: { xwa2_notify_username_on_change: { username: 'alice', lid: '12345@lid' } }
+        })
+    )
+    assert.ok(parsed)
+    assert.equal(parsed.kind, 'username_set')
+    if (parsed.kind === 'username_set') {
+        assert.equal(parsed.username, 'alice')
+        assert.equal(parsed.lidJid, '12345@lid')
+    }
+})
+
+test('parseMexNotification: UsernameDeleteNotification → username_delete', () => {
+    const parsed = parseMexNotification(
+        mexUpdate('UsernameDeleteNotification', {
+            data: { xwa2_notify_username_delete: { lid: '12345@lid', display_name: 'Alice' } }
+        })
+    )
+    assert.ok(parsed && parsed.kind === 'username_delete')
+    assert.equal(parsed.lidJid, '12345@lid')
+    assert.equal(parsed.displayName, 'Alice')
+})
+
+test('parseMexNotification: UsernameUpdateNotification → username_update_hint', () => {
+    const parsed = parseMexNotification(
+        mexUpdate('UsernameUpdateNotification', {
+            data: { xwa2_notify_username_on_update_side_sub: { hash: 'abc123' } }
+        })
+    )
+    assert.ok(parsed && parsed.kind === 'username_update_hint')
+    assert.equal(parsed.contactHash, 'abc123')
+})
+
+test('parseMexNotification: AccountSyncUsernameNotification → own_username_sync', () => {
+    const parsed = parseMexNotification(
+        mexUpdate('AccountSyncUsernameNotification', {
+            data: {
+                xwa2_notify_wa_user: {
+                    lid_jid: '999@lid',
+                    username_info: { username: 'me', state: 'OWNED', pin: '1234' }
+                }
+            }
+        })
+    )
+    assert.ok(parsed && parsed.kind === 'own_username_sync')
+    assert.equal(parsed.ownLidJid, '999@lid')
+    assert.equal(parsed.username, 'me')
+    assert.equal(parsed.state, 'OWNED')
+    assert.equal(parsed.pin, '1234')
+})
+
+test('parseMexNotification: TextStatusUpdateNotification → text_status_update', () => {
+    const parsed = parseMexNotification(
+        mexUpdate('TextStatusUpdateNotification', {
+            data: {
+                xwa2_notify_text_status_on_update: {
+                    jid: '5511@s.whatsapp.net',
+                    text: 'feeling great',
+                    emoji: { content: '🚀' },
+                    ephemeral_duration_sec: 3600,
+                    last_update_time: '1779500000'
+                }
+            }
+        })
+    )
+    assert.ok(parsed && parsed.kind === 'text_status_update')
+    assert.equal(parsed.jid, '5511@s.whatsapp.net')
+    assert.equal(parsed.text, 'feeling great')
+    assert.equal(parsed.emoji, '🚀')
+    assert.equal(parsed.ephemeralDurationSec, 3600)
+    assert.equal(parsed.lastUpdateTime, 1779500000)
+})
+
+test('parseMexNotification: TextStatusUpdateNotificationSideSub → text_status_update_hint', () => {
+    const parsed = parseMexNotification(
+        mexUpdate('TextStatusUpdateNotificationSideSub', {
+            data: { xwa2_notify_text_status_on_update_side_sub: { hash: 'xyz' } }
+        })
+    )
+    assert.ok(parsed && parsed.kind === 'text_status_update_hint')
+    assert.equal(parsed.contactHash, 'xyz')
+})
+
+test('parseMexNotification: LidChangeNotification → lid_change', () => {
+    const parsed = parseMexNotification(
+        mexUpdate('LidChangeNotification', {
+            data: { xwa2_notify_lid_change: { old: '111@lid', new: '222@lid' } }
+        })
+    )
+    assert.ok(parsed && parsed.kind === 'lid_change')
+    assert.equal(parsed.oldLidJid, '111@lid')
+    assert.equal(parsed.newLidJid, '222@lid')
+})
+
+test('parseMexNotification: MessageCappingInfoNotification → message_capping', () => {
+    const parsed = parseMexNotification(
+        mexUpdate('MessageCappingInfoNotification', {
+            data: {
+                xwa2_notify_new_chat_messages_capping_info_update: {
+                    capping_status: 'CAPPED',
+                    ote_status: 'EXHAUSTED',
+                    mv_status: 'NOT_ACTIVE',
+                    total_quota: 50,
+                    used_quota: 50,
+                    cycle_start_timestamp: '1779000000',
+                    cycle_end_timestamp: '1779604800',
+                    server_sent_timestamp: '1779500000'
+                }
+            }
+        })
+    )
+    assert.ok(parsed && parsed.kind === 'message_capping')
+    assert.equal(parsed.cappingStatus, 'CAPPED')
+    assert.equal(parsed.oteStatus, 'EXHAUSTED')
+    assert.equal(parsed.totalQuota, 50)
+    assert.equal(parsed.usedQuota, 50)
+    assert.equal(parsed.cycleEndTimestamp, 1779604800)
+})
+
+test('parseMexNotification: unknown op falls back to kind=unknown with raw data', () => {
+    const parsed = parseMexNotification(
+        mexUpdate('NotificationGroupPropertyUpdate', {
+            data: { xwa2_group: { id: 'x' } },
+            errors: [{ message: 'forbidden', extensions: { error_code: 403 } }]
+        })
+    )
+    assert.ok(parsed && parsed.kind === 'unknown')
+    assert.equal(parsed.operationName, 'NotificationGroupPropertyUpdate')
+    assert.deepEqual(parsed.data, { xwa2_group: { id: 'x' } })
+    assert.equal(parsed.errors[0].extensions?.error_code, 403)
+})
+
+test('parseMexNotification: known op with invalid payload shape falls back to unknown', () => {
+    const parsed = parseMexNotification(mexUpdate('UsernameSetNotification', { data: {} }))
+    assert.ok(parsed && parsed.kind === 'unknown')
+    assert.equal(parsed.operationName, 'UsernameSetNotification')
+})
+
+test('parseMexNotification: accepts byte content (Uint8Array)', () => {
+    const json = JSON.stringify({
+        data: { xwa2_notify_lid_change: { old: 'a@lid', new: 'b@lid' } }
+    })
+    const node: BinaryNode = {
+        tag: 'notification',
+        attrs: { type: 'mex' },
+        content: [
+            {
+                tag: 'update',
+                attrs: { op_name: 'LidChangeNotification' },
+                content: new TextEncoder().encode(json)
+            }
+        ]
+    }
+    const parsed = parseMexNotification(node)
+    assert.ok(parsed && parsed.kind === 'lid_change')
+    assert.equal(parsed.newLidJid, 'b@lid')
+})
+
+test('parseMexNotification: returns null for non-mex / missing update / invalid json', () => {
+    assert.equal(parseMexNotification({ tag: 'notification', attrs: { type: 'group' } }), null)
+    assert.equal(parseMexNotification({ tag: 'notification', attrs: { type: 'mex' } }), null)
+    assert.equal(
+        parseMexNotification({
+            tag: 'notification',
+            attrs: { type: 'mex' },
+            content: [{ tag: 'update', attrs: {}, content: '{}' }]
+        }),
+        null
+    )
+    assert.equal(
+        parseMexNotification({
+            tag: 'notification',
+            attrs: { type: 'mex' },
+            content: [{ tag: 'update', attrs: { op_name: 'X' }, content: 'not-json' }]
+        }),
+        null
     )
 })

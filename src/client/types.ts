@@ -299,6 +299,150 @@ export interface WaIncomingNotificationEvent extends WaIncomingBaseEvent {
     readonly details?: Readonly<Record<string, unknown>>
 }
 
+export interface WaMexNotificationGraphQlError {
+    readonly message?: string
+    readonly path?: readonly string[]
+    readonly extensions?: {
+        readonly error_code?: number
+        readonly severity?: string
+        readonly is_summary?: boolean
+    }
+}
+
+export type WaMexNotificationOperationName =
+    | 'UsernameSetNotification'
+    | 'UsernameDeleteNotification'
+    | 'UsernameUpdateNotification'
+    | 'AccountSyncUsernameNotification'
+    | 'TextStatusUpdateNotification'
+    | 'TextStatusUpdateNotificationSideSub'
+    | 'LidChangeNotification'
+    | 'MessageCappingInfoNotification'
+    | 'NotificationCommunityOwnerUpdate'
+    | 'NotificationUserBrigadingUpdate'
+    | 'NotificationUserReachoutTimelockUpdate'
+    | 'NotificationIntegrityChallengeRequest'
+    | 'NotificationScheduledMessagePost'
+    | 'NotificationScheduledMessageReveal'
+    | 'NotificationGroupPropertyUpdate'
+    | 'NotificationGroupHiddenPropertyUpdate'
+    | 'NotificationGroupSafetyCheckPropertyUpdate'
+    | 'NotificationGroupMemberLinkPropertyUpdate'
+    | 'NotificationGroupMemberShareGroupHistoryModePropertyUpdate'
+    | 'NotificationGroupAppealStatusUpdate'
+    | 'NotificationGroupLimitSharingPropertyUpdate'
+    | 'NotificationNewsletterUserSettingChange'
+    | 'NotificationNewsletterJoin'
+    | 'NotificationNewsletterLeave'
+    | 'NotificationNewsletterStateChange'
+    | 'NotificationNewsletterAdminProfileUpdate'
+    | 'NotificationNewsletterAdminMetadataUpdate'
+    | 'NotificationNewsletterOwnerUpdate'
+    | 'NotificationNewsletterUpdate'
+    | 'NotificationNewsletterAdminPromote'
+    | 'NotificationNewsletterAdminDemote'
+    | 'NotificationNewsletterAdminInviteRevoke'
+    | 'NotificationNewsletterWamoSubStatusChange'
+    | 'NewsletterResponseStateUpdate'
+    | 'NotificationNewsletterBlockUser'
+    | 'NotificationNewsletterPaidPartnershipUpdate'
+    | 'NotificationNewsletterMilestone'
+    | 'MexNotificationEvent'
+    | (string & {})
+
+interface WaMexNotificationBaseFields extends WaIncomingBaseEvent {
+    readonly operationName: WaMexNotificationOperationName
+    readonly errors: readonly WaMexNotificationGraphQlError[]
+}
+
+export interface WaMexUsernameSetEvent extends WaMexNotificationBaseFields {
+    readonly kind: 'username_set'
+    readonly operationName: 'UsernameSetNotification'
+    readonly lidJid: string
+    readonly username: string
+}
+
+export interface WaMexUsernameDeleteEvent extends WaMexNotificationBaseFields {
+    readonly kind: 'username_delete'
+    readonly operationName: 'UsernameDeleteNotification'
+    readonly lidJid: string
+    readonly displayName: string | null
+}
+
+export interface WaMexUsernameUpdateHintEvent extends WaMexNotificationBaseFields {
+    readonly kind: 'username_update_hint'
+    readonly operationName: 'UsernameUpdateNotification'
+    readonly contactHash: string
+}
+
+export interface WaMexOwnUsernameSyncEvent extends WaMexNotificationBaseFields {
+    readonly kind: 'own_username_sync'
+    readonly operationName: 'AccountSyncUsernameNotification'
+    readonly ownLidJid: string
+    readonly username: string | null
+    readonly state: string | null
+    readonly pin: string | null
+}
+
+export interface WaMexTextStatusUpdateEvent extends WaMexNotificationBaseFields {
+    readonly kind: 'text_status_update'
+    readonly operationName: 'TextStatusUpdateNotification'
+    readonly jid: string
+    readonly text: string | null
+    readonly emoji: string | null
+    readonly ephemeralDurationSec: number | null
+    readonly lastUpdateTime: number | null
+}
+
+export interface WaMexTextStatusUpdateHintEvent extends WaMexNotificationBaseFields {
+    readonly kind: 'text_status_update_hint'
+    readonly operationName: 'TextStatusUpdateNotificationSideSub'
+    readonly contactHash: string
+}
+
+export interface WaMexLidChangeEvent extends WaMexNotificationBaseFields {
+    readonly kind: 'lid_change'
+    readonly operationName: 'LidChangeNotification'
+    readonly oldLidJid: string
+    readonly newLidJid: string
+}
+
+export type WaMexMessageCappingStatus =
+    | 'NONE'
+    | 'FIRST_WARNING'
+    | 'SECOND_WARNING'
+    | 'CAPPED'
+    | (string & {})
+
+export interface WaMexMessageCappingEvent extends WaMexNotificationBaseFields {
+    readonly kind: 'message_capping'
+    readonly operationName: 'MessageCappingInfoNotification'
+    readonly cappingStatus: WaMexMessageCappingStatus
+    readonly oteStatus: string | null
+    readonly mvStatus: string | null
+    readonly totalQuota: number | null
+    readonly usedQuota: number | null
+    readonly cycleStartTimestamp: number | null
+    readonly cycleEndTimestamp: number | null
+    readonly serverSentTimestamp: number | null
+}
+
+export interface WaMexNotificationUnknownEvent extends WaMexNotificationBaseFields {
+    readonly kind: 'unknown'
+    readonly data: unknown
+}
+
+export type WaMexNotificationEvent =
+    | WaMexUsernameSetEvent
+    | WaMexUsernameDeleteEvent
+    | WaMexUsernameUpdateHintEvent
+    | WaMexOwnUsernameSyncEvent
+    | WaMexTextStatusUpdateEvent
+    | WaMexTextStatusUpdateHintEvent
+    | WaMexLidChangeEvent
+    | WaMexMessageCappingEvent
+    | WaMexNotificationUnknownEvent
+
 export interface WaRegistrationCodeEvent extends WaIncomingBaseEvent {
     readonly code: string
     readonly expiryTimestampMs: number
@@ -717,6 +861,7 @@ export interface WaClientEventMap {
     readonly chatstate: (event: WaIncomingChatstateEvent) => void
     readonly call: (event: WaIncomingCallEvent) => void
     readonly notification: (event: WaIncomingNotificationEvent) => void
+    readonly mex_notification: (event: WaMexNotificationEvent) => void
     readonly registration_code_received: (event: WaRegistrationCodeEvent) => void
     readonly account_takeover_notice: (event: WaAccountTakeoverNoticeEvent) => void
     readonly failure: (event: WaIncomingFailureEvent) => void

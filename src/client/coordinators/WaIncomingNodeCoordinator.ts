@@ -32,6 +32,7 @@ import type {
     WaIncomingReceiptEvent,
     WaIncomingStanzaFilter,
     WaIncomingUnhandledStanzaEvent,
+    WaMexNotificationEvent,
     WaPictureEvent,
     WaRegistrationCodeEvent
 } from '@client/types'
@@ -82,6 +83,7 @@ interface WaIncomingNodeRuntime {
     readonly emitIncomingFailure: (event: WaIncomingFailureEvent) => void
     readonly emitIncomingErrorStanza: (event: WaIncomingBaseEvent) => void
     readonly emitIncomingNotification: (event: WaIncomingNotificationEvent) => void
+    readonly emitMexNotification: (event: WaMexNotificationEvent) => void
     readonly emitRegistrationCode: (event: WaRegistrationCodeEvent) => void
     readonly emitAccountTakeoverNotice: (event: WaAccountTakeoverNoticeEvent) => void
     readonly emitGroupEvent: (event: WaGroupEvent) => void
@@ -355,6 +357,7 @@ export class WaIncomingNodeCoordinator {
                 logger: this.logger,
                 sendNode: runtime.sendNode,
                 emitIncomingNotification: runtime.emitIncomingNotification,
+                emitMexNotification: runtime.emitMexNotification,
                 emitUnhandledStanza: runtime.emitUnhandledIncomingNode,
                 syncAppState: runtime.syncAppState
             })

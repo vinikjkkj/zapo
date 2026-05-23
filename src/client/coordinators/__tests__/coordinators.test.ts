@@ -61,6 +61,7 @@ function createIncomingRuntime() {
             emitIncomingFailure: () => undefined,
             emitIncomingErrorStanza: () => undefined,
             emitIncomingNotification: () => undefined,
+            emitMexNotification: () => undefined,
             emitRegistrationCode: () => undefined,
             emitAccountTakeoverNotice: () => undefined,
             emitGroupEvent: () => undefined,
