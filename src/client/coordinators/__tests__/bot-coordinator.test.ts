@@ -399,7 +399,11 @@ test('bot coordinator getBotProfile parses full profile node via usync', async (
                                                     tag: 'profile',
                                                     attrs: { persona_id: 'persona-1' },
                                                     content: [
-                                                        { tag: 'name', attrs: {}, content: 'Meta AI' },
+                                                        {
+                                                            tag: 'name',
+                                                            attrs: {},
+                                                            content: 'Meta AI'
+                                                        },
                                                         {
                                                             tag: 'attributes',
                                                             attrs: {},
@@ -415,7 +419,11 @@ test('bot coordinator getBotProfile parses full profile node via usync', async (
                                                             attrs: {},
                                                             content: 'assistant'
                                                         },
-                                                        { tag: 'default', attrs: {}, content: 'true' },
+                                                        {
+                                                            tag: 'default',
+                                                            attrs: {},
+                                                            content: 'true'
+                                                        },
                                                         {
                                                             tag: 'prompts',
                                                             attrs: {},
@@ -432,7 +440,8 @@ test('bot coordinator getBotProfile parses full profile node via usync', async (
                                                                         {
                                                                             tag: 'text',
                                                                             attrs: {},
-                                                                            content: 'Tell me a story'
+                                                                            content:
+                                                                                'Tell me a story'
                                                                         }
                                                                     ]
                                                                 }
@@ -459,7 +468,8 @@ test('bot coordinator getBotProfile parses full profile node via usync', async (
                                                                         {
                                                                             tag: 'description',
                                                                             attrs: {},
-                                                                            content: 'generate image'
+                                                                            content:
+                                                                                'generate image'
                                                                         }
                                                                     ]
                                                                 }

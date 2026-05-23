@@ -44,11 +44,7 @@ import {
     iterateUsyncUsers,
     parseUsyncResultEnvelope
 } from '@transport/node/builders/usync'
-import {
-    findNodeChild,
-    getNodeChildrenByTag,
-    getNodeTextContent
-} from '@transport/node/helpers'
+import { findNodeChild, getNodeChildrenByTag, getNodeTextContent } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
 import { logUsyncProtocolErrors } from '@transport/node/usync'
 import type { BinaryNode } from '@transport/types'
@@ -180,7 +176,9 @@ function parseBotListResult(result: BinaryNode): readonly WaBotInfo[] {
     return out
 }
 
-function parseBotProfilePrompts(promptsNode: BinaryNode | undefined): readonly WaBotProfilePrompt[] {
+function parseBotProfilePrompts(
+    promptsNode: BinaryNode | undefined
+): readonly WaBotProfilePrompt[] {
     if (!promptsNode) return []
     const children = getNodeChildrenByTag(promptsNode, 'prompt')
     const out = new Array<WaBotProfilePrompt>(children.length)
@@ -201,7 +199,8 @@ function parseBotProfileCommands(commandsNode: BinaryNode | undefined): {
     readonly commandsDescription: string | null
 } {
     if (!commandsNode) return { commands: [], commandsDescription: null }
-    const commandsDescription = getNodeTextContent(findNodeChild(commandsNode, 'description')) || null
+    const commandsDescription =
+        getNodeTextContent(findNodeChild(commandsNode, 'description')) || null
     const commandNodes = getNodeChildrenByTag(commandsNode, 'command')
     const commands = new Array<WaBotProfileCommand>(commandNodes.length)
     let count = 0
@@ -216,9 +215,7 @@ function parseBotProfileCommands(commandsNode: BinaryNode | undefined): {
     return { commands, commandsDescription }
 }
 
-function parsePosingAsProfessional(
-    node: BinaryNode | undefined
-): WaBotPosingAsProfessional | null {
+function parsePosingAsProfessional(node: BinaryNode | undefined): WaBotPosingAsProfessional | null {
     if (!node) return null
     const type = node.attrs.type
     if (type === 'unknown' || type === 'yes' || type === 'no') {
@@ -254,14 +251,12 @@ function parseBotProfileUsync(result: BinaryNode): WaBotProfileResult | null {
                 attributes: getNodeTextContent(findNodeChild(profileNode, 'attributes')) || null,
                 description: getNodeTextContent(findNodeChild(profileNode, 'description')) || null,
                 category: getNodeTextContent(findNodeChild(profileNode, 'category')) || null,
-                isDefault:
-                    getNodeTextContent(findNodeChild(profileNode, 'default')) === 'true',
+                isDefault: getNodeTextContent(findNodeChild(profileNode, 'default')) === 'true',
                 prompts: parseBotProfilePrompts(findNodeChild(profileNode, 'prompts')),
                 personaId: (profileNode.attrs.persona_id as string | undefined) ?? null,
                 commands,
                 commandsDescription,
-                isMetaCreated:
-                    isMetaCreatedRaw === undefined ? null : isMetaCreatedRaw === 'true',
+                isMetaCreated: isMetaCreatedRaw === undefined ? null : isMetaCreatedRaw === 'true',
                 creatorName: creatorNode
                     ? getNodeTextContent(findNodeChild(creatorNode, 'name')) || null
                     : null,

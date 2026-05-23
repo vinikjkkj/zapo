@@ -371,11 +371,7 @@ async function runSyncQuery(
         args.contextData
     )
     assertIqResult(response, args.assertContext ?? args.queryContext)
-    logUsyncProtocolErrors(
-        parseUsyncResultEnvelope(response),
-        runtime.logger,
-        args.queryContext
-    )
+    logUsyncProtocolErrors(parseUsyncResultEnvelope(response), runtime.logger, args.queryContext)
     runtime.logger.debug(args.logMessage, args.contextData)
 }
 

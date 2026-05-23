@@ -100,10 +100,7 @@ function parseUsyncVerifiedNames(result: BinaryNode): readonly WaVerifiedNameBat
             count += 1
             continue
         }
-        const vnNode = findNodeChild(
-            businessNode,
-            WA_BUSINESS_NOTIFICATION_TAGS.VERIFIED_NAME
-        )
+        const vnNode = findNodeChild(businessNode, WA_BUSINESS_NOTIFICATION_TAGS.VERIFIED_NAME)
         out[count] = {
             jid,
             verifiedName: vnNode ? parseVerifiedNameNode(vnNode) : null

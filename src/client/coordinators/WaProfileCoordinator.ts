@@ -96,9 +96,7 @@ export interface WaProfileCoordinator {
     readonly getDisappearingMode: (
         jids: readonly string[]
     ) => Promise<readonly WaDisappearingModeResult[]>
-    readonly getTextStatuses: (
-        jids: readonly string[]
-    ) => Promise<readonly WaTextStatusResult[]>
+    readonly getTextStatuses: (jids: readonly string[]) => Promise<readonly WaTextStatusResult[]>
     readonly setTextStatus: (input: WaSetTextStatusInput) => Promise<void>
     readonly getUsernames: (jids: readonly string[]) => Promise<readonly WaUsernameResult[]>
     readonly getOwnUsername: () => Promise<WaOwnUsernameResult>
@@ -451,12 +449,9 @@ export function createProfileCoordinator(
                 queryProtocolNodes: [buildGetTextStatusUsyncQueryNode()],
                 users: jids.map((jid) => ({ jid }))
             })
-            const result = await queryWithContext(
-                'profile.getTextStatuses',
-                usyncNode,
-                undefined,
-                { count: jids.length }
-            )
+            const result = await queryWithContext('profile.getTextStatuses', usyncNode, undefined, {
+                count: jids.length
+            })
             assertIqResult(result, 'profile.getTextStatuses')
             logUsyncProtocolErrors(
                 parseUsyncResultEnvelope(result),
@@ -483,18 +478,11 @@ export function createProfileCoordinator(
                 queryProtocolNodes: [buildGetUsernameUsyncQueryNode()],
                 users: jids.map((jid) => ({ jid }))
             })
-            const result = await queryWithContext(
-                'profile.getUsernames',
-                usyncNode,
-                undefined,
-                { count: jids.length }
-            )
+            const result = await queryWithContext('profile.getUsernames', usyncNode, undefined, {
+                count: jids.length
+            })
             assertIqResult(result, 'profile.getUsernames')
-            logUsyncProtocolErrors(
-                parseUsyncResultEnvelope(result),
-                logger,
-                'profile.getUsernames'
-            )
+            logUsyncProtocolErrors(parseUsyncResultEnvelope(result), logger, 'profile.getUsernames')
             return parseUsyncUsernames(result)
         },
 

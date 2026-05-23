@@ -529,10 +529,7 @@ test('profile coordinator gets text statuses via usync', async () => {
         }
     })
 
-    const results = await coordinator.getTextStatuses([
-        'a@s.whatsapp.net',
-        'b@s.whatsapp.net'
-    ])
+    const results = await coordinator.getTextStatuses(['a@s.whatsapp.net', 'b@s.whatsapp.net'])
 
     assert.equal(results.length, 2)
     assert.deepEqual(results[0], {

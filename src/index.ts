@@ -155,10 +155,7 @@ export type {
 } from '@client/coordinators/WaProfileCoordinator'
 export type { WaProfilePictureType } from '@transport/node/builders/profile'
 export { parseUsyncResultEnvelope } from '@transport/node/builders/usync'
-export type {
-    WaUsyncProtocolError,
-    WaUsyncResultEnvelope
-} from '@transport/node/builders/usync'
+export type { WaUsyncProtocolError, WaUsyncResultEnvelope } from '@transport/node/builders/usync'
 export type {
     WaSendStatusInput,
     WaStatusCoordinator
