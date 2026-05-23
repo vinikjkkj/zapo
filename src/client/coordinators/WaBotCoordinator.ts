@@ -34,11 +34,25 @@ import {
 import { isBotJid, toUserJid } from '@protocol/jid'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
-import { buildBotListIq } from '@transport/node/builders/bot'
-import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
+import {
+    buildBotListIq,
+    buildBotProfileUsyncUserNodeContent,
+    buildGetBotProfileUsyncQueryNode
+} from '@transport/node/builders/bot'
+import {
+    buildUsyncIq,
+    iterateUsyncUsers,
+    parseUsyncResultEnvelope
+} from '@transport/node/builders/usync'
+import {
+    findNodeChild,
+    getNodeChildrenByTag,
+    getNodeTextContent
+} from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
+import { logUsyncProtocolErrors } from '@transport/node/usync'
 import type { BinaryNode } from '@transport/types'
-import { toError } from '@util/primitives'
+import { parseOptionalInt, toError } from '@util/primitives'
 
 export interface WaBotInfo {
     readonly jid: string
@@ -47,6 +61,38 @@ export interface WaBotInfo {
     readonly isDefault: boolean
     readonly section?: string
     readonly count?: number
+}
+
+export interface WaBotProfilePrompt {
+    readonly emoji: string
+    readonly text: string
+}
+
+export interface WaBotProfileCommand {
+    readonly name: string
+    readonly description: string
+}
+
+export type WaBotPosingAsProfessional = 'unknown' | 'yes' | 'no'
+
+export interface WaBotProfileResult {
+    readonly name: string | null
+    readonly attributes: string | null
+    readonly description: string | null
+    readonly category: string | null
+    readonly isDefault: boolean
+    readonly prompts: readonly WaBotProfilePrompt[]
+    readonly personaId: string | null
+    readonly commands: readonly WaBotProfileCommand[]
+    readonly commandsDescription: string | null
+    readonly isMetaCreated: boolean | null
+    readonly creatorName: string | null
+    readonly creatorProfileUrl: string | null
+    readonly posingAsProfessional: WaBotPosingAsProfessional | null
+}
+
+export interface WaGetBotProfileOptions {
+    readonly personaId?: string
 }
 
 export interface WaBotPromptOptions extends WaSendMessageOptions {
@@ -64,6 +110,10 @@ export interface WaBotPromptOptions extends WaSendMessageOptions {
 
 export interface WaBotCoordinator {
     readonly listBots: () => Promise<readonly WaBotInfo[]>
+    readonly getBotProfile: (
+        jid: string,
+        options?: WaGetBotProfileOptions
+    ) => Promise<WaBotProfileResult | null>
     readonly sendPrompt: (
         to: string,
         content: WaSendMessageContent,
@@ -90,6 +140,7 @@ interface WaBotCoordinatorOptions {
     readonly messageSecretStore: WaMessageSecretStore
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly emitBotChunk: (event: WaIncomingBotChunkEvent) => void
+    readonly generateSid: () => Promise<string>
 }
 
 function deriveFbidJid(jid: string, personaId: string): string {
@@ -116,19 +167,114 @@ function parseBotListResult(result: BinaryNode): readonly WaBotInfo[] {
             const jid = node.attrs.jid
             const personaId = node.attrs.persona_id
             if (typeof jid !== 'string' || typeof personaId !== 'string') continue
-            const countAttr = node.attrs.count
-            const count = typeof countAttr === 'string' ? Number.parseInt(countAttr, 10) : undefined
             out.push({
                 jid,
                 fbidJid: deriveFbidJid(jid, personaId),
                 personaId,
                 isDefault: defaultJid !== undefined && jid === defaultJid,
                 section: sectionName,
-                count: Number.isSafeInteger(count) ? count : undefined
+                count: parseOptionalInt(node.attrs.count)
             })
         }
     }
     return out
+}
+
+function parseBotProfilePrompts(promptsNode: BinaryNode | undefined): readonly WaBotProfilePrompt[] {
+    if (!promptsNode) return []
+    const children = getNodeChildrenByTag(promptsNode, 'prompt')
+    const out = new Array<WaBotProfilePrompt>(children.length)
+    let count = 0
+    for (let i = 0; i < children.length; i += 1) {
+        const promptNode = children[i]
+        const emoji = getNodeTextContent(findNodeChild(promptNode, 'emoji')) ?? ''
+        const text = getNodeTextContent(findNodeChild(promptNode, 'text')) ?? ''
+        out[count] = { emoji, text }
+        count += 1
+    }
+    out.length = count
+    return out
+}
+
+function parseBotProfileCommands(commandsNode: BinaryNode | undefined): {
+    readonly commands: readonly WaBotProfileCommand[]
+    readonly commandsDescription: string | null
+} {
+    if (!commandsNode) return { commands: [], commandsDescription: null }
+    const commandsDescription = getNodeTextContent(findNodeChild(commandsNode, 'description')) || null
+    const commandNodes = getNodeChildrenByTag(commandsNode, 'command')
+    const commands = new Array<WaBotProfileCommand>(commandNodes.length)
+    let count = 0
+    for (let i = 0; i < commandNodes.length; i += 1) {
+        const cmdNode = commandNodes[i]
+        const name = getNodeTextContent(findNodeChild(cmdNode, 'name')) ?? ''
+        const description = getNodeTextContent(findNodeChild(cmdNode, 'description')) ?? ''
+        commands[count] = { name, description }
+        count += 1
+    }
+    commands.length = count
+    return { commands, commandsDescription }
+}
+
+function parsePosingAsProfessional(
+    node: BinaryNode | undefined
+): WaBotPosingAsProfessional | null {
+    if (!node) return null
+    const type = node.attrs.type
+    if (type === 'unknown' || type === 'yes' || type === 'no') {
+        return type
+    }
+    return null
+}
+
+function parseBotProfileUsync(result: BinaryNode): WaBotProfileResult | null {
+    const userNodes = iterateUsyncUsers(result) ?? []
+    for (let i = 0; i < userNodes.length; i += 1) {
+        const userNode = userNodes[i]
+        const userContent = userNode.content
+        if (!Array.isArray(userContent)) continue
+        for (let j = 0; j < userContent.length; j += 1) {
+            const botNode = userContent[j]
+            if (botNode.tag !== WA_NODE_TAGS.BOT) continue
+            const errorNode = findNodeChild(botNode, WA_NODE_TAGS.ERROR)
+            if (errorNode) return null
+            const profileNode = findNodeChild(botNode, 'profile')
+            if (!profileNode) return null
+
+            const isMetaCreatedRaw = getNodeTextContent(
+                findNodeChild(profileNode, 'is_meta_created')
+            )
+            const creatorNode = findNodeChild(profileNode, 'creator')
+            const { commands, commandsDescription } = parseBotProfileCommands(
+                findNodeChild(profileNode, 'commands')
+            )
+
+            return {
+                name: getNodeTextContent(findNodeChild(profileNode, 'name')) || null,
+                attributes: getNodeTextContent(findNodeChild(profileNode, 'attributes')) || null,
+                description: getNodeTextContent(findNodeChild(profileNode, 'description')) || null,
+                category: getNodeTextContent(findNodeChild(profileNode, 'category')) || null,
+                isDefault:
+                    getNodeTextContent(findNodeChild(profileNode, 'default')) === 'true',
+                prompts: parseBotProfilePrompts(findNodeChild(profileNode, 'prompts')),
+                personaId: (profileNode.attrs.persona_id as string | undefined) ?? null,
+                commands,
+                commandsDescription,
+                isMetaCreated:
+                    isMetaCreatedRaw === undefined ? null : isMetaCreatedRaw === 'true',
+                creatorName: creatorNode
+                    ? getNodeTextContent(findNodeChild(creatorNode, 'name')) || null
+                    : null,
+                creatorProfileUrl: creatorNode
+                    ? getNodeTextContent(findNodeChild(creatorNode, 'profile_url')) || null
+                    : null,
+                posingAsProfessional: parsePosingAsProfessional(
+                    findNodeChild(profileNode, 'posing_as_professional')
+                )
+            }
+        }
+    }
+    return null
 }
 
 function normalizeBotJidToFbid(botJid: string): string {
@@ -148,7 +294,8 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
         messageStore,
         messageSecretStore,
         getCurrentCredentials,
-        emitBotChunk
+        emitBotChunk,
+        generateSid
     } = options
 
     return {
@@ -157,6 +304,26 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
             const result = await queryWithContext('bot.listBots', node)
             assertIqResult(result, 'bot.listBots')
             return parseBotListResult(result)
+        },
+
+        getBotProfile: async (jid, opts) => {
+            const sid = await generateSid()
+            const usyncNode = buildUsyncIq({
+                sid,
+                queryProtocolNodes: [buildGetBotProfileUsyncQueryNode()],
+                users: [
+                    {
+                        jid,
+                        content: buildBotProfileUsyncUserNodeContent(opts?.personaId)
+                    }
+                ]
+            })
+            const result = await queryWithContext('bot.getBotProfile', usyncNode, undefined, {
+                jid
+            })
+            assertIqResult(result, 'bot.getBotProfile')
+            logUsyncProtocolErrors(parseUsyncResultEnvelope(result), logger, 'bot.getBotProfile')
+            return parseBotProfileUsync(result)
         },
 
         sendPrompt: async (to, content, opts = {}) => {

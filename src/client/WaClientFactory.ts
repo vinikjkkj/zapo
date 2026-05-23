@@ -625,14 +625,17 @@ export function buildWaClientDependencies(input: {
 
     const profileCoordinator = createProfileCoordinator({
         queryWithContext: runtime.queryWithContext,
-        generateSid: generateUsyncSid
+        generateSid: generateUsyncSid,
+        mexSocket: { query: runtime.query },
+        logger
     })
 
     const businessCoordinator = createBusinessCoordinator({
         queryWithContext: runtime.queryWithContext,
         mediaTransfer,
         getMediaConn: () => getClientMediaConn(mediaMessageBuildOptions),
-        logger
+        logger,
+        generateSid: generateUsyncSid
     })
 
     const emailCoordinator = createEmailCoordinator({
@@ -805,7 +808,8 @@ export function buildWaClientDependencies(input: {
         messageStore: sessionStore.messages,
         messageSecretStore: sessionStore.messageSecret,
         getCurrentCredentials,
-        emitBotChunk: (event) => runtime.emitEvent('message_bot_chunk', event)
+        emitBotChunk: (event) => runtime.emitEvent('message_bot_chunk', event),
+        generateSid: generateUsyncSid
     })
 
     const appStateSync = new WaAppStateSyncClient({

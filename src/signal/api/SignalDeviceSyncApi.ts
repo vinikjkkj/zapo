@@ -3,10 +3,18 @@ import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { WA_DEFAULTS, WA_NODE_TAGS, WA_USYNC_CONTEXTS } from '@protocol/constants'
 import { buildDeviceJid, isHostedDeviceId, splitJid, toUserJid } from '@protocol/jid'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
-import { buildUsyncIq, iterateUsyncUsers } from '@transport/node/builders/usync'
+import {
+    buildUsyncIq,
+    iterateUsyncUsers,
+    parseUsyncResultEnvelope
+} from '@transport/node/builders/usync'
 import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
-import { createUsyncSidGenerator, type WaUsyncSidGenerator } from '@transport/node/usync'
+import {
+    createUsyncSidGenerator,
+    logUsyncProtocolErrors,
+    type WaUsyncSidGenerator
+} from '@transport/node/usync'
 import type { BinaryNode } from '@transport/types'
 
 interface SignalDeviceSyncApiOptions {
@@ -277,6 +285,7 @@ export class SignalDeviceSyncApi {
         requestedUsers: readonly string[]
     ): readonly { readonly jid: string; readonly deviceJids: readonly string[] }[] {
         assertIqResult(node, 'signal device sync')
+        logUsyncProtocolErrors(parseUsyncResultEnvelope(node), this.logger, 'signal.deviceSync')
         const userNodes = iterateUsyncUsers(node)
         if (!userNodes) {
             throw new Error('signal device sync response missing usync envelope')
@@ -318,6 +327,7 @@ export class SignalDeviceSyncApi {
         readonly exists: boolean
     }[] {
         assertIqResult(node, 'signal lid sync')
+        logUsyncProtocolErrors(parseUsyncResultEnvelope(node), this.logger, 'signal.lidSync')
         const userNodes = iterateUsyncUsers(node)
         if (!userNodes) {
             throw new Error('signal lid sync response missing usync envelope')

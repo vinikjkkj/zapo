@@ -15,12 +15,24 @@ import {
     buildCoverPhotoIq,
     buildEditBusinessProfileIq,
     buildGetBusinessProfileIq,
+    buildGetBusinessUsyncQueryNode,
     buildGetVerifiedNameIq,
     type WaEditBusinessProfileInput
 } from '@transport/node/builders/business'
+import {
+    buildUsyncIq,
+    iterateUsyncUsers,
+    parseUsyncResultEnvelope
+} from '@transport/node/builders/usync'
 import { findNodeChild, getNodeChildren } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
+import { logUsyncProtocolErrors } from '@transport/node/usync'
 import type { BinaryNode } from '@transport/types'
+
+export interface WaVerifiedNameBatchEntry {
+    readonly jid: string
+    readonly verifiedName: WaVerifiedNameResult | null
+}
 
 export interface WaBusinessCoordinator {
     readonly getBusinessProfile: (
@@ -28,6 +40,9 @@ export interface WaBusinessCoordinator {
     ) => Promise<readonly WaBusinessProfileResult[]>
     readonly editBusinessProfile: (input: WaEditBusinessProfileInput) => Promise<void>
     readonly getVerifiedName: (jid: string) => Promise<WaVerifiedNameResult | null>
+    readonly getVerifiedNames: (
+        jids: readonly string[]
+    ) => Promise<readonly WaVerifiedNameBatchEntry[]>
     readonly updateCoverPhoto: (media: WaUploadMediaSource) => Promise<void>
     readonly deleteCoverPhoto: (id: string) => Promise<void>
 }
@@ -42,6 +57,7 @@ interface WaBusinessCoordinatorOptions {
     readonly mediaTransfer: WaMediaTransferClient
     readonly getMediaConn: () => Promise<WaMediaConn>
     readonly logger: Logger
+    readonly generateSid: () => Promise<string>
 }
 
 function parseBusinessProfiles(result: BinaryNode): readonly WaBusinessProfileResult[] {
@@ -68,10 +84,40 @@ function parseVerifiedName(result: BinaryNode): WaVerifiedNameResult | null {
     return parseVerifiedNameNode(vnNode)
 }
 
+function parseUsyncVerifiedNames(result: BinaryNode): readonly WaVerifiedNameBatchEntry[] {
+    const userNodes = iterateUsyncUsers(result) ?? []
+    const out = new Array<WaVerifiedNameBatchEntry>(userNodes.length)
+    let count = 0
+    for (let i = 0; i < userNodes.length; i += 1) {
+        const userNode = userNodes[i]
+        const jid = userNode.attrs.jid as string | undefined
+        if (!jid) continue
+        const businessNode = findNodeChild(userNode, 'business')
+        if (!businessNode) continue
+        const errorNode = findNodeChild(businessNode, 'error')
+        if (errorNode) {
+            out[count] = { jid, verifiedName: null }
+            count += 1
+            continue
+        }
+        const vnNode = findNodeChild(
+            businessNode,
+            WA_BUSINESS_NOTIFICATION_TAGS.VERIFIED_NAME
+        )
+        out[count] = {
+            jid,
+            verifiedName: vnNode ? parseVerifiedNameNode(vnNode) : null
+        }
+        count += 1
+    }
+    out.length = count
+    return out
+}
+
 export function createBusinessCoordinator(
     options: WaBusinessCoordinatorOptions
 ): WaBusinessCoordinator {
-    const { queryWithContext, mediaTransfer, getMediaConn, logger } = options
+    const { queryWithContext, mediaTransfer, getMediaConn, logger, generateSid } = options
 
     return {
         getBusinessProfile: async (jids) => {
@@ -97,6 +143,29 @@ export function createBusinessCoordinator(
             })
             assertIqResult(result, 'business.getVerifiedName')
             return parseVerifiedName(result)
+        },
+
+        getVerifiedNames: async (jids) => {
+            if (jids.length === 0) return []
+            const sid = await generateSid()
+            const usyncNode = buildUsyncIq({
+                sid,
+                queryProtocolNodes: [buildGetBusinessUsyncQueryNode()],
+                users: jids.map((jid) => ({ jid }))
+            })
+            const result = await queryWithContext(
+                'business.getVerifiedNames',
+                usyncNode,
+                undefined,
+                { count: jids.length }
+            )
+            assertIqResult(result, 'business.getVerifiedNames')
+            logUsyncProtocolErrors(
+                parseUsyncResultEnvelope(result),
+                logger,
+                'business.getVerifiedNames'
+            )
+            return parseUsyncVerifiedNames(result)
         },
 
         updateCoverPhoto: async (media) => {

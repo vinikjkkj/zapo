@@ -22,7 +22,7 @@ import {
     getNodeTextContent
 } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
-import { longToNumber, parseOptionalInt } from '@util/primitives'
+import { parseOptionalInt } from '@util/primitives'
 
 interface WaParseBusinessNotificationResult {
     readonly events: readonly WaBusinessEvent[]
@@ -43,7 +43,7 @@ function parseCertificateContent(
             name: details.verifiedName ?? undefined,
             serial:
                 details.serial !== null && details.serial !== undefined
-                    ? String(longToNumber(details.serial))
+                    ? details.serial.toString()
                     : undefined,
             isApi: details.issuer === VN_ISSUER_API,
             isSmb: details.issuer === VN_ISSUER_SMB

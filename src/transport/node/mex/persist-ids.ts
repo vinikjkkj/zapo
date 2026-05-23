@@ -135,5 +135,17 @@ export const WA_MEX_PERSIST_IDS = Object.freeze({
     CommunityFetchAllSubgroups: Object.freeze({
         docId: '9935467776504344',
         clientDocId: '9935467776504344'
+    }),
+    UpdateTextStatus: Object.freeze({
+        docId: '9152604461510864',
+        clientDocId: '9152604461510864'
+    }),
+    GetUsername: Object.freeze({
+        docId: '25347099718279209',
+        clientDocId: '25347099718279209'
+    }),
+    SetUsername: Object.freeze({
+        docId: '25757341163897635',
+        clientDocId: '25757341163897635'
     })
 }) satisfies Readonly<Record<string, WaMexPersistId>>

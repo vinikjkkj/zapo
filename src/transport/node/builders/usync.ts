@@ -10,6 +10,7 @@ import {
 import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
+import { parseOptionalInt } from '@util/primitives'
 
 export type WaUsyncMode = (typeof WA_USYNC_MODES)[keyof typeof WA_USYNC_MODES]
 export type WaUsyncContext = (typeof WA_USYNC_CONTEXTS)[keyof typeof WA_USYNC_CONTEXTS]
@@ -48,6 +49,52 @@ export function iterateUsyncUsers(result: BinaryNode): readonly BinaryNode[] | n
     const listNode = findNodeChild(usyncNode, WA_NODE_TAGS.LIST)
     if (!listNode) return null
     return getNodeChildrenByTag(listNode, WA_NODE_TAGS.USER)
+}
+
+export interface WaUsyncProtocolError {
+    readonly code: number | null
+    readonly text: string | null
+    readonly backoffSeconds: number | null
+}
+
+export interface WaUsyncResultEnvelope {
+    readonly errors: Readonly<Record<string, WaUsyncProtocolError>>
+    readonly refresh: Readonly<Record<string, number>>
+}
+
+const EMPTY_USYNC_RESULT_ENVELOPE: WaUsyncResultEnvelope = Object.freeze({
+    errors: Object.freeze({}),
+    refresh: Object.freeze({})
+})
+
+export function parseUsyncResultEnvelope(result: BinaryNode): WaUsyncResultEnvelope {
+    const usyncNode = findNodeChild(result, WA_NODE_TAGS.USYNC)
+    if (!usyncNode) return EMPTY_USYNC_RESULT_ENVELOPE
+    const resultNode = findNodeChild(usyncNode, 'result')
+    if (!resultNode) return EMPTY_USYNC_RESULT_ENVELOPE
+    if (!Array.isArray(resultNode.content)) return EMPTY_USYNC_RESULT_ENVELOPE
+
+    const errors: Record<string, WaUsyncProtocolError> = {}
+    const refresh: Record<string, number> = {}
+
+    for (let i = 0; i < resultNode.content.length; i += 1) {
+        const protoNode = resultNode.content[i]
+        const errorNode = findNodeChild(protoNode, WA_NODE_TAGS.ERROR)
+        if (errorNode) {
+            errors[protoNode.tag] = {
+                code: parseOptionalInt(errorNode.attrs.code) ?? null,
+                text: (errorNode.attrs.text as string | undefined) ?? null,
+                backoffSeconds: parseOptionalInt(errorNode.attrs.backoff) ?? null
+            }
+            continue
+        }
+        const refreshSeconds = parseOptionalInt(protoNode.attrs.refresh)
+        if (refreshSeconds !== undefined) {
+            refresh[protoNode.tag] = refreshSeconds
+        }
+    }
+
+    return { errors, refresh }
 }
 
 export function buildUsyncIq(input: BuildUsyncIqInput): BinaryNode {

@@ -2,6 +2,7 @@ import { parseSignalAddressFromJid } from '@protocol/jid'
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
+import { parseOptionalInt } from '@util/primitives'
 
 export const DEVICE_NOTIFICATION_ACTIONS = Object.freeze({
     ADD: 'add',
@@ -72,15 +73,7 @@ export function parseDeviceNotification(node: BinaryNode): DeviceNotification | 
                 continue
             }
 
-            const keyIndexAttr = deviceNode.attrs['key-index']
-            const parsedKeyIndex =
-                keyIndexAttr === undefined ? null : Number.parseInt(keyIndexAttr, 10)
-            const keyIndex =
-                parsedKeyIndex !== null &&
-                Number.isSafeInteger(parsedKeyIndex) &&
-                parsedKeyIndex >= 0
-                    ? parsedKeyIndex
-                    : null
+            const keyIndex = parseOptionalInt(deviceNode.attrs['key-index']) ?? null
 
             devices[devices.length] = {
                 deviceId,

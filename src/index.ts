@@ -63,13 +63,21 @@ export type {
 export type {
     WaBotCoordinator,
     WaBotInfo,
-    WaBotPromptOptions
+    WaBotPosingAsProfessional,
+    WaBotProfileCommand,
+    WaBotProfilePrompt,
+    WaBotProfileResult,
+    WaBotPromptOptions,
+    WaGetBotProfileOptions
 } from '@client/coordinators/WaBotCoordinator'
 export type {
     WaBroadcastListCoordinator,
     WaSendBroadcastListMessageInput
 } from '@client/coordinators/WaBroadcastListCoordinator'
-export type { WaBusinessCoordinator } from '@client/coordinators/WaBusinessCoordinator'
+export type {
+    WaBusinessCoordinator,
+    WaVerifiedNameBatchEntry
+} from '@client/coordinators/WaBusinessCoordinator'
 export type { WaUploadMediaSource } from '@client/media'
 export type { WaEditBusinessProfileInput } from '@transport/node/builders/business'
 export type {
@@ -135,12 +143,22 @@ export type {
 } from '@client/coordinators/WaPrivacyCoordinator'
 export type {
     WaDisappearingModeResult,
+    WaOwnUsernameResult,
     WaProfileCoordinator,
     WaProfileInfo,
     WaProfilePictureResult,
-    WaProfileStatusResult
+    WaProfileStatusResult,
+    WaSetTextStatusInput,
+    WaSetUsernameInput,
+    WaTextStatusResult,
+    WaUsernameResult
 } from '@client/coordinators/WaProfileCoordinator'
 export type { WaProfilePictureType } from '@transport/node/builders/profile'
+export { parseUsyncResultEnvelope } from '@transport/node/builders/usync'
+export type {
+    WaUsyncProtocolError,
+    WaUsyncResultEnvelope
+} from '@transport/node/builders/usync'
 export type {
     WaSendStatusInput,
     WaStatusCoordinator

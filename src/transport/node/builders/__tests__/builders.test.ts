@@ -82,7 +82,11 @@ import {
     buildTcTokenMessageNode
 } from '@transport/node/builders/privacy-token'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
-import { buildUsyncIq, buildUsyncUserNode } from '@transport/node/builders/usync'
+import {
+    buildUsyncIq,
+    buildUsyncUserNode,
+    parseUsyncResultEnvelope
+} from '@transport/node/builders/usync'
 import type { BinaryNode } from '@transport/types'
 
 test('presence and offline builders generate expected lightweight nodes', () => {
@@ -236,6 +240,94 @@ test('usync builder composes query/list nodes with defaults and overrides', () =
             }),
         /must include at least one protocol node/
     )
+})
+
+test('parseUsyncResultEnvelope extracts per-protocol errors with backoff', () => {
+    const response: BinaryNode = {
+        tag: 'iq',
+        attrs: { type: 'result' },
+        content: [
+            {
+                tag: 'usync',
+                attrs: {},
+                content: [
+                    {
+                        tag: 'result',
+                        attrs: {},
+                        content: [
+                            {
+                                tag: 'bot',
+                                attrs: {},
+                                content: [
+                                    {
+                                        tag: 'error',
+                                        attrs: {
+                                            code: '400',
+                                            text: 'bad-request',
+                                            backoff: '598'
+                                        }
+                                    }
+                                ]
+                            },
+                            { tag: 'contact', attrs: { refresh: '3600' } },
+                            { tag: 'status', attrs: {} }
+                        ]
+                    },
+                    { tag: 'list', attrs: {} }
+                ]
+            }
+        ]
+    }
+
+    const envelope = parseUsyncResultEnvelope(response)
+    assert.deepEqual(envelope.errors, {
+        bot: { code: 400, text: 'bad-request', backoffSeconds: 598 }
+    })
+    assert.deepEqual(envelope.refresh, { contact: 3600 })
+})
+
+test('parseUsyncResultEnvelope returns empty envelope when usync or result missing', () => {
+    const noUsync: BinaryNode = { tag: 'iq', attrs: { type: 'result' } }
+    assert.deepEqual(parseUsyncResultEnvelope(noUsync), { errors: {}, refresh: {} })
+
+    const noResult: BinaryNode = {
+        tag: 'iq',
+        attrs: { type: 'result' },
+        content: [{ tag: 'usync', attrs: {} }]
+    }
+    assert.deepEqual(parseUsyncResultEnvelope(noResult), { errors: {}, refresh: {} })
+})
+
+test('parseUsyncResultEnvelope falls back to null fields when error attrs missing', () => {
+    const response: BinaryNode = {
+        tag: 'iq',
+        attrs: { type: 'result' },
+        content: [
+            {
+                tag: 'usync',
+                attrs: {},
+                content: [
+                    {
+                        tag: 'result',
+                        attrs: {},
+                        content: [
+                            {
+                                tag: 'feature',
+                                attrs: {},
+                                content: [{ tag: 'error', attrs: {} }]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+
+    const envelope = parseUsyncResultEnvelope(response)
+    assert.deepEqual(envelope.errors, {
+        feature: { code: null, text: null, backoffSeconds: null }
+    })
+    assert.deepEqual(envelope.refresh, {})
 })
 
 test('account sync builders generate expected iq structure', () => {

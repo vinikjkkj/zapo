@@ -13,3 +13,31 @@ export function buildBotListIq(version: string = BOT_LIST_VERSION): BinaryNode {
         }
     ])
 }
+
+export function buildGetBotProfileUsyncQueryNode(): BinaryNode {
+    return {
+        tag: WA_NODE_TAGS.BOT,
+        attrs: {},
+        content: [
+            {
+                tag: 'profile',
+                attrs: { v: '1' }
+            }
+        ]
+    }
+}
+
+export function buildBotProfileUsyncUserNodeContent(personaId?: string): readonly BinaryNode[] {
+    return [
+        {
+            tag: WA_NODE_TAGS.BOT,
+            attrs: {},
+            content: [
+                {
+                    tag: 'profile',
+                    attrs: personaId ? { persona_id: personaId } : {}
+                }
+            ]
+        }
+    ]
+}

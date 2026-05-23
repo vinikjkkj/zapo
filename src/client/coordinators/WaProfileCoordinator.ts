@@ -1,18 +1,28 @@
+import type { Logger } from '@infra/log/types'
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
     buildDeleteProfilePictureIq,
     buildGetDisappearingModeUsyncQueryNode,
     buildGetProfilePictureIq,
     buildGetStatusUsyncQueryNodes,
+    buildGetTextStatusUsyncQueryNode,
+    buildGetUsernameUsyncQueryNode,
     buildSetProfilePictureIq,
     buildSetStatusIq,
     type WaProfilePictureType
 } from '@transport/node/builders/profile'
-import { buildUsyncIq, iterateUsyncUsers } from '@transport/node/builders/usync'
-import { findNodeChild } from '@transport/node/helpers'
+import {
+    buildUsyncIq,
+    iterateUsyncUsers,
+    parseUsyncResultEnvelope
+} from '@transport/node/builders/usync'
+import { findNodeChild, getNodeTextContent } from '@transport/node/helpers'
+import { dispatchMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
+import { WA_MEX_PERSIST_IDS } from '@transport/node/mex/persist-ids'
 import { assertIqResult } from '@transport/node/query'
+import { logUsyncProtocolErrors } from '@transport/node/usync'
 import type { BinaryNode } from '@transport/types'
-import { TEXT_DECODER } from '@util/bytes'
+import { parseOptionalInt, parseOptionalSignedInt } from '@util/primitives'
 
 export interface WaProfilePictureResult {
     readonly url?: string
@@ -37,6 +47,38 @@ export interface WaDisappearingModeResult {
     readonly ephemeralityDisabled?: boolean
 }
 
+export interface WaTextStatusResult {
+    readonly jid: string
+    readonly text: string | null
+    readonly emoji: string | null
+    readonly ephemeralDurationSec: number | null
+    readonly lastUpdateTime: number | null
+}
+
+export interface WaSetTextStatusInput {
+    readonly text?: string | null
+    readonly emoji?: string | null
+    readonly ephemeralDurationSec?: number | null
+}
+
+export interface WaUsernameResult {
+    readonly jid: string
+    readonly username: string | null
+}
+
+export interface WaOwnUsernameResult {
+    readonly username: string | null
+    readonly state: string | null
+    readonly pin: string | null
+}
+
+export interface WaSetUsernameInput {
+    readonly username: string
+    readonly reserved?: boolean
+    readonly sessionId?: string
+    readonly source?: string
+}
+
 export interface WaProfileCoordinator {
     readonly getProfilePicture: (
         jid: string,
@@ -54,6 +96,14 @@ export interface WaProfileCoordinator {
     readonly getDisappearingMode: (
         jids: readonly string[]
     ) => Promise<readonly WaDisappearingModeResult[]>
+    readonly getTextStatuses: (
+        jids: readonly string[]
+    ) => Promise<readonly WaTextStatusResult[]>
+    readonly setTextStatus: (input: WaSetTextStatusInput) => Promise<void>
+    readonly getUsernames: (jids: readonly string[]) => Promise<readonly WaUsernameResult[]>
+    readonly getOwnUsername: () => Promise<WaOwnUsernameResult>
+    readonly setUsername: (input: WaSetUsernameInput) => Promise<boolean>
+    readonly deleteUsername: () => Promise<boolean>
 }
 
 interface WaProfileCoordinatorOptions {
@@ -65,6 +115,8 @@ interface WaProfileCoordinatorOptions {
         options?: { readonly useSystemId?: boolean }
     ) => Promise<BinaryNode>
     readonly generateSid: () => Promise<string>
+    readonly mexSocket: WaMexQuerySocket
+    readonly logger: Logger
 }
 
 function parseProfilePicture(result: BinaryNode): WaProfilePictureResult {
@@ -108,27 +160,16 @@ function parseUsyncProfiles(result: BinaryNode): readonly WaProfileInfo[] {
         for (let j = 0; j < userContent.length; j += 1) {
             const child = userContent[j]
             if (child.tag === WA_NODE_TAGS.PICTURE) {
-                const idAttr = child.attrs.id as string | undefined
-                if (idAttr) {
-                    const parsed = Number.parseInt(idAttr, 10)
-                    if (Number.isSafeInteger(parsed)) {
-                        info.pictureId = parsed
-                    }
+                const pictureId = parseOptionalInt(child.attrs.id as string | undefined)
+                if (pictureId !== undefined) {
+                    info.pictureId = pictureId
                 }
             } else if (child.tag === 'status') {
                 const code = child.attrs.code as string | undefined
-                if (code !== undefined && Number.parseInt(code, 10) === 401) {
+                if (parseOptionalInt(code) === 401) {
                     info.status = ''
                 } else {
-                    const content = child.content
-                    if (content instanceof Uint8Array) {
-                        const decoded = TEXT_DECODER.decode(content)
-                        info.status = decoded.length > 0 ? decoded : null
-                    } else if (typeof content === 'string') {
-                        info.status = content.length > 0 ? content : null
-                    } else {
-                        info.status = null
-                    }
+                    info.status = getNodeTextContent(child) || null
                 }
             }
         }
@@ -157,8 +198,8 @@ function parseUsyncDisappearingModes(result: BinaryNode): readonly WaDisappearin
             const errorNode = findNodeChild(child, WA_NODE_TAGS.ERROR)
             if (errorNode) continue
 
-            const duration = Number.parseInt((child.attrs.duration as string) ?? '0', 10)
-            const timestamp = Number.parseInt((child.attrs.t as string) ?? '0', 10)
+            const duration = parseOptionalInt(child.attrs.duration as string | undefined) ?? 0
+            const timestamp = parseOptionalInt(child.attrs.t as string | undefined) ?? 0
             const entry: {
                 duration: number
                 timestamp: number
@@ -177,6 +218,105 @@ function parseUsyncDisappearingModes(result: BinaryNode): readonly WaDisappearin
     return results
 }
 
+function parseUsyncTextStatuses(result: BinaryNode): readonly WaTextStatusResult[] {
+    const userNodes = iterateUsyncUsers(result) ?? []
+    const results = new Array<WaTextStatusResult>(userNodes.length)
+    let count = 0
+
+    for (let i = 0; i < userNodes.length; i += 1) {
+        const userNode = userNodes[i]
+        const jid = userNode.attrs.jid as string | undefined
+        if (!jid) continue
+
+        const userContent = userNode.content
+        if (!Array.isArray(userContent)) continue
+
+        for (let j = 0; j < userContent.length; j += 1) {
+            const child = userContent[j]
+            if (child.tag !== 'text_status') continue
+
+            const errorNode = findNodeChild(child, WA_NODE_TAGS.ERROR)
+            if (errorNode) continue
+
+            const emojiNode = findNodeChild(child, 'emoji')
+
+            results[count] = {
+                jid,
+                text: (child.attrs.text as string | undefined) ?? null,
+                emoji: emojiNode?.attrs.content ?? null,
+                ephemeralDurationSec:
+                    parseOptionalSignedInt(
+                        child.attrs.ephemeral_duration_sec as string | undefined
+                    ) ?? null,
+                lastUpdateTime:
+                    parseOptionalInt(child.attrs.last_update_time as string | undefined) ?? null
+            }
+            count += 1
+        }
+    }
+    results.length = count
+    return results
+}
+
+function parseUsyncUsernames(result: BinaryNode): readonly WaUsernameResult[] {
+    const userNodes = iterateUsyncUsers(result) ?? []
+    const results = new Array<WaUsernameResult>(userNodes.length)
+    let count = 0
+
+    for (let i = 0; i < userNodes.length; i += 1) {
+        const userNode = userNodes[i]
+        const jid = userNode.attrs.jid as string | undefined
+        if (!jid) continue
+
+        const userContent = userNode.content
+        if (!Array.isArray(userContent)) continue
+
+        for (let j = 0; j < userContent.length; j += 1) {
+            const child = userContent[j]
+            if (child.tag !== 'username') continue
+
+            const errorNode = findNodeChild(child, WA_NODE_TAGS.ERROR)
+            if (errorNode) continue
+
+            const username = getNodeTextContent(child) || null
+
+            results[count] = { jid, username }
+            count += 1
+        }
+    }
+    results.length = count
+    return results
+}
+
+function parseOwnUsernameMexResponse(data: unknown): WaOwnUsernameResult {
+    const root = (data ?? {}) as {
+        readonly xwa2_username_get?: {
+            readonly username_info?: {
+                readonly username?: string | null
+                readonly state?: string | null
+                readonly pin?: string | null
+            } | null
+        } | null
+    }
+    const info = root.xwa2_username_get?.username_info
+    return {
+        username: info?.username ?? null,
+        state: info?.state ?? null,
+        pin: info?.pin ?? null
+    }
+}
+
+function isMexSetUsernameSuccess(data: unknown): boolean {
+    const root = (data ?? {}) as {
+        readonly xwa2_username_set?: { readonly result?: string | null } | null
+    }
+    return root.xwa2_username_set?.result === 'SUCCESS'
+}
+
+function isMexNotFoundError(error: unknown): boolean {
+    return error instanceof Error && /\berrors?:\s*404\b/.test(error.message)
+}
+
 function parseUsyncStatus(result: BinaryNode): WaProfileStatusResult {
     const profiles = parseUsyncProfiles(result)
     if (profiles.length === 0) {
@@ -185,10 +325,28 @@ function parseUsyncStatus(result: BinaryNode): WaProfileStatusResult {
     return { status: profiles[0].status ?? null }
 }
 
+function buildTextStatusMutationInput(input: WaSetTextStatusInput): {
+    readonly text: string | null
+    readonly emoji: { readonly content: string } | undefined
+    readonly ephemeral_duration_sec: number
+} {
+    const text = input.text === '' ? null : (input.text ?? null)
+    const emoji = input.emoji ?? null
+    let ephemeralDurationSec = input.ephemeralDurationSec ?? 0
+    if (text === null && emoji === null && ephemeralDurationSec !== 0) {
+        ephemeralDurationSec = 0
+    }
+    return {
+        text,
+        emoji: emoji !== null ? { content: emoji } : undefined,
+        ephemeral_duration_sec: ephemeralDurationSec
+    }
+}
+
 export function createProfileCoordinator(
     options: WaProfileCoordinatorOptions
 ): WaProfileCoordinator {
-    const { queryWithContext, generateSid } = options
+    const { queryWithContext, generateSid, mexSocket, logger } = options
 
     return {
         getProfilePicture: async (jid, type, existingId) => {
@@ -231,6 +389,7 @@ export function createProfileCoordinator(
                 jid
             })
             assertIqResult(result, 'profile.getStatus')
+            logUsyncProtocolErrors(parseUsyncResultEnvelope(result), logger, 'profile.getStatus')
             return parseUsyncStatus(result)
         },
 
@@ -257,6 +416,7 @@ export function createProfileCoordinator(
                 count: jids.length
             })
             assertIqResult(result, 'profile.getProfiles')
+            logUsyncProtocolErrors(parseUsyncResultEnvelope(result), logger, 'profile.getProfiles')
             return parseUsyncProfiles(result)
         },
 
@@ -275,7 +435,109 @@ export function createProfileCoordinator(
                 { count: jids.length }
             )
             assertIqResult(result, 'profile.getDisappearingMode')
+            logUsyncProtocolErrors(
+                parseUsyncResultEnvelope(result),
+                logger,
+                'profile.getDisappearingMode'
+            )
             return parseUsyncDisappearingModes(result)
+        },
+
+        getTextStatuses: async (jids) => {
+            if (jids.length === 0) return []
+            const sid = await generateSid()
+            const usyncNode = buildUsyncIq({
+                sid,
+                queryProtocolNodes: [buildGetTextStatusUsyncQueryNode()],
+                users: jids.map((jid) => ({ jid }))
+            })
+            const result = await queryWithContext(
+                'profile.getTextStatuses',
+                usyncNode,
+                undefined,
+                { count: jids.length }
+            )
+            assertIqResult(result, 'profile.getTextStatuses')
+            logUsyncProtocolErrors(
+                parseUsyncResultEnvelope(result),
+                logger,
+                'profile.getTextStatuses'
+            )
+            return parseUsyncTextStatuses(result)
+        },
+
+        setTextStatus: async (input) => {
+            await dispatchMexQuery(mexSocket, {
+                docId: WA_MEX_PERSIST_IDS.UpdateTextStatus.docId,
+                clientDocId: WA_MEX_PERSIST_IDS.UpdateTextStatus.clientDocId,
+                opName: 'profile.setTextStatus',
+                variables: { input: buildTextStatusMutationInput(input) }
+            })
+        },
+
+        getUsernames: async (jids) => {
+            if (jids.length === 0) return []
+            const sid = await generateSid()
+            const usyncNode = buildUsyncIq({
+                sid,
+                queryProtocolNodes: [buildGetUsernameUsyncQueryNode()],
+                users: jids.map((jid) => ({ jid }))
+            })
+            const result = await queryWithContext(
+                'profile.getUsernames',
+                usyncNode,
+                undefined,
+                { count: jids.length }
+            )
+            assertIqResult(result, 'profile.getUsernames')
+            logUsyncProtocolErrors(
+                parseUsyncResultEnvelope(result),
+                logger,
+                'profile.getUsernames'
+            )
+            return parseUsyncUsernames(result)
+        },
+
+        getOwnUsername: async () => {
+            try {
+                const { data } = await dispatchMexQuery(mexSocket, {
+                    docId: WA_MEX_PERSIST_IDS.GetUsername.docId,
+                    clientDocId: WA_MEX_PERSIST_IDS.GetUsername.clientDocId,
+                    opName: 'profile.getOwnUsername',
+                    variables: {}
+                })
+                return parseOwnUsernameMexResponse(data)
+            } catch (error) {
+                if (isMexNotFoundError(error)) {
+                    return { username: null, state: null, pin: null }
+                }
+                throw error
+            }
+        },
+
+        setUsername: async (input) => {
+            const { data } = await dispatchMexQuery(mexSocket, {
+                docId: WA_MEX_PERSIST_IDS.SetUsername.docId,
+                clientDocId: WA_MEX_PERSIST_IDS.SetUsername.clientDocId,
+                opName: 'profile.setUsername',
+                variables: {
+                    input: input.username,
+                    reserved: input.reserved ?? false,
+                    session_id: input.sessionId ?? '',
+                    source: input.source ?? 'USER_INPUT'
+                }
+            })
+            return isMexSetUsernameSuccess(data)
+        },
+
+        deleteUsername: async () => {
+            const { data } = await dispatchMexQuery(mexSocket, {
+                docId: WA_MEX_PERSIST_IDS.SetUsername.docId,
+                clientDocId: WA_MEX_PERSIST_IDS.SetUsername.clientDocId,
+                opName: 'profile.deleteUsername',
+                variables: {}
+            })
+            return isMexSetUsernameSuccess(data)
         }
     }
 }

@@ -145,6 +145,14 @@ export type BuildCoverPhotoIqInput =
           readonly id: string
       }
 
+export function buildGetBusinessUsyncQueryNode(): BinaryNode {
+    return {
+        tag: 'business',
+        attrs: {},
+        content: [{ tag: 'verified_name', attrs: {} }]
+    }
+}
+
 export function buildCoverPhotoIq(input: BuildCoverPhotoIqInput): BinaryNode {
     const attrs: Record<string, string> =
         input.op === 'update'

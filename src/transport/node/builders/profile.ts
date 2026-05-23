@@ -83,6 +83,20 @@ export function buildGetDisappearingModeUsyncQueryNode(): BinaryNode {
     }
 }
 
+export function buildGetTextStatusUsyncQueryNode(): BinaryNode {
+    return {
+        tag: 'text_status',
+        attrs: {}
+    }
+}
+
+export function buildGetUsernameUsyncQueryNode(): BinaryNode {
+    return {
+        tag: 'username',
+        attrs: {}
+    }
+}
+
 export function buildGetStatusUsyncQueryNodes(): readonly BinaryNode[] {
     return [
         {

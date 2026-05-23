@@ -1,4 +1,5 @@
 const DIGITS_ONLY_RE = /^\d+$/
+const SIGNED_DIGITS_RE = /^-?\d+$/
 
 export function toError(value: unknown): Error {
     if (value instanceof Error) return value
@@ -59,4 +60,11 @@ function parseStrictUnsignedInt(value: string): number | undefined {
 export function parseOptionalInt(value: string | undefined): number | undefined {
     if (!value) return undefined
     return parseStrictUnsignedInt(value)
+}
+
+export function parseOptionalSignedInt(value: string | undefined): number | undefined {
+    if (!value) return undefined
+    if (!SIGNED_DIGITS_RE.test(value)) return undefined
+    const parsed = Number(value)
+    return Number.isSafeInteger(parsed) ? parsed : undefined
 }

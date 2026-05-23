@@ -11,7 +11,7 @@ import {
 import { WA_DEFAULTS } from '@protocol/constants'
 import { buildGetAbPropsIq } from '@transport/node/builders/abprops'
 import type { BinaryNode } from '@transport/types'
-import { toError } from '@util/primitives'
+import { parseOptionalInt, toError } from '@util/primitives'
 
 type WaAbPropsRuntime = {
     readonly queryWithContext: (
@@ -180,8 +180,7 @@ function parseConfigValue(
         return value === '1' || value === 'true' || value === 'True'
     }
     if (type === 'int') {
-        const parsed = Number.parseInt(value, 10)
-        return Number.isSafeInteger(parsed) ? parsed : (defaultValue as number)
+        return parseOptionalInt(value) ?? (defaultValue as number)
     }
     return value
 }

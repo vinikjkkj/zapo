@@ -2,6 +2,7 @@ import { WA_DEFAULTS } from '@protocol/defaults'
 import { WA_IQ_TYPES, WA_XMLNS } from '@protocol/nodes'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
+import { parseOptionalInt } from '@util/primitives'
 
 function noticeNodes(noticeIds: readonly string[]): BinaryNode[] {
     return noticeIds.map((id) => ({
@@ -53,8 +54,7 @@ export function parseTosQueryResponse(node: BinaryNode): WaTosQueryResult {
     if (!tosNode) {
         throw new Error('tos response missing <tos> node')
     }
-    const refreshAttr = tosNode.attrs.refresh
-    const refreshSeconds = refreshAttr ? Number.parseInt(refreshAttr, 10) : 0
+    const refreshSeconds = parseOptionalInt(tosNode.attrs.refresh) ?? 0
     const notices: WaTosNoticeState[] = []
     if (Array.isArray(tosNode.content)) {
         for (const child of tosNode.content) {

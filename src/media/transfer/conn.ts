@@ -3,6 +3,7 @@ import { WA_NODE_TAGS } from '@protocol/constants'
 import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
+import { parseOptionalInt } from '@util/primitives'
 
 export function parseMediaConnResponse(node: BinaryNode, nowMs: number): WaMediaConn {
     assertIqResult(node, 'media_conn')
@@ -16,8 +17,8 @@ export function parseMediaConnResponse(node: BinaryNode, nowMs: number): WaMedia
     if (!auth) {
         throw new Error('media_conn response is missing auth')
     }
-    const ttlRaw = Number.parseInt(mediaConnNode.attrs.ttl ?? '0', 10)
-    if (!Number.isFinite(ttlRaw) || ttlRaw <= 0) {
+    const ttlRaw = parseOptionalInt(mediaConnNode.attrs.ttl) ?? 0
+    if (ttlRaw <= 0) {
         throw new Error('media_conn response has invalid ttl')
     }
 

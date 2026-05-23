@@ -31,6 +31,7 @@ function makeBusinessCoordinator(overrides: Partial<CoordinatorDeps> = {}) {
             throw new Error('getMediaConn not stubbed in this test')
         },
         logger: createNoopLogger('error'),
+        generateSid: async () => 'test-sid',
         ...overrides
     })
 }
@@ -378,6 +379,104 @@ test('business coordinator returns null for missing verified name', async () => 
 
     const result = await coordinator.getVerifiedName('5511@s.whatsapp.net')
     assert.equal(result, null)
+})
+
+test('business coordinator gets verified names in batch via usync', async () => {
+    const certBytes = buildVerifiedNameCertBytes({
+        serial: 99,
+        issuer: 'smb:wa',
+        verifiedName: 'Acme Co'
+    })
+
+    const calls: Array<{ readonly context: string; readonly node: BinaryNode }> = []
+    const coordinator = makeBusinessCoordinator({
+        queryWithContext: async (context, node) => {
+            calls.push({ context, node })
+            return createIqResult([
+                {
+                    tag: 'usync',
+                    attrs: {},
+                    content: [
+                        { tag: 'result', attrs: {} },
+                        {
+                            tag: 'list',
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: 'a@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: 'business',
+                                            attrs: {},
+                                            content: [
+                                                {
+                                                    tag: 'verified_name',
+                                                    attrs: { verified_level: 'high' },
+                                                    content: certBytes
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: 'b@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: 'business',
+                                            attrs: {},
+                                            content: [
+                                                {
+                                                    tag: 'error',
+                                                    attrs: { code: '404', text: 'not-found' }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: 'c@s.whatsapp.net' },
+                                    content: [{ tag: 'business', attrs: {} }]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+        }
+    })
+
+    const result = await coordinator.getVerifiedNames([
+        'a@s.whatsapp.net',
+        'b@s.whatsapp.net',
+        'c@s.whatsapp.net'
+    ])
+
+    assert.equal(result.length, 3)
+    assert.equal(result[0].jid, 'a@s.whatsapp.net')
+    assert.equal(result[0].verifiedName?.name, 'Acme Co')
+    assert.equal(result[0].verifiedName?.serial, '99')
+    assert.deepEqual(result[1], { jid: 'b@s.whatsapp.net', verifiedName: null })
+    assert.deepEqual(result[2], { jid: 'c@s.whatsapp.net', verifiedName: null })
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].context, 'business.getVerifiedNames')
+    assert.equal(calls[0].node.attrs.xmlns, 'usync')
+})
+
+test('business coordinator returns empty array for empty jids batch', async () => {
+    const calls: string[] = []
+    const coordinator = makeBusinessCoordinator({
+        queryWithContext: async (context) => {
+            calls.push(context)
+            return createIqResult()
+        }
+    })
+    const result = await coordinator.getVerifiedNames([])
+    assert.equal(result.length, 0)
+    assert.equal(calls.length, 0)
 })
 
 test('business coordinator uploads cover photo bytes and finalizes via IQ', async () => {

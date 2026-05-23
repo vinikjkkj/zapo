@@ -16,7 +16,8 @@ const decryptDepsStub = {
     messageStore: null as unknown as WaMessageStore,
     messageSecretStore: null as unknown as WaMessageSecretStore,
     getCurrentCredentials: () => null,
-    emitBotChunk: () => undefined
+    emitBotChunk: () => undefined,
+    generateSid: async () => 'test-sid'
 }
 
 function createIqResult(content?: readonly BinaryNode[]): BinaryNode {
@@ -368,4 +369,235 @@ test('bot coordinator sendPrompt mention path injects mention metadata into imag
     assert.equal(inner.imageMessage.caption, '@867051314767696 olha isso')
     assert.deepEqual(inner.imageMessage.contextInfo?.mentionedJid, [META_AI_FBID])
     assert.equal(inner.imageMessage.contextInfo?.botMessageSharingInfo?.botEntryPointOrigin, 30)
+})
+
+test('bot coordinator getBotProfile parses full profile node via usync', async () => {
+    const calls: BinaryNode[] = []
+    const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
+        queryWithContext: async (_context, node) => {
+            calls.push(node)
+            return createIqResult([
+                {
+                    tag: 'usync',
+                    attrs: {},
+                    content: [
+                        { tag: 'result', attrs: {} },
+                        {
+                            tag: 'list',
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: '13135550002@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: 'bot',
+                                            attrs: {},
+                                            content: [
+                                                {
+                                                    tag: 'profile',
+                                                    attrs: { persona_id: 'persona-1' },
+                                                    content: [
+                                                        { tag: 'name', attrs: {}, content: 'Meta AI' },
+                                                        {
+                                                            tag: 'attributes',
+                                                            attrs: {},
+                                                            content: 'attr-bytes'
+                                                        },
+                                                        {
+                                                            tag: 'description',
+                                                            attrs: {},
+                                                            content: 'AI assistant'
+                                                        },
+                                                        {
+                                                            tag: 'category',
+                                                            attrs: {},
+                                                            content: 'assistant'
+                                                        },
+                                                        { tag: 'default', attrs: {}, content: 'true' },
+                                                        {
+                                                            tag: 'prompts',
+                                                            attrs: {},
+                                                            content: [
+                                                                {
+                                                                    tag: 'prompt',
+                                                                    attrs: {},
+                                                                    content: [
+                                                                        {
+                                                                            tag: 'emoji',
+                                                                            attrs: {},
+                                                                            content: '✨'
+                                                                        },
+                                                                        {
+                                                                            tag: 'text',
+                                                                            attrs: {},
+                                                                            content: 'Tell me a story'
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            tag: 'commands',
+                                                            attrs: {},
+                                                            content: [
+                                                                {
+                                                                    tag: 'description',
+                                                                    attrs: {},
+                                                                    content: 'top-level desc'
+                                                                },
+                                                                {
+                                                                    tag: 'command',
+                                                                    attrs: {},
+                                                                    content: [
+                                                                        {
+                                                                            tag: 'name',
+                                                                            attrs: {},
+                                                                            content: 'imagine'
+                                                                        },
+                                                                        {
+                                                                            tag: 'description',
+                                                                            attrs: {},
+                                                                            content: 'generate image'
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            tag: 'is_meta_created',
+                                                            attrs: {},
+                                                            content: 'true'
+                                                        },
+                                                        {
+                                                            tag: 'creator',
+                                                            attrs: {},
+                                                            content: [
+                                                                {
+                                                                    tag: 'name',
+                                                                    attrs: {},
+                                                                    content: 'Meta'
+                                                                },
+                                                                {
+                                                                    tag: 'profile_url',
+                                                                    attrs: {},
+                                                                    content: 'https://meta.com'
+                                                                }
+                                                            ]
+                                                        },
+                                                        {
+                                                            tag: 'posing_as_professional',
+                                                            attrs: { type: 'no' }
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+        },
+        buildMessageContent: async () => ({ message: {} }),
+        sendMessage: noopSendMessage
+    })
+
+    const result = await coordinator.getBotProfile('13135550002@s.whatsapp.net')
+
+    assert.ok(result)
+    assert.equal(result.name, 'Meta AI')
+    assert.equal(result.description, 'AI assistant')
+    assert.equal(result.category, 'assistant')
+    assert.equal(result.isDefault, true)
+    assert.deepEqual(result.prompts, [{ emoji: '✨', text: 'Tell me a story' }])
+    assert.equal(result.personaId, 'persona-1')
+    assert.deepEqual(result.commands, [{ name: 'imagine', description: 'generate image' }])
+    assert.equal(result.commandsDescription, 'top-level desc')
+    assert.equal(result.isMetaCreated, true)
+    assert.equal(result.creatorName, 'Meta')
+    assert.equal(result.creatorProfileUrl, 'https://meta.com')
+    assert.equal(result.posingAsProfessional, 'no')
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].attrs.xmlns, 'usync')
+})
+
+test('bot coordinator getBotProfile returns null when server replies with bot error', async () => {
+    const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
+        queryWithContext: async () =>
+            createIqResult([
+                {
+                    tag: 'usync',
+                    attrs: {},
+                    content: [
+                        { tag: 'result', attrs: {} },
+                        {
+                            tag: 'list',
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: '5511920387975@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: 'bot',
+                                            attrs: {},
+                                            content: [
+                                                {
+                                                    tag: 'error',
+                                                    attrs: { code: '400', text: 'bad-request' }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]),
+        buildMessageContent: async () => ({ message: {} }),
+        sendMessage: noopSendMessage
+    })
+
+    const result = await coordinator.getBotProfile('5511920387975@s.whatsapp.net')
+    assert.equal(result, null)
+})
+
+test('bot coordinator getBotProfile sends persona_id in user element when provided', async () => {
+    const captured: BinaryNode[] = []
+    const coordinator = createBotCoordinator({
+        ...decryptDepsStub,
+        queryWithContext: async (_context, node) => {
+            captured.push(node)
+            return createIqResult([
+                {
+                    tag: 'usync',
+                    attrs: {},
+                    content: [
+                        { tag: 'result', attrs: {} },
+                        { tag: 'list', attrs: {} }
+                    ]
+                }
+            ])
+        },
+        buildMessageContent: async () => ({ message: {} }),
+        sendMessage: noopSendMessage
+    })
+
+    await coordinator.getBotProfile('x@bot', { personaId: 'p-meta' })
+
+    const usyncNode = (captured[0].content as readonly BinaryNode[])[0]
+    const listNode = (usyncNode.content as readonly BinaryNode[]).find((n) => n.tag === 'list')!
+    const userNode = (listNode.content as readonly BinaryNode[])[0]
+    const userBotNode = (userNode.content as readonly BinaryNode[])[0]
+    assert.equal(userBotNode.tag, 'bot')
+    const profileNode = (userBotNode.content as readonly BinaryNode[])[0]
+    assert.equal(profileNode.tag, 'profile')
+    assert.equal(profileNode.attrs.persona_id, 'p-meta')
 })

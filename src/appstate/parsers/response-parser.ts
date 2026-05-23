@@ -14,6 +14,7 @@ import {
     getNodeChildrenByTag
 } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
+import { parseOptionalInt } from '@util/primitives'
 
 export interface CollectionResponsePayload {
     readonly collection: AppStateCollectionName
@@ -48,11 +49,10 @@ export function parseSyncResponse(iqNode: BinaryNode): readonly CollectionRespon
         const versionAttr = collectionNode.attrs.version
         let version: number | undefined
         if (versionAttr) {
-            const parsedVersion = Number.parseInt(versionAttr, 10)
-            if (!Number.isSafeInteger(parsedVersion) || parsedVersion < 0) {
+            version = parseOptionalInt(versionAttr)
+            if (version === undefined) {
                 throw new Error(`invalid app-state collection version "${versionAttr}"`)
             }
-            version = parsedVersion
         }
 
         const [patchesNode, snapshotNode] = findNodeChildrenByTags(collectionNode, [

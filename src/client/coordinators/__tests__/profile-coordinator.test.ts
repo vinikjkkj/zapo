@@ -2,9 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createProfileCoordinator } from '@client/coordinators/WaProfileCoordinator'
+import { createNoopLogger } from '@infra/log/types'
 import { WA_XMLNS } from '@protocol/constants'
 import type { BinaryNode } from '@transport/types'
-import { TEXT_ENCODER } from '@util/bytes'
+import { TEXT_DECODER, TEXT_ENCODER } from '@util/bytes'
 
 function createIqResult(content?: readonly BinaryNode[]): BinaryNode {
     return {
@@ -23,6 +24,8 @@ test('profile coordinator gets profile picture url', async () => {
 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node, _timeoutMs, contextData) => {
             calls.push({ context, node, contextData })
             return createIqResult([
@@ -61,6 +64,8 @@ test('profile coordinator gets profile picture url', async () => {
 test('profile coordinator returns empty result when no picture node', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async () => createIqResult()
     })
 
@@ -76,6 +81,8 @@ test('profile coordinator gets full image picture with existing id', async () =>
 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
             return createIqResult([
@@ -109,6 +116,8 @@ test('profile coordinator sets profile picture and returns id', async () => {
 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node, _timeoutMs, contextData) => {
             calls.push({ context, node, contextData })
             return createIqResult([
@@ -140,6 +149,8 @@ test('profile coordinator sets group profile picture with target jid', async () 
 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (_context, node) => {
             calls.push({ node })
             return createIqResult([{ tag: 'picture', attrs: { id: '111' } }])
@@ -159,6 +170,8 @@ test('profile coordinator deletes profile picture', async () => {
 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
             return createIqResult()
@@ -182,6 +195,8 @@ test('profile coordinator gets status via usync', async () => {
 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
             return createIqResult([
@@ -224,6 +239,8 @@ test('profile coordinator gets status via usync', async () => {
 test('profile coordinator returns null status when no content', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async () =>
             createIqResult([
                 {
@@ -254,6 +271,8 @@ test('profile coordinator returns null status when no content', async () => {
 test('profile coordinator returns empty string for status code 401', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async () =>
             createIqResult([
                 {
@@ -289,6 +308,8 @@ test('profile coordinator gets multiple profiles via usync', async () => {
 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
             return createIqResult([
@@ -350,6 +371,8 @@ test('profile coordinator sets status text', async () => {
 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
             return createIqResult()
@@ -370,6 +393,8 @@ test('profile coordinator sets status text', async () => {
 test('profile coordinator gets disappearing mode via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async () =>
             createIqResult([
                 {
@@ -427,6 +452,8 @@ test('profile coordinator returns empty disappearing mode for empty jids', async
     const calls: string[] = []
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context) => {
             calls.push(context)
             return createIqResult()
@@ -438,11 +465,543 @@ test('profile coordinator returns empty disappearing mode for empty jids', async
     assert.equal(calls.length, 0)
 })
 
+test('profile coordinator gets text statuses via usync', async () => {
+    const calls: Array<{
+        readonly context: string
+        readonly node: BinaryNode
+    }> = []
+
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
+        queryWithContext: async (context, node) => {
+            calls.push({ context, node })
+            return createIqResult([
+                {
+                    tag: 'usync',
+                    attrs: {},
+                    content: [
+                        { tag: 'result', attrs: {} },
+                        {
+                            tag: 'list',
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: 'a@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: 'text_status',
+                                            attrs: {
+                                                text: 'feeling great',
+                                                ephemeral_duration_sec: '3600',
+                                                last_update_time: '1700000000'
+                                            },
+                                            content: [
+                                                {
+                                                    tag: 'emoji',
+                                                    attrs: { content: '🚀' }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: 'b@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: 'text_status',
+                                            attrs: {
+                                                text: ' ',
+                                                ephemeral_duration_sec: '-1',
+                                                last_update_time: '1776181230'
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+        }
+    })
+
+    const results = await coordinator.getTextStatuses([
+        'a@s.whatsapp.net',
+        'b@s.whatsapp.net'
+    ])
+
+    assert.equal(results.length, 2)
+    assert.deepEqual(results[0], {
+        jid: 'a@s.whatsapp.net',
+        text: 'feeling great',
+        emoji: '🚀',
+        ephemeralDurationSec: 3600,
+        lastUpdateTime: 1700000000
+    })
+    assert.deepEqual(results[1], {
+        jid: 'b@s.whatsapp.net',
+        text: ' ',
+        emoji: null,
+        ephemeralDurationSec: -1,
+        lastUpdateTime: 1776181230
+    })
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].context, 'profile.getTextStatuses')
+    assert.equal(calls[0].node.attrs.xmlns, 'usync')
+})
+
+test('profile coordinator skips text_status entries with error nodes', async () => {
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
+        queryWithContext: async () =>
+            createIqResult([
+                {
+                    tag: 'usync',
+                    attrs: {},
+                    content: [
+                        { tag: 'result', attrs: {} },
+                        {
+                            tag: 'list',
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: 'a@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: 'text_status',
+                                            attrs: {},
+                                            content: [
+                                                {
+                                                    tag: 'error',
+                                                    attrs: { code: '404', text: 'not-found' }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+    })
+
+    const results = await coordinator.getTextStatuses(['a@s.whatsapp.net'])
+    assert.equal(results.length, 0)
+})
+
+test('profile coordinator returns empty text statuses for empty jids', async () => {
+    const calls: string[] = []
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
+        queryWithContext: async (context) => {
+            calls.push(context)
+            return createIqResult()
+        }
+    })
+
+    const results = await coordinator.getTextStatuses([])
+    assert.equal(results.length, 0)
+    assert.equal(calls.length, 0)
+})
+
+test('profile coordinator sets text status via mex', async () => {
+    const captured: BinaryNode[] = []
+    const mexSocket = {
+        query: async (node: BinaryNode): Promise<BinaryNode> => {
+            captured.push(node)
+            return {
+                tag: 'iq',
+                attrs: { type: 'result' },
+                content: [
+                    {
+                        tag: 'result',
+                        attrs: {},
+                        content: TEXT_ENCODER.encode(
+                            JSON.stringify({
+                                data: { xwa2_update_text_status: { result: 'OK' } }
+                            })
+                        )
+                    }
+                ]
+            }
+        }
+    }
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        queryWithContext: async () => createIqResult(),
+        mexSocket
+    })
+
+    await coordinator.setTextStatus({
+        text: 'feeling great',
+        emoji: '🚀',
+        ephemeralDurationSec: 3600
+    })
+
+    assert.equal(captured.length, 1)
+    assert.equal(captured[0].attrs.xmlns, 'w:mex')
+    const queryNode = (captured[0].content as readonly BinaryNode[])[0]
+    assert.equal(queryNode.tag, 'query')
+    assert.equal(queryNode.attrs.query_id, '9152604461510864')
+    const body = JSON.parse(
+        typeof queryNode.content === 'string'
+            ? queryNode.content
+            : TEXT_DECODER.decode(queryNode.content as Uint8Array)
+    )
+    assert.deepEqual(body.variables, {
+        input: {
+            text: 'feeling great',
+            emoji: { content: '🚀' },
+            ephemeral_duration_sec: 3600
+        }
+    })
+})
+
+test('profile coordinator setTextStatus normalizes empty inputs to clear payload', async () => {
+    const captured: BinaryNode[] = []
+    const mexSocket = {
+        query: async (node: BinaryNode): Promise<BinaryNode> => {
+            captured.push(node)
+            return {
+                tag: 'iq',
+                attrs: { type: 'result' },
+                content: [
+                    {
+                        tag: 'result',
+                        attrs: {},
+                        content: TEXT_ENCODER.encode(JSON.stringify({ data: null }))
+                    }
+                ]
+            }
+        }
+    }
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        queryWithContext: async () => createIqResult(),
+        mexSocket
+    })
+
+    await coordinator.setTextStatus({ text: '', ephemeralDurationSec: 3600 })
+
+    const queryNode = (captured[0].content as readonly BinaryNode[])[0]
+    const body = JSON.parse(
+        typeof queryNode.content === 'string'
+            ? queryNode.content
+            : TEXT_DECODER.decode(queryNode.content as Uint8Array)
+    )
+    assert.deepEqual(body.variables, {
+        input: { text: null, ephemeral_duration_sec: 0 }
+    })
+})
+
+test('profile coordinator gets usernames via usync', async () => {
+    const calls: Array<{ readonly context: string; readonly node: BinaryNode }> = []
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
+        queryWithContext: async (context, node) => {
+            calls.push({ context, node })
+            return createIqResult([
+                {
+                    tag: 'usync',
+                    attrs: {},
+                    content: [
+                        { tag: 'result', attrs: {} },
+                        {
+                            tag: 'list',
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: 'a@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: 'username',
+                                            attrs: {},
+                                            content: TEXT_ENCODER.encode('alice')
+                                        }
+                                    ]
+                                },
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: 'b@s.whatsapp.net' },
+                                    content: [{ tag: 'username', attrs: {} }]
+                                },
+                                {
+                                    tag: 'user',
+                                    attrs: { jid: 'c@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: 'username',
+                                            attrs: {},
+                                            content: [
+                                                {
+                                                    tag: 'error',
+                                                    attrs: { code: '404', text: 'not-found' }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+        }
+    })
+
+    const results = await coordinator.getUsernames([
+        'a@s.whatsapp.net',
+        'b@s.whatsapp.net',
+        'c@s.whatsapp.net'
+    ])
+
+    assert.equal(results.length, 2)
+    assert.deepEqual(results[0], { jid: 'a@s.whatsapp.net', username: 'alice' })
+    assert.deepEqual(results[1], { jid: 'b@s.whatsapp.net', username: null })
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].context, 'profile.getUsernames')
+})
+
+test('profile coordinator returns empty usernames for empty jids', async () => {
+    const calls: string[] = []
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
+        queryWithContext: async (context) => {
+            calls.push(context)
+            return createIqResult()
+        }
+    })
+    const results = await coordinator.getUsernames([])
+    assert.equal(results.length, 0)
+    assert.equal(calls.length, 0)
+})
+
+test('profile coordinator getOwnUsername parses mex payload', async () => {
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        queryWithContext: async () => createIqResult(),
+        mexSocket: {
+            query: async (): Promise<BinaryNode> => ({
+                tag: 'iq',
+                attrs: { type: 'result' },
+                content: [
+                    {
+                        tag: 'result',
+                        attrs: {},
+                        content: TEXT_ENCODER.encode(
+                            JSON.stringify({
+                                data: {
+                                    xwa2_username_get: {
+                                        username_info: {
+                                            username: 'me',
+                                            state: 'OWNED',
+                                            pin: '1234'
+                                        }
+                                    }
+                                }
+                            })
+                        )
+                    }
+                ]
+            })
+        }
+    })
+    const result = await coordinator.getOwnUsername()
+    assert.deepEqual(result, { username: 'me', state: 'OWNED', pin: '1234' })
+})
+
+test('profile coordinator getOwnUsername swallows 404 GraphQL errors', async () => {
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        queryWithContext: async () => createIqResult(),
+        mexSocket: {
+            query: async (): Promise<BinaryNode> => ({
+                tag: 'iq',
+                attrs: { type: 'result' },
+                content: [
+                    {
+                        tag: 'result',
+                        attrs: {},
+                        content: TEXT_ENCODER.encode(
+                            JSON.stringify({
+                                errors: [
+                                    {
+                                        message: 'Not Found',
+                                        path: ['xwa2_username_get'],
+                                        extensions: { error_code: 404 }
+                                    }
+                                ]
+                            })
+                        )
+                    }
+                ]
+            })
+        }
+    })
+    const result = await coordinator.getOwnUsername()
+    assert.deepEqual(result, { username: null, state: null, pin: null })
+})
+
+test('profile coordinator getOwnUsername returns nulls when info missing', async () => {
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        queryWithContext: async () => createIqResult(),
+        mexSocket: {
+            query: async (): Promise<BinaryNode> => ({
+                tag: 'iq',
+                attrs: { type: 'result' },
+                content: [
+                    {
+                        tag: 'result',
+                        attrs: {},
+                        content: TEXT_ENCODER.encode(
+                            JSON.stringify({ data: { xwa2_username_get: { username_info: null } } })
+                        )
+                    }
+                ]
+            })
+        }
+    })
+    const result = await coordinator.getOwnUsername()
+    assert.deepEqual(result, { username: null, state: null, pin: null })
+})
+
+test('profile coordinator setUsername sends mex variables with defaults', async () => {
+    const captured: BinaryNode[] = []
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        queryWithContext: async () => createIqResult(),
+        mexSocket: {
+            query: async (node: BinaryNode): Promise<BinaryNode> => {
+                captured.push(node)
+                return {
+                    tag: 'iq',
+                    attrs: { type: 'result' },
+                    content: [
+                        {
+                            tag: 'result',
+                            attrs: {},
+                            content: TEXT_ENCODER.encode(
+                                JSON.stringify({
+                                    data: { xwa2_username_set: { result: 'SUCCESS' } }
+                                })
+                            )
+                        }
+                    ]
+                }
+            }
+        }
+    })
+
+    const ok = await coordinator.setUsername({ username: 'newhandle' })
+    assert.equal(ok, true)
+    const queryNode = (captured[0].content as readonly BinaryNode[])[0]
+    assert.equal(queryNode.attrs.query_id, '25757341163897635')
+    const body = JSON.parse(
+        typeof queryNode.content === 'string'
+            ? queryNode.content
+            : TEXT_DECODER.decode(queryNode.content as Uint8Array)
+    )
+    assert.deepEqual(body.variables, {
+        input: 'newhandle',
+        reserved: false,
+        session_id: '',
+        source: 'USER_INPUT'
+    })
+})
+
+test('profile coordinator setUsername returns false on non-SUCCESS result', async () => {
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        queryWithContext: async () => createIqResult(),
+        mexSocket: {
+            query: async (): Promise<BinaryNode> => ({
+                tag: 'iq',
+                attrs: { type: 'result' },
+                content: [
+                    {
+                        tag: 'result',
+                        attrs: {},
+                        content: TEXT_ENCODER.encode(
+                            JSON.stringify({ data: { xwa2_username_set: { result: 'TAKEN' } } })
+                        )
+                    }
+                ]
+            })
+        }
+    })
+    assert.equal(await coordinator.setUsername({ username: 'x' }), false)
+})
+
+test('profile coordinator deleteUsername sends empty variables', async () => {
+    const captured: BinaryNode[] = []
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        queryWithContext: async () => createIqResult(),
+        mexSocket: {
+            query: async (node: BinaryNode): Promise<BinaryNode> => {
+                captured.push(node)
+                return {
+                    tag: 'iq',
+                    attrs: { type: 'result' },
+                    content: [
+                        {
+                            tag: 'result',
+                            attrs: {},
+                            content: TEXT_ENCODER.encode(
+                                JSON.stringify({
+                                    data: { xwa2_username_set: { result: 'SUCCESS' } }
+                                })
+                            )
+                        }
+                    ]
+                }
+            }
+        }
+    })
+
+    const ok = await coordinator.deleteUsername()
+    assert.equal(ok, true)
+    const queryNode = (captured[0].content as readonly BinaryNode[])[0]
+    assert.equal(queryNode.attrs.query_id, '25757341163897635')
+    const body = JSON.parse(
+        typeof queryNode.content === 'string'
+            ? queryNode.content
+            : TEXT_DECODER.decode(queryNode.content as Uint8Array)
+    )
+    assert.deepEqual(body.variables, {})
+})
+
 test('profile coordinator returns empty array for empty jids list', async () => {
     const calls: Array<{ readonly context: string }> = []
 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context) => {
             calls.push({ context })
             return createIqResult()

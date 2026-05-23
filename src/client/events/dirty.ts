@@ -19,10 +19,12 @@ import {
     buildNewsletterMetadataSyncIq
 } from '@transport/node/builders/account-sync'
 import { buildGetPrivacySettingsIq } from '@transport/node/builders/privacy'
+import { parseUsyncResultEnvelope } from '@transport/node/builders/usync'
 import { getNodeChildrenTags } from '@transport/node/helpers'
 import { assertIqResult, parseIqError } from '@transport/node/query'
+import { logUsyncProtocolErrors } from '@transport/node/usync'
 import type { BinaryNode } from '@transport/types'
-import { toError } from '@util/primitives'
+import { parseOptionalInt, toError } from '@util/primitives'
 
 export interface WaDirtyBit {
     readonly type: string
@@ -50,8 +52,8 @@ const ACCOUNT_SYNC_PROTOCOL_SET = new Set<string>(WA_ACCOUNT_SYNC_PROTOCOLS)
 
 function parseDirtyBitNode(node: BinaryNode, logger: Logger): WaDirtyBit | null {
     const type = node.attrs.type
-    const timestamp = Number.parseInt(node.attrs.timestamp ?? '', 10)
-    if (!type || !Number.isFinite(timestamp)) {
+    const timestamp = parseOptionalInt(node.attrs.timestamp)
+    if (!type || timestamp === undefined) {
         logger.warn('received invalid dirty bit node', {
             type,
             timestamp: node.attrs.timestamp
@@ -369,6 +371,11 @@ async function runSyncQuery(
         args.contextData
     )
     assertIqResult(response, args.assertContext ?? args.queryContext)
+    logUsyncProtocolErrors(
+        parseUsyncResultEnvelope(response),
+        runtime.logger,
+        args.queryContext
+    )
     runtime.logger.debug(args.logMessage, args.contextData)
 }
 
