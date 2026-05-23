@@ -93,14 +93,11 @@ function parseUsyncVerifiedNames(result: BinaryNode): readonly WaVerifiedNameBat
         const jid = userNode.attrs.jid as string | undefined
         if (!jid) continue
         const businessNode = findNodeChild(userNode, 'business')
-        if (!businessNode) continue
-        const errorNode = findNodeChild(businessNode, 'error')
-        if (errorNode) {
-            out[count] = { jid, verifiedName: null }
-            count += 1
-            continue
-        }
-        const vnNode = findNodeChild(businessNode, WA_BUSINESS_NOTIFICATION_TAGS.VERIFIED_NAME)
+        const errorNode = businessNode ? findNodeChild(businessNode, 'error') : undefined
+        const vnNode =
+            businessNode && !errorNode
+                ? findNodeChild(businessNode, WA_BUSINESS_NOTIFICATION_TAGS.VERIFIED_NAME)
+                : undefined
         out[count] = {
             jid,
             verifiedName: vnNode ? parseVerifiedNameNode(vnNode) : null

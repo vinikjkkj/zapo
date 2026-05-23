@@ -226,31 +226,33 @@ function parseUsyncTextStatuses(result: BinaryNode): readonly WaTextStatusResult
         const jid = userNode.attrs.jid as string | undefined
         if (!jid) continue
 
-        const userContent = userNode.content
-        if (!Array.isArray(userContent)) continue
+        let entry: WaTextStatusResult = {
+            jid,
+            text: null,
+            emoji: null,
+            ephemeralDurationSec: null,
+            lastUpdateTime: null
+        }
 
-        for (let j = 0; j < userContent.length; j += 1) {
-            const child = userContent[j]
-            if (child.tag !== 'text_status') continue
-
-            const errorNode = findNodeChild(child, WA_NODE_TAGS.ERROR)
-            if (errorNode) continue
-
-            const emojiNode = findNodeChild(child, 'emoji')
-
-            results[count] = {
+        const textStatusNode = findNodeChild(userNode, 'text_status')
+        if (textStatusNode && !findNodeChild(textStatusNode, WA_NODE_TAGS.ERROR)) {
+            const emojiNode = findNodeChild(textStatusNode, 'emoji')
+            entry = {
                 jid,
-                text: (child.attrs.text as string | undefined) ?? null,
+                text: (textStatusNode.attrs.text as string | undefined) ?? null,
                 emoji: emojiNode?.attrs.content ?? null,
                 ephemeralDurationSec:
                     parseOptionalSignedInt(
-                        child.attrs.ephemeral_duration_sec as string | undefined
+                        textStatusNode.attrs.ephemeral_duration_sec as string | undefined
                     ) ?? null,
                 lastUpdateTime:
-                    parseOptionalInt(child.attrs.last_update_time as string | undefined) ?? null
+                    parseOptionalInt(textStatusNode.attrs.last_update_time as string | undefined) ??
+                    null
             }
-            count += 1
         }
+
+        results[count] = entry
+        count += 1
     }
     results.length = count
     return results
@@ -266,21 +268,14 @@ function parseUsyncUsernames(result: BinaryNode): readonly WaUsernameResult[] {
         const jid = userNode.attrs.jid as string | undefined
         if (!jid) continue
 
-        const userContent = userNode.content
-        if (!Array.isArray(userContent)) continue
+        const usernameNode = findNodeChild(userNode, 'username')
+        const hasUsernameError =
+            usernameNode && findNodeChild(usernameNode, WA_NODE_TAGS.ERROR) !== undefined
+        const username =
+            usernameNode && !hasUsernameError ? getNodeTextContent(usernameNode) || null : null
 
-        for (let j = 0; j < userContent.length; j += 1) {
-            const child = userContent[j]
-            if (child.tag !== 'username') continue
-
-            const errorNode = findNodeChild(child, WA_NODE_TAGS.ERROR)
-            if (errorNode) continue
-
-            const username = getNodeTextContent(child) || null
-
-            results[count] = { jid, username }
-            count += 1
-        }
+        results[count] = { jid, username }
+        count += 1
     }
     results.length = count
     return results

@@ -551,7 +551,7 @@ test('profile coordinator gets text statuses via usync', async () => {
     assert.equal(calls[0].node.attrs.xmlns, 'usync')
 })
 
-test('profile coordinator skips text_status entries with error nodes', async () => {
+test('profile coordinator emits null text_status entry on error nodes', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
@@ -591,7 +591,15 @@ test('profile coordinator skips text_status entries with error nodes', async () 
     })
 
     const results = await coordinator.getTextStatuses(['a@s.whatsapp.net'])
-    assert.equal(results.length, 0)
+    assert.deepEqual(results, [
+        {
+            jid: 'a@s.whatsapp.net',
+            text: null,
+            emoji: null,
+            ephemeralDurationSec: null,
+            lastUpdateTime: null
+        }
+    ])
 })
 
 test('profile coordinator returns empty text statuses for empty jids', async () => {
@@ -767,9 +775,10 @@ test('profile coordinator gets usernames via usync', async () => {
         'c@s.whatsapp.net'
     ])
 
-    assert.equal(results.length, 2)
+    assert.equal(results.length, 3)
     assert.deepEqual(results[0], { jid: 'a@s.whatsapp.net', username: 'alice' })
     assert.deepEqual(results[1], { jid: 'b@s.whatsapp.net', username: null })
+    assert.deepEqual(results[2], { jid: 'c@s.whatsapp.net', username: null })
     assert.equal(calls.length, 1)
     assert.equal(calls[0].context, 'profile.getUsernames')
 })
