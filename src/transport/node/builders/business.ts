@@ -1,5 +1,5 @@
-import { WA_BUSINESS_NOTIFICATION_TAGS } from '@protocol/notification'
 import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
+import { WA_BUSINESS_NOTIFICATION_TAGS } from '@protocol/notification'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
