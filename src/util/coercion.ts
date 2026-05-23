@@ -62,7 +62,9 @@ export function tryAsString(value: unknown): string | null {
 export function tryAsNumber(value: unknown): number | null {
     if (typeof value === 'number' && Number.isFinite(value)) return value
     if (typeof value === 'string') {
-        const parsed = Number(value)
+        const normalized = value.trim()
+        if (normalized.length === 0) return null
+        const parsed = Number(normalized)
         return Number.isFinite(parsed) ? parsed : null
     }
     return null

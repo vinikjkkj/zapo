@@ -998,3 +998,17 @@ test('parseMexNotification: returns null for non-mex / missing update / invalid 
         null
     )
 })
+
+test('parseMexNotification: returns null when JSON parses to a non-object', () => {
+    for (const literal of ['null', '"foo"', '42', 'true', '[1,2]']) {
+        assert.equal(
+            parseMexNotification({
+                tag: 'notification',
+                attrs: { type: 'mex' },
+                content: [{ tag: 'update', attrs: { op_name: 'X' }, content: literal }]
+            }),
+            null,
+            `expected null for JSON payload ${literal}`
+        )
+    }
+})

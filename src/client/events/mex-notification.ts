@@ -172,16 +172,17 @@ export function parseMexNotification(node: BinaryNode): WaMexNotificationParsed 
     if (!operationName) return null
     const payload = getNodeTextContent(updateNode)
     if (payload === undefined) return null
-    let parsed: {
-        readonly data?: unknown
-        readonly errors?: readonly WaMexNotificationGraphQlError[]
-    }
+    let parsedRaw: unknown
     try {
-        parsed = JSON.parse(payload) as typeof parsed
+        parsedRaw = JSON.parse(payload)
     } catch {
         return null
     }
-    const errors = parsed.errors ?? []
+    const parsed = tryAsRecord(parsedRaw)
+    if (!parsed) return null
+    const errors: readonly WaMexNotificationGraphQlError[] = Array.isArray(parsed.errors)
+        ? (parsed.errors as readonly WaMexNotificationGraphQlError[])
+        : []
     const data = parsed.data ?? null
 
     const normalizer = OP_NORMALIZERS[operationName]
