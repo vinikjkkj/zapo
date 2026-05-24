@@ -3,11 +3,13 @@ const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 
 const rootDir = process.cwd()
-const protoDir = path.join(rootDir, 'proto')
+const protoDir = path.join(rootDir, 'spec', 'proto')
 const protoNodeModulesPath = path.join(protoDir, 'node_modules', 'protobufjs-cli')
 
 if (!existsSync(protoNodeModulesPath)) {
-    console.log('proto generation deps not installed in proto/, running npm install --prefix proto')
+    console.log(
+        'proto generation deps not installed in spec/proto/, running npm install --prefix spec/proto'
+    )
     runNpm(['--prefix', protoDir, 'install'])
 }
 

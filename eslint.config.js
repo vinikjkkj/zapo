@@ -11,11 +11,12 @@ module.exports = [
             'wa-web/**',
             'wa-mob/**',
             'coverage/**',
-            'proto/index.js',
-            'proto/index.d.ts',
-            'proto/*.tmp.*',
-            'proto/WAProto.codegen.tmp.proto',
-            'proto/WAProto.types.codegen.tmp.js'
+            'spec/proto/index.js',
+            'spec/proto/index.d.ts',
+            'spec/proto/*.tmp.*',
+            'spec/proto/WAProto.codegen.tmp.proto',
+            'spec/proto/WAProto.types.codegen.tmp.js',
+            'spec/mex/**'
         ]
     },
     ...base,
@@ -144,7 +145,7 @@ module.exports = [
         }
     },
     {
-        files: ['src/proto.ts', 'src/__tests__/index.test.ts'],
+        files: ['src/proto.ts', 'src/mex.ts', 'src/__tests__/index.test.ts'],
         rules: {
             'no-restricted-imports': 'off'
         }

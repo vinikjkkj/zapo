@@ -179,7 +179,7 @@ await client.connect()
 - `npm run typecheck` - type-check project
 - `npm run lint` - lint source files
 - `npm run format` - format codebase
-- `npm run proto:generate` - regenerate protobuf runtime/types from `proto/WAProto.proto`
+- `npm run proto:generate` - regenerate protobuf runtime/types from `spec/proto/WAProto.proto`
 - `npm run changeset` - create a versioning entry (`patch`/`minor`/`major`)
 - `npm run changeset:status` - show pending versioning entries
 - `npm run version:packages` - apply pending versions and update `CHANGELOG.md`
@@ -222,13 +222,13 @@ If the tag contains `-` (example: `v0.2.0-rc.1`), the release is marked as prere
 
 ## Protobuf Generation
 
-`WAProto.proto` source: https://github.com/wppconnect-team/wa-proto
+`WAProto.proto` source: https://github.com/vinikjkkj/wa-spec
 
 `npm run proto:generate` runs `scripts/generate-proto.cjs`, which:
 
-- Ensures proto tooling dependencies are installed in `proto/`
-- Generates and minifies `proto/index.js`
-- Regenerates compact typings at `proto/index.d.ts`
+- Ensures proto tooling dependencies are installed in `spec/proto/`
+- Generates and minifies `spec/proto/index.js`
+- Regenerates compact typings at `spec/proto/index.d.ts`
 
 ## Support the Project
 

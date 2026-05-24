@@ -31,7 +31,6 @@ import {
     buildNewsletterViewReceiptNode
 } from '@transport/node/builders/newsletter'
 import { findNodeChild } from '@transport/node/helpers'
-import { WA_MEX_PERSIST_IDS } from '@transport/node/mex/persist-ids'
 import type { BinaryNode } from '@transport/types'
 
 export interface WaNewsletterMessagingDeps extends WaNewsletterMexDeps {
@@ -293,14 +292,10 @@ export function createMessagingOps(deps: WaNewsletterMessagingDeps): WaNewslette
         },
         follow: async (newsletterJid) => {
             await ensureTosAccepted(deps, 'consumer')
-            await runMex<unknown>(deps, WA_MEX_PERSIST_IDS.NewsletterJoin, 'NewsletterJoin', {
-                newsletter_id: newsletterJid
-            })
+            await runMex(deps, 'JoinNewsletter', { newsletter_id: newsletterJid })
         },
         unfollow: async (newsletterJid) => {
-            await runMex<unknown>(deps, WA_MEX_PERSIST_IDS.NewsletterLeave, 'NewsletterLeave', {
-                newsletter_id: newsletterJid
-            })
+            await runMex(deps, 'LeaveNewsletter', { newsletter_id: newsletterJid })
         },
         mute: async (input) => {
             const muteType =
@@ -308,18 +303,13 @@ export function createMessagingOps(deps: WaNewsletterMessagingDeps): WaNewslette
                     ? WA_NEWSLETTER_MUTE_TYPES.ADMIN_ACTIVITY
                     : WA_NEWSLETTER_MUTE_TYPES.FOLLOWER_ACTIVITY
             const value = input.mute ? WA_NEWSLETTER_MUTE_VALUES.ON : WA_NEWSLETTER_MUTE_VALUES.OFF
-            await runMex<unknown>(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterUpdateUserSetting,
-                'NewsletterUpdateUserSetting',
-                {
-                    input: {
-                        newsletter_id: input.newsletterJid,
-                        type: muteType,
-                        value
-                    }
+            await runMex(deps, 'UpdateNewsletterUserSetting', {
+                input: {
+                    newsletter_id: input.newsletterJid,
+                    type: muteType,
+                    value
                 }
-            )
+            })
         }
     }
 }

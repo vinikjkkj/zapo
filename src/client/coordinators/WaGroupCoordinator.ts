@@ -26,8 +26,7 @@ import {
     getNodeTextContent,
     hasNodeChild
 } from '@transport/node/helpers'
-import { dispatchMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
-import { WA_MEX_PERSIST_IDS } from '@transport/node/mex/persist-ids'
+import { runMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
 import { assertIqResult, buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -686,15 +685,10 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             if (!mexSocket) {
                 throw new Error('community.fetchSubGroups requires a mex transport')
             }
-            const { data } = await dispatchMexQuery(mexSocket, {
-                docId: WA_MEX_PERSIST_IDS.CommunityFetchAllSubgroups.docId,
-                clientDocId: WA_MEX_PERSIST_IDS.CommunityFetchAllSubgroups.clientDocId,
-                opName: 'CommunityFetchAllSubgroups',
-                variables: {
-                    group_id: communityJid,
-                    query_context: 'INTERACTIVE',
-                    sub_group_hint_id: undefined
-                }
+            const data = await runMexQuery(mexSocket, 'FetchAllSubgroups', {
+                group_id: communityJid,
+                query_context: 'INTERACTIVE',
+                sub_group_hint_id: undefined
             })
             const envelope = (data ?? {}) as MexFetchAllSubgroupsResult
             const groupQuery = envelope.xwa2_group_query_by_id

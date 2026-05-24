@@ -99,8 +99,10 @@
     },
     "files": [
         "dist",
-        "proto/index.js",
-        "proto/index.d.ts",
+        "spec/proto/index.js",
+        "spec/proto/index.d.ts",
+        "spec/mex/index.js",
+        "spec/mex/index.d.ts",
         "scripts/check-node-version.cjs"
     ],
     "workspaces": [

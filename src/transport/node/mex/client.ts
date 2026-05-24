@@ -1,3 +1,8 @@
+import {
+    WA_MEX_PERSIST_IDS,
+    type WaMexOperationResponses,
+    type WaMexOperationVariables
+} from '@mex'
 import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
 import { decodeNodeContentUtf8OrBytes, findNodeChild } from '@transport/node/helpers'
 import { decodeMexArgoResponse, isMexArgoDecoderAvailable } from '@transport/node/mex/argo-decoder'
@@ -31,6 +36,34 @@ interface MexGraphQlError {
     readonly message?: string
     readonly path?: readonly string[]
     readonly extensions?: { readonly error_code?: number; readonly severity?: string }
+}
+
+export type WaMexOpKey = keyof WaMexOperationVariables
+
+/**
+ * Typed wrapper around `dispatchMexQuery` that resolves persist IDs from the
+ * generated `WA_MEX_PERSIST_IDS` table. The op key constrains the `variables`
+ * shape via `WaMexOperationVariables` and defaults the response to
+ * `WaMexOperationResponses[K] | null` (the response tree the extractor walked
+ * from the Relay `operation.selections`; leaves are `unknown` since Relay
+ * strips scalar types at codegen).
+ */
+export async function runMexQuery<K extends WaMexOpKey, T = WaMexOperationResponses[K] | null>(
+    socket: WaMexQuerySocket,
+    opKey: K,
+    variables: WaMexOperationVariables[K]
+): Promise<T> {
+    const persist = WA_MEX_PERSIST_IDS[opKey]
+    if (!persist) {
+        throw new Error(`mex/${String(opKey)} persist IDs not found`)
+    }
+    const { data } = await dispatchMexQuery(socket, {
+        docId: persist.docId,
+        clientDocId: persist.clientDocId,
+        opName: opKey,
+        variables: variables as Readonly<Record<string, unknown>>
+    })
+    return data as T
 }
 
 export async function dispatchMexQuery(

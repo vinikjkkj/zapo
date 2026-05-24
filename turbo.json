@@ -31,8 +31,9 @@
                 "$TURBO_ROOT$/src/**/*.ts",
                 "$TURBO_ROOT$/tsconfig.base.json",
                 "$TURBO_ROOT$/packages/tsconfig.paths.json",
-                "$TURBO_ROOT$/proto/**/*.ts",
-                "$TURBO_ROOT$/proto/**/*.d.ts"
+                "$TURBO_ROOT$/spec/proto/**/*.ts",
+                "$TURBO_ROOT$/spec/proto/**/*.d.ts",
+                "$TURBO_ROOT$/spec/mex/**/*.d.ts"
             ]
         }
     }
