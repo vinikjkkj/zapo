@@ -54,6 +54,9 @@ export async function runMexQuery<K extends WaMexOpKey, T = WaMexOperationRespon
     variables: WaMexOperationVariables[K]
 ): Promise<T> {
     const persist = WA_MEX_PERSIST_IDS[opKey]
+    if (!persist) {
+        throw new Error(`mex/${String(opKey)} persist IDs not found`)
+    }
     const { data } = await dispatchMexQuery(socket, {
         docId: persist.docId,
         clientDocId: persist.clientDocId,

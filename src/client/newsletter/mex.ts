@@ -24,12 +24,12 @@ export interface WaNewsletterMexDeps {
     readonly logger: Logger
 }
 
-export async function runMex<K extends WaMexOpKey, T = WaMexOperationResponses[K] | null>(
+export async function runMex<K extends WaMexOpKey>(
     deps: WaNewsletterMexDeps,
     opKey: K,
     variables: WaMexOperationVariables[K]
-): Promise<T> {
-    return runMexQuery<K, T>(deps.mexSocket, opKey, variables)
+): Promise<WaMexOperationResponses[K] | null> {
+    return runMexQuery(deps.mexSocket, opKey, variables)
 }
 
 export async function runMexEnvelope<K extends WaMexOpKey>(
@@ -37,7 +37,7 @@ export async function runMexEnvelope<K extends WaMexOpKey>(
     opKey: K,
     variables: WaMexOperationVariables[K]
 ): Promise<WaNewsletterMexEnvelope> {
-    const data = await runMex<K, Record<string, unknown> | null>(deps, opKey, variables)
+    const data = (await runMex(deps, opKey, variables)) as Record<string, unknown> | null
     return data ?? {}
 }
 

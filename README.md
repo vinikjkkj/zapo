@@ -222,7 +222,7 @@ If the tag contains `-` (example: `v0.2.0-rc.1`), the release is marked as prere
 
 ## Protobuf Generation
 
-`WAProto.proto` source: https://github.com/wppconnect-team/wa-proto
+`WAProto.proto` source: https://github.com/vinikjkkj/wa-spec
 
 `npm run proto:generate` runs `scripts/generate-proto.cjs`, which:
 
