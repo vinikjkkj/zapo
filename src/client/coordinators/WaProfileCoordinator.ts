@@ -1,4 +1,6 @@
 import type { Logger } from '@infra/log/types'
+import type { WaMexOperationResponses } from '@mex'
+import { parseJidFull } from '@protocol/jid'
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
     buildDeleteProfilePictureIq,
@@ -21,6 +23,7 @@ import { runMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
 import { assertIqResult } from '@transport/node/query'
 import { logUsyncProtocolErrors } from '@transport/node/usync'
 import type { BinaryNode } from '@transport/types'
+import { tryAsRecord, tryAsString } from '@util/coercion'
 import { parseOptionalInt, parseOptionalSignedInt } from '@util/primitives'
 
 export interface WaProfilePictureResult {
@@ -78,6 +81,11 @@ export interface WaSetUsernameInput {
     readonly source?: string
 }
 
+export interface WaUsernameAvailabilityResult {
+    readonly available: boolean
+    readonly suggestions: readonly string[]
+}
+
 export interface WaProfileCoordinator {
     readonly getProfilePicture: (
         jid: string,
@@ -101,6 +109,9 @@ export interface WaProfileCoordinator {
     readonly getOwnUsername: () => Promise<WaOwnUsernameResult>
     readonly setUsername: (input: WaSetUsernameInput) => Promise<boolean>
     readonly deleteUsername: () => Promise<boolean>
+    readonly getAboutStatus: (jid: string) => Promise<string | null>
+    readonly checkUsernameAvailability: (username: string) => Promise<WaUsernameAvailabilityResult>
+    readonly setUsernameKey: (pin: string) => Promise<boolean>
 }
 
 interface WaProfileCoordinatorOptions {
@@ -280,29 +291,47 @@ function parseUsyncUsernames(result: BinaryNode): readonly WaUsernameResult[] {
     return results
 }
 
-function parseOwnUsernameMexResponse(data: unknown): WaOwnUsernameResult {
-    const root = (data ?? {}) as {
-        readonly xwa2_username_get?: {
-            readonly username_info?: {
-                readonly username?: string | null
-                readonly state?: string | null
-                readonly pin?: string | null
-            } | null
-        } | null
-    }
-    const info = root.xwa2_username_get?.username_info
+function parseOwnUsernameMexResponse(
+    data: WaMexOperationResponses['GetUsername'] | null
+): WaOwnUsernameResult {
+    const info = tryAsRecord(tryAsRecord(data?.xwa2_username_get)?.username_info)
     return {
-        username: info?.username ?? null,
-        state: info?.state ?? null,
-        pin: info?.pin ?? null
+        username: tryAsString(info?.username),
+        state: tryAsString(info?.state),
+        pin: tryAsString(info?.pin)
     }
 }
 
-function isMexSetUsernameSuccess(data: unknown): boolean {
-    const root = (data ?? {}) as {
-        readonly xwa2_username_set?: { readonly result?: string | null } | null
-    }
-    return root.xwa2_username_set?.result === 'SUCCESS'
+function isMexSetUsernameSuccess(data: WaMexOperationResponses['SetUsername'] | null): boolean {
+    return data?.xwa2_username_set?.result === 'SUCCESS'
+}
+
+// The spec types leaves as `unknown` and lists xwa2_users_updates_since /
+// updates as single objects, but at runtime both are arrays — narrow inline.
+function parseAboutStatusMexResponse(
+    data: WaMexOperationResponses['FetchAboutStatus'] | null
+): string | null {
+    const updates = data?.xwa2_users_updates_since as
+        | ReadonlyArray<{ readonly updates?: ReadonlyArray<{ readonly text?: unknown }> }>
+        | undefined
+    const text = updates?.[0]?.updates?.[0]?.text
+    return typeof text === 'string' ? text : null
+}
+
+function parseUsernameAvailabilityMexResponse(
+    data: WaMexOperationResponses['UsernameAvailability'] | null
+): WaUsernameAvailabilityResult {
+    const check = data?.xwa2_username_check
+    const suggestions = (
+        Array.isArray(check?.suggestions) ? (check.suggestions as readonly unknown[]) : []
+    ).filter((s): s is string => typeof s === 'string')
+    return { available: check?.result === 'SUCCESS', suggestions }
+}
+
+function isMexUsernameKeySetSuccess(
+    data: WaMexOperationResponses['SetUsernameKey'] | null
+): boolean {
+    return data?.xwa2_username_pin_set?.result === 'SUCCESS'
 }
 
 function isMexNotFoundError(error: unknown): boolean {
@@ -502,6 +531,25 @@ export function createProfileCoordinator(
         deleteUsername: async () => {
             const data = await runMexQuery(mexSocket, 'SetUsername', {})
             return isMexSetUsernameSuccess(data)
+        },
+
+        getAboutStatus: async (jid) => {
+            const data = await runMexQuery(mexSocket, 'FetchAboutStatus', {
+                user: { user_id: parseJidFull(jid).address.user }
+            })
+            return parseAboutStatusMexResponse(data)
+        },
+
+        checkUsernameAvailability: async (username) => {
+            const data = await runMexQuery(mexSocket, 'UsernameAvailability', {
+                input: username
+            })
+            return parseUsernameAvailabilityMexResponse(data)
+        },
+
+        setUsernameKey: async (pin) => {
+            const data = await runMexQuery(mexSocket, 'SetUsernameKey', { pin })
+            return isMexUsernameKeySetSuccess(data)
         }
     }
 }

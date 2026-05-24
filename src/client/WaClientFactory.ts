@@ -761,7 +761,8 @@ export function buildWaClientDependencies(input: {
         messageStore: sessionStore.messages,
         messageSecretStore: sessionStore.messageSecret,
         trustedContactToken,
-        emitAddon: (event) => runtime.emitEvent('message_addon', event)
+        emitAddon: (event) => runtime.emitEvent('message_addon', event),
+        mexSocket: { query: runtime.query }
     })
 
     const presenceCoordinator = createPresenceCoordinator({

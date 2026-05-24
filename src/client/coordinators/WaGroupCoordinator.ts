@@ -1,6 +1,8 @@
 import { parseParticipants as parseGroupEventParticipants } from '@client/events/group'
+import type { WaMexOperationResponses } from '@mex'
 import { WA_DEFAULTS } from '@protocol/defaults'
 import { WA_GROUP_PARTICIPANT_TYPES, type WaGroupSetting } from '@protocol/group'
+import { parseJidFull } from '@protocol/jid'
 import { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
 import { WA_GROUP_NOTIFICATION_TAGS } from '@protocol/notification'
 import { buildListParticipatingGroupsIq } from '@transport/node/builders/account-sync'
@@ -29,6 +31,7 @@ import {
 import { runMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
 import { assertIqResult, buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
+import { tryAsNumber, tryAsRecord, tryAsString } from '@util/coercion'
 
 export interface WaGroupParticipant {
     readonly jid: string
@@ -135,10 +138,28 @@ export interface WaCommunitySubGroup {
     readonly pendingMembershipRequests: number
 }
 
+export interface WaCommunitySubGroupSuggestion {
+    readonly jid: string
+    readonly subject: string | null
+    readonly description: string | null
+    readonly creator: string | null
+    readonly creationTime: number | null
+    readonly participantCount: number | null
+    readonly isExistingGroup: boolean
+    readonly hiddenGroup: boolean
+}
+
 export interface WaCommunitySubGroupsResult {
     readonly communityJid: string
     readonly announcementGroup: WaCommunitySubGroup | null
     readonly subGroups: readonly WaCommunitySubGroup[]
+}
+
+export interface WaGroupSuspensionAppealResult {
+    readonly success: boolean
+    readonly responseCode: string | null
+    readonly errorMessage: string | null
+    readonly appealCreationTime: number | null
 }
 
 interface WaGroupCoordinatorOptions {
@@ -228,6 +249,19 @@ export interface WaGroupCoordinator {
         subGroupJid: string,
         options?: { readonly type?: string }
     ) => Promise<BinaryNode>
+    readonly isInternalGroup: (groupJid: string) => Promise<boolean>
+    readonly transferCommunityOwnership: (
+        communityJid: string,
+        newOwnerJid: string
+    ) => Promise<void>
+    readonly fetchSubgroupSuggestions: (
+        communityJid: string,
+        hintSubgroupJid: string
+    ) => Promise<readonly WaCommunitySubGroupSuggestion[]>
+    readonly submitGroupSuspensionAppeal: (
+        groupJid: string,
+        options?: { readonly reason?: string | null; readonly debugInfo?: string }
+    ) => Promise<WaGroupSuspensionAppealResult>
 }
 
 type WaGroupParticipantChangeAction = 'add' | 'remove' | 'promote' | 'demote'
@@ -414,37 +448,77 @@ const SETTING_TAGS: Readonly<
     }
 }
 
-interface MexSubGroupNode {
-    readonly id?: string
-    readonly subject?: { readonly value?: string; readonly creation_time?: string | number }
-    readonly properties?: {
-        readonly general_chat?: boolean | null
-        readonly membership_approval_mode_enabled?: boolean | null
-        readonly hidden_group?: boolean | null
-    } | null
-    readonly membership_approval_requests?: { readonly total_count?: string | number } | null
-}
-
-interface MexFetchAllSubgroupsResult {
-    readonly xwa2_group_query_by_id?: {
-        readonly default_sub_group?: MexSubGroupNode | null
-        readonly sub_groups?: { readonly edges?: readonly { readonly node?: MexSubGroupNode }[] }
-    } | null
-}
-
-function parseSubGroupNode(node: MexSubGroupNode, defaultSubgroup: boolean): WaCommunitySubGroup {
-    const totalCount = node.membership_approval_requests?.total_count
-    const creationTime = node.subject?.creation_time
+function parseSubGroupNode(node: unknown, defaultSubgroup: boolean): WaCommunitySubGroup {
+    const n = tryAsRecord(node)
+    const subject = tryAsRecord(n?.subject)
+    const properties = tryAsRecord(n?.properties)
+    const approvals = tryAsRecord(n?.membership_approval_requests)
     return {
-        jid: node.id ?? '',
-        subject: node.subject?.value,
-        subjectTime: creationTime !== undefined ? Number(creationTime) : undefined,
+        jid: tryAsString(n?.id) ?? '',
+        subject: tryAsString(subject?.value) ?? undefined,
+        subjectTime: tryAsNumber(subject?.creation_time) ?? undefined,
         defaultSubgroup,
-        generalSubgroup: node.properties?.general_chat === true,
-        hiddenSubgroup: node.properties?.hidden_group === true,
-        membershipApprovalEnabled: node.properties?.membership_approval_mode_enabled === true,
-        pendingMembershipRequests: totalCount !== undefined ? Number(totalCount) : 0
+        generalSubgroup: properties?.general_chat === true,
+        hiddenSubgroup: properties?.hidden_group === true,
+        membershipApprovalEnabled: properties?.membership_approval_mode_enabled === true,
+        pendingMembershipRequests: tryAsNumber(approvals?.total_count) ?? 0
     }
+}
+
+function parseGroupIsInternalMexResponse(
+    data: WaMexOperationResponses['FetchGroupIsInternal'] | null
+): boolean {
+    return data?.xwa2_group_query_by_id?.properties?.internal === true
+}
+
+function parseGroupSuspensionAppealMexResponse(
+    data: WaMexOperationResponses['GroupSuspensionAppeal'] | null
+): WaGroupSuspensionAppealResult {
+    const root = data?.wa_create_group_suspension_appeal
+    const responseCode = tryAsString(root?.response_code)
+    return {
+        success: responseCode === 'SUCCESS' || responseCode === 'APPEAL_ALREADY_EXISTS',
+        responseCode,
+        errorMessage: tryAsString(root?.error_message),
+        appealCreationTime: tryAsNumber(root?.appeal_creation_time)
+    }
+}
+
+// Spec types `edges` as a single object, but at runtime it's an array — narrow inline.
+function parseSubGroupSuggestionsMexResponse(
+    data: WaMexOperationResponses['FetchSubgroupSuggestions'] | null
+): readonly WaCommunitySubGroupSuggestion[] {
+    type Edge = NonNullable<
+        NonNullable<
+            NonNullable<
+                WaMexOperationResponses['FetchSubgroupSuggestions']['xwa2_group_query_by_id']
+            >['sub_group_suggestions']
+        >['edges']
+    >
+    const edges = (data?.xwa2_group_query_by_id?.sub_group_suggestions?.edges ?? []) as
+        | readonly Edge[]
+        | Edge
+    const list = Array.isArray(edges) ? edges : []
+    const results: WaCommunitySubGroupSuggestion[] = []
+    for (const edge of list) {
+        const node = edge?.node
+        if (!node || typeof node.id !== 'string') continue
+        results.push({
+            jid: node.id,
+            subject: typeof node.subject?.value === 'string' ? node.subject.value : null,
+            description:
+                typeof node.description?.value === 'string' ? node.description.value : null,
+            creator: typeof node.creator?.id === 'string' ? node.creator.id : null,
+            creationTime: typeof node.creation_time === 'number' ? node.creation_time : null,
+            participantCount:
+                typeof node.total_participants_count === 'number'
+                    ? node.total_participants_count
+                    : null,
+            isExistingGroup: node.is_existing_group === true,
+            hiddenGroup: node.hidden_group === true
+        })
+    }
+    return results
 }
 
 export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGroupCoordinator {
@@ -690,13 +764,13 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
                 query_context: 'INTERACTIVE',
                 sub_group_hint_id: undefined
             })
-            const envelope = (data ?? {}) as MexFetchAllSubgroupsResult
-            const groupQuery = envelope.xwa2_group_query_by_id
-            const announcementNode = groupQuery?.default_sub_group
-            const announcementGroup = announcementNode
-                ? parseSubGroupNode(announcementNode, true)
+            const groupQuery = data?.xwa2_group_query_by_id
+            const announcementGroup = groupQuery?.default_sub_group
+                ? parseSubGroupNode(groupQuery.default_sub_group, true)
                 : null
-            const edges = groupQuery?.sub_groups?.edges ?? []
+            const edges = (groupQuery?.sub_groups?.edges ?? []) as readonly {
+                readonly node?: unknown
+            }[]
             const subGroups: WaCommunitySubGroup[] = []
             for (const edge of edges) {
                 if (!edge?.node) continue
@@ -739,6 +813,52 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             const result = await queryWithContext('community.joinLinkedGroup', node)
             assertIqResult(result, 'community.joinLinkedGroup')
             return result
+        },
+
+        isInternalGroup: async (groupJid) => {
+            if (!mexSocket) {
+                throw new Error('group.isInternalGroup requires a mex transport')
+            }
+            const data = await runMexQuery(mexSocket, 'FetchGroupIsInternal', { id: groupJid })
+            return parseGroupIsInternalMexResponse(data)
+        },
+
+        transferCommunityOwnership: async (communityJid, newOwnerJid) => {
+            if (!mexSocket) {
+                throw new Error('community.transferOwnership requires a mex transport')
+            }
+            await runMexQuery(mexSocket, 'TransferCommunityOwnership', {
+                input: {
+                    group_id: communityJid,
+                    role_updates: [{ new_role: 'SUPERADMIN_MEMBER', user_jid: newOwnerJid }]
+                }
+            })
+        },
+
+        fetchSubgroupSuggestions: async (communityJid, hintSubgroupJid) => {
+            if (!mexSocket) {
+                throw new Error('community.fetchSubgroupSuggestions requires a mex transport')
+            }
+            const data = await runMexQuery(mexSocket, 'FetchSubgroupSuggestions', {
+                group_id: communityJid,
+                query_context: 'INTERACTIVE',
+                sub_group_hint_id: hintSubgroupJid
+            })
+            return parseSubGroupSuggestionsMexResponse(data)
+        },
+
+        submitGroupSuspensionAppeal: async (groupJid, options) => {
+            if (!mexSocket) {
+                throw new Error('group.submitSuspensionAppeal requires a mex transport')
+            }
+            const data = await runMexQuery(mexSocket, 'GroupSuspensionAppeal', {
+                input: {
+                    group_jid: parseJidFull(groupJid).address.user,
+                    appeal_reason: options?.reason ?? null,
+                    debug_info: options?.debugInfo ?? '{}'
+                }
+            })
+            return parseGroupSuspensionAppealMexResponse(data)
         }
     }
 }

@@ -30,11 +30,14 @@ import type {
     WaSendReceiptInput,
     WaSendReceiptOptions
 } from '@message/types'
+import type { WaMexOperationResponses } from '@mex'
 import type { Proto } from '@proto'
 import { applyDeviceToJid } from '@protocol/jid'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
+import { runMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
 import { readAllBytes } from '@util/bytes'
+import { tryAsNumber, tryAsString } from '@util/coercion'
 import { toError } from '@util/primitives'
 
 export interface WaMessageCoordinatorDeps {
@@ -45,6 +48,53 @@ export interface WaMessageCoordinatorDeps {
     readonly messageSecretStore: WaMessageSecretStore
     readonly trustedContactToken: WaTrustedContactTokenCoordinator
     readonly emitAddon: (event: WaIncomingAddonEvent) => void
+    readonly mexSocket: WaMexQuerySocket
+}
+
+export interface WaReachoutTimelock {
+    readonly isActive: boolean
+    readonly enforcementType: string | null
+    readonly enforcementEndsAt: number | null
+}
+
+export type WaMessageCappingType = 'INDIVIDUAL_NEW_CHAT_THREAD' | (string & {})
+
+export interface WaMessageCappingInfo {
+    readonly totalQuota: number | null
+    readonly usedQuota: number | null
+    readonly cycleStartAt: number | null
+    readonly cycleEndAt: number | null
+    readonly serverSentAt: number | null
+    readonly oteStatus: string | null
+    readonly mvStatus: string | null
+    readonly cappingStatus: string | null
+}
+
+function parseReachoutTimelockMexResponse(
+    data: WaMexOperationResponses['FetchReachoutTimelock'] | null
+): WaReachoutTimelock {
+    const root = data?.xwa2_fetch_account_reachout_timelock
+    return {
+        isActive: root?.is_active === true,
+        enforcementType: tryAsString(root?.enforcement_type),
+        enforcementEndsAt: tryAsNumber(root?.time_enforcement_ends)
+    }
+}
+
+function parseMessageCappingMexResponse(
+    data: WaMexOperationResponses['FetchNewChatMessageCappingInfo'] | null
+): WaMessageCappingInfo {
+    const root = data?.xwa2_message_capping_info
+    return {
+        totalQuota: tryAsNumber(root?.total_quota),
+        usedQuota: tryAsNumber(root?.used_quota),
+        cycleStartAt: tryAsNumber(root?.cycle_start_timestamp),
+        cycleEndAt: tryAsNumber(root?.cycle_end_timestamp),
+        serverSentAt: tryAsNumber(root?.server_sent_timestamp),
+        oteStatus: tryAsString(root?.ote_status),
+        mvStatus: tryAsString(root?.mv_status),
+        cappingStatus: tryAsString(root?.capping_status)
+    }
 }
 
 export class WaMessageCoordinator {
@@ -55,6 +105,7 @@ export class WaMessageCoordinator {
     private readonly messageSecretStore: WaMessageSecretStore
     private readonly trustedContactToken: WaTrustedContactTokenCoordinator
     private readonly emitAddon: (event: WaIncomingAddonEvent) => void
+    private readonly mexSocket: WaMexQuerySocket
 
     public constructor(deps: WaMessageCoordinatorDeps) {
         this.messageDispatch = deps.messageDispatch
@@ -64,6 +115,21 @@ export class WaMessageCoordinator {
         this.messageSecretStore = deps.messageSecretStore
         this.trustedContactToken = deps.trustedContactToken
         this.emitAddon = deps.emitAddon
+        this.mexSocket = deps.mexSocket
+    }
+
+    public async getReachoutTimelock(): Promise<WaReachoutTimelock> {
+        const data = await runMexQuery(this.mexSocket, 'FetchReachoutTimelock', {})
+        return parseReachoutTimelockMexResponse(data)
+    }
+
+    public async getNewChatMessageCapping(
+        type: WaMessageCappingType = 'INDIVIDUAL_NEW_CHAT_THREAD'
+    ): Promise<WaMessageCappingInfo> {
+        const data = await runMexQuery(this.mexSocket, 'FetchNewChatMessageCappingInfo', {
+            input: { type }
+        })
+        return parseMessageCappingMexResponse(data)
     }
 
     public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
