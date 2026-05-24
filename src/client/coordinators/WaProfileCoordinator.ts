@@ -17,8 +17,7 @@ import {
     parseUsyncResultEnvelope
 } from '@transport/node/builders/usync'
 import { findNodeChild, getNodeTextContent } from '@transport/node/helpers'
-import { dispatchMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
-import { WA_MEX_PERSIST_IDS } from '@transport/node/mex/persist-ids'
+import { runMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
 import { assertIqResult } from '@transport/node/query'
 import { logUsyncProtocolErrors } from '@transport/node/usync'
 import type { BinaryNode } from '@transport/types'
@@ -457,11 +456,8 @@ export function createProfileCoordinator(
         },
 
         setTextStatus: async (input) => {
-            await dispatchMexQuery(mexSocket, {
-                docId: WA_MEX_PERSIST_IDS.UpdateTextStatus.docId,
-                clientDocId: WA_MEX_PERSIST_IDS.UpdateTextStatus.clientDocId,
-                opName: 'profile.setTextStatus',
-                variables: { input: buildTextStatusMutationInput(input) }
+            await runMexQuery(mexSocket, 'UpdateTextStatus', {
+                input: buildTextStatusMutationInput(input)
             })
         },
 
@@ -483,12 +479,7 @@ export function createProfileCoordinator(
 
         getOwnUsername: async () => {
             try {
-                const { data } = await dispatchMexQuery(mexSocket, {
-                    docId: WA_MEX_PERSIST_IDS.GetUsername.docId,
-                    clientDocId: WA_MEX_PERSIST_IDS.GetUsername.clientDocId,
-                    opName: 'profile.getOwnUsername',
-                    variables: {}
-                })
+                const data = await runMexQuery(mexSocket, 'GetUsername', {})
                 return parseOwnUsernameMexResponse(data)
             } catch (error) {
                 if (isMexNotFoundError(error)) {
@@ -499,27 +490,17 @@ export function createProfileCoordinator(
         },
 
         setUsername: async (input) => {
-            const { data } = await dispatchMexQuery(mexSocket, {
-                docId: WA_MEX_PERSIST_IDS.SetUsername.docId,
-                clientDocId: WA_MEX_PERSIST_IDS.SetUsername.clientDocId,
-                opName: 'profile.setUsername',
-                variables: {
-                    input: input.username,
-                    reserved: input.reserved ?? false,
-                    session_id: input.sessionId ?? '',
-                    source: input.source ?? 'USER_INPUT'
-                }
+            const data = await runMexQuery(mexSocket, 'SetUsername', {
+                input: input.username,
+                reserved: input.reserved ?? false,
+                session_id: input.sessionId ?? '',
+                source: input.source ?? 'USER_INPUT'
             })
             return isMexSetUsernameSuccess(data)
         },
 
         deleteUsername: async () => {
-            const { data } = await dispatchMexQuery(mexSocket, {
-                docId: WA_MEX_PERSIST_IDS.SetUsername.docId,
-                clientDocId: WA_MEX_PERSIST_IDS.SetUsername.clientDocId,
-                opName: 'profile.deleteUsername',
-                variables: {}
-            })
+            const data = await runMexQuery(mexSocket, 'SetUsername', {})
             return isMexSetUsernameSuccess(data)
         }
     }

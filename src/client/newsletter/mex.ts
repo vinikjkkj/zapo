@@ -1,13 +1,13 @@
 import type { WaNewsletterMexEnvelope } from '@client/newsletter/types'
 import type { Logger } from '@infra/log/types'
+import type { WaMexOperationResponses, WaMexOperationVariables } from '@mex'
 import type { AbPropName } from '@protocol/abprops'
 import {
     buildTosQueryIq,
     buildTosUpdateIq,
     parseTosQueryResponse
 } from '@transport/node/builders/tos'
-import { dispatchMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
-import type { WaMexPersistId } from '@transport/node/mex/persist-ids'
+import { runMexQuery, type WaMexOpKey, type WaMexQuerySocket } from '@transport/node/mex/client'
 import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
 
@@ -24,28 +24,20 @@ export interface WaNewsletterMexDeps {
     readonly logger: Logger
 }
 
-export async function runMex<T>(
+export async function runMex<K extends WaMexOpKey, T = WaMexOperationResponses[K] | null>(
     deps: WaNewsletterMexDeps,
-    persist: WaMexPersistId,
-    opName: string,
-    variables: Readonly<Record<string, unknown>>
+    opKey: K,
+    variables: WaMexOperationVariables[K]
 ): Promise<T> {
-    const { data } = await dispatchMexQuery(deps.mexSocket, {
-        docId: persist.docId,
-        clientDocId: persist.clientDocId,
-        opName,
-        variables
-    })
-    return data as T
+    return runMexQuery<K, T>(deps.mexSocket, opKey, variables)
 }
 
-export async function runMexEnvelope(
+export async function runMexEnvelope<K extends WaMexOpKey>(
     deps: WaNewsletterMexDeps,
-    persist: WaMexPersistId,
-    opName: string,
-    variables: Readonly<Record<string, unknown>>
+    opKey: K,
+    variables: WaMexOperationVariables[K]
 ): Promise<WaNewsletterMexEnvelope> {
-    const data = await runMex<Record<string, unknown> | null>(deps, persist, opName, variables)
+    const data = await runMex<K, Record<string, unknown> | null>(deps, opKey, variables)
     return data ?? {}
 }
 

@@ -3,7 +3,7 @@ const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 
 const rootDir = process.cwd()
-const protoDir = path.join(rootDir, 'proto')
+const protoDir = path.join(rootDir, 'spec', 'proto')
 const protoNodeModulesPath = path.join(protoDir, 'node_modules', 'protobufjs-cli')
 
 if (!existsSync(protoNodeModulesPath)) {

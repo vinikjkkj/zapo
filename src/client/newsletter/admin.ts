@@ -36,7 +36,6 @@ import {
     parseTosQueryResponse,
     type WaTosQueryResult
 } from '@transport/node/builders/tos'
-import { WA_MEX_PERSIST_IDS } from '@transport/node/mex/persist-ids'
 import { assertIqResult } from '@transport/node/query'
 import { bytesToBase64 } from '@util/bytes'
 
@@ -86,9 +85,7 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
     return {
         create: async (input) => {
             await ensureTosAccepted(deps, 'creation')
-            const data = await runMex<{
-                readonly xwa2_newsletter_create?: MexNewsletterEnvelope
-            } | null>(deps, WA_MEX_PERSIST_IDS.NewsletterCreate, 'NewsletterCreate', {
+            const data = await runMex(deps, 'CreateNewsletter', {
                 input: {
                     name: input.name,
                     description: input.description,
@@ -98,7 +95,7 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
             if (!data?.xwa2_newsletter_create) {
                 throw new Error('newsletter create returned no envelope')
             }
-            return parseNewsletterMetadata(data.xwa2_newsletter_create)
+            return parseNewsletterMetadata(data.xwa2_newsletter_create as MexNewsletterEnvelope)
         },
         update: async (newsletterJid, input) => {
             const updates: Record<string, unknown> = {}
@@ -110,114 +107,74 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
             if (input.reactionCodesSetting !== undefined) {
                 updates.reaction_codes = { value: input.reactionCodesSetting }
             }
-            const data = await runMex<{
-                readonly xwa2_newsletter_update?: MexNewsletterEnvelope
-            } | null>(deps, WA_MEX_PERSIST_IDS.NewsletterUpdate, 'NewsletterUpdate', {
+            const data = await runMex(deps, 'UpdateNewsletter', {
                 newsletter_id: newsletterJid,
                 updates
             })
             if (!data?.xwa2_newsletter_update) {
                 throw new Error('newsletter update returned no envelope')
             }
-            return parseNewsletterMetadata(data.xwa2_newsletter_update)
+            return parseNewsletterMetadata(data.xwa2_newsletter_update as MexNewsletterEnvelope)
         },
         delete: async (newsletterJid) => {
-            await runMex<unknown>(deps, WA_MEX_PERSIST_IDS.NewsletterDelete, 'NewsletterDelete', {
-                newsletter_id: newsletterJid
-            })
+            await runMex(deps, 'DeleteNewsletter', { newsletter_id: newsletterJid })
         },
         fetchAdminInfo: async (newsletterJid) => {
-            const envelope = await runMexEnvelope(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterAdminInfo,
-                'NewsletterAdminInfo',
-                { newsletter_id: newsletterJid }
-            )
+            const envelope = await runMexEnvelope(deps, 'FetchNewsletterAdminInfo', {
+                newsletter_id: newsletterJid
+            })
             return parseAdminInfo(envelope)
         },
         fetchAdminCapabilities: async (newsletterJid) => {
-            const envelope = await runMexEnvelope(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterFetchAdminCapabilities,
-                'NewsletterFetchAdminCapabilities',
-                { newsletter_id: newsletterJid }
-            )
+            const envelope = await runMexEnvelope(deps, 'FetchNewsletterAdminCapabilities', {
+                newsletter_id: newsletterJid
+            })
             return parseAdminCapabilities(envelope)
         },
         fetchFollowers: async (newsletterJid, opts) => {
-            const envelope = await runMexEnvelope(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterFollowers,
-                'NewsletterFollowers',
-                {
-                    input: {
-                        newsletter_id: newsletterJid,
-                        count: opts?.count ?? 50
-                    }
+            const envelope = await runMexEnvelope(deps, 'FetchNewsletterFollowers', {
+                input: {
+                    newsletter_id: newsletterJid,
+                    count: opts?.count ?? 50
                 }
-            )
+            })
             return parseFollowers(envelope)
         },
         fetchInsights: (newsletterJid, metrics) => {
             if (metrics.length === 0) {
                 throw new Error('newsletter fetchInsights requires at least one metric request')
             }
-            return runMexEnvelope(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterFetchInsights,
-                'NewsletterFetchInsights',
-                {
-                    input: {
-                        newsletter_id: newsletterJid,
-                        metrics
-                    }
+            return runMexEnvelope(deps, 'FetchNewsletterInsights', {
+                input: {
+                    newsletter_id: newsletterJid,
+                    metrics
                 }
-            )
+            })
         },
-        fetchReports: () =>
-            runMexEnvelope(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterFetchReports,
-                'NewsletterFetchReports',
-                {}
-            ),
+        fetchReports: () => runMexEnvelope(deps, 'FetchNewsletterReports', {}),
         fetchPendingInvites: async (newsletterJid) => {
-            const envelope = await runMexEnvelope(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterFetchPendingInvites,
-                'NewsletterFetchPendingInvites',
-                { newsletter_id: newsletterJid }
-            )
+            const envelope = await runMexEnvelope(deps, 'FetchNewsletterPendingInvites', {
+                newsletter_id: newsletterJid
+            })
             return parsePendingInvites(envelope)
         },
         fetchEnforcements: (newsletterJid) =>
-            runMexEnvelope(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterFetchEnforcements,
-                'NewsletterFetchEnforcements',
-                { newsletter_id: newsletterJid }
-            ),
+            runMexEnvelope(deps, 'FetchNewsletterEnforcements', { newsletter_id: newsletterJid }),
         fetchPollVoters: async (input) => {
-            const envelope = await runMexEnvelope(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterFetchPollVoters,
-                'NewsletterFetchPollVoters',
-                {
-                    input: {
-                        newsletter_id: input.newsletterJid,
-                        server_id: String(input.messageServerId),
-                        vote_hash: input.voteHash,
-                        limit: input.limit ?? 50
-                    }
+            const envelope = await runMexEnvelope(deps, 'FetchNewsletterPollVoters', {
+                input: {
+                    newsletter_id: input.newsletterJid,
+                    server_id: String(input.messageServerId),
+                    vote_hash: input.voteHash,
+                    limit: input.limit ?? 50
                 }
-            )
+            })
             return parsePollVoters(envelope)
         },
         fetchMessageReactionSenders: async (input) => {
             const envelope = await runMexEnvelope(
                 deps,
-                WA_MEX_PERSIST_IDS.NewsletterFetchMessageReactionSenders,
-                'NewsletterFetchMessageReactionSenders',
+                'FetchNewsletterMessageReactionSenderList',
                 {
                     input: {
                         id: input.newsletterJid,
@@ -228,73 +185,43 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
             return parseReactionSenders(envelope)
         },
         logExposures: async (exposures) => {
-            await runMexEnvelope(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterLogExposures,
-                'NewsletterLogExposures',
-                {
-                    input: {
-                        exposures: exposures.map((e) => ({
-                            newsletter_id: e.newsletterJid,
-                            capability: e.capability
-                        }))
-                    }
+            await runMexEnvelope(deps, 'LogNewsletterExposures', {
+                input: {
+                    exposures: exposures.map((e) => ({
+                        newsletter_id: e.newsletterJid,
+                        capability: e.capability
+                    }))
                 }
-            )
+            })
         },
         changeOwner: async (input) => {
-            await runMex<unknown>(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterChangeOwner,
-                'NewsletterChangeOwner',
-                {
-                    newsletter_id: input.newsletterJid,
-                    user_id: input.userJid
-                }
-            )
+            await runMex(deps, 'ChangeNewsletterOwner', {
+                newsletter_id: input.newsletterJid,
+                user_id: input.userJid
+            })
         },
         demoteAdmin: async (input) => {
-            await runMex<unknown>(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterDemoteAdmin,
-                'NewsletterDemoteAdmin',
-                {
-                    newsletter_id: input.newsletterJid,
-                    user_id: input.userJid
-                }
-            )
+            await runMex(deps, 'DemoteNewsletterAdmin', {
+                newsletter_id: input.newsletterJid,
+                user_id: input.userJid
+            })
         },
         createAdminInvite: async (input) => {
-            const envelope = await runMexEnvelope(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterCreateAdminInvite,
-                'NewsletterCreateAdminInvite',
-                {
-                    newsletter_id: input.newsletterJid,
-                    user_id: input.userJid
-                }
-            )
+            const envelope = await runMexEnvelope(deps, 'CreateNewsletterAdminInvite', {
+                newsletter_id: input.newsletterJid,
+                user_id: input.userJid
+            })
             return parseAdminInviteResult(envelope)
         },
         acceptAdminInvite: async (newsletterJid) => {
             await ensureTosAccepted(deps, 'admin_invite')
-            await runMex<unknown>(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterAcceptAdminInvite,
-                'NewsletterAcceptAdminInvite',
-                { newsletter_id: newsletterJid }
-            )
+            await runMex(deps, 'AcceptNewsletterAdminInvite', { newsletter_id: newsletterJid })
         },
         revokeAdminInvite: async (input) => {
-            await runMex<unknown>(
-                deps,
-                WA_MEX_PERSIST_IDS.NewsletterRevokeAdminInvite,
-                'NewsletterRevokeAdminInvite',
-                {
-                    newsletter_id: input.newsletterJid,
-                    user_id: input.userJid
-                }
-            )
+            await runMex(deps, 'RevokeNewsletterAdminInvite', {
+                newsletter_id: input.newsletterJid,
+                user_id: input.userJid
+            })
         },
         queryTosState: async (noticeIds) => {
             if (!deps.queryWithContext) {

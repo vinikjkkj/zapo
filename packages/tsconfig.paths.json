@@ -30,6 +30,7 @@
             "@protocol": ["src/protocol/index.ts"],
             "@protocol/*": ["src/protocol/*"],
             "@proto": ["src/proto.ts"],
+            "@mex": ["src/mex.ts"],
             "@retry": ["src/retry/index.ts"],
             "@retry/*": ["src/retry/*"],
             "@signal": ["src/signal/index.ts"],
