@@ -1,6 +1,5 @@
 import { runMex, runMexEnvelope, type WaNewsletterMexDeps } from '@client/newsletter/mex'
 import {
-    type MexNewsletterEnvelope,
     parseDehydratedMetadata,
     parseDirectoryCategoriesPreview,
     parseDirectoryList,
@@ -82,7 +81,7 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
         if (!data?.xwa2_newsletter) {
             throw new Error('newsletter fetch returned no envelope')
         }
-        return parseNewsletterMetadata(data.xwa2_newsletter as MexNewsletterEnvelope)
+        return parseNewsletterMetadata(data.xwa2_newsletter)
     }
 
     return {
@@ -94,8 +93,9 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                 fetch_wamo_sub: opts?.fetchWamoSub ?? false,
                 fetch_status_metadata: false
             })
-            const list = (data?.xwa2_newsletter_subscribed ??
-                []) as readonly MexNewsletterEnvelope[]
+            const list = Array.isArray(data?.xwa2_newsletter_subscribed)
+                ? (data.xwa2_newsletter_subscribed as readonly unknown[])
+                : []
             return list.map(parseNewsletterMetadata)
         },
         searchDirectory: async (opts) => {

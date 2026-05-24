@@ -5,7 +5,6 @@ import {
     type WaNewsletterMexDeps
 } from '@client/newsletter/mex'
 import {
-    type MexNewsletterEnvelope,
     parseAdminCapabilities,
     parseAdminInfo,
     parseAdminInviteResult,
@@ -95,7 +94,7 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
             if (!data?.xwa2_newsletter_create) {
                 throw new Error('newsletter create returned no envelope')
             }
-            return parseNewsletterMetadata(data.xwa2_newsletter_create as MexNewsletterEnvelope)
+            return parseNewsletterMetadata(data.xwa2_newsletter_create)
         },
         update: async (newsletterJid, input) => {
             const updates: Record<string, unknown> = {}
@@ -114,7 +113,7 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
             if (!data?.xwa2_newsletter_update) {
                 throw new Error('newsletter update returned no envelope')
             }
-            return parseNewsletterMetadata(data.xwa2_newsletter_update as MexNewsletterEnvelope)
+            return parseNewsletterMetadata(data.xwa2_newsletter_update)
         },
         delete: async (newsletterJid) => {
             await runMex(deps, 'DeleteNewsletter', { newsletter_id: newsletterJid })

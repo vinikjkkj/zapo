@@ -21,407 +21,279 @@ import {
     type WaNewsletterRole,
     type WaNewsletterStateType
 } from '@protocol/newsletter'
+import { tryAsNumber, tryAsRecord, tryAsString } from '@util/coercion'
 
-interface RawPicture {
-    readonly id?: string
-    readonly direct_path?: string
+function asUndef<T>(value: T | null): T | undefined {
+    return value === null ? undefined : value
 }
 
-export interface MexNewsletterEnvelope {
-    readonly id?: string
-    readonly state?: { readonly type?: WaNewsletterStateType }
-    readonly thread_metadata?: {
-        readonly creation_time?: string | number
-        readonly name?: { readonly text?: string; readonly update_time?: string | number }
-        readonly description?: {
-            readonly text?: string
-            readonly update_time?: string | number
-        }
-        readonly picture?: RawPicture
-        readonly preview?: RawPicture
-        readonly invite?: string
-        readonly handle?: string
-        readonly subscribers_count?: string | number
-        readonly verification?: string
-    }
-    readonly viewer_metadata?: {
-        readonly role?: WaNewsletterRole
-        readonly settings?: readonly { readonly type?: string; readonly value?: string }[]
-    }
+function asArray(value: unknown): readonly unknown[] {
+    return Array.isArray(value) ? value : []
 }
 
-interface RawAdminProfile {
-    readonly id?: string
-    readonly name?: string
-    readonly picture?: RawPicture
+function parsePicture(raw: unknown): WaNewsletterPicture | undefined {
+    const r = tryAsRecord(raw)
+    if (!r) return undefined
+    const id = tryAsString(r.id)
+    const directPath = tryAsString(r.direct_path)
+    if (!id && !directPath) return undefined
+    return { id: asUndef(id), directPath: asUndef(directPath) }
 }
 
-interface RawFollowerEdge {
-    readonly admin_profile?: RawAdminProfile
-    readonly follow_time?: string | number
-    readonly role?: string
-    readonly node?: {
-        readonly id?: string
-        readonly pn?: string
-        readonly display_name?: string
-        readonly username_info?: { readonly username?: string }
-    }
-}
-
-interface RawPageInfo {
-    readonly hasNextPage?: boolean
-    readonly hasPreviousPage?: boolean
-    readonly startCursor?: string
-    readonly endCursor?: string
-}
-
-function toNumber(value: string | number | null | undefined): number | undefined {
-    if (value === null || value === undefined) return undefined
-    if (typeof value === 'number') return value
-    const parsed = Number.parseInt(value, 10)
-    return Number.isFinite(parsed) ? parsed : undefined
-}
-
-function parsePicture(raw: RawPicture | undefined): WaNewsletterPicture | undefined {
-    if (!raw) return undefined
-    if (!raw.id && !raw.direct_path) return undefined
+function parseAdminProfile(raw: unknown): WaNewsletterAdminProfile | null {
+    const r = tryAsRecord(raw)
+    const name = tryAsString(r?.name)
+    if (!name) return null
+    const picture = tryAsRecord(r?.picture)
     return {
-        id: raw.id,
-        directPath: raw.direct_path
+        id: asUndef(tryAsString(r?.id)),
+        name,
+        pictureId: asUndef(tryAsString(picture?.id)),
+        pictureDirectPath: asUndef(tryAsString(picture?.direct_path))
     }
 }
 
-function parseAdminProfile(raw: RawAdminProfile | undefined): WaNewsletterAdminProfile | null {
-    if (!raw || !raw.name) return null
+function parsePageInfo(raw: unknown): WaPageInfo | undefined {
+    const r = tryAsRecord(raw)
+    if (!r) return undefined
     return {
-        id: raw.id,
-        name: raw.name,
-        pictureId: raw.picture?.id,
-        pictureDirectPath: raw.picture?.direct_path
+        hasNextPage: typeof r.hasNextPage === 'boolean' ? r.hasNextPage : undefined,
+        hasPreviousPage: typeof r.hasPreviousPage === 'boolean' ? r.hasPreviousPage : undefined,
+        startCursor: asUndef(tryAsString(r.startCursor)),
+        endCursor: asUndef(tryAsString(r.endCursor))
     }
 }
 
-function parsePageInfo(raw: RawPageInfo | undefined): WaPageInfo | undefined {
-    if (!raw) return undefined
-    return {
-        hasNextPage: raw.hasNextPage,
-        hasPreviousPage: raw.hasPreviousPage,
-        startCursor: raw.startCursor,
-        endCursor: raw.endCursor
-    }
-}
-
-export function parseNewsletterMetadata(envelope: MexNewsletterEnvelope): WaNewsletterMetadata {
-    const meta = envelope.thread_metadata
-    const viewer = envelope.viewer_metadata
-    const settings = viewer?.settings ?? []
+export function parseNewsletterMetadata(envelope: unknown): WaNewsletterMetadata {
+    const env = tryAsRecord(envelope)
+    const meta = tryAsRecord(env?.thread_metadata)
+    const viewer = tryAsRecord(env?.viewer_metadata)
+    const state = tryAsRecord(env?.state)
+    const name = tryAsRecord(meta?.name)
+    const description = tryAsRecord(meta?.description)
 
     let mutedAdmin: boolean | undefined
     let mutedFollower: boolean | undefined
-    for (const setting of settings) {
-        if (setting.type === WA_NEWSLETTER_MUTE_TYPES.ADMIN_ACTIVITY) {
-            mutedAdmin = setting.value === WA_NEWSLETTER_MUTE_VALUES.ON
-        } else if (setting.type === WA_NEWSLETTER_MUTE_TYPES.FOLLOWER_ACTIVITY) {
-            mutedFollower = setting.value === WA_NEWSLETTER_MUTE_VALUES.ON
+    for (const settingRaw of asArray(viewer?.settings)) {
+        const setting = tryAsRecord(settingRaw)
+        const type = tryAsString(setting?.type)
+        const value = tryAsString(setting?.value)
+        if (type === WA_NEWSLETTER_MUTE_TYPES.ADMIN_ACTIVITY) {
+            mutedAdmin = value === WA_NEWSLETTER_MUTE_VALUES.ON
+        } else if (type === WA_NEWSLETTER_MUTE_TYPES.FOLLOWER_ACTIVITY) {
+            mutedFollower = value === WA_NEWSLETTER_MUTE_VALUES.ON
         }
     }
 
     return {
-        jid: envelope.id ?? '',
-        state: envelope.state?.type ?? WA_NEWSLETTER_STATE_TYPES.ACTIVE,
-        creationTime: toNumber(meta?.creation_time),
-        name: meta?.name?.text,
-        nameUpdateTime: toNumber(meta?.name?.update_time),
-        description: meta?.description?.text,
-        descriptionUpdateTime: toNumber(meta?.description?.update_time),
+        jid: tryAsString(env?.id) ?? '',
+        state:
+            (tryAsString(state?.type) as WaNewsletterStateType | null) ??
+            WA_NEWSLETTER_STATE_TYPES.ACTIVE,
+        creationTime: asUndef(tryAsNumber(meta?.creation_time)),
+        name: asUndef(tryAsString(name?.text)),
+        nameUpdateTime: asUndef(tryAsNumber(name?.update_time)),
+        description: asUndef(tryAsString(description?.text)),
+        descriptionUpdateTime: asUndef(tryAsNumber(description?.update_time)),
         picture: parsePicture(meta?.picture),
         preview: parsePicture(meta?.preview),
-        invite: meta?.invite,
-        handle: meta?.handle,
-        subscribersCount: toNumber(meta?.subscribers_count),
-        verification: meta?.verification,
-        viewerRole: viewer?.role,
+        invite: asUndef(tryAsString(meta?.invite)),
+        handle: asUndef(tryAsString(meta?.handle)),
+        subscribersCount: asUndef(tryAsNumber(meta?.subscribers_count)),
+        verification: asUndef(tryAsString(meta?.verification)),
+        viewerRole: (tryAsString(viewer?.role) as WaNewsletterRole | null) ?? undefined,
         mutedAdmin,
         mutedFollower
     }
 }
 
 export function parseAdminInfo(envelope: WaNewsletterMexEnvelope): WaNewsletterAdminInfo {
-    const admin = (envelope as { readonly xwa2_newsletter_admin?: unknown }).xwa2_newsletter_admin
-    if (!admin || typeof admin !== 'object') {
-        return { adminProfile: null }
-    }
-    const node = admin as {
-        readonly admin_count?: number
-        readonly admin_profile?: RawAdminProfile
-    }
+    const admin = tryAsRecord(envelope.xwa2_newsletter_admin)
+    if (!admin) return { adminProfile: null }
     return {
-        adminCount: node.admin_count,
-        adminProfile: parseAdminProfile(node.admin_profile)
+        adminCount: asUndef(tryAsNumber(admin.admin_count)),
+        adminProfile: parseAdminProfile(admin.admin_profile)
     }
 }
 
 export function parseAdminCapabilities(envelope: WaNewsletterMexEnvelope): ReadonlySet<string> {
-    const admin = (envelope as { readonly xwa2_newsletter_admin?: unknown }).xwa2_newsletter_admin
-    if (!admin || typeof admin !== 'object') return new Set()
-    const capabilities = (admin as { readonly capabilities?: readonly string[] }).capabilities
-    return new Set(Array.isArray(capabilities) ? capabilities : [])
+    const admin = tryAsRecord(envelope.xwa2_newsletter_admin)
+    const result = new Set<string>()
+    for (const cap of asArray(admin?.capabilities)) {
+        const s = tryAsString(cap)
+        if (s) result.add(s)
+    }
+    return result
 }
 
 export function parsePendingInvites(envelope: WaNewsletterMexEnvelope): readonly string[] {
-    const admin = (envelope as { readonly xwa2_newsletter_admin?: unknown }).xwa2_newsletter_admin
-    if (!admin || typeof admin !== 'object') return []
-    const invites = (
-        admin as {
-            readonly pending_admin_invites?: readonly {
-                readonly user?: { readonly id?: string; readonly pn?: string }
-            }[]
-        }
-    ).pending_admin_invites
-    if (!Array.isArray(invites)) return []
+    const admin = tryAsRecord(envelope.xwa2_newsletter_admin)
     const result: string[] = []
-    for (const invite of invites) {
-        const user = invite?.user
-        const id = user?.pn ?? user?.id
+    for (const inviteRaw of asArray(admin?.pending_admin_invites)) {
+        const user = tryAsRecord(tryAsRecord(inviteRaw)?.user)
+        const id = tryAsString(user?.pn) ?? tryAsString(user?.id)
         if (id) result.push(id)
     }
     return result
 }
 
 export function parseFollowers(envelope: WaNewsletterMexEnvelope): WaNewsletterFollowersPage {
-    const root = (envelope as { readonly xwa2_newsletter_followers?: unknown })
-        .xwa2_newsletter_followers
-    if (!root || typeof root !== 'object') {
-        return { followers: [] }
-    }
-    const followersWrap = (
-        root as {
-            readonly followers?: {
-                readonly edges?: readonly RawFollowerEdge[]
-                readonly page_info?: RawPageInfo
-            }
-        }
-    ).followers
-    const edges = followersWrap?.edges ?? []
+    const root = tryAsRecord(envelope.xwa2_newsletter_followers)
+    const followersWrap = tryAsRecord(root?.followers)
     const followers: WaNewsletterFollower[] = []
-    for (const edge of edges) {
-        const id = edge.node?.id
+    for (const edgeRaw of asArray(followersWrap?.edges)) {
+        const edge = tryAsRecord(edgeRaw)
+        const node = tryAsRecord(edge?.node)
+        const id = tryAsString(node?.id)
         if (!id) continue
         followers.push({
             id,
-            displayName: edge.node?.display_name,
-            role: edge.role as WaNewsletterRole | undefined,
-            phoneJid: edge.node?.pn,
-            username: edge.node?.username_info?.username,
-            followTime: toNumber(edge.follow_time),
-            adminProfile: parseAdminProfile(edge.admin_profile)
+            displayName: asUndef(tryAsString(node?.display_name)),
+            role: (tryAsString(edge?.role) as WaNewsletterRole | null) ?? undefined,
+            phoneJid: asUndef(tryAsString(node?.pn)),
+            username: asUndef(tryAsString(tryAsRecord(node?.username_info)?.username)),
+            followTime: asUndef(tryAsNumber(edge?.follow_time)),
+            adminProfile: parseAdminProfile(edge?.admin_profile)
         })
     }
     return { followers, pageInfo: parsePageInfo(followersWrap?.page_info) }
 }
 
-interface RawDirectoryResponse {
-    readonly result?: readonly MexNewsletterEnvelope[]
-    readonly page_info?: RawPageInfo
+function parseDirectoryResponse(root: unknown): WaNewsletterDirectoryResults {
+    const r = tryAsRecord(root)
+    return {
+        results: asArray(r?.result).map(parseNewsletterMetadata),
+        pageInfo: parsePageInfo(r?.page_info)
+    }
 }
 
 export function parseDirectorySearch(
     envelope: WaNewsletterMexEnvelope
 ): WaNewsletterDirectoryResults {
-    const root = (envelope as { readonly xwa2_newsletters_directory_search?: RawDirectoryResponse })
-        .xwa2_newsletters_directory_search
-    return {
-        results: (root?.result ?? []).map(parseNewsletterMetadata),
-        pageInfo: parsePageInfo(root?.page_info)
-    }
+    return parseDirectoryResponse(envelope.xwa2_newsletters_directory_search)
 }
 
 export function parseDirectoryList(
     envelope: WaNewsletterMexEnvelope
 ): WaNewsletterDirectoryResults {
-    const root = (
-        envelope as { readonly xwa2_newsletters_directory_list_v2?: RawDirectoryResponse }
-    ).xwa2_newsletters_directory_list_v2
-    return {
-        results: (root?.result ?? []).map(parseNewsletterMetadata),
-        pageInfo: parsePageInfo(root?.page_info)
-    }
+    return parseDirectoryResponse(envelope.xwa2_newsletters_directory_list_v2)
 }
 
 export function parseRecommended(
     envelope: WaNewsletterMexEnvelope
 ): readonly WaNewsletterMetadata[] {
-    const root = (envelope as { readonly xwa2_recommended_newsletters?: RawDirectoryResponse })
-        .xwa2_recommended_newsletters
-    return (root?.result ?? []).map(parseNewsletterMetadata)
+    return parseDirectoryResponse(envelope.xwa2_recommended_newsletters).results
 }
 
 export function parseSimilar(envelope: WaNewsletterMexEnvelope): readonly WaNewsletterMetadata[] {
-    const root = (envelope as { readonly xwa2_newsletters_similar?: RawDirectoryResponse })
-        .xwa2_newsletters_similar
-    return (root?.result ?? []).map(parseNewsletterMetadata)
+    return parseDirectoryResponse(envelope.xwa2_newsletters_similar).results
 }
 
 export function parseDomainsPreviewable(
     envelope: WaNewsletterMexEnvelope
 ): ReadonlyMap<string, boolean> {
-    const root = (
-        envelope as {
-            readonly xwa2_newsletter_message_integrity?: {
-                readonly url_previews?: readonly {
-                    readonly url_domain?: string
-                    readonly is_previewable?: boolean
-                }[]
-            }
-        }
-    ).xwa2_newsletter_message_integrity
-    const previews = root?.url_previews ?? []
+    const root = tryAsRecord(envelope.xwa2_newsletter_message_integrity)
     const map = new Map<string, boolean>()
-    for (const preview of previews) {
-        if (preview.url_domain) {
-            map.set(preview.url_domain, preview.is_previewable === true)
+    for (const previewRaw of asArray(root?.url_previews)) {
+        const preview = tryAsRecord(previewRaw)
+        const domain = tryAsString(preview?.url_domain)
+        if (domain) {
+            map.set(domain, preview?.is_previewable === true)
         }
     }
     return map
 }
 
-interface RawDirectoryCategoryPreviewEntry {
-    readonly category?: string
-    readonly category_title?: string
-    readonly newsletters?: readonly MexNewsletterEnvelope[]
-}
-
 export function parseDirectoryCategoriesPreview(
     envelope: WaNewsletterMexEnvelope
 ): readonly WaNewsletterDirectoryCategoryPreview[] {
-    const root = (
-        envelope as {
-            readonly xwa2_newsletters_directory_category_preview?: {
-                readonly result?: readonly RawDirectoryCategoryPreviewEntry[]
-            }
-        }
-    ).xwa2_newsletters_directory_category_preview
-    const entries = root?.result ?? []
+    const root = tryAsRecord(envelope.xwa2_newsletters_directory_category_preview)
     const result: WaNewsletterDirectoryCategoryPreview[] = []
-    for (const entry of entries) {
-        if (!entry.category) continue
+    for (const entryRaw of asArray(root?.result)) {
+        const entry = tryAsRecord(entryRaw)
+        const category = tryAsString(entry?.category)
+        if (!category) continue
         result.push({
-            category: entry.category,
-            categoryTitle: entry.category_title,
-            newsletters: (entry.newsletters ?? []).map(parseNewsletterMetadata)
+            category,
+            categoryTitle: asUndef(tryAsString(entry?.category_title)),
+            newsletters: asArray(entry?.newsletters).map(parseNewsletterMetadata)
         })
     }
     return result
 }
 
-interface RawDehydratedNewsletter {
-    readonly id?: string
-    readonly thread_metadata?: {
-        readonly subscribers_count?: string | number
-        readonly verification?: string
-        readonly settings?: { readonly reaction_codes?: { readonly value?: string } }
-        readonly wamo_sub?: { readonly plan_id?: string }
-    }
-    readonly viewer_metadata?: { readonly wamo_sub_status?: string }
-}
-
 export function parseDehydratedMetadata(
     envelope: WaNewsletterMexEnvelope
 ): WaNewsletterDehydratedMetadata {
-    const node = (envelope as { readonly xwa2_newsletter?: RawDehydratedNewsletter })
-        .xwa2_newsletter
-    const meta = node?.thread_metadata
+    const node = tryAsRecord(envelope.xwa2_newsletter)
+    const meta = tryAsRecord(node?.thread_metadata)
+    const reactionCodes = tryAsRecord(tryAsRecord(meta?.settings)?.reaction_codes)
+    const wamoSub = tryAsRecord(meta?.wamo_sub)
+    const viewer = tryAsRecord(node?.viewer_metadata)
     return {
-        jid: node?.id ?? '',
-        subscribersCount: toNumber(meta?.subscribers_count),
-        verification: meta?.verification,
-        reactionCodesSetting: meta?.settings?.reaction_codes?.value,
-        wamoSubPlanId: meta?.wamo_sub?.plan_id,
-        wamoSubStatus: node?.viewer_metadata?.wamo_sub_status
+        jid: tryAsString(node?.id) ?? '',
+        subscribersCount: asUndef(tryAsNumber(meta?.subscribers_count)),
+        verification: asUndef(tryAsString(meta?.verification)),
+        reactionCodesSetting: asUndef(tryAsString(reactionCodes?.value)),
+        wamoSubPlanId: asUndef(tryAsString(wamoSub?.plan_id)),
+        wamoSubStatus: asUndef(tryAsString(viewer?.wamo_sub_status))
     }
 }
 
 export function parseAdminInviteResult(
     envelope: WaNewsletterMexEnvelope
 ): WaNewsletterAdminInviteResult {
-    const root = (
-        envelope as {
-            readonly xwa2_newsletter_admin_invite_create?: {
-                readonly id?: string
-                readonly invite_expiration_time?: string | number
-            }
-        }
-    ).xwa2_newsletter_admin_invite_create
+    const root = tryAsRecord(envelope.xwa2_newsletter_admin_invite_create)
     return {
-        inviteId: root?.id,
-        expirationTime: toNumber(root?.invite_expiration_time)
-    }
-}
-
-interface RawReactionEntry {
-    readonly reaction_code?: string
-    readonly sender_list?: {
-        readonly edges?: readonly {
-            readonly node?: { readonly id?: string; readonly profile_pic_direct_path?: string }
-        }[]
+        inviteId: asUndef(tryAsString(root?.id)),
+        expirationTime: asUndef(tryAsNumber(root?.invite_expiration_time))
     }
 }
 
 export function parseReactionSenders(
     envelope: WaNewsletterMexEnvelope
 ): readonly WaNewsletterReactionSenders[] {
-    const root = (
-        envelope as {
-            readonly xwa2_newsletters_reaction_sender_list?: {
-                readonly reactions?: readonly RawReactionEntry[]
-            }
+    const root = tryAsRecord(envelope.xwa2_newsletters_reaction_sender_list)
+    return asArray(root?.reactions).map((entryRaw) => {
+        const entry = tryAsRecord(entryRaw)
+        const senderList = tryAsRecord(entry?.sender_list)
+        const senders: { readonly id: string; readonly profileUrl?: string }[] = []
+        for (const edgeRaw of asArray(senderList?.edges)) {
+            const node = tryAsRecord(tryAsRecord(edgeRaw)?.node)
+            const id = tryAsString(node?.id)
+            if (!id) continue
+            senders.push({
+                id,
+                profileUrl: asUndef(tryAsString(node?.profile_pic_direct_path))
+            })
         }
-    ).xwa2_newsletters_reaction_sender_list
-    const reactions = root?.reactions ?? []
-    return reactions.map((entry) => ({
-        reactionCode: entry.reaction_code ?? '',
-        senders: (entry.sender_list?.edges ?? [])
-            .map((edge) => ({
-                id: edge.node?.id ?? '',
-                profileUrl: edge.node?.profile_pic_direct_path
-            }))
-            .filter((sender) => sender.id.length > 0)
-    }))
-}
-
-interface RawVotesGroup {
-    readonly vote_hash?: string
-    readonly voter_list?: {
-        readonly edges?: readonly {
-            readonly node?: { readonly id?: string }
-            readonly action_time?: string | number
-        }[]
-    }
+        return { reactionCode: tryAsString(entry?.reaction_code) ?? '', senders }
+    })
 }
 
 export function parsePollVoters(
     envelope: WaNewsletterMexEnvelope
 ): ReadonlyMap<string, readonly WaNewsletterPollVoter[]> {
-    const root = (
-        envelope as {
-            readonly voter_list?: { readonly votes?: readonly RawVotesGroup[] }
-        }
-    ).voter_list
-    const votes = root?.votes ?? []
+    const root = tryAsRecord(envelope.voter_list)
     const map = new Map<string, readonly WaNewsletterPollVoter[]>()
-    for (const group of votes) {
-        if (!group.vote_hash) continue
+    for (const groupRaw of asArray(root?.votes)) {
+        const group = tryAsRecord(groupRaw)
+        const voteHash = tryAsString(group?.vote_hash)
+        if (!voteHash) continue
+        const voterList = tryAsRecord(group?.voter_list)
         const voters: WaNewsletterPollVoter[] = []
-        for (const edge of group.voter_list?.edges ?? []) {
-            const id = edge.node?.id
+        for (const edgeRaw of asArray(voterList?.edges)) {
+            const edge = tryAsRecord(edgeRaw)
+            const node = tryAsRecord(edge?.node)
+            const id = tryAsString(node?.id)
             if (!id) continue
-            const time = toNumber(edge.action_time)
+            const time = tryAsNumber(edge?.action_time)
             voters.push({
                 id,
-                time: time !== undefined ? Math.floor(time / 1_000_000) : undefined
+                time: time !== null ? Math.floor(time / 1_000_000) : undefined
             })
         }
-        map.set(group.vote_hash, voters)
+        map.set(voteHash, voters)
     }
     return map
 }
