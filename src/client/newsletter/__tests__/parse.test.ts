@@ -92,6 +92,8 @@ test('parseFollowers maps edges into typed followers', () => {
     assert.equal(page.followers[0].role, 'OWNER')
     assert.equal(page.followers[0].username, 'aaa')
     assert.equal(page.followers[0].adminProfile?.name, 'A profile')
+    assert.equal(page.followers[1].id, 'b@lid')
+    assert.equal(page.followers[1].role, 'ADMIN')
     assert.equal(page.followers[1].adminProfile, null)
 })
 

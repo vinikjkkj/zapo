@@ -10,7 +10,9 @@ export type WaNewsletterRole = (typeof WA_NEWSLETTER_ROLES)[keyof typeof WA_NEWS
 export const WA_NEWSLETTER_STATE_TYPES = Object.freeze({
     ACTIVE: 'ACTIVE',
     SUSPENDED: 'SUSPENDED',
-    GEOSUSPENDED: 'GEOSUSPENDED'
+    GEOSUSPENDED: 'GEOSUSPENDED',
+    DELETED: 'DELETED',
+    NON_EXISTING: 'NON_EXISTING'
 } as const)
 
 export type WaNewsletterStateType =

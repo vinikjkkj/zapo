@@ -188,7 +188,6 @@ export interface WaPageInfo {
 
 export interface WaNewsletterFollowersPage {
     readonly followers: readonly WaNewsletterFollower[]
-    readonly pageInfo?: WaPageInfo
 }
 
 export interface WaNewsletterDirectoryResults {
