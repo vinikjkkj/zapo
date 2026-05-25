@@ -20,14 +20,17 @@ function waitForMutation(
     timeoutMs = 8_000
 ): Promise<WaAppStateMutationEvent> {
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(
-            () => reject(new Error('timed out waiting for matching mutation')),
-            timeoutMs
-        )
+        const cleanup = (): void => {
+            clearTimeout(timer)
+            client.off('mutation', listener)
+        }
+        const timer = setTimeout(() => {
+            cleanup()
+            reject(new Error('timed out waiting for matching mutation'))
+        }, timeoutMs)
         const listener: WaClientEventMap['mutation'] = (event) => {
             if (predicate(event)) {
-                clearTimeout(timer)
-                client.off('mutation', listener)
+                cleanup()
                 resolve(event)
             }
         }

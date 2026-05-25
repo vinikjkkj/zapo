@@ -83,7 +83,19 @@ function buildMutationIndexFromSchema<S extends WaAppstateSchema>(
             continue
         }
         if (part.type === 'jidOrZero') {
-            parts[i] = arg === null || arg === undefined ? '0' : (arg as string)
+            if (arg === null || arg === undefined) {
+                const fromMeSlot = schema.indexParts.find(
+                    (p) => p.type === 'boolString' && p.name === 'fromMe'
+                )
+                if (fromMeSlot && args['fromMe'] !== true) {
+                    throw new Error(
+                        `app-state index arg "${part.name}" for schema "${schema.name}" requires a JID when fromMe is not true`
+                    )
+                }
+                parts[i] = '0'
+                continue
+            }
+            parts[i] = arg as string
             continue
         }
         if (part.type === 'enum') {
@@ -180,7 +192,7 @@ function wrapData(
 ): Proto.ISyncActionValue {
     const encoded = applyEnumEncodeToData(schema.valueEnumFields, data)
     const field = schema.valueField
-    if (field === null || field === 'map') {
+    if (field === null) {
         return encoded as Proto.ISyncActionValue
     }
     return { [field]: encoded } as Proto.ISyncActionValue

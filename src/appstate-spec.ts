@@ -136,6 +136,7 @@ export function decodeIndexArgsFromSchema(
             continue
         }
         if (part.type === 'boolString') {
+            if (raw !== '0' && raw !== '1') return null
             args[part.name] = raw === '1'
             continue
         }

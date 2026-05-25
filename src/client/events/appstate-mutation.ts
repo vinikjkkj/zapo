@@ -61,7 +61,7 @@ function unwrapData(
     }
     const field = schema.valueField
     let inner: Record<string, unknown> | null
-    if (field === null || field === 'map') {
+    if (field === null) {
         const rest: Record<string, unknown> = {}
         for (const key of Object.keys(value)) {
             if (key === 'timestamp') continue

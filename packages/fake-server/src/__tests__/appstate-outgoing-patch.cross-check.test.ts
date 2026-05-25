@@ -67,14 +67,21 @@ test('client.chat.setChatMute uploads an encrypted patch the fake server decrypt
         )
 
         const bootstrapEventPromise = new Promise<void>((resolve, reject) => {
-            const timer = setTimeout(
-                () => reject(new Error('placeholder mutation never applied')),
-                8_000
-            )
+            const cleanup = (): void => {
+                clearTimeout(timer)
+                client.off('mutation', handler)
+            }
+            const timer = setTimeout(() => {
+                cleanup()
+                reject(new Error('placeholder mutation never applied'))
+            }, 8_000)
             const handler: WaClientEventMap['mutation'] = (event) => {
-                if (event.schema === 'Mute' && event.chatJid === placeholderChatJid) {
-                    clearTimeout(timer)
-                    client.off('mutation', handler)
+                if (
+                    event.schema === 'Mute' &&
+                    event.operation === 'set' &&
+                    event.chatJid === placeholderChatJid
+                ) {
+                    cleanup()
                     resolve()
                 }
             }
