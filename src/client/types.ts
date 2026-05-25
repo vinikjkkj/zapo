@@ -1,4 +1,5 @@
 import type { AppStateCollectionName } from '@appstate/types'
+import type { DataForKey, WaAppstateActionKey, WaAppstateIndexArgs } from '@appstate-spec'
 import type {
     WaAuthClientOptions,
     WaAuthCredentials,
@@ -731,86 +732,28 @@ export interface WaHistorySyncChunkEvent {
     readonly progress?: number
 }
 
-export type WaChatEventAction =
-    | 'archive'
-    | 'mute'
-    | 'pin'
-    | 'mark_read'
-    | 'clear'
-    | 'delete'
-    | 'lock'
-    | 'chat_assignment'
-    | (string & {})
+export type WaAppStateMutationSource = 'snapshot' | 'patch'
 
-export type WaChatEventSource = 'snapshot' | 'patch'
-
-export interface WaChatEvent {
-    readonly action: WaChatEventAction
-    readonly source: WaChatEventSource
+type MutationEventBase = {
+    readonly source: WaAppStateMutationSource
     readonly collection: AppStateCollectionName
-    readonly operation: 'set' | 'remove'
-    readonly mutationIndex: string
-    readonly indexAction?: string
-    readonly indexParts?: readonly string[]
-    readonly syncActionValueKey?: string
-    readonly chatJid?: string
-    readonly timestamp: number
     readonly version: number
-    readonly archived?: boolean
-    readonly muted?: boolean
-    readonly muteEndTimestampMs?: number
-    readonly pinned?: boolean
-    readonly read?: boolean
-    readonly deleteStarred?: boolean
-    readonly deleteMedia?: boolean
-    readonly locked?: boolean
-    readonly deviceAgentId?: string
-}
-
-export interface WaStatusPrivacyEntry {
-    readonly mode: number | null
-    readonly userJids: readonly string[]
-    readonly shareToFB?: boolean
-    readonly shareToIG?: boolean
-}
-
-export interface WaBroadcastListMembershipEntry {
-    readonly lidJid: string
-    readonly pnJid?: string
-}
-
-interface WaAccountEventBase {
-    readonly source: WaChatEventSource
-    readonly collection: AppStateCollectionName
-    readonly operation: 'set' | 'remove'
-    readonly mutationIndex: string
-    readonly indexAction: string
-    readonly indexParts: readonly string[]
     readonly timestamp: number
-    readonly version: number
+    readonly _raw: {
+        readonly index: string
+        readonly indexParts: readonly string[]
+        readonly value: Proto.ISyncActionValue | null
+    }
 }
 
-export type WaAccountEvent =
-    | (WaAccountEventBase & {
-          readonly action: 'status_privacy'
-          readonly settings: WaStatusPrivacyEntry
-      })
-    | (WaAccountEventBase & {
-          readonly action: 'user_status_mute'
-          readonly targetJid: string
-          readonly muted: boolean | null
-      })
-    | (WaAccountEventBase & {
-          readonly action: 'business_broadcast_list_set'
-          readonly listId: string
-          readonly listName: string
-          readonly participants: readonly WaBroadcastListMembershipEntry[]
-          readonly labelIds: readonly string[]
-      })
-    | (WaAccountEventBase & {
-          readonly action: 'business_broadcast_list_remove'
-          readonly listId: string
-      })
+export type WaAppStateMutationEvent = {
+    readonly [K in WaAppstateActionKey]:
+        | ({ readonly schema: K; readonly operation: 'set' } & MutationEventBase &
+              WaAppstateIndexArgs<K> &
+              Partial<DataForKey<K>>)
+        | ({ readonly schema: K; readonly operation: 'remove' } & MutationEventBase &
+              WaAppstateIndexArgs<K>)
+}[WaAppstateActionKey]
 
 export type WaConnectionEvent =
     | {
@@ -870,8 +813,7 @@ export interface WaClientEventMap {
     readonly group_event: (event: WaGroupEvent) => void
     readonly business_event: (event: WaBusinessEvent) => void
     readonly picture_event: (event: WaPictureEvent) => void
-    readonly chat_event: (event: WaChatEvent) => void
-    readonly account_event: (event: WaAccountEvent) => void
+    readonly mutation: (event: WaAppStateMutationEvent) => void
     readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void
     readonly privacy_token_update: (event: WaPrivacyTokenUpdateEvent) => void
     readonly offline_resume: (event: WaOfflineResumeEvent) => void

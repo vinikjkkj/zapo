@@ -6,12 +6,20 @@ import type {
     WaAppStateSyncResult
 } from '@appstate/types'
 import { downloadExternalBlobReference } from '@appstate/utils'
-import { parseAccountEventFromAppStateMutation } from '@client/events/account'
-import { parseChatEventFromAppStateMutation } from '@client/events/chat'
+import {
+    type DataForKey,
+    encodeEnumValue,
+    type EnumNamesAt,
+    type ValueForSchema,
+    WA_APPSTATE_SCHEMAS,
+    type WaAppstateActionKey,
+    type WaAppstateIndexArgs,
+    type WaAppstateSchema
+} from '@appstate-spec'
+import { parseAppStateMutationEvent } from '@client/events/appstate-mutation'
 import type {
-    WaAccountEvent,
     WaAppStateMessageKey,
-    WaChatEvent,
+    WaAppStateMutationEvent,
     WaClearChatOptions,
     WaDeleteChatOptions,
     WaDeleteMessageForMeOptions
@@ -19,11 +27,7 @@ import type {
 import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { proto, type Proto } from '@proto'
-import {
-    WA_APP_STATE_ACCOUNT_MUTATION_SPECS,
-    WA_APP_STATE_CHAT_MUTATION_SPECS,
-    WA_APP_STATE_COLLECTION_STATES
-} from '@protocol/constants'
+import { WA_APP_STATE_COLLECTION_STATES } from '@protocol/constants'
 import {
     isGroupJid,
     isGroupOrBroadcastJid,
@@ -47,11 +51,224 @@ const WA_APP_STATE_MUTATION_FLUSH_SUCCESS_STATES = new Set<string>([
 
 const WA_APP_STATE_ARCHIVE_RANGE_DEFAULT_LIMIT = 256
 
-function serializeMutationIndex(action: string, parts: readonly string[]): string {
-    const arr = new Array<string>(parts.length + 1)
-    arr[0] = action
-    for (let i = 0; i < parts.length; i += 1) arr[i + 1] = parts[i]
-    return JSON.stringify(arr)
+type IndexArgsForSchema<S extends WaAppstateSchema> = {
+    readonly [Part in S['indexParts'][number] as Part extends { type: 'literal' }
+        ? never
+        : Part extends { name: infer N extends string }
+          ? N
+          : never]: Part extends { type: 'boolString' }
+        ? boolean
+        : Part extends { type: 'jidOrZero' }
+          ? string | null
+          : Part extends { type: 'enum'; protoEnum: infer P extends string }
+            ? EnumNamesAt<P>
+            : string
+}
+
+function buildMutationIndexFromSchema<S extends WaAppstateSchema>(
+    schema: S,
+    indexArgs: IndexArgsForSchema<S>
+): string {
+    const parts = new Array<string>(schema.indexParts.length)
+    const args = indexArgs as Readonly<Record<string, string | boolean | null>>
+    for (let i = 0; i < schema.indexParts.length; i += 1) {
+        const part = schema.indexParts[i]
+        if (part.type === 'literal') {
+            parts[i] = part.value
+            continue
+        }
+        const arg = args[part.name]
+        if (part.type === 'boolString') {
+            parts[i] = arg ? '1' : '0'
+            continue
+        }
+        if (part.type === 'jidOrZero') {
+            if (arg === null || arg === undefined) {
+                const fromMeSlot = schema.indexParts.find(
+                    (p) => p.type === 'boolString' && p.name === 'fromMe'
+                )
+                if (fromMeSlot && args['fromMe'] !== true) {
+                    throw new Error(
+                        `app-state index arg "${part.name}" for schema "${schema.name}" requires a JID when fromMe is not true`
+                    )
+                }
+                parts[i] = '0'
+                continue
+            }
+            parts[i] = arg as string
+            continue
+        }
+        if (part.type === 'enum') {
+            if (typeof arg === 'number') {
+                parts[i] = String(arg)
+                continue
+            }
+            if (typeof arg !== 'string') {
+                throw new Error(
+                    `app-state enum index arg "${part.name}" for schema "${schema.name}" must be a string`
+                )
+            }
+            const numeric = encodeEnumValue(part.protoEnum, arg)
+            if (numeric === null) {
+                throw new Error(
+                    `app-state enum index arg "${part.name}"="${arg}" is not in enum ${part.protoEnum}`
+                )
+            }
+            parts[i] = String(numeric)
+            continue
+        }
+        if (typeof arg !== 'string') {
+            throw new Error(
+                `app-state index arg "${part.name}" for schema "${schema.name}" must be a string`
+            )
+        }
+        parts[i] = arg
+    }
+    return JSON.stringify(parts)
+}
+
+function buildSetMutationFromSchema<S extends WaAppstateSchema>(input: {
+    readonly schema: S
+    readonly indexArgs: IndexArgsForSchema<S>
+    readonly value: ValueForSchema<S>
+    readonly timestamp: number
+}): WaAppStateMutationInput {
+    return {
+        collection: input.schema.collection,
+        operation: 'set',
+        index: buildMutationIndexFromSchema(input.schema, input.indexArgs),
+        value: { ...input.value, timestamp: input.timestamp },
+        version: input.schema.version,
+        timestamp: input.timestamp
+    }
+}
+
+type SetMutationInputFor<K extends WaAppstateActionKey> = K extends K
+    ? { readonly schema: K } & WaAppstateIndexArgs<K> & Partial<DataForKey<K>>
+    : never
+
+type RemoveMutationInputFor<K extends WaAppstateActionKey> = K extends K
+    ? { readonly schema: K } & WaAppstateIndexArgs<K>
+    : never
+
+export interface WaSetMutationInputMap {
+    readonly _: SetMutationInputFor<WaAppstateActionKey>
+}
+export interface WaRemoveMutationInputMap {
+    readonly _: RemoveMutationInputFor<WaAppstateActionKey>
+}
+export type WaSetMutationInput = WaSetMutationInputMap['_']
+export type WaRemoveMutationInput = WaRemoveMutationInputMap['_']
+
+function splitFlatInput(
+    schema: WaAppstateSchema,
+    input: Readonly<Record<string, unknown>>
+): {
+    readonly indexArgs: Readonly<Record<string, unknown>>
+    readonly data: Readonly<Record<string, unknown>>
+} {
+    const indexNames = new Set<string>()
+    for (const part of schema.indexParts) {
+        if (part.type !== 'literal') {
+            indexNames.add(part.name)
+        }
+    }
+    const indexArgs: Record<string, unknown> = {}
+    const data: Record<string, unknown> = {}
+    for (const key of Object.keys(input)) {
+        if (key === 'schema') continue
+        if (indexNames.has(key)) {
+            indexArgs[key] = input[key]
+        } else {
+            data[key] = input[key]
+        }
+    }
+    return { indexArgs, data }
+}
+
+function wrapData(
+    schema: WaAppstateSchema,
+    data: Readonly<Record<string, unknown>>
+): Proto.ISyncActionValue {
+    const encoded = applyEnumEncodeToData(schema.valueEnumFields, data)
+    const field = schema.valueField
+    if (field === null) {
+        return encoded as Proto.ISyncActionValue
+    }
+    return { [field]: encoded } as Proto.ISyncActionValue
+}
+
+function applyEnumEncodeToData(
+    enumFields: WaAppstateSchema['valueEnumFields'],
+    data: Readonly<Record<string, unknown>>
+): Record<string, unknown> {
+    if (!enumFields) return { ...data }
+    const out: Record<string, unknown> = { ...data }
+    for (const [fieldPath, enumPath] of Object.entries(enumFields)) {
+        applyEnumAtPath(out, fieldPath.split('.'), (raw) => {
+            if (typeof raw === 'number') return raw
+            if (typeof raw !== 'string') return raw
+            const numeric = encodeEnumValue(enumPath, raw)
+            if (numeric === null) {
+                throw new Error(`enum value "${raw}" not in ${enumPath}`)
+            }
+            return numeric
+        })
+    }
+    return out
+}
+
+function applyEnumAtPath(
+    obj: Record<string, unknown>,
+    segments: readonly string[],
+    transform: (value: unknown) => unknown
+): void {
+    if (segments.length === 0) return
+    const [head, ...rest] = segments
+    if (rest.length === 0) {
+        if (head in obj) {
+            const value = obj[head]
+            if (Array.isArray(value)) {
+                obj[head] = value.map(transform)
+            } else if (value !== null && value !== undefined) {
+                obj[head] = transform(value)
+            }
+        }
+        return
+    }
+    const next = obj[head]
+    if (Array.isArray(next)) {
+        const cloned = next.map((item) => {
+            if (item && typeof item === 'object') {
+                const itemCopy = { ...(item as Record<string, unknown>) }
+                applyEnumAtPath(itemCopy, rest, transform)
+                return itemCopy
+            }
+            return item
+        })
+        obj[head] = cloned
+        return
+    }
+    if (next && typeof next === 'object') {
+        const nextCopy = { ...(next as Record<string, unknown>) }
+        applyEnumAtPath(nextCopy, rest, transform)
+        obj[head] = nextCopy
+    }
+}
+
+function buildRemoveMutationFromSchema<S extends WaAppstateSchema>(input: {
+    readonly schema: S
+    readonly indexArgs: IndexArgsForSchema<S>
+    readonly timestamp: number
+}): WaAppStateMutationInput {
+    return {
+        collection: input.schema.collection,
+        operation: 'remove',
+        index: buildMutationIndexFromSchema(input.schema, input.indexArgs),
+        previousValue: { timestamp: input.timestamp },
+        version: input.schema.version,
+        timestamp: input.timestamp
+    }
 }
 
 interface WaAppStateMutationCoordinatorOptions {
@@ -62,17 +279,10 @@ interface WaAppStateMutationCoordinatorOptions {
     readonly isConnected: () => boolean
     readonly serverClock: ServerClock
     readonly archiveRangeLimit?: number
-    readonly emitChatEvent?: (event: WaChatEvent) => void
-    readonly emitAccountEvent?: (event: WaAccountEvent) => void
+    readonly emitMutation?: (event: WaAppStateMutationEvent) => void
     readonly emitSnapshotMutations?: boolean
     readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
 }
-
-type WaAppStateChatMutationSpec =
-    (typeof WA_APP_STATE_CHAT_MUTATION_SPECS)[keyof typeof WA_APP_STATE_CHAT_MUTATION_SPECS]
-
-type WaAppStateAccountMutationSpec =
-    (typeof WA_APP_STATE_ACCOUNT_MUTATION_SPECS)[keyof typeof WA_APP_STATE_ACCOUNT_MUTATION_SPECS]
 
 export interface WaSetStatusPrivacyInput {
     readonly mode: StatusDistributionModeKey | StatusDistributionMode
@@ -101,8 +311,7 @@ export class WaAppStateMutationCoordinator {
     private readonly isConnected: () => boolean
     private readonly serverClock: ServerClock
     private readonly archiveRangeLimit: number
-    private readonly emitChatEvent?: (event: WaChatEvent) => void
-    private readonly emitAccountEvent?: (event: WaAccountEvent) => void
+    private readonly emitMutation?: (event: WaAppStateMutationEvent) => void
     private readonly emitSnapshotMutations: boolean
     private readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
     private readonly pendingMutations: Map<string, WaAppStateMutationInput>
@@ -120,8 +329,7 @@ export class WaAppStateMutationCoordinator {
             WA_APP_STATE_ARCHIVE_RANGE_DEFAULT_LIMIT,
             'WaAppStateMutationCoordinatorOptions.archiveRangeLimit'
         )
-        this.emitChatEvent = options.emitChatEvent
-        this.emitAccountEvent = options.emitAccountEvent
+        this.emitMutation = options.emitMutation
         this.emitSnapshotMutations = options.emitSnapshotMutations === true
         this.nctSaltSink = options.nctSaltSink
         this.pendingMutations = new Map()
@@ -186,18 +394,13 @@ export class WaAppStateMutationCoordinator {
                 }
                 try {
                     this.handleNctSaltMutation(mutation)
-                    const accountEvent = parseAccountEventFromAppStateMutation(mutation)
-                    if (accountEvent) {
-                        this.emitAccountEvent?.(accountEvent)
+                    const event = parseAppStateMutationEvent(mutation)
+                    if (!event) {
                         continue
                     }
-                    const chatEvent = parseChatEventFromAppStateMutation(mutation)
-                    if (!chatEvent) {
-                        continue
-                    }
-                    this.emitChatEvent?.(chatEvent)
+                    this.emitMutation?.(event)
                 } catch (error) {
-                    this.logger.debug('failed to parse chat event from app-state mutation', {
+                    this.logger.debug('failed to parse app-state mutation event', {
                         collection: mutation.collection,
                         source: mutation.source,
                         index: mutation.index,
@@ -254,69 +457,58 @@ export class WaAppStateMutationCoordinator {
             throw new Error('setChatMute requires muteEndTimestampMs when muted is true')
         }
 
-        const mutation = this.createSetMutation({
-            spec: WA_APP_STATE_CHAT_MUTATION_SPECS.MUTE,
-            chatIndexJid,
-            value: {
-                muteAction: {
-                    muted,
-                    ...(normalizedMuteEnd === undefined
-                        ? {}
-                        : { muteEndTimestamp: normalizedMuteEnd })
-                }
-            },
-            timestamp
-        })
-        await this.enqueueAndFlush([mutation])
+        await this.enqueueAndFlush([
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.Mute,
+                indexArgs: { chatJid: chatIndexJid },
+                value: {
+                    muteAction: {
+                        muted,
+                        ...(normalizedMuteEnd === undefined
+                            ? {}
+                            : { muteEndTimestamp: normalizedMuteEnd })
+                    }
+                },
+                timestamp
+            })
+        ])
     }
 
     public async setMessageStar(message: WaAppStateMessageKey, starred: boolean): Promise<void> {
         const messageIndex = this.buildMessageMutationIndex(message)
         const timestamp = this.serverClock.nowMs()
-        const mutation = this.createSetMutation({
-            spec: WA_APP_STATE_CHAT_MUTATION_SPECS.STAR,
-            chatIndexJid: messageIndex.chatIndexJid,
-            value: {
-                starAction: {
-                    starred
-                }
-            },
-            timestamp,
-            indexPartsTail: messageIndex.indexPartsTail
-        })
-        await this.enqueueAndFlush([mutation])
+        await this.enqueueAndFlush([
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.Star,
+                indexArgs: messageIndex,
+                value: { starAction: { starred } },
+                timestamp
+            })
+        ])
     }
 
     public async setChatRead(chatJid: string, read: boolean): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
         const timestamp = this.serverClock.nowMs()
         const messageRange = await this.buildChatMessageRange(chatIndexJid)
-        const mutation = this.createSetMutation({
-            spec: WA_APP_STATE_CHAT_MUTATION_SPECS.MARK_CHAT_AS_READ,
-            chatIndexJid,
-            value: {
-                markChatAsReadAction: {
-                    read,
-                    messageRange
-                }
-            },
-            timestamp
-        })
-        await this.enqueueAndFlush([mutation])
+        await this.enqueueAndFlush([
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.MarkChatAsRead,
+                indexArgs: { chatJid: chatIndexJid },
+                value: { markChatAsReadAction: { read, messageRange } },
+                timestamp
+            })
+        ])
     }
 
     public async setChatPin(chatJid: string, pinned: boolean): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
         const timestamp = this.serverClock.nowMs()
         const pending: WaAppStateMutationInput[] = [
-            this.createSetMutation({
-                spec: WA_APP_STATE_CHAT_MUTATION_SPECS.PIN,
-                chatIndexJid,
-                value: {
-                    pinAction: {
-                        pinned
-                    }
-                },
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.Pin,
+                indexArgs: { chatJid: chatIndexJid },
+                value: { pinAction: { pinned } },
                 timestamp
             })
         ]
@@ -337,14 +529,10 @@ export class WaAppStateMutationCoordinator {
 
         if (archived) {
             pending.push(
-                this.createSetMutation({
-                    spec: WA_APP_STATE_CHAT_MUTATION_SPECS.PIN,
-                    chatIndexJid,
-                    value: {
-                        pinAction: {
-                            pinned: false
-                        }
-                    },
+                buildSetMutationFromSchema({
+                    schema: WA_APPSTATE_SCHEMAS.Pin,
+                    indexArgs: { chatJid: chatIndexJid },
+                    value: { pinAction: { pinned: false } },
                     timestamp
                 })
             )
@@ -359,18 +547,18 @@ export class WaAppStateMutationCoordinator {
         const deleteStarred = options.deleteStarred === true
         const deleteMedia = options.deleteMedia === true
         const messageRange = await this.buildChatMessageRange(chatIndexJid)
-        const mutation = this.createSetMutation({
-            spec: WA_APP_STATE_CHAT_MUTATION_SPECS.CLEAR_CHAT,
-            chatIndexJid,
-            value: {
-                clearChatAction: {
-                    messageRange
-                }
-            },
-            timestamp,
-            indexPartsTail: [deleteStarred ? '1' : '0', deleteMedia ? '1' : '0']
-        })
-        await this.enqueueAndFlush([mutation])
+        await this.enqueueAndFlush([
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.ClearChat,
+                indexArgs: {
+                    chatJid: chatIndexJid,
+                    deleteStarred: deleteStarred ? '1' : '0',
+                    deleteMedia: deleteMedia ? '1' : '0'
+                },
+                value: { clearChatAction: { messageRange } },
+                timestamp
+            })
+        ])
     }
 
     public async deleteChat(chatJid: string, options: WaDeleteChatOptions = {}): Promise<void> {
@@ -378,18 +566,17 @@ export class WaAppStateMutationCoordinator {
         const timestamp = this.serverClock.nowMs()
         const deleteMedia = options.deleteMedia === true
         const messageRange = await this.buildChatMessageRange(chatIndexJid)
-        const mutation = this.createSetMutation({
-            spec: WA_APP_STATE_CHAT_MUTATION_SPECS.DELETE_CHAT,
-            chatIndexJid,
-            value: {
-                deleteChatAction: {
-                    messageRange
-                }
-            },
-            timestamp,
-            indexPartsTail: [deleteMedia ? '1' : '0']
-        })
-        await this.enqueueAndFlush([mutation])
+        await this.enqueueAndFlush([
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.DeleteChat,
+                indexArgs: {
+                    chatJid: chatIndexJid,
+                    deleteMedia: deleteMedia ? '1' : '0'
+                },
+                value: { deleteChatAction: { messageRange } },
+                timestamp
+            })
+        ])
     }
 
     public async deleteMessageForMe(
@@ -411,19 +598,19 @@ export class WaAppStateMutationCoordinator {
             }
             messageTimestamp = Math.floor(messageTimestampMs / 1_000)
         }
-        const mutation = this.createSetMutation({
-            spec: WA_APP_STATE_CHAT_MUTATION_SPECS.DELETE_MESSAGE_FOR_ME,
-            chatIndexJid: messageIndex.chatIndexJid,
-            value: {
-                deleteMessageForMeAction: {
-                    deleteMedia,
-                    ...(messageTimestamp === undefined ? {} : { messageTimestamp })
-                }
-            },
-            timestamp,
-            indexPartsTail: messageIndex.indexPartsTail
-        })
-        await this.enqueueAndFlush([mutation])
+        await this.enqueueAndFlush([
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.DeleteMessageForMe,
+                indexArgs: messageIndex,
+                value: {
+                    deleteMessageForMeAction: {
+                        deleteMedia,
+                        ...(messageTimestamp === undefined ? {} : { messageTimestamp })
+                    }
+                },
+                timestamp
+            })
+        ])
     }
 
     public async setChatLock(chatJid: string, locked: boolean): Promise<void> {
@@ -433,28 +620,20 @@ export class WaAppStateMutationCoordinator {
         if (locked) {
             pending.push(await this.createArchiveMutation(chatIndexJid, false, timestamp))
             pending.push(
-                this.createSetMutation({
-                    spec: WA_APP_STATE_CHAT_MUTATION_SPECS.PIN,
-                    chatIndexJid,
-                    value: {
-                        pinAction: {
-                            pinned: false
-                        }
-                    },
+                buildSetMutationFromSchema({
+                    schema: WA_APPSTATE_SCHEMAS.Pin,
+                    indexArgs: { chatJid: chatIndexJid },
+                    value: { pinAction: { pinned: false } },
                     timestamp
                 })
             )
         }
 
         pending.push(
-            this.createSetMutation({
-                spec: WA_APP_STATE_CHAT_MUTATION_SPECS.LOCK_CHAT,
-                chatIndexJid,
-                value: {
-                    lockChatAction: {
-                        locked
-                    }
-                },
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.LockChat,
+                indexArgs: { chatJid: chatIndexJid },
+                value: { lockChatAction: { locked } },
                 timestamp
             })
         )
@@ -585,30 +764,6 @@ export class WaAppStateMutationCoordinator {
         }
     }
 
-    private createSetMutation(input: {
-        readonly spec: WaAppStateChatMutationSpec
-        readonly chatIndexJid: string
-        readonly value: Proto.ISyncActionValue
-        readonly timestamp: number
-        readonly indexPartsTail?: readonly string[]
-    }): WaAppStateMutationInput {
-        return {
-            collection: input.spec.collection,
-            operation: 'set',
-            index: this.buildMutationIndex(
-                input.spec.action,
-                input.chatIndexJid,
-                input.indexPartsTail ?? []
-            ),
-            value: {
-                ...input.value,
-                timestamp: input.timestamp
-            },
-            version: input.spec.version,
-            timestamp: input.timestamp
-        }
-    }
-
     public async setStatusPrivacy(input: WaSetStatusPrivacyInput): Promise<void> {
         const modeValue =
             typeof input.mode === 'number'
@@ -628,9 +783,9 @@ export class WaAppStateMutationCoordinator {
         }
         const timestamp = this.serverClock.nowMs()
         await this.enqueueAndFlush([
-            this.createAccountSetMutation({
-                spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.STATUS_PRIVACY,
-                indexArgs: [],
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.StatusPrivacy,
+                indexArgs: {},
                 value,
                 timestamp
             })
@@ -644,9 +799,9 @@ export class WaAppStateMutationCoordinator {
         }
         const timestamp = this.serverClock.nowMs()
         await this.enqueueAndFlush([
-            this.createAccountSetMutation({
-                spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.USER_STATUS_MUTE,
-                indexArgs: [indexJid],
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.UserStatusMute,
+                indexArgs: { id: indexJid },
                 value: { userStatusMuteAction: { muted } },
                 timestamp
             })
@@ -667,9 +822,9 @@ export class WaAppStateMutationCoordinator {
         }
         const timestamp = this.serverClock.nowMs()
         await this.enqueueAndFlush([
-            this.createAccountSetMutation({
-                spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.BUSINESS_BROADCAST_LIST,
-                indexArgs: [input.id],
+            buildSetMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.BusinessBroadcastList,
+                indexArgs: { id: input.id },
                 value,
                 timestamp
             })
@@ -679,43 +834,38 @@ export class WaAppStateMutationCoordinator {
     public async removeBroadcastList(id: string): Promise<void> {
         const timestamp = this.serverClock.nowMs()
         await this.enqueueAndFlush([
-            this.createAccountRemoveMutation({
-                spec: WA_APP_STATE_ACCOUNT_MUTATION_SPECS.BUSINESS_BROADCAST_LIST,
-                indexArgs: [id],
+            buildRemoveMutationFromSchema({
+                schema: WA_APPSTATE_SCHEMAS.BusinessBroadcastList,
+                indexArgs: { id },
                 timestamp
             })
         ])
     }
 
-    private createAccountSetMutation(input: {
-        readonly spec: WaAppStateAccountMutationSpec
-        readonly indexArgs: readonly string[]
-        readonly value: Proto.ISyncActionValue
-        readonly timestamp: number
-    }): WaAppStateMutationInput {
-        return {
-            collection: input.spec.collection,
-            operation: 'set',
-            index: serializeMutationIndex(input.spec.action, input.indexArgs),
-            value: { ...input.value, timestamp: input.timestamp },
-            version: input.spec.version,
-            timestamp: input.timestamp
-        }
+    public async set(input: WaSetMutationInput): Promise<void> {
+        const resolved = WA_APPSTATE_SCHEMAS[input.schema] as WaAppstateSchema
+        const { indexArgs, data } = splitFlatInput(resolved, input as Record<string, unknown>)
+        const value = wrapData(resolved, data)
+        const timestamp = this.serverClock.nowMs()
+        const mutation = buildSetMutationFromSchema({
+            schema: resolved,
+            indexArgs: indexArgs as unknown as IndexArgsForSchema<typeof resolved>,
+            value,
+            timestamp
+        })
+        await this.enqueueAndFlush([mutation])
     }
 
-    private createAccountRemoveMutation(input: {
-        readonly spec: WaAppStateAccountMutationSpec
-        readonly indexArgs: readonly string[]
-        readonly timestamp: number
-    }): WaAppStateMutationInput {
-        return {
-            collection: input.spec.collection,
-            operation: 'remove',
-            index: serializeMutationIndex(input.spec.action, input.indexArgs),
-            previousValue: { timestamp: input.timestamp },
-            version: input.spec.version,
-            timestamp: input.timestamp
-        }
+    public async remove(input: WaRemoveMutationInput): Promise<void> {
+        const resolved = WA_APPSTATE_SCHEMAS[input.schema] as WaAppstateSchema
+        const { indexArgs } = splitFlatInput(resolved, input as Record<string, unknown>)
+        const timestamp = this.serverClock.nowMs()
+        const mutation = buildRemoveMutationFromSchema({
+            schema: resolved,
+            indexArgs: indexArgs as unknown as IndexArgsForSchema<typeof resolved>,
+            timestamp
+        })
+        await this.enqueueAndFlush([mutation])
     }
 
     private async createArchiveMutation(
@@ -724,15 +874,10 @@ export class WaAppStateMutationCoordinator {
         timestamp: number
     ): Promise<WaAppStateMutationInput> {
         const messageRange = await this.buildChatMessageRange(chatIndexJid)
-        return this.createSetMutation({
-            spec: WA_APP_STATE_CHAT_MUTATION_SPECS.ARCHIVE,
-            chatIndexJid,
-            value: {
-                archiveChatAction: {
-                    archived,
-                    messageRange
-                }
-            },
+        return buildSetMutationFromSchema({
+            schema: WA_APPSTATE_SCHEMAS.Archive,
+            indexArgs: { chatJid: chatIndexJid },
+            value: { archiveChatAction: { archived, messageRange } },
             timestamp
         })
     }
@@ -830,8 +975,10 @@ export class WaAppStateMutationCoordinator {
     }
 
     private buildMessageMutationIndex(message: WaAppStateMessageKey): {
-        readonly chatIndexJid: string
-        readonly indexPartsTail: readonly [string, '0' | '1', string]
+        readonly remote: string
+        readonly id: string
+        readonly fromMe: boolean
+        readonly participant: string
     } {
         const chatIndexJid = this.normalizeChatMutationJid(message.chatJid)
         const messageId = message.id.trim()
@@ -845,8 +992,10 @@ export class WaAppStateMutationCoordinator {
             message.participantJid
         )
         return {
-            chatIndexJid,
-            indexPartsTail: [messageId, fromMe ? '1' : '0', participant]
+            remote: chatIndexJid,
+            id: messageId,
+            fromMe,
+            participant
         }
     }
 
@@ -868,18 +1017,6 @@ export class WaAppStateMutationCoordinator {
             throw new Error(`invalid participantJid for message mutation: ${participantJid}`)
         }
         return normalizeDeviceJid(normalized)
-    }
-
-    private buildMutationIndex(
-        action: string,
-        chatIndexJid: string,
-        indexPartsTail: readonly string[]
-    ): string {
-        const arr = new Array<string>(indexPartsTail.length + 2)
-        arr[0] = action
-        arr[1] = chatIndexJid
-        for (let i = 0; i < indexPartsTail.length; i += 1) arr[i + 2] = indexPartsTail[i]
-        return JSON.stringify(arr)
     }
 
     private describeMutationActions(mutations: readonly WaAppStateMutationInput[]): string {

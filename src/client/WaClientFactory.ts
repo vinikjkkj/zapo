@@ -850,8 +850,7 @@ export function buildWaClientDependencies(input: {
         isConnected: () => connectionManager?.isConnected() ?? false,
         serverClock,
         emitSnapshotMutations: options.chatEvents?.emitSnapshotMutations === true,
-        emitChatEvent: (event) => runtime.emitEvent('chat_event', event),
-        emitAccountEvent: (event) => runtime.emitEvent('account_event', event),
+        emitMutation: (event) => runtime.emitEvent('mutation', event),
         nctSaltSink: (salt) => trustedContactToken.handleNctSaltSync(salt)
     })
 

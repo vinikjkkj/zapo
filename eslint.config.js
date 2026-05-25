@@ -16,7 +16,8 @@ module.exports = [
             'spec/proto/*.tmp.*',
             'spec/proto/WAProto.codegen.tmp.proto',
             'spec/proto/WAProto.types.codegen.tmp.js',
-            'spec/mex/**'
+            'spec/mex/**',
+            'spec/appstate/**'
         ]
     },
     ...base,
@@ -145,7 +146,12 @@ module.exports = [
         }
     },
     {
-        files: ['src/proto.ts', 'src/mex.ts', 'src/__tests__/index.test.ts'],
+        files: [
+            'src/proto.ts',
+            'src/mex.ts',
+            'src/appstate-spec.ts',
+            'src/__tests__/index.test.ts'
+        ],
         rules: {
             'no-restricted-imports': 'off'
         }

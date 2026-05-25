@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { WA_APPSTATE_SCHEMAS } from '@appstate-spec'
 import { AB_PROP_CONFIGS, resolveAbPropNameByCode } from '@protocol/abprops'
 import { WA_BOT_KNOWN_JIDS, WA_BOT_MSG_EDIT_TYPES, WA_BOT_NODE_ATTRS } from '@protocol/bot'
 import {
     getWaCompanionPlatformId,
     getWaMediaHkdfInfo,
-    WA_APP_STATE_CHAT_MUTATION_SPECS,
     WA_COMPANION_PLATFORM_IDS,
     WA_DEFAULTS,
     WA_MEDIA_HKDF_INFO,
@@ -151,10 +151,10 @@ test('login identity parsing and protocol constants', () => {
 
     assert.equal(getWaMediaHkdfInfo('image'), WA_MEDIA_HKDF_INFO.image)
     assert.equal(typeof WA_DEFAULTS.HOST_DOMAIN, 'string')
-    assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.STAR.action, 'star')
-    assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.MUTE.action, 'mute')
-    assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.DELETE_MESSAGE_FOR_ME.version, 3)
-    assert.equal(WA_APP_STATE_CHAT_MUTATION_SPECS.LOCK_CHAT.version, 7)
+    assert.equal(WA_APPSTATE_SCHEMAS.Star.name, 'star')
+    assert.equal(WA_APPSTATE_SCHEMAS.Mute.name, 'mute')
+    assert.equal(WA_APPSTATE_SCHEMAS.DeleteMessageForMe.version, 3)
+    assert.equal(WA_APPSTATE_SCHEMAS.LockChat.version, 7)
 })
 
 test('privacy protocol constants keep mapping invariants', () => {
