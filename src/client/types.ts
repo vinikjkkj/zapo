@@ -6,6 +6,7 @@ import type {
     WaAuthDangerousOptions,
     WaAuthSocketOptions
 } from '@auth/types'
+import type { WaCallGroupParticipant, WaCallType } from '@client/events/call'
 import type { IncomingPresenceType, PresenceLastSeen } from '@client/events/presence'
 import type { WaMediaProcessor } from '@media/processor'
 import type { WaLinkPreviewOptions } from '@message/addons/link-preview/types'
@@ -294,10 +295,37 @@ export interface WaIncomingChatstateEvent extends WaIncomingBaseEvent {
     readonly participantJid?: string
 }
 
-// TODO: populate with call-specific fields (offer id, call type, from device,
-// audio/video flag, etc.) and update WaIncomingNodeCoordinator's call handler
-// to parse them out of the <call> stanza instead of only passing the base node.
-export interface WaIncomingCallEvent extends WaIncomingBaseEvent {}
+export interface WaIncomingCallEvent extends WaIncomingBaseEvent {
+    /** Discriminator from the inner child tag (e.g. `offer`, `accept`, `terminate`). `unknown` when the child tag is missing or not recognized. */
+    readonly type: WaCallType
+    /** Original inner child tag, useful when `type === 'unknown'`. */
+    readonly payloadTag?: string
+    /** WhatsApp call identifier (from inner child `call-id`). */
+    readonly callId?: string
+    /** JID of the device that initiated the call. */
+    readonly callCreatorJid?: string
+    /** Sender LID of the call stanza, when present. */
+    readonly senderLidJid?: string
+    /** Phone-number JID of the caller, when present. */
+    readonly callerPnJid?: string
+    /** Group JID for group calls. */
+    readonly groupJid?: string
+    /** True when the call payload has a `<video/>` marker. */
+    readonly isVideo: boolean
+    readonly callerUsername?: string
+    readonly callerCountryCode?: string
+    readonly callerPushName?: string
+    readonly peerPlatform?: string
+    readonly peerAppVersion?: string
+    /** Stanza timestamp (`t` attr, seconds since epoch). */
+    readonly timestampSeconds?: number
+    /** Stanza end-of-validity timestamp (`e` attr, seconds since epoch). */
+    readonly endTimestampSeconds?: number
+    /** Optional silence reason (e.g. `vc_wave_all`). */
+    readonly silenceReason?: string
+    /** Group participant snapshot, when the stanza includes `<group_info>`. */
+    readonly groupInfo?: readonly WaCallGroupParticipant[]
+}
 
 export interface WaIncomingNotificationEvent extends WaIncomingBaseEvent {
     readonly notificationType?: string

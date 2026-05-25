@@ -12,6 +12,7 @@ export const WA_MESSAGE_TYPES = Object.freeze({
     ACK_TYPE_ERROR: 'error',
     ACK_CLASS_ERROR: 'error',
     ACK_CLASS_MESSAGE: 'message',
+    ACK_CLASS_CALL: 'call',
     RECEIPT_TYPE_DELIVERY: 'delivery',
     RECEIPT_TYPE_SENDER: 'sender',
     RECEIPT_TYPE_INACTIVE: 'inactive',

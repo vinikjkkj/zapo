@@ -58,6 +58,7 @@ function createIncomingRuntime() {
             emitIncomingPresence: () => undefined,
             emitIncomingChatstate: () => undefined,
             emitIncomingCall: () => undefined,
+            getCurrentCredentials: () => null,
             emitIncomingFailure: () => undefined,
             emitIncomingErrorStanza: () => undefined,
             emitIncomingNotification: () => undefined,

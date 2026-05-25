@@ -18,6 +18,13 @@ export type {
 } from '@protocol/stream'
 export { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
 export {
+    WA_CALL_CHILD_TAGS,
+    WA_CALL_NODE_ATTRS,
+    WA_CALL_PAYLOAD_TAGS,
+    WA_CALL_RECEIPT_PAYLOAD_TAGS
+} from '@protocol/call'
+export type { WaCallPayloadTag } from '@protocol/call'
+export {
     WA_EDIT_ATTRS,
     WA_ENC_MEDIA_TYPES,
     WA_EVENT_META_TYPES,

@@ -66,6 +66,7 @@ export const WA_NODE_TAGS = Object.freeze({
     PLAINTEXT: 'plaintext',
     PRESENCE: 'presence',
     CHATSTATE: 'chatstate',
+    CALL: 'call',
     COMPOSING: 'composing',
     PAUSED: 'paused',
     BIZ: 'biz',

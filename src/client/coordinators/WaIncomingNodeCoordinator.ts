@@ -1,4 +1,4 @@
-import type { WaSuccessPersistAttributes } from '@auth/types'
+import type { WaAuthCredentials, WaSuccessPersistAttributes } from '@auth/types'
 import type { WaOfflineResumeCoordinator } from '@client/coordinators/WaOfflineResumeCoordinator'
 import { parseChatstateNode } from '@client/events/chatstate'
 import type { WaDirtyBit } from '@client/events/dirty'
@@ -6,6 +6,7 @@ import {
     buildInboundAck,
     createIncomingBaseEvent,
     createIncomingBusinessNotificationHandler,
+    createIncomingCallHandler,
     createIncomingFailureHandler,
     createIncomingGroupNotificationHandler,
     createIncomingNotificationHandler,
@@ -81,6 +82,7 @@ interface WaIncomingNodeRuntime {
     readonly emitIncomingPresence: (event: WaIncomingPresenceEvent) => void
     readonly emitIncomingChatstate: (event: WaIncomingChatstateEvent) => void
     readonly emitIncomingCall: (event: WaIncomingCallEvent) => void
+    readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly emitIncomingFailure: (event: WaIncomingFailureEvent) => void
     readonly emitIncomingErrorStanza: (event: WaIncomingErrorStanzaEvent) => void
     readonly emitIncomingNotification: (event: WaIncomingNotificationEvent) => void
@@ -407,12 +409,13 @@ export class WaIncomingNodeCoordinator {
             }
         })
         this.registerIncomingHandler({
-            tag: 'call',
-            // eslint-disable-next-line @typescript-eslint/require-await
-            handler: async (node) => {
-                runtime.emitIncomingCall(createIncomingBaseEvent(node))
-                return true
-            }
+            tag: WA_NODE_TAGS.CALL,
+            handler: createIncomingCallHandler({
+                logger: this.logger,
+                sendNode: runtime.sendNode,
+                emitIncomingCall: runtime.emitIncomingCall,
+                getCurrentCredentials: runtime.getCurrentCredentials
+            })
         })
         this.registerIncomingHandler({
             tag: 'failure',

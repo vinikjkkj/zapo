@@ -1,4 +1,6 @@
+import type { WaAuthCredentials } from '@auth/types'
 import { parseBusinessNotificationEvents } from '@client/events/business'
+import { parseCallNode } from '@client/events/call'
 import { parseGroupNotificationEvents } from '@client/events/group'
 import { parseMexNotification } from '@client/events/mex-notification'
 import { parsePictureNotificationEvents } from '@client/events/picture'
@@ -8,6 +10,7 @@ import type {
     WaBusinessEvent,
     WaGroupEvent,
     WaIncomingBaseEvent,
+    WaIncomingCallEvent,
     WaIncomingFailureEvent,
     WaIncomingNotificationEvent,
     WaIncomingReceiptEvent,
@@ -19,14 +22,17 @@ import type {
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import {
+    WA_CALL_NODE_ATTRS,
+    WA_CALL_RECEIPT_PAYLOAD_TAGS,
     WA_DISCONNECT_REASONS,
     WA_MESSAGE_TAGS,
     WA_MESSAGE_TYPES,
     WA_NODE_TAGS,
     WA_NOTIFICATION_TYPES
 } from '@protocol/constants'
+import { isLidJid, normalizeDeviceJid, toUserJid } from '@protocol/jid'
 import type { WaConnectionCode, WaDisconnectReason } from '@protocol/stream'
-import { buildAckNode } from '@transport/node/builders/global'
+import { buildAckNode, buildReceiptNode } from '@transport/node/builders/global'
 import { getFirstNodeChild, getNodeChildrenNonEmptyAttrValuesByTag } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt, toError } from '@util/primitives'
@@ -79,6 +85,11 @@ type IncomingPictureNotificationHandlerOptions = IncomingAckRuntime & {
 type IncomingRegistrationNotificationHandlerOptions = IncomingAckRuntime & {
     readonly emitRegistrationCode: (event: WaRegistrationCodeEvent) => void
     readonly emitAccountTakeoverNotice: (event: WaAccountTakeoverNoticeEvent) => void
+}
+
+type IncomingCallHandlerOptions = IncomingAckRuntime & {
+    readonly emitIncomingCall: (event: WaIncomingCallEvent) => void
+    readonly getCurrentCredentials: () => WaAuthCredentials | null
 }
 
 const FAILURE_REASON_TO_DISCONNECT: Readonly<Record<number, WaDisconnectReason>> = {
@@ -543,6 +554,71 @@ export function createIncomingPictureNotificationHandler(
         emit: options.emitPictureEvent,
         emitUnhandledStanza: options.emitUnhandledStanza
     })
+}
+
+export function createIncomingCallHandler(
+    options: IncomingCallHandlerOptions
+): (node: BinaryNode) => Promise<boolean> {
+    return async (node: BinaryNode): Promise<boolean> => {
+        const parsed = parseCallNode(node)
+        options.emitIncomingCall({
+            ...createIncomingBaseEvent(node),
+            ...parsed
+        })
+
+        const peerJid = node.attrs.from
+        const stanzaId = node.attrs.id
+        if (!peerJid || !stanzaId) {
+            options.logger.warn('incoming call missing required attrs for ack', {
+                hasFrom: peerJid !== undefined,
+                hasId: stanzaId !== undefined,
+                payloadTag: parsed.payloadTag
+            })
+            return true
+        }
+
+        const payloadTag = parsed.payloadTag
+        const isReceiptType =
+            parsed.type !== 'unknown' && WA_CALL_RECEIPT_PAYLOAD_TAGS.has(parsed.type)
+
+        let response: BinaryNode
+        if (isReceiptType && payloadTag && parsed.callId && parsed.callCreatorJid) {
+            const credentials = options.getCurrentCredentials()
+            const fromJid = isLidJid(peerJid)
+                ? credentials?.meLid && normalizeDeviceJid(credentials.meLid)
+                : credentials?.meJid && toUserJid(credentials.meJid)
+            const receiptAttrs: Record<string, string> = {
+                id: stanzaId,
+                to: peerJid
+            }
+            if (fromJid) {
+                receiptAttrs.from = fromJid
+            }
+            response = buildReceiptNode({
+                kind: 'custom',
+                attrs: receiptAttrs,
+                content: [
+                    {
+                        tag: payloadTag,
+                        attrs: {
+                            [WA_CALL_NODE_ATTRS.CALL_ID]: parsed.callId,
+                            [WA_CALL_NODE_ATTRS.CALL_CREATOR]: parsed.callCreatorJid
+                        }
+                    }
+                ]
+            })
+        } else {
+            response = buildAckNode({
+                kind: 'custom',
+                ackClass: WA_MESSAGE_TYPES.ACK_CLASS_CALL,
+                to: peerJid,
+                id: stanzaId,
+                type: payloadTag
+            })
+        }
+        await sendSafeAck(options.logger, options.sendNode, response)
+        return true
+    }
 }
 
 export function createInfoBulletinNotificationEvent(

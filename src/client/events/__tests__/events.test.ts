@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { parseAppStateMutationEvent } from '@client/events/appstate-mutation'
 import { parseBusinessNotificationEvents } from '@client/events/business'
+import { parseCallNode } from '@client/events/call'
 import { parseChatstateNode } from '@client/events/chatstate'
 import { parseGroupNotificationEvents } from '@client/events/group'
 import { parseMexNotification } from '@client/events/mex-notification'
@@ -1030,4 +1031,158 @@ test('parseMexNotification: returns null when JSON parses to a non-object', () =
             `expected null for JSON payload ${literal}`
         )
     }
+})
+
+test('parseCallNode: extracts offer payload with video and caller metadata', () => {
+    const parsed = parseCallNode({
+        tag: 'call',
+        attrs: {
+            id: 'CALL1',
+            from: '5511@s.whatsapp.net',
+            t: '1700000000',
+            e: '1700000060',
+            platform: 'web',
+            version: '2.3000.0'
+        },
+        content: [
+            {
+                tag: 'offer',
+                attrs: {
+                    'call-id': 'CID-1',
+                    'call-creator': '5511:1@s.whatsapp.net',
+                    caller_pn: '5511@s.whatsapp.net',
+                    username: 'alice',
+                    caller_country_code: '55',
+                    notify: 'Alice'
+                },
+                content: [
+                    { tag: 'video', attrs: {} },
+                    { tag: 'silence', attrs: { reason: 'vc_wave_all' } }
+                ]
+            }
+        ]
+    })
+
+    assert.equal(parsed.type, 'offer')
+    assert.equal(parsed.payloadTag, 'offer')
+    assert.equal(parsed.callId, 'CID-1')
+    assert.equal(parsed.callCreatorJid, '5511:1@s.whatsapp.net')
+    assert.equal(parsed.callerPnJid, '5511@s.whatsapp.net')
+    assert.equal(parsed.callerUsername, 'alice')
+    assert.equal(parsed.callerCountryCode, '55')
+    assert.equal(parsed.callerPushName, 'Alice')
+    assert.equal(parsed.peerPlatform, 'web')
+    assert.equal(parsed.peerAppVersion, '2.3000.0')
+    assert.equal(parsed.timestampSeconds, 1_700_000_000)
+    assert.equal(parsed.endTimestampSeconds, 1_700_000_060)
+    assert.equal(parsed.isVideo, true)
+    assert.equal(parsed.silenceReason, 'vc_wave_all')
+    assert.equal(parsed.groupInfo, undefined)
+})
+
+test('parseCallNode: extracts group_info participants and sender_lid', () => {
+    const parsed = parseCallNode({
+        tag: 'call',
+        attrs: {
+            id: 'CALL2',
+            from: '5511@s.whatsapp.net',
+            sender_lid: '99:1@lid'
+        },
+        content: [
+            {
+                tag: 'offer',
+                attrs: {
+                    'call-id': 'CID-2',
+                    'call-creator': '5511:1@s.whatsapp.net',
+                    'group-jid': '120@g.us'
+                },
+                content: [
+                    {
+                        tag: 'group_info',
+                        attrs: {},
+                        content: [
+                            {
+                                tag: 'participant',
+                                attrs: {
+                                    jid: '5522:0@lid',
+                                    user_pn: '5522@s.whatsapp.net',
+                                    username: 'bob',
+                                    guest_name: 'Bob G.'
+                                }
+                            },
+                            { tag: 'participant', attrs: { jid: '5533:0@lid' } }
+                        ]
+                    }
+                ]
+            }
+        ]
+    })
+
+    assert.equal(parsed.type, 'offer')
+    assert.equal(parsed.senderLidJid, '99:1@lid')
+    assert.equal(parsed.groupJid, '120@g.us')
+    assert.equal(parsed.isVideo, false)
+    assert.equal(parsed.groupInfo?.length, 2)
+    assert.deepEqual(parsed.groupInfo?.[0], {
+        jid: '5522:0@lid',
+        userPnJid: '5522@s.whatsapp.net',
+        username: 'bob',
+        guestName: 'Bob G.'
+    })
+    assert.deepEqual(parsed.groupInfo?.[1], {
+        jid: '5533:0@lid',
+        userPnJid: undefined,
+        username: undefined,
+        guestName: undefined
+    })
+})
+
+test('parseCallNode: maps recognized payload tags to typed discriminator', () => {
+    const tags = [
+        'accept',
+        'reject',
+        'terminate',
+        'transport',
+        'mute',
+        'preaccept',
+        'video_state',
+        'enc_rekey',
+        'peer_state',
+        'flow_control',
+        'web_client',
+        'group_update',
+        'offer_notice'
+    ] as const
+
+    for (const tag of tags) {
+        const parsed = parseCallNode({
+            tag: 'call',
+            attrs: { id: 'X', from: '5511@s.whatsapp.net' },
+            content: [{ tag, attrs: { 'call-id': 'C', 'call-creator': '5511:1@s.whatsapp.net' } }]
+        })
+        assert.equal(parsed.type, tag)
+        assert.equal(parsed.payloadTag, tag)
+        assert.equal(parsed.callId, 'C')
+    }
+})
+
+test('parseCallNode: returns unknown type for unrecognized or empty payload', () => {
+    const unknownTag = parseCallNode({
+        tag: 'call',
+        attrs: { id: 'X', from: '5511@s.whatsapp.net' },
+        content: [{ tag: 'frobnicate', attrs: { 'call-id': 'C' } }]
+    })
+    assert.equal(unknownTag.type, 'unknown')
+    assert.equal(unknownTag.payloadTag, 'frobnicate')
+    assert.equal(unknownTag.callId, 'C')
+
+    const empty = parseCallNode({
+        tag: 'call',
+        attrs: { id: 'X', from: '5511@s.whatsapp.net' },
+        content: []
+    })
+    assert.equal(empty.type, 'unknown')
+    assert.equal(empty.payloadTag, undefined)
+    assert.equal(empty.callId, undefined)
+    assert.equal(empty.isVideo, false)
 })

@@ -346,6 +346,7 @@ function createIncomingNodeRuntime(input: {
         emitIncomingPresence: (event) => emitEvent('presence', event),
         emitIncomingChatstate: (event) => emitEvent('chatstate', event),
         emitIncomingCall: (event) => emitEvent('call', event),
+        getCurrentCredentials,
         emitIncomingFailure: (event) => emitEvent('stream_failure', event),
         emitIncomingErrorStanza: (event) => emitEvent('stanza_error', event),
         emitIncomingNotification: (event) => emitEvent('debug_notification', event),
