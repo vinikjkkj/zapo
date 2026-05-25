@@ -584,9 +584,24 @@ export function createIncomingCallHandler(
         let response: BinaryNode
         if (isReceiptType && payloadTag && parsed.callId && parsed.callCreatorJid) {
             const credentials = options.getCurrentCredentials()
-            const fromJid = isLidJid(peerJid)
-                ? credentials?.meLid && normalizeDeviceJid(credentials.meLid)
-                : credentials?.meJid && toUserJid(credentials.meJid)
+            let fromJid: string | undefined
+            try {
+                fromJid = isLidJid(peerJid)
+                    ? credentials?.meLid
+                        ? normalizeDeviceJid(credentials.meLid)
+                        : undefined
+                    : credentials?.meJid
+                      ? toUserJid(credentials.meJid)
+                      : undefined
+            } catch (error) {
+                options.logger.warn('failed to derive call receipt from jid', {
+                    peerJid,
+                    meLid: credentials?.meLid,
+                    meJid: credentials?.meJid,
+                    message: toError(error).message
+                })
+                fromJid = undefined
+            }
             const receiptAttrs: Record<string, string> = {
                 id: stanzaId,
                 to: peerJid
