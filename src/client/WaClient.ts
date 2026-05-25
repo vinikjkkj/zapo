@@ -170,19 +170,19 @@ export class WaClient extends EventEmitter {
 
     private bindNodeTransportEvents(): void {
         this.deps.nodeTransport.on('frame_in', (frame) =>
-            this.emit('transport_frame_in', { frame })
+            this.emit('debug_transport_frame_in', { frame })
         )
         this.deps.nodeTransport.on('frame_out', (frame) =>
-            this.emit('transport_frame_out', { frame })
+            this.emit('debug_transport_frame_out', { frame })
         )
         this.deps.nodeTransport.on('node_in', (node, frame) =>
-            this.emit('transport_node_in', { node, frame })
+            this.emit('debug_transport_node_in', { node, frame })
         )
         this.deps.nodeTransport.on('node_out', (node, frame) =>
-            this.emit('transport_node_out', { node, frame })
+            this.emit('debug_transport_node_out', { node, frame })
         )
         this.deps.nodeTransport.on('decode_error', (error, frame) => {
-            this.emit('transport_decode_error', { error, frame })
+            this.emit('debug_transport_decode_error', { error, frame })
             this.handleError(error)
         })
     }
@@ -521,6 +521,6 @@ export class WaClient extends EventEmitter {
 
     private handleError(error: Error): void {
         this.logger.error('wa client error', { message: error.message })
-        this.emit('client_error', { error })
+        this.emit('debug_client_error', { error })
     }
 }

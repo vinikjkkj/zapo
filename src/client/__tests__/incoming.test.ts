@@ -319,7 +319,7 @@ test('registration notification handler defers to default handler for unrecogniz
     assert.equal(sent.length, 0)
 })
 
-test('business notification handler emits business_event and acks with type=business', async () => {
+test('business notification handler emits business and acks with type=business', async () => {
     const sent: BinaryNode[] = []
     const events: WaBusinessEvent[] = []
     const unhandled: WaIncomingUnhandledStanzaEvent[] = []

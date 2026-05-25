@@ -128,8 +128,8 @@ async function startSession(client: WaClient): Promise<void> {
     client.on('auth_pairing_code', ({ code }) => {
         console.log(`[pairing_code] ${code}`)
     })
-    client.on('auth_pairing_refresh', ({ forceManual }) => {
-        console.log(`[pairing_refresh] forceManual=${forceManual}`)
+    client.on('auth_pairing_required', ({ forceManual }) => {
+        console.log(`[pairing_required] forceManual=${forceManual}`)
     })
     client.on('auth_paired', ({ credentials }) => {
         console.log(`[paired] meJid=${credentials.meJid ?? 'unknown'}`)
@@ -160,8 +160,8 @@ async function startSession(client: WaClient): Promise<void> {
         console.log('[message_bot_chunk] chunk de mensagens recebida:')
         console.dir(event, { depth: null })
     })
-    client.on('group_event', (event) => {
-        console.log('[group_event] evento de grupo recebido:')
+    client.on('group', (event) => {
+        console.log('[group] evento de grupo recebido:')
         console.dir(event, { depth: null })
     })
     client.on('mutation', (event) => {

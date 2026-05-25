@@ -14,6 +14,7 @@ import type {
     WaIncomingUnhandledStanzaEvent,
     WaMexNotificationEvent,
     WaPictureEvent,
+    WaReceiptStatus,
     WaRegistrationCodeEvent
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
@@ -221,6 +222,28 @@ async function applyFailureAction(
     }
 }
 
+function mapReceiptStatus(
+    type: string | undefined
+): { status: WaReceiptStatus; fromSelfDevice: boolean } | null {
+    switch (type) {
+        case undefined:
+        case WA_MESSAGE_TYPES.RECEIPT_TYPE_DELIVERY:
+            return { status: 'delivered', fromSelfDevice: false }
+        case WA_MESSAGE_TYPES.RECEIPT_TYPE_READ:
+            return { status: 'read', fromSelfDevice: false }
+        case WA_MESSAGE_TYPES.RECEIPT_TYPE_READ_SELF:
+            return { status: 'read', fromSelfDevice: true }
+        case WA_MESSAGE_TYPES.RECEIPT_TYPE_PLAYED:
+            return { status: 'played', fromSelfDevice: false }
+        case WA_MESSAGE_TYPES.RECEIPT_TYPE_PLAYED_SELF:
+            return { status: 'played', fromSelfDevice: true }
+        case WA_MESSAGE_TYPES.RECEIPT_TYPE_INACTIVE:
+            return { status: 'inactive', fromSelfDevice: false }
+        default:
+            return null
+    }
+}
+
 export function createIncomingReceiptHandler(
     options: IncomingReceiptHandlerOptions
 ): (node: BinaryNode) => Promise<boolean> {
@@ -234,11 +257,16 @@ export function createIncomingReceiptHandler(
             return true
         }
 
-        options.emitIncomingReceipt({
-            ...createIncomingBaseEvent(node),
-            participantJid: node.attrs.participant,
-            recipientJid: node.attrs.recipient
-        })
+        const mapped = mapReceiptStatus(node.attrs.type)
+        if (mapped) {
+            options.emitIncomingReceipt({
+                ...createIncomingBaseEvent(node),
+                status: mapped.status,
+                fromSelfDevice: mapped.fromSelfDevice,
+                participantJid: node.attrs.participant,
+                recipientJid: node.attrs.recipient
+            })
+        }
 
         try {
             await options.trackOutboundReceipt?.(node)

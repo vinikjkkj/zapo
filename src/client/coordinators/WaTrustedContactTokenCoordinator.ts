@@ -154,7 +154,7 @@ export class WaTrustedContactTokenCoordinator {
                 tcTokenTimestamp: token.timestampS,
                 updatedAtMs: nowMs
             })
-            this.runtime.emitEvent('privacy_token_update', {
+            this.runtime.emitEvent('debug_privacy_token', {
                 jid: fromJid,
                 timestampS: token.timestampS,
                 type: token.type,

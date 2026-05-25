@@ -89,13 +89,13 @@ function waitForEvent<K extends keyof WaClientEventMap>(
     })
 }
 
-test('resume handshake: second connection uses IK and reaches connection_success', async () => {
+test('resume handshake: second connection uses IK and reaches debug_connection_success', async () => {
     const server = await FakeWaServer.start()
     const authStore = new InMemoryAuthStore()
 
     try {
         const firstClient = buildClientFor(server, authStore, 'resume-1')
-        const firstSuccess = waitForEvent(firstClient, 'connection_success')
+        const firstSuccess = waitForEvent(firstClient, 'debug_connection_success')
         await firstClient.connect()
         await firstSuccess
 
@@ -109,7 +109,7 @@ test('resume handshake: second connection uses IK and reaches connection_success
         await firstClient.disconnect()
 
         const secondClient = buildClientFor(server, authStore, 'resume-2')
-        const secondSuccess = waitForEvent(secondClient, 'connection_success')
+        const secondSuccess = waitForEvent(secondClient, 'debug_connection_success')
         await secondClient.connect()
         await secondSuccess
 

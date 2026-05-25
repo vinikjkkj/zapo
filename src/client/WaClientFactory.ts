@@ -322,7 +322,7 @@ function createIncomingNodeRuntime(input: {
     return {
         handleStreamControlResult: streamControl.handleStreamControlResult,
         persistSuccessAttributes: (attributes) => authClient.persistSuccessAttributes(attributes),
-        emitSuccessNode: (node) => emitEvent('connection_success', { node }),
+        emitSuccessNode: (node) => emitEvent('debug_connection_success', { node }),
         updateClockSkewFromSuccess: (serverUnixSeconds) =>
             connectionManager.updateClockSkewFromSuccess(serverUnixSeconds),
         shouldWarmupMediaConn: () =>
@@ -342,18 +342,18 @@ function createIncomingNodeRuntime(input: {
         sendNode,
         handleIncomingRetryReceipt: (node) => retryCoordinator.handleIncomingRetryReceipt(node),
         trackOutboundReceipt: (node) => retryCoordinator.trackOutboundReceipt(node),
-        emitIncomingReceipt: (event) => emitEvent('message_receipt', event),
+        emitIncomingReceipt: (event) => emitEvent('receipt', event),
         emitIncomingPresence: (event) => emitEvent('presence', event),
         emitIncomingChatstate: (event) => emitEvent('chatstate', event),
         emitIncomingCall: (event) => emitEvent('call', event),
-        emitIncomingFailure: (event) => emitEvent('failure', event),
+        emitIncomingFailure: (event) => emitEvent('stream_failure', event),
         emitIncomingErrorStanza: (event) => emitEvent('stanza_error', event),
-        emitIncomingNotification: (event) => emitEvent('notification', event),
+        emitIncomingNotification: (event) => emitEvent('debug_notification', event),
         emitMexNotification: (event) => emitEvent('mex_notification', event),
-        emitRegistrationCode: (event) => emitEvent('registration_code_received', event),
-        emitAccountTakeoverNotice: (event) => emitEvent('account_takeover_notice', event),
+        emitRegistrationCode: (event) => emitEvent('mobile_registration_code', event),
+        emitAccountTakeoverNotice: (event) => emitEvent('mobile_account_takeover_notice', event),
         emitGroupEvent: (event) => {
-            emitEvent('group_event', event)
+            emitEvent('group', event)
             void messageDispatch.mutateGroupMetadataCacheFromGroupEvent(event).catch((error) => {
                 logger.warn('failed to mutate group metadata cache from group event', {
                     action: event.action,
@@ -363,9 +363,9 @@ function createIncomingNodeRuntime(input: {
                 })
             })
         },
-        emitBusinessEvent: (event) => emitEvent('business_event', event),
-        emitPictureEvent: (event) => emitEvent('picture_event', event),
-        emitUnhandledIncomingNode: (event) => emitEvent('stanza_unhandled', event),
+        emitBusinessEvent: (event) => emitEvent('business', event),
+        emitPictureEvent: (event) => emitEvent('picture', event),
+        emitUnhandledIncomingNode: (event) => emitEvent('debug_unhandled_stanza', event),
         syncAppState,
         stopComms: () => {
             void connectionManager.getComms()?.stopComms()
@@ -591,7 +591,7 @@ export function buildWaClientDependencies(input: {
                 onQr: (qr, ttlMs) => runtime.emitEvent('auth_qr', { qr, ttlMs }),
                 onPairingCode: (code) => runtime.emitEvent('auth_pairing_code', { code }),
                 onPairingRefresh: (forceManual) =>
-                    runtime.emitEvent('auth_pairing_refresh', { forceManual }),
+                    runtime.emitEvent('auth_pairing_required', { forceManual }),
                 onPaired: (credentials) => {
                     runtime.emitEvent('auth_paired', { credentials })
                     scheduleReconnectAfterPairing()
@@ -957,7 +957,7 @@ export function buildWaClientDependencies(input: {
         },
         emitNewsletterReaction: (event) => runtime.emitEvent('newsletter_reaction', event),
         emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) =>
-            runtime.emitEvent('stanza_unhandled', event)
+            runtime.emitEvent('debug_unhandled_stanza', event)
     }
 
     const handleClientDirtyBits = (dirtyBits: Parameters<typeof handleDirtyBits>[1]) =>
@@ -1020,7 +1020,7 @@ export function buildWaClientDependencies(input: {
                 childTag === WA_NEWSLETTER_NOTIFICATION_TAGS.LIVE_UPDATES
                     ? 'live_updates'
                     : 'unknown'
-            runtime.emitEvent('newsletter_event', {
+            runtime.emitEvent('newsletter', {
                 rawNode: node,
                 stanzaId: node.attrs.id,
                 chatJid: newsletterJid,
@@ -1146,7 +1146,7 @@ export function buildWaClientDependencies(input: {
                     })
                 }
 
-                runtime.emitEvent('notification', {
+                runtime.emitEvent('debug_notification', {
                     rawNode: node,
                     stanzaId: parsed.stanzaId,
                     chatJid: parsed.fromJid,
@@ -1220,7 +1220,7 @@ export function buildWaClientDependencies(input: {
                 })
             }
 
-            runtime.emitEvent('notification', {
+            runtime.emitEvent('debug_notification', {
                 rawNode: node,
                 stanzaId: parsed.stanzaId,
                 chatJid: parsed.fromJid,

@@ -125,14 +125,15 @@ test('server pushes <receipt/> and lib emits incoming_receipt', async () => {
     })
 
     const { client } = createZapoClient(server, { sessionId: 'push-receipt' })
-    const receiptPromise = waitForEvent(client, 'message_receipt')
+    const receiptPromise = waitForEvent(client, 'receipt')
 
     try {
         await client.connect()
         const [event] = await receiptPromise
         assert.equal(event.chatJid, '5511999999999@s.whatsapp.net')
         assert.equal(event.stanzaId, 'msg-99')
-        assert.equal(event.stanzaType, 'read')
+        assert.equal(event.status, 'read')
+        assert.equal(event.fromSelfDevice, false)
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()
@@ -155,7 +156,7 @@ test('server pushes generic <notification/> and lib emits incoming_notification'
     })
 
     const { client } = createZapoClient(server, { sessionId: 'push-notification' })
-    const notifPromise = waitForEvent(client, 'notification')
+    const notifPromise = waitForEvent(client, 'debug_notification')
 
     try {
         await client.connect()
@@ -168,7 +169,7 @@ test('server pushes generic <notification/> and lib emits incoming_notification'
     }
 })
 
-test('server pushes <notification type="group"/> and lib emits a group_event', async () => {
+test('server pushes <notification type="group"/> and lib emits a group event', async () => {
     const server = await FakeWaServer.start()
 
     server.scenario((s) => {
@@ -190,7 +191,7 @@ test('server pushes <notification type="group"/> and lib emits a group_event', a
     })
 
     const { client } = createZapoClient(server, { sessionId: 'push-group' })
-    const groupPromise = waitForEvent(client, 'group_event')
+    const groupPromise = waitForEvent(client, 'group')
 
     try {
         await client.connect()
@@ -251,7 +252,7 @@ test('server pushes <failure/> and lib emits incoming_failure', async () => {
     })
 
     const { client } = createZapoClient(server, { sessionId: 'push-failure' })
-    const failurePromise = waitForEvent(client, 'failure')
+    const failurePromise = waitForEvent(client, 'stream_failure')
 
     try {
         await client.connect()

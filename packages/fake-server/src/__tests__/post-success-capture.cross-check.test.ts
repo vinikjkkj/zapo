@@ -25,8 +25,8 @@ test('capture: stanzas the client sends in the first 5s after success', async ()
     client.on('connection', (event) => {
         events.push(`connection { status=${event.status}, reason=${String(event.reason)} }`)
     })
-    client.on('connection_success', () => {
-        events.push('connection_success')
+    client.on('debug_connection_success', () => {
+        events.push('debug_connection_success')
     })
 
     try {

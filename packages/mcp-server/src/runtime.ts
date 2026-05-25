@@ -215,46 +215,48 @@ const buildQueryMatcher = (query: string, isRegex: boolean): ((haystack: string)
 const ALL_EVENT_NAMES = [
     'auth_qr',
     'auth_pairing_code',
-    'auth_pairing_refresh',
+    'auth_pairing_required',
     'auth_paired',
-    'connection_success',
-    'client_error',
     'connection',
-    'transport_frame_in',
-    'transport_frame_out',
-    'transport_node_in',
-    'transport_node_out',
-    'transport_decode_error',
     'message',
     'message_addon',
     'message_bot_chunk',
     'message_protocol',
-    'message_receipt',
+    'receipt',
+    'newsletter',
     'newsletter_reaction',
-    'newsletter_event',
     'presence',
     'chatstate',
     'call',
-    'notification',
-    'registration_code_received',
-    'account_takeover_notice',
-    'failure',
-    'stanza_error',
-    'stanza_unhandled',
-    'group_event',
-    'business_event',
-    'picture_event',
+    'group',
+    'business',
+    'picture',
     'mutation',
     'history_sync_chunk',
-    'privacy_token_update',
-    'offline_resume'
+    'offline_resume',
+    'stream_failure',
+    'stanza_error',
+
+    'mobile_registration_code',
+    'mobile_account_takeover_notice',
+
+    'debug_connection_success',
+    'debug_notification',
+    'debug_privacy_token',
+    'debug_client_error',
+    'debug_unhandled_stanza',
+    'debug_transport_frame_in',
+    'debug_transport_frame_out',
+    'debug_transport_node_in',
+    'debug_transport_node_out',
+    'debug_transport_decode_error'
 ] as const
 
 const NOISY_EVENT_NAMES: ReadonlySet<string> = new Set([
-    'transport_frame_in',
-    'transport_frame_out',
-    'transport_node_in',
-    'transport_node_out'
+    'debug_transport_frame_in',
+    'debug_transport_frame_out',
+    'debug_transport_node_in',
+    'debug_transport_node_out'
 ])
 
 export interface BufferedEvent {

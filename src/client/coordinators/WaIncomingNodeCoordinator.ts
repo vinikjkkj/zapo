@@ -21,9 +21,9 @@ import type {
     WaAccountTakeoverNoticeEvent,
     WaBusinessEvent,
     WaGroupEvent,
-    WaIncomingBaseEvent,
     WaIncomingCallEvent,
     WaIncomingChatstateEvent,
+    WaIncomingErrorStanzaEvent,
     WaIncomingFailureEvent,
     WaIncomingNodeHandler,
     WaIncomingNodeHandlerRegistration,
@@ -81,7 +81,7 @@ interface WaIncomingNodeRuntime {
     readonly emitIncomingChatstate: (event: WaIncomingChatstateEvent) => void
     readonly emitIncomingCall: (event: WaIncomingCallEvent) => void
     readonly emitIncomingFailure: (event: WaIncomingFailureEvent) => void
-    readonly emitIncomingErrorStanza: (event: WaIncomingBaseEvent) => void
+    readonly emitIncomingErrorStanza: (event: WaIncomingErrorStanzaEvent) => void
     readonly emitIncomingNotification: (event: WaIncomingNotificationEvent) => void
     readonly emitMexNotification: (event: WaMexNotificationEvent) => void
     readonly emitRegistrationCode: (event: WaRegistrationCodeEvent) => void
@@ -424,7 +424,11 @@ export class WaIncomingNodeCoordinator {
             tag: WA_NODE_TAGS.ERROR,
             // eslint-disable-next-line @typescript-eslint/require-await
             handler: async (node) => {
-                runtime.emitIncomingErrorStanza(createIncomingBaseEvent(node))
+                runtime.emitIncomingErrorStanza({
+                    ...createIncomingBaseEvent(node),
+                    code: parseOptionalInt(node.attrs.code),
+                    text: node.attrs.text
+                })
                 return true
             }
         })

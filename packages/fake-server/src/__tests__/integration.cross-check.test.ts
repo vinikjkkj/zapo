@@ -29,7 +29,7 @@ test('zapo-js client completes a full noise XX handshake against the fake server
     const { client } = createZapoClient(server, { sessionId: 'fake-server-test' })
 
     try {
-        const successPromise = waitForEvent(client, 'connection_success', 5_000)
+        const successPromise = waitForEvent(client, 'debug_connection_success', 5_000)
 
         await client.connect()
 

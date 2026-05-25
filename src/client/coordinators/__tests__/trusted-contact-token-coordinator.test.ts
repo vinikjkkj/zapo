@@ -133,7 +133,7 @@ test('trusted contact token coordinator persists incoming trusted tokens and emi
     assert.deepEqual(record?.tcToken, new Uint8Array([1]))
     assert.equal(record?.tcTokenTimestamp, 100)
     assert.equal(emitted.length, 1)
-    assert.equal(emitted[0].event, 'privacy_token_update')
+    assert.equal(emitted[0].event, 'debug_privacy_token')
     assert.equal(warnings.length, 1)
 })
 

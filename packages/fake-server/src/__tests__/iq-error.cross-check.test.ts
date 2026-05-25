@@ -19,7 +19,7 @@ test('lib privacy.getPrivacySettings rejects when fake server replies with iq er
 
     const successPromise = new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('connection timeout')), 5_000)
-        client.once('connection_success', () => {
+        client.once('debug_connection_success', () => {
             clearTimeout(timer)
             resolve()
         })

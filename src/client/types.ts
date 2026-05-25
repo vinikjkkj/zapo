@@ -272,7 +272,12 @@ export interface WaIncomingProtocolMessageEvent extends WaIncomingMessageEvent {
     readonly protocolMessage: Proto.Message.IProtocolMessage
 }
 
+export type WaReceiptStatus = 'delivered' | 'read' | 'played' | 'inactive'
+
 export interface WaIncomingReceiptEvent extends WaIncomingBaseEvent {
+    readonly status: WaReceiptStatus
+    /** True when the receipt came from another device of the current user (multi-device sync). */
+    readonly fromSelfDevice: boolean
     readonly participantJid?: string
     readonly recipientJid?: string
 }
@@ -496,6 +501,11 @@ export interface WaIncomingFailureEvent extends WaIncomingBaseEvent {
 
 export interface WaIncomingUnhandledStanzaEvent extends WaIncomingBaseEvent {
     readonly reason: string
+}
+
+export interface WaIncomingErrorStanzaEvent extends WaIncomingBaseEvent {
+    readonly code?: number
+    readonly text?: string
 }
 
 export interface WaIncomingNewsletterReactionEvent extends WaIncomingBaseEvent {
@@ -774,49 +784,51 @@ export type WaConnectionEvent =
 export interface WaClientEventMap {
     readonly auth_qr: (event: { readonly qr: string; readonly ttlMs: number }) => void
     readonly auth_pairing_code: (event: { readonly code: string }) => void
-    readonly auth_pairing_refresh: (event: { readonly forceManual: boolean }) => void
+    readonly auth_pairing_required: (event: { readonly forceManual: boolean }) => void
     readonly auth_paired: (event: { readonly credentials: WaAuthCredentials }) => void
-    readonly connection_success: (event: { readonly node: BinaryNode }) => void
-    readonly client_error: (event: { readonly error: Error }) => void
     readonly connection: (event: WaConnectionEvent) => void
-    readonly transport_frame_in: (event: { readonly frame: Uint8Array }) => void
-    readonly transport_frame_out: (event: { readonly frame: Uint8Array }) => void
-    readonly transport_node_in: (event: {
-        readonly node: BinaryNode
-        readonly frame: Uint8Array
-    }) => void
-    readonly transport_node_out: (event: {
-        readonly node: BinaryNode
-        readonly frame: Uint8Array
-    }) => void
-    readonly transport_decode_error: (event: {
-        readonly error: Error
-        readonly frame: Uint8Array
-    }) => void
     readonly message: (event: WaIncomingMessageEvent) => void
     readonly message_addon: (event: WaIncomingAddonEvent) => void
     readonly message_bot_chunk: (event: WaIncomingBotChunkEvent) => void
     readonly message_protocol: (event: WaIncomingProtocolMessageEvent) => void
-    readonly message_receipt: (event: WaIncomingReceiptEvent) => void
+    readonly receipt: (event: WaIncomingReceiptEvent) => void
+    readonly newsletter: (event: WaIncomingNewsletterEvent) => void
     readonly newsletter_reaction: (event: WaIncomingNewsletterReactionEvent) => void
-    readonly newsletter_event: (event: WaIncomingNewsletterEvent) => void
     readonly presence: (event: WaIncomingPresenceEvent) => void
     readonly chatstate: (event: WaIncomingChatstateEvent) => void
     readonly call: (event: WaIncomingCallEvent) => void
-    readonly notification: (event: WaIncomingNotificationEvent) => void
     readonly mex_notification: (event: WaMexNotificationEvent) => void
-    readonly registration_code_received: (event: WaRegistrationCodeEvent) => void
-    readonly account_takeover_notice: (event: WaAccountTakeoverNoticeEvent) => void
-    readonly failure: (event: WaIncomingFailureEvent) => void
-    readonly stanza_error: (event: WaIncomingBaseEvent) => void
-    readonly stanza_unhandled: (event: WaIncomingUnhandledStanzaEvent) => void
-    readonly group_event: (event: WaGroupEvent) => void
-    readonly business_event: (event: WaBusinessEvent) => void
-    readonly picture_event: (event: WaPictureEvent) => void
+    readonly group: (event: WaGroupEvent) => void
+    readonly business: (event: WaBusinessEvent) => void
+    readonly picture: (event: WaPictureEvent) => void
     readonly mutation: (event: WaAppStateMutationEvent) => void
     readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void
-    readonly privacy_token_update: (event: WaPrivacyTokenUpdateEvent) => void
     readonly offline_resume: (event: WaOfflineResumeEvent) => void
+    readonly stream_failure: (event: WaIncomingFailureEvent) => void
+    readonly stanza_error: (event: WaIncomingErrorStanzaEvent) => void
+
+    readonly mobile_registration_code: (event: WaRegistrationCodeEvent) => void
+    readonly mobile_account_takeover_notice: (event: WaAccountTakeoverNoticeEvent) => void
+
+    readonly debug_connection_success: (event: { readonly node: BinaryNode }) => void
+    readonly debug_notification: (event: WaIncomingNotificationEvent) => void
+    readonly debug_privacy_token: (event: WaPrivacyTokenUpdateEvent) => void
+    readonly debug_client_error: (event: { readonly error: Error }) => void
+    readonly debug_unhandled_stanza: (event: WaIncomingUnhandledStanzaEvent) => void
+    readonly debug_transport_frame_in: (event: { readonly frame: Uint8Array }) => void
+    readonly debug_transport_frame_out: (event: { readonly frame: Uint8Array }) => void
+    readonly debug_transport_node_in: (event: {
+        readonly node: BinaryNode
+        readonly frame: Uint8Array
+    }) => void
+    readonly debug_transport_node_out: (event: {
+        readonly node: BinaryNode
+        readonly frame: Uint8Array
+    }) => void
+    readonly debug_transport_decode_error: (event: {
+        readonly error: Error
+        readonly frame: Uint8Array
+    }) => void
 }
 
 export interface WaOfflineResumeEvent {

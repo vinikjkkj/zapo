@@ -101,7 +101,7 @@ test('listEvents filters by q substring across type + payload', () => {
     recordEvent(runtime, 'connection', { status: 'open' })
     recordEvent(runtime, 'message', { chatJid: '120363@g.us', text: 'hi' })
     recordEvent(runtime, 'message', { chatJid: '5511@s.whatsapp.net', text: 'yo' })
-    recordEvent(runtime, 'group_event', { action: 'add', participants: ['120363@g.us'] })
+    recordEvent(runtime, 'group', { action: 'add', participants: ['120363@g.us'] })
 
     const byType = runtime.listEvents({ q: 'CONNECTION' })
     assert.equal(byType.length, 1)
@@ -111,7 +111,7 @@ test('listEvents filters by q substring across type + payload', () => {
     assert.equal(byPayloadJid.length, 2)
     assert.deepStrictEqual(
         byPayloadJid.map((e) => e.type),
-        ['message', 'group_event']
+        ['message', 'group']
     )
 
     const none = runtime.listEvents({ q: 'no-such-thing' })
@@ -134,7 +134,7 @@ test('listEvents supports case-insensitive regex via q + regex flag', () => {
 test('listEvents q combines with types filter', () => {
     const runtime = new McpRuntime(baseConfig())
     recordEvent(runtime, 'message', { id: 'AAA-match' })
-    recordEvent(runtime, 'group_event', { id: 'AAA-match' })
+    recordEvent(runtime, 'group', { id: 'AAA-match' })
     recordEvent(runtime, 'message', { id: 'BBB' })
 
     const matches = runtime.listEvents({ types: ['message'], q: 'aaa' })

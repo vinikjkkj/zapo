@@ -6,7 +6,7 @@ import { buildReceipt } from '../protocol/push/receipt'
 
 import { createZapoClient } from './helpers/zapo-client'
 
-test('fake server pushes a read receipt and the lib emits message_receipt', async () => {
+test('fake server pushes a read receipt and the lib emits receipt', async () => {
     const server = await FakeWaServer.start()
     const { client } = createZapoClient(server, { sessionId: 'receipts-inbound' })
 
@@ -16,18 +16,17 @@ test('fake server pushes a read receipt and the lib emits message_receipt', asyn
     const receiptPromise = new Promise<{
         readonly stanzaId?: string
         readonly chatJid?: string
-        readonly stanzaType?: string
+        readonly status: string
+        readonly fromSelfDevice: boolean
     }>((resolve, reject) => {
-        const timer = setTimeout(
-            () => reject(new Error('timed out waiting for message_receipt')),
-            5_000
-        )
-        client.once('message_receipt', (event) => {
+        const timer = setTimeout(() => reject(new Error('timed out waiting for receipt')), 5_000)
+        client.once('receipt', (event) => {
             clearTimeout(timer)
             resolve({
                 stanzaId: event.stanzaId,
                 chatJid: event.chatJid,
-                stanzaType: event.stanzaType
+                status: event.status,
+                fromSelfDevice: event.fromSelfDevice
             })
         })
     })
@@ -47,7 +46,8 @@ test('fake server pushes a read receipt and the lib emits message_receipt', asyn
         const event = await receiptPromise
         assert.equal(event.stanzaId, messageId)
         assert.equal(event.chatJid, peerJid)
-        assert.equal(event.stanzaType, 'read')
+        assert.equal(event.status, 'read')
+        assert.equal(event.fromSelfDevice, false)
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()
