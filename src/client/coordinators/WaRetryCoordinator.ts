@@ -225,7 +225,7 @@ export class WaRetryCoordinator {
         return (
             node.tag === WA_MESSAGE_TAGS.RECEIPT &&
             (node.attrs.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY ||
-                node.attrs.type === 'enc_rekey_retry')
+                node.attrs.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_ENC_REKEY_RETRY)
         )
     }
 
@@ -332,7 +332,7 @@ export class WaRetryCoordinator {
         receiptNode: BinaryNode,
         request: WaParsedRetryRequest
     ): Promise<void> {
-        if (request.type === 'enc_rekey_retry') {
+        if (request.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_ENC_REKEY_RETRY) {
             this.deps.logger.info('received enc_rekey_retry request (voip path deferred)', {
                 id: request.stanzaId,
                 originalMsgId: request.originalMsgId,
@@ -480,7 +480,10 @@ export class WaRetryCoordinator {
             return
         }
         const receiptType = receiptNode.attrs.type
-        if (receiptType === 'retry' || receiptType === 'enc_rekey_retry') {
+        if (
+            receiptType === WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY ||
+            receiptType === WA_MESSAGE_TYPES.RECEIPT_TYPE_ENC_REKEY_RETRY
+        ) {
             return
         }
         const nextState = this.mapOutboundStateFromReceiptType(receiptType)

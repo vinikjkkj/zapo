@@ -22,7 +22,8 @@ export const WA_MESSAGE_TYPES = Object.freeze({
     RECEIPT_TYPE_HISTORY_SYNC: 'hist_sync',
     RECEIPT_TYPE_PEER: 'peer_msg',
     RECEIPT_TYPE_SERVER_ERROR: 'server-error',
-    RECEIPT_TYPE_RETRY: 'retry'
+    RECEIPT_TYPE_RETRY: 'retry',
+    RECEIPT_TYPE_ENC_REKEY_RETRY: 'enc_rekey_retry'
 } as const)
 
 export type WaOutboundReceiptType =

@@ -71,7 +71,7 @@ export function parseRetryReceiptRequest(
     }
     const receiptType =
         node.attrs.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY ||
-        node.attrs.type === 'enc_rekey_retry'
+        node.attrs.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_ENC_REKEY_RETRY
             ? node.attrs.type
             : null
     if (!receiptType) {

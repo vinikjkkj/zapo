@@ -1,6 +1,9 @@
+import type { WA_MESSAGE_TYPES } from '@protocol/message'
 import type { BinaryNode } from '@transport/types'
 
-export type WaRetryReceiptType = 'retry' | 'enc_rekey_retry'
+export type WaRetryReceiptType =
+    | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY
+    | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_ENC_REKEY_RETRY
 export type WaRetryOutboundMode = 'plaintext' | 'encrypted' | 'opaque_node'
 export type WaRetryOutboundState = 'pending' | 'delivered' | 'read' | 'played' | 'ineligible'
 

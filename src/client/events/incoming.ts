@@ -113,7 +113,10 @@ const OUT_OF_SCOPE_NOTIFICATION_TYPES = new Set<string>(['pay', 'psa', 'waffle',
 
 const NOTIFICATION_TYPES_WITH_PARTICIPANT_ACK = new Set<string>(['mediaretry', 'psa'])
 const NOTIFICATION_TYPES_WITHOUT_TYPE_ACK = new Set<string>(['encrypt', 'devices'])
-const RECEIPT_RETRY_TYPES = new Set<string>(['retry', 'enc_rekey_retry'])
+const RECEIPT_RETRY_TYPES = new Set<string>([
+    WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY,
+    WA_MESSAGE_TYPES.RECEIPT_TYPE_ENC_REKEY_RETRY
+])
 
 /**
  * Builds the inbound ack for `message`/`receipt`/`notification` tags. Returns
@@ -222,6 +225,14 @@ async function applyFailureAction(
     }
 }
 
+const INTERNAL_ONLY_RECEIPT_TYPES: ReadonlySet<string> = new Set([
+    ...RECEIPT_RETRY_TYPES,
+    WA_MESSAGE_TYPES.RECEIPT_TYPE_PEER,
+    WA_MESSAGE_TYPES.RECEIPT_TYPE_SENDER,
+    WA_MESSAGE_TYPES.RECEIPT_TYPE_HISTORY_SYNC,
+    WA_MESSAGE_TYPES.RECEIPT_TYPE_SERVER_ERROR
+])
+
 function mapReceiptStatus(
     type: string | undefined
 ): { status: WaReceiptStatus; fromSelfDevice: boolean } | null {
@@ -266,6 +277,12 @@ export function createIncomingReceiptHandler(
                 participantJid: node.attrs.participant,
                 recipientJid: node.attrs.recipient
             })
+        } else if (node.attrs.type && !INTERNAL_ONLY_RECEIPT_TYPES.has(node.attrs.type)) {
+            options.logger.warn('unrecognized receipt type suppressed', {
+                id: node.attrs.id,
+                from: node.attrs.from,
+                type: node.attrs.type
+            })
         }
 
         try {
@@ -280,7 +297,10 @@ export function createIncomingReceiptHandler(
         }
 
         const receiptType = node.attrs.type
-        if (receiptType === 'retry' || receiptType === 'enc_rekey_retry') {
+        if (
+            receiptType === WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY ||
+            receiptType === WA_MESSAGE_TYPES.RECEIPT_TYPE_ENC_REKEY_RETRY
+        ) {
             if (options.handleIncomingRetryReceipt) {
                 await options.handleIncomingRetryReceipt(node)
             } else {

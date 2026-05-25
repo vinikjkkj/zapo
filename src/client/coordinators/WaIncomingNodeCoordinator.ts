@@ -40,6 +40,7 @@ import type { Logger } from '@infra/log/types'
 import {
     WA_IQ_TYPES,
     WA_MESSAGE_TAGS,
+    WA_MESSAGE_TYPES,
     WA_NODE_TAGS,
     WA_NOTIFICATION_TYPES,
     WA_SIGNALING
@@ -291,7 +292,10 @@ export class WaIncomingNodeCoordinator {
     }
 
     private isRetryReceiptType(type: string | undefined): boolean {
-        return type === 'retry' || type === 'enc_rekey_retry'
+        return (
+            type === WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY ||
+            type === WA_MESSAGE_TYPES.RECEIPT_TYPE_ENC_REKEY_RETRY
+        )
     }
 
     private registerDefaultIncomingHandlers(): void {

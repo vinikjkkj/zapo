@@ -4,7 +4,14 @@ import { dirname, resolve } from 'node:path'
 
 import { createMediaProcessor } from '@zapo-js/media-utils'
 import { createSqliteStore } from '@zapo-js/store-sqlite'
-import { createStore, type Logger, type LogLevel, WaClient, type WaStore } from 'zapo-js'
+import {
+    createStore,
+    type Logger,
+    type LogLevel,
+    WaClient,
+    type WaClientEventMap,
+    type WaStore
+} from 'zapo-js'
 import { hexToBytes, resolvePositive, toError } from 'zapo-js/util'
 
 import { encodeForJson } from './serializer'
@@ -250,9 +257,9 @@ const ALL_EVENT_NAMES = [
     'debug_transport_node_in',
     'debug_transport_node_out',
     'debug_transport_decode_error'
-] as const
+] as const satisfies readonly (keyof WaClientEventMap)[]
 
-const NOISY_EVENT_NAMES: ReadonlySet<string> = new Set([
+const NOISY_EVENT_NAMES: ReadonlySet<(typeof ALL_EVENT_NAMES)[number]> = new Set([
     'debug_transport_frame_in',
     'debug_transport_frame_out',
     'debug_transport_node_in',
