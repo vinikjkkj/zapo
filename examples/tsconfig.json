@@ -1,11 +1,9 @@
 {
     "extends": "../tsconfig.json",
     "compilerOptions": {
-        "noEmit": true,
         "rootDir": "..",
-        "paths": {
-            "@zapo-js/*": ["packages/*/src"]
-        }
+        "noEmit": true
     },
-    "include": ["./**/*", "../src/**/*", "../packages/*/src/**/*"]
+    "include": ["./**/*.ts"],
+    "exclude": ["../dist", "../node_modules"]
 }

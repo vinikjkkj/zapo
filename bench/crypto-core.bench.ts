@@ -127,7 +127,7 @@ async function runBench(): Promise<void> {
 
     const ikm = buildPatternBytes(32)
     const salt = buildPatternBytes(32)
-    const hkdfInfo = 'wa-bench-crypto'
+    const hkdfInfo = new TextEncoder().encode('wa-bench-crypto')
     const plaintext = buildPatternBytes(config.payloadBytes)
     const nonce = buildPatternBytes(12)
 
