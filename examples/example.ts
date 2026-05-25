@@ -164,8 +164,8 @@ async function startSession(client: WaClient): Promise<void> {
         console.log('[group_event] evento de grupo recebido:')
         console.dir(event, { depth: null })
     })
-    client.on('chat_event', (event) => {
-        console.log('[chat_event] evento de chat recebido:')
+    client.on('mutation', (event) => {
+        console.log('[mutation] mutação de app-state recebida:')
         console.dir(event, { depth: null })
     })
 

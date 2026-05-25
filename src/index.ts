@@ -10,15 +10,12 @@ export type {
 } from '@client/types'
 export type { WaMessageCoordinator } from '@client/coordinators/WaMessageCoordinator'
 export type {
-    WaAccountEvent,
     WaAccountTakeoverNoticeEvent,
-    WaBroadcastListMembershipEntry,
+    WaAppStateMutationEvent,
+    WaAppStateMutationSource,
     WaBusinessEvent,
     WaBusinessEventAction,
     WaBusinessProfileResult,
-    WaChatEvent,
-    WaChatEventAction,
-    WaChatEventSource,
     WaConnectionEvent,
     WaGroupEvent,
     WaGroupEventAction,
@@ -62,7 +59,6 @@ export type {
     WaPrivacyTokenUpdateEvent,
     WaRegistrationCodeEvent,
     WaSendMessageOptions,
-    WaStatusPrivacyEntry,
     WaVerifiedNameResult,
     WaAddonKind,
     WaNewsletterEventAction

@@ -6,31 +6,31 @@ import test from 'node:test'
 
 import type { WaClient, WaClientEventMap } from 'zapo-js'
 
-type WaChatEvent = Parameters<WaClientEventMap['chat_event']>[0]
+type WaAppStateMutationEvent = Parameters<WaClientEventMap['mutation']>[0]
 
 import { FakeWaServer } from '../api/FakeWaServer'
 import { FakeAppStateCollection } from '../state/fake-app-state-collection'
 
 import { createZapoClient } from './helpers/zapo-client'
 
-function waitForChatEvent(
+function waitForMutation(
     client: WaClient,
-    predicate: (event: WaChatEvent) => boolean,
+    predicate: (event: WaAppStateMutationEvent) => boolean,
     timeoutMs = 8_000
-): Promise<WaChatEvent> {
+): Promise<WaAppStateMutationEvent> {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(
-            () => reject(new Error('timed out waiting for matching chat_event')),
+            () => reject(new Error('timed out waiting for matching mutation')),
             timeoutMs
         )
-        const listener: WaClientEventMap['chat_event'] = (event) => {
+        const listener: WaClientEventMap['mutation'] = (event) => {
             if (predicate(event)) {
                 clearTimeout(timer)
-                client.off('chat_event', listener)
+                client.off('mutation', listener)
                 resolve(event)
             }
         }
-        client.on('chat_event', listener)
+        client.on('mutation', listener)
     })
 }
 
@@ -89,9 +89,10 @@ test('full app-state sync round-trip ships an encrypted patch the lib decrypts',
             pipeline
         )
 
-        const muteEventPromise = waitForChatEvent(
+        const muteEventPromise = waitForMutation(
             client,
-            (event) => event.action === 'mute' && event.chatJid === chatJid
+            (event) =>
+                event.schema === 'Mute' && event.operation === 'set' && event.chatJid === chatJid
         )
 
         await peer.sendAppStateSyncKeyShare({
@@ -105,11 +106,11 @@ test('full app-state sync round-trip ships an encrypted patch the lib decrypts',
         })
 
         const event = await muteEventPromise
-        assert.equal(event.action, 'mute')
-        assert.equal(event.chatJid, chatJid)
+        assert.equal(event.schema, 'Mute')
         assert.equal(event.collection, 'regular_high')
         assert.equal(event.source, 'patch')
-        if (event.action === 'mute') {
+        if (event.schema === 'Mute' && event.operation === 'set') {
+            assert.equal(event.chatJid, chatJid)
             assert.equal(event.muted, true)
         }
     } finally {

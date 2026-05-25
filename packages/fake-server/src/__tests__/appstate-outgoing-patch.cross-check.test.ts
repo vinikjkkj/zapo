@@ -4,6 +4,8 @@ import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import test from 'node:test'
 
+import type { WaClientEventMap } from 'zapo-js'
+
 import { FakeWaServer } from '../api/FakeWaServer'
 import { FakeAppStateCollection } from '../state/fake-app-state-collection'
 
@@ -69,14 +71,14 @@ test('client.chat.setChatMute uploads an encrypted patch the fake server decrypt
                 () => reject(new Error('placeholder mutation never applied')),
                 8_000
             )
-            const handler = (event: { readonly chatJid?: string }): void => {
-                if (event.chatJid === placeholderChatJid) {
+            const handler: WaClientEventMap['mutation'] = (event) => {
+                if (event.schema === 'Mute' && event.chatJid === placeholderChatJid) {
                     clearTimeout(timer)
-                    client.off('chat_event', handler)
+                    client.off('mutation', handler)
                     resolve()
                 }
             }
-            client.on('chat_event', handler)
+            client.on('mutation', handler)
         })
 
         await peer.sendAppStateSyncKeyShare({

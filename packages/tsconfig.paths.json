@@ -16,6 +16,7 @@
             "zapo-js/transport": ["src/transport/index.ts"],
             "@appstate": ["src/appstate/index.ts"],
             "@appstate/*": ["src/appstate/*"],
+            "@appstate-spec": ["src/appstate-spec.ts"],
             "@auth": ["src/auth/index.ts"],
             "@auth/*": ["src/auth/*"],
             "@client": ["src/client/index.ts"],

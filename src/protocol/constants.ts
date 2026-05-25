@@ -29,10 +29,8 @@ export {
 } from '@protocol/message'
 export type { WaOutboundReceiptType } from '@protocol/message'
 export {
-    WA_APP_STATE_ACCOUNT_MUTATION_SPECS,
     WA_APP_STATE_COLLECTIONS,
     WA_APP_STATE_COLLECTION_STATES,
-    WA_APP_STATE_CHAT_MUTATION_SPECS,
     WA_APP_STATE_ERROR_CODES,
     WA_APP_STATE_KDF_INFO,
     WA_APP_STATE_KEY_TYPES,

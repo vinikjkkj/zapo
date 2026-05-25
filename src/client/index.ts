@@ -1,9 +1,8 @@
 export { WaClient } from '@client/WaClient'
 export type {
     WaAppStateMessageKey,
-    WaChatEvent,
-    WaChatEventAction,
-    WaChatEventSource,
+    WaAppStateMutationEvent,
+    WaAppStateMutationSource,
     WaClearChatOptions,
     WaConnectionEvent,
     WaDeleteChatOptions,
