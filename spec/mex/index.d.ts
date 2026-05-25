@@ -1,5 +1,5 @@
 // AUTO-GENERATED — do not edit. Regenerated daily by wa-spec.
-// WhatsApp Version: 2.3000.1040073745
+// WhatsApp Version: 2.3000.1040100380
 
 export interface WaMexPersistId {
     readonly docId: string
@@ -271,40 +271,40 @@ export declare const WA_MEX_OPERATION_SCHEMAS: {
 }
 
 export type WaMexACSServerProviderConfigVariables = {
-    readonly project_name?: unknown
+    readonly project_name?: string
 }
 
 export type WaMexACSServerProviderIssuanceVariables = {
     readonly input?: {
-        readonly project_name?: unknown
-        readonly config_id?: unknown
-        readonly issue_element?: unknown
-        readonly request_proof?: unknown
+        readonly project_name?: string
+        readonly config_id?: string
+        readonly issue_element?: string
+        readonly request_proof?: string
     }
 }
 
 export type WaMexAcceptNewsletterAdminInviteVariables = {
-    readonly newsletter_id?: unknown
+    readonly newsletter_id?: string
 }
 
 export type WaMexAiAgentAutoReplyControlVariables = {
-    readonly consumer_lid?: unknown
-    readonly phone_number?: unknown
-    readonly thread_status?: unknown
+    readonly consumer_lid?: string
+    readonly phone_number?: string
+    readonly thread_status?: string
 }
 
 export type WaMexAuthAgentFeaturePolicyVariables = Readonly<Record<string, never>>
 
 export type WaMexBPAccessTokenAndSessionCookiesVariables = {
-    readonly application_id?: unknown
-    readonly code?: unknown
+    readonly application_id?: number
+    readonly code?: string
 }
 
 export type WaMexBizCreateOrderVariables = {
     readonly input?: {
         readonly order?: {
-            readonly jid?: unknown
-            readonly products?: unknown
+            readonly jid?: string
+            readonly products?: ReadonlyArray<Readonly<Record<string, unknown>>>
         }
     }
 }
@@ -312,179 +312,179 @@ export type WaMexBizCreateOrderVariables = {
 export type WaMexBizCustomUrlGetUserGraphqlVariables = {
     readonly data?: {
         readonly custom_url?: {
-            readonly path?: unknown
+            readonly path?: string
         }
     }
 }
 
 export type WaMexBizGetCategoriesVariables = {
     readonly query_params?: {
-        readonly query?: unknown
-        readonly locale?: unknown
-        readonly operation?: unknown
-        readonly version?: unknown
+        readonly query?: string
+        readonly locale?: string
+        readonly operation?: 'PROFILE_TYPEAHEAD'
+        readonly version?: 'V_1'
     }
 }
 
 export type WaMexBizGetCategoriesV2Variables = {
     readonly query_params?: {
-        readonly query?: unknown
-        readonly locale?: unknown
-        readonly operation?: unknown
-        readonly version?: unknown
+        readonly query?: string
+        readonly locale?: string
+        readonly operation?: 'PROFILE_TYPEAHEAD'
+        readonly version?: 'V_2'
     }
 }
 
 export type WaMexBizGetCustomUrlUserGraphqlVariables = {
     readonly data?: {
         readonly custom_url?: {
-            readonly path?: unknown
+            readonly path?: string
         }
     }
 }
 
 export type WaMexBizGetMerchantComplianceVariables = {
-    readonly request?: unknown
+    readonly request?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexBizGetPriceTiersVariables = {
     readonly request?: {
-        readonly locale?: unknown
+        readonly locale?: string
     }
 }
 
 export type WaMexBizGetProfileShimlinksVariables = {
-    readonly bizJid?: unknown
+    readonly bizJid?: string
 }
 
 export type WaMexBizGraphQLRefreshCartVariables = {
-    readonly request?: unknown
+    readonly request?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexBizProfileAddressAutocompleteVariables = {
     readonly input?: {
-        readonly center?: unknown
-        readonly query?: unknown
-        readonly use_case_id?: unknown
+        readonly center?: string
+        readonly query?: string
+        readonly use_case_id?: 'WHATSAPP_BIZ_PROFILE'
     }
 }
 
 export type WaMexBizQueryOrderVariables = {
     readonly request?: {
         readonly order?: {
-            readonly jid?: unknown
+            readonly jid?: string
             readonly token?: {
-                readonly sensitive_string_value?: unknown
+                readonly sensitive_string_value?: string
             }
-            readonly id?: unknown
+            readonly id?: string
             readonly image_dimensions?: {
-                readonly height?: unknown
-                readonly width?: unknown
+                readonly height?: number
+                readonly width?: number
             }
-            readonly direct_connection_encrypted_info?: unknown
+            readonly direct_connection_encrypted_info?: string
         }
     }
 }
 
 export type WaMexBizSetMerchantComplianceVariables = {
-    readonly input?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexCachedTokenVariables = {
     readonly input?: {
-        readonly client_pub_key?: unknown
-        readonly request_id?: unknown
+        readonly client_pub_key?: string
+        readonly request_id?: string
     }
 }
 
 export type WaMexCanonicalUserValidVariables = Readonly<Record<string, never>>
 
 export type WaMexChangeNewsletterOwnerVariables = {
-    readonly newsletter_id?: unknown
-    readonly user_id?: unknown
+    readonly newsletter_id?: string
+    readonly user_id?: string
 }
 
 export type WaMexConsumerFetchQuickPromotionsVariables = {
-    readonly nux_ids?: unknown
+    readonly nux_ids?: ReadonlyArray<string>
     readonly trigger_context?: {
         readonly wa_smb_trigger_context?: {
-            readonly is_from_wa_smb?: unknown
-            readonly app_version?: unknown
-            readonly country?: unknown
-            readonly locale?: unknown
+            readonly is_from_wa_smb?: boolean
+            readonly app_version?: number
+            readonly country?: string
+            readonly locale?: string
         }
     }
 }
 
 export type WaMexConsumerQuickPromotionActionGraphQLVariables = {
-    readonly input?: unknown
+    readonly input?: string
 }
 
 export type WaMexCreateInviteCodeVariables = {
     readonly input?: {
-        readonly receiver?: unknown
-        readonly entry_point?: unknown
-        readonly server_send_sms?: unknown
+        readonly receiver?: string
+        readonly entry_point?: string
+        readonly server_send_sms?: boolean
     }
 }
 
 export type WaMexCreateMarketingCampaignActionVariables = {
-    readonly input?: unknown
+    readonly input?: string
 }
 
 export type WaMexCreateNewsletterVariables = {
     readonly input?: {
-        readonly name?: unknown
-        readonly description?: unknown
-        readonly picture?: unknown
+        readonly name?: string
+        readonly description?: string
+        readonly picture?: string
     }
 }
 
 export type WaMexCreateNewsletterAdminInviteVariables = {
-    readonly newsletter_id?: unknown
-    readonly user_id?: unknown
+    readonly newsletter_id?: string
+    readonly user_id?: string
 }
 
 export type WaMexCreateReportAppealVariables = {
-    readonly reason?: unknown
-    readonly report_id?: unknown
+    readonly reason?: string
+    readonly report_id?: string
 }
 
 export type WaMexCreateWhatsAppAdsIdentityVariables = {
     readonly code?: {
-        readonly sensitive_string_value?: unknown
+        readonly sensitive_string_value?: string
     }
     readonly phone_number?: {
-        readonly sensitive_string_value?: unknown
+        readonly sensitive_string_value?: string
     }
 }
 
 export type WaMexCustomLabel3pdEventVariables = {
-    readonly custom_labels?: unknown
-    readonly expt_group?: unknown
+    readonly custom_labels?: ReadonlyArray<string>
+    readonly expt_group?: string
 }
 
 export type WaMexDeleteNewsletterVariables = {
-    readonly newsletter_id?: unknown
+    readonly newsletter_id?: string
 }
 
 export type WaMexDemoteNewsletterAdminVariables = {
-    readonly newsletter_id?: unknown
-    readonly user_id?: unknown
+    readonly newsletter_id?: string
+    readonly user_id?: string
 }
 
 export type WaMexEditBizProfileVariables = {
-    readonly input?: unknown
-    readonly lid?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
+    readonly lid?: string
 }
 
 export type WaMexExternalCtxAuthoriseWAChatVariables = {
-    readonly input?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexFetchAboutStatusVariables = {
     readonly user?: {
-        readonly user_id?: unknown
+        readonly user_id?: string
     }
 }
 
@@ -493,171 +493,178 @@ export type WaMexFetchAdEntryPointsConfigurationVariables = Readonly<Record<stri
 export type WaMexFetchAdEntryPointsConfigurationM1Variables = Readonly<Record<string, never>>
 
 export type WaMexFetchAllNewslettersMetadataVariables = {
-    readonly fetch_status_metadata?: unknown
-    readonly fetch_wamo_sub?: unknown
+    readonly fetch_status_metadata?: boolean
+    readonly fetch_wamo_sub?: boolean
 }
 
 export type WaMexFetchAllSubgroupsVariables = {
-    readonly group_id?: unknown
-    readonly query_context?: unknown
-    readonly sub_group_hint_id?: unknown
+    readonly group_id?: string
+    readonly query_context?: string
+    readonly sub_group_hint_id?: string
 }
 
 export type WaMexFetchBotProfilesGQLVariables = {
-    readonly ids?: unknown
+    readonly ids?: ReadonlyArray<string>
 }
 
 export type WaMexFetchDynamicAIModesVariables = Readonly<Record<string, never>>
 
 export type WaMexFetchGroupInfoVariables = {
-    readonly id?: unknown
-    readonly include_username?: unknown
-    readonly participants_phash?: unknown
-    readonly query_context?: unknown
+    readonly id?: string
+    readonly include_username?: boolean
+    readonly participants_phash?: string
+    readonly query_context?: string
 }
 
 export type WaMexFetchGroupInfoIncludBotsVariables = {
-    readonly id?: unknown
-    readonly include_username?: unknown
-    readonly participants_phash?: unknown
-    readonly query_context?: unknown
+    readonly id?: string
+    readonly include_username?: boolean
+    readonly participants_phash?: string
+    readonly query_context?: string
 }
 
 export type WaMexFetchGroupInviteCodeVariables = {
-    readonly id?: unknown
-    readonly query_context?: unknown
+    readonly id?: string
+    readonly query_context?: 'INVITE_CODE'
 }
 
 export type WaMexFetchGroupIsInternalVariables = {
-    readonly id?: unknown
+    readonly id?: string
 }
 
 export type WaMexFetchIntegritySignalsVariables = {
     readonly input?: {
         readonly query_input?: ReadonlyArray<{
-            readonly jid?: unknown
+            readonly jid?: string
             readonly integrity_signals?: {
-                readonly use_case?: unknown
+                readonly use_case?: 'CHAT_FMX'
             }
         }>
         readonly telemetry?: {
-            readonly context?: unknown
+            readonly context?: 'INTERACTIVE'
         }
     }
 }
 
 export type WaMexFetchNativeAdsMvpEligibilityVariables = {
-    readonly phone_number?: unknown
+    readonly phone_number?: string
 }
 
 export type WaMexFetchNewChatMessageCappingInfoVariables = {
     readonly input?: {
-        readonly type?: unknown
+        readonly type?: 'INDIVIDUAL_NEW_CHAT_THREAD'
     }
 }
 
 export type WaMexFetchNewsletterVariables = {
-    readonly fetch_creation_time?: unknown
-    readonly fetch_full_image?: unknown
-    readonly fetch_status_metadata?: unknown
-    readonly fetch_viewer_metadata?: unknown
-    readonly fetch_wamo_sub?: unknown
+    readonly fetch_creation_time?: boolean
+    readonly fetch_full_image?: boolean
+    readonly fetch_status_metadata?: boolean
+    readonly fetch_viewer_metadata?: boolean
+    readonly fetch_wamo_sub?: boolean
     readonly input?: {
-        readonly key?: unknown
-        readonly type?: unknown
-        readonly view_role?: unknown
+        readonly key?: string
+        readonly type?: 'INVITE' | 'JID'
+        readonly view_role?: 'ADMIN' | 'GUEST' | 'OWNER' | 'SUBSCRIBER'
     }
 }
 
 export type WaMexFetchNewsletterAdminCapabilitiesVariables = {
-    readonly newsletter_id?: unknown
+    readonly newsletter_id?: string
 }
 
 export type WaMexFetchNewsletterAdminInfoVariables = {
-    readonly newsletter_id?: unknown
+    readonly newsletter_id?: string
 }
 
 export type WaMexFetchNewsletterDehydratedVariables = {
-    readonly fetch_wamo_sub?: unknown
+    readonly fetch_wamo_sub?: boolean
     readonly input?: {
-        readonly key?: unknown
-        readonly type?: unknown
-        readonly view_role?: unknown
+        readonly key?: string
+        readonly type?: 'INVITE' | 'JID'
+        readonly view_role?: 'ADMIN' | 'GUEST' | 'OWNER' | 'SUBSCRIBER'
     }
 }
 
 export type WaMexFetchNewsletterDirectoryCategoriesPreviewVariables = {
-    readonly fetch_status_metadata?: unknown
+    readonly fetch_status_metadata?: boolean
     readonly input?: {
-        readonly categories?: unknown
-        readonly country_code?: unknown
-        readonly per_category_limit?: unknown
+        readonly categories?: ReadonlyArray<string>
+        readonly country_code?: string
+        readonly per_category_limit?: number
     }
 }
 
 export type WaMexFetchNewsletterDirectoryListVariables = {
-    readonly fetch_status_metadata?: unknown
+    readonly fetch_status_metadata?: boolean
     readonly input?: {
-        readonly view?: unknown
+        readonly view?: string
         readonly filters?: {
-            readonly country_codes?: unknown
-            readonly categories?: unknown
+            readonly country_codes?: ReadonlyArray<string>
+            readonly categories?: ReadonlyArray<string>
         }
-        readonly limit?: unknown
-        readonly start_cursor?: unknown
+        readonly limit?: number
+        readonly start_cursor?: string
     }
 }
 
 export type WaMexFetchNewsletterDirectorySearchResultsVariables = {
-    readonly fetch_status_metadata?: unknown
+    readonly fetch_status_metadata?: boolean
     readonly input?: {
-        readonly search_text?: unknown
-        readonly categories?: unknown
-        readonly limit?: unknown
-        readonly start_cursor?: unknown
+        readonly search_text?: string
+        readonly categories?: ReadonlyArray<string>
+        readonly limit?: number
+        readonly start_cursor?: string
     }
 }
 
 export type WaMexFetchNewsletterEnforcementsVariables = {
-    readonly locale?: unknown
-    readonly newsletter_id?: unknown
+    readonly locale?: string
+    readonly newsletter_id?: string
 }
 
 export type WaMexFetchNewsletterFollowersVariables = {
     readonly input?: {
-        readonly newsletter_id?: unknown
-        readonly count?: unknown
+        readonly newsletter_id?: string
+        readonly count?: number
     }
 }
 
 export type WaMexFetchNewsletterInsightsVariables = {
     readonly input?: {
-        readonly newsletter_id?: unknown
-        readonly metrics?: unknown
+        readonly newsletter_id?: string
+        readonly metrics?: ReadonlyArray<{
+            readonly id?: number
+            readonly type?: string
+            readonly group_by?: {
+                readonly number_of_days?: number
+            }
+            readonly limit?: number
+        }>
     }
 }
 
 export type WaMexFetchNewsletterIsDomainPreviewableVariables = {
-    readonly url_domains?: unknown
+    readonly url_domains?: ReadonlyArray<string>
 }
 
 export type WaMexFetchNewsletterMessageReactionSenderListVariables = {
     readonly input?: {
-        readonly id?: unknown
-        readonly server_id?: unknown
+        readonly id?: string
+        readonly server_id?: string
     }
 }
 
 export type WaMexFetchNewsletterPendingInvitesVariables = {
-    readonly newsletter_id?: unknown
+    readonly newsletter_id?: string
 }
 
 export type WaMexFetchNewsletterPollVotersVariables = {
     readonly input?: {
-        readonly limit?: unknown
-        readonly server_id?: unknown
-        readonly newsletter_id?: unknown
-        readonly vote_hash?: unknown
+        readonly limit?: number
+        readonly server_id?: string
+        readonly newsletter_id?: string
+        readonly vote_hash?: string
     }
 }
 
@@ -669,18 +676,18 @@ export type WaMexFetchOIDCStateVariables = Readonly<Record<string, never>>
 
 export type WaMexFetchPlaintextLinkPreviewVariables = {
     readonly input?: {
-        readonly url?: unknown
+        readonly url?: string
     }
 }
 
 export type WaMexFetchQuickPromotionsVariables = {
-    readonly nux_ids?: unknown
+    readonly nux_ids?: ReadonlyArray<string>
     readonly trigger_context?: {
         readonly wa_smb_trigger_context?: {
-            readonly is_from_wa_smb?: unknown
-            readonly app_version?: unknown
-            readonly country?: unknown
-            readonly locale?: unknown
+            readonly is_from_wa_smb?: boolean
+            readonly app_version?: number
+            readonly country?: string
+            readonly locale?: string
         }
     }
 }
@@ -688,78 +695,78 @@ export type WaMexFetchQuickPromotionsVariables = {
 export type WaMexFetchReachoutTimelockVariables = Readonly<Record<string, never>>
 
 export type WaMexFetchRecommendedNewslettersVariables = {
-    readonly fetch_status_metadata?: unknown
+    readonly fetch_status_metadata?: boolean
     readonly input?: {
-        readonly limit?: unknown
-        readonly country_codes?: unknown
+        readonly limit?: number
+        readonly country_codes?: ReadonlyArray<string>
     }
 }
 
 export type WaMexFetchSimilarNewslettersVariables = {
-    readonly fetch_status_metadata?: unknown
+    readonly fetch_status_metadata?: boolean
     readonly input?: {
-        readonly newsletter_id?: unknown
-        readonly limit?: unknown
-        readonly country_codes?: unknown
+        readonly newsletter_id?: string
+        readonly limit?: number
+        readonly country_codes?: ReadonlyArray<string>
     }
 }
 
 export type WaMexFetchSubgroupSuggestionsVariables = {
-    readonly group_id?: unknown
-    readonly query_context?: unknown
-    readonly sub_group_hint_id?: unknown
+    readonly group_id?: string
+    readonly query_context?: string
+    readonly sub_group_hint_id?: string
 }
 
 export type WaMexFetchSubscriptionEntryPointsVariables = Readonly<Record<string, never>>
 
 export type WaMexFetchSubscriptionsVariables = {
     readonly data?: {
-        readonly platform?: unknown
+        readonly platform?: 'UNKNOWN'
     }
 }
 
 export type WaMexFetchTextStatusListVariables = {
-    readonly input?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexGetAccessTokenFromOIDCCodeVariables = {
-    readonly code?: unknown
-    readonly state?: unknown
+    readonly code?: string
+    readonly state?: string
 }
 
 export type WaMexGetAccountNonceVariables = {
     readonly input?: {
         readonly identifier?: {
-            readonly scope?: unknown
+            readonly scope?: 'REQUEST'
         }
     }
 }
 
 export type WaMexGetDsbInfoVariables = {
     readonly input?: {
-        readonly entity_id?: unknown
+        readonly entity_id?: string
     }
 }
 
 export type WaMexGetFBAccountPagesVariables = {
-    readonly userId?: unknown
+    readonly userId?: string
 }
 
 export type WaMexGetNumbersForBrandIdsVariables = {
     readonly input?: {
-        readonly brand_ids?: unknown
-        readonly lid_based_response?: unknown
+        readonly brand_ids?: ReadonlyArray<string>
+        readonly lid_based_response?: boolean
     }
 }
 
 export type WaMexGetPrivacyListsVariables = {
     readonly input?: {
         readonly query_input?: ReadonlyArray<{
-            readonly jid?: unknown
+            readonly jid?: string
             readonly privacy_contact_list_type?: {
-                readonly dhash?: unknown
-                readonly category?: unknown
-                readonly type?: unknown
+                readonly dhash?: string
+                readonly category?: string
+                readonly type?: string
             }
         }>
     }
@@ -768,8 +775,8 @@ export type WaMexGetPrivacyListsVariables = {
 export type WaMexGetPrivacySettingsVariables = {
     readonly input?: {
         readonly query_input?: ReadonlyArray<{
-            readonly jid?: unknown
-            readonly privacy_features?: unknown
+            readonly jid?: string
+            readonly privacy_features?: ReadonlyArray<string>
         }>
     }
 }
@@ -778,15 +785,15 @@ export type WaMexGetUsernameVariables = Readonly<Record<string, never>>
 
 export type WaMexGetWAAEligibilityVariables = {
     readonly input?: {
-        readonly flow_id?: unknown
-        readonly request_id?: unknown
+        readonly flow_id?: string
+        readonly request_id?: string
     }
 }
 
 export type WaMexGraphQLProductCatalogGetPublicKeyVariables = {
     readonly request?: {
         readonly public_key?: {
-            readonly biz_jid?: unknown
+            readonly biz_jid?: string
         }
     }
 }
@@ -794,78 +801,81 @@ export type WaMexGraphQLProductCatalogGetPublicKeyVariables = {
 export type WaMexGraphQLVerifyPostcodeVariables = {
     readonly request?: {
         readonly verify_postcode?: {
-            readonly biz_jid?: unknown
-            readonly direct_connection_encrypted_info?: unknown
+            readonly biz_jid?: string
+            readonly direct_connection_encrypted_info?: string
         }
     }
 }
 
 export type WaMexGroupStoreInviteSmsVariables = {
     readonly input?: {
-        readonly partcipants?: unknown
-        readonly group_jid?: unknown
+        readonly partcipants?: ReadonlyArray<Readonly<Record<string, unknown>>>
+        readonly group_jid?: string
     }
 }
 
 export type WaMexGroupSuspensionAppealVariables = {
     readonly input?: {
-        readonly group_jid?: unknown
-        readonly appeal_reason?: unknown
-        readonly debug_info?: unknown
+        readonly group_jid?: string
+        readonly appeal_reason?: string
+        readonly debug_info?: string
     }
 }
 
 export type WaMexIntegrityChallengeResponseVariables = {
     readonly input?: {
-        readonly challenge_type?: unknown
+        readonly challenge_type?: string
         readonly passkey_response?: {
-            readonly signed_challenge?: unknown
-            readonly prf_available?: unknown
+            readonly signed_challenge?: string
+            readonly prf_available?: boolean
         }
     }
 }
 
 export type WaMexJoinNewsletterVariables = {
-    readonly newsletter_id?: unknown
+    readonly newsletter_id?: string
 }
 
 export type WaMexLeaveNewsletterVariables = {
-    readonly newsletter_id?: unknown
+    readonly newsletter_id?: string
 }
 
 export type WaMexLidChangeNotificationVariables = Readonly<Record<string, never>>
 
 export type WaMexLogNewsletterExposuresVariables = {
     readonly input?: {
-        readonly exposures?: unknown
+        readonly exposures?: ReadonlyArray<{
+            readonly newsletter_id?: string
+            readonly capability?: 'ADMIN_CONTEXT_CARD_1' | 'ADMIN_CONTEXT_CARD_2' | 'ADMIN_CONTEXT_CARD_3' | 'ADMIN_NOTIFICATIONS' | 'ADMIN_ONBOARDING' | 'ADMIN_ONBOARDING_2' | 'ADMIN_PROFILE' | 'CHANNEL_STATUS_PRODUCER' | 'INSIGHTS' | 'INVITE_ADMINS_BUTTON' | 'INVITE_FOLLOWERS' | 'JARVIS_INTEGRATION_ENABLED' | 'MUSIC' | 'NEW_MESSAGE_TYPES_TOOLTIP' | 'PHOTO_POLLS' | 'PINNING_NUDGE' | 'QUESTIONS' | 'QUESTIONS_M2' | 'QUIZ' | 'SHARE_STICKER_PACKS' | 'THREAD_MENU'
+        }>
     }
 }
 
 export type WaMexNativeMLModelVariables = {
-    readonly client_capability_metadata?: unknown
-    readonly model_request_metadatas?: unknown
+    readonly client_capability_metadata?: string
+    readonly model_request_metadatas?: string
 }
 
 export type WaMexNewsletterAddPaidPartnershipLabelVariables = {
-    readonly message_type?: unknown
-    readonly newsletter_id?: unknown
-    readonly server_id?: unknown
+    readonly message_type?: string
+    readonly newsletter_id?: string
+    readonly server_id?: string
 }
 
 export type WaMexQueryCatalogVariables = {
     readonly request?: {
         readonly product_catalog?: {
-            readonly jid?: unknown
-            readonly allow_shop_source?: unknown
-            readonly width?: unknown
-            readonly height?: unknown
-            readonly direct_connection_encrypted_info?: unknown
-            readonly limit?: unknown
-            readonly after?: unknown
-            readonly catalog_session_id?: unknown
-            readonly variant_info_fields?: unknown
-            readonly variant_thumbnail_height?: unknown
-            readonly variant_thumbnail_width?: unknown
+            readonly jid?: string
+            readonly allow_shop_source?: 'ALLOWSHOPSOURCE_FALSE' | 'ALLOWSHOPSOURCE_TRUE'
+            readonly width?: string
+            readonly height?: string
+            readonly direct_connection_encrypted_info?: string
+            readonly limit?: string
+            readonly after?: string
+            readonly catalog_session_id?: string
+            readonly variant_info_fields?: Readonly<Record<string, unknown>>
+            readonly variant_thumbnail_height?: string
+            readonly variant_thumbnail_width?: string
         }
     }
 }
@@ -873,10 +883,10 @@ export type WaMexQueryCatalogVariables = {
 export type WaMexQueryCatalogHasCategoriesVariables = {
     readonly request?: {
         readonly categories?: {
-            readonly biz_jid?: unknown
-            readonly direct_connection_encrypted_info?: unknown
-            readonly image_dimensions?: unknown
-            readonly catalog_session_id?: unknown
+            readonly biz_jid?: string
+            readonly direct_connection_encrypted_info?: string
+            readonly image_dimensions?: Readonly<Record<string, unknown>>
+            readonly catalog_session_id?: string
         }
     }
 }
@@ -884,15 +894,15 @@ export type WaMexQueryCatalogHasCategoriesVariables = {
 export type WaMexQueryCatalogProductVariables = {
     readonly request?: {
         readonly product?: {
-            readonly jid?: unknown
-            readonly product_id?: unknown
-            readonly width?: unknown
-            readonly height?: unknown
-            readonly fetch_compliance_info?: unknown
-            readonly direct_connection_encrypted_info?: unknown
-            readonly variant_info_fields?: unknown
-            readonly variant_thumbnail_height?: unknown
-            readonly variant_thumbnail_width?: unknown
+            readonly jid?: string
+            readonly product_id?: string
+            readonly width?: string
+            readonly height?: string
+            readonly fetch_compliance_info?: string
+            readonly direct_connection_encrypted_info?: string
+            readonly variant_info_fields?: Readonly<Record<string, unknown>>
+            readonly variant_thumbnail_height?: string
+            readonly variant_thumbnail_width?: string
         }
     }
 }
@@ -900,16 +910,16 @@ export type WaMexQueryCatalogProductVariables = {
 export type WaMexQueryProductCollectionsVariables = {
     readonly request?: {
         readonly collections?: {
-            readonly biz_jid?: unknown
-            readonly collection_limit?: unknown
-            readonly item_limit?: unknown
-            readonly after?: unknown
-            readonly width?: unknown
-            readonly height?: unknown
-            readonly direct_connection_encrypted_info?: unknown
-            readonly variant_info_fields?: unknown
-            readonly variant_thumbnail_height?: unknown
-            readonly variant_thumbnail_width?: unknown
+            readonly biz_jid?: string
+            readonly collection_limit?: string
+            readonly item_limit?: string
+            readonly after?: string
+            readonly width?: string
+            readonly height?: string
+            readonly direct_connection_encrypted_info?: string
+            readonly variant_info_fields?: Readonly<Record<string, unknown>>
+            readonly variant_thumbnail_height?: string
+            readonly variant_thumbnail_width?: string
         }
     }
 }
@@ -917,11 +927,13 @@ export type WaMexQueryProductCollectionsVariables = {
 export type WaMexQueryProductListCatalogVariables = {
     readonly request?: {
         readonly product_list?: {
-            readonly jid?: unknown
-            readonly products?: unknown
-            readonly width?: unknown
-            readonly height?: unknown
-            readonly direct_connection_encrypted_info?: unknown
+            readonly jid?: string
+            readonly products?: ReadonlyArray<{
+                readonly id?: string
+            }>
+            readonly width?: string
+            readonly height?: string
+            readonly direct_connection_encrypted_info?: string
         }
     }
 }
@@ -929,136 +941,136 @@ export type WaMexQueryProductListCatalogVariables = {
 export type WaMexQueryProductSingleCollectionVariables = {
     readonly request?: {
         readonly collection?: {
-            readonly biz_jid?: unknown
-            readonly id?: unknown
-            readonly limit?: unknown
-            readonly after?: unknown
-            readonly width?: unknown
-            readonly height?: unknown
-            readonly direct_connection_encrypted_info?: unknown
-            readonly variant_info_fields?: unknown
-            readonly variant_thumbnail_height?: unknown
-            readonly variant_thumbnail_width?: unknown
+            readonly biz_jid?: string
+            readonly id?: string
+            readonly limit?: string
+            readonly after?: string
+            readonly width?: string
+            readonly height?: string
+            readonly direct_connection_encrypted_info?: string
+            readonly variant_info_fields?: Readonly<Record<string, unknown>>
+            readonly variant_thumbnail_height?: string
+            readonly variant_thumbnail_width?: string
         }
     }
 }
 
 export type WaMexQuerySubgroupParticipantCountVariables = {
     readonly input?: {
-        readonly group_jid?: unknown
-        readonly query_context?: unknown
-        readonly sub_group_jid_hint?: unknown
+        readonly group_jid?: string
+        readonly query_context?: string
+        readonly sub_group_jid_hint?: string
     }
 }
 
 export type WaMexQuickPromotionActionVariables = {
-    readonly input?: unknown
+    readonly input?: string
 }
 
 export type WaMexReportProductVariables = {
     readonly input?: {
-        readonly jid?: unknown
-        readonly product_id?: unknown
+        readonly jid?: string
+        readonly product_id?: string
     }
 }
 
 export type WaMexRequestClientLogsForBugVariables = {
     readonly input?: {
-        readonly bug_id?: unknown
-        readonly participant_ids?: unknown
-        readonly reporter_id?: unknown
-        readonly up_to_timestamp_secs?: unknown
+        readonly bug_id?: string
+        readonly participant_ids?: ReadonlyArray<string>
+        readonly reporter_id?: string
+        readonly up_to_timestamp_secs?: number
     }
 }
 
 export type WaMexResolveAccountTypeAndAdPageVariables = {
-    readonly pageId?: unknown
+    readonly pageId?: string
 }
 
 export type WaMexResolveAccountTypeAndAdPageQueryVariables = {
-    readonly pageId?: unknown
+    readonly pageId?: string
 }
 
 export type WaMexRevokeNewsletterAdminInviteVariables = {
-    readonly newsletter_id?: unknown
-    readonly user_id?: unknown
+    readonly newsletter_id?: string
+    readonly user_id?: string
 }
 
 export type WaMexSetUsernameVariables = {
-    readonly input?: unknown
-    readonly reserved?: unknown
-    readonly session_id?: unknown
-    readonly source?: unknown
+    readonly input?: string
+    readonly reserved?: boolean
+    readonly session_id?: string
+    readonly source?: 'USER_INPUT'
 }
 
 export type WaMexSetUsernameKeyVariables = {
-    readonly pin?: unknown
+    readonly pin?: string
 }
 
 export type WaMexSignupMetadataVariables = {
-    readonly phone_number?: unknown
-    readonly signup_id?: unknown
+    readonly phone_number?: string
+    readonly signup_id?: string
 }
 
 export type WaMexSupportBugReportSubmitVariables = {
-    readonly input?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexSupportContactFormSubmitVariables = {
-    readonly input?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexSupportMessageFeedbackSubmitVariables = {
-    readonly input?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexTransferCommunityOwnershipVariables = {
-    readonly input?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexUpdateGroupPropertyVariables = {
-    readonly group_id?: unknown
-    readonly update?: unknown
+    readonly group_id?: string
+    readonly update?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexUpdateNewsletterVariables = {
-    readonly newsletter_id?: unknown
+    readonly newsletter_id?: string
     readonly updates?: {
-        readonly name?: unknown
-        readonly description?: unknown
-        readonly picture?: unknown
-        readonly settings?: unknown
+        readonly name?: string
+        readonly description?: string
+        readonly picture?: string
+        readonly settings?: Readonly<Record<string, unknown>>
     }
 }
 
 export type WaMexUpdateNewsletterUserSettingVariables = {
-    readonly input?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexUpdateTextStatusVariables = {
-    readonly input?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexUsernameAvailabilityVariables = {
-    readonly input?: unknown
-    readonly session_id?: unknown
-    readonly source?: unknown
+    readonly input?: string
+    readonly session_id?: string
+    readonly source?: 'USER_INPUT'
 }
 
 export type WaMexUsyncVariables = {
-    readonly include_about_status?: unknown
-    readonly include_country_code?: unknown
-    readonly include_username?: unknown
+    readonly include_about_status?: boolean
+    readonly include_country_code?: boolean
+    readonly include_username?: boolean
     readonly input?: {
-        readonly query_input?: unknown
-        readonly telemetry?: unknown
+        readonly query_input?: Readonly<Record<string, unknown>>
+        readonly telemetry?: Readonly<Record<string, unknown>>
     }
 }
 
 export type WaMexWAAOnboardingVariables = {
     readonly input?: {
-        readonly flow_id?: unknown
-        readonly request_id?: unknown
+        readonly flow_id?: string
+        readonly request_id?: string
     }
 }
 
@@ -1067,19 +1079,19 @@ export type WaMexWaffleFXServiceDataQueryV2Variables = Readonly<Record<string, n
 export type WaMexWaffleFXWAMOUpdateUOOMVariables = Readonly<Record<string, never>>
 
 export type WaMexWaffleXEVariables = {
-    readonly input?: unknown
+    readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type WaMexuseWAWebEstimatedDailyReachVariables = {
-    readonly audienceOptionAudience?: unknown
-    readonly configuredPlacementSpec?: unknown
-    readonly currency?: unknown
-    readonly flow?: unknown
-    readonly flowID?: unknown
-    readonly legacyAdAccountID?: unknown
-    readonly optimizationGoalInput?: unknown
-    readonly postID?: unknown
-    readonly targetingSpecAudience?: unknown
+    readonly audienceOptionAudience?: Readonly<Record<string, unknown>>
+    readonly configuredPlacementSpec?: Readonly<Record<string, unknown>>
+    readonly currency?: string
+    readonly flow?: string
+    readonly flowID?: string
+    readonly legacyAdAccountID?: string
+    readonly optimizationGoalInput?: Readonly<Record<string, unknown>>
+    readonly postID?: string
+    readonly targetingSpecAudience?: Readonly<Record<string, unknown>>
 }
 
 export interface WaMexOperationVariables {
@@ -1212,72 +1224,72 @@ export interface WaMexOperationVariables {
 
 export type WaMexACSServerProviderConfigResponse = {
     readonly xwa_wa_acs_config?: {
-        readonly cipher_suite?: unknown
-        readonly expire_time?: unknown
-        readonly id?: unknown
-        readonly max_evals?: unknown
-        readonly public_key?: unknown
-        readonly redemption_limit?: unknown
-        readonly token_ttl?: unknown
+        readonly cipher_suite?: string
+        readonly expire_time?: string
+        readonly id?: string
+        readonly max_evals?: number
+        readonly public_key?: string
+        readonly redemption_limit?: string
+        readonly token_ttl?: number
     }
 }
 
 export type WaMexACSServerProviderIssuanceResponse = {
     readonly xwa_wa_acs_issue_credentials?: {
-        readonly success?: unknown
+        readonly success?: boolean
         readonly creds?: {
-            readonly evaluation?: {
-                readonly data?: unknown
-            }
-            readonly proof?: {
-                readonly c?: unknown
-                readonly s?: unknown
-            }
+            readonly evaluation?: ReadonlyArray<{
+                readonly data?: string
+            }>
+            readonly proof?: ReadonlyArray<{
+                readonly c?: string
+                readonly s?: string
+            }>
         }
-        readonly error_message?: unknown
+        readonly error_message?: string
     }
 }
 
 export type WaMexAcceptNewsletterAdminInviteResponse = {
     readonly xwa2_newsletter_admin_invite_accept?: {
-        readonly __typename?: unknown
-        readonly id?: unknown
+        readonly __typename?: string
+        readonly id?: string
     }
 }
 
 export type WaMexAiAgentAutoReplyControlResponse = {
     readonly xfb_whatsapp_smb_maiba_status_update?: {
-        readonly success?: unknown
+        readonly success?: boolean
     }
 }
 
 export type WaMexAuthAgentFeaturePolicyResponse = {
     readonly whatsapp_authorized_agent_feature_policy?: {
-        readonly disabled_features?: unknown
+        readonly disabled_features?: ReadonlyArray<string>
     }
 }
 
 export type WaMexBPAccessTokenAndSessionCookiesResponse = {
     readonly xwa_bp_access_token_and_session_cookies?: {
-        readonly status?: unknown
-        readonly access_token?: unknown
-        readonly session_cookies?: unknown
-        readonly bp_id?: unknown
-        readonly access_token_type?: unknown
-        readonly email_attr?: unknown
+        readonly status?: string
+        readonly access_token?: string
+        readonly session_cookies?: string
+        readonly bp_id?: string
+        readonly access_token_type?: string
+        readonly email_attr?: string
     }
 }
 
 export type WaMexBizCreateOrderResponse = {
     readonly xwa_checkout_place_order?: {
         readonly order?: {
-            readonly order_id?: unknown
-            readonly token?: unknown
+            readonly order_id?: string
+            readonly token?: string
             readonly price?: {
-                readonly currency?: unknown
-                readonly subtotal_amount?: unknown
-                readonly total_amount?: unknown
-                readonly price_status?: unknown
+                readonly currency?: string
+                readonly subtotal_amount?: number
+                readonly total_amount?: number
+                readonly price_status?: string
             }
         }
     }
@@ -1285,75 +1297,75 @@ export type WaMexBizCreateOrderResponse = {
 
 export type WaMexBizCustomUrlGetUserGraphqlResponse = {
     readonly xwa_custom_url_get_user?: {
-        readonly success?: unknown
-        readonly lid?: unknown
-        readonly error_code?: unknown
-        readonly error_text?: unknown
+        readonly success?: boolean
+        readonly lid?: string
+        readonly error_code?: number
+        readonly error_text?: string
     }
 }
 
 export type WaMexBizGetCategoriesResponse = {
     readonly whatsapp_catkit_typeahead_proxy?: {
-        readonly categories?: {
-            readonly id?: unknown
-            readonly display_name?: unknown
-        }
+        readonly categories?: ReadonlyArray<{
+            readonly id?: string
+            readonly display_name?: string
+        }>
         readonly not_a_biz?: {
-            readonly id?: unknown
-            readonly display_name?: unknown
+            readonly id?: string
+            readonly display_name?: string
         }
     }
 }
 
 export type WaMexBizGetCategoriesV2Response = {
     readonly whatsapp_catkit_typeahead_proxy?: {
-        readonly categories?: {
-            readonly id?: unknown
-            readonly display_name?: unknown
-            readonly categories?: {
-                readonly id?: unknown
-                readonly display_name?: unknown
-                readonly categories?: {
-                    readonly id?: unknown
-                    readonly display_name?: unknown
-                }
-            }
-        }
+        readonly categories?: ReadonlyArray<{
+            readonly id?: string
+            readonly display_name?: string
+            readonly categories?: ReadonlyArray<{
+                readonly id?: string
+                readonly display_name?: string
+                readonly categories?: ReadonlyArray<{
+                    readonly id?: string
+                    readonly display_name?: string
+                }>
+            }>
+        }>
         readonly not_a_biz?: {
-            readonly id?: unknown
-            readonly display_name?: unknown
+            readonly id?: string
+            readonly display_name?: string
         }
     }
 }
 
 export type WaMexBizGetCustomUrlUserGraphqlResponse = {
     readonly xwa_custom_url_get_user?: {
-        readonly success?: unknown
+        readonly success?: boolean
         readonly user?: {
-            readonly jid?: unknown
+            readonly jid?: string
         }
-        readonly error_code?: unknown
-        readonly error_text?: unknown
+        readonly error_code?: number
+        readonly error_text?: string
     }
 }
 
 export type WaMexBizGetMerchantComplianceResponse = {
     readonly xfb_whatsapp_biz_merchant_compliance_info?: {
         readonly merchant_info?: {
-            readonly entity_name?: unknown
-            readonly entity_type?: unknown
-            readonly is_registered?: unknown
-            readonly entity_type_custom?: unknown
+            readonly entity_name?: string
+            readonly entity_type?: string
+            readonly is_registered?: boolean
+            readonly entity_type_custom?: string
             readonly customer_care_details?: {
-                readonly email?: unknown
-                readonly landline_number?: unknown
-                readonly mobile_number?: unknown
+                readonly email?: string
+                readonly landline_number?: string
+                readonly mobile_number?: string
             }
             readonly grievance_officer_details?: {
-                readonly name?: unknown
-                readonly email?: unknown
-                readonly landline_number?: unknown
-                readonly mobile_number?: unknown
+                readonly name?: string
+                readonly email?: string
+                readonly landline_number?: string
+                readonly mobile_number?: string
             }
         }
     }
@@ -1361,120 +1373,120 @@ export type WaMexBizGetMerchantComplianceResponse = {
 
 export type WaMexBizGetPriceTiersResponse = {
     readonly xwa_whatsapp_get_pricing_tiers?: {
-        readonly price_tiers?: {
-            readonly id?: unknown
-            readonly description?: unknown
-            readonly symbol?: unknown
-        }
+        readonly price_tiers?: ReadonlyArray<{
+            readonly id?: string
+            readonly description?: string
+            readonly symbol?: string
+        }>
     }
 }
 
 export type WaMexBizGetProfileShimlinksResponse = {
-    readonly xwa_whatsapp_smb_get_profile_linkshims?: {
-        readonly website?: unknown
-        readonly shimmed_website_url?: unknown
-    }
+    readonly xwa_whatsapp_smb_get_profile_linkshims?: ReadonlyArray<{
+        readonly website?: string
+        readonly shimmed_website_url?: string
+    }>
 }
 
 export type WaMexBizGraphQLRefreshCartResponse = {
     readonly xwa_checkout_refresh_cart?: {
         readonly cart?: {
-            readonly products?: {
-                readonly is_hidden?: unknown
-                readonly availability?: unknown
-                readonly product_availability?: unknown
+            readonly products?: ReadonlyArray<{
+                readonly is_hidden?: boolean
+                readonly availability?: string
+                readonly product_availability?: string
                 readonly status_info?: {
-                    readonly reject_reason?: unknown
-                    readonly status?: unknown
-                    readonly can_appeal?: unknown
-                    readonly commerce_url?: unknown
+                    readonly reject_reason?: string
+                    readonly status?: string
+                    readonly can_appeal?: boolean
+                    readonly commerce_url?: string
                 }
-                readonly image_fetch_status?: unknown
-                readonly price?: unknown
-                readonly currency?: unknown
-                readonly retailer_id?: unknown
-                readonly name?: unknown
-                readonly description?: unknown
-                readonly url?: unknown
-                readonly id?: unknown
+                readonly image_fetch_status?: string
+                readonly price?: string
+                readonly currency?: string
+                readonly retailer_id?: string
+                readonly name?: string
+                readonly description?: string
+                readonly url?: string
+                readonly id?: string
                 readonly media?: {
-                    readonly images?: {
-                        readonly id?: unknown
-                        readonly request_image_url?: unknown
+                    readonly images?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly request_image_url?: string
                         readonly original_dimensions?: {
-                            readonly height?: unknown
-                            readonly width?: unknown
+                            readonly height?: number
+                            readonly width?: number
                         }
-                    }
-                    readonly videos?: {
-                        readonly thumbnail_url?: unknown
-                        readonly original_video_url?: unknown
-                        readonly id?: unknown
-                    }
+                    }>
+                    readonly videos?: ReadonlyArray<{
+                        readonly thumbnail_url?: string
+                        readonly original_video_url?: string
+                        readonly id?: string
+                    }>
                 }
                 readonly sale_price?: {
-                    readonly price?: unknown
-                    readonly start_date?: unknown
-                    readonly end_date?: unknown
+                    readonly price?: string
+                    readonly start_date?: string
+                    readonly end_date?: string
                 }
-                readonly max_available?: unknown
-                readonly belongs_to?: unknown
-                readonly status?: unknown
-                readonly compliance_category?: unknown
+                readonly max_available?: number
+                readonly belongs_to?: string
+                readonly status?: string
+                readonly compliance_category?: string
                 readonly compliance_info?: {
-                    readonly country_code_origin?: unknown
-                    readonly importer_name?: unknown
+                    readonly country_code_origin?: string
+                    readonly importer_name?: string
                     readonly importer_address?: {
-                        readonly street1?: unknown
-                        readonly street2?: unknown
-                        readonly city?: unknown
-                        readonly region?: unknown
-                        readonly postal_code?: unknown
-                        readonly country_code?: unknown
+                        readonly street1?: string
+                        readonly street2?: string
+                        readonly city?: string
+                        readonly region?: string
+                        readonly postal_code?: string
+                        readonly country_code?: string
                     }
                 }
                 readonly variant_info?: {
-                    readonly types?: {
-                        readonly name?: unknown
-                        readonly options?: {
-                            readonly value?: unknown
+                    readonly types?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly options?: ReadonlyArray<{
+                            readonly value?: string
                             readonly thumbnail_media?: {
                                 readonly original_dimensions?: {
-                                    readonly width?: unknown
-                                    readonly height?: unknown
+                                    readonly width?: number
+                                    readonly height?: number
                                 }
-                                readonly request_image_url?: unknown
-                                readonly original_image_url?: unknown
-                                readonly id?: unknown
+                                readonly request_image_url?: string
+                                readonly original_image_url?: string
+                                readonly id?: string
                             }
-                        }
-                    }
+                        }>
+                    }>
                     readonly listing_details?: {
-                        readonly description?: unknown
-                        readonly multi_price?: unknown
-                        readonly lowest_price?: unknown
+                        readonly description?: string
+                        readonly multi_price?: string
+                        readonly lowest_price?: string
                     }
-                    readonly variant_properties?: {
-                        readonly value?: unknown
-                        readonly name?: unknown
-                    }
+                    readonly variant_properties?: ReadonlyArray<{
+                        readonly value?: string
+                        readonly name?: string
+                    }>
                     readonly availability?: {
-                        readonly listing?: {
-                            readonly is_available?: unknown
-                            readonly product_id?: unknown
-                            readonly options?: {
-                                readonly name?: unknown
-                                readonly value?: unknown
-                            }
-                        }
+                        readonly listing?: ReadonlyArray<{
+                            readonly is_available?: boolean
+                            readonly product_id?: string
+                            readonly options?: ReadonlyArray<{
+                                readonly name?: string
+                                readonly value?: string
+                            }>
+                        }>
                     }
                 }
-            }
+            }>
             readonly price_details?: {
-                readonly total_amount?: unknown
-                readonly subtotal_amount?: unknown
-                readonly currency?: unknown
-                readonly price_status?: unknown
+                readonly total_amount?: number
+                readonly subtotal_amount?: number
+                readonly currency?: string
+                readonly price_status?: string
             }
         }
     }
@@ -1482,51 +1494,51 @@ export type WaMexBizGraphQLRefreshCartResponse = {
 
 export type WaMexBizProfileAddressAutocompleteResponse = {
     readonly whatsapp_maps_typeahead?: {
-        readonly items?: {
-            readonly id?: unknown
+        readonly items?: ReadonlyArray<{
+            readonly id?: string
             readonly location?: {
-                readonly latitude?: unknown
-                readonly longitude?: unknown
+                readonly latitude?: number
+                readonly longitude?: number
             }
             readonly address?: {
-                readonly city?: unknown
-                readonly country?: unknown
-                readonly postalcode?: unknown
-                readonly stateprovince?: unknown
-                readonly streetaddress?: unknown
+                readonly city?: string
+                readonly country?: string
+                readonly postalcode?: string
+                readonly stateprovince?: string
+                readonly streetaddress?: string
             }
-            readonly title?: unknown
-        }
+            readonly title?: string
+        }>
     }
 }
 
 export type WaMexBizQueryOrderResponse = {
     readonly xwa_checkout_get_order_info?: {
         readonly order?: {
-            readonly creation_time_stamp?: unknown
-            readonly products?: {
-                readonly id?: unknown
-                readonly name?: unknown
-                readonly price?: unknown
-                readonly currency?: unknown
+            readonly creation_time_stamp?: string
+            readonly products?: ReadonlyArray<{
+                readonly id?: string
+                readonly name?: string
+                readonly price?: string
+                readonly currency?: string
                 readonly variant_info?: {
-                    readonly variant_properties?: {
-                        readonly name?: unknown
-                        readonly value?: unknown
-                    }
+                    readonly variant_properties?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly value?: string
+                    }>
                 }
                 readonly media?: {
-                    readonly images?: {
-                        readonly id?: unknown
-                        readonly request_image_url?: unknown
-                    }
+                    readonly images?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly request_image_url?: string
+                    }>
                 }
-                readonly quantity?: unknown
-            }
+                readonly quantity?: string
+            }>
             readonly price_details?: {
-                readonly subtotal_amount?: unknown
-                readonly currency?: unknown
-                readonly total_amount?: unknown
+                readonly subtotal_amount?: string
+                readonly currency?: string
+                readonly total_amount?: string
             }
         }
     }
@@ -1534,22 +1546,22 @@ export type WaMexBizQueryOrderResponse = {
 
 export type WaMexBizSetMerchantComplianceResponse = {
     readonly xfb_whatsapp_biz_merchant_set_compliance_info?: {
-        readonly __typename?: unknown
+        readonly __typename?: string
         readonly merchant_info?: {
-            readonly entity_name?: unknown
-            readonly entity_type?: unknown
-            readonly is_registered?: unknown
-            readonly entity_type_custom?: unknown
+            readonly entity_name?: string
+            readonly entity_type?: string
+            readonly is_registered?: boolean
+            readonly entity_type_custom?: string
             readonly customer_care_details?: {
-                readonly email?: unknown
-                readonly landline_number?: unknown
-                readonly mobile_number?: unknown
+                readonly email?: string
+                readonly landline_number?: string
+                readonly mobile_number?: string
             }
             readonly grievance_officer_details?: {
-                readonly name?: unknown
-                readonly email?: unknown
-                readonly landline_number?: unknown
-                readonly mobile_number?: unknown
+                readonly name?: string
+                readonly email?: string
+                readonly landline_number?: string
+                readonly mobile_number?: string
             }
         }
     }
@@ -1558,1492 +1570,1504 @@ export type WaMexBizSetMerchantComplianceResponse = {
 export type WaMexCachedTokenResponse = {
     readonly xwa2_ent_trade_canonical_nonce_for_access_tokens?: {
         readonly encrypted_access_tokens?: {
-            readonly key?: unknown
-            readonly data?: unknown
-            readonly tag?: unknown
-            readonly nonce?: unknown
-            readonly algorithm?: unknown
+            readonly key?: string
+            readonly data?: string
+            readonly tag?: string
+            readonly nonce?: string
+            readonly algorithm?: string
         }
     }
 }
 
 export type WaMexCanonicalUserValidResponse = {
     readonly xwa_canonical_user_valid?: {
-        readonly success?: unknown
+        readonly success?: boolean
     }
 }
 
 export type WaMexChangeNewsletterOwnerResponse = {
     readonly xwa2_newsletter_change_owner?: {
-        readonly __typename?: unknown
-        readonly id?: unknown
+        readonly __typename?: string
+        readonly id?: string
     }
 }
 
 export type WaMexConsumerFetchQuickPromotionsResponse = {
-    readonly quick_promotion_multiverse_batch_fetch_root?: {
-        readonly surface_nux_id?: unknown
+    readonly quick_promotion_multiverse_batch_fetch_root?: ReadonlyArray<{
+        readonly surface_nux_id?: string
         readonly eligible_promotions?: {
-            readonly edges?: {
-                readonly client_ttl_seconds?: unknown
-                readonly priority?: unknown
-                readonly is_holdout?: unknown
-                readonly log_eligibility_waterfall?: unknown
+            readonly edges?: ReadonlyArray<{
+                readonly client_ttl_seconds?: number
+                readonly priority?: number
+                readonly is_holdout?: boolean
+                readonly log_eligibility_waterfall?: string
                 readonly time_range?: {
-                    readonly start?: unknown
-                    readonly end?: unknown
+                    readonly start?: string
+                    readonly end?: string
                 }
                 readonly node?: {
-                    readonly __typename?: unknown
-                    readonly promotion_id?: unknown
-                    readonly is_server_force_pass?: unknown
-                    readonly ab_prop_name?: unknown
-                    readonly max_impressions?: unknown
-                    readonly surface_delay_in_seconds?: unknown
-                    readonly encrypted_logging_data?: unknown
-                    readonly client_side_dry_run?: unknown
-                    readonly creatives?: {
-                        readonly __typename?: unknown
+                    readonly __typename?: string
+                    readonly promotion_id?: string
+                    readonly is_server_force_pass?: boolean
+                    readonly ab_prop_name?: string
+                    readonly max_impressions?: number
+                    readonly surface_delay_in_seconds?: number
+                    readonly encrypted_logging_data?: string
+                    readonly client_side_dry_run?: boolean
+                    readonly creatives?: ReadonlyArray<{
+                        readonly __typename?: string
                         readonly title?: {
-                            readonly text?: unknown
+                            readonly text?: string
                         }
                         readonly content?: {
-                            readonly text?: unknown
+                            readonly text?: string
                         }
                         readonly primary_action?: {
-                            readonly __typename?: unknown
+                            readonly __typename?: string
                             readonly title?: {
-                                readonly text?: unknown
+                                readonly text?: string
                             }
-                            readonly limit?: unknown
-                            readonly url?: unknown
+                            readonly limit?: number
+                            readonly url?: string
                         }
                         readonly dismiss_action?: {
-                            readonly __typename?: unknown
-                            readonly limit?: unknown
+                            readonly __typename?: string
+                            readonly limit?: string
                         }
                         readonly wa_light_mode_media_details?: {
-                            readonly jpeg_thumbnail?: unknown
+                            readonly jpeg_thumbnail?: string
                         }
                         readonly wa_dark_mode_media_details?: {
-                            readonly jpeg_thumbnail?: unknown
+                            readonly jpeg_thumbnail?: string
                         }
-                        readonly accessibility_text_for_image?: unknown
-                        readonly is_dismissible?: unknown
-                        readonly id?: unknown
-                    }
+                        readonly accessibility_text_for_image?: string
+                        readonly is_dismissible?: boolean
+                        readonly id?: string
+                    }>
                     readonly content_attributes?: {
                         readonly wa_banner_background_color?: {
-                            readonly light_mode_highlight_color?: unknown
-                            readonly dark_mode_highlight_color?: unknown
-                            readonly light_mode_background_color?: unknown
-                            readonly dark_mode_background_color?: unknown
+                            readonly light_mode_highlight_color?: string
+                            readonly dark_mode_highlight_color?: string
+                            readonly light_mode_background_color?: string
+                            readonly dark_mode_background_color?: string
                         }
-                        readonly wa_primary_cta_alternative_url?: unknown
-                        readonly wa_eligible_duration_after_impression_in_seconds?: unknown
+                        readonly wa_primary_cta_alternative_url?: string
+                        readonly wa_eligible_duration_after_impression_in_seconds?: number
                     }
-                    readonly wa_qp_content_attributes_do_not_use?: {
-                        readonly name?: unknown
-                        readonly value?: unknown
-                    }
+                    readonly wa_qp_content_attributes_do_not_use?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly value?: string
+                    }>
                     readonly contextual_filters_for_wa_do_not_use?: {
-                        readonly clause_type?: unknown
-                        readonly filters?: Readonly<Record<string, unknown>>
-                        readonly clauses?: {
-                            readonly clause_type?: unknown
-                            readonly filters?: Readonly<Record<string, unknown>>
-                            readonly clauses?: {
-                                readonly clause_type?: unknown
-                                readonly filters?: Readonly<Record<string, unknown>>
-                                readonly clauses?: {
-                                    readonly clause_type?: unknown
-                                    readonly filters?: Readonly<Record<string, unknown>>
-                                    readonly clauses?: {
-                                        readonly clause_type?: unknown
-                                        readonly filters?: Readonly<Record<string, unknown>>
-                                        readonly clauses?: {
-                                            readonly clause_type?: unknown
-                                            readonly filters?: Readonly<Record<string, unknown>>
-                                            readonly clauses?: {
-                                                readonly clause_type?: unknown
-                                                readonly filters?: Readonly<Record<string, unknown>>
-                                                readonly clauses?: {
-                                                    readonly clause_type?: unknown
-                                                    readonly filters?: Readonly<Record<string, unknown>>
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        readonly clause_type?: string
+                        readonly filters?: ReadonlyArray<Readonly<Record<string, unknown>>>
+                        readonly clauses?: ReadonlyArray<{
+                            readonly clause_type?: string
+                            readonly filters?: ReadonlyArray<Readonly<Record<string, unknown>>>
+                            readonly clauses?: ReadonlyArray<{
+                                readonly clause_type?: string
+                                readonly filters?: ReadonlyArray<Readonly<Record<string, unknown>>>
+                                readonly clauses?: ReadonlyArray<{
+                                    readonly clause_type?: string
+                                    readonly filters?: ReadonlyArray<Readonly<Record<string, unknown>>>
+                                    readonly clauses?: ReadonlyArray<{
+                                        readonly clause_type?: string
+                                        readonly filters?: ReadonlyArray<Readonly<Record<string, unknown>>>
+                                        readonly clauses?: ReadonlyArray<{
+                                            readonly clause_type?: string
+                                            readonly filters?: ReadonlyArray<Readonly<Record<string, unknown>>>
+                                            readonly clauses?: ReadonlyArray<{
+                                                readonly clause_type?: string
+                                                readonly filters?: ReadonlyArray<Readonly<Record<string, unknown>>>
+                                                readonly clauses?: ReadonlyArray<{
+                                                    readonly clause_type?: string
+                                                    readonly filters?: ReadonlyArray<Readonly<Record<string, unknown>>>
+                                                }>
+                                            }>
+                                        }>
+                                    }>
+                                }>
+                            }>
+                        }>
                     }
-                    readonly id?: unknown
+                    readonly id?: string
                 }
-            }
+            }>
         }
-    }
+    }>
 }
 
 export type WaMexConsumerQuickPromotionActionGraphQLResponse = {
     readonly wa_consumer_quick_promotion_log_event?: {
-        readonly client_mutation_id?: unknown
+        readonly client_mutation_id?: string
     }
 }
 
 export type WaMexCreateInviteCodeResponse = {
     readonly xwa2_growth_create_invite_code?: {
-        readonly code?: unknown
+        readonly code?: string
     }
 }
 
 export type WaMexCreateMarketingCampaignActionResponse = {
     readonly whatsapp_marketing_messages_create?: {
-        readonly ad_campaign_group_id?: unknown
-        readonly ad_campaign_id?: unknown
-        readonly ad_group_id?: unknown
-        readonly ad_id?: unknown
-        readonly ad_creative_id?: unknown
-        readonly campaign_name?: unknown
-        readonly status?: unknown
-        readonly lifetime_budget?: unknown
-        readonly start_time?: unknown
+        readonly ad_campaign_group_id?: string
+        readonly ad_campaign_id?: string
+        readonly ad_group_id?: string
+        readonly ad_id?: string
+        readonly ad_creative_id?: string
+        readonly campaign_name?: string
+        readonly status?: string
+        readonly lifetime_budget?: string
+        readonly start_time?: string
     }
 }
 
 export type WaMexCreateNewsletterResponse = {
     readonly xwa2_newsletter_create?: {
-        readonly id?: unknown
+        readonly id?: string
         readonly state?: {
-            readonly type?: unknown
+            readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
         }
         readonly thread_metadata?: {
             readonly name?: {
-                readonly id?: unknown
-                readonly text?: unknown
-                readonly update_time?: unknown
+                readonly id?: string
+                readonly text?: string
+                readonly update_time?: string
             }
             readonly description?: {
-                readonly id?: unknown
-                readonly text?: unknown
-                readonly update_time?: unknown
+                readonly id?: string
+                readonly text?: string
+                readonly update_time?: string
             }
             readonly picture?: {
-                readonly id?: unknown
-                readonly type?: unknown
-                readonly direct_path?: unknown
+                readonly id?: string
+                readonly type?: 'IMAGE' | 'PREVIEW'
+                readonly direct_path?: string
             }
             readonly preview?: {
-                readonly id?: unknown
-                readonly type?: unknown
-                readonly direct_path?: unknown
+                readonly id?: string
+                readonly type?: 'PREVIEW'
+                readonly direct_path?: string
             }
-            readonly invite?: unknown
-            readonly handle?: unknown
-            readonly verification?: unknown
-            readonly subscribers_count?: unknown
-            readonly creation_time?: unknown
+            readonly invite?: string
+            readonly handle?: string
+            readonly verification?: 'UNVERIFIED' | 'VERIFIED'
+            readonly subscribers_count?: string
+            readonly creation_time?: string
         }
         readonly viewer_metadata?: {
-            readonly settings?: {
-                readonly type?: unknown
-                readonly value?: unknown
-            }
-            readonly role?: unknown
+            readonly settings?: ReadonlyArray<{
+                readonly type?: 'MUTE_ADMIN_ACTIVITY' | 'MUTE_FOLLOWER_ACTIVITY'
+                readonly value?: 'OFF' | 'ON'
+            }>
+            readonly role?: 'ADMIN' | 'GUEST' | 'OWNER' | 'SUBSCRIBER'
         }
     }
 }
 
 export type WaMexCreateNewsletterAdminInviteResponse = {
     readonly xwa2_newsletter_admin_invite_create?: {
-        readonly invite_expiration_time?: unknown
-        readonly id?: unknown
+        readonly invite_expiration_time?: string
+        readonly id?: string
     }
 }
 
 export type WaMexCreateReportAppealResponse = {
     readonly xwa2_create_channel_report_appeal_v2?: {
-        readonly report_id?: unknown
-        readonly status?: unknown
-        readonly creation_time?: unknown
-        readonly last_update_time?: unknown
-        readonly channel_name?: unknown
-        readonly channel_jid?: unknown
+        readonly report_id?: string
+        readonly status?: string
+        readonly creation_time?: string
+        readonly last_update_time?: string
+        readonly channel_name?: string
+        readonly channel_jid?: string
         readonly reported_content_data?: {
-            readonly __typename?: unknown
-            readonly server_msg_id?: unknown
-            readonly server_id?: unknown
-            readonly server_response_id?: unknown
-            readonly notify_name?: unknown
+            readonly __typename?: string
+            readonly server_msg_id?: string
+            readonly server_id?: string
+            readonly server_response_id?: string
+            readonly notify_name?: string
             readonly question_data?: {
-                readonly __typename?: unknown
-                readonly server_msg_id?: unknown
+                readonly __typename?: string
+                readonly server_msg_id?: string
             }
         }
         readonly appeal?: {
-            readonly state?: unknown
-            readonly appeal_reason?: unknown
-            readonly creation_time?: unknown
-            readonly report_id?: unknown
-            readonly appeal_id?: unknown
+            readonly state?: 'CONTENT_UNAVAILABLE' | 'NON_APPEALABLE' | 'NOT_APPEALED' | 'PENDING' | 'REJECT' | 'SUCCESS'
+            readonly appeal_reason?: string
+            readonly creation_time?: string
+            readonly report_id?: string
+            readonly appeal_id?: string
         }
     }
 }
 
 export type WaMexCreateWhatsAppAdsIdentityResponse = {
     readonly create_or_update_whatsapp_ads_identity?: {
-        readonly id?: unknown
+        readonly id?: string
     }
 }
 
 export type WaMexCustomLabel3pdEventResponse = {
-    readonly xwa_get_3pd_event?: {
-        readonly custom_label?: unknown
-        readonly ctwa_3pd_conversion_type?: unknown
-        readonly ctwa_3pd_conversion_subtype?: unknown
-        readonly ctwa_3pd_conversion_metadata?: unknown
-    }
+    readonly xwa_get_3pd_event?: ReadonlyArray<{
+        readonly custom_label?: string
+        readonly ctwa_3pd_conversion_type?: string
+        readonly ctwa_3pd_conversion_subtype?: string
+        readonly ctwa_3pd_conversion_metadata?: string
+    }>
 }
 
 export type WaMexDeleteNewsletterResponse = {
     readonly xwa2_newsletter_delete_v2?: {
-        readonly id?: unknown
+        readonly id?: string
         readonly state?: {
-            readonly type?: unknown
+            readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
         }
     }
 }
 
 export type WaMexDemoteNewsletterAdminResponse = {
     readonly xwa2_newsletter_admin_demote?: {
-        readonly __typename?: unknown
-        readonly id?: unknown
+        readonly __typename?: string
+        readonly id?: string
     }
 }
 
 export type WaMexEditBizProfileResponse = {
-    readonly edit_wa_web_biz_profile?: unknown
+    readonly edit_wa_web_biz_profile?: boolean
 }
 
 export type WaMexExternalCtxAuthoriseWAChatResponse = {
     readonly xwa_external_ctx_authorise_wa_chat?: {
-        readonly success?: unknown
-        readonly partner_name?: unknown
+        readonly success?: boolean
+        readonly partner_name?: string
     }
 }
 
 export type WaMexFetchAboutStatusResponse = {
-    readonly xwa2_users_updates_since?: {
-        readonly updates?: {
-            readonly __typename?: unknown
-            readonly text?: unknown
-        }
-    }
+    readonly xwa2_users_updates_since?: ReadonlyArray<{
+        readonly updates?: ReadonlyArray<{
+            readonly __typename?: string
+            readonly text?: string
+        }>
+    }>
 }
 
 export type WaMexFetchAdEntryPointsConfigurationResponse = {
-    readonly ctwa_client_entry_point_entitlement?: {
-        readonly entry_point_or_experience?: unknown
-        readonly should_show?: unknown
-    }
+    readonly ctwa_client_entry_point_entitlement?: ReadonlyArray<{
+        readonly entry_point_or_experience?: string
+        readonly should_show?: boolean
+    }>
 }
 
 export type WaMexFetchAdEntryPointsConfigurationM1Response = {
-    readonly ctwa_client_entry_point_entitlement?: {
-        readonly entry_point_or_experience?: unknown
-        readonly should_show?: unknown
-        readonly content?: unknown
-        readonly sub_content?: unknown
-    }
+    readonly ctwa_client_entry_point_entitlement?: ReadonlyArray<{
+        readonly entry_point_or_experience?: string
+        readonly should_show?: boolean
+        readonly content?: string
+        readonly sub_content?: string
+    }>
 }
 
 export type WaMexFetchAllNewslettersMetadataResponse = {
-    readonly xwa2_newsletter_subscribed?: {
-        readonly id?: unknown
+    readonly xwa2_newsletter_subscribed?: ReadonlyArray<{
+        readonly id?: string
         readonly state?: {
-            readonly type?: unknown
+            readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
         }
         readonly thread_metadata?: {
-            readonly creation_time?: unknown
+            readonly creation_time?: string
             readonly name?: {
-                readonly id?: unknown
-                readonly text?: unknown
-                readonly update_time?: unknown
+                readonly id?: string
+                readonly text?: string
+                readonly update_time?: string
             }
             readonly picture?: {
-                readonly id?: unknown
-                readonly type?: unknown
-                readonly direct_path?: unknown
+                readonly id?: string
+                readonly type?: 'IMAGE' | 'PREVIEW'
+                readonly direct_path?: string
             }
             readonly preview?: {
-                readonly id?: unknown
-                readonly type?: unknown
-                readonly direct_path?: unknown
+                readonly id?: string
+                readonly type?: 'PREVIEW'
+                readonly direct_path?: string
             }
             readonly description?: {
-                readonly id?: unknown
-                readonly text?: unknown
-                readonly update_time?: unknown
+                readonly id?: string
+                readonly text?: string
+                readonly update_time?: string
             }
-            readonly invite?: unknown
-            readonly handle?: unknown
-            readonly verification?: unknown
+            readonly invite?: string
+            readonly handle?: string
+            readonly verification?: 'UNVERIFIED' | 'VERIFIED'
             readonly settings?: {
                 readonly reaction_codes?: {
-                    readonly value?: unknown
+                    readonly value?: 'ALL'
                 }
             }
             readonly wamo_sub?: {
-                readonly plan_id?: unknown
+                readonly plan_id?: string
             }
         }
         readonly viewer_metadata?: {
-            readonly settings?: {
-                readonly type?: unknown
-                readonly value?: unknown
-            }
-            readonly role?: unknown
-            readonly wamo_sub_status?: unknown
+            readonly settings?: ReadonlyArray<{
+                readonly type?: 'MUTE_ADMIN_ACTIVITY' | 'MUTE_FOLLOWER_ACTIVITY'
+                readonly value?: 'OFF' | 'ON'
+            }>
+            readonly role?: 'ADMIN' | 'GUEST' | 'OWNER' | 'SUBSCRIBER'
+            readonly wamo_sub_status?: 'ACTIVE' | 'INACTIVE'
         }
         readonly status_metadata?: {
-            readonly last_status_server_id?: unknown
-            readonly last_status_sent_time?: unknown
+            readonly last_status_server_id?: string
+            readonly last_status_sent_time?: string
         }
-    }
+    }>
 }
 
 export type WaMexFetchAllSubgroupsResponse = {
     readonly xwa2_group_query_by_id?: {
-        readonly id?: unknown
-        readonly __typename?: unknown
+        readonly id?: string
+        readonly __typename?: string
         readonly default_sub_group?: {
-            readonly id?: unknown
+            readonly id?: string
             readonly subject?: {
-                readonly value?: unknown
-                readonly creation_time?: unknown
+                readonly value?: string
+                readonly creation_time?: string
             }
         }
         readonly sub_groups?: {
-            readonly edges?: {
+            readonly edges?: ReadonlyArray<{
                 readonly node?: {
-                    readonly id?: unknown
+                    readonly id?: string
                     readonly subject?: {
-                        readonly value?: unknown
-                        readonly creation_time?: unknown
+                        readonly value?: string
+                        readonly creation_time?: string
                     }
                     readonly properties?: {
-                        readonly general_chat?: unknown
-                        readonly membership_approval_mode_enabled?: unknown
-                        readonly hidden_group?: unknown
+                        readonly general_chat?: boolean
+                        readonly membership_approval_mode_enabled?: boolean
+                        readonly hidden_group?: boolean
                     }
                     readonly membership_approval_requests?: {
-                        readonly total_count?: unknown
+                        readonly total_count?: number
                     }
                 }
-            }
+            }>
         }
     }
 }
 
 export type WaMexFetchBotProfilesGQLResponse = {
-    readonly xfb_fetch_genai_personas?: {
-        readonly __typename?: unknown
-        readonly id?: unknown
-        readonly jid?: unknown
-        readonly is_meta_created?: unknown
+    readonly xfb_fetch_genai_personas?: ReadonlyArray<{
+        readonly __typename?: string
+        readonly id?: string
+        readonly jid?: string
+        readonly is_meta_created?: boolean
         readonly creator?: {
-            readonly name?: unknown
-            readonly profile_uri?: unknown
+            readonly name?: string
+            readonly profile_uri?: string
         }
         readonly latest_published_version_for_viewer?: {
-            readonly __typename?: unknown
-            readonly name?: unknown
-            readonly description?: unknown
-            readonly icebreaker_prompt_list?: unknown
-            readonly posing_as_professional?: unknown
-            readonly id?: unknown
+            readonly __typename?: string
+            readonly name?: string
+            readonly description?: string
+            readonly icebreaker_prompt_list?: ReadonlyArray<string>
+            readonly posing_as_professional?: boolean
+            readonly id?: string
         }
-    }
+    }>
 }
 
 export type WaMexFetchDynamicAIModesResponse = {
-    readonly xfb_meta_ai_modes?: {
-        readonly mode_id?: unknown
-        readonly type?: unknown
-        readonly is_experimental?: unknown
-        readonly title?: unknown
-        readonly subtitle?: unknown
-    }
+    readonly xfb_meta_ai_modes?: ReadonlyArray<{
+        readonly mode_id?: string
+        readonly type?: string
+        readonly is_experimental?: boolean
+        readonly title?: string
+        readonly subtitle?: string
+    }>
 }
 
 export type WaMexFetchGroupInfoResponse = {
     readonly xwa2_group_query_by_id?: {
-        readonly __typename?: unknown
-        readonly id?: unknown
-        readonly creation_time?: unknown
+        readonly __typename?: string
+        readonly id?: string
+        readonly creation_time?: string
         readonly creator?: {
-            readonly id?: unknown
-            readonly lid?: unknown
-            readonly pn?: unknown
+            readonly id?: string
+            readonly lid?: string
+            readonly pn?: string
             readonly username_info?: {
-                readonly __typename?: unknown
-                readonly username?: unknown
+                readonly __typename?: string
+                readonly username?: string
             }
         }
-        readonly state?: unknown
+        readonly state?: 'ACTIVE' | 'NON_EXISTENT' | 'SUSPENDED'
         readonly subject?: {
             readonly creator?: {
-                readonly id?: unknown
-                readonly lid?: unknown
-                readonly pn?: unknown
+                readonly id?: string
+                readonly lid?: string
+                readonly pn?: string
                 readonly username_info?: {
-                    readonly __typename?: unknown
-                    readonly username?: unknown
+                    readonly __typename?: string
+                    readonly username?: string
                 }
             }
-            readonly creation_time?: unknown
-            readonly value?: unknown
+            readonly creation_time?: string
+            readonly value?: string
         }
         readonly description?: {
-            readonly id?: unknown
-            readonly creation_time?: unknown
+            readonly id?: string
+            readonly creation_time?: string
             readonly creator?: {
-                readonly id?: unknown
-                readonly lid?: unknown
-                readonly pn?: unknown
+                readonly id?: string
+                readonly lid?: string
+                readonly pn?: string
                 readonly username_info?: {
-                    readonly __typename?: unknown
-                    readonly username?: unknown
+                    readonly __typename?: string
+                    readonly username?: string
                 }
             }
-            readonly value?: unknown
+            readonly value?: string
         }
         readonly participants?: {
-            readonly edges?: {
+            readonly edges?: ReadonlyArray<{
                 readonly node?: {
-                    readonly id?: unknown
-                    readonly lid?: unknown
-                    readonly pn?: unknown
-                    readonly display_name?: unknown
+                    readonly id?: string
+                    readonly lid?: string
+                    readonly pn?: string
+                    readonly display_name?: string
                     readonly username_info?: {
-                        readonly __typename?: unknown
-                        readonly username?: unknown
+                        readonly __typename?: string
+                        readonly username?: string
                     }
                 }
-                readonly role?: unknown
-            }
-            readonly participants_phash_match?: unknown
+                readonly role?: 'ADMIN_MEMBER' | 'MEMBER' | 'SUPERADMIN_MEMBER'
+            }>
+            readonly participants_phash_match?: boolean
         }
-        readonly total_participants_count?: unknown
-        readonly missing_participant_identification?: unknown
+        readonly total_participants_count?: number
+        readonly missing_participant_identification?: boolean
         readonly properties?: {
-            readonly announcement?: unknown
-            readonly capi?: unknown
-            readonly ephemeral?: {
-                readonly expiration_time_in_sec?: unknown
-            }
-            readonly growth_locked2?: {
-                readonly locked?: unknown
+            readonly allow_non_admin_sub_group_creation?: boolean
+            readonly closed_by_membership_approval_mode?: boolean
+            readonly appeal_status?: string
+            readonly appeal_update_time?: string
+            readonly limit_sharing?: {
+                readonly limit_sharing_enabled?: boolean
             }
             readonly lid_migration_state?: {
-                readonly addressing_mode?: unknown
+                readonly addressing_mode?: 'LID'
             }
-            readonly locked?: unknown
-            readonly member_add_mode?: unknown
-            readonly member_link_mode?: unknown
-            readonly member_share_group_history_mode?: unknown
-            readonly membership_approval_mode_enabled?: unknown
-            readonly support?: unknown
-            readonly group_safety_check?: unknown
-            readonly appeal_status?: unknown
-            readonly appeal_update_time?: unknown
-            readonly limit_sharing?: {
-                readonly limit_sharing_enabled?: unknown
+            readonly ephemeral?: {
+                readonly expiration_time_in_sec?: number
             }
+            readonly growth_locked2?: {
+                readonly locked?: boolean
+            }
+            readonly member_add_mode?: 'ADMIN_ADD' | 'ALL_MEMBER_ADD'
+            readonly parent_group_jid?: string
+            readonly group_safety_check?: boolean
+            readonly announcement?: boolean
+            readonly locked?: boolean
+            readonly member_link_mode?: 'ADMIN_LINK' | 'ALL_MEMBER_LINK'
+            readonly member_share_group_history_mode?: 'ALL_MEMBER_SHARE'
+            readonly membership_approval_mode_enabled?: boolean
+            readonly general_chat?: boolean
+            readonly auto_add_disabled?: boolean
+            readonly hidden_group?: boolean
+            readonly capi?: boolean
+            readonly support?: boolean
         }
-        readonly membership_approval_request?: unknown
+        readonly membership_approval_request?: boolean
     }
 }
 
 export type WaMexFetchGroupInfoIncludBotsResponse = {
     readonly xwa2_group_query_by_id?: {
-        readonly __typename?: unknown
-        readonly id?: unknown
-        readonly creation_time?: unknown
+        readonly __typename?: string
+        readonly id?: string
+        readonly creation_time?: string
         readonly creator?: {
-            readonly id?: unknown
-            readonly lid?: unknown
-            readonly pn?: unknown
+            readonly id?: string
+            readonly lid?: string
+            readonly pn?: string
             readonly username_info?: {
-                readonly __typename?: unknown
-                readonly username?: unknown
+                readonly __typename?: string
+                readonly username?: string
             }
         }
-        readonly state?: unknown
+        readonly state?: 'ACTIVE' | 'NON_EXISTENT' | 'SUSPENDED'
         readonly subject?: {
             readonly creator?: {
-                readonly id?: unknown
-                readonly lid?: unknown
-                readonly pn?: unknown
+                readonly id?: string
+                readonly lid?: string
+                readonly pn?: string
                 readonly username_info?: {
-                    readonly __typename?: unknown
-                    readonly username?: unknown
+                    readonly __typename?: string
+                    readonly username?: string
                 }
             }
-            readonly creation_time?: unknown
-            readonly value?: unknown
+            readonly creation_time?: string
+            readonly value?: string
         }
         readonly description?: {
-            readonly id?: unknown
-            readonly creation_time?: unknown
+            readonly id?: string
+            readonly creation_time?: string
             readonly creator?: {
-                readonly id?: unknown
-                readonly lid?: unknown
-                readonly pn?: unknown
+                readonly id?: string
+                readonly lid?: string
+                readonly pn?: string
                 readonly username_info?: {
-                    readonly __typename?: unknown
-                    readonly username?: unknown
+                    readonly __typename?: string
+                    readonly username?: string
                 }
             }
-            readonly value?: unknown
+            readonly value?: string
         }
         readonly participants?: {
-            readonly edges?: {
+            readonly edges?: ReadonlyArray<{
                 readonly participant?: {
-                    readonly __typename?: unknown
-                    readonly id?: unknown
-                    readonly lid?: unknown
-                    readonly pn?: unknown
-                    readonly display_name?: unknown
+                    readonly __typename?: string
+                    readonly id?: string
+                    readonly lid?: string
+                    readonly pn?: string
+                    readonly display_name?: string
                     readonly username_info?: {
-                        readonly __typename?: unknown
-                        readonly username?: unknown
+                        readonly __typename?: string
+                        readonly username?: string
                     }
-                    readonly jid?: unknown
+                    readonly jid?: string
                 }
-                readonly role?: unknown
-            }
-            readonly participants_phash_match?: unknown
+                readonly role?: 'ADMIN_MEMBER' | 'MEMBER' | 'SUPERADMIN_MEMBER'
+            }>
+            readonly participants_phash_match?: boolean
         }
-        readonly total_participants_count?: unknown
-        readonly missing_participant_identification?: unknown
+        readonly total_participants_count?: number
+        readonly missing_participant_identification?: boolean
         readonly properties?: {
-            readonly allow_admin_reports?: unknown
-            readonly announcement?: unknown
-            readonly capi?: unknown
-            readonly ephemeral?: {
-                readonly expiration_time_in_sec?: unknown
-            }
-            readonly growth_locked2?: {
-                readonly locked?: unknown
+            readonly allow_non_admin_sub_group_creation?: boolean
+            readonly closed_by_membership_approval_mode?: boolean
+            readonly appeal_status?: string
+            readonly appeal_update_time?: string
+            readonly limit_sharing?: {
+                readonly limit_sharing_enabled?: boolean
             }
             readonly lid_migration_state?: {
-                readonly addressing_mode?: unknown
+                readonly addressing_mode?: 'LID'
             }
-            readonly locked?: unknown
-            readonly member_add_mode?: unknown
-            readonly member_link_mode?: unknown
-            readonly member_share_group_history_mode?: unknown
-            readonly membership_approval_mode_enabled?: unknown
-            readonly support?: unknown
-            readonly group_safety_check?: unknown
-            readonly appeal_status?: unknown
-            readonly appeal_update_time?: unknown
-            readonly limit_sharing?: {
-                readonly limit_sharing_enabled?: unknown
+            readonly allow_admin_reports?: boolean
+            readonly announcement?: boolean
+            readonly ephemeral?: {
+                readonly expiration_time_in_sec?: number
             }
+            readonly growth_locked2?: {
+                readonly locked?: boolean
+            }
+            readonly locked?: boolean
+            readonly member_add_mode?: 'ADMIN_ADD' | 'ALL_MEMBER_ADD'
+            readonly member_link_mode?: 'ADMIN_LINK' | 'ALL_MEMBER_LINK'
+            readonly member_share_group_history_mode?: 'ALL_MEMBER_SHARE'
+            readonly membership_approval_mode_enabled?: boolean
+            readonly parent_group_jid?: string
+            readonly general_chat?: boolean
+            readonly auto_add_disabled?: boolean
+            readonly hidden_group?: boolean
+            readonly group_safety_check?: boolean
+            readonly capi?: boolean
+            readonly support?: boolean
         }
-        readonly membership_approval_request?: unknown
+        readonly membership_approval_request?: boolean
     }
 }
 
 export type WaMexFetchGroupInviteCodeResponse = {
     readonly xwa2_group_query_by_id?: {
-        readonly __typename?: unknown
-        readonly invite_code?: unknown
-        readonly id?: unknown
+        readonly __typename?: string
+        readonly invite_code?: string
+        readonly id?: string
     }
 }
 
 export type WaMexFetchGroupIsInternalResponse = {
     readonly xwa2_group_query_by_id?: {
-        readonly __typename?: unknown
+        readonly __typename?: string
         readonly properties?: {
-            readonly internal?: unknown
+            readonly internal?: boolean
         }
-        readonly id?: unknown
+        readonly id?: string
     }
 }
 
 export type WaMexFetchIntegritySignalsResponse = {
-    readonly xwa2_fetch_wa_users?: {
-        readonly __typename?: unknown
+    readonly xwa2_fetch_wa_users?: ReadonlyArray<{
+        readonly __typename?: string
         readonly integrity_signals_info?: {
-            readonly __typename?: unknown
-            readonly is_suspicious_start_chat?: unknown
-            readonly is_new_account?: unknown
+            readonly __typename?: string
+            readonly is_suspicious_start_chat?: boolean
+            readonly is_new_account?: boolean
         }
-        readonly id?: unknown
-    }
+        readonly id?: string
+    }>
 }
 
 export type WaMexFetchNativeAdsMvpEligibilityResponse = {
     readonly wa_smb_native_ads_web_info?: {
-        readonly lifetime_native_ctwa_advertiser?: unknown
-        readonly webclient_l90_ad_creator?: unknown
-        readonly is_page_asset_linked?: unknown
-        readonly is_pageless_asset_linked?: unknown
+        readonly lifetime_native_ctwa_advertiser?: boolean
+        readonly webclient_l90_ad_creator?: boolean
+        readonly is_page_asset_linked?: boolean
+        readonly is_pageless_asset_linked?: boolean
     }
 }
 
 export type WaMexFetchNewChatMessageCappingInfoResponse = {
     readonly xwa2_message_capping_info?: {
-        readonly total_quota?: unknown
-        readonly used_quota?: unknown
-        readonly cycle_start_timestamp?: unknown
-        readonly cycle_end_timestamp?: unknown
-        readonly server_sent_timestamp?: unknown
-        readonly ote_status?: unknown
-        readonly mv_status?: unknown
-        readonly capping_status?: unknown
+        readonly total_quota?: string
+        readonly used_quota?: string
+        readonly cycle_start_timestamp?: string
+        readonly cycle_end_timestamp?: string
+        readonly server_sent_timestamp?: string
+        readonly ote_status?: string
+        readonly mv_status?: string
+        readonly capping_status?: string
     }
 }
 
 export type WaMexFetchNewsletterResponse = {
     readonly xwa2_newsletter?: {
-        readonly id?: unknown
+        readonly id?: string
         readonly state?: {
-            readonly type?: unknown
+            readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
         }
         readonly thread_metadata?: {
-            readonly creation_time?: unknown
+            readonly creation_time?: string
             readonly name?: {
-                readonly id?: unknown
-                readonly text?: unknown
-                readonly update_time?: unknown
+                readonly id?: string
+                readonly text?: string
+                readonly update_time?: string
             }
             readonly picture?: {
-                readonly id?: unknown
-                readonly type?: unknown
-                readonly direct_path?: unknown
+                readonly id?: string
+                readonly type?: 'IMAGE' | 'PREVIEW'
+                readonly direct_path?: string
             }
             readonly preview?: {
-                readonly id?: unknown
-                readonly type?: unknown
-                readonly direct_path?: unknown
+                readonly id?: string
+                readonly type?: 'PREVIEW'
+                readonly direct_path?: string
             }
             readonly description?: {
-                readonly id?: unknown
-                readonly text?: unknown
-                readonly update_time?: unknown
+                readonly id?: string
+                readonly text?: string
+                readonly update_time?: string
             }
-            readonly invite?: unknown
-            readonly handle?: unknown
-            readonly subscribers_count?: unknown
-            readonly verification?: unknown
+            readonly invite?: string
+            readonly handle?: string
+            readonly subscribers_count?: string
+            readonly verification?: 'UNVERIFIED' | 'VERIFIED'
             readonly settings?: {
                 readonly reaction_codes?: {
-                    readonly value?: unknown
+                    readonly value?: 'ALL'
                 }
             }
             readonly wamo_sub?: {
-                readonly plan_id?: unknown
+                readonly plan_id?: string
             }
         }
         readonly viewer_metadata?: {
-            readonly settings?: {
-                readonly type?: unknown
-                readonly value?: unknown
-            }
-            readonly role?: unknown
-            readonly wamo_sub_status?: unknown
+            readonly settings?: ReadonlyArray<{
+                readonly type?: 'MUTE_ADMIN_ACTIVITY' | 'MUTE_FOLLOWER_ACTIVITY'
+                readonly value?: 'OFF' | 'ON'
+            }>
+            readonly role?: 'ADMIN' | 'GUEST' | 'OWNER' | 'SUBSCRIBER'
+            readonly wamo_sub_status?: 'ACTIVE' | 'INACTIVE'
         }
         readonly status_metadata?: {
-            readonly last_status_server_id?: unknown
-            readonly last_status_sent_time?: unknown
+            readonly last_status_server_id?: string
+            readonly last_status_sent_time?: string
         }
     }
 }
 
 export type WaMexFetchNewsletterAdminCapabilitiesResponse = {
     readonly xwa2_newsletter_admin?: {
-        readonly capabilities?: unknown
-        readonly id?: unknown
+        readonly capabilities?: ReadonlyArray<'ADMIN_CONTEXT_CARD_1' | 'ADMIN_CONTEXT_CARD_2' | 'ADMIN_CONTEXT_CARD_3' | 'ADMIN_NOTIFICATIONS' | 'ADMIN_ONBOARDING' | 'ADMIN_ONBOARDING_2' | 'ADMIN_PROFILE' | 'CHANNEL_STATUS_PRODUCER' | 'INSIGHTS' | 'INVITE_ADMINS_BUTTON' | 'INVITE_FOLLOWERS' | 'JARVIS_INTEGRATION_ENABLED' | 'MUSIC' | 'NEW_MESSAGE_TYPES_TOOLTIP' | 'PHOTO_POLLS' | 'PINNING_NUDGE' | 'QUESTIONS' | 'QUESTIONS_M2' | 'QUIZ' | 'SHARE_STICKER_PACKS' | 'THREAD_MENU'>
+        readonly id?: string
     }
 }
 
 export type WaMexFetchNewsletterAdminInfoResponse = {
     readonly xwa2_newsletter_admin?: {
-        readonly admin_count?: unknown
+        readonly admin_count?: number
         readonly admin_profile?: {
-            readonly id?: unknown
-            readonly name?: unknown
+            readonly id?: string
+            readonly name?: string
             readonly picture?: {
-                readonly id?: unknown
-                readonly direct_path?: unknown
+                readonly id?: string
+                readonly direct_path?: string
             }
         }
         readonly admin_settings?: {
-            readonly admin_profiles_enabled?: unknown
+            readonly admin_profiles_enabled?: boolean
         }
-        readonly id?: unknown
+        readonly id?: string
     }
 }
 
 export type WaMexFetchNewsletterDehydratedResponse = {
     readonly xwa2_newsletter?: {
-        readonly id?: unknown
+        readonly id?: string
         readonly thread_metadata?: {
-            readonly subscribers_count?: unknown
-            readonly verification?: unknown
+            readonly subscribers_count?: string
+            readonly verification?: 'UNVERIFIED' | 'VERIFIED'
             readonly settings?: {
                 readonly reaction_codes?: {
-                    readonly value?: unknown
+                    readonly value?: 'ALL'
                 }
             }
             readonly wamo_sub?: {
-                readonly plan_id?: unknown
+                readonly plan_id?: string
             }
         }
         readonly viewer_metadata?: {
-            readonly wamo_sub_status?: unknown
+            readonly wamo_sub_status?: 'ACTIVE' | 'INACTIVE'
         }
     }
 }
 
 export type WaMexFetchNewsletterDirectoryCategoriesPreviewResponse = {
     readonly xwa2_newsletters_directory_category_preview?: {
-        readonly result?: {
-            readonly category?: unknown
-            readonly category_title?: unknown
-            readonly newsletters?: {
-                readonly id?: unknown
+        readonly result?: ReadonlyArray<{
+            readonly category?: string
+            readonly category_title?: string
+            readonly newsletters?: ReadonlyArray<{
+                readonly id?: string
                 readonly thread_metadata?: {
-                    readonly creation_time?: unknown
-                    readonly invite?: unknown
-                    readonly handle?: unknown
-                    readonly subscribers_count?: unknown
+                    readonly creation_time?: string
+                    readonly invite?: string
+                    readonly handle?: string
+                    readonly subscribers_count?: string
                     readonly name?: {
-                        readonly id?: unknown
-                        readonly text?: unknown
-                        readonly update_time?: unknown
+                        readonly id?: string
+                        readonly text?: string
+                        readonly update_time?: string
                     }
                     readonly description?: {
-                        readonly id?: unknown
-                        readonly text?: unknown
-                        readonly update_time?: unknown
+                        readonly id?: string
+                        readonly text?: string
+                        readonly update_time?: string
                     }
                     readonly picture?: {
-                        readonly id?: unknown
-                        readonly direct_path?: unknown
-                        readonly type?: unknown
+                        readonly id?: string
+                        readonly direct_path?: string
+                        readonly type?: 'IMAGE' | 'PREVIEW'
                     }
-                    readonly verification?: unknown
+                    readonly verification?: 'UNVERIFIED' | 'VERIFIED'
                 }
                 readonly status_metadata?: {
-                    readonly last_status_server_id?: unknown
-                    readonly last_status_sent_time?: unknown
+                    readonly last_status_server_id?: string
+                    readonly last_status_sent_time?: string
                 }
-            }
-        }
+            }>
+        }>
     }
 }
 
 export type WaMexFetchNewsletterDirectoryListResponse = {
     readonly xwa2_newsletters_directory_list?: {
         readonly page_info?: {
-            readonly hasNextPage?: unknown
-            readonly hasPreviousPage?: unknown
-            readonly startCursor?: unknown
-            readonly endCursor?: unknown
+            readonly hasNextPage?: boolean
+            readonly hasPreviousPage?: boolean
+            readonly startCursor?: string
+            readonly endCursor?: string
         }
-        readonly result?: {
-            readonly id?: unknown
+        readonly result?: ReadonlyArray<{
+            readonly id?: string
             readonly thread_metadata?: {
-                readonly creation_time?: unknown
-                readonly invite?: unknown
-                readonly handle?: unknown
-                readonly subscribers_count?: unknown
+                readonly creation_time?: string
+                readonly invite?: string
+                readonly handle?: string
+                readonly subscribers_count?: string
                 readonly name?: {
-                    readonly id?: unknown
-                    readonly text?: unknown
-                    readonly update_time?: unknown
+                    readonly id?: string
+                    readonly text?: string
+                    readonly update_time?: string
                 }
                 readonly description?: {
-                    readonly id?: unknown
-                    readonly text?: unknown
-                    readonly update_time?: unknown
+                    readonly id?: string
+                    readonly text?: string
+                    readonly update_time?: string
                 }
                 readonly picture?: {
-                    readonly id?: unknown
-                    readonly direct_path?: unknown
-                    readonly type?: unknown
+                    readonly id?: string
+                    readonly direct_path?: string
+                    readonly type?: 'IMAGE' | 'PREVIEW'
                 }
-                readonly verification?: unknown
+                readonly verification?: 'UNVERIFIED' | 'VERIFIED'
             }
             readonly status_metadata?: {
-                readonly last_status_server_id?: unknown
-                readonly last_status_sent_time?: unknown
+                readonly last_status_server_id?: string
+                readonly last_status_sent_time?: string
             }
-        }
+        }>
     }
 }
 
 export type WaMexFetchNewsletterDirectorySearchResultsResponse = {
     readonly xwa2_newsletters_directory_search?: {
         readonly page_info?: {
-            readonly hasNextPage?: unknown
-            readonly hasPreviousPage?: unknown
-            readonly startCursor?: unknown
-            readonly endCursor?: unknown
+            readonly hasNextPage?: boolean
+            readonly hasPreviousPage?: boolean
+            readonly startCursor?: string
+            readonly endCursor?: string
         }
-        readonly result?: {
-            readonly id?: unknown
+        readonly result?: ReadonlyArray<{
+            readonly id?: string
             readonly thread_metadata?: {
-                readonly creation_time?: unknown
-                readonly invite?: unknown
-                readonly handle?: unknown
-                readonly subscribers_count?: unknown
+                readonly creation_time?: string
+                readonly invite?: string
+                readonly handle?: string
+                readonly subscribers_count?: string
                 readonly name?: {
-                    readonly id?: unknown
-                    readonly text?: unknown
-                    readonly update_time?: unknown
+                    readonly id?: string
+                    readonly text?: string
+                    readonly update_time?: string
                 }
                 readonly description?: {
-                    readonly id?: unknown
-                    readonly text?: unknown
-                    readonly update_time?: unknown
+                    readonly id?: string
+                    readonly text?: string
+                    readonly update_time?: string
                 }
                 readonly picture?: {
-                    readonly id?: unknown
-                    readonly direct_path?: unknown
-                    readonly type?: unknown
+                    readonly id?: string
+                    readonly direct_path?: string
+                    readonly type?: 'IMAGE' | 'PREVIEW'
                 }
-                readonly verification?: unknown
+                readonly verification?: 'UNVERIFIED' | 'VERIFIED'
             }
             readonly status_metadata?: {
-                readonly last_status_server_id?: unknown
-                readonly last_status_sent_time?: unknown
+                readonly last_status_server_id?: string
+                readonly last_status_sent_time?: string
             }
-        }
+        }>
     }
 }
 
 export type WaMexFetchNewsletterEnforcementsResponse = {
     readonly xwa2_channel_enforcements?: {
-        readonly profile_picture_deletions?: {
-            readonly enforcement_creation_time?: unknown
-            readonly appeal_creation_time?: unknown
-            readonly appeal_state?: unknown
-            readonly enforcement_violation_category?: unknown
-            readonly enforcement_source?: unknown
-            readonly enforcement_id?: unknown
+        readonly profile_picture_deletions?: ReadonlyArray<{
+            readonly enforcement_creation_time?: string
+            readonly appeal_creation_time?: string
+            readonly appeal_state?: string
+            readonly enforcement_violation_category?: string
+            readonly enforcement_source?: string
+            readonly enforcement_id?: string
             readonly enforcement_extra_data?: {
                 readonly ip_violation_report_data?: {
-                    readonly report_fbid?: unknown
-                    readonly appeal_form_url?: unknown
-                    readonly reporter_email?: unknown
-                    readonly reporter_name?: unknown
+                    readonly report_fbid?: string
+                    readonly appeal_form_url?: string
+                    readonly reporter_email?: string
+                    readonly reporter_name?: string
                 }
             }
             readonly enforcement_policy_information?: {
-                readonly overview?: unknown
-                readonly headline?: unknown
-                readonly subtitle?: unknown
-                readonly explanation?: unknown
-                readonly admin_disclaimer?: unknown
+                readonly overview?: string
+                readonly headline?: string
+                readonly subtitle?: string
+                readonly explanation?: string
+                readonly admin_disclaimer?: string
             }
-        }
-        readonly suspensions?: {
-            readonly appeal_creation_time?: unknown
-            readonly enforcement_creation_time?: unknown
-            readonly appeal_state?: unknown
-            readonly enforcement_violation_category?: unknown
-            readonly enforcement_id?: unknown
-            readonly enforcement_source?: unknown
+        }>
+        readonly suspensions?: ReadonlyArray<{
+            readonly appeal_creation_time?: string
+            readonly enforcement_creation_time?: string
+            readonly appeal_state?: string
+            readonly enforcement_violation_category?: string
+            readonly enforcement_id?: string
+            readonly enforcement_source?: string
             readonly enforcement_extra_data?: {
                 readonly ip_violation_report_data?: {
-                    readonly report_fbid?: unknown
-                    readonly appeal_form_url?: unknown
-                    readonly reporter_email?: unknown
-                    readonly reporter_name?: unknown
+                    readonly report_fbid?: string
+                    readonly appeal_form_url?: string
+                    readonly reporter_email?: string
+                    readonly reporter_name?: string
                 }
                 readonly enforcement_target_data?: {
-                    readonly __typename?: unknown
-                    readonly server_msg_id?: unknown
-                    readonly server_id?: unknown
-                    readonly id?: unknown
+                    readonly __typename?: string
+                    readonly server_msg_id?: string
+                    readonly server_id?: string
+                    readonly id?: string
                 }
                 readonly appeal_extra_data?: {
-                    readonly appeal_form_url?: unknown
+                    readonly appeal_form_url?: string
                 }
             }
             readonly enforcement_policy_information?: {
-                readonly overview?: unknown
-                readonly headline?: unknown
-                readonly subtitle?: unknown
-                readonly explanation?: unknown
-                readonly admin_disclaimer?: unknown
+                readonly overview?: string
+                readonly headline?: string
+                readonly subtitle?: string
+                readonly explanation?: string
+                readonly admin_disclaimer?: string
             }
-        }
-        readonly violating_messages?: {
+        }>
+        readonly violating_messages?: ReadonlyArray<{
             readonly base_enforcement_data?: {
-                readonly enforcement_creation_time?: unknown
-                readonly appeal_creation_time?: unknown
-                readonly appeal_state?: unknown
-                readonly enforcement_id?: unknown
-                readonly enforcement_violation_category?: unknown
-                readonly enforcement_source?: unknown
+                readonly enforcement_creation_time?: string
+                readonly appeal_creation_time?: string
+                readonly appeal_state?: string
+                readonly enforcement_id?: string
+                readonly enforcement_violation_category?: string
+                readonly enforcement_source?: string
                 readonly enforcement_extra_data?: {
                     readonly ip_violation_report_data?: {
-                        readonly report_fbid?: unknown
-                        readonly appeal_form_url?: unknown
-                        readonly reporter_email?: unknown
-                        readonly reporter_name?: unknown
+                        readonly report_fbid?: string
+                        readonly appeal_form_url?: string
+                        readonly reporter_email?: string
+                        readonly reporter_name?: string
                     }
                 }
                 readonly enforcement_policy_information?: {
-                    readonly overview?: unknown
-                    readonly headline?: unknown
-                    readonly subtitle?: unknown
-                    readonly explanation?: unknown
-                    readonly admin_disclaimer?: unknown
+                    readonly overview?: string
+                    readonly headline?: string
+                    readonly subtitle?: string
+                    readonly explanation?: string
+                    readonly admin_disclaimer?: string
                 }
             }
             readonly content_data?: {
-                readonly __typename?: unknown
-                readonly server_msg_id?: unknown
-                readonly server_id?: unknown
+                readonly __typename?: string
+                readonly server_msg_id?: string
+                readonly server_id?: string
             }
-        }
-        readonly geosuspensions?: {
+        }>
+        readonly geosuspensions?: ReadonlyArray<{
             readonly base_enforcement_data?: {
-                readonly enforcement_creation_time?: unknown
-                readonly appeal_creation_time?: unknown
-                readonly appeal_state?: unknown
-                readonly enforcement_id?: unknown
-                readonly enforcement_violation_category?: unknown
-                readonly enforcement_source?: unknown
+                readonly enforcement_creation_time?: string
+                readonly appeal_creation_time?: string
+                readonly appeal_state?: string
+                readonly enforcement_id?: string
+                readonly enforcement_violation_category?: string
+                readonly enforcement_source?: string
                 readonly enforcement_extra_data?: {
                     readonly ip_violation_report_data?: {
-                        readonly report_fbid?: unknown
-                        readonly appeal_form_url?: unknown
-                        readonly reporter_email?: unknown
-                        readonly reporter_name?: unknown
+                        readonly report_fbid?: string
+                        readonly appeal_form_url?: string
+                        readonly reporter_email?: string
+                        readonly reporter_name?: string
                     }
                     readonly enforcement_target_data?: {
-                        readonly __typename?: unknown
-                        readonly server_msg_id?: unknown
-                        readonly server_id?: unknown
-                        readonly id?: unknown
+                        readonly __typename?: string
+                        readonly server_msg_id?: string
+                        readonly server_id?: string
+                        readonly id?: string
                     }
                     readonly appeal_extra_data?: {
-                        readonly appeal_form_url?: unknown
+                        readonly appeal_form_url?: string
                     }
                     readonly enforcing_entity_data?: {
-                        readonly name?: unknown
+                        readonly name?: string
                     }
-                    readonly enforcement_origin_workflow?: unknown
-                    readonly enforcement_origin_legal_basis?: unknown
+                    readonly enforcement_origin_workflow?: string
+                    readonly enforcement_origin_legal_basis?: string
                 }
                 readonly enforcement_policy_information?: {
-                    readonly overview?: unknown
-                    readonly headline?: unknown
-                    readonly subtitle?: unknown
-                    readonly explanation?: unknown
-                    readonly admin_disclaimer?: unknown
+                    readonly overview?: string
+                    readonly headline?: string
+                    readonly subtitle?: string
+                    readonly explanation?: string
+                    readonly admin_disclaimer?: string
                 }
             }
-            readonly country_codes?: unknown
-        }
+            readonly country_codes?: ReadonlyArray<string>
+        }>
     }
 }
 
 export type WaMexFetchNewsletterFollowersResponse = {
     readonly xwa2_newsletter_followers?: {
         readonly followers?: {
-            readonly edges?: {
+            readonly edges?: ReadonlyArray<{
                 readonly node?: {
-                    readonly id?: unknown
-                    readonly display_name?: unknown
-                    readonly pn?: unknown
+                    readonly id?: string
+                    readonly display_name?: string
+                    readonly pn?: string
                     readonly username_info?: {
-                        readonly __typename?: unknown
-                        readonly username?: unknown
+                        readonly __typename?: string
+                        readonly username?: string
                     }
                 }
-                readonly follow_time?: unknown
-                readonly role?: unknown
+                readonly follow_time?: string
+                readonly role?: 'ADMIN' | 'GUEST' | 'OWNER' | 'SUBSCRIBER'
                 readonly admin_profile?: {
-                    readonly id?: unknown
-                    readonly name?: unknown
+                    readonly id?: string
+                    readonly name?: string
                     readonly picture?: {
-                        readonly direct_path?: unknown
-                        readonly id?: unknown
+                        readonly direct_path?: string
+                        readonly id?: string
                     }
                 }
-            }
+            }>
         }
     }
 }
 
 export type WaMexFetchNewsletterInsightsResponse = {
     readonly xwa2_newsletter_admin_insights?: {
-        readonly newsletter_id?: unknown
+        readonly newsletter_id?: string
         readonly state?: {
-            readonly type?: unknown
+            readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
         }
-        readonly last_update_time?: unknown
-        readonly metrics_status?: unknown
-        readonly result?: {
-            readonly id?: unknown
-            readonly values?: {
-                readonly value?: unknown
-                readonly country?: unknown
-                readonly role?: unknown
-                readonly timestamp?: unknown
-            }
-        }
+        readonly last_update_time?: string
+        readonly metrics_status?: string
+        readonly result?: ReadonlyArray<{
+            readonly id?: string
+            readonly values?: ReadonlyArray<{
+                readonly value?: string
+                readonly country?: string
+                readonly role?: 'ADMIN' | 'GUEST' | 'OWNER' | 'SUBSCRIBER'
+                readonly timestamp?: string
+            }>
+        }>
     }
 }
 
 export type WaMexFetchNewsletterIsDomainPreviewableResponse = {
     readonly xwa2_newsletter_message_integrity?: {
-        readonly url_previews?: {
-            readonly url_domain?: unknown
-            readonly is_previewable?: unknown
-        }
+        readonly url_previews?: ReadonlyArray<{
+            readonly url_domain?: string
+            readonly is_previewable?: boolean
+        }>
     }
 }
 
 export type WaMexFetchNewsletterMessageReactionSenderListResponse = {
     readonly xwa2_newsletters_reaction_sender_list?: {
-        readonly reactions?: {
-            readonly reaction_code?: unknown
+        readonly reactions?: ReadonlyArray<{
+            readonly reaction_code?: string
             readonly sender_list?: {
-                readonly edges?: {
+                readonly edges?: ReadonlyArray<{
                     readonly node?: {
-                        readonly id?: unknown
-                        readonly profile_pic_direct_path?: unknown
+                        readonly id?: string
+                        readonly profile_pic_direct_path?: string
                     }
-                }
+                }>
             }
-        }
+        }>
     }
 }
 
 export type WaMexFetchNewsletterPendingInvitesResponse = {
     readonly xwa2_newsletter_admin?: {
-        readonly pending_admin_invites?: {
+        readonly pending_admin_invites?: ReadonlyArray<{
             readonly user?: {
-                readonly pn?: unknown
-                readonly id?: unknown
+                readonly pn?: string
+                readonly id?: string
             }
-        }
-        readonly id?: unknown
+        }>
+        readonly id?: string
     }
 }
 
 export type WaMexFetchNewsletterPollVotersResponse = {
     readonly voter_list?: {
-        readonly votes?: {
-            readonly vote_hash?: unknown
+        readonly votes?: ReadonlyArray<{
+            readonly vote_hash?: string
             readonly voter_list?: {
-                readonly edges?: {
-                    readonly action_time?: unknown
+                readonly edges?: ReadonlyArray<{
+                    readonly action_time?: string
                     readonly node?: {
-                        readonly id?: unknown
+                        readonly id?: string
                     }
-                }
+                }>
             }
-        }
+        }>
     }
 }
 
 export type WaMexFetchNewsletterReportsResponse = {
     readonly xwa2_channels_reports?: {
-        readonly channels_reports?: {
-            readonly report_id?: unknown
-            readonly status?: unknown
-            readonly creation_time?: unknown
-            readonly last_update_time?: unknown
-            readonly channel_name?: unknown
-            readonly channel_jid?: unknown
+        readonly channels_reports?: ReadonlyArray<{
+            readonly report_id?: string
+            readonly status?: string
+            readonly creation_time?: string
+            readonly last_update_time?: string
+            readonly channel_name?: string
+            readonly channel_jid?: string
             readonly reported_content_data?: {
-                readonly __typename?: unknown
-                readonly server_msg_id?: unknown
-                readonly server_id?: unknown
-                readonly server_response_id?: unknown
-                readonly notify_name?: unknown
+                readonly __typename?: string
+                readonly server_msg_id?: string
+                readonly server_id?: string
+                readonly server_response_id?: string
+                readonly notify_name?: string
                 readonly question_data?: {
-                    readonly __typename?: unknown
-                    readonly server_msg_id?: unknown
+                    readonly __typename?: string
+                    readonly server_msg_id?: string
                 }
             }
             readonly appeal?: {
-                readonly state?: unknown
-                readonly appeal_reason?: unknown
-                readonly creation_time?: unknown
-                readonly report_id?: unknown
-                readonly appeal_id?: unknown
+                readonly state?: 'CONTENT_UNAVAILABLE' | 'NON_APPEALABLE' | 'NOT_APPEALED' | 'PENDING' | 'REJECT' | 'SUCCESS'
+                readonly appeal_reason?: string
+                readonly creation_time?: string
+                readonly report_id?: string
+                readonly appeal_id?: string
             }
-        }
+        }>
     }
 }
 
 export type WaMexFetchOHAIKeyConfigResponse = {
     readonly xwa2_ohai_configurations?: {
-        readonly ohai_configs?: {
-            readonly aead_id?: unknown
-            readonly expiration_date?: unknown
-            readonly kdf_id?: unknown
-            readonly kem_id?: unknown
-            readonly key_id?: unknown
-            readonly last_updated_time?: unknown
-            readonly public_key?: unknown
-        }
+        readonly ohai_configs?: ReadonlyArray<{
+            readonly aead_id?: number
+            readonly expiration_date?: string
+            readonly kdf_id?: number
+            readonly kem_id?: number
+            readonly key_id?: number
+            readonly last_updated_time?: string
+            readonly public_key?: string
+        }>
     }
 }
 
 export type WaMexFetchOIDCStateResponse = {
-    readonly xfb_wa_biz_get_oidc_state?: unknown
+    readonly xfb_wa_biz_get_oidc_state?: string
 }
 
 export type WaMexFetchPlaintextLinkPreviewResponse = {
     readonly xwa2_newsletter_link_preview?: {
-        readonly description?: unknown
-        readonly direct_path?: unknown
-        readonly hash?: unknown
-        readonly preview_type?: unknown
-        readonly thumb_data?: unknown
-        readonly title?: unknown
-        readonly height?: unknown
-        readonly width?: unknown
+        readonly description?: string
+        readonly direct_path?: string
+        readonly hash?: string
+        readonly preview_type?: 'IMAGE'
+        readonly thumb_data?: string
+        readonly title?: string
+        readonly height?: number
+        readonly width?: number
     }
 }
 
 export type WaMexFetchQuickPromotionsResponse = {
-    readonly quick_promotion_batch_fetch_root?: {
-        readonly surface_nux_id?: unknown
+    readonly quick_promotion_batch_fetch_root?: ReadonlyArray<{
+        readonly surface_nux_id?: string
         readonly eligible_promotions?: {
-            readonly edges?: {
-                readonly client_ttl_seconds?: unknown
-                readonly priority?: unknown
-                readonly is_holdout?: unknown
-                readonly log_eligibility_waterfall?: unknown
+            readonly edges?: ReadonlyArray<{
+                readonly client_ttl_seconds?: number
+                readonly priority?: number
+                readonly is_holdout?: boolean
+                readonly log_eligibility_waterfall?: string
                 readonly time_range?: {
-                    readonly start?: unknown
-                    readonly end?: unknown
+                    readonly start?: string
+                    readonly end?: string
                 }
                 readonly node?: {
-                    readonly promotion_id?: unknown
-                    readonly is_server_force_pass?: unknown
-                    readonly ab_prop_name?: unknown
-                    readonly surface_delay_in_seconds?: unknown
-                    readonly encrypted_logging_data?: unknown
-                    readonly client_side_dry_run?: unknown
-                    readonly creatives?: {
+                    readonly promotion_id?: string
+                    readonly is_server_force_pass?: boolean
+                    readonly ab_prop_name?: string
+                    readonly surface_delay_in_seconds?: number
+                    readonly encrypted_logging_data?: string
+                    readonly client_side_dry_run?: boolean
+                    readonly creatives?: ReadonlyArray<{
                         readonly title?: {
-                            readonly text?: unknown
+                            readonly text?: string
                         }
                         readonly content?: {
-                            readonly text?: unknown
+                            readonly text?: string
                         }
                         readonly primary_action?: {
                             readonly title?: {
-                                readonly text?: unknown
+                                readonly text?: string
                             }
-                            readonly url?: unknown
+                            readonly url?: string
                         }
                         readonly wa_light_mode_media_details?: {
-                            readonly jpeg_thumbnail?: unknown
+                            readonly jpeg_thumbnail?: string
                         }
                         readonly wa_dark_mode_media_details?: {
-                            readonly jpeg_thumbnail?: unknown
+                            readonly jpeg_thumbnail?: string
                         }
-                        readonly accessibility_text_for_image?: unknown
-                        readonly is_dismissible?: unknown
-                        readonly id?: unknown
-                    }
+                        readonly accessibility_text_for_image?: string
+                        readonly is_dismissible?: boolean
+                        readonly id?: string
+                    }>
                     readonly content_attributes?: {
                         readonly wa_banner_background_color?: {
-                            readonly light_mode_highlight_color?: unknown
-                            readonly dark_mode_highlight_color?: unknown
-                            readonly light_mode_background_color?: unknown
-                            readonly dark_mode_background_color?: unknown
+                            readonly light_mode_highlight_color?: string
+                            readonly dark_mode_highlight_color?: string
+                            readonly light_mode_background_color?: string
+                            readonly dark_mode_background_color?: string
                         }
-                        readonly wa_primary_cta_alternative_url?: unknown
-                        readonly wa_eligible_duration_after_impression_in_seconds?: unknown
+                        readonly wa_primary_cta_alternative_url?: string
+                        readonly wa_eligible_duration_after_impression_in_seconds?: number
                     }
-                    readonly wa_qp_content_attributes_do_not_use?: {
-                        readonly name?: unknown
-                        readonly value?: unknown
-                    }
+                    readonly wa_qp_content_attributes_do_not_use?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly value?: string
+                    }>
                     readonly contextual_filters_for_wa_do_not_use?: {
-                        readonly clause_type?: unknown
-                        readonly filters?: {
-                            readonly filter_name?: unknown
-                            readonly parameters?: {
-                                readonly key?: unknown
-                                readonly value?: unknown
-                            }
-                            readonly passes_if_client_not_supported?: unknown
-                            readonly filter_result?: unknown
-                        }
-                        readonly clauses?: {
-                            readonly clause_type?: unknown
-                            readonly filters?: {
-                                readonly filter_name?: unknown
-                                readonly parameters?: {
-                                    readonly key?: unknown
-                                    readonly value?: unknown
-                                }
-                                readonly passes_if_client_not_supported?: unknown
-                                readonly filter_result?: unknown
-                            }
-                            readonly clauses?: {
-                                readonly clause_type?: unknown
-                                readonly filters?: {
-                                    readonly filter_name?: unknown
-                                    readonly parameters?: {
-                                        readonly key?: unknown
-                                        readonly value?: unknown
-                                    }
-                                    readonly passes_if_client_not_supported?: unknown
-                                    readonly filter_result?: unknown
-                                }
-                                readonly clauses?: {
-                                    readonly clause_type?: unknown
-                                    readonly filters?: {
-                                        readonly filter_name?: unknown
-                                        readonly parameters?: {
-                                            readonly key?: unknown
-                                            readonly value?: unknown
-                                        }
-                                        readonly passes_if_client_not_supported?: unknown
-                                        readonly filter_result?: unknown
-                                    }
-                                    readonly clauses?: {
-                                        readonly clause_type?: unknown
-                                        readonly filters?: {
-                                            readonly filter_name?: unknown
-                                            readonly parameters?: {
-                                                readonly key?: unknown
-                                                readonly value?: unknown
-                                            }
-                                            readonly passes_if_client_not_supported?: unknown
-                                            readonly filter_result?: unknown
-                                        }
-                                        readonly clauses?: {
-                                            readonly clause_type?: unknown
-                                            readonly filters?: {
-                                                readonly filter_name?: unknown
-                                                readonly parameters?: {
-                                                    readonly key?: unknown
-                                                    readonly value?: unknown
-                                                }
-                                                readonly passes_if_client_not_supported?: unknown
-                                                readonly filter_result?: unknown
-                                            }
-                                            readonly clauses?: {
-                                                readonly clause_type?: unknown
-                                                readonly filters?: {
-                                                    readonly filter_name?: unknown
-                                                    readonly parameters?: {
-                                                        readonly key?: unknown
-                                                        readonly value?: unknown
-                                                    }
-                                                    readonly passes_if_client_not_supported?: unknown
-                                                    readonly filter_result?: unknown
-                                                }
-                                                readonly clauses?: {
-                                                    readonly clause_type?: unknown
-                                                    readonly filters?: {
-                                                        readonly filter_name?: unknown
-                                                        readonly parameters?: {
-                                                            readonly key?: unknown
-                                                            readonly value?: unknown
-                                                        }
-                                                        readonly passes_if_client_not_supported?: unknown
-                                                        readonly filter_result?: unknown
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        readonly clause_type?: string
+                        readonly filters?: ReadonlyArray<{
+                            readonly filter_name?: string
+                            readonly parameters?: ReadonlyArray<{
+                                readonly key?: string
+                                readonly value?: string
+                            }>
+                            readonly passes_if_client_not_supported?: boolean
+                            readonly filter_result?: string
+                        }>
+                        readonly clauses?: ReadonlyArray<{
+                            readonly clause_type?: string
+                            readonly filters?: ReadonlyArray<{
+                                readonly filter_name?: string
+                                readonly parameters?: ReadonlyArray<{
+                                    readonly key?: string
+                                    readonly value?: string
+                                }>
+                                readonly passes_if_client_not_supported?: boolean
+                                readonly filter_result?: string
+                            }>
+                            readonly clauses?: ReadonlyArray<{
+                                readonly clause_type?: string
+                                readonly filters?: ReadonlyArray<{
+                                    readonly filter_name?: string
+                                    readonly parameters?: ReadonlyArray<{
+                                        readonly key?: string
+                                        readonly value?: string
+                                    }>
+                                    readonly passes_if_client_not_supported?: boolean
+                                    readonly filter_result?: string
+                                }>
+                                readonly clauses?: ReadonlyArray<{
+                                    readonly clause_type?: string
+                                    readonly filters?: ReadonlyArray<{
+                                        readonly filter_name?: string
+                                        readonly parameters?: ReadonlyArray<{
+                                            readonly key?: string
+                                            readonly value?: string
+                                        }>
+                                        readonly passes_if_client_not_supported?: boolean
+                                        readonly filter_result?: string
+                                    }>
+                                    readonly clauses?: ReadonlyArray<{
+                                        readonly clause_type?: string
+                                        readonly filters?: ReadonlyArray<{
+                                            readonly filter_name?: string
+                                            readonly parameters?: ReadonlyArray<{
+                                                readonly key?: string
+                                                readonly value?: string
+                                            }>
+                                            readonly passes_if_client_not_supported?: boolean
+                                            readonly filter_result?: string
+                                        }>
+                                        readonly clauses?: ReadonlyArray<{
+                                            readonly clause_type?: string
+                                            readonly filters?: ReadonlyArray<{
+                                                readonly filter_name?: string
+                                                readonly parameters?: ReadonlyArray<{
+                                                    readonly key?: string
+                                                    readonly value?: string
+                                                }>
+                                                readonly passes_if_client_not_supported?: boolean
+                                                readonly filter_result?: string
+                                            }>
+                                            readonly clauses?: ReadonlyArray<{
+                                                readonly clause_type?: string
+                                                readonly filters?: ReadonlyArray<{
+                                                    readonly filter_name?: string
+                                                    readonly parameters?: ReadonlyArray<{
+                                                        readonly key?: string
+                                                        readonly value?: string
+                                                    }>
+                                                    readonly passes_if_client_not_supported?: boolean
+                                                    readonly filter_result?: string
+                                                }>
+                                                readonly clauses?: ReadonlyArray<{
+                                                    readonly clause_type?: string
+                                                    readonly filters?: ReadonlyArray<{
+                                                        readonly filter_name?: string
+                                                        readonly parameters?: ReadonlyArray<{
+                                                            readonly key?: string
+                                                            readonly value?: string
+                                                        }>
+                                                        readonly passes_if_client_not_supported?: boolean
+                                                        readonly filter_result?: string
+                                                    }>
+                                                }>
+                                            }>
+                                        }>
+                                    }>
+                                }>
+                            }>
+                        }>
                     }
-                    readonly id?: unknown
+                    readonly id?: string
                 }
-            }
+            }>
         }
-    }
+    }>
 }
 
 export type WaMexFetchReachoutTimelockResponse = {
     readonly xwa2_fetch_account_reachout_timelock?: {
-        readonly is_active?: unknown
-        readonly time_enforcement_ends?: unknown
-        readonly enforcement_type?: unknown
+        readonly is_active?: boolean
+        readonly time_enforcement_ends?: string
+        readonly enforcement_type?: 'GEOSUSPEND' | 'GEOSUSPEND_INFORM' | 'PROFILE_PICTURE_DELETION' | 'SUSPEND' | 'SUSPEND_INFORM' | 'VIOLATING_MSG'
     }
 }
 
 export type WaMexFetchRecommendedNewslettersResponse = {
     readonly xwa2_newsletters_recommended?: {
         readonly page_info?: {
-            readonly hasNextPage?: unknown
-            readonly hasPreviousPage?: unknown
-            readonly startCursor?: unknown
-            readonly endCursor?: unknown
+            readonly hasNextPage?: boolean
+            readonly hasPreviousPage?: boolean
+            readonly startCursor?: string
+            readonly endCursor?: string
         }
-        readonly result?: {
-            readonly id?: unknown
+        readonly result?: ReadonlyArray<{
+            readonly id?: string
             readonly state?: {
-                readonly type?: unknown
+                readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
             }
             readonly thread_metadata?: {
-                readonly creation_time?: unknown
+                readonly creation_time?: string
                 readonly name?: {
-                    readonly id?: unknown
-                    readonly text?: unknown
-                    readonly update_time?: unknown
+                    readonly id?: string
+                    readonly text?: string
+                    readonly update_time?: string
                 }
                 readonly description?: {
-                    readonly id?: unknown
-                    readonly text?: unknown
-                    readonly update_time?: unknown
+                    readonly id?: string
+                    readonly text?: string
+                    readonly update_time?: string
                 }
                 readonly preview?: {
-                    readonly id?: unknown
-                    readonly type?: unknown
-                    readonly direct_path?: unknown
+                    readonly id?: string
+                    readonly type?: 'PREVIEW'
+                    readonly direct_path?: string
                 }
-                readonly invite?: unknown
-                readonly handle?: unknown
-                readonly verification?: unknown
-                readonly subscribers_count?: unknown
+                readonly invite?: string
+                readonly handle?: string
+                readonly verification?: 'UNVERIFIED' | 'VERIFIED'
+                readonly subscribers_count?: string
             }
             readonly status_metadata?: {
-                readonly last_status_server_id?: unknown
-                readonly last_status_sent_time?: unknown
+                readonly last_status_server_id?: string
+                readonly last_status_sent_time?: string
             }
-        }
+        }>
     }
 }
 
 export type WaMexFetchSimilarNewslettersResponse = {
     readonly xwa2_newsletters_similar?: {
-        readonly result?: {
-            readonly id?: unknown
+        readonly result?: ReadonlyArray<{
+            readonly id?: string
             readonly thread_metadata?: {
                 readonly name?: {
-                    readonly id?: unknown
-                    readonly text?: unknown
-                    readonly update_time?: unknown
+                    readonly id?: string
+                    readonly text?: string
+                    readonly update_time?: string
                 }
                 readonly picture?: {
-                    readonly id?: unknown
-                    readonly type?: unknown
-                    readonly direct_path?: unknown
+                    readonly id?: string
+                    readonly type?: 'IMAGE' | 'PREVIEW'
+                    readonly direct_path?: string
                 }
-                readonly verification?: unknown
+                readonly verification?: 'UNVERIFIED' | 'VERIFIED'
             }
             readonly status_metadata?: {
-                readonly last_status_server_id?: unknown
+                readonly last_status_server_id?: string
             }
             readonly state?: {
-                readonly type?: unknown
+                readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
             }
-        }
+        }>
     }
 }
 
 export type WaMexFetchSubgroupSuggestionsResponse = {
     readonly xwa2_group_query_by_id?: {
-        readonly __typename?: unknown
-        readonly id?: unknown
+        readonly __typename?: string
+        readonly id?: string
         readonly sub_group_suggestions?: {
-            readonly edges?: {
+            readonly edges?: ReadonlyArray<{
                 readonly node?: {
-                    readonly id?: unknown
+                    readonly id?: string
                     readonly subject?: {
-                        readonly value?: unknown
+                        readonly value?: string
                     }
                     readonly description?: {
-                        readonly value?: unknown
-                        readonly id?: unknown
+                        readonly value?: string
+                        readonly id?: string
                     }
                     readonly creator?: {
-                        readonly id?: unknown
+                        readonly id?: string
                     }
-                    readonly creation_time?: unknown
-                    readonly total_participants_count?: unknown
-                    readonly is_existing_group?: unknown
-                    readonly hidden_group?: unknown
+                    readonly creation_time?: string
+                    readonly total_participants_count?: number
+                    readonly is_existing_group?: boolean
+                    readonly hidden_group?: boolean
                 }
-            }
+            }>
         }
     }
 }
 
 export type WaMexFetchSubscriptionEntryPointsResponse = {
     readonly waSubscriptionEntryPoints?: {
-        readonly subscriptionEntryPoints?: {
-            readonly subscriptionType?: unknown
-            readonly webEntryPointEligibility?: unknown
-            readonly webEntryPointRedirectionUri?: unknown
-        }
+        readonly subscriptionEntryPoints?: ReadonlyArray<{
+            readonly subscriptionType?: string
+            readonly webEntryPointEligibility?: boolean
+            readonly webEntryPointRedirectionUri?: string
+        }>
     }
 }
 
 export type WaMexFetchSubscriptionsResponse = {
     readonly xwa_get_subscriptions?: {
-        readonly subscriptions?: {
-            readonly id?: unknown
-            readonly status?: unknown
-            readonly end_time?: unknown
-            readonly creation_time?: unknown
-            readonly tier?: unknown
-            readonly source?: unknown
-            readonly is_platform_changed?: unknown
-            readonly start_time?: unknown
-        }
-        readonly feature_flags?: {
-            readonly name?: unknown
-            readonly enabled?: unknown
-            readonly expiration_time?: unknown
-            readonly limit?: unknown
-        }
+        readonly subscriptions?: ReadonlyArray<{
+            readonly id?: string
+            readonly status?: 'ACTIVE' | 'CANCELED'
+            readonly end_time?: string
+            readonly creation_time?: string
+            readonly tier?: string
+            readonly source?: string
+            readonly is_platform_changed?: boolean
+            readonly start_time?: string
+        }>
+        readonly feature_flags?: ReadonlyArray<{
+            readonly name?: string
+            readonly enabled?: boolean
+            readonly expiration_time?: string
+            readonly limit?: number
+        }>
     }
 }
 
 export type WaMexFetchTextStatusListResponse = {
-    readonly xwa2_text_status_list?: {
-        readonly jid?: unknown
-        readonly text?: unknown
-        readonly last_update_time?: unknown
-        readonly ephemeral_duration_sec?: unknown
+    readonly xwa2_text_status_list?: ReadonlyArray<{
+        readonly jid?: string
+        readonly text?: string
+        readonly last_update_time?: string
+        readonly ephemeral_duration_sec?: number
         readonly emoji?: {
-            readonly content?: unknown
+            readonly content?: string
         }
-    }
+    }>
 }
 
 export type WaMexGetAccessTokenFromOIDCCodeResponse = {
     readonly xfb_wa_biz_get_token_from_oidc_code?: {
-        readonly access_token?: unknown
-        readonly fb_user_id?: unknown
+        readonly access_token?: string
+        readonly fb_user_id?: string
     }
 }
 
 export type WaMexGetAccountNonceResponse = {
     readonly xfb_wa_biz_account_nonce?: {
         readonly detail?: {
-            readonly nonce?: unknown
+            readonly nonce?: string
             readonly request?: {
-                readonly id?: unknown
+                readonly id?: string
             }
         }
     }
@@ -3051,90 +3075,90 @@ export type WaMexGetAccountNonceResponse = {
 
 export type WaMexGetDsbInfoResponse = {
     readonly xwa2_get_dsb_info?: {
-        readonly reference_number?: unknown
+        readonly reference_number?: string
     }
 }
 
 export type WaMexGetFBAccountPagesResponse = {
     readonly user?: {
         readonly facebook_pages?: {
-            readonly nodes?: {
-                readonly name?: unknown
-                readonly id?: unknown
+            readonly nodes?: ReadonlyArray<{
+                readonly name?: string
+                readonly id?: string
                 readonly profile_picture?: {
-                    readonly uri?: unknown
+                    readonly uri?: string
                 }
-                readonly permitted_tasks?: unknown
-            }
+                readonly permitted_tasks?: string
+            }>
         }
-        readonly id?: unknown
+        readonly id?: string
     }
 }
 
 export type WaMexGetNumbersForBrandIdsResponse = {
     readonly xwa_get_numbers_for_brand_ids?: {
-        readonly brand_ids_data?: {
-            readonly brand_id?: unknown
-            readonly error?: unknown
-            readonly phone_numbers?: unknown
-            readonly lids?: unknown
-        }
+        readonly brand_ids_data?: ReadonlyArray<{
+            readonly brand_id?: string
+            readonly error?: boolean
+            readonly phone_numbers?: ReadonlyArray<string>
+            readonly lids?: ReadonlyArray<string>
+        }>
     }
 }
 
 export type WaMexGetPrivacyListsResponse = {
-    readonly xwa2_fetch_wa_users?: {
-        readonly __typename?: unknown
+    readonly xwa2_fetch_wa_users?: ReadonlyArray<{
+        readonly __typename?: string
         readonly privacy_contact_list?: {
-            readonly dhash?: unknown
-            readonly contacts?: {
-                readonly jid?: unknown
-                readonly pn_jid?: unknown
+            readonly dhash?: string
+            readonly contacts?: ReadonlyArray<{
+                readonly jid?: string
+                readonly pn_jid?: string
                 readonly username_info?: {
-                    readonly __typename?: unknown
-                    readonly username?: unknown
+                    readonly __typename?: string
+                    readonly username?: string
                 }
-            }
+            }>
         }
-        readonly id?: unknown
-    }
+        readonly id?: string
+    }>
 }
 
 export type WaMexGetPrivacySettingsResponse = {
-    readonly xwa2_fetch_wa_users?: {
-        readonly __typename?: unknown
+    readonly xwa2_fetch_wa_users?: ReadonlyArray<{
+        readonly __typename?: string
         readonly privacy_settings?: {
-            readonly settings?: {
-                readonly feature?: unknown
-                readonly setting?: unknown
-            }
+            readonly settings?: ReadonlyArray<{
+                readonly feature?: 'ABOUT' | 'CALLADD' | 'DEFENSE' | 'DEPENDENT_ACCOUNT_CALLING' | 'DEPENDENT_ACCOUNT_MESSAGES' | 'GROUPADD' | 'LAST' | 'LINKED_PROFILES' | 'MESSAGES' | 'ONLINE' | 'PIX' | 'PROFILE' | 'READRECEIPTS' | 'STICKERS'
+                readonly setting?: 'ALL' | 'MYCONTACTS' | 'OFF'
+            }>
         }
-        readonly id?: unknown
-    }
+        readonly id?: string
+    }>
 }
 
 export type WaMexGetUsernameResponse = {
     readonly xwa2_username_get?: {
         readonly username_info?: {
-            readonly username?: unknown
-            readonly state?: unknown
-            readonly pin?: unknown
+            readonly username?: string
+            readonly state?: string
+            readonly pin?: string
         }
     }
 }
 
 export type WaMexGetWAAEligibilityResponse = {
     readonly eval_wa_ad_account_eligibility_rules?: {
-        readonly eligibility_result?: unknown
+        readonly eligibility_result?: string
     }
 }
 
 export type WaMexGraphQLProductCatalogGetPublicKeyResponse = {
     readonly xwa_product_catalog_get_public_key?: {
-        readonly public_key_certificate_pem?: unknown
+        readonly public_key_certificate_pem?: string
         readonly public_key_with_signature?: {
-            readonly public_key_pem?: unknown
-            readonly public_key_signature?: unknown
+            readonly public_key_pem?: string
+            readonly public_key_signature?: string
         }
     }
 }
@@ -3142,196 +3166,196 @@ export type WaMexGraphQLProductCatalogGetPublicKeyResponse = {
 export type WaMexGraphQLVerifyPostcodeResponse = {
     readonly xwa_product_catalog_get_verify_postcode?: {
         readonly postcode_verification_result?: {
-            readonly result_code?: unknown
-            readonly encrypted_location_name?: unknown
+            readonly result_code?: string
+            readonly encrypted_location_name?: string
         }
     }
 }
 
 export type WaMexGroupStoreInviteSmsResponse = {
     readonly xwa2_group_store_invites_sms?: {
-        readonly group_jid?: unknown
-        readonly participant_responses?: {
-            readonly error_code?: unknown
-        }
+        readonly group_jid?: string
+        readonly participant_responses?: ReadonlyArray<{
+            readonly error_code?: number
+        }>
     }
 }
 
 export type WaMexGroupSuspensionAppealResponse = {
     readonly wa_create_group_suspension_appeal?: {
-        readonly response_code?: unknown
-        readonly error_message?: unknown
-        readonly appeal_creation_time?: unknown
+        readonly response_code?: string
+        readonly error_message?: string
+        readonly appeal_creation_time?: string
     }
 }
 
 export type WaMexIntegrityChallengeResponseResponse = {
     readonly xwa2_submit_integrity_challenge_response?: {
-        readonly success?: unknown
-        readonly error_message?: unknown
+        readonly success?: boolean
+        readonly error_message?: string
     }
 }
 
 export type WaMexJoinNewsletterResponse = {
     readonly xwa2_newsletter_join_v2?: {
-        readonly id?: unknown
+        readonly id?: string
         readonly state?: {
-            readonly type?: unknown
+            readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
         }
     }
 }
 
 export type WaMexLeaveNewsletterResponse = {
     readonly xwa2_newsletter_leave_v2?: {
-        readonly id?: unknown
+        readonly id?: string
         readonly state?: {
-            readonly type?: unknown
+            readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
         }
     }
 }
 
 export type WaMexLidChangeNotificationResponse = {
     readonly xwa2_notify_lid_change?: {
-        readonly old?: unknown
-        readonly new?: unknown
+        readonly old?: string
+        readonly new?: string
     }
 }
 
 export type WaMexLogNewsletterExposuresResponse = {
     readonly xwa2_newsletter_log_exposures?: {
-        readonly __typename?: unknown
+        readonly __typename?: string
     }
 }
 
 export type WaMexNativeMLModelResponse = {
     readonly aim_model_batched_manifest?: {
-        readonly models?: {
-            readonly name?: unknown
-            readonly version?: unknown
-            readonly assets?: {
-                readonly name?: unknown
-                readonly id?: unknown
-                readonly cache_key?: unknown
-                readonly source_content_hash?: unknown
-                readonly md5_hash?: unknown
-                readonly asset_handle?: unknown
-                readonly creation_time?: unknown
-                readonly url?: unknown
-                readonly filesize_bytes?: unknown
-                readonly compression_type?: unknown
-                readonly asset_type?: unknown
-            }
-            readonly properties?: {
-                readonly name?: unknown
-                readonly value?: unknown
-            }
-        }
-        readonly entry_point?: unknown
-        readonly asset_count?: unknown
-        readonly model_count?: unknown
-        readonly status?: unknown
-        readonly status_details?: unknown
+        readonly models?: ReadonlyArray<{
+            readonly name?: string
+            readonly version?: number
+            readonly assets?: ReadonlyArray<{
+                readonly name?: string
+                readonly id?: string
+                readonly cache_key?: string
+                readonly source_content_hash?: string
+                readonly md5_hash?: string
+                readonly asset_handle?: string
+                readonly creation_time?: string
+                readonly url?: string
+                readonly filesize_bytes?: number
+                readonly compression_type?: string
+                readonly asset_type?: string
+            }>
+            readonly properties?: ReadonlyArray<{
+                readonly name?: string
+                readonly value?: string
+            }>
+        }>
+        readonly entry_point?: string
+        readonly asset_count?: number
+        readonly model_count?: number
+        readonly status?: string
+        readonly status_details?: string
     }
 }
 
 export type WaMexNewsletterAddPaidPartnershipLabelResponse = {
     readonly xwa2_newsletter_label_paid_partnership?: {
-        readonly id?: unknown
+        readonly id?: string
     }
 }
 
 export type WaMexQueryCatalogResponse = {
     readonly xwa_product_catalog_get_product_catalog?: {
-        readonly __typename?: unknown
+        readonly __typename?: string
         readonly product_catalog?: {
-            readonly products?: {
-                readonly id?: unknown
-                readonly retailer_id?: unknown
-                readonly is_hidden?: unknown
-                readonly is_sanctioned?: unknown
-                readonly product_availability?: unknown
-                readonly max_available?: unknown
-                readonly name?: unknown
-                readonly description?: unknown
-                readonly url?: unknown
-                readonly shimmed_url?: unknown
-                readonly currency?: unknown
-                readonly price?: unknown
+            readonly products?: ReadonlyArray<{
+                readonly id?: string
+                readonly retailer_id?: string
+                readonly is_hidden?: boolean
+                readonly is_sanctioned?: boolean
+                readonly product_availability?: string
+                readonly max_available?: number
+                readonly name?: string
+                readonly description?: string
+                readonly url?: string
+                readonly shimmed_url?: string
+                readonly currency?: string
+                readonly price?: string
                 readonly status_info?: {
-                    readonly can_appeal?: unknown
-                    readonly status?: unknown
+                    readonly can_appeal?: boolean
+                    readonly status?: string
                 }
                 readonly sale_price?: {
-                    readonly price?: unknown
-                    readonly start_date?: unknown
-                    readonly end_date?: unknown
+                    readonly price?: string
+                    readonly start_date?: string
+                    readonly end_date?: string
                 }
                 readonly media?: {
-                    readonly images?: {
-                        readonly id?: unknown
-                        readonly original_image_url?: unknown
-                        readonly request_image_url?: unknown
-                    }
-                    readonly videos?: {
-                        readonly id?: unknown
-                        readonly original_video_url?: unknown
-                        readonly thumbnail_url?: unknown
-                    }
+                    readonly images?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly original_image_url?: string
+                        readonly request_image_url?: string
+                    }>
+                    readonly videos?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly original_video_url?: string
+                        readonly thumbnail_url?: string
+                    }>
                 }
-                readonly belongs_to?: unknown
-                readonly compliance_category?: unknown
+                readonly belongs_to?: string
+                readonly compliance_category?: string
                 readonly compliance_info?: {
-                    readonly country_code_origin?: unknown
-                    readonly importer_name?: unknown
+                    readonly country_code_origin?: string
+                    readonly importer_name?: string
                     readonly importer_address?: {
-                        readonly street1?: unknown
-                        readonly street2?: unknown
-                        readonly postal_code?: unknown
-                        readonly city?: unknown
-                        readonly region?: unknown
-                        readonly country_code?: unknown
+                        readonly street1?: string
+                        readonly street2?: string
+                        readonly postal_code?: string
+                        readonly city?: string
+                        readonly region?: string
+                        readonly country_code?: string
                     }
                 }
                 readonly variant_info?: {
                     readonly listing_details?: {
-                        readonly description?: unknown
-                        readonly multi_price?: unknown
-                        readonly lowest_price?: unknown
+                        readonly description?: string
+                        readonly multi_price?: string
+                        readonly lowest_price?: string
                     }
                     readonly availability?: {
-                        readonly listing?: {
-                            readonly is_available?: unknown
-                            readonly options?: {
-                                readonly name?: unknown
-                                readonly value?: unknown
-                            }
-                            readonly product_id?: unknown
-                        }
+                        readonly listing?: ReadonlyArray<{
+                            readonly is_available?: boolean
+                            readonly options?: ReadonlyArray<{
+                                readonly name?: string
+                                readonly value?: string
+                            }>
+                            readonly product_id?: string
+                        }>
                     }
-                    readonly types?: {
-                        readonly name?: unknown
-                        readonly options?: {
-                            readonly value?: unknown
+                    readonly types?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly options?: ReadonlyArray<{
+                            readonly value?: string
                             readonly thumbnail_media?: {
-                                readonly id?: unknown
+                                readonly id?: string
                                 readonly original_dimensions?: {
-                                    readonly height?: unknown
-                                    readonly width?: unknown
+                                    readonly height?: number
+                                    readonly width?: number
                                 }
-                                readonly original_image_url?: unknown
-                                readonly request_image_url?: unknown
+                                readonly original_image_url?: string
+                                readonly request_image_url?: string
                             }
-                        }
-                    }
-                    readonly variant_properties?: {
-                        readonly name?: unknown
-                        readonly value?: unknown
-                    }
+                        }>
+                    }>
+                    readonly variant_properties?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly value?: string
+                    }>
                 }
-            }
+            }>
             readonly paging?: {
-                readonly before?: unknown
-                readonly after?: unknown
+                readonly before?: string
+                readonly after?: string
             }
         }
     }
@@ -3339,9 +3363,9 @@ export type WaMexQueryCatalogResponse = {
 
 export type WaMexQueryCatalogHasCategoriesResponse = {
     readonly xwa_product_catalog_get_categories?: {
-        readonly categories?: {
-            readonly __typename?: unknown
-        }
+        readonly categories?: ReadonlyArray<{
+            readonly __typename?: string
+        }>
     }
 }
 
@@ -3349,88 +3373,88 @@ export type WaMexQueryCatalogProductResponse = {
     readonly xwa_product_catalog_get_product?: {
         readonly product_catalog?: {
             readonly product?: {
-                readonly id?: unknown
-                readonly retailer_id?: unknown
-                readonly is_hidden?: unknown
-                readonly is_sanctioned?: unknown
-                readonly product_availability?: unknown
-                readonly max_available?: unknown
-                readonly name?: unknown
-                readonly description?: unknown
-                readonly url?: unknown
-                readonly shimmed_url?: unknown
-                readonly currency?: unknown
-                readonly price?: unknown
+                readonly id?: string
+                readonly retailer_id?: string
+                readonly is_hidden?: boolean
+                readonly is_sanctioned?: boolean
+                readonly product_availability?: string
+                readonly max_available?: number
+                readonly name?: string
+                readonly description?: string
+                readonly url?: string
+                readonly shimmed_url?: string
+                readonly currency?: string
+                readonly price?: string
                 readonly status_info?: {
-                    readonly can_appeal?: unknown
-                    readonly status?: unknown
+                    readonly can_appeal?: boolean
+                    readonly status?: string
                 }
                 readonly sale_price?: {
-                    readonly price?: unknown
-                    readonly start_date?: unknown
-                    readonly end_date?: unknown
+                    readonly price?: string
+                    readonly start_date?: string
+                    readonly end_date?: string
                 }
                 readonly media?: {
-                    readonly images?: {
-                        readonly id?: unknown
-                        readonly original_image_url?: unknown
-                        readonly request_image_url?: unknown
-                    }
-                    readonly videos?: {
-                        readonly id?: unknown
-                        readonly original_video_url?: unknown
-                        readonly thumbnail_url?: unknown
-                    }
+                    readonly images?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly original_image_url?: string
+                        readonly request_image_url?: string
+                    }>
+                    readonly videos?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly original_video_url?: string
+                        readonly thumbnail_url?: string
+                    }>
                 }
-                readonly belongs_to?: unknown
-                readonly compliance_category?: unknown
+                readonly belongs_to?: string
+                readonly compliance_category?: string
                 readonly compliance_info?: {
-                    readonly country_code_origin?: unknown
-                    readonly importer_name?: unknown
+                    readonly country_code_origin?: string
+                    readonly importer_name?: string
                     readonly importer_address?: {
-                        readonly street1?: unknown
-                        readonly street2?: unknown
-                        readonly postal_code?: unknown
-                        readonly city?: unknown
-                        readonly region?: unknown
-                        readonly country_code?: unknown
+                        readonly street1?: string
+                        readonly street2?: string
+                        readonly postal_code?: string
+                        readonly city?: string
+                        readonly region?: string
+                        readonly country_code?: string
                     }
                 }
                 readonly variant_info?: {
                     readonly listing_details?: {
-                        readonly description?: unknown
-                        readonly multi_price?: unknown
-                        readonly lowest_price?: unknown
+                        readonly description?: string
+                        readonly multi_price?: string
+                        readonly lowest_price?: string
                     }
                     readonly availability?: {
-                        readonly listing?: {
-                            readonly is_available?: unknown
-                            readonly options?: {
-                                readonly name?: unknown
-                                readonly value?: unknown
-                            }
-                            readonly product_id?: unknown
-                        }
+                        readonly listing?: ReadonlyArray<{
+                            readonly is_available?: boolean
+                            readonly options?: ReadonlyArray<{
+                                readonly name?: string
+                                readonly value?: string
+                            }>
+                            readonly product_id?: string
+                        }>
                     }
-                    readonly types?: {
-                        readonly name?: unknown
-                        readonly options?: {
-                            readonly value?: unknown
+                    readonly types?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly options?: ReadonlyArray<{
+                            readonly value?: string
                             readonly thumbnail_media?: {
-                                readonly id?: unknown
+                                readonly id?: string
                                 readonly original_dimensions?: {
-                                    readonly height?: unknown
-                                    readonly width?: unknown
+                                    readonly height?: number
+                                    readonly width?: number
                                 }
-                                readonly original_image_url?: unknown
-                                readonly request_image_url?: unknown
+                                readonly original_image_url?: string
+                                readonly request_image_url?: string
                             }
-                        }
-                    }
-                    readonly variant_properties?: {
-                        readonly name?: unknown
-                        readonly value?: unknown
-                    }
+                        }>
+                    }>
+                    readonly variant_properties?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly value?: string
+                    }>
                 }
             }
         }
@@ -3439,197 +3463,197 @@ export type WaMexQueryCatalogProductResponse = {
 
 export type WaMexQueryProductCollectionsResponse = {
     readonly xwa_product_catalog_get_collections?: {
-        readonly __typename?: unknown
-        readonly collections?: {
-            readonly id?: unknown
-            readonly name?: unknown
+        readonly __typename?: string
+        readonly collections?: ReadonlyArray<{
+            readonly id?: string
+            readonly name?: string
             readonly status_info?: {
-                readonly status?: unknown
-                readonly can_appeal?: unknown
-                readonly reject_reason?: unknown
-                readonly commerce_url?: unknown
+                readonly status?: string
+                readonly can_appeal?: string
+                readonly reject_reason?: string
+                readonly commerce_url?: string
             }
-            readonly products?: {
-                readonly id?: unknown
-                readonly retailer_id?: unknown
-                readonly is_hidden?: unknown
-                readonly is_sanctioned?: unknown
-                readonly product_availability?: unknown
-                readonly max_available?: unknown
-                readonly name?: unknown
-                readonly description?: unknown
-                readonly url?: unknown
-                readonly shimmed_url?: unknown
-                readonly currency?: unknown
-                readonly price?: unknown
+            readonly products?: ReadonlyArray<{
+                readonly id?: string
+                readonly retailer_id?: string
+                readonly is_hidden?: boolean
+                readonly is_sanctioned?: boolean
+                readonly product_availability?: string
+                readonly max_available?: number
+                readonly name?: string
+                readonly description?: string
+                readonly url?: string
+                readonly shimmed_url?: string
+                readonly currency?: string
+                readonly price?: string
                 readonly status_info?: {
-                    readonly can_appeal?: unknown
-                    readonly status?: unknown
+                    readonly can_appeal?: string
+                    readonly status?: string
                 }
                 readonly sale_price?: {
-                    readonly price?: unknown
-                    readonly start_date?: unknown
-                    readonly end_date?: unknown
+                    readonly price?: string
+                    readonly start_date?: string
+                    readonly end_date?: string
                 }
                 readonly media?: {
-                    readonly images?: {
-                        readonly id?: unknown
-                        readonly original_image_url?: unknown
-                        readonly request_image_url?: unknown
-                    }
-                    readonly videos?: {
-                        readonly id?: unknown
-                        readonly original_video_url?: unknown
-                        readonly thumbnail_url?: unknown
-                    }
+                    readonly images?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly original_image_url?: string
+                        readonly request_image_url?: string
+                    }>
+                    readonly videos?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly original_video_url?: string
+                        readonly thumbnail_url?: string
+                    }>
                 }
-                readonly belongs_to?: unknown
-                readonly compliance_category?: unknown
+                readonly belongs_to?: string
+                readonly compliance_category?: string
                 readonly compliance_info?: {
-                    readonly country_code_origin?: unknown
-                    readonly importer_name?: unknown
+                    readonly country_code_origin?: string
+                    readonly importer_name?: string
                     readonly importer_address?: {
-                        readonly street1?: unknown
-                        readonly street2?: unknown
-                        readonly postal_code?: unknown
-                        readonly city?: unknown
-                        readonly region?: unknown
-                        readonly country_code?: unknown
+                        readonly street1?: string
+                        readonly street2?: string
+                        readonly postal_code?: string
+                        readonly city?: string
+                        readonly region?: string
+                        readonly country_code?: string
                     }
                 }
                 readonly variant_info?: {
                     readonly listing_details?: {
-                        readonly description?: unknown
-                        readonly multi_price?: unknown
-                        readonly lowest_price?: unknown
+                        readonly description?: string
+                        readonly multi_price?: string
+                        readonly lowest_price?: string
                     }
                     readonly availability?: {
-                        readonly listing?: {
-                            readonly is_available?: unknown
-                            readonly options?: {
-                                readonly name?: unknown
-                                readonly value?: unknown
-                            }
-                            readonly product_id?: unknown
-                        }
+                        readonly listing?: ReadonlyArray<{
+                            readonly is_available?: boolean
+                            readonly options?: ReadonlyArray<{
+                                readonly name?: string
+                                readonly value?: string
+                            }>
+                            readonly product_id?: string
+                        }>
                     }
-                    readonly types?: {
-                        readonly name?: unknown
-                        readonly options?: {
-                            readonly value?: unknown
+                    readonly types?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly options?: ReadonlyArray<{
+                            readonly value?: string
                             readonly thumbnail_media?: {
-                                readonly id?: unknown
+                                readonly id?: string
                                 readonly original_dimensions?: {
-                                    readonly height?: unknown
-                                    readonly width?: unknown
+                                    readonly height?: number
+                                    readonly width?: number
                                 }
-                                readonly original_image_url?: unknown
-                                readonly request_image_url?: unknown
+                                readonly original_image_url?: string
+                                readonly request_image_url?: string
                             }
-                        }
-                    }
-                    readonly variant_properties?: {
-                        readonly name?: unknown
-                        readonly value?: unknown
-                    }
+                        }>
+                    }>
+                    readonly variant_properties?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly value?: string
+                    }>
                 }
-            }
-        }
+            }>
+        }>
         readonly paging?: {
-            readonly after?: unknown
+            readonly after?: string
         }
     }
 }
 
 export type WaMexQueryProductListCatalogResponse = {
     readonly xwa_product_catalog_get_product_list?: {
-        readonly __typename?: unknown
+        readonly __typename?: string
         readonly product_list?: {
-            readonly products?: {
-                readonly id?: unknown
-                readonly retailer_id?: unknown
-                readonly is_hidden?: unknown
-                readonly is_sanctioned?: unknown
-                readonly product_availability?: unknown
-                readonly max_available?: unknown
-                readonly name?: unknown
-                readonly description?: unknown
-                readonly url?: unknown
-                readonly shimmed_url?: unknown
-                readonly currency?: unknown
-                readonly price?: unknown
+            readonly products?: ReadonlyArray<{
+                readonly id?: string
+                readonly retailer_id?: string
+                readonly is_hidden?: boolean
+                readonly is_sanctioned?: boolean
+                readonly product_availability?: string
+                readonly max_available?: number
+                readonly name?: string
+                readonly description?: string
+                readonly url?: string
+                readonly shimmed_url?: string
+                readonly currency?: string
+                readonly price?: string
                 readonly status_info?: {
-                    readonly can_appeal?: unknown
-                    readonly status?: unknown
+                    readonly can_appeal?: boolean
+                    readonly status?: string
                 }
                 readonly sale_price?: {
-                    readonly price?: unknown
-                    readonly start_date?: unknown
-                    readonly end_date?: unknown
+                    readonly price?: string
+                    readonly start_date?: string
+                    readonly end_date?: string
                 }
                 readonly media?: {
-                    readonly images?: {
-                        readonly id?: unknown
-                        readonly original_image_url?: unknown
-                        readonly request_image_url?: unknown
-                    }
-                    readonly videos?: {
-                        readonly id?: unknown
-                        readonly original_video_url?: unknown
-                        readonly thumbnail_url?: unknown
-                    }
+                    readonly images?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly original_image_url?: string
+                        readonly request_image_url?: string
+                    }>
+                    readonly videos?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly original_video_url?: string
+                        readonly thumbnail_url?: string
+                    }>
                 }
-                readonly belongs_to?: unknown
-                readonly compliance_category?: unknown
+                readonly belongs_to?: string
+                readonly compliance_category?: string
                 readonly compliance_info?: {
-                    readonly country_code_origin?: unknown
-                    readonly importer_name?: unknown
+                    readonly country_code_origin?: string
+                    readonly importer_name?: string
                     readonly importer_address?: {
-                        readonly street1?: unknown
-                        readonly street2?: unknown
-                        readonly postal_code?: unknown
-                        readonly city?: unknown
-                        readonly region?: unknown
-                        readonly country_code?: unknown
+                        readonly street1?: string
+                        readonly street2?: string
+                        readonly postal_code?: string
+                        readonly city?: string
+                        readonly region?: string
+                        readonly country_code?: string
                     }
                 }
                 readonly variant_info?: {
                     readonly listing_details?: {
-                        readonly description?: unknown
-                        readonly multi_price?: unknown
-                        readonly lowest_price?: unknown
+                        readonly description?: string
+                        readonly multi_price?: string
+                        readonly lowest_price?: string
                     }
                     readonly availability?: {
-                        readonly listing?: {
-                            readonly is_available?: unknown
-                            readonly options?: {
-                                readonly name?: unknown
-                                readonly value?: unknown
-                            }
-                            readonly product_id?: unknown
-                        }
+                        readonly listing?: ReadonlyArray<{
+                            readonly is_available?: boolean
+                            readonly options?: ReadonlyArray<{
+                                readonly name?: string
+                                readonly value?: string
+                            }>
+                            readonly product_id?: string
+                        }>
                     }
-                    readonly types?: {
-                        readonly name?: unknown
-                        readonly options?: {
-                            readonly value?: unknown
+                    readonly types?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly options?: ReadonlyArray<{
+                            readonly value?: string
                             readonly thumbnail_media?: {
-                                readonly id?: unknown
+                                readonly id?: string
                                 readonly original_dimensions?: {
-                                    readonly height?: unknown
-                                    readonly width?: unknown
+                                    readonly height?: number
+                                    readonly width?: number
                                 }
-                                readonly original_image_url?: unknown
-                                readonly request_image_url?: unknown
+                                readonly original_image_url?: string
+                                readonly request_image_url?: string
                             }
-                        }
-                    }
-                    readonly variant_properties?: {
-                        readonly name?: unknown
-                        readonly value?: unknown
-                    }
+                        }>
+                    }>
+                    readonly variant_properties?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly value?: string
+                    }>
                 }
-            }
+            }>
         }
     }
 }
@@ -3637,254 +3661,254 @@ export type WaMexQueryProductListCatalogResponse = {
 export type WaMexQueryProductSingleCollectionResponse = {
     readonly xwa_product_catalog_get_single_collection?: {
         readonly collection?: {
-            readonly id?: unknown
-            readonly name?: unknown
+            readonly id?: string
+            readonly name?: string
             readonly status_info?: {
-                readonly status?: unknown
-                readonly can_appeal?: unknown
-                readonly reject_reason?: unknown
-                readonly commerce_url?: unknown
+                readonly status?: string
+                readonly can_appeal?: string
+                readonly reject_reason?: string
+                readonly commerce_url?: string
             }
-            readonly products?: {
-                readonly id?: unknown
-                readonly retailer_id?: unknown
-                readonly is_hidden?: unknown
-                readonly is_sanctioned?: unknown
-                readonly product_availability?: unknown
-                readonly max_available?: unknown
-                readonly name?: unknown
-                readonly description?: unknown
-                readonly url?: unknown
-                readonly shimmed_url?: unknown
-                readonly currency?: unknown
-                readonly price?: unknown
+            readonly products?: ReadonlyArray<{
+                readonly id?: string
+                readonly retailer_id?: string
+                readonly is_hidden?: boolean
+                readonly is_sanctioned?: boolean
+                readonly product_availability?: string
+                readonly max_available?: number
+                readonly name?: string
+                readonly description?: string
+                readonly url?: string
+                readonly shimmed_url?: string
+                readonly currency?: string
+                readonly price?: string
                 readonly status_info?: {
-                    readonly can_appeal?: unknown
-                    readonly status?: unknown
+                    readonly can_appeal?: string
+                    readonly status?: string
                 }
                 readonly sale_price?: {
-                    readonly price?: unknown
-                    readonly start_date?: unknown
-                    readonly end_date?: unknown
+                    readonly price?: string
+                    readonly start_date?: string
+                    readonly end_date?: string
                 }
                 readonly media?: {
-                    readonly images?: {
-                        readonly id?: unknown
-                        readonly original_image_url?: unknown
-                        readonly request_image_url?: unknown
-                    }
-                    readonly videos?: {
-                        readonly id?: unknown
-                        readonly original_video_url?: unknown
-                        readonly thumbnail_url?: unknown
-                    }
+                    readonly images?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly original_image_url?: string
+                        readonly request_image_url?: string
+                    }>
+                    readonly videos?: ReadonlyArray<{
+                        readonly id?: string
+                        readonly original_video_url?: string
+                        readonly thumbnail_url?: string
+                    }>
                 }
-                readonly belongs_to?: unknown
-                readonly compliance_category?: unknown
+                readonly belongs_to?: string
+                readonly compliance_category?: string
                 readonly compliance_info?: {
-                    readonly country_code_origin?: unknown
-                    readonly importer_name?: unknown
+                    readonly country_code_origin?: string
+                    readonly importer_name?: string
                     readonly importer_address?: {
-                        readonly street1?: unknown
-                        readonly street2?: unknown
-                        readonly postal_code?: unknown
-                        readonly city?: unknown
-                        readonly region?: unknown
-                        readonly country_code?: unknown
+                        readonly street1?: string
+                        readonly street2?: string
+                        readonly postal_code?: string
+                        readonly city?: string
+                        readonly region?: string
+                        readonly country_code?: string
                     }
                 }
                 readonly variant_info?: {
                     readonly listing_details?: {
-                        readonly description?: unknown
-                        readonly multi_price?: unknown
-                        readonly lowest_price?: unknown
+                        readonly description?: string
+                        readonly multi_price?: string
+                        readonly lowest_price?: string
                     }
                     readonly availability?: {
-                        readonly listing?: {
-                            readonly is_available?: unknown
-                            readonly options?: {
-                                readonly name?: unknown
-                                readonly value?: unknown
-                            }
-                            readonly product_id?: unknown
-                        }
+                        readonly listing?: ReadonlyArray<{
+                            readonly is_available?: boolean
+                            readonly options?: ReadonlyArray<{
+                                readonly name?: string
+                                readonly value?: string
+                            }>
+                            readonly product_id?: string
+                        }>
                     }
-                    readonly types?: {
-                        readonly name?: unknown
-                        readonly options?: {
-                            readonly value?: unknown
+                    readonly types?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly options?: ReadonlyArray<{
+                            readonly value?: string
                             readonly thumbnail_media?: {
-                                readonly id?: unknown
+                                readonly id?: string
                                 readonly original_dimensions?: {
-                                    readonly height?: unknown
-                                    readonly width?: unknown
+                                    readonly height?: number
+                                    readonly width?: number
                                 }
-                                readonly original_image_url?: unknown
-                                readonly request_image_url?: unknown
+                                readonly original_image_url?: string
+                                readonly request_image_url?: string
                             }
-                        }
-                    }
-                    readonly variant_properties?: {
-                        readonly name?: unknown
-                        readonly value?: unknown
-                    }
+                        }>
+                    }>
+                    readonly variant_properties?: ReadonlyArray<{
+                        readonly name?: string
+                        readonly value?: string
+                    }>
                 }
-            }
+            }>
         }
         readonly paging?: {
-            readonly after?: unknown
+            readonly after?: string
         }
     }
 }
 
 export type WaMexQuerySubgroupParticipantCountResponse = {
     readonly xwa2_group_query_by_id?: {
-        readonly __typename?: unknown
+        readonly __typename?: string
         readonly sub_groups?: {
-            readonly edges?: {
+            readonly edges?: ReadonlyArray<{
                 readonly node?: {
-                    readonly id?: unknown
-                    readonly total_participants_count?: unknown
+                    readonly id?: string
+                    readonly total_participants_count?: number
                 }
-            }
+            }>
         }
-        readonly id?: unknown
+        readonly id?: string
     }
 }
 
 export type WaMexQuickPromotionActionResponse = {
     readonly wa_quick_promotion_log_event?: {
-        readonly client_mutation_id?: unknown
+        readonly client_mutation_id?: string
     }
 }
 
 export type WaMexReportProductResponse = {
     readonly xwa_whatsapp_catalog_report_product?: {
-        readonly __typename?: unknown
-        readonly success?: unknown
+        readonly __typename?: string
+        readonly success?: boolean
     }
 }
 
 export type WaMexRequestClientLogsForBugResponse = {
-    readonly xwa2_request_client_logs_for_bug?: unknown
+    readonly xwa2_request_client_logs_for_bug?: boolean
 }
 
 export type WaMexResolveAccountTypeAndAdPageResponse = {
-    readonly xfb_wa_biz_clear_oidc_preference?: unknown
+    readonly xfb_wa_biz_clear_oidc_preference?: boolean
 }
 
 export type WaMexResolveAccountTypeAndAdPageQueryResponse = {
     readonly page?: {
-        readonly can_viewer_do_actions?: unknown
-        readonly id?: unknown
+        readonly can_viewer_do_actions?: boolean
+        readonly id?: string
     }
 }
 
 export type WaMexRevokeNewsletterAdminInviteResponse = {
     readonly xwa2_newsletter_admin_invite_revoke?: {
-        readonly __typename?: unknown
-        readonly id?: unknown
+        readonly __typename?: string
+        readonly id?: string
     }
 }
 
 export type WaMexSetUsernameResponse = {
     readonly xwa2_username_set?: {
-        readonly result?: unknown
+        readonly result?: 'SUCCESS'
     }
 }
 
 export type WaMexSetUsernameKeyResponse = {
     readonly xwa2_username_pin_set?: {
-        readonly result?: unknown
+        readonly result?: 'SUCCESS'
     }
 }
 
 export type WaMexSignupMetadataResponse = {
     readonly wa_signup_metadata?: {
-        readonly id?: unknown
-        readonly signup_message?: unknown
-        readonly privacy_policy_url?: unknown
+        readonly id?: string
+        readonly signup_message?: string
+        readonly privacy_policy_url?: string
     }
 }
 
 export type WaMexSupportBugReportSubmitResponse = {
     readonly xwa_wa_support_bug_report_submit?: {
-        readonly success?: unknown
-        readonly error_code?: unknown
-        readonly error_message?: unknown
-        readonly bug_report_id?: unknown
-        readonly task_id?: unknown
+        readonly success?: boolean
+        readonly error_code?: number
+        readonly error_message?: string
+        readonly bug_report_id?: string
+        readonly task_id?: string
     }
 }
 
 export type WaMexSupportContactFormSubmitResponse = {
     readonly xwa_wa_support_contact_form_submit?: {
-        readonly success?: unknown
-        readonly error_code?: unknown
-        readonly error_message?: unknown
-        readonly ticket_id?: unknown
-        readonly support_phone_number_jid?: unknown
+        readonly success?: boolean
+        readonly error_code?: number
+        readonly error_message?: string
+        readonly ticket_id?: string
+        readonly support_phone_number_jid?: string
     }
 }
 
 export type WaMexSupportMessageFeedbackSubmitResponse = {
     readonly xwa_wa_support_message_feedback_submit?: {
-        readonly success?: unknown
-        readonly error_code?: unknown
-        readonly error_message?: unknown
+        readonly success?: boolean
+        readonly error_code?: number
+        readonly error_message?: string
     }
 }
 
 export type WaMexTransferCommunityOwnershipResponse = {
     readonly xwa2_group_update_users_role?: {
-        readonly group_id?: unknown
+        readonly group_id?: string
         readonly lid_migration_state?: {
-            readonly addressing_mode?: unknown
+            readonly addressing_mode?: string
         }
     }
 }
 
 export type WaMexUpdateGroupPropertyResponse = {
     readonly xwa2_group_update_property?: {
-        readonly id?: unknown
-        readonly state?: unknown
+        readonly id?: string
+        readonly state?: string
     }
 }
 
 export type WaMexUpdateNewsletterResponse = {
     readonly xwa2_newsletter_update?: {
-        readonly id?: unknown
+        readonly id?: string
         readonly state?: {
-            readonly type?: unknown
+            readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
         }
         readonly thread_metadata?: {
             readonly name?: {
-                readonly id?: unknown
-                readonly text?: unknown
-                readonly update_time?: unknown
+                readonly id?: string
+                readonly text?: string
+                readonly update_time?: string
             }
             readonly description?: {
-                readonly id?: unknown
-                readonly text?: unknown
-                readonly update_time?: unknown
+                readonly id?: string
+                readonly text?: string
+                readonly update_time?: string
             }
             readonly picture?: {
-                readonly id?: unknown
-                readonly type?: unknown
-                readonly direct_path?: unknown
+                readonly id?: string
+                readonly type?: 'IMAGE' | 'PREVIEW'
+                readonly direct_path?: string
             }
             readonly preview?: {
-                readonly id?: unknown
-                readonly type?: unknown
-                readonly direct_path?: unknown
+                readonly id?: string
+                readonly type?: 'PREVIEW'
+                readonly direct_path?: string
             }
-            readonly invite?: unknown
-            readonly handle?: unknown
-            readonly verification?: unknown
-            readonly creation_time?: unknown
+            readonly invite?: string
+            readonly handle?: string
+            readonly verification?: 'UNVERIFIED' | 'VERIFIED'
+            readonly creation_time?: string
             readonly settings?: {
                 readonly reaction_codes?: {
-                    readonly value?: unknown
+                    readonly value?: 'ALL'
                 }
             }
         }
@@ -3893,128 +3917,128 @@ export type WaMexUpdateNewsletterResponse = {
 
 export type WaMexUpdateNewsletterUserSettingResponse = {
     readonly xwa2_newsletter_update_user_setting?: {
-        readonly id?: unknown
+        readonly id?: string
         readonly state?: {
-            readonly type?: unknown
+            readonly type?: 'ACTIVE' | 'DELETED' | 'GEOSUSPENDED' | 'NON_EXISTING' | 'SUSPENDED'
         }
     }
 }
 
 export type WaMexUpdateTextStatusResponse = {
     readonly xwa2_update_text_status?: {
-        readonly result?: unknown
+        readonly result?: string
     }
 }
 
 export type WaMexUsernameAvailabilityResponse = {
     readonly xwa2_username_check?: {
-        readonly result?: unknown
-        readonly suggestions?: unknown
+        readonly result?: 'SUCCESS'
+        readonly suggestions?: ReadonlyArray<string>
     }
 }
 
 export type WaMexUsyncResponse = {
-    readonly xwa2_fetch_wa_users?: {
-        readonly __typename?: unknown
-        readonly jid?: unknown
-        readonly country_code?: unknown
+    readonly xwa2_fetch_wa_users?: ReadonlyArray<{
+        readonly __typename?: string
+        readonly jid?: string
+        readonly country_code?: string
         readonly username_info?: {
-            readonly __typename?: unknown
-            readonly username?: unknown
-            readonly state?: unknown
-            readonly timestamp?: unknown
-            readonly pin?: unknown
-            readonly status?: unknown
+            readonly __typename?: string
+            readonly username?: string
+            readonly state?: string
+            readonly timestamp?: string
+            readonly pin?: string
+            readonly status?: string
         }
         readonly about_status_info?: {
-            readonly __typename?: unknown
-            readonly text?: unknown
-            readonly timestamp?: unknown
-            readonly status?: unknown
+            readonly __typename?: string
+            readonly text?: string
+            readonly timestamp?: string
+            readonly status?: string
         }
-        readonly id?: unknown
-    }
+        readonly id?: string
+    }>
 }
 
 export type WaMexWAAOnboardingResponse = {
     readonly create_or_onboard_wa_ad_account?: {
-        readonly ad_account_id?: unknown
-        readonly status?: unknown
+        readonly ad_account_id?: string
+        readonly status?: string
     }
 }
 
 export type WaMexWaffleFXServiceDataQueryV2Response = {
     readonly waffle_fx_service_data?: {
         readonly services?: {
-            readonly waffle_sxs?: {
-                readonly waffle_di?: unknown
-                readonly waffle_da?: unknown
-                readonly waffle_xss?: {
-                    readonly waffle_iaxe?: unknown
-                    readonly waffle_x_surface?: unknown
-                }
-            }
+            readonly waffle_sxs?: ReadonlyArray<{
+                readonly waffle_di?: string
+                readonly waffle_da?: string
+                readonly waffle_xss?: ReadonlyArray<{
+                    readonly waffle_iaxe?: string
+                    readonly waffle_x_surface?: string
+                }>
+            }>
             readonly waffle_afs?: {
-                readonly waffle_wes?: unknown
+                readonly waffle_wes?: string
             }
             readonly foa_to_wa_link_eligibility?: {
-                readonly is_eligible_to_link_to_unlinked_fb?: unknown
-                readonly is_eligible_to_link_to_linked_fb?: unknown
-                readonly is_eligible_to_link_to_unlinked_ig?: unknown
-                readonly is_eligible_to_link_to_linked_ig?: unknown
-                readonly is_eligible_to_link_to_unlinked_rl?: unknown
-                readonly is_eligible_to_link_to_linked_rl?: unknown
+                readonly is_eligible_to_link_to_unlinked_fb?: boolean
+                readonly is_eligible_to_link_to_linked_fb?: boolean
+                readonly is_eligible_to_link_to_unlinked_ig?: boolean
+                readonly is_eligible_to_link_to_linked_ig?: boolean
+                readonly is_eligible_to_link_to_unlinked_rl?: boolean
+                readonly is_eligible_to_link_to_linked_rl?: boolean
             }
         }
     }
 }
 
 export type WaMexWaffleFXWAMOUpdateUOOMResponse = {
-    readonly xfb_waffle_fx_wamo_update_uoom?: unknown
+    readonly xfb_waffle_fx_wamo_update_uoom?: boolean
 }
 
 export type WaMexWaffleXEResponse = {
     readonly waffle_xe_root?: {
         readonly purpose_public_keys?: {
-            readonly purpose_public_ek?: unknown
-            readonly purpose_public_ik?: unknown
-            readonly purpose_public_ik_sig?: unknown
-            readonly purpose_public_ik_enc_certificate?: unknown
-            readonly purpose_dummy_ciphertext?: unknown
-            readonly purpose_dummy_nonce?: unknown
+            readonly purpose_public_ek?: string
+            readonly purpose_public_ik?: string
+            readonly purpose_public_ik_sig?: string
+            readonly purpose_public_ik_enc_certificate?: string
+            readonly purpose_dummy_ciphertext?: string
+            readonly purpose_dummy_nonce?: string
         }
-        readonly waffle_unique_ids?: unknown
-        readonly waffle_d?: {
+        readonly waffle_unique_ids?: string
+        readonly waffle_d?: ReadonlyArray<{
             readonly waffle_xas?: {
-                readonly waffle_xan?: unknown
-                readonly waffle_xs?: unknown
+                readonly waffle_xan?: string
+                readonly waffle_xs?: string
             }
-            readonly waffle_di?: unknown
-        }
-        readonly waffle_xps?: {
+            readonly waffle_di?: string
+        }>
+        readonly waffle_xps?: ReadonlyArray<{
             readonly waffle_xas?: {
-                readonly waffle_xan?: unknown
-                readonly waffle_xs?: unknown
+                readonly waffle_xan?: string
+                readonly waffle_xs?: string
             }
-            readonly waffle_hcbc?: unknown
-        }
+            readonly waffle_hcbc?: string
+        }>
     }
 }
 
 export type WaMexuseWAWebEstimatedDailyReachResponse = {
     readonly lwi?: {
         readonly budget_estimate_data_v2?: {
-            readonly daily_outcomes_curve?: {
-                readonly actions?: unknown
-                readonly actions_lower_bound?: unknown
-                readonly actions_upper_bound?: unknown
-                readonly bid?: unknown
-                readonly impressions?: unknown
-                readonly reach?: unknown
-                readonly reach_lower_bound?: unknown
-                readonly reach_upper_bound?: unknown
-                readonly spend?: unknown
-            }
+            readonly daily_outcomes_curve?: ReadonlyArray<{
+                readonly actions?: number
+                readonly actions_lower_bound?: number
+                readonly actions_upper_bound?: number
+                readonly bid?: number
+                readonly impressions?: number
+                readonly reach?: number
+                readonly reach_lower_bound?: number
+                readonly reach_upper_bound?: number
+                readonly spend?: number
+            }>
         }
     }
 }

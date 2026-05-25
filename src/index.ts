@@ -128,7 +128,6 @@ export type {
     WaNewsletterFollowersPage,
     WaNewsletterInsightMetricRequest,
     WaNewsletterMetadata,
-    WaNewsletterMexEnvelope,
     WaNewsletterMuteInput,
     WaNewsletterPicture,
     WaNewsletterPollVoter,

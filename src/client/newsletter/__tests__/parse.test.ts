@@ -39,10 +39,10 @@ test('parseAdminInfo extracts admin count and profile', () => {
 
 test('parseAdminCapabilities returns set of capability strings', () => {
     const caps = parseAdminCapabilities({
-        xwa2_newsletter_admin: { capabilities: ['SEND', 'EDIT', 'DELETE'] }
+        xwa2_newsletter_admin: { capabilities: ['ADMIN_PROFILE', 'INSIGHTS', 'THREAD_MENU'] }
     })
     assert.equal(caps.size, 3)
-    assert.ok(caps.has('SEND'))
+    assert.ok(caps.has('ADMIN_PROFILE'))
     assert.equal(parseAdminCapabilities({}).size, 0)
 })
 
@@ -80,11 +80,10 @@ test('parseFollowers maps edges into typed followers', () => {
                         }
                     },
                     {
-                        role: 'SUBSCRIBER',
+                        role: 'ADMIN',
                         node: { id: 'b@lid' }
                     }
-                ],
-                page_info: { hasNextPage: true, endCursor: 'CURSOR' }
+                ]
             }
         }
     })
@@ -94,8 +93,6 @@ test('parseFollowers maps edges into typed followers', () => {
     assert.equal(page.followers[0].username, 'aaa')
     assert.equal(page.followers[0].adminProfile?.name, 'A profile')
     assert.equal(page.followers[1].adminProfile, null)
-    assert.equal(page.pageInfo?.hasNextPage, true)
-    assert.equal(page.pageInfo?.endCursor, 'CURSOR')
 })
 
 test('parseDirectorySearch and related parsers map results to metadata', () => {
@@ -124,7 +121,7 @@ test('parseDirectorySearch and related parsers map results to metadata', () => {
     assert.equal(search.pageInfo?.hasNextPage, false)
 
     const recommended = parseRecommended({
-        xwa2_recommended_newsletters: {
+        xwa2_newsletters_recommended: {
             result: [{ id: 'r@newsletter', state: { type: 'ACTIVE' } }]
         }
     })

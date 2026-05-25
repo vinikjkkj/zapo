@@ -484,36 +484,21 @@ function parseGroupSuspensionAppealMexResponse(
     }
 }
 
-// Spec types `edges` as a single object, but at runtime it's an array — narrow inline.
 function parseSubGroupSuggestionsMexResponse(
     data: WaMexOperationResponses['FetchSubgroupSuggestions'] | null
 ): readonly WaCommunitySubGroupSuggestion[] {
-    type Edge = NonNullable<
-        NonNullable<
-            NonNullable<
-                WaMexOperationResponses['FetchSubgroupSuggestions']['xwa2_group_query_by_id']
-            >['sub_group_suggestions']
-        >['edges']
-    >
-    const edges = (data?.xwa2_group_query_by_id?.sub_group_suggestions?.edges ?? []) as
-        | readonly Edge[]
-        | Edge
-    const list = Array.isArray(edges) ? edges : []
+    const edges = data?.xwa2_group_query_by_id?.sub_group_suggestions?.edges ?? []
     const results: WaCommunitySubGroupSuggestion[] = []
-    for (const edge of list) {
+    for (const edge of edges) {
         const node = edge?.node
-        if (!node || typeof node.id !== 'string') continue
+        if (!node?.id) continue
         results.push({
             jid: node.id,
-            subject: typeof node.subject?.value === 'string' ? node.subject.value : null,
-            description:
-                typeof node.description?.value === 'string' ? node.description.value : null,
-            creator: typeof node.creator?.id === 'string' ? node.creator.id : null,
-            creationTime: typeof node.creation_time === 'number' ? node.creation_time : null,
-            participantCount:
-                typeof node.total_participants_count === 'number'
-                    ? node.total_participants_count
-                    : null,
+            subject: node.subject?.value ?? null,
+            description: node.description?.value ?? null,
+            creator: node.creator?.id ?? null,
+            creationTime: tryAsNumber(node.creation_time),
+            participantCount: node.total_participants_count ?? null,
             isExistingGroup: node.is_existing_group === true,
             hiddenGroup: node.hidden_group === true
         })
@@ -854,7 +839,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             const data = await runMexQuery(mexSocket, 'GroupSuspensionAppeal', {
                 input: {
                     group_jid: parseJidFull(groupJid).address.user,
-                    appeal_reason: options?.reason ?? null,
+                    appeal_reason: options?.reason ?? undefined,
                     debug_info: options?.debugInfo ?? '{}'
                 }
             })

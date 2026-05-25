@@ -57,7 +57,7 @@ export interface WaReachoutTimelock {
     readonly enforcementEndsAt: number | null
 }
 
-export type WaMessageCappingType = 'INDIVIDUAL_NEW_CHAT_THREAD' | (string & {})
+export type WaMessageCappingType = 'INDIVIDUAL_NEW_CHAT_THREAD'
 
 export interface WaMessageCappingInfo {
     readonly totalQuota: number | null

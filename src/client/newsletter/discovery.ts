@@ -1,4 +1,4 @@
-import { runMex, runMexEnvelope, type WaNewsletterMexDeps } from '@client/newsletter/mex'
+import { runMex, type WaNewsletterMexDeps } from '@client/newsletter/mex'
 import {
     parseDehydratedMetadata,
     parseDirectoryCategoriesPreview,
@@ -56,7 +56,10 @@ export interface WaNewsletterDiscoveryOps {
     ) => Promise<ReadonlyMap<string, boolean>>
     readonly fetchDehydrated: (
         keyOrInvite: string,
-        options?: { readonly viewRole?: string; readonly fetchWamoSub?: boolean }
+        options?: {
+            readonly viewRole?: keyof typeof WA_NEWSLETTER_VIEW_ROLES
+            readonly fetchWamoSub?: boolean
+        }
     ) => Promise<WaNewsletterDehydratedMetadata>
 }
 
@@ -93,13 +96,10 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                 fetch_wamo_sub: opts?.fetchWamoSub ?? false,
                 fetch_status_metadata: false
             })
-            const list = Array.isArray(data?.xwa2_newsletter_subscribed)
-                ? (data.xwa2_newsletter_subscribed as readonly unknown[])
-                : []
-            return list.map(parseNewsletterMetadata)
+            return (data?.xwa2_newsletter_subscribed ?? []).map(parseNewsletterMetadata)
         },
         searchDirectory: async (opts) => {
-            const envelope = await runMexEnvelope(deps, 'FetchNewsletterDirectorySearchResults', {
+            const data = await runMex(deps, 'FetchNewsletterDirectorySearchResults', {
                 input: {
                     search_text: opts?.searchText ?? '',
                     categories: opts?.categories ?? [],
@@ -108,20 +108,20 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                 },
                 fetch_status_metadata: false
             })
-            return parseDirectorySearch(envelope)
+            return parseDirectorySearch(data)
         },
         fetchRecommended: async (opts) => {
-            const envelope = await runMexEnvelope(deps, 'FetchRecommendedNewsletters', {
+            const data = await runMex(deps, 'FetchRecommendedNewsletters', {
                 input: {
                     limit: opts?.limit ?? 25,
                     country_codes: opts?.countryCodes ?? []
                 },
                 fetch_status_metadata: false
             })
-            return parseRecommended(envelope)
+            return parseRecommended(data)
         },
         fetchSimilar: async (newsletterJid, opts) => {
-            const envelope = await runMexEnvelope(deps, 'FetchSimilarNewsletters', {
+            const data = await runMex(deps, 'FetchSimilarNewsletters', {
                 input: {
                     newsletter_id: newsletterJid,
                     limit: opts?.limit ?? 10,
@@ -129,10 +129,10 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                 },
                 fetch_status_metadata: false
             })
-            return parseSimilar(envelope)
+            return parseSimilar(data)
         },
         fetchDirectoryList: async (opts) => {
-            const envelope = await runMexEnvelope(deps, 'FetchNewsletterDirectoryList', {
+            const data = await runMex(deps, 'FetchNewsletterDirectoryList', {
                 input: {
                     view: opts.view,
                     filters: {
@@ -144,32 +144,28 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                 },
                 fetch_status_metadata: false
             })
-            return parseDirectoryList(envelope)
+            return parseDirectoryList(data)
         },
         fetchDirectoryCategoriesPreview: async (opts) => {
-            const envelope = await runMexEnvelope(
-                deps,
-                'FetchNewsletterDirectoryCategoriesPreview',
-                {
-                    input: {
-                        categories: opts.categories,
-                        country_code: opts.countryCode || undefined,
-                        per_category_limit: opts.perCategoryLimit ?? 10
-                    },
-                    fetch_status_metadata: false
-                }
-            )
-            return parseDirectoryCategoriesPreview(envelope)
+            const data = await runMex(deps, 'FetchNewsletterDirectoryCategoriesPreview', {
+                input: {
+                    categories: opts.categories,
+                    country_code: opts.countryCode || undefined,
+                    per_category_limit: opts.perCategoryLimit ?? 10
+                },
+                fetch_status_metadata: false
+            })
+            return parseDirectoryCategoriesPreview(data)
         },
         fetchIsDomainPreviewable: async (domains) => {
-            const envelope = await runMexEnvelope(deps, 'FetchNewsletterIsDomainPreviewable', {
+            const data = await runMex(deps, 'FetchNewsletterIsDomainPreviewable', {
                 url_domains: domains
             })
-            return parseDomainsPreviewable(envelope)
+            return parseDomainsPreviewable(data)
         },
         fetchDehydrated: async (keyOrInvite, opts) => {
             const isJid = keyOrInvite.endsWith('@newsletter')
-            const envelope = await runMexEnvelope(deps, 'FetchNewsletterDehydrated', {
+            const data = await runMex(deps, 'FetchNewsletterDehydrated', {
                 input: {
                     key: keyOrInvite,
                     type: isJid ? 'JID' : 'INVITE',
@@ -177,7 +173,7 @@ export function createDiscoveryOps(deps: WaNewsletterMexDeps): WaNewsletterDisco
                 },
                 fetch_wamo_sub: opts?.fetchWamoSub ?? false
             })
-            return parseDehydratedMetadata(envelope)
+            return parseDehydratedMetadata(data)
         }
     }
 }

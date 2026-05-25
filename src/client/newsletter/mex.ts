@@ -1,4 +1,3 @@
-import type { WaNewsletterMexEnvelope } from '@client/newsletter/types'
 import type { Logger } from '@infra/log/types'
 import type { WaMexOperationResponses, WaMexOperationVariables } from '@mex'
 import type { AbPropName } from '@protocol/abprops'
@@ -30,15 +29,6 @@ export async function runMex<K extends WaMexOpKey>(
     variables: WaMexOperationVariables[K]
 ): Promise<WaMexOperationResponses[K] | null> {
     return runMexQuery(deps.mexSocket, opKey, variables)
-}
-
-export async function runMexEnvelope<K extends WaMexOpKey>(
-    deps: WaNewsletterMexDeps,
-    opKey: K,
-    variables: WaMexOperationVariables[K]
-): Promise<WaNewsletterMexEnvelope> {
-    const data = (await runMex(deps, opKey, variables)) as Record<string, unknown> | null
-    return data ?? {}
 }
 
 function resolveTosId(deps: WaNewsletterMexDeps, kind: WaNewsletterTosKind): string | null {

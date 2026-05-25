@@ -78,7 +78,7 @@ export interface WaSetUsernameInput {
     readonly username: string
     readonly reserved?: boolean
     readonly sessionId?: string
-    readonly source?: string
+    readonly source?: 'USER_INPUT'
 }
 
 export interface WaUsernameAvailabilityResult {
@@ -306,16 +306,10 @@ function isMexSetUsernameSuccess(data: WaMexOperationResponses['SetUsername'] | 
     return data?.xwa2_username_set?.result === 'SUCCESS'
 }
 
-// The spec types leaves as `unknown` and lists xwa2_users_updates_since /
-// updates as single objects, but at runtime both are arrays — narrow inline.
 function parseAboutStatusMexResponse(
     data: WaMexOperationResponses['FetchAboutStatus'] | null
 ): string | null {
-    const updates = data?.xwa2_users_updates_since as
-        | ReadonlyArray<{ readonly updates?: ReadonlyArray<{ readonly text?: unknown }> }>
-        | undefined
-    const text = updates?.[0]?.updates?.[0]?.text
-    return typeof text === 'string' ? text : null
+    return data?.xwa2_users_updates_since?.[0]?.updates?.[0]?.text ?? null
 }
 
 function parseUsernameAvailabilityMexResponse(

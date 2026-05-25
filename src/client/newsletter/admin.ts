@@ -1,9 +1,4 @@
-import {
-    ensureTosAccepted,
-    runMex,
-    runMexEnvelope,
-    type WaNewsletterMexDeps
-} from '@client/newsletter/mex'
+import { ensureTosAccepted, runMex, type WaNewsletterMexDeps } from '@client/newsletter/mex'
 import {
     parseAdminCapabilities,
     parseAdminInfo,
@@ -18,17 +13,18 @@ import type {
     WaNewsletterAdminInfo,
     WaNewsletterAdminInviteInput,
     WaNewsletterAdminInviteResult,
+    WaNewsletterCapability,
     WaNewsletterCapabilityExposure,
     WaNewsletterCreateInput,
     WaNewsletterFollowersOptions,
     WaNewsletterFollowersPage,
     WaNewsletterInsightMetricRequest,
     WaNewsletterMetadata,
-    WaNewsletterMexEnvelope,
     WaNewsletterPollVoter,
     WaNewsletterReactionSenders,
     WaNewsletterUpdateInput
 } from '@client/newsletter/types'
+import type { WaMexOperationResponses } from '@mex'
 import {
     buildTosQueryIq,
     buildTosUpdateIq,
@@ -46,7 +42,9 @@ export interface WaNewsletterAdminOps {
     ) => Promise<WaNewsletterMetadata>
     readonly delete: (newsletterJid: string) => Promise<void>
     readonly fetchAdminInfo: (newsletterJid: string) => Promise<WaNewsletterAdminInfo>
-    readonly fetchAdminCapabilities: (newsletterJid: string) => Promise<ReadonlySet<string>>
+    readonly fetchAdminCapabilities: (
+        newsletterJid: string
+    ) => Promise<ReadonlySet<WaNewsletterCapability>>
     readonly fetchFollowers: (
         newsletterJid: string,
         options?: WaNewsletterFollowersOptions
@@ -54,10 +52,12 @@ export interface WaNewsletterAdminOps {
     readonly fetchInsights: (
         newsletterJid: string,
         metrics: readonly WaNewsletterInsightMetricRequest[]
-    ) => Promise<WaNewsletterMexEnvelope>
-    readonly fetchReports: () => Promise<WaNewsletterMexEnvelope>
+    ) => Promise<WaMexOperationResponses['FetchNewsletterInsights'] | null>
+    readonly fetchReports: () => Promise<WaMexOperationResponses['FetchNewsletterReports'] | null>
     readonly fetchPendingInvites: (newsletterJid: string) => Promise<readonly string[]>
-    readonly fetchEnforcements: (newsletterJid: string) => Promise<WaNewsletterMexEnvelope>
+    readonly fetchEnforcements: (
+        newsletterJid: string
+    ) => Promise<WaMexOperationResponses['FetchNewsletterEnforcements'] | null>
     readonly fetchPollVoters: (input: {
         readonly newsletterJid: string
         readonly messageServerId: number
@@ -119,48 +119,48 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
             await runMex(deps, 'DeleteNewsletter', { newsletter_id: newsletterJid })
         },
         fetchAdminInfo: async (newsletterJid) => {
-            const envelope = await runMexEnvelope(deps, 'FetchNewsletterAdminInfo', {
+            const data = await runMex(deps, 'FetchNewsletterAdminInfo', {
                 newsletter_id: newsletterJid
             })
-            return parseAdminInfo(envelope)
+            return parseAdminInfo(data)
         },
         fetchAdminCapabilities: async (newsletterJid) => {
-            const envelope = await runMexEnvelope(deps, 'FetchNewsletterAdminCapabilities', {
+            const data = await runMex(deps, 'FetchNewsletterAdminCapabilities', {
                 newsletter_id: newsletterJid
             })
-            return parseAdminCapabilities(envelope)
+            return parseAdminCapabilities(data)
         },
         fetchFollowers: async (newsletterJid, opts) => {
-            const envelope = await runMexEnvelope(deps, 'FetchNewsletterFollowers', {
+            const data = await runMex(deps, 'FetchNewsletterFollowers', {
                 input: {
                     newsletter_id: newsletterJid,
                     count: opts?.count ?? 50
                 }
             })
-            return parseFollowers(envelope)
+            return parseFollowers(data)
         },
         fetchInsights: (newsletterJid, metrics) => {
             if (metrics.length === 0) {
                 throw new Error('newsletter fetchInsights requires at least one metric request')
             }
-            return runMexEnvelope(deps, 'FetchNewsletterInsights', {
+            return runMex(deps, 'FetchNewsletterInsights', {
                 input: {
                     newsletter_id: newsletterJid,
                     metrics
                 }
             })
         },
-        fetchReports: () => runMexEnvelope(deps, 'FetchNewsletterReports', {}),
+        fetchReports: () => runMex(deps, 'FetchNewsletterReports', {}),
         fetchPendingInvites: async (newsletterJid) => {
-            const envelope = await runMexEnvelope(deps, 'FetchNewsletterPendingInvites', {
+            const data = await runMex(deps, 'FetchNewsletterPendingInvites', {
                 newsletter_id: newsletterJid
             })
-            return parsePendingInvites(envelope)
+            return parsePendingInvites(data)
         },
         fetchEnforcements: (newsletterJid) =>
-            runMexEnvelope(deps, 'FetchNewsletterEnforcements', { newsletter_id: newsletterJid }),
+            runMex(deps, 'FetchNewsletterEnforcements', { newsletter_id: newsletterJid }),
         fetchPollVoters: async (input) => {
-            const envelope = await runMexEnvelope(deps, 'FetchNewsletterPollVoters', {
+            const data = await runMex(deps, 'FetchNewsletterPollVoters', {
                 input: {
                     newsletter_id: input.newsletterJid,
                     server_id: String(input.messageServerId),
@@ -168,23 +168,19 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
                     limit: input.limit ?? 50
                 }
             })
-            return parsePollVoters(envelope)
+            return parsePollVoters(data)
         },
         fetchMessageReactionSenders: async (input) => {
-            const envelope = await runMexEnvelope(
-                deps,
-                'FetchNewsletterMessageReactionSenderList',
-                {
-                    input: {
-                        id: input.newsletterJid,
-                        server_id: String(input.messageServerId)
-                    }
+            const data = await runMex(deps, 'FetchNewsletterMessageReactionSenderList', {
+                input: {
+                    id: input.newsletterJid,
+                    server_id: String(input.messageServerId)
                 }
-            )
-            return parseReactionSenders(envelope)
+            })
+            return parseReactionSenders(data)
         },
         logExposures: async (exposures) => {
-            await runMexEnvelope(deps, 'LogNewsletterExposures', {
+            await runMex(deps, 'LogNewsletterExposures', {
                 input: {
                     exposures: exposures.map((e) => ({
                         newsletter_id: e.newsletterJid,
@@ -206,11 +202,11 @@ export function createAdminOps(deps: WaNewsletterMexDeps): WaNewsletterAdminOps 
             })
         },
         createAdminInvite: async (input) => {
-            const envelope = await runMexEnvelope(deps, 'CreateNewsletterAdminInvite', {
+            const data = await runMex(deps, 'CreateNewsletterAdminInvite', {
                 newsletter_id: input.newsletterJid,
                 user_id: input.userJid
             })
-            return parseAdminInviteResult(envelope)
+            return parseAdminInviteResult(data)
         },
         acceptAdminInvite: async (newsletterJid) => {
             await ensureTosAccepted(deps, 'admin_invite')
