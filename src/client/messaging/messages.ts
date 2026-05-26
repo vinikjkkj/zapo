@@ -17,6 +17,7 @@ import {
 } from '@client/media'
 import type { ResolvedLinkPreviewResult } from '@client/messaging/link-preview'
 import type { WaMediaOptions } from '@client/types'
+import { aesGcmEncrypt, randomBytesAsync, sha256 } from '@crypto'
 import type { Logger } from '@infra/log/types'
 import { MEDIA_CONN_CACHE_GRACE_MS, MEDIA_UPLOAD_PATHS } from '@media/constants'
 import { WaMediaCrypto } from '@media/crypto/WaMediaCrypto'
@@ -25,7 +26,26 @@ import { parseMediaConnResponse } from '@media/transfer/conn'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { MediaCryptoType, WaMediaConn } from '@media/types'
 import { buildExtendedTextWithPreview } from '@message/addons/link-preview/builder'
-import { isSendMediaMessage, isSendTextMessage } from '@message/encode/content'
+import {
+    buildAddonAdditionalData,
+    shouldUseAddonAdditionalData
+} from '@message/crypto/addon-crypto'
+import {
+    createUseCaseSecret,
+    WA_USE_CASE_SECRET_MODIFICATION_TYPES
+} from '@message/crypto/use-case-secret'
+import {
+    isSendEventMessage,
+    isSendEventResponseMessage,
+    isSendKeepMessage,
+    isSendMediaMessage,
+    isSendPinMessage,
+    isSendPollMessage,
+    isSendPollVoteMessage,
+    isSendReactionMessage,
+    isSendRevokeMessage,
+    isSendTextMessage
+} from '@message/encode/content'
 import {
     toStickerPackProtoStickers,
     toStickerPackZipEntries,
@@ -34,16 +54,26 @@ import {
 import type {
     WaMessageBuildResult,
     WaMessageUploadInfo,
+    WaSendEventMessage,
+    WaSendEventResponseMessage,
+    WaSendEventResponseType,
+    WaSendKeepMessage,
     WaSendMediaMessage,
     WaSendMessageContent,
+    WaSendPinMessage,
+    WaSendPollMessage,
+    WaSendPollVoteMessage,
+    WaSendReactionMessage,
+    WaSendRevokeMessage,
     WaSendStickerPackMessage,
     WaSendTextMessage
 } from '@message/types'
-import { proto } from '@proto'
+import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
+import { toUserJid } from '@protocol/jid'
 import { buildMediaConnIq } from '@transport/node/builders/media'
 import type { BinaryNode } from '@transport/types'
-import { bytesToBase64, toBytesView } from '@util/bytes'
+import { bytesToBase64, TEXT_ENCODER, toBytesView } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 const VOICE_NOTE_MIMETYPE = 'audio/ogg; codecs=opus'
@@ -66,9 +96,268 @@ export interface WaMediaMessageOptions {
     ) => Promise<ResolvedLinkPreviewResult | null>
 }
 
+export interface WaBuildMessageContext {
+    readonly to: string
+    /** Outgoing stanza id, pre-resolved. Required for addon-crypto kinds (poll-vote, event-response). */
+    readonly outgoingStanzaId?: string
+    /** Current me jid (used as modificationSender for addon crypto). */
+    readonly meJid?: string
+}
+
+function requireCtxField(
+    ctx: WaBuildMessageContext | undefined,
+    field: string,
+    kind: string
+): void {
+    const value = ctx ? (ctx as unknown as Record<string, unknown>)[field] : undefined
+    if (typeof value !== 'string' || value.length === 0) {
+        throw new Error(`${kind} message requires ${field} in build context`)
+    }
+}
+
+function buildMessageKey(
+    remoteJid: string,
+    fromMe: boolean,
+    id: string,
+    participant?: string
+): Proto.IMessageKey {
+    return {
+        remoteJid,
+        fromMe,
+        id,
+        ...(participant ? { participant } : {})
+    }
+}
+
+function buildReactionMessage(
+    content: WaSendReactionMessage,
+    ctx?: WaBuildMessageContext
+): Proto.IMessage {
+    requireCtxField(ctx, 'to', 'reaction')
+    return {
+        reactionMessage: {
+            key: buildMessageKey(
+                ctx!.to,
+                content.target.fromMe,
+                content.target.stanzaId,
+                content.target.participant
+            ),
+            text: content.emoji,
+            senderTimestampMs: content.senderTimestampMs ?? Date.now()
+        }
+    }
+}
+
+function buildRevokeMessage(
+    content: WaSendRevokeMessage,
+    ctx?: WaBuildMessageContext
+): Proto.IMessage {
+    requireCtxField(ctx, 'to', 'revoke')
+    return {
+        protocolMessage: {
+            type: proto.Message.ProtocolMessage.Type.REVOKE,
+            key: buildMessageKey(
+                ctx!.to,
+                content.fromMe ?? true,
+                content.stanzaId,
+                content.participant
+            )
+        }
+    }
+}
+
+function buildPinMessage(content: WaSendPinMessage, ctx?: WaBuildMessageContext): Proto.IMessage {
+    requireCtxField(ctx, 'to', content.type)
+    return {
+        pinInChatMessage: {
+            key: buildMessageKey(
+                ctx!.to,
+                content.target.fromMe,
+                content.target.stanzaId,
+                content.target.participant
+            ),
+            type:
+                content.type === 'pin'
+                    ? proto.Message.PinInChatMessage.Type.PIN_FOR_ALL
+                    : proto.Message.PinInChatMessage.Type.UNPIN_FOR_ALL,
+            senderTimestampMs: content.senderTimestampMs ?? Date.now()
+        }
+    }
+}
+
+function buildKeepMessage(content: WaSendKeepMessage, ctx?: WaBuildMessageContext): Proto.IMessage {
+    requireCtxField(ctx, 'to', content.type)
+    return {
+        keepInChatMessage: {
+            key: buildMessageKey(
+                ctx!.to,
+                content.target.fromMe,
+                content.target.stanzaId,
+                content.target.participant
+            ),
+            keepType:
+                content.type === 'keep'
+                    ? proto.KeepType.KEEP_FOR_ALL
+                    : proto.KeepType.UNDO_KEEP_FOR_ALL,
+            timestampMs: content.timestampMs ?? Date.now()
+        }
+    }
+}
+
+function buildPollCreationMessage(content: WaSendPollMessage): Proto.IMessage {
+    if (content.options.length === 0) {
+        throw new Error('poll message requires at least one option')
+    }
+    const options: Proto.Message.PollCreationMessage.IOption[] = content.options.map((opt) => ({
+        optionName: typeof opt === 'string' ? opt : opt.name
+    }))
+    return {
+        pollCreationMessageV3: {
+            name: content.name,
+            options,
+            selectableOptionsCount: content.selectableCount ?? 1,
+            ...(content.allowAddOption !== undefined
+                ? { allowAddOption: content.allowAddOption }
+                : {}),
+            ...(content.hideParticipantName !== undefined
+                ? { hideParticipantName: content.hideParticipantName }
+                : {})
+        }
+    }
+}
+
+function buildEventMessage(content: WaSendEventMessage): Proto.IMessage {
+    const eventMessage: Proto.Message.IEventMessage = {
+        name: content.name,
+        startTime: content.startTime,
+        isCanceled: content.isCanceled ?? false
+    }
+    if (content.description !== undefined) eventMessage.description = content.description
+    if (content.endTime !== undefined) eventMessage.endTime = content.endTime
+    if (content.joinLink !== undefined) eventMessage.joinLink = content.joinLink
+    if (content.extraGuestsAllowed !== undefined)
+        eventMessage.extraGuestsAllowed = content.extraGuestsAllowed
+    if (content.isScheduleCall !== undefined) eventMessage.isScheduleCall = content.isScheduleCall
+    if (content.hasReminder !== undefined) eventMessage.hasReminder = content.hasReminder
+    if (content.reminderOffsetSec !== undefined)
+        eventMessage.reminderOffsetSec = content.reminderOffsetSec
+    if (content.location) {
+        eventMessage.location = {
+            degreesLatitude: content.location.latitude,
+            degreesLongitude: content.location.longitude,
+            ...(content.location.name !== undefined ? { name: content.location.name } : {}),
+            ...(content.location.address !== undefined ? { address: content.location.address } : {})
+        }
+    }
+    return { eventMessage }
+}
+
+const EVENT_RESPONSE_ENUM: Readonly<
+    Record<WaSendEventResponseType, Proto.Message.EventResponseMessage.EventResponseType>
+> = {
+    going: proto.Message.EventResponseMessage.EventResponseType.GOING,
+    not_going: proto.Message.EventResponseMessage.EventResponseType.NOT_GOING,
+    maybe: proto.Message.EventResponseMessage.EventResponseType.MAYBE
+}
+
+async function encryptAddonForOutgoing(input: {
+    readonly messageSecret: Uint8Array
+    readonly parentStanzaId: string
+    readonly parentMsgOriginalSender: string
+    readonly modificationSender: string
+    readonly modificationType: (typeof WA_USE_CASE_SECRET_MODIFICATION_TYPES)[keyof typeof WA_USE_CASE_SECRET_MODIFICATION_TYPES]
+    readonly payload: Uint8Array
+}): Promise<{ readonly encPayload: Uint8Array; readonly encIv: Uint8Array }> {
+    const secret = await createUseCaseSecret({
+        messageSecret: input.messageSecret,
+        stanzaId: input.parentStanzaId,
+        parentMsgOriginalSender: input.parentMsgOriginalSender,
+        modificationSender: input.modificationSender,
+        modificationType: input.modificationType
+    })
+    const iv = await randomBytesAsync(12)
+    const additionalData = shouldUseAddonAdditionalData(input.modificationType)
+        ? buildAddonAdditionalData(input.parentStanzaId, input.modificationSender)
+        : undefined
+    const encPayload = aesGcmEncrypt(secret, iv, input.payload, additionalData)
+    return { encPayload, encIv: iv }
+}
+
+async function buildPollVoteMessage(
+    content: WaSendPollVoteMessage,
+    ctx?: WaBuildMessageContext
+): Promise<Proto.IMessage> {
+    requireCtxField(ctx, 'outgoingStanzaId', 'poll-vote')
+    requireCtxField(ctx, 'meJid', 'poll-vote')
+    if (content.selectedOptionNames.length === 0) {
+        throw new Error('poll-vote requires at least one selected option')
+    }
+    const selectedOptions = content.selectedOptionNames.map((name) =>
+        sha256(TEXT_ENCODER.encode(name))
+    )
+    const payload = proto.Message.PollVoteMessage.encode({ selectedOptions }).finish()
+    const { encPayload, encIv } = await encryptAddonForOutgoing({
+        messageSecret: content.poll.messageSecret,
+        parentStanzaId: content.poll.stanzaId,
+        parentMsgOriginalSender: toUserJid(content.poll.authorJid),
+        modificationSender: toUserJid(ctx!.meJid!),
+        modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.POLL_VOTE,
+        payload
+    })
+    return {
+        pollUpdateMessage: {
+            pollCreationMessageKey: buildMessageKey(
+                ctx!.to,
+                content.poll.fromMe,
+                content.poll.stanzaId,
+                content.poll.participant
+            ),
+            vote: { encPayload, encIv },
+            senderTimestampMs: content.senderTimestampMs ?? Date.now()
+        }
+    }
+}
+
+async function buildEventResponseMessage(
+    content: WaSendEventResponseMessage,
+    ctx?: WaBuildMessageContext
+): Promise<Proto.IMessage> {
+    requireCtxField(ctx, 'outgoingStanzaId', 'event-response')
+    requireCtxField(ctx, 'meJid', 'event-response')
+    const responseProto: Proto.Message.IEventResponseMessage = {
+        response: EVENT_RESPONSE_ENUM[content.response],
+        timestampMs: content.timestampMs ?? Date.now()
+    }
+    if (content.extraGuestCount !== undefined) {
+        responseProto.extraGuestCount = content.extraGuestCount
+    }
+    const payload = proto.Message.EventResponseMessage.encode(responseProto).finish()
+    const { encPayload, encIv } = await encryptAddonForOutgoing({
+        messageSecret: content.event.messageSecret,
+        parentStanzaId: content.event.stanzaId,
+        parentMsgOriginalSender: toUserJid(content.event.authorJid),
+        modificationSender: toUserJid(ctx!.meJid!),
+        modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.EVENT_RESPONSE,
+        payload
+    })
+    return {
+        encEventResponseMessage: {
+            eventCreationMessageKey: buildMessageKey(
+                ctx!.to,
+                content.event.fromMe,
+                content.event.stanzaId,
+                content.event.participant
+            ),
+            encPayload,
+            encIv
+        }
+    }
+}
+
 export async function buildMediaMessageContent(
     options: WaMediaMessageOptions,
-    content: WaSendMessageContent
+    content: WaSendMessageContent,
+    ctx?: WaBuildMessageContext
 ): Promise<WaMessageBuildResult> {
     if (typeof content === 'string') {
         return { message: { conversation: content } }
@@ -93,6 +382,18 @@ export async function buildMediaMessageContent(
             }
         }
         return { message: { extendedTextMessage: { text: content.text } } }
+    }
+    if (isSendReactionMessage(content)) return { message: buildReactionMessage(content, ctx) }
+    if (isSendRevokeMessage(content)) return { message: buildRevokeMessage(content, ctx) }
+    if (isSendPinMessage(content)) return { message: buildPinMessage(content, ctx) }
+    if (isSendKeepMessage(content)) return { message: buildKeepMessage(content, ctx) }
+    if (isSendPollMessage(content)) return { message: buildPollCreationMessage(content) }
+    if (isSendEventMessage(content)) return { message: buildEventMessage(content) }
+    if (isSendPollVoteMessage(content)) {
+        return { message: await buildPollVoteMessage(content, ctx) }
+    }
+    if (isSendEventResponseMessage(content)) {
+        return { message: await buildEventResponseMessage(content, ctx) }
     }
     if (isSendMediaMessage(content)) {
         return buildMediaMessage(options, content)

@@ -12,7 +12,7 @@ import type { WaMediaProcessor } from '@media/processor'
 import type { WaLinkPreviewOptions } from '@message/addons/link-preview/types'
 import type { WaQuoteRef, WaSendContextInfo } from '@message/context-info'
 import type { WaDecodedAddon } from '@message/crypto/addon-crypto'
-import type { WaMessagePublishOptions } from '@message/types'
+import type { WaMessagePublishOptions, WaSendEditKey } from '@message/types'
 import type { Proto } from '@proto'
 import type { WaBotMsgEditType } from '@protocol/bot'
 import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
@@ -189,6 +189,13 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
     readonly mentions?: readonly string[]
     readonly disableGroupEphemeralAutoInject?: boolean
     readonly customNodes?: readonly BinaryNode[]
+    /** Wrap the outgoing message as view-once. Only valid for image/video/audio content. */
+    readonly viewOnce?: boolean
+    /**
+     * Edit a previously-sent message: the `content` argument becomes the new payload
+     * and gets wrapped in a `MESSAGE_EDIT` protocolMessage targeting `editKey.stanzaId`.
+     */
+    readonly editKey?: WaSendEditKey
 }
 
 export interface WaClearChatOptions {

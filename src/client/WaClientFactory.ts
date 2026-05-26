@@ -727,8 +727,8 @@ export function buildWaClientDependencies(input: {
         fanoutResolver,
         groupMetadataCache,
         appStateSyncKeyProtocol,
-        buildMessageContent: async (content) =>
-            buildMediaMessageContent(mediaMessageBuildOptions, content),
+        buildMessageContent: async (content, ctx) =>
+            buildMediaMessageContent(mediaMessageBuildOptions, content, ctx),
         senderKeyManager,
         signalProtocol,
         signalStore: sessionStore.signal,

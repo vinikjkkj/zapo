@@ -13,7 +13,15 @@ import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClien
 import type { WaMediaConn } from '@media/types'
 import { applyContextInfo, type WaSendContextInfo } from '@message/context-info'
 import {
+    isSendEventMessage,
+    isSendEventResponseMessage,
+    isSendKeepMessage,
     isSendMediaMessage,
+    isSendPinMessage,
+    isSendPollMessage,
+    isSendPollVoteMessage,
+    isSendReactionMessage,
+    isSendRevokeMessage,
     isSendTextMessage,
     resolveMessageTypeAttr
 } from '@message/encode/content'
@@ -307,6 +315,24 @@ export async function buildNewsletterMessageContent(
             mediaType: resolveSendMediaKind(content),
             upload
         }
+    }
+
+    if (isSendReactionMessage(content) || isSendRevokeMessage(content)) {
+        throw new Error(
+            `newsletter sends do not accept '${content.type}' content; use newsletter.react() or newsletter.revoke() instead`
+        )
+    }
+    if (
+        isSendPinMessage(content) ||
+        isSendKeepMessage(content) ||
+        isSendPollVoteMessage(content) ||
+        isSendEventResponseMessage(content) ||
+        isSendEventMessage(content) ||
+        isSendPollMessage(content)
+    ) {
+        throw new Error(
+            `newsletter sends do not accept '${content.type}' content; use newsletter.editMessage/votePoll or raw protobuf for poll creation instead`
+        )
     }
 
     const protoMessage = applyContextInfo(content, ctx)
