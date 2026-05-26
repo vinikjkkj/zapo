@@ -1,6 +1,6 @@
 import type {
     WaIncomingMessageEvent,
-    WaIncomingNewsletterReactionEvent,
+    WaIncomingNewsletterMessageUpdateEvent,
     WaIncomingUnhandledStanzaEvent
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
@@ -37,7 +37,7 @@ interface WaIncomingMessageAckHandlerOptions {
         error: unknown
     ) => Promise<boolean>
     readonly emitIncomingMessage?: (event: WaIncomingMessageEvent) => void
-    readonly emitNewsletterReaction?: (event: WaIncomingNewsletterReactionEvent) => void
+    readonly emitNewsletterMessageUpdate?: (event: WaIncomingNewsletterMessageUpdateEvent) => void
     readonly emitUnhandledStanza?: (event: WaIncomingUnhandledStanzaEvent) => void
 }
 
@@ -594,7 +594,7 @@ async function handleIncomingNewsletterMessage(
     processIncomingNewsletterMessage(node, {
         logger: options.logger,
         emitIncomingMessage: options.emitIncomingMessage,
-        emitNewsletterReaction: options.emitNewsletterReaction,
+        emitNewsletterMessageUpdate: options.emitNewsletterMessageUpdate,
         emitUnhandledStanza: options.emitUnhandledStanza
     })
 

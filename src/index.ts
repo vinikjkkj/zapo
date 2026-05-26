@@ -32,7 +32,7 @@ export type {
     WaIncomingFailureEvent,
     WaIncomingMessageEvent,
     WaIncomingNewsletterEvent,
-    WaIncomingNewsletterReactionEvent,
+    WaIncomingNewsletterMessageUpdateEvent,
     WaIncomingNodeHandler,
     WaIncomingNodeHandlerRegistration,
     WaIncomingNotificationEvent,
@@ -63,7 +63,10 @@ export type {
     WaSendMessageOptions,
     WaVerifiedNameResult,
     WaAddonKind,
-    WaNewsletterEventAction
+    WaNewsletterEventAction,
+    WaNewsletterMessageUpdate,
+    WaNewsletterPollVoteEntry,
+    WaNewsletterReactionEntry
 } from '@client/types'
 export type {
     WaAppStateMutationCoordinator,

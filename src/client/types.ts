@@ -536,11 +536,41 @@ export interface WaIncomingErrorStanzaEvent extends WaIncomingBaseEvent {
     readonly text?: string
 }
 
-export interface WaIncomingNewsletterReactionEvent extends WaIncomingBaseEvent {
+export interface WaNewsletterPollVoteEntry {
+    readonly optionHash: Uint8Array
+    readonly count?: number
+}
+
+export interface WaNewsletterReactionEntry {
+    readonly code: string
+    readonly count?: number
+}
+
+export type WaNewsletterMessageUpdate =
+    | {
+          readonly kind: 'reaction'
+          readonly isSender: boolean
+          readonly revoked: boolean
+          readonly reactions: ReadonlyArray<WaNewsletterReactionEntry>
+      }
+    | { readonly kind: 'revoke' }
+    | { readonly kind: 'edit'; readonly plaintext: Uint8Array; readonly message: Proto.IMessage }
+    | {
+          readonly kind: 'poll_vote'
+          readonly isSender: boolean
+          readonly votes: ReadonlyArray<WaNewsletterPollVoteEntry>
+      }
+    | {
+          readonly kind: 'counters'
+          readonly views?: number
+          readonly forwards?: number
+          readonly responses?: number
+      }
+
+export interface WaIncomingNewsletterMessageUpdateEvent extends WaIncomingBaseEvent {
     readonly timestampSeconds?: number
     readonly parentMessageServerId?: number
-    readonly reactionCode?: string
-    readonly revoked: boolean
+    readonly update: WaNewsletterMessageUpdate
 }
 
 export type WaNewsletterEventAction =
@@ -821,7 +851,7 @@ export interface WaClientEventMap {
     readonly message_protocol: (event: WaIncomingProtocolMessageEvent) => void
     readonly receipt: (event: WaIncomingReceiptEvent) => void
     readonly newsletter: (event: WaIncomingNewsletterEvent) => void
-    readonly newsletter_reaction: (event: WaIncomingNewsletterReactionEvent) => void
+    readonly newsletter_message_update: (event: WaIncomingNewsletterMessageUpdateEvent) => void
     readonly presence: (event: WaIncomingPresenceEvent) => void
     readonly chatstate: (event: WaIncomingChatstateEvent) => void
     readonly call: (event: WaIncomingCallEvent) => void
