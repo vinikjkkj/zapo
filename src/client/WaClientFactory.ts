@@ -83,6 +83,7 @@ import type { Logger } from '@infra/log/types'
 import { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { WaMediaConn } from '@media/types'
 import { createDefaultLinkPreviewFetcher } from '@message/addons/link-preview/fetcher'
+import { processNewsletterLiveUpdates } from '@message/kinds/newsletter'
 import { handleIncomingMessageAck } from '@message/primitives/incoming'
 import {
     createPeerDataOperationRequester,
@@ -956,7 +957,8 @@ export function buildWaClientDependencies(input: {
                 .handleIncomingMessageEvent(event)
                 .catch((err) => runtime.handleError(toError(err)))
         },
-        emitNewsletterReaction: (event) => runtime.emitEvent('newsletter_reaction', event),
+        emitNewsletterMessageUpdate: (event) =>
+            runtime.emitEvent('newsletter_message_update', event),
         emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) =>
             runtime.emitEvent('debug_unhandled_stanza', event)
     }
@@ -1031,6 +1033,15 @@ export function buildWaClientDependencies(input: {
                 action,
                 subType: childTag
             })
+            if (action === 'live_updates') {
+                processNewsletterLiveUpdates(node, {
+                    logger,
+                    emitIncomingMessage: incomingMessageAckOptions.emitIncomingMessage,
+                    emitNewsletterMessageUpdate:
+                        incomingMessageAckOptions.emitNewsletterMessageUpdate,
+                    emitUnhandledStanza: incomingMessageAckOptions.emitUnhandledStanza
+                })
+            }
             return false
         }
     })

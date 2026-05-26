@@ -231,7 +231,7 @@ const ALL_EVENT_NAMES = [
     'message_protocol',
     'receipt',
     'newsletter',
-    'newsletter_reaction',
+    'newsletter_message_update',
     'presence',
     'chatstate',
     'call',

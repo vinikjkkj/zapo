@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import type {
     WaIncomingMessageEvent,
-    WaIncomingNewsletterReactionEvent,
+    WaIncomingNewsletterMessageUpdateEvent,
     WaIncomingUnhandledStanzaEvent
 } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
@@ -39,7 +39,10 @@ import {
     extractInvokedBotJid,
     genBotMsgSecret
 } from '@message/kinds/bot'
-import { processIncomingNewsletterMessage } from '@message/kinds/newsletter'
+import {
+    processIncomingNewsletterMessage,
+    processNewsletterLiveUpdates
+} from '@message/kinds/newsletter'
 import {
     describeAckNode,
     isAckOrReceiptNode,
@@ -47,6 +50,7 @@ import {
     isRetryableNegativeAck
 } from '@message/primitives/ack'
 import { proto } from '@proto'
+import type { BinaryNode } from '@transport/types'
 
 test('ack helpers classify receipt and retryability correctly', () => {
     const ackNode = { tag: 'ack', attrs: { id: '1', type: 'error', code: '500' } }
@@ -719,7 +723,7 @@ test('processIncomingNewsletterMessage emits unhandled when plaintext is missing
     )
 })
 
-test('processIncomingNewsletterMessage emits reaction event with parent server_id', () => {
+test('processIncomingNewsletterMessage emits reaction update with parent server_id', () => {
     const node = {
         tag: 'message',
         attrs: {
@@ -737,23 +741,181 @@ test('processIncomingNewsletterMessage emits reaction event with parent server_i
         ]
     }
 
-    let reactionEvent: WaIncomingNewsletterReactionEvent | null = null
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
     processIncomingNewsletterMessage(node, {
         logger: NEWSLETTER_LOGGER,
-        emitNewsletterReaction: (event) => {
-            reactionEvent = event
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
         }
     })
 
-    assert.ok(reactionEvent)
-    const event = reactionEvent as unknown as WaIncomingNewsletterReactionEvent
+    assert.ok(updateEvent)
+    const event = updateEvent as unknown as WaIncomingNewsletterMessageUpdateEvent
     assert.equal(event.parentMessageServerId, 42)
-    assert.equal(event.reactionCode, '1f44d')
-    assert.equal(event.revoked, false)
     assert.equal(event.timestampSeconds, 1700000000)
+    assert.equal(event.update.kind, 'reaction')
+    if (event.update.kind === 'reaction') {
+        assert.equal(event.update.isSender, false)
+        assert.equal(event.update.revoked, false)
+        assert.equal(event.update.reactions.length, 1)
+        assert.equal(event.update.reactions[0].code, '1f44d')
+        assert.equal(event.update.reactions[0].count, undefined)
+    }
 })
 
-test('processIncomingNewsletterMessage emits reaction_revoke with revoked flag', () => {
+test('processIncomingNewsletterMessage emits reaction aggregate via <reactions> envelope', () => {
+    const node: BinaryNode = {
+        tag: 'message',
+        attrs: { id: 'REAGG', from: '120363025343298869@newsletter', server_id: '42' },
+        content: [
+            {
+                tag: 'reactions',
+                attrs: {},
+                content: [
+                    { tag: 'reaction', attrs: { code: '🔥', count: '3' } },
+                    { tag: 'reaction', attrs: { code: '👍', count: '1' } }
+                ]
+            }
+        ]
+    }
+
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
+        }
+    })
+
+    assert.ok(updateEvent)
+    const event = updateEvent as unknown as WaIncomingNewsletterMessageUpdateEvent
+    assert.equal(event.update.kind, 'reaction')
+    if (event.update.kind === 'reaction') {
+        assert.equal(event.update.isSender, false)
+        assert.equal(event.update.revoked, false)
+        assert.equal(event.update.reactions.length, 2)
+        assert.equal(event.update.reactions[0].code, '🔥')
+        assert.equal(event.update.reactions[0].count, 3)
+        assert.equal(event.update.reactions[1].code, '👍')
+        assert.equal(event.update.reactions[1].count, 1)
+    }
+})
+
+test('processIncomingNewsletterMessage omits code when reaction revoke has no code attr', () => {
+    const node = {
+        tag: 'message',
+        attrs: {
+            id: 'REACT_NO_CODE',
+            from: '120363025343298869@newsletter',
+            type: 'reaction',
+            edit: '7',
+            server_id: '42'
+        },
+        content: [{ tag: 'reaction', attrs: {} }]
+    }
+
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
+        }
+    })
+
+    assert.ok(updateEvent)
+    const event = updateEvent as unknown as WaIncomingNewsletterMessageUpdateEvent
+    if (event.update.kind === 'reaction') {
+        assert.equal(event.update.revoked, true)
+        assert.equal(event.update.reactions.length, 1)
+        assert.equal(event.update.reactions[0].code, undefined)
+    }
+})
+
+test('processIncomingNewsletterMessage rejects poll_vote with empty votes envelope', () => {
+    const node: BinaryNode = {
+        tag: 'message',
+        attrs: { id: 'POLL_EMPTY', from: '120363025343298869@newsletter', type: 'poll' },
+        content: [{ tag: 'votes', attrs: {}, content: [] }]
+    }
+
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
+    let unhandled: WaIncomingUnhandledStanzaEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
+        },
+        emitUnhandledStanza: (event) => {
+            unhandled = event
+        }
+    })
+
+    assert.equal(updateEvent, null)
+    assert.ok(unhandled)
+    assert.equal(
+        (unhandled as unknown as WaIncomingUnhandledStanzaEvent).reason,
+        'newsletter.invalid_votes'
+    )
+})
+
+test('processIncomingNewsletterMessage preserves counters with zero values', () => {
+    const node: BinaryNode = {
+        tag: 'message',
+        attrs: { id: 'CTR_ZERO', from: '120363025343298869@newsletter', server_id: '42' },
+        content: [{ tag: 'views_count', attrs: { count: '0' } }]
+    }
+
+    const emitted: WaIncomingNewsletterMessageUpdateEvent[] = []
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            emitted.push(event)
+        }
+    })
+
+    assert.equal(emitted.length, 1)
+    if (emitted[0].update.kind === 'counters') {
+        assert.equal(emitted[0].update.views, 0)
+        assert.equal(emitted[0].update.forwards, undefined)
+    }
+})
+
+test('processIncomingNewsletterMessage skips counters when count attr is invalid', () => {
+    const node: BinaryNode = {
+        tag: 'message',
+        attrs: {
+            id: 'CTR_BAD',
+            from: '120363025343298869@newsletter',
+            server_id: '42',
+            type: 'text'
+        },
+        content: [
+            { tag: 'views_count', attrs: { count: 'abc' } },
+            {
+                tag: 'plaintext',
+                attrs: {},
+                content: proto.Message.encode({ conversation: 'x' }).finish()
+            }
+        ]
+    }
+
+    const emitted: WaIncomingNewsletterMessageUpdateEvent[] = []
+    let incoming = 0
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            emitted.push(event)
+        },
+        emitIncomingMessage: () => {
+            incoming += 1
+        }
+    })
+
+    assert.equal(emitted.length, 0)
+    assert.equal(incoming, 1)
+})
+
+test('processIncomingNewsletterMessage emits reaction revoke via type=reaction_revoke', () => {
     const node = {
         tag: 'message',
         attrs: {
@@ -770,16 +932,397 @@ test('processIncomingNewsletterMessage emits reaction_revoke with revoked flag',
         ]
     }
 
-    let reactionEvent: WaIncomingNewsletterReactionEvent | null = null
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
     processIncomingNewsletterMessage(node, {
         logger: NEWSLETTER_LOGGER,
-        emitNewsletterReaction: (event) => {
-            reactionEvent = event
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
         }
     })
 
-    assert.ok(reactionEvent)
-    assert.equal((reactionEvent as unknown as WaIncomingNewsletterReactionEvent).revoked, true)
+    assert.ok(updateEvent)
+    const event = updateEvent as unknown as WaIncomingNewsletterMessageUpdateEvent
+    assert.equal(event.update.kind, 'reaction')
+    if (event.update.kind === 'reaction') {
+        assert.equal(event.update.revoked, true)
+    }
+})
+
+test('processIncomingNewsletterMessage emits reaction revoke via edit=7', () => {
+    const node = {
+        tag: 'message',
+        attrs: {
+            id: 'REACT3',
+            from: '120363025343298869@newsletter',
+            type: 'reaction',
+            edit: '7',
+            server_id: '42'
+        },
+        content: [{ tag: 'reaction', attrs: {} }]
+    }
+
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
+        }
+    })
+
+    assert.ok(updateEvent)
+    const event = updateEvent as unknown as WaIncomingNewsletterMessageUpdateEvent
+    assert.equal(event.update.kind, 'reaction')
+    if (event.update.kind === 'reaction') {
+        assert.equal(event.update.revoked, true)
+    }
+})
+
+test('processIncomingNewsletterMessage emits poll_vote with aggregated counts (isSender=false)', () => {
+    const hashA = new Uint8Array(32).fill(0xaa)
+    const hashB = new Uint8Array(32).fill(0xbb)
+    const node: BinaryNode = {
+        tag: 'message',
+        attrs: {
+            id: 'POLL1',
+            from: '120363025343298869@newsletter',
+            type: 'poll',
+            server_id: '77',
+            t: '1700000001'
+        },
+        content: [
+            {
+                tag: 'votes',
+                attrs: {},
+                content: [
+                    { tag: 'vote', attrs: { count: '3' }, content: hashA },
+                    { tag: 'vote', attrs: { count: '1' }, content: hashB }
+                ]
+            },
+            { tag: 'meta', attrs: { polltype: 'vote' } }
+        ]
+    }
+
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
+        }
+    })
+
+    assert.ok(updateEvent)
+    const event = updateEvent as unknown as WaIncomingNewsletterMessageUpdateEvent
+    assert.equal(event.parentMessageServerId, 77)
+    assert.equal(event.update.kind, 'poll_vote')
+    if (event.update.kind === 'poll_vote') {
+        assert.equal(event.update.isSender, false)
+        assert.equal(event.update.votes.length, 2)
+        assert.deepEqual(event.update.votes[0].optionHash, hashA)
+        assert.equal(event.update.votes[0].count, 3)
+        assert.deepEqual(event.update.votes[1].optionHash, hashB)
+        assert.equal(event.update.votes[1].count, 1)
+    }
+})
+
+test('processIncomingNewsletterMessage emits poll_vote echo (isSender=true, no counts)', () => {
+    const hashA = new Uint8Array(32).fill(0x11)
+    const hashB = new Uint8Array(32).fill(0x22)
+    const node: BinaryNode = {
+        tag: 'message',
+        attrs: {
+            id: 'POLL_ECHO',
+            from: '120363025343298869@newsletter',
+            type: 'poll',
+            server_id: '77',
+            is_sender: 'true'
+        },
+        content: [
+            {
+                tag: 'votes',
+                attrs: {},
+                content: [
+                    { tag: 'vote', attrs: {}, content: hashA },
+                    { tag: 'vote', attrs: {}, content: hashB }
+                ]
+            },
+            { tag: 'meta', attrs: { polltype: 'vote' } }
+        ]
+    }
+
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
+        }
+    })
+
+    assert.ok(updateEvent)
+    const event = updateEvent as unknown as WaIncomingNewsletterMessageUpdateEvent
+    assert.equal(event.update.kind, 'poll_vote')
+    if (event.update.kind === 'poll_vote') {
+        assert.equal(event.update.isSender, true)
+        assert.equal(event.update.votes.length, 2)
+        assert.deepEqual(event.update.votes[0].optionHash, hashA)
+        assert.equal(event.update.votes[0].count, undefined)
+        assert.deepEqual(event.update.votes[1].optionHash, hashB)
+        assert.equal(event.update.votes[1].count, undefined)
+    }
+})
+
+test('processIncomingNewsletterMessage rejects poll_vote mixing count and no-count entries', () => {
+    const node: BinaryNode = {
+        tag: 'message',
+        attrs: { id: 'POLL_MIX', from: '120363025343298869@newsletter', type: 'poll' },
+        content: [
+            {
+                tag: 'votes',
+                attrs: {},
+                content: [
+                    { tag: 'vote', attrs: { count: '2' }, content: new Uint8Array(32).fill(1) },
+                    { tag: 'vote', attrs: {}, content: new Uint8Array(32).fill(2) }
+                ]
+            }
+        ]
+    }
+
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
+    let unhandled: WaIncomingUnhandledStanzaEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
+        },
+        emitUnhandledStanza: (event) => {
+            unhandled = event
+        }
+    })
+
+    assert.equal(updateEvent, null)
+    assert.ok(unhandled)
+    assert.equal(
+        (unhandled as unknown as WaIncomingUnhandledStanzaEvent).reason,
+        'newsletter.invalid_votes'
+    )
+})
+
+test('processIncomingNewsletterMessage rejects poll_vote with wrong hash size', () => {
+    const node = {
+        tag: 'message',
+        attrs: { id: 'POLL2', from: '120363025343298869@newsletter', type: 'poll' },
+        content: [
+            {
+                tag: 'votes',
+                attrs: {},
+                content: [{ tag: 'vote', attrs: { count: '1' }, content: new Uint8Array(16) }]
+            }
+        ]
+    }
+
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
+    let unhandled: WaIncomingUnhandledStanzaEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
+        },
+        emitUnhandledStanza: (event) => {
+            unhandled = event
+        }
+    })
+
+    assert.equal(updateEvent, null)
+    assert.ok(unhandled)
+    assert.equal(
+        (unhandled as unknown as WaIncomingUnhandledStanzaEvent).reason,
+        'newsletter.invalid_votes'
+    )
+})
+
+test('processIncomingNewsletterMessage emits counters from views/forwards/responses', () => {
+    const node: BinaryNode = {
+        tag: 'message',
+        attrs: { id: 'MTR', from: '120363025343298869@newsletter', server_id: '42' },
+        content: [
+            { tag: 'views_count', attrs: { count: '5' } },
+            { tag: 'forwards_count', attrs: { count: '2' } },
+            { tag: 'responses_count', attrs: { count: '1' } }
+        ]
+    }
+
+    const emitted: WaIncomingNewsletterMessageUpdateEvent[] = []
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            emitted.push(event)
+        }
+    })
+
+    assert.equal(emitted.length, 1)
+    assert.equal(emitted[0].update.kind, 'counters')
+    if (emitted[0].update.kind === 'counters') {
+        assert.equal(emitted[0].update.views, 5)
+        assert.equal(emitted[0].update.forwards, 2)
+        assert.equal(emitted[0].update.responses, 1)
+    }
+})
+
+test('processIncomingNewsletterMessage emits both reaction and counters from same stanza', () => {
+    const node: BinaryNode = {
+        tag: 'message',
+        attrs: { id: 'COMBO', from: '120363025343298869@newsletter', server_id: '42' },
+        content: [
+            {
+                tag: 'reactions',
+                attrs: {},
+                content: [{ tag: 'reaction', attrs: { code: '🔥', count: '4' } }]
+            },
+            { tag: 'views_count', attrs: { count: '12' } }
+        ]
+    }
+
+    const kinds: string[] = []
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            kinds.push(event.update.kind)
+        }
+    })
+
+    assert.deepEqual(kinds, ['reaction', 'counters'])
+})
+
+test('processNewsletterLiveUpdates fans aggregated poll_vote inside live_updates envelope', () => {
+    const hashA = new Uint8Array(32).fill(0x33)
+    const hashB = new Uint8Array(32).fill(0x44)
+    const notification: BinaryNode = {
+        tag: 'notification',
+        attrs: {
+            from: '120363025343298869@newsletter',
+            type: 'newsletter',
+            id: 'NOTIF1',
+            t: '1700000099'
+        },
+        content: [
+            {
+                tag: 'live_updates',
+                attrs: {},
+                content: [
+                    {
+                        tag: 'messages',
+                        attrs: { t: '1700000099' },
+                        content: [
+                            {
+                                tag: 'message',
+                                attrs: { server_id: '128' },
+                                content: [
+                                    {
+                                        tag: 'votes',
+                                        attrs: {},
+                                        content: [
+                                            {
+                                                tag: 'vote',
+                                                attrs: { count: '4' },
+                                                content: hashA
+                                            },
+                                            {
+                                                tag: 'vote',
+                                                attrs: { count: '1' },
+                                                content: hashB
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            // bare message announcement — should be skipped
+                            { tag: 'message', attrs: { server_id: '129' } }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+
+    const emitted: WaIncomingNewsletterMessageUpdateEvent[] = []
+    processNewsletterLiveUpdates(notification, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            emitted.push(event)
+        }
+    })
+
+    assert.equal(emitted.length, 1)
+    const event = emitted[0]
+    assert.equal(event.parentMessageServerId, 128)
+    assert.equal(event.chatJid, '120363025343298869@newsletter')
+    assert.equal(event.timestampSeconds, 1700000099)
+    assert.equal(event.update.kind, 'poll_vote')
+    if (event.update.kind === 'poll_vote') {
+        assert.equal(event.update.isSender, false)
+        assert.equal(event.update.votes.length, 2)
+        assert.deepEqual(event.update.votes[0].optionHash, hashA)
+        assert.equal(event.update.votes[0].count, 4)
+        assert.deepEqual(event.update.votes[1].optionHash, hashB)
+        assert.equal(event.update.votes[1].count, 1)
+    }
+})
+
+test('processIncomingNewsletterMessage emits revoke on edit=8', () => {
+    const node = {
+        tag: 'message',
+        attrs: {
+            id: 'REV1',
+            from: '120363025343298869@newsletter',
+            type: 'text',
+            edit: '8',
+            server_id: '99'
+        },
+        content: [{ tag: 'plaintext', attrs: {} }]
+    }
+
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
+        }
+    })
+
+    assert.ok(updateEvent)
+    const event = updateEvent as unknown as WaIncomingNewsletterMessageUpdateEvent
+    assert.equal(event.parentMessageServerId, 99)
+    assert.equal(event.update.kind, 'revoke')
+})
+
+test('processIncomingNewsletterMessage emits edit on edit=3 with new plaintext', () => {
+    const newMessage = proto.Message.encode({ conversation: 'edited content' }).finish()
+    const node = {
+        tag: 'message',
+        attrs: {
+            id: 'EDIT1',
+            from: '120363025343298869@newsletter',
+            type: 'text',
+            edit: '3',
+            server_id: '55'
+        },
+        content: [{ tag: 'plaintext', attrs: {}, content: newMessage }]
+    }
+
+    let updateEvent: WaIncomingNewsletterMessageUpdateEvent | null = null
+    processIncomingNewsletterMessage(node, {
+        logger: NEWSLETTER_LOGGER,
+        emitNewsletterMessageUpdate: (event) => {
+            updateEvent = event
+        }
+    })
+
+    assert.ok(updateEvent)
+    const event = updateEvent as unknown as WaIncomingNewsletterMessageUpdateEvent
+    assert.equal(event.parentMessageServerId, 55)
+    assert.equal(event.update.kind, 'edit')
+    if (event.update.kind === 'edit') {
+        assert.equal(event.update.message.conversation, 'edited content')
+    }
 })
 
 test('processIncomingNewsletterMessage emits unhandled on decode failure', () => {
