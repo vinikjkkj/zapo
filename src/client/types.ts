@@ -196,6 +196,11 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
      * and gets wrapped in a `MESSAGE_EDIT` protocolMessage targeting `editKey.stanzaId`.
      */
     readonly editKey?: WaSendEditKey
+    /**
+     * Override the auto-generated `messageContextInfo.messageSecret` (32 bytes).
+     * Use to share a known secret across follow-up addons or for deterministic tests.
+     */
+    readonly messageSecret?: Uint8Array
 }
 
 export interface WaClearChatOptions {

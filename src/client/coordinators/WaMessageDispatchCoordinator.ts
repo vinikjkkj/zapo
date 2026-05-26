@@ -8,7 +8,7 @@ import { randomBytesAsync, sha256 } from '@crypto'
 import { md5Bytes } from '@crypto/core/primitives'
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
-import { ensureMessageSecret } from '@message'
+import { assertMessageSecret, ensureMessageSecret } from '@message'
 import {
     applyContextInfo,
     resolveSendContextInfo,
@@ -348,7 +348,19 @@ export class WaMessageDispatchCoordinator {
               }
             : withViewOnce
         const upload = built.upload
-        const messageWithSecret = await ensureMessageSecret(message)
+        const messageWithOverride = options.messageSecret
+            ? {
+                  ...message,
+                  messageContextInfo: {
+                      ...(message.messageContextInfo ?? {}),
+                      messageSecret: assertMessageSecret(
+                          options.messageSecret,
+                          'options.messageSecret'
+                      )
+                  }
+              }
+            : message
+        const messageWithSecret = await ensureMessageSecret(messageWithOverride)
         const rawSecret = messageWithSecret.messageContextInfo?.messageSecret
         if (
             rawSecret &&
