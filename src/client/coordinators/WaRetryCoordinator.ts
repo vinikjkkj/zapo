@@ -1,6 +1,7 @@
 import type { WaAuthCredentials } from '@auth/types'
 import type { WaIncomingMessageEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import type { IcdcMeta } from '@message/crypto/icdc'
 import { buildRecoveredIncomingEvent } from '@message/primitives/incoming'
 import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import type { WaMessageClient } from '@message/WaMessageClient'
@@ -32,6 +33,7 @@ import type {
 import type { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
 import type { SignalMissingPreKeysSyncApi } from '@signal/api/SignalMissingPreKeysSyncApi'
 import { generatePreKeyPair } from '@signal/registration/keygen'
+import type { SignalSessionResolver } from '@signal/session/resolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalPreKeyBundle } from '@signal/types'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
@@ -54,11 +56,14 @@ interface WaRetryCoordinatorOptions {
     readonly sessionStore: WaSessionStore
     readonly senderKeyStore: WaSenderKeyStore
     readonly signalProtocol: SignalProtocol
+    readonly sessionResolver: SignalSessionResolver
     readonly signalDeviceSync: SignalDeviceSyncApi
     readonly signalMissingPreKeysSync: SignalMissingPreKeysSyncApi
     readonly messageClient: WaMessageClient
     readonly sendNode: (node: BinaryNode) => Promise<void>
     readonly getCurrentCredentials: () => WaAuthCredentials | null
+    /** Refresh device-list ICDC for the given user jid; passed through to retry replay. */
+    readonly resolveUserIcdc?: (userJid: string) => Promise<IcdcMeta | null>
     readonly peerDataOperation?: PeerDataOperationRequester
     readonly emitIncomingMessage?: (event: WaIncomingMessageEvent) => void
 }
@@ -149,7 +154,9 @@ export class WaRetryCoordinator {
             logger: options.logger,
             messageClient: options.messageClient,
             signalProtocol: options.signalProtocol,
-            getCurrentCredentials: options.getCurrentCredentials
+            sessionResolver: options.sessionResolver,
+            getCurrentCredentials: options.getCurrentCredentials,
+            resolveUserIcdc: options.resolveUserIcdc
         })
         this.retryProcessingByMessageId = new Map()
         this.retrySessionBaseKeys = new Map()
