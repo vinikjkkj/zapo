@@ -789,11 +789,13 @@ export function buildWaClientDependencies(input: {
         sessionStore: sessionStore.session,
         senderKeyStore: sessionStore.senderKey,
         signalProtocol,
+        sessionResolver,
         signalDeviceSync,
         signalMissingPreKeysSync,
         messageClient,
         sendNode: runtime.sendNode,
         getCurrentCredentials,
+        resolveUserIcdc: (userJid) => messageDispatch.resolveUserIcdc(userJid),
         peerDataOperation,
         emitIncomingMessage: (event) => {
             void runtime

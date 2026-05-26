@@ -9,6 +9,7 @@ import { parseRetryReceiptRequest, pickRetryStateMax } from '@retry/parse'
 import { mapRetryReasonFromError } from '@retry/reason'
 import { WaRetryReplayService } from '@retry/replay'
 import type { WaRetryOutboundMessageRecord, WaRetryReplayPayload } from '@retry/types'
+import type { SignalSessionResolver } from '@signal/session/resolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import { encodeBinaryNode } from '@transport/binary'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
@@ -44,6 +45,11 @@ function createLogger(warnings: string[] = []): Logger {
         },
         error: () => undefined
     }
+}
+
+const NOOP_SESSION_RESOLVER: SignalSessionResolver = {
+    ensureSession: async () => undefined,
+    ensureSessionsBatch: async () => []
 }
 
 test('retry replay payload codec round-trips supported modes', () => {
@@ -199,7 +205,8 @@ test('retry replay service resends plaintext when requester matches destination 
                 ciphertext: new Uint8Array([9, 9])
             })
         } as unknown as SignalProtocol,
-        getCurrentCredentials: () => null
+        getCurrentCredentials: () => null,
+        sessionResolver: NOOP_SESSION_RESOLVER
     })
 
     const outbound = buildOutboundRecord('m-plain-1', {
@@ -236,7 +243,8 @@ test('retry replay service accepts raw replay payloads from memory store', async
                 ciphertext: new Uint8Array([4, 4])
             })
         } as unknown as SignalProtocol,
-        getCurrentCredentials: () => null
+        getCurrentCredentials: () => null,
+        sessionResolver: NOOP_SESSION_RESOLVER
     })
 
     const now = Date.now()
@@ -280,7 +288,8 @@ test('retry replay service returns ineligible on plaintext destination mismatch'
                 ciphertext: new Uint8Array([1])
             })
         } as unknown as SignalProtocol,
-        getCurrentCredentials: () => null
+        getCurrentCredentials: () => null,
+        sessionResolver: NOOP_SESSION_RESOLVER
     })
 
     const outbound = buildOutboundRecord('m-plain-2', {
@@ -315,7 +324,8 @@ test('retry replay service handles group plaintext retries and pkmsg identity gu
                 ciphertext: new Uint8Array([5, 6, 7])
             })
         } as unknown as SignalProtocol,
-        getCurrentCredentials: () => null
+        getCurrentCredentials: () => null,
+        sessionResolver: NOOP_SESSION_RESOLVER
     })
 
     const outbound = buildOutboundRecord('m-group-1', {
@@ -366,7 +376,8 @@ test('retry replay service emits status@broadcast retry with meta and no address
                 ciphertext: new Uint8Array([1, 2, 3])
             })
         } as unknown as SignalProtocol,
-        getCurrentCredentials: () => null
+        getCurrentCredentials: () => null,
+        sessionResolver: NOOP_SESSION_RESOLVER
     })
 
     const now = Date.now()
@@ -417,7 +428,8 @@ test('retry replay service handles encrypted mode eligibility', async () => {
                 ciphertext: new Uint8Array([1])
             })
         } as unknown as SignalProtocol,
-        getCurrentCredentials: () => null
+        getCurrentCredentials: () => null,
+        sessionResolver: NOOP_SESSION_RESOLVER
     })
 
     const skmsgOutbound = buildOutboundRecord('m-encrypted-skmsg', {
@@ -477,7 +489,8 @@ test('retry replay service handles opaque replay compatibility checks', async ()
                 ciphertext: new Uint8Array([1])
             })
         } as unknown as SignalProtocol,
-        getCurrentCredentials: () => null
+        getCurrentCredentials: () => null,
+        sessionResolver: NOOP_SESSION_RESOLVER
     })
 
     const compatibleNode: BinaryNode = {

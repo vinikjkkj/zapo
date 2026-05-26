@@ -1559,7 +1559,7 @@ export class WaMessageDispatchCoordinator {
         return proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
     }
 
-    private resolveUserIcdc(
+    public resolveUserIcdc(
         userJid: string,
         localIdentity?: { readonly address: SignalAddress; readonly pubKey: Uint8Array }
     ): Promise<IcdcMeta | null> {

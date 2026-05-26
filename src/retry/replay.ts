@@ -1,9 +1,10 @@
 import type { WaAuthCredentials } from '@auth/types'
 import type { Logger } from '@infra/log/types'
+import { type IcdcMeta, injectDeviceListMetadata } from '@message/crypto/icdc'
 import { wrapDeviceSentMessage } from '@message/encode/device-sent'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
 import type { WaMessageClient } from '@message/WaMessageClient'
-import { proto } from '@proto'
+import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS, WA_NODE_TAGS } from '@protocol/constants'
 import {
     isGroupOrBroadcastJid,
@@ -20,6 +21,7 @@ import type {
     WaRetryOutboundMessageRecord,
     WaRetryPlaintextReplayPayload
 } from '@retry/types'
+import type { SignalSessionResolver } from '@signal/session/resolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import { decodeBinaryNode } from '@transport/binary'
 import { buildGroupRetryMessageNode, buildMetaNode } from '@transport/node/builders/message'
@@ -31,7 +33,9 @@ export interface WaRetryReplayServiceOptions {
     readonly logger: Logger
     readonly messageClient: WaMessageClient
     readonly signalProtocol: SignalProtocol
+    readonly sessionResolver: SignalSessionResolver
     readonly getCurrentCredentials: () => WaAuthCredentials | null
+    readonly resolveUserIcdc?: (userJid: string) => Promise<IcdcMeta | null>
 }
 
 export type WaRetryResendResult = 'resent' | 'ineligible'
@@ -100,23 +104,110 @@ export class WaRetryReplayService {
         } catch {
             return 'ineligible'
         }
-        if (payloadUserJid !== requesterUserJid) {
+        const requesterIsSelf = this.isRequesterCurrentAccount(requesterJid)
+        if (payloadUserJid !== requesterUserJid && !requesterIsSelf) {
             return 'ineligible'
         }
 
+        const plaintext =
+            (await this.refreshRetryPlaintext(payload, {
+                wrapAsDeviceSent: requesterIsSelf,
+                includeRecipientIcdc: true,
+                logContext: 'direct'
+            })) ?? payload.plaintext
+
+        await this.options.sessionResolver.ensureSession(requesterAddress, requesterJid)
+
         const encrypted = await this.options.signalProtocol.encryptMessage(
             requesterAddress,
-            payload.plaintext
+            plaintext
         )
+        const deviceIdentity =
+            encrypted.type === 'pkmsg' ? this.resolveSignedDeviceIdentity('direct') : undefined
         await this.options.messageClient.sendEncrypted({
             to: requesterJid,
             encType: encrypted.type,
             ciphertext: encrypted.ciphertext,
             encCount: retryCount,
             id: outbound.messageId,
-            type: payload.type
+            type: payload.type,
+            deviceIdentity
         })
         return 'resent'
+    }
+
+    private resolveSignedDeviceIdentity(context: string): Uint8Array | undefined {
+        const signedIdentity = this.options.getCurrentCredentials()?.signedIdentity
+        if (!signedIdentity) {
+            this.options.logger.warn('retry request missing signed identity for pkmsg envelope', {
+                context
+            })
+            return undefined
+        }
+        return proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
+    }
+
+    private async refreshRetryPlaintext(
+        payload: WaRetryPlaintextReplayPayload,
+        options: {
+            readonly wrapAsDeviceSent: boolean
+            readonly includeRecipientIcdc: boolean
+            readonly logContext: string
+        }
+    ): Promise<Uint8Array | null> {
+        if (!options.wrapAsDeviceSent && !this.options.resolveUserIcdc) {
+            return null
+        }
+        try {
+            const messageBytes = unpadPkcs7(payload.plaintext)
+            const decoded = proto.Message.decode(messageBytes)
+            let message: Proto.IMessage = decoded
+            let changed = false
+
+            if (this.options.resolveUserIcdc) {
+                const meUserJid = this.safeUserJid(this.options.getCurrentCredentials()?.meJid)
+                const recipientUserJid = options.includeRecipientIcdc
+                    ? this.safeUserJid(payload.to)
+                    : null
+                const [senderIcdc, recipientIcdc] = await Promise.all([
+                    meUserJid ? this.options.resolveUserIcdc(meUserJid) : Promise.resolve(null),
+                    recipientUserJid
+                        ? this.options.resolveUserIcdc(recipientUserJid)
+                        : Promise.resolve(null)
+                ])
+                const injected = injectDeviceListMetadata(message, senderIcdc, recipientIcdc)
+                if (injected !== message) {
+                    message = injected
+                    changed = true
+                }
+            }
+
+            if (options.wrapAsDeviceSent && !message.deviceSentMessage) {
+                message = wrapDeviceSentMessage(message, payload.to)
+                changed = true
+            }
+
+            if (!changed) {
+                return null
+            }
+            return writeRandomPadMax16(proto.Message.encode(message).finish())
+        } catch (error) {
+            this.options.logger.warn('retry request failed to refresh plaintext', {
+                context: options.logContext,
+                to: payload.to,
+                message: toError(error).message
+            })
+            return null
+        }
+    }
+
+    private safeUserJid(jid: string | undefined): string | null {
+        if (!jid) return null
+        try {
+            return toUserJid(jid)
+        } catch {
+            return null
+        }
     }
 
     private async resendGroupPlaintextPayload(
@@ -127,8 +218,11 @@ export class WaRetryReplayService {
         retryCount: number
     ): Promise<WaRetryResendResult> {
         const plaintext =
-            (await this.maybeWrapGroupRetryPlaintextForSelfDevice(payload, requesterJid)) ??
-            payload.plaintext
+            (await this.refreshRetryPlaintext(payload, {
+                wrapAsDeviceSent: this.isRequesterCurrentAccount(requesterJid),
+                includeRecipientIcdc: false,
+                logContext: 'group'
+            })) ?? payload.plaintext
         const encrypted = await this.options.signalProtocol.encryptMessage(
             requesterAddress,
             plaintext
@@ -146,7 +240,6 @@ export class WaRetryReplayService {
             deviceIdentity = proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
         }
 
-        // status retries echo `<meta status_setting>` and omit `addressing_mode`.
         const isStatus = isStatusBroadcastJid(payload.to)
         const metaNode = isStatus
             ? buildMetaNode({ status_setting: payload.statusSetting ?? 'contacts' })
@@ -184,6 +277,10 @@ export class WaRetryReplayService {
         if (normalizeDeviceJid(payload.to) !== normalizedRequesterJid) {
             return 'ineligible'
         }
+        const deviceIdentity =
+            payload.encType === 'pkmsg'
+                ? this.resolveSignedDeviceIdentity('encrypted_replay')
+                : undefined
         await this.options.messageClient.sendEncrypted({
             to: requesterJid,
             encType: payload.encType,
@@ -191,7 +288,8 @@ export class WaRetryReplayService {
             encCount: retryCount,
             id: outbound.messageId,
             type: payload.type,
-            participant: payload.participant
+            participant: payload.participant,
+            deviceIdentity
         })
         return 'resent'
     }
@@ -217,31 +315,6 @@ export class WaRetryReplayService {
                   }
         await this.options.messageClient.sendMessageNode(replayNode)
         return 'resent'
-    }
-
-    private async maybeWrapGroupRetryPlaintextForSelfDevice(
-        payload: WaRetryPlaintextReplayPayload,
-        requesterJid: string
-    ): Promise<Uint8Array | null> {
-        if (!this.isRequesterCurrentAccount(requesterJid)) {
-            return null
-        }
-        try {
-            const messageBytes = unpadPkcs7(payload.plaintext)
-            const message = proto.Message.decode(messageBytes)
-            const wrapped = wrapDeviceSentMessage(message, payload.to)
-            return writeRandomPadMax16(proto.Message.encode(wrapped).finish())
-        } catch (error) {
-            this.options.logger.warn(
-                'retry request failed to wrap deviceSent payload for self requester',
-                {
-                    requester: requesterJid,
-                    to: payload.to,
-                    message: toError(error).message
-                }
-            )
-            return null
-        }
     }
 
     private isRequesterCurrentAccount(requesterJid: string): boolean {
