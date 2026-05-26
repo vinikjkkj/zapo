@@ -82,7 +82,7 @@ export function processIncomingNewsletterMessage(
                 kind: 'reaction',
                 isSender: node.attrs.is_sender === 'true',
                 revoked,
-                reactions: [{ code: reactionNode.attrs.code ?? '' }]
+                reactions: [reactionNode.attrs.code ? { code: reactionNode.attrs.code } : {}]
             })
             emittedAggregate = true
         }
@@ -241,23 +241,30 @@ function parsePollVotes(votesNode: BinaryNode): WaNewsletterPollVoteEntry[] | nu
     if (withCount > 0 && withoutCount > 0) {
         return null
     }
+    if (entries.length === 0) {
+        return null
+    }
     return entries
 }
 
 function parseCounters(
     node: BinaryNode
 ): (WaNewsletterMessageUpdate & { kind: 'counters' }) | null {
-    const viewsNode = findNodeChild(node, 'views_count')
-    const forwardsNode = findNodeChild(node, 'forwards_count')
-    const responsesNode = findNodeChild(node, 'responses_count')
-    if (!viewsNode && !forwardsNode && !responsesNode) return null
-    const update: WaNewsletterMessageUpdate & { kind: 'counters' } = {
+    const views = parseCounterAttr(findNodeChild(node, 'views_count'))
+    const forwards = parseCounterAttr(findNodeChild(node, 'forwards_count'))
+    const responses = parseCounterAttr(findNodeChild(node, 'responses_count'))
+    if (views === undefined && forwards === undefined && responses === undefined) return null
+    return {
         kind: 'counters',
-        ...(viewsNode ? { views: parseOptionalInt(viewsNode.attrs.count) } : {}),
-        ...(forwardsNode ? { forwards: parseOptionalInt(forwardsNode.attrs.count) } : {}),
-        ...(responsesNode ? { responses: parseOptionalInt(responsesNode.attrs.count) } : {})
+        ...(views !== undefined ? { views } : {}),
+        ...(forwards !== undefined ? { forwards } : {}),
+        ...(responses !== undefined ? { responses } : {})
     }
-    return update
+}
+
+function parseCounterAttr(node: BinaryNode | undefined): number | undefined {
+    if (!node) return undefined
+    return parseOptionalInt(node.attrs.count)
 }
 
 function parseReactionAggregate(envelope: BinaryNode): WaNewsletterReactionEntry[] | null {

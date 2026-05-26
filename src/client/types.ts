@@ -542,7 +542,7 @@ export interface WaNewsletterPollVoteEntry {
 }
 
 export interface WaNewsletterReactionEntry {
-    readonly code: string
+    readonly code?: string
     readonly count?: number
 }
 
