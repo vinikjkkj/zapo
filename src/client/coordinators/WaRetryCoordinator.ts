@@ -9,6 +9,7 @@ import { proto } from '@proto'
 import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES } from '@protocol/constants'
 import {
     isGroupOrBroadcastJid,
+    isHostedDeviceJid,
     normalizeDeviceJid,
     parseJidFull,
     parseSignalAddressFromJid,
@@ -270,11 +271,13 @@ export class WaRetryCoordinator {
                 delegatedToPlaceholderResend: true
             }
         }
+        const senderDeviceJid = context.participant ?? context.from
+        const forceKeysForHosted = senderDeviceJid ? isHostedDeviceJid(senderDeviceJid) : false
         return {
             registrationId: registrationInfo.registrationId,
             retryCount,
             retryKeys:
-                retryCount >= RETRY_KEYS_MIN_COUNT
+                forceKeysForHosted || retryCount >= RETRY_KEYS_MIN_COUNT
                     ? ((await this.buildRetryKeysSection(
                           registrationInfo.identityKeyPair.pubKey
                       )) ?? undefined)

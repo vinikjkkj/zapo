@@ -95,7 +95,7 @@ test('device fanout resolver keeps hosted devices in direct fanout', async () =>
     ])
 })
 
-test('device fanout resolver excludes hosted devices in group fanout', async () => {
+test('device fanout resolver keeps hosted devices in group fanout', async () => {
     const resolver = createDeviceFanoutResolver({
         signalDeviceSync: {
             syncDeviceList: async () => [
@@ -117,7 +117,12 @@ test('device fanout resolver excludes hosted devices in group fanout', async () 
         '6116570308623@lid',
         '551188888888@s.whatsapp.net'
     ])
-    assert.deepEqual(fanout, ['6116570308623:1@lid', '551188888888@s.whatsapp.net'])
+    assert.deepEqual(fanout, [
+        '6116570308623:1@lid',
+        '6116570308623:99@hosted.lid',
+        '551188888888@s.whatsapp.net',
+        '551188888888:99@hosted'
+    ])
 })
 
 test('group metadata cache mutates membership from events', async () => {

@@ -8,6 +8,7 @@ import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS, WA_NODE_TAGS } from '@protocol/constants'
 import {
     isGroupOrBroadcastJid,
+    isHostedDeviceJid,
     isStatusBroadcastJid,
     normalizeDeviceJid,
     parseJidFull,
@@ -124,6 +125,9 @@ export class WaRetryReplayService {
         )
         const deviceIdentity =
             encrypted.type === 'pkmsg' ? this.resolveSignedDeviceIdentity('direct') : undefined
+        const metaNode = isHostedDeviceJid(requesterJid)
+            ? buildMetaNode({ sender_intent: 'hosted' })
+            : undefined
         await this.options.messageClient.sendEncrypted({
             to: requesterJid,
             encType: encrypted.type,
@@ -131,7 +135,8 @@ export class WaRetryReplayService {
             encCount: retryCount,
             id: outbound.messageId,
             type: payload.type,
-            deviceIdentity
+            deviceIdentity,
+            metaNode
         })
         return 'resent'
     }
@@ -241,9 +246,14 @@ export class WaRetryReplayService {
         }
 
         const isStatus = isStatusBroadcastJid(payload.to)
-        const metaNode = isStatus
-            ? buildMetaNode({ status_setting: payload.statusSetting ?? 'contacts' })
-            : undefined
+        const metaAttrs: Record<string, string> = {}
+        if (isStatus) {
+            metaAttrs.status_setting = payload.statusSetting ?? 'contacts'
+        }
+        if (isHostedDeviceJid(requesterJid)) {
+            metaAttrs.sender_intent = 'hosted'
+        }
+        const metaNode = Object.keys(metaAttrs).length > 0 ? buildMetaNode(metaAttrs) : undefined
         const retryNode = buildGroupRetryMessageNode({
             to: payload.to,
             type: payload.type,
@@ -281,6 +291,9 @@ export class WaRetryReplayService {
             payload.encType === 'pkmsg'
                 ? this.resolveSignedDeviceIdentity('encrypted_replay')
                 : undefined
+        const metaNode = isHostedDeviceJid(requesterJid)
+            ? buildMetaNode({ sender_intent: 'hosted' })
+            : undefined
         await this.options.messageClient.sendEncrypted({
             to: requesterJid,
             encType: payload.encType,
@@ -289,7 +302,8 @@ export class WaRetryReplayService {
             id: outbound.messageId,
             type: payload.type,
             participant: payload.participant,
-            deviceIdentity
+            deviceIdentity,
+            metaNode
         })
         return 'resent'
     }

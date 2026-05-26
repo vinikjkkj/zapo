@@ -47,6 +47,7 @@ import { WA_DEFAULTS, type WaStatusDistributionSetting } from '@protocol/constan
 import {
     isBotJid,
     isGroupJid,
+    isHostedDeviceJid,
     isLidJid,
     isNewsletterJid,
     normalizeDeviceJid,
@@ -506,10 +507,15 @@ export class WaMessageDispatchCoordinator {
             logTag: 'broadcast list',
             customize: ({ fanoutDeviceJids }) => {
                 const phashTargets = new Array<string>(fanoutDeviceJids.length + 1)
+                let phashTargetCount = 0
                 for (let i = 0; i < fanoutDeviceJids.length; i += 1) {
-                    phashTargets[i] = fanoutDeviceJids[i]
+                    const candidate = fanoutDeviceJids[i]
+                    if (isHostedDeviceJid(candidate)) continue
+                    phashTargets[phashTargetCount] = candidate
+                    phashTargetCount += 1
                 }
-                phashTargets[fanoutDeviceJids.length] = senderJid
+                phashTargets[phashTargetCount] = senderJid
+                phashTargets.length = phashTargetCount + 1
                 return Promise.resolve({ phash: computePhashV2(phashTargets) })
             }
         })
@@ -749,10 +755,15 @@ export class WaMessageDispatchCoordinator {
             }
         }
         const phashTargets = new Array<string>(resolvedFanoutTargets.length + 1)
+        let phashTargetCount = 0
         for (let index = 0; index < resolvedFanoutTargets.length; index += 1) {
-            phashTargets[index] = resolvedFanoutTargets[index].jid
+            const candidate = resolvedFanoutTargets[index].jid
+            if (isHostedDeviceJid(candidate)) continue
+            phashTargets[phashTargetCount] = candidate
+            phashTargetCount += 1
         }
-        phashTargets[resolvedFanoutTargets.length] = senderForPhash
+        phashTargets[phashTargetCount] = senderForPhash
+        phashTargets.length = phashTargetCount + 1
         const localPhash = computePhashV2(phashTargets)
         const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
             message,
@@ -935,10 +946,15 @@ export class WaMessageDispatchCoordinator {
             }
         }
         const phashTargets = new Array<string>(fanoutDeviceJids.length + 1)
+        let phashTargetCount = 0
         for (let index = 0; index < fanoutDeviceJids.length; index += 1) {
-            phashTargets[index] = fanoutDeviceJids[index]
+            const candidate = fanoutDeviceJids[index]
+            if (isHostedDeviceJid(candidate)) continue
+            phashTargets[phashTargetCount] = candidate
+            phashTargetCount += 1
         }
-        phashTargets[fanoutDeviceJids.length] = senderJid
+        phashTargets[phashTargetCount] = senderJid
+        phashTargets.length = phashTargetCount + 1
         const localPhash = computePhashV2(phashTargets)
         const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
             message,
