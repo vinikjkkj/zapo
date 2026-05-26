@@ -88,6 +88,142 @@ export interface WaSendTextMessage {
     readonly linkPreview?: boolean | WaLinkPreviewOverride
 }
 
+export interface WaSendMessageTarget {
+    readonly stanzaId: string
+    readonly fromMe: boolean
+    /** Required in groups when targeting a message sent by another participant. */
+    readonly participant?: string
+}
+
+/** @deprecated use {@link WaSendMessageTarget} */
+export type WaSendReactionTarget = WaSendMessageTarget
+
+export interface WaSendReactionMessage {
+    readonly type: 'reaction'
+    /** Emoji to attach. Pass an empty string to revoke an existing reaction. */
+    readonly emoji: string
+    readonly target: WaSendMessageTarget
+    /** Defaults to `Date.now()` when omitted. */
+    readonly senderTimestampMs?: number
+}
+
+export interface WaSendRevokeMessage {
+    readonly type: 'revoke'
+    /** Stanza id of the message being revoked. */
+    readonly stanzaId: string
+    /** Defaults to `true` (revoking your own messages). */
+    readonly fromMe?: boolean
+    /** Original author jid; required when an admin revokes someone else's message in a group. */
+    readonly participant?: string
+}
+
+export interface WaSendPinMessage {
+    readonly type: 'pin' | 'unpin'
+    readonly target: WaSendMessageTarget
+    readonly senderTimestampMs?: number
+}
+
+export interface WaSendEditKey {
+    /** Stanza id of the message being edited (must be `fromMe: true`). */
+    readonly stanzaId: string
+    /** Required in groups when the original message uses lid/pn addressing on the participant. */
+    readonly participant?: string
+    /** Defaults to `Date.now()` when omitted. */
+    readonly timestampMs?: number
+}
+
+export interface WaSendKeepMessage {
+    readonly type: 'keep' | 'unkeep'
+    readonly target: WaSendMessageTarget
+    /** Defaults to `Date.now()` when omitted. */
+    readonly timestampMs?: number
+}
+
+export interface WaSendPollOptionInput {
+    readonly name: string
+}
+
+export interface WaSendPollMessage {
+    readonly type: 'poll'
+    readonly name: string
+    /** Option names (strings) or `{ name }` objects. Order matters for vote hashing. */
+    readonly options: readonly (string | WaSendPollOptionInput)[]
+    /** How many options a voter may pick. Defaults to 1. */
+    readonly selectableCount?: number
+    readonly allowAddOption?: boolean
+    readonly hideParticipantName?: boolean
+    readonly contextInfo?: WaSendContextInfo
+}
+
+export interface WaSendPollParent {
+    /** Stanza id of the original poll creation message. */
+    readonly stanzaId: string
+    readonly fromMe: boolean
+    /** Group participant jid; required outside 1:1 chats. */
+    readonly participant?: string
+    /** Author of the original poll (parentMsgOriginalSender for the use-case secret). */
+    readonly authorJid: string
+    /** The poll's `messageContextInfo.messageSecret` (32 bytes). */
+    readonly messageSecret: Uint8Array
+}
+
+export interface WaSendPollVoteMessage {
+    readonly type: 'poll-vote'
+    readonly poll: WaSendPollParent
+    /** Option names exactly as they appeared in the poll. Hashed with SHA-256 internally. */
+    readonly selectedOptionNames: readonly string[]
+    /** Defaults to `Date.now()` when omitted. */
+    readonly senderTimestampMs?: number
+}
+
+export interface WaSendEventLocation {
+    readonly latitude: number
+    readonly longitude: number
+    readonly name?: string
+    readonly address?: string
+}
+
+export interface WaSendEventMessage {
+    readonly type: 'event'
+    readonly name: string
+    readonly description?: string
+    /** Unix seconds. */
+    readonly startTime: number
+    /** Unix seconds. */
+    readonly endTime?: number
+    readonly location?: WaSendEventLocation
+    readonly joinLink?: string
+    readonly extraGuestsAllowed?: boolean
+    readonly isScheduleCall?: boolean
+    readonly isCanceled?: boolean
+    readonly hasReminder?: boolean
+    /** Reminder offset in seconds before `startTime`. */
+    readonly reminderOffsetSec?: number
+    readonly contextInfo?: WaSendContextInfo
+}
+
+export type WaSendEventResponseType = 'going' | 'not_going' | 'maybe'
+
+export interface WaSendEventParent {
+    /** Stanza id of the original event creation message. */
+    readonly stanzaId: string
+    readonly fromMe: boolean
+    readonly participant?: string
+    /** Creator of the event (parentMsgOriginalSender for the use-case secret). */
+    readonly authorJid: string
+    /** The event's `messageContextInfo.messageSecret` (32 bytes). */
+    readonly messageSecret: Uint8Array
+}
+
+export interface WaSendEventResponseMessage {
+    readonly type: 'event-response'
+    readonly event: WaSendEventParent
+    readonly response: WaSendEventResponseType
+    readonly extraGuestCount?: number
+    /** Defaults to `Date.now()` when omitted. */
+    readonly timestampMs?: number
+}
+
 interface WaSendImageMessage extends WaSendMediaBase, UserMediaFields<Proto.Message.IImageMessage> {
     readonly type: 'image'
 }
@@ -163,7 +299,19 @@ export type WaSendMediaMessage =
     | WaSendStickerMessage
     | WaSendStickerPackMessage
 
-export type WaSendMessageContent = string | WaSendTextMessage | Proto.IMessage | WaSendMediaMessage
+export type WaSendMessageContent =
+    | string
+    | WaSendTextMessage
+    | WaSendReactionMessage
+    | WaSendRevokeMessage
+    | WaSendPinMessage
+    | WaSendKeepMessage
+    | WaSendPollMessage
+    | WaSendPollVoteMessage
+    | WaSendEventMessage
+    | WaSendEventResponseMessage
+    | Proto.IMessage
+    | WaSendMediaMessage
 
 export interface WaEncryptedMessageInput {
     readonly to: string

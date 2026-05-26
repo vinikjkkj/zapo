@@ -1,4 +1,15 @@
-import type { WaSendMediaMessage, WaSendTextMessage } from '@message/types'
+import type {
+    WaSendEventMessage,
+    WaSendEventResponseMessage,
+    WaSendKeepMessage,
+    WaSendMediaMessage,
+    WaSendPinMessage,
+    WaSendPollMessage,
+    WaSendPollVoteMessage,
+    WaSendReactionMessage,
+    WaSendRevokeMessage,
+    WaSendTextMessage
+} from '@message/types'
 import { proto, type Proto } from '@proto'
 import {
     WA_EDIT_ATTRS,
@@ -26,6 +37,116 @@ export function isSendTextMessage(content: unknown): content is WaSendTextMessag
         (content as { type: unknown }).type === 'text' &&
         'text' in content
     )
+}
+
+export function isSendReactionMessage(content: unknown): content is WaSendReactionMessage {
+    return (
+        !!content &&
+        typeof content === 'object' &&
+        'type' in content &&
+        (content as { type: unknown }).type === 'reaction' &&
+        'target' in content
+    )
+}
+
+export function isSendRevokeMessage(content: unknown): content is WaSendRevokeMessage {
+    return (
+        !!content &&
+        typeof content === 'object' &&
+        'type' in content &&
+        (content as { type: unknown }).type === 'revoke' &&
+        'stanzaId' in content
+    )
+}
+
+export function isSendPinMessage(content: unknown): content is WaSendPinMessage {
+    if (!content || typeof content !== 'object' || !('type' in content) || !('target' in content)) {
+        return false
+    }
+    const type = (content as { type: unknown }).type
+    return type === 'pin' || type === 'unpin'
+}
+
+export function isSendKeepMessage(content: unknown): content is WaSendKeepMessage {
+    if (!content || typeof content !== 'object' || !('type' in content) || !('target' in content)) {
+        return false
+    }
+    const type = (content as { type: unknown }).type
+    return type === 'keep' || type === 'unkeep'
+}
+
+export function isSendPollMessage(content: unknown): content is WaSendPollMessage {
+    return (
+        !!content &&
+        typeof content === 'object' &&
+        'type' in content &&
+        (content as { type: unknown }).type === 'poll' &&
+        'name' in content &&
+        'options' in content
+    )
+}
+
+export function isSendPollVoteMessage(content: unknown): content is WaSendPollVoteMessage {
+    return (
+        !!content &&
+        typeof content === 'object' &&
+        'type' in content &&
+        (content as { type: unknown }).type === 'poll-vote' &&
+        'poll' in content &&
+        'selectedOptionNames' in content
+    )
+}
+
+export function isSendEventMessage(content: unknown): content is WaSendEventMessage {
+    return (
+        !!content &&
+        typeof content === 'object' &&
+        'type' in content &&
+        (content as { type: unknown }).type === 'event' &&
+        'name' in content &&
+        'startTime' in content
+    )
+}
+
+export function isSendEventResponseMessage(
+    content: unknown
+): content is WaSendEventResponseMessage {
+    return (
+        !!content &&
+        typeof content === 'object' &&
+        'type' in content &&
+        (content as { type: unknown }).type === 'event-response' &&
+        'event' in content &&
+        'response' in content
+    )
+}
+
+export function isSendAddonCryptoMessage(
+    content: unknown
+): content is WaSendPollVoteMessage | WaSendEventResponseMessage {
+    return isSendPollVoteMessage(content) || isSendEventResponseMessage(content)
+}
+
+const VIEW_ONCE_MEDIA_FIELDS = [
+    'imageMessage',
+    'videoMessage',
+    'ptvMessage',
+    'audioMessage'
+] as const
+
+export function supportsViewOnce(message: Proto.IMessage): boolean {
+    return VIEW_ONCE_MEDIA_FIELDS.some((field) => message[field])
+}
+
+export function wrapAsViewOnce(message: Proto.IMessage): Proto.IMessage {
+    if (message.viewOnceMessage || message.viewOnceMessageV2) {
+        return message
+    }
+    for (const field of VIEW_ONCE_MEDIA_FIELDS) {
+        const media = message[field]
+        if (media) return { ...message, [field]: { ...media, viewOnce: true } }
+    }
+    return message
 }
 
 export function unwrapMessage(message: Proto.IMessage): Proto.IMessage {
@@ -105,6 +226,38 @@ export function resolveMessageTypeAttr(message: Proto.IMessage): string {
 }
 
 const REVOKED_REACTION_TEXT = ''
+
+export function resolveDecryptFailAttr(message: Proto.IMessage): 'hide' | undefined {
+    const msg = unwrapMessage(message)
+    const secretEncType = msg.secretEncryptedMessage?.secretEncType
+    if (
+        msg.reactionMessage ||
+        msg.encReactionMessage ||
+        (msg.pollUpdateMessage && msg.pollUpdateMessage.vote != null) ||
+        msg.keepInChatMessage ||
+        msg.editedMessage ||
+        msg.pinInChatMessage ||
+        msg.encCommentMessage ||
+        msg.encEventResponseMessage ||
+        secretEncType === proto.Message.SecretEncryptedMessage.SecretEncType.EVENT_EDIT ||
+        secretEncType === proto.Message.SecretEncryptedMessage.SecretEncType.POLL_EDIT ||
+        secretEncType === proto.Message.SecretEncryptedMessage.SecretEncType.POLL_ADD_OPTION ||
+        msg.messageHistoryNotice
+    ) {
+        return 'hide'
+    }
+    if (msg.protocolMessage) {
+        const protocolType = msg.protocolMessage.type
+        if (
+            protocolType === proto.Message.ProtocolMessage.Type.EPHEMERAL_SYNC_RESPONSE ||
+            protocolType === proto.Message.ProtocolMessage.Type.REQUEST_WELCOME_MESSAGE ||
+            msg.protocolMessage.editedMessage
+        ) {
+            return 'hide'
+        }
+    }
+    return undefined
+}
 
 export function needsSecretPersistence(message: Proto.IMessage): boolean {
     const msg = unwrapMessage(message)
@@ -261,7 +414,11 @@ export function resolveMetaAttrs(message: Proto.IMessage): MessageMetaAttrs | nu
         eventType = WA_EVENT_META_TYPES.EDIT
     }
 
-    if (message.viewOnceMessage || message.viewOnceMessageV2) {
+    if (
+        message.viewOnceMessage ||
+        message.viewOnceMessageV2 ||
+        VIEW_ONCE_MEDIA_FIELDS.some((field) => msg[field]?.viewOnce)
+    ) {
         viewOnce = 'true'
     }
 

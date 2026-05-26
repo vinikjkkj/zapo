@@ -8,7 +8,7 @@ import { randomBytesAsync, sha256 } from '@crypto'
 import { md5Bytes } from '@crypto/core/primitives'
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
-import { ensureMessageSecret } from '@message'
+import { assertMessageSecret, ensureMessageSecret } from '@message'
 import {
     applyContextInfo,
     resolveSendContextInfo,
@@ -21,14 +21,17 @@ import {
     type BuildReportingTokenArtifactsResult
 } from '@message/crypto/reporting-token'
 import {
+    isSendAddonCryptoMessage,
     isSendMediaMessage,
     isSendTextMessage,
     needsSecretPersistence,
     resolveButtonAddonKind,
+    resolveDecryptFailAttr,
     resolveEditAttr,
     resolveEncMediaType,
     resolveMessageTypeAttr,
-    resolveMetaAttrs
+    resolveMetaAttrs,
+    wrapAsViewOnce
 } from '@message/encode/content'
 import { wrapDeviceSentMessage } from '@message/encode/device-sent'
 import { writeRandomPadMax16 } from '@message/encode/padding'
@@ -87,7 +90,14 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly fanoutResolver: DeviceFanoutResolver
     readonly groupMetadataCache: GroupMetadataCache
     readonly appStateSyncKeyProtocol: AppStateSyncKeyProtocol
-    readonly buildMessageContent: (content: WaSendMessageContent) => Promise<WaMessageBuildResult>
+    readonly buildMessageContent: (
+        content: WaSendMessageContent,
+        ctx?: {
+            readonly to: string
+            readonly outgoingStanzaId?: string
+            readonly meJid?: string
+        }
+    ) => Promise<WaMessageBuildResult>
     readonly senderKeyManager: SenderKeyManager
     readonly signalProtocol: SignalProtocol
     readonly signalStore: WaSignalStore
@@ -122,6 +132,7 @@ interface WaOutboundEnvelope {
     readonly type: string
     readonly edit?: string
     readonly mediatype?: string
+    readonly decryptFail?: string
     readonly customNodes?: readonly BinaryNode[]
     readonly sendOptions: WaSendMessageOptions
 }
@@ -279,10 +290,25 @@ export class WaMessageDispatchCoordinator {
                 newsletterCtx
             )
         }
-        const [built, sendOptions] = await Promise.all([
-            this.deps.buildMessageContent(content),
-            this.withResolvedMessageId(options)
-        ])
+        let built: WaMessageBuildResult
+        let sendOptions: WaSendMessageOptions
+        if (isSendAddonCryptoMessage(content)) {
+            sendOptions = await this.withResolvedMessageId(options)
+            const meJid = this.deps.getCurrentCredentials()?.meJid
+            if (!meJid) {
+                throw new Error(`${content.type} sendMessage requires registered meJid`)
+            }
+            built = await this.deps.buildMessageContent(content, {
+                to: recipientJid,
+                outgoingStanzaId: sendOptions.id,
+                meJid: toUserJid(meJid)
+            })
+        } else {
+            ;[built, sendOptions] = await Promise.all([
+                this.deps.buildMessageContent(content, { to: recipientJid }),
+                this.withResolvedMessageId(options)
+            ])
+        }
         let optionsCtx = options.contextInfo
         if (
             isGroupJid(recipientJid) &&
@@ -302,9 +328,39 @@ export class WaMessageDispatchCoordinator {
             forward: options.forward,
             mentions: options.mentions
         })
-        const message = ctx ? applyContextInfo(built.message, ctx) : built.message
+        const withCtx = ctx ? applyContextInfo(built.message, ctx) : built.message
+        const withViewOnce = options.viewOnce ? wrapAsViewOnce(withCtx) : withCtx
+        const message = options.editKey
+            ? {
+                  protocolMessage: {
+                      type: proto.Message.ProtocolMessage.Type.MESSAGE_EDIT,
+                      key: {
+                          remoteJid: recipientJid,
+                          fromMe: true,
+                          id: options.editKey.stanzaId,
+                          ...(options.editKey.participant
+                              ? { participant: options.editKey.participant }
+                              : {})
+                      },
+                      editedMessage: withViewOnce,
+                      timestampMs: options.editKey.timestampMs ?? Date.now()
+                  }
+              }
+            : withViewOnce
         const upload = built.upload
-        const messageWithSecret = await ensureMessageSecret(message)
+        const messageWithOverride = options.messageSecret
+            ? {
+                  ...message,
+                  messageContextInfo: {
+                      ...(message.messageContextInfo ?? {}),
+                      messageSecret: assertMessageSecret(
+                          options.messageSecret,
+                          'options.messageSecret'
+                      )
+                  }
+              }
+            : message
+        const messageWithSecret = await ensureMessageSecret(messageWithOverride)
         const rawSecret = messageWithSecret.messageContextInfo?.messageSecret
         if (
             rawSecret &&
@@ -364,12 +420,14 @@ export class WaMessageDispatchCoordinator {
             }
         }
 
+        const decryptFail = resolveDecryptFailAttr(messageWithIcdc)
         const envelope: WaOutboundEnvelope = {
             message: messageWithIcdc,
             plaintext,
             type,
             edit,
             mediatype,
+            decryptFail,
             customNodes: customNodes.length > 0 ? customNodes : undefined,
             sendOptions
         }
@@ -603,6 +661,7 @@ export class WaMessageDispatchCoordinator {
             phash: extras.phash,
             edit: resolveEditAttr(messageWithSecret, sendOptions.subtype) ?? undefined,
             mediatype: resolveEncMediaType(messageWithSecret) ?? undefined,
+            decryptFail: resolveDecryptFailAttr(messageWithSecret),
             groupCiphertext: groupCiphertext.ciphertext,
             participants,
             deviceIdentity: shouldAttachDeviceIdentity
@@ -786,7 +845,8 @@ export class WaMessageDispatchCoordinator {
                 ? this.getEncodedSignedDeviceIdentity()
                 : undefined,
             customNodes: customNodes.length > 0 ? customNodes : undefined,
-            mediatype
+            mediatype,
+            decryptFail: envelope.decryptFail
         })
         const replayPayload: WaRetryReplayPayload = {
             mode: 'plaintext',
@@ -981,6 +1041,7 @@ export class WaMessageDispatchCoordinator {
                     : undefined,
             customNodes: customNodes.length > 0 ? customNodes : undefined,
             mediatype,
+            decryptFail: envelope.decryptFail,
             botParticipants: botSidecar ? [botSidecar] : undefined
         })
 
@@ -1456,7 +1517,8 @@ export class WaMessageDispatchCoordinator {
             participants,
             deviceIdentity,
             customNodes: customNodes.length > 0 ? customNodes : undefined,
-            mediatype
+            mediatype,
+            decryptFail: envelope.decryptFail
         })
 
         const replayPayload: WaRetryReplayPayload = {

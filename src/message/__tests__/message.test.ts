@@ -22,13 +22,24 @@ import {
     WA_USE_CASE_SECRET_MODIFICATION_TYPES
 } from '@message/crypto/use-case-secret'
 import {
+    isSendAddonCryptoMessage,
+    isSendEventMessage,
+    isSendEventResponseMessage,
+    isSendKeepMessage,
     isSendMediaMessage,
+    isSendPinMessage,
+    isSendPollMessage,
+    isSendPollVoteMessage,
+    isSendReactionMessage,
+    isSendRevokeMessage,
     needsSecretPersistence,
     resolveButtonAddonKind,
     resolveEditAttr,
     resolveEncMediaType,
     resolveMessageTypeAttr,
-    resolveMetaAttrs
+    resolveMetaAttrs,
+    supportsViewOnce,
+    wrapAsViewOnce
 } from '@message/encode/content'
 import { unwrapDeviceSentMessage, wrapDeviceSentMessage } from '@message/encode/device-sent'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
@@ -69,6 +80,70 @@ test('content helpers detect media payload and resolve message type', () => {
         true
     )
     assert.equal(isSendMediaMessage({}), false)
+
+    assert.equal(
+        isSendReactionMessage({
+            type: 'reaction',
+            emoji: '👍',
+            target: { stanzaId: 'A', fromMe: false }
+        }),
+        true
+    )
+    assert.equal(isSendReactionMessage({ type: 'reaction', emoji: '👍' }), false)
+    assert.equal(isSendReactionMessage({ type: 'text', text: 'hi' }), false)
+
+    assert.equal(isSendRevokeMessage({ type: 'revoke', stanzaId: 'A' }), true)
+    assert.equal(isSendRevokeMessage({ type: 'revoke' }), false)
+    assert.equal(isSendRevokeMessage({ type: 'text', text: 'hi' }), false)
+
+    const target = { stanzaId: 'A', fromMe: true }
+    assert.equal(isSendPinMessage({ type: 'pin', target }), true)
+    assert.equal(isSendPinMessage({ type: 'unpin', target }), true)
+    assert.equal(isSendPinMessage({ type: 'pin' }), false)
+    assert.equal(isSendKeepMessage({ type: 'keep', target }), true)
+    assert.equal(isSendKeepMessage({ type: 'unkeep', target }), true)
+    assert.equal(isSendKeepMessage({ type: 'pin', target }), false)
+
+    assert.equal(isSendPollMessage({ type: 'poll', name: 'Q', options: ['A'] }), true)
+    assert.equal(isSendPollMessage({ type: 'poll', name: 'Q' }), false)
+
+    assert.equal(
+        isSendPollVoteMessage({
+            type: 'poll-vote',
+            poll: { stanzaId: 'A', fromMe: false, authorJid: 'x', messageSecret: new Uint8Array() },
+            selectedOptionNames: ['x']
+        }),
+        true
+    )
+    assert.equal(isSendPollVoteMessage({ type: 'poll-vote' }), false)
+
+    assert.equal(isSendEventMessage({ type: 'event', name: 'E', startTime: 0 }), true)
+    assert.equal(isSendEventMessage({ type: 'event', name: 'E' }), false)
+
+    assert.equal(
+        isSendEventResponseMessage({
+            type: 'event-response',
+            event: {
+                stanzaId: 'A',
+                fromMe: false,
+                authorJid: 'x',
+                messageSecret: new Uint8Array()
+            },
+            response: 'going'
+        }),
+        true
+    )
+    assert.equal(isSendEventResponseMessage({ type: 'event-response' }), false)
+
+    assert.equal(
+        isSendAddonCryptoMessage({
+            type: 'poll-vote',
+            poll: { stanzaId: 'A', fromMe: false, authorJid: 'x', messageSecret: new Uint8Array() },
+            selectedOptionNames: ['x']
+        }),
+        true
+    )
+    assert.equal(isSendAddonCryptoMessage({ type: 'reaction', emoji: '🔥', target }), false)
 
     assert.equal(resolveMessageTypeAttr({ reactionMessage: {} }), 'reaction')
     assert.equal(resolveMessageTypeAttr({ encReactionMessage: {} }), 'reaction')
@@ -111,6 +186,36 @@ test('content helpers detect media payload and resolve message type', () => {
         }),
         'media'
     )
+})
+
+test('view-once helpers wrap supported media and reject incompatible payloads', () => {
+    assert.equal(supportsViewOnce({ imageMessage: {} }), true)
+    assert.equal(supportsViewOnce({ videoMessage: {} }), true)
+    assert.equal(supportsViewOnce({ audioMessage: {} }), true)
+    assert.equal(supportsViewOnce({ ptvMessage: {} }), true)
+    assert.equal(supportsViewOnce({ conversation: 'hi' }), false)
+    assert.equal(supportsViewOnce({ ephemeralMessage: { message: { videoMessage: {} } } }), false)
+
+    const wrapped = wrapAsViewOnce({ imageMessage: { url: 'x' } })
+    assert.equal(wrapped.imageMessage?.url, 'x')
+    assert.equal(wrapped.imageMessage?.viewOnce, true)
+
+    const wrappedVideo = wrapAsViewOnce({ videoMessage: { url: 'v' } })
+    assert.equal(wrappedVideo.videoMessage?.viewOnce, true)
+
+    const wrappedAudio = wrapAsViewOnce({ audioMessage: { url: 'a' } })
+    assert.equal(wrappedAudio.audioMessage?.viewOnce, true)
+
+    const wrappedPtv = wrapAsViewOnce({ ptvMessage: { url: 'p' } })
+    assert.equal(wrappedPtv.ptvMessage?.viewOnce, true)
+
+    const legacy = { viewOnceMessageV2: { message: { imageMessage: { url: 'x' } } } }
+    assert.equal(wrapAsViewOnce(legacy), legacy)
+
+    const passthrough = wrapAsViewOnce({ conversation: 'hi' })
+    assert.deepEqual(passthrough, { conversation: 'hi' })
+    const wrappedRaw = { ephemeralMessage: { message: { imageMessage: {} } } }
+    assert.equal(wrapAsViewOnce(wrappedRaw), wrappedRaw)
 })
 
 test('resolveButtonAddonKind classifies list/interactive incl. documentWithCaption wrap', () => {

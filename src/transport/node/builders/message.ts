@@ -17,6 +17,7 @@ type DirectMessageFanoutInput = {
     readonly deviceIdentity?: Uint8Array
     readonly customNodes?: readonly BinaryNode[]
     readonly mediatype?: string
+    readonly decryptFail?: string
 }
 
 type GroupMessageFanoutInput = DirectMessageFanoutInput & {
@@ -43,13 +44,15 @@ type GroupRetryMessageInput = {
     readonly retryCount: number
     readonly deviceIdentity?: Uint8Array
     readonly mediatype?: string
+    readonly decryptFail?: string
     readonly metaNode?: BinaryNode
 }
 
 function buildEncAttrs(
     encType: string,
     mediatype?: string,
-    retryCount?: number
+    retryCount?: number,
+    decryptFail?: string
 ): Record<string, string> {
     const attrs: Record<string, string> = {
         v: WA_MESSAGE_TYPES.ENC_VERSION,
@@ -60,6 +63,9 @@ function buildEncAttrs(
     }
     if (retryCount !== undefined && retryCount > 0) {
         attrs.count = String(Math.trunc(retryCount))
+    }
+    if (decryptFail) {
+        attrs['decrypt-fail'] = decryptFail
     }
     return attrs
 }
@@ -91,7 +97,11 @@ function buildMessageAttrs(input: {
     return attrs
 }
 
-function buildEncryptedToNode(p: EncryptedParticipant, mediatype?: string): BinaryNode {
+function buildEncryptedToNode(
+    p: EncryptedParticipant,
+    mediatype?: string,
+    decryptFail?: string
+): BinaryNode {
     // Status broadcast viewers without an encrypted payload get a bare `<to jid>`.
     if (!p.encType && !p.ciphertext) {
         return { tag: 'to', attrs: { jid: p.jid } }
@@ -105,7 +115,7 @@ function buildEncryptedToNode(p: EncryptedParticipant, mediatype?: string): Bina
         content: [
             {
                 tag: WA_MESSAGE_TAGS.ENC,
-                attrs: buildEncAttrs(p.encType, mediatype),
+                attrs: buildEncAttrs(p.encType, mediatype, undefined, decryptFail),
                 content: p.ciphertext
             }
         ]
@@ -178,7 +188,9 @@ export function buildDirectMessageFanoutNode(input: GroupMessageFanoutInput): Bi
         {
             tag: WA_NODE_TAGS.PARTICIPANTS,
             attrs: {},
-            content: input.participants.map((p) => buildEncryptedToNode(p, input.mediatype))
+            content: input.participants.map((p) =>
+                buildEncryptedToNode(p, input.mediatype, input.decryptFail)
+            )
         }
     ]
     pushOptionalNodes(content, input)
@@ -198,12 +210,14 @@ export function buildGroupSenderKeyMessageNode(input: GroupSenderKeyMessageInput
         content.push({
             tag: WA_NODE_TAGS.PARTICIPANTS,
             attrs: {},
-            content: input.participants.map((p) => buildEncryptedToNode(p, input.mediatype))
+            content: input.participants.map((p) =>
+                buildEncryptedToNode(p, input.mediatype, input.decryptFail)
+            )
         })
     }
     content.push({
         tag: WA_MESSAGE_TAGS.ENC,
-        attrs: buildEncAttrs('skmsg', input.mediatype),
+        attrs: buildEncAttrs('skmsg', input.mediatype, undefined, input.decryptFail),
         content: input.groupCiphertext
     })
     pushOptionalNodes(content, input)
@@ -222,7 +236,7 @@ export function buildGroupRetryMessageNode(input: GroupRetryMessageInput): Binar
     }
     content.push({
         tag: WA_MESSAGE_TAGS.ENC,
-        attrs: buildEncAttrs(input.encType, input.mediatype, input.retryCount),
+        attrs: buildEncAttrs(input.encType, input.mediatype, input.retryCount, input.decryptFail),
         content: input.ciphertext
     })
     if (input.deviceIdentity) {

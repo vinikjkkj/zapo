@@ -13,9 +13,18 @@ import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClien
 import type { WaMediaConn } from '@media/types'
 import { applyContextInfo, type WaSendContextInfo } from '@message/context-info'
 import {
+    isSendEventMessage,
+    isSendEventResponseMessage,
+    isSendKeepMessage,
     isSendMediaMessage,
+    isSendPinMessage,
+    isSendPollMessage,
+    isSendPollVoteMessage,
+    isSendReactionMessage,
+    isSendRevokeMessage,
     isSendTextMessage,
-    resolveMessageTypeAttr
+    resolveMessageTypeAttr,
+    unwrapMessage
 } from '@message/encode/content'
 import {
     toStickerPackProtoStickers,
@@ -309,9 +318,54 @@ export async function buildNewsletterMessageContent(
         }
     }
 
+    if (isSendReactionMessage(content) || isSendRevokeMessage(content)) {
+        throw new Error(
+            `newsletter sends do not accept '${content.type}' content; use newsletter.react() or newsletter.revoke() instead`
+        )
+    }
+    if (isSendPollVoteMessage(content)) {
+        throw new Error(
+            "newsletter sends do not accept 'poll-vote' content; use newsletter.votePoll() instead"
+        )
+    }
+    if (isSendPollMessage(content) || isSendEventMessage(content)) {
+        throw new Error(
+            `newsletter sends do not accept typed '${content.type}' content; pass the raw Proto.IMessage instead`
+        )
+    }
+    if (
+        isSendPinMessage(content) ||
+        isSendKeepMessage(content) ||
+        isSendEventResponseMessage(content)
+    ) {
+        throw new Error(`newsletter sends do not accept '${content.type}' content`)
+    }
+
     const protoMessage = applyContextInfo(content, ctx)
+    const inner = unwrapMessage(protoMessage)
+    if (
+        inner.reactionMessage ||
+        inner.encReactionMessage ||
+        inner.pollUpdateMessage ||
+        inner.encEventResponseMessage ||
+        inner.encCommentMessage ||
+        inner.pinInChatMessage ||
+        inner.keepInChatMessage ||
+        inner.protocolMessage?.type === proto.Message.ProtocolMessage.Type.REVOKE
+    ) {
+        throw new Error(
+            'newsletter sends do not accept addon/update protobuf payloads; use the newsletter helpers instead'
+        )
+    }
     const messageTypeAttr = resolveMessageTypeAttr(protoMessage)
-    const isPollCreation = messageTypeAttr === 'poll' && Boolean(protoMessage.pollCreationMessage)
+    const isPollCreation =
+        messageTypeAttr === 'poll' &&
+        Boolean(
+            inner.pollCreationMessage ||
+            inner.pollCreationMessageV2 ||
+            inner.pollCreationMessageV3 ||
+            inner.pollCreationMessageV5
+        )
     const mediaTypeAttr = pickMediaTypeFromMessage(protoMessage)
     return {
         kind: isPollCreation ? 'poll-creation' : mediaTypeAttr ? 'media' : 'text',
