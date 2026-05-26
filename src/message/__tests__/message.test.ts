@@ -192,8 +192,9 @@ test('view-once helpers wrap supported media and reject incompatible payloads', 
     assert.equal(supportsViewOnce({ imageMessage: {} }), true)
     assert.equal(supportsViewOnce({ videoMessage: {} }), true)
     assert.equal(supportsViewOnce({ audioMessage: {} }), true)
+    assert.equal(supportsViewOnce({ ptvMessage: {} }), true)
     assert.equal(supportsViewOnce({ conversation: 'hi' }), false)
-    assert.equal(supportsViewOnce({ ephemeralMessage: { message: { videoMessage: {} } } }), true)
+    assert.equal(supportsViewOnce({ ephemeralMessage: { message: { videoMessage: {} } } }), false)
 
     const wrapped = wrapAsViewOnce({ imageMessage: { url: 'x' } })
     assert.equal(wrapped.imageMessage?.url, 'x')
@@ -205,10 +206,16 @@ test('view-once helpers wrap supported media and reject incompatible payloads', 
     const wrappedAudio = wrapAsViewOnce({ audioMessage: { url: 'a' } })
     assert.equal(wrappedAudio.audioMessage?.viewOnce, true)
 
+    const wrappedPtv = wrapAsViewOnce({ ptvMessage: { url: 'p' } })
+    assert.equal(wrappedPtv.ptvMessage?.viewOnce, true)
+
     const legacy = { viewOnceMessageV2: { message: { imageMessage: { url: 'x' } } } }
     assert.equal(wrapAsViewOnce(legacy), legacy)
 
-    assert.throws(() => wrapAsViewOnce({ conversation: 'hi' }), /viewOnce only supports/)
+    const passthrough = wrapAsViewOnce({ conversation: 'hi' })
+    assert.deepEqual(passthrough, { conversation: 'hi' })
+    const wrappedRaw = { ephemeralMessage: { message: { imageMessage: {} } } }
+    assert.equal(wrapAsViewOnce(wrappedRaw), wrappedRaw)
 })
 
 test('resolveButtonAddonKind classifies list/interactive incl. documentWithCaption wrap', () => {

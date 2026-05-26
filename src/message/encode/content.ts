@@ -127,29 +127,24 @@ export function isSendAddonCryptoMessage(
     return isSendPollVoteMessage(content) || isSendEventResponseMessage(content)
 }
 
+const VIEW_ONCE_MEDIA_FIELDS = [
+    'imageMessage',
+    'videoMessage',
+    'ptvMessage',
+    'audioMessage'
+] as const
+
 export function supportsViewOnce(message: Proto.IMessage): boolean {
-    const inner = unwrapMessage(message)
-    return !!(inner.imageMessage || inner.videoMessage || inner.ptvMessage || inner.audioMessage)
+    return VIEW_ONCE_MEDIA_FIELDS.some((field) => message[field])
 }
 
 export function wrapAsViewOnce(message: Proto.IMessage): Proto.IMessage {
     if (message.viewOnceMessage || message.viewOnceMessageV2) {
         return message
     }
-    if (!supportsViewOnce(message)) {
-        throw new Error('viewOnce only supports image, video, or audio messages')
-    }
-    if (message.imageMessage) {
-        return { imageMessage: { ...message.imageMessage, viewOnce: true } }
-    }
-    if (message.videoMessage) {
-        return { videoMessage: { ...message.videoMessage, viewOnce: true } }
-    }
-    if (message.ptvMessage) {
-        return { ptvMessage: { ...message.ptvMessage, viewOnce: true } }
-    }
-    if (message.audioMessage) {
-        return { audioMessage: { ...message.audioMessage, viewOnce: true } }
+    for (const field of VIEW_ONCE_MEDIA_FIELDS) {
+        const media = message[field]
+        if (media) return { ...message, [field]: { ...media, viewOnce: true } }
     }
     return message
 }
@@ -422,10 +417,7 @@ export function resolveMetaAttrs(message: Proto.IMessage): MessageMetaAttrs | nu
     if (
         message.viewOnceMessage ||
         message.viewOnceMessageV2 ||
-        msg.imageMessage?.viewOnce ||
-        msg.videoMessage?.viewOnce ||
-        msg.ptvMessage?.viewOnce ||
-        msg.audioMessage?.viewOnce
+        VIEW_ONCE_MEDIA_FIELDS.some((field) => msg[field]?.viewOnce)
     ) {
         viewOnce = 'true'
     }
