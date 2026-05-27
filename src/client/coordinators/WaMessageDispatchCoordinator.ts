@@ -679,7 +679,7 @@ export class WaMessageDispatchCoordinator {
         }
         const result = await this.deps.retryTracker.track(
             {
-                messageIdHint: sendOptions.id ?? messageNode.attrs.id,
+                messageIdHint: messageNode.attrs.id ?? sendOptions.id,
                 toJid: input.groupJid,
                 type: messageNode.attrs.type,
                 replayPayload,
@@ -858,7 +858,7 @@ export class WaMessageDispatchCoordinator {
         }
         const result = await this.deps.retryTracker.track(
             {
-                messageIdHint: sendOptions.id ?? messageNode.attrs.id,
+                messageIdHint: messageNode.attrs.id ?? sendOptions.id,
                 toJid: groupJid,
                 type,
                 replayPayload,
@@ -1056,7 +1056,7 @@ export class WaMessageDispatchCoordinator {
         }
         const result = await this.deps.retryTracker.track(
             {
-                messageIdHint: sendOptions.id ?? messageNode.attrs.id,
+                messageIdHint: messageNode.attrs.id ?? sendOptions.id,
                 toJid: groupJid,
                 type,
                 replayPayload,
@@ -1533,7 +1533,7 @@ export class WaMessageDispatchCoordinator {
         }
         const result = await this.deps.retryTracker.track(
             {
-                messageIdHint: sendOptions.id ?? messageNode.attrs.id,
+                messageIdHint: messageNode.attrs.id ?? sendOptions.id,
                 toJid: recipientJid,
                 type,
                 replayPayload,
