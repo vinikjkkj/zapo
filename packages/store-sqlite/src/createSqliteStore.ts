@@ -21,11 +21,40 @@ import type {
 } from './types'
 
 export interface WaSqliteStoreConfig {
+    /**
+     * Filesystem path to the SQLite database file. Use `':memory:'` for an
+     * in-process ephemeral database (handy in tests). The file is created
+     * on first use; migrations run lazily the first time each domain is
+     * touched.
+     */
     readonly path: string
+    /**
+     * SQLite driver selection. Defaults to `'auto'` which prefers
+     * `better-sqlite3` on Node and falls back to `bun:sqlite` on Bun.
+     * Override only when you need to pin the driver for testing.
+     */
     readonly driver?: WaSqliteDriver
+    /**
+     * Extra `PRAGMA` statements applied right after open (e.g.
+     * `journal_mode = WAL`, `synchronous = NORMAL`, custom `cache_size`).
+     * Library defaults are merged with these on top.
+     */
     readonly pragmas?: Readonly<Record<string, string | number>>
+    /**
+     * Per-domain table name overrides. Use to share a single SQLite file
+     * with another application that already owns the default table names.
+     */
     readonly tableNames?: WaSqliteTableNameOverrides
+    /**
+     * Per-domain batch sizes for bulk reads (prekey lookups, device-list
+     * queries, sender-key distribution checks). Tune up for high-traffic
+     * accounts; tune down to reduce per-statement parameter counts.
+     */
     readonly batchSizes?: WaSqliteBatchSizeSelection
+    /**
+     * Override default TTLs (in ms) for the cache domains. Defaults match
+     * the in-memory cache TTLs in `createStore`.
+     */
     readonly cacheTtlMs?: {
         readonly retryMs?: number
         readonly groupMetadataMs?: number
@@ -56,6 +85,26 @@ export interface WaSqliteStoreResult {
     }
 }
 
+/**
+ * Builds a SQLite-backed {@link WaStoreBackend} bundle: persistent stores
+ * for `auth`, `signal`, `preKey`, `session`, `identity`, `senderKey`,
+ * `appState`, `messages`, `threads`, `contacts`, `privacyToken`, plus
+ * TTL-evicted caches for `retry`, `groupMetadata`, `deviceList`,
+ * `messageSecret`. Feed the result into `createStore({ backends: { sqlite:
+ * createSqliteStore(...) }, providers: { ... } })` from `zapo-js`.
+ *
+ * @example
+ * ```ts
+ * import { createStore, WaClient } from 'zapo-js'
+ * import { createSqliteStore } from '@zapo-js/store-sqlite'
+ *
+ * const store = createStore({
+ *     backends: { sqlite: createSqliteStore({ path: '.auth/state.sqlite' }) },
+ *     providers: { auth: 'sqlite', signal: 'sqlite', senderKey: 'sqlite', appState: 'sqlite' }
+ * })
+ * const client = new WaClient({ store, sessionId: 'default' })
+ * ```
+ */
 export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreResult {
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs

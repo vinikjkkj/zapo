@@ -9,6 +9,11 @@ import type {
 } from '@transport/types'
 import { TEXT_ENCODER } from '@util/bytes'
 
+/**
+ * `RawWebSocket`-shaped adapter over a raw Node TCP socket. Used by the
+ * mobile transport to speak the WhatsApp Mobile binary protocol over
+ * `tcp://host:port` URLs.
+ */
 export class WaMobileTcpSocket implements RawWebSocket {
     public binaryType = 'arraybuffer'
     public readyState: number = WA_READY_STATES.CONNECTING
@@ -124,5 +129,6 @@ function parseTcpUrl(url: string): { host: string; port: number } {
     return { host, port }
 }
 
+/** {@link RawWebSocketConstructor} alias for {@link WaMobileTcpSocket}  -  drop in via `WaCommsConfig.rawWebSocketConstructor`. */
 export const WaMobileTcpSocketCtor: RawWebSocketConstructor =
     WaMobileTcpSocket as unknown as RawWebSocketConstructor

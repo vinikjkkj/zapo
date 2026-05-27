@@ -24,6 +24,11 @@ export const WA_MEDIA_HKDF_INFO = Object.freeze({
 
 export const WA_PREVIEW_MEDIA_HKDF_INFO = TEXT_ENCODER.encode('Messenger Preview Keys')
 
+/**
+ * Returns the HKDF `info` bytes used to derive per-media keys for a given
+ * media type. Throws for unsupported types  -  see {@link WA_MEDIA_HKDF_INFO}
+ * for the supported set.
+ */
 export function getWaMediaHkdfInfo(mediaType: string): Uint8Array {
     const info = WA_MEDIA_HKDF_INFO[mediaType as keyof typeof WA_MEDIA_HKDF_INFO]
     if (info !== undefined) return info

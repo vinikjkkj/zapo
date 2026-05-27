@@ -69,8 +69,11 @@ const loadSdk = async (): Promise<SdkBundle> => {
     }
 }
 
+/** Server-info overrides surfaced to the MCP client during initialize. */
 export interface RunMcpServerOptions {
+    /** Server name shown in the MCP client UI. Defaults to `'@zapo-js/mcp-server'`. */
     readonly name?: string
+    /** Server version. Defaults to `'0.0.0'`. */
     readonly version?: string
 }
 
@@ -228,7 +231,7 @@ const runHttpTransport = async (
     if (!LOOPBACK_HOSTS.has(config.httpHost)) {
         // The HTTP transport has no auth and the `call` tool exposes the entire
         // WaClient + zapo-js surface. Binding to a non-loopback interface puts
-        // that on the network — definitely not what you want by accident.
+        // that on the network  -  definitely not what you want by accident.
         runtime.getLogger().warn('mcp http transport bound to non-loopback host without auth', {
             host: config.httpHost,
             port: config.httpPort,
@@ -308,6 +311,16 @@ const runHttpTransport = async (
     }
 }
 
+/**
+ * Boots an MCP server that exposes a single `WaClient` instance plus
+ * helpers (`call`, `inspect`, `events`, `logs`, `lifecycle`, `restart`)
+ * as MCP tools. Reads its config from environment variables via
+ * {@link buildRuntimeConfigFromEnv} - set `MCP_TRANSPORT=http` to switch
+ * from stdio (default) to a Streamable-HTTP server.
+ *
+ * Used by the published `zapo-mcp-server` binary; you only need to call
+ * it directly when embedding the server in another process.
+ */
 export const runMcpServer = async (options: RunMcpServerOptions = {}): Promise<void> => {
     const config = buildRuntimeConfigFromEnv()
     const runtime = new McpRuntime(config)

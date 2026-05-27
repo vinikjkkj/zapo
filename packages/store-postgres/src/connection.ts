@@ -3,7 +3,7 @@ import pg, { type Pool, type PoolConfig } from 'pg'
 import { assertSafeTablePrefix, queryRows } from './helpers'
 import type { WaPgMigrationDomain } from './types'
 
-// pg returns bytea as Buffer which extends Uint8Array — zero-copy on read
+// pg returns bytea as Buffer which extends Uint8Array  -  zero-copy on read
 
 interface Migration {
     readonly name: string

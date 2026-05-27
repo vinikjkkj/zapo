@@ -1,5 +1,5 @@
 /**
- * Layer 1 — crypto primitives wrapper.
+ * Layer 1  -  crypto primitives wrapper.
  *
  * Re-exports bit-exact cryptographic primitives from zapo-js. No protocol
  * interpretation, so reusing them does not create a test-vs-impl tautology.

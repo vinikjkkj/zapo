@@ -20,14 +20,35 @@ import { WaThreadMysqlStore } from './thread.store'
 import type { WaMysqlStorageOptions } from './types'
 
 export interface WaMysqlStoreConfig {
+    /**
+     * Either a live `mysql2/promise` `Pool` (used as-is) or `PoolOptions`
+     * to build one. When the store builds the pool itself,
+     * {@link WaMysqlStoreResult.destroy} will `pool.end()` it. Pass an
+     * externally-owned `Pool` to keep that lifecycle in your own hands.
+     */
     readonly pool: Pool | PoolOptions
+    /**
+     * Prefix prepended to every table name. Use to share one database
+     * across multiple apps without name collisions.
+     */
     readonly tablePrefix?: string
+    /**
+     * Override default TTLs (in ms) for the cache domains. Unlike SQLite
+     * (lazy on-read eviction) and Redis/Mongo (server-side TTL), MySQL
+     * needs an explicit cleanup poller - see {@link cleanup}.
+     */
     readonly cacheTtlMs?: {
         readonly retryMs?: number
         readonly groupMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
+    /**
+     * Background cleanup poller config. Without this, expired cache rows
+     * stay in the table until overwritten - the cache tables grow
+     * monotonically. Start one poller per session via
+     * {@link WaMysqlStoreResult.startCleanup}.
+     */
     readonly cleanup?: {
         readonly enabled?: boolean
         readonly intervalMs?: number
@@ -64,6 +85,30 @@ function isPool(value: Pool | PoolOptions): value is Pool {
     return typeof (value as Pool).execute === 'function'
 }
 
+/**
+ * Builds a MySQL / MariaDB-backed {@link WaStoreBackend} bundle. Good fit
+ * for fleets standardized on MySQL where you want session state to ride
+ * the same backups / replication / IAM.
+ *
+ * Cache domains require a {@link MysqlCleanupPoller} (`startCleanup()`)
+ * to prune expired rows - call it once per session id.
+ *
+ * @example
+ * ```ts
+ * import { createStore, WaClient } from 'zapo-js'
+ * import { createMysqlStore } from '@zapo-js/store-mysql'
+ *
+ * const result = createMysqlStore({
+ *     pool: { host: 'localhost', user: 'wa', password: 'wa', database: 'wa' }
+ * })
+ * const store = createStore({
+ *     backends: { mysql: result },
+ *     providers: { auth: 'mysql', signal: 'mysql', senderKey: 'mysql', appState: 'mysql' }
+ * })
+ * const client = new WaClient({ store, sessionId: 'default' })
+ * result.startCleanup('default')
+ * ```
+ */
 export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult {
     const pool = isPool(config.pool) ? config.pool : createMysqlPool(config.pool)
     const tablePrefix = config.tablePrefix ?? ''

@@ -24,6 +24,11 @@ interface WaKeepAliveOptions {
     readonly onClockSkewMs?: (clockSkewMs: number) => void
 }
 
+/**
+ * Periodically pings the server with a ping IQ to detect dead sockets and
+ * measure clock skew. Skips when the orchestrator has other traffic in
+ * flight; recovers a queued/dropped ping via the configured `getComms()`.
+ */
 export class WaKeepAlive {
     private readonly logger: Logger
     private readonly nodeOrchestrator: WaKeepAliveOptions['nodeOrchestrator']

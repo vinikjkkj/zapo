@@ -1,6 +1,6 @@
 # @zapo-js/fake-server
 
-In-process fake WhatsApp Web server that drives the real `zapo-js` `WaClient` end-to-end — full Noise XX/IK handshake, QR pairing, Signal Protocol (X3DH + Double Ratchet), SenderKey for groups, media upload/download over self-signed HTTPS, app-state sync — all without touching WhatsApp servers.
+In-process fake WhatsApp Web server that drives the real `zapo-js` `WaClient` end-to-end - full Noise XX/IK handshake, QR pairing, Signal Protocol (X3DH + Double Ratchet), SenderKey for groups, media upload/download over self-signed HTTPS, app-state sync - all without touching WhatsApp servers.
 
 ## Quick start
 
@@ -29,8 +29,8 @@ await server.stop()
 ```text
 src/
 ├── api/                     # Public-facing API
-│   ├── FakeWaServer.ts      # Main facade — WS server, IQ router, registries, lifecycle
-│   ├── FakePeer.ts          # Simulated WhatsApp peer — Signal crypto, send/recv, groups
+│   ├── FakeWaServer.ts      # Main facade  -  WS server, IQ router, registries, lifecycle
+│   ├── FakePeer.ts          # Simulated WhatsApp peer  -  Signal crypto, send/recv, groups
 │   ├── FakePairingDriver.ts # QR pairing flow orchestrator
 │   └── Scenario.ts          # Declarative test scenario DSL
 ├── protocol/                # Protocol-layer builders, parsers, crypto

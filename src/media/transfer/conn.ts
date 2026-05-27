@@ -5,6 +5,10 @@ import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { parseOptionalInt } from '@util/primitives'
 
+/**
+ * Parses a `media_conn` IQ response into a {@link WaMediaConn} (auth token,
+ * absolute expiry, and host list). Throws on missing auth/ttl/hosts.
+ */
 export function parseMediaConnResponse(node: BinaryNode, nowMs: number): WaMediaConn {
     assertIqResult(node, 'media_conn')
 

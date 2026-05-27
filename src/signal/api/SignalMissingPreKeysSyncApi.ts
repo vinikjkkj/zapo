@@ -46,6 +46,10 @@ function isMissingPreKeysUserResultPreferred(result: SignalMissingPreKeysUserRes
     return 'devices' in result
 }
 
+/**
+ * Fetches missing prekey bundles for specific (user, device, registration id)
+ * triples  -  used during message encryption when a Signal session is missing.
+ */
 export class SignalMissingPreKeysSyncApi {
     private readonly logger: SignalMissingPreKeysSyncApiOptions['logger']
     private readonly query: SignalMissingPreKeysSyncApiOptions['query']
@@ -58,6 +62,10 @@ export class SignalMissingPreKeysSyncApi {
             options.defaultTimeoutMs ?? WA_DEFAULTS.SIGNAL_FETCH_KEY_BUNDLES_TIMEOUT_MS
     }
 
+    /**
+     * Fetches prekey bundles for the requested `targets` in a single IQ.
+     * Returns either a per-device bundle list or an error envelope per user.
+     */
     public async fetchMissingPreKeys(
         targets: readonly SignalMissingPreKeysTarget[],
         timeoutMs = this.defaultTimeoutMs

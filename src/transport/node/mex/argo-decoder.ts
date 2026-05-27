@@ -159,7 +159,7 @@ function readDesc(ctx: DecodeCtx): unknown {
 
 function readError(ctx: DecodeCtx): WaMexArgoError {
     const message = readStringFromBlock(ctx)
-    skipOptional(ctx) // location — never observed in MEX errors so far
+    skipOptional(ctx) // location  -  never observed in MEX errors so far
     const path = readPath(ctx)
     const extensions = readOptionalDesc(ctx)
     return { message, path, extensions }

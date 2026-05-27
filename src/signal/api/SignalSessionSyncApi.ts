@@ -32,6 +32,11 @@ function isKeyBundleResultPreferred(result: SignalSessionKeyBundleResult): boole
     return 'bundle' in result
 }
 
+/**
+ * Fetches per-device prekey bundles required to start a Signal session.
+ * Use {@link fetchKeyBundle} for single-JID calls or {@link fetchKeyBundles}
+ * for batched encryption.
+ */
 export class SignalSessionSyncApi {
     private readonly logger: SignalSessionSyncApiOptions['logger']
     private readonly query: SignalSessionSyncApiOptions['query']
@@ -46,6 +51,10 @@ export class SignalSessionSyncApi {
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
     }
 
+    /**
+     * Convenience wrapper for {@link fetchKeyBundles} that fetches a single
+     * bundle and throws on server error envelopes.
+     */
     public async fetchKeyBundle(
         target: { readonly jid: string; readonly reasonIdentity?: boolean },
         timeoutMs = this.defaultTimeoutMs
@@ -73,6 +82,10 @@ export class SignalSessionSyncApi {
         return parsed
     }
 
+    /**
+     * Batched key-bundle fetch. Returns one entry per JID  -  either a bundle
+     * (success) or an error envelope. Duplicate JIDs are coalesced.
+     */
     public async fetchKeyBundles(
         targets: readonly { readonly jid: string; readonly reasonIdentity?: boolean }[],
         timeoutMs = this.defaultTimeoutMs

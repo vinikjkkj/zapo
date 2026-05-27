@@ -107,6 +107,49 @@ function resolveStore<T>(
     return factory(sessionId)
 }
 
+/**
+ * Builds a {@link WaStore} from the configured providers/backends. Each call
+ * to `store.session(sessionId)` returns a cached, lock-wrapped per-domain
+ * store bundle for that session  -  `auth` is required (no default), the
+ * Signal-protocol domains default to memory, mailbox domains (messages,
+ * threads, contacts) default to noop, and the cache domains default to
+ * bounded memory with the TTLs in `options.memory.cacheTtlMs`.
+ *
+ * @example
+ * ```ts
+ * // Persistent setup with @zapo-js/store-sqlite (recommended for production)
+ * import { createSqliteStore } from '@zapo-js/store-sqlite'
+ * import { createStore } from 'zapo-js'
+ *
+ * const store = createStore({
+ *     backends: { sqlite: createSqliteStore({ path: '.auth/state.sqlite' }) },
+ *     providers: {
+ *         auth: 'sqlite',        // required  -  pairing creds live here
+ *         signal: 'sqlite',      // signal sessions
+ *         senderKey: 'sqlite',   // group sender keys
+ *         appState: 'sqlite',    // app-state collections
+ *         messages: 'sqlite',    // optional message archive
+ *         threads: 'sqlite',
+ *         contacts: 'sqlite'
+ *     }
+ * })
+ *
+ * // Memory-only (tests / ephemeral sessions  -  credentials lost on restart)
+ * const memStore = createStore({
+ *     providers: { auth: 'memory' as never } // requires registering a memory auth backend yourself
+ * })
+ *
+ * // Cache tuning
+ * createStore({
+ *     backends: { sqlite: createSqliteStore({ path: '.auth/state.sqlite' }) },
+ *     providers: { auth: 'sqlite', signal: 'sqlite', senderKey: 'sqlite', appState: 'sqlite' },
+ *     memory: {
+ *         cacheTtlMs: { groupMetadataMs: 10 * 60_000, deviceListMs: 5 * 60_000 },
+ *         limits: { groupMetadataGroups: 1024, deviceListUsers: 4096 }
+ *     }
+ * })
+ * ```
+ */
 export function createStore<B extends string>(options: WaCreateStoreOptions<B>): WaStore {
     const backends = (options.backends ?? {}) as Readonly<Record<string, WaStoreBackend>>
     const providers = options.providers ?? {}
@@ -158,7 +201,7 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
                 'stores',
                 () => {
                     throw new Error(
-                        'providers.auth is required — register a backend or set providers.auth'
+                        'providers.auth is required  -  register a backend or set providers.auth'
                     )
                 }
             )

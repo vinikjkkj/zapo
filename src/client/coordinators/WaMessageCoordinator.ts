@@ -97,6 +97,11 @@ function parseMessageCappingMexResponse(
     }
 }
 
+/**
+ * Coordinates outbound message sending, receipts, addon decryption, media
+ * download, and the related MEX account queries. Accessed via
+ * {@link WaClient.message}.
+ */
 export class WaMessageCoordinator {
     private readonly messageDispatch: WaMessageDispatchCoordinator
     private readonly mediaTransfer: WaMediaTransferClient
@@ -118,11 +123,19 @@ export class WaMessageCoordinator {
         this.mexSocket = deps.mexSocket
     }
 
+    /**
+     * Fetches the server-side "reachout" timelock that throttles cold outreach
+     * to non-contacts, returning the active window when enforcement is on.
+     */
     public async getReachoutTimelock(): Promise<WaReachoutTimelock> {
         const data = await runMexQuery(this.mexSocket, 'FetchReachoutTimelock', {})
         return parseReachoutTimelockMexResponse(data)
     }
 
+    /**
+     * Fetches the per-cycle message capping info applied to new-chat threads
+     * (quota, used, cycle boundaries, status flags).
+     */
     public async getNewChatMessageCapping(
         type: WaMessageCappingType = 'INDIVIDUAL_NEW_CHAT_THREAD'
     ): Promise<WaMessageCappingInfo> {
@@ -132,6 +145,11 @@ export class WaMessageCoordinator {
         return parseMessageCappingMexResponse(data)
     }
 
+    /**
+     * Force-refreshes the Signal session(s) for `jid`. Set `reasonIdentity` to
+     * `true` when the trigger was an identity change  -  this also queues a
+     * trusted-contact-token reissue.
+     */
     public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
         await this.messageDispatch.syncSignalSession(jid, reasonIdentity)
         if (reasonIdentity) {
@@ -144,6 +162,69 @@ export class WaMessageCoordinator {
         }
     }
 
+    /**
+     * Sends a message (any {@link WaSendMessageContent} kind  -  text, media,
+     * poll, reaction, edit, revoke, etc.) to `to` and returns the publish
+     * result containing the stanza id and ack metadata.
+     *
+     * `to` accepts any JID accepted by {@link normalizeRecipientJid}: bare
+     * digits (`'5511999999999'`), a phone JID (`'5511…@s.whatsapp.net'`),
+     * a group JID (`'…@g.us'`), or a LID. See the {@link WaSendMessageContent}
+     * union for the full kind list.
+     *
+     * **Gotchas:**
+     * - The stanza id is auto-generated unless you set `options.id`. Reusing
+     *   an id manually makes the send idempotent on the server but is also how
+     *   internal retries (`maxAttempts`) work  -  don't reuse ids across
+     *   logically distinct messages.
+     * - Sending to a `@newsletter` JID routes through a separate code path
+     *   that ignores most of `options` (no quote/forward/edit semantics).
+     * - Addon-crypto kinds (poll-vote, reaction, message-edit, ...) require an
+     *   authenticated session (`meJid` present)  -  throws otherwise.
+     * - Group sends fan out to every cached member device. If your
+     *   `groupMetadata` cache is empty/disabled, this triggers a metadata IQ
+     *   per send (rate-limited server-side, see {@link WaCreateStoreOptions}).
+     *
+     * @example
+     * ```ts
+     * // 1. Plain text (string shorthand)
+     * await client.message.send('5511999999999', 'hello!')
+     *
+     * // 2. Reply with mention
+     * await client.message.send(groupJid, {
+     *     type: 'text',
+     *     text: '@5511999999999 ping',
+     *     contextInfo: {
+     *         mentionedJid: ['5511999999999@s.whatsapp.net'],
+     *         quoted: { key: { remoteJid: groupJid, fromMe: false, id: incomingId } }
+     *     }
+     * })
+     *
+     * // 3. Image from a file path (the encoder opens + streams it for you)
+     * await client.message.send(jid, {
+     *     type: 'image',
+     *     media: '/tmp/photo.jpg',
+     *     mimetype: 'image/jpeg',
+     *     caption: 'check this out'
+     * })
+     *
+     * // 4. React to an incoming message (empty emoji = unreact)
+     * await client.message.send(event.chatJid!, {
+     *     type: 'reaction',
+     *     emoji: '👍',
+     *     target: { stanzaId: event.stanzaId, fromMe: false, participant: event.senderJid }
+     * })
+     *
+     * // 5. Poll
+     * const result = await client.message.send(jid, {
+     *     type: 'poll',
+     *     name: 'lunch?',
+     *     options: ['pizza', 'sushi', 'burger'],
+     *     selectableCount: 1
+     * })
+     * console.log('sent as', result.id)
+     * ```
+     */
     public send(
         to: string,
         content: WaSendMessageContent,
@@ -152,6 +233,17 @@ export class WaMessageCoordinator {
         return this.messageDispatch.sendMessage(to, content, options)
     }
 
+    /**
+     * Sends a receipt (delivery / read / played / inactive). Overloads:
+     * - Pass one or many `WaIncomingMessageEvent` to auto-derive chat/sender
+     *   metadata and batch ids by chat.
+     * - Pass an explicit `(jid, ids, options)` triple for manual control.
+     *
+     * **You usually don't need to call this for `'delivery'`** - the library
+     * already auto-ACKs delivery on every incoming `<message>` it decrypts
+     * successfully. Use this manually for `'read'`/`'played'` (read receipts
+     * the user explicitly toggled) or for `'inactive'`/retry receipts.
+     */
     public sendReceipt(
         target: WaIncomingMessageEvent | readonly WaIncomingMessageEvent[],
         options?: WaSendReceiptEventOptions
@@ -195,6 +287,18 @@ export class WaMessageCoordinator {
         }
     }
 
+    /**
+     * Resolves the media payload inside `source` and returns a `Readable`
+     * stream of the decrypted bytes. Throws when the message has no
+     * downloadable media.
+     *
+     * **Caller owns the stream** - pipe it somewhere or call `.destroy()` to
+     * release the underlying socket; an unconsumed stream leaks the connection.
+     * MAC + SHA-256 verification runs **as bytes are consumed**, so if you
+     * abort mid-read you've consumed unverified bytes. Pass `options.signal`
+     * to cancel cleanly, or use {@link downloadBytes} / {@link downloadToFile}
+     * for one-shot verified downloads.
+     */
     public async download(
         source: WaIncomingMessageEvent | Proto.IMessage,
         options: WaDownloadMediaOptions = {}
@@ -219,6 +323,12 @@ export class WaMessageCoordinator {
         return plaintext
     }
 
+    /**
+     * Convenience wrapper around {@link download} that streams the decrypted
+     * media directly to `filePath`. On failure the **partial file is not
+     * cleaned up** - delete it yourself in the error handler if you don't
+     * want to leak corrupted artifacts.
+     */
     public async downloadToFile(
         source: WaIncomingMessageEvent | Proto.IMessage,
         filePath: string,
@@ -228,6 +338,11 @@ export class WaMessageCoordinator {
         await pipeline(stream, createWriteStream(filePath))
     }
 
+    /**
+     * Convenience wrapper around {@link download} that buffers the decrypted
+     * media into a single `Uint8Array`. Use only for small media  -  caps via
+     * `options.maxBytes`.
+     */
     public async downloadBytes(
         source: WaIncomingMessageEvent | Proto.IMessage,
         options: WaDownloadMediaOptions = {}
@@ -236,6 +351,18 @@ export class WaMessageCoordinator {
         return readAllBytes(stream, { maxBytes: options.maxBytes })
     }
 
+    /**
+     * Attempts to decrypt an addon payload (poll vote, reaction, edit, ...)
+     * attached to `event` and, on success, emits a typed
+     * `WaIncomingAddonEvent`. Silently returns when the parent message
+     * secret is missing or the payload is not an addon.
+     *
+     * Called automatically by the client when `options.addons.autoDecrypt`
+     * is `true` - you rarely need to invoke it directly. The parent secret
+     * is looked up in the in-memory `messageSecret` cache first, then in
+     * the `messages` store; if both are `'none'`/missing, decryption fails
+     * silently (and the event never fires).
+     */
     public async tryDecryptAddon(event: WaIncomingMessageEvent): Promise<void> {
         const message = event.message
         if (!message) return

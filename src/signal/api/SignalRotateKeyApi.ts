@@ -13,6 +13,11 @@ interface SignalRotateKeyApiOptions {
     readonly defaultTimeoutMs?: number
 }
 
+/**
+ * Generates a fresh signed prekey and uploads it to the server. Handles the
+ * `406`/`409`/`5xx` error codes by signaling whether a digest re-validation
+ * is required.
+ */
 export class SignalRotateKeyApi {
     private readonly logger: SignalRotateKeyApiOptions['logger']
     private readonly query: SignalRotateKeyApiOptions['query']
@@ -26,6 +31,11 @@ export class SignalRotateKeyApi {
         this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.IQ_TIMEOUT_MS
     }
 
+    /**
+     * Rotates the signed prekey by generating a new one (next key id) and
+     * uploading it. Returns `shouldDigestKey: true` when the caller should
+     * re-run a digest validation after the rotation.
+     */
     public async rotateSignedPreKey(
         timeoutMs = this.defaultTimeoutMs
     ): Promise<{ shouldDigestKey: boolean; errorCode?: number }> {

@@ -87,7 +87,7 @@ class ByteReader {
 // Reusable scratch buffer for nibble/hex unpack. Max output is
 // `(0x7f) * 2 = 254` bytes (length byte holds the packed-byte count in
 // its low 7 bits, each byte unpacks to ≤2 chars). Single-threaded JS +
-// non-reentrant decoder makes module-level reuse safe — `TextDecoder`
+// non-reentrant decoder makes module-level reuse safe  -  `TextDecoder`
 // copies into the returned string before we touch the buffer again.
 const PACKED_SCRATCH = new Uint8Array(256)
 
@@ -311,6 +311,7 @@ function decodeNodeInternal(reader: ByteReader): BinaryNode {
     return node
 }
 
+/** Decodes raw WhatsApp binary node bytes into a {@link BinaryNode}. */
 export function decodeBinaryNode(data: Uint8Array): BinaryNode {
     const reader = new ByteReader(data)
     return decodeNodeInternal(reader)
@@ -329,6 +330,10 @@ async function inflateCompressedStanza(data: Uint8Array): Promise<Uint8Array> {
     }
 }
 
+/**
+ * Decodes a framed stanza: reads the 1-byte flag, inflates the body when the
+ * `0x02` compression bit is set, then parses the result as a {@link BinaryNode}.
+ */
 export async function decodeBinaryNodeStanza(stanza: Uint8Array): Promise<BinaryNode> {
     const reader = new ByteReader(stanza)
     const flag = reader.readUint8()

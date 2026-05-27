@@ -20,7 +20,7 @@ export interface WaMexQuerySocket {
 export interface WaMexQueryArgs {
     readonly docId: string
     readonly clientDocId: string
-    /** Passed verbatim — caller wraps under `input` only when the op's schema requires it. */
+    /** Passed verbatim  -  caller wraps under `input` only when the op's schema requires it. */
     readonly variables: Readonly<Record<string, unknown>>
     readonly opName: string
     readonly timeoutMs?: number

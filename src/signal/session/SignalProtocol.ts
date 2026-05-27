@@ -52,6 +52,11 @@ export interface SignalProtocolStores {
     readonly identity: WaIdentityStore
 }
 
+/**
+ * High-level Signal protocol session orchestrator: establishes outgoing
+ * sessions from prekey bundles, encrypts/decrypts ratchet messages, and owns
+ * the per-address session mutation lock.
+ */
 export class SignalProtocol {
     private readonly stores: SignalProtocolStores
     private readonly logger: Logger
@@ -63,6 +68,11 @@ export class SignalProtocol {
         this.sessionMutationLock = new StoreLock()
     }
 
+    /**
+     * Builds an outgoing Signal session against a remote prekey bundle. Set
+     * `options.reuseExisting` to skip the handshake when a session already
+     * exists for the same remote identity.
+     */
     public async establishOutgoingSession(
         address: SignalAddress,
         remoteBundle: SignalPreKeyBundle,
@@ -91,6 +101,11 @@ export class SignalProtocol {
         })
     }
 
+    /**
+     * Encrypts `plaintext` for `address`. Returns `pkmsg` when this is the
+     * first message of the session, `msg` otherwise. `expectedIdentity`
+     * enforces identity continuity.
+     */
     public async encryptMessage(
         address: SignalAddress,
         plaintext: Uint8Array,
@@ -106,6 +121,7 @@ export class SignalProtocol {
         return encrypted
     }
 
+    /** Batch variant of {@link encryptMessage} that shares per-address locks. */
     public async encryptMessagesBatch(
         requests: readonly {
             readonly address: SignalAddress
@@ -250,6 +266,10 @@ export class SignalProtocol {
         })
     }
 
+    /**
+     * Decrypts a Signal message (`msg` or `pkmsg`) from `address`. For
+     * `pkmsg`, instantiates the session from the embedded bundle when needed.
+     */
     public async decryptMessage(
         address: SignalAddress,
         envelope: {

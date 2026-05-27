@@ -17,6 +17,10 @@ export function createPeriodicCleanup(ttlMs: number, run: () => void): PeriodicC
     }
 }
 
+/**
+ * Returns a validated positive-safe-integer query limit, falling back to
+ * `defaultLimit` when `limit` is undefined. Throws on invalid input.
+ */
 export function normalizeQueryLimit(limit: number | undefined, defaultLimit: number): number {
     if (limit === undefined) {
         return defaultLimit

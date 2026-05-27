@@ -87,32 +87,71 @@ export interface WaUsernameAvailabilityResult {
     readonly suggestions: readonly string[]
 }
 
+/**
+ * Coordinates own/peer profile queries and mutations: picture, status, text
+ * status, username, disappearing mode, and LID lookup. Accessed via
+ * {@link WaClient.profile}.
+ */
 export interface WaProfileCoordinator {
+    /** Fetches a profile picture envelope (URL + direct path + id). */
     readonly getProfilePicture: (
         jid: string,
         type?: WaProfilePictureType,
         existingId?: string
     ) => Promise<WaProfilePictureResult>
+    /**
+     * Sets the profile picture for the current account or `targetJid`
+     * (group/community admin operation when set). `imageBytes` is uploaded
+     * **as-is** - the library does not transcode, resize, or crop, so pass
+     * pre-encoded JPEG bytes shaped to WhatsApp's expected picture format
+     * (square, JPEG, reasonable resolution). Returns the server-side
+     * picture id on success.
+     */
     readonly setProfilePicture: (
         imageBytes: Uint8Array,
         targetJid?: string
     ) => Promise<string | null>
+    /** Deletes the profile picture for the current account or `targetJid` (admin op for groups/communities). */
     readonly deleteProfilePicture: (targetJid?: string) => Promise<void>
+    /** Fetches the legacy "About" status for a single JID. */
     readonly getStatus: (jid: string) => Promise<WaProfileStatusResult>
+    /** Sets the current account's legacy "About" status. */
     readonly setStatus: (text: string) => Promise<void>
+    /** Batched usync fetch of picture id + status for many JIDs. */
     readonly getProfiles: (jids: readonly string[]) => Promise<readonly WaProfileInfo[]>
+    /** Batched fetch of the disappearing-mode setting per JID. */
     readonly getDisappearingMode: (
         jids: readonly string[]
     ) => Promise<readonly WaDisappearingModeResult[]>
+    /** Batched fetch of the modern text-status (emoji + text) per JID. */
     readonly getTextStatuses: (jids: readonly string[]) => Promise<readonly WaTextStatusResult[]>
+    /**
+     * Updates the current account's text status (the modern "About" emoji +
+     * text shown in chat). Passing `text: null` (or `''`) **clears** the
+     * status; passing `ephemeralDurationSec` without `text` and `emoji` is
+     * silently coerced back to `0` (server rejects expiring empty statuses).
+     */
     readonly setTextStatus: (input: WaSetTextStatusInput) => Promise<void>
+    /** Batched fetch of username per JID. */
     readonly getUsernames: (jids: readonly string[]) => Promise<readonly WaUsernameResult[]>
+    /** Fetches the current account's username record (value, state, recovery pin). */
     readonly getOwnUsername: () => Promise<WaOwnUsernameResult>
+    /**
+     * Reserves/sets a username on the current account. Returns `true` only
+     * when the server reports `'SUCCESS'`; on any other outcome (taken,
+     * invalid, rate-limited) it returns `false` without throwing - check the
+     * value and consult {@link checkUsernameAvailability} for suggestions.
+     */
     readonly setUsername: (input: WaSetUsernameInput) => Promise<boolean>
+    /** Deletes the current account's username. Returns `true` on success. */
     readonly deleteUsername: () => Promise<boolean>
+    /** Fetches the "About" text for a single JID via MEX. */
     readonly getAboutStatus: (jid: string) => Promise<string | null>
+    /** Checks whether a username is available and returns server suggestions. */
     readonly checkUsernameAvailability: (username: string) => Promise<WaUsernameAvailabilityResult>
+    /** Sets the username recovery PIN. Returns `true` on success. */
     readonly setUsernameKey: (pin: string) => Promise<boolean>
+    /** Resolves LIDs for a list of phone numbers (handles normalization). */
     readonly getLidsByPhoneNumbers: (
         phoneNumbers: readonly string[]
     ) => Promise<readonly SignalLidSyncResult[]>
@@ -365,6 +404,7 @@ function buildTextStatusMutationInput(input: WaSetTextStatusInput): {
     }
 }
 
+/** Builds a {@link WaProfileCoordinator} from its IQ/MEX/SID dependencies. */
 export function createProfileCoordinator(
     options: WaProfileCoordinatorOptions
 ): WaProfileCoordinator {

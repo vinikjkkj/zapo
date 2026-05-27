@@ -52,12 +52,44 @@ export type WaAuthSocketOptions = Pick<
 }
 
 export interface WaAuthClientOptions {
+    /**
+     * Browser id advertised during pairing (`'chrome' | 'firefox' | 'safari' |
+     * ...`, see {@link WA_BROWSERS}). Drives the platform id sent in the
+     * link-code stanza and the *Linked Devices* UI label on the phone.
+     * Defaults to `WA_DEFAULTS.DEVICE_BROWSER` (`'chrome'`).
+     */
     readonly deviceBrowser?: string
+    /**
+     * Override the numeric companion platform id (see
+     * {@link WA_COMPANION_PLATFORM_IDS}). Inferred from `deviceBrowser` when
+     * omitted  -  set explicitly for non-browser platforms (Electron, UWP, ...).
+     */
     readonly devicePlatform?: string
+    /**
+     * Human-readable OS name shown in the *Linked Devices* list (`'Windows'`,
+     * `'Mac OS'`, `'Linux'`). Defaults to the current runtime's OS.
+     */
     readonly deviceOsDisplayName?: string
+    /**
+     * When `true`, request a full history download from the primary device on
+     * pairing instead of just recent messages. Off by default.
+     */
     readonly requireFullSync?: boolean
+    /**
+     * WhatsApp Web version string the client advertises (`'x.y.z'`). Defaults
+     * to a tested production version  -  only override to pin/upgrade manually.
+     */
     readonly version?: string
+    /**
+     * **Dangerous escape hatches**  -  each flag disables a security check.
+     * Do not enable in production.
+     */
     readonly dangerous?: WaAuthDangerousOptions
+    /**
+     * Mobile-transport overrides (TCP socket, device info). Set this to
+     * connect via the WhatsApp Mobile protocol instead of Web  -  see
+     * {@link WaMobileTransportOptions}.
+     */
     readonly mobileTransport?: WaMobileTransportOptions
 }
 

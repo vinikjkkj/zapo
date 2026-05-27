@@ -4,7 +4,6 @@ packages/*/dist
 node_modules
 .auth
 example.js
-AGENTS.md
 logs.txt
 wa-web
 wa-mob

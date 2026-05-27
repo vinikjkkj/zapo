@@ -65,6 +65,10 @@ function isFieldPMinus1(b: Uint8Array): boolean {
     return true
 }
 
+/**
+ * Applies the standard curve25519 scalar clamping in place and returns the
+ * same buffer for chaining. Throws on non-32-byte inputs.
+ */
 export function clampCurvePrivateKeyInPlace(privateKey: Uint8Array): Uint8Array {
     assertByteLength(privateKey, 32, `invalid curve25519 private key length ${privateKey.length}`)
     privateKey[0] &= 248
@@ -73,6 +77,11 @@ export function clampCurvePrivateKeyInPlace(privateKey: Uint8Array): Uint8Array 
     return privateKey
 }
 
+/**
+ * Converts a 32-byte Montgomery (curve25519) public key to its Edwards form
+ * for XEdDSA verification, applying the supplied `signBit` (`0x80` mask).
+ * Throws on the field-`p-1` low-order point.
+ */
 export function montgomeryToEdwardsPublic(curvePublicKey: Uint8Array, signBit: number): Uint8Array {
     assertByteLength(
         curvePublicKey,
@@ -109,7 +118,12 @@ function x25519PublicKeyObject(pubKey: Uint8Array) {
     })
 }
 
+/**
+ * X25519 key-pair generation and Diffie-Hellman scalar multiplication
+ * backed by Node's native primitives.
+ */
 export class X25519 {
+    /** Generates a fresh X25519 key pair. */
     static async generateKeyPair(): Promise<SignalKeyPair> {
         const { privateKey } = await generateKeyPairAsync('x25519')
         const jwk = privateKey.export({ format: 'jwk' })
@@ -119,6 +133,7 @@ export class X25519 {
         }
     }
 
+    /** Derives the matching public key from a 32-byte X25519 private key. */
     static keyPairFromPrivateKey(privKey: Uint8Array): SignalKeyPair {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
         const jwk = x25519PrivateKeyObject(privKey).export({ format: 'jwk' })
@@ -128,6 +143,10 @@ export class X25519 {
         }
     }
 
+    /**
+     * Computes the X25519 shared secret between `privKey` and `pubKey`.
+     * Uses Node's async DH path when supported, otherwise falls back to sync.
+     */
     static async scalarMult(privKey: Uint8Array, pubKey: Uint8Array): Promise<Uint8Array> {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
         assertByteLength(pubKey, 32, 'x25519 public key must be 32 bytes')

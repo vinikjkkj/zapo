@@ -93,6 +93,11 @@ function normalizeHeaderRecord(
     return normalized
 }
 
+/**
+ * Streaming media uploader/downloader. Handles host failover, encryption
+ * (`WaMediaCrypto`), and MAC verification. Used internally by the message
+ * coordinator and exposed for direct media transfer use cases.
+ */
 export class WaMediaTransferClient {
     private readonly logger?: Logger
     private readonly defaultHosts: readonly string[]
@@ -114,6 +119,10 @@ export class WaMediaTransferClient {
         this.skipMacVerification = options.skipMacVerification === true
     }
 
+    /**
+     * Streams an encrypted media payload from the first responsive media host.
+     * Returns the raw transfer response  -  caller is responsible for piping the body.
+     */
     public async downloadStream(request: StreamDownloadRequest): Promise<StreamTransferResponse> {
         const { urls, headers, timeoutMs } = this.resolveTransferRequest(request)
         const agent = request.agent ?? this.defaultDownloadAgent
@@ -134,6 +143,7 @@ export class WaMediaTransferClient {
         return result
     }
 
+    /** Convenience wrapper: downloads the encrypted body and returns it as a Uint8Array. */
     public async downloadBytes(request: StreamDownloadRequest): Promise<Uint8Array> {
         const response = await this.downloadStream(request)
         await this.assertSuccessfulResponse(response)
@@ -145,6 +155,10 @@ export class WaMediaTransferClient {
         })
     }
 
+    /**
+     * Uploads a raw (already-encrypted or plaintext) body to the requested
+     * media URL. Returns the server's transfer response unchanged.
+     */
     public async uploadStream(request: StreamUploadRequest): Promise<StreamTransferResponse> {
         const bodyIsBytes = request.body instanceof Uint8Array
         const { urls, headers, timeoutMs } = this.resolveTransferRequest(request, {
@@ -182,6 +196,11 @@ export class WaMediaTransferClient {
         return result
     }
 
+    /**
+     * Encrypts the plaintext body with the per-`mediaType` HKDF keys (a new
+     * media key is generated when none is supplied) and uploads it. Returns
+     * the upload response plus the derived key/hashes for the message stanza.
+     */
     public async uploadEncrypted(request: EncryptedUploadRequest): Promise<EncryptedUploadResult> {
         this.logger?.info('media encrypted upload start', {
             mediaType: request.mediaType
@@ -222,6 +241,10 @@ export class WaMediaTransferClient {
         }
     }
 
+    /**
+     * Downloads an encrypted media payload, decrypts it, and verifies the MAC
+     * + file SHA-256s. Returns the decrypted bytes.
+     */
     public async downloadAndDecrypt(request: EncryptedDownloadRequest): Promise<Uint8Array> {
         this.logger?.info('media encrypted download start', {
             mediaType: request.mediaType
@@ -244,6 +267,11 @@ export class WaMediaTransferClient {
         }
     }
 
+    /**
+     * Streaming variant of {@link downloadAndDecrypt}: returns a `plaintext`
+     * Readable plus a `metadata` promise that resolves after the stream ends
+     * with the verified hashes (or rejects on MAC/size failure).
+     */
     public async downloadAndDecryptStream(
         request: EncryptedDownloadRequest
     ): Promise<WaMediaReadableDecryptionResult> {
@@ -267,6 +295,7 @@ export class WaMediaTransferClient {
         }
     }
 
+    /** Drains a streaming response body to a Uint8Array (respects `maxBytes`). */
     public async readResponseBytes(
         response: StreamTransferResponse,
         maxBytes?: number

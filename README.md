@@ -16,237 +16,139 @@
   <img alt="focus" src="https://img.shields.io/badge/focus-high--scale%20%2B%20multi--session-0A7EA4" />
 </p>
 
-## Table of Contents
+<p align="center">
+  📚 <strong>Documentation:</strong> <a href="https://zapo.to/">zapo.to</a> ·
+  🛠 <strong>Contributing:</strong> <a href="CONTRIBUTING.md">CONTRIBUTING.md</a> ·
+  💛 <strong>Sponsor:</strong> <a href="https://github.com/sponsors/vinikjkkj">GitHub Sponsors</a>
+</p>
 
-- [Stability Notice](#stability-notice)
-- [What Makes This Project Different](#what-makes-this-project-different)
-- [Core Principles](#core-principles)
-- [Architecture at a Glance](#architecture-at-a-glance)
-- [Requirements](#requirements)
-- [Quick Start](#quick-start)
-- [Minimal Usage](#minimal-usage)
-- [Useful Scripts](#useful-scripts)
-- [Versioning and Releases](#versioning-and-releases)
-- [GitHub Release Notes](#github-release-notes)
-- [Protobuf Generation](#protobuf-generation)
-- [Support the Project](#support-the-project)
-- [Contribution Notes](#contribution-notes)
-- [Disclaimer](#disclaimer)
+---
 
 ## Stability Notice
 
 > Frequent breaking changes are expected until the first major release.
-> If you run `zapo` in long-lived environments, pin exact versions and validate upgrades carefully.
+> If you run `zapo` in long-lived environments, pin exact versions and
+> validate upgrades carefully.
 
-## What Makes This Project Different
+## Install
 
-`zapo` is an independent runtime implementation (not a wrapper/fork of an existing WhatsApp library).
+```bash
+npm install zapo-js
+```
 
-- No wrappers around third-party WhatsApp SDKs
-- No forks of existing WhatsApp client libraries
-- No copied protocol abstractions from community libraries
-- `WAProto.proto` is sourced from `wppconnect-team/wa-proto` and compiled locally for runtime/types
+Zero mandatory runtime dependencies. Pick the optional packages you need
+on top: a persistent store and (optionally) the media processor for
+thumbnails / voice-note metadata.
 
-The protocol source of truth is the deobfuscated WhatsApp Web.
-The target is behavior parity with WhatsApp Web, while improving internal performance and memory efficiency.
+```bash
+# Persistent store - choose one
+npm install @zapo-js/store-sqlite better-sqlite3
+# or @zapo-js/store-redis ioredis
+# or @zapo-js/store-postgres pg
+# or @zapo-js/store-mysql mysql2
+# or @zapo-js/store-mongo mongodb
 
-## Core Principles
+# Optional - thumbnails + waveforms + voice-note normalization
+npm install @zapo-js/media-utils sharp
+# plus a system `ffmpeg` + `ffprobe` on PATH (see media-utils README)
 
-These principles drive implementation decisions:
-
-- `index-first`: validate protocol behavior against WhatsApp Web before implementing anything
-- `performance-first`: optimize for low CPU, low RAM, low allocations, and zero-copy in hot paths
-- `async-first`: I/O, network, and crypto operations are async
-
-## Architecture at a Glance
-
-### Patterns
-
-- Coordinator-first feature design in `src/client/coordinators/`
-- Pure node builders in `src/transport/node/builders/` for reusable protocol stanzas
-- Incoming parsers/normalizers in `src/client/events/`, with coordinators handling orchestration only
-- Typed store contracts in `src/store/contracts/` with `memory` and `sqlite` providers
-- Protocol constants in `src/protocol/` using `Object.freeze({...} as const)`
-
-### Engineering conventions
-
-- `Uint8Array` everywhere for binary data (`Buffer` is avoided)
-- Zero-copy (`subarray`, byte views) in critical paths
-- Bounded in-memory structures to prevent unbounded growth
-- Path aliases (`@client`, `@crypto`, `@store`, etc.), no relative `../` imports
-- Named exports only, no default exports
-- No enums (`Object.freeze` + `as const` instead)
-
-## Requirements
-
-- Node.js `>= 20.9.0`
-- npm
-
-Runtime dependencies:
-
-- Mandatory: none
-
-Optional peer dependencies:
-
-- `better-sqlite3` for SQLite-backed stores
-- `pino` and `pino-pretty` for structured logging
+# Optional - structured logging
+npm install pino pino-pretty
+```
 
 ## Quick Start
 
-1. Install dependencies.
-
-```bash
-npm install
-```
-
-2. Run the real-flow example.
-
-```bash
-npm run example
-```
-
-3. Scan the QR code emitted by `auth_qr`.
-4. Send `ping` to the connected session, the example replies with `pong`.
-
-Auth state is persisted in `.auth/state.sqlite`.
-
-## Minimal Usage
-
 ```ts
-import { createPinoLogger, createStore, WaClient } from 'zapo-js'
+import { ConsoleLogger, createStore, WaClient } from 'zapo-js'
 import { createSqliteStore } from '@zapo-js/store-sqlite'
-
-const logger = await createPinoLogger({
-    level: 'info',
-    pretty: true
-})
 
 const store = createStore({
     backends: {
-        sqlite: createSqliteStore({
-            path: '.auth/state.sqlite',
-            driver: 'auto'
-        })
+        sqlite: createSqliteStore({ path: '.auth/state.sqlite' })
     },
     providers: {
         auth: 'sqlite',
         signal: 'sqlite',
-        preKey: 'sqlite',
-        session: 'sqlite',
-        identity: 'sqlite',
         senderKey: 'sqlite',
-        appState: 'sqlite',
-        messages: 'sqlite',
-        threads: 'sqlite',
-        contacts: 'sqlite'
+        appState: 'sqlite'
     }
 })
 
-const client = new WaClient(
-    {
-        store,
-        sessionId: 'default',
-        connectTimeoutMs: 15_000,
-        nodeQueryTimeoutMs: 30_000,
-        history: {
-            enabled: true,
-            requireFullSync: true
-        }
-    },
-    logger
-)
+const client = new WaClient({ store, sessionId: 'default' }, new ConsoleLogger('info'))
 
-client.on('auth_qr', ({ qr, ttlMs }) => {
-    console.log('qr', { qr, ttlMs })
+client.on('auth_qr', ({ qr }) => {
+    console.log('scan this:', qr)
 })
 
-client.on('message', (event) => {
-    console.log('incoming', {
-        chatJid: event.chatJid,
-        senderJid: event.senderJid
-    })
+client.on('auth_paired', ({ credentials }) => {
+    console.log('paired as', credentials.meJid)
+})
+
+client.on('message', async (event) => {
+    if (event.message?.conversation === 'ping') {
+        await client.message.send(event.chatJid!, 'pong')
+    }
 })
 
 await client.connect()
 ```
 
-## Useful Scripts
+That's the minimum to pair, listen for messages, and reply. For everything
+else - sending media, reactions, polls, groups, newsletters, app-state
+mutations, business profile, events catalog, store providers, the typed
+event map, and the architectural reasoning - read the guides at
+**[zapo.to](https://zapo.to/)**.
 
-- `npm run build` - build CJS, ESM, and types
-- `npm run test` - run unit tests (non-flow)
-- `npm run test:flow` - run real-flow tests
-- `npm run test:coverage` - run coverage report
-- `npm run typecheck` - type-check project
-- `npm run lint` - lint source files
-- `npm run format` - format codebase
-- `npm run proto:generate` - regenerate protobuf runtime/types from `spec/proto/WAProto.proto`
-- `npm run changeset` - create a versioning entry (`patch`/`minor`/`major`)
-- `npm run changeset:status` - show pending versioning entries
-- `npm run version:packages` - apply pending versions and update `CHANGELOG.md`
-- `npm run release:publish` - build and publish to npm with Changesets
+## Packages
 
-## Versioning and Releases
+The core lives at the repo root (`zapo-js`). Optional packages live in
+[`packages/`](packages/) and ship under the `@zapo-js/*` scope. Install
+only what you need.
 
-Versioning is managed with [Changesets](https://github.com/changesets/changesets).
+| Package                                              | Peer dependency             | Purpose                                                                                                                               |
+| ---------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@zapo-js/store-sqlite`](packages/store-sqlite)     | `better-sqlite3`            | SQLite persistent store (single-process bots, dev sessions, small-to-medium prod).                                                    |
+| [`@zapo-js/store-redis`](packages/store-redis)       | `ioredis`                   | Redis-backed store with native TTL eviction.                                                                                          |
+| [`@zapo-js/store-mongo`](packages/store-mongo)       | `mongodb`                   | MongoDB-backed store with TTL-index eviction.                                                                                         |
+| [`@zapo-js/store-mysql`](packages/store-mysql)       | `mysql2`                    | MySQL / MariaDB-backed store with background cleanup poller.                                                                          |
+| [`@zapo-js/store-postgres`](packages/store-postgres) | `pg`                        | PostgreSQL-backed store with background cleanup poller.                                                                               |
+| [`@zapo-js/media-utils`](packages/media-utils)       | `sharp` + `ffmpeg`          | `WaMediaProcessor`: thumbnails, waveforms, voice-note normalization.                                                                  |
+| [`@zapo-js/fake-server`](packages/fake-server)       | (none)                      | In-process fake WhatsApp Web server for end-to-end testing.                                                                           |
+| [`@zapo-js/mcp-server`](packages/mcp-server)         | `@modelcontextprotocol/sdk` | **Dev-only.** MCP server exposing the `WaClient` as dynamic tools for an LLM agent (Claude Code / Cursor / etc.). Not for production. |
 
-Release flow:
+Each package's README has the install + config + integration notes.
 
-```bash
-npm run changeset
-npm run changeset:status
-npm run version:packages
-npm run release:publish
-```
+## Documentation
 
-Notes:
+- **[zapo.to](https://zapo.to/)** - guides, full API reference, examples,
+  protocol notes
+- **Per-package READMEs** under [`packages/`](packages/) - one per
+  optional package
+- **[`AGENTS.md`](AGENTS.md)** - architecture spec + coding rules
+  (contributor-facing)
 
-- Changesets are stored in `.changeset/*.md`
-- Multiple changesets are merged automatically into the next release
-- SemVer is manual and intentional: `patch`, `minor`, `major`
+## Contributing
 
-## GitHub Release Notes
+Pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for
+setup, repo layout, CI, release flow, and the conventions PRs must follow.
 
-Release notes are generated automatically (including grouped changes and contributors) when a version tag is pushed.
+Contributors also agree to the [Code of Conduct](CODE_OF_CONDUCT.md),
+which includes an **AI-Assisted Contributions** policy covering
+disclosure, human ownership, and the rule against bundle-hallucinated
+protocol claims.
 
-- Workflow: `.github/workflows/github-release.yml`
-- Categories config: `.github/release.yml`
+## License
 
-Trigger example:
-
-```bash
-git tag v0.1.1
-git push origin v0.1.1
-```
-
-If the tag contains `-` (example: `v0.2.0-rc.1`), the release is marked as prerelease.
-
-## Protobuf Generation
-
-`WAProto.proto` source: https://github.com/vinikjkkj/wa-spec
-
-`npm run proto:generate` runs `scripts/generate-proto.cjs`, which:
-
-- Ensures proto tooling dependencies are installed in `spec/proto/`
-- Generates and minifies `spec/proto/index.js`
-- Regenerates compact typings at `spec/proto/index.d.ts`
+[MIT](LICENSE) © vinikjkkj
 
 ## Support the Project
 
-If `zapo` is useful in your production or study setup, you can support ongoing development on GitHub Sponsors:
-
-- https://github.com/sponsors/vinikjkkj
-
-## Contribution Notes
-
-Before opening a PR:
-
-- Validate behavior against WhatsApp Web
-- Keep performance and memory constraints in mind
-- Keep node building/parsing aligned with project patterns
-- Avoid API changes that diverge from observed WhatsApp Web behavior
-- Test real flows when touching auth, transport, app state, retry, or signal paths
+If `zapo` is useful in your production or study setup, you can support
+ongoing development on GitHub Sponsors:
+[github.com/sponsors/vinikjkkj](https://github.com/sponsors/vinikjkkj).
 
 ## Disclaimer
 
-This project is an independent implementation for engineering and interoperability research.
-It is not affiliated with or endorsed by WhatsApp.
+This project is an independent implementation for engineering and
+interoperability research. It is not affiliated with or endorsed by
+WhatsApp.

@@ -53,43 +53,111 @@ export interface WaLogoutStoreClearOptions {
 }
 
 export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOptions {
+    /**
+     * Store instance built by {@link createStore}. Holds every per-session
+     * domain (auth, signal, app-state, ...). Required.
+     */
     readonly store: WaStore
+    /**
+     * Logical session identifier  -  keys every domain inside `store`. Use a
+     * stable string per device/account; changing it between runs orphans the
+     * previous credentials.
+     */
     readonly sessionId: string
+    /**
+     * Optional HTTP(S)/WS proxy configuration. You can target the WebSocket
+     * (`ws`), media upload, media download, and link preview legs
+     * independently  -  see {@link WaClientProxyOptions}.
+     */
     readonly proxy?: WaClientProxyOptions
+    /**
+     * Override the WhatsApp chat WebSocket URL list. Defaults to the
+     * production endpoints; useful for routing through a fake server in
+     * tests or pinning a specific edge.
+     */
     readonly chatSocketUrls?: readonly string[]
+    /** Default timeout (ms) for IQ queries. Defaults to `WA_DEFAULTS.IQ_TIMEOUT_MS` (60s). */
     readonly iqTimeoutMs?: number
+    /** Default timeout (ms) for raw node `query()` calls when none is passed. */
     readonly nodeQueryTimeoutMs?: number
+    /** Interval (ms) between server ping IQs sent by the keep-alive loop. */
     readonly keepAliveIntervalMs?: number
+    /**
+     * How long (ms) the keep-alive may go without a server reply before the
+     * socket is considered dead and a reconnect is triggered.
+     */
     readonly deadSocketTimeoutMs?: number
+    /** Default timeout (ms) for media upload/download requests. */
     readonly mediaTimeoutMs?: number
+    /** Default timeout (ms) for app-state sync IQ rounds. */
     readonly appStateSyncTimeoutMs?: number
+    /** Default timeout (ms) for Signal prekey-bundle fetches. */
     readonly signalFetchKeyBundlesTimeoutMs?: number
+    /** How long (ms) `message.send` waits for the server `<ack>` per attempt. */
     readonly messageAckTimeoutMs?: number
+    /** Max number of attempts for a single `message.send` before giving up. */
     readonly messageMaxAttempts?: number
+    /** Delay (ms) between message-send retry attempts. */
     readonly messageRetryDelayMs?: number
     /**
      * Initial presence sent right after the post-connect passive task runs.
-     * - `true` (default): announce the client as online — matches the wa-web
+     * - `true` (default): announce the client as online  -  matches the wa-web
      *   behavior when the browser tab has focus at login time.
-     * - `false`: announce as unavailable — matches wa-web when the tab is not
+     * - `false`: announce as unavailable  -  matches wa-web when the tab is not
      *   focused (or the Windows app is minimized to tray) at login time. Useful
      *   for bots/headless sessions that should not appear "online" on connect.
      */
     readonly markOnlineOnConnect?: boolean
+    /**
+     * Write-behind persistence tuning  -  how long to batch incoming messages
+     * before flushing to `messages`/`threads`/`contacts` stores.
+     */
     readonly writeBehind?: WaWriteBehindOptions
+    /**
+     * History-sync behavior  -  enable initial history download, full vs.
+     * recent sync, and external blob handling.
+     */
     readonly history?: WaHistorySyncOptions
+    /**
+     * Chat-event emission tuning. `emitSnapshotMutations: true` re-emits
+     * `app_state_mutation` events for every mutation seen during a snapshot
+     * sync (off by default  -  those mutations represent historical state).
+     */
     readonly chatEvents?: {
         readonly emitSnapshotMutations?: boolean
     }
+    /**
+     * Privacy-token (trusted-contact-token) cache tuning. Controls how often
+     * tokens are re-issued and which JIDs they're scoped to.
+     */
     readonly privacyToken?: WaPrivacyTokenOptions
+    /**
+     * Addon behavior  -  set `autoDecrypt: true` to automatically decrypt
+     * encrypted addons (poll votes, reactions, ...) and emit them as typed
+     * `message_addon` events.
+     */
     readonly addons?: WaAddonOptions
+    /**
+     * Per-domain control of what {@link WaClient.logout} clears from the
+     * store. Defaults to clearing everything; set a domain to `false` to
+     * preserve it across logout.
+     */
     readonly logoutStoreClear?: WaLogoutStoreClearOptions
+    /**
+     * Media handling tuning  -  optional {@link WaMediaProcessor} for
+     * thumbnail/voice-note/sticker normalization plus generation flags.
+     */
     readonly media?: WaMediaOptions
+    /**
+     * Link-preview fetcher configuration  -  provide a custom fetcher (e.g.
+     * one that runs through your own scraping pipeline) or disable the
+     * default auto-fetch globally.
+     */
     readonly linkPreview?: WaLinkPreviewOptions
     /**
      * Test-only overrides intended for running against a fake server.
      *
-     * These hooks **do not** bypass any security checks — they only swap in
+     * These hooks **do not** bypass any security checks  -  they only swap in
      * test fixtures (e.g. a different root CA) so the full verification code
      * path still runs end-to-end. If you actually need to skip a check, use
      * `dangerous` instead.
@@ -130,7 +198,7 @@ export interface WaClientTestHooks {
      * The default is the production WhatsApp root. Tests against a fake
      * server inject the fake server's ephemeral root here so that the lib
      * still runs the full certificate-verification code path against a
-     * chain signed by a known key — no validation logic is bypassed.
+     * chain signed by a known key  -  no validation logic is bypassed.
      */
     readonly noiseRootCa?: WaNoiseRootCa
 }
@@ -180,14 +248,54 @@ export interface WaSignalMessagePublishInput {
 }
 
 export interface WaSendMessageOptions extends WaMessagePublishOptions {
+    /**
+     * Override the auto-generated stanza id. Useful for retries with idempotent
+     * ids or for clients that want to track messages by a known external id.
+     */
     readonly id?: string
+    /**
+     * Identity key (33-byte serialized) the recipient is expected to be using.
+     * Throws `identity mismatch` if the cached remote identity differs  -
+     * forces an explicit recovery instead of silently sending to a new device.
+     */
     readonly expectedIdentity?: Uint8Array
+    /**
+     * Disambiguator for the resolved `edit` stanza attribute. Today only
+     * `'admin_revoke'` is meaningful  -  pass it when a group admin is
+     * revoking another participant's message so the outgoing stanza is
+     * tagged `edit="8"` (admin revoke) instead of `edit="7"` (sender revoke).
+     * Any other value is ignored.
+     */
     readonly subtype?: string
+    /**
+     * Optional context info to merge into the outgoing message  -  quoted message,
+     * mentioned JIDs, forward score, link-preview override, etc. (see {@link WaSendContextInfo}).
+     */
     readonly contextInfo?: WaSendContextInfo
+    /**
+     * Shorthand for replying to a message: pass the incoming event (or a
+     * pre-built `WaQuoteRef`) and the coordinator fills the quote fields in
+     * `contextInfo` for you.
+     */
     readonly quote?: WaIncomingMessageEvent | WaQuoteRef
+    /**
+     * Mark as forwarded. `true` increments the forward score; `{ score }`
+     * sets it explicitly (use the score from the source message's contextInfo
+     * to propagate the "frequently forwarded" badge correctly).
+     */
     readonly forward?: boolean | { readonly score?: number }
+    /**
+     * JIDs to mention (`@`-tag) in the message. Each must appear as `@<digits>`
+     * in the text for WhatsApp to render the mention link.
+     */
     readonly mentions?: readonly string[]
+    /**
+     * Skip the automatic `ephemeralSettingTimestamp`/`expiration` injection
+     * applied for messages sent into groups with disappearing-mode on. Off by
+     * default  -  only set when you're managing those fields manually.
+     */
     readonly disableGroupEphemeralAutoInject?: boolean
+    /** Raw child nodes appended to the `<message>` stanza. Escape hatch for protocol features the typed API doesn't cover. */
     readonly customNodes?: readonly BinaryNode[]
     /** Wrap the outgoing message as view-once. Only valid for image/video/audio content. */
     readonly viewOnce?: boolean
@@ -204,7 +312,7 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
     /**
      * Extra attributes merged into the outgoing `<message>` stanza. Keys provided
      * here override protocol-managed ones (`to`, `type`, `id`, `edit`, `phash`,
-     * `addressing_mode`) — use with care: bad overrides can break the send.
+     * `addressing_mode`)  -  use with care: bad overrides can break the send.
      */
     readonly additionalAttributes?: Readonly<Record<string, string>>
 }
@@ -252,7 +360,7 @@ export interface WaIncomingNodeHandlerRegistration {
 
 /**
  * Predicate evaluated against every inbound stanza. Return `true` to drop the
- * stanza before any handler runs — the coordinator still sends the appropriate
+ * stanza before any handler runs  -  the coordinator still sends the appropriate
  * ack for `message`/`receipt`/`notification` so the server stops re-delivering.
  *
  * Stream-control nodes and the connection-critical `success`/`failure` tags
@@ -857,50 +965,169 @@ export type WaConnectionEvent =
           readonly isNewLogin: false
       }
 
+/**
+ * Type-safe event map for {@link WaClient}. Subscribe with
+ * `client.on('event_name', (event) => ...)` and the payload is inferred.
+ *
+ * Events fall into a few groups: **auth** (`auth_*`  -  pairing flow),
+ * **connection** (`connection`, `offline_resume`, `stream_failure`),
+ * **messaging** (`message`, `message_addon`, `message_bot_chunk`,
+ * `message_protocol`, `receipt`), **chat/presence**, per-feature
+ * (`newsletter*`, `group`, `business`, `picture`, `mutation`,
+ * `history_sync_chunk`, `mex_notification`, `call`), **mobile-only**
+ * (`mobile_*`), and **debug_** (raw stanzas/frames  -  opt-in observability).
+ */
 export interface WaClientEventMap {
+    /**
+     * Pairing QR refresh  -  emitted while {@link WaClient.connect} runs and the
+     * device has not been linked yet. `qr` is the string the phone scans;
+     * `ttlMs` is the time until the next refresh (a new event will fire then).
+     */
     readonly auth_qr: (event: { readonly qr: string; readonly ttlMs: number }) => void
+    /** 8-character pairing code (link-code flow)  -  emitted after `requestPairingCode` returns. */
     readonly auth_pairing_code: (event: { readonly code: string }) => void
+    /**
+     * The server is ready to receive pairing input. `forceManual: true` means
+     * the QR refresh budget was exhausted and the user must request a fresh
+     * one (e.g. via the link-code flow).
+     */
     readonly auth_pairing_required: (event: { readonly forceManual: boolean }) => void
+    /**
+     * Pairing succeeded  -  `credentials.meJid` is now populated. The client
+     * persists the credentials before this event fires; `connect()` resolves
+     * shortly after.
+     */
     readonly auth_paired: (event: { readonly credentials: WaAuthCredentials }) => void
+    /**
+     * Connection-state transitions: `'open'` (handshake + auth complete),
+     * `'connecting'`, or `'close'` (with a `reason` and optional `code`). The
+     * client does **not** auto-reconnect on close  -  call {@link WaClient.connect} again.
+     */
     readonly connection: (event: WaConnectionEvent) => void
+    /**
+     * An inbound `<message>` stanza was decrypted. The payload includes the
+     * raw stanza, the decrypted {@link Proto.IMessage}, and resolved sender/
+     * chat JIDs. Reply with {@link WaMessageCoordinator.send} (use
+     * `options.quote` for threads).
+     */
     readonly message: (event: WaIncomingMessageEvent) => void
+    /**
+     * A decrypted addon (poll vote, reaction, edit, comment, ...) attached to
+     * a previous message. Fires only when `addons.autoDecrypt` is on **and**
+     * the parent message secret is available in the cache.
+     */
     readonly message_addon: (event: WaIncomingAddonEvent) => void
+    /**
+     * A streaming bot chunk (Meta-AI reply piece). Fires per chunk  -  concat
+     * the `plaintext` in arrival order until you see the `editType === 'full'`
+     * or `'last'` terminator.
+     */
     readonly message_bot_chunk: (event: WaIncomingBotChunkEvent) => void
+    /**
+     * A decoded `protocolMessage` (revoke, ephemeral-setting change, history
+     * sync notification, etc.) extracted from an incoming message. The plain
+     * `message` event also fires for the same stanza; this one gives you the
+     * typed protocol payload directly.
+     */
     readonly message_protocol: (event: WaIncomingProtocolMessageEvent) => void
+    /**
+     * Inbound `<receipt>` for an outgoing message  -  delivery, read, played,
+     * server, etc. Use this to track message ACK progression.
+     */
     readonly receipt: (event: WaIncomingReceiptEvent) => void
+    /** A newsletter (channel) event  -  create/update/follow/etc. or admin actions. */
     readonly newsletter: (event: WaIncomingNewsletterEvent) => void
+    /** Newsletter message update  -  edit, react, view-count, poll-vote changes. */
     readonly newsletter_message_update: (event: WaIncomingNewsletterMessageUpdateEvent) => void
+    /**
+     * Peer presence (online / offline / last-seen). Only delivered for JIDs
+     * the client previously subscribed via {@link WaPresenceCoordinator.subscribe}.
+     */
     readonly presence: (event: WaIncomingPresenceEvent) => void
+    /** Peer chatstate (typing / recording / paused)  -  also requires an active presence subscription. */
     readonly chatstate: (event: WaIncomingChatstateEvent) => void
+    /** Incoming call signaling (offer / accept / reject / terminate). Read-only  -  this client doesn't place calls. */
     readonly call: (event: WaIncomingCallEvent) => void
+    /**
+     * MEX (GraphQL-over-noise) push notification  -  typed shape varies per
+     * operation. Use the discriminator (`event.operationName`) or fall back
+     * to the unknown variant for forward-compat.
+     */
     readonly mex_notification: (event: WaMexNotificationEvent) => void
+    /** Group lifecycle event  -  create, subject/description change, participant add/remove/promote/demote, leave, etc. */
     readonly group: (event: WaGroupEvent) => void
+    /** Business profile change  -  verified name, profile updates, cover photo changes. */
     readonly business: (event: WaBusinessEvent) => void
+    /** Profile/group/community picture change notification  -  the new picture must still be fetched explicitly. */
     readonly picture: (event: WaPictureEvent) => void
+    /**
+     * A parsed app-state mutation crossed the sync boundary  -  chat mute/star/
+     * read/pin/archive/contact/label/etc. Use the discriminator
+     * (`event.action`) to branch on the mutation kind.
+     */
     readonly mutation: (event: WaAppStateMutationEvent) => void
+    /**
+     * One chunk of history-sync data while the primary device is mirroring
+     * past chats. Multiple chunks per sync; track `event.progress` for
+     * completion. Only fires when `history.enabled` is set.
+     */
     readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void
+    /**
+     * Offline-message queue progress after a reconnect (`'resuming'` ticks
+     * with `remainingStanzas`, then `'complete'`). Useful to defer UI updates
+     * until the catch-up finishes.
+     */
     readonly offline_resume: (event: WaOfflineResumeEvent) => void
+    /**
+     * Fatal stream-level error from the server (e.g. logged out from another
+     * device, stream conflict). The connection will close right after.
+     */
     readonly stream_failure: (event: WaIncomingFailureEvent) => void
+    /**
+     * Server-sent error on a specific outgoing stanza  -  id mismatch, bad
+     * request, throttling. The matching pending operation will already have
+     * rejected; this event surfaces context for diagnostics.
+     */
     readonly stanza_error: (event: WaIncomingErrorStanzaEvent) => void
 
+    /**
+     * SMS/voice verification code prompt during mobile-flow registration  -
+     * only fires when using `mobileTransport`. Read the code from the
+     * phone and feed it back via the registration API.
+     */
     readonly mobile_registration_code: (event: WaRegistrationCodeEvent) => void
+    /**
+     * Account-takeover warning sent during mobile-flow registration when the
+     * number is already linked to another device. Only relevant under
+     * `mobileTransport`.
+     */
     readonly mobile_account_takeover_notice: (event: WaAccountTakeoverNoticeEvent) => void
 
+    /** **debug**  -  the success node closing the noise handshake; emitted before `connection: { status: 'open' }`. */
     readonly debug_connection_success: (event: { readonly node: BinaryNode }) => void
+    /** **debug**  -  every inbound `<notification>` stanza, regardless of whether a typed handler matched. */
     readonly debug_notification: (event: WaIncomingNotificationEvent) => void
+    /** **debug**  -  trusted-contact-token cache updates (issue / refresh / clear). */
     readonly debug_privacy_token: (event: WaPrivacyTokenUpdateEvent) => void
+    /** **debug**  -  any error surfaced through the client error pipeline (already logged). */
     readonly debug_client_error: (event: { readonly error: Error }) => void
+    /** **debug**  -  incoming stanzas with no registered handler (lets you spot protocol features the lib doesn't model yet). */
     readonly debug_unhandled_stanza: (event: WaIncomingUnhandledStanzaEvent) => void
+    /** **debug**  -  raw inbound noise frame bytes (before binary-node decode). */
     readonly debug_transport_frame_in: (event: { readonly frame: Uint8Array }) => void
+    /** **debug**  -  raw outbound noise frame bytes (after binary-node encode). */
     readonly debug_transport_frame_out: (event: { readonly frame: Uint8Array }) => void
+    /** **debug**  -  decoded inbound {@link BinaryNode} plus its source frame. */
     readonly debug_transport_node_in: (event: {
         readonly node: BinaryNode
         readonly frame: Uint8Array
     }) => void
+    /** **debug**  -  outbound {@link BinaryNode} plus the encoded frame about to ship. */
     readonly debug_transport_node_out: (event: {
         readonly node: BinaryNode
         readonly frame: Uint8Array
     }) => void
+    /** **debug**  -  a frame that failed binary-node decoding (corrupted/unsupported). */
     readonly debug_transport_decode_error: (event: {
         readonly error: Error
         readonly frame: Uint8Array

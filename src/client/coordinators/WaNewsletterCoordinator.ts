@@ -45,12 +45,17 @@ export type {
     WaPageInfo
 } from '@client/newsletter/types'
 
+/**
+ * Newsletter coordinator surface  -  combines the discovery, admin, and
+ * messaging operation sets. Accessed via {@link WaClient.newsletter}.
+ */
 export type WaNewsletterCoordinator = WaNewsletterDiscoveryOps &
     WaNewsletterAdminOps &
     WaNewsletterMessagingOps
 
 export type WaNewsletterCoordinatorOptions = WaNewsletterMessagingDeps
 
+/** Builds a {@link WaNewsletterCoordinator} from its MEX/messaging dependencies. */
 export function createNewsletterCoordinator(
     options: WaNewsletterCoordinatorOptions
 ): WaNewsletterCoordinator {

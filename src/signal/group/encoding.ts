@@ -19,6 +19,7 @@ export interface SenderKeyDistributionRow extends Record<string, unknown> {
     readonly timestamp_ms: unknown
 }
 
+/** Serializes a {@link SenderKeyRecord} into the Signal `SenderKeyRecordStructure` protobuf. */
 export function encodeSenderKeyRecord(record: SenderKeyRecord): Uint8Array {
     return proto.SenderKeyRecordStructure.encode({
         senderKeyStates: [
@@ -98,6 +99,10 @@ function decodeSenderKeyState(
     }
 }
 
+/**
+ * Decodes a stored sender-key blob into a {@link SenderKeyRecord}.
+ * `groupId`/`sender` are re-attached from the row key (not in the protobuf).
+ */
 export function decodeSenderKeyRecord(
     raw: unknown,
     groupId: string,
@@ -121,6 +126,7 @@ export function decodeSenderKeyRecord(
     }
 }
 
+/** Decodes a sender-key-distribution SQL row into a {@link SenderKeyDistributionRecord}. */
 export function decodeSenderKeyDistributionRow(
     row: SenderKeyDistributionRow
 ): SenderKeyDistributionRecord {

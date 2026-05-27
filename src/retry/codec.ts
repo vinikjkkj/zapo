@@ -19,6 +19,10 @@ const RETRY_PAYLOAD_ENC_TYPE_REVERSE = Object.freeze({
     3: 'skmsg'
 } as const satisfies Record<number, keyof typeof RETRY_PAYLOAD_ENC_TYPE>)
 
+/**
+ * Encodes a {@link WaRetryReplayPayload} into the on-disk codec format used
+ * by the retry store. Supports the `plaintext`/`encrypted`/`opaque_node` modes.
+ */
 export function encodeRetryReplayPayload(payload: WaRetryReplayPayload): Uint8Array {
     const chunks: Uint8Array[] = []
     if (payload.mode === 'plaintext') {
@@ -60,6 +64,7 @@ export function encodeRetryReplayPayload(payload: WaRetryReplayPayload): Uint8Ar
     return concatBytes(chunks)
 }
 
+/** Inverse of {@link encodeRetryReplayPayload}. Throws on bad magic/version. */
 export function decodeRetryReplayPayload(raw: Uint8Array): WaRetryReplayPayload {
     if (raw.byteLength < 3) {
         throw new Error('invalid retry replay payload: unsupported codec version')

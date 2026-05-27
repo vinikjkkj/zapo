@@ -49,6 +49,11 @@ function parseNoiseCertificate(
     }
 }
 
+/**
+ * Validates a WhatsApp noise certificate chain against `rootCa` (defaults to
+ * the production root) and confirms the leaf binds `serverStatic`. Throws on
+ * any structural mismatch, bad signature, or unexpected issuer serial.
+ */
 export async function verifyNoiseCertificateChain(
     certificateChain: Uint8Array,
     serverStatic: Uint8Array,

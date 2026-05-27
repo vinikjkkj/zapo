@@ -32,6 +32,10 @@ export interface SignalLidSyncResult {
     readonly exists: boolean
 }
 
+/**
+ * Resolves the device list and LID mapping for a set of users via the `usync`
+ * protocol. Concurrent calls for the same JIDs are deduplicated.
+ */
 export class SignalDeviceSyncApi {
     private readonly logger: SignalDeviceSyncApiOptions['logger']
     private readonly query: SignalDeviceSyncApiOptions['query']
@@ -51,6 +55,10 @@ export class SignalDeviceSyncApi {
         this.generateSid = options.generateSid ?? createUsyncSidGenerator()
     }
 
+    /**
+     * Refreshes the device list for every JID in `userJids`. Returns the
+     * resolved per-user device JIDs (matches the on-store snapshot).
+     */
     public syncDeviceList(
         userJids: readonly string[],
         timeoutMs = this.defaultTimeoutMs
@@ -147,6 +155,10 @@ export class SignalDeviceSyncApi {
         return merged
     }
 
+    /**
+     * Looks up LIDs for a list of phone JIDs via a `lid` usync query. Returns
+     * one entry per input JID with `exists` indicating server-side presence.
+     */
     public async queryLidsByPhoneJids(
         phoneJids: readonly string[],
         timeoutMs = this.defaultTimeoutMs

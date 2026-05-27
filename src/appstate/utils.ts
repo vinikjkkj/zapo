@@ -6,6 +6,10 @@ import { decodeProtoBytes } from '@util/bytes'
 
 const APP_STATE_COLLECTION_NAMES = new Set<string>(Object.values(WA_APP_STATE_COLLECTIONS))
 
+/**
+ * Returns `value` typed as a known {@link AppStateCollectionName}, or `null`
+ * when the string is unrecognized.
+ */
 export function parseCollectionName(value: string | undefined): AppStateCollectionName | null {
     return value && APP_STATE_COLLECTION_NAMES.has(value) ? (value as AppStateCollectionName) : null
 }
@@ -14,12 +18,20 @@ function keyDeviceId(keyId: Uint8Array): number | null {
     return keyId.byteLength < 6 ? null : (keyId[0] << 8) | keyId[1]
 }
 
+/**
+ * Reads the 32-bit big-endian epoch encoded in bytes 2..5 of an app-state key id.
+ * Returns `-1` when the key id is too short.
+ */
 export function keyEpoch(keyId: Uint8Array): number {
     return keyId.byteLength < 6
         ? -1
         : keyId[2] * 16_777_216 + keyId[3] * 65_536 + keyId[4] * 256 + keyId[5]
 }
 
+/**
+ * Picks the highest-epoch app-state sync key from `keys`. Ties are broken by
+ * the lower device id. Returns `null` when the iterable is empty.
+ */
 export function pickActiveSyncKey(keys: Iterable<WaAppStateSyncKey>): WaAppStateSyncKey | null {
     let active: WaAppStateSyncKey | null = null
     for (const key of keys) {
@@ -45,6 +57,10 @@ export function pickActiveSyncKey(keys: Iterable<WaAppStateSyncKey>): WaAppState
     return active
 }
 
+/**
+ * Downloads and decrypts an external app-state blob via the media transfer
+ * client. Throws when the reference is missing required fields.
+ */
 export async function downloadExternalBlobReference(
     mediaTransfer: WaMediaTransferClient,
     reference: Proto.IExternalBlobReference

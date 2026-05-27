@@ -53,6 +53,11 @@ function aesCbcDecryptFromSeed(seed: Uint8Array, ciphertext: Uint8Array): Uint8A
     return aesCbcDecrypt(keyBytes, iv, ciphertext)
 }
 
+/**
+ * Implements the sender-key group encryption side of Signal: creates and
+ * rotates sender keys, encrypts/decrypts group messages, and tracks which
+ * participants have already received the distribution message.
+ */
 export class SenderKeyManager {
     private readonly store: WaSenderKeyStore
     private readonly senderLock = new StoreLock()
@@ -71,6 +76,10 @@ export class SenderKeyManager {
         this.skipSignatureVerification = options?.skipSignatureVerification === true
     }
 
+    /**
+     * Produces the distribution message and ciphertext for `plaintext` sent by
+     * `sender` into `groupId`. Initializes a sender key when none exists yet.
+     */
     public async prepareGroupEncryption(
         groupId: string,
         sender: SignalAddress,
@@ -140,6 +149,7 @@ export class SenderKeyManager {
         })
     }
 
+    /** Filters a participant list down to those who have not yet received the current sender key distribution. */
     public async filterParticipantsNeedingDistribution(
         groupId: string,
         senderKeyId: number,
@@ -162,6 +172,7 @@ export class SenderKeyManager {
         return pendingParticipants
     }
 
+    /** Records that the sender key was successfully delivered to the given participants. */
     public async markSenderKeyDistributed(
         groupId: string,
         senderKeyId: number,
@@ -183,6 +194,11 @@ export class SenderKeyManager {
         await this.store.upsertSenderKeyDistributions(distributions)
     }
 
+    /**
+     * Verifies (per `skipSignatureVerification`) and stores an incoming sender
+     * key distribution so subsequent group ciphertexts from `sender` can be
+     * decrypted.
+     */
     public async processSenderKeyDistributionPayload(
         groupId: string,
         sender: SignalAddress,
@@ -216,6 +232,7 @@ export class SenderKeyManager {
         })
     }
 
+    /** Decrypts an incoming sender-key group ciphertext into plaintext. */
     public async decryptGroupMessage(payload: GroupSenderKeyCiphertext): Promise<Uint8Array> {
         return this.runWithSenderLock(payload.groupId, payload.sender, async () => {
             const parsed = parseSenderKeyMessage(payload.ciphertext)

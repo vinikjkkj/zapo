@@ -112,11 +112,21 @@ class SidecarAccumulator {
     }
 }
 
+/**
+ * WhatsApp media payload encryption/decryption (AES-256-CBC + HMAC-SHA-256 +
+ * SHA-256 hashes + streaming sidecar). Buffer-only and streaming variants are
+ * provided for upload, download, and disk-staged encryption.
+ */
 export class WaMediaCrypto {
+    /** Generates a fresh 32-byte media key suitable for {@link deriveKeys}. */
     static async generateMediaKey(): Promise<Uint8Array> {
         return randomBytesAsync(32)
     }
 
+    /**
+     * Derives the per-type AES IV, AES key, and MAC key from `mediaKey` using
+     * HKDF with the {@link getWaMediaHkdfInfo} context.
+     */
     static deriveKeys(mediaType: MediaCryptoType, mediaKey: Uint8Array): WaMediaDerivedKeys {
         assertByteLength(
             mediaKey,
@@ -132,6 +142,10 @@ export class WaMediaCrypto {
         }
     }
 
+    /**
+     * Encrypts an in-memory buffer with the streaming sidecar (unless disabled)
+     * and an optional first-frame sidecar for instant-thumbnail playback.
+     */
     // eslint-disable-next-line @typescript-eslint/require-await
     static async encryptBytes(
         mediaType: MediaCryptoType,
@@ -176,6 +190,11 @@ export class WaMediaCrypto {
         }
     }
 
+    /**
+     * Decrypts an in-memory `ciphertext||mac` buffer. Verifies the encrypted
+     * SHA-256, the MAC, and (when supplied) the plaintext SHA-256. Pass
+     * `skipMacVerification` only when the MAC was checked elsewhere.
+     */
     // eslint-disable-next-line @typescript-eslint/require-await
     static async decryptBytes(
         mediaType: MediaCryptoType,
@@ -221,6 +240,10 @@ export class WaMediaCrypto {
         return { plaintext, fileSha256, fileEncSha256 }
     }
 
+    /**
+     * Streaming encrypt  -  returns an `encrypted` Readable plus a `metadata`
+     * promise that resolves with hashes/sidecars after the stream ends.
+     */
     // eslint-disable-next-line @typescript-eslint/require-await
     static async encryptReadable(
         mediaType: MediaCryptoType,
@@ -245,6 +268,11 @@ export class WaMediaCrypto {
         return { encrypted, metadata }
     }
 
+    /**
+     * Encrypts `plaintext` to a temporary file in `tmpdir()` and returns its
+     * path/size/hashes. The file is removed on failure; call
+     * {@link cleanupEncryptedFile} after a successful upload.
+     */
     static async encryptToFile(
         mediaType: MediaCryptoType,
         mediaKey: Uint8Array,
@@ -278,10 +306,16 @@ export class WaMediaCrypto {
         }
     }
 
+    /** Removes a temporary file produced by {@link encryptToFile}; missing files are ignored. */
     static async cleanupEncryptedFile(filePath: string): Promise<void> {
         await unlink(filePath).catch(() => undefined)
     }
 
+    /**
+     * Streaming decrypt  -  returns a `plaintext` Readable plus a `metadata`
+     * promise that resolves with the verified hashes after the stream ends
+     * (or rejects on MAC/hash failure).
+     */
     // eslint-disable-next-line @typescript-eslint/require-await
     static async decryptReadable(
         encrypted: Readable,
@@ -293,6 +327,7 @@ export class WaMediaCrypto {
         return { plaintext, metadata }
     }
 
+    /** Returns the ciphertext byte length (AES-CBC padded + 10-byte MAC) for a given plaintext size. */
     static encryptedLength(plaintextLength: number): number {
         if (!Number.isFinite(plaintextLength) || plaintextLength < 0) {
             throw new Error(`invalid plaintext length ${plaintextLength}`)

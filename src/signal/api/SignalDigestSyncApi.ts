@@ -66,6 +66,11 @@ export interface SignalDigestPrefetchedLocalKeyBundle {
     readonly signedPreKey: SignedPreKeyRecord
 }
 
+/**
+ * Validates the local Signal key bundle (identity, signed prekey, one-time
+ * prekey ids) against the server-side digest. Used to detect drift after a
+ * crash or partial sync and decide whether to re-upload.
+ */
 export class SignalDigestSyncApi {
     private readonly logger: SignalDigestSyncApiOptions['logger']
     private readonly query: SignalDigestSyncApiOptions['query']
@@ -84,6 +89,11 @@ export class SignalDigestSyncApi {
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
     }
 
+    /**
+     * Compares the local Signal key bundle digest with the server's. Returns
+     * a structured result describing whether anything diverged and which
+     * field caused the mismatch.
+     */
     public async validateLocalKeyBundle(timeoutMs?: number): Promise<SignalDigestValidationResult>
     public async validateLocalKeyBundle(
         prefetched?: SignalDigestPrefetchedLocalKeyBundle,

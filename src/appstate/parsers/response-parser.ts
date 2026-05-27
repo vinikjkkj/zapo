@@ -24,6 +24,11 @@ export interface CollectionResponsePayload {
     readonly snapshotReference?: Proto.IExternalBlobReference
 }
 
+/**
+ * Parses an app-state `sync` IQ response into one payload per collection,
+ * decoding embedded patches and snapshot references. Throws when the IQ is
+ * an error envelope or missing the `<sync>` child.
+ */
 export function parseSyncResponse(iqNode: BinaryNode): readonly CollectionResponsePayload[] {
     if (iqNode.tag !== WA_NODE_TAGS.IQ) {
         throw new Error(`invalid sync response tag ${iqNode.tag}`)
@@ -90,6 +95,11 @@ export function parseSyncResponse(iqNode: BinaryNode): readonly CollectionRespon
     return payloads
 }
 
+/**
+ * Reads a `<collection>` node and returns the right
+ * {@link AppStateCollectionState} (success / has-more / conflict / fatal /
+ * retryable) based on its `type` attribute and embedded error code.
+ */
 export function parseCollectionState(node: BinaryNode): AppStateCollectionState {
     const type = node.attrs.type
     const hasMorePatches = node.attrs.has_more_patches === 'true'

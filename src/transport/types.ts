@@ -30,13 +30,21 @@ export interface SocketCloseInfo {
 }
 
 export interface WaSocketConfig {
+    /** Single WebSocket URL. Mutually exclusive with {@link urls}; the URL list takes precedence when both are set. */
     readonly url?: string
+    /** Failover URL list  -  tried in order until one connects. Overrides {@link url}. */
     readonly urls?: readonly string[]
+    /** WebSocket sub-protocols to advertise. Defaults to none. */
     readonly protocols?: readonly string[]
+    /** Extra HTTP headers sent with the WebSocket upgrade. */
     readonly headers?: Readonly<Record<string, string>>
+    /** undici-style proxy dispatcher (preferred when the runtime supports it). */
     readonly dispatcher?: WaProxyDispatcher
+    /** Node `http.Agent`-style proxy (fallback when `dispatcher` is unavailable). */
     readonly agent?: WaProxyAgent
+    /** Idle timeout (ms)  -  if no frame arrives in this window the socket is closed. */
     readonly timeoutIntervalMs?: number
+    /** Override the `RawWebSocket` constructor (e.g. {@link WaMobileTcpSocketCtor} for the mobile TCP transport). */
     readonly rawWebSocketConstructor?: RawWebSocketConstructor
 }
 
@@ -48,9 +56,13 @@ export interface WaSocketHandlers {
 }
 
 export interface WaCommsConfig extends WaSocketConfig {
+    /** Maximum time (ms) the initial WebSocket open is allowed to take. */
     readonly connectTimeoutMs?: number
+    /** Base delay (ms) between reconnect attempts after a close. */
     readonly reconnectIntervalMs?: number
+    /** Max number of reconnect attempts before giving up. Default: unbounded. */
     readonly maxReconnectAttempts?: number
+    /** Noise handshake configuration (credentials, login payload, root CA, ...). */
     readonly noise: WaNoiseConfig
 }
 

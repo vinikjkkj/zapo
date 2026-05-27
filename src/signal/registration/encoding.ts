@@ -28,6 +28,7 @@ export interface SignalMetaRow extends Record<string, unknown> {
     readonly signed_prekey_rotation_ts: unknown
 }
 
+/** Decodes a stored signal-registration SQL row into a {@link RegistrationInfo}. */
 export function decodeSignalRegistrationRow(row: SignalRegistrationRow): RegistrationInfo {
     return {
         registrationId: asNumber(row.registration_id, 'signal_registration.registration_id'),
@@ -38,6 +39,7 @@ export function decodeSignalRegistrationRow(row: SignalRegistrationRow): Registr
     }
 }
 
+/** Decodes a one-time prekey SQL row into a {@link PreKeyRecord}. */
 export function decodeSignalPreKeyRow(row: SignalPreKeyRow): PreKeyRecord {
     return {
         keyId: asNumber(row.key_id, 'signal_prekey.key_id'),
@@ -49,6 +51,7 @@ export function decodeSignalPreKeyRow(row: SignalPreKeyRow): PreKeyRecord {
     }
 }
 
+/** Decodes a signed-prekey SQL row into a {@link SignedPreKeyRecord}. */
 export function decodeSignalSignedPreKeyRow(row: SignalSignedPreKeyRow): SignedPreKeyRecord {
     return {
         keyId: asNumber(row.key_id, 'signal_signed_prekey.key_id'),

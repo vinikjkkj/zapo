@@ -39,6 +39,11 @@ class MessagePublishNackError extends Error {
     }
 }
 
+/**
+ * Low-level message-publishing client. Sends pre-built message/receipt nodes,
+ * handles ack timeouts and retry on negative-ack failures, and is the
+ * transport hook used by {@link WaMessageCoordinator}.
+ */
 export class WaMessageClient {
     private readonly logger: WaMessageClientOptions['logger']
     private readonly sendNode: WaMessageClientOptions['sendNode']
@@ -56,6 +61,11 @@ export class WaMessageClient {
         this.defaultRetryDelayMs = options.defaultRetryDelayMs ?? WA_DEFAULTS.MESSAGE_RETRY_DELAY_MS
     }
 
+    /**
+     * Publishes a `<message>` stanza and awaits its ack/receipt, retrying on
+     * retryable negative-ack errors up to `maxAttempts`. Returns the ack
+     * metadata extracted from the server response.
+     */
     public async publishNode(
         node: BinaryNode,
         options: WaMessagePublishOptions = {}
@@ -133,6 +143,7 @@ export class WaMessageClient {
         throw lastError ?? new Error('message publish failed')
     }
 
+    /** Builds the encrypted message envelope from `input` and publishes it via {@link publishNode}. */
     public async publishEncrypted(
         input: WaEncryptedMessageInput,
         options: WaMessagePublishOptions = {}
@@ -141,6 +152,7 @@ export class WaMessageClient {
         return this.publishNode(node, options)
     }
 
+    /** Fire-and-forget variant: sends a `<message>` stanza without awaiting an ack. */
     public async sendMessageNode(node: BinaryNode): Promise<void> {
         if (node.tag !== WA_MESSAGE_TAGS.MESSAGE) {
             throw new Error(`invalid node tag for message send: ${node.tag}`)
@@ -153,6 +165,7 @@ export class WaMessageClient {
         await this.sendNode(node)
     }
 
+    /** Builds and sends an encrypted message envelope without awaiting an ack. */
     public async sendEncrypted(input: WaEncryptedMessageInput): Promise<void> {
         const node = this.buildEncryptedMessageNode(input)
         await this.sendMessageNode(node)
@@ -219,6 +232,7 @@ export class WaMessageClient {
         return node
     }
 
+    /** Builds and sends a `<receipt>` stanza (delivery/read/played/etc.). */
     public async sendReceipt(input: WaSendReceiptInput): Promise<void> {
         const node = buildReceiptNode({
             kind: 'outbound',

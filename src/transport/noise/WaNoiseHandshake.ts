@@ -2,6 +2,11 @@ import { aesGcmDecrypt, aesGcmEncrypt, hkdfSplit, sha256, writeNonceCounter } fr
 import { WaNoiseSocket } from '@transport/noise/WaNoiseSocket'
 import { EMPTY_BYTES } from '@util/bytes'
 
+/**
+ * Implements the Noise XX-style handshake state used by WaComms: tracks the
+ * handshake hash, chaining key, derived cipher key, and nonce counter. Calls
+ * {@link finish} to produce the post-handshake {@link WaNoiseSocket}.
+ */
 export class WaNoiseHandshake {
     private handshakeHash: Uint8Array
     private chainingKey: Uint8Array

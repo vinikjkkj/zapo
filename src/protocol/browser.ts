@@ -42,6 +42,10 @@ const BROWSER_TO_DISPLAY_NAME: Record<string, string> = {
     [WA_BROWSERS.EDGE]: 'Edge'
 }
 
+/**
+ * Maps a {@link WA_BROWSERS} value to the companion platform id sent in the
+ * pairing `link_code` stanza. Unknown inputs fall back to `OTHER_WEB_CLIENT`.
+ */
 export function getWaCompanionPlatformId(browser: string): string {
     return (
         BROWSER_TO_PLATFORM_ID[browser.trim().toLowerCase()] ??
@@ -49,6 +53,10 @@ export function getWaCompanionPlatformId(browser: string): string {
     )
 }
 
+/**
+ * Returns the human-readable browser name advertised during pairing.
+ * Unknown inputs are echoed back unchanged.
+ */
 export function getWaBrowserDisplayName(browser: string): string {
     return BROWSER_TO_DISPLAY_NAME[browser.trim().toLowerCase()] ?? browser
 }

@@ -128,7 +128,7 @@ export interface WaNewsletterSendOptions {
     readonly contextInfo?: WaSendContextInfo | null
     /**
      * Extra attributes merged into the outgoing `<message>` stanza. Keys provided
-     * here override protocol-managed ones (`to`, `id`, `type`, `edit`, ...) —
+     * here override protocol-managed ones (`to`, `id`, `type`, `edit`, ...)  -
      * use with care: bad overrides can break the send.
      */
     readonly additionalAttributes?: Readonly<Record<string, string>>

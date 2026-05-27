@@ -29,18 +29,22 @@ function feed<T extends Digestable>(target: T, input: HashInput): T {
     return target
 }
 
+/** Computes the SHA-1 digest of `value`. Accepts a single chunk or array of chunks. */
 export function sha1(value: HashInput): Uint8Array {
     return toBytesView(feed(createHash('sha1'), value).digest())
 }
 
+/** Computes the SHA-256 digest of `value`. */
 export function sha256(value: HashInput): Uint8Array {
     return toBytesView(feed(createHash('sha256'), value).digest())
 }
 
+/** Computes the SHA-512 digest of `value`. */
 export function sha512(value: HashInput): Uint8Array {
     return toBytesView(feed(createHash('sha512'), value).digest())
 }
 
+/** Computes the MD5 digest of `input`, accepting a string or raw chunks. */
 export function md5Bytes(input: string | HashInput): Uint8Array {
     const hash = createHash('md5')
     if (typeof input === 'string') {
@@ -53,6 +57,10 @@ export function md5Bytes(input: string | HashInput): Uint8Array {
 
 export type AesKey = Uint8Array | KeyObject
 
+/**
+ * AES-256-GCM encrypt. The 16-byte auth tag is appended to the ciphertext.
+ * Pass `aad` when binding the ciphertext to associated data.
+ */
 export function aesGcmEncrypt(
     key: AesKey,
     nonce: Uint8Array,
@@ -69,6 +77,10 @@ export function aesGcmEncrypt(
     return concatBytes([head, tail, tag])
 }
 
+/**
+ * AES-256-GCM decrypt. Expects the 16-byte auth tag appended to the
+ * ciphertext (matching {@link aesGcmEncrypt}'s layout). Throws on auth failure.
+ */
 export function aesGcmDecrypt(
     key: AesKey,
     nonce: Uint8Array,
@@ -91,6 +103,7 @@ export function aesGcmDecrypt(
     return concatBytes([head, tail])
 }
 
+/** AES-256-CBC encrypt with PKCS#7 padding (default Node behavior). */
 export function aesCbcEncrypt(key: Uint8Array, iv: Uint8Array, plaintext: Uint8Array): Uint8Array {
     const cipher = createCipheriv('aes-256-cbc', key, iv)
     const head = cipher.update(plaintext)
@@ -101,6 +114,7 @@ export function aesCbcEncrypt(key: Uint8Array, iv: Uint8Array, plaintext: Uint8A
     return concatBytes([head, tail])
 }
 
+/** AES-256-CBC decrypt with PKCS#7 padding. */
 export function aesCbcDecrypt(key: Uint8Array, iv: Uint8Array, ciphertext: Uint8Array): Uint8Array {
     const decipher = createDecipheriv('aes-256-cbc', key, iv)
     const head = decipher.update(ciphertext)
@@ -111,6 +125,7 @@ export function aesCbcDecrypt(key: Uint8Array, iv: Uint8Array, ciphertext: Uint8
     return concatBytes([head, tail])
 }
 
+/** AES-256-CTR encrypt with the given 16-byte counter. */
 export function aesCtrEncrypt(
     key: Uint8Array,
     counter: Uint8Array,
@@ -125,6 +140,7 @@ export function aesCtrEncrypt(
     return concatBytes([head, tail])
 }
 
+/** AES-256-CTR decrypt with the given 16-byte counter. */
 export function aesCtrDecrypt(
     key: Uint8Array,
     counter: Uint8Array,
@@ -139,14 +155,17 @@ export function aesCtrDecrypt(
     return concatBytes([head, tail])
 }
 
+/** Computes the HMAC-SHA-256 MAC of `data` keyed by `key`. */
 export function hmacSha256Sign(key: Uint8Array, data: HashInput): Uint8Array {
     return toBytesView(feed(createHmac('sha256', key), data).digest())
 }
 
+/** Computes the HMAC-SHA-512 MAC of `data` keyed by `key`. */
 export function hmacSha512Sign(key: Uint8Array, data: HashInput): Uint8Array {
     return toBytesView(feed(createHmac('sha512', key), data).digest())
 }
 
+/** PBKDF2 over HMAC-SHA-256  -  derives `length` bytes from `password` + `salt`. */
 export async function pbkdf2Sha256(
     password: Uint8Array,
     salt: Uint8Array,

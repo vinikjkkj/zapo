@@ -41,6 +41,15 @@ type WaAuthClientDeps = Readonly<{
     }
 }>
 
+/**
+ * Owns the auth/pairing lifecycle and persistence of {@link WaAuthCredentials}.
+ * Exposed as `client.auth` on a {@link WaClient}.
+ *
+ * Lifecycle: construct with options + dependencies, call
+ * {@link loadOrCreateCredentials} to bring credentials online, then either
+ * follow the QR flow (`onQr` callback) or call {@link requestPairingCode} for
+ * the link-code flow.
+ */
 export class WaAuthClient {
     private readonly options: Readonly<WaAuthClientOptions>
     private readonly logger: Logger
@@ -99,6 +108,10 @@ export class WaAuthClient {
         })
     }
 
+    /**
+     * Returns a snapshot of auth readiness flags (connection, registration,
+     * pending QR/pairing prompts).
+     */
     public getState(connected = false) {
         return {
             connected,
@@ -108,10 +121,15 @@ export class WaAuthClient {
         }
     }
 
+    /** Returns the currently-loaded credentials, or `null` before initialization. */
     public getCurrentCredentials(): WaAuthCredentials | null {
         return this.credentials
     }
 
+    /**
+     * Loads persisted credentials from the auth store, or generates a fresh
+     * set when none exist. Must be called before connecting.
+     */
     public async loadOrCreateCredentials(): Promise<WaAuthCredentials> {
         return this.runHandled(async () => {
             this.logger.debug('auth client loadOrCreateCredentials start')
@@ -131,6 +149,10 @@ export class WaAuthClient {
         })
     }
 
+    /**
+     * Builds a {@link WaCommsConfig} from the current credentials and the
+     * runtime device/transport options  -  feeds {@link WaComms}.
+     */
     public buildCommsConfig(
         socketOptions: WaAuthSocketOptions,
         overrides: {
@@ -152,6 +174,7 @@ export class WaAuthClient {
         })
     }
 
+    /** Clears the in-memory QR and pairing sessions without touching storage. */
     // eslint-disable-next-line @typescript-eslint/require-await
     public async clearTransientState(): Promise<void> {
         this.logger.trace('auth client clear transient state')
@@ -159,12 +182,21 @@ export class WaAuthClient {
         this.pairingFlow.clearSession()
     }
 
+    /**
+     * Wipes credentials from memory **and** from the auth store. Does
+     * **not** touch the other store domains (signal, app-state, ...) -
+     * those are cleared separately when {@link WaClient.logout} triggers
+     * the server-side logout path, honoring `options.logoutStoreClear`.
+     * Call this manually only when you want to force a re-pair without
+     * going through the server logout IQ.
+     */
     public async clearStoredCredentials(): Promise<void> {
         this.logger.warn('auth client clearing stored credentials')
         this.credentials = null
         await Promise.all([this.authStore.clear(), this.clearTransientState()])
     }
 
+    /** Stores the server's noise static key for subsequent handshakes. */
     public async persistServerStaticKey(serverStaticKey: Uint8Array): Promise<void> {
         this.logger.debug('persisting server static key', {
             keyLength: serverStaticKey.byteLength
@@ -175,6 +207,7 @@ export class WaAuthClient {
         }))
     }
 
+    /** Stores the "server holds prekeys" flag; persists only when the value changes. */
     public async persistServerHasPreKeys(serverHasPreKeys: boolean): Promise<void> {
         await this.patchCredentials(
             (credentials) => ({
@@ -192,6 +225,10 @@ export class WaAuthClient {
         )
     }
 
+    /**
+     * Stores the routing-info blob received from the server. Skips persistence
+     * when the value matches the one already on disk.
+     */
     public async persistRoutingInfo(routingInfo: Uint8Array): Promise<void> {
         this.logger.trace('persisting routing info', {
             byteLength: routingInfo.byteLength
@@ -213,6 +250,7 @@ export class WaAuthClient {
         )
     }
 
+    /** Clears the persisted routing-info blob (used after a routing error). */
     public async clearRoutingInfo(): Promise<WaAuthCredentials> {
         return this.patchCredentials(
             (credentials) => ({
@@ -228,6 +266,11 @@ export class WaAuthClient {
         )
     }
 
+    /**
+     * Persists the per-connection success attributes from the server (LID,
+     * display name, companion key, last-success ts, props versions, ...). Only
+     * persists when at least one attribute actually changed.
+     */
     public async persistSuccessAttributes(attributes: WaSuccessPersistAttributes): Promise<void> {
         let persistDiff: Record<string, boolean> | undefined
         const computeDiff = (current: WaAuthCredentials, next: WaAuthCredentials) => ({
@@ -269,6 +312,32 @@ export class WaAuthClient {
         )
     }
 
+    /**
+     * Requests an 8-character pairing code for `phoneNumber` (link-code flow).
+     * Pass `customCode` to suggest a specific code; the server still validates
+     * and may return a different one.
+     *
+     * The client must already be connected  -  kick off `WaClient.connect()` in
+     * parallel, wait for the `auth_pairing_required` event (or any QR), then
+     * call this. The user then enters the returned code in WhatsApp on their
+     * phone under *Linked Devices → Link with phone number instead*.
+     *
+     * @example
+     * ```ts
+     * // Start the handshake; do NOT await  -  connect() resolves only after pairing
+     * void client.connect()
+     *
+     * // Wait until the pairing screen is ready on the server side
+     * await new Promise<void>((resolve) => client.once('auth_pairing_required', () => resolve()))
+     *
+     * // Phone number in international format, digits only
+     * const code = await client.auth.requestPairingCode('5511999999999')
+     * console.log(`enter this on your phone: ${code.match(/.{1,4}/g)!.join('-')}`)
+     *
+     * // The `connect()` promise resolves after the user types the code:
+     * await new Promise<void>((resolve) => client.once('auth_paired', () => resolve()))
+     * ```
+     */
     public async requestPairingCode(
         phoneNumber: string,
         shouldShowPushNotification = true,
@@ -282,6 +351,7 @@ export class WaAuthClient {
         )
     }
 
+    /** Fetches the ISO country code the server resolved for the current account. */
     public async fetchPairingCountryCodeIso(): Promise<string> {
         this.requireConnected()
         this.requireCredentials()
@@ -289,16 +359,19 @@ export class WaAuthClient {
         return this.runHandled(() => this.pairingFlow.fetchPairingCountryCodeIso())
     }
 
+    /** Dispatcher: returns `true` when `node` is a pairing-related IQ-set we handled. */
     public async handleIncomingIqSet(node: BinaryNode): Promise<boolean> {
         this.logger.trace('auth client handleIncomingIqSet', { id: node.attrs.id })
         return this.runHandled(() => this.pairingFlow.handleIncomingIqSet(node))
     }
 
+    /** Dispatcher: returns `true` when `node` is a link-code companion notification. */
     public async handleLinkCodeNotification(node: BinaryNode): Promise<boolean> {
         this.logger.trace('auth client handleLinkCodeNotification', { id: node.attrs.id })
         return this.runHandled(() => this.pairingFlow.handleLinkCodeNotification(node))
     }
 
+    /** Dispatcher: returns `true` when `node` is a companion-registration refresh notification. */
     public async handleCompanionRegRefreshNotification(node: BinaryNode): Promise<boolean> {
         this.logger.trace('auth client handleCompanionRegRefreshNotification', {
             id: node.attrs.id

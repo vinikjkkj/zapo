@@ -24,6 +24,11 @@ interface SignalIdentitySyncApiOptions {
     readonly hostDomain?: string
 }
 
+/**
+ * Fetches identity keys for a list of JIDs from the server and persists them
+ * into the identity store. Concurrent calls for the same JID set are
+ * deduplicated.
+ */
 export class SignalIdentitySyncApi {
     private readonly logger: SignalIdentitySyncApiOptions['logger']
     private readonly query: SignalIdentitySyncApiOptions['query']
@@ -41,6 +46,10 @@ export class SignalIdentitySyncApi {
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
     }
 
+    /**
+     * Fetches and persists identity keys for `targetJids`. Returns one entry
+     * per JID the server resolved; missing/erroring users are skipped.
+     */
     public syncIdentityKeys(
         targetJids: readonly string[],
         timeoutMs = this.defaultTimeoutMs

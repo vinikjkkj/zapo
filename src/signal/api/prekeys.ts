@@ -6,6 +6,10 @@ export {
     buildSignedPreKeyRotateIq
 } from '@transport/node/builders/prekeys'
 
+/**
+ * Extracts the numeric error code and text from a failed `prekey` upload IQ
+ * response. Use after a non-success status to decide whether to retry.
+ */
 export function parsePreKeyUploadFailure(node: BinaryNode): {
     readonly errorCode?: number
     readonly errorText: string

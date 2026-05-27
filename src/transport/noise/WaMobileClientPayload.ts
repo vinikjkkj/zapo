@@ -52,6 +52,11 @@ function parseAppVersion(version: string): ParsedAppVersion {
     }
 }
 
+/**
+ * Builds the encoded {@link Proto.ClientPayload} bytes the WhatsApp Mobile
+ * transport sends after the noise login handshake. Throws when
+ * `username`/`appVersion` are missing/invalid.
+ */
 export function buildMobileLoginPayload(config: WaMobileLoginPayloadConfig): Uint8Array {
     if (!Number.isSafeInteger(config.username) || config.username <= 0) {
         throw new Error('mobile login payload requires a valid numeric username')

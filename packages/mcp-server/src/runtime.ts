@@ -188,7 +188,7 @@ class BufferedTeeLogger implements Logger {
 /**
  * JSON.stringify-safe wrapper. Routes through encodeForJson so BigInt, Uint8Array,
  * cycles and other non-JSON values turn into the runtime's marker shape instead of
- * throwing — a logger that crashes on log payload is worse than a noisy log.
+ * throwing  -  a logger that crashes on log payload is worse than a noisy log.
  */
 const safeStringify = (value: unknown): string => {
     try {
@@ -203,7 +203,7 @@ const safeStringify = (value: unknown): string => {
  * match (`isRegex: true`, with the `i` flag). Precomputes the lowercased query
  * or compiles the regex once so the buffer scan does not re-allocate them per
  * entry. Malformed regex yields a predicate that always returns false instead
- * of throwing — tool inputs should miss rather than crash the scan.
+ * of throwing  -  tool inputs should miss rather than crash the scan.
  */
 const buildQueryMatcher = (query: string, isRegex: boolean): ((haystack: string) => boolean) => {
     if (!query) return () => true
@@ -290,7 +290,7 @@ export interface RuntimeConfig {
     readonly logFilePath?: string
     /** Override the chat socket URL list (used when pointing at a fake server). */
     readonly chatSocketUrls?: readonly string[]
-    /** Override the Noise root CA — required when pointing at a fake server. */
+    /** Override the Noise root CA  -  required when pointing at a fake server. */
     readonly noiseRootCa?: { readonly publicKey: Uint8Array; readonly serial: number }
     /** Transport mode for the MCP server: stdio (default) or http (StreamableHTTP, useful with nodemon). */
     readonly transport: McpTransportMode
@@ -302,6 +302,12 @@ export interface RuntimeConfig {
     readonly httpPath: string
 }
 
+/**
+ * Builds a {@link RuntimeConfig} from the `MCP_*` environment variables.
+ * Used by `bin.ts` to bootstrap a server without explicit wiring. Every
+ * variable is optional - sensible defaults map to a local stdio MCP that
+ * persists credentials to `.auth/state.sqlite` in the cwd.
+ */
 export const buildRuntimeConfigFromEnv = (env = process.env): RuntimeConfig => {
     const authPath = env.MCP_AUTH_PATH
         ? resolve(env.MCP_AUTH_PATH)
@@ -396,6 +402,14 @@ const parseEnvPositiveInt = (raw: string | undefined, name: string, fallback: nu
     return resolvePositive(Number.isFinite(parsed) ? parsed : Number.NaN, fallback, name)
 }
 
+/**
+ * Owns the lifecycle of the underlying `WaClient` instance plus the
+ * buffered event/log rings consumed by the `events` / `logs` tools. One
+ * runtime per MCP server process; create/teardown via `start` / `destroy`
+ * (which lets a supervisor reconnect cleanly).
+ *
+ * Most users won't construct this directly - use {@link runMcpServer}.
+ */
 export class McpRuntime {
     private readonly config: RuntimeConfig
     private readonly logger: BufferedTeeLogger

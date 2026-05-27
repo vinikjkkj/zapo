@@ -67,32 +67,47 @@ async function loadPinoFactory(): Promise<PinoFactory> {
     }
 }
 
+/**
+ * {@link Logger} adapter over a Pino-shaped logger instance. Construct it
+ * directly when you already have a configured Pino logger, or use
+ * {@link createPinoLogger} to build one with the optional `pino` /
+ * `pino-pretty` dependencies.
+ */
 export class PinoLogger implements Logger {
     public readonly level: LogLevel
     private readonly logger: PinoLikeLogger
 
+    /**
+     * @param logger Pino-compatible underlying logger.
+     * @param level  Minimum level to emit (also forwarded to `logger.level`).
+     */
     public constructor(logger: PinoLikeLogger, level: LogLevel = 'info') {
         this.logger = logger
         this.level = level
         this.logger.level = level
     }
 
+    /** Emits a `trace` record. */
     public trace(message: string, context?: Readonly<Record<string, unknown>>): void {
         this.write('trace', message, context)
     }
 
+    /** Emits a `debug` record. */
     public debug(message: string, context?: Readonly<Record<string, unknown>>): void {
         this.write('debug', message, context)
     }
 
+    /** Emits an `info` record. */
     public info(message: string, context?: Readonly<Record<string, unknown>>): void {
         this.write('info', message, context)
     }
 
+    /** Emits a `warn` record. */
     public warn(message: string, context?: Readonly<Record<string, unknown>>): void {
         this.write('warn', message, context)
     }
 
+    /** Emits an `error` record. */
     public error(message: string, context?: Readonly<Record<string, unknown>>): void {
         this.write('error', message, context)
     }
@@ -116,6 +131,11 @@ export class PinoLogger implements Logger {
     }
 }
 
+/**
+ * Dynamically loads `pino` (and optionally `pino-pretty` when `pretty` is set),
+ * configures it with the given options, and wraps it in a {@link PinoLogger}.
+ * Throws if the optional `pino` dependency is not installed.
+ */
 export async function createPinoLogger(options: PinoLoggerOptions = {}): Promise<PinoLogger> {
     const level = options.level ?? 'info'
     const pino = await loadPinoFactory()

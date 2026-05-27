@@ -18,8 +18,24 @@ import { WaThreadRedisStore } from './thread.store'
 import type { WaRedisStorageOptions } from './types'
 
 export interface WaRedisStoreConfig {
+    /**
+     * Either a live `ioredis` `Redis` instance (used as-is) or `RedisOptions`
+     * to construct a new client. When `createRedisStore` builds the client
+     * itself it also owns its lifecycle - {@link WaRedisStoreResult.destroy}
+     * calls `redis.quit()`. Pass an externally-owned `Redis` to keep that
+     * lifecycle in your own hands.
+     */
     readonly redis: Redis | RedisOptions
+    /**
+     * Prefix prepended to every Redis key. Use to share one Redis instance
+     * across multiple unrelated apps (`'wa:'`, `'tenant-A:'`, ...).
+     */
     readonly keyPrefix?: string
+    /**
+     * Override default TTLs (in ms) for the cache domains. Implemented as
+     * Redis `EX`/`PEXPIRE` on each write, so expired entries are pruned by
+     * Redis itself - no background cleanup needed.
+     */
     readonly cacheTtlMs?: {
         readonly retryMs?: number
         readonly groupMetadataMs?: number
@@ -56,6 +72,32 @@ function isRedis(value: Redis | RedisOptions): value is Redis {
     return typeof (value as Redis).get === 'function'
 }
 
+/**
+ * Builds a Redis-backed {@link WaStoreBackend} bundle. Best fit when you
+ * already run Redis for caching and want stateless app instances that can
+ * share session state - all 11 persistent domains and 4 cache domains live
+ * under a single key namespace (controlled by `keyPrefix`).
+ *
+ * Cache domains use native Redis TTLs (`EX`/`PEXPIRE` on write); no
+ * background cleanup job is needed.
+ *
+ * @example
+ * ```ts
+ * import { createStore, WaClient } from 'zapo-js'
+ * import { createRedisStore } from '@zapo-js/store-redis'
+ *
+ * const store = createStore({
+ *     backends: {
+ *         redis: createRedisStore({
+ *             redis: { host: '127.0.0.1', port: 6379 },
+ *             keyPrefix: 'wa:'
+ *         })
+ *     },
+ *     providers: { auth: 'redis', signal: 'redis', senderKey: 'redis', appState: 'redis' }
+ * })
+ * const client = new WaClient({ store, sessionId: 'default' })
+ * ```
+ */
 export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult {
     const redis = isRedis(config.redis) ? config.redis : new Redis(config.redis)
     const keyPrefix = config.keyPrefix ?? ''

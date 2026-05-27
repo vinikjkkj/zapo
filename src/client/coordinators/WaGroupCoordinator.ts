@@ -172,92 +172,159 @@ interface WaGroupCoordinatorOptions {
     readonly mexSocket?: WaMexQuerySocket
 }
 
+/**
+ * Coordinates group and community queries/mutations. Accessed via
+ * {@link WaClient.group}. Community sub-APIs (`fetchSubGroups`,
+ * `isInternalGroup`, `transferCommunityOwnership`, `fetchSubgroupSuggestions`,
+ * `submitGroupSuspensionAppeal`) require an active MEX transport and throw
+ * when unavailable.
+ */
 export interface WaGroupCoordinator {
+    /** Fetches the full metadata for `groupJid`. */
     readonly queryGroupMetadata: (groupJid: string) => Promise<WaGroupMetadata>
+    /** Lists every group the current account participates in. */
     readonly queryAllGroups: () => Promise<readonly WaGroupMetadata[]>
+    /** Resolves the IQ result for a group invite `code`  -  returns the raw node. */
     readonly queryGroupInviteInfo: (code: string) => Promise<BinaryNode>
+    /**
+     * Creates a new group with `subject` and the given participant JIDs.
+     * The creator is auto-added as admin; do **not** include your own JID
+     * in `participants`. Same partial-failure shape as
+     * {@link addParticipants} for individual invitees - inspect the result
+     * for `<participant ... error="..."/>` entries.
+     */
     readonly createGroup: (
         subject: string,
         participants: readonly string[],
         options?: WaGroupCreateOptions
     ) => Promise<BinaryNode>
+    /** Renames the group. */
     readonly setSubject: (groupJid: string, subject: string) => Promise<void>
+    /** Sets or clears the group description; pass `null` to remove it. */
     readonly setDescription: (
         groupJid: string,
         description: string | null,
         prevDescId?: string
     ) => Promise<void>
+    /** Toggles a named group setting (announce / restrict / ephemeral / ...). */
     readonly setSetting: (
         groupJid: string,
         setting: WaGroupSetting,
         enabled: boolean
     ) => Promise<void>
+    /**
+     * Adds the given participant JIDs to the group. Returns the raw IQ
+     * result - **per-participant outcome is encoded inside** as a list of
+     * `<participant jid="..." error="..."/>` children. The IQ as a whole
+     * succeeds even when some participants fail (e.g. blocked you, privacy
+     * settings disallow add); parse the children to surface partial errors.
+     */
     readonly addParticipants: (
         groupJid: string,
         participants: readonly string[]
     ) => Promise<BinaryNode>
+    /** Removes the given participant JIDs. Same partial-failure shape as {@link addParticipants}. */
     readonly removeParticipants: (
         groupJid: string,
         participants: readonly string[]
     ) => Promise<BinaryNode>
+    /** Promotes participants to admins. Same partial-failure shape as {@link addParticipants}. */
     readonly promoteParticipants: (
         groupJid: string,
         participants: readonly string[]
     ) => Promise<BinaryNode>
+    /** Demotes admins back to regular participants. Same partial-failure shape as {@link addParticipants}. */
     readonly demoteParticipants: (
         groupJid: string,
         participants: readonly string[]
     ) => Promise<BinaryNode>
+    /** Leaves one or more groups (batched in a single IQ). */
     readonly leaveGroup: (groupJids: readonly string[]) => Promise<BinaryNode>
+    /**
+     * Revokes the current invite link. The server rotates the code
+     * immediately - every previously-shared `chat.whatsapp.com/<code>` link
+     * stops working, and the next call to {@link queryGroupInviteInfo}
+     * returns the new code.
+     */
     readonly revokeInvite: (groupJid: string) => Promise<BinaryNode>
+    /**
+     * Joins a group using its invite `code` (the path segment of a
+     * `chat.whatsapp.com/<code>` URL). Throws if the code is expired,
+     * revoked, the group is full, or the current account is already a
+     * member.
+     */
     readonly joinGroupViaInvite: (code: string) => Promise<BinaryNode>
+    /**
+     * Creates a community (parent group). Defaults to request-required
+     * membership unless `membershipApprovalMode === 'open'`.
+     */
     readonly createCommunity: (
         subject: string,
         options?: WaCommunityCreateOptions
     ) => Promise<WaGroupMetadata>
+    /** Deactivates (deletes) a community. */
     readonly deactivateCommunity: (communityJid: string) => Promise<void>
+    /** Links existing groups as sub-groups of `communityJid`. */
     readonly linkSubGroups: (
         communityJid: string,
         subGroupJids: readonly string[]
     ) => Promise<WaLinkSubGroupsResult>
+    /**
+     * Unlinks sub-groups from a community. Set `removeOrphanedMembers` to
+     * also evict members that no longer belong to any linked group.
+     */
     readonly unlinkSubGroups: (
         communityJid: string,
         subGroupJids: readonly string[],
         options?: { readonly removeOrphanedMembers?: boolean }
     ) => Promise<WaUnlinkSubGroupsResult>
+    /** Returns the merged participant list across all groups in a community. */
     readonly queryLinkedGroupsParticipants: (
         communityJid: string
     ) => Promise<readonly WaGroupParticipant[]>
+    /** Lists sub-groups (and announcement group) of a community via MEX. */
     readonly fetchSubGroups: (communityJid: string) => Promise<WaCommunitySubGroupsResult>
+    /** Lists pending membership-approval requests for the group. */
     readonly queryMembershipApprovalRequests: (
         groupJid: string
     ) => Promise<readonly WaMembershipRequest[]>
+    /** Approves the listed pending join requests. */
     readonly approveMembershipRequests: (
         groupJid: string,
         participantJids: readonly string[]
     ) => Promise<void>
+    /** Rejects the listed pending join requests. */
     readonly rejectMembershipRequests: (
         groupJid: string,
         participantJids: readonly string[]
     ) => Promise<void>
+    /** Cancels the current account's own pending join requests in the group. */
     readonly cancelMembershipRequests: (
         groupJid: string,
         participantJids: readonly string[]
     ) => Promise<void>
+    /** Joins a linked sub-group of a community the account already belongs to. */
     readonly joinLinkedGroup: (
         communityJid: string,
         subGroupJid: string,
         options?: { readonly type?: string }
     ) => Promise<BinaryNode>
+    /** Returns `true` when the group is flagged as an internal WhatsApp group. */
     readonly isInternalGroup: (groupJid: string) => Promise<boolean>
+    /** Transfers community ownership to `newOwnerJid` (superadmin handoff). */
     readonly transferCommunityOwnership: (
         communityJid: string,
         newOwnerJid: string
     ) => Promise<void>
+    /** Lists suggested sub-groups for a community, anchored on a hint group. */
     readonly fetchSubgroupSuggestions: (
         communityJid: string,
         hintSubgroupJid: string
     ) => Promise<readonly WaCommunitySubGroupSuggestion[]>
+    /**
+     * Submits a suspension appeal for the group. `responseCode === 'SUCCESS'`
+     * or `'APPEAL_ALREADY_EXISTS'` are reported as successful.
+     */
     readonly submitGroupSuspensionAppeal: (
         groupJid: string,
         options?: { readonly reason?: string | null; readonly debugInfo?: string }
@@ -506,6 +573,7 @@ function parseSubGroupSuggestionsMexResponse(
     return results
 }
 
+/** Builds a {@link WaGroupCoordinator} backed by the given IQ query function and optional MEX socket. */
 export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGroupCoordinator {
     const { queryWithContext, mexSocket } = options
 

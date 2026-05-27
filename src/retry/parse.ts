@@ -62,6 +62,11 @@ function parseRetryKeyBundle(node: BinaryNode | undefined): WaRetryKeyBundle | u
     }
 }
 
+/**
+ * Parses an incoming `receipt` stanza into a {@link WaParsedRetryRequest}.
+ * Returns `null` when the stanza is not a retry/rekey-retry receipt; throws
+ * when required attrs/children are missing.
+ */
 export function parseRetryReceiptRequest(
     node: BinaryNode,
     options?: { readonly expectedToJids?: readonly string[] }
@@ -123,6 +128,10 @@ export function parseRetryReceiptRequest(
     }
 }
 
+/**
+ * Returns whichever of `left`/`right` represents the more advanced retry
+ * state (according to the internal precedence rank).
+ */
 export function pickRetryStateMax(
     left: WaRetryOutboundState,
     right: WaRetryOutboundState

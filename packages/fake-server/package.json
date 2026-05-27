@@ -2,6 +2,8 @@
     "name": "@zapo-js/fake-server",
     "version": "0.3.0",
     "description": "Fake WhatsApp Web server used to test zapo-js",
+    "license": "MIT",
+    "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
     "main": "dist/index.js",
     "module": "dist/esm/index.js",
     "types": "dist/index.d.ts",

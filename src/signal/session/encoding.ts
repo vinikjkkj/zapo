@@ -226,6 +226,10 @@ export function decodeSignalSessionSnapshot(
     }
 }
 
+/**
+ * Serializes a {@link SignalSessionRecord} (current + previous sessions) into
+ * the Signal `RecordStructure` protobuf encoding used by the session stores.
+ */
 export function encodeSignalSessionRecord(record: SignalSessionRecord): Uint8Array {
     return proto.RecordStructure.encode({
         currentSession: encodeSignalSessionSnapshot(record),
@@ -233,6 +237,10 @@ export function encodeSignalSessionRecord(record: SignalSessionRecord): Uint8Arr
     }).finish()
 }
 
+/**
+ * Decodes a Signal `RecordStructure` payload (as stored on disk) back into a
+ * {@link SignalSessionRecord}. Throws when the current session is missing.
+ */
 export function decodeSignalSessionRecord(raw: unknown): SignalSessionRecord {
     const decoded = proto.RecordStructure.decode(asBytes(raw, 'signal_sessions.record'))
     if (!decoded.currentSession) {
@@ -248,6 +256,7 @@ export function decodeSignalSessionRecord(raw: unknown): SignalSessionRecord {
     }
 }
 
+/** Reads a stored remote identity blob into a Uint8Array (validates byte-shape). */
 export function decodeSignalRemoteIdentity(raw: unknown): Uint8Array {
     return asBytes(raw, 'signal_identity.identity_key')
 }

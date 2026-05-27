@@ -9,6 +9,7 @@ import { toError } from '@util/primitives'
 
 type StoreRow = Readonly<Record<string, unknown>>
 
+/** Serializes an app-state sync key fingerprint to its protobuf bytes, or `null` when absent. */
 export function encodeAppStateFingerprint(
     fingerprint: WaAppStateSyncKey['fingerprint']
 ): Uint8Array | null {
@@ -18,6 +19,7 @@ export function encodeAppStateFingerprint(
     return proto.Message.AppStateSyncKeyFingerprint.encode(fingerprint).finish()
 }
 
+/** Inverse of {@link encodeAppStateFingerprint}; throws on malformed input. */
 export function decodeAppStateFingerprint(
     raw: unknown
 ): WaAppStateSyncKey['fingerprint'] | undefined {
@@ -34,6 +36,7 @@ export function decodeAppStateFingerprint(
     }
 }
 
+/** Decodes app-state sync-key SQL rows into {@link WaAppStateSyncKey} records. */
 export function decodeAppStateSyncKeys(rows: readonly StoreRow[]): readonly WaAppStateSyncKey[] {
     const decoded = new Array<WaAppStateSyncKey>(rows.length)
     for (let i = 0; i < rows.length; i += 1) {
@@ -48,6 +51,10 @@ export function decodeAppStateSyncKeys(rows: readonly StoreRow[]): readonly WaAp
     return decoded
 }
 
+/**
+ * Joins app-state collection-version and index-value SQL rows into the
+ * `collections` shape used by the in-memory app-state store.
+ */
 export function decodeAppStateCollections(
     versionRows: readonly StoreRow[],
     valueRows: readonly StoreRow[]

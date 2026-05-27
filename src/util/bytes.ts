@@ -69,10 +69,15 @@ export function hexToBytes(value: string): Uint8Array {
     return out
 }
 
+/** Encodes a Uint8Array to a standard padded base64 string. */
 export function bytesToBase64(value: Uint8Array): string {
     return encodeBase64(value, BASE64_CHARS, true)
 }
 
+/**
+ * Decodes a standard padded base64 string to a Uint8Array. Throws on invalid
+ * characters or a length that is not a multiple of 4.
+ */
 export function base64ToBytes(value: string): Uint8Array {
     const len = value.length
     if (len === 0) return EMPTY_BYTES
@@ -122,6 +127,11 @@ export function base64ToBytesChecked(value: string, field: string): Uint8Array {
     return base64ToBytes(value)
 }
 
+/**
+ * Decodes a base64url-encoded value to a Uint8Array, restoring padding and
+ * the `+`/`/` alphabet first. Throws with a `missing ${field}` message when
+ * `value` is empty/undefined.
+ */
 export function decodeBase64Url(value: string | undefined, field: string): Uint8Array {
     if (!value) {
         throw new Error(`missing ${field}`)
@@ -215,6 +225,7 @@ function encodeBase64(value: Uint8Array, alphabet: string, pad: boolean): string
     return out.join('')
 }
 
+/** Concatenates an array of Uint8Arrays into a single new Uint8Array. */
 export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
     let total = 0
     for (let i = 0; i < parts.length; i += 1) {
@@ -229,6 +240,13 @@ export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
     return out
 }
 
+/**
+ * Returns a zero-copy `Uint8Array` view over the input. Subclasses of
+ * `Uint8Array` (Node `Buffer`) are wrapped in a plain view; `ArrayBuffer`/
+ * `ArrayBufferView` get a view over their backing buffer. Use at system
+ * boundaries (WebCrypto / Node crypto / WebSocket results)  -  not on values
+ * that are already plain `Uint8Array`.
+ */
 export function toBytesView(value: Uint8Array | ArrayBuffer | ArrayBufferView): Uint8Array {
     if (value instanceof Uint8Array) {
         return value.constructor === Uint8Array
@@ -241,6 +259,10 @@ export function toBytesView(value: Uint8Array | ArrayBuffer | ArrayBufferView): 
     return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
 }
 
+/**
+ * Normalizes an arbitrary stream chunk (string / Uint8Array / ArrayBuffer /
+ * ArrayBufferView) to a Uint8Array. Throws on unsupported types.
+ */
 export function toChunkBytes(chunk: unknown): Uint8Array {
     if (typeof chunk === 'string') {
         return TEXT_ENCODER.encode(chunk)
@@ -251,6 +273,10 @@ export function toChunkBytes(chunk: unknown): Uint8Array {
     throw new Error(`unsupported stream chunk type: ${typeof chunk}`)
 }
 
+/**
+ * Constant-time, JIT-resistant equality over `Uint8Array`s. Required for
+ * MAC/HMAC/signature comparisons (use {@link uint8Equal} for non-secret data).
+ */
 export function uint8TimingSafeEqual(left: Uint8Array, right: Uint8Array): boolean {
     if (left.byteLength !== right.byteLength) {
         return false
@@ -258,6 +284,10 @@ export function uint8TimingSafeEqual(left: Uint8Array, right: Uint8Array): boole
     return timingSafeEqual(left, right)
 }
 
+/**
+ * XOR-accumulated equality over `Uint8Array`s. Suitable for non-secret data
+ * (e.g. identity key match). Use {@link uint8TimingSafeEqual} for MAC checks.
+ */
 export function uint8Equal(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) {
         return false
@@ -303,6 +333,11 @@ export function intToBytes(byteLength: number, value: number): Uint8Array {
     return out
 }
 
+/**
+ * Drains a Node `Readable` stream into a single Uint8Array. When
+ * `options.maxBytes` is set, the stream is destroyed and the promise rejects
+ * once the limit is exceeded.
+ */
 export async function readAllBytes(
     stream: Readable,
     options: { readonly maxBytes?: number } = {}

@@ -22,6 +22,11 @@ interface ConnectionWaiter {
 type StanzaHandler = (payload: Uint8Array) => void | Promise<void>
 type InflateFrame = (compressed: Uint8Array) => Uint8Array | Promise<Uint8Array>
 
+/**
+ * Owns the WebSocket + Noise handshake lifecycle: opens the socket, drives
+ * the noise pairing/login exchange, persists routing-info/server-static
+ * updates, and delivers post-handshake binary frames to the caller.
+ */
 export class WaComms {
     private readonly config: Readonly<
         Required<

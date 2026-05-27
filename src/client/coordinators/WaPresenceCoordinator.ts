@@ -10,8 +10,14 @@ import {
 } from '@transport/node/builders/presence'
 import type { BinaryNode } from '@transport/types'
 
+/**
+ * Coordinates own presence broadcasts and peer presence subscriptions.
+ * Accessed via {@link WaClient.presence}.
+ */
 export interface WaPresenceCoordinator {
+    /** Broadcasts the current account's `available`/`unavailable` presence. */
     readonly send: (type?: 'available' | 'unavailable') => Promise<void>
+    /** Sends a chatstate hint (typing/recording/paused/...) into a specific chat. */
     readonly sendChatstate: (
         jid: string,
         options: Omit<BuildChatstateNodeInput, 'jid'>
@@ -32,6 +38,7 @@ interface WaPresenceCoordinatorOptions {
     readonly getCurrentCredentials: () => WaAuthCredentials | null
 }
 
+/** Builds a {@link WaPresenceCoordinator} from its node-send dependency. */
 export function createPresenceCoordinator(
     options: WaPresenceCoordinatorOptions
 ): WaPresenceCoordinator {

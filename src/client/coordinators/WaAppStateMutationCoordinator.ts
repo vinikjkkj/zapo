@@ -303,6 +303,11 @@ export interface WaSetBroadcastListInput {
     readonly labelIds?: readonly string[]
 }
 
+/**
+ * Coordinates app-state mutations (mute/star/read/pin/archive/clear/delete/
+ * lock chats, status privacy, broadcast lists) and emits parsed mutation
+ * events on sync. Accessed via {@link WaClient.chat}.
+ */
 export class WaAppStateMutationCoordinator {
     private readonly logger: Logger
     private readonly messageStore: WaMessageStore
@@ -336,6 +341,11 @@ export class WaAppStateMutationCoordinator {
         this.flushPromise = null
     }
 
+    /**
+     * Runs an app-state sync round, optionally applying pending mutations.
+     * Throws when the client is not connected. Returns the per-collection
+     * result; blocked collections are logged.
+     */
     public async sync(options: WaAppStateSyncOptions = {}): Promise<WaAppStateSyncResult> {
         if (!this.isConnected()) {
             throw new Error('client is not connected')
@@ -358,6 +368,7 @@ export class WaAppStateMutationCoordinator {
         return syncResult
     }
 
+    /** Returns the names of collections reported as `BLOCKED` in `syncResult`. */
     public getBlockedCollections(syncResult: WaAppStateSyncResult): readonly string[] {
         const blocked: string[] = []
         for (const entry of syncResult.collections) {
@@ -368,6 +379,12 @@ export class WaAppStateMutationCoordinator {
         return blocked
     }
 
+    /**
+     * Walks a sync result and emits one `app_state_mutation` event per
+     * distinct (collection, index)  -  only the last mutation per key wins.
+     * Snapshot-source mutations are skipped unless `emitSnapshotMutations`
+     * was enabled at construction.
+     */
     public emitEventsFromSyncResult(syncResult: WaAppStateSyncResult): void {
         for (const collectionResult of syncResult.collections) {
             const mutations = collectionResult.mutations ?? []
@@ -437,6 +454,16 @@ export class WaAppStateMutationCoordinator {
         }
     }
 
+    /**
+     * Mutes or unmutes a chat. `muteEndTimestampMs` is required when
+     * `muted` is `true` and must be a non-negative safe-integer epoch.
+     *
+     * For a "mute forever" entry, pass a very large epoch value (the
+     * official client uses year-9999 epochs). The mute end is the absolute
+     * timestamp when WhatsApp will re-enable notifications - the client
+     * does **not** unmute automatically when the timer expires (you'll see
+     * the chat un-muted on the phone, but no `mutation` event re-fires).
+     */
     public async setChatMute(
         chatJid: string,
         muted: boolean,
@@ -474,6 +501,7 @@ export class WaAppStateMutationCoordinator {
         ])
     }
 
+    /** Stars or un-stars a specific message. */
     public async setMessageStar(message: WaAppStateMessageKey, starred: boolean): Promise<void> {
         const messageIndex = this.buildMessageMutationIndex(message)
         const timestamp = this.serverClock.nowMs()
@@ -487,6 +515,7 @@ export class WaAppStateMutationCoordinator {
         ])
     }
 
+    /** Marks the chat as read or unread. */
     public async setChatRead(chatJid: string, read: boolean): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
         const timestamp = this.serverClock.nowMs()
@@ -501,6 +530,12 @@ export class WaAppStateMutationCoordinator {
         ])
     }
 
+    /**
+     * Pins or unpins the chat. Pinning also clears any active archive flag
+     * (the two states are mutually exclusive on the client). WhatsApp
+     * imposes a server-side cap on pinned chats - extra pins sync but the
+     * official UI will hide / reject them.
+     */
     public async setChatPin(chatJid: string, pinned: boolean): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
         const timestamp = this.serverClock.nowMs()
@@ -520,6 +555,7 @@ export class WaAppStateMutationCoordinator {
         await this.enqueueAndFlush(pending)
     }
 
+    /** Archives or unarchives the chat. Archiving also clears any pin. */
     public async setChatArchive(chatJid: string, archived: boolean): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
         const timestamp = this.serverClock.nowMs()
@@ -541,6 +577,13 @@ export class WaAppStateMutationCoordinator {
         await this.enqueueAndFlush(pending)
     }
 
+    /**
+     * Clears the chat history (without deleting the chat itself - it stays
+     * in the chat list, just empty). Defaults to **preserving** starred
+     * messages and media; set `options.deleteStarred`/`deleteMedia` to wipe
+     * those too. The clear is local-only - other participants keep their
+     * copies.
+     */
     public async clearChat(chatJid: string, options: WaClearChatOptions = {}): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
         const timestamp = this.serverClock.nowMs()
@@ -561,6 +604,12 @@ export class WaAppStateMutationCoordinator {
         ])
     }
 
+    /**
+     * Deletes the chat entirely (removes from the chat list + drops every
+     * stored message). Local-only - the conversation continues to exist on
+     * the peer's device. For groups, this does **not** leave the group;
+     * use {@link WaGroupCoordinator.leaveGroup} for that.
+     */
     public async deleteChat(chatJid: string, options: WaDeleteChatOptions = {}): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
         const timestamp = this.serverClock.nowMs()
@@ -579,6 +628,13 @@ export class WaAppStateMutationCoordinator {
         ])
     }
 
+    /**
+     * Deletes a single message **locally** - removes it from your own
+     * device(s) only. The recipient(s) still see it. Use a `revoke`
+     * outgoing message ({@link WaMessageCoordinator.send} with
+     * `{ type: 'revoke', ... }`) to delete-for-everyone instead.
+     * `messageTimestampMs` must be a non-negative safe-integer epoch when set.
+     */
     public async deleteMessageForMe(
         message: WaAppStateMessageKey,
         options: WaDeleteMessageForMeOptions = {}
@@ -613,6 +669,7 @@ export class WaAppStateMutationCoordinator {
         ])
     }
 
+    /** Locks or unlocks the chat. Locking also clears archive and pin. */
     public async setChatLock(chatJid: string, locked: boolean): Promise<void> {
         const chatIndexJid = this.normalizeChatMutationJid(chatJid)
         const timestamp = this.serverClock.nowMs()
@@ -641,6 +698,11 @@ export class WaAppStateMutationCoordinator {
         await this.enqueueAndFlush(pending)
     }
 
+    /**
+     * Drains any queued mutations through a sync round. Concurrent callers
+     * share the in-flight flush promise. Failed collections are re-queued
+     * before the error is rethrown.
+     */
     public async flushMutations(): Promise<void> {
         if (this.flushPromise) {
             return this.flushPromise
@@ -764,6 +826,11 @@ export class WaAppStateMutationCoordinator {
         }
     }
 
+    /**
+     * Sets the account-wide status-broadcast distribution policy. `mode`
+     * accepts either the proto enum number or its string name; allow/deny
+     * lists are provided via `userJids`.
+     */
     public async setStatusPrivacy(input: WaSetStatusPrivacyInput): Promise<void> {
         const modeValue =
             typeof input.mode === 'number'
@@ -792,6 +859,7 @@ export class WaAppStateMutationCoordinator {
         ])
     }
 
+    /** Mutes/unmutes a single user's status broadcasts. Rejects group/broadcast JIDs. */
     public async setUserStatusMute(jid: string, muted: boolean): Promise<void> {
         const indexJid = this.normalizeChatMutationJid(jid)
         if (isGroupOrBroadcastJid(indexJid)) {
@@ -808,6 +876,7 @@ export class WaAppStateMutationCoordinator {
         ])
     }
 
+    /** Creates or updates the broadcast list identified by `input.id`. */
     public async setBroadcastList(input: WaSetBroadcastListInput): Promise<void> {
         const participants = input.participants.map((entry) => ({
             lidJid: entry.lidJid,
@@ -831,6 +900,7 @@ export class WaAppStateMutationCoordinator {
         ])
     }
 
+    /** Deletes the broadcast list identified by `id`. */
     public async removeBroadcastList(id: string): Promise<void> {
         const timestamp = this.serverClock.nowMs()
         await this.enqueueAndFlush([
@@ -842,6 +912,51 @@ export class WaAppStateMutationCoordinator {
         ])
     }
 
+    /**
+     * Applies a `set` mutation against any registered app-state schema. This
+     * is the way to reach schemas that don't have a typed helper on this
+     * coordinator (Contact, LabelEdit, LabelJid, QuickReply, AiThreadPin,
+     * Favorites, Nux, ...). For the common chat actions there's a dedicated
+     * method ({@link setChatMute}, {@link setChatRead}, {@link setMessageStar},
+     * {@link setChatPin}, {@link setChatArchive}, etc.)  -  use those instead.
+     *
+     * `input` is flat  -  pick a `schema` name from {@link WA_APPSTATE_SCHEMAS},
+     * fill the index fields (`id`, `chatJid`, `labelId`, ...) and the value
+     * fields side-by-side, and the coordinator routes them to the right
+     * SyncActionValue subfield.
+     *
+     * @example
+     * ```ts
+     * // Add a contact to the address book
+     * await client.chat.set({
+     *     schema: 'Contact',
+     *     id: '5511999999999@s.whatsapp.net',
+     *     contactAction: { fullName: 'Maria Silva', firstName: 'Maria' }
+     * })
+     *
+     * // Create a chat label (color is a server-side palette index)
+     * await client.chat.set({
+     *     schema: 'LabelEdit',
+     *     id: 'label-1',
+     *     labelEditAction: { name: 'Pendente', color: 0, isActive: true }
+     * })
+     *
+     * // Apply that label to a chat
+     * await client.chat.set({
+     *     schema: 'LabelJid',
+     *     labelId: 'label-1',
+     *     chatJid: '5511999999999@s.whatsapp.net',
+     *     labelAssociationAction: { labeled: true }
+     * })
+     *
+     * // Save a business quick reply
+     * await client.chat.set({
+     *     schema: 'QuickReply',
+     *     id: 'qr-greeting',
+     *     quickReplyAction: { shortcut: '/oi', message: 'Olá! Tudo bem?' }
+     * })
+     * ```
+     */
     public async set(input: WaSetMutationInput): Promise<void> {
         const resolved = WA_APPSTATE_SCHEMAS[input.schema] as WaAppstateSchema
         const { indexArgs, data } = splitFlatInput(resolved, input as Record<string, unknown>)
@@ -856,6 +971,34 @@ export class WaAppStateMutationCoordinator {
         await this.enqueueAndFlush([mutation])
     }
 
+    /**
+     * Applies a `remove` mutation against any registered app-state schema  -
+     * same shape as {@link set} but without the value fields (only the schema
+     * name + index args). Use this for schemas without a typed helper.
+     *
+     * @example
+     * ```ts
+     * // Drop a contact from the address book
+     * await client.chat.remove({
+     *     schema: 'Contact',
+     *     id: '5511999999999@s.whatsapp.net'
+     * })
+     *
+     * // Remove a label from a chat (the label itself stays  -  use LabelEdit
+     * // with `deleted: true` to delete the label definition entirely)
+     * await client.chat.remove({
+     *     schema: 'LabelJid',
+     *     labelId: 'label-1',
+     *     chatJid: '5511999999999@s.whatsapp.net'
+     * })
+     *
+     * // Delete a quick reply
+     * await client.chat.remove({
+     *     schema: 'QuickReply',
+     *     id: 'qr-greeting'
+     * })
+     * ```
+     */
     public async remove(input: WaRemoveMutationInput): Promise<void> {
         const resolved = WA_APPSTATE_SCHEMAS[input.schema] as WaAppstateSchema
         const { indexArgs } = splitFlatInput(resolved, input as Record<string, unknown>)

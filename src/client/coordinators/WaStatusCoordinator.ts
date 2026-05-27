@@ -30,10 +30,18 @@ export interface WaSendStatusInput {
     readonly options?: WaSendMessageOptions
 }
 
+/**
+ * Coordinates the status-broadcast surface: distribution privacy, per-contact
+ * mute, send, and revoke. Accessed via {@link WaClient.status}.
+ */
 export interface WaStatusCoordinator {
+    /** Updates the account-wide status privacy setting (see {@link WaSetStatusPrivacyInput}). */
     readonly setPrivacy: (input: WaSetStatusPrivacyInput) => Promise<void>
+    /** Mutes or unmutes a specific contact's status broadcasts. */
     readonly setUserMuted: (jid: string, muted: boolean) => Promise<void>
+    /** Publishes a status broadcast to the given recipients. */
     readonly send: (input: WaSendStatusInput) => Promise<WaMessagePublishResult>
+    /** Revokes a previously-published status broadcast. */
     readonly revokeStatus: (input: {
         readonly messageId: string
         readonly recipients: readonly string[]
@@ -42,6 +50,7 @@ export interface WaStatusCoordinator {
     }) => Promise<WaMessagePublishResult>
 }
 
+/** Builds a {@link WaStatusCoordinator} from its dependencies. */
 export function createStatusCoordinator(options: WaStatusCoordinatorOptions): WaStatusCoordinator {
     return {
         setPrivacy: (input) => options.appStateMutations.setStatusPrivacy(input),

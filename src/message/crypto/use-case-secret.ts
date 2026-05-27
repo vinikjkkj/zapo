@@ -16,6 +16,10 @@ export const WA_USE_CASE_SECRET_MODIFICATION_TYPES = Object.freeze({
     POLL_ADD_OPTION: 'Poll Add Option'
 } as const)
 
+/**
+ * Validates that `messageSecret` is exactly 32 bytes and returns it as a
+ * zero-copy Uint8Array view (throws otherwise).
+ */
 export function assertMessageSecret(
     messageSecret: Uint8Array | ArrayBuffer | ArrayBufferView,
     context = 'message secret'
@@ -29,6 +33,11 @@ export function assertMessageSecret(
     return bytes
 }
 
+/**
+ * Returns `message` unchanged when a message secret is already present;
+ * otherwise generates a fresh 32-byte secret and attaches it under
+ * `messageContextInfo.messageSecret`.
+ */
 export async function ensureMessageSecret(message: Proto.IMessage): Promise<Proto.IMessage> {
     const messageSecret = message.messageContextInfo?.messageSecret
     if (messageSecret && messageSecret.byteLength > 0) {
@@ -45,6 +54,11 @@ export async function ensureMessageSecret(message: Proto.IMessage): Promise<Prot
     }
 }
 
+/**
+ * Derives the per-use-case secret (poll vote, reaction, edit, ...) via HKDF
+ * over `messageSecret` and the canonical `stanzaId + sender + sender +
+ * modificationType` info string.
+ */
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function createUseCaseSecret(input: {
     readonly messageSecret: Uint8Array | ArrayBuffer | ArrayBufferView

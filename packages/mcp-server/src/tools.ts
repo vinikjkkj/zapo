@@ -180,7 +180,7 @@ const eventsTool: ToolDefinition = {
     description:
         'Read recent buffered WaClient events. Filter by types and/or sequence id. ' +
         'Use this to wait for QR codes, pairing codes, incoming messages, group events, etc. ' +
-        'Each event has a monotonic seq — pass `since: <seq>` next call to fetch only newer ones. ' +
+        'Each event has a monotonic seq  -  pass `since: <seq>` next call to fetch only newer ones. ' +
         'Use `q` for case-insensitive substring search across `type + JSON.stringify(payload)`; ' +
         '`regex: true` to treat `q` as a regex pattern (case-insensitive).',
     inputSchema: {
@@ -318,7 +318,7 @@ const restartTool: ToolDefinition = {
         'Restart the runtime state. ' +
         '"soft" (default): disconnect + drop the WaClient, clear the event and log buffers, ' +
         'reset their seq counters; the process stays alive, and the next tool call recreates ' +
-        'everything from the same config — code changes loaded into the Node module cache ' +
+        'everything from the same config  -  code changes loaded into the Node module cache ' +
         'are NOT picked up. ' +
         '"process_exit": same cleanup, then exit the process with code 0 so a supervisor ' +
         '(nodemon, Claude Code respawn-on-reconnect, etc.) starts a fresh process. With no ' +
@@ -430,11 +430,11 @@ const evalTool: ToolDefinition = {
         'Execute arbitrary JS in the MCP runtime with `client` (WaClient instance) and `lib` ' +
         '(zapo-js module namespace) in scope. **Disabled by default**: requires ' +
         '`MCP_EVAL_ENABLED=1` in the MCP process env, otherwise every call is rejected. ' +
-        'The source is wrapped in an async function — top-level `await` works. ' +
+        'The source is wrapped in an async function  -  top-level `await` works. ' +
         'Use `return <expr>` to surface a value; the result is encoded for JSON ' +
         '($bytes / $bigint markers). Use `globalThis.<key> = ...` to persist state between ' +
         'eval calls (e.g. stash an unregister callback returned by registerIncomingStanzaFilter). ' +
-        'When `noAwait: true`, fire-and-forget — the call returns immediately and rejections ' +
+        'When `noAwait: true`, fire-and-forget  -  the call returns immediately and rejections ' +
         'go to the runtime logger.',
     inputSchema: {
         type: 'object',
@@ -634,7 +634,7 @@ const resolvePath = (
 
 /**
  * Walking arbitrary string keys against a JS object would happily traverse the
- * prototype chain — `__proto__`, `constructor`, `prototype` are all accessible
+ * prototype chain  -  `__proto__`, `constructor`, `prototype` are all accessible
  * and dangerous (prototype pollution, escape from intended object surface).
  * The runtime is local-only today but the HTTP transport could be exposed,
  * so block these keys at the resolver.

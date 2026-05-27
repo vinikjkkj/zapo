@@ -41,6 +41,11 @@ export interface WaRetryReplayServiceOptions {
 
 export type WaRetryResendResult = 'resent' | 'ineligible'
 
+/**
+ * Replays a previously-sent outbound message in response to an incoming
+ * retry receipt. Dispatches to plaintext/encrypted/opaque-node handlers
+ * based on the stored payload shape.
+ */
 export class WaRetryReplayService {
     private readonly options: WaRetryReplayServiceOptions
 
@@ -48,6 +53,11 @@ export class WaRetryReplayService {
         this.options = options
     }
 
+    /**
+     * Resends `outbound` to `requesterJid`. Returns `'resent'` on a fresh
+     * send or `'ineligible'` when the cached payload cannot satisfy the
+     * request (e.g. requester not in the original device list).
+     */
     public async resendOutboundMessage(
         outbound: WaRetryOutboundMessageRecord,
         requesterJid: string,

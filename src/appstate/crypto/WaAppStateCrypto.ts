@@ -57,6 +57,11 @@ interface WaAppStateDecryptedMutation {
 
 const DEFAULT_DERIVED_KEYS_CACHE_MAX_SIZE = 256
 
+/**
+ * Implements the app-state mutation cryptography: HKDF key derivation (with
+ * a bounded LRU cache), per-mutation encrypt/decrypt, snapshot/patch MAC
+ * generation, and the LT-hash arithmetic used to track collection state.
+ */
 export class WaAppStateCrypto {
     private readonly derivedKeysCache: Map<string, WaAppStateDerivedKeys>
     private readonly derivedKeysCacheMaxSize: number
@@ -78,10 +83,15 @@ export class WaAppStateCrypto {
         return this.skipMacVerification
     }
 
+    /** Empties the derived-keys LRU cache (e.g. after a session reset). */
     public clearCache(): void {
         this.derivedKeysCache.clear()
     }
 
+    /**
+     * Derives the index/value/snapshot/patch keys from an app-state sync key.
+     * Cached by base64 of `keyData` (LRU-bounded).
+     */
     public deriveKeys(keyData: Uint8Array): WaAppStateDerivedKeys {
         const cacheKey = bytesToBase64(keyData)
         const cached = this.derivedKeysCache.get(cacheKey)
@@ -119,10 +129,12 @@ export class WaAppStateCrypto {
         return keys
     }
 
+    /** Computes the HMAC-SHA-256 index MAC over `indexBytes`. */
     public generateIndexMac(indexHmacKey: Uint8Array, indexBytes: Uint8Array): Uint8Array {
         return hmacSha256Sign(indexHmacKey, indexBytes)
     }
 
+    /** Encrypts a single mutation value with AES-CBC + HMAC value-MAC. */
     public async encryptMutation(args: {
         readonly operation: number
         readonly keyId: Uint8Array
@@ -164,6 +176,7 @@ export class WaAppStateCrypto {
         }
     }
 
+    /** Verifies and decrypts a single app-state mutation. */
     // eslint-disable-next-line @typescript-eslint/require-await
     public async decryptMutation(args: {
         readonly operation: number
@@ -225,6 +238,7 @@ export class WaAppStateCrypto {
         }
     }
 
+    /** Generates the HMAC-SHA-512 snapshot MAC over the LT-hash + version + collection name. */
     // eslint-disable-next-line @typescript-eslint/require-await
     public async generateSnapshotMac(
         keyData: Uint8Array,
@@ -240,6 +254,7 @@ export class WaAppStateCrypto {
         ])
     }
 
+    /** Generates the HMAC-SHA-512 patch MAC binding mutations to a collection version. */
     // eslint-disable-next-line @typescript-eslint/require-await
     public async generatePatchMac(
         keyData: Uint8Array,
@@ -257,6 +272,7 @@ export class WaAppStateCrypto {
         ])
     }
 
+    /** Adds value MACs into the running LT-hash digest for a collection. */
     // eslint-disable-next-line @typescript-eslint/require-await
     public async ltHashAdd(
         base: Uint8Array,
@@ -265,6 +281,7 @@ export class WaAppStateCrypto {
         return this.ltHashApply(base, addValues, (left, right) => left + right)
     }
 
+    /** Removes value MACs from the running LT-hash digest (for `remove` operations). */
     // eslint-disable-next-line @typescript-eslint/require-await
     public async ltHashSubtract(
         base: Uint8Array,
@@ -273,6 +290,7 @@ export class WaAppStateCrypto {
         return this.ltHashApply(base, removeValues, (left, right) => left - right)
     }
 
+    /** Combined subtract+add LT-hash update used when a key's value MAC changes in place. */
     public async ltHashSubtractThenAdd(
         base: Uint8Array,
         addValues: readonly Uint8Array[],

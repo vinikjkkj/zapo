@@ -1,5 +1,5 @@
 /**
- * Layer 1 — binary stanza codec wrapper.
+ * Layer 1  -  binary stanza codec wrapper.
  *
  * Re-exports the bit-exact WhatsApp WAP token encoder/decoder from zapo-js.
  * This file is the only sanctioned import path for binary node serialization

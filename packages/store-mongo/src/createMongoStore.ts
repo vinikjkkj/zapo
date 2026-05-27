@@ -18,6 +18,12 @@ import { WaThreadMongoStore } from './thread.store'
 import type { WaMongoStorageOptions } from './types'
 
 export interface WaMongoStoreConfig {
+    /**
+     * Either an existing `Db` (used as-is) or a connection descriptor with
+     * `uri` + `database`. When the store opens the connection itself,
+     * {@link WaMongoStoreResult.destroy} will `client.close()` it. Pass an
+     * externally-owned `Db` to keep that lifecycle in your own hands.
+     */
     readonly db:
         | Db
         | {
@@ -25,7 +31,17 @@ export interface WaMongoStoreConfig {
               readonly database: string
               readonly options?: MongoClientOptions
           }
+    /**
+     * Prefix prepended to every collection name. Use to share one database
+     * across multiple apps without name collisions.
+     */
     readonly collectionPrefix?: string
+    /**
+     * Override default TTLs (in ms) for the cache domains. Backed by Mongo
+     * TTL indexes - expired documents are pruned by the server's TTL
+     * monitor (default sweep is ~60s). For sub-minute eviction you may see
+     * entries linger briefly past the TTL.
+     */
     readonly cacheTtlMs?: {
         readonly retryMs?: number
         readonly groupMetadataMs?: number
@@ -62,6 +78,27 @@ function isDb(value: WaMongoStoreConfig['db']): value is Db {
     return typeof (value as Db).collection === 'function'
 }
 
+/**
+ * Builds a MongoDB-backed {@link WaStoreBackend} bundle. All 11 persistent
+ * domains + 4 cache domains live in a single database (split into
+ * collections by `collectionPrefix`).
+ *
+ * @example
+ * ```ts
+ * import { createStore, WaClient } from 'zapo-js'
+ * import { createMongoStore } from '@zapo-js/store-mongo'
+ *
+ * const store = createStore({
+ *     backends: {
+ *         mongo: createMongoStore({
+ *             db: { uri: 'mongodb://localhost:27017', database: 'wa' }
+ *         })
+ *     },
+ *     providers: { auth: 'mongo', signal: 'mongo', senderKey: 'mongo', appState: 'mongo' }
+ * })
+ * const client = new WaClient({ store, sessionId: 'default' })
+ * ```
+ */
 export function createMongoStore(config: WaMongoStoreConfig): WaMongoStoreResult {
     let db: Db
     let client: MongoClient | null = null

@@ -39,6 +39,11 @@ const RETRY_REASON_MATCHERS = [
     }
 ] as const
 
+/**
+ * Maps a decryption/Signal error to the appropriate {@link WaRetryReasonCode}
+ * so an outbound retry receipt carries the correct `error` attribute.
+ * Returns `undefined` when no known reason matches.
+ */
 export function mapRetryReasonFromError(error: unknown): WaRetryReasonCode | undefined {
     const message = toError(error).message.toLowerCase()
 

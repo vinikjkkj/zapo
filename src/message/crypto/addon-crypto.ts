@@ -22,6 +22,7 @@ type WaAddonBytes = Uint8Array | ArrayBuffer | ArrayBufferView
 type ModificationType =
     (typeof WA_USE_CASE_SECRET_MODIFICATION_TYPES)[keyof typeof WA_USE_CASE_SECRET_MODIFICATION_TYPES]
 
+/** Returns `true` when an addon kind binds its AES-GCM ciphertext to additional data (polls + event responses). */
 export function shouldUseAddonAdditionalData(modificationType: ModificationType): boolean {
     return (
         modificationType === WA_USE_CASE_SECRET_MODIFICATION_TYPES.POLL_VOTE ||
@@ -29,6 +30,7 @@ export function shouldUseAddonAdditionalData(modificationType: ModificationType)
     )
 }
 
+/** Builds the canonical AES-GCM `additionalData` bytes for an addon (stanza id + NUL + sender). */
 export function buildAddonAdditionalData(stanzaId: string, addOnSenderJid: string): Uint8Array {
     if (!stanzaId.trim()) {
         throw new Error('stanza id must be a non-empty string')
@@ -39,6 +41,7 @@ export function buildAddonAdditionalData(stanzaId: string, addOnSenderJid: strin
     return TEXT_ENCODER.encode(`${stanzaId}\u0000${addOnSenderJid}`)
 }
 
+/** Encrypts an addon payload (poll vote, reaction, edit, ...) with the per-use-case secret. */
 export async function encryptAddonPayload(input: {
     readonly messageSecret: WaAddonBytes
     readonly stanzaId: string
@@ -61,6 +64,7 @@ export async function encryptAddonPayload(input: {
     return aesGcmEncrypt(secret, iv, toBytesView(input.payload), additionalData)
 }
 
+/** Decrypts an addon payload encrypted with {@link encryptAddonPayload}. */
 export async function decryptAddonPayload(input: {
     readonly messageSecret: WaAddonBytes
     readonly stanzaId: string
@@ -92,6 +96,11 @@ export interface WaIdentifiedEncAddon {
     readonly raw: Proto.IMessage
 }
 
+/**
+ * Inspects a message and, when it contains an encrypted addon (reaction,
+ * poll vote, edit, comment, event response, ...), returns the parsed
+ * envelope with its kind and target message key. Returns `null` otherwise.
+ */
 export function identifyEncryptedAddon(message: Proto.IMessage): WaIdentifiedEncAddon | null {
     const msg = unwrapMessage(message)
 
@@ -222,6 +231,7 @@ export type WaDecodedAddon =
     | { readonly kind: 'poll_edit'; readonly message: Proto.IMessage }
     | { readonly kind: 'poll_add_option'; readonly message: Proto.IMessage }
 
+/** Decodes the decrypted addon plaintext into its typed protobuf message based on `kind`. */
 export function decodeAddonPlaintext(kind: WaAddonKind, plaintext: Uint8Array): WaDecodedAddon {
     switch (kind) {
         case 'reaction':

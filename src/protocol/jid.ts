@@ -38,11 +38,21 @@ function findAtIndex(jid: string): number {
     return atIndex
 }
 
+/**
+ * Splits a JID into `user` and `server` parts at the `@` separator.
+ * Throws if the input does not contain a valid `user@server` shape.
+ */
 export function splitJid(jid: string): { readonly user: string; readonly server: string } {
     const atIndex = findAtIndex(jid)
     return { user: jid.slice(0, atIndex), server: internServer(jid.slice(atIndex + 1)) }
 }
 
+/**
+ * Normalizes a user-supplied recipient (phone number, group id, or full JID)
+ * into a canonical JID. Strings already containing `@` are returned as-is;
+ * dashed inputs map to `<input>@g.us` (group); pure-digit inputs map to
+ * `<digits>@s.whatsapp.net`.
+ */
 export function normalizeRecipientJid(to: string): string {
     const input = to.trim()
     if (input.length === 0) throw new Error('recipient cannot be empty')
@@ -70,30 +80,37 @@ function isJidType(jid: string, type: string): boolean {
     return true
 }
 
+/** Returns `true` for JIDs in the `@lid` server (linked-device identity). */
 export function isLidJid(jid: string): boolean {
     return isJidType(jid, WA_DEFAULTS.LID_SERVER)
 }
 
+/** Returns `true` for JIDs in the `@bot` server. */
 export function isBotJid(jid: string): boolean {
     return isJidType(jid, WA_DEFAULTS.BOT_SERVER)
 }
 
+/** Returns `true` for JIDs in the `@g.us` server (groups). */
 export function isGroupJid(jid: string): boolean {
     return isJidType(jid, WA_DEFAULTS.GROUP_SERVER)
 }
 
+/** Returns `true` for JIDs in the `@broadcast` server (broadcast lists). */
 export function isBroadcastJid(jid: string): boolean {
     return isJidType(jid, WA_DEFAULTS.BROADCAST_SERVER)
 }
 
+/** Returns `true` for the special `status@broadcast` JID. */
 export function isStatusBroadcastJid(jid: string): boolean {
     return jid === WA_DEFAULTS.STATUS_BROADCAST_JID
 }
 
+/** Returns `true` for JIDs in the `@newsletter` server. */
 export function isNewsletterJid(jid: string): boolean {
     return isJidType(jid, WA_DEFAULTS.NEWSLETTER_SERVER)
 }
 
+/** Returns `true` for any group or broadcast JID. */
 export function isGroupOrBroadcastJid(jid: string): boolean {
     return isGroupJid(jid) || isBroadcastJid(jid)
 }
@@ -104,6 +121,10 @@ export interface ParsedJid {
     readonly normalizedJid: string
 }
 
+/**
+ * Parses a JID into a Signal-style `{ user, server, device }` address.
+ * `device` is `0` when the JID has no `:device` segment.
+ */
 export function parseSignalAddressFromJid(jid: string): SignalAddress {
     const atIndex = findAtIndex(jid)
     const colonIndex = jid.indexOf(':', 0)
@@ -122,6 +143,10 @@ export function parseSignalAddressFromJid(jid: string): SignalAddress {
     return { user: jid.slice(0, colonIndex), server, device }
 }
 
+/**
+ * Parses a JID and returns the Signal address plus the user-only and
+ * fully-normalized device JID forms in a single pass.
+ */
 export function parseJidFull(jid: string): ParsedJid {
     const address = parseSignalAddressFromJid(jid)
     const userJid = `${address.user}@${address.server}`
@@ -130,6 +155,11 @@ export function parseJidFull(jid: string): ParsedJid {
     return { address, userJid, normalizedJid }
 }
 
+/**
+ * Maps the hosted-account server variants (`hosted` / `hosted.lid`) back to
+ * their canonical Signal server (`hostDomain` / `lid`). Other servers are
+ * returned unchanged.
+ */
 export function canonicalizeSignalServer(
     server: string,
     hostDomain: string = WA_DEFAULTS.HOST_DOMAIN
@@ -139,6 +169,11 @@ export function canonicalizeSignalServer(
     return server
 }
 
+/**
+ * Returns the JID rewritten with its server canonicalized via
+ * {@link canonicalizeSignalServer}  -  used to derive the address Signal
+ * sessions are keyed by.
+ */
 export function canonicalizeSignalJid(
     jid: string,
     hostDomain: string = WA_DEFAULTS.HOST_DOMAIN
@@ -149,6 +184,11 @@ export function canonicalizeSignalJid(
     return `${address.user}:${address.device}@${server}`
 }
 
+/**
+ * Strips the `:device` segment from a JID, returning the bare `user@server`
+ * form. Set `options.canonicalizeSignalServer` to also rewrite hosted servers
+ * via {@link canonicalizeSignalServer}.
+ */
 export function toUserJid(
     jid: string,
     options: {
@@ -176,26 +216,40 @@ export function toUserJid(
     return `${address.user}@${server}`
 }
 
+/**
+ * Returns the JID in its full device form. JIDs with `device === 0` lose the
+ * device segment (`user@server`); all others keep `user:device@server`.
+ */
 export function normalizeDeviceJid(jid: string): string {
     const address = parseSignalAddressFromJid(jid)
     if (address.device === 0) return `${address.user}@${address.server}`
     return `${address.user}:${address.device}@${address.server}`
 }
 
+/**
+ * Appends `:device` to a bare user JID. A falsy `device` returns the input
+ * unchanged.
+ */
 export function applyDeviceToJid(userJid: string, device: number | undefined): string {
     if (!device) return userJid
     const address = parseSignalAddressFromJid(userJid)
     return buildDeviceJid(address.user, address.server ?? WA_DEFAULTS.HOST_DOMAIN, device)
 }
 
+/** Returns `true` when `deviceId` matches the WhatsApp hosted-device id. */
 export function isHostedDeviceId(deviceId: number): boolean {
     return deviceId === WA_DEFAULTS.HOSTED_DEVICE_ID
 }
 
+/** Returns `true` for the hosted server variants (`hosted` and `hosted.lid`). */
 export function isHostedServer(server: string): boolean {
     return server === WA_DEFAULTS.HOSTED_SERVER || server === WA_DEFAULTS.HOSTED_LID_SERVER
 }
 
+/**
+ * Returns `true` when the JID refers to a hosted device  -  either by server
+ * (`@hosted` / `@hosted.lid`) or by a `:HOSTED_DEVICE_ID@…` device segment.
+ */
 export function isHostedDeviceJid(jid: string): boolean {
     if (
         isJidType(jid, WA_DEFAULTS.HOSTED_SERVER) ||
@@ -217,6 +271,11 @@ export function isHostedDeviceJid(jid: string): boolean {
     return isHostedDeviceId(deviceId)
 }
 
+/**
+ * Builds a device JID from its parts. When `options.isHosted` is set, the
+ * hosted-server variant is selected (preserving LID vs phone) and the canonical
+ * hosted device id is used.
+ */
 export function buildDeviceJid(
     user: string,
     normalizedServer: string,
@@ -243,6 +302,11 @@ export function buildDeviceJid(
     return `${user}:${deviceId}@${normalizedServer}`
 }
 
+/**
+ * Extracts the numeric username and device id from the authenticated user's
+ * own JID. Throws when either segment is missing, non-numeric, or out of the
+ * safe-integer range.
+ */
 export function getLoginIdentity(meJid: string): {
     readonly username: number
     readonly device: number
@@ -262,12 +326,20 @@ export function getLoginIdentity(meJid: string): {
     return { username, device }
 }
 
+/**
+ * Builds a `<digits>@s.whatsapp.net` JID from a free-form phone number,
+ * stripping non-digit characters. Throws when no digits are found.
+ */
 export function parsePhoneJid(input: string): string {
     const digits = extractDigits(input)
     if (!digits) throw new Error('phone number is empty after normalization')
     return `${digits}@${WA_DEFAULTS.HOST_DOMAIN}`
 }
 
+/**
+ * Returns a stable `user|server|device` key for a Signal address, suitable
+ * as a Map/Set key.
+ */
 export function signalAddressKey(address: SignalAddress): string {
     const server = address.server ?? WA_DEFAULTS.HOST_DOMAIN
     return `${address.user}|${server}|${address.device}`

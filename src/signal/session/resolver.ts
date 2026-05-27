@@ -17,7 +17,16 @@ export interface SignalResolvedSessionTarget {
     readonly session: SignalSessionRecord
 }
 
+/**
+ * Resolves Signal sessions for one or more JIDs, fetching missing prekey
+ * bundles, enforcing identity continuity, and deduplicating concurrent
+ * fetches for the same address.
+ */
 export type SignalSessionResolver = {
+    /**
+     * Ensures a session exists for `address` (fetching the prekey bundle if
+     * needed). `reasonIdentity` triggers a remote identity refresh first.
+     */
     ensureSession(
         address: SignalAddress,
         jid: string,
@@ -25,12 +34,17 @@ export type SignalSessionResolver = {
         reasonIdentity?: boolean
     ): Promise<void>
 
+    /**
+     * Batched session resolver  -  issues a single key-bundle fetch for all
+     * missing JIDs. Returns the resolved targets that now have a session.
+     */
     ensureSessionsBatch(
         targetJids: readonly string[],
         expectedIdentityByJid?: ReadonlyMap<string, Uint8Array>
     ): Promise<readonly SignalResolvedSessionTarget[]>
 }
 
+/** Builds a {@link SignalSessionResolver} backed by the given Signal APIs and stores. */
 export function createSignalSessionResolver(options: {
     readonly signalProtocol: SignalProtocol
     readonly sessionStore: WaSessionStore

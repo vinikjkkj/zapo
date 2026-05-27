@@ -20,14 +20,34 @@ import { WaThreadPgStore } from './thread.store'
 import type { WaPgStorageOptions } from './types'
 
 export interface WaPgStoreConfig {
+    /**
+     * Either a live `pg` `Pool` (used as-is) or `PoolConfig` to build one.
+     * When the store builds the pool itself,
+     * {@link WaPgStoreResult.destroy} will `pool.end()` it. Pass an
+     * externally-owned `Pool` to keep that lifecycle in your own hands.
+     */
     readonly pool: Pool | PoolConfig
+    /**
+     * Prefix prepended to every table name. Use to share one database
+     * across multiple apps without name collisions.
+     */
     readonly tablePrefix?: string
+    /**
+     * Override default TTLs (in ms) for the cache domains. Postgres needs
+     * an explicit cleanup poller (see {@link cleanup}) - rows stay in the
+     * table until pruned.
+     */
     readonly cacheTtlMs?: {
         readonly retryMs?: number
         readonly groupMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
+    /**
+     * Background cleanup poller config. Start one poller per session via
+     * {@link WaPgStoreResult.startCleanup} - without it the cache tables
+     * grow monotonically.
+     */
     readonly cleanup?: {
         readonly intervalMs?: number
         readonly onError?: (error: Error) => void
@@ -63,6 +83,30 @@ function isPool(value: Pool | PoolConfig): value is Pool {
     return typeof (value as Pool).connect === 'function'
 }
 
+/**
+ * Builds a PostgreSQL-backed {@link WaStoreBackend} bundle. Best fit for
+ * stacks already on Postgres - session state rides the same backups,
+ * replication and IAM as your application data.
+ *
+ * Cache domains require a {@link PgCleanupPoller} (`startCleanup()`) to
+ * prune expired rows - call it once per session id.
+ *
+ * @example
+ * ```ts
+ * import { createStore, WaClient } from 'zapo-js'
+ * import { createPostgresStore } from '@zapo-js/store-postgres'
+ *
+ * const result = createPostgresStore({
+ *     pool: { connectionString: process.env.DATABASE_URL }
+ * })
+ * const store = createStore({
+ *     backends: { pg: result },
+ *     providers: { auth: 'pg', signal: 'pg', senderKey: 'pg', appState: 'pg' }
+ * })
+ * const client = new WaClient({ store, sessionId: 'default' })
+ * result.startCleanup('default')
+ * ```
+ */
 export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
     const pool = isPool(config.pool) ? config.pool : createPgPool(config.pool)
     const tablePrefix = config.tablePrefix ?? ''

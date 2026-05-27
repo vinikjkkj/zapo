@@ -1,6 +1,12 @@
 const DIGITS_ONLY_RE = /^\d+$/
 const SIGNED_DIGITS_RE = /^-?\d+$/
 
+/**
+ * Normalizes an unknown thrown value into an `Error`  -  `Error` instances are
+ * returned unchanged, strings/numbers are wrapped, and objects with `message`
+ * or `code` fields are mapped to readable messages. Use in `catch` blocks
+ * before logging.
+ */
 export function toError(value: unknown): Error {
     if (value instanceof Error) return value
     if (typeof value === 'string') return new Error(value)
@@ -30,6 +36,10 @@ function assertSafeInteger(
     throw new Error(`${prefix}: ${value}`)
 }
 
+/**
+ * Coerces a `number` or `{ toNumber() }` (protobufjs `Long`) to a finite
+ * safe-integer. Throws on missing/non-numeric/out-of-range inputs.
+ */
 export function toSafeNumber(
     value: number | { toNumber?: () => number } | null | undefined,
     field: string

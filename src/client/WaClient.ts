@@ -50,6 +50,42 @@ const SYNC_RELATED_PROTOCOL_TYPES = new Set<WaIncomingProtocolType>([
     proto.Message.ProtocolMessage.Type.PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE
 ])
 
+/**
+ * Top-level WhatsApp client. Owns the transport, auth, signal, and per-feature
+ * coordinators (accessible via getters such as {@link message}, {@link group},
+ * {@link newsletter}, etc.) and re-emits every {@link WaClientEventMap} event.
+ *
+ * Lifecycle: construct with {@link WaClientOptions}, call {@link connect} to
+ * open the socket, react to `connection`/`auth_qr`/`auth_pairing_code` events,
+ * then use the coordinator getters to drive the session. Call {@link disconnect}
+ * to shut down cleanly or {@link logout} to remove the companion device.
+ *
+ * @example
+ * ```ts
+ * import { createPinoLogger, createStore, WaClient } from 'zapo-js'
+ * import { createSqliteStore } from '@zapo-js/store-sqlite'
+ *
+ * const store = createStore({
+ *     backends: { sqlite: createSqliteStore({ path: '.auth/state.sqlite' }) },
+ *     providers: { auth: 'sqlite', signal: 'sqlite', senderKey: 'sqlite', appState: 'sqlite' }
+ * })
+ *
+ * const client = new WaClient(
+ *     { store, sessionId: 'default' },
+ *     await createPinoLogger({ level: 'info', pretty: true })
+ * )
+ *
+ * client.on('auth_qr', ({ qr, ttlMs }) => console.log('scan:', qr, ttlMs))
+ * client.on('connection', (event) => console.log('connection', event))
+ * client.on('message', async (event) => {
+ *     if (event.message?.conversation === 'ping') {
+ *         await client.message.send(event.chatJid!, 'pong')
+ *     }
+ * })
+ *
+ * await client.connect()
+ * ```
+ */
 export class WaClient extends EventEmitter {
     private readonly options!: Readonly<WaClientOptions>
     private readonly logger!: Logger
@@ -63,6 +99,10 @@ export class WaClient extends EventEmitter {
     private activeIncomingHandlers = 0
     private readonly incomingHandlersDrainedWaiters: Array<() => void> = []
 
+    /**
+     * @param options Client configuration (store, transport, addons, history...).
+     * @param logger  Optional structured logger. Defaults to a `ConsoleLogger('info')`.
+     */
     public constructor(options: WaClientOptions, logger: Logger = new ConsoleLogger('info')) {
         super()
 
@@ -85,7 +125,7 @@ export class WaClient extends EventEmitter {
             this.stores.messageSecret === NOOP_MESSAGE_SECRET_STORE
         ) {
             this.logger.warn(
-                'addons.autoDecrypt is enabled but messageSecret cache is noop — ' +
+                'addons.autoDecrypt is enabled but messageSecret cache is noop  -  ' +
                     'addon decryption will only work if secrets are in the message store'
             )
         }
@@ -126,24 +166,28 @@ export class WaClient extends EventEmitter {
         this.bindNodeTransportEvents()
     }
 
+    /** Strongly-typed `EventEmitter#on` over {@link WaClientEventMap}. */
     public on<K extends keyof WaClientEventMap>(event: K, listener: WaClientEventMap[K]): this
     public on(event: string | symbol, listener: (...args: unknown[]) => void): this
     public on(event: string | symbol, listener: (...args: unknown[]) => void): this {
         return super.on(event, listener)
     }
 
+    /** Strongly-typed `EventEmitter#once` over {@link WaClientEventMap}. */
     public once<K extends keyof WaClientEventMap>(event: K, listener: WaClientEventMap[K]): this
     public once(event: string | symbol, listener: (...args: unknown[]) => void): this
     public once(event: string | symbol, listener: (...args: unknown[]) => void): this {
         return super.once(event, listener)
     }
 
+    /** Strongly-typed `EventEmitter#off` over {@link WaClientEventMap}. */
     public off<K extends keyof WaClientEventMap>(event: K, listener: WaClientEventMap[K]): this
     public off(event: string | symbol, listener: (...args: unknown[]) => void): this
     public off(event: string | symbol, listener: (...args: unknown[]) => void): this {
         return super.off(event, listener)
     }
 
+    /** Strongly-typed `EventEmitter#emit` over {@link WaClientEventMap}. */
     public emit<K extends keyof WaClientEventMap>(
         event: K,
         payload: Parameters<WaClientEventMap[K]>[0]
@@ -153,16 +197,28 @@ export class WaClient extends EventEmitter {
         return super.emit(event, ...args)
     }
 
+    /**
+     * Returns the current auth state snapshot (credentials, registration,
+     * connection flag)  -  useful for resuming or inspecting the client.
+     */
     public getState() {
         const connected = this.deps.connectionManager.isConnected()
         this.logger.trace('wa client state requested', { connected })
         return this.deps.authClient.getState(connected)
     }
 
+    /**
+     * Returns the credentials persisted for the current session, or `null` if
+     * the client has not been paired yet.
+     */
     public getCredentials() {
         return this.deps.authClient.getCurrentCredentials()
     }
 
+    /**
+     * Returns the measured skew between the local clock and the server, in
+     * milliseconds, or `null` if no handshake has completed yet.
+     */
     public getClockSkewMs(): number | null {
         return this.deps.connectionManager.getClockSkewMs()
     }
@@ -206,7 +262,7 @@ export class WaClient extends EventEmitter {
                     })
                 })
             }
-            // Decode unconditionally — chunks whose parent prompt we never sent
+            // Decode unconditionally  -  chunks whose parent prompt we never sent
             // are skipped by the secret-store lookup downstream.
             if (event.message) {
                 void this.deps.botCoordinator.tryDecryptChunk(event).catch((err) => {
@@ -313,6 +369,30 @@ export class WaClient extends EventEmitter {
         }
     }
 
+    /**
+     * Opens the transport and runs the noise/auth handshake. If a connection
+     * is already in flight, the in-flight promise is reused. Resolves once the
+     * client is fully ready; pairing prompts are surfaced via the `auth_qr`
+     * and `auth_pairing_code` events while this awaits.
+     *
+     * **First-time pairing:** the promise stays pending until the user scans a
+     * QR or types the pairing code. Subscribe to `auth_qr` / `auth_pairing_code`
+     * *before* awaiting  -  they fire while `connect()` is still running.
+     *
+     * @example
+     * ```ts
+     * // QR pairing (default  -  works headless)
+     * client.on('auth_qr', ({ qr }) => console.log('scan:', qr))
+     * client.on('auth_paired', ({ credentials }) => console.log('paired:', credentials.meJid))
+     * await client.connect()
+     *
+     * // Link-code pairing  -  call requestPairingCode while connect() is running
+     * void client.connect()
+     * await new Promise((r) => client.once('auth_pairing_required', r))
+     * const code = await client.auth.requestPairingCode('5511999999999')
+     * console.log('enter code on phone:', code)
+     * ```
+     */
     public async connect(): Promise<void> {
         if (this.connectPromise) {
             this.logger.trace('wa client connect already in-flight')
@@ -340,6 +420,14 @@ export class WaClient extends EventEmitter {
         return this.connectPromise
     }
 
+    /**
+     * Closes the transport gracefully: pauses incoming events, flushes the
+     * write-behind persistence queue, and emits a `connection` close event
+     * with reason `client_disconnected`. Does not clear stored credentials -
+     * call {@link connect} again to resume the same session. There is no
+     * built-in auto-reconnect; subscribe to `connection: { status: 'close' }`
+     * and decide your own backoff.
+     */
     public async disconnect(): Promise<void> {
         await this.pauseIncomingEventsAndWaitDrain()
         const writeBehindFlush = await this.writeBehind.flush(
@@ -360,49 +448,87 @@ export class WaClient extends EventEmitter {
         })
     }
 
+    /** Auth client: pairing, credentials, registration state. */
     public get auth(): WaAuthClient {
         return this.deps.authClient
     }
+    /** Message coordinator: send/receive, receipts, addons, media download. */
     public get message(): WaMessageCoordinator {
         return this.deps.messageCoordinator
     }
+    /** Presence coordinator: own/peer presence subscriptions. */
     public get presence(): WaPresenceCoordinator {
         return this.deps.presenceCoordinator
     }
+    /** Low-level coordinator: raw node send/query escape hatch. */
     public get lowlevel(): WaLowLevelCoordinator {
         return this.deps.lowLevelCoordinator
     }
+    /** App-state mutation coordinator: chat-side settings (mute, pin, etc.). */
     public get chat(): WaAppStateMutationCoordinator {
         return this.deps.chatCoordinator
     }
+    /** Group coordinator: create/query/manage WhatsApp groups and communities. */
     public get group(): WaGroupCoordinator {
         return this.deps.groupCoordinator
     }
+    /** Status coordinator: status broadcast send and reactions. */
     public get status(): WaStatusCoordinator {
         return this.deps.statusCoordinator
     }
+    /**
+     * Broadcast-list coordinator: list management and broadcast sends.
+     * **Business-only** - the underlying app-state schema rejects regular
+     * accounts. See {@link WaBroadcastListCoordinator}.
+     */
     public get broadcastList(): WaBroadcastListCoordinator {
         return this.deps.broadcastListCoordinator
     }
+    /** Newsletter coordinator: create/query/follow/admin/send for channels. */
     public get newsletter(): WaNewsletterCoordinator {
         return this.deps.newsletterCoordinator
     }
+    /** Privacy coordinator: privacy categories, blocklist, disallowed list. */
     public get privacy(): WaPrivacyCoordinator {
         return this.deps.privacyCoordinator
     }
+    /** Profile coordinator: own/peer profile fields (picture, status, username). */
     public get profile(): WaProfileCoordinator {
         return this.deps.profileCoordinator
     }
+    /**
+     * Business coordinator: business profile, verified-name lookups. Reads
+     * work from any account; **writes (`editBusinessProfile`,
+     * `updateCoverPhoto`, `deleteCoverPhoto`) are business-only** and throw
+     * on regular accounts. See {@link WaBusinessCoordinator}.
+     */
     public get business(): WaBusinessCoordinator {
         return this.deps.businessCoordinator
     }
+    /** Bot coordinator: Meta-AI bot profiles, prompt/chunk decryption. */
     public get bot(): WaBotCoordinator {
         return this.deps.botCoordinator
     }
+    /**
+     * Email coordinator: bind/unbind/verify email on the account.
+     * **Mobile-only** - every method throws unless the client is connected
+     * via `options.mobileTransport`. See {@link WaEmailCoordinator}.
+     */
     public get email(): WaEmailCoordinator {
         return this.deps.emailCoordinator
     }
 
+    /**
+     * Unpairs this companion device by removing it server-side. Requires an
+     * authenticated session; throws when no `meJid` is present.
+     *
+     * **Does not** disconnect the socket or clear local stores by itself -
+     * the server initiates the close after accepting the IQ, which surfaces
+     * via a `connection` event with `isLogout: true`. That close handler is
+     * what wipes the persisted state, honoring `options.logoutStoreClear`.
+     * The {@link WaClient} instance is single-shot after logout: create a
+     * fresh one (with a fresh `sessionId` or pre-cleared store) to re-pair.
+     */
     public async logout(reason: WaLogoutReason = WA_LOGOUT_REASONS.USER_INITIATED): Promise<void> {
         const meJid = this.deps.authClient.getCurrentCredentials()?.meJid
         if (!meJid) {

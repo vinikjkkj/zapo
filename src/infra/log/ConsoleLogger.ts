@@ -16,31 +16,42 @@ const CONSOLE_WRITERS: Readonly<Record<LogLevel, (...args: unknown[]) => void>> 
     error: console.error
 }
 
+/**
+ * Default zero-dependency {@link Logger} that writes structured records to
+ * the standard `console` sinks. Messages below the configured `level` are
+ * dropped without formatting cost.
+ */
 export class ConsoleLogger implements Logger {
     public readonly level: LogLevel
     private readonly minLevelPriority: number
 
+    /** @param level Minimum level to emit. Defaults to `'info'`. */
     public constructor(level: LogLevel = 'info') {
         this.level = level
         this.minLevelPriority = LOG_LEVEL_PRIORITY[level]
     }
 
+    /** Emits a `trace` record. */
     public trace(message: string, context?: Record<string, unknown>): void {
         this.write('trace', message, context)
     }
 
+    /** Emits a `debug` record. */
     public debug(message: string, context?: Record<string, unknown>): void {
         this.write('debug', message, context)
     }
 
+    /** Emits an `info` record. */
     public info(message: string, context?: Record<string, unknown>): void {
         this.write('info', message, context)
     }
 
+    /** Emits a `warn` record. */
     public warn(message: string, context?: Record<string, unknown>): void {
         this.write('warn', message, context)
     }
 
+    /** Emits an `error` record. */
     public error(message: string, context?: Record<string, unknown>): void {
         this.write('error', message, context)
     }

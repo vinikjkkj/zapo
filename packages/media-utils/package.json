@@ -2,6 +2,8 @@
     "name": "@zapo-js/media-utils",
     "version": "0.1.0",
     "description": "Media processing utilities for zapo-js (thumbnails, waveforms, probing)",
+    "license": "MIT",
+    "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
     "main": "dist/index.js",
     "module": "dist/esm/index.js",
     "types": "dist/index.d.ts",

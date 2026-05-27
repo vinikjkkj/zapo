@@ -11,6 +11,33 @@ import type { WaMediaProcessorOptions } from './types'
 
 export type { WaMediaProcessorOptions } from './types'
 
+/**
+ * Builds a {@link WaMediaProcessor} backed by `sharp` (image/sticker
+ * thumbnails) and `ffmpeg` / `ffprobe` (video thumbnails, audio probing,
+ * waveform extraction, voice-note normalization). Plug the result into
+ * `WaClientOptions.media.processor` to enable automatic thumbnail/
+ * waveform generation on outgoing media.
+ *
+ * Missing binaries are non-fatal: `ffmpeg`/`ffprobe` absence skips the
+ * affected operation and forwards a `onWarning` message instead of
+ * throwing.
+ *
+ * @example
+ * ```ts
+ * import { WaClient } from 'zapo-js'
+ * import { createMediaProcessor } from '@zapo-js/media-utils'
+ *
+ * const client = new WaClient({
+ *     store,
+ *     sessionId: 'default',
+ *     media: {
+ *         processor: createMediaProcessor({
+ *             onWarning: (msg) => console.warn('[media]', msg)
+ *         })
+ *     }
+ * })
+ * ```
+ */
 export function createMediaProcessor(options?: WaMediaProcessorOptions): WaMediaProcessor {
     const opts = options ?? {}
     const warn = opts.onWarning

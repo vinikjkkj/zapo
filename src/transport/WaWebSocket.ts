@@ -99,6 +99,11 @@ function resolveSocketRuntime(): SocketRuntime {
     return 'browser'
 }
 
+/**
+ * Thin wrapper around a `RawWebSocket` (or Node `ws` constructor) used by
+ * {@link WaComms}. Iterates the configured URL list on failure and applies a
+ * connect/idle timeout.
+ */
 export class WaWebSocket {
     private readonly config: Readonly<
         Required<Pick<WaSocketConfig, 'timeoutIntervalMs'>> &

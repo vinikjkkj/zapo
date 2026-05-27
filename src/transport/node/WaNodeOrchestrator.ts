@@ -19,6 +19,11 @@ interface WaNodeOrchestratorOptions {
     readonly mobileIqIdFormat?: boolean
 }
 
+/**
+ * Issues outgoing binary nodes and matches incoming responses back to their
+ * caller's IQ promises by stanza id. Owns the per-process id generator and
+ * the in-flight query timeout map.
+ */
 export class WaNodeOrchestrator {
     private readonly logger: Logger
     private readonly sendNodeFn: (node: BinaryNode) => Promise<void>

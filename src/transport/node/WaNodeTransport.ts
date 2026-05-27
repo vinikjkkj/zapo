@@ -8,6 +8,12 @@ import type { BinaryNode } from '@transport/types'
 import type { WaComms } from '@transport/WaComms'
 import { toError } from '@util/primitives'
 
+/**
+ * Bridges encoded binary stanzas to/from {@link WaComms}: encodes outbound
+ * {@link BinaryNode}s into framed bytes, decodes incoming frames back into
+ * nodes, and re-emits `node_in`/`node_out`/`frame_in`/`frame_out`/
+ * `decode_error` events for debug observers.
+ */
 export class WaNodeTransport extends EventEmitter {
     private readonly logger: Logger
     private comms: WaComms | null
@@ -18,11 +24,13 @@ export class WaNodeTransport extends EventEmitter {
         this.comms = null
     }
 
+    /** Attaches (or detaches with `null`) the {@link WaComms} instance used to write frames. */
     public bindComms(comms: WaComms | null): void {
         this.comms = comms
         this.logger.debug('node transport bindComms', { connected: comms !== null })
     }
 
+    /** Encodes `node` as a stanza frame and writes it through the bound comms. Throws when not connected. */
     public async sendNode(node: BinaryNode): Promise<void> {
         const comms = this.comms
         if (!comms) {
@@ -40,6 +48,11 @@ export class WaNodeTransport extends EventEmitter {
         await comms.sendFrame(frame)
     }
 
+    /**
+     * Decodes an incoming frame and forwards the resulting {@link BinaryNode}
+     * to `onNode`. Stream-end frames are silently dropped; decode errors are
+     * logged and surfaced via the `decode_error` event without throwing.
+     */
     public async dispatchIncomingFrame(
         frame: Uint8Array,
         onNode: (node: BinaryNode) => Promise<void> | void

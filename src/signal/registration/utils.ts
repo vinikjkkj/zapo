@@ -13,6 +13,11 @@ interface RegistrationBundle {
     readonly firstPreKey: PreKeyRecord
 }
 
+/**
+ * Bootstraps a fresh Signal identity: generates registration info, the first
+ * signed prekey, and the first one-time prekey, then persists them in order
+ * so a partial commit can never split bootstrap state.
+ */
 export async function createAndStoreInitialKeys(
     store: WaSignalStore,
     preKeyStore: WaPreKeyStore

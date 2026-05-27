@@ -2,6 +2,8 @@
     "name": "@zapo-js/store-postgres",
     "version": "0.3.0",
     "description": "PostgreSQL store provider for zapo-js",
+    "license": "MIT",
+    "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
     "main": "dist/index.js",
     "module": "dist/esm/index.js",
     "types": "dist/index.d.ts",

@@ -3,17 +3,17 @@
  * @zapo-js/fake-server. Pairs a single real `WaClient` against an
  * in-process fake server and measures four scenarios:
  *
- *   1. SEND 1:1 — N messages to N distinct contacts (each with M
+ *   1. SEND 1:1  -  N messages to N distinct contacts (each with M
  *      devices); the lib runs usync + prekey-fetch + per-device
  *      pkmsg encryption + wire send.
- *   2. RECV 1:1 — N peers ship 1 message each in parallel; the
+ *   2. RECV 1:1  -  N peers ship 1 message each in parallel; the
  *      lib runs Signal X3DH + Double Ratchet recv + decrypt + emit.
- *   3. SEND group — N messages distributed across G groups of S
+ *   3. SEND group  -  N messages distributed across G groups of S
  *      members each. The first send to each group does the SKDM
  *      fanout (1 pkmsg per member) and is amortised by an explicit
  *      warmup OUTSIDE the timed window so the timed numbers reflect
  *      steady-state skmsg throughput.
- *   4. RECV group — N messages distributed across the same G groups,
+ *   4. RECV group  -  N messages distributed across the same G groups,
  *      each fired from a designated sender peer.
  *
  * Pairing is the most expensive setup step, so the harness pairs
@@ -30,18 +30,18 @@
  *   ZAPO_BENCH_JSON                  (=1 to also print results as JSON)
  *
  * Profiling flags (same shape as test/example.cjs):
- *   --cpu                    — V8 CPU profile covering the whole run;
+ *   --cpu                     -  V8 CPU profile covering the whole run;
  *                              saved to cpu-<ts>.cpuprofile on exit
  *                              (and cpu-<scenario>-<ts>.cpuprofile per
  *                              scenario if --per-scenario is passed)
- *   --heap                   — heap allocation timeline tracking; saved
+ *   --heap                    -  heap allocation timeline tracking; saved
  *                              to heap-<ts>.heaptimeline on exit
- *   --snapshot               — heap snapshot at start + end of the run
+ *   --snapshot                -  heap snapshot at start + end of the run
  *                              (snapshot-start-<ts>.heapsnapshot and
  *                              snapshot-end-<ts>.heapsnapshot)
- *   --per-scenario           — with --cpu, emit one profile per scenario
- *   --snapshot-per-scenario  — heap snapshot between scenarios
- *   --out-dir=<path>         — directory to write profiles into
+ *   --per-scenario            -  with --cpu, emit one profile per scenario
+ *   --snapshot-per-scenario   -  heap snapshot between scenarios
+ *   --out-dir=<path>          -  directory to write profiles into
  *                              (default: cwd)
  *
  * Run with:
@@ -130,7 +130,7 @@ class InMemoryAuthStore implements WaAuthStore {
 }
 
 function noopStore(): never {
-    throw new Error('unexpected store call — bench harness should not reach this slot')
+    throw new Error('unexpected store call  -  bench harness should not reach this slot')
 }
 
 const AUTH_BACKEND = (
@@ -239,7 +239,7 @@ class BenchProfiler {
             try {
                 await this.session.post('Profiler.start')
             } catch {
-                // already running — fine
+                // already running  -  fine
             }
         }
         if (this.options.snapshotPerScenario) {
@@ -429,7 +429,7 @@ async function bringUpPairedClient(): Promise<PairedFixture> {
         // The default in-memory prekey store caps at 4_096 entries.
         // The bench creates ~4000 fake peers and triggers ~5 prekey
         // refills (each generates 812 fresh keyIds), so the total
-        // distinct keyId set hits ~4060 — right at the cap. The
+        // distinct keyId set hits ~4060  -  right at the cap. The
         // bounded map then evicts the oldest entries (the very keyIds
         // that the early peers reserved), causing those peers to fail
         // their pkmsg with "prekey N not found" later. Bumping the
@@ -981,7 +981,7 @@ async function mainSeparateProcess(
     const setupStart = performance.now()
     await client.connect()
     await rpc.waitForAuthenticatedPipeline()
-    // Start pairing on the server side — the material relay is already wired
+    // Start pairing on the server side  -  the material relay is already wired
     const pairPromise = rpc.runPairing(meDeviceJid)
     const waitNextPromise = rpc.waitForNextAuthenticatedPipeline()
     await pairedPromise

@@ -98,6 +98,11 @@ class WaAppStateMissingKeyError extends Error {
     }
 }
 
+/**
+ * App-state synchronization client. Owns the sync key inventory, processes
+ * snapshots/patches, encrypts pending mutations, and persists the resulting
+ * collection state in the {@link WaAppStateStore}.
+ */
 export class WaAppStateSyncClient {
     private readonly logger: Logger
     private readonly query: (node: BinaryNode, timeoutMs: number) => Promise<BinaryNode>
@@ -142,6 +147,10 @@ export class WaAppStateSyncClient {
         this.syncPromise = null
     }
 
+    /**
+     * Returns the active app-state sync key, generating and persisting a new
+     * one when the store is empty (used during initial setup).
+     */
     public async ensureInitialSyncKey(): Promise<WaAppStateSyncKey> {
         const existing = await this.store.getActiveSyncKey()
         if (existing) {
@@ -165,6 +174,7 @@ export class WaAppStateSyncClient {
         return key
     }
 
+    /** Imports peer-shared sync keys into the store; returns the count actually added. */
     public async importSyncKeys(keys: readonly WaAppStateSyncKey[]): Promise<number> {
         this.logger.debug('app-state importing sync keys', { count: keys.length })
         const inserted = await this.store.upsertSyncKeys(keys)
@@ -175,6 +185,7 @@ export class WaAppStateSyncClient {
         return inserted
     }
 
+    /** Handler for `AppStateSyncKeyShare` protocol messages  -  stores received keys and triggers a sync. */
     public async handleIncomingKeyShare(
         context: IncomingKeyEventContext,
         protocolMessage: Proto.Message.IProtocolMessage
@@ -213,6 +224,7 @@ export class WaAppStateSyncClient {
         }
     }
 
+    /** Handler for `AppStateSyncKeyRequest` protocol messages  -  replies with the requested keys via `sendKeyShare`. */
     public async handleIncomingKeyRequest(
         context: IncomingKeyEventContext,
         protocolMessage: Proto.Message.IProtocolMessage
@@ -328,6 +340,7 @@ export class WaAppStateSyncClient {
         return [...deduped.values()]
     }
 
+    /** Imports the keys from a decoded `AppStateSyncKeyShare` proto message. */
     public async importSyncKeyShare(share: Proto.Message.IAppStateSyncKeyShare): Promise<number> {
         const keys: WaAppStateSyncKey[] = []
         for (const item of share.keys ?? []) {
@@ -361,6 +374,12 @@ export class WaAppStateSyncClient {
         return this.importSyncKeys(keys)
     }
 
+    /**
+     * Runs one app-state sync round across the requested collections,
+     * applying any `pendingMutations` and downloading external snapshots
+     * via `options.downloadExternalBlob` when present. Concurrent calls
+     * share the in-flight promise.
+     */
     public async sync(options: WaAppStateSyncOptions = {}): Promise<WaAppStateSyncResult> {
         if (this.syncPromise) {
             this.logger.debug('app-state sync already in flight, joining existing run')
@@ -1307,7 +1326,7 @@ export class WaAppStateSyncClient {
             patchVersion,
             collection
         )
-        // non-fatal: wa-mob/wa-web tolerate this — patchMac below covers payload integrity.
+        // non-fatal: wa-mob/wa-web tolerate this  -  patchMac below covers payload integrity.
         if (!uint8TimingSafeEqual(expectedSnapshotMac, snapshotMac)) {
             this.logger.warn('patch snapshot MAC mismatch (tolerated)', {
                 collection,

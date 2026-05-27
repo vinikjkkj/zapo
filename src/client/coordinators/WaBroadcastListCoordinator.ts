@@ -28,12 +28,25 @@ export interface WaSendBroadcastListMessageInput {
     readonly options?: WaSendMessageOptions
 }
 
+/**
+ * Manages broadcast lists and dispatches messages to one. Accessed via
+ * {@link WaClient.broadcastList}.
+ *
+ * **Business-only.** Broadcast lists are backed by the
+ * `BusinessBroadcastList` app-state schema and are only available on
+ * WhatsApp Business accounts - regular accounts will see the underlying
+ * mutation IQs rejected by the server.
+ */
 export interface WaBroadcastListCoordinator {
+    /** Creates or updates a broadcast list definition (name + recipients). */
     readonly setList: (input: WaSetBroadcastListInput) => Promise<void>
+    /** Deletes a broadcast list by id. */
     readonly removeList: (id: string) => Promise<void>
+    /** Sends a message to every member of a broadcast list. */
     readonly send: (input: WaSendBroadcastListMessageInput) => Promise<WaMessagePublishResult>
 }
 
+/** Builds a {@link WaBroadcastListCoordinator} from its dependencies. */
 export function createBroadcastListCoordinator(
     options: WaBroadcastListCoordinatorOptions
 ): WaBroadcastListCoordinator {

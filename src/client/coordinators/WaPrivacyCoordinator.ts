@@ -35,17 +35,43 @@ export interface WaBlocklistResult {
     readonly dhash?: string
 }
 
+/**
+ * Coordinates privacy queries/mutations: per-category settings, blocklist,
+ * and the per-category disallowed lists. Accessed via {@link WaClient.privacy}.
+ */
 export interface WaPrivacyCoordinator {
+    /** Fetches the current value of every privacy category. */
     readonly getPrivacySettings: () => Promise<WaPrivacySettings>
+    /**
+     * Updates a single privacy category to a new {@link WaPrivacyValue}.
+     *
+     * The `'contact_blacklist'` value (a deny-list of specific contacts on
+     * top of `'contacts'`/`'all'`) only flips the **mode** here - you must
+     * separately populate the per-category disallowed list with
+     * {@link getDisallowedList} + the corresponding app-state mutation, or
+     * the deny-list stays empty.
+     */
     readonly setPrivacySetting: <S extends WaPrivacySettingName>(
         setting: S,
         value: WaPrivacySettingValueMap[S]
     ) => Promise<void>
+    /**
+     * Fetches the per-category disallowed list (the JIDs explicitly excluded
+     * from `contact_blacklist`/`contact_whitelist` style settings).
+     */
     readonly getDisallowedList: (
         category: WaPrivacyDisallowedListSettingName
     ) => Promise<WaPrivacyDisallowedListResult>
+    /** Returns the current account-wide blocklist. */
     readonly getBlocklist: () => Promise<WaBlocklistResult>
+    /**
+     * Blocks `jid` (account-wide blocklist). After this, the peer can no
+     * longer message/call you and cannot see your last seen/online/photo/
+     * status. The block is symmetric only from the peer's read perspective -
+     * they don't get an explicit "you were blocked" notification.
+     */
     readonly blockUser: (jid: string) => Promise<void>
+    /** Removes `jid` from the blocklist. */
     readonly unblockUser: (jid: string) => Promise<void>
 }
 
@@ -160,6 +186,7 @@ function parseBlocklist(result: BinaryNode): WaBlocklistResult {
     return { jids, dhash }
 }
 
+/** Builds a {@link WaPrivacyCoordinator} backed by the given IQ query function. */
 export function createPrivacyCoordinator(
     options: WaPrivacyCoordinatorOptions
 ): WaPrivacyCoordinator {

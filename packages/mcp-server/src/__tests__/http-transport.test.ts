@@ -62,7 +62,7 @@ const callMcp = async (
     const text = await res.text()
     let body: unknown
     if (text.startsWith('event:') || text.includes('\nevent:')) {
-        // SSE response — parse the first data: line
+        // SSE response  -  parse the first data: line
         const dataLine = text.split('\n').find((l) => l.startsWith('data:'))
         body = dataLine ? JSON.parse(dataLine.slice('data:'.length).trim()) : null
     } else if (text.length > 0) {

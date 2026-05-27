@@ -67,6 +67,11 @@ const EMPTY_USYNC_RESULT_ENVELOPE: WaUsyncResultEnvelope = Object.freeze({
     refresh: Object.freeze({})
 })
 
+/**
+ * Walks a `usync` IQ result and extracts per-protocol error envelopes plus
+ * `refresh` hints. Returns an empty envelope when the result has no `usync`
+ * payload.
+ */
 export function parseUsyncResultEnvelope(result: BinaryNode): WaUsyncResultEnvelope {
     const usyncNode = findNodeChild(result, WA_NODE_TAGS.USYNC)
     if (!usyncNode) return EMPTY_USYNC_RESULT_ENVELOPE

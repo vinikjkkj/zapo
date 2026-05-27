@@ -12,6 +12,11 @@ const PREFIX_SIGNATURE_RANDOM = new Uint8Array([
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 ])
 
+/**
+ * Verifies an XEdDSA signature over `message` against an X25519 (Montgomery)
+ * public key, converting to the Edwards form internally. Returns `false`
+ * on shape mismatch instead of throwing.
+ */
 export async function xeddsaVerify(
     curvePublicKey: Uint8Array,
     message: Uint8Array,
@@ -37,6 +42,10 @@ export async function xeddsaVerify(
     }
 }
 
+/**
+ * Signs `message` with an X25519 (Montgomery) private key using the XEdDSA
+ * construction. Returns a 64-byte signature.
+ */
 export async function xeddsaSign(privateKey: Uint8Array, message: Uint8Array): Promise<Uint8Array> {
     assertByteLength(privateKey, 32, `invalid curve25519 private key length ${privateKey.length}`)
 
