@@ -180,6 +180,9 @@ export class WaClient extends EventEmitter {
 
     private async runClientTooOldRecover(): Promise<void> {
         try {
+            if (this.connectPromise) {
+                await this.connectPromise.catch(() => undefined)
+            }
             const latest = await fetchLatestWaWebVersion()
             this.logger.info('client_too_old auto-recover: reconnecting', {
                 version: latest.version

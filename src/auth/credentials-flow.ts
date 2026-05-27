@@ -117,7 +117,6 @@ export async function buildCommsConfig(
     // deviceInfo on every `new WaClient(...)` call.
     const effectiveMobileTransport =
         clientOptions.mobileTransport ?? mobileTransportFromCredentials(credentials)
-    const versionBase = await resolveVersion(clientOptions.version)
     logger.debug('building comms config from credentials', {
         registered,
         hasServerStaticKey:
@@ -170,6 +169,8 @@ export async function buildCommsConfig(
             }
         }
     }
+
+    const versionBase = await resolveVersion(clientOptions.version)
 
     return {
         url: socketOptions.url,
