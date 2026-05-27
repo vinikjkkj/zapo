@@ -3,7 +3,7 @@ import { hkdfSync } from 'node:crypto'
 import { EMPTY_BYTES, toBytesView } from '@util/bytes'
 
 /**
- * HKDF (HMAC-SHA-256)  -  derives `outLength` bytes from `ikm` using the given
+ * HKDF (HMAC-SHA-256) – derives `outLength` bytes from `ikm` using the given
  * `salt` (empty bytes when `null`) and `info` context.
  */
 export function hkdf(

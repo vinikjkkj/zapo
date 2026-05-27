@@ -4,7 +4,7 @@ import { X25519 } from '@crypto/curves/X25519'
 import type { PreKeyRecord, RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
 
 /**
- * Generates the per-device Signal registration info  -  a random registration id
+ * Generates the per-device Signal registration info – a random registration id
  * plus a fresh identity X25519 key pair.
  */
 export async function generateRegistrationInfo(): Promise<RegistrationInfo> {

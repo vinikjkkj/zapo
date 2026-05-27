@@ -87,7 +87,7 @@ class ByteReader {
 // Reusable scratch buffer for nibble/hex unpack. Max output is
 // `(0x7f) * 2 = 254` bytes (length byte holds the packed-byte count in
 // its low 7 bits, each byte unpacks to ≤2 chars). Single-threaded JS +
-// non-reentrant decoder makes module-level reuse safe  -  `TextDecoder`
+// non-reentrant decoder makes module-level reuse safe – `TextDecoder`
 // copies into the returned string before we touch the buffer again.
 const PACKED_SCRATCH = new Uint8Array(256)
 

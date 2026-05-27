@@ -119,7 +119,7 @@ export function attachBotThread(message: Proto.IMessage, input: WaBotThreadInput
 export function extractInvokedBotJid(message: Proto.IMessage): string | null {
     const inner = message.botInvokeMessage?.message
     if (!inner) return null
-    // Mention metadata lives on whichever submessage carries the body  -  text
+    // Mention metadata lives on whichever submessage carries the body – text
     // prompts on extendedTextMessage, media prompts on the caption-bearing body.
     const mentioned =
         inner.extendedTextMessage?.contextInfo?.mentionedJid ??

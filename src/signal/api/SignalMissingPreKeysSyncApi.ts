@@ -48,7 +48,7 @@ function isMissingPreKeysUserResultPreferred(result: SignalMissingPreKeysUserRes
 
 /**
  * Fetches missing prekey bundles for specific (user, device, registration id)
- * triples  -  used during message encryption when a Signal session is missing.
+ * triples – used during message encryption when a Signal session is missing.
  */
 export class SignalMissingPreKeysSyncApi {
     private readonly logger: SignalMissingPreKeysSyncApiOptions['logger']

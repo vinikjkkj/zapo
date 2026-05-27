@@ -171,7 +171,7 @@ export function canonicalizeSignalServer(
 
 /**
  * Returns the JID rewritten with its server canonicalized via
- * {@link canonicalizeSignalServer}  -  used to derive the address Signal
+ * {@link canonicalizeSignalServer} – used to derive the address Signal
  * sessions are keyed by.
  */
 export function canonicalizeSignalJid(
@@ -247,7 +247,7 @@ export function isHostedServer(server: string): boolean {
 }
 
 /**
- * Returns `true` when the JID refers to a hosted device  -  either by server
+ * Returns `true` when the JID refers to a hosted device – either by server
  * (`@hosted` / `@hosted.lid`) or by a `:HOSTED_DEVICE_ID@…` device segment.
  */
 export function isHostedDeviceJid(jid: string): boolean {

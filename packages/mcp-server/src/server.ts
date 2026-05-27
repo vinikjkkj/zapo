@@ -231,7 +231,7 @@ const runHttpTransport = async (
     if (!LOOPBACK_HOSTS.has(config.httpHost)) {
         // The HTTP transport has no auth and the `call` tool exposes the entire
         // WaClient + zapo-js surface. Binding to a non-loopback interface puts
-        // that on the network  -  definitely not what you want by accident.
+        // that on the network – definitely not what you want by accident.
         runtime.getLogger().warn('mcp http transport bound to non-loopback host without auth', {
             host: config.httpHost,
             port: config.httpPort,

@@ -241,7 +241,7 @@ export class WaMediaCrypto {
     }
 
     /**
-     * Streaming encrypt  -  returns an `encrypted` Readable plus a `metadata`
+     * Streaming encrypt – returns an `encrypted` Readable plus a `metadata`
      * promise that resolves with hashes/sidecars after the stream ends.
      */
     // eslint-disable-next-line @typescript-eslint/require-await
@@ -312,7 +312,7 @@ export class WaMediaCrypto {
     }
 
     /**
-     * Streaming decrypt  -  returns a `plaintext` Readable plus a `metadata`
+     * Streaming decrypt – returns a `plaintext` Readable plus a `metadata`
      * promise that resolves with the verified hashes after the stream ends
      * (or rejects on MAC/hash failure).
      */

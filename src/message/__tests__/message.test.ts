@@ -1339,7 +1339,7 @@ test('processNewsletterLiveUpdates fans aggregated poll_vote inside live_updates
                                     }
                                 ]
                             },
-                            // bare message announcement  -  should be skipped
+                            // bare message announcement – should be skipped
                             { tag: 'message', attrs: { server_id: '129' } }
                         ]
                     }

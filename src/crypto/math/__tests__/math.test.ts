@@ -91,32 +91,32 @@ test('fe aliased operations produce correct results', () => {
     const a = 0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdefn % p
     const b = 0xdeadbeefcafebabe0000000000000001deadbeefcafebabe0000000000000001n % p
 
-    // feMul(a, a, b)  -  output aliases first input
+    // feMul(a, a, b) – output aliases first input
     const aFe1 = feFromBigInt(a)
     feMul(aFe1, aFe1, feFromBigInt(b))
     assert.equal(feToBigInt(aFe1), (a * b) % p, 'feMul(a, a, b)')
 
-    // feMul(a, b, a)  -  output aliases second input
+    // feMul(a, b, a) – output aliases second input
     const aFe2 = feFromBigInt(a)
     feMul(aFe2, feFromBigInt(b), aFe2)
     assert.equal(feToBigInt(aFe2), (a * b) % p, 'feMul(a, b, a)')
 
-    // feAdd(c, c, c)  -  output aliases both inputs
+    // feAdd(c, c, c) – output aliases both inputs
     const cFe = feFromBigInt(a)
     feAdd(cFe, cFe, cFe)
     assert.equal(feToBigInt(cFe), (a + a) % p, 'feAdd(c, c, c)')
 
-    // feSub(c, c, c)  -  result should be 0
+    // feSub(c, c, c) – result should be 0
     const dFe = feFromBigInt(a)
     feSub(dFe, dFe, dFe)
     assert.equal(feToBigInt(dFe), 0n, 'feSub(c, c, c)')
 
-    // feNeg(a, a)  -  output aliases input
+    // feNeg(a, a) – output aliases input
     const eFe = feFromBigInt(a)
     feNeg(eFe, eFe)
     assert.equal(feToBigInt(eFe), p - a, 'feNeg(a, a)')
 
-    // feSqr(a, a)  -  output aliases input
+    // feSqr(a, a) – output aliases input
     const fFe = feFromBigInt(a)
     feSqr(fFe, fFe)
     assert.equal(feToBigInt(fFe), (a * a) % p, 'feSqr(a, a)')

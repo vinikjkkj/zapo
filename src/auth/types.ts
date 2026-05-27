@@ -62,7 +62,7 @@ export interface WaAuthClientOptions {
     /**
      * Override the numeric companion platform id (see
      * {@link WA_COMPANION_PLATFORM_IDS}). Inferred from `deviceBrowser` when
-     * omitted  -  set explicitly for non-browser platforms (Electron, UWP, ...).
+     * omitted – set explicitly for non-browser platforms (Electron, UWP, ...).
      */
     readonly devicePlatform?: string
     /**
@@ -77,17 +77,17 @@ export interface WaAuthClientOptions {
     readonly requireFullSync?: boolean
     /**
      * WhatsApp Web version string the client advertises (`'x.y.z'`). Defaults
-     * to a tested production version  -  only override to pin/upgrade manually.
+     * to a tested production version – only override to pin/upgrade manually.
      */
     readonly version?: string
     /**
-     * **Dangerous escape hatches**  -  each flag disables a security check.
+     * **Dangerous escape hatches** – each flag disables a security check.
      * Do not enable in production.
      */
     readonly dangerous?: WaAuthDangerousOptions
     /**
      * Mobile-transport overrides (TCP socket, device info). Set this to
-     * connect via the WhatsApp Mobile protocol instead of Web  -  see
+     * connect via the WhatsApp Mobile protocol instead of Web – see
      * {@link WaMobileTransportOptions}.
      */
     readonly mobileTransport?: WaMobileTransportOptions

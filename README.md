@@ -122,6 +122,8 @@ Each package's README has the install + config + integration notes.
 
 - **[zapo.to](https://zapo.to/)** - guides, full API reference, examples,
   protocol notes
+- **[`vinikjkkj/zapo-docs`](https://github.com/vinikjkkj/zapo-docs)** -
+  source of zapo.to (open issues/PRs there for doc fixes)
 - **Per-package READMEs** under [`packages/`](packages/) - one per
   optional package
 - **[`AGENTS.md`](AGENTS.md)** - architecture spec + coding rules
@@ -136,6 +138,14 @@ Contributors also agree to the [Code of Conduct](CODE_OF_CONDUCT.md),
 which includes an **AI-Assisted Contributions** policy covering
 disclosure, human ownership, and the rule against bundle-hallucinated
 protocol claims.
+
+## Security
+
+Found a vulnerability in the crypto, auth, or Signal layer? Please
+**do not open a public issue**. Report it privately via
+[GitHub Security Advisories](https://github.com/vinikjkkj/zapo/security/advisories/new)
+or email `contact@vinicius.email`. Scope, response window, and
+disclosure timeline are documented in [`SECURITY.md`](SECURITY.md).
 
 ## License
 

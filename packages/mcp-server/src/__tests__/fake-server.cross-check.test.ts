@@ -140,7 +140,7 @@ test('mcp runtime drives pairing + send/receive against fake-server', async () =
             })
         })
 
-        // Drive connect through the call tool  -  same code path Claude would use.
+        // Drive connect through the call tool – same code path Claude would use.
         const connectPromise = callTool.handler({ path: 'connect' }, runtime)
 
         const pipeline = await server.waitForAuthenticatedPipeline()

@@ -26,7 +26,7 @@ export const WA_PREVIEW_MEDIA_HKDF_INFO = TEXT_ENCODER.encode('Messenger Preview
 
 /**
  * Returns the HKDF `info` bytes used to derive per-media keys for a given
- * media type. Throws for unsupported types  -  see {@link WA_MEDIA_HKDF_INFO}
+ * media type. Throws for unsupported types – see {@link WA_MEDIA_HKDF_INFO}
  * for the supported set.
  */
 export function getWaMediaHkdfInfo(mediaType: string): Uint8Array {

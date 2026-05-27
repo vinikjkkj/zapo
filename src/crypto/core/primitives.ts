@@ -165,7 +165,7 @@ export function hmacSha512Sign(key: Uint8Array, data: HashInput): Uint8Array {
     return toBytesView(feed(createHmac('sha512', key), data).digest())
 }
 
-/** PBKDF2 over HMAC-SHA-256  -  derives `length` bytes from `password` + `salt`. */
+/** PBKDF2 over HMAC-SHA-256 – derives `length` bytes from `password` + `salt`. */
 export async function pbkdf2Sha256(
     password: Uint8Array,
     salt: Uint8Array,

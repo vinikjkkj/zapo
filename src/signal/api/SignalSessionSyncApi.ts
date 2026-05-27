@@ -83,7 +83,7 @@ export class SignalSessionSyncApi {
     }
 
     /**
-     * Batched key-bundle fetch. Returns one entry per JID  -  either a bundle
+     * Batched key-bundle fetch. Returns one entry per JID – either a bundle
      * (success) or an error envelope. Duplicate JIDs are coalesced.
      */
     public async fetchKeyBundles(

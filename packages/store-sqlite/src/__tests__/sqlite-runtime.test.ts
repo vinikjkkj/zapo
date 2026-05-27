@@ -719,7 +719,7 @@ test('sqlite message-secret store covers set/get, batch, TTL expiry and cleanup'
         assert.deepEqual(await store.get('msg-3', Date.now()), entryC)
         assert.deepEqual(await store.get('msg-4', Date.now()), entryD)
 
-        // TTL expiry  -  reading after TTL returns null
+        // TTL expiry – reading after TTL returns null
         const expired = await store.get('msg-1', Date.now() + 200)
         assert.equal(expired, null)
 

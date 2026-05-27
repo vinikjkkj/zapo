@@ -244,7 +244,7 @@ export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
  * Returns a zero-copy `Uint8Array` view over the input. Subclasses of
  * `Uint8Array` (Node `Buffer`) are wrapped in a plain view; `ArrayBuffer`/
  * `ArrayBufferView` get a view over their backing buffer. Use at system
- * boundaries (WebCrypto / Node crypto / WebSocket results)  -  not on values
+ * boundaries (WebCrypto / Node crypto / WebSocket results) – not on values
  * that are already plain `Uint8Array`.
  */
 export function toBytesView(value: Uint8Array | ArrayBuffer | ArrayBufferView): Uint8Array {

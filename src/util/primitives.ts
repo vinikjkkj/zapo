@@ -2,7 +2,7 @@ const DIGITS_ONLY_RE = /^\d+$/
 const SIGNED_DIGITS_RE = /^-?\d+$/
 
 /**
- * Normalizes an unknown thrown value into an `Error`  -  `Error` instances are
+ * Normalizes an unknown thrown value into an `Error` – `Error` instances are
  * returned unchanged, strings/numbers are wrapped, and objects with `message`
  * or `code` fields are mapped to readable messages. Use in `catch` blocks
  * before logging.

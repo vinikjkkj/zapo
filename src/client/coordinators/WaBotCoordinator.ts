@@ -93,7 +93,7 @@ export interface WaGetBotProfileOptions {
 
 export interface WaBotPromptOptions extends WaSendMessageOptions {
     // Bot to invoke. Defaults to `to` when `to` is a `@bot` jid (direct chat).
-    // Required when `to` is a group/chat  -  there the bot is invoked via mention.
+    // Required when `to` is a group/chat – there the bot is invoked via mention.
     readonly botJid?: string
     readonly personaId?: string
     readonly capabilities?: readonly proto.BotCapabilityMetadata.BotCapabilityType[]
@@ -322,7 +322,7 @@ function normalizeBotJidToFbid(botJid: string): string {
     const mapped = resolveBotFbidJid(botJid)
     if (mapped) return mapped
     throw new Error(
-        `cannot resolve FBID for bot jid "${botJid}"  -  pass a @bot jid or use the fbidJid from listBots`
+        `cannot resolve FBID for bot jid "${botJid}" – pass a @bot jid or use the fbidJid from listBots`
     )
 }
 
@@ -369,7 +369,7 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
         },
 
         sendPrompt: async (to, content, opts = {}) => {
-            // `to` wins when it is a @bot jid  -  caller chose a specific bot; ignore
+            // `to` wins when it is a @bot jid – caller chose a specific bot; ignore
             // opts.botJid so it cannot misroute the prompt to a different bot.
             const isDirect = isBotJid(to)
             const botJid = isDirect ? to : opts.botJid
@@ -396,7 +396,7 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
             }
 
             // Mention envelope must NOT carry personaId/invokerJid/capabilities/
-            // botThreadInfo  -  Meta AI silently drops the request otherwise.
+            // botThreadInfo – Meta AI silently drops the request otherwise.
             const mentionedJids: string[] = [fbidBotJid]
             if (opts.extraMentionedJids) {
                 for (const jid of opts.extraMentionedJids) {

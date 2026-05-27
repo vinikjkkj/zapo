@@ -105,7 +105,7 @@ function buildCommentMarkdown(options) {
         const baseReport = baseReportsBySuite.get(report.suite)
         const suiteComparison = summarizeSuiteComparison(report, baseReport)
         lines.push(
-            `<details><summary>${report.title} (${report.suite}) — ${suite.status.toUpperCase()}</summary>`
+            `<details><summary>${report.title} (${report.suite}) – ${suite.status.toUpperCase()}</summary>`
         )
         lines.push('')
         lines.push(`comparison vs base: ${suiteComparison.comparisonNote}`)

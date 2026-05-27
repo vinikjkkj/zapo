@@ -138,7 +138,7 @@ module.exports = [
                         {
                             group: ['..', '../*', '../**'],
                             message:
-                                'cross-module relative imports are forbidden — use a path alias (@module/*) instead'
+                                'cross-module relative imports are forbidden – use a path alias (@module/*) instead'
                         }
                     ]
                 }

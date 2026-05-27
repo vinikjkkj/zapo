@@ -76,7 +76,7 @@ function parseArgs(argv: readonly string[]): CliArgs {
 }
 
 function printHelp(): void {
-    process.stdout.write(`@zapo-js/fake-server  -  standalone fake WhatsApp Web server
+    process.stdout.write(`@zapo-js/fake-server – standalone fake WhatsApp Web server
 
 USAGE
   npx @zapo-js/fake-server [flags]

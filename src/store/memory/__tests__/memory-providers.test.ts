@@ -226,7 +226,7 @@ test('memory message secret store covers set/get, batch, TTL expiry, bounds and 
     assert.deepEqual(await store.get('msg-2'), entryB)
     assert.equal(await store.get('missing'), null)
 
-    // bounds eviction  -  maxSecrets=2, so msg-1 gets evicted
+    // bounds eviction – maxSecrets=2, so msg-1 gets evicted
     await store.set('msg-3', entryC)
     assert.equal(await store.get('msg-1'), null)
     assert.deepEqual(await store.get('msg-3'), entryC)

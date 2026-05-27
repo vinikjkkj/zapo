@@ -258,7 +258,7 @@ test('bot coordinator sendPrompt mention path wraps text in botInvokeMessage wit
     assert.ok(rendering, 'rendering config metadata must be present')
     assert.equal(typeof rendering.bloksVersioningId, 'string')
     assert.equal(rendering.pixelDensity, 2.8125)
-    // mention envelope drops persona/invoker/capabilities/thread  -  Meta AI silently
+    // mention envelope drops persona/invoker/capabilities/thread – Meta AI silently
     // drops the request otherwise (per wa-web parity).
     assert.equal(m.messageContextInfo?.botMetadata?.personaId, undefined)
     assert.equal(m.messageContextInfo?.botMetadata?.invokerJid, undefined)

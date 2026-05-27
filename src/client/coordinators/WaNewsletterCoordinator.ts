@@ -46,7 +46,7 @@ export type {
 } from '@client/newsletter/types'
 
 /**
- * Newsletter coordinator surface  -  combines the discovery, admin, and
+ * Newsletter coordinator surface – combines the discovery, admin, and
  * messaging operation sets. Accessed via {@link WaClient.newsletter}.
  */
 export type WaNewsletterCoordinator = WaNewsletterDiscoveryOps &

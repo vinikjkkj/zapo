@@ -125,7 +125,7 @@ export class WaClient extends EventEmitter {
             this.stores.messageSecret === NOOP_MESSAGE_SECRET_STORE
         ) {
             this.logger.warn(
-                'addons.autoDecrypt is enabled but messageSecret cache is noop  -  ' +
+                'addons.autoDecrypt is enabled but messageSecret cache is noop – ' +
                     'addon decryption will only work if secrets are in the message store'
             )
         }
@@ -199,7 +199,7 @@ export class WaClient extends EventEmitter {
 
     /**
      * Returns the current auth state snapshot (credentials, registration,
-     * connection flag)  -  useful for resuming or inspecting the client.
+     * connection flag) – useful for resuming or inspecting the client.
      */
     public getState() {
         const connected = this.deps.connectionManager.isConnected()
@@ -262,7 +262,7 @@ export class WaClient extends EventEmitter {
                     })
                 })
             }
-            // Decode unconditionally  -  chunks whose parent prompt we never sent
+            // Decode unconditionally – chunks whose parent prompt we never sent
             // are skipped by the secret-store lookup downstream.
             if (event.message) {
                 void this.deps.botCoordinator.tryDecryptChunk(event).catch((err) => {
@@ -377,16 +377,16 @@ export class WaClient extends EventEmitter {
      *
      * **First-time pairing:** the promise stays pending until the user scans a
      * QR or types the pairing code. Subscribe to `auth_qr` / `auth_pairing_code`
-     * *before* awaiting  -  they fire while `connect()` is still running.
+     * *before* awaiting – they fire while `connect()` is still running.
      *
      * @example
      * ```ts
-     * // QR pairing (default  -  works headless)
+     * // QR pairing (default – works headless)
      * client.on('auth_qr', ({ qr }) => console.log('scan:', qr))
      * client.on('auth_paired', ({ credentials }) => console.log('paired:', credentials.meJid))
      * await client.connect()
      *
-     * // Link-code pairing  -  call requestPairingCode while connect() is running
+     * // Link-code pairing – call requestPairingCode while connect() is running
      * void client.connect()
      * await new Promise((r) => client.once('auth_pairing_required', r))
      * const code = await client.auth.requestPairingCode('5511999999999')

@@ -63,7 +63,7 @@ export interface WaBusinessCoordinator {
     ) => Promise<readonly WaVerifiedNameBatchEntry[]>
     /**
      * Uploads and binds a new business cover photo. Returns the server-side
-     * upload id  -  feed it back into {@link deleteCoverPhoto} to remove the
+     * upload id – feed it back into {@link deleteCoverPhoto} to remove the
      * cover later. **Business-only** - throws on regular WhatsApp accounts.
      */
     readonly updateCoverPhoto: (media: WaUploadMediaSource) => Promise<{ readonly id: string }>

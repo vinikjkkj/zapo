@@ -32,7 +32,7 @@ export interface SocketCloseInfo {
 export interface WaSocketConfig {
     /** Single WebSocket URL. Mutually exclusive with {@link urls}; the URL list takes precedence when both are set. */
     readonly url?: string
-    /** Failover URL list  -  tried in order until one connects. Overrides {@link url}. */
+    /** Failover URL list – tried in order until one connects. Overrides {@link url}. */
     readonly urls?: readonly string[]
     /** WebSocket sub-protocols to advertise. Defaults to none. */
     readonly protocols?: readonly string[]
@@ -42,7 +42,7 @@ export interface WaSocketConfig {
     readonly dispatcher?: WaProxyDispatcher
     /** Node `http.Agent`-style proxy (fallback when `dispatcher` is unavailable). */
     readonly agent?: WaProxyAgent
-    /** Idle timeout (ms)  -  if no frame arrives in this window the socket is closed. */
+    /** Idle timeout (ms) – if no frame arrives in this window the socket is closed. */
     readonly timeoutIntervalMs?: number
     /** Override the `RawWebSocket` constructor (e.g. {@link WaMobileTcpSocketCtor} for the mobile TCP transport). */
     readonly rawWebSocketConstructor?: RawWebSocketConstructor

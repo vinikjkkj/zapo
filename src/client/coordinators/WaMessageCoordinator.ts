@@ -147,7 +147,7 @@ export class WaMessageCoordinator {
 
     /**
      * Force-refreshes the Signal session(s) for `jid`. Set `reasonIdentity` to
-     * `true` when the trigger was an identity change  -  this also queues a
+     * `true` when the trigger was an identity change – this also queues a
      * trusted-contact-token reissue.
      */
     public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
@@ -163,7 +163,7 @@ export class WaMessageCoordinator {
     }
 
     /**
-     * Sends a message (any {@link WaSendMessageContent} kind  -  text, media,
+     * Sends a message (any {@link WaSendMessageContent} kind – text, media,
      * poll, reaction, edit, revoke, etc.) to `to` and returns the publish
      * result containing the stanza id and ack metadata.
      *
@@ -175,12 +175,12 @@ export class WaMessageCoordinator {
      * **Gotchas:**
      * - The stanza id is auto-generated unless you set `options.id`. Reusing
      *   an id manually makes the send idempotent on the server but is also how
-     *   internal retries (`maxAttempts`) work  -  don't reuse ids across
+     *   internal retries (`maxAttempts`) work – don't reuse ids across
      *   logically distinct messages.
      * - Sending to a `@newsletter` JID routes through a separate code path
      *   that ignores most of `options` (no quote/forward/edit semantics).
      * - Addon-crypto kinds (poll-vote, reaction, message-edit, ...) require an
-     *   authenticated session (`meJid` present)  -  throws otherwise.
+     *   authenticated session (`meJid` present) – throws otherwise.
      * - Group sends fan out to every cached member device. If your
      *   `groupMetadata` cache is empty/disabled, this triggers a metadata IQ
      *   per send (rate-limited server-side, see {@link WaCreateStoreOptions}).
@@ -340,7 +340,7 @@ export class WaMessageCoordinator {
 
     /**
      * Convenience wrapper around {@link download} that buffers the decrypted
-     * media into a single `Uint8Array`. Use only for small media  -  caps via
+     * media into a single `Uint8Array`. Use only for small media – caps via
      * `options.maxBytes`.
      */
     public async downloadBytes(

@@ -77,7 +77,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
     readonly backends?: Readonly<Record<B, WaStoreBackend>>
     /**
      * Per-domain provider selection for the persistent (non-cache) stores.
-     * `auth` is required  -  every other domain falls back to `'memory'` (or
+     * `auth` is required – every other domain falls back to `'memory'` (or
      * `'none'` for the mailbox domains) when omitted.
      */
     readonly providers?: {
@@ -95,7 +95,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * `next_prekey_id`, signed-prekey rotation timestamp). Splits with
          * {@link session}/{@link identity}/{@link preKey} in backends that
          * partition the Signal state; some backends collapse them. Default:
-         * `'memory'`  -  fine for short-lived sessions; persist it in
+         * `'memory'` – fine for short-lived sessions; persist it in
          * production so re-keying / digest checks survive restarts.
          */
         readonly signal?: B | 'memory'
@@ -109,7 +109,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
         /**
          * Signal sessions (the per-peer Double Ratchet state). Losing this
          * forces a transparent re-handshake on the next message to/from that
-         * peer  -  your identity key doesn't change, so no "security code
+         * peer – your identity key doesn't change, so no "security code
          * changed" notice fires on the peer. Default: `'memory'`.
          */
         readonly session?: B | 'memory'
@@ -140,7 +140,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * you want to call `client.message.send(..., { quote })` later for
          * messages this device never had in RAM, or to look up message
          * secrets for addon decryption after a restart. Default: `'none'`
-         * (no archive  -  events fire but aren't stored).
+         * (no archive – events fire but aren't stored).
          */
         readonly messages?: B | 'memory' | 'none'
         /**
@@ -157,7 +157,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
          */
         readonly contacts?: B | 'memory' | 'none'
         /**
-         * Trusted-contact-token cache  -  short-lived tokens the lib issues
+         * Trusted-contact-token cache – short-lived tokens the lib issues
          * to peers so they can verify that messages from you are authentic.
          * Persisting avoids re-issuing on every reconnect (saves IQs).
          * Default: `'memory'`.
@@ -165,7 +165,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
         readonly privacyToken?: B | 'memory'
     }
     /**
-     * Provider selection for the bounded cache domains  -  TTL-evicted state
+     * Provider selection for the bounded cache domains – TTL-evicted state
      * the library re-derives on demand if missing. All default to
      * `'memory'`. Set a domain to `'none'` to disable that cache entirely
      * (the lib will keep working but re-fetch / re-compute every time);
@@ -186,7 +186,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * Group metadata (subject, participants, settings) keyed by group
          * JID. Populated by `client.group.queryGroupMetadata`/server pushes
          * and consumed during fan-out so the library knows who to encrypt
-         * to. Disabling forces a metadata IQ on every group send  -  the
+         * to. Disabling forces a metadata IQ on every group send – the
          * server **rate-limits** this aggressively and active group accounts
          * will get throttled (or temporarily blocked) without a cache.
          * Default: `'memory'`.
@@ -204,7 +204,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * addon decryption (poll votes, reactions, encrypted edits, ...) can
          * find the parent message's 32-byte secret. Falls back to the
          * `messages` store when set. Disable only if `messages` is persistent
-         *  -  otherwise addon auto-decrypt loses parents after restart.
+         * – otherwise addon auto-decrypt loses parents after restart.
          * Default: `'memory'`.
          */
         readonly messageSecret?: B | 'memory' | 'none'
@@ -220,7 +220,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
         readonly limits?: WaStoreMemoryLimitSelection
         readonly cacheTtlMs?: {
             /**
-             * Retry tracker TTL  -  how long an outbound replay payload stays
+             * Retry tracker TTL – how long an outbound replay payload stays
              * resendable after the original send. Default: 60 000 (1 min).
              * Match this to your worst-case clock skew + network delay
              * between you and slow peers; longer = more replay coverage at
@@ -228,7 +228,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
              */
             readonly retryMs?: number
             /**
-             * Group metadata cache TTL  -  how long a cached subject/
+             * Group metadata cache TTL – how long a cached subject/
              * participant list is trusted before a fresh IQ is issued.
              * Default: 300 000 (5 min). Shorter = fresher participant lists,
              * more IQ traffic; longer = better throughput, slightly stale
@@ -236,7 +236,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
              */
             readonly groupMetadataMs?: number
             /**
-             * Device list cache TTL  -  how long a cached per-user device set
+             * Device list cache TTL – how long a cached per-user device set
              * is reused before re-running usync. Default: 300 000 (5 min).
              * Devices changing during this window are still picked up via
              * the push-notification path; the TTL only affects the
@@ -244,7 +244,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
              */
             readonly deviceListMs?: number
             /**
-             * Message-secret TTL  -  how long the addon-decryption cache
+             * Message-secret TTL – how long the addon-decryption cache
              * keeps a parent message's secret around. Default: 1 800 000
              * (30 min). Cover the typical reaction/edit window for active
              * chats; addons arriving after expiry fall back to the

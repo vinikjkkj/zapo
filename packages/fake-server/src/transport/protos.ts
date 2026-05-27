@@ -1,5 +1,5 @@
 /**
- * Layer 1  -  generated protobuf wrapper.
+ * Layer 1 – generated protobuf wrapper.
  *
  * Re-exports the proto namespace from zapo-js. The protos are generated from
  * `.proto` definitions, not lib behavior, so direct reuse is safe.

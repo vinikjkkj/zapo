@@ -185,7 +185,7 @@ export class WaAppStateSyncClient {
         return inserted
     }
 
-    /** Handler for `AppStateSyncKeyShare` protocol messages  -  stores received keys and triggers a sync. */
+    /** Handler for `AppStateSyncKeyShare` protocol messages – stores received keys and triggers a sync. */
     public async handleIncomingKeyShare(
         context: IncomingKeyEventContext,
         protocolMessage: Proto.Message.IProtocolMessage
@@ -224,7 +224,7 @@ export class WaAppStateSyncClient {
         }
     }
 
-    /** Handler for `AppStateSyncKeyRequest` protocol messages  -  replies with the requested keys via `sendKeyShare`. */
+    /** Handler for `AppStateSyncKeyRequest` protocol messages – replies with the requested keys via `sendKeyShare`. */
     public async handleIncomingKeyRequest(
         context: IncomingKeyEventContext,
         protocolMessage: Proto.Message.IProtocolMessage
@@ -1326,7 +1326,7 @@ export class WaAppStateSyncClient {
             patchVersion,
             collection
         )
-        // non-fatal: wa-mob/wa-web tolerate this  -  patchMac below covers payload integrity.
+        // non-fatal: wa-mob/wa-web tolerate this – patchMac below covers payload integrity.
         if (!uint8TimingSafeEqual(expectedSnapshotMac, snapshotMac)) {
             this.logger.warn('patch snapshot MAC mismatch (tolerated)', {
                 collection,

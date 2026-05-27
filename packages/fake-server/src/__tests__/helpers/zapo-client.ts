@@ -31,9 +31,7 @@ class InMemoryAuthStore implements WaAuthStore {
 }
 
 function noopStore(): never {
-    throw new Error(
-        'unexpected store call  -  this slot should not be reached in cross-check tests'
-    )
+    throw new Error('unexpected store call – this slot should not be reached in cross-check tests')
 }
 
 const AUTH_BACKEND = (

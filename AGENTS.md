@@ -196,7 +196,7 @@ import { toError } from '@util/primitives'
 | Indentation                      | 4 spaces                                                                                                                                                                                                                                                                                       |
 | Strings                          | Single quotes                                                                                                                                                                                                                                                                                  |
 | Trailing commas                  | None                                                                                                                                                                                                                                                                                           |
-| Print width                      | 100                                                                                                                                                                                                                                                                                            |
+| Print width                      | 100, enforced by Prettier (`npm run format:check`). Markdown tables, fenced code blocks, and long inline links are exempt – Prettier does not wrap them. Do not hand-wrap to "satisfy" external reviewers if `format:check` passes.                                                            |
 | Exports                          | Named exports only (no default export)                                                                                                                                                                                                                                                         |
 | Enums                            | Avoid TS `enum`; prefer `Object.freeze({...} as const)`                                                                                                                                                                                                                                        |
 | Binary type                      | `Uint8Array` only (no `Buffer`)                                                                                                                                                                                                                                                                |
@@ -273,6 +273,30 @@ Types containing private key material, secrets, or auth tokens must:
 - For long-lived runtime instances, consider implementing `[Symbol.for('nodejs.util.inspect.custom')]` to mask values in Node REPL/log output.
 
 Current sensitive surface: `WaAuthCredentials` (re-exported via `src/index.ts`).
+
+### 5.9 JSDoc maintenance
+
+JSDoc on exported functions, methods, classes, options, and event maps
+is part of the public contract. When you change a public signature, a
+return shape, an option default, or observable behavior, treat the
+surrounding documentation as code – stale JSDoc actively misleads users
+and downstream agents.
+
+- Update the JSDoc directly above the change: params, return type,
+  `@throws`, `@example`, and any mobile-only / business-only / TOS /
+  rate-limit markers attached to the symbol.
+- After renaming a symbol or changing its signature, grep the whole repo
+  for the old name. `@example` blocks routinely call **across modules**
+  (e.g. `WaClient` examples invoke `client.message.send(...)`,
+  `createStore` examples reference store domain keys, coordinator docs
+  reference each other). Every callsite inside a JSDoc has to compile
+  against the new API.
+- `@example` blocks are not type-checked. They rot silently and only
+  surface as a user copy-pasting a snippet that no longer compiles. A
+  grep over the old name is the only safety net.
+- If you remove a public export, also remove every JSDoc that referenced
+  it by name. Re-exports under `src/<module>/index.ts` and subpath
+  barrels count as public surface.
 
 ---
 
@@ -775,5 +799,5 @@ This project follows [Semantic Versioning](https://semver.org/). While on `0.x`,
 - [ ] No secret material in logs
 - [ ] No unbounded in-memory growth introduced
 - [ ] No cross-module relative import chains
-- [ ] Documentation/comments updated when behavior changed
+- [ ] JSDoc updated on changed exports (params, return, `@throws`, `@example`, mobile/business markers) **and** `@example` blocks in other files that call the changed symbol still compile – grep the old name (see §5.9)
 - [ ] `npm run lint`, `npm run format:check`, `npm run test`, and `npm run typecheck:all` pass locally (the `:all` variant catches package-level type errors that `npm run typecheck` alone misses – e.g. a public export removed from `src/<module>/index.ts` that a `packages/*` file imports via `zapo-js/<module>`)

@@ -29,8 +29,8 @@ await server.stop()
 ```text
 src/
 ├── api/                     # Public-facing API
-│   ├── FakeWaServer.ts      # Main facade  -  WS server, IQ router, registries, lifecycle
-│   ├── FakePeer.ts          # Simulated WhatsApp peer  -  Signal crypto, send/recv, groups
+│   ├── FakeWaServer.ts      # Main facade – WS server, IQ router, registries, lifecycle
+│   ├── FakePeer.ts          # Simulated WhatsApp peer – Signal crypto, send/recv, groups
 │   ├── FakePairingDriver.ts # QR pairing flow orchestrator
 │   └── Scenario.ts          # Declarative test scenario DSL
 ├── protocol/                # Protocol-layer builders, parsers, crypto

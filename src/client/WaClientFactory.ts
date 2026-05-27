@@ -1062,7 +1062,7 @@ export function buildWaClientDependencies(input: {
 
             const childTag = firstChild.tag
 
-            // <count value="N"/>  -  server prekeys running low
+            // <count value="N"/> – server prekeys running low
             if (childTag === 'count') {
                 const ackNode = buildAckNode({
                     kind: 'notification',
@@ -1084,7 +1084,7 @@ export function buildWaClientDependencies(input: {
                 return true
             }
 
-            // <digest/>  -  digest key sync
+            // <digest/> – digest key sync
             if (childTag === 'digest') {
                 const ackNode = buildAckNode({
                     kind: 'notification',
@@ -1106,7 +1106,7 @@ export function buildWaClientDependencies(input: {
                 return true
             }
 
-            // <identity/>  -  contact identity key changed
+            // <identity/> – contact identity key changed
             if (childTag === 'identity') {
                 const parsed = parseIdentityChangeNotification(node)
                 if (!parsed) {

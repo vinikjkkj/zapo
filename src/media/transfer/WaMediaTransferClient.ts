@@ -121,7 +121,7 @@ export class WaMediaTransferClient {
 
     /**
      * Streams an encrypted media payload from the first responsive media host.
-     * Returns the raw transfer response  -  caller is responsible for piping the body.
+     * Returns the raw transfer response – caller is responsible for piping the body.
      */
     public async downloadStream(request: StreamDownloadRequest): Promise<StreamTransferResponse> {
         const { urls, headers, timeoutMs } = this.resolveTransferRequest(request)

@@ -381,7 +381,7 @@ export class WaAppStateMutationCoordinator {
 
     /**
      * Walks a sync result and emits one `app_state_mutation` event per
-     * distinct (collection, index)  -  only the last mutation per key wins.
+     * distinct (collection, index) – only the last mutation per key wins.
      * Snapshot-source mutations are skipped unless `emitSnapshotMutations`
      * was enabled at construction.
      */
@@ -918,9 +918,9 @@ export class WaAppStateMutationCoordinator {
      * coordinator (Contact, LabelEdit, LabelJid, QuickReply, AiThreadPin,
      * Favorites, Nux, ...). For the common chat actions there's a dedicated
      * method ({@link setChatMute}, {@link setChatRead}, {@link setMessageStar},
-     * {@link setChatPin}, {@link setChatArchive}, etc.)  -  use those instead.
+     * {@link setChatPin}, {@link setChatArchive}, etc.) – use those instead.
      *
-     * `input` is flat  -  pick a `schema` name from {@link WA_APPSTATE_SCHEMAS},
+     * `input` is flat – pick a `schema` name from {@link WA_APPSTATE_SCHEMAS},
      * fill the index fields (`id`, `chatJid`, `labelId`, ...) and the value
      * fields side-by-side, and the coordinator routes them to the right
      * SyncActionValue subfield.
@@ -984,7 +984,7 @@ export class WaAppStateMutationCoordinator {
      *     id: '5511999999999@s.whatsapp.net'
      * })
      *
-     * // Remove a label from a chat (the label itself stays  -  use LabelEdit
+     * // Remove a label from a chat (the label itself stays – use LabelEdit
      * // with `deleted: true` to delete the label definition entirely)
      * await client.chat.remove({
      *     schema: 'LabelJid',

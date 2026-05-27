@@ -184,7 +184,7 @@ export interface WaGroupCoordinator {
     readonly queryGroupMetadata: (groupJid: string) => Promise<WaGroupMetadata>
     /** Lists every group the current account participates in. */
     readonly queryAllGroups: () => Promise<readonly WaGroupMetadata[]>
-    /** Resolves the IQ result for a group invite `code`  -  returns the raw node. */
+    /** Resolves the IQ result for a group invite `code` – returns the raw node. */
     readonly queryGroupInviteInfo: (code: string) => Promise<BinaryNode>
     /**
      * Creates a new group with `subject` and the given participant JIDs.

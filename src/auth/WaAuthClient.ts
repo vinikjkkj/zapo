@@ -151,7 +151,7 @@ export class WaAuthClient {
 
     /**
      * Builds a {@link WaCommsConfig} from the current credentials and the
-     * runtime device/transport options  -  feeds {@link WaComms}.
+     * runtime device/transport options – feeds {@link WaComms}.
      */
     public buildCommsConfig(
         socketOptions: WaAuthSocketOptions,
@@ -317,14 +317,14 @@ export class WaAuthClient {
      * Pass `customCode` to suggest a specific code; the server still validates
      * and may return a different one.
      *
-     * The client must already be connected  -  kick off `WaClient.connect()` in
+     * The client must already be connected – kick off `WaClient.connect()` in
      * parallel, wait for the `auth_pairing_required` event (or any QR), then
      * call this. The user then enters the returned code in WhatsApp on their
      * phone under *Linked Devices → Link with phone number instead*.
      *
      * @example
      * ```ts
-     * // Start the handshake; do NOT await  -  connect() resolves only after pairing
+     * // Start the handshake; do NOT await – connect() resolves only after pairing
      * void client.connect()
      *
      * // Wait until the pairing screen is ready on the server side

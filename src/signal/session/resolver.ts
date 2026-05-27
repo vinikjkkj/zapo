@@ -35,7 +35,7 @@ export type SignalSessionResolver = {
     ): Promise<void>
 
     /**
-     * Batched session resolver  -  issues a single key-bundle fetch for all
+     * Batched session resolver – issues a single key-bundle fetch for all
      * missing JIDs. Returns the resolved targets that now have a session.
      */
     ensureSessionsBatch(

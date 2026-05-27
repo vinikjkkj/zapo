@@ -188,7 +188,7 @@ class BufferedTeeLogger implements Logger {
 /**
  * JSON.stringify-safe wrapper. Routes through encodeForJson so BigInt, Uint8Array,
  * cycles and other non-JSON values turn into the runtime's marker shape instead of
- * throwing  -  a logger that crashes on log payload is worse than a noisy log.
+ * throwing – a logger that crashes on log payload is worse than a noisy log.
  */
 const safeStringify = (value: unknown): string => {
     try {
@@ -203,7 +203,7 @@ const safeStringify = (value: unknown): string => {
  * match (`isRegex: true`, with the `i` flag). Precomputes the lowercased query
  * or compiles the regex once so the buffer scan does not re-allocate them per
  * entry. Malformed regex yields a predicate that always returns false instead
- * of throwing  -  tool inputs should miss rather than crash the scan.
+ * of throwing – tool inputs should miss rather than crash the scan.
  */
 const buildQueryMatcher = (query: string, isRegex: boolean): ((haystack: string) => boolean) => {
     if (!query) return () => true
@@ -290,7 +290,7 @@ export interface RuntimeConfig {
     readonly logFilePath?: string
     /** Override the chat socket URL list (used when pointing at a fake server). */
     readonly chatSocketUrls?: readonly string[]
-    /** Override the Noise root CA  -  required when pointing at a fake server. */
+    /** Override the Noise root CA – required when pointing at a fake server. */
     readonly noiseRootCa?: { readonly publicKey: Uint8Array; readonly serial: number }
     /** Transport mode for the MCP server: stdio (default) or http (StreamableHTTP, useful with nodemon). */
     readonly transport: McpTransportMode

@@ -1,7 +1,7 @@
 /**
  * Writes a 32-bit big-endian `counter` into the last 4 bytes of a 12-byte
  * AES-GCM nonce buffer. The first 8 bytes are left untouched so callers can
- * reuse a per-instance scratch buffer (see Performance rules §7.6).
+ * reuse a per-instance scratch buffer in hot paths.
  */
 export function writeNonceCounter(out: Uint8Array, counter: number): void {
     if (out.length < 12) {

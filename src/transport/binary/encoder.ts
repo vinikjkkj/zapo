@@ -250,7 +250,7 @@ export function encodeBinaryNode(node: BinaryNode): Uint8Array {
 }
 
 /**
- * Encodes a {@link BinaryNode} as a transport stanza  -  prefixes the bytes
+ * Encodes a {@link BinaryNode} as a transport stanza – prefixes the bytes
  * with the 1-byte flag (`0x00`) the WebSocket framing expects.
  */
 export function encodeBinaryNodeStanza(node: BinaryNode): Uint8Array {
