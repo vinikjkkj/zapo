@@ -148,6 +148,71 @@ export function buildCancelMembershipRequestsIq(input: {
     ])
 }
 
+export type WaGroupMemberAddMode = 'admin_add' | 'all_member_add'
+export type WaGroupMemberLinkMode = 'admin_link' | 'all_member_link'
+export type WaGroupMemberShareGroupHistoryMode = 'admin_share' | 'all_member_share'
+
+function buildSetGroupMemberModeIq(input: {
+    readonly groupJid: string
+    readonly tag: string
+    readonly mode: string
+}): BinaryNode {
+    return buildIqNode(WA_IQ_TYPES.SET, input.groupJid, WA_XMLNS.GROUPS, [
+        {
+            tag: input.tag,
+            attrs: {},
+            content: input.mode
+        }
+    ])
+}
+
+export function buildSetGroupMemberAddModeIq(input: {
+    readonly groupJid: string
+    readonly mode: WaGroupMemberAddMode
+}): BinaryNode {
+    return buildSetGroupMemberModeIq({
+        groupJid: input.groupJid,
+        tag: 'member_add_mode',
+        mode: input.mode
+    })
+}
+
+export function buildSetGroupMemberLinkModeIq(input: {
+    readonly groupJid: string
+    readonly mode: WaGroupMemberLinkMode
+}): BinaryNode {
+    return buildSetGroupMemberModeIq({
+        groupJid: input.groupJid,
+        tag: 'member_link_mode',
+        mode: input.mode
+    })
+}
+
+export function buildSetGroupMemberShareGroupHistoryModeIq(input: {
+    readonly groupJid: string
+    readonly mode: WaGroupMemberShareGroupHistoryMode
+}): BinaryNode {
+    return buildSetGroupMemberModeIq({
+        groupJid: input.groupJid,
+        tag: 'member_share_group_history_mode',
+        mode: input.mode
+    })
+}
+
+export function buildSetGroupEphemeralIq(input: {
+    readonly groupJid: string
+    readonly expirationSeconds: number
+    readonly trigger?: number
+}): BinaryNode {
+    const attrs: Record<string, string> = { expiration: String(input.expirationSeconds) }
+    if (input.trigger !== undefined) {
+        attrs.trigger = String(input.trigger)
+    }
+    return buildIqNode(WA_IQ_TYPES.SET, input.groupJid, WA_XMLNS.GROUPS, [
+        { tag: 'ephemeral', attrs }
+    ])
+}
+
 export function buildJoinLinkedGroupIq(input: {
     readonly groupJid: string
     readonly subGroupJid: string

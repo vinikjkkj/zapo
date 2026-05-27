@@ -626,14 +626,6 @@ export function buildWaClientDependencies(input: {
         queryWithContext: runtime.queryWithContext
     })
 
-    const profileCoordinator = createProfileCoordinator({
-        queryWithContext: runtime.queryWithContext,
-        generateSid: generateUsyncSid,
-        mexSocket: { query: runtime.query },
-        queryLidsByPhoneJids: (phoneJids) => signalDeviceSync.queryLidsByPhoneJids(phoneJids),
-        logger
-    })
-
     const businessCoordinator = createBusinessCoordinator({
         queryWithContext: runtime.queryWithContext,
         mediaTransfer,
@@ -758,17 +750,6 @@ export function buildWaClientDependencies(input: {
         mobileMessageIdFormat: options.mobileTransport !== undefined
     })
 
-    const messageCoordinator = new WaMessageCoordinator({
-        messageDispatch,
-        mediaTransfer,
-        logger,
-        messageStore: sessionStore.messages,
-        messageSecretStore: sessionStore.messageSecret,
-        trustedContactToken,
-        emitAddon: (event) => runtime.emitEvent('message_addon', event),
-        mexSocket: { query: runtime.query }
-    })
-
     const presenceCoordinator = createPresenceCoordinator({
         sendNode: (node) => nodeOrchestrator.sendNode(node, false),
         getCurrentCredentials
@@ -781,6 +762,18 @@ export function buildWaClientDependencies(input: {
         getCurrentCredentials,
         generateOutgoingMessageId: () => messageDispatch.generateOutgoingMessageId(),
         subscribeToProtocolMessage: runtime.subscribeProtocolMessage
+    })
+
+    const messageCoordinator = new WaMessageCoordinator({
+        messageDispatch,
+        mediaTransfer,
+        logger,
+        messageStore: sessionStore.messages,
+        messageSecretStore: sessionStore.messageSecret,
+        trustedContactToken,
+        emitAddon: (event) => runtime.emitEvent('message_addon', event),
+        mexSocket: { query: runtime.query },
+        peerDataOperation
     })
 
     const retryCoordinator = new WaRetryCoordinator({
@@ -858,6 +851,15 @@ export function buildWaClientDependencies(input: {
         emitSnapshotMutations: options.chatEvents?.emitSnapshotMutations === true,
         emitMutation: (event) => runtime.emitEvent('mutation', event),
         nctSaltSink: (salt) => trustedContactToken.handleNctSaltSync(salt)
+    })
+
+    const profileCoordinator = createProfileCoordinator({
+        queryWithContext: runtime.queryWithContext,
+        generateSid: generateUsyncSid,
+        mexSocket: { query: runtime.query },
+        queryLidsByPhoneJids: (phoneJids) => signalDeviceSync.queryLidsByPhoneJids(phoneJids),
+        mutations: appStateMutations,
+        logger
     })
 
     const statusCoordinator = createStatusCoordinator({

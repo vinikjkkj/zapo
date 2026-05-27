@@ -23,6 +23,7 @@ import {
     shouldUseAddonAdditionalData
 } from '@message/crypto/addon-crypto'
 import { resolveMediaPayload } from '@message/encode/media-payload'
+import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import type {
     WaMessagePublishResult,
     WaSendMessageContent,
@@ -31,8 +32,8 @@ import type {
     WaSendReceiptOptions
 } from '@message/types'
 import type { WaMexOperationResponses } from '@mex'
-import type { Proto } from '@proto'
-import { applyDeviceToJid } from '@protocol/jid'
+import { proto, type Proto } from '@proto'
+import { applyDeviceToJid, normalizeRecipientJid } from '@protocol/jid'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import { runMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
@@ -49,6 +50,29 @@ export interface WaMessageCoordinatorDeps {
     readonly trustedContactToken: WaTrustedContactTokenCoordinator
     readonly emitAddon: (event: WaIncomingAddonEvent) => void
     readonly mexSocket: WaMexQuerySocket
+    readonly peerDataOperation: PeerDataOperationRequester
+}
+
+export interface WaRequestHistorySyncInput {
+    /** Chat the older messages should be fetched from. */
+    readonly chatJid: string
+    /**
+     * Id of the oldest message currently in the local view. The server
+     * pages backwards from this anchor. Omit to let the server pick its
+     * own anchor (rarely useful).
+     */
+    readonly oldestMsgId?: string
+    /** Whether {@link oldestMsgId} was sent by the current account. */
+    readonly oldestMsgFromMe?: boolean
+    /** Epoch ms of the oldest local message; pairs with {@link oldestMsgId}. */
+    readonly oldestMsgTimestampMs?: number
+    /**
+     * How many older messages to request. WhatsApp Web defaults to the
+     * server-side `history_sync_on_demand_message_count` AB-prop (~50);
+     * passing nothing here leaves the field unset so the server applies
+     * its own default.
+     */
+    readonly count?: number
 }
 
 export interface WaReachoutTimelock {
@@ -111,6 +135,7 @@ export class WaMessageCoordinator {
     private readonly trustedContactToken: WaTrustedContactTokenCoordinator
     private readonly emitAddon: (event: WaIncomingAddonEvent) => void
     private readonly mexSocket: WaMexQuerySocket
+    private readonly peerDataOperation: PeerDataOperationRequester
 
     public constructor(deps: WaMessageCoordinatorDeps) {
         this.messageDispatch = deps.messageDispatch
@@ -121,6 +146,61 @@ export class WaMessageCoordinator {
         this.trustedContactToken = deps.trustedContactToken
         this.emitAddon = deps.emitAddon
         this.mexSocket = deps.mexSocket
+        this.peerDataOperation = deps.peerDataOperation
+    }
+
+    /**
+     * Asks the server to backfill older messages for `chatJid` beyond what
+     * arrived in the initial history-sync. Implemented as a
+     * `PeerDataOperationRequestMessage` (type `HISTORY_SYNC_ON_DEMAND`)
+     * sent to this account's own user JID; the response arrives later as
+     * a `history_sync_chunk` event the same way the bootstrap chunks do -
+     * subscribe before calling if you need to react to the chunk.
+     *
+     * The method returns once the request is dispatched (with the protocol
+     * message id), **not** when the chunk arrives. Pair `oldestMsgId` +
+     * `oldestMsgTimestampMs` + `oldestMsgFromMe` from the topmost message
+     * currently visible to page backwards correctly.
+     */
+    public async requestHistorySync(
+        input: WaRequestHistorySyncInput
+    ): Promise<{ readonly messageId: string }> {
+        const chatJid = normalizeRecipientJid(input.chatJid)
+        if (input.count !== undefined) {
+            if (
+                !Number.isFinite(input.count) ||
+                !Number.isSafeInteger(input.count) ||
+                input.count <= 0
+            ) {
+                throw new Error(`invalid count: ${input.count}`)
+            }
+        }
+        if (input.oldestMsgTimestampMs !== undefined) {
+            if (
+                !Number.isFinite(input.oldestMsgTimestampMs) ||
+                !Number.isSafeInteger(input.oldestMsgTimestampMs) ||
+                input.oldestMsgTimestampMs < 0
+            ) {
+                throw new Error(`invalid oldestMsgTimestampMs: ${input.oldestMsgTimestampMs}`)
+            }
+        }
+        const historySyncOnDemandRequest: Proto.Message.PeerDataOperationRequestMessage.IHistorySyncOnDemandRequest =
+            {
+                chatJid,
+                supportInlineResponse: true,
+                ...(input.oldestMsgId === undefined ? {} : { oldestMsgId: input.oldestMsgId }),
+                ...(input.oldestMsgFromMe === undefined
+                    ? {}
+                    : { oldestMsgFromMe: input.oldestMsgFromMe }),
+                ...(input.oldestMsgTimestampMs === undefined
+                    ? {}
+                    : { oldestMsgTimestampMs: input.oldestMsgTimestampMs }),
+                ...(input.count === undefined ? {} : { onDemandMsgCount: input.count })
+            }
+        return this.peerDataOperation.send(
+            proto.Message.PeerDataOperationRequestType.HISTORY_SYNC_ON_DEMAND,
+            { historySyncOnDemandRequest }
+        )
     }
 
     /**

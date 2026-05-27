@@ -142,6 +142,98 @@ test('deactivateCommunity sends delete_parent', async () => {
     assert.equal(root.tag, 'delete_parent')
 })
 
+test('setMemberAddMode shapes member_add_mode IQ with text content', async () => {
+    const mock = createMockQuery([iqResult(), iqResult()])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    await coordinator.setMemberAddMode('120363@g.us', 'all_member_add')
+    await coordinator.setMemberAddMode('120363@g.us', 'admin_add')
+
+    assert.equal(mock.calls.length, 2)
+    assert.equal(mock.calls[0].context, 'group.setMemberAddMode')
+    assert.equal(mock.calls[0].node.attrs.to, '120363@g.us')
+    assert.equal(mock.calls[0].node.attrs.type, 'set')
+    assert.equal(mock.calls[0].node.attrs.xmlns, 'w:g2')
+    const firstChild = (mock.calls[0].node.content as BinaryNode[])[0]
+    assert.equal(firstChild.tag, 'member_add_mode')
+    assert.equal(firstChild.content, 'all_member_add')
+    const secondChild = (mock.calls[1].node.content as BinaryNode[])[0]
+    assert.equal(secondChild.content, 'admin_add')
+})
+
+test('setMemberLinkMode and setMemberShareGroupHistoryMode shape mode IQs', async () => {
+    const mock = createMockQuery([iqResult(), iqResult()])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    await coordinator.setMemberLinkMode('120363@g.us', 'admin_link')
+    await coordinator.setMemberShareGroupHistoryMode('120363@g.us', 'all_member_share')
+
+    assert.equal(mock.calls[0].context, 'group.setMemberLinkMode')
+    const linkChild = (mock.calls[0].node.content as BinaryNode[])[0]
+    assert.equal(linkChild.tag, 'member_link_mode')
+    assert.equal(linkChild.content, 'admin_link')
+
+    assert.equal(mock.calls[1].context, 'group.setMemberShareGroupHistoryMode')
+    const shareChild = (mock.calls[1].node.content as BinaryNode[])[0]
+    assert.equal(shareChild.tag, 'member_share_group_history_mode')
+    assert.equal(shareChild.content, 'all_member_share')
+})
+
+test('setEphemeralDuration shapes ephemeral IQ with expiration attr', async () => {
+    const mock = createMockQuery([iqResult(), iqResult()])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    await coordinator.setEphemeralDuration('120363@g.us', 86400)
+    await coordinator.setEphemeralDuration('120363@g.us', 604800, 1)
+
+    const first = (mock.calls[0].node.content as BinaryNode[])[0]
+    assert.equal(first.tag, 'ephemeral')
+    assert.equal(first.attrs.expiration, '86400')
+    assert.equal(first.attrs.trigger, undefined)
+
+    const second = (mock.calls[1].node.content as BinaryNode[])[0]
+    assert.equal(second.attrs.expiration, '604800')
+    assert.equal(second.attrs.trigger, '1')
+
+    await assert.rejects(
+        () => coordinator.setEphemeralDuration('120363@g.us', -1),
+        /invalid expirationSeconds/
+    )
+    await assert.rejects(
+        () => coordinator.setEphemeralDuration('120363@g.us', 86400, -1),
+        /invalid trigger/
+    )
+})
+
+test('setSetting toggles new group_history / allow_admin_reports / no_frequently_forwarded', async () => {
+    const mock = createMockQuery([
+        iqResult(),
+        iqResult(),
+        iqResult(),
+        iqResult(),
+        iqResult(),
+        iqResult()
+    ])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    await coordinator.setSetting('120363@g.us', 'group_history', true)
+    await coordinator.setSetting('120363@g.us', 'group_history', false)
+    await coordinator.setSetting('120363@g.us', 'allow_admin_reports', true)
+    await coordinator.setSetting('120363@g.us', 'allow_admin_reports', false)
+    await coordinator.setSetting('120363@g.us', 'no_frequently_forwarded', true)
+    await coordinator.setSetting('120363@g.us', 'no_frequently_forwarded', false)
+
+    const tags = mock.calls.map((c) => (c.node.content as BinaryNode[])[0].tag)
+    assert.deepEqual(tags, [
+        'group_history',
+        'no_group_history',
+        'allow_admin_reports',
+        'not_allow_admin_reports',
+        'no_frequently_forwarded',
+        'frequently_forwarded_ok'
+    ])
+})
+
 test('queryLinkedGroupsParticipants returns flattened participants', async () => {
     const response: BinaryNode = iqResult([
         {

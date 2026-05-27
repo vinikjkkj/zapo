@@ -19,7 +19,14 @@ import {
     buildGroupParticipantChangeIq,
     buildJoinLinkedGroupIq,
     buildLeaveGroupIq,
-    buildMembershipRequestsActionIq
+    buildMembershipRequestsActionIq,
+    buildSetGroupEphemeralIq,
+    buildSetGroupMemberAddModeIq,
+    buildSetGroupMemberLinkModeIq,
+    buildSetGroupMemberShareGroupHistoryModeIq,
+    type WaGroupMemberAddMode,
+    type WaGroupMemberLinkMode,
+    type WaGroupMemberShareGroupHistoryMode
 } from '@transport/node/builders/group'
 import {
     findNodeChild,
@@ -211,6 +218,40 @@ export interface WaGroupCoordinator {
         groupJid: string,
         setting: WaGroupSetting,
         enabled: boolean
+    ) => Promise<void>
+    /**
+     * Sets who can add members to the group. `admin_add` restricts adds to
+     * admins; `all_member_add` lets any participant add. Group admin
+     * operation - non-admins receive a `403 not-authorized` error.
+     */
+    readonly setMemberAddMode: (groupJid: string, mode: WaGroupMemberAddMode) => Promise<void>
+    /**
+     * Sets who can share/forward the group invite link. `admin_link`
+     * restricts to admins; `all_member_link` lets any participant share.
+     * Group admin operation.
+     */
+    readonly setMemberLinkMode: (groupJid: string, mode: WaGroupMemberLinkMode) => Promise<void>
+    /**
+     * Sets whether new members see prior chat history. `admin_share` hides
+     * history; `all_member_share` exposes the message backlog when someone
+     * joins. Group admin operation.
+     */
+    readonly setMemberShareGroupHistoryMode: (
+        groupJid: string,
+        mode: WaGroupMemberShareGroupHistoryMode
+    ) => Promise<void>
+    /**
+     * Sets the per-group disappearing-message lifetime in seconds (`0`
+     * disables, `86400` = 24h, `604800` = 7d, `7776000` = 90d). Use this
+     * to pick a duration; `setSetting('ephemeral', false)` is the explicit
+     * disable path. `trigger` is the WhatsApp ephemeral-trigger code -
+     * leave unset unless you know the protocol value to pass through.
+     * Group admin operation.
+     */
+    readonly setEphemeralDuration: (
+        groupJid: string,
+        expirationSeconds: number,
+        trigger?: number
     ) => Promise<void>
     /**
      * Adds the given participant JIDs to the group. Returns the raw IQ
@@ -512,6 +553,18 @@ const SETTING_TAGS: Readonly<
     allow_non_admin_sub_group_creation: {
         on: WA_GROUP_NOTIFICATION_TAGS.ALLOW_NON_ADMIN_SUB_GROUP_CREATION,
         off: WA_GROUP_NOTIFICATION_TAGS.NOT_ALLOW_NON_ADMIN_SUB_GROUP_CREATION
+    },
+    group_history: {
+        on: WA_GROUP_NOTIFICATION_TAGS.GROUP_HISTORY,
+        off: WA_GROUP_NOTIFICATION_TAGS.NO_GROUP_HISTORY
+    },
+    allow_admin_reports: {
+        on: WA_GROUP_NOTIFICATION_TAGS.ALLOW_ADMIN_REPORTS,
+        off: WA_GROUP_NOTIFICATION_TAGS.NOT_ALLOW_ADMIN_REPORTS
+    },
+    no_frequently_forwarded: {
+        on: WA_GROUP_NOTIFICATION_TAGS.NO_FREQUENTLY_FORWARDED,
+        off: WA_GROUP_NOTIFICATION_TAGS.FREQUENTLY_FORWARDED_OK
     }
 }
 
@@ -663,6 +716,61 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             ])
             const result = await queryWithContext('group.setDescription', node)
             assertIqResult(result, 'group.setDescription')
+        },
+
+        setMemberAddMode: async (groupJid, mode) => {
+            const node = buildSetGroupMemberAddModeIq({ groupJid, mode })
+            const result = await queryWithContext('group.setMemberAddMode', node, undefined, {
+                groupJid,
+                mode
+            })
+            assertIqResult(result, 'group.setMemberAddMode')
+        },
+
+        setMemberLinkMode: async (groupJid, mode) => {
+            const node = buildSetGroupMemberLinkModeIq({ groupJid, mode })
+            const result = await queryWithContext('group.setMemberLinkMode', node, undefined, {
+                groupJid,
+                mode
+            })
+            assertIqResult(result, 'group.setMemberLinkMode')
+        },
+
+        setMemberShareGroupHistoryMode: async (groupJid, mode) => {
+            const node = buildSetGroupMemberShareGroupHistoryModeIq({ groupJid, mode })
+            const result = await queryWithContext(
+                'group.setMemberShareGroupHistoryMode',
+                node,
+                undefined,
+                { groupJid, mode }
+            )
+            assertIqResult(result, 'group.setMemberShareGroupHistoryMode')
+        },
+
+        setEphemeralDuration: async (groupJid, expirationSeconds, trigger) => {
+            if (
+                !Number.isFinite(expirationSeconds) ||
+                !Number.isSafeInteger(expirationSeconds) ||
+                expirationSeconds < 0
+            ) {
+                throw new Error(`invalid expirationSeconds: ${expirationSeconds}`)
+            }
+            if (trigger !== undefined) {
+                if (!Number.isFinite(trigger) || !Number.isSafeInteger(trigger) || trigger < 0) {
+                    throw new Error(`invalid trigger: ${trigger}`)
+                }
+            }
+            const node = buildSetGroupEphemeralIq({
+                groupJid,
+                expirationSeconds,
+                ...(trigger === undefined ? {} : { trigger })
+            })
+            const result = await queryWithContext('group.setEphemeralDuration', node, undefined, {
+                groupJid,
+                expirationSeconds,
+                ...(trigger === undefined ? {} : { trigger })
+            })
+            assertIqResult(result, 'group.setEphemeralDuration')
         },
 
         setSetting: async (groupJid, setting, enabled) => {

@@ -15,7 +15,8 @@ const HANDLED_SYNC_TYPES = new Set([
     proto.Message.HistorySyncType.INITIAL_BOOTSTRAP,
     proto.Message.HistorySyncType.RECENT,
     proto.Message.HistorySyncType.FULL,
-    proto.Message.HistorySyncType.PUSH_NAME
+    proto.Message.HistorySyncType.PUSH_NAME,
+    proto.Message.HistorySyncType.ON_DEMAND
 ])
 const HISTORY_SYNC_MAX_PENDING_WRITES = 1_024
 
