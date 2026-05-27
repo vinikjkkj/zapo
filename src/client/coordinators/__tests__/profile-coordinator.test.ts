@@ -25,6 +25,7 @@ test('profile coordinator gets profile picture url', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node, _timeoutMs, contextData) => {
             calls.push({ context, node, contextData })
@@ -65,6 +66,7 @@ test('profile coordinator returns empty result when no picture node', async () =
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async () => createIqResult()
     })
@@ -82,6 +84,7 @@ test('profile coordinator gets full image picture with existing id', async () =>
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
@@ -117,6 +120,7 @@ test('profile coordinator sets profile picture and returns id', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node, _timeoutMs, contextData) => {
             calls.push({ context, node, contextData })
@@ -150,6 +154,7 @@ test('profile coordinator sets group profile picture with target jid', async () 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (_context, node) => {
             calls.push({ node })
@@ -171,6 +176,7 @@ test('profile coordinator deletes profile picture', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
@@ -196,6 +202,7 @@ test('profile coordinator gets status via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
@@ -240,6 +247,7 @@ test('profile coordinator returns null status when no content', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async () =>
             createIqResult([
@@ -272,6 +280,7 @@ test('profile coordinator returns empty string for status code 401', async () =>
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async () =>
             createIqResult([
@@ -309,6 +318,7 @@ test('profile coordinator gets multiple profiles via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
@@ -372,6 +382,7 @@ test('profile coordinator sets status text', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
@@ -394,6 +405,7 @@ test('profile coordinator gets disappearing mode via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async () =>
             createIqResult([
@@ -453,6 +465,7 @@ test('profile coordinator returns empty disappearing mode for empty jids', async
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context) => {
             calls.push(context)
@@ -474,6 +487,7 @@ test('profile coordinator gets text statuses via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
@@ -555,6 +569,7 @@ test('profile coordinator emits null text_status entry on error nodes', async ()
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async () =>
             createIqResult([
@@ -607,6 +622,7 @@ test('profile coordinator returns empty text statuses for empty jids', async () 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context) => {
             calls.push(context)
@@ -644,6 +660,7 @@ test('profile coordinator sets text status via mex', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         queryWithContext: async () => createIqResult(),
         mexSocket
     })
@@ -694,6 +711,7 @@ test('profile coordinator setTextStatus normalizes empty inputs to clear payload
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         queryWithContext: async () => createIqResult(),
         mexSocket
     })
@@ -716,6 +734,7 @@ test('profile coordinator gets usernames via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context, node) => {
             calls.push({ context, node })
@@ -788,6 +807,7 @@ test('profile coordinator returns empty usernames for empty jids', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context) => {
             calls.push(context)
@@ -803,6 +823,7 @@ test('profile coordinator getOwnUsername parses mex payload', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         queryWithContext: async () => createIqResult(),
         mexSocket: {
             query: async (): Promise<BinaryNode> => ({
@@ -838,6 +859,7 @@ test('profile coordinator getOwnUsername swallows 404 GraphQL errors', async () 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         queryWithContext: async () => createIqResult(),
         mexSocket: {
             query: async (): Promise<BinaryNode> => ({
@@ -871,6 +893,7 @@ test('profile coordinator getOwnUsername returns nulls when info missing', async
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         queryWithContext: async () => createIqResult(),
         mexSocket: {
             query: async (): Promise<BinaryNode> => ({
@@ -897,6 +920,7 @@ test('profile coordinator setUsername sends mex variables with defaults', async 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         queryWithContext: async () => createIqResult(),
         mexSocket: {
             query: async (node: BinaryNode): Promise<BinaryNode> => {
@@ -941,6 +965,7 @@ test('profile coordinator setUsername returns false on non-SUCCESS result', asyn
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         queryWithContext: async () => createIqResult(),
         mexSocket: {
             query: async (): Promise<BinaryNode> => ({
@@ -966,6 +991,7 @@ test('profile coordinator deleteUsername sends empty variables', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         queryWithContext: async () => createIqResult(),
         mexSocket: {
             query: async (node: BinaryNode): Promise<BinaryNode> => {
@@ -1007,6 +1033,7 @@ test('profile coordinator returns empty array for empty jids list', async () => 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         logger: createNoopLogger(),
+        queryLidsByPhoneJids: async () => [],
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
         queryWithContext: async (context) => {
             calls.push({ context })
@@ -1018,4 +1045,54 @@ test('profile coordinator returns empty array for empty jids list', async () => 
 
     assert.equal(profiles.length, 0)
     assert.equal(calls.length, 0)
+})
+
+test('profile coordinator resolves lids by phone numbers', async () => {
+    const portCalls: Array<readonly string[]> = []
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
+        queryWithContext: async () => createIqResult(),
+        queryLidsByPhoneJids: async (phoneJids) => {
+            portCalls.push(phoneJids)
+            return [
+                {
+                    phoneJid: '5511999999999@s.whatsapp.net',
+                    lidJid: '1234@lid',
+                    exists: true
+                }
+            ]
+        }
+    })
+
+    const result = await coordinator.getLidsByPhoneNumbers(['+55 (11) 99999-9999'])
+
+    assert.deepEqual(result, [
+        {
+            phoneJid: '5511999999999@s.whatsapp.net',
+            lidJid: '1234@lid',
+            exists: true
+        }
+    ])
+    assert.equal(portCalls.length, 1)
+    assert.deepEqual(portCalls[0], ['5511999999999@s.whatsapp.net'])
+})
+
+test('profile coordinator returns empty lid result without calling port', async () => {
+    let called = false
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
+        queryWithContext: async () => createIqResult(),
+        queryLidsByPhoneJids: async () => {
+            called = true
+            return []
+        }
+    })
+
+    const result = await coordinator.getLidsByPhoneNumbers([])
+    assert.equal(result.length, 0)
+    assert.equal(called, false)
 })

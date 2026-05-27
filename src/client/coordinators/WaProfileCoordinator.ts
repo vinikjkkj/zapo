@@ -1,7 +1,8 @@
 import type { Logger } from '@infra/log/types'
 import type { WaMexOperationResponses } from '@mex'
-import { parseJidFull } from '@protocol/jid'
+import { parseJidFull, parsePhoneJid } from '@protocol/jid'
 import { WA_NODE_TAGS } from '@protocol/nodes'
+import type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 import {
     buildDeleteProfilePictureIq,
     buildGetDisappearingModeUsyncQueryNode,
@@ -112,6 +113,9 @@ export interface WaProfileCoordinator {
     readonly getAboutStatus: (jid: string) => Promise<string | null>
     readonly checkUsernameAvailability: (username: string) => Promise<WaUsernameAvailabilityResult>
     readonly setUsernameKey: (pin: string) => Promise<boolean>
+    readonly getLidsByPhoneNumbers: (
+        phoneNumbers: readonly string[]
+    ) => Promise<readonly SignalLidSyncResult[]>
 }
 
 interface WaProfileCoordinatorOptions {
@@ -124,6 +128,9 @@ interface WaProfileCoordinatorOptions {
     ) => Promise<BinaryNode>
     readonly generateSid: () => Promise<string>
     readonly mexSocket: WaMexQuerySocket
+    readonly queryLidsByPhoneJids: (
+        phoneJids: readonly string[]
+    ) => Promise<readonly SignalLidSyncResult[]>
     readonly logger: Logger
 }
 
@@ -361,7 +368,7 @@ function buildTextStatusMutationInput(input: WaSetTextStatusInput): {
 export function createProfileCoordinator(
     options: WaProfileCoordinatorOptions
 ): WaProfileCoordinator {
-    const { queryWithContext, generateSid, mexSocket, logger } = options
+    const { queryWithContext, generateSid, mexSocket, queryLidsByPhoneJids, logger } = options
 
     return {
         getProfilePicture: async (jid, type, existingId) => {
@@ -544,6 +551,18 @@ export function createProfileCoordinator(
         setUsernameKey: async (pin) => {
             const data = await runMexQuery(mexSocket, 'SetUsernameKey', { pin })
             return isMexUsernameKeySetSuccess(data)
+        },
+
+        getLidsByPhoneNumbers: async (phoneNumbers) => {
+            if (phoneNumbers.length === 0) return []
+            const normalizedPhoneJids = new Array<string>(phoneNumbers.length)
+            for (let index = 0; index < phoneNumbers.length; index += 1) {
+                normalizedPhoneJids[index] = parsePhoneJid(phoneNumbers[index])
+            }
+            logger.trace('profile.getLidsByPhoneNumbers', {
+                phones: normalizedPhoneJids.length
+            })
+            return queryLidsByPhoneJids(normalizedPhoneJids)
         }
     }
 }

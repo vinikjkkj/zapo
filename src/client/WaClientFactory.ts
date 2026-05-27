@@ -630,6 +630,7 @@ export function buildWaClientDependencies(input: {
         queryWithContext: runtime.queryWithContext,
         generateSid: generateUsyncSid,
         mexSocket: { query: runtime.query },
+        queryLidsByPhoneJids: (phoneJids) => signalDeviceSync.queryLidsByPhoneJids(phoneJids),
         logger
     })
 

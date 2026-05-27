@@ -34,9 +34,8 @@ import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
-import { normalizeDeviceJid, parsePhoneJid } from '@protocol/jid'
+import { normalizeDeviceJid } from '@protocol/jid'
 import { WA_LOGOUT_REASONS, type WaLogoutReason } from '@protocol/stream'
-import type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 import { NOOP_MESSAGE_SECRET_STORE } from '@store/noop.store'
 import { buildRemoveCompanionDeviceIq } from '@transport/node/builders/device'
 import { assertIqResult, queryWithContext as queryNodeWithContext } from '@transport/node/query'
@@ -359,25 +358,6 @@ export class WaClient extends EventEmitter {
             isLogout: false,
             isNewLogin: false
         })
-    }
-
-    public async getLidsByPhoneNumbers(
-        phoneNumbers: readonly string[]
-    ): Promise<readonly SignalLidSyncResult[]> {
-        if (
-            !this.deps.connectionManager.isConnected() ||
-            !this.deps.authClient.getCurrentCredentials()
-        ) {
-            throw new Error('client is not connected')
-        }
-        const normalizedPhoneJids = new Array<string>(phoneNumbers.length)
-        for (let index = 0; index < phoneNumbers.length; index += 1) {
-            normalizedPhoneJids[index] = parsePhoneJid(phoneNumbers[index])
-        }
-        this.logger.trace('wa client query lids by phone numbers', {
-            phones: normalizedPhoneJids.length
-        })
-        return this.deps.signalDeviceSync.queryLidsByPhoneJids(normalizedPhoneJids)
     }
 
     public get auth(): WaAuthClient {
