@@ -29,6 +29,7 @@ import { withSessionLock } from '@store/locks/session.lock'
 import { withSignalLock } from '@store/locks/signal.lock'
 import { withThreadLock } from '@store/locks/thread.lock'
 import { WaAppStateMemoryStore } from '@store/memory/appstate.store'
+import { WaAuthMemoryStore } from '@store/memory/auth.store'
 import { WaContactMemoryStore } from '@store/memory/contact.store'
 import { WaDeviceListMemoryStore } from '@store/memory/device-list.store'
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
@@ -110,10 +111,11 @@ function resolveStore<T>(
 /**
  * Builds a {@link WaStore} from the configured providers/backends. Each call
  * to `store.session(sessionId)` returns a cached, lock-wrapped per-domain
- * store bundle for that session – `auth` is required (no default), the
- * Signal-protocol domains default to memory, mailbox domains (messages,
- * threads, contacts) default to noop, and the cache domains default to
- * bounded memory with the TTLs in `options.memory.cacheTtlMs`.
+ * store bundle for that session – every domain defaults to `'memory'` (or
+ * `'none'` for the mailbox domains), and the cache domains default to
+ * bounded memory with the TTLs in `options.memory.cacheTtlMs`. `auth`
+ * defaults to memory too, so the device re-pairs on every restart unless
+ * you point it at a persistent backend.
  *
  * @example
  * ```ts
@@ -124,7 +126,7 @@ function resolveStore<T>(
  * const store = createStore({
  *     backends: { sqlite: createSqliteStore({ path: '.auth/state.sqlite' }) },
  *     providers: {
- *         auth: 'sqlite',        // required – pairing creds live here
+ *         auth: 'sqlite',        // pairing creds – persist in production
  *         signal: 'sqlite',      // signal sessions
  *         senderKey: 'sqlite',   // group sender keys
  *         appState: 'sqlite',    // app-state collections
@@ -135,9 +137,7 @@ function resolveStore<T>(
  * })
  *
  * // Memory-only (tests / ephemeral sessions – credentials lost on restart)
- * const memStore = createStore({
- *     providers: { auth: 'memory' as never } // requires registering a memory auth backend yourself
- * })
+ * const memStore = createStore({})
  *
  * // Cache tuning
  * createStore({
@@ -196,14 +196,10 @@ export function createStore<B extends string>(options: WaCreateStoreOptions<B>):
             const rawAuth = resolveStore<WaAuthStore>(
                 id,
                 backends,
-                providers.auth,
+                providers.auth ?? 'memory',
                 'auth',
                 'stores',
-                () => {
-                    throw new Error(
-                        'providers.auth is required – register a backend or set providers.auth'
-                    )
-                }
+                () => new WaAuthMemoryStore()
             )
             const rawSignal = resolveStore<WaSignalStore>(
                 id,

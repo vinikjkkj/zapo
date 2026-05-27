@@ -53,14 +53,7 @@ import * as inspector from 'node:inspector/promises'
 import { resolve as resolvePath } from 'node:path'
 import { performance } from 'node:perf_hooks'
 
-import {
-    createStore,
-    type Logger,
-    type WaAuthCredentials,
-    type WaAuthStore,
-    WaClient,
-    type WaClientEventMap
-} from 'zapo-js'
+import { createStore, type Logger, WaClient, type WaClientEventMap } from 'zapo-js'
 
 import type { FakePeer } from '../src/api/FakePeer'
 import { FakeWaServer, type WaFakeConnectionPipeline } from '../src/api/FakeWaServer'
@@ -115,47 +108,6 @@ const NOOP_LOGGER: Logger = {
         if (process.env.ZAPO_BENCH_VERBOSE) console.error('[lib error]', ...args)
     }
 }
-
-class InMemoryAuthStore implements WaAuthStore {
-    private credentials: WaAuthCredentials | null = null
-    public async load(): Promise<WaAuthCredentials | null> {
-        return this.credentials
-    }
-    public async save(credentials: WaAuthCredentials): Promise<void> {
-        this.credentials = credentials
-    }
-    public async clear(): Promise<void> {
-        this.credentials = null
-    }
-}
-
-function noopStore(): never {
-    throw new Error('unexpected store call – bench harness should not reach this slot')
-}
-
-const AUTH_BACKEND = (
-    authStore: WaAuthStore
-): { readonly stores: object; readonly caches: object } => ({
-    stores: {
-        auth: () => authStore,
-        signal: noopStore,
-        preKey: noopStore,
-        session: noopStore,
-        identity: noopStore,
-        senderKey: noopStore,
-        appState: noopStore,
-        messages: noopStore,
-        threads: noopStore,
-        contacts: noopStore,
-        privacyToken: noopStore
-    },
-    caches: {
-        retry: noopStore,
-        participants: noopStore,
-        deviceList: noopStore,
-        messageSecret: noopStore
-    }
-})
 
 // ─── Profiler ─────────────────────────────────────────────────────────
 
@@ -417,15 +369,7 @@ interface PairedFixture {
 
 async function bringUpPairedClient(): Promise<PairedFixture> {
     const server = await FakeWaServer.start()
-    const authStore = new InMemoryAuthStore()
     const store = createStore({
-        backends: { mem: AUTH_BACKEND(authStore) as never },
-        providers: {
-            auth: 'mem',
-            signal: 'memory',
-            senderKey: 'memory',
-            appState: 'memory'
-        },
         // The default in-memory prekey store caps at 4_096 entries.
         // The bench creates ~4000 fake peers and triggers ~5 prekey
         // refills (each generates 812 fresh keyIds), so the total
@@ -930,15 +874,7 @@ async function mainSeparateProcess(
         console.log('[server] profiling skipped (--no-server-prof)')
     }
 
-    const authStore = new InMemoryAuthStore()
     const store = createStore({
-        backends: { mem: AUTH_BACKEND(authStore) as never },
-        providers: {
-            auth: 'mem',
-            signal: 'memory',
-            senderKey: 'memory',
-            appState: 'memory'
-        },
         memory: { limits: { signalPreKeys: 16_384 } }
     })
 

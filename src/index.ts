@@ -227,7 +227,7 @@ export { ConsoleLogger } from '@infra/log/ConsoleLogger'
 export { PinoLogger, createPinoLogger } from '@infra/log/PinoLogger'
 export type { PinoLoggerOptions } from '@infra/log/PinoLogger'
 export type { Logger, LogLevel } from '@infra/log/types'
-export { createStore } from '@store'
+export { createStore, WaAuthMemoryStore } from '@store'
 export type {
     WaAppStateCollectionStoreState,
     WaAppStateStore,

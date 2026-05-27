@@ -59,8 +59,30 @@ const mockAuthBackend = {
     }
 } as const
 
-test('createStore requires providers.auth', () => {
-    assert.throws(() => createStore({}).session('default'), /providers.auth is required/)
+test('createStore defaults auth to in-memory when no provider is set', async () => {
+    const store = createStore({})
+    const session = store.session('default')
+    assert.equal(await session.auth.load(), null)
+
+    const credentials = {
+        noiseKeyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) },
+        registrationInfo: {
+            registrationId: 1,
+            identityKeyPair: { pubKey: new Uint8Array(33), privKey: new Uint8Array(32) }
+        },
+        signedPreKey: {
+            keyId: 1,
+            keyPair: { pubKey: new Uint8Array(33), privKey: new Uint8Array(32) },
+            signature: new Uint8Array(64)
+        },
+        advSecretKey: new Uint8Array(32)
+    } as const
+    await session.auth.save(credentials)
+    assert.deepEqual(await session.auth.load(), credentials)
+    await session.auth.clear()
+    assert.equal(await session.auth.load(), null)
+
+    await store.destroy()
 })
 
 test('createStore session lifecycle with backend + memory', async () => {

@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { WA_APP_STATE_COLLECTIONS } from '@protocol/constants'
 import { WaAppStateMemoryStore } from '@store/memory/appstate.store'
+import { WaAuthMemoryStore } from '@store/memory/auth.store'
 import { WaDeviceListMemoryStore } from '@store/memory/device-list.store'
 import { WaIdentityMemoryStore } from '@store/memory/identity.store'
 import { WaMessageSecretMemoryStore } from '@store/memory/message-secret.store'
@@ -13,6 +14,31 @@ import { WaRetryMemoryStore } from '@store/memory/retry.store'
 import { SenderKeyMemoryStore } from '@store/memory/sender-key.store'
 import { WaSessionMemoryStore } from '@store/memory/session.store'
 import { WaThreadMemoryStore } from '@store/memory/thread.store'
+
+test('memory auth store roundtrips credentials and clears', async () => {
+    const store = new WaAuthMemoryStore()
+    assert.equal(await store.load(), null)
+
+    const credentials = {
+        noiseKeyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) },
+        registrationInfo: {
+            registrationId: 7,
+            identityKeyPair: { pubKey: new Uint8Array(33), privKey: new Uint8Array(32) }
+        },
+        signedPreKey: {
+            keyId: 11,
+            keyPair: { pubKey: new Uint8Array(33), privKey: new Uint8Array(32) },
+            signature: new Uint8Array(64)
+        },
+        advSecretKey: new Uint8Array(32),
+        meJid: '5511@s.whatsapp.net'
+    } as const
+    await store.save(credentials)
+    assert.deepEqual(await store.load(), credentials)
+
+    await store.clear()
+    assert.equal(await store.load(), null)
+})
 
 test('memory message/thread stores enforce limits and ordering', async () => {
     const messageStore = new WaMessageMemoryStore({ maxMessages: 2 })

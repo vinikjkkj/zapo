@@ -77,8 +77,8 @@ export interface WaCreateStoreOptions<B extends string = string> {
     readonly backends?: Readonly<Record<B, WaStoreBackend>>
     /**
      * Per-domain provider selection for the persistent (non-cache) stores.
-     * `auth` is required – every other domain falls back to `'memory'` (or
-     * `'none'` for the mailbox domains) when omitted.
+     * Every domain falls back to `'memory'` (or `'none'` for the mailbox
+     * domains) when omitted.
      */
     readonly providers?: {
         /**
@@ -86,8 +86,10 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * identity, registration info, signed prekey, ADV secret, server
          * static key, routing info, account metadata. **This is what proves
          * "I am this paired device" to WhatsApp.** Lose it and the next
-         * connect has to re-pair from scratch (QR/link-code). No default  -
-         * pick a persistent backend in production.
+         * connect has to re-pair from scratch (QR/link-code). Default:
+         * `'memory'` – fine for tests / one-shot scripts, but persist it
+         * (e.g. `@zapo-js/store-sqlite`) in production so the device
+         * survives a process restart.
          */
         readonly auth?: B | 'memory'
         /**

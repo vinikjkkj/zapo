@@ -1,37 +1,19 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {
-    createStore,
-    type WaAuthCredentials,
-    type WaAuthStore,
-    WaClient,
-    type WaClientEventMap
-} from 'zapo-js'
+import { createStore, WaAuthMemoryStore, WaClient, type WaClientEventMap } from 'zapo-js'
 
 import { FakeWaServer } from '../api/FakeWaServer'
-
-class InMemoryAuthStore implements WaAuthStore {
-    private credentials: WaAuthCredentials | null = null
-    public async load(): Promise<WaAuthCredentials | null> {
-        return this.credentials
-    }
-    public async save(credentials: WaAuthCredentials): Promise<void> {
-        this.credentials = credentials
-    }
-    public async clear(): Promise<void> {
-        this.credentials = null
-    }
-    public peek(): WaAuthCredentials | null {
-        return this.credentials
-    }
-}
 
 function noopStore(): never {
     throw new Error('unexpected store call in resume cross-check')
 }
 
-function buildClientFor(server: FakeWaServer, authStore: WaAuthStore, sessionId: string): WaClient {
+function buildClientFor(
+    server: FakeWaServer,
+    authStore: WaAuthMemoryStore,
+    sessionId: string
+): WaClient {
     const store = createStore({
         backends: {
             mem: {
@@ -56,12 +38,7 @@ function buildClientFor(server: FakeWaServer, authStore: WaAuthStore, sessionId:
                 }
             }
         },
-        providers: {
-            auth: 'mem',
-            signal: 'memory',
-            senderKey: 'memory',
-            appState: 'memory'
-        }
+        providers: { auth: 'mem' }
     })
     return new WaClient({
         store,
@@ -91,7 +68,7 @@ function waitForEvent<K extends keyof WaClientEventMap>(
 
 test('resume handshake: second connection uses IK and reaches debug_connection_success', async () => {
     const server = await FakeWaServer.start()
-    const authStore = new InMemoryAuthStore()
+    const authStore = new WaAuthMemoryStore()
 
     try {
         const firstClient = buildClientFor(server, authStore, 'resume-1')
@@ -99,7 +76,7 @@ test('resume handshake: second connection uses IK and reaches debug_connection_s
         await firstClient.connect()
         await firstSuccess
 
-        const credsAfterXx = authStore.peek()
+        const credsAfterXx = await authStore.load()
         assert.ok(credsAfterXx, 'auth store should have credentials after first connect')
         assert.ok(
             credsAfterXx.serverStaticKey && credsAfterXx.serverStaticKey.byteLength === 32,

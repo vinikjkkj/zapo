@@ -37,6 +37,7 @@ export type {
     WaStoredPrivacyTokenRecord
 } from '@store/contracts/privacy-token.store'
 export { WaAppStateMemoryStore } from '@store/memory/appstate.store'
+export { WaAuthMemoryStore } from '@store/memory/auth.store'
 export { WaSignalMemoryStore } from '@store/memory/signal.store'
 export { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
 export { WaSessionMemoryStore } from '@store/memory/session.store'
