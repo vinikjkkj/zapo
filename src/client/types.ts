@@ -201,6 +201,12 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
      * Use to share a known secret across follow-up addons or for deterministic tests.
      */
     readonly messageSecret?: Uint8Array
+    /**
+     * Extra attributes merged into the outgoing `<message>` stanza. Keys provided
+     * here override protocol-managed ones (`to`, `type`, `id`, `edit`, `phash`,
+     * `addressing_mode`) — use with care: bad overrides can break the send.
+     */
+    readonly additionalAttributes?: Readonly<Record<string, string>>
 }
 
 export interface WaClearChatOptions {

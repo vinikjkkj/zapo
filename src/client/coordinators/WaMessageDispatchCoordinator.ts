@@ -667,7 +667,8 @@ export class WaMessageDispatchCoordinator {
             deviceIdentity: shouldAttachDeviceIdentity
                 ? this.getEncodedSignedDeviceIdentity()
                 : undefined,
-            customNodes: extras.customNodes
+            customNodes: extras.customNodes,
+            additionalAttributes: sendOptions.additionalAttributes
         })
         const replayPayload: WaRetryReplayPayload = {
             mode: 'plaintext',
@@ -846,7 +847,8 @@ export class WaMessageDispatchCoordinator {
                 : undefined,
             customNodes: customNodes.length > 0 ? customNodes : undefined,
             mediatype,
-            decryptFail: envelope.decryptFail
+            decryptFail: envelope.decryptFail,
+            additionalAttributes: sendOptions.additionalAttributes
         })
         const replayPayload: WaRetryReplayPayload = {
             mode: 'plaintext',
@@ -1042,7 +1044,8 @@ export class WaMessageDispatchCoordinator {
             customNodes: customNodes.length > 0 ? customNodes : undefined,
             mediatype,
             decryptFail: envelope.decryptFail,
-            botParticipants: botSidecar ? [botSidecar] : undefined
+            botParticipants: botSidecar ? [botSidecar] : undefined,
+            additionalAttributes: sendOptions.additionalAttributes
         })
 
         const replayPayload: WaRetryReplayPayload = {
@@ -1518,7 +1521,8 @@ export class WaMessageDispatchCoordinator {
             deviceIdentity,
             customNodes: customNodes.length > 0 ? customNodes : undefined,
             mediatype,
-            decryptFail: envelope.decryptFail
+            decryptFail: envelope.decryptFail,
+            additionalAttributes: sendOptions.additionalAttributes
         })
 
         const replayPayload: WaRetryReplayPayload = {

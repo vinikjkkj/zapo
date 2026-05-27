@@ -63,7 +63,7 @@ test('status coordinator setUserMuted delegates to app state mutations', async (
     ])
 })
 
-test('status coordinator sendStatus converts conversation to extendedTextMessage', async () => {
+test('status coordinator send converts conversation to extendedTextMessage', async () => {
     const publishes: Array<{
         message: Proto.IMessage
         recipients: readonly string[]
@@ -85,7 +85,7 @@ test('status coordinator sendStatus converts conversation to extendedTextMessage
         }
     })
 
-    const result = await coordinator.sendStatus({
+    const result = await coordinator.send({
         content: 'hi status',
         recipients: ['5511000000000@lid'],
         statusSetting: 'denylist'
@@ -98,7 +98,7 @@ test('status coordinator sendStatus converts conversation to extendedTextMessage
     assert.equal(publishes[0].message.conversation, null)
 })
 
-test('status coordinator sendStatus passes a pre-built proto unchanged', async () => {
+test('status coordinator send passes a pre-built proto unchanged', async () => {
     let captured: Proto.IMessage | undefined
     const coordinator = createStatusCoordinator({
         appStateMutations: createFakeAppStateMutations(),
@@ -112,7 +112,7 @@ test('status coordinator sendStatus passes a pre-built proto unchanged', async (
     const proto1: Proto.IMessage = {
         extendedTextMessage: { text: 'already wrapped' }
     }
-    await coordinator.sendStatus({ content: proto1, recipients: ['5511000000000@lid'] })
+    await coordinator.send({ content: proto1, recipients: ['5511000000000@lid'] })
     assert.equal(captured?.extendedTextMessage?.text, 'already wrapped')
 })
 

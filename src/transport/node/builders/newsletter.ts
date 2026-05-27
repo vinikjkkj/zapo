@@ -6,6 +6,7 @@ import type { BinaryNode } from '@transport/types'
 
 interface NewsletterMessageBaseInput {
     readonly to: string
+    readonly additionalAttributes?: Readonly<Record<string, string>>
 }
 
 interface NewsletterMessageNewInput extends NewsletterMessageBaseInput {
@@ -151,6 +152,10 @@ export function buildNewsletterMessageNode(input: BuildNewsletterMessageInput): 
                 pollMetaChild('vote', input.contentType)
             ]
             break
+    }
+
+    if (input.additionalAttributes) {
+        Object.assign(attrs, input.additionalAttributes)
     }
 
     return content === undefined ? { tag: 'message', attrs } : { tag: 'message', attrs, content }

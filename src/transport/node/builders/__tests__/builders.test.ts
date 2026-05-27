@@ -1062,6 +1062,39 @@ test('message builders cover group and inbound receipt branches', () => {
     assert.equal(nack.content[0].attrs.failure_reason, '12')
 })
 
+test('message builders merge additionalAttributes with user-wins semantics', () => {
+    const direct = buildDirectMessageFanoutNode({
+        to: '5511@s.whatsapp.net',
+        type: 'text',
+        id: 'm1',
+        participants: [
+            {
+                jid: '5511:2@s.whatsapp.net',
+                encType: 'msg',
+                ciphertext: new Uint8Array([1])
+            }
+        ],
+        additionalAttributes: { category: 'peer', type: 'media' }
+    })
+    assert.equal(direct.attrs.to, '5511@s.whatsapp.net')
+    assert.equal(direct.attrs.id, 'm1')
+    assert.equal(direct.attrs.category, 'peer')
+    // user-wins: additionalAttributes.type override the protocol type
+    assert.equal(direct.attrs.type, 'media')
+
+    const group = buildGroupSenderKeyMessageNode({
+        to: '123@g.us',
+        type: 'text',
+        id: 'g1',
+        groupCiphertext: new Uint8Array([2]),
+        participants: [],
+        additionalAttributes: { push_priority: 'high' }
+    })
+    assert.equal(group.attrs.push_priority, 'high')
+    assert.equal(group.attrs.to, '123@g.us')
+    assert.equal(group.attrs.type, 'text')
+})
+
 test('pairing builders generate link-code nodes and ack helpers', () => {
     const hello = buildCompanionHelloRequestNode({
         phoneJid: '5511999999999@s.whatsapp.net',
@@ -1613,6 +1646,34 @@ test('buildNewsletterMessageNode covers every message kind variant', async () =>
             }),
         /at least one item/
     )
+})
+
+test('buildNewsletterMessageNode merges additionalAttributes (user-wins)', async () => {
+    const { buildNewsletterMessageNode } = await import('@transport/node/builders/newsletter')
+    const to = '120363@newsletter'
+
+    const text = buildNewsletterMessageNode({
+        kind: 'text',
+        to,
+        id: 'S1',
+        plaintext: new Uint8Array([1]),
+        additionalAttributes: { category: 'peer', type: 'media' }
+    })
+    assert.equal(text.attrs.to, to)
+    assert.equal(text.attrs.id, 'S1')
+    assert.equal(text.attrs.category, 'peer')
+    assert.equal(text.attrs.type, 'media')
+
+    const media = buildNewsletterMessageNode({
+        kind: 'media',
+        to,
+        id: 'S2',
+        plaintext: new Uint8Array([2]),
+        mediaType: 'image',
+        additionalAttributes: { push_priority: 'high' }
+    })
+    assert.equal(media.attrs.push_priority, 'high')
+    assert.equal(media.attrs.type, 'media')
 })
 
 test('newsletter fetch IQs build the right history/update stanzas', async () => {

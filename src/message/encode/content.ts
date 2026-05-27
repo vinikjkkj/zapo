@@ -233,7 +233,9 @@ export function resolveDecryptFailAttr(message: Proto.IMessage): 'hide' | undefi
     if (
         msg.reactionMessage ||
         msg.encReactionMessage ||
-        (msg.pollUpdateMessage && msg.pollUpdateMessage.vote != null) ||
+        (msg.pollUpdateMessage &&
+            msg.pollUpdateMessage.vote !== null &&
+            msg.pollUpdateMessage.vote !== undefined) ||
         msg.keepInChatMessage ||
         msg.editedMessage ||
         msg.pinInChatMessage ||

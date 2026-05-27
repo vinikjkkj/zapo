@@ -45,7 +45,7 @@ export interface WaNewsletterMessagingDeps extends WaNewsletterMexDeps {
 }
 
 export interface WaNewsletterMessagingOps {
-    readonly sendMessage: (
+    readonly send: (
         newsletterJid: string,
         content: WaSendMessageContent,
         options?: WaNewsletterSendOptions
@@ -114,7 +114,8 @@ function buildDispatchNode(
     newsletterJid: string,
     stanzaId: string,
     built: WaNewsletterBuiltContent,
-    edit: { readonly parentMessageId: string } | null
+    edit: { readonly parentMessageId: string } | null,
+    additionalAttributes?: Readonly<Record<string, string>>
 ): BinaryNode {
     if (built.kind === 'poll-creation') {
         if (edit) {
@@ -124,7 +125,8 @@ function buildDispatchNode(
             kind: 'poll-creation',
             to: newsletterJid,
             id: stanzaId,
-            plaintext: built.plaintext
+            plaintext: built.plaintext,
+            additionalAttributes
         })
     }
     if (built.kind === 'media') {
@@ -138,7 +140,8 @@ function buildDispatchNode(
                       to: newsletterJid,
                       parentMessageId: edit.parentMessageId,
                       plaintext: built.plaintext,
-                      mediaType: built.mediaType
+                      mediaType: built.mediaType,
+                      additionalAttributes
                   }
                 : {
                       kind: 'media',
@@ -146,7 +149,8 @@ function buildDispatchNode(
                       id: stanzaId,
                       plaintext: built.plaintext,
                       mediaType: built.mediaType,
-                      mediaHandle: built.upload?.handle
+                      mediaHandle: built.upload?.handle,
+                      additionalAttributes
                   }
         )
     }
@@ -156,13 +160,15 @@ function buildDispatchNode(
                   kind: 'edit-text',
                   to: newsletterJid,
                   parentMessageId: edit.parentMessageId,
-                  plaintext: built.plaintext
+                  plaintext: built.plaintext,
+                  additionalAttributes
               }
             : {
                   kind: 'text',
                   to: newsletterJid,
                   id: stanzaId,
-                  plaintext: built.plaintext
+                  plaintext: built.plaintext,
+                  additionalAttributes
               }
     )
 }
@@ -173,14 +179,16 @@ export function createMessagingOps(deps: WaNewsletterMessagingDeps): WaNewslette
     }
 
     return {
-        sendMessage: async (
-            newsletterJid,
-            content,
-            sendOptions
-        ): Promise<WaNewsletterSendResult> => {
+        send: async (newsletterJid, content, sendOptions): Promise<WaNewsletterSendResult> => {
             const stanzaId = await resolveStanzaId(sendOptions?.stanzaId)
             const built = await buildContent(deps, content, sendOptions?.contextInfo)
-            const node = buildDispatchNode(newsletterJid, stanzaId, built, null)
+            const node = buildDispatchNode(
+                newsletterJid,
+                stanzaId,
+                built,
+                null,
+                sendOptions?.additionalAttributes
+            )
             const result = await deps.publishMessageNode(node)
             return { ...result, upload: toUploadSummary(built) }
         },

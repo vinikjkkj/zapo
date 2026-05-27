@@ -67,7 +67,7 @@ test('broadcast list coordinator removeList delegates to app state mutations', a
     assert.deepEqual(appStateMutations.removeBroadcastListCalls, ['list-1'])
 })
 
-test('broadcast list coordinator sendMessage forwards built message + recipients', async () => {
+test('broadcast list coordinator send forwards built message + recipients', async () => {
     const sends: Array<{
         listJid: string
         message: Proto.IMessage
@@ -89,7 +89,7 @@ test('broadcast list coordinator sendMessage forwards built message + recipients
         }
     })
 
-    const result = await coordinator.sendMessage({
+    const result = await coordinator.send({
         listJid: 'list-1@broadcast',
         content: 'hello list',
         recipients: ['a@lid', 'b@lid']

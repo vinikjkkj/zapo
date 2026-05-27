@@ -33,7 +33,7 @@ export interface WaSendStatusInput {
 export interface WaStatusCoordinator {
     readonly setPrivacy: (input: WaSetStatusPrivacyInput) => Promise<void>
     readonly setUserMuted: (jid: string, muted: boolean) => Promise<void>
-    readonly sendStatus: (input: WaSendStatusInput) => Promise<WaMessagePublishResult>
+    readonly send: (input: WaSendStatusInput) => Promise<WaMessagePublishResult>
     readonly revokeStatus: (input: {
         readonly messageId: string
         readonly recipients: readonly string[]
@@ -46,7 +46,7 @@ export function createStatusCoordinator(options: WaStatusCoordinatorOptions): Wa
     return {
         setPrivacy: (input) => options.appStateMutations.setStatusPrivacy(input),
         setUserMuted: (jid, muted) => options.appStateMutations.setUserStatusMute(jid, muted),
-        sendStatus: async (input) => {
+        send: async (input) => {
             const built = await options.buildMessageContent(input.content)
             const message =
                 built.message.conversation && !built.message.extendedTextMessage

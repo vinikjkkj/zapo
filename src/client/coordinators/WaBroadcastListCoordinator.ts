@@ -31,9 +31,7 @@ export interface WaSendBroadcastListMessageInput {
 export interface WaBroadcastListCoordinator {
     readonly setList: (input: WaSetBroadcastListInput) => Promise<void>
     readonly removeList: (id: string) => Promise<void>
-    readonly sendMessage: (
-        input: WaSendBroadcastListMessageInput
-    ) => Promise<WaMessagePublishResult>
+    readonly send: (input: WaSendBroadcastListMessageInput) => Promise<WaMessagePublishResult>
 }
 
 export function createBroadcastListCoordinator(
@@ -42,7 +40,7 @@ export function createBroadcastListCoordinator(
     return {
         setList: (input) => options.appStateMutations.setBroadcastList(input),
         removeList: (id) => options.appStateMutations.removeBroadcastList(id),
-        sendMessage: async (input) => {
+        send: async (input) => {
             const built = await options.buildMessageContent(input.content)
             const published = await options.publishBroadcastListMessage({
                 listJid: input.listJid,

@@ -18,6 +18,7 @@ type DirectMessageFanoutInput = {
     readonly customNodes?: readonly BinaryNode[]
     readonly mediatype?: string
     readonly decryptFail?: string
+    readonly additionalAttributes?: Readonly<Record<string, string>>
 }
 
 type GroupMessageFanoutInput = DirectMessageFanoutInput & {
@@ -77,6 +78,7 @@ function buildMessageAttrs(input: {
     readonly edit?: string
     readonly phash?: string
     readonly addressingMode?: string
+    readonly additionalAttributes?: Readonly<Record<string, string>>
 }): Record<string, string> {
     const attrs: Record<string, string> = {
         to: input.to,
@@ -93,6 +95,9 @@ function buildMessageAttrs(input: {
     }
     if (input.addressingMode) {
         attrs.addressing_mode = input.addressingMode
+    }
+    if (input.additionalAttributes) {
+        Object.assign(attrs, input.additionalAttributes)
     }
     return attrs
 }

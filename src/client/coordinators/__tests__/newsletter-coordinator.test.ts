@@ -204,12 +204,9 @@ test('coordinator mute toggles MUTE_FOLLOWER_ACTIVITY by default', async () => {
     assert.equal(adminBody.variables.input.value, WA_NEWSLETTER_MUTE_VALUES.OFF)
 })
 
-test('coordinator sendMessage(jid, "text") wraps as conversation proto', async () => {
+test('coordinator send(jid, "text") wraps as conversation proto', async () => {
     const env = createTestCoordinator({ resultData: null })
-    const result = await env.coordinator.sendMessage(
-        '120363025343298869@newsletter',
-        'hello channel'
-    )
+    const result = await env.coordinator.send('120363025343298869@newsletter', 'hello channel')
     assert.ok(result.id.startsWith('STANZA-'))
     assert.equal(result.upload, undefined)
     assert.equal(env.sendCalls.length, 1)
@@ -221,9 +218,9 @@ test('coordinator sendMessage(jid, "text") wraps as conversation proto', async (
     assert.ok(stanza.content[0].content instanceof Uint8Array)
 })
 
-test('coordinator sendMessage with explicit stanzaId honors caller id', async () => {
+test('coordinator send with explicit stanzaId honors caller id', async () => {
     const env = createTestCoordinator({ resultData: null })
-    const result = await env.coordinator.sendMessage('120363025343298869@newsletter', 'hello', {
+    const result = await env.coordinator.send('120363025343298869@newsletter', 'hello', {
         stanzaId: 'CUSTOM'
     })
     assert.equal(result.id, 'CUSTOM')
@@ -257,7 +254,7 @@ test('coordinator listSubscribed parses metadata array', async () => {
     assert.equal(list[1].viewerRole, 'OWNER')
 })
 
-test('coordinator sendMessage with media uploads plaintext blob and emits media stanza', async () => {
+test('coordinator send with media uploads plaintext blob and emits media stanza', async () => {
     const responseBody = new TextEncoder().encode(
         JSON.stringify({
             url: 'https://media.example/blob',
@@ -289,7 +286,7 @@ test('coordinator sendMessage with media uploads plaintext blob and emits media 
         }
     )
 
-    const result = await env.coordinator.sendMessage('120363025343298869@newsletter', {
+    const result = await env.coordinator.send('120363025343298869@newsletter', {
         type: 'image',
         media: new Uint8Array([7, 8, 9]),
         mimetype: 'image/jpeg',
