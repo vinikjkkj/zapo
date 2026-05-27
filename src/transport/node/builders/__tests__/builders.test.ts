@@ -48,7 +48,11 @@ import {
     buildGroupParticipantChangeIq,
     buildJoinLinkedGroupIq,
     buildLeaveGroupIq,
-    buildMembershipRequestsActionIq
+    buildMembershipRequestsActionIq,
+    buildSetGroupEphemeralIq,
+    buildSetGroupMemberAddModeIq,
+    buildSetGroupMemberLinkModeIq,
+    buildSetGroupMemberShareGroupHistoryModeIq
 } from '@transport/node/builders/group'
 import {
     buildButtonAddonNode,
@@ -81,6 +85,7 @@ import {
     buildPrivacyTokenIqNode,
     buildTcTokenMessageNode
 } from '@transport/node/builders/privacy-token'
+import { buildSetDisappearingModeIq } from '@transport/node/builders/profile'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
 import {
     buildUsyncIq,
@@ -433,6 +438,78 @@ test('group builders support create participant updates and leave', () => {
     assert.equal(leave.attrs.type, 'set')
     assert.ok(Array.isArray(leave.content))
     assert.equal(leave.content[0].tag, 'leave')
+})
+
+test('buildSetGroupMemberAddModeIq shapes IQ with mode as text content', () => {
+    const adminAdd = buildSetGroupMemberAddModeIq({
+        groupJid: '120363@g.us',
+        mode: 'admin_add'
+    })
+    assert.equal(adminAdd.attrs.type, 'set')
+    assert.equal(adminAdd.attrs.to, '120363@g.us')
+    assert.equal(adminAdd.attrs.xmlns, WA_XMLNS.GROUPS)
+    const adminAddChild = (adminAdd.content as readonly BinaryNode[])[0]
+    assert.equal(adminAddChild.tag, 'member_add_mode')
+    assert.equal(adminAddChild.content, 'admin_add')
+
+    const allMember = buildSetGroupMemberAddModeIq({
+        groupJid: '120363@g.us',
+        mode: 'all_member_add'
+    })
+    const allMemberChild = (allMember.content as readonly BinaryNode[])[0]
+    assert.equal(allMemberChild.content, 'all_member_add')
+})
+
+test('buildSetGroupMemberLinkModeIq and ShareGroupHistoryMode shape mode IQs', () => {
+    const link = buildSetGroupMemberLinkModeIq({
+        groupJid: '120363@g.us',
+        mode: 'admin_link'
+    })
+    const linkChild = (link.content as readonly BinaryNode[])[0]
+    assert.equal(linkChild.tag, 'member_link_mode')
+    assert.equal(linkChild.content, 'admin_link')
+
+    const share = buildSetGroupMemberShareGroupHistoryModeIq({
+        groupJid: '120363@g.us',
+        mode: 'all_member_share'
+    })
+    const shareChild = (share.content as readonly BinaryNode[])[0]
+    assert.equal(shareChild.tag, 'member_share_group_history_mode')
+    assert.equal(shareChild.content, 'all_member_share')
+})
+
+test('buildSetGroupEphemeralIq shapes ephemeral IQ with expiration and optional trigger', () => {
+    const noTrigger = buildSetGroupEphemeralIq({
+        groupJid: '120363@g.us',
+        expirationSeconds: 86400
+    })
+    const noTriggerChild = (noTrigger.content as readonly BinaryNode[])[0]
+    assert.equal(noTriggerChild.tag, 'ephemeral')
+    assert.equal(noTriggerChild.attrs.expiration, '86400')
+    assert.equal(noTriggerChild.attrs.trigger, undefined)
+
+    const withTrigger = buildSetGroupEphemeralIq({
+        groupJid: '120363@g.us',
+        expirationSeconds: 604800,
+        trigger: 1
+    })
+    const withTriggerChild = (withTrigger.content as readonly BinaryNode[])[0]
+    assert.equal(withTriggerChild.attrs.expiration, '604800')
+    assert.equal(withTriggerChild.attrs.trigger, '1')
+})
+
+test('buildSetDisappearingModeIq shapes IQ with duration string attr', () => {
+    const node = buildSetDisappearingModeIq(86400)
+    assert.equal(node.attrs.type, 'set')
+    assert.equal(node.attrs.to, WA_DEFAULTS.HOST_DOMAIN)
+    assert.equal(node.attrs.xmlns, 'disappearing_mode')
+    const child = (node.content as readonly BinaryNode[])[0]
+    assert.equal(child.tag, 'disappearing_mode')
+    assert.equal(child.attrs.duration, '86400')
+
+    const disabled = buildSetDisappearingModeIq(0)
+    const disabledChild = (disabled.content as readonly BinaryNode[])[0]
+    assert.equal(disabledChild.attrs.duration, '0')
 })
 
 test('membership approval + join-linked-group builders shape iqs', () => {

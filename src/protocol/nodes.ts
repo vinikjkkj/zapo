@@ -107,5 +107,6 @@ export const WA_XMLNS = Object.freeze({
     WHATSAPP_PING: 'w:p',
     ABPROPS: 'abt',
     MEX: 'w:mex',
-    BOT: 'bot'
+    BOT: 'bot',
+    DISAPPEARING_MODE: 'disappearing_mode'
 } as const)

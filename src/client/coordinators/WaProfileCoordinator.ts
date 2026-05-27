@@ -1,3 +1,4 @@
+import type { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import type { Logger } from '@infra/log/types'
 import type { WaMexOperationResponses } from '@mex'
 import { parseJidFull, parsePhoneJid } from '@protocol/jid'
@@ -10,6 +11,7 @@ import {
     buildGetStatusUsyncQueryNodes,
     buildGetTextStatusUsyncQueryNode,
     buildGetUsernameUsyncQueryNode,
+    buildSetDisappearingModeIq,
     buildSetProfilePictureIq,
     buildSetStatusIq,
     type WaProfilePictureType
@@ -117,12 +119,30 @@ export interface WaProfileCoordinator {
     readonly getStatus: (jid: string) => Promise<WaProfileStatusResult>
     /** Sets the current account's legacy "About" status. */
     readonly setStatus: (text: string) => Promise<void>
+    /**
+     * Sets the account's pushName - the display name broadcast to other
+     * users in chats and group participant lists. WhatsApp Web applies the
+     * change via a `SettingPushName` app-state mutation (collection
+     * `critical_block`); the new value reaches peers as their next
+     * incoming-message envelope from this account carries the updated
+     * `notify` attr. Empty strings are accepted but reset the display name
+     * to the device fingerprint default.
+     */
+    readonly setPushName: (name: string) => Promise<void>
     /** Batched usync fetch of picture id + status for many JIDs. */
     readonly getProfiles: (jids: readonly string[]) => Promise<readonly WaProfileInfo[]>
     /** Batched fetch of the disappearing-mode setting per JID. */
     readonly getDisappearingMode: (
         jids: readonly string[]
     ) => Promise<readonly WaDisappearingModeResult[]>
+    /**
+     * Sets the account-wide default disappearing-mode duration applied to
+     * **new** 1:1 chats started by this account. `durationSeconds` is the
+     * ephemeral message lifetime (`0` disables, `86400` = 24h, `604800` =
+     * 7d, `7776000` = 90d). Existing chats keep their per-chat setting -
+     * change that with a system `disappearing_mode` message instead.
+     */
+    readonly setDisappearingMode: (durationSeconds: number) => Promise<void>
     /** Batched fetch of the modern text-status (emoji + text) per JID. */
     readonly getTextStatuses: (jids: readonly string[]) => Promise<readonly WaTextStatusResult[]>
     /**
@@ -170,6 +190,13 @@ interface WaProfileCoordinatorOptions {
     readonly queryLidsByPhoneJids: (
         phoneJids: readonly string[]
     ) => Promise<readonly SignalLidSyncResult[]>
+    /**
+     * App-state mutation coordinator. {@link WaProfileCoordinator.setPushName}
+     * routes through `mutations.set({ schema: 'SettingPushName', ... })` so
+     * the pushName change shares the same flush pipeline as other queued
+     * mutations.
+     */
+    readonly mutations: WaAppStateMutationCoordinator
     readonly logger: Logger
 }
 
@@ -408,7 +435,8 @@ function buildTextStatusMutationInput(input: WaSetTextStatusInput): {
 export function createProfileCoordinator(
     options: WaProfileCoordinatorOptions
 ): WaProfileCoordinator {
-    const { queryWithContext, generateSid, mexSocket, queryLidsByPhoneJids, logger } = options
+    const { queryWithContext, generateSid, mexSocket, queryLidsByPhoneJids, mutations, logger } =
+        options
 
     return {
         getProfilePicture: async (jid, type, existingId) => {
@@ -463,6 +491,10 @@ export function createProfileCoordinator(
             assertIqResult(result, 'profile.setStatus')
         },
 
+        setPushName: async (name) => {
+            await mutations.set({ schema: 'SettingPushName', name })
+        },
+
         getProfiles: async (jids) => {
             if (jids.length === 0) {
                 return []
@@ -503,6 +535,21 @@ export function createProfileCoordinator(
                 'profile.getDisappearingMode'
             )
             return parseUsyncDisappearingModes(result)
+        },
+
+        setDisappearingMode: async (durationSeconds) => {
+            if (
+                !Number.isFinite(durationSeconds) ||
+                !Number.isSafeInteger(durationSeconds) ||
+                durationSeconds < 0
+            ) {
+                throw new Error(`invalid durationSeconds: ${durationSeconds}`)
+            }
+            const node = buildSetDisappearingModeIq(durationSeconds)
+            const result = await queryWithContext('profile.setDisappearingMode', node, undefined, {
+                durationSeconds
+            })
+            assertIqResult(result, 'profile.setDisappearingMode')
         },
 
         getTextStatuses: async (jids) => {

@@ -117,6 +117,63 @@ test('history sync processor persists conversations and emits chunk event', asyn
     assert.equal((emitted[0] as { messagesCount: number }).messagesCount, 1)
 })
 
+test('history sync processor handles ON_DEMAND chunks (peer-data-operation response)', async () => {
+    const historySyncBytes = proto.HistorySync.encode({
+        chunkOrder: 0,
+        progress: 100,
+        conversations: [
+            {
+                id: 'thread@s.whatsapp.net',
+                messages: [
+                    {
+                        message: {
+                            key: { id: 'on-demand-msg', fromMe: false },
+                            messageTimestamp: 200,
+                            message: { conversation: 'older message' }
+                        }
+                    }
+                ]
+            }
+        ]
+    }).finish()
+    const zipped = gzipSync(historySyncBytes)
+
+    const emitted: { type: string; payload: unknown }[] = []
+    await processHistorySyncNotification(
+        {
+            logger: createNoopLogger(),
+            mediaTransfer: {
+                downloadAndDecrypt: async () => {
+                    throw new Error('should not be called for inline payload')
+                }
+            } as never,
+            writeBehind: {
+                persistMessageAsync: async () => undefined,
+                persistThreadAsync: async () => undefined,
+                persistContactAsync: async () => undefined
+            } as never,
+            emitEvent: (type, payload) => {
+                emitted.push({ type, payload })
+            }
+        },
+        {
+            syncType: proto.Message.HistorySyncType.ON_DEMAND,
+            initialHistBootstrapInlinePayload: zipped
+        }
+    )
+
+    assert.equal(emitted.length, 1)
+    assert.equal(emitted[0].type, 'history_sync_chunk')
+    const event = emitted[0].payload as {
+        syncType: number
+        messagesCount: number
+        progress: number
+    }
+    assert.equal(event.syncType, proto.Message.HistorySyncType.ON_DEMAND)
+    assert.equal(event.messagesCount, 1)
+    assert.equal(event.progress, 100)
+})
+
 test('history sync processor does not emit chunk event when chunk persistence fails', async () => {
     const historySyncBytes = proto.HistorySync.encode({
         chunkOrder: 2,

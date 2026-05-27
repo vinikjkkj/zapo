@@ -10,3 +10,6 @@ export type WaGroupSetting =
     | 'ephemeral'
     | 'membership_approval_mode'
     | 'allow_non_admin_sub_group_creation'
+    | 'group_history'
+    | 'allow_admin_reports'
+    | 'no_frequently_forwarded'

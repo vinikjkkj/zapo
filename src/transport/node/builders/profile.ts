@@ -83,6 +83,15 @@ export function buildGetDisappearingModeUsyncQueryNode(): BinaryNode {
     }
 }
 
+export function buildSetDisappearingModeIq(durationSeconds: number): BinaryNode {
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.DISAPPEARING_MODE, [
+        {
+            tag: WA_NODE_TAGS.DISAPPEARING_MODE,
+            attrs: { duration: String(durationSeconds) }
+        }
+    ])
+}
+
 export function buildGetTextStatusUsyncQueryNode(): BinaryNode {
     return {
         tag: WA_NODE_TAGS.TEXT_STATUS,

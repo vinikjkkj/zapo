@@ -72,5 +72,7 @@ export const WA_GROUP_NOTIFICATION_TAGS = Object.freeze({
     IS_CAPI_HOSTED_GROUP: 'is_capi_hosted_group',
     GROUP_SAFETY_CHECK: 'group_safety_check',
     LIMIT_SHARING_ENABLED: 'limit_sharing_enabled',
-    MISSING_PARTICIPANT_IDENTIFICATION: 'missing_participant_identification'
+    MISSING_PARTICIPANT_IDENTIFICATION: 'missing_participant_identification',
+    GROUP_HISTORY: 'group_history',
+    NO_GROUP_HISTORY: 'no_group_history'
 } as const)
