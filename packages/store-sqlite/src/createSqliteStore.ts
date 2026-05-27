@@ -1,5 +1,6 @@
 import { WaAppStateSqliteStore } from './appstate.store'
 import { WaAuthSqliteStore } from './auth.store'
+import type { WaSqliteConnection } from './connection'
 import { WaContactSqliteStore } from './contact.store'
 import { WaDeviceListSqliteStore } from './device-list.store'
 import { WaGroupMetadataSqliteStore } from './group-metadata.store'
@@ -25,24 +26,38 @@ export interface WaSqliteStoreConfig {
      * Filesystem path to the SQLite database file. Use `':memory:'` for an
      * in-process ephemeral database (handy in tests). The file is created
      * on first use; migrations run lazily the first time each domain is
-     * touched.
+     * touched. Mutually exclusive with {@link connection}.
      */
-    readonly path: string
+    readonly path?: string
+    /**
+     * Pre-opened {@link WaSqliteConnection} the stores should reuse instead
+     * of opening their own. Mutually exclusive with {@link path}. The
+     * caller owns the lifecycle - per-store `destroy()` does not close it,
+     * so call `connection.close()` (or your wrapper's dispose) when
+     * tearing the app down. Use this to share a single SQLite connection
+     * across `zapo-js` and the rest of your application.
+     */
+    readonly connection?: WaSqliteConnection
     /**
      * SQLite driver selection. Defaults to `'auto'` which prefers
      * `better-sqlite3` on Node and falls back to `bun:sqlite` on Bun.
-     * Override only when you need to pin the driver for testing.
+     * Override only when you need to pin the driver for testing. Ignored
+     * when {@link connection} is set.
      */
     readonly driver?: WaSqliteDriver
     /**
      * Extra `PRAGMA` statements applied right after open (e.g.
      * `journal_mode = WAL`, `synchronous = NORMAL`, custom `cache_size`).
-     * Library defaults are merged with these on top.
+     * Library defaults are merged with these on top. Ignored when
+     * {@link connection} is set - apply pragmas yourself before passing
+     * the connection in.
      */
     readonly pragmas?: Readonly<Record<string, string | number>>
     /**
      * Per-domain table name overrides. Use to share a single SQLite file
      * with another application that already owns the default table names.
+     * Ignored when {@link connection} is set - the connection's own
+     * table-name resolver is used.
      */
     readonly tableNames?: WaSqliteTableNameOverrides
     /**
@@ -93,19 +108,44 @@ export interface WaSqliteStoreResult {
  * `messageSecret`. Feed the result into `createStore({ backends: { sqlite:
  * createSqliteStore(...) }, providers: { ... } })` from `zapo-js`.
  *
+ * Pass `path` for the library to open and own a connection (closed by
+ * per-store `destroy()` via the shared ref-counted cache), or `connection`
+ * to reuse one you already opened (you keep the lifecycle).
+ *
+ * @throws if neither or both of `path` / `connection` are set.
+ *
  * @example
  * ```ts
  * import { createStore, WaClient } from 'zapo-js'
  * import { createSqliteStore } from '@zapo-js/store-sqlite'
  *
+ * // Library-owned connection (most common)
  * const store = createStore({
  *     backends: { sqlite: createSqliteStore({ path: '.auth/state.sqlite' }) },
  *     providers: { auth: 'sqlite', signal: 'sqlite', senderKey: 'sqlite', appState: 'sqlite' }
  * })
  * const client = new WaClient({ store, sessionId: 'default' })
  * ```
+ *
+ * @example
+ * ```ts
+ * // Bring your own connection - shared with the rest of your app
+ * import { createSqliteStore, openSqliteConnection } from '@zapo-js/store-sqlite'
+ *
+ * const connection = await openSqliteConnection({ path: 'app.sqlite', sessionId: 'shared' })
+ * const store = createStore({
+ *     backends: { sqlite: createSqliteStore({ connection }) },
+ *     providers: { auth: 'sqlite', signal: 'sqlite', senderKey: 'sqlite', appState: 'sqlite' }
+ * })
+ * // ... use store + connection elsewhere ...
+ * await store.destroy()
+ * connection.close() // you own it
+ * ```
  */
 export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreResult {
+    if (!config.path === !config.connection) {
+        throw new Error('createSqliteStore requires exactly one of "path" or "connection"')
+    }
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
@@ -113,8 +153,9 @@ export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreRes
     const batchSizes = config.batchSizes
 
     const opts = (sessionId: string): WaSqliteStorageOptions => ({
-        path: config.path,
         sessionId,
+        path: config.path,
+        connection: config.connection,
         driver: config.driver,
         pragmas: config.pragmas,
         tableNames: config.tableNames

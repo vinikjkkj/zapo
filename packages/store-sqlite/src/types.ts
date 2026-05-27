@@ -1,3 +1,5 @@
+import type { WaSqliteConnection } from './connection'
+
 export type WaSqliteDriver = 'auto' | 'better-sqlite3' | 'bun'
 
 export type WaSqliteTableName =
@@ -27,8 +29,20 @@ export type WaSqliteTableName =
 export type WaSqliteTableNameOverrides = Readonly<Partial<Record<WaSqliteTableName, string>>>
 
 export interface WaSqliteStorageOptions {
-    readonly path: string
     readonly sessionId: string
+    /**
+     * Filesystem path to the SQLite database. Mutually exclusive with
+     * {@link connection}. When set, the store opens (and ref-counts) its
+     * own connection and closes it on `destroy()`.
+     */
+    readonly path?: string
+    /**
+     * Pre-opened {@link WaSqliteConnection} the store should reuse instead
+     * of opening its own. Mutually exclusive with {@link path}. When set,
+     * `destroy()` does not close the connection - the caller owns its
+     * lifecycle. Migrations still run on first access (idempotent).
+     */
+    readonly connection?: WaSqliteConnection
     readonly driver?: WaSqliteDriver
     readonly pragmas?: Readonly<Record<string, string | number>>
     readonly tableNames?: WaSqliteTableNameOverrides

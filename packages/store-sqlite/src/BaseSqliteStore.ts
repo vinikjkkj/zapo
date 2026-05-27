@@ -18,7 +18,18 @@ export abstract class BaseSqliteStore {
 
     protected async getConnection(): Promise<WaSqliteConnection> {
         if (!this.connectionPromise) {
-            this.connectionPromise = openSqliteConnection(this.options).then((connection) =>
+            const supplied = this.options.connection
+            const path = this.options.path
+            if (supplied && path) {
+                throw new Error('sqlite store accepts only one of "path" or "connection"')
+            }
+            if (!supplied && !path) {
+                throw new Error('sqlite store requires either "path" or "connection"')
+            }
+            const open: Promise<WaSqliteConnection> = supplied
+                ? Promise.resolve(supplied)
+                : openSqliteConnection(this.options)
+            this.connectionPromise = open.then((connection) =>
                 ensureSqliteMigrations(connection, this.migrationDomains).then(() => connection)
             )
         }
@@ -36,6 +47,9 @@ export abstract class BaseSqliteStore {
         const connectionPromise = this.connectionPromise
         this.connectionPromise = null
         if (!connectionPromise) {
+            return
+        }
+        if (this.options.connection) {
             return
         }
         const connection = await connectionPromise
