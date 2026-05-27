@@ -293,7 +293,7 @@ function closeDatabaseSafely(db: SqliteDatabaseLike): void {
 }
 
 async function openBetterSqlite(
-    options: WaSqliteStorageOptions,
+    path: string,
     resolveSql: (sql: string) => string,
     pragmas: NormalizedSqlitePragmas
 ): Promise<WaSqliteConnection> {
@@ -307,7 +307,7 @@ async function openBetterSqlite(
     }
 
     const Database = asConstructor(loaded)
-    const db = new Database(options.path)
+    const db = new Database(path)
     try {
         applyPragmas(db, pragmas)
     } catch (error) {
@@ -319,7 +319,7 @@ async function openBetterSqlite(
 }
 
 async function openBunSqlite(
-    options: WaSqliteStorageOptions,
+    path: string,
     resolveSql: (sql: string) => string,
     pragmas: NormalizedSqlitePragmas
 ): Promise<WaSqliteConnection> {
@@ -340,7 +340,7 @@ async function openBunSqlite(
         throw new Error('invalid bun sqlite module export')
     }
 
-    const db = new (ctor as new (path: string) => SqliteDatabaseLike)(options.path)
+    const db = new (ctor as new (path: string) => SqliteDatabaseLike)(path)
     try {
         applyPragmas(db, pragmas)
     } catch (error) {
@@ -426,17 +426,15 @@ function createConnectionHandle(
 export async function openSqliteConnection(
     options: WaSqliteStorageOptions
 ): Promise<WaSqliteConnection> {
+    const { path } = options
+    if (!path) {
+        throw new Error('openSqliteConnection requires options.path')
+    }
     const driver = resolveDriver(options.driver)
     const resolvedTableNames = resolveSqliteTableNames(options.tableNames)
     const resolveSql = createSqliteTableNameSqlResolver(resolvedTableNames)
     const normalizedPragmas = normalizePragmas(options.pragmas)
-    const normalizedOptions: WaSqliteStorageOptions = {
-        ...options,
-        driver,
-        pragmas: normalizedPragmas,
-        tableNames: resolvedTableNames
-    }
-    const cacheKey = `${driver}|${options.path}|${Object.entries(normalizedPragmas)
+    const cacheKey = `${driver}|${path}|${Object.entries(normalizedPragmas)
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([key, value]) => `${key}=${String(value)}`)
         .join(';')}|${serializeSqliteTableNames(resolvedTableNames)}`
@@ -444,8 +442,8 @@ export async function openSqliteConnection(
     if (!entry) {
         const createdConnection =
             driver === 'bun'
-                ? openBunSqlite(normalizedOptions, resolveSql, normalizedPragmas)
-                : openBetterSqlite(normalizedOptions, resolveSql, normalizedPragmas)
+                ? openBunSqlite(path, resolveSql, normalizedPragmas)
+                : openBetterSqlite(path, resolveSql, normalizedPragmas)
         const createdEntry: SqliteConnectionCacheEntry = {
             connection: null,
             connectionPromise: Promise.resolve(null as never),

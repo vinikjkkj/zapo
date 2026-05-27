@@ -6,6 +6,7 @@ import test from 'node:test'
 
 import { WaAuthSqliteStore } from '../auth.store'
 import { openSqliteConnection } from '../connection'
+import { createSqliteStore } from '../createSqliteStore'
 import { WaMessageSqliteStore } from '../message.store'
 import { WaPrivacyTokenSqliteStore } from '../privacy-token.store'
 import { WaThreadSqliteStore } from '../thread.store'
@@ -305,6 +306,113 @@ test('sqlite connection rejects invalid custom table names', async () => {
             /unsupported sqlite tableNames key/
         )
     } finally {
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+test('sqlite store reuses externally-owned connection and does not close it on destroy', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-shared-conn-'))
+    const connection = await openSqliteConnection({
+        path: join(dir, 'state.sqlite'),
+        sessionId: 'shared',
+        driver: 'better-sqlite3'
+    })
+
+    try {
+        const store = new WaAuthSqliteStore({ connection, sessionId: 'shared' })
+        const credentials = createCredentials()
+        await store.save(credentials)
+        await store.destroy()
+
+        const row = connection.get<{ readonly me_jid: string }>(
+            'SELECT me_jid FROM auth_credentials WHERE session_id = ?',
+            ['shared']
+        )
+        assert.equal(row?.me_jid, credentials.meJid)
+
+        const reopened = new WaAuthSqliteStore({ connection, sessionId: 'shared' })
+        const loaded = await reopened.load()
+        assert.ok(loaded)
+        assert.equal(loaded.meJid, credentials.meJid)
+        await reopened.destroy()
+    } finally {
+        connection.close()
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+test('sqlite store rejects invalid path/connection combinations', async () => {
+    await assert.rejects(async () => {
+        const store = new WaAuthSqliteStore({ sessionId: 'x' })
+        await store.load()
+    }, /requires either "path" or "connection"/)
+
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-conflict-'))
+    const connection = await openSqliteConnection({
+        path: join(dir, 'state.sqlite'),
+        sessionId: 'x',
+        driver: 'better-sqlite3'
+    })
+    try {
+        await assert.rejects(async () => {
+            const store = new WaAuthSqliteStore({
+                sessionId: 'x',
+                path: join(dir, 'state.sqlite'),
+                connection
+            })
+            await store.load()
+        }, /accepts only one of "path" or "connection"/)
+    } finally {
+        connection.close()
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+test('createSqliteStore accepts an externally-owned connection', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-create-conn-'))
+    const connection = await openSqliteConnection({
+        path: join(dir, 'state.sqlite'),
+        sessionId: 'shared',
+        driver: 'better-sqlite3'
+    })
+
+    try {
+        const bundle = createSqliteStore({ connection })
+        const authStore = bundle.stores.auth('session-a')
+        const credentials = createCredentials()
+        await authStore.save(credentials)
+        await authStore.destroy()
+
+        const row = connection.get<{ readonly me_jid: string }>(
+            'SELECT me_jid FROM auth_credentials WHERE session_id = ?',
+            ['session-a']
+        )
+        assert.equal(row?.me_jid, credentials.meJid)
+    } finally {
+        connection.close()
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+test('createSqliteStore rejects missing or duplicated connection source', async () => {
+    assert.throws(
+        () => createSqliteStore({}),
+        /createSqliteStore requires exactly one of "path" or "connection"/
+    )
+
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-create-conflict-'))
+    const connection = await openSqliteConnection({
+        path: join(dir, 'state.sqlite'),
+        sessionId: 'shared',
+        driver: 'better-sqlite3'
+    })
+    try {
+        assert.throws(
+            () => createSqliteStore({ path: join(dir, 'state.sqlite'), connection }),
+            /createSqliteStore requires exactly one of "path" or "connection"/
+        )
+    } finally {
+        connection.close()
         await rm(dir, { recursive: true, force: true })
     }
 })
