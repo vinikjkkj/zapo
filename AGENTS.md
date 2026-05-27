@@ -79,7 +79,8 @@ zapo/
 ├── spec/               # Vendored protocol spec from vinikjkkj/wa-spec
 │   ├── proto/          # WAProto.proto + compiled output (imported by src/proto.ts)
 │   ├── appstate/       # app-state schema descriptors (imported by src/appstate-spec.ts)
-│   └── mex/            # MEX GraphQL operation types (imported by src/mex.ts)
+│   ├── mex/            # MEX GraphQL operation types (imported by src/mex.ts)
+│   └── version/        # current WA Web version json (imported by src/version-spec.ts)
 ├── test/               # media test fixtures (audio/video/image, runtime-only, gitignored)
 ├── turbo.json          # Turborepo task orchestration
 ├── tsconfig.packages.json # Shared TS config for optional packages
@@ -138,6 +139,7 @@ Use aliases for cross-domain imports:
 - `@proto` maps to `src/proto.ts` (re-exports `../spec/proto`)
 - `@appstate-spec` maps to `src/appstate-spec.ts` (re-exports `../spec/appstate` + adds typed helpers)
 - `@mex` maps to `src/mex.ts` (re-exports `../spec/mex` operation types)
+- `@version-spec` maps to `src/version-spec.ts` (re-exports `../spec/version` – `WA_VERSION` is the WA Web version string used by the noise payload builders)
 - `@util/*` and `@infra/*` are deep-import only (no barrel alias)
 
 ### Sub-folder barrels
@@ -163,8 +165,9 @@ Coordinators, types, helpers, and other internal symbols should always be import
 Relative imports are allowed only for explicit local bridging patterns already used in the codebase:
 
 - same-folder internal helpers (example: `src/util/coercion.ts` importing `./bytes`)
-- `src/proto.ts`, `src/appstate-spec.ts`, and `src/mex.ts` bridging to the
-  vendored `../spec/` folder (the only `../` imports allowed in `src/`)
+- `src/proto.ts`, `src/appstate-spec.ts`, `src/mex.ts`, and
+  `src/version-spec.ts` bridging to the vendored `../spec/` folder (the
+  only `../` imports allowed in `src/`)
 
 Do not add new cross-module `../` import chains.
 

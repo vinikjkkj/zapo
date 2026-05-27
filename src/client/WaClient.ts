@@ -35,11 +35,12 @@ import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClien
 import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
 import { normalizeDeviceJid } from '@protocol/jid'
-import { WA_LOGOUT_REASONS, type WaLogoutReason } from '@protocol/stream'
+import { WA_DISCONNECT_REASONS, WA_LOGOUT_REASONS, type WaLogoutReason } from '@protocol/stream'
 import { NOOP_MESSAGE_SECRET_STORE } from '@store/noop.store'
 import { buildRemoveCompanionDeviceIq } from '@transport/node/builders/device'
 import { assertIqResult, queryWithContext as queryNodeWithContext } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
+import { fetchLatestWaWebVersion } from '@transport/wa-web-version-fetcher'
 import { toError } from '@util/primitives'
 
 type WaIncomingProtocolType = NonNullable<Proto.Message.IProtocolMessage['type']>
@@ -164,6 +165,32 @@ export class WaClient extends EventEmitter {
         this.mediaTransfer = dependencies.mediaTransfer
 
         this.bindNodeTransportEvents()
+        this.on('connection', (event) => {
+            if (event.status !== 'close') return
+            if (!this.options.recoverFromClientTooOld) return
+            if (event.reason !== WA_DISCONNECT_REASONS.FAILURE_CLIENT_TOO_OLD) return
+            this.logger.warn(
+                'wa rejected the connect with client_too_old: the zapo default WA Web version is outdated. ' +
+                    'Auto-recovering by fetching the current version from web.whatsapp.com – ' +
+                    'please upgrade zapo so the shipped default catches up.'
+            )
+            void this.runClientTooOldRecover()
+        })
+    }
+
+    private async runClientTooOldRecover(): Promise<void> {
+        try {
+            const latest = await fetchLatestWaWebVersion()
+            this.logger.info('client_too_old auto-recover: reconnecting', {
+                version: latest.version
+            })
+            this.deps.authClient.setNextConnectVersion(latest.version)
+            await this.connect()
+        } catch (error) {
+            this.logger.warn('client_too_old auto-recover failed', {
+                message: toError(error).message
+            })
+        }
     }
 
     /** Strongly-typed `EventEmitter#on` over {@link WaClientEventMap}. */

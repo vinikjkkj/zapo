@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto'
 
 import { md5Bytes } from '@crypto/core/primitives'
 import { proto } from '@proto'
-import { DEFAULT_VERSION_BASE } from '@transport/noise/constants'
 import type {
     WaLoginPayloadConfig,
     WaPayloadCommonConfig,
     WaRegistrationPayloadConfig
 } from '@transport/noise/types'
 import { intToBytes } from '@util/bytes'
+import { WA_VERSION } from '@version-spec'
 
 function parseVersion(versionBase: string): {
     primary: number
@@ -154,7 +154,7 @@ function buildCommonPayload(
     readonly userAgent: typeof proto.ClientPayload.prototype.userAgent
     readonly webInfo: typeof proto.ClientPayload.prototype.webInfo
 } {
-    const versionBase = config.versionBase ?? DEFAULT_VERSION_BASE
+    const versionBase = config.versionBase ?? WA_VERSION
     const pull = config.pull ?? true
     return {
         passive: config.passive === true,
@@ -194,7 +194,7 @@ export function buildRegistrationPayload(config: WaRegistrationPayloadConfig): U
         throw new Error('registration payload requires a valid signedPreKeyId')
     }
 
-    const versionBase = config.versionBase ?? DEFAULT_VERSION_BASE
+    const versionBase = config.versionBase ?? WA_VERSION
     const version = parseVersion(versionBase)
     const common = buildCommonPayload(config, version)
     const devicePairingData = {

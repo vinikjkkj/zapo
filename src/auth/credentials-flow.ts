@@ -83,7 +83,19 @@ function mobileTransportFromCredentials(
     }
 }
 
-export function buildCommsConfig(
+async function resolveVersion(
+    version: WaAuthClientOptions['version']
+): Promise<string | undefined> {
+    if (version === undefined) return undefined
+    if (typeof version === 'string') return version
+    const resolved = await version()
+    if (typeof resolved !== 'string' || resolved.length === 0) {
+        throw new Error('version resolver returned a non-string value')
+    }
+    return resolved
+}
+
+export async function buildCommsConfig(
     logger: Logger,
     credentials: WaAuthCredentials,
     socketOptions: WaAuthSocketOptions,
@@ -94,7 +106,7 @@ export function buildCommsConfig(
         readonly noiseTrustedRootCa?: WaNoiseRootCa
         readonly disableNoiseCertificateChainVerification?: boolean
     }
-): WaCommsConfig {
+): Promise<WaCommsConfig> {
     const meJid = credentials.meJid
     const registered = meJid !== null && meJid !== undefined
     const loginIdentity = registered ? getLoginIdentity(meJid) : null
@@ -105,6 +117,7 @@ export function buildCommsConfig(
     // deviceInfo on every `new WaClient(...)` call.
     const effectiveMobileTransport =
         clientOptions.mobileTransport ?? mobileTransportFromCredentials(credentials)
+    const versionBase = await resolveVersion(clientOptions.version)
     logger.debug('building comms config from credentials', {
         registered,
         hasServerStaticKey:
@@ -183,7 +196,7 @@ export function buildCommsConfig(
                       device: loginIdentity.device,
                       deviceBrowser: clientOptions.deviceBrowser,
                       deviceOsDisplayName: clientOptions.deviceOsDisplayName,
-                      versionBase: clientOptions.version
+                      versionBase
                   }
                 : undefined,
             registrationPayloadConfig: !loginIdentity
@@ -193,7 +206,7 @@ export function buildCommsConfig(
                       deviceBrowser: clientOptions.deviceBrowser,
                       deviceOsDisplayName: clientOptions.deviceOsDisplayName,
                       requireFullSync: clientOptions.requireFullSync,
-                      versionBase: clientOptions.version
+                      versionBase
                   }
                 : undefined
         }

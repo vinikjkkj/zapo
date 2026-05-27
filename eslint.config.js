@@ -17,7 +17,8 @@ module.exports = [
             'spec/proto/WAProto.codegen.tmp.proto',
             'spec/proto/WAProto.types.codegen.tmp.js',
             'spec/mex/**',
-            'spec/appstate/**'
+            'spec/appstate/**',
+            'spec/version/**'
         ]
     },
     ...base,
@@ -150,6 +151,7 @@ module.exports = [
             'src/proto.ts',
             'src/mex.ts',
             'src/appstate-spec.ts',
+            'src/version-spec.ts',
             'src/__tests__/index.test.ts'
         ],
         rules: {

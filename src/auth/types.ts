@@ -51,6 +51,14 @@ export type WaAuthSocketOptions = Pick<
     }
 }
 
+/**
+ * WhatsApp Web version supplied to {@link WaAuthClientOptions.version}. Either
+ * a literal `'x.y.z'` string or an async resolver invoked once per connect,
+ * letting callers refresh the version (e.g. via `fetchLatestWaWebVersion`)
+ * without rebuilding the client.
+ */
+export type WaVersionResolver = string | (() => string | Promise<string>)
+
 export interface WaAuthClientOptions {
     /**
      * Browser id advertised during pairing (`'chrome' | 'firefox' | 'safari' |
@@ -76,10 +84,13 @@ export interface WaAuthClientOptions {
      */
     readonly requireFullSync?: boolean
     /**
-     * WhatsApp Web version string the client advertises (`'x.y.z'`). Defaults
-     * to a tested production version – only override to pin/upgrade manually.
+     * WhatsApp Web version the client advertises. Either a `'x.y.z'` literal
+     * or a (sync/async) resolver invoked once per connect – use the resolver
+     * form together with {@link fetchLatestWaWebVersion} to refresh the
+     * version when the hardcoded default starts hitting `failure_client_too_old`.
+     * Defaults to a tested production version.
      */
-    readonly version?: string
+    readonly version?: WaVersionResolver
     /**
      * **Dangerous escape hatches** – each flag disables a security check.
      * Do not enable in production.

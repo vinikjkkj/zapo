@@ -109,6 +109,14 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      */
     readonly markOnlineOnConnect?: boolean
     /**
+     * Automatically reconnect when the server rejects the noise handshake
+     * with HTTP 405 / `failure_client_too_old`. On every 405 the client
+     * logs a warning asking you to upgrade zapo, fetches the current
+     * version from `web.whatsapp.com` via `fetchLatestWaWebVersion()`,
+     * swaps it in for the next connect, and retries. Off by default.
+     */
+    readonly recoverFromClientTooOld?: boolean
+    /**
      * Write-behind persistence tuning – how long to batch incoming messages
      * before flushing to `messages`/`threads`/`contacts` stores.
      */

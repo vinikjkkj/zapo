@@ -216,8 +216,13 @@ export type {
     WaLinkPreviewType
 } from '@message/addons/link-preview/types'
 export type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
-export type { WaAuthCredentials } from '@auth/types'
+export type { WaAuthCredentials, WaVersionResolver } from '@auth/types'
 export type { BinaryNode } from '@transport/types'
+export { fetchLatestWaWebVersion } from '@transport/wa-web-version-fetcher'
+export type {
+    WaFetchLatestWebVersionOptions,
+    WaLatestWebVersion
+} from '@transport/wa-web-version-fetcher'
 export { ConsoleLogger } from '@infra/log/ConsoleLogger'
 export { PinoLogger, createPinoLogger } from '@infra/log/PinoLogger'
 export type { PinoLoggerOptions } from '@infra/log/PinoLogger'

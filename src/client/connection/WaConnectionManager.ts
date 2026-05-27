@@ -304,7 +304,7 @@ export class WaConnectionManager {
         this.logger.debug('starting comms with credentials', {
             registered: credentials.meJid !== null && credentials.meJid !== undefined
         })
-        const commsConfig = this.authClient.buildCommsConfig(this.options, {
+        const commsConfig = await this.authClient.buildCommsConfig(this.options, {
             noiseTrustedRootCa: this.options.testHooks?.noiseRootCa,
             disableNoiseCertificateChainVerification:
                 this.options.dangerous?.disableNoiseCertificateChainVerification

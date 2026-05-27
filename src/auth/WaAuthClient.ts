@@ -17,7 +17,7 @@ import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
-import type { BinaryNode } from '@transport/types'
+import type { BinaryNode, WaCommsConfig } from '@transport/types'
 import { uint8Equal } from '@util/bytes'
 import { toError } from '@util/primitives'
 import { getRuntimeOsDisplayName } from '@util/runtime'
@@ -61,6 +61,7 @@ export class WaAuthClient {
     private readonly qrFlow: WaQrFlow
     private readonly pairingFlow: WaPairingFlow
     private credentials: WaAuthCredentials | null
+    private versionOverride: string | null = null
 
     public constructor(options: WaAuthClientOptions, deps: WaAuthClientDeps) {
         const deviceBrowser = options.deviceBrowser ?? WA_DEFAULTS.DEVICE_BROWSER
@@ -153,25 +154,38 @@ export class WaAuthClient {
      * Builds a {@link WaCommsConfig} from the current credentials and the
      * runtime device/transport options – feeds {@link WaComms}.
      */
-    public buildCommsConfig(
+    public async buildCommsConfig(
         socketOptions: WaAuthSocketOptions,
         overrides: {
             readonly noiseTrustedRootCa?: WaNoiseRootCa
             readonly disableNoiseCertificateChainVerification?: boolean
         } = {}
-    ) {
+    ): Promise<WaCommsConfig> {
         this.logger.trace('auth client building comms config')
+        const override = this.versionOverride
+        this.versionOverride = null
         return buildCommsConfig(this.logger, this.requireCredentials(), socketOptions, {
             deviceBrowser: this.options.deviceBrowser,
             deviceOsDisplayName: this.options.deviceOsDisplayName,
             requireFullSync: this.options.requireFullSync,
-            version: this.options.version,
+            version: override ?? this.options.version,
             mobileTransport: this.options.mobileTransport,
             noiseTrustedRootCa: overrides.noiseTrustedRootCa,
             disableNoiseCertificateChainVerification:
                 overrides.disableNoiseCertificateChainVerification ??
                 this.options.dangerous?.disableNoiseCertificateChainVerification
         })
+    }
+
+    /**
+     * One-shot override for the next {@link buildCommsConfig} call: takes
+     * precedence over the user-supplied `version` option, then clears. Used
+     * by the `recoverFromClientTooOld` auto-retry to inject a fresh version
+     * string fetched from `web.whatsapp.com` without mutating the user's
+     * options.
+     */
+    public setNextConnectVersion(version: string): void {
+        this.versionOverride = version
     }
 
     /** Clears the in-memory QR and pairing sessions without touching storage. */

@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { DEFAULT_VERSION_BASE } from '@transport/noise/constants'
 import { buildLoginPayload, buildRegistrationPayload } from '@transport/noise/WaClientPayload'
 import { WaFrameCodec } from '@transport/noise/WaFrameCodec'
 import { verifyNoiseCertificateChain } from '@transport/noise/WaNoiseCert'
+import { WA_VERSION } from '@version-spec'
 
 test('client payload builders validate required fields', () => {
     const loginPayload = buildLoginPayload({
         username: 123,
         device: 1,
-        versionBase: DEFAULT_VERSION_BASE,
+        versionBase: WA_VERSION,
         deviceBrowser: 'Chrome',
         deviceOsDisplayName: 'Windows'
     })
@@ -21,7 +21,7 @@ test('client payload builders validate required fields', () => {
             buildLoginPayload({
                 username: 0,
                 device: 1,
-                versionBase: DEFAULT_VERSION_BASE,
+                versionBase: WA_VERSION,
                 deviceBrowser: 'Chrome',
                 deviceOsDisplayName: 'Windows'
             }),
@@ -45,7 +45,7 @@ test('client payload builders validate required fields', () => {
             signature: new Uint8Array(64).fill(5),
             uploaded: false
         },
-        versionBase: DEFAULT_VERSION_BASE,
+        versionBase: WA_VERSION,
         deviceBrowser: 'Chrome',
         deviceOsDisplayName: 'Windows'
     })

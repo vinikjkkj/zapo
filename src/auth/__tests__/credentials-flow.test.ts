@@ -75,7 +75,7 @@ test('auth flow persists and restores existing credentials', async () => {
     assert.equal(saved?.meDisplayName, 'Tester')
 })
 
-test('buildCommsConfig switches between login and registration payloads', () => {
+test('buildCommsConfig switches between login and registration payloads', async () => {
     const logger = createNoopLogger()
     const credentials = createCredentials()
     const version = '2.3000.1020607560'
@@ -83,7 +83,7 @@ test('buildCommsConfig switches between login and registration payloads', () => 
         dispatch: () => undefined
     }
 
-    const loginConfig = buildCommsConfig(
+    const loginConfig = await buildCommsConfig(
         logger,
         credentials,
         {
@@ -112,7 +112,7 @@ test('buildCommsConfig switches between login and registration payloads', () => 
     assert.equal(loginConfig.dispatcher, wsDispatcher)
     assert.equal(loginConfig.agent, undefined)
 
-    const registrationConfig = buildCommsConfig(
+    const registrationConfig = await buildCommsConfig(
         logger,
         { ...credentials, meJid: undefined },
         {
@@ -131,9 +131,46 @@ test('buildCommsConfig switches between login and registration payloads', () => 
     assert.equal(registrationConfig.noise.registrationPayloadConfig?.versionBase, version)
 })
 
-test('buildCommsConfig maps ws proxy agent when provided', () => {
+test('buildCommsConfig resolves async version function once per call', async () => {
+    let calls = 0
+    const resolver = async () => {
+        calls += 1
+        return '2.3000.9999999'
+    }
+    const config = await buildCommsConfig(
+        createNoopLogger(),
+        createCredentials(),
+        { url: 'wss://web.whatsapp.com/ws/chat' },
+        {
+            deviceBrowser: 'Chrome',
+            deviceOsDisplayName: 'Linux',
+            requireFullSync: false,
+            version: resolver
+        }
+    )
+    assert.equal(calls, 1)
+    assert.equal(config.noise.loginPayloadConfig?.versionBase, '2.3000.9999999')
+})
+
+test('buildCommsConfig rejects version resolvers that return a non-string', async () => {
+    await assert.rejects(
+        () =>
+            buildCommsConfig(
+                createNoopLogger(),
+                createCredentials(),
+                { url: 'wss://web.whatsapp.com/ws/chat' },
+                {
+                    requireFullSync: false,
+                    version: (() => undefined) as unknown as () => string
+                }
+            ),
+        /version resolver returned a non-string value/
+    )
+})
+
+test('buildCommsConfig maps ws proxy agent when provided', async () => {
     const wsAgent = new http.Agent({ keepAlive: true })
-    const config = buildCommsConfig(
+    const config = await buildCommsConfig(
         createNoopLogger(),
         createCredentials(),
         {
@@ -154,7 +191,7 @@ test('buildCommsConfig maps ws proxy agent when provided', () => {
     wsAgent.destroy()
 })
 
-test('buildCommsConfig falls back to credentials.deviceInfo when mobileTransport option is absent', () => {
+test('buildCommsConfig falls back to credentials.deviceInfo when mobileTransport option is absent', async () => {
     const credentials: WaAuthCredentials = {
         ...createCredentials(),
         deviceInfo: {
@@ -168,7 +205,7 @@ test('buildCommsConfig falls back to credentials.deviceInfo when mobileTransport
         yearClass: 2022,
         memClass: 4096
     }
-    const config = buildCommsConfig(
+    const config = await buildCommsConfig(
         createNoopLogger(),
         credentials,
         { url: 'wss://web.whatsapp.com/ws/chat' },
@@ -180,7 +217,7 @@ test('buildCommsConfig falls back to credentials.deviceInfo when mobileTransport
     assert.ok(config.noise?.loginPayload, 'expected login payload')
 })
 
-test('buildCommsConfig prefers explicit mobileTransport option over credentials.deviceInfo', () => {
+test('buildCommsConfig prefers explicit mobileTransport option over credentials.deviceInfo', async () => {
     const credentials: WaAuthCredentials = {
         ...createCredentials(),
         deviceInfo: {
@@ -191,7 +228,7 @@ test('buildCommsConfig prefers explicit mobileTransport option over credentials.
             appVersion: '2.26.15.11'
         }
     }
-    const config = buildCommsConfig(
+    const config = await buildCommsConfig(
         createNoopLogger(),
         credentials,
         { url: 'wss://web.whatsapp.com/ws/chat' },

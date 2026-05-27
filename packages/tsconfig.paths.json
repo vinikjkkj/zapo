@@ -41,6 +41,7 @@
             "@transport": ["src/transport/index.ts"],
             "@transport/*": ["src/transport/*"],
             "@util/*": ["src/util/*"],
+            "@version-spec": ["src/version-spec.ts"],
             "@zapo-js/*": ["packages/*/src"]
         }
     }

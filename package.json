@@ -107,6 +107,9 @@
         "spec/mex/index.d.ts",
         "spec/appstate/index.js",
         "spec/appstate/index.d.ts",
+        "spec/version/version.json",
+        "spec/version/index.js",
+        "spec/version/index.d.ts",
         "scripts/check-node-version.cjs"
     ],
     "workspaces": [
