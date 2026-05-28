@@ -212,6 +212,72 @@ export interface WaCreateStoreOptions<B extends string = string> {
         readonly messageSecret?: B | 'memory' | 'none'
     }
     /**
+     * Opt-in in-process read-through cache in front of a *persistent* backend
+     * for the hot signal domains. Each enabled domain wraps its backend store
+     * with a bounded-LRU L1 (the in-tree memory provider) so repeated reads of
+     * the same peer on the send/recv path skip the backend round-trip; writes
+     * stay write-through (or invalidate-on-write for `privacyToken`) so the
+     * backend remains authoritative.
+     *
+     * A domain flag is a no-op unless that domain resolves to a real backend
+     * in {@link providers} - caching a `'memory'`/`'none'` provider in front of
+     * itself buys nothing and is skipped.
+     *
+     * **Single-writer assumption:** the L1 is per-process and has no
+     * cross-process invalidation channel. Enable this only when a single
+     * process owns a given `sessionId`'s backend rows (the library's
+     * connection model). Do **not** enable it when multiple processes share
+     * one backend for the *same* session - another process's writes would
+     * leave this cache stale. Different sessions sharing one backend are fine.
+     * All flags default to `false`.
+     *
+     * Distinct from {@link cacheProviders}: that selects *where* the bounded
+     * cache domains live; this layers an in-memory read cache *in front of*
+     * the persistent domains.
+     *
+     * Only the four domains below are exposed. The other persistent domains
+     * are deliberately excluded, each for a verified reason:
+     * - `signal`: the per-send `getRegistrationInfo` read is already memoized
+     *   write-through inside the signal lock (`signal.lock.ts`), and the
+     *   remaining reads (`getSignedPreKey`/`getSignedPreKeyById`/rotation ts)
+     *   change only on the rare signed-prekey rotation and fire on inbound
+     *   session-init, not per message - a second cache would add nothing.
+     * - `appState`: the sync client already caches collection state for the
+     *   sync-context lifetime, the only scope where reads both repeat and stay
+     *   coherent. Across sync cycles the version is incremented and persisted,
+     *   so a persistent cache yields ~0 hits, and the version is sent on the
+     *   wire (server-authoritative) - a stale one forces a refetch loop.
+     * - `preKey`: one-time prekeys are read exactly once then consumed
+     *   (deleted) on the inbound path, so there is nothing to re-read; serving
+     *   a consumed prekey from a stale cache would reuse a one-time key and
+     *   break forward secrecy. There is no safe, useful read here.
+     * - `auth` is loaded once per connect and kept in memory; the mailbox
+     *   domains (`messages`/`threads`/`contacts`) are cold, large reads off
+     *   the crypto path with write-behind already; and the cache domains
+     *   (retry/groupMetadata/deviceList/messageSecret) default to in-process
+     *   memory already, so an L1 in front would be a cache over a cache.
+     */
+    readonly cacheLayer?: {
+        /** Cache Signal Double-Ratchet sessions (key→record). Write-through. */
+        readonly session?: boolean
+        /** Cache remote identity keys (key→bytes). Write-through. */
+        readonly identity?: boolean
+        /** Cache per-(group, sender) sender keys + distributions. Write-through. */
+        readonly senderKey?: boolean
+        /** Cache trusted-contact tokens (jid→record). Invalidate-on-write. */
+        readonly privacyToken?: boolean
+        /**
+         * Per-domain L1 entry caps (LRU eviction once exceeded). Defaults to
+         * the matching memory-provider default when unset.
+         */
+        readonly limits?: {
+            readonly session?: number
+            readonly identity?: number
+            readonly senderKey?: number
+            readonly privacyToken?: number
+        }
+    }
+    /**
      * Memory-store tuning for the built-in `'memory'` providers. `limits`
      * caps per-domain entry counts (LRU eviction once exceeded); `cacheTtlMs`
      * controls how long cache entries live before being evicted. Tune these

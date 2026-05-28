@@ -1,3 +1,7 @@
+import { withIdentityCache } from '@store/cache/identity.cache'
+import { withPrivacyTokenCache } from '@store/cache/privacy-token.cache'
+import { withSenderKeyCache } from '@store/cache/sender-key.cache'
+import { withSessionCache } from '@store/cache/session.cache'
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
@@ -101,6 +105,10 @@ async function destroyIfSupported(value: unknown): Promise<void> {
     await value.destroy()
 }
 
+function usesBackend(provider: string | undefined): boolean {
+    return !!provider && provider !== 'memory' && provider !== 'none'
+}
+
 function resolveStore<T>(
     sessionId: string,
     backends: Readonly<Record<string, WaStoreBackend>>,
@@ -183,6 +191,7 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
     const backends = (options.backends ?? {}) as Readonly<Record<string, WaStoreBackend>>
     const providers = options.providers ?? {}
     const cacheProviders = options.cacheProviders ?? {}
+    const cacheLayer = options.cacheLayer ?? {}
 
     if (Object.keys(backends).length > 0) {
         const missingProviders = REQUIRED_PROVIDER_DOMAINS.filter(
@@ -405,9 +414,21 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
             const authStore = withAuthLock(rawAuth)
             const signalStore = withSignalLock(rawSignal)
             const preKeyStore = withPreKeyLock(rawPreKey)
-            const sessionStore = withSessionLock(rawSession)
-            const identityStore = withIdentityLock(rawIdentity)
-            const senderKeyStore = withSenderKeyLock(rawSenderKey)
+            const sessionStore = withSessionLock(
+                cacheLayer.session && usesBackend(providers.session)
+                    ? withSessionCache(rawSession, cacheLayer.limits?.session)
+                    : rawSession
+            )
+            const identityStore = withIdentityLock(
+                cacheLayer.identity && usesBackend(providers.identity)
+                    ? withIdentityCache(rawIdentity, cacheLayer.limits?.identity)
+                    : rawIdentity
+            )
+            const senderKeyStore = withSenderKeyLock(
+                cacheLayer.senderKey && usesBackend(providers.senderKey)
+                    ? withSenderKeyCache(rawSenderKey, cacheLayer.limits?.senderKey)
+                    : rawSenderKey
+            )
             const appStateStore = withAppStateLock(rawAppState)
             const retryStore = withRetryLock(rawRetry)
             const groupMetadataStore = withGroupMetadataLock(rawGroupMetadata)
@@ -416,7 +437,11 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
             const messageSecretStore = withMessageSecretLock(rawMessageSecret)
             const threadStore = withThreadLock(rawThreads)
             const contactStore = withContactLock(rawContacts)
-            const privacyTokenStore = withPrivacyTokenLock(rawPrivacyToken)
+            const privacyTokenStore = withPrivacyTokenLock(
+                cacheLayer.privacyToken && usesBackend(providers.privacyToken)
+                    ? withPrivacyTokenCache(rawPrivacyToken, cacheLayer.limits?.privacyToken)
+                    : rawPrivacyToken
+            )
 
             let cachesDestroyed = false
             let sessionDestroyed = false
