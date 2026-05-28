@@ -54,6 +54,21 @@ export interface WaMysqlStoreConfig {
         readonly intervalMs?: number
         readonly onError?: (error: Error) => void
     }
+    /**
+     * Upper bound on rows per multi-row INSERT statement in batch
+     * writes (`setSessionsBatch`, `setRemoteIdentities`,
+     * `upsertSenderKeyDistributions`, prekey gen). Default 500.
+     *
+     * Internally rounded down to the nearest power of two
+     * (`500 → 256`, `1000 → 512`, etc.) so each batch call decomposes
+     * `N` into power-of-two sub-chunks and only ever emits SQL with a
+     * row count from `{1, 2, 4, ..., maxBatchChunk}`. This bounds the
+     * distinct prepared statements per connection at `log2(N) + 1` (≈
+     * 9 at the default), which keeps the mysql2 client-side cache and
+     * the mysql `max_prepared_stmt_count` quota stable under
+     * workloads where `N` varies widely.
+     */
+    readonly batchInsertChunkSize?: number
 }
 
 export interface WaMysqlStoreResult {
@@ -118,10 +133,12 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsPool = !isPool(config.pool)
 
+    const batchInsertChunkSize = config.batchInsertChunkSize
     const opts = (sessionId: string): WaMysqlStorageOptions => ({
         pool,
         sessionId,
-        tablePrefix
+        tablePrefix,
+        batchInsertChunkSize
     })
 
     const cleanupPollers = new Set<MysqlCleanupPoller>()

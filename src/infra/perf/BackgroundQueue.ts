@@ -1,3 +1,4 @@
+import { resolvePositive } from '@util/coercion'
 import { toError } from '@util/primitives'
 
 interface QueueWaiter {
@@ -29,6 +30,21 @@ export interface BackgroundQueueOptions<K extends string, V> {
     readonly onError?: (key: K, error: unknown, attempt: number) => void
     readonly onPressure?: (pendingKeys: number) => void
     readonly onDiscard?: (key: K, value: V) => void
+    /**
+     * Optional bulk writer. When set, the drain loop coalesces up to
+     * {@link maxBatchSize} pending entries into a single
+     * `batchWriter([...])` call instead of issuing
+     * {@link maxWriteConcurrency} parallel `writer(key, value)` calls.
+     *
+     * Failure semantics: the batch is retried as a unit. The store-side
+     * implementation should be idempotent (upsert) so a partial-success +
+     * retry does not corrupt state.
+     */
+    readonly batchWriter?: (
+        entries: ReadonlyArray<{ readonly key: K; readonly value: V }>
+    ) => Promise<void>
+    /** Max entries per `batchWriter` call. Default 250. Ignored without `batchWriter`. */
+    readonly maxBatchSize?: number
 }
 
 export interface BackgroundQueueFlushResult {
@@ -38,11 +54,16 @@ export interface BackgroundQueueFlushResult {
 
 const DEFAULT_MAX_PENDING_KEYS = 4_096
 const DEFAULT_FLUSH_TIMEOUT_MS = 5_000
+const DEFAULT_MAX_BATCH_SIZE = 250
 const RETRY_BACKOFF_BASE_MS = 100
 const RETRY_BACKOFF_MAX_MS = 2_000
 
 export class BackgroundQueue<K extends string, V> {
     private readonly writer: (key: K, value: V) => Promise<void>
+    private readonly batchWriter:
+        | ((entries: ReadonlyArray<{ readonly key: K; readonly value: V }>) => Promise<void>)
+        | null
+    private readonly maxBatchSize: number
     private readonly coalesce: (previous: V, incoming: V, key: K) => V
     private readonly maxPendingKeys: number
     private readonly maxWriteConcurrency: number
@@ -65,16 +86,20 @@ export class BackgroundQueue<K extends string, V> {
     ) {
         this.writer = writer
         this.coalesce = options.coalesce ?? ((_p, i) => i)
-        const maxPendingKeys = options.maxPendingKeys ?? DEFAULT_MAX_PENDING_KEYS
-        if (!Number.isSafeInteger(maxPendingKeys) || maxPendingKeys < 1) {
-            throw new Error('BackgroundQueue maxPendingKeys must be a positive integer')
-        }
-        this.maxPendingKeys = maxPendingKeys
-        const maxWriteConcurrency = options.maxWriteConcurrency ?? 1
-        if (!Number.isSafeInteger(maxWriteConcurrency) || maxWriteConcurrency < 1) {
-            throw new Error('BackgroundQueue maxWriteConcurrency must be a positive integer')
-        }
-        this.maxWriteConcurrency = maxWriteConcurrency
+        this.maxPendingKeys = resolvePositive(
+            options.maxPendingKeys,
+            DEFAULT_MAX_PENDING_KEYS,
+            'maxPendingKeys'
+        )
+        this.maxWriteConcurrency = resolvePositive(
+            options.maxWriteConcurrency,
+            1,
+            'maxWriteConcurrency'
+        )
+        this.batchWriter = options.batchWriter ?? null
+        this.maxBatchSize = this.batchWriter
+            ? resolvePositive(options.maxBatchSize, DEFAULT_MAX_BATCH_SIZE, 'maxBatchSize')
+            : DEFAULT_MAX_BATCH_SIZE
         const flushTimeoutMs = options.flushTimeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS
         if (!Number.isFinite(flushTimeoutMs) || flushTimeoutMs < 1) {
             throw new Error('BackgroundQueue flushTimeoutMs must be a positive finite number')
@@ -314,7 +339,15 @@ export class BackgroundQueue<K extends string, V> {
 
     private async drainLoop(): Promise<void> {
         while (true) {
-            const batch = this.takeBatch()
+            if (this.batchWriter) {
+                const batch = this.takeBatch(this.maxBatchSize)
+                if (batch.length === 0) {
+                    return
+                }
+                await this.processBatch(batch)
+                continue
+            }
+            const batch = this.takeBatch(this.maxWriteConcurrency)
             if (batch.length === 0) {
                 return
             }
@@ -330,9 +363,9 @@ export class BackgroundQueue<K extends string, V> {
         }
     }
 
-    private takeBatch(): { readonly key: K; readonly entry: QueueEntry<V> }[] {
+    private takeBatch(limit: number): { readonly key: K; readonly entry: QueueEntry<V> }[] {
         const batch: { readonly key: K; readonly entry: QueueEntry<V> }[] = []
-        for (let i = 0; i < this.maxWriteConcurrency; i += 1) {
+        for (let i = 0; i < limit; i += 1) {
             const next = this.takeNext()
             if (!next) {
                 break
@@ -340,6 +373,42 @@ export class BackgroundQueue<K extends string, V> {
             batch.push(next)
         }
         return batch
+    }
+
+    private async processBatch(
+        batch: ReadonlyArray<{ readonly key: K; readonly entry: QueueEntry<V> }>
+    ): Promise<void> {
+        const batchWriter = this.batchWriter
+        if (!batchWriter) {
+            throw new Error('processBatch called without batchWriter')
+        }
+        this.inFlight += batch.length
+        const payload = new Array<{ key: K; value: V }>(batch.length)
+        for (let i = 0; i < batch.length; i += 1) {
+            payload[i] = { key: batch[i].key, value: batch[i].entry.value }
+        }
+        try {
+            await batchWriter(payload)
+            this.flushedCount += batch.length
+            for (const item of batch) {
+                this.resolveEntry(item.entry)
+            }
+        } catch (error) {
+            for (const item of batch) {
+                if (this.retryDisabled) {
+                    this.discardEntry(item.key, item.entry)
+                } else {
+                    const merged = this.mergeForRetry(item.key, item.entry)
+                    const attempt = merged.attempt + 1
+                    merged.attempt = attempt
+                    this.invokeOnError(item.key, error, attempt)
+                    this.scheduleRetry(item.key, merged, this.retryDelayMs(attempt))
+                }
+            }
+        } finally {
+            this.inFlight -= batch.length
+            this.notifyStateChange()
+        }
     }
 
     private async processEntry(key: K, entry: QueueEntry<V>): Promise<void> {

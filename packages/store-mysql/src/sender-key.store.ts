@@ -56,10 +56,46 @@ export class WaSenderKeyMysqlStore extends BaseMysqlStore implements WaSenderKey
         records: readonly SenderKeyDistributionRecord[]
     ): Promise<void> {
         if (records.length === 0) return
-        await this.withTransaction(async (conn) => {
-            for (const record of records) {
+        const runChunk = async (
+            executor: { execute: PoolConnection['execute'] },
+            chunk: readonly SenderKeyDistributionRecord[]
+        ): Promise<void> => {
+            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')
+            const params: MysqlParam[] = []
+            for (const record of chunk) {
                 const sender = toSignalAddressParts(record.sender)
-                await this.upsertSenderKeyDistributionRow(conn, record, sender)
+                params.push(
+                    this.sessionId,
+                    record.groupId,
+                    sender.user,
+                    sender.server,
+                    sender.device,
+                    record.keyId,
+                    record.timestampMs
+                )
+            }
+            await executor.execute(
+                `INSERT INTO ${this.t('sender_key_distribution')} (
+                    session_id, group_id, sender_user, sender_server, sender_device,
+                    key_id, timestamp_ms
+                ) VALUES ${placeholders}
+                ON DUPLICATE KEY UPDATE
+                    key_id = VALUES(key_id),
+                    timestamp_ms = VALUES(timestamp_ms)`,
+                params
+            )
+        }
+        const sizes = this.powerOfTwoChunks(records.length)
+        if (sizes.length === 1) {
+            await this.ensureReady()
+            await runChunk(this.pool, records)
+            return
+        }
+        await this.withTransaction(async (conn) => {
+            let cursor = 0
+            for (const size of sizes) {
+                await runChunk(conn, records.slice(cursor, cursor + size))
+                cursor += size
             }
         })
     }
@@ -140,45 +176,38 @@ export class WaSenderKeyMysqlStore extends BaseMysqlStore implements WaSenderKey
     ): Promise<readonly (SenderKeyDistributionRecord | null)[]> {
         if (senders.length === 0) return []
         await this.ensureReady()
-        const targets = senders.map((s) => toSignalAddressParts(s))
-        const byKey = new Map<string, SenderKeyDistributionRecord>()
-        for (let start = 0; start < targets.length; start += BATCH_SIZE) {
-            const batch = targets.slice(start, start + BATCH_SIZE)
-            while (batch.length < BATCH_SIZE) batch.push(NO_MATCH_SENDER)
-            const params: MysqlParam[] = [
-                this.sessionId,
-                groupId,
-                ...batch.flatMap((t) => [t.user, t.server, t.device])
-            ]
-            const rows = queryRows(
-                await this.pool.execute(
-                    `SELECT group_id, sender_user, sender_server, sender_device, key_id, timestamp_ms
-                     FROM ${this.t('sender_key_distribution')}
-                     WHERE session_id = ? AND group_id = ? AND (${FIXED_SENDER_PLACEHOLDERS})`,
-                    params
-                )
+        const rows = queryRows(
+            await this.pool.execute(
+                `SELECT group_id, sender_user, sender_server, sender_device, key_id, timestamp_ms
+                 FROM ${this.t('sender_key_distribution')}
+                 WHERE session_id = ? AND group_id = ?`,
+                [this.sessionId, groupId]
             )
-            for (const row of rows) {
-                const key = this.distributionTargetKey(
-                    String(row.sender_user),
-                    String(row.sender_server),
-                    Number(row.sender_device)
-                )
-                byKey.set(key, {
-                    groupId: String(row.group_id),
-                    sender: {
-                        user: String(row.sender_user),
-                        server: String(row.sender_server),
-                        device: Number(row.sender_device)
-                    },
-                    keyId: Number(row.key_id),
-                    timestampMs: Number(row.timestamp_ms)
-                })
-            }
-        }
-        return targets.map(
-            (t) => byKey.get(this.distributionTargetKey(t.user, t.server, t.device)) ?? null
         )
+        const byKey = new Map<string, SenderKeyDistributionRecord>()
+        for (const row of rows) {
+            const key = this.distributionTargetKey(
+                String(row.sender_user),
+                String(row.sender_server),
+                Number(row.sender_device)
+            )
+            byKey.set(key, {
+                groupId: String(row.group_id),
+                sender: {
+                    user: String(row.sender_user),
+                    server: String(row.sender_server),
+                    device: Number(row.sender_device)
+                },
+                keyId: Number(row.key_id),
+                timestampMs: Number(row.timestamp_ms)
+            })
+        }
+        const out = new Array<SenderKeyDistributionRecord | null>(senders.length)
+        for (let i = 0; i < senders.length; i += 1) {
+            const t = toSignalAddressParts(senders[i])
+            out[i] = byKey.get(this.distributionTargetKey(t.user, t.server, t.device)) ?? null
+        }
+        return out
     }
 
     public async deleteDeviceSenderKey(target: SignalAddress, groupId?: string): Promise<number> {

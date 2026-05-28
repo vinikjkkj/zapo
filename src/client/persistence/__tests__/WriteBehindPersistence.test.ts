@@ -13,20 +13,26 @@ test('write-behind merges partial contact upserts for the same jid', async () =>
     })
     const contactWrites: WaStoredContactRecord[] = []
 
+    const contactUpsert = async (record: WaStoredContactRecord): Promise<void> => {
+        if (record.jid === 'block@s.whatsapp.net') {
+            await blocked
+        }
+        contactWrites.push(record)
+    }
     const writeBehind = new WriteBehindPersistence(
         {
             messageStore: {
-                upsert: async () => undefined
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
             } as never,
             threadStore: {
-                upsert: async () => undefined
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
             } as never,
             contactStore: {
-                upsert: async (record: WaStoredContactRecord) => {
-                    if (record.jid === 'block@s.whatsapp.net') {
-                        await blocked
-                    }
-                    contactWrites.push(record)
+                upsert: contactUpsert,
+                upsertBatch: async (records: readonly WaStoredContactRecord[]) => {
+                    for (const record of records) await contactUpsert(record)
                 }
             } as never
         },
@@ -65,21 +71,27 @@ test('write-behind merges partial thread upserts for the same jid', async () => 
     })
     const threadWrites: WaStoredThreadRecord[] = []
 
+    const threadUpsert = async (record: WaStoredThreadRecord): Promise<void> => {
+        if (record.jid === 'block-thread@s.whatsapp.net') {
+            await blocked
+        }
+        threadWrites.push(record)
+    }
     const writeBehind = new WriteBehindPersistence(
         {
             messageStore: {
-                upsert: async () => undefined
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
             } as never,
             threadStore: {
-                upsert: async (record: WaStoredThreadRecord) => {
-                    if (record.jid === 'block-thread@s.whatsapp.net') {
-                        await blocked
-                    }
-                    threadWrites.push(record)
+                upsert: threadUpsert,
+                upsertBatch: async (records: readonly WaStoredThreadRecord[]) => {
+                    for (const record of records) await threadUpsert(record)
                 }
             } as never,
             contactStore: {
-                upsert: async () => undefined
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
             } as never
         },
         createNoopLogger()
@@ -114,20 +126,26 @@ test('write-behind flush and destroy expose remaining pending entries', async ()
         releaseBlock = resolve
     })
 
+    const messageUpsert = async (record: { readonly id: string }): Promise<void> => {
+        if (record.id === 'blocked') {
+            await blocked
+        }
+    }
     const writeBehind = new WriteBehindPersistence(
         {
             messageStore: {
-                upsert: async (record: { readonly id: string }) => {
-                    if (record.id === 'blocked') {
-                        await blocked
-                    }
+                upsert: messageUpsert,
+                upsertBatch: async (records: readonly { readonly id: string }[]) => {
+                    for (const record of records) await messageUpsert(record)
                 }
             } as never,
             threadStore: {
-                upsert: async () => undefined
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
             } as never,
             contactStore: {
-                upsert: async () => undefined
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
             } as never
         },
         createNoopLogger()

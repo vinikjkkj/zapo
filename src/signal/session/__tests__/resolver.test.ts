@@ -94,6 +94,27 @@ test('signal session resolver batch does not fallback to single fetch for partia
                 const session = {} as never
                 sessionsByAddress.set(key, session)
                 return session
+            },
+            prepareOutgoingSession: async (address: {
+                readonly user: string
+                readonly device: number
+            }) => {
+                const session = {} as never
+                return { session, remoteIdentity: new Uint8Array(33), reusedExisting: false }
+            },
+            persistOutgoingSessionsBatch: async (
+                entries: ReadonlyArray<{
+                    readonly address: { readonly user: string; readonly device: number }
+                    readonly session: unknown
+                }>
+            ) => {
+                const resolved = entries.map((e) => {
+                    const key = toKey(e.address)
+                    established.push(key)
+                    sessionsByAddress.set(key, e.session)
+                    return { address: e.address, session: e.session }
+                })
+                return { resolved, skipped: [] }
             }
         } as never,
         sessionStore: {
@@ -222,6 +243,8 @@ test('signal session resolver shares dedup between ensureSession and ensureSessi
         server: 's.whatsapp.net'
     } as const
 
+    let prepareCalls = 0
+    let persistBatchCalls = 0
     const resolver = createSignalSessionResolver({
         signalProtocol: {
             hasSession: async () => hasSession,
@@ -229,6 +252,30 @@ test('signal session resolver shares dedup between ensureSession and ensureSessi
                 establishCalls += 1
                 hasSession = true
                 return sessionRecord
+            },
+            prepareOutgoingSession: async () => {
+                prepareCalls += 1
+                return {
+                    session: sessionRecord,
+                    remoteIdentity: new Uint8Array(33),
+                    reusedExisting: false
+                }
+            },
+            persistOutgoingSessionsBatch: async (
+                entries: ReadonlyArray<{
+                    readonly address: unknown
+                    readonly session: unknown
+                }>
+            ) => {
+                persistBatchCalls += 1
+                const resolved = entries.map((e) => {
+                    if (hasSession) {
+                        return { address: e.address, session: sessionRecord }
+                    }
+                    hasSession = true
+                    return { address: e.address, session: e.session }
+                })
+                return { resolved, skipped: [] }
             }
         } as never,
         sessionStore: {
@@ -273,9 +320,14 @@ test('signal session resolver shares dedup between ensureSession and ensureSessi
 
     assert.equal(fetchCalls, 1)
     assert.equal(fetchBatchCalls, 1)
-    assert.equal(establishCalls, 1)
+    // knownAbsent is part of the dedup key: single-call and batch
+    // both compute independently. Persist-time recheck makes whichever
+    // finishes first the winner; the other defers.
+    assert.equal(establishCalls + prepareCalls, 2)
+    assert.equal(persistBatchCalls, 1)
     assert.equal(batchResult.length, 1)
     assert.equal(batchResult[0].jid, jid)
+    assert.strictEqual(batchResult[0].session, sessionRecord)
 })
 
 test('signal session resolver keeps stricter identity checks for concurrent calls', async () => {

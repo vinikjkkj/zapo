@@ -88,10 +88,50 @@ export class WaIdentityPgStore extends BasePgStore implements WaIdentityStore {
         }[]
     ): Promise<void> {
         if (entries.length === 0) return
-        await this.withTransaction(async (client) => {
-            for (const entry of entries) {
+        const runChunk = async (
+            executor: { query: PoolClient['query'] },
+            chunk: readonly { readonly address: SignalAddress; readonly identityKey: Uint8Array }[]
+        ): Promise<void> => {
+            let paramIdx = 1
+            const placeholders = chunk
+                .map(() => {
+                    const p = `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4})`
+                    paramIdx += 5
+                    return p
+                })
+                .join(', ')
+            const params: PgParam[] = []
+            for (const entry of chunk) {
                 const target = toSignalAddressParts(entry.address)
-                await this.upsertRemoteIdentity(client, target, entry.identityKey)
+                params.push(
+                    this.sessionId,
+                    target.user,
+                    target.server,
+                    target.device,
+                    entry.identityKey
+                )
+            }
+            await executor.query({
+                name: this.stmtName(`identity_upsert_batch_${chunk.length}`),
+                text: `INSERT INTO ${this.t('signal_identity')} (
+                    session_id, "user", server, device, identity_key
+                ) VALUES ${placeholders}
+                ON CONFLICT (session_id, "user", server, device) DO UPDATE SET
+                    identity_key = EXCLUDED.identity_key`,
+                values: params
+            })
+        }
+        const sizes = this.powerOfTwoChunks(entries.length)
+        if (sizes.length === 1) {
+            await this.ensureReady()
+            await runChunk(this.pool, entries)
+            return
+        }
+        await this.withTransaction(async (client) => {
+            let cursor = 0
+            for (const size of sizes) {
+                await runChunk(client, entries.slice(cursor, cursor + size))
+                cursor += size
             }
         })
     }

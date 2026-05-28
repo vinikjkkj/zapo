@@ -1109,6 +1109,66 @@ describe('store-postgres integration', { timeout: 60_000 }, () => {
         await session.clear()
     })
 
+    it('signal: setSessionsBatch with batchInsertChunkSize=2 splits into power-of-two chunks', async (t) => {
+        if (!pool) return t.skip('ZAPO_TEST_PG_* not set')
+
+        const tinyChunkStore = createPostgresStore({ pool, batchInsertChunkSize: 2 })
+        try {
+            const sessionId = nextSessionId('chunked')
+            const session = tinyChunkStore.stores.session(sessionId)
+            await session.clear()
+
+            // 7 entries with maxBatchChunk=2 → power-of-2 sub-chunks [2, 2, 2, 1]
+            // = 4 statements wrapped in a transaction.
+            const N = 7
+            const addresses = Array.from({ length: N }, (_, i) => makeAddress(`u${i}`, i + 1))
+            const sessions = await Promise.all(
+                Array.from({ length: N }, (_, i) => makeSessionRecord(100 + i))
+            )
+            const entries = addresses.map((address, i) => ({ address, session: sessions[i] }))
+
+            await session.setSessionsBatch(entries)
+
+            const got = await session.getSessionsBatch(addresses)
+            assert.equal(got.length, N)
+            for (let i = 0; i < N; i += 1) {
+                assert.equal(got[i]?.local.regId, sessions[i].local.regId)
+            }
+            await session.clear()
+        } finally {
+            await tinyChunkStore.destroy()
+        }
+    })
+
+    it('rejects invalid batchInsertChunkSize', (t) => {
+        if (!pool) {
+            t.skip('ZAPO_TEST_PG_* not set')
+            return
+        }
+        const livePool = pool
+        assert.throws(
+            () =>
+                createPostgresStore({ pool: livePool, batchInsertChunkSize: 0 }).stores.session(
+                    'x'
+                ),
+            /batchInsertChunkSize/
+        )
+        assert.throws(
+            () =>
+                createPostgresStore({ pool: livePool, batchInsertChunkSize: -1 }).stores.session(
+                    'x'
+                ),
+            /batchInsertChunkSize/
+        )
+        assert.throws(
+            () =>
+                createPostgresStore({ pool: livePool, batchInsertChunkSize: 1.5 }).stores.session(
+                    'x'
+                ),
+            /batchInsertChunkSize/
+        )
+    })
+
     it('appstate: updating same collection replaces previous index entries', async (t) => {
         if (!store) return t.skip('ZAPO_TEST_PG_* not set')
 

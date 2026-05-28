@@ -53,11 +53,13 @@ import * as inspector from 'node:inspector/promises'
 import { resolve as resolvePath } from 'node:path'
 import { performance } from 'node:perf_hooks'
 
-import { createStore, type Logger, WaClient, type WaClientEventMap } from 'zapo-js'
+import { type Logger, WaClient, type WaClientEventMap } from 'zapo-js'
 
 import type { FakePeer } from '../src/api/FakePeer'
 import { FakeWaServer, type WaFakeConnectionPipeline } from '../src/api/FakeWaServer'
 import { parsePairingQrString } from '../src/protocol/auth/pair-device'
+
+import { type BenchStoreFixture, buildBenchStore } from './_store-factory'
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -365,26 +367,16 @@ interface PairedFixture {
     readonly client: WaClient
     readonly pipeline: WaFakeConnectionPipeline
     readonly meJid: string
+    readonly storeFixture: BenchStoreFixture
 }
 
 async function bringUpPairedClient(): Promise<PairedFixture> {
     const server = await FakeWaServer.start()
-    const store = createStore({
-        // The default in-memory prekey store caps at 4_096 entries.
-        // The bench creates ~4000 fake peers and triggers ~5 prekey
-        // refills (each generates 812 fresh keyIds), so the total
-        // distinct keyId set hits ~4060 – right at the cap. The
-        // bounded map then evicts the oldest entries (the very keyIds
-        // that the early peers reserved), causing those peers to fail
-        // their pkmsg with "prekey N not found" later. Bumping the
-        // cap above the worst-case keeps every reserved keyId alive
-        // for the duration of the bench.
-        memory: { limits: { signalPreKeys: 16_384 } }
-    })
+    const storeFixture = await buildBenchStore()
 
     const client = new WaClient(
         {
-            store,
+            store: storeFixture.store,
             sessionId: 'zapo-messaging-bench',
             chatSocketUrls: [server.url],
             connectTimeoutMs: 60_000,
@@ -431,7 +423,7 @@ async function bringUpPairedClient(): Promise<PairedFixture> {
     const pipelineAfterPair = await pipelineAfterPairPromise
     await server.triggerPreKeyUpload(pipelineAfterPair)
 
-    return { server, client, pipeline: pipelineAfterPair, meJid }
+    return { server, client, pipeline: pipelineAfterPair, meJid, storeFixture }
 }
 
 // ─── Fixtures ─────────────────────────────────────────────────────────
@@ -745,6 +737,7 @@ function printConfig(config: BenchConfig): void {
     console.log(`  members/group     : ${config.groupMembers}`)
     console.log(`  messages/scenario : ${config.messages}`)
     console.log(`  scenarios         : ${[...config.scenarios].join(', ')}`)
+    console.log(`  store             : ${process.env.ZAPO_BENCH_STORE ?? 'memory'}`)
     console.log(`  --expose-gc       : ${hasExposedGc() ? 'yes' : 'no'}`)
     console.log('')
 }
@@ -844,6 +837,7 @@ async function mainInProcess(
         cleanup: async () => {
             await fixture.client.disconnect().catch(() => undefined)
             await fixture.server.stop()
+            await fixture.storeFixture.destroy().catch(() => undefined)
         }
     }
 }
@@ -874,13 +868,11 @@ async function mainSeparateProcess(
         console.log('[server] profiling skipped (--no-server-prof)')
     }
 
-    const store = createStore({
-        memory: { limits: { signalPreKeys: 16_384 } }
-    })
+    const storeFixture = await buildBenchStore()
 
     const client = new WaClient(
         {
-            store,
+            store: storeFixture.store,
             sessionId: 'zapo-bench-separate',
             chatSocketUrls: [rpc.serverUrl],
             connectTimeoutMs: 60_000,
@@ -982,6 +974,7 @@ async function mainSeparateProcess(
             }
             await client.disconnect().catch(() => undefined)
             await rpc.stop()
+            await storeFixture.destroy().catch(() => undefined)
         }
     }
 }

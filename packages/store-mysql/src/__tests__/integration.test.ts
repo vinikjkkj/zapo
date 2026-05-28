@@ -1123,6 +1123,61 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         await session.clear()
     })
 
+    it('signal: setSessionsBatch chunked split runs in withTransaction', async (t) => {
+        if (!pool) {
+            t.skip('ZAPO_TEST_MYSQL_* not set')
+            return
+        }
+
+        const tinyChunkStore = createMysqlStore({ pool, batchInsertChunkSize: 3 })
+        try {
+            const sessionId = nextSessionId('chunked')
+            const session = tinyChunkStore.stores.session(sessionId)
+            await session.clear()
+
+            const N = 8
+            const addresses = Array.from({ length: N }, (_, i) => makeAddress(`u${i}`, i + 1))
+            const sessions = await Promise.all(
+                Array.from({ length: N }, (_, i) => makeSessionRecord(100 + i))
+            )
+            const entries = addresses.map((address, i) => ({ address, session: sessions[i] }))
+
+            // 8 / 3 = 3 chunks (3+3+2): exercises the withTransaction path.
+            await session.setSessionsBatch(entries)
+
+            const got = await session.getSessionsBatch(addresses)
+            assert.equal(got.length, N)
+            for (let i = 0; i < N; i += 1) {
+                assert.equal(got[i]?.local.regId, sessions[i].local.regId)
+            }
+            await session.clear()
+        } finally {
+            await tinyChunkStore.destroy()
+        }
+    })
+
+    it('rejects invalid batchInsertChunkSize', (t) => {
+        if (!pool) {
+            t.skip('ZAPO_TEST_MYSQL_* not set')
+            return
+        }
+        const livePool = pool
+        assert.throws(
+            () => createMysqlStore({ pool: livePool, batchInsertChunkSize: 0 }).stores.session('x'),
+            /batchInsertChunkSize/
+        )
+        assert.throws(
+            () =>
+                createMysqlStore({ pool: livePool, batchInsertChunkSize: -1 }).stores.session('x'),
+            /batchInsertChunkSize/
+        )
+        assert.throws(
+            () =>
+                createMysqlStore({ pool: livePool, batchInsertChunkSize: 1.5 }).stores.session('x'),
+            /batchInsertChunkSize/
+        )
+    })
+
     it('appstate: updating same collection replaces previous index entries', async (t) => {
         if (!store) return t.skip('ZAPO_TEST_MYSQL_* not set')
 

@@ -18,9 +18,11 @@ export interface WaMysqlStorageOptions {
     readonly pool: Pool
     readonly sessionId: string
     readonly tablePrefix?: string
+    readonly batchInsertChunkSize?: number
 }
 
 export interface WaMysqlCreateStoreOptions {
     readonly pool: Pool | PoolOptions
     readonly tablePrefix?: string
+    readonly batchInsertChunkSize?: number
 }

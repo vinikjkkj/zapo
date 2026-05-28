@@ -32,22 +32,22 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
 
     public async hasSessions(addresses: readonly SignalAddress[]): Promise<readonly boolean[]> {
         if (addresses.length === 0) return []
-        const pipeline = this.redis.pipeline()
-        for (const address of addresses) {
-            const target = toSignalAddressParts(address)
-            pipeline.exists(
-                this.k(
-                    'signal:sess',
-                    this.sessionId,
-                    target.user,
-                    target.server,
-                    String(target.device)
-                )
+        // Single EXISTS with variadic keys: redis returns total matched count,
+        // so we need per-key results via MGET-on-existence pattern. Simplest:
+        // MGET the keys and treat null == missing.
+        const keys = new Array<string>(addresses.length)
+        for (let i = 0; i < addresses.length; i += 1) {
+            const target = toSignalAddressParts(addresses[i])
+            keys[i] = this.k(
+                'signal:sess',
+                this.sessionId,
+                target.user,
+                target.server,
+                String(target.device)
             )
         }
-        const results = await pipeline.exec()
-        if (!results) return addresses.map(() => false)
-        return results.map(([err, val]) => !err && val === 1)
+        const values = await this.redis.mget(...keys)
+        return values.map((v) => v !== null)
     }
 
     public async getSession(address: SignalAddress): Promise<SignalSessionRecord | null> {
@@ -68,24 +68,22 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         addresses: readonly SignalAddress[]
     ): Promise<readonly (SignalSessionRecord | null)[]> {
         if (addresses.length === 0) return []
-        const pipeline = this.redis.pipeline()
-        for (const address of addresses) {
-            const target = toSignalAddressParts(address)
-            pipeline.getBuffer(
-                this.k(
-                    'signal:sess',
-                    this.sessionId,
-                    target.user,
-                    target.server,
-                    String(target.device)
-                )
+        const keys = new Array<string>(addresses.length)
+        for (let i = 0; i < addresses.length; i += 1) {
+            const target = toSignalAddressParts(addresses[i])
+            keys[i] = this.k(
+                'signal:sess',
+                this.sessionId,
+                target.user,
+                target.server,
+                String(target.device)
             )
         }
-        const results = await pipeline.exec()
-        if (!results) return addresses.map(() => null)
-        return results.map(([err, data]) => {
-            if (err || !data) return null
-            return decodeSignalSessionRecord(new Uint8Array(data as Uint8Array))
+        // mgetBuffer: single MGET command server-side returning binary values.
+        const values = await this.redis.mgetBuffer(...keys)
+        return values.map((data) => {
+            if (!data) return null
+            return decodeSignalSessionRecord(new Uint8Array(data))
         })
     }
 
@@ -109,20 +107,26 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         }[]
     ): Promise<void> {
         if (entries.length === 0) return
-        const pipeline = this.redis.pipeline()
+        // Single MSET — ioredis accepts variadic (key, value) pairs and the
+        // command is processed as one unit server-side, replacing what would
+        // otherwise be N pipelined SETs.
+        const args: Array<string | Buffer> = []
         for (const entry of entries) {
             const target = toSignalAddressParts(entry.address)
-            const key = this.k(
-                'signal:sess',
-                this.sessionId,
-                target.user,
-                target.server,
-                String(target.device)
+            args.push(
+                this.k(
+                    'signal:sess',
+                    this.sessionId,
+                    target.user,
+                    target.server,
+                    String(target.device)
+                ),
+                toRedisBuffer(encodeSignalSessionRecord(entry.session))
             )
-            const encoded = encodeSignalSessionRecord(entry.session)
-            pipeline.set(key, toRedisBuffer(encoded))
         }
-        await pipeline.exec()
+        await (this.redis as unknown as { mset: (...args: unknown[]) => Promise<unknown> }).mset(
+            ...args
+        )
     }
 
     public async deleteSession(address: SignalAddress): Promise<void> {

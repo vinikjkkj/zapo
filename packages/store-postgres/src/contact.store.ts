@@ -1,8 +1,9 @@
+import type { PoolClient } from 'pg'
 import type { WaContactStore, WaStoredContactRecord } from 'zapo-js/store'
 
 import { BasePgStore } from './BasePgStore'
 import { affectedRows, queryFirst } from './helpers'
-import type { WaPgStorageOptions } from './types'
+import type { PgParam, WaPgStorageOptions } from './types'
 
 export class WaContactPgStore extends BasePgStore implements WaContactStore {
     public constructor(options: WaPgStorageOptions) {
@@ -34,20 +35,56 @@ export class WaContactPgStore extends BasePgStore implements WaContactStore {
 
     public async upsertBatch(records: readonly WaStoredContactRecord[]): Promise<void> {
         if (records.length === 0) return
-
-        await this.withTransaction(async (client) => {
-            for (const record of records) {
-                await client.query(
-                    this.upsertQuery([
-                        this.sessionId,
-                        record.jid,
-                        record.displayName ?? null,
-                        record.pushName ?? null,
-                        record.lid ?? null,
-                        record.phoneNumber ?? null,
-                        record.lastUpdatedMs
-                    ])
+        const table = this.t('mailbox_contacts')
+        const runChunk = async (
+            executor: { query: PoolClient['query'] },
+            chunk: readonly WaStoredContactRecord[]
+        ): Promise<void> => {
+            let paramIdx = 1
+            const placeholders = chunk
+                .map(() => {
+                    const p = `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6})`
+                    paramIdx += 7
+                    return p
+                })
+                .join(', ')
+            const params: PgParam[] = []
+            for (const record of chunk) {
+                params.push(
+                    this.sessionId,
+                    record.jid,
+                    record.displayName ?? null,
+                    record.pushName ?? null,
+                    record.lid ?? null,
+                    record.phoneNumber ?? null,
+                    record.lastUpdatedMs
                 )
+            }
+            await executor.query({
+                name: this.stmtName(`contact_upsert_batch_${chunk.length}`),
+                text: `INSERT INTO ${table} (
+                    session_id, jid, display_name, push_name, lid, phone_number, last_updated_ms
+                ) VALUES ${placeholders}
+                ON CONFLICT (session_id, jid) DO UPDATE SET
+                    display_name = COALESCE(EXCLUDED.display_name, ${table}.display_name),
+                    push_name = COALESCE(EXCLUDED.push_name, ${table}.push_name),
+                    lid = COALESCE(EXCLUDED.lid, ${table}.lid),
+                    phone_number = COALESCE(EXCLUDED.phone_number, ${table}.phone_number),
+                    last_updated_ms = EXCLUDED.last_updated_ms`,
+                values: params
+            })
+        }
+        const sizes = this.powerOfTwoChunks(records.length)
+        if (sizes.length === 1) {
+            await this.ensureReady()
+            await runChunk(this.pool, records)
+            return
+        }
+        await this.withTransaction(async (client) => {
+            let cursor = 0
+            for (const size of sizes) {
+                await runChunk(client, records.slice(cursor, cursor + size))
+                cursor += size
             }
         })
     }

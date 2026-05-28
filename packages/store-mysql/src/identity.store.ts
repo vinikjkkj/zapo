@@ -85,10 +85,42 @@ export class WaIdentityMysqlStore extends BaseMysqlStore implements WaIdentitySt
         }[]
     ): Promise<void> {
         if (entries.length === 0) return
-        await this.withTransaction(async (conn) => {
-            for (const entry of entries) {
+        const runChunk = async (
+            executor: { execute: PoolConnection['execute'] },
+            chunk: readonly { readonly address: SignalAddress; readonly identityKey: Uint8Array }[]
+        ): Promise<void> => {
+            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?)').join(', ')
+            const params: MysqlParam[] = []
+            for (const entry of chunk) {
                 const target = toSignalAddressParts(entry.address)
-                await this.upsertRemoteIdentity(conn, target, entry.identityKey)
+                params.push(
+                    this.sessionId,
+                    target.user,
+                    target.server,
+                    target.device,
+                    entry.identityKey
+                )
+            }
+            await executor.execute(
+                `INSERT INTO ${this.t('signal_identity')} (
+                    session_id, user, server, device, identity_key
+                ) VALUES ${placeholders}
+                ON DUPLICATE KEY UPDATE
+                    identity_key = VALUES(identity_key)`,
+                params
+            )
+        }
+        const sizes = this.powerOfTwoChunks(entries.length)
+        if (sizes.length === 1) {
+            await this.ensureReady()
+            await runChunk(this.pool, entries)
+            return
+        }
+        await this.withTransaction(async (conn) => {
+            let cursor = 0
+            for (const size of sizes) {
+                await runChunk(conn, entries.slice(cursor, cursor + size))
+                cursor += size
             }
         })
     }

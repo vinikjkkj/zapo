@@ -11,27 +11,15 @@ import {
     toSignalAddressParts
 } from 'zapo-js/signal'
 import type { WaSenderKeyStore as WaSenderKeyStoreContract } from 'zapo-js/store'
-import { asNumber, asString, resolvePositive } from 'zapo-js/util'
+import { asNumber, asString } from 'zapo-js/util'
 
 import { BaseSqliteStore } from './BaseSqliteStore'
 import type { WaSqliteConnection } from './connection'
-import { repeatSqlToken } from './sql-utils'
 import type { WaSqliteStorageOptions } from './types'
 
-const DEFAULTS = Object.freeze({
-    distributionBatchSize: 250
-} as const)
-
 export class SenderKeySqliteStore extends BaseSqliteStore implements WaSenderKeyStoreContract {
-    private readonly distributionBatchSize: number
-
-    public constructor(options: WaSqliteStorageOptions, distributionBatchSize?: number) {
+    public constructor(options: WaSqliteStorageOptions) {
         super(options, ['senderKey'])
-        this.distributionBatchSize = resolvePositive(
-            distributionBatchSize,
-            DEFAULTS.distributionBatchSize,
-            'senderKey.sqlite.distributionBatchSize'
-        )
     }
 
     public async upsertSenderKey(record: SenderKeyRecord): Promise<void> {
@@ -154,37 +142,19 @@ export class SenderKeySqliteStore extends BaseSqliteStore implements WaSenderKey
             return []
         }
         const db = await this.getConnection()
-        const targets = new Array<SignalAddressParts>(senders.length)
-        for (let index = 0; index < senders.length; index += 1) {
-            targets[index] = toSignalAddressParts(senders[index])
-        }
+        const rows = db.all<SenderKeyDistributionRow>(
+            `SELECT group_id, sender_user, sender_server, sender_device, key_id, timestamp_ms
+             FROM sender_key_distribution
+             WHERE session_id = ? AND group_id = ?`,
+            [this.options.sessionId, groupId]
+        )
         const map = new Map<string, SenderKeyDistributionRecord>()
-        for (let start = 0; start < targets.length; start += this.distributionBatchSize) {
-            const end = Math.min(start + this.distributionBatchSize, targets.length)
-            const batchLength = end - start
-            const filters = repeatSqlToken(
-                '(sender_user = ? AND sender_server = ? AND sender_device = ?)',
-                batchLength,
-                ' OR '
-            )
-            const params: unknown[] = [this.options.sessionId, groupId]
-            for (let index = start; index < end; index += 1) {
-                const target = targets[index]
-                params.push(target.user, target.server, target.device)
-            }
-            const rows = db.all<SenderKeyDistributionRow>(
-                `SELECT group_id, sender_user, sender_server, sender_device, key_id, timestamp_ms
-                 FROM sender_key_distribution
-                 WHERE session_id = ? AND group_id = ? AND (${filters})`,
-                params
-            )
-            for (const row of rows) {
-                map.set(this.distributionRowKey(row), decodeSenderKeyDistributionRow(row))
-            }
+        for (const row of rows) {
+            map.set(this.distributionRowKey(row), decodeSenderKeyDistributionRow(row))
         }
-        const records = new Array<SenderKeyDistributionRecord | null>(targets.length)
-        for (let index = 0; index < targets.length; index += 1) {
-            const target = targets[index]
+        const records = new Array<SenderKeyDistributionRecord | null>(senders.length)
+        for (let index = 0; index < senders.length; index += 1) {
+            const target = toSignalAddressParts(senders[index])
             records[index] =
                 map.get(this.distributionTargetKey(target.user, target.server, target.device)) ??
                 null

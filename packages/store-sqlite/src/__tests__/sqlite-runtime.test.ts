@@ -381,10 +381,10 @@ test('sqlite retry store tracks outbound state, inbound counters and expiration'
     }
 })
 
-test('sqlite sender-key store handles lists, batching and deletions', async () => {
+test('sqlite sender-key store handles lists and deletions', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-sender-'))
     const sqlitePath = join(dir, 'state.sqlite')
-    const store = new SenderKeySqliteStore(makeSqliteOptions(sqlitePath, 'session-a'), 1)
+    const store = new SenderKeySqliteStore(makeSqliteOptions(sqlitePath, 'session-a'))
     const senderA = makeAddress('5511', 0)
     const senderB = makeAddress('5522', 1)
     const groupId = '120363000000000000@g.us'

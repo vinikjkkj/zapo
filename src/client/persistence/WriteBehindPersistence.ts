@@ -92,17 +92,22 @@ export class WriteBehindPersistence {
             }
         })
         this.queues = {
-            messages: new BackgroundQueue(
-                (_key, value) => stores.messageStore.upsert(value),
-                queueOptions('messages')
-            ),
+            messages: new BackgroundQueue((_key, value) => stores.messageStore.upsert(value), {
+                ...queueOptions('messages'),
+                batchWriter: (entries) =>
+                    stores.messageStore.upsertBatch(entries.map((e) => e.value))
+            }),
             threads: new BackgroundQueue((_key, value) => stores.threadStore.upsert(value), {
                 ...queueOptions('threads'),
-                coalesce: (previous, incoming) => mergeThread(previous, incoming)
+                coalesce: (previous, incoming) => mergeThread(previous, incoming),
+                batchWriter: (entries) =>
+                    stores.threadStore.upsertBatch(entries.map((e) => e.value))
             }),
             contacts: new BackgroundQueue((_key, value) => stores.contactStore.upsert(value), {
                 ...queueOptions('contacts'),
-                coalesce: (previous, incoming) => mergeContact(previous, incoming)
+                coalesce: (previous, incoming) => mergeContact(previous, incoming),
+                batchWriter: (entries) =>
+                    stores.contactStore.upsertBatch(entries.map((e) => e.value))
             })
         }
     }

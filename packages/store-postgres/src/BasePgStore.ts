@@ -1,13 +1,24 @@
 import type { Pool, PoolClient } from 'pg'
+import { resolvePositive } from 'zapo-js/util'
 
 import { ensurePgMigrations } from './connection'
 import { assertSafeTablePrefix } from './helpers'
 import type { WaPgMigrationDomain, WaPgStorageOptions } from './types'
 
+const DEFAULT_BATCH_INSERT_CHUNK_SIZE = 500
+
 export abstract class BasePgStore {
     protected readonly pool: Pool
     protected readonly sessionId: string
     protected readonly tablePrefix: string
+    /**
+     * Largest power-of-two sub-chunk used by multi-row INSERT helpers.
+     * `batchInsertChunkSize` is rounded down to the nearest power of two
+     * so each batch call only ever emits SQL with row counts from
+     * `{1, 2, 4, ..., maxBatchChunk}`, bounding the named prepared
+     * statements kept per pg connection.
+     */
+    protected readonly maxBatchChunk: number
     private readonly migrationDomains: readonly WaPgMigrationDomain[]
     private migrationPromise: Promise<void> | null
 
@@ -19,8 +30,33 @@ export abstract class BasePgStore {
         this.sessionId = options.sessionId
         this.tablePrefix = options.tablePrefix ?? ''
         assertSafeTablePrefix(this.tablePrefix)
+        const requested = resolvePositive(
+            options.batchInsertChunkSize,
+            DEFAULT_BATCH_INSERT_CHUNK_SIZE,
+            'batchInsertChunkSize'
+        )
+        this.maxBatchChunk = 1 << (31 - Math.clz32(requested))
         this.migrationDomains = migrationDomains
         this.migrationPromise = null
+    }
+
+    /**
+     * Decomposes `n` into a list of power-of-two sub-chunks, each <=
+     * {@link maxBatchChunk}, emitted largest-first.
+     */
+    protected powerOfTwoChunks(n: number): readonly number[] {
+        if (n <= 0) return []
+        const out: number[] = []
+        let remaining = n
+        let size = this.maxBatchChunk
+        while (size >= 1 && remaining > 0) {
+            while (remaining >= size) {
+                out.push(size)
+                remaining -= size
+            }
+            size = size >>> 1
+        }
+        return out
     }
 
     protected t(name: string): string {

@@ -64,20 +64,36 @@ export class WaPreKeyPgStore extends BasePgStore implements WaPreKeyStore {
 
             await this.withTransaction(async (client) => {
                 await this.ensureMetaRow(client)
-                for (const record of generated) {
-                    await client.query({
-                        name: this.stmtName('prekey_insert_prekey_noop'),
-                        text: `INSERT INTO ${this.t('signal_prekey')} (
-                            session_id, key_id, pub_key, priv_key, uploaded
-                        ) VALUES ($1, $2, $3, $4, $5)
-                        ON CONFLICT (session_id, key_id) DO NOTHING`,
-                        values: [
+                const sizes = this.powerOfTwoChunks(generated.length)
+                let cursor = 0
+                for (const size of sizes) {
+                    const chunk = generated.slice(cursor, cursor + size)
+                    cursor += size
+                    let paramIdx = 1
+                    const placeholders = chunk
+                        .map(() => {
+                            const p = `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4})`
+                            paramIdx += 5
+                            return p
+                        })
+                        .join(', ')
+                    const params: PgParam[] = []
+                    for (const record of chunk) {
+                        params.push(
                             this.sessionId,
                             record.keyId,
                             record.keyPair.pubKey,
                             record.keyPair.privKey,
                             record.uploaded === true ? 1 : 0
-                        ]
+                        )
+                    }
+                    await client.query({
+                        name: this.stmtName(`prekey_insert_batch_${chunk.length}`),
+                        text: `INSERT INTO ${this.t('signal_prekey')} (
+                            session_id, key_id, pub_key, priv_key, uploaded
+                        ) VALUES ${placeholders}
+                        ON CONFLICT (session_id, key_id) DO NOTHING`,
+                        values: params
                     })
                 }
                 await this.updateNextPreKeyId(client, maxId + 1)

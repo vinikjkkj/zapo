@@ -35,6 +35,7 @@ const REPO_ROOT = resolve(__dirname, '../../..')
 const COMPOSE_FILE = join(REPO_ROOT, 'packages', 'docker-compose.test.yml')
 
 const ALL_BENCHES = [
+    'messaging',
     'connect-lifecycle',
     'history-sync',
     'bulk-usync',
