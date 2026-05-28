@@ -1,3 +1,4 @@
+import { resolvePositive } from '@util/coercion'
 import { toError } from '@util/primitives'
 
 interface QueueWaiter {
@@ -85,22 +86,20 @@ export class BackgroundQueue<K extends string, V> {
     ) {
         this.writer = writer
         this.coalesce = options.coalesce ?? ((_p, i) => i)
-        const maxPendingKeys = options.maxPendingKeys ?? DEFAULT_MAX_PENDING_KEYS
-        if (!Number.isSafeInteger(maxPendingKeys) || maxPendingKeys < 1) {
-            throw new Error('BackgroundQueue maxPendingKeys must be a positive integer')
-        }
-        this.maxPendingKeys = maxPendingKeys
-        const maxWriteConcurrency = options.maxWriteConcurrency ?? 1
-        if (!Number.isSafeInteger(maxWriteConcurrency) || maxWriteConcurrency < 1) {
-            throw new Error('BackgroundQueue maxWriteConcurrency must be a positive integer')
-        }
-        this.maxWriteConcurrency = maxWriteConcurrency
+        this.maxPendingKeys = resolvePositive(
+            options.maxPendingKeys,
+            DEFAULT_MAX_PENDING_KEYS,
+            'maxPendingKeys'
+        )
+        this.maxWriteConcurrency = resolvePositive(
+            options.maxWriteConcurrency,
+            1,
+            'maxWriteConcurrency'
+        )
         this.batchWriter = options.batchWriter ?? null
-        const maxBatchSize = options.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE
-        if (!Number.isSafeInteger(maxBatchSize) || maxBatchSize < 1) {
-            throw new Error('BackgroundQueue maxBatchSize must be a positive integer')
-        }
-        this.maxBatchSize = maxBatchSize
+        this.maxBatchSize = this.batchWriter
+            ? resolvePositive(options.maxBatchSize, DEFAULT_MAX_BATCH_SIZE, 'maxBatchSize')
+            : DEFAULT_MAX_BATCH_SIZE
         const flushTimeoutMs = options.flushTimeoutMs ?? DEFAULT_FLUSH_TIMEOUT_MS
         if (!Number.isFinite(flushTimeoutMs) || flushTimeoutMs < 1) {
             throw new Error('BackgroundQueue flushTimeoutMs must be a positive finite number')

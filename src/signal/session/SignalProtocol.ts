@@ -72,7 +72,9 @@ export class SignalProtocol {
     /**
      * Builds an outgoing Signal session against a remote prekey bundle. Set
      * `options.reuseExisting` to skip the handshake when a session already
-     * exists for the same remote identity.
+     * exists for the same remote identity. Set `options.knownAbsent` only
+     * when the caller already proved (within the same logical step) that no
+     * session exists; it skips the in-lock recheck and forces a new handshake.
      */
     public async establishOutgoingSession(
         address: SignalAddress,
@@ -99,6 +101,112 @@ export class SignalProtocol {
             await this.stores.identity.setRemoteIdentity(address, session.remote.pubKey)
             await this.stores.session.setSession(address, session)
             return session
+        })
+    }
+
+    /**
+     * Compute an outgoing session under the per-address lock without
+     * persisting. Caller batches results and persists via
+     * {@link persistOutgoingSessionsBatch} to collapse N `setRemoteIdentity`
+     * + `setSession` round-trips into one bulk write per store.
+     */
+    public async prepareOutgoingSession(
+        address: SignalAddress,
+        remoteBundle: SignalPreKeyBundle,
+        options: EstablishOutgoingSessionOptions = {}
+    ): Promise<{
+        readonly session: SignalSessionRecord
+        readonly remoteIdentity: Uint8Array
+        readonly reusedExisting: boolean
+    }> {
+        return this.runWithAddressLock(address, async () => {
+            if (options.reuseExisting && !options.knownAbsent) {
+                const existing = await this.stores.session.getSession(address)
+                if (existing) {
+                    const remoteIdentity = toSerializedPubKey(remoteBundle.identity)
+                    if (!uint8Equal(existing.remote.pubKey, remoteIdentity)) {
+                        throw new Error('identity mismatch')
+                    }
+                    return {
+                        session: existing,
+                        remoteIdentity: existing.remote.pubKey,
+                        reusedExisting: true
+                    }
+                }
+            }
+            const [local, localOneTimeBase] = await Promise.all([
+                requireLocalIdentity(this.stores.signal),
+                generateSerializedKeyPair()
+            ])
+            const session = await initiateSessionOutgoing(local, remoteBundle, localOneTimeBase)
+            return {
+                session,
+                remoteIdentity: session.remote.pubKey,
+                reusedExisting: false
+            }
+        })
+    }
+
+    /**
+     * Persist prepared outgoing sessions while holding every per-address
+     * lock (same discipline as {@link encryptMessagesBatch}). Re-reads
+     * sessions inside the lock; defers to a concurrent writer's session
+     * when identities agree to avoid clobbering a fresher ratchet advance,
+     * and reports identity conflicts via `skipped`.
+     */
+    public async persistOutgoingSessionsBatch(
+        entries: ReadonlyArray<{
+            readonly address: SignalAddress
+            readonly session: SignalSessionRecord
+            readonly remoteIdentity: Uint8Array
+        }>
+    ): Promise<{
+        readonly resolved: ReadonlyArray<{
+            readonly address: SignalAddress
+            readonly session: SignalSessionRecord
+        }>
+        readonly skipped: ReadonlyArray<{
+            readonly address: SignalAddress
+            readonly reason: 'identity-mismatch'
+        }>
+    }> {
+        if (entries.length === 0) return { resolved: [], skipped: [] }
+        const lockKeys = new Array<string>(entries.length)
+        for (let i = 0; i < entries.length; i += 1) {
+            lockKeys[i] = signalAddressLockKey(entries[i].address)
+        }
+        return this.sessionMutationLock.runMany(lockKeys, async () => {
+            const addresses = entries.map((e) => e.address)
+            const existingSessions = await this.stores.session.getSessionsBatch(addresses)
+            const identityUpdates: { address: SignalAddress; identityKey: Uint8Array }[] = []
+            const sessionUpdates: { address: SignalAddress; session: SignalSessionRecord }[] = []
+            const resolved: { address: SignalAddress; session: SignalSessionRecord }[] = []
+            const skipped: { address: SignalAddress; reason: 'identity-mismatch' }[] = []
+            for (let i = 0; i < entries.length; i += 1) {
+                const entry = entries[i]
+                const existing = existingSessions[i]
+                if (existing) {
+                    if (uint8Equal(existing.remote.pubKey, entry.remoteIdentity)) {
+                        resolved.push({ address: entry.address, session: existing })
+                        continue
+                    }
+                    skipped.push({ address: entry.address, reason: 'identity-mismatch' })
+                    continue
+                }
+                identityUpdates.push({
+                    address: entry.address,
+                    identityKey: entry.remoteIdentity
+                })
+                sessionUpdates.push({ address: entry.address, session: entry.session })
+                resolved.push({ address: entry.address, session: entry.session })
+            }
+            if (identityUpdates.length > 0) {
+                await this.stores.identity.setRemoteIdentities(identityUpdates)
+            }
+            if (sessionUpdates.length > 0) {
+                await this.stores.session.setSessionsBatch(sessionUpdates)
+            }
+            return { resolved, skipped }
         })
     }
 

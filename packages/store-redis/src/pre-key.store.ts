@@ -226,11 +226,11 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
         // Single Lua script atomically returns the hash contents (binary
         // pub/priv included) and removes the prekey from all indexes.
         // evalBuffer keeps the byte fields intact across the round-trip.
-        const raw = (await (
+        const raw = await (
             this.redis as unknown as {
                 evalBuffer: (...args: unknown[]) => Promise<Buffer[] | null>
             }
-        ).evalBuffer(LUA_CONSUME_PREKEY, 3, hashKey, idsKey, availKey, idStr)) as Buffer[] | null
+        ).evalBuffer(LUA_CONSUME_PREKEY, 3, hashKey, idsKey, availKey, idStr)
         if (!raw || raw.length === 0) return null
 
         const data: Record<string, Buffer> = {}

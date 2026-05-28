@@ -1140,8 +1140,11 @@ describe('store-postgres integration', { timeout: 60_000 }, () => {
         }
     })
 
-    it('rejects invalid batchInsertChunkSize', () => {
-        if (!pool) return
+    it('rejects invalid batchInsertChunkSize', (t) => {
+        if (!pool) {
+            t.skip('ZAPO_TEST_PG_* not set')
+            return
+        }
         const livePool = pool
         assert.throws(
             () =>

@@ -169,47 +169,39 @@ async function buildPostgresStore(): Promise<BenchStoreFixture> {
         cur.totalUs += elapsedUs
         queryStats.set(key, cur)
     }
-    // pg's `query` accepts either (text, params) or ({ name, text, values });
-    // wrap so both shapes get traced. pg also supports callback-style calls
-    // internally that return non-thenables — just skip those.
-    const wrapQuery = (originalQuery: Function, target: object) => {
-        return function (this: object, ...args: unknown[]) {
+    // Only wrap Pool.connect: pg-pool's Pool.query() routes through connect
+    // + client.query, so a single connect hook traces both direct pool.query
+    // and explicit withTransaction client.query without double-counting.
+    const WRAPPED = Symbol('trace.query.wrapped')
+    const wrapClient = (client: object): void => {
+        if ((client as Record<symbol, unknown>)[WRAPPED]) return
+        ;(client as Record<symbol, unknown>)[WRAPPED] = true
+        const c = client as { query: Function }
+        const originalQuery = c.query.bind(c)
+        c.query = function (...args: unknown[]) {
             const start = process.hrtime.bigint()
             const arg0 = args[0] as string | { text?: string }
             const sql = typeof arg0 === 'string' ? arg0 : (arg0?.text ?? '<unknown>')
-            const result = originalQuery.apply(target, args) as unknown
+            const result = originalQuery(...args) as unknown
             if (result && typeof (result as { then?: unknown }).then === 'function') {
                 return (result as Promise<unknown>).finally(() => recordCall(sql, start))
             }
             recordCall(sql, start)
             return result
-        }
-    }
-    // pg-pool's Pool.query() internally calls Pool.connect() + client.query()
-    // (callback style). Wrapping only connect — but supporting BOTH the
-    // promise and callback signatures — lets a single hook trace direct
-    // pool.query calls AND explicit withTransaction client.query calls
-    // without double-counting.
-    const WRAPPED = Symbol('trace.query.wrapped')
-    const wrapClient = (client: object): void => {
-        if ((client as Record<symbol, unknown>)[WRAPPED]) return
-        ;(client as Record<symbol, unknown>)[WRAPPED] = true
-        const c = client as { query: unknown }
-        const origQuery = (c.query as Function).bind(c)
-        c.query = wrapQuery(origQuery, c) as typeof c.query
+        } as typeof c.query
     }
     const pool = !trace
         ? rawPool
         : new Proxy(rawPool, {
               get(target, prop, receiver) {
                   if (prop !== 'connect') return Reflect.get(target, prop, receiver)
-                  return function (this: unknown, cb?: unknown) {
+                  return function (cb?: unknown) {
                       if (typeof cb === 'function') {
                           return (target.connect as Function).call(
                               target,
                               (err: unknown, client: unknown, done: unknown) => {
                                   if (client) wrapClient(client as object)
-                                  ;(cb as Function)(err, client, done)
+                                  cb(err, client, done)
                               }
                           )
                       }

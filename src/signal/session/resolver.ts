@@ -130,7 +130,11 @@ export function createSignalSessionResolver(options: {
         knownAbsent = false
     ): Promise<SignalSessionRecord | null> => {
         const expectedIdentityKey = expectedIdentity ? bytesToHex(expectedIdentity) : 'none'
-        const dedupKey = `signalSession:${signalAddressKey(address)}:${reasonIdentity ? '1' : '0'}:${expectedIdentityKey}`
+        // knownAbsent is part of the dedup key: single-caller (false) and
+        // batch (true) must NOT share a Promise, or the unsafe variant
+        // could leak to the safe caller. Per-address lock + the recheck
+        // inside persistOutgoingSessionsBatch resolves any race.
+        const dedupKey = `signalSession:${signalAddressKey(address)}:${reasonIdentity ? '1' : '0'}:${expectedIdentityKey}:${knownAbsent ? '1' : '0'}`
         return dedup.run(dedupKey, () =>
             ensureSessionInternal(
                 address,
@@ -251,9 +255,16 @@ export function createSignalSessionResolver(options: {
             return collectResolvedTargets()
         }
 
-        const ensuredTargetIndices = new Array<number>(missingIndices.length)
-        const ensurePromises = new Array<Promise<SignalSessionRecord | null>>(missingIndices.length)
-        let ensureCount = 0
+        // Prepare under per-address locks (no persist). Bulk persist below
+        // holds every per-address lock at once via persistOutgoingSessionsBatch.
+        const prepareTargetIndices = new Array<number>(missingIndices.length)
+        const preparePromises = new Array<
+            Promise<{
+                readonly session: SignalSessionRecord
+                readonly remoteIdentity: Uint8Array
+            }>
+        >(missingIndices.length)
+        let prepareCount = 0
         for (let index = 0; index < missingIndices.length; index += 1) {
             const targetIndex = missingIndices[index]
             const targetJid = normalizedTargetJids[targetIndex]
@@ -268,43 +279,107 @@ export function createSignalSessionResolver(options: {
                 continue
             }
             const expectedIdentity = normalizedExpectedIdentityByJid?.get(targetJid)
-            ensuredTargetIndices[ensureCount] = targetIndex
-            ensurePromises[ensureCount] = ensureSessionWithDedup(
-                normalizedTargetAddresses[targetIndex],
-                targetJid,
-                expectedIdentity,
-                false,
-                batchResult.bundle,
-                true
-            )
-            ensureCount += 1
+            const expectedSerializedIdentity = expectedIdentity
+                ? toSerializedPubKey(expectedIdentity)
+                : null
+            const bundleIdentity = toSerializedPubKey(batchResult.bundle.identity)
+            if (
+                expectedSerializedIdentity &&
+                !uint8Equal(bundleIdentity, expectedSerializedIdentity)
+            ) {
+                throw new Error('identity mismatch')
+            }
+            const targetAddress = normalizedTargetAddresses[targetIndex]
+            const bundle = batchResult.bundle
+            prepareTargetIndices[prepareCount] = targetIndex
+            preparePromises[prepareCount] = signalProtocol
+                .prepareOutgoingSession(targetAddress, bundle, {
+                    reuseExisting: true,
+                    knownAbsent: true
+                })
+                .then((prep) => ({
+                    session: prep.session,
+                    remoteIdentity: prep.remoteIdentity
+                }))
+            prepareCount += 1
         }
-        if (ensureCount === 0) {
+        if (prepareCount === 0) {
             return collectResolvedTargets()
         }
-        ensuredTargetIndices.length = ensureCount
-        ensurePromises.length = ensureCount
-        const ensureResults = await Promise.allSettled(ensurePromises)
+        prepareTargetIndices.length = prepareCount
+        preparePromises.length = prepareCount
+        const prepareResults = await Promise.allSettled(preparePromises)
 
+        const batchEntries: {
+            address: SignalAddress
+            session: SignalSessionRecord
+            remoteIdentity: Uint8Array
+        }[] = []
+        const entryToTargetIndex: number[] = []
         const fallbackIndices: number[] = []
-        for (let index = 0; index < ensuredTargetIndices.length; index += 1) {
-            const targetIndex = ensuredTargetIndices[index]
-            const ensureResult = ensureResults[index]
-            if (ensureResult.status === 'rejected') {
-                const normalized = toError(ensureResult.reason)
+        for (let i = 0; i < prepareTargetIndices.length; i += 1) {
+            const targetIndex = prepareTargetIndices[i]
+            const result = prepareResults[i]
+            if (result.status === 'rejected') {
+                const normalized = toError(result.reason)
                 if (normalized.message === 'identity mismatch') {
                     throw normalized
                 }
-                logger.warn('signal session ensure failed during batch resolution', {
+                logger.warn('signal session prepare failed during batch resolution', {
                     jid: normalizedTargetJids[targetIndex],
                     message: normalized.message
                 })
                 continue
             }
-            const session = ensureResult.value
+            batchEntries.push({
+                address: normalizedTargetAddresses[targetIndex],
+                session: result.value.session,
+                remoteIdentity: result.value.remoteIdentity
+            })
+            entryToTargetIndex.push(targetIndex)
+        }
+        if (batchEntries.length === 0) {
+            return collectResolvedTargets()
+        }
+        let persistResult: Awaited<ReturnType<SignalProtocol['persistOutgoingSessionsBatch']>>
+        try {
+            persistResult = await signalProtocol.persistOutgoingSessionsBatch(batchEntries)
+        } catch (error) {
+            const normalized = toError(error)
+            logger.warn('signal batched session persist failed', {
+                requested: batchEntries.length,
+                message: normalized.message
+            })
+            for (let i = 0; i < entryToTargetIndex.length; i += 1) {
+                fallbackIndices.push(entryToTargetIndex[i])
+            }
+            persistResult = { resolved: [], skipped: [] }
+        }
+        const sessionByAddressKey = new Map<string, SignalSessionRecord>()
+        for (const r of persistResult.resolved) {
+            sessionByAddressKey.set(signalAddressKey(r.address), r.session)
+        }
+        const skippedByAddressKey = new Set<string>()
+        for (const s of persistResult.skipped) {
+            skippedByAddressKey.add(signalAddressKey(s.address))
+            logger.warn('signal session persist skipped due to identity conflict', {
+                user: s.address.user,
+                server: s.address.server,
+                device: s.address.device
+            })
+        }
+        for (let i = 0; i < entryToTargetIndex.length; i += 1) {
+            const targetIndex = entryToTargetIndex[i]
+            const addrKey = signalAddressKey(normalizedTargetAddresses[targetIndex])
+            const session = sessionByAddressKey.get(addrKey)
             if (session) {
                 resolvedByIndex[targetIndex] = session
-            } else {
+                continue
+            }
+            if (skippedByAddressKey.has(addrKey)) {
+                continue
+            }
+            if (!fallbackIndices.includes(targetIndex)) {
                 fallbackIndices.push(targetIndex)
             }
         }

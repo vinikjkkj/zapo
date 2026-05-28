@@ -13,12 +13,11 @@ export abstract class BaseMysqlStore {
     protected readonly tablePrefix: string
     /**
      * Largest power-of-two sub-chunk used by multi-row INSERT helpers.
-     * Caller passes `batchInsertChunkSize`; we round down to the
-     * nearest power of two so the set of distinct SQL texts emitted by
-     * batch writes stays bounded by `log2(maxBatchChunk)` — keeps the
-     * mysql2 client-side prep cache + the server-side
-     * `max_prepared_stmt_count` quota bounded regardless of how the
-     * caller varies batch sizes.
+     * Caller passes `batchInsertChunkSize`; we round down to the nearest
+     * power of two so the set of distinct SQL texts emitted by batch
+     * writes stays bounded by `log2(maxBatchChunk)`. This keeps the mysql2
+     * client-side prep cache and the server-side `max_prepared_stmt_count`
+     * quota bounded regardless of how the caller varies batch sizes.
      */
     protected readonly maxBatchChunk: number
     private readonly migrationDomains: readonly WaMysqlMigrationDomain[]

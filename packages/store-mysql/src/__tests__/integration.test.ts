@@ -1123,8 +1123,11 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         await session.clear()
     })
 
-    it('signal: setSessionsBatch with batchInsertChunkSize=3 splits into multi-chunk transaction', async (t) => {
-        if (!pool) return t.skip('ZAPO_TEST_MYSQL_* not set')
+    it('signal: setSessionsBatch chunked split runs in withTransaction', async (t) => {
+        if (!pool) {
+            t.skip('ZAPO_TEST_MYSQL_* not set')
+            return
+        }
 
         const tinyChunkStore = createMysqlStore({ pool, batchInsertChunkSize: 3 })
         try {
@@ -1139,7 +1142,7 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
             )
             const entries = addresses.map((address, i) => ({ address, session: sessions[i] }))
 
-            // 8 / 3 = 3 chunks (3+3+2) — exercises the withTransaction path.
+            // 8 / 3 = 3 chunks (3+3+2): exercises the withTransaction path.
             await session.setSessionsBatch(entries)
 
             const got = await session.getSessionsBatch(addresses)
@@ -1153,8 +1156,11 @@ describe('store-mysql integration', { timeout: 60_000 }, () => {
         }
     })
 
-    it('rejects invalid batchInsertChunkSize', () => {
-        if (!pool) return
+    it('rejects invalid batchInsertChunkSize', (t) => {
+        if (!pool) {
+            t.skip('ZAPO_TEST_MYSQL_* not set')
+            return
+        }
         const livePool = pool
         assert.throws(
             () => createMysqlStore({ pool: livePool, batchInsertChunkSize: 0 }).stores.session('x'),
