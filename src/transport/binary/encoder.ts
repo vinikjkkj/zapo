@@ -69,28 +69,31 @@ class ByteWriter {
     }
 }
 
-function isNibbleString(value: string): boolean {
-    for (let i = 0; i < value.length; i += 1) {
-        const code = value.charCodeAt(i)
-        const isDigit = code >= 48 && code <= 57
-        const isSpecial = code === 45 || code === 46
-        if (!isDigit && !isSpecial) {
-            return false
-        }
-    }
-    return value.length > 0
-}
+const PACKED_NONE = 0
+const PACKED_NIBBLE = 1
+const PACKED_HEX = 2
 
-function isHexString(value: string): boolean {
-    for (let i = 0; i < value.length; i += 1) {
+function classifyPackedString(value: string): number {
+    const n = value.length
+    if (n === 0 || n >= 128) return PACKED_NONE
+    let nibbleOk = true
+    let hexOk = true
+    for (let i = 0; i < n; i += 1) {
         const code = value.charCodeAt(i)
-        const isDigit = code >= 48 && code <= 57
-        const isHex = code >= 65 && code <= 70
-        if (!isDigit && !isHex) {
-            return false
+        if (code >= 48 && code <= 57) continue
+        if (code === 45 || code === 46) {
+            hexOk = false
+            if (!nibbleOk) return PACKED_NONE
+            continue
         }
+        if (code >= 65 && code <= 70) {
+            nibbleOk = false
+            if (!hexOk) return PACKED_NONE
+            continue
+        }
+        return PACKED_NONE
     }
-    return value.length > 0
+    return nibbleOk ? PACKED_NIBBLE : PACKED_HEX
 }
 
 function toNibble(value: string, index: number, packedType: number): number {
@@ -174,11 +177,12 @@ function writeString(value: string, writer: ByteWriter): void {
         }
     }
 
-    if (value.length < 128 && isNibbleString(value)) {
+    const packed = classifyPackedString(value)
+    if (packed === PACKED_NIBBLE) {
         writePackedString(value, NIBBLE_8, writer)
         return
     }
-    if (value.length < 128 && isHexString(value)) {
+    if (packed === PACKED_HEX) {
         writePackedString(value, HEX_8, writer)
         return
     }

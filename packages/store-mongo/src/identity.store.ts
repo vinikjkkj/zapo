@@ -107,7 +107,7 @@ export class WaIdentityMongoStore extends BaseMongoStore implements WaIdentitySt
                 }
             }
         })
-        await col.bulkWrite(ops)
+        await col.bulkWrite(ops, { ordered: false })
     }
 
     // ── Clear ─────────────────────────────────────────────────────────
