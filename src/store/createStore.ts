@@ -193,8 +193,10 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                 `createStore: when backends is set, every persistence domain must be assigned ` +
                     `explicitly via providers. Missing: ${missingProviders
                         .map((d) => `providers.${d}`)
-                        .join(', ')}. Pass a backend name (e.g. 'sqlite'), 'memory' to use the ` +
-                    `in-tree memory provider, or 'none' to skip the domain. Cache providers ` +
+                        .join(', ')}. Pass a backend name (e.g. 'sqlite') to persist, or ` +
+                    `'memory' to use the in-tree memory provider. For the mailbox domains ` +
+                    `(messages/threads/contacts) 'none' skips the domain entirely; for the ` +
+                    `other domains 'none' falls back to memory. Cache providers ` +
                     `(retry/groupMetadata/deviceList/messageSecret) stay opt-in and default to memory.`
             )
         }
