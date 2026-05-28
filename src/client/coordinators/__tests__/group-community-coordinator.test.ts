@@ -234,6 +234,119 @@ test('setSetting toggles new group_history / allow_admin_reports / no_frequently
     ])
 })
 
+test('queryGroupInviteInfo parses subject/owner/ephemeral/description/participants', async () => {
+    const response: BinaryNode = iqResult([
+        {
+            tag: 'group',
+            attrs: {
+                id: '120363@g.us',
+                subject: 'TESTE',
+                size: '3',
+                creation: '1700000000',
+                s_o: 'owner@lid',
+                s_o_pn: 'owner@s.whatsapp.net',
+                s_t: '1710000000',
+                addressing_mode: 'lid'
+            },
+            content: [
+                { tag: 'ephemeral', attrs: { expiration: '86400' } },
+                {
+                    tag: 'participant',
+                    attrs: { jid: 'a@lid', phone_number: 'a@s.whatsapp.net', type: 'admin' }
+                },
+                {
+                    tag: 'description',
+                    attrs: { id: 'D1', t: '1715000000' },
+                    content: [{ tag: 'body', attrs: {}, content: new Uint8Array([114, 101, 103]) }]
+                }
+            ]
+        }
+    ])
+    const mock = createMockQuery([response])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    const info = await coordinator.queryGroupInviteInfo('CODE')
+
+    assert.equal(info.jid, '120363@g.us')
+    assert.equal(info.subject, 'TESTE')
+    assert.equal(info.size, 3)
+    assert.equal(info.creation, 1700000000)
+    assert.equal(info.subjectOwner, 'owner@lid')
+    assert.equal(info.subjectOwnerPhoneNumber, 'owner@s.whatsapp.net')
+    assert.equal(info.subjectTime, 1710000000)
+    assert.equal(info.addressingMode, 'lid')
+    assert.equal(info.ephemeral, 86400)
+    assert.equal(info.desc, 'reg')
+    assert.equal(info.descId, 'D1')
+    assert.equal(info.descTime, 1715000000)
+    assert.equal(info.participants.length, 1)
+    assert.equal(info.participants[0].jid, 'a@lid')
+    assert.equal(info.participants[0].phoneNumber, 'a@s.whatsapp.net')
+    assert.equal(info.participants[0].type, 'admin')
+})
+
+test('revokeInvite returns new code and any affected participants', async () => {
+    const responseWithAffected = iqResult([
+        { tag: 'invite', attrs: { code: 'NEW123' } },
+        {
+            tag: 'participant',
+            attrs: {
+                jid: 'evicted@lid',
+                error: '404',
+                phone_number: 'evicted@s.whatsapp.net'
+            }
+        }
+    ])
+    const responseEmpty = iqResult([{ tag: 'invite', attrs: { code: 'NEW456' } }])
+    const mock = createMockQuery([responseWithAffected, responseEmpty])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    const r1 = await coordinator.revokeInvite('120363@g.us')
+    assert.equal(r1.code, 'NEW123')
+    assert.equal(r1.affectedParticipants.length, 1)
+    assert.equal(r1.affectedParticipants[0].jid, 'evicted@lid')
+    assert.equal(r1.affectedParticipants[0].code, 404)
+    assert.equal(r1.affectedParticipants[0].status, 'error')
+    assert.equal(r1.affectedParticipants[0].phoneNumber, 'evicted@s.whatsapp.net')
+
+    const r2 = await coordinator.revokeInvite('120363@g.us')
+    assert.equal(r2.code, 'NEW456')
+    assert.deepEqual(r2.affectedParticipants, [])
+})
+
+test('participant action returns per-jid result with status/code/phoneNumber/username', async () => {
+    const response = iqResult([
+        {
+            tag: 'add',
+            attrs: {},
+            content: [
+                {
+                    tag: 'participant',
+                    attrs: {
+                        jid: 'ok@lid',
+                        phone_number: 'ok@s.whatsapp.net',
+                        username: 'maria'
+                    }
+                },
+                { tag: 'participant', attrs: { jid: 'fail@lid', error: '403' } }
+            ]
+        }
+    ])
+    const mock = createMockQuery([response])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    const results = await coordinator.addParticipants('120363@g.us', ['ok@lid', 'fail@lid'])
+    assert.equal(results.length, 2)
+    assert.equal(results[0].jid, 'ok@lid')
+    assert.equal(results[0].status, 'ok')
+    assert.equal(results[0].code, 200)
+    assert.equal(results[0].phoneNumber, 'ok@s.whatsapp.net')
+    assert.equal(results[0].username, 'maria')
+    assert.equal(results[1].jid, 'fail@lid')
+    assert.equal(results[1].status, 'error')
+    assert.equal(results[1].code, 403)
+})
+
 test('queryLinkedGroupsParticipants returns flattened participants', async () => {
     const response: BinaryNode = iqResult([
         {

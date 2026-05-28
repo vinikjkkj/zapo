@@ -437,8 +437,9 @@ export class WaMessageCoordinator {
      * `WaIncomingAddonEvent`. Silently returns when the parent message
      * secret is missing or the payload is not an addon.
      *
-     * Called automatically by the client when `options.addons.autoDecrypt`
-     * is `true` - you rarely need to invoke it directly. The parent secret
+     * Called automatically by the client unless `options.addons.autoDecrypt`
+     * is explicitly `false` - you rarely need to invoke it directly. The
+     * parent secret
      * is looked up in the in-memory `messageSecret` cache first, then in
      * the `messages` store; if both are `'none'`/missing, decryption fails
      * silently (and the event never fires).

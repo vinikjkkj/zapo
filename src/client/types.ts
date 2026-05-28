@@ -34,6 +34,18 @@ export interface WaClientProxyOptions {
     readonly linkPreview?: WaProxyTransport
 }
 
+/**
+ * Per-domain control over what {@link WaClient.logout} wipes from the store.
+ *
+ * Defaults (when the domain is left `undefined`):
+ * - `messages`, `threads`, `contacts` → **preserved** (mailbox archive
+ *   survives logout; the user keeps their history when re-pairing).
+ * - everything else → **cleared** (credentials, Signal state, app-state,
+ *   caches, privacy tokens — all need a clean slate for the new pair).
+ *
+ * Explicit `true`/`false` always wins. To wipe the mailbox too, pass
+ * `{ messages: true, threads: true, contacts: true }`.
+ */
 export interface WaLogoutStoreClearOptions {
     readonly auth?: boolean
     readonly signal?: boolean
@@ -101,11 +113,11 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
     readonly messageRetryDelayMs?: number
     /**
      * Initial presence sent right after the post-connect passive task runs.
-     * - `true` (default): announce the client as online – matches the wa-web
-     *   behavior when the browser tab has focus at login time.
-     * - `false`: announce as unavailable – matches wa-web when the tab is not
-     *   focused (or the Windows app is minimized to tray) at login time. Useful
-     *   for bots/headless sessions that should not appear "online" on connect.
+     * - `false` (default): announce as unavailable – matches wa-web when the
+     *   tab is not focused (or the Windows app is minimized to tray) at login
+     *   time, and keeps headless bots/automation invisible by default.
+     * - `true`: announce the client as online – matches wa-web behavior when
+     *   the browser tab has focus at login time.
      */
     readonly markOnlineOnConnect?: boolean
     /**
@@ -122,8 +134,12 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      */
     readonly writeBehind?: WaWriteBehindOptions
     /**
-     * History-sync behavior – enable initial history download, full vs.
-     * recent sync, and external blob handling.
+     * History-sync behavior. By default chunks pushed via
+     * `historySyncNotification` (both the initial bootstrap and the
+     * on-demand backfill triggered by `message.requestHistorySync`) are
+     * downloaded and emitted as `history_sync_chunk` events. Set
+     * `enabled: false` to drop them; `requireFullSync: true` asks the
+     * primary device for a full history download instead of just recent.
      */
     readonly history?: WaHistorySyncOptions
     /**
@@ -140,15 +156,17 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      */
     readonly privacyToken?: WaPrivacyTokenOptions
     /**
-     * Addon behavior – set `autoDecrypt: true` to automatically decrypt
-     * encrypted addons (poll votes, reactions, ...) and emit them as typed
-     * `message_addon` events.
+     * Addon behavior. Encrypted addons (poll votes, reactions, ...) are
+     * decrypted automatically and emitted as typed `message_addon` events
+     * by default; set `autoDecrypt: false` to receive them encrypted and
+     * decrypt yourself via `client.message.tryDecryptAddon(event)`.
      */
     readonly addons?: WaAddonOptions
     /**
      * Per-domain control of what {@link WaClient.logout} clears from the
-     * store. Defaults to clearing everything; set a domain to `false` to
-     * preserve it across logout.
+     * store. By default the mailbox archive (`messages`, `threads`,
+     * `contacts`) is **preserved** and every other domain is cleared. See
+     * {@link WaLogoutStoreClearOptions} for the per-domain defaults.
      */
     readonly logoutStoreClear?: WaLogoutStoreClearOptions
     /**
@@ -221,6 +239,14 @@ export interface WaMediaOptions {
 }
 
 export interface WaAddonOptions {
+    /**
+     * Decrypt incoming addon ciphertexts (poll votes, reactions, message
+     * edits, ...) and emit them as typed `message_addon` events. On by
+     * default - set to `false` to receive the encrypted payload and
+     * decrypt yourself via `client.message.tryDecryptAddon(event)`. When
+     * on, the `messageSecret` cache must be a real store (the in-tree
+     * memory provider is the default; `'none'` defeats the cache).
+     */
     readonly autoDecrypt?: boolean
 }
 
@@ -239,6 +265,14 @@ export interface WaWriteBehindOptions {
 }
 
 export interface WaHistorySyncOptions {
+    /**
+     * Whether to process the `historySyncNotification` protocol messages
+     * that WhatsApp pushes on first connect (initial bootstrap) and via
+     * `message.requestHistorySync` (on-demand). On by default - set to
+     * `false` to drop the chunks silently (useful when you do not persist
+     * mailbox/threads/contacts and the conversation download would just
+     * burn bandwidth).
+     */
     readonly enabled?: boolean
     readonly requireFullSync?: boolean
 }
@@ -1021,8 +1055,9 @@ export interface WaClientEventMap {
     readonly message: (event: WaIncomingMessageEvent) => void
     /**
      * A decrypted addon (poll vote, reaction, edit, comment, ...) attached to
-     * a previous message. Fires only when `addons.autoDecrypt` is on **and**
-     * the parent message secret is available in the cache.
+     * a previous message. Fires unless `addons.autoDecrypt` is explicitly
+     * set to `false`, and the parent message secret is available in the
+     * cache.
      */
     readonly message_addon: (event: WaIncomingAddonEvent) => void
     /**
@@ -1075,9 +1110,11 @@ export interface WaClientEventMap {
      */
     readonly mutation: (event: WaAppStateMutationEvent) => void
     /**
-     * One chunk of history-sync data while the primary device is mirroring
-     * past chats. Multiple chunks per sync; track `event.progress` for
-     * completion. Only fires when `history.enabled` is set.
+     * One chunk of history-sync data, fired both during the initial
+     * bootstrap that the primary device pushes after pairing and for any
+     * on-demand backfill triggered by `message.requestHistorySync`.
+     * Multiple chunks per sync; track `event.progress` for completion.
+     * Skipped only when `history.enabled` is explicitly `false`.
      */
     readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void
     /**

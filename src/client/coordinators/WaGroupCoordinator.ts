@@ -58,10 +58,17 @@ export interface WaGroupMetadata {
     readonly subjectOwner?: string
     readonly subjectTime?: number
     readonly owner?: string
+    /** PN-form jid of the group creator when the group is LID-addressed (`creator_pn`). */
+    readonly ownerPhoneNumber?: string
+    /** Username handle of the group creator when set (`creator_username`). */
+    readonly ownerUsername?: string
+    /** ISO country code of the group creator when set (`creator_country_code`). */
+    readonly ownerCountryCode?: string
     readonly creation?: number
     readonly desc?: string
     readonly descId?: string
     readonly descOwner?: string
+    readonly descTime?: number
     readonly restrict: boolean
     readonly announce: boolean
     readonly ephemeral?: number
@@ -169,6 +176,55 @@ export interface WaGroupSuspensionAppealResult {
     readonly appealCreationTime: number | null
 }
 
+export interface WaGroupInviteParticipantSample {
+    readonly jid: string
+    readonly phoneNumber?: string
+    readonly type?: string
+}
+
+export interface WaGroupInviteInfo extends GroupCommons {
+    readonly hiddenGroup: boolean
+    readonly defaultSubgroup: boolean
+    readonly generalChat: boolean
+    readonly hasCapi: boolean
+    /**
+     * Sample of participants returned alongside the invite preview - WhatsApp
+     * trims this list (admins/recent members), it is not the full roster.
+     * Call {@link WaGroupCoordinator.queryGroupMetadata} after joining for
+     * the complete list.
+     */
+    readonly participants: readonly WaGroupInviteParticipantSample[]
+}
+
+export interface WaRevokeInviteResult {
+    readonly code: string
+    /**
+     * Participants that joined via the now-revoked code and that the server
+     * surfaced in the response (typically with `code: 404` meaning the
+     * invite they used is gone). Empty when nobody was affected.
+     */
+    readonly affectedParticipants: readonly WaParticipantActionResult[]
+}
+
+export type WaParticipantActionStatus = 'ok' | 'error'
+
+export interface WaParticipantActionResult {
+    readonly jid: string
+    readonly status: WaParticipantActionStatus
+    /** HTTP-style numeric code returned by the server (`200`, `403`, `409`, ...). */
+    readonly code: number
+    /** PN-form JID the server resolved for the participant (when addressing-mode is LID). */
+    readonly phoneNumber?: string
+    /** Username (handle) the server resolved for the participant, when set. */
+    readonly username?: string
+    /**
+     * Optional content children attached to the participant outcome. Some
+     * partial failures (`409: gone`, `408: not-allowed`, ...) carry extra
+     * tags that hint at how to recover.
+     */
+    readonly raw: BinaryNode
+}
+
 interface WaGroupCoordinatorOptions {
     readonly queryWithContext: (
         context: string,
@@ -191,20 +247,27 @@ export interface WaGroupCoordinator {
     readonly queryGroupMetadata: (groupJid: string) => Promise<WaGroupMetadata>
     /** Lists every group the current account participates in. */
     readonly queryAllGroups: () => Promise<readonly WaGroupMetadata[]>
-    /** Resolves the IQ result for a group invite `code` – returns the raw node. */
-    readonly queryGroupInviteInfo: (code: string) => Promise<BinaryNode>
+    /**
+     * Resolves a group invite `code` (the path segment of a
+     * `chat.whatsapp.com/<code>` URL) into a preview of the group: subject,
+     * size, ephemeral timer, description, and a trimmed participant sample.
+     * The sample is NOT the full roster - call {@link queryGroupMetadata}
+     * after joining for the complete list.
+     */
+    readonly queryGroupInviteInfo: (code: string) => Promise<WaGroupInviteInfo>
     /**
      * Creates a new group with `subject` and the given participant JIDs.
      * The creator is auto-added as admin; do **not** include your own JID
-     * in `participants`. Same partial-failure shape as
-     * {@link addParticipants} for individual invitees - inspect the result
-     * for `<participant ... error="..."/>` entries.
+     * in `participants`. The returned metadata includes the participant
+     * list - partial failures surface as participants with `type: 'error'`
+     * or are filtered out by the server; inspect against the original
+     * `participants` to spot rejections.
      */
     readonly createGroup: (
         subject: string,
         participants: readonly string[],
         options?: WaGroupCreateOptions
-    ) => Promise<BinaryNode>
+    ) => Promise<WaGroupMetadata>
     /** Renames the group. */
     readonly setSubject: (groupJid: string, subject: string) => Promise<void>
     /** Sets or clears the group description; pass `null` to remove it. */
@@ -254,47 +317,46 @@ export interface WaGroupCoordinator {
         trigger?: number
     ) => Promise<void>
     /**
-     * Adds the given participant JIDs to the group. Returns the raw IQ
-     * result - **per-participant outcome is encoded inside** as a list of
-     * `<participant jid="..." error="..."/>` children. The IQ as a whole
-     * succeeds even when some participants fail (e.g. blocked you, privacy
-     * settings disallow add); parse the children to surface partial errors.
+     * Adds the given participant JIDs to the group. The IQ as a whole
+     * succeeds even when some invitees fail (blocked you, privacy settings
+     * disallow add, already a member, etc.) - inspect the returned per-jid
+     * results: `status: 'ok'` (code 200) means the invite landed,
+     * everything else carries the server's HTTP-style `code`.
      */
     readonly addParticipants: (
         groupJid: string,
         participants: readonly string[]
-    ) => Promise<BinaryNode>
-    /** Removes the given participant JIDs. Same partial-failure shape as {@link addParticipants}. */
+    ) => Promise<readonly WaParticipantActionResult[]>
+    /** Removes the given participant JIDs. Same per-jid result shape as {@link addParticipants}. */
     readonly removeParticipants: (
         groupJid: string,
         participants: readonly string[]
-    ) => Promise<BinaryNode>
-    /** Promotes participants to admins. Same partial-failure shape as {@link addParticipants}. */
+    ) => Promise<readonly WaParticipantActionResult[]>
+    /** Promotes participants to admins. Same per-jid result shape as {@link addParticipants}. */
     readonly promoteParticipants: (
         groupJid: string,
         participants: readonly string[]
-    ) => Promise<BinaryNode>
-    /** Demotes admins back to regular participants. Same partial-failure shape as {@link addParticipants}. */
+    ) => Promise<readonly WaParticipantActionResult[]>
+    /** Demotes admins back to regular participants. Same per-jid result shape as {@link addParticipants}. */
     readonly demoteParticipants: (
         groupJid: string,
         participants: readonly string[]
-    ) => Promise<BinaryNode>
+    ) => Promise<readonly WaParticipantActionResult[]>
     /** Leaves one or more groups (batched in a single IQ). */
-    readonly leaveGroup: (groupJids: readonly string[]) => Promise<BinaryNode>
+    readonly leaveGroup: (groupJids: readonly string[]) => Promise<void>
     /**
      * Revokes the current invite link. The server rotates the code
      * immediately - every previously-shared `chat.whatsapp.com/<code>` link
-     * stops working, and the next call to {@link queryGroupInviteInfo}
-     * returns the new code.
+     * stops working. Returns the freshly-issued code.
      */
-    readonly revokeInvite: (groupJid: string) => Promise<BinaryNode>
+    readonly revokeInvite: (groupJid: string) => Promise<WaRevokeInviteResult>
     /**
      * Joins a group using its invite `code` (the path segment of a
      * `chat.whatsapp.com/<code>` URL). Throws if the code is expired,
      * revoked, the group is full, or the current account is already a
-     * member.
+     * member. Returns the joined group's metadata.
      */
-    readonly joinGroupViaInvite: (code: string) => Promise<BinaryNode>
+    readonly joinGroupViaInvite: (code: string) => Promise<WaGroupMetadata>
     /**
      * Creates a community (parent group). Defaults to request-required
      * membership unless `membershipApprovalMode === 'open'`.
@@ -344,12 +406,17 @@ export interface WaGroupCoordinator {
         groupJid: string,
         participantJids: readonly string[]
     ) => Promise<void>
-    /** Joins a linked sub-group of a community the account already belongs to. */
+    /**
+     * Joins a linked sub-group of a community the account already belongs
+     * to. The IQ result carries no group payload (wa-web only validates the
+     * envelope) - call {@link queryGroupMetadata} on `subGroupJid` after
+     * this resolves to get the full metadata for the newly-joined group.
+     */
     readonly joinLinkedGroup: (
         communityJid: string,
         subGroupJid: string,
         options?: { readonly type?: string }
-    ) => Promise<BinaryNode>
+    ) => Promise<void>
     /** Returns `true` when the group is flagged as an internal WhatsApp group. */
     readonly isInternalGroup: (groupJid: string) => Promise<boolean>
     /** Transfers community ownership to `newOwnerJid` (superadmin handoff). */
@@ -429,28 +496,43 @@ function parseMembershipApprovalRequests(node: BinaryNode): readonly WaMembershi
     return requests
 }
 
-function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
-    const groupNode =
-        node.tag === WA_NODE_TAGS.GROUP ? node : findNodeChild(node, WA_NODE_TAGS.GROUP)
-    const target = groupNode ?? node
+interface GroupCommons {
+    readonly jid: string
+    readonly subject: string
+    readonly size?: number
+    readonly creation?: number
+    readonly subjectOwner?: string
+    /** PN-form jid of the subject owner when the group is LID-addressed (`s_o_pn`). */
+    readonly subjectOwnerPhoneNumber?: string
+    /** Username handle of the subject owner when set (`s_o_username`). */
+    readonly subjectOwnerUsername?: string
+    readonly subjectTime?: number
+    readonly addressingMode?: 'lid' | 'pn'
+    readonly desc?: string
+    readonly descId?: string
+    readonly descOwner?: string
+    readonly descTime?: number
+    readonly ephemeral?: number
+    readonly ephemeralTrigger?: number
+    readonly linkedParentJid?: string
+    readonly membershipApprovalEnabled: boolean
+}
+
+function findGroupTarget(node: BinaryNode): BinaryNode {
+    return node.tag === WA_NODE_TAGS.GROUP
+        ? node
+        : (findNodeChild(node, WA_NODE_TAGS.GROUP) ?? node)
+}
+
+function parseGroupCommons(target: BinaryNode): GroupCommons {
     const attrs = target.attrs
 
     const descNode = findNodeChild(target, WA_NODE_TAGS.DESCRIPTION)
-    let desc: string | undefined
-    if (descNode) {
-        const bodyNode = findNodeChild(descNode, WA_NODE_TAGS.BODY)
-        if (bodyNode && typeof bodyNode.content === 'string') {
-            desc = bodyNode.content
-        }
-    }
+    const desc = descNode
+        ? getNodeTextContent(findNodeChild(descNode, WA_NODE_TAGS.BODY))
+        : undefined
 
     const ephemeralNode = findNodeChild(target, WA_NODE_TAGS.EPHEMERAL)
-    const ephemeral = ephemeralNode?.attrs.expiration
-        ? Number(ephemeralNode.attrs.expiration)
-        : undefined
-    const ephemeralTrigger = ephemeralNode?.attrs.trigger
-        ? Number(ephemeralNode.attrs.trigger)
-        : undefined
 
     const parentNode = findNodeChild(target, 'parent')
     const linkedParentNode = findNodeChild(target, 'linked_parent')
@@ -459,15 +541,6 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
     const groupJoinNode = membershipApprovalNode
         ? findNodeChild(membershipApprovalNode, WA_NODE_TAGS.GROUP_JOIN)
         : undefined
-
-    const growthLockedNode = findNodeChild(target, 'growth_locked')
-    const appealStatusNode = findNodeChild(target, 'appeal_status')
-    const appealStatusType = appealStatusNode?.attrs.type
-    const appealUpdateTimeNode = findNodeChild(target, 'appeal_update_time')
-    const evolutionVersionNode = findNodeChild(target, 'evolution_version')
-    const memberAddModeNode = findNodeChild(target, 'member_add_mode')
-    const memberLinkModeNode = findNodeChild(target, 'member_link_mode')
-    const memberShareNode = findNodeChild(target, 'member_share_group_history_mode')
 
     const addressingModeRaw = attrs.addressing_mode
     const addressingMode: 'lid' | 'pn' | undefined =
@@ -479,19 +552,51 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
     return {
         jid,
         subject: attrs.subject ?? '',
-        subjectOwner: attrs.s_o ?? attrs.subject_owner,
-        subjectTime: attrs.s_t ? Number(attrs.s_t) : undefined,
-        owner: attrs.creator ?? attrs.owner,
+        size: attrs.size ? Number(attrs.size) : undefined,
         creation: attrs.creation ? Number(attrs.creation) : undefined,
+        subjectOwner: attrs.s_o ?? attrs.subject_owner,
+        subjectOwnerPhoneNumber: attrs.s_o_pn,
+        subjectOwnerUsername: attrs.s_o_username,
+        subjectTime: attrs.s_t ? Number(attrs.s_t) : undefined,
+        addressingMode,
         desc,
         descId: descNode?.attrs.id,
         descOwner: descNode?.attrs.participant,
+        descTime: descNode?.attrs.t ? Number(descNode.attrs.t) : undefined,
+        ephemeral: ephemeralNode?.attrs.expiration
+            ? Number(ephemeralNode.attrs.expiration)
+            : undefined,
+        ephemeralTrigger: ephemeralNode?.attrs.trigger
+            ? Number(ephemeralNode.attrs.trigger)
+            : undefined,
+        linkedParentJid: linkedParentNode?.attrs.jid ?? parentNode?.attrs.jid,
+        membershipApprovalEnabled: groupJoinNode?.attrs.state === 'on'
+    }
+}
+
+function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
+    const target = findGroupTarget(node)
+    const attrs = target.attrs
+    const commons = parseGroupCommons(target)
+
+    const parentNode = findNodeChild(target, 'parent')
+    const growthLockedNode = findNodeChild(target, 'growth_locked')
+    const appealStatusNode = findNodeChild(target, 'appeal_status')
+    const appealStatusType = appealStatusNode?.attrs.type
+    const appealUpdateTimeNode = findNodeChild(target, 'appeal_update_time')
+    const evolutionVersionNode = findNodeChild(target, 'evolution_version')
+    const memberAddModeNode = findNodeChild(target, 'member_add_mode')
+    const memberLinkModeNode = findNodeChild(target, 'member_link_mode')
+    const memberShareNode = findNodeChild(target, 'member_share_group_history_mode')
+
+    return {
+        ...commons,
+        owner: attrs.creator ?? attrs.owner,
+        ownerPhoneNumber: attrs.creator_pn,
+        ownerUsername: attrs.creator_username,
+        ownerCountryCode: attrs.creator_country_code,
         restrict: hasNodeChild(target, WA_NODE_TAGS.LOCKED),
         announce: hasNodeChild(target, WA_NODE_TAGS.ANNOUNCEMENT),
-        ephemeral,
-        ephemeralTrigger,
-        size: attrs.size ? Number(attrs.size) : undefined,
-        addressingMode,
         isParentGroup: parentNode !== undefined,
         isClosedCommunity:
             parentNode?.attrs.default_membership_approval_mode === 'request_required',
@@ -499,7 +604,6 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
         generalSubgroup: hasNodeChild(target, 'general_chat'),
         hiddenSubgroup: hasNodeChild(target, 'hidden_group'),
         allowNonAdminSubGroupCreation: hasNodeChild(target, 'allow_non_admin_sub_group_creation'),
-        membershipApprovalEnabled: groupJoinNode?.attrs.state === 'on',
         noFrequentlyForwarded: hasNodeChild(target, 'no_frequently_forwarded'),
         support: hasNodeChild(target, 'support'),
         suspended: hasNodeChild(target, 'suspended'),
@@ -529,8 +633,70 @@ function parseGroupMetadata(node: BinaryNode): WaGroupMetadata {
         appealUpdateTime: appealUpdateTimeNode?.attrs.value
             ? Number(appealUpdateTimeNode.attrs.value)
             : undefined,
-        linkedParentJid: linkedParentNode?.attrs.jid ?? parentNode?.attrs.jid,
         participants: parseGroupParticipants(target)
+    }
+}
+
+function parseParticipantActionResult(p: BinaryNode): WaParticipantActionResult | null {
+    const jid = p.attrs.jid
+    if (!jid) return null
+    const errorCode = p.attrs.error
+    const code = errorCode ? Number(errorCode) : 200
+    return {
+        jid,
+        status: code >= 200 && code < 300 ? 'ok' : 'error',
+        code,
+        phoneNumber: p.attrs.phone_number,
+        username: p.attrs.username,
+        raw: p
+    }
+}
+
+function parseParticipantActionResults(
+    iqResult: BinaryNode,
+    action: WaGroupParticipantChangeAction
+): readonly WaParticipantActionResult[] {
+    const wrapper = findNodeChild(iqResult, action)
+    const target = wrapper ?? iqResult
+    const participantNodes = getNodeChildrenByTag(target, WA_NODE_TAGS.PARTICIPANT)
+    const results: WaParticipantActionResult[] = new Array(participantNodes.length)
+    let count = 0
+    for (const p of participantNodes) {
+        const parsed = parseParticipantActionResult(p)
+        if (!parsed) continue
+        results[count] = parsed
+        count += 1
+    }
+    results.length = count
+    return results
+}
+
+function parseGroupInviteInfo(node: BinaryNode): WaGroupInviteInfo {
+    const target = findGroupTarget(node)
+    const commons = parseGroupCommons(target)
+
+    const participantNodes = getNodeChildrenByTag(target, WA_NODE_TAGS.PARTICIPANT)
+    const participants: WaGroupInviteParticipantSample[] = new Array(participantNodes.length)
+    let participantCount = 0
+    for (const p of participantNodes) {
+        const jidAttr = p.attrs.jid
+        if (!jidAttr) continue
+        participants[participantCount] = {
+            jid: jidAttr,
+            phoneNumber: p.attrs.phone_number,
+            type: p.attrs.type
+        }
+        participantCount += 1
+    }
+    participants.length = participantCount
+
+    return {
+        ...commons,
+        hiddenGroup: hasNodeChild(target, 'hidden_group'),
+        defaultSubgroup: hasNodeChild(target, 'default_sub_group'),
+        generalChat: hasNodeChild(target, 'general_chat'),
+        hasCapi: hasNodeChild(target, 'capi'),
+        participants
     }
 }
 
@@ -634,7 +800,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
         action: WaGroupParticipantChangeAction,
         groupJid: string,
         participants: readonly string[]
-    ): Promise<BinaryNode> => {
+    ): Promise<readonly WaParticipantActionResult[]> => {
         const context = `group.${action}Participants`
         const node = buildGroupParticipantChangeIq({
             groupJid,
@@ -643,7 +809,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
         })
         const result = await queryWithContext(context, node)
         assertIqResult(result, context)
-        return result
+        return parseParticipantActionResults(result, action)
     }
 
     return {
@@ -676,7 +842,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             ])
             const result = await queryWithContext('group.invite.info', node)
             assertIqResult(result, 'group.invite.info')
-            return result
+            return parseGroupInviteInfo(result)
         },
 
         createGroup: async (subject, participants, opts) => {
@@ -688,7 +854,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             })
             const result = await queryWithContext('group.create', node)
             assertIqResult(result, 'group.create')
-            return result
+            return parseGroupMetadata(result)
         },
 
         setSubject: async (groupJid, subject) => {
@@ -810,7 +976,6 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             const node = buildLeaveGroupIq(groupJids)
             const result = await queryWithContext('group.leave', node)
             assertIqResult(result, 'group.leave')
-            return result
         },
 
         revokeInvite: async (groupJid) => {
@@ -819,7 +984,24 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             ])
             const result = await queryWithContext('group.revokeInvite', node)
             assertIqResult(result, 'group.revokeInvite')
-            return result
+            const inviteNode = findNodeChild(result, WA_NODE_TAGS.INVITE)
+            const code = inviteNode?.attrs.code
+            if (!code) {
+                throw new Error('group.revokeInvite: missing invite code in response')
+            }
+            const participantNodes = getNodeChildrenByTag(result, WA_NODE_TAGS.PARTICIPANT)
+            const affectedParticipants: WaParticipantActionResult[] = new Array(
+                participantNodes.length
+            )
+            let affectedCount = 0
+            for (const p of participantNodes) {
+                const parsed = parseParticipantActionResult(p)
+                if (!parsed) continue
+                affectedParticipants[affectedCount] = parsed
+                affectedCount += 1
+            }
+            affectedParticipants.length = affectedCount
+            return { code, affectedParticipants }
         },
 
         joinGroupViaInvite: async (code) => {
@@ -828,7 +1010,7 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             ])
             const result = await queryWithContext('group.joinViaInvite', node)
             assertIqResult(result, 'group.joinViaInvite')
-            return result
+            return parseGroupMetadata(result)
         },
 
         createCommunity: async (subject, opts) => {
@@ -973,7 +1155,6 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             })
             const result = await queryWithContext('community.joinLinkedGroup', node)
             assertIqResult(result, 'community.joinLinkedGroup')
-            return result
         },
 
         isInternalGroup: async (groupJid) => {

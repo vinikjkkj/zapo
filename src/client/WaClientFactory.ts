@@ -1314,7 +1314,7 @@ export function buildWaClientDependencies(input: {
             receiptQueue,
             getCurrentCredentials,
             abPropsCoordinator,
-            markOnlineOnConnect: options.markOnlineOnConnect ?? true
+            markOnlineOnConnect: options.markOnlineOnConnect ?? false
         }),
         mobilePrimary: options.mobileTransport !== undefined,
         appStateSync

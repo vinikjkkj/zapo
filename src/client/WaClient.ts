@@ -122,12 +122,13 @@ export class WaClient extends EventEmitter {
         )
 
         if (
-            this.options.addons?.autoDecrypt &&
+            this.options.addons?.autoDecrypt !== false &&
             this.stores.messageSecret === NOOP_MESSAGE_SECRET_STORE
         ) {
             this.logger.warn(
-                'addons.autoDecrypt is enabled but messageSecret cache is noop – ' +
-                    'addon decryption will only work if secrets are in the message store'
+                'addons.autoDecrypt is on (default) but messageSecret cache is noop – ' +
+                    'addon decryption will only work if secrets are in the message store. ' +
+                    'Set addons.autoDecrypt: false to silence this warning.'
             )
         }
 
@@ -284,7 +285,7 @@ export class WaClient extends EventEmitter {
                 messageSecretStore: this.stores.messageSecret,
                 event
             })
-            if (this.options.addons?.autoDecrypt && event.message) {
+            if (this.options.addons?.autoDecrypt !== false && event.message) {
                 void this.deps.messageCoordinator.tryDecryptAddon(event).catch((err) => {
                     this.logger.warn('addon auto-decrypt failed', {
                         id: event.stanzaId,
@@ -332,7 +333,10 @@ export class WaClient extends EventEmitter {
             }
 
             if (protocolType === proto.Message.ProtocolMessage.Type.HISTORY_SYNC_NOTIFICATION) {
-                if (this.options.history?.enabled && protocolMessage.historySyncNotification) {
+                if (
+                    this.options.history?.enabled !== false &&
+                    protocolMessage.historySyncNotification
+                ) {
                     await runHistorySyncNotification(
                         {
                             logger: this.logger,
@@ -591,8 +595,13 @@ export class WaClient extends EventEmitter {
         }
 
         const s = this.options.logoutStoreClear
-        const shouldClear = (key: keyof NonNullable<typeof s>): boolean =>
-            s === undefined || s[key] !== false
+        const isMailbox = (key: keyof NonNullable<typeof s>): boolean =>
+            key === 'messages' || key === 'threads' || key === 'contacts'
+        const shouldClear = (key: keyof NonNullable<typeof s>): boolean => {
+            const explicit = s?.[key]
+            if (explicit !== undefined) return explicit
+            return !isMailbox(key)
+        }
 
         if (shouldClear('auth')) await this.deps.authClient.clearStoredCredentials()
         if (shouldClear('appState')) await this.stores.appState.clear()

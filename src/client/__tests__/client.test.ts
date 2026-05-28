@@ -485,6 +485,25 @@ test('buildWaClientDependencies wires trusted contact token AB prop overrides', 
     assert.equal(config.senderNumBuckets, 4)
 })
 
+test('default option resolution: autoDecrypt on, history on, markOnlineOnConnect off', () => {
+    const opts: WaClientOptions = { store: {} as never, sessionId: 's' }
+
+    assert.equal(opts.addons?.autoDecrypt !== false, true)
+    assert.equal(opts.history?.enabled !== false, true)
+    assert.equal(opts.markOnlineOnConnect ?? false, false)
+
+    const optedOut: WaClientOptions = {
+        store: {} as never,
+        sessionId: 's',
+        addons: { autoDecrypt: false },
+        history: { enabled: false },
+        markOnlineOnConnect: true
+    }
+    assert.equal(optedOut.addons?.autoDecrypt !== false, false)
+    assert.equal(optedOut.history?.enabled !== false, false)
+    assert.equal(optedOut.markOnlineOnConnect ?? false, true)
+})
+
 function getClearStoredStateMethod() {
     return (
         WaClient.prototype as unknown as {
@@ -610,15 +629,13 @@ function createClearStoredStateHarness(logoutStoreClear?: {
     return { fakeClient, cleared }
 }
 
-test('clearStoredState clears every store domain by default', async () => {
+test('clearStoredState clears non-mailbox domains by default and preserves mailbox archive', async () => {
     const { fakeClient, cleared } = createClearStoredStateHarness()
     await getClearStoredStateMethod().call(fakeClient)
 
     assert.deepEqual(cleared, [
         'auth',
         'appState',
-        'contacts',
-        'messages',
         'messageSecret',
         'groupMetadata',
         'deviceList',
@@ -628,9 +645,21 @@ test('clearStoredState clears every store domain by default', async () => {
         'session',
         'identity',
         'senderKey',
-        'threads',
         'privacyToken'
     ])
+})
+
+test('clearStoredState wipes mailbox when explicitly opted in', async () => {
+    const { fakeClient, cleared } = createClearStoredStateHarness({
+        messages: true,
+        threads: true,
+        contacts: true
+    })
+    await getClearStoredStateMethod().call(fakeClient)
+
+    assert.ok(cleared.includes('messages'))
+    assert.ok(cleared.includes('threads'))
+    assert.ok(cleared.includes('contacts'))
 })
 
 test('WaClient exposes chat/group/privacy coordinator getters', () => {
@@ -660,8 +689,6 @@ test('clearStoredState respects logoutStoreClear domain toggles', async () => {
     await getClearStoredStateMethod().call(fakeClient)
 
     assert.deepEqual(cleared, [
-        'contacts',
-        'messages',
         'messageSecret',
         'groupMetadata',
         'deviceList',
@@ -669,8 +696,7 @@ test('clearStoredState respects logoutStoreClear domain toggles', async () => {
         'preKey',
         'session',
         'identity',
-        'senderKey',
-        'threads'
+        'senderKey'
     ])
 })
 
