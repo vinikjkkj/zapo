@@ -125,46 +125,49 @@ async function runHistoryScenarioInProcess(
             totalMessages,
             async () => {
                 let receivedChunks = 0
-                const allChunksDone = new Promise<void>((resolve, reject) => {
-                    const timer = setTimeout(
-                        () =>
-                            reject(
-                                new Error(
-                                    `history-sync stalled at chunk ${receivedChunks}/${chunks}`
-                                )
-                            ),
-                        180_000
-                    )
-                    const listener: WaClientEventMap['history_sync_chunk'] = () => {
-                        receivedChunks += 1
-                        if (receivedChunks >= chunks) {
-                            clearTimeout(timer)
-                            client.off('history_sync_chunk', listener)
-                            resolve()
+                let timer: NodeJS.Timeout | null = null
+                let listener: WaClientEventMap['history_sync_chunk'] | null = null
+                try {
+                    const allChunksDone = new Promise<void>((resolve, reject) => {
+                        timer = setTimeout(
+                            () =>
+                                reject(
+                                    new Error(
+                                        `history-sync stalled at chunk ${receivedChunks}/${chunks}`
+                                    )
+                                ),
+                            180_000
+                        )
+                        listener = () => {
+                            receivedChunks += 1
+                            if (receivedChunks >= chunks) resolve()
                         }
-                    }
-                    client.on('history_sync_chunk', listener)
-                })
-
-                for (let i = 0; i < chunks; i += 1) {
-                    const convs = buildChunkConversationsFlat(preset, i).map((c) => ({
-                        id: c.id,
-                        name: c.name,
-                        unreadCount: c.unreadCount,
-                        messages: c.messages.map((m) => ({
-                            id: m.id,
-                            fromMe: m.fromMe,
-                            timestamp: m.timestamp,
-                            message: { conversation: m.conversation }
-                        }))
-                    }))
-                    await peer.sendHistorySync({
-                        chunkOrder: i,
-                        progress: Math.min(100, Math.round(((i + 1) / chunks) * 100)),
-                        conversations: convs
+                        client.on('history_sync_chunk', listener)
                     })
+
+                    for (let i = 0; i < chunks; i += 1) {
+                        const convs = buildChunkConversationsFlat(preset, i).map((c) => ({
+                            id: c.id,
+                            name: c.name,
+                            unreadCount: c.unreadCount,
+                            messages: c.messages.map((m) => ({
+                                id: m.id,
+                                fromMe: m.fromMe,
+                                timestamp: m.timestamp,
+                                message: { conversation: m.conversation }
+                            }))
+                        }))
+                        await peer.sendHistorySync({
+                            chunkOrder: i,
+                            progress: Math.min(100, Math.round(((i + 1) / chunks) * 100)),
+                            conversations: convs
+                        })
+                    }
+                    await allChunksDone
+                } finally {
+                    if (timer) clearTimeout(timer)
+                    if (listener) client.off('history_sync_chunk', listener)
                 }
-                await allChunksDone
             },
             'msgs'
         )
@@ -195,48 +198,50 @@ async function runHistoryScenarioRpc(
     await startServerProfilingIfRequested(rpc, profiler.options, argSet)
     await takeServerSnapshotIfRequested(rpc, `server-pre-${presetName}`, profiler.options, argSet)
 
-    const peer = await rpc.createFakePeer({ jid: '5511888888888@s.whatsapp.net' })
-
     const totalMessages = chunks * preset.conversations * preset.messagesPerConversation
     const scenarioName = `history_${presetName}`
 
     try {
+        const peer = await rpc.createFakePeer({ jid: '5511888888888@s.whatsapp.net' })
         await profiler.beforeScenario(scenarioName)
         const result = await runScenario(
             scenarioName,
             totalMessages,
             async () => {
                 let receivedChunks = 0
-                const allChunksDone = new Promise<void>((resolve, reject) => {
-                    const timer = setTimeout(
-                        () =>
-                            reject(
-                                new Error(
-                                    `history-sync stalled at chunk ${receivedChunks}/${chunks}`
-                                )
-                            ),
-                        180_000
-                    )
-                    const listener: WaClientEventMap['history_sync_chunk'] = () => {
-                        receivedChunks += 1
-                        if (receivedChunks >= chunks) {
-                            clearTimeout(timer)
-                            client.off('history_sync_chunk', listener)
-                            resolve()
+                let timer: NodeJS.Timeout | null = null
+                let listener: WaClientEventMap['history_sync_chunk'] | null = null
+                try {
+                    const allChunksDone = new Promise<void>((resolve, reject) => {
+                        timer = setTimeout(
+                            () =>
+                                reject(
+                                    new Error(
+                                        `history-sync stalled at chunk ${receivedChunks}/${chunks}`
+                                    )
+                                ),
+                            180_000
+                        )
+                        listener = () => {
+                            receivedChunks += 1
+                            if (receivedChunks >= chunks) resolve()
                         }
-                    }
-                    client.on('history_sync_chunk', listener)
-                })
-
-                for (let i = 0; i < chunks; i += 1) {
-                    await rpc.peerSendHistorySync({
-                        peerId: peer.peerId,
-                        chunkOrder: i,
-                        progress: Math.min(100, Math.round(((i + 1) / chunks) * 100)),
-                        conversations: buildChunkConversationsFlat(preset, i)
+                        client.on('history_sync_chunk', listener)
                     })
+
+                    for (let i = 0; i < chunks; i += 1) {
+                        await rpc.peerSendHistorySync({
+                            peerId: peer.peerId,
+                            chunkOrder: i,
+                            progress: Math.min(100, Math.round(((i + 1) / chunks) * 100)),
+                            conversations: buildChunkConversationsFlat(preset, i)
+                        })
+                    }
+                    await allChunksDone
+                } finally {
+                    if (timer) clearTimeout(timer)
+                    if (listener) client.off('history_sync_chunk', listener)
                 }
-                await allChunksDone
             },
             'msgs'
         )
@@ -247,9 +252,9 @@ async function runHistoryScenarioRpc(
             profiler.options,
             argSet
         )
-        await stopServerProfilingIfRequested(rpc, profiler.options, argSet)
         return result
     } finally {
+        await stopServerProfilingIfRequested(rpc, profiler.options, argSet).catch(() => undefined)
         await teardownRpcFixture(fixture)
         forceGcIfAvailable()
     }

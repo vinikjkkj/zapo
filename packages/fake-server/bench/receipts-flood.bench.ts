@@ -78,18 +78,16 @@ async function runReceiptsScenarioInProcess(
 
     try {
         let received = 0
+        let timer: NodeJS.Timeout | null = null
+        let listener: WaClientEventMap['receipt'] | null = null
         const allDone = new Promise<void>((resolve, reject) => {
-            const timer = setTimeout(
+            timer = setTimeout(
                 () => reject(new Error(`receipts stalled at ${received}/${totalReceipts}`)),
                 120_000
             )
-            const listener: WaClientEventMap['receipt'] = () => {
+            listener = () => {
                 received += 1
-                if (received >= totalReceipts) {
-                    clearTimeout(timer)
-                    client.off('receipt', listener)
-                    resolve()
-                }
+                if (received >= totalReceipts) resolve()
             }
             client.on('receipt', listener)
         })
@@ -97,19 +95,24 @@ async function runReceiptsScenarioInProcess(
         const inputs = buildReceiptInputs(totalReceipts, peerJid, types)
         const scenarioName = 'receipts_flood'
         await profiler.beforeScenario(scenarioName)
-        const result = await runScenario(
-            scenarioName,
-            totalReceipts,
-            async () => {
-                for (let i = 0; i < inputs.length; i += 1) {
-                    await pipeline.sendStanza(buildReceipt(inputs[i]))
-                }
-                await allDone
-            },
-            'receipts'
-        )
-        await profiler.afterScenario(scenarioName)
-        return result
+        try {
+            const result = await runScenario(
+                scenarioName,
+                totalReceipts,
+                async () => {
+                    for (let i = 0; i < inputs.length; i += 1) {
+                        await pipeline.sendStanza(buildReceipt(inputs[i]))
+                    }
+                    await allDone
+                },
+                'receipts'
+            )
+            await profiler.afterScenario(scenarioName)
+            return result
+        } finally {
+            if (timer) clearTimeout(timer)
+            if (listener) client.off('receipt', listener)
+        }
     } finally {
         await teardownFixture(fixture)
         forceGcIfAvailable()
@@ -125,24 +128,23 @@ async function runReceiptsScenarioRpc(
     const storeFixture = await buildBenchStore()
     const fixture = await bringUpPairedClientViaRpc(storeFixture, { sessionId: 'bench-receipts' })
     const { rpc, client } = fixture
-    await startServerProfilingIfRequested(rpc, profiler.options, argSet)
-    await takeServerSnapshotIfRequested(rpc, 'server-pre', profiler.options, argSet)
     const peerJid = '5511777777777@s.whatsapp.net'
 
     try {
+        await startServerProfilingIfRequested(rpc, profiler.options, argSet)
+        await takeServerSnapshotIfRequested(rpc, 'server-pre', profiler.options, argSet)
+
         let received = 0
+        let timer: NodeJS.Timeout | null = null
+        let listener: WaClientEventMap['receipt'] | null = null
         const allDone = new Promise<void>((resolve, reject) => {
-            const timer = setTimeout(
+            timer = setTimeout(
                 () => reject(new Error(`receipts stalled at ${received}/${totalReceipts}`)),
                 120_000
             )
-            const listener: WaClientEventMap['receipt'] = () => {
+            listener = () => {
                 received += 1
-                if (received >= totalReceipts) {
-                    clearTimeout(timer)
-                    client.off('receipt', listener)
-                    resolve()
-                }
+                if (received >= totalReceipts) resolve()
             }
             client.on('receipt', listener)
         })
@@ -150,22 +152,27 @@ async function runReceiptsScenarioRpc(
         const inputs = buildReceiptInputs(totalReceipts, peerJid, types)
         const scenarioName = 'receipts_flood'
         await profiler.beforeScenario(scenarioName)
-        // Batch IPC: ship all receipts in 1 RPC call (avoid one-IPC-per-receipt
-        // overhead that would dominate at high N).
-        const result = await runScenario(
-            scenarioName,
-            totalReceipts,
-            async () => {
-                await rpc.pipelineSendReceiptBatch(inputs)
-                await allDone
-            },
-            'receipts'
-        )
-        await profiler.afterScenario(scenarioName)
-        await takeServerSnapshotIfRequested(rpc, 'server-post', profiler.options, argSet)
-        await stopServerProfilingIfRequested(rpc, profiler.options, argSet)
-        return result
+        try {
+            // Batch IPC: ship all receipts in 1 RPC call (avoid one-IPC-per-receipt
+            // overhead that would dominate at high N).
+            const result = await runScenario(
+                scenarioName,
+                totalReceipts,
+                async () => {
+                    await rpc.pipelineSendReceiptBatch(inputs)
+                    await allDone
+                },
+                'receipts'
+            )
+            await profiler.afterScenario(scenarioName)
+            await takeServerSnapshotIfRequested(rpc, 'server-post', profiler.options, argSet)
+            return result
+        } finally {
+            if (timer) clearTimeout(timer)
+            if (listener) client.off('receipt', listener)
+        }
     } finally {
+        await stopServerProfilingIfRequested(rpc, profiler.options, argSet).catch(() => undefined)
         await teardownRpcFixture(fixture)
         forceGcIfAvailable()
     }

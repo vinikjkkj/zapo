@@ -100,7 +100,7 @@ export function readProfilerOptions(args: ReadonlySet<string>): ProfilerOptions 
         snapshot: args.has('--snapshot'),
         perScenario: args.has('--per-scenario'),
         snapshotPerScenario: args.has('--snapshot-per-scenario'),
-        outDir: outDirArg ? outDirArg.split('=')[1] : process.cwd()
+        outDir: outDirArg ? outDirArg.slice('--out-dir='.length) : process.cwd()
     }
 }
 

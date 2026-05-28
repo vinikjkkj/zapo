@@ -65,16 +65,14 @@ async function runMediaScenarioInProcess(
         sessionId: `bench-media-${sizeBytes}`
     })
     const { server, client, pipeline } = fixture
-    await ensurePreKeyPool(server, pipeline, 2)
-
-    const peerJid = '5511777777777@s.whatsapp.net'
-    await server.createFakePeer({ jid: peerJid }, pipeline)
-
     const scenarioName = `media_${sizeBytes}B`
     const totalBytes = sizeBytes * uploads
     const buffer = fillRandom(sizeBytes)
 
     try {
+        await ensurePreKeyPool(server, pipeline, 2)
+        const peerJid = '5511777777777@s.whatsapp.net'
+        await server.createFakePeer({ jid: peerJid }, pipeline)
         await profiler.beforeScenario(scenarioName)
         const result = await runScenario(
             scenarioName,
@@ -111,18 +109,23 @@ async function runMediaScenarioRpc(
         sessionId: `bench-media-${sizeBytes}`
     })
     const { rpc, client } = fixture
-    await startServerProfilingIfRequested(rpc, profiler.options, argSet)
-    await takeServerSnapshotIfRequested(rpc, `server-pre-${sizeBytes}B`, profiler.options, argSet)
-    await rpc.ensurePreKeyPool(2)
-
-    const peerJid = '5511777777777@s.whatsapp.net'
-    await rpc.createFakePeer({ jid: peerJid })
-
     const scenarioName = `media_${sizeBytes}B`
     const totalBytes = sizeBytes * uploads
     const buffer = fillRandom(sizeBytes)
 
     try {
+        await startServerProfilingIfRequested(rpc, profiler.options, argSet)
+        await takeServerSnapshotIfRequested(
+            rpc,
+            `server-pre-${sizeBytes}B`,
+            profiler.options,
+            argSet
+        )
+        await rpc.ensurePreKeyPool(2)
+
+        const peerJid = '5511777777777@s.whatsapp.net'
+        await rpc.createFakePeer({ jid: peerJid })
+
         await profiler.beforeScenario(scenarioName)
         const result = await runScenario(
             scenarioName,
@@ -146,10 +149,10 @@ async function runMediaScenarioRpc(
             profiler.options,
             argSet
         )
-        await stopServerProfilingIfRequested(rpc, profiler.options, argSet)
         const throughputBps = result.elapsedMs > 0 ? (totalBytes / result.elapsedMs) * 1_000 : 0
         return { result, totalBytes, throughputBytesPerSec: throughputBps }
     } finally {
+        await stopServerProfilingIfRequested(rpc, profiler.options, argSet).catch(() => undefined)
         await teardownRpcFixture(fixture)
         forceGcIfAvailable()
     }
