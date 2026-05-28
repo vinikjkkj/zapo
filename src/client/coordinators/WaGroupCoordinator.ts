@@ -519,9 +519,12 @@ interface GroupCommons {
 }
 
 function findGroupTarget(node: BinaryNode): BinaryNode {
-    return node.tag === WA_NODE_TAGS.GROUP
-        ? node
-        : (findNodeChild(node, WA_NODE_TAGS.GROUP) ?? node)
+    if (node.tag === WA_NODE_TAGS.GROUP) return node
+    const groupNode = findNodeChild(node, WA_NODE_TAGS.GROUP)
+    if (!groupNode) {
+        throw new Error(`expected <group> node in response, got <${node.tag}>`)
+    }
+    return groupNode
 }
 
 function parseGroupCommons(target: BinaryNode): GroupCommons {

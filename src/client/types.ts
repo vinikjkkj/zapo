@@ -41,7 +41,7 @@ export interface WaClientProxyOptions {
  * - `messages`, `threads`, `contacts` → **preserved** (mailbox archive
  *   survives logout; the user keeps their history when re-pairing).
  * - everything else → **cleared** (credentials, Signal state, app-state,
- *   caches, privacy tokens — all need a clean slate for the new pair).
+ *   caches, privacy tokens: all need a clean slate for the new pair).
  *
  * Explicit `true`/`false` always wins. To wipe the mailbox too, pass
  * `{ messages: true, threads: true, contacts: true }`.
@@ -243,9 +243,10 @@ export interface WaAddonOptions {
      * Decrypt incoming addon ciphertexts (poll votes, reactions, message
      * edits, ...) and emit them as typed `message_addon` events. On by
      * default - set to `false` to receive the encrypted payload and
-     * decrypt yourself via `client.message.tryDecryptAddon(event)`. When
-     * on, the `messageSecret` cache must be a real store (the in-tree
-     * memory provider is the default; `'none'` defeats the cache).
+     * decrypt yourself via `client.message.tryDecryptAddon(event)`. The
+     * parent message secret is looked up in the `messageSecret` cache
+     * first, then in the `messages` store; setting both to `'none'`
+     * defeats addon decryption silently.
      */
     readonly autoDecrypt?: boolean
 }
@@ -1057,7 +1058,7 @@ export interface WaClientEventMap {
      * A decrypted addon (poll vote, reaction, edit, comment, ...) attached to
      * a previous message. Fires unless `addons.autoDecrypt` is explicitly
      * set to `false`, and the parent message secret is available in the
-     * cache.
+     * `messageSecret` cache or the `messages` store.
      */
     readonly message_addon: (event: WaIncomingAddonEvent) => void
     /**
