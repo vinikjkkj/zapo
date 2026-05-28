@@ -141,10 +141,45 @@ export class WaSessionMysqlStore extends BaseMysqlStore implements WaSessionStor
         }[]
     ): Promise<void> {
         if (entries.length === 0) return
-        await this.withTransaction(async (conn) => {
-            for (const entry of entries) {
+        const runChunk = async (
+            executor: { execute: PoolConnection['execute'] },
+            chunk: readonly {
+                readonly address: SignalAddress
+                readonly session: SignalSessionRecord
+            }[]
+        ): Promise<void> => {
+            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?)').join(', ')
+            const params: MysqlParam[] = []
+            for (const entry of chunk) {
                 const target = toSignalAddressParts(entry.address)
-                await this.upsertSession(conn, target, entry.session)
+                params.push(
+                    this.sessionId,
+                    target.user,
+                    target.server,
+                    target.device,
+                    encodeSignalSessionRecord(entry.session)
+                )
+            }
+            await executor.execute(
+                `INSERT INTO ${this.t('signal_session')} (
+                    session_id, user, server, device, record
+                ) VALUES ${placeholders}
+                ON DUPLICATE KEY UPDATE
+                    record = VALUES(record)`,
+                params
+            )
+        }
+        const sizes = this.powerOfTwoChunks(entries.length)
+        if (sizes.length === 1) {
+            await this.ensureReady()
+            await runChunk(this.pool, entries)
+            return
+        }
+        await this.withTransaction(async (conn) => {
+            let cursor = 0
+            for (const size of sizes) {
+                await runChunk(conn, entries.slice(cursor, cursor + size))
+                cursor += size
             }
         })
     }

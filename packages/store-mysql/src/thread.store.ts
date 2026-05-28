@@ -1,8 +1,9 @@
+import type { PoolConnection } from 'mysql2/promise'
 import type { WaStoredThreadRecord, WaThreadStore } from 'zapo-js/store'
 
 import { BaseMysqlStore } from './BaseMysqlStore'
 import { affectedRows, type MysqlRow, queryFirst, queryRows, safeLimit } from './helpers'
-import type { WaMysqlStorageOptions } from './types'
+import type { MysqlParam, WaMysqlStorageOptions } from './types'
 
 export class WaThreadMysqlStore extends BaseMysqlStore implements WaThreadStore {
     public constructor(options: WaMysqlStorageOptions) {
@@ -40,34 +41,52 @@ export class WaThreadMysqlStore extends BaseMysqlStore implements WaThreadStore 
 
     public async upsertBatch(records: readonly WaStoredThreadRecord[]): Promise<void> {
         if (records.length === 0) return
-
-        await this.withTransaction(async (conn) => {
-            for (const record of records) {
-                await conn.execute(
-                    `INSERT INTO ${this.t('mailbox_threads')} (
-                        session_id, jid, name, unread_count, archived, pinned,
-                        mute_end_ms, marked_as_unread, ephemeral_expiration
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        name = COALESCE(VALUES(name), name),
-                        unread_count = COALESCE(VALUES(unread_count), unread_count),
-                        archived = COALESCE(VALUES(archived), archived),
-                        pinned = COALESCE(VALUES(pinned), pinned),
-                        mute_end_ms = COALESCE(VALUES(mute_end_ms), mute_end_ms),
-                        marked_as_unread = COALESCE(VALUES(marked_as_unread), marked_as_unread),
-                        ephemeral_expiration = COALESCE(VALUES(ephemeral_expiration), ephemeral_expiration)`,
-                    [
-                        this.sessionId,
-                        record.jid,
-                        record.name ?? null,
-                        record.unreadCount ?? null,
-                        record.archived === undefined ? null : record.archived ? 1 : 0,
-                        record.pinned ?? null,
-                        record.muteEndMs ?? null,
-                        record.markedAsUnread === undefined ? null : record.markedAsUnread ? 1 : 0,
-                        record.ephemeralExpiration ?? null
-                    ]
+        const runChunk = async (
+            executor: { execute: PoolConnection['execute'] },
+            chunk: readonly WaStoredThreadRecord[]
+        ): Promise<void> => {
+            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
+            const params: MysqlParam[] = []
+            for (const record of chunk) {
+                params.push(
+                    this.sessionId,
+                    record.jid,
+                    record.name ?? null,
+                    record.unreadCount ?? null,
+                    record.archived === undefined ? null : record.archived ? 1 : 0,
+                    record.pinned ?? null,
+                    record.muteEndMs ?? null,
+                    record.markedAsUnread === undefined ? null : record.markedAsUnread ? 1 : 0,
+                    record.ephemeralExpiration ?? null
                 )
+            }
+            await executor.execute(
+                `INSERT INTO ${this.t('mailbox_threads')} (
+                    session_id, jid, name, unread_count, archived, pinned,
+                    mute_end_ms, marked_as_unread, ephemeral_expiration
+                ) VALUES ${placeholders}
+                ON DUPLICATE KEY UPDATE
+                    name = COALESCE(VALUES(name), name),
+                    unread_count = COALESCE(VALUES(unread_count), unread_count),
+                    archived = COALESCE(VALUES(archived), archived),
+                    pinned = COALESCE(VALUES(pinned), pinned),
+                    mute_end_ms = COALESCE(VALUES(mute_end_ms), mute_end_ms),
+                    marked_as_unread = COALESCE(VALUES(marked_as_unread), marked_as_unread),
+                    ephemeral_expiration = COALESCE(VALUES(ephemeral_expiration), ephemeral_expiration)`,
+                params
+            )
+        }
+        const sizes = this.powerOfTwoChunks(records.length)
+        if (sizes.length === 1) {
+            await this.ensureReady()
+            await runChunk(this.pool, records)
+            return
+        }
+        await this.withTransaction(async (conn) => {
+            let cursor = 0
+            for (const size of sizes) {
+                await runChunk(conn, records.slice(cursor, cursor + size))
+                cursor += size
             }
         })
     }

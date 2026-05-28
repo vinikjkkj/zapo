@@ -1,3 +1,4 @@
+import type { PoolConnection } from 'mysql2/promise'
 import type { WaMessageStore, WaStoredMessageRecord } from 'zapo-js/store'
 
 import { BaseMysqlStore } from './BaseMysqlStore'
@@ -9,7 +10,7 @@ import {
     safeLimit,
     toBytesOrNull
 } from './helpers'
-import type { WaMysqlStorageOptions } from './types'
+import type { MysqlParam, WaMysqlStorageOptions } from './types'
 
 function rowToRecord(row: MysqlRow): WaStoredMessageRecord {
     return {
@@ -63,36 +64,54 @@ export class WaMessageMysqlStore extends BaseMysqlStore implements WaMessageStor
 
     public async upsertBatch(records: readonly WaStoredMessageRecord[]): Promise<void> {
         if (records.length === 0) return
-
-        await this.withTransaction(async (conn) => {
-            for (const record of records) {
-                await conn.execute(
-                    `INSERT INTO ${this.t('mailbox_messages')} (
-                        session_id, message_id, thread_jid, sender_jid, participant_jid,
-                        from_me, timestamp_ms, enc_type, plaintext, message_bytes
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        thread_jid = VALUES(thread_jid),
-                        sender_jid = VALUES(sender_jid),
-                        participant_jid = VALUES(participant_jid),
-                        from_me = VALUES(from_me),
-                        timestamp_ms = VALUES(timestamp_ms),
-                        enc_type = VALUES(enc_type),
-                        plaintext = VALUES(plaintext),
-                        message_bytes = VALUES(message_bytes)`,
-                    [
-                        this.sessionId,
-                        record.id,
-                        record.threadJid,
-                        record.senderJid ?? null,
-                        record.participantJid ?? null,
-                        record.fromMe ? 1 : 0,
-                        record.timestampMs ?? null,
-                        record.encType ?? null,
-                        record.plaintext ?? null,
-                        record.messageBytes ?? null
-                    ]
+        const runChunk = async (
+            executor: { execute: PoolConnection['execute'] },
+            chunk: readonly WaStoredMessageRecord[]
+        ): Promise<void> => {
+            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
+            const params: MysqlParam[] = []
+            for (const record of chunk) {
+                params.push(
+                    this.sessionId,
+                    record.id,
+                    record.threadJid,
+                    record.senderJid ?? null,
+                    record.participantJid ?? null,
+                    record.fromMe ? 1 : 0,
+                    record.timestampMs ?? null,
+                    record.encType ?? null,
+                    record.plaintext ?? null,
+                    record.messageBytes ?? null
                 )
+            }
+            await executor.execute(
+                `INSERT INTO ${this.t('mailbox_messages')} (
+                    session_id, message_id, thread_jid, sender_jid, participant_jid,
+                    from_me, timestamp_ms, enc_type, plaintext, message_bytes
+                ) VALUES ${placeholders}
+                ON DUPLICATE KEY UPDATE
+                    thread_jid = VALUES(thread_jid),
+                    sender_jid = VALUES(sender_jid),
+                    participant_jid = VALUES(participant_jid),
+                    from_me = VALUES(from_me),
+                    timestamp_ms = VALUES(timestamp_ms),
+                    enc_type = VALUES(enc_type),
+                    plaintext = VALUES(plaintext),
+                    message_bytes = VALUES(message_bytes)`,
+                params
+            )
+        }
+        const sizes = this.powerOfTwoChunks(records.length)
+        if (sizes.length === 1) {
+            await this.ensureReady()
+            await runChunk(this.pool, records)
+            return
+        }
+        await this.withTransaction(async (conn) => {
+            let cursor = 0
+            for (const size of sizes) {
+                await runChunk(conn, records.slice(cursor, cursor + size))
+                cursor += size
             }
         })
     }

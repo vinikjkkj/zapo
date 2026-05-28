@@ -152,10 +152,53 @@ export class WaSessionPgStore extends BasePgStore implements WaSessionStore {
         }[]
     ): Promise<void> {
         if (entries.length === 0) return
-        await this.withTransaction(async (client) => {
-            for (const entry of entries) {
+        const runChunk = async (
+            executor: { query: PoolClient['query'] },
+            chunk: readonly {
+                readonly address: SignalAddress
+                readonly session: SignalSessionRecord
+            }[]
+        ): Promise<void> => {
+            let paramIdx = 1
+            const placeholders = chunk
+                .map(() => {
+                    const p = `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4})`
+                    paramIdx += 5
+                    return p
+                })
+                .join(', ')
+            const params: PgParam[] = []
+            for (const entry of chunk) {
                 const target = toSignalAddressParts(entry.address)
-                await this.upsertSession(client, target, entry.session)
+                params.push(
+                    this.sessionId,
+                    target.user,
+                    target.server,
+                    target.device,
+                    encodeSignalSessionRecord(entry.session)
+                )
+            }
+            await executor.query({
+                name: this.stmtName(`session_upsert_batch_${chunk.length}`),
+                text: `INSERT INTO ${this.t('signal_session')} (
+                    session_id, "user", server, device, record
+                ) VALUES ${placeholders}
+                ON CONFLICT (session_id, "user", server, device) DO UPDATE SET
+                    record = EXCLUDED.record`,
+                values: params
+            })
+        }
+        const sizes = this.powerOfTwoChunks(entries.length)
+        if (sizes.length === 1) {
+            await this.ensureReady()
+            await runChunk(this.pool, entries)
+            return
+        }
+        await this.withTransaction(async (client) => {
+            let cursor = 0
+            for (const size of sizes) {
+                await runChunk(client, entries.slice(cursor, cursor + size))
+                cursor += size
             }
         })
     }

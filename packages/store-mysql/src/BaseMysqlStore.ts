@@ -1,13 +1,26 @@
 import type { Pool, PoolConnection } from 'mysql2/promise'
+import { resolvePositive } from 'zapo-js/util'
 
 import { ensureMysqlMigrations } from './connection'
 import { assertSafeTablePrefix } from './helpers'
 import type { WaMysqlMigrationDomain, WaMysqlStorageOptions } from './types'
 
+const DEFAULT_BATCH_INSERT_CHUNK_SIZE = 500
+
 export abstract class BaseMysqlStore {
     protected readonly pool: Pool
     protected readonly sessionId: string
     protected readonly tablePrefix: string
+    /**
+     * Largest power-of-two sub-chunk used by multi-row INSERT helpers.
+     * Caller passes `batchInsertChunkSize`; we round down to the
+     * nearest power of two so the set of distinct SQL texts emitted by
+     * batch writes stays bounded by `log2(maxBatchChunk)` — keeps the
+     * mysql2 client-side prep cache + the server-side
+     * `max_prepared_stmt_count` quota bounded regardless of how the
+     * caller varies batch sizes.
+     */
+    protected readonly maxBatchChunk: number
     private readonly migrationDomains: readonly WaMysqlMigrationDomain[]
     private migrationPromise: Promise<void> | null
     private migrationDone = false
@@ -20,8 +33,36 @@ export abstract class BaseMysqlStore {
         this.sessionId = options.sessionId
         this.tablePrefix = options.tablePrefix ?? ''
         assertSafeTablePrefix(this.tablePrefix)
+        const requested = resolvePositive(
+            options.batchInsertChunkSize,
+            DEFAULT_BATCH_INSERT_CHUNK_SIZE,
+            'batchInsertChunkSize'
+        )
+        this.maxBatchChunk = 1 << (31 - Math.clz32(requested))
         this.migrationDomains = migrationDomains
         this.migrationPromise = null
+    }
+
+    /**
+     * Decomposes `n` into a list of power-of-two sub-chunks, each <=
+     * {@link maxBatchChunk}, emitted largest-first. Multi-row INSERT
+     * call sites iterate this list and emit one statement per
+     * sub-chunk so the inner SQL text only ever takes on values from
+     * `{1, 2, 4, ..., maxBatchChunk}`.
+     */
+    protected powerOfTwoChunks(n: number): readonly number[] {
+        if (n <= 0) return []
+        const out: number[] = []
+        let remaining = n
+        let size = this.maxBatchChunk
+        while (size >= 1 && remaining > 0) {
+            while (remaining >= size) {
+                out.push(size)
+                remaining -= size
+            }
+            size = size >>> 1
+        }
+        return out
     }
 
     protected t(name: string): string {

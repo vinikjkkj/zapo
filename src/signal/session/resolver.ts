@@ -68,7 +68,8 @@ export function createSignalSessionResolver(options: {
         jid: string,
         expectedIdentity?: Uint8Array,
         reasonIdentity = false,
-        prefetchedBundle?: SignalPreKeyBundle
+        prefetchedBundle?: SignalPreKeyBundle,
+        knownAbsent = false
     ): Promise<SignalSessionRecord | null> => {
         const expectedSerializedIdentity = expectedIdentity
             ? toSerializedPubKey(expectedIdentity)
@@ -76,7 +77,7 @@ export function createSignalSessionResolver(options: {
         if (reasonIdentity) {
             await signalIdentitySync.syncIdentityKeys([jid])
         }
-        if (await sessionStore.hasSession(address)) {
+        if (!knownAbsent && (await sessionStore.hasSession(address))) {
             if (expectedSerializedIdentity) {
                 const storedIdentity = await identityStore.getRemoteIdentity(address)
                 if (!storedIdentity || !uint8Equal(storedIdentity, expectedSerializedIdentity)) {
@@ -109,7 +110,8 @@ export function createSignalSessionResolver(options: {
             throw new Error('identity mismatch')
         }
         const session = await signalProtocol.establishOutgoingSession(address, fetched.bundle, {
-            reuseExisting: true
+            reuseExisting: true,
+            knownAbsent
         })
         logger.info('signal session synchronized', {
             jid,
@@ -124,12 +126,20 @@ export function createSignalSessionResolver(options: {
         jid: string,
         expectedIdentity?: Uint8Array,
         reasonIdentity = false,
-        prefetchedBundle?: SignalPreKeyBundle
+        prefetchedBundle?: SignalPreKeyBundle,
+        knownAbsent = false
     ): Promise<SignalSessionRecord | null> => {
         const expectedIdentityKey = expectedIdentity ? bytesToHex(expectedIdentity) : 'none'
         const dedupKey = `signalSession:${signalAddressKey(address)}:${reasonIdentity ? '1' : '0'}:${expectedIdentityKey}`
         return dedup.run(dedupKey, () =>
-            ensureSessionInternal(address, jid, expectedIdentity, reasonIdentity, prefetchedBundle)
+            ensureSessionInternal(
+                address,
+                jid,
+                expectedIdentity,
+                reasonIdentity,
+                prefetchedBundle,
+                knownAbsent
+            )
         )
     }
 
@@ -264,7 +274,8 @@ export function createSignalSessionResolver(options: {
                 targetJid,
                 expectedIdentity,
                 false,
-                batchResult.bundle
+                batchResult.bundle,
+                true
             )
             ensureCount += 1
         }

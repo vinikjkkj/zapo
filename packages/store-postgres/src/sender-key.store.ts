@@ -52,10 +52,54 @@ export class WaSenderKeyPgStore extends BasePgStore implements WaSenderKeyStore 
         records: readonly SenderKeyDistributionRecord[]
     ): Promise<void> {
         if (records.length === 0) return
-        await this.withTransaction(async (client) => {
-            for (const record of records) {
+        const runChunk = async (
+            executor: { query: PoolClient['query'] },
+            chunk: readonly SenderKeyDistributionRecord[]
+        ): Promise<void> => {
+            let paramIdx = 1
+            const placeholders = chunk
+                .map(() => {
+                    const p = `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6})`
+                    paramIdx += 7
+                    return p
+                })
+                .join(', ')
+            const params: PgParam[] = []
+            for (const record of chunk) {
                 const sender = toSignalAddressParts(record.sender)
-                await this.upsertSenderKeyDistributionRow(client, record, sender)
+                params.push(
+                    this.sessionId,
+                    record.groupId,
+                    sender.user,
+                    sender.server,
+                    sender.device,
+                    record.keyId,
+                    record.timestampMs
+                )
+            }
+            await executor.query({
+                name: this.stmtName(`sk_upsert_distrib_batch_${chunk.length}`),
+                text: `INSERT INTO ${this.t('sender_key_distribution')} (
+                    session_id, group_id, sender_user, sender_server, sender_device,
+                    key_id, timestamp_ms
+                ) VALUES ${placeholders}
+                ON CONFLICT (session_id, group_id, sender_user, sender_server, sender_device) DO UPDATE SET
+                    key_id = EXCLUDED.key_id,
+                    timestamp_ms = EXCLUDED.timestamp_ms`,
+                values: params
+            })
+        }
+        const sizes = this.powerOfTwoChunks(records.length)
+        if (sizes.length === 1) {
+            await this.ensureReady()
+            await runChunk(this.pool, records)
+            return
+        }
+        await this.withTransaction(async (client) => {
+            let cursor = 0
+            for (const size of sizes) {
+                await runChunk(client, records.slice(cursor, cursor + size))
+                cursor += size
             }
         })
     }
@@ -140,52 +184,39 @@ export class WaSenderKeyPgStore extends BasePgStore implements WaSenderKeyStore 
     ): Promise<readonly (SenderKeyDistributionRecord | null)[]> {
         if (senders.length === 0) return []
         await this.ensureReady()
-        const targets = senders.map((s) => toSignalAddressParts(s))
-        const byKey = new Map<string, SenderKeyDistributionRecord>()
-        for (let start = 0; start < targets.length; start += BATCH_SIZE) {
-            const batch = targets.slice(start, start + BATCH_SIZE)
-            let paramIdx = 3
-            const senderClauses = batch
-                .map(() => {
-                    const clause = `(sender_user = $${paramIdx} AND sender_server = $${paramIdx + 1} AND sender_device = $${paramIdx + 2})`
-                    paramIdx += 3
-                    return clause
-                })
-                .join(' OR ')
-            const params: PgParam[] = [
-                this.sessionId,
-                groupId,
-                ...batch.flatMap((t) => [t.user, t.server, t.device])
-            ]
-            const rows = queryRows(
-                await this.pool.query(
-                    `SELECT group_id, sender_user, sender_server, sender_device, key_id, timestamp_ms
-                     FROM ${this.t('sender_key_distribution')}
-                     WHERE session_id = $1 AND group_id = $2 AND (${senderClauses})`,
-                    params
-                )
-            )
-            for (const row of rows) {
-                const key = this.distributionTargetKey(
-                    String(row.sender_user),
-                    String(row.sender_server),
-                    Number(row.sender_device)
-                )
-                byKey.set(key, {
-                    groupId: String(row.group_id),
-                    sender: {
-                        user: String(row.sender_user),
-                        server: String(row.sender_server),
-                        device: Number(row.sender_device)
-                    },
-                    keyId: Number(row.key_id),
-                    timestampMs: Number(row.timestamp_ms)
-                })
-            }
-        }
-        return targets.map(
-            (t) => byKey.get(this.distributionTargetKey(t.user, t.server, t.device)) ?? null
+        const rows = queryRows(
+            await this.pool.query({
+                name: this.stmtName('sk_distrib_by_group'),
+                text: `SELECT group_id, sender_user, sender_server, sender_device, key_id, timestamp_ms
+                 FROM ${this.t('sender_key_distribution')}
+                 WHERE session_id = $1 AND group_id = $2`,
+                values: [this.sessionId, groupId]
+            })
         )
+        const byKey = new Map<string, SenderKeyDistributionRecord>()
+        for (const row of rows) {
+            const key = this.distributionTargetKey(
+                String(row.sender_user),
+                String(row.sender_server),
+                Number(row.sender_device)
+            )
+            byKey.set(key, {
+                groupId: String(row.group_id),
+                sender: {
+                    user: String(row.sender_user),
+                    server: String(row.sender_server),
+                    device: Number(row.sender_device)
+                },
+                keyId: Number(row.key_id),
+                timestampMs: Number(row.timestamp_ms)
+            })
+        }
+        const out = new Array<SenderKeyDistributionRecord | null>(senders.length)
+        for (let i = 0; i < senders.length; i += 1) {
+            const t = toSignalAddressParts(senders[i])
+            out[i] = byKey.get(this.distributionTargetKey(t.user, t.server, t.device)) ?? null
+        }
+        return out
     }
 
     public async deleteDeviceSenderKey(target: SignalAddress, groupId?: string): Promise<number> {

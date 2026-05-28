@@ -62,7 +62,6 @@ export type WaSqliteMigrationDomain =
 
 export interface WaSqliteBatchSizeSelection {
     readonly deviceList?: number
-    readonly senderKeyDistribution?: number
     readonly signalPreKey?: number
     readonly signalHasSession?: number
 }

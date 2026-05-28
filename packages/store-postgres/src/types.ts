@@ -18,9 +18,11 @@ export interface WaPgStorageOptions {
     readonly pool: Pool
     readonly sessionId: string
     readonly tablePrefix?: string
+    readonly batchInsertChunkSize?: number
 }
 
 export interface WaPgCreateStoreOptions {
     readonly pool: Pool | PoolConfig
     readonly tablePrefix?: string
+    readonly batchInsertChunkSize?: number
 }

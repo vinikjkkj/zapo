@@ -1,8 +1,9 @@
+import type { PoolConnection } from 'mysql2/promise'
 import type { WaContactStore, WaStoredContactRecord } from 'zapo-js/store'
 
 import { BaseMysqlStore } from './BaseMysqlStore'
 import { affectedRows, queryFirst } from './helpers'
-import type { WaMysqlStorageOptions } from './types'
+import type { MysqlParam, WaMysqlStorageOptions } from './types'
 
 export class WaContactMysqlStore extends BaseMysqlStore implements WaContactStore {
     public constructor(options: WaMysqlStorageOptions) {
@@ -36,30 +37,48 @@ export class WaContactMysqlStore extends BaseMysqlStore implements WaContactStor
 
     public async upsertBatch(records: readonly WaStoredContactRecord[]): Promise<void> {
         if (records.length === 0) return
-
-        await this.withTransaction(async (conn) => {
-            for (const record of records) {
-                await conn.execute(
-                    `INSERT INTO ${this.t('mailbox_contacts')} (
-                        session_id, jid, display_name, push_name, lid,
-                        phone_number, last_updated_ms
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                        display_name = COALESCE(VALUES(display_name), display_name),
-                        push_name = COALESCE(VALUES(push_name), push_name),
-                        lid = COALESCE(VALUES(lid), lid),
-                        phone_number = COALESCE(VALUES(phone_number), phone_number),
-                        last_updated_ms = VALUES(last_updated_ms)`,
-                    [
-                        this.sessionId,
-                        record.jid,
-                        record.displayName ?? null,
-                        record.pushName ?? null,
-                        record.lid ?? null,
-                        record.phoneNumber ?? null,
-                        record.lastUpdatedMs
-                    ]
+        const runChunk = async (
+            executor: { execute: PoolConnection['execute'] },
+            chunk: readonly WaStoredContactRecord[]
+        ): Promise<void> => {
+            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')
+            const params: MysqlParam[] = []
+            for (const record of chunk) {
+                params.push(
+                    this.sessionId,
+                    record.jid,
+                    record.displayName ?? null,
+                    record.pushName ?? null,
+                    record.lid ?? null,
+                    record.phoneNumber ?? null,
+                    record.lastUpdatedMs
                 )
+            }
+            await executor.execute(
+                `INSERT INTO ${this.t('mailbox_contacts')} (
+                    session_id, jid, display_name, push_name, lid,
+                    phone_number, last_updated_ms
+                ) VALUES ${placeholders}
+                ON DUPLICATE KEY UPDATE
+                    display_name = COALESCE(VALUES(display_name), display_name),
+                    push_name = COALESCE(VALUES(push_name), push_name),
+                    lid = COALESCE(VALUES(lid), lid),
+                    phone_number = COALESCE(VALUES(phone_number), phone_number),
+                    last_updated_ms = VALUES(last_updated_ms)`,
+                params
+            )
+        }
+        const sizes = this.powerOfTwoChunks(records.length)
+        if (sizes.length === 1) {
+            await this.ensureReady()
+            await runChunk(this.pool, records)
+            return
+        }
+        await this.withTransaction(async (conn) => {
+            let cursor = 0
+            for (const size of sizes) {
+                await runChunk(conn, records.slice(cursor, cursor + size))
+                cursor += size
             }
         })
     }

@@ -52,6 +52,18 @@ export interface WaPgStoreConfig {
         readonly intervalMs?: number
         readonly onError?: (error: Error) => void
     }
+    /**
+     * Upper bound on rows per multi-row INSERT statement in batch
+     * writes (`setSessionsBatch`, `setRemoteIdentities`,
+     * `upsertSenderKeyDistributions`, prekey gen). Default 500.
+     *
+     * Internally rounded down to the nearest power of two
+     * (`500 → 256`, `1000 → 512`, etc.). Each batch call decomposes
+     * `N` into power-of-two sub-chunks and reuses the same named
+     * prepared statement per chunk size, keeping the per-connection
+     * statement cache stable even when `N` varies widely.
+     */
+    readonly batchInsertChunkSize?: number
 }
 
 export interface WaPgStoreResult {
@@ -116,10 +128,12 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsPool = !isPool(config.pool)
 
+    const batchInsertChunkSize = config.batchInsertChunkSize
     const opts = (sessionId: string): WaPgStorageOptions => ({
         pool,
         sessionId,
-        tablePrefix
+        tablePrefix,
+        batchInsertChunkSize
     })
 
     const cleanupPollers = new Set<PgCleanupPoller>()

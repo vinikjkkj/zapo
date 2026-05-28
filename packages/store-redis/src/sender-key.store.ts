@@ -36,44 +36,36 @@ export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKey
 
     public async upsertSenderKeyDistribution(record: SenderKeyDistributionRecord): Promise<void> {
         const sender = toSignalAddressParts(record.sender)
-        const key = this.k(
-            'skd',
-            this.sessionId,
-            record.groupId,
-            sender.user,
-            sender.server,
-            String(sender.device)
-        )
-        await this.redis.hset(key, {
-            key_id: String(record.keyId),
-            timestamp_ms: String(record.timestampMs)
-        })
-
-        const groupIdxKey = this.k('sk:grp', this.sessionId, record.groupId)
-        await this.redis.sadd(groupIdxKey, `${sender.user}:${sender.server}:${sender.device}`)
+        const hashKey = this.k('skd', this.sessionId, record.groupId)
+        const field = `${sender.user}:${sender.server}:${sender.device}`
+        await this.redis.hset(hashKey, field, `${record.keyId}:${record.timestampMs}`)
     }
 
     public async upsertSenderKeyDistributions(
         records: readonly SenderKeyDistributionRecord[]
     ): Promise<void> {
         if (records.length === 0) return
-        const pipeline = this.redis.pipeline()
+        // Group by (sessionId, groupId) so each group commits a single
+        // multi-field HSET instead of one HSET per record.
+        const byGroupKey = new Map<string, string[]>()
         for (const record of records) {
             const sender = toSignalAddressParts(record.sender)
-            const key = this.k(
-                'skd',
-                this.sessionId,
-                record.groupId,
-                sender.user,
-                sender.server,
-                String(sender.device)
+            const hashKey = this.k('skd', this.sessionId, record.groupId)
+            const args = byGroupKey.get(hashKey) ?? []
+            args.push(
+                `${sender.user}:${sender.server}:${sender.device}`,
+                `${record.keyId}:${record.timestampMs}`
             )
-            pipeline.hset(key, {
-                key_id: String(record.keyId),
-                timestamp_ms: String(record.timestampMs)
-            })
-            const groupIdxKey = this.k('sk:grp', this.sessionId, record.groupId)
-            pipeline.sadd(groupIdxKey, `${sender.user}:${sender.server}:${sender.device}`)
+            byGroupKey.set(hashKey, args)
+        }
+        if (byGroupKey.size === 1) {
+            const [hashKey, args] = byGroupKey.entries().next().value as [string, string[]]
+            await this.redis.hset(hashKey, ...args)
+            return
+        }
+        const pipeline = this.redis.pipeline()
+        for (const [hashKey, args] of byGroupKey) {
+            pipeline.hset(hashKey, ...args)
         }
         await pipeline.exec()
     }
@@ -83,63 +75,50 @@ export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKey
         readonly skDistribList: readonly SenderKeyDistributionRecord[]
     }> {
         const groupIdxKey = this.k('sk:grp', this.sessionId, groupId)
-        const members = await this.redis.smembers(groupIdxKey)
-        if (members.length === 0) {
-            return { skList: [], skDistribList: [] }
-        }
-
-        const skPipeline = this.redis.pipeline()
-        const skdPipeline = this.redis.pipeline()
-        const parsedMembers: { user: string; server: string; device: number }[] = []
-
-        for (const member of members) {
-            const parts = member.split(':')
-            const user = parts[0]
-            const server = parts[1]
-            const device = Number(parts[2])
-            parsedMembers.push({ user, server, device })
-            skPipeline.getBuffer(
-                this.k('sk', this.sessionId, groupId, user, server, String(device))
-            )
-            skdPipeline.hgetall(
-                this.k('skd', this.sessionId, groupId, user, server, String(device))
-            )
-        }
-
-        const [skResults, skdResults] = await Promise.all([skPipeline.exec(), skdPipeline.exec()])
+        const skdHashKey = this.k('skd', this.sessionId, groupId)
+        const [members, skdAll] = await Promise.all([
+            this.redis.smembers(groupIdxKey),
+            this.redis.hgetall(skdHashKey)
+        ])
 
         const skList: SenderKeyRecord[] = []
-        const skDistribList: SenderKeyDistributionRecord[] = []
-
-        if (skResults) {
-            for (let i = 0; i < skResults.length; i += 1) {
-                const [err, data] = skResults[i]
-                if (err || !data) continue
-                const m = parsedMembers[i]
-                skList.push(
-                    decodeSenderKeyRecord(new Uint8Array(data as Uint8Array), groupId, {
-                        user: m.user,
-                        server: m.server,
-                        device: m.device
-                    })
+        if (members.length > 0) {
+            const skPipeline = this.redis.pipeline()
+            const parsedMembers: { user: string; server: string; device: number }[] = []
+            for (const member of members) {
+                const parts = member.split(':')
+                const user = parts[0]
+                const server = parts[1]
+                const device = Number(parts[2])
+                parsedMembers.push({ user, server, device })
+                skPipeline.getBuffer(
+                    this.k('sk', this.sessionId, groupId, user, server, String(device))
                 )
+            }
+            const skResults = await skPipeline.exec()
+            if (skResults) {
+                for (let i = 0; i < skResults.length; i += 1) {
+                    const [err, data] = skResults[i]
+                    if (err || !data) continue
+                    const m = parsedMembers[i]
+                    skList.push(
+                        decodeSenderKeyRecord(new Uint8Array(data as Uint8Array), groupId, m)
+                    )
+                }
             }
         }
 
-        if (skdResults) {
-            for (let i = 0; i < skdResults.length; i += 1) {
-                const [err, data] = skdResults[i]
-                if (err || !data || typeof data !== 'object') continue
-                const record = data as Record<string, string>
-                if (Object.keys(record).length === 0) continue
-                const m = parsedMembers[i]
-                skDistribList.push({
-                    groupId,
-                    sender: { user: m.user, server: m.server, device: m.device },
-                    keyId: Number(record.key_id),
-                    timestampMs: Number(record.timestamp_ms)
-                })
-            }
+        const skDistribList: SenderKeyDistributionRecord[] = []
+        for (const [field, value] of Object.entries(skdAll)) {
+            const colonIdx = value.indexOf(':')
+            if (colonIdx === -1) continue
+            const parts = field.split(':')
+            skDistribList.push({
+                groupId,
+                sender: { user: parts[0], server: parts[1], device: Number(parts[2]) },
+                keyId: Number(value.slice(0, colonIdx)),
+                timestampMs: Number(value.slice(colonIdx + 1))
+            })
         }
 
         return { skList, skDistribList }
@@ -172,28 +151,33 @@ export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKey
         senders: readonly SignalAddress[]
     ): Promise<readonly (SenderKeyDistributionRecord | null)[]> {
         if (senders.length === 0) return []
-        const targets = senders.map((s) => toSignalAddressParts(s))
-        const pipeline = this.redis.pipeline()
-        for (const t of targets) {
-            pipeline.hgetall(
-                this.k('skd', this.sessionId, groupId, t.user, t.server, String(t.device))
-            )
-        }
-        const results = await pipeline.exec()
-        if (!results) return senders.map(() => null)
-
-        return targets.map((t, index) => {
-            const [err, data] = results[index]
-            if (err || !data || typeof data !== 'object') return null
-            const record = data as Record<string, string>
-            if (Object.keys(record).length === 0) return null
-            return {
+        // Single HGETALL on the group hash returns every member's
+        // distribution in one round-trip; previous layout issued one
+        // HGETALL per member which dominated the redis call profile.
+        const hashKey = this.k('skd', this.sessionId, groupId)
+        const all = await this.redis.hgetall(hashKey)
+        const out = new Array<SenderKeyDistributionRecord | null>(senders.length)
+        for (let i = 0; i < senders.length; i += 1) {
+            const t = toSignalAddressParts(senders[i])
+            const field = `${t.user}:${t.server}:${t.device}`
+            const value = all[field]
+            if (!value) {
+                out[i] = null
+                continue
+            }
+            const colonIdx = value.indexOf(':')
+            if (colonIdx === -1) {
+                out[i] = null
+                continue
+            }
+            out[i] = {
                 groupId,
                 sender: { user: t.user, server: t.server, device: t.device },
-                keyId: Number(record.key_id),
-                timestampMs: Number(record.timestamp_ms)
+                keyId: Number(value.slice(0, colonIdx)),
+                timestampMs: Number(value.slice(colonIdx + 1))
             }
-        })
+        }
+        return out
     }
 
     public async deleteDeviceSenderKey(target: SignalAddress, groupId?: string): Promise<number> {
@@ -209,18 +193,11 @@ export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKey
                 sender.server,
                 String(sender.device)
             )
-            const skdKey = this.k(
-                'skd',
-                this.sessionId,
-                groupId,
-                sender.user,
-                sender.server,
-                String(sender.device)
-            )
+            const skdHashKey = this.k('skd', this.sessionId, groupId)
             const groupIdxKey = this.k('sk:grp', this.sessionId, groupId)
             const pipeline = this.redis.pipeline()
             pipeline.del(skKey)
-            pipeline.del(skdKey)
+            pipeline.hdel(skdHashKey, memberKey)
             pipeline.srem(groupIdxKey, memberKey)
             const results = await pipeline.exec()
             if (!results) return 0
@@ -247,17 +224,10 @@ export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKey
                 sender.server,
                 String(sender.device)
             )
-            const skdKey = this.k(
-                'skd',
-                this.sessionId,
-                grpId,
-                sender.user,
-                sender.server,
-                String(sender.device)
-            )
+            const skdHashKey = this.k('skd', this.sessionId, grpId)
             const pipeline = this.redis.pipeline()
             pipeline.del(skKey)
-            pipeline.del(skdKey)
+            pipeline.hdel(skdHashKey, memberKey)
             pipeline.srem(idxKey, memberKey)
             const results = await pipeline.exec()
             if (results) {
@@ -275,7 +245,8 @@ export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKey
     ): Promise<number> {
         if (participants.length === 0) return 0
         const groupIdxKey = this.k('sk:grp', this.sessionId, groupId)
-        let total = 0
+        const skdHashKey = this.k('skd', this.sessionId, groupId)
+        const memberKeys: string[] = []
         const pipeline = this.redis.pipeline()
         for (const participant of participants) {
             const sender = toSignalAddressParts(participant)
@@ -287,28 +258,24 @@ export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKey
                 sender.server,
                 String(sender.device)
             )
-            const skdKey = this.k(
-                'skd',
-                this.sessionId,
-                groupId,
-                sender.user,
-                sender.server,
-                String(sender.device)
-            )
-            const memberKey = `${sender.user}:${sender.server}:${sender.device}`
+            memberKeys.push(`${sender.user}:${sender.server}:${sender.device}`)
             pipeline.del(skKey)
-            pipeline.del(skdKey)
-            pipeline.srem(groupIdxKey, memberKey)
         }
+        // Bulk HDEL + SREM with the full member list — one redis command each
+        // instead of one per participant.
+        pipeline.hdel(skdHashKey, ...memberKeys)
+        pipeline.srem(groupIdxKey, ...memberKeys)
         const results = await pipeline.exec()
+        let total = 0
         if (results) {
-            for (let i = 0; i < results.length; i += 1) {
-                const step = i % 3
-                if (step < 2) {
-                    const [err, val] = results[i]
-                    if (!err) total += Number(val)
-                }
+            // First `participants.length` results are the DELs on sk keys.
+            for (let i = 0; i < participants.length; i += 1) {
+                const [err, val] = results[i]
+                if (!err) total += Number(val)
             }
+            // Then the HDEL result (number of fields removed).
+            const [hdelErr, hdelVal] = results[participants.length]
+            if (!hdelErr) total += Number(hdelVal)
         }
         return total
     }

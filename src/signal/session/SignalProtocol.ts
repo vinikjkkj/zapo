@@ -43,6 +43,7 @@ function signalAddressLockKey(address: SignalAddress): string {
 
 interface EstablishOutgoingSessionOptions {
     readonly reuseExisting?: boolean
+    readonly knownAbsent?: boolean
 }
 
 export interface SignalProtocolStores {
@@ -79,7 +80,7 @@ export class SignalProtocol {
         options: EstablishOutgoingSessionOptions = {}
     ): Promise<SignalSessionRecord> {
         return this.runWithAddressLock(address, async () => {
-            if (options.reuseExisting) {
+            if (options.reuseExisting && !options.knownAbsent) {
                 const existing = await this.stores.session.getSession(address)
                 if (existing) {
                     const remoteIdentity = toSerializedPubKey(remoteBundle.identity)

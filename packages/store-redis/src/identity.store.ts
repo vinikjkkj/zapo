@@ -30,25 +30,19 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
         addresses: readonly SignalAddress[]
     ): Promise<readonly (Uint8Array | null)[]> {
         if (addresses.length === 0) return []
-        const pipeline = this.redis.pipeline()
-        for (const address of addresses) {
-            const target = toSignalAddressParts(address)
-            pipeline.getBuffer(
-                this.k(
-                    'signal:ident',
-                    this.sessionId,
-                    target.user,
-                    target.server,
-                    String(target.device)
-                )
+        const keys = new Array<string>(addresses.length)
+        for (let i = 0; i < addresses.length; i += 1) {
+            const target = toSignalAddressParts(addresses[i])
+            keys[i] = this.k(
+                'signal:ident',
+                this.sessionId,
+                target.user,
+                target.server,
+                String(target.device)
             )
         }
-        const results = await pipeline.exec()
-        if (!results) return addresses.map(() => null)
-        return results.map(([err, data]) => {
-            if (err || !data) return null
-            return new Uint8Array(data as Uint8Array)
-        })
+        const values = await this.redis.mgetBuffer(...keys)
+        return values.map((data) => (data ? new Uint8Array(data) : null))
     }
 
     public async setRemoteIdentity(address: SignalAddress, identityKey: Uint8Array): Promise<void> {
@@ -70,19 +64,23 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
         }[]
     ): Promise<void> {
         if (entries.length === 0) return
-        const pipeline = this.redis.pipeline()
+        const args: Array<string | Buffer> = []
         for (const entry of entries) {
             const target = toSignalAddressParts(entry.address)
-            const key = this.k(
-                'signal:ident',
-                this.sessionId,
-                target.user,
-                target.server,
-                String(target.device)
+            args.push(
+                this.k(
+                    'signal:ident',
+                    this.sessionId,
+                    target.user,
+                    target.server,
+                    String(target.device)
+                ),
+                toRedisBuffer(entry.identityKey)
             )
-            pipeline.set(key, toRedisBuffer(entry.identityKey))
         }
-        await pipeline.exec()
+        await (this.redis as unknown as { mset: (...args: unknown[]) => Promise<unknown> }).mset(
+            ...args
+        )
     }
 
     // ── Clear ─────────────────────────────────────────────────────────

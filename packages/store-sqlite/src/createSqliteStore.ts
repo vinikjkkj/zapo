@@ -174,8 +174,7 @@ export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreRes
                 }),
             identity: (sessionId) => new WaIdentitySqliteStore(opts(sessionId)),
             signal: (sessionId) => new WaSignalSqliteStore(opts(sessionId)),
-            senderKey: (sessionId) =>
-                new SenderKeySqliteStore(opts(sessionId), batchSizes?.senderKeyDistribution),
+            senderKey: (sessionId) => new SenderKeySqliteStore(opts(sessionId)),
             appState: (sessionId) => new WaAppStateSqliteStore(opts(sessionId)),
             messages: (sessionId) => new WaMessageSqliteStore(opts(sessionId)),
             threads: (sessionId) => new WaThreadSqliteStore(opts(sessionId)),
