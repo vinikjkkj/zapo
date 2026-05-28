@@ -105,16 +105,16 @@ The core lives at the repo root (`zapo-js`). Optional packages live in
 [`packages/`](packages/) and ship under the `@zapo-js/*` scope. Install
 only what you need.
 
-| Package                                              | Peer dependency             | Purpose                                                                                                                               |
-| ---------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@zapo-js/store-sqlite`](packages/store-sqlite)     | `better-sqlite3`            | SQLite persistent store (single-process bots, dev sessions, small-to-medium prod).                                                    |
-| [`@zapo-js/store-redis`](packages/store-redis)       | `ioredis`                   | Redis-backed store with native TTL eviction.                                                                                          |
-| [`@zapo-js/store-mongo`](packages/store-mongo)       | `mongodb`                   | MongoDB-backed store with TTL-index eviction.                                                                                         |
-| [`@zapo-js/store-mysql`](packages/store-mysql)       | `mysql2`                    | MySQL / MariaDB-backed store with background cleanup poller.                                                                          |
-| [`@zapo-js/store-postgres`](packages/store-postgres) | `pg`                        | PostgreSQL-backed store with background cleanup poller.                                                                               |
-| [`@zapo-js/media-utils`](packages/media-utils)       | `sharp` + `ffmpeg`          | `WaMediaProcessor`: thumbnails, waveforms, voice-note normalization.                                                                  |
-| [`@zapo-js/fake-server`](packages/fake-server)       | (none)                      | In-process fake WhatsApp Web server for end-to-end testing.                                                                           |
-| [`@zapo-js/mcp-server`](packages/mcp-server)         | `@modelcontextprotocol/sdk` | **Dev-only.** MCP server exposing the `WaClient` as dynamic tools for an LLM agent (Claude Code / Cursor / etc.). Not for production. |
+| Package                                              | Peer dependency             | Purpose                                                                                                                                          |
+| ---------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`@zapo-js/store-sqlite`](packages/store-sqlite)     | `better-sqlite3`            | SQLite persistent store (single-process bots, dev sessions, small-to-medium prod).                                                               |
+| [`@zapo-js/store-redis`](packages/store-redis)       | `ioredis`                   | Redis-backed store with native TTL eviction.                                                                                                     |
+| [`@zapo-js/store-mongo`](packages/store-mongo)       | `mongodb`                   | MongoDB-backed store with TTL-index eviction.                                                                                                    |
+| [`@zapo-js/store-mysql`](packages/store-mysql)       | `mysql2`                    | MySQL / MariaDB-backed store with background cleanup poller.                                                                                     |
+| [`@zapo-js/store-postgres`](packages/store-postgres) | `pg`                        | PostgreSQL-backed store with background cleanup poller.                                                                                          |
+| [`@zapo-js/media-utils`](packages/media-utils)       | `sharp` + `ffmpeg`          | `WaMediaProcessor`: thumbnails, waveforms, voice-note normalization.                                                                             |
+| [`@zapo-js/fake-server`](packages/fake-server)       | (none)                      | In-process fake WhatsApp Web server for end-to-end testing.                                                                                      |
+| [`@zapo-js/mcp-server`](packages/mcp-server)         | `@modelcontextprotocol/sdk` | **Dev-only.** MCP server exposing multi-session `WaClient`s as dynamic tools for an LLM agent (Claude Code / Cursor / etc.). Not for production. |
 
 Each package's README has the install + config + integration notes.
 

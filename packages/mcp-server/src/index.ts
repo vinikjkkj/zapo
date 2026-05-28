@@ -1,7 +1,7 @@
 export { runMcpServer } from './server'
 export type { RunMcpServerOptions } from './server'
 export { McpRuntime, buildRuntimeConfigFromEnv } from './runtime'
-export type { BufferedEvent, LogEntry, RuntimeConfig } from './runtime'
+export type { BufferedEvent, LogEntry, RuntimeConfig, SessionSummary } from './runtime'
 export { TOOLS } from './tools'
 export type { ToolDefinition } from './tools'
 export { encodeForJson, decodeFromJson } from './serializer'

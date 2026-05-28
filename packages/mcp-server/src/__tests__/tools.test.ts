@@ -118,6 +118,7 @@ const buildFakeRuntime = (client: FakeClient): SpyableFakeRuntime => {
         bufferLogsSize: () => logs.length,
         async closeLogFile() {},
         resetSequences: () => undefined,
+        listSessions: () => [],
         // test-only helpers: push synthetic entries + read last filter
         __pushLog: (entry: LogEntry) => {
             logs.push(entry)

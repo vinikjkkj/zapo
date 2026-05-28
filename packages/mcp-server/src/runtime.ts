@@ -18,6 +18,7 @@ import { encodeForJson } from './serializer'
 
 const DEFAULT_BUFFER_SIZE = 1000
 const DEFAULT_LOG_BUFFER_SIZE = 500
+const DEFAULT_MAX_SESSIONS = 16
 
 const LOG_LEVEL_PRIORITY: Readonly<Record<LogLevel, number>> = {
     trace: 10,
@@ -98,17 +99,23 @@ class BufferedTeeLogger implements Logger {
             readonly drain?: boolean
             readonly q?: string
             readonly regex?: boolean
+            readonly session?: string
         } = {}
     ): readonly LogEntry[] {
         const levels = filter.levels && filter.levels.length > 0 ? new Set(filter.levels) : null
         const since = filter.since ?? 0
         const limit = filter.limit && filter.limit > 0 ? filter.limit : 100
         const matchQuery = buildQueryMatcher(filter.q ?? '', filter.regex === true)
+        // Logs share one ring; per-session entries are tagged via context.session
+        // by the per-session child logger. A `session` filter keeps only those;
+        // omitting it returns everything, including untagged server/global lines.
+        const session = filter.session
         const matched: LogEntry[] = []
         for (let i = 0; i < this.buffer.length; i += 1) {
             const entry = this.buffer[i]
             if (entry.seq <= since) continue
             if (levels && !levels.has(entry.level)) continue
+            if (session !== undefined && entry.context?.session !== session) continue
             const haystack =
                 entry.message + (entry.context ? ' ' + safeStringify(entry.context) : '')
             if (!matchQuery(haystack)) continue
@@ -277,9 +284,21 @@ export type McpTransportMode = 'stdio' | 'http'
 
 export interface RuntimeConfig {
     readonly authPath: string
+    /**
+     * Default session id. Tool calls that omit `session` resolve to this one,
+     * and `lifecycle status` reports it as the default. Other session ids are
+     * created lazily on first use (all sharing the one store at `authPath`).
+     */
     readonly sessionId: string
     readonly logLevel: LogLevel
     readonly bufferSize: number
+    /**
+     * Upper bound on concurrently-live sessions in this process (bounded to
+     * avoid unbounded `WaClient`/buffer growth from arbitrary tool-supplied
+     * ids). Creating a session past this throws until one is destroyed.
+     * Defaults to 16 when omitted.
+     */
+    readonly maxSessions?: number
     readonly captureNoisyEvents: boolean
     readonly deviceBrowser?: string
     readonly deviceOsDisplayName?: string
@@ -319,6 +338,11 @@ export const buildRuntimeConfigFromEnv = (env = process.env): RuntimeConfig => {
         'MCP_EVENT_BUFFER_SIZE',
         DEFAULT_BUFFER_SIZE
     )
+    const maxSessions = parseEnvPositiveInt(
+        env.MCP_MAX_SESSIONS,
+        'MCP_MAX_SESSIONS',
+        DEFAULT_MAX_SESSIONS
+    )
     const captureNoisyEvents = env.MCP_CAPTURE_TRANSPORT === '1'
     const historyEnabled = env.MCP_HISTORY_DISABLED !== '1'
     const chatSocketUrls = parseUrlList(env.MCP_CHAT_SOCKET_URLS)
@@ -338,6 +362,7 @@ export const buildRuntimeConfigFromEnv = (env = process.env): RuntimeConfig => {
         sessionId,
         logLevel,
         bufferSize,
+        maxSessions,
         captureNoisyEvents,
         deviceBrowser: env.MCP_DEVICE_BROWSER,
         deviceOsDisplayName: env.MCP_DEVICE_OS_DISPLAY,
@@ -402,26 +427,51 @@ const parseEnvPositiveInt = (raw: string | undefined, name: string, fallback: nu
     return resolvePositive(Number.isFinite(parsed) ? parsed : Number.NaN, fallback, name)
 }
 
+/** Mutable per-session state held by {@link McpRuntime}. */
+interface SessionState {
+    readonly sessionId: string
+    client: WaClient | null
+    clientInitPromise: Promise<WaClient> | null
+    listenersDetach: Array<() => void>
+    readonly events: BufferedEvent[]
+    nextEventSeq: number
+}
+
+/** Per-session snapshot surfaced by `lifecycle status`. */
+export interface SessionSummary {
+    readonly sessionId: string
+    /** True for the session id tool calls resolve to when `session` is omitted. */
+    readonly isDefault: boolean
+    /** Whether a `WaClient` has been instantiated for this session. */
+    readonly clientCreated: boolean
+    /** Number of events currently buffered for this session. */
+    readonly bufferedEvents: number
+}
+
 /**
- * Owns the lifecycle of the underlying `WaClient` instance plus the
- * buffered event/log rings consumed by the `events` / `logs` tools. One
- * runtime per MCP server process; create/teardown via `start` / `destroy`
- * (which lets a supervisor reconnect cleanly).
+ * Owns N `WaClient` sessions multiplexed over one shared `WaStore` (a single
+ * backend / sqlite file at `config.authPath`), plus the per-session buffered
+ * event rings and the shared, session-tagged log ring consumed by the
+ * `events` / `logs` tools. One runtime per MCP server process.
+ *
+ * Sessions are created lazily: the first tool call referencing a session id
+ * (or omitting it, which resolves to `config.sessionId`) spins up a client
+ * bound to that id over the shared store. The store scopes every row by
+ * session id, so distinct sessions never collide while sharing one connection.
  *
  * Most users won't construct this directly - use {@link runMcpServer}.
  */
 export class McpRuntime {
     private readonly config: RuntimeConfig
     private readonly logger: BufferedTeeLogger
-    private readonly buffer: BufferedEvent[] = []
-    private nextSeq = 1
-    private client: WaClient | null = null
+    private readonly maxSessions: number
     private store: WaStore | null = null
-    private listenersDetach: Array<() => void> = []
-    private clientInitPromise: Promise<WaClient> | null = null
+    private readonly sessions = new Map<string, SessionState>()
 
     public constructor(config: RuntimeConfig) {
         this.config = config
+        this.maxSessions =
+            config.maxSessions && config.maxSessions > 0 ? config.maxSessions : DEFAULT_MAX_SESSIONS
         this.logger = new BufferedTeeLogger(
             config.logLevel,
             config.logBufferSize,
@@ -437,6 +487,7 @@ export class McpRuntime {
             readonly drain?: boolean
             readonly q?: string
             readonly regex?: boolean
+            readonly session?: string
         } = {}
     ): readonly LogEntry[] {
         return this.logger.listLogs(filter)
@@ -454,9 +505,16 @@ export class McpRuntime {
         await this.logger.closeFile()
     }
 
-    /** Reset event + log seq counters back to 1. Call after a hard state wipe. */
-    public resetSequences(): void {
-        this.nextSeq = 1
+    /**
+     * Reset a session's event seq counter (and the shared log seq) back to 1.
+     * Call after a soft restart wipes a session's buffers. Defaults to the
+     * default session when `session` is omitted.
+     */
+    public resetSequences(session?: string): void {
+        const state = this.peekSession(session)
+        if (state) {
+            state.nextEventSeq = 1
+        }
         this.logger.resetSequence()
     }
 
@@ -468,21 +526,54 @@ export class McpRuntime {
         return this.logger
     }
 
-    public ensureClient(): Promise<WaClient> {
-        if (this.client) {
-            return Promise.resolve(this.client)
+    /** Resolve `session` to a non-empty id, defaulting to `config.sessionId`. */
+    private resolveSessionId(session?: string): string {
+        const id = (session ?? this.config.sessionId).trim()
+        if (id.length === 0) {
+            throw new Error('session must be a non-empty string')
         }
-        if (this.clientInitPromise) {
-            return this.clientInitPromise
-        }
-        this.clientInitPromise = this.initClient().finally(() => {
-            this.clientInitPromise = null
-        })
-        return this.clientInitPromise
+        return id
     }
 
-    private async initClient(): Promise<WaClient> {
-        await mkdir(dirname(this.config.authPath), { recursive: true })
+    private getOrCreateSession(session?: string): SessionState {
+        const id = this.resolveSessionId(session)
+        const existing = this.sessions.get(id)
+        if (existing) return existing
+        if (this.sessions.size >= this.maxSessions) {
+            throw new Error(
+                `max sessions reached (${this.maxSessions}); destroy a session before creating "${id}"`
+            )
+        }
+        const state: SessionState = {
+            sessionId: id,
+            client: null,
+            clientInitPromise: null,
+            listenersDetach: [],
+            events: [],
+            nextEventSeq: 1
+        }
+        this.sessions.set(id, state)
+        return state
+    }
+
+    /** Look up an existing session without creating it. */
+    private peekSession(session?: string): SessionState | null {
+        return this.sessions.get(this.resolveSessionId(session)) ?? null
+    }
+
+    /** Snapshot of every live session, for `lifecycle status`. */
+    public listSessions(): readonly SessionSummary[] {
+        return Array.from(this.sessions.values(), (state) => ({
+            sessionId: state.sessionId,
+            isDefault: state.sessionId === this.config.sessionId,
+            clientCreated: state.client !== null,
+            bufferedEvents: state.events.length
+        }))
+    }
+
+    /** Lazily build the one store shared by every session in this process. */
+    private ensureStore(): WaStore {
+        if (this.store) return this.store
         this.store = createStore({
             backends: {
                 sqlite: createSqliteStore({
@@ -504,10 +595,31 @@ export class McpRuntime {
                 privacyToken: 'sqlite'
             }
         })
+        return this.store
+    }
+
+    public ensureClient(session?: string): Promise<WaClient> {
+        const state = this.getOrCreateSession(session)
+        if (state.client) {
+            return Promise.resolve(state.client)
+        }
+        if (state.clientInitPromise) {
+            return state.clientInitPromise
+        }
+        state.clientInitPromise = this.initClient(state).finally(() => {
+            state.clientInitPromise = null
+        })
+        return state.clientInitPromise
+    }
+
+    private async initClient(state: SessionState): Promise<WaClient> {
+        await mkdir(dirname(this.config.authPath), { recursive: true })
+        const store = this.ensureStore()
+        const sessionLogger = this.createSessionLogger(state.sessionId)
         const client = new WaClient(
             {
-                store: this.store,
-                sessionId: this.config.sessionId,
+                store,
+                sessionId: state.sessionId,
                 connectTimeoutMs: 60_000,
                 deviceBrowser: this.config.deviceBrowser ?? 'Chrome',
                 deviceOsDisplayName: this.config.deviceOsDisplayName ?? 'Windows',
@@ -519,40 +631,65 @@ export class McpRuntime {
                 chatSocketUrls: this.config.chatSocketUrls,
                 media: {
                     processor: createMediaProcessor({
-                        onWarning: (message) => this.logger.warn(message)
+                        onWarning: (message) => sessionLogger.warn(message)
                     })
                 },
                 testHooks: this.config.noiseRootCa
                     ? { noiseRootCa: this.config.noiseRootCa }
                     : undefined
             },
-            this.logger
+            sessionLogger
         )
-        this.attachListeners(client)
-        this.client = client
+        this.attachListeners(state, client)
+        state.client = client
         this.logger.info('mcp client created', {
-            sessionId: this.config.sessionId,
+            session: state.sessionId,
             authPath: this.config.authPath
         })
         return client
     }
 
-    public getClient(): WaClient | null {
-        return this.client
+    /**
+     * Wrap the shared logger so every line a session's `WaClient` emits is
+     * tagged with `context.session`. Lets the `logs` tool scope by session
+     * while keeping a single ring buffer (and a single optional log file).
+     */
+    private createSessionLogger(sessionId: string): Logger {
+        const base = this.logger
+        const tag = (context?: Record<string, unknown>): Record<string, unknown> =>
+            context ? { ...context, session: sessionId } : { session: sessionId }
+        return {
+            level: base.level,
+            trace: (message, context) => base.trace(message, tag(context)),
+            debug: (message, context) => base.debug(message, tag(context)),
+            info: (message, context) => base.info(message, tag(context)),
+            warn: (message, context) => base.warn(message, tag(context)),
+            error: (message, context) => base.error(message, tag(context))
+        }
     }
 
-    public async destroyClient(): Promise<void> {
-        if (this.client) {
-            try {
-                await this.client.disconnect()
-            } catch (error) {
-                this.logger.warn('disconnect during destroy failed', {
-                    message: toError(error).message
-                })
-            }
-            this.detachListeners()
-            this.client = null
+    public getClient(session?: string): WaClient | null {
+        return this.peekSession(session)?.client ?? null
+    }
+
+    /**
+     * Disconnect + drop one session's client (default session when omitted).
+     * The shared store stays open for the other sessions - use
+     * {@link destroyAll} to tear the whole runtime (store included) down.
+     */
+    public async destroyClient(session?: string): Promise<void> {
+        const state = this.peekSession(session)
+        if (state) {
+            await this.teardownSessionClient(state)
         }
+    }
+
+    /** Disconnect every session client and destroy the shared store. */
+    public async destroyAll(): Promise<void> {
+        for (const state of this.sessions.values()) {
+            await this.teardownSessionClient(state)
+        }
+        this.sessions.clear()
         if (this.store) {
             try {
                 await this.store.destroy()
@@ -565,6 +702,20 @@ export class McpRuntime {
         }
     }
 
+    private async teardownSessionClient(state: SessionState): Promise<void> {
+        if (!state.client) return
+        try {
+            await state.client.disconnect()
+        } catch (error) {
+            this.logger.warn('disconnect during destroy failed', {
+                session: state.sessionId,
+                message: toError(error).message
+            })
+        }
+        this.detachListeners(state)
+        state.client = null
+    }
+
     public listEvents(
         filter: {
             readonly types?: readonly string[]
@@ -573,15 +724,19 @@ export class McpRuntime {
             readonly drain?: boolean
             readonly q?: string
             readonly regex?: boolean
-        } = {}
+        } = {},
+        session?: string
     ): readonly BufferedEvent[] {
+        const state = this.peekSession(session)
+        if (!state) return []
+        const events = state.events
         const types = filter.types && filter.types.length > 0 ? new Set(filter.types) : null
         const since = filter.since ?? 0
         const limit = filter.limit && filter.limit > 0 ? filter.limit : 50
         const matchQuery = buildQueryMatcher(filter.q ?? '', filter.regex === true)
         const matched: BufferedEvent[] = []
-        for (let i = 0; i < this.buffer.length; i += 1) {
-            const ev = this.buffer[i]
+        for (let i = 0; i < events.length; i += 1) {
+            const ev = events[i]
             if (ev.seq <= since) continue
             if (types && !types.has(ev.type)) continue
             if (!matchQuery(ev.type + ' ' + safeStringify(ev.payload))) continue
@@ -590,55 +745,58 @@ export class McpRuntime {
         const tail = matched.length > limit ? matched.slice(matched.length - limit) : matched
         if (filter.drain && tail.length > 0) {
             const drainSet = new Set(tail.map((e) => e.seq))
-            for (let i = this.buffer.length - 1; i >= 0; i -= 1) {
-                if (drainSet.has(this.buffer[i].seq)) {
-                    this.buffer.splice(i, 1)
+            for (let i = events.length - 1; i >= 0; i -= 1) {
+                if (drainSet.has(events[i].seq)) {
+                    events.splice(i, 1)
                 }
             }
         }
         return tail
     }
 
-    public clearEvents(): number {
-        const n = this.buffer.length
-        this.buffer.length = 0
+    public clearEvents(session?: string): number {
+        const state = this.peekSession(session)
+        if (!state) return 0
+        const n = state.events.length
+        state.events.length = 0
         return n
     }
 
-    public bufferSize(): number {
-        return this.buffer.length
+    public bufferSize(session?: string): number {
+        return this.peekSession(session)?.events.length ?? 0
     }
 
-    private attachListeners(client: WaClient): void {
-        this.detachListeners()
+    private attachListeners(state: SessionState, client: WaClient): void {
+        this.detachListeners(state)
         for (const name of ALL_EVENT_NAMES) {
             if (!this.config.captureNoisyEvents && NOISY_EVENT_NAMES.has(name)) {
                 continue
             }
             const handler = (payload: unknown): void => {
-                this.recordEvent(name, payload)
+                this.recordEvent(name, payload, state.sessionId)
             }
             client.on(name, handler as never)
-            this.listenersDetach.push(() => {
+            state.listenersDetach.push(() => {
                 client.off(name, handler as never)
             })
         }
     }
 
-    private detachListeners(): void {
-        for (const detach of this.listenersDetach) {
+    private detachListeners(state: SessionState): void {
+        for (const detach of state.listenersDetach) {
             try {
                 detach()
             } catch {
                 /* ignore */
             }
         }
-        this.listenersDetach = []
+        state.listenersDetach = []
     }
 
-    private recordEvent(type: string, rawPayload: unknown): void {
-        const seq = this.nextSeq
-        this.nextSeq += 1
+    private recordEvent(type: string, rawPayload: unknown, session?: string): void {
+        const state = this.getOrCreateSession(session)
+        const seq = state.nextEventSeq
+        state.nextEventSeq += 1
         const encoded = encodeForJson(rawPayload)
         const event: BufferedEvent = {
             seq,
@@ -646,10 +804,10 @@ export class McpRuntime {
             timestampMs: Date.now(),
             payload: encoded
         }
-        this.buffer.push(event)
-        const overflow = this.buffer.length - this.config.bufferSize
+        state.events.push(event)
+        const overflow = state.events.length - this.config.bufferSize
         if (overflow > 0) {
-            this.buffer.splice(0, overflow)
+            state.events.splice(0, overflow)
         }
     }
 }

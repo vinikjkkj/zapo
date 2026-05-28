@@ -312,11 +312,13 @@ const runHttpTransport = async (
 }
 
 /**
- * Boots an MCP server that exposes a single `WaClient` instance plus
- * helpers (`call`, `inspect`, `events`, `logs`, `lifecycle`, `restart`)
- * as MCP tools. Reads its config from environment variables via
- * {@link buildRuntimeConfigFromEnv} - set `MCP_TRANSPORT=http` to switch
- * from stdio (default) to a Streamable-HTTP server.
+ * Boots an MCP server that exposes N `WaClient` sessions (multiplexed over
+ * one shared store) plus helpers (`call`, `inspect`, `events`, `logs`,
+ * `lifecycle`, `restart`, `eval`) as MCP tools. Each tool takes an optional
+ * `session` id (default `MCP_SESSION_ID`); new ids spin up additional
+ * sessions lazily on the same store. Reads its config from environment
+ * variables via {@link buildRuntimeConfigFromEnv} - set `MCP_TRANSPORT=http`
+ * to switch from stdio (default) to a Streamable-HTTP server.
  *
  * Used by the published `zapo-mcp-server` binary; you only need to call
  * it directly when embedding the server in another process.
@@ -339,7 +341,7 @@ export const runMcpServer = async (options: RunMcpServerOptions = {}): Promise<v
     const shutdown = async (signal: string): Promise<void> => {
         runtime.getLogger().info('shutting down', { signal })
         try {
-            await runtime.destroyClient()
+            await runtime.destroyAll()
         } catch {
             /* swallow */
         }

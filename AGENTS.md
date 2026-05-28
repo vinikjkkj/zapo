@@ -704,7 +704,9 @@ Re-exported curves (`@crypto/curves`):
 
 ## 13. MCP Dev Server (`@zapo-js/mcp-server`)
 
-Optional package that exposes the `WaClient` instance and the `zapo-js` module namespace as MCP tools, so an LLM agent can drive end-to-end flows (connect, pair, send, query groups/newsletters, inspect events, etc.) without writing throwaway scripts. Source: `packages/mcp-server/`.
+Optional package that exposes `WaClient` sessions and the `zapo-js` module namespace as MCP tools, so an LLM agent can drive end-to-end flows (connect, pair, send, query groups/newsletters, inspect events, etc.) without writing throwaway scripts. Source: `packages/mcp-server/`.
+
+The server multiplexes **multiple sessions over one shared store**: every tool takes an optional `session` id (default `MCP_SESSION_ID`), and a new id lazily spins up an additional `WaClient` on the same backend (the store scopes every row by session id). Event buffers are per-session; log lines are tagged with `context.session` so `logs` can filter by session.
 
 ### Registering with Claude Code
 
@@ -761,25 +763,26 @@ After editing source: rebuild → call `restart` with `mode: "process_exit"` →
 
 ### Environment variables
 
-| Var                                                                            | Default                       | Purpose                                           |
-| ------------------------------------------------------------------------------ | ----------------------------- | ------------------------------------------------- |
-| `MCP_AUTH_PATH`                                                                | `<cwd>/.auth/state.sqlite`    | sqlite credential store path                      |
-| `MCP_SESSION_ID`                                                               | `default_2`                   | session id passed to `WaClient`                   |
-| `MCP_LOG_LEVEL`                                                                | `info`                        | `trace` / `debug` / `info` / `warn` / `error`     |
-| `MCP_LOG_FILE`                                                                 | unset                         | append every log line as JSONL                    |
-| `MCP_LOG_BUFFER_SIZE`                                                          | `500`                         | in-memory log ring size                           |
-| `MCP_EVENT_BUFFER_SIZE`                                                        | `1000`                        | in-memory event ring size                         |
-| `MCP_CAPTURE_TRANSPORT`                                                        | `0`                           | also buffer noisy `transport_*` events            |
-| `MCP_HISTORY_DISABLED`                                                         | `0`                           | disable history sync on connect                   |
-| `MCP_TRANSPORT`                                                                | `stdio`                       | `stdio` or `http` (StreamableHTTPServerTransport) |
-| `MCP_HTTP_HOST` / `MCP_HTTP_PORT` / `MCP_HTTP_PATH`                            | `127.0.0.1` / `3737` / `/mcp` | HTTP listener config                              |
-| `MCP_FAKE_NOISE_PUBKEY_HEX` + `MCP_FAKE_NOISE_SERIAL` + `MCP_CHAT_SOCKET_URLS` | unset                         | point at `@zapo-js/fake-server` for tests         |
+| Var                                                                            | Default                       | Purpose                                               |
+| ------------------------------------------------------------------------------ | ----------------------------- | ----------------------------------------------------- |
+| `MCP_AUTH_PATH`                                                                | `<cwd>/.auth/state.sqlite`    | sqlite credential store path                          |
+| `MCP_SESSION_ID`                                                               | `default_2`                   | default session id (tools that omit `session` use it) |
+| `MCP_MAX_SESSIONS`                                                             | `16`                          | max concurrently-live sessions in the process         |
+| `MCP_LOG_LEVEL`                                                                | `info`                        | `trace` / `debug` / `info` / `warn` / `error`         |
+| `MCP_LOG_FILE`                                                                 | unset                         | append every log line as JSONL                        |
+| `MCP_LOG_BUFFER_SIZE`                                                          | `500`                         | in-memory log ring size                               |
+| `MCP_EVENT_BUFFER_SIZE`                                                        | `1000`                        | in-memory event ring size                             |
+| `MCP_CAPTURE_TRANSPORT`                                                        | `0`                           | also buffer noisy `transport_*` events                |
+| `MCP_HISTORY_DISABLED`                                                         | `0`                           | disable history sync on connect                       |
+| `MCP_TRANSPORT`                                                                | `stdio`                       | `stdio` or `http` (StreamableHTTPServerTransport)     |
+| `MCP_HTTP_HOST` / `MCP_HTTP_PORT` / `MCP_HTTP_PATH`                            | `127.0.0.1` / `3737` / `/mcp` | HTTP listener config                                  |
+| `MCP_FAKE_NOISE_PUBKEY_HEX` + `MCP_FAKE_NOISE_SERIAL` + `MCP_CHAT_SOCKET_URLS` | unset                         | point at `@zapo-js/fake-server` for tests             |
 
 ### Notes / limits
 
 - The cwd of the spawned MCP process determines the default `.auth/` location. When Claude Code spawns it, that's wherever Claude Code was started.
-- One `WaClient` per process. Multi-session needs multiple servers with distinct `MCP_AUTH_PATH` + `MCP_SESSION_ID`.
-- `WaClient` has no auto-reconnect. On `connection: close`, call `connect` again manually.
+- One process can run many sessions over one shared store: pass `session` to any tool (default `MCP_SESSION_ID`), bounded by `MCP_MAX_SESSIONS`. All sessions share the one `MCP_AUTH_PATH` backend. Running separate processes is only needed when you want isolated stores/auth files.
+- `WaClient` has no auto-reconnect. On `connection: close`, call `connect` again manually (per session).
 - `restart` (soft) does NOT pick up code changes; `process_exit` + reconnect does.
 - `node --watch` is not a full supervisor: it restarts on file changes only. `process_exit` from the `restart` tool kills the watcher too – under HTTP+watch, just edit a file to reload instead.
 

@@ -17,12 +17,13 @@ const ROOT_VALUES: readonly Root[] = ['client', 'lib']
 
 const resolveRoot = async (
     root: Root,
-    runtime: McpRuntime
+    runtime: McpRuntime,
+    session?: string
 ): Promise<{ readonly object: Record<string, unknown>; readonly label: string }> => {
     if (root === 'lib') {
         return { object: ZapoLib as unknown as Record<string, unknown>, label: 'zapo-js' }
     }
-    const client = await runtime.ensureClient()
+    const client = await runtime.ensureClient(session)
     return { object: client as unknown as Record<string, unknown>, label: 'WaClient' }
 }
 
@@ -33,6 +34,30 @@ const parseRoot = (raw: unknown): Root => {
     }
     throw new Error(`"root" must be one of ${ROOT_VALUES.join(' | ')}`)
 }
+
+const parseSession = (raw: unknown): string | undefined => {
+    if (raw === undefined || raw === null) return undefined
+    if (typeof raw !== 'string') {
+        throw new Error('"session" must be a string')
+    }
+    const id = raw.trim()
+    if (id.length === 0) {
+        throw new Error('"session" must be a non-empty string')
+    }
+    return id
+}
+
+/**
+ * Shared `session` input-schema property. Reused across tools so the wording
+ * (and the lazy-create behavior) stays consistent.
+ */
+const SESSION_PROP = {
+    type: 'string',
+    description:
+        'Target WaClient session id. Omit to use the default session (MCP_SESSION_ID). ' +
+        'Any other id lazily spins up an additional session that shares the same ' +
+        'store / auth backend (rows are scoped per session id). Capped by MCP_MAX_SESSIONS.'
+} as const
 
 const callTool: ToolDefinition = {
     name: 'call',
@@ -71,14 +96,15 @@ const callTool: ToolDefinition = {
                 type: 'boolean',
                 description:
                     'When true, invoke the function and return immediately without awaiting its Promise. Useful for client.connect() during pairing. Rejections are logged via the runtime logger.'
-            }
+            },
+            session: SESSION_PROP
         },
         required: ['path'],
         additionalProperties: false
     },
     handler: async (input, runtime) => {
-        const { path, args, root, noAwait } = parseCallInput(input)
-        const { object, label } = await resolveRoot(root, runtime)
+        const { path, args, root, noAwait, session } = parseCallInput(input)
+        const { object, label } = await resolveRoot(root, runtime, session)
         const { parent, value, lastKey } = resolvePath(object, path)
         if (typeof value === 'function') {
             const decoded = (decodeFromJson(args) as unknown[]) ?? []
@@ -88,6 +114,7 @@ const callTool: ToolDefinition = {
                     ;(invoked as Promise<unknown>).catch((error: unknown) => {
                         runtime.getLogger().warn('noAwait call rejected', {
                             path,
+                            session: session ?? null,
                             message: toError(error).message
                         })
                     })
@@ -149,13 +176,14 @@ const inspectTool: ToolDefinition = {
                 type: 'boolean',
                 description:
                     'Include EventEmitter-inherited methods (on/off/emit/etc). Default false.'
-            }
+            },
+            session: SESSION_PROP
         },
         additionalProperties: false
     },
     handler: async (input, runtime) => {
-        const { path, includeEventEmitter, root } = parseInspectInput(input)
-        const { object, label } = await resolveRoot(root, runtime)
+        const { path, includeEventEmitter, root, session } = parseInspectInput(input)
+        const { object, label } = await resolveRoot(root, runtime, session)
         const { value } = resolvePath(object, path)
         if (value === null || value === undefined) {
             return { root, rootLabel: label, path, value: encodeForJson(value), members: [] }
@@ -212,16 +240,18 @@ const eventsTool: ToolDefinition = {
             regex: {
                 type: 'boolean',
                 description: 'Treat `q` as a regex pattern (case-insensitive).'
-            }
+            },
+            session: SESSION_PROP
         },
         additionalProperties: false
     },
     handler: async (input, runtime) => {
-        const filter = parseEventsInput(input)
-        const events = runtime.listEvents(filter)
+        const { filter, session } = parseEventsInput(input)
+        const events = runtime.listEvents(filter, session)
         return {
             count: events.length,
-            bufferSize: runtime.bufferSize(),
+            session: session ?? runtime.getConfig().sessionId,
+            bufferSize: runtime.bufferSize(session),
             events
         }
     }
@@ -229,15 +259,21 @@ const eventsTool: ToolDefinition = {
 
 const eventsClearTool: ToolDefinition = {
     name: 'events_clear',
-    description: 'Clear the entire event buffer. Returns the number of events dropped.',
+    description:
+        "Clear a session's event buffer (default session when `session` is omitted). " +
+        'Returns the number of events dropped.',
     inputSchema: {
         type: 'object',
-        properties: {},
+        properties: {
+            session: SESSION_PROP
+        },
         additionalProperties: false
     },
-    handler: async (_input, runtime) => {
-        const dropped = runtime.clearEvents()
-        return { dropped }
+    handler: async (input, runtime) => {
+        const obj = (input ?? {}) as Record<string, unknown>
+        const session = parseSession(obj.session)
+        const dropped = runtime.clearEvents(session)
+        return { dropped, session: session ?? runtime.getConfig().sessionId }
     }
 }
 
@@ -280,6 +316,12 @@ const logsTool: ToolDefinition = {
             regex: {
                 type: 'boolean',
                 description: 'Treat `q` as a regex pattern (case-insensitive).'
+            },
+            session: {
+                type: 'string',
+                description:
+                    'Keep only log lines emitted by this session (matched on context.session). ' +
+                    'Omit to return every line, including untagged server/global logs.'
             }
         },
         additionalProperties: false
@@ -289,6 +331,7 @@ const logsTool: ToolDefinition = {
         const logs = runtime.listLogs(filter)
         return {
             count: logs.length,
+            session: filter.session ?? null,
             bufferSize: runtime.bufferLogsSize(),
             logs
         }
@@ -315,16 +358,17 @@ const RESTART_MODES = ['soft', 'process_exit'] as const
 const restartTool: ToolDefinition = {
     name: 'restart',
     description:
-        'Restart the runtime state. ' +
-        '"soft" (default): disconnect + drop the WaClient, clear the event and log buffers, ' +
-        'reset their seq counters; the process stays alive, and the next tool call recreates ' +
-        'everything from the same config – code changes loaded into the Node module cache ' +
-        'are NOT picked up. ' +
-        '"process_exit": same cleanup, then exit the process with code 0 so a supervisor ' +
-        '(nodemon, Claude Code respawn-on-reconnect, etc.) starts a fresh process. With no ' +
-        'supervisor, the caller must reconnect the MCP server manually (e.g. /mcp in Claude ' +
-        'Code) for the next tool call to land. The exit is scheduled ~150ms after the response ' +
-        'is sent so the JSON-RPC reply has time to flush.',
+        'Restart runtime state. ' +
+        '"soft" (default): disconnect + drop one session\'s WaClient (default session when ' +
+        '`session` is omitted), clear its event buffer + the shared log buffer, reset seq ' +
+        'counters; the process stays alive and the next tool call recreates the client from ' +
+        'the same config - code changes loaded into the Node module cache are NOT picked up. ' +
+        'Other sessions and the shared store are left untouched. ' +
+        '"process_exit": disconnect EVERY session, destroy the shared store, then exit with ' +
+        'code 0 so a supervisor (nodemon, Claude Code respawn-on-reconnect, etc.) starts a ' +
+        'fresh process. With no supervisor, reconnect the MCP server manually (e.g. /mcp in ' +
+        'Claude Code) for the next tool call to land. The exit is scheduled ~150ms after the ' +
+        'response is sent so the JSON-RPC reply has time to flush.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -333,20 +377,19 @@ const restartTool: ToolDefinition = {
                 enum: RESTART_MODES as unknown as string[],
                 description:
                     '"soft" (default) keeps the process; "process_exit" terminates the process so a supervisor can respawn it.'
-            }
+            },
+            session: SESSION_PROP
         },
         additionalProperties: false
     },
     handler: async (input, runtime) => {
-        const mode = parseRestartInput(input)
-        const eventsBefore = runtime.bufferSize()
-        const logsBefore = runtime.bufferLogsSize()
-        await runtime.destroyClient()
-        runtime.clearEvents()
-        runtime.clearLogs()
-        runtime.resetSequences()
+        const { mode, session } = parseRestartInput(input)
+        const resolvedSession = session ?? runtime.getConfig().sessionId
 
         if (mode === 'process_exit') {
+            const eventsBefore = runtime.bufferSize(session)
+            const logsBefore = runtime.bufferLogsSize()
+            await runtime.destroyAll()
             setTimeout(() => {
                 runtime
                     .closeLogFile()
@@ -356,14 +399,25 @@ const restartTool: ToolDefinition = {
             return {
                 ok: true,
                 mode,
+                session: resolvedSession,
                 eventsCleared: eventsBefore,
                 logsCleared: logsBefore,
                 note: 'process will exit ~150ms after this response; reconnect the MCP transport for the next tool call'
             }
         }
+
+        // soft: reset just the targeted session. Logs share one ring for the
+        // whole process, so the log buffer is cleared wholesale either way.
+        const eventsBefore = runtime.bufferSize(session)
+        const logsBefore = runtime.bufferLogsSize()
+        await runtime.destroyClient(session)
+        runtime.clearEvents(session)
+        runtime.clearLogs()
+        runtime.resetSequences(session)
         return {
             ok: true,
             mode,
+            session: resolvedSession,
             eventsCleared: eventsBefore,
             logsCleared: logsBefore
         }
@@ -373,26 +427,31 @@ const restartTool: ToolDefinition = {
 const lifecycleTool: ToolDefinition = {
     name: 'lifecycle',
     description:
-        'Manage the underlying WaClient instance. Actions: ' +
-        '"status" reports config + whether client is created, ' +
-        '"start" creates the client (no connect), ' +
-        '"destroy" disconnects + drops the client (next call recreates it).',
+        'Manage a WaClient session (default session when `session` is omitted). Actions: ' +
+        '"status" reports config, the resolved session, whether its client is created, its ' +
+        'state, and a summary of every live session; ' +
+        '"start" creates the session client (no connect); ' +
+        '"destroy" disconnects + drops that session client (next call recreates it). ' +
+        'The shared store stays open for the other sessions - only `restart` with ' +
+        'mode "process_exit" tears the whole process (and store) down.',
     inputSchema: {
         type: 'object',
         properties: {
             action: {
                 type: 'string',
                 enum: ['status', 'start', 'destroy']
-            }
+            },
+            session: SESSION_PROP
         },
         required: ['action'],
         additionalProperties: false
     },
     handler: async (input, runtime) => {
-        const action = parseLifecycleInput(input)
+        const { action, session } = parseLifecycleInput(input)
+        const resolvedSession = session ?? runtime.getConfig().sessionId
         switch (action) {
             case 'status': {
-                const client = runtime.getClient()
+                const client = runtime.getClient(session)
                 let state: unknown = null
                 if (client) {
                     try {
@@ -403,18 +462,20 @@ const lifecycleTool: ToolDefinition = {
                 }
                 return {
                     config: runtime.getConfig(),
+                    session: resolvedSession,
                     clientCreated: client !== null,
                     state: encodeForJson(state),
-                    bufferSize: runtime.bufferSize()
+                    bufferSize: runtime.bufferSize(session),
+                    sessions: runtime.listSessions()
                 }
             }
             case 'start': {
-                await runtime.ensureClient()
-                return { ok: true }
+                await runtime.ensureClient(session)
+                return { ok: true, session: resolvedSession }
             }
             case 'destroy': {
-                await runtime.destroyClient()
-                return { ok: true }
+                await runtime.destroyClient(session)
+                return { ok: true, session: resolvedSession }
             }
         }
     }
@@ -427,8 +488,9 @@ const AsyncFunctionCtor = Object.getPrototypeOf(async function () {}).constructo
 const evalTool: ToolDefinition = {
     name: 'eval',
     description:
-        'Execute arbitrary JS in the MCP runtime with `client` (WaClient instance) and `lib` ' +
-        '(zapo-js module namespace) in scope. **Disabled by default**: requires ' +
+        'Execute arbitrary JS in the MCP runtime with `client` (the WaClient for the selected ' +
+        '`session`, default session when omitted) and `lib` (zapo-js module namespace) in ' +
+        'scope. **Disabled by default**: requires ' +
         '`MCP_EVAL_ENABLED=1` in the MCP process env, otherwise every call is rejected. ' +
         'The source is wrapped in an async function – top-level `await` works. ' +
         'Use `return <expr>` to surface a value; the result is encoded for JSON ' +
@@ -447,7 +509,8 @@ const evalTool: ToolDefinition = {
             noAwait: {
                 type: 'boolean',
                 description: 'Fire-and-forget mode. Defaults to false.'
-            }
+            },
+            session: SESSION_PROP
         },
         required: ['source'],
         additionalProperties: false
@@ -458,13 +521,14 @@ const evalTool: ToolDefinition = {
                 'eval tool is disabled; set MCP_EVAL_ENABLED=1 in the MCP process env to enable'
             )
         }
-        const { source, noAwait } = parseEvalInput(input)
-        const client = await runtime.ensureClient()
+        const { source, noAwait, session } = parseEvalInput(input)
+        const client = await runtime.ensureClient(session)
         const fn = new AsyncFunctionCtor('client', 'lib', source)
         const invoked = fn(client, ZapoLib)
         if (noAwait) {
             invoked.catch((error: unknown) => {
                 runtime.getLogger().warn('eval noAwait rejected', {
+                    session: session ?? null,
                     message: toError(error).message
                 })
             })
@@ -489,7 +553,7 @@ export const TOOLS: readonly ToolDefinition[] = Object.freeze([
 
 const parseCallInput = (
     input: unknown
-): { path: string; args: unknown[]; root: Root; noAwait: boolean } => {
+): { path: string; args: unknown[]; root: Root; noAwait: boolean; session?: string } => {
     if (!input || typeof input !== 'object') {
         throw new Error('call: input must be an object')
     }
@@ -500,28 +564,31 @@ const parseCallInput = (
     const args = Array.isArray(obj.args) ? (obj.args as unknown[]) : []
     const root = parseRoot(obj.root)
     const noAwait = obj.noAwait === true
-    return { path: obj.path, args, root, noAwait }
+    return { path: obj.path, args, root, noAwait, session: parseSession(obj.session) }
 }
 
 const parseInspectInput = (
     input: unknown
-): { path: string; includeEventEmitter: boolean; root: Root } => {
+): { path: string; includeEventEmitter: boolean; root: Root; session?: string } => {
     const obj = (input ?? {}) as Record<string, unknown>
     const path = typeof obj.path === 'string' ? obj.path : ''
     const includeEventEmitter = obj.includeEventEmitter === true
     const root = parseRoot(obj.root)
-    return { path, includeEventEmitter, root }
+    return { path, includeEventEmitter, root, session: parseSession(obj.session) }
 }
 
 const parseEventsInput = (
     input: unknown
 ): {
-    types?: readonly string[]
-    since?: number
-    limit?: number
-    drain?: boolean
-    q?: string
-    regex?: boolean
+    filter: {
+        types?: readonly string[]
+        since?: number
+        limit?: number
+        drain?: boolean
+        q?: string
+        regex?: boolean
+    }
+    session?: string
 } => {
     const obj = (input ?? {}) as Record<string, unknown>
     const types =
@@ -533,7 +600,10 @@ const parseEventsInput = (
     const drain = obj.drain === true
     const q = typeof obj.q === 'string' ? obj.q : undefined
     const regex = obj.regex === true
-    return { types, since, limit, drain, q, regex }
+    return {
+        filter: { types, since, limit, drain, q, regex },
+        session: parseSession(obj.session)
+    }
 }
 
 const parseLogsInput = (
@@ -545,6 +615,7 @@ const parseLogsInput = (
     drain?: boolean
     q?: string
     regex?: boolean
+    session?: string
 } => {
     const obj = (input ?? {}) as Record<string, unknown>
     let levels: readonly ('trace' | 'debug' | 'info' | 'warn' | 'error')[] | undefined
@@ -570,18 +641,20 @@ const parseLogsInput = (
     const drain = obj.drain === true
     const q = typeof obj.q === 'string' ? obj.q : undefined
     const regex = obj.regex === true
-    return { levels, since, limit, drain, q, regex }
+    return { levels, since, limit, drain, q, regex, session: parseSession(obj.session) }
 }
 
-const parseLifecycleInput = (input: unknown): 'status' | 'start' | 'destroy' => {
+const parseLifecycleInput = (
+    input: unknown
+): { action: 'status' | 'start' | 'destroy'; session?: string } => {
     const obj = (input ?? {}) as Record<string, unknown>
     if (obj.action === 'status' || obj.action === 'start' || obj.action === 'destroy') {
-        return obj.action
+        return { action: obj.action, session: parseSession(obj.session) }
     }
     throw new Error('lifecycle: "action" must be "status" | "start" | "destroy"')
 }
 
-const parseEvalInput = (input: unknown): { source: string; noAwait: boolean } => {
+const parseEvalInput = (input: unknown): { source: string; noAwait: boolean; session?: string } => {
     if (!input || typeof input !== 'object') {
         throw new Error('eval: input must be an object')
     }
@@ -589,13 +662,14 @@ const parseEvalInput = (input: unknown): { source: string; noAwait: boolean } =>
     if (typeof obj.source !== 'string' || obj.source.length === 0) {
         throw new Error('eval: "source" must be a non-empty string')
     }
-    return { source: obj.source, noAwait: obj.noAwait === true }
+    return { source: obj.source, noAwait: obj.noAwait === true, session: parseSession(obj.session) }
 }
 
-const parseRestartInput = (input: unknown): 'soft' | 'process_exit' => {
+const parseRestartInput = (input: unknown): { mode: 'soft' | 'process_exit'; session?: string } => {
     const obj = (input ?? {}) as Record<string, unknown>
-    if (obj.mode === undefined || obj.mode === null) return 'soft'
-    if (obj.mode === 'soft' || obj.mode === 'process_exit') return obj.mode
+    const session = parseSession(obj.session)
+    if (obj.mode === undefined || obj.mode === null) return { mode: 'soft', session }
+    if (obj.mode === 'soft' || obj.mode === 'process_exit') return { mode: obj.mode, session }
     throw new Error(`restart: "mode" must be one of ${RESTART_MODES.join(' | ')}`)
 }
 

@@ -211,9 +211,9 @@ test('mcp runtime drives pairing + send/receive against fake-server', async () =
         assert.ok(stateResult.state !== null)
     } finally {
         try {
-            await runtime.destroyClient()
+            await runtime.destroyAll()
         } catch (error) {
-            process.stderr.write(`destroyClient error: ${(error as Error)?.stack ?? error}\n`)
+            process.stderr.write(`destroyAll error: ${(error as Error)?.stack ?? error}\n`)
         }
         try {
             await server.stop()
