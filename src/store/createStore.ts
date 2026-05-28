@@ -54,6 +54,7 @@ import {
 } from '@store/noop.store'
 import type {
     WaCreateStoreOptions,
+    WaCreateStoreOptionsStrict,
     WaStore,
     WaStoreBackend,
     WaStoreMemoryLimitSelection,
@@ -71,6 +72,20 @@ const DEFAULT_CACHE_TTLS_MS = Object.freeze({
     deviceListMs: 5 * 60 * 1000,
     messageSecretMs: 30 * 60 * 1000
 } as const)
+
+const REQUIRED_PROVIDER_DOMAINS = [
+    'auth',
+    'signal',
+    'preKey',
+    'session',
+    'identity',
+    'senderKey',
+    'appState',
+    'messages',
+    'threads',
+    'contacts',
+    'privacyToken'
+] as const
 
 function hasDestroy(value: unknown): value is Destroyable {
     return (
@@ -111,11 +126,21 @@ function resolveStore<T>(
 /**
  * Builds a {@link WaStore} from the configured providers/backends. Each call
  * to `store.session(sessionId)` returns a cached, lock-wrapped per-domain
- * store bundle for that session – every domain defaults to `'memory'` (or
- * `'none'` for the mailbox domains), and the cache domains default to
- * bounded memory with the TTLs in `options.memory.cacheTtlMs`. `auth`
- * defaults to memory too, so the device re-pairs on every restart unless
- * you point it at a persistent backend.
+ * store bundle for that session. Cache domains default to bounded memory
+ * with the TTLs in `options.memory.cacheTtlMs`.
+ *
+ * **Defaults policy:**
+ * - With `backends` empty (or absent), every domain falls back to memory
+ *   (mailbox domains to `'none'`). The session lives only in memory and the
+ *   device re-pairs on every restart.
+ * - With `backends` set, **every persistence domain must be assigned
+ *   explicitly** in `providers` (auth/signal/preKey/session/identity/
+ *   senderKey/appState/privacyToken/messages/threads/contacts). The factory
+ *   throws listing the missing keys. Pass `'memory'` to keep the in-tree
+ *   memory provider for that domain, `'none'` to skip it, or the backend
+ *   name to persist. Cache domains (retry/groupMetadata/deviceList/
+ *   messageSecret) stay opt-in and default to memory - they are small,
+ *   hot, and cheap to rebuild.
  *
  * @example
  * ```ts
@@ -126,34 +151,54 @@ function resolveStore<T>(
  * const store = createStore({
  *     backends: { sqlite: createSqliteStore({ path: '.auth/state.sqlite' }) },
  *     providers: {
- *         auth: 'sqlite',        // pairing creds – persist in production
- *         signal: 'sqlite',      // signal sessions
- *         senderKey: 'sqlite',   // group sender keys
- *         appState: 'sqlite',    // app-state collections
- *         messages: 'sqlite',    // optional message archive
- *         threads: 'sqlite',
- *         contacts: 'sqlite'
+ *         auth: 'sqlite',
+ *         signal: 'sqlite',
+ *         preKey: 'sqlite',
+ *         session: 'sqlite',
+ *         identity: 'sqlite',
+ *         senderKey: 'sqlite',
+ *         appState: 'sqlite',
+ *         privacyToken: 'sqlite',
+ *         messages: 'sqlite',   // 'none' to skip the message archive
+ *         threads: 'sqlite',    // 'none' to skip
+ *         contacts: 'sqlite'    // 'none' to skip
  *     }
+ *     // cacheProviders omitted - retry/groupMetadata/deviceList/
+ *     // messageSecret default to memory
  * })
  *
- * // Memory-only (tests / ephemeral sessions – credentials lost on restart)
+ * // Memory-only (tests / ephemeral sessions - credentials lost on restart)
  * const memStore = createStore({})
- *
- * // Cache tuning
- * createStore({
- *     backends: { sqlite: createSqliteStore({ path: '.auth/state.sqlite' }) },
- *     providers: { auth: 'sqlite', signal: 'sqlite', senderKey: 'sqlite', appState: 'sqlite' },
- *     memory: {
- *         cacheTtlMs: { groupMetadataMs: 10 * 60_000, deviceListMs: 5 * 60_000 },
- *         limits: { groupMetadataGroups: 1024, deviceListUsers: 4096 }
- *     }
- * })
  * ```
  */
-export function createStore<B extends string>(options: WaCreateStoreOptions<B>): WaStore {
+export function createStore(
+    options?: Omit<WaCreateStoreOptions<never>, 'backends' | 'providers'> & {
+        readonly backends?: undefined
+        readonly providers?: undefined
+    }
+): WaStore
+export function createStore<B extends string>(options: WaCreateStoreOptionsStrict<B>): WaStore
+export function createStore<B extends string>(options?: WaCreateStoreOptions<B>): WaStore {
+    options = options ?? {}
     const backends = (options.backends ?? {}) as Readonly<Record<string, WaStoreBackend>>
     const providers = options.providers ?? {}
     const cacheProviders = options.cacheProviders ?? {}
+
+    if (Object.keys(backends).length > 0) {
+        const missingProviders = REQUIRED_PROVIDER_DOMAINS.filter(
+            (domain) => providers[domain] === undefined
+        )
+        if (missingProviders.length > 0) {
+            throw new Error(
+                `createStore: when backends is set, every persistence domain must be assigned ` +
+                    `explicitly via providers. Missing: ${missingProviders
+                        .map((d) => `providers.${d}`)
+                        .join(', ')}. Pass a backend name (e.g. 'sqlite'), 'memory' to use the ` +
+                    `in-tree memory provider, or 'none' to skip the domain. Cache providers ` +
+                    `(retry/groupMetadata/deviceList/messageSecret) stay opt-in and default to memory.`
+            )
+        }
+    }
     const cacheTtlsMs = Object.freeze({
         retry: resolvePositive(
             options.memory?.cacheTtlMs?.retryMs,

@@ -257,6 +257,20 @@ export interface WaCreateStoreOptions<B extends string = string> {
     }
 }
 
+/**
+ * Strict overload shape for {@link createStore} when at least one backend
+ * is registered. Every persistence domain in `providers` is `Required` -
+ * the compiler refuses partial coverage and the IDE highlights the missing
+ * keys. Cache domains stay opt-in (default `'memory'`).
+ */
+export interface WaCreateStoreOptionsStrict<B extends string> extends Omit<
+    WaCreateStoreOptions<B>,
+    'backends' | 'providers'
+> {
+    readonly backends: Readonly<Record<B, WaStoreBackend>>
+    readonly providers: Required<NonNullable<WaCreateStoreOptions<B>['providers']>>
+}
+
 export interface WaStoreMemoryLimitSelection {
     readonly appStateSyncKeys?: number
     readonly appStateCollectionEntries?: number

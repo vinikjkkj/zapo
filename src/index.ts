@@ -234,6 +234,7 @@ export type {
     WaAuthStore,
     WaContactStore,
     WaCreateStoreOptions,
+    WaCreateStoreOptionsStrict,
     WaDeviceListSnapshot,
     WaDeviceListStore,
     WaGroupMetadataSnapshot,

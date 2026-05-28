@@ -38,7 +38,19 @@ function buildClientFor(
                 }
             }
         },
-        providers: { auth: 'mem' }
+        providers: {
+            auth: 'mem',
+            signal: 'mem',
+            preKey: 'mem',
+            session: 'mem',
+            identity: 'mem',
+            senderKey: 'mem',
+            appState: 'mem',
+            privacyToken: 'mem',
+            messages: 'mem',
+            threads: 'mem',
+            contacts: 'mem'
+        }
     })
     return new WaClient({
         store,

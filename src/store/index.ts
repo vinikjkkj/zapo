@@ -1,5 +1,6 @@
 export type {
     WaCreateStoreOptions,
+    WaCreateStoreOptionsStrict,
     WaStore,
     WaStoreBackend,
     WaCacheDomain,

@@ -65,12 +65,15 @@ async function main(): Promise<void> {
         providers: {
             auth: 'sqlite',
             signal: 'sqlite',
+            preKey: 'sqlite',
+            session: 'sqlite',
+            identity: 'sqlite',
             senderKey: 'sqlite',
             appState: 'sqlite',
+            privacyToken: 'sqlite',
             messages: 'sqlite',
             threads: 'sqlite',
-            contacts: 'sqlite',
-            privacyToken: 'sqlite'
+            contacts: 'sqlite'
         }
     })
 

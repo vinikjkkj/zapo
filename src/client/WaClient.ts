@@ -68,7 +68,19 @@ const SYNC_RELATED_PROTOCOL_TYPES = new Set<WaIncomingProtocolType>([
  *
  * const store = createStore({
  *     backends: { sqlite: createSqliteStore({ path: '.auth/state.sqlite' }) },
- *     providers: { auth: 'sqlite', signal: 'sqlite', senderKey: 'sqlite', appState: 'sqlite' }
+ *     providers: {
+ *         auth: 'sqlite',
+ *         signal: 'sqlite',
+ *         preKey: 'sqlite',
+ *         session: 'sqlite',
+ *         identity: 'sqlite',
+ *         senderKey: 'sqlite',
+ *         appState: 'sqlite',
+ *         privacyToken: 'sqlite',
+ *         messages: 'sqlite',
+ *         threads: 'sqlite',
+ *         contacts: 'sqlite'
+ *     }
  * })
  *
  * const client = new WaClient(

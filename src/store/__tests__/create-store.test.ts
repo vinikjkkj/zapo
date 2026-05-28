@@ -90,6 +90,13 @@ test('createStore session lifecycle with backend + memory', async () => {
         backends: { mock: mockAuthBackend },
         providers: {
             auth: 'mock',
+            signal: 'memory',
+            preKey: 'memory',
+            session: 'memory',
+            identity: 'memory',
+            senderKey: 'memory',
+            appState: 'memory',
+            privacyToken: 'memory',
             messages: 'memory',
             threads: 'memory',
             contacts: 'memory'
@@ -118,8 +125,59 @@ test('createStore rejects unknown backend name', () => {
         () =>
             createStore({
                 backends: { db: mockAuthBackend },
-                providers: { auth: 'unknown' as 'db' }
+                providers: {
+                    auth: 'unknown' as 'db',
+                    signal: 'memory',
+                    preKey: 'memory',
+                    session: 'memory',
+                    identity: 'memory',
+                    senderKey: 'memory',
+                    appState: 'memory',
+                    privacyToken: 'memory',
+                    messages: 'none',
+                    threads: 'none',
+                    contacts: 'none'
+                }
             }).session('x'),
         /unknown backend/
     )
+})
+
+test('createStore throws when backends is set but providers omit persistence domains', () => {
+    // Type-system also catches this at compile time via the strict overload;
+    // we cast to bypass and assert the runtime guard is still in place for
+    // JS callers / `as any` users.
+    assert.throws(
+        () =>
+            createStore({
+                backends: { mock: mockAuthBackend },
+                providers: { auth: 'mock' }
+            } as never),
+        /Missing: providers\.signal.*providers\.preKey.*providers\.session.*providers\.identity.*providers\.senderKey.*providers\.appState.*providers\.messages.*providers\.threads.*providers\.contacts.*providers\.privacyToken/s
+    )
+})
+
+test('createStore allows omitting cacheProviders when backends is set (caches default to memory)', () => {
+    const store = createStore({
+        backends: { mock: mockAuthBackend },
+        providers: {
+            auth: 'mock',
+            signal: 'memory',
+            preKey: 'memory',
+            session: 'memory',
+            identity: 'memory',
+            senderKey: 'memory',
+            appState: 'memory',
+            privacyToken: 'memory',
+            messages: 'none',
+            threads: 'none',
+            contacts: 'none'
+        }
+        // cacheProviders intentionally omitted
+    })
+    const session = store.session('x')
+    assert.ok(session.retry)
+    assert.ok(session.groupMetadata)
+    assert.ok(session.deviceList)
+    assert.ok(session.messageSecret)
 })
