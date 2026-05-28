@@ -10,6 +10,8 @@ wa-mob
 coverage
 *.heap**
 *.cpuprofile
+bench-profiles/
+bench-profiles-*/
 /test/
 .claude
 *.log
