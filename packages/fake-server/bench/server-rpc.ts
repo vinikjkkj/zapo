@@ -221,6 +221,102 @@ export class ServerRpc {
         return result.path
     }
 
+    // ─── Bench-specific RPC wrappers (push from server side) ──────
+
+    public async peerSendHistorySync(input: {
+        peerId: string
+        chunkOrder?: number
+        progress?: number
+        conversations?: readonly {
+            id: string
+            name?: string
+            unreadCount?: number
+            messages?: readonly {
+                id: string
+                fromMe: boolean
+                timestamp: number
+                conversation: string
+            }[]
+        }[]
+        pushnames?: readonly { id: string; pushname: string }[]
+    }): Promise<void> {
+        await this.call('peerSendHistorySync', input)
+    }
+
+    public async peerSendAppStateSyncKeyShare(input: {
+        peerId: string
+        keys: { keyId: Uint8Array; keyData: Uint8Array; timestamp: number }[]
+    }): Promise<void> {
+        await this.call('peerSendAppStateSyncKeyShare', {
+            peerId: input.peerId,
+            keys: input.keys.map((k) => ({
+                keyIdBytes: Array.from(k.keyId),
+                keyDataBytes: Array.from(k.keyData),
+                timestamp: k.timestamp
+            }))
+        })
+    }
+
+    public async pipelineSendReceiptBatch(
+        receipts: readonly {
+            id: string
+            from: string
+            type?: string
+            t?: number
+        }[]
+    ): Promise<void> {
+        await this.call('pipelineSendReceiptBatch', { receipts })
+    }
+
+    public async setupGroupBenchHandlers(): Promise<void> {
+        await this.call('setupGroupBenchHandlers')
+    }
+
+    public async registerAppStateSyncKey(keyId: Uint8Array, keyData: Uint8Array): Promise<void> {
+        await this.call('registerAppStateSyncKey', {
+            keyIdBytes: Array.from(keyId),
+            keyDataBytes: Array.from(keyData)
+        })
+    }
+
+    public async setupAppStateBootstrap(input: {
+        name: string
+        syncKeyId: Uint8Array
+        syncKeyData: Uint8Array
+        mutation: {
+            operation: 'set' | 'remove'
+            index: string
+            value?: Record<string, unknown> | null
+            version: number
+        }
+    }): Promise<void> {
+        await this.call('setupAppStateBootstrap', {
+            name: input.name,
+            syncKeyIdBytes: Array.from(input.syncKeyId),
+            syncKeyDataBytes: Array.from(input.syncKeyData),
+            mutation: input.mutation
+        })
+    }
+
+    public async setupAppStateExternalSnapshot(input: {
+        name: string
+        syncKeyId: Uint8Array
+        syncKeyData: Uint8Array
+        mutations: readonly {
+            operation: 'set' | 'remove'
+            index: string
+            value?: Record<string, unknown> | null
+            version: number
+        }[]
+    }): Promise<void> {
+        await this.call('setupAppStateExternalSnapshot', {
+            name: input.name,
+            syncKeyIdBytes: Array.from(input.syncKeyId),
+            syncKeyDataBytes: Array.from(input.syncKeyData),
+            mutations: input.mutations
+        })
+    }
+
     public async stop(): Promise<void> {
         try {
             await this.call('stop')

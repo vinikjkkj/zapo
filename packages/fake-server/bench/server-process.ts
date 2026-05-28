@@ -15,6 +15,11 @@ import { resolve as resolvePath } from 'node:path'
 
 import type { FakePeer } from '../src/api/FakePeer'
 import { FakeWaServer, type WaFakeConnectionPipeline } from '../src/api/FakeWaServer'
+import { buildExternalBlobReference } from '../src/protocol/iq/appstate-sync'
+import { buildIqResult } from '../src/protocol/iq/router'
+import { buildReceipt, type FakeReceiptType } from '../src/protocol/push/receipt'
+import { FakeAppStateCollection } from '../src/state/fake-app-state-collection'
+import type { BinaryNode } from '../src/transport/codec'
 
 // ─── State ────────────────────────────────────────────────────────────
 
@@ -300,6 +305,232 @@ async function handleTakeSnapshot(params: {
     return { path: out }
 }
 
+// ─── Bench-specific handlers ──────────────────────────────────────────
+
+interface SerializedConversationMsg {
+    readonly id: string
+    readonly fromMe: boolean
+    readonly timestamp: number
+    readonly conversation: string
+}
+
+interface SerializedConversation {
+    readonly id: string
+    readonly name?: string
+    readonly unreadCount?: number
+    readonly messages?: readonly SerializedConversationMsg[]
+}
+
+async function handlePeerSendHistorySync(params: {
+    peerId: string
+    chunkOrder?: number
+    progress?: number
+    conversations?: readonly SerializedConversation[]
+    pushnames?: readonly { id: string; pushname: string }[]
+}): Promise<void> {
+    const peer = peersById.get(params.peerId)
+    if (!peer) throw new Error(`peer ${params.peerId} not found`)
+    await peer.sendHistorySync({
+        chunkOrder: params.chunkOrder,
+        progress: params.progress,
+        conversations: params.conversations?.map((c) => ({
+            id: c.id,
+            name: c.name,
+            unreadCount: c.unreadCount,
+            messages: c.messages?.map((m) => ({
+                id: m.id,
+                fromMe: m.fromMe,
+                timestamp: m.timestamp,
+                message: { conversation: m.conversation }
+            }))
+        })),
+        pushnames: params.pushnames
+    })
+}
+
+async function handlePeerSendAppStateSyncKeyShare(params: {
+    peerId: string
+    keys: { keyIdBytes: number[]; keyDataBytes: number[]; timestamp: number }[]
+}): Promise<void> {
+    const peer = peersById.get(params.peerId)
+    if (!peer) throw new Error(`peer ${params.peerId} not found`)
+    await peer.sendAppStateSyncKeyShare({
+        keys: params.keys.map((k) => ({
+            keyId: new Uint8Array(k.keyIdBytes),
+            keyData: new Uint8Array(k.keyDataBytes),
+            timestamp: k.timestamp
+        }))
+    })
+}
+
+async function handlePipelineSendReceiptBatch(params: {
+    receipts: { id: string; from: string; type?: FakeReceiptType; t?: number }[]
+}): Promise<void> {
+    if (!pipeline) throw new Error('no pipeline')
+    for (const r of params.receipts) {
+        await pipeline.sendStanza(buildReceipt(r))
+    }
+}
+
+function findChildNode(node: BinaryNode, tag: string): BinaryNode | undefined {
+    if (!Array.isArray(node.content)) return undefined
+    return node.content.find((child) => child.tag === tag)
+}
+
+function handleSetupGroupBenchHandlers(): void {
+    if (!server) throw new Error('server not started')
+    server.registerIqHandler(
+        { xmlns: 'w:g2', type: 'set', childTag: 'create' },
+        (iq) => {
+            const create = findChildNode(iq, 'create')
+            const participantJids: string[] = []
+            if (create && Array.isArray(create.content)) {
+                for (const child of create.content) {
+                    if (child.tag === 'participant' && child.attrs.jid) {
+                        participantJids.push(child.attrs.jid)
+                    }
+                }
+            }
+            const result = buildIqResult(iq)
+            const fakeGroupJid = `120363${String(900_000_700_000 + Math.floor(Math.random() * 1_000_000)).padStart(15, '0')}@g.us`
+            return {
+                ...result,
+                attrs: { ...result.attrs, from: '@g.us' },
+                content: [
+                    {
+                        tag: 'group',
+                        attrs: {
+                            id: fakeGroupJid,
+                            subject: create?.attrs.subject ?? 'New Group',
+                            creation: String(Math.floor(Date.now() / 1_000)),
+                            creator: participantJids[0] ?? ''
+                        },
+                        content: participantJids.map((jid) => ({
+                            tag: 'participant',
+                            attrs: { jid, add_request: 'success' }
+                        }))
+                    }
+                ]
+            }
+        },
+        'bench-group-create'
+    )
+    for (const action of ['add', 'remove', 'promote', 'demote'] as const) {
+        server.registerIqHandler(
+            { xmlns: 'w:g2', type: 'set', childTag: action },
+            (iq) => {
+                const actionNode = findChildNode(iq, action)
+                const participants =
+                    actionNode && Array.isArray(actionNode.content)
+                        ? actionNode.content.filter((c) => c.tag === 'participant')
+                        : []
+                const result = buildIqResult(iq)
+                return {
+                    ...result,
+                    content: [
+                        {
+                            tag: action,
+                            attrs: actionNode?.attrs ?? {},
+                            content: participants.map((p) => ({
+                                tag: 'participant',
+                                attrs: { ...p.attrs, add_request: 'success' }
+                            }))
+                        }
+                    ]
+                }
+            },
+            `bench-group-${action}`
+        )
+    }
+}
+
+function handleRegisterAppStateSyncKey(params: {
+    keyIdBytes: number[]
+    keyDataBytes: number[]
+}): void {
+    if (!server) throw new Error('server not started')
+    server.registerAppStateSyncKey(
+        new Uint8Array(params.keyIdBytes),
+        new Uint8Array(params.keyDataBytes)
+    )
+}
+
+interface SerializedMutation {
+    readonly operation: 'set' | 'remove'
+    readonly index: string
+    readonly value?: Record<string, unknown> | null
+    readonly version: number
+}
+
+async function handleSetupAppStateBootstrap(params: {
+    name: string
+    syncKeyIdBytes: number[]
+    syncKeyDataBytes: number[]
+    mutation: SerializedMutation
+}): Promise<void> {
+    if (!server) throw new Error('server not started')
+    const keyId = new Uint8Array(params.syncKeyIdBytes)
+    const keyData = new Uint8Array(params.syncKeyDataBytes)
+    server.registerAppStateSyncKey(keyId, keyData)
+    const coll = new FakeAppStateCollection({ name: params.name, keyId, keyData })
+    await coll.applyMutation({
+        operation: params.mutation.operation,
+        index: params.mutation.index,
+        value: (params.mutation.value ?? null) as never,
+        version: params.mutation.version
+    })
+    const patch = await coll.encodePendingPatch()
+    const version = coll.version
+    let shipped = false
+    server.provideAppStateCollection(params.name, () => {
+        if (shipped) return { name: params.name, version }
+        shipped = true
+        return { name: params.name, version, patches: [patch] }
+    })
+}
+
+async function handleSetupAppStateExternalSnapshot(params: {
+    name: string
+    syncKeyIdBytes: number[]
+    syncKeyDataBytes: number[]
+    mutations: readonly SerializedMutation[]
+}): Promise<void> {
+    if (!server) throw new Error('server not started')
+    const keyId = new Uint8Array(params.syncKeyIdBytes)
+    const keyData = new Uint8Array(params.syncKeyDataBytes)
+    const coll = new FakeAppStateCollection({ name: params.name, keyId, keyData })
+    for (const m of params.mutations)
+        await coll.applyMutation({
+            operation: m.operation,
+            index: m.index,
+            value: (m.value ?? null) as never,
+            version: m.version
+        })
+    const snapshotBytes = await coll.encodeSnapshot()
+    const snapshotVersion = coll.version
+    const mediaBlob = await server.publishMediaBlob({
+        mediaType: 'md-app-state',
+        plaintext: snapshotBytes
+    })
+    const srv = server
+    let shipped = false
+    server.provideAppStateCollection(params.name, () => {
+        if (shipped) return { name: params.name, version: snapshotVersion }
+        shipped = true
+        return {
+            name: params.name,
+            version: snapshotVersion,
+            snapshot: buildExternalBlobReference({
+                mediaKey: mediaBlob.mediaKey,
+                directPath: srv.mediaUrl(mediaBlob.path),
+                fileSha256: mediaBlob.fileSha256,
+                fileEncSha256: mediaBlob.fileEncSha256,
+                fileSizeBytes: mediaBlob.fileLength
+            })
+        }
+    })
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────
 
 const handlers: Record<
@@ -329,7 +560,22 @@ const handlers: Record<
     mediaProxyAgent: handleMediaProxyAgent,
     startProfiling: handleStartProfiling as (p: Record<string, unknown>) => Promise<void>,
     stopProfiling: handleStopProfiling as (p: Record<string, unknown>) => Promise<unknown>,
-    takeSnapshot: handleTakeSnapshot as (p: Record<string, unknown>) => Promise<unknown>
+    takeSnapshot: handleTakeSnapshot as (p: Record<string, unknown>) => Promise<unknown>,
+    peerSendHistorySync: handlePeerSendHistorySync as (p: Record<string, unknown>) => Promise<void>,
+    peerSendAppStateSyncKeyShare: handlePeerSendAppStateSyncKeyShare as (
+        p: Record<string, unknown>
+    ) => Promise<void>,
+    pipelineSendReceiptBatch: handlePipelineSendReceiptBatch as (
+        p: Record<string, unknown>
+    ) => Promise<void>,
+    setupGroupBenchHandlers: handleSetupGroupBenchHandlers as (p: Record<string, unknown>) => void,
+    registerAppStateSyncKey: handleRegisterAppStateSyncKey as (p: Record<string, unknown>) => void,
+    setupAppStateBootstrap: handleSetupAppStateBootstrap as (
+        p: Record<string, unknown>
+    ) => Promise<void>,
+    setupAppStateExternalSnapshot: handleSetupAppStateExternalSnapshot as (
+        p: Record<string, unknown>
+    ) => Promise<void>
 }
 
 process.on('message', async (msg: RpcRequest) => {
