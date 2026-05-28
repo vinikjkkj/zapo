@@ -113,7 +113,7 @@ export class WaSenderKeyMongoStore extends BaseMongoStore implements WaSenderKey
                 }
             }
         })
-        await col.bulkWrite(ops)
+        await col.bulkWrite(ops, { ordered: false })
     }
 
     public async getGroupSenderKeyList(groupId: string): Promise<{

@@ -160,7 +160,7 @@ export class WaSessionMongoStore extends BaseMongoStore implements WaSessionStor
                 }
             }
         })
-        await col.bulkWrite(ops)
+        await col.bulkWrite(ops, { ordered: false })
     }
 
     public async deleteSession(address: SignalAddress): Promise<void> {

@@ -131,7 +131,7 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
                         upsert: true
                     }
                 }))
-                await prekeys.bulkWrite(ops)
+                await prekeys.bulkWrite(ops, { ordered: false })
             }
 
             await metaCol.updateOne(
