@@ -431,7 +431,7 @@ const lifecycleTool: ToolDefinition = {
         '"status" reports config, the resolved session, whether its client is created, its ' +
         'state, and a summary of every live session; ' +
         '"start" creates the session client (no connect); ' +
-        '"destroy" disconnects + drops that session client (next call recreates it). ' +
+        '"destroy" disconnects + drops that session and frees its slot (next call recreates it). ' +
         'The shared store stays open for the other sessions - only `restart` with ' +
         'mode "process_exit" tears the whole process (and store) down.',
     inputSchema: {

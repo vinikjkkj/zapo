@@ -116,6 +116,25 @@ test('maxSessions caps lazy session creation', () => {
     assert.equal(runtime.bufferSize('one'), 2)
 })
 
+test('destroying a session reclaims its maxSessions slot', async () => {
+    const runtime = new McpRuntime(cfg({ maxSessions: 2 }))
+    recordEvent(runtime, 'message', {}, 'one')
+    recordEvent(runtime, 'message', {}, 'two')
+    assert.throws(() => recordEvent(runtime, 'message', {}, 'three'), /max sessions reached/)
+
+    // destroy removes the state entirely: frees the slot AND drops its buffer
+    await runtime.destroyClient('one')
+    assert.equal(runtime.bufferSize('one'), 0)
+    assert.deepStrictEqual(
+        runtime.listSessions().map((s) => s.sessionId),
+        ['two']
+    )
+
+    // the freed slot is now reusable
+    recordEvent(runtime, 'message', {}, 'three')
+    assert.equal(runtime.bufferSize('three'), 1)
+})
+
 test('events tool routes by session', async () => {
     const runtime = new McpRuntime(cfg())
     recordEvent(runtime, 'message', { id: 'A' }, 'a')

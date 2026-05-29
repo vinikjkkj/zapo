@@ -673,15 +673,18 @@ export class McpRuntime {
     }
 
     /**
-     * Disconnect + drop one session's client (default session when omitted).
-     * The shared store stays open for the other sessions - use
-     * {@link destroyAll} to tear the whole runtime (store included) down.
+     * Disconnect + drop one session (default session when omitted): tear down
+     * its client, detach listeners, and remove its state - freeing a
+     * `maxSessions` slot and discarding its buffered events. The shared store
+     * stays open for the other sessions; use {@link destroyAll} to tear the
+     * whole runtime (store included) down.
      */
     public async destroyClient(session?: string): Promise<void> {
-        const state = this.peekSession(session)
-        if (state) {
-            await this.teardownSessionClient(state)
-        }
+        const id = this.resolveSessionId(session)
+        const state = this.sessions.get(id)
+        if (!state) return
+        await this.teardownSessionClient(state)
+        this.sessions.delete(id)
     }
 
     /** Disconnect every session client and destroy the shared store. */
