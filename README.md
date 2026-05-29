@@ -93,7 +93,7 @@ client.on('auth_paired', ({ credentials }) => {
 
 client.on('message', async (event) => {
     if (event.message?.conversation === 'ping') {
-        await client.message.send(event.chatJid!, 'pong')
+        await client.message.send(event.key.remoteJid, 'pong')
     }
 })
 
