@@ -10,7 +10,7 @@ import { bytesToHex } from '@util/bytes'
 export type PublishProtocolMessageToDeviceFn = (
     deviceJid: string,
     protocolMessage: Proto.Message.IProtocolMessage,
-    options?: { readonly id?: string }
+    options?: { readonly id?: string; readonly pushPriority?: 'high' | 'high_force' }
 ) => Promise<WaMessagePublishResult>
 
 export type AppStateSyncKeyProtocol = {

@@ -504,7 +504,7 @@ export class WaMessageDispatchCoordinator {
     public async publishProtocolMessageToDevice(
         deviceJid: string,
         protocolMessage: Proto.Message.IProtocolMessage,
-        options?: { readonly id?: string }
+        options?: { readonly id?: string; readonly pushPriority?: 'high' | 'high_force' }
     ): Promise<WaMessagePublishResult> {
         return this.publishSignalMessage({
             to: deviceJid,
@@ -512,7 +512,7 @@ export class WaMessageDispatchCoordinator {
             id: options?.id,
             type: 'text',
             category: 'peer',
-            pushPriority: 'high'
+            pushPriority: options?.pushPriority ?? 'high'
         })
     }
 

@@ -116,7 +116,7 @@ export function createPeerDataOperationRequester(
         const result = await publishProtocolMessageToDevice(
             toUserJid(meJid),
             buildRequestProtocolMessage(type, body),
-            { id }
+            { id, pushPriority: 'high_force' }
         )
         return result.id
     }
