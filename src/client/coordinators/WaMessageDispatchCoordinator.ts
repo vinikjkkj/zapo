@@ -331,7 +331,8 @@ export class WaMessageDispatchCoordinator {
             optionsLevel: optionsCtx,
             quote: options.quote,
             forward: options.forward,
-            mentions: options.mentions
+            mentions: options.mentions,
+            meLid: this.deps.getCurrentCredentials()?.meLid
         })
         const withCtx = ctx ? applyContextInfo(built.message, ctx) : built.message
         const withViewOnce = options.viewOnce ? wrapAsViewOnce(withCtx) : withCtx

@@ -214,10 +214,9 @@ export class SignalDeviceSyncApi {
      * (and vice versa). Skips users with no cached snapshot — the alt gets
      * recorded on the next {@link syncDeviceList} sweep.
      */
-    private async propagateAltUserJids(
-        results: readonly SignalLidSyncResult[]
-    ): Promise<void> {
+    private async propagateAltUserJids(results: readonly SignalLidSyncResult[]): Promise<void> {
         if (!this.deviceListStore || results.length === 0) return
+        const nowMs = Date.now()
         const lidByPhoneJid = new Map<string, string>()
         const phoneJids: string[] = []
         for (const entry of results) {
@@ -227,7 +226,7 @@ export class SignalDeviceSyncApi {
             }
         }
         if (phoneJids.length === 0) return
-        const existing = await this.deviceListStore.getUserDevicesBatch(phoneJids)
+        const existing = await this.deviceListStore.getUserDevicesBatch(phoneJids, nowMs)
         const updates: {
             readonly userJid: string
             readonly altUserJid: string
@@ -244,7 +243,7 @@ export class SignalDeviceSyncApi {
                 userJid: snapshot.userJid,
                 altUserJid: lidJid,
                 deviceJids: snapshot.deviceJids,
-                updatedAtMs: snapshot.updatedAtMs
+                updatedAtMs: nowMs
             })
         }
         if (updates.length > 0) {

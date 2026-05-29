@@ -1,4 +1,5 @@
 import type { Proto } from '@proto'
+import { isGroupOrBroadcastJid } from '@protocol/jid'
 
 export interface WaSendContextInfo {
     readonly quotedMessageId?: string
@@ -139,6 +140,7 @@ type WaQuoteSource = {
         readonly id?: string
         readonly remoteJid?: string
         readonly participant?: string
+        readonly fromMe?: boolean
     }
     readonly id?: string
     readonly remoteJid?: string
@@ -154,6 +156,13 @@ export interface WaSendContextResolveInput {
     readonly quote?: WaQuoteSource
     readonly forward?: WaForwardSource
     readonly mentions?: readonly string[]
+    /**
+     * LID-form self user JID. Used as the DM-quote `participant` fallback when
+     * the quoted message is `fromMe` and no explicit participant was provided.
+     * Mirrors wa-web's `getSender(msg)` (returns `msg.from`, which for 1:1 is
+     * `fromMe ? me : peer`).
+     */
+    readonly meLid?: string
 }
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] }
@@ -167,8 +176,16 @@ export function resolveSendContextInfo(input: WaSendContextResolveInput): WaSend
     if (input.quote) {
         const q = input.quote
         ctx.quotedMessageId = q.id ?? q.key?.id ?? ctx.quotedMessageId
-        ctx.quotedParticipant = q.participant ?? q.key?.participant ?? ctx.quotedParticipant
-        ctx.quotedRemoteJid = q.remoteJid ?? q.key?.remoteJid ?? ctx.quotedRemoteJid
+        const explicit = q.participant ?? q.key?.participant
+        const quotedRemote = q.remoteJid ?? q.key?.remoteJid
+        const dmFallback =
+            explicit === undefined && quotedRemote && !isGroupOrBroadcastJid(quotedRemote)
+                ? q.key?.fromMe
+                    ? input.meLid
+                    : quotedRemote
+                : undefined
+        ctx.quotedParticipant = explicit ?? dmFallback ?? ctx.quotedParticipant
+        ctx.quotedRemoteJid = quotedRemote ?? ctx.quotedRemoteJid
         ctx.quotedMessage = q.message ?? ctx.quotedMessage
     }
 

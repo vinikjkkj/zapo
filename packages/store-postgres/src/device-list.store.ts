@@ -162,10 +162,7 @@ export class WaDeviceListPgStore extends BasePgStore implements WaDeviceListStor
     }
 }
 
-function decodePgSnapshot(
-    userJid: string,
-    row: Record<string, unknown>
-): WaDeviceListSnapshot {
+function decodePgSnapshot(userJid: string, row: Record<string, unknown>): WaDeviceListSnapshot {
     const parsed: unknown = JSON.parse(row.device_jids_json as string)
     if (!Array.isArray(parsed)) {
         throw new Error('device_list_cache.device_jids_json must be an array')

@@ -114,6 +114,44 @@ test('resolveSendContextInfo resolves quote from WaQuoteRef shape', () => {
     assert.deepEqual(result?.quotedMessage, { conversation: 'orig' })
 })
 
+test('resolveSendContextInfo derives DM quote participant from remoteJid when peer-authored', () => {
+    const result = resolveSendContextInfo({
+        quote: { key: { id: 'm-3', remoteJid: 'peer@lid', fromMe: false } }
+    })
+    assert.equal(result?.quotedParticipant, 'peer@lid')
+    assert.equal(result?.quotedRemoteJid, 'peer@lid')
+})
+
+test('resolveSendContextInfo derives DM quote participant from meLid when fromMe', () => {
+    const result = resolveSendContextInfo({
+        quote: { key: { id: 'm-4', remoteJid: 'peer@lid', fromMe: true } },
+        meLid: 'me@lid'
+    })
+    assert.equal(result?.quotedParticipant, 'me@lid')
+    assert.equal(result?.quotedRemoteJid, 'peer@lid')
+})
+
+test('resolveSendContextInfo does not derive DM fallback for group quote remoteJid', () => {
+    const result = resolveSendContextInfo({
+        quote: { key: { id: 'm-5', remoteJid: 'g@g.us', fromMe: false } }
+    })
+    assert.equal(result?.quotedParticipant, undefined)
+})
+
+test('resolveSendContextInfo prefers explicit quote participant over DM fallback', () => {
+    const result = resolveSendContextInfo({
+        quote: {
+            key: {
+                id: 'm-6',
+                remoteJid: 'peer@lid',
+                participant: 'explicit@lid',
+                fromMe: false
+            }
+        }
+    })
+    assert.equal(result?.quotedParticipant, 'explicit@lid')
+})
+
 test('resolveSendContextInfo applies forward with default score', () => {
     const result = resolveSendContextInfo({ forward: true })
     assert.equal(result?.isForwarded, true)

@@ -19,10 +19,13 @@ export class WaDeviceListRedisStore extends BaseRedisStore implements WaDeviceLi
 
     public async upsertUserDevicesBatch(snapshots: readonly WaDeviceListSnapshot[]): Promise<void> {
         if (snapshots.length === 0) return
-        const previousAltKeys = await Promise.all(
-            snapshots.map((snapshot) =>
-                this.redis.hget(this.k('devlist', this.sessionId, snapshot.userJid), 'alt_user_jid')
-            )
+        const readPipeline = this.redis.pipeline()
+        for (const snapshot of snapshots) {
+            readPipeline.hget(this.k('devlist', this.sessionId, snapshot.userJid), 'alt_user_jid')
+        }
+        const readResults = (await readPipeline.exec()) ?? []
+        const previousAltKeys = readResults.map(
+            (result): string | null => (result?.[1] as string | null) ?? null
         )
         const pipeline = this.redis.pipeline()
         for (let index = 0; index < snapshots.length; index += 1) {

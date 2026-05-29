@@ -116,10 +116,10 @@ export class WaDeviceListSqliteStore extends BaseSqliteStore implements WaDevice
         const expiresAtMs = asNumber(row.expires_at_ms, 'device_list_cache.expires_at_ms')
         if (expiresAtMs <= nowMs) {
             const expiredUserJid = asString(row.user_jid, 'device_list_cache.user_jid')
-            db.run(
-                `DELETE FROM device_list_cache WHERE session_id = ? AND user_jid = ?`,
-                [this.options.sessionId, expiredUserJid]
-            )
+            db.run(`DELETE FROM device_list_cache WHERE session_id = ? AND user_jid = ?`, [
+                this.options.sessionId,
+                expiredUserJid
+            ])
             return null
         }
         const userJid = asString(row.user_jid, 'device_list_cache.user_jid')

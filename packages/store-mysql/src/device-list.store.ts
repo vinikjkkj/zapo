@@ -152,10 +152,7 @@ export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceLi
     }
 }
 
-function decodeMysqlSnapshot(
-    userJid: string,
-    row: Record<string, unknown>
-): WaDeviceListSnapshot {
+function decodeMysqlSnapshot(userJid: string, row: Record<string, unknown>): WaDeviceListSnapshot {
     const rawJson =
         row.device_jids_json instanceof Uint8Array
             ? TEXT_DECODER.decode(row.device_jids_json)

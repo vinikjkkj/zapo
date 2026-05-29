@@ -23,8 +23,7 @@ export function withDeviceListLock(store: WaDeviceListStore): WaDeviceListStore 
             ),
         getUserDevicesBatch: (userJids, nowMs) =>
             gate.runShared(() => store.getUserDevicesBatch(userJids, nowMs)),
-        findByAnyUserJid: (jid, nowMs) =>
-            gate.runShared(() => store.findByAnyUserJid(jid, nowMs)),
+        findByAnyUserJid: (jid, nowMs) => gate.runShared(() => store.findByAnyUserJid(jid, nowMs)),
         deleteUserDevices: (userJid) =>
             gate.runShared(() =>
                 lock.run(`deviceList:user:${userJid}`, () => store.deleteUserDevices(userJid))
