@@ -1,4 +1,5 @@
 import type { WaMediaProcessor, WaMediaProcessorInput } from 'zapo-js/media'
+import { toError } from 'zapo-js/util'
 
 import {
     computeWaveformWithFfmpeg,
@@ -80,6 +81,20 @@ export function createMediaProcessor(options?: WaMediaProcessorOptions): WaMedia
 
         async generateStickerThumbnail(input: WaMediaProcessorInput, maxEdge: number) {
             return generateStickerThumbnail(input, maxEdge)
+        },
+
+        async detectMimetype(input: string | Uint8Array) {
+            try {
+                const fileType = await import('file-type')
+                const result =
+                    typeof input === 'string'
+                        ? await fileType.fileTypeFromFile(input)
+                        : await fileType.fileTypeFromBuffer(input)
+                return result?.mime ?? null
+            } catch (error) {
+                warn?.(`detectMimetype failed: ${toError(error).message}`)
+                return null
+            }
         }
     }
 }

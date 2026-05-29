@@ -64,13 +64,12 @@ type UserMediaFields<T> = {
 
 interface WaSendMediaBase {
     readonly media: MediaInput
-    readonly mimetype: string
-    readonly fileLength?: number
-    readonly contextInfo?: WaSendContextInfo
-}
-
-interface WaSendMediaBaseOptionalMime {
-    readonly media: MediaInput
+    /**
+     * Mime type of the media. Optional when a {@link WaMediaProcessor} with
+     * `detectMimetype` is configured (e.g. `@zapo-js/media-utils` with
+     * `file-type` installed) — the builder infers it from the input. Required
+     * otherwise; a missing mimetype throws at build time.
+     */
     readonly mimetype?: string
     readonly fileLength?: number
     readonly contextInfo?: WaSendContextInfo
@@ -265,7 +264,7 @@ interface WaSendDocumentMessage
 }
 
 interface WaSendStickerMessage
-    extends WaSendMediaBaseOptionalMime, UserMediaFields<Proto.Message.IStickerMessage> {
+    extends WaSendMediaBase, UserMediaFields<Proto.Message.IStickerMessage> {
     readonly type: 'sticker'
 }
 

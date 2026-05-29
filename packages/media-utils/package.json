@@ -28,10 +28,17 @@
     },
     "peerDependencies": {
         "zapo-js": ">=0.1.0",
-        "sharp": ">=0.33.0"
+        "sharp": ">=0.33.0",
+        "file-type": ">=19.0.0"
+    },
+    "peerDependenciesMeta": {
+        "file-type": {
+            "optional": true
+        }
     },
     "devDependencies": {
         "sharp": "^0.33.0",
+        "file-type": "^19.0.0",
         "zapo-js": "file:../.."
     },
     "engines": {
