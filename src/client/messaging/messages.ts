@@ -44,7 +44,8 @@ import {
     isSendPollVoteMessage,
     isSendReactionMessage,
     isSendRevokeMessage,
-    isSendTextMessage
+    isSendTextMessage,
+    resolveMessageTarget
 } from '@message/encode/content'
 import {
     toStickerPackProtoStickers,
@@ -53,6 +54,7 @@ import {
 } from '@message/kinds/sticker-pack'
 import type {
     WaMessageBuildResult,
+    WaMessageKey,
     WaMessageUploadInfo,
     WaSendEventMessage,
     WaSendEventResponseMessage,
@@ -70,7 +72,7 @@ import type {
 } from '@message/types'
 import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS } from '@protocol/constants'
-import { toUserJid } from '@protocol/jid'
+import { isBroadcastJid, isGroupJid, toUserJid } from '@protocol/jid'
 import { buildMediaConnIq } from '@transport/node/builders/media'
 import type { BinaryNode } from '@transport/types'
 import { bytesToBase64, TEXT_ENCODER, toBytesView } from '@util/bytes'
@@ -129,6 +131,16 @@ function buildMessageKey(
     }
 }
 
+/**
+ * Builds the proto key for a reply/edit/reaction/revoke/pin target. `remoteJid`
+ * is forced to the send recipient and `participant` is dropped in 1:1 chats
+ * (only meaningful in groups/broadcasts).
+ */
+function targetMessageKey(remoteJid: string, key: WaMessageKey): Proto.IMessageKey {
+    const inGroup = isGroupJid(remoteJid) || isBroadcastJid(remoteJid)
+    return buildMessageKey(remoteJid, key.fromMe, key.id, inGroup ? key.participant : undefined)
+}
+
 function buildReactionMessage(
     content: WaSendReactionMessage,
     ctx?: WaBuildMessageContext
@@ -136,12 +148,7 @@ function buildReactionMessage(
     requireCtxField(ctx, 'to', 'reaction')
     return {
         reactionMessage: {
-            key: buildMessageKey(
-                ctx!.to,
-                content.target.fromMe,
-                content.target.stanzaId,
-                content.target.participant
-            ),
+            key: targetMessageKey(ctx!.to, resolveMessageTarget(content.target)),
             text: content.emoji,
             senderTimestampMs: content.senderTimestampMs ?? Date.now()
         }
@@ -156,12 +163,7 @@ function buildRevokeMessage(
     return {
         protocolMessage: {
             type: proto.Message.ProtocolMessage.Type.REVOKE,
-            key: buildMessageKey(
-                ctx!.to,
-                content.fromMe ?? true,
-                content.stanzaId,
-                content.participant
-            )
+            key: targetMessageKey(ctx!.to, resolveMessageTarget(content.target))
         }
     }
 }
@@ -170,12 +172,7 @@ function buildPinMessage(content: WaSendPinMessage, ctx?: WaBuildMessageContext)
     requireCtxField(ctx, 'to', content.type)
     return {
         pinInChatMessage: {
-            key: buildMessageKey(
-                ctx!.to,
-                content.target.fromMe,
-                content.target.stanzaId,
-                content.target.participant
-            ),
+            key: targetMessageKey(ctx!.to, resolveMessageTarget(content.target)),
             type:
                 content.type === 'pin'
                     ? proto.Message.PinInChatMessage.Type.PIN_FOR_ALL
@@ -189,12 +186,7 @@ function buildKeepMessage(content: WaSendKeepMessage, ctx?: WaBuildMessageContex
     requireCtxField(ctx, 'to', content.type)
     return {
         keepInChatMessage: {
-            key: buildMessageKey(
-                ctx!.to,
-                content.target.fromMe,
-                content.target.stanzaId,
-                content.target.participant
-            ),
+            key: targetMessageKey(ctx!.to, resolveMessageTarget(content.target)),
             keepType:
                 content.type === 'keep'
                     ? proto.KeepType.KEEP_FOR_ALL
@@ -298,7 +290,7 @@ async function buildPollVoteMessage(
     const payload = proto.Message.PollVoteMessage.encode({ selectedOptions }).finish()
     const { encPayload, encIv } = await encryptAddonForOutgoing({
         messageSecret: content.poll.messageSecret,
-        parentStanzaId: content.poll.stanzaId,
+        parentStanzaId: content.poll.id,
         parentMsgOriginalSender: toUserJid(content.poll.authorJid),
         modificationSender: toUserJid(ctx!.meJid!),
         modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.POLL_VOTE,
@@ -309,7 +301,7 @@ async function buildPollVoteMessage(
             pollCreationMessageKey: buildMessageKey(
                 ctx!.to,
                 content.poll.fromMe,
-                content.poll.stanzaId,
+                content.poll.id,
                 content.poll.participant
             ),
             vote: { encPayload, encIv },
@@ -334,7 +326,7 @@ async function buildEventResponseMessage(
     const payload = proto.Message.EventResponseMessage.encode(responseProto).finish()
     const { encPayload, encIv } = await encryptAddonForOutgoing({
         messageSecret: content.event.messageSecret,
-        parentStanzaId: content.event.stanzaId,
+        parentStanzaId: content.event.id,
         parentMsgOriginalSender: toUserJid(content.event.authorJid),
         modificationSender: toUserJid(ctx!.meJid!),
         modificationType: WA_USE_CASE_SECRET_MODIFICATION_TYPES.EVENT_RESPONSE,
@@ -345,7 +337,7 @@ async function buildEventResponseMessage(
             eventCreationMessageKey: buildMessageKey(
                 ctx!.to,
                 content.event.fromMe,
-                content.event.stanzaId,
+                content.event.id,
                 content.event.participant
             ),
             encPayload,

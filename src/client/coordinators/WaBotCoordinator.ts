@@ -457,25 +457,25 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
 
             const useEditTargetSalt =
                 editType === WA_BOT_MSG_EDIT_TYPES.INNER || editType === WA_BOT_MSG_EDIT_TYPES.LAST
-            const saltId = useEditTargetSalt ? editTargetId : event.stanzaId
+            const saltId = useEditTargetSalt ? editTargetId : event.key.id
             if (!saltId) {
                 logger.debug('bot chunk missing salt id', {
-                    id: event.stanzaId,
+                    id: event.key.id,
                     editType,
                     hasEditTargetId: !!editTargetId
                 })
                 return
             }
 
-            const senderJid = event.senderJid
+            const senderJid = event.key.participant ?? event.key.remoteJid
             if (!senderJid) {
-                logger.debug('bot chunk missing sender jid', { id: event.stanzaId })
+                logger.debug('bot chunk missing sender jid', { id: event.key.id })
                 return
             }
 
             const metaTargetSenderJid = metaNode?.attrs[WA_META_NODE_ATTRS_BOT.TARGET_SENDER_JID]
             const credentials = getCurrentCredentials()
-            const isFbidBotChat = event.chatJid ? isBotJid(event.chatJid) : false
+            const isFbidBotChat = event.key.remoteJid ? isBotJid(event.key.remoteJid) : false
             // FBID bot (`*@bot`) keys on user LID; legacy PN bot keys on user PN
             const meFallbackJid = isFbidBotChat
                 ? (credentials?.meLid ?? credentials?.meJid)
@@ -487,7 +487,7 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
                   : undefined
             if (!targetSenderJid) {
                 logger.debug('bot chunk missing target sender jid (no me jid)', {
-                    id: event.stanzaId,
+                    id: event.key.id,
                     isFbidBotChat
                 })
                 return
@@ -500,7 +500,7 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
             )
             if (!parentEntry) {
                 logger.debug('bot chunk parent message secret not found', {
-                    id: event.stanzaId,
+                    id: event.key.id,
                     targetId: targetMessageId
                 })
                 return
@@ -518,7 +518,7 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
                 })
             } catch (error) {
                 logger.warn('failed to decrypt bot chunk', {
-                    id: event.stanzaId,
+                    id: event.key.id,
                     targetId: targetMessageId,
                     editType,
                     message: toError(error).message
@@ -533,7 +533,7 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
                 decoded = proto.Message.decode(plaintext)
             } catch (error) {
                 logger.warn('failed to decode decrypted bot chunk', {
-                    id: event.stanzaId,
+                    id: event.key.id,
                     targetId: targetMessageId,
                     message: toError(error).message
                 })
@@ -542,11 +542,9 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
 
             emitBotChunk({
                 rawNode: event.rawNode,
-                stanzaId: event.stanzaId,
-                chatJid: event.chatJid,
+                key: event.key,
                 stanzaType: event.stanzaType,
                 offline: event.offline,
-                senderJid,
                 targetMessageId,
                 editType,
                 editTargetId,

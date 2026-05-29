@@ -31,6 +31,7 @@ export type {
     WaIncomingErrorStanzaEvent,
     WaIncomingFailureEvent,
     WaIncomingMessageEvent,
+    WaIncomingMessageKey,
     WaIncomingNewsletterEvent,
     WaIncomingNewsletterMessageUpdateEvent,
     WaIncomingNodeHandler,
@@ -176,8 +177,11 @@ export type {
 export type {
     WaEncryptedMessageInput,
     WaMessageAckMetadata,
+    WaMessageKey,
     WaMessagePublishOptions,
     WaMessagePublishResult,
+    WaMessageRef,
+    WaMessageTargetInput,
     WaSendEditKey,
     WaSendEventLocation,
     WaSendEventMessage,
@@ -187,14 +191,12 @@ export type {
     WaSendKeepMessage,
     WaSendMediaMessage,
     WaSendMessageContent,
-    WaSendMessageTarget,
     WaSendPinMessage,
     WaSendPollMessage,
     WaSendPollOptionInput,
     WaSendPollParent,
     WaSendPollVoteMessage,
     WaSendReactionMessage,
-    WaSendReactionTarget,
     WaSendReceiptEventOptions,
     WaSendReceiptInput,
     WaSendReceiptOptions,
@@ -204,7 +206,7 @@ export type {
     WaSendStickerPackTrayIcon,
     WaSendTextMessage
 } from '@message/types'
-export { getContentType } from '@message/encode/content'
+export { getContentType, resolveMessageTarget } from '@message/encode/content'
 export type { WaSendContextInfo } from '@message/context-info'
 export type {
     WaLinkPreviewFetcher,

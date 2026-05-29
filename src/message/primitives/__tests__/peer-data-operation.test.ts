@@ -65,8 +65,15 @@ function createHarness(opts?: {
     const emitResponse: RequesterHarness['emitResponse'] = (stanzaId, results = []) => {
         emitProtocol({
             rawNode: { tag: 'message', attrs: {} },
-            isGroupChat: false,
-            isBroadcastChat: false,
+            key: {
+                remoteJid: '',
+                id: stanzaId ?? '',
+                fromMe: false,
+                isGroup: false,
+                isBroadcast: false,
+                isNewsletter: false,
+                senderDevice: 0
+            },
             protocolMessage: {
                 type: proto.Message.ProtocolMessage.Type
                     .PEER_DATA_OPERATION_REQUEST_RESPONSE_MESSAGE,
@@ -168,8 +175,15 @@ test('irrelevant or unmatched protocol messages do not resolve pending requests'
     )
     harness.emitProtocol({
         rawNode: { tag: 'message', attrs: {} },
-        isGroupChat: false,
-        isBroadcastChat: false,
+        key: {
+            remoteJid: '',
+            id: '',
+            fromMe: false,
+            isGroup: false,
+            isBroadcast: false,
+            isNewsletter: false,
+            senderDevice: 0
+        },
         protocolMessage: {
             type: proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_REQUEST
         }

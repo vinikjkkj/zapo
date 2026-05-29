@@ -12,7 +12,12 @@ import type { WaMediaProcessor } from '@media/processor'
 import type { WaLinkPreviewOptions } from '@message/addons/link-preview/types'
 import type { WaQuoteRef, WaSendContextInfo } from '@message/context-info'
 import type { WaDecodedAddon } from '@message/crypto/addon-crypto'
-import type { WaMessagePublishOptions, WaSendEditKey } from '@message/types'
+import type {
+    WaMessageKey,
+    WaMessagePublishOptions,
+    WaMessageRef,
+    WaSendEditKey
+} from '@message/types'
 import type { Proto } from '@proto'
 import type { WaBotMsgEditType } from '@protocol/bot'
 import type { WaBusinessHoursDay, WaBusinessHoursMode } from '@protocol/business'
@@ -321,7 +326,7 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
      * pre-built `WaQuoteRef`) and the coordinator fills the quote fields in
      * `contextInfo` for you.
      */
-    readonly quote?: WaIncomingMessageEvent | WaQuoteRef
+    readonly quote?: WaIncomingMessageEvent | WaQuoteRef | WaMessageKey
     /**
      * Mark as forwarded. `true` increments the forward score; `{ score }`
      * sets it explicitly (use the score from the source message's contextInfo
@@ -345,9 +350,11 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
     readonly viewOnce?: boolean
     /**
      * Edit a previously-sent message: the `content` argument becomes the new payload
-     * and gets wrapped in a `MESSAGE_EDIT` protocolMessage targeting `editKey.stanzaId`.
+     * and gets wrapped in a `MESSAGE_EDIT` protocolMessage targeting the message id.
+     * Pass a received `message` event verbatim, its `key`, or an explicit
+     * {@link WaSendEditKey} (`fromMe` is forced true, `remoteJid` is the recipient).
      */
-    readonly editKey?: WaSendEditKey
+    readonly editKey?: WaMessageKey | WaSendEditKey | WaMessageRef
     /**
      * Override the auto-generated `messageContextInfo.messageSecret` (32 bytes).
      * Use to share a known secret across follow-up addons or for deterministic tests.
@@ -420,21 +427,42 @@ export interface WaIncomingBaseEvent {
     readonly offline?: boolean
 }
 
-export interface WaIncomingMessageEvent extends WaIncomingBaseEvent {
-    readonly timestampSeconds?: number
-    readonly senderJid?: string
-    readonly senderAlt?: string
-    readonly senderDevice?: number
+/**
+ * A received message's key. Extends the proto {@link WaMessageKey}
+ * (`remoteJid`/`id`/`fromMe`/`participant`) with the message's addressing and
+ * sender metadata. It stays assignable to `Proto.IMessageKey` (the extra fields
+ * are ignored there) and can be passed verbatim to reply / edit / react /
+ * revoke / pin / quote.
+ */
+export interface WaIncomingMessageKey extends WaMessageKey {
+    readonly isGroup: boolean
+    readonly isBroadcast: boolean
+    readonly isNewsletter: boolean
+    /** The `remoteJid`'s alternate addressing — the pn when addressed by lid, or vice-versa (1:1 chats). */
+    readonly remoteJidAlt?: string
+    /** The `participant`'s alternate addressing — the pn when addressed by lid, or vice-versa (group chats). */
+    readonly participantAlt?: string
+    /** Sender's device id — `0` when the source JID has no `:device` segment. */
+    readonly senderDevice: number
     readonly senderUsername?: string
     readonly recipientJid?: string
     readonly recipientAlt?: string
+    /** Server-assigned message id (newsletters / channel messages). */
+    readonly serverId?: number
+}
+
+export interface WaIncomingMessageEvent extends Omit<WaIncomingBaseEvent, 'chatJid' | 'stanzaId'> {
+    /**
+     * The message key: the proto fields (`remoteJid` = chat, `id` = stanza id,
+     * `fromMe`, `participant` = author) plus chat/sender addressing metadata
+     * (`isGroup`, `participantAlt`, ...). Pass it (or the whole event) verbatim to
+     * reply / edit / react / revoke / pin / quote. `remoteJid`/`id` supersede the
+     * old top-level `chatJid`/`stanzaId`.
+     */
+    readonly key: WaIncomingMessageKey
+    readonly timestampSeconds?: number
     readonly pushName?: string
     readonly encryptionType?: string
-    readonly isGroupChat: boolean
-    readonly isBroadcastChat: boolean
-    readonly isNewsletterChat?: boolean
-    readonly serverId?: number
-    readonly isSender?: boolean
     readonly plaintext?: Uint8Array
     readonly message?: Proto.IMessage
 }
@@ -671,16 +699,26 @@ export type WaAddonKind =
     | 'poll_edit'
     | 'poll_add_option'
 
-export interface WaIncomingAddonEvent extends WaIncomingBaseEvent {
+export interface WaIncomingAddonEvent extends Omit<WaIncomingBaseEvent, 'chatJid' | 'stanzaId'> {
+    /**
+     * The addon message's key (proto fields + addressing metadata). The sender is
+     * `key.participant ?? key.remoteJid`. Supersedes the old `chatJid` / `stanzaId`
+     * / `senderJid`.
+     */
+    readonly key: WaIncomingMessageKey
     readonly kind: WaAddonKind
     readonly targetMessageId: string
-    readonly senderJid: string
     readonly decrypted: WaDecodedAddon
     readonly raw: Proto.IMessage
 }
 
-export interface WaIncomingBotChunkEvent extends WaIncomingBaseEvent {
-    readonly senderJid: string
+export interface WaIncomingBotChunkEvent extends Omit<WaIncomingBaseEvent, 'chatJid' | 'stanzaId'> {
+    /**
+     * The chunk message's key (proto fields + addressing metadata). The sender is
+     * `key.participant ?? key.remoteJid`. Supersedes the old `chatJid` / `stanzaId`
+     * / `senderJid`.
+     */
+    readonly key: WaIncomingMessageKey
     readonly targetMessageId: string
     readonly editType: WaBotMsgEditType
     readonly editTargetId?: string

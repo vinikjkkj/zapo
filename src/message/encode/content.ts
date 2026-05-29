@@ -1,4 +1,6 @@
 import type {
+    WaMessageKey,
+    WaMessageTargetInput,
     WaSendEventMessage,
     WaSendEventResponseMessage,
     WaSendKeepMessage,
@@ -34,6 +36,23 @@ export function getContentType(
             (k === 'conversation' || k.includes('Message')) && k !== 'senderKeyDistributionMessage'
     )
     return key as keyof Proto.IMessage | undefined
+}
+
+/**
+ * Normalizes a reply/edit/reaction/revoke/pin target into a {@link WaMessageKey}:
+ * an explicit key is returned as-is, while a received `message` event
+ * ({@link WaMessageRef}, identified by its `rawNode`) yields its pre-computed
+ * `key`.
+ */
+export function resolveMessageTarget(ref: WaMessageTargetInput): WaMessageKey {
+    if (!('rawNode' in ref)) {
+        return ref
+    }
+    const key = ref.key
+    if (key === undefined || typeof key.id !== 'string') {
+        throw new Error('message event used as a target is missing key.id')
+    }
+    return key
 }
 
 export function isSendMediaMessage(content: unknown): content is WaSendMediaMessage {
@@ -72,7 +91,7 @@ export function isSendRevokeMessage(content: unknown): content is WaSendRevokeMe
         typeof content === 'object' &&
         'type' in content &&
         (content as { type: unknown }).type === 'revoke' &&
-        'stanzaId' in content
+        'target' in content
     )
 }
 

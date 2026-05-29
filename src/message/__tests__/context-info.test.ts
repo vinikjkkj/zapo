@@ -90,7 +90,7 @@ test('resolveSendContextInfo returns null when nothing was provided', () => {
 
 test('resolveSendContextInfo resolves quote from WaIncomingMessageEvent shape', () => {
     const result = resolveSendContextInfo({
-        quote: { stanzaId: 'm-1', chatJid: 'group@g.us', senderJid: 'a@s.whatsapp.net' }
+        quote: { key: { id: 'm-1', remoteJid: 'group@g.us', participant: 'a@s.whatsapp.net' } }
     })
     assert.deepEqual(result, {
         quotedMessageId: 'm-1',
@@ -103,7 +103,7 @@ test('resolveSendContextInfo resolves quote from WaIncomingMessageEvent shape', 
 test('resolveSendContextInfo resolves quote from WaQuoteRef shape', () => {
     const result = resolveSendContextInfo({
         quote: {
-            stanzaId: 'm-2',
+            id: 'm-2',
             participant: 'a@s.whatsapp.net',
             remoteJid: 'group@g.us',
             message: { conversation: 'orig' }
@@ -142,7 +142,7 @@ test('resolveSendContextInfo merges content-level + options-level + quote + forw
     const result = resolveSendContextInfo({
         contentLevel: { isSpoiler: true },
         optionsLevel: { groupSubject: 'G' },
-        quote: { stanzaId: 'q-1', chatJid: 'g@g.us', senderJid: 'a@s.whatsapp.net' },
+        quote: { key: { id: 'q-1', remoteJid: 'g@g.us', participant: 'a@s.whatsapp.net' } },
         forward: true,
         mentions: ['a@s.whatsapp.net']
     })

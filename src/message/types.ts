@@ -88,44 +88,62 @@ export interface WaSendTextMessage {
     readonly linkPreview?: boolean | WaLinkPreviewOverride
 }
 
-export interface WaSendMessageTarget {
-    readonly stanzaId: string
+/**
+ * A message key in the protobuf {@link Proto.IMessageKey} shape, used to target
+ * an existing message (reply / edit / reaction / revoke / pin / keep). Every
+ * field is filled on a received `message` event's `key`, so they are required
+ * here (and assignable to the looser `Proto.IMessageKey`). When sending, the
+ * builder forces `remoteJid` to the recipient and drops `participant` in 1:1
+ * chats.
+ */
+export interface WaMessageKey {
+    readonly remoteJid: string
+    readonly id: string
     readonly fromMe: boolean
-    /** Required in groups when targeting a message sent by another participant. */
+    /** The author - set in groups/broadcasts; omitted in 1:1 (the author is `remoteJid`). */
     readonly participant?: string
 }
 
-/** @deprecated use {@link WaSendMessageTarget} */
-export type WaSendReactionTarget = WaSendMessageTarget
+/**
+ * A received `message` event passed verbatim as a target. Its `key` (a
+ * {@link WaMessageKey}, the same shape the event exposes) is what gets used;
+ * `rawNode` - always present on real events - discriminates it from an explicit
+ * {@link WaMessageKey}.
+ */
+export interface WaMessageRef {
+    readonly key?: WaMessageKey
+    readonly rawNode: unknown
+}
+
+/** An explicit {@link WaMessageKey}, or a received `message` event ({@link WaMessageRef}). */
+export type WaMessageTargetInput = WaMessageKey | WaMessageRef
 
 export interface WaSendReactionMessage {
     readonly type: 'reaction'
     /** Emoji to attach. Pass an empty string to revoke an existing reaction. */
     readonly emoji: string
-    readonly target: WaSendMessageTarget
+    /** An explicit {@link WaMessageKey} or a received `message` event passed verbatim. */
+    readonly target: WaMessageTargetInput
     /** Defaults to `Date.now()` when omitted. */
     readonly senderTimestampMs?: number
 }
 
 export interface WaSendRevokeMessage {
     readonly type: 'revoke'
-    /** Stanza id of the message being revoked. */
-    readonly stanzaId: string
-    /** Defaults to `true` (revoking your own messages). */
-    readonly fromMe?: boolean
-    /** Original author jid; required when an admin revokes someone else's message in a group. */
-    readonly participant?: string
+    /** An explicit {@link WaMessageKey} or a received `message` event passed verbatim. */
+    readonly target: WaMessageTargetInput
 }
 
 export interface WaSendPinMessage {
     readonly type: 'pin' | 'unpin'
-    readonly target: WaSendMessageTarget
+    /** An explicit {@link WaMessageKey} or a received `message` event passed verbatim. */
+    readonly target: WaMessageTargetInput
     readonly senderTimestampMs?: number
 }
 
 export interface WaSendEditKey {
-    /** Stanza id of the message being edited (must be `fromMe: true`). */
-    readonly stanzaId: string
+    /** Id of the message being edited (`fromMe` is forced true, `remoteJid` is the recipient). */
+    readonly id: string
     /** Required in groups when the original message uses lid/pn addressing on the participant. */
     readonly participant?: string
     /** Defaults to `Date.now()` when omitted. */
@@ -134,7 +152,8 @@ export interface WaSendEditKey {
 
 export interface WaSendKeepMessage {
     readonly type: 'keep' | 'unkeep'
-    readonly target: WaSendMessageTarget
+    /** An explicit {@link WaMessageKey} or a received `message` event passed verbatim. */
+    readonly target: WaMessageTargetInput
     /** Defaults to `Date.now()` when omitted. */
     readonly timestampMs?: number
 }
@@ -156,8 +175,8 @@ export interface WaSendPollMessage {
 }
 
 export interface WaSendPollParent {
-    /** Stanza id of the original poll creation message. */
-    readonly stanzaId: string
+    /** Id of the original poll creation message. */
+    readonly id: string
     readonly fromMe: boolean
     /** Group participant jid; required outside 1:1 chats. */
     readonly participant?: string
@@ -205,8 +224,8 @@ export interface WaSendEventMessage {
 export type WaSendEventResponseType = 'going' | 'not_going' | 'maybe'
 
 export interface WaSendEventParent {
-    /** Stanza id of the original event creation message. */
-    readonly stanzaId: string
+    /** Id of the original event creation message. */
+    readonly id: string
     readonly fromMe: boolean
     readonly participant?: string
     /** Creator of the event (parentMsgOriginalSender for the use-case secret). */

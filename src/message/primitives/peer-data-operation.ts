@@ -86,7 +86,7 @@ export function createPeerDataOperationRequester(
         const results = response.peerDataOperationResult ?? []
         if (!stanzaId) {
             logger.debug('pdo response without stanzaId', {
-                from: event.chatJid,
+                from: event.key.remoteJid,
                 resultCount: results.length
             })
             return

@@ -19,7 +19,7 @@ function persistContacts(
     event: WaIncomingMessageEvent,
     nowMs: number
 ): void {
-    const senderJid = event.senderJid
+    const senderJid = event.key.participant ?? event.key.remoteJid
     const rawParticipant = event.rawNode.attrs.participant
     const participantJid = rawParticipant ? toUserJid(rawParticipant) : undefined
     if (!senderJid && !participantJid) {
@@ -35,7 +35,8 @@ function persistContacts(
 
 export function persistIncomingMailboxEntities(options: WaPersistIncomingMailboxOptions): void {
     const { logger, writeBehind, messageSecretStore, event } = options
-    const { stanzaId, chatJid } = event
+    const stanzaId = event.key.id
+    const chatJid = event.key.remoteJid
     if (!stanzaId || !chatJid) {
         return
     }
@@ -48,7 +49,7 @@ export function persistIncomingMailboxEntities(options: WaPersistIncomingMailbox
         writeBehind.persistMessage({
             id: stanzaId,
             threadJid: chatJid,
-            senderJid: event.senderJid,
+            senderJid: event.key.participant ?? event.key.remoteJid,
             participantJid: event.rawNode.attrs.participant,
             fromMe: false,
             timestampMs:
@@ -65,7 +66,7 @@ export function persistIncomingMailboxEntities(options: WaPersistIncomingMailbox
             event.message &&
             needsSecretPersistence(event.message)
         ) {
-            const rawSender = event.senderJid ?? event.rawNode.attrs.participant
+            const rawSender = event.key.participant ?? event.key.remoteJid
             const senderJid = rawSender ? toUserJid(rawSender) : ''
             void messageSecretStore
                 .set(stanzaId, { secret: rawSecret, senderJid })

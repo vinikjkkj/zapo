@@ -135,20 +135,23 @@ export function processIncomingNewsletterMessage(
     }
 
     const chatJid = node.attrs.from
+    const serverId = parseOptionalInt(node.attrs.server_id)
     options.emitIncomingMessage?.({
         rawNode: node,
-        stanzaId: node.attrs.id,
-        chatJid,
+        key: {
+            remoteJid: chatJid ?? '',
+            id: node.attrs.id ?? '',
+            fromMe: node.attrs.is_sender === 'true',
+            isGroup: false,
+            isBroadcast: false,
+            isNewsletter: true,
+            senderDevice: 0,
+            ...(serverId !== undefined ? { serverId } : {})
+        },
         stanzaType: messageType,
         offline: node.attrs.offline !== undefined,
         timestampSeconds: parseOptionalInt(node.attrs.t),
-        senderJid: chatJid,
         encryptionType: 'plaintext',
-        isGroupChat: false,
-        isBroadcastChat: false,
-        isNewsletterChat: true,
-        serverId: parseOptionalInt(node.attrs.server_id),
-        isSender: node.attrs.is_sender === 'true',
         plaintext: decoded.plaintext,
         message: decoded.message
     })

@@ -289,10 +289,10 @@ export class WaMessageCoordinator {
      * })
      *
      * // 4. React to an incoming message (empty emoji = unreact)
-     * await client.message.send(event.chatJid!, {
+     * await client.message.send(event.key.remoteJid, {
      *     type: 'reaction',
      *     emoji: '👍',
-     *     target: { stanzaId: event.stanzaId, fromMe: false, participant: event.senderJid }
+     *     target: event.key // or pass the whole event
      * })
      *
      * // 5. Poll
@@ -345,18 +345,19 @@ export class WaMessageCoordinator {
         }
         const events = Array.isArray(first) ? first : [first as WaIncomingMessageEvent]
         const options = (second as WaSendReceiptEventOptions | undefined) ?? {}
-        const targets = events.map((event) => {
-            if (!event.chatJid || !event.stanzaId) {
+        const targets = events.map((event: WaIncomingMessageEvent) => {
+            if (!event.key.remoteJid || !event.key.id) {
                 throw new Error('sendReceipt event is missing chatJid or stanzaId')
             }
+            const senderJid = event.key.participant ?? event.key.remoteJid
             return {
-                chatJid: event.chatJid,
-                id: event.stanzaId,
-                senderJid: event.senderJid
-                    ? applyDeviceToJid(event.senderJid, event.senderDevice)
+                chatJid: event.key.remoteJid,
+                id: event.key.id,
+                senderJid: senderJid
+                    ? applyDeviceToJid(senderJid, event.key.senderDevice)
                     : undefined,
-                isGroupChat: event.isGroupChat,
-                isBroadcastChat: event.isBroadcastChat
+                isGroupChat: event.key.isGroup,
+                isBroadcastChat: event.key.isBroadcast
             }
         })
         for (const group of aggregateReceiptTargets(targets)) {
@@ -461,14 +462,14 @@ export class WaMessageCoordinator {
         )
         if (!parentEntry) {
             this.logger.debug('addon parent message secret not found', {
-                id: event.stanzaId,
+                id: event.key.id,
                 targetId: targetMessageId
             })
             return
         }
 
         const parentMsgOriginalSender = parentEntry.senderJid
-        const modificationSender = event.senderJid ?? ''
+        const modificationSender = event.key.participant ?? event.key.remoteJid
 
         const plaintext = await decryptAddonPayload({
             messageSecret: parentEntry.secret,
@@ -496,13 +497,11 @@ export class WaMessageCoordinator {
         }
         this.emitAddon({
             rawNode: event.rawNode,
-            stanzaId: event.stanzaId,
-            chatJid: event.chatJid,
+            key: event.key,
             stanzaType: event.stanzaType,
             offline: event.offline,
             kind: addon.kind,
             targetMessageId,
-            senderJid: modificationSender,
             decrypted,
             raw: message
         })

@@ -85,18 +85,24 @@ test('content helpers detect media payload and resolve message type', () => {
         isSendReactionMessage({
             type: 'reaction',
             emoji: '👍',
-            target: { stanzaId: 'A', fromMe: false }
+            target: { remoteJid: 'x@s.whatsapp.net', id: 'A', fromMe: false }
         }),
         true
     )
     assert.equal(isSendReactionMessage({ type: 'reaction', emoji: '👍' }), false)
     assert.equal(isSendReactionMessage({ type: 'text', text: 'hi' }), false)
 
-    assert.equal(isSendRevokeMessage({ type: 'revoke', stanzaId: 'A' }), true)
+    assert.equal(
+        isSendRevokeMessage({
+            type: 'revoke',
+            target: { remoteJid: 'x@s.whatsapp.net', id: 'A', fromMe: true }
+        }),
+        true
+    )
     assert.equal(isSendRevokeMessage({ type: 'revoke' }), false)
     assert.equal(isSendRevokeMessage({ type: 'text', text: 'hi' }), false)
 
-    const target = { stanzaId: 'A', fromMe: true }
+    const target = { remoteJid: 'x@s.whatsapp.net', id: 'A', fromMe: true }
     assert.equal(isSendPinMessage({ type: 'pin', target }), true)
     assert.equal(isSendPinMessage({ type: 'unpin', target }), true)
     assert.equal(isSendPinMessage({ type: 'pin' }), false)
@@ -110,7 +116,7 @@ test('content helpers detect media payload and resolve message type', () => {
     assert.equal(
         isSendPollVoteMessage({
             type: 'poll-vote',
-            poll: { stanzaId: 'A', fromMe: false, authorJid: 'x', messageSecret: new Uint8Array() },
+            poll: { id: 'A', fromMe: false, authorJid: 'x', messageSecret: new Uint8Array() },
             selectedOptionNames: ['x']
         }),
         true
@@ -124,7 +130,7 @@ test('content helpers detect media payload and resolve message type', () => {
         isSendEventResponseMessage({
             type: 'event-response',
             event: {
-                stanzaId: 'A',
+                id: 'A',
                 fromMe: false,
                 authorJid: 'x',
                 messageSecret: new Uint8Array()
@@ -138,7 +144,7 @@ test('content helpers detect media payload and resolve message type', () => {
     assert.equal(
         isSendAddonCryptoMessage({
             type: 'poll-vote',
-            poll: { stanzaId: 'A', fromMe: false, authorJid: 'x', messageSecret: new Uint8Array() },
+            poll: { id: 'A', fromMe: false, authorJid: 'x', messageSecret: new Uint8Array() },
             selectedOptionNames: ['x']
         }),
         true
@@ -785,15 +791,15 @@ test('processIncomingNewsletterMessage decodes plaintext message and emits event
     assert.equal(unhandled, null)
     assert.ok(emitted)
     const event = emitted as unknown as WaIncomingMessageEvent
-    assert.equal(event.chatJid, '120363025343298869@newsletter')
-    assert.equal(event.senderJid, '120363025343298869@newsletter')
+    assert.equal(event.key.remoteJid, '120363025343298869@newsletter')
+    assert.equal(event.key.participant, undefined)
     assert.equal(event.encryptionType, 'plaintext')
-    assert.equal(event.isNewsletterChat, true)
-    assert.equal(event.isGroupChat, false)
-    assert.equal(event.isBroadcastChat, false)
+    assert.equal(event.key.isNewsletter, true)
+    assert.equal(event.key.isGroup, false)
+    assert.equal(event.key.isBroadcast, false)
     assert.equal(event.timestampSeconds, 1700000000)
-    assert.equal(event.serverId, 12345)
-    assert.equal(event.isSender, true)
+    assert.equal(event.key.serverId, 12345)
+    assert.equal(event.key.fromMe, true)
     assert.equal(event.message?.conversation, 'hello channel')
 })
 

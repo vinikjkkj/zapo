@@ -55,10 +55,15 @@ interface MacMutation {
 
 type DecryptedPatchMutation = WaAppStateMutation & { operationCode: number }
 
+/**
+ * Minimal message-key context for incoming app-state key protocol messages.
+ * Uses the proto `Proto.IMessageKey` attribute names so callers can pass an
+ * incoming message's `key` verbatim (no field remapping).
+ */
 export interface IncomingKeyEventContext {
-    readonly stanzaId?: string
-    readonly chatJid?: string
-    readonly senderJid?: string
+    readonly remoteJid?: string
+    readonly id?: string
+    readonly participant?: string
     readonly senderDevice?: number
 }
 
@@ -193,8 +198,8 @@ export class WaAppStateSyncClient {
         const share = protocolMessage.appStateSyncKeyShare
         if (!share) {
             this.logger.warn('incoming app-state key share protocol message without payload', {
-                id: context.stanzaId,
-                from: context.chatJid
+                id: context.id,
+                from: context.remoteJid
             })
             return
         }
@@ -202,23 +207,23 @@ export class WaAppStateSyncClient {
         try {
             const imported = await this.importSyncKeyShare(share)
             this.logger.info('imported app-state sync key share from protocol message', {
-                id: context.stanzaId,
-                from: context.chatJid,
+                id: context.id,
+                from: context.remoteJid,
                 imported
             })
             if (imported > 0 && this.triggerSync) {
                 void this.triggerSync().catch((error) => {
                     this.logger.warn('failed to sync app-state after key share import', {
-                        id: context.stanzaId,
-                        from: context.chatJid,
+                        id: context.id,
+                        from: context.remoteJid,
                         message: toError(error).message
                     })
                 })
             }
         } catch (error) {
             this.logger.warn('failed to import app-state sync key share from protocol message', {
-                id: context.stanzaId,
-                from: context.chatJid,
+                id: context.id,
+                from: context.remoteJid,
                 message: toError(error).message
             })
         }
@@ -232,30 +237,28 @@ export class WaAppStateSyncClient {
         const request = protocolMessage.appStateSyncKeyRequest
         if (!request) {
             this.logger.warn('incoming app-state key request protocol message without payload', {
-                id: context.stanzaId,
-                from: context.chatJid
+                id: context.id,
+                from: context.remoteJid
             })
             return
         }
 
-        const requesterSource = context.senderJid ?? context.chatJid
-        if (!requesterSource) {
+        const senderJid = context.participant ?? context.remoteJid
+        if (!senderJid) {
             this.logger.warn('incoming app-state key request missing sender jid', {
-                id: context.stanzaId
+                id: context.id
             })
             return
         }
 
         let requesterDeviceJid: string
         try {
-            const requesterRaw = context.senderJid
-                ? applyDeviceToJid(context.senderJid, context.senderDevice)
-                : requesterSource
+            const requesterRaw = applyDeviceToJid(senderJid, context.senderDevice)
             requesterDeviceJid = normalizeDeviceJid(requesterRaw)
         } catch (error) {
             this.logger.warn('incoming app-state key request has malformed sender jid', {
-                id: context.stanzaId,
-                from: requesterSource,
+                id: context.id,
+                from: senderJid,
                 message: toError(error).message
             })
             return
@@ -263,7 +266,7 @@ export class WaAppStateSyncClient {
 
         if (this.isOwnAccountDevice && !this.isOwnAccountDevice(requesterDeviceJid)) {
             this.logger.warn('incoming app-state key request ignored: sender is not own account', {
-                id: context.stanzaId,
+                id: context.id,
                 from: requesterDeviceJid
             })
             return
@@ -272,7 +275,7 @@ export class WaAppStateSyncClient {
         const requestedKeyIds = this.extractKeyRequestIds(request)
         if (requestedKeyIds.length === 0) {
             this.logger.warn('incoming app-state key request has no valid key ids', {
-                id: context.stanzaId,
+                id: context.id,
                 from: requesterDeviceJid
             })
             return
@@ -280,7 +283,7 @@ export class WaAppStateSyncClient {
 
         if (!this.sendKeyShare) {
             this.logger.warn('incoming app-state key request received but no sendKeyShare wired', {
-                id: context.stanzaId,
+                id: context.id,
                 from: requesterDeviceJid
             })
             return
@@ -301,7 +304,7 @@ export class WaAppStateSyncClient {
         try {
             await this.sendKeyShare(requesterDeviceJid, availableKeys, missingKeyIds)
             this.logger.info('responded to app-state key request', {
-                id: context.stanzaId,
+                id: context.id,
                 to: requesterDeviceJid,
                 requested: requestedKeyIds.length,
                 shared: availableKeys.length,
@@ -309,7 +312,7 @@ export class WaAppStateSyncClient {
             })
         } catch (error) {
             this.logger.warn('failed to respond to app-state key request', {
-                id: context.stanzaId,
+                id: context.id,
                 to: requesterDeviceJid,
                 requested: requestedKeyIds.length,
                 shared: availableKeys.length,

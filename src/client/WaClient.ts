@@ -300,7 +300,7 @@ export class WaClient extends EventEmitter {
             if (this.options.addons?.autoDecrypt !== false && event.message) {
                 void this.deps.messageCoordinator.tryDecryptAddon(event).catch((err) => {
                     this.logger.warn('addon auto-decrypt failed', {
-                        id: event.stanzaId,
+                        id: event.key.id,
                         message: toError(err).message
                     })
                 })
@@ -310,7 +310,7 @@ export class WaClient extends EventEmitter {
             if (event.message) {
                 void this.deps.botCoordinator.tryDecryptChunk(event).catch((err) => {
                     this.logger.warn('bot chunk auto-decrypt failed', {
-                        id: event.stanzaId,
+                        id: event.key.id,
                         message: toError(err).message
                     })
                 })
@@ -328,19 +328,19 @@ export class WaClient extends EventEmitter {
             const protocolType = protocolMessage.type
             if (protocolType === null || protocolType === undefined) {
                 this.logger.debug('incoming protocol message without type', {
-                    id: event.stanzaId,
-                    from: event.chatJid
+                    id: event.key.id,
+                    from: event.key.remoteJid
                 })
                 return
             }
 
             if (protocolType === proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_REQUEST) {
-                await this.appStateSync.handleIncomingKeyRequest(event, protocolMessage)
+                await this.appStateSync.handleIncomingKeyRequest(event.key, protocolMessage)
                 return
             }
 
             if (protocolType === proto.Message.ProtocolMessage.Type.APP_STATE_SYNC_KEY_SHARE) {
-                await this.appStateSync.handleIncomingKeyShare(event, protocolMessage)
+                await this.appStateSync.handleIncomingKeyShare(event.key, protocolMessage)
                 return
             }
 
@@ -370,16 +370,16 @@ export class WaClient extends EventEmitter {
 
             if (SYNC_RELATED_PROTOCOL_TYPES.has(protocolType)) {
                 this.logger.info('incoming sync-related protocol message', {
-                    id: event.stanzaId,
-                    from: event.chatJid,
+                    id: event.key.id,
+                    from: event.key.remoteJid,
                     protocolType
                 })
                 return
             }
 
             this.logger.debug('incoming protocol message received', {
-                id: event.stanzaId,
-                from: event.chatJid,
+                id: event.key.id,
+                from: event.key.remoteJid,
                 protocolType
             })
         } finally {

@@ -353,7 +353,8 @@ test('buildMediaMessageContent builds reaction message with key and emoji', asyn
             type: 'reaction',
             emoji: '🔥',
             target: {
-                stanzaId: 'STANZA1',
+                remoteJid: groupJid,
+                id: 'STANZA1',
                 fromMe: false,
                 participant: '551199999999@s.whatsapp.net'
             },
@@ -373,7 +374,11 @@ test('buildMediaMessageContent builds reaction message with key and emoji', asyn
 
     const revoke = await buildMediaMessageContent(
         BUILD_OPTIONS,
-        { type: 'reaction', emoji: '', target: { stanzaId: 'STANZA1', fromMe: true } },
+        {
+            type: 'reaction',
+            emoji: '',
+            target: { remoteJid: '551122222222@s.whatsapp.net', id: 'STANZA1', fromMe: true }
+        },
         { to: '551122222222@s.whatsapp.net' }
     )
     assert.equal(revoke.message.reactionMessage?.text, '')
@@ -385,7 +390,7 @@ test('buildMediaMessageContent builds reaction message with key and emoji', asyn
             buildMediaMessageContent(BUILD_OPTIONS, {
                 type: 'reaction',
                 emoji: '🔥',
-                target: { stanzaId: 'STANZA1', fromMe: true }
+                target: { remoteJid: '551122222222@s.whatsapp.net', id: 'STANZA1', fromMe: true }
             }),
         /requires to in build context/
     )
@@ -395,7 +400,7 @@ test('buildMediaMessageContent builds revoke protocolMessage', async () => {
     const chatJid = '551122222222@s.whatsapp.net'
     const own = await buildMediaMessageContent(
         BUILD_OPTIONS,
-        { type: 'revoke', stanzaId: 'STANZA2' },
+        { type: 'revoke', target: { remoteJid: chatJid, id: 'STANZA2', fromMe: true } },
         { to: chatJid }
     )
     assert.equal(own.message.protocolMessage?.type, proto.Message.ProtocolMessage.Type.REVOKE)
@@ -409,9 +414,12 @@ test('buildMediaMessageContent builds revoke protocolMessage', async () => {
         BUILD_OPTIONS,
         {
             type: 'revoke',
-            stanzaId: 'STANZA3',
-            fromMe: false,
-            participant: '551199999999@s.whatsapp.net'
+            target: {
+                remoteJid: '120363000000000000@g.us',
+                id: 'STANZA3',
+                fromMe: false,
+                participant: '551199999999@s.whatsapp.net'
+            }
         },
         { to: '120363000000000000@g.us' }
     )
@@ -423,7 +431,11 @@ test('buildMediaMessageContent builds revoke protocolMessage', async () => {
     })
 
     await assert.rejects(
-        () => buildMediaMessageContent(BUILD_OPTIONS, { type: 'revoke', stanzaId: 'X' }),
+        () =>
+            buildMediaMessageContent(BUILD_OPTIONS, {
+                type: 'revoke',
+                target: { remoteJid: '551122222222@s.whatsapp.net', id: 'X', fromMe: true }
+            }),
         /requires to in build context/
     )
 })
@@ -434,7 +446,7 @@ test('buildMediaMessageContent builds pin/unpin with PinInChatMessage Type enum'
         BUILD_OPTIONS,
         {
             type: 'pin',
-            target: { stanzaId: 'S1', fromMe: true },
+            target: { remoteJid: chatJid, id: 'S1', fromMe: true },
             senderTimestampMs: 1_700_000_000_000
         },
         { to: chatJid }
@@ -448,7 +460,7 @@ test('buildMediaMessageContent builds pin/unpin with PinInChatMessage Type enum'
 
     const unpin = await buildMediaMessageContent(
         BUILD_OPTIONS,
-        { type: 'unpin', target: { stanzaId: 'S1', fromMe: true } },
+        { type: 'unpin', target: { remoteJid: chatJid, id: 'S1', fromMe: true } },
         { to: chatJid }
     )
     assert.equal(
@@ -461,13 +473,13 @@ test('buildMediaMessageContent builds keep/unkeep with KeepType enum', async () 
     const chatJid = '551122222222@s.whatsapp.net'
     const keep = await buildMediaMessageContent(
         BUILD_OPTIONS,
-        { type: 'keep', target: { stanzaId: 'S3', fromMe: true } },
+        { type: 'keep', target: { remoteJid: chatJid, id: 'S3', fromMe: true } },
         { to: chatJid }
     )
     assert.equal(keep.message.keepInChatMessage?.keepType, proto.KeepType.KEEP_FOR_ALL)
     const unkeep = await buildMediaMessageContent(
         BUILD_OPTIONS,
-        { type: 'unkeep', target: { stanzaId: 'S3', fromMe: true } },
+        { type: 'unkeep', target: { remoteJid: chatJid, id: 'S3', fromMe: true } },
         { to: chatJid }
     )
     assert.equal(unkeep.message.keepInChatMessage?.keepType, proto.KeepType.UNDO_KEEP_FOR_ALL)
@@ -541,7 +553,7 @@ test('buildMediaMessageContent encrypts poll-vote with addon-crypto and hashes o
         {
             type: 'poll-vote',
             poll: {
-                stanzaId: 'POLL_PARENT',
+                id: 'POLL_PARENT',
                 fromMe: false,
                 authorJid: '551100000000@s.whatsapp.net',
                 participant: '551100000000@s.whatsapp.net',
@@ -575,7 +587,7 @@ test('buildMediaMessageContent encrypts poll-vote with addon-crypto and hashes o
                 {
                     type: 'poll-vote',
                     poll: {
-                        stanzaId: 'P',
+                        id: 'P',
                         fromMe: false,
                         authorJid: 'a',
                         messageSecret
@@ -595,7 +607,7 @@ test('buildMediaMessageContent encrypts event-response with addon-crypto and cho
         {
             type: 'event-response',
             event: {
-                stanzaId: 'EVENT_PARENT',
+                id: 'EVENT_PARENT',
                 fromMe: false,
                 authorJid: '551100000000@s.whatsapp.net',
                 participant: '551100000000@s.whatsapp.net',

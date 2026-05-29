@@ -330,20 +330,32 @@ export class WaMessageDispatchCoordinator {
         })
         const withCtx = ctx ? applyContextInfo(built.message, ctx) : built.message
         const withViewOnce = options.viewOnce ? wrapAsViewOnce(withCtx) : withCtx
-        const message = options.editKey
+        const editKey = options.editKey
+        let editId: string | undefined
+        let editParticipant: string | undefined
+        let editTimestamp: number | undefined
+        if (editKey) {
+            if ('rawNode' in editKey) {
+                editId = editKey.key?.id ?? undefined
+                editParticipant = editKey.key?.participant ?? undefined
+            } else {
+                editId = editKey.id
+                editParticipant = editKey.participant
+                editTimestamp = 'timestampMs' in editKey ? editKey.timestampMs : undefined
+            }
+        }
+        const message: Proto.IMessage = editKey
             ? {
                   protocolMessage: {
                       type: proto.Message.ProtocolMessage.Type.MESSAGE_EDIT,
                       key: {
                           remoteJid: recipientJid,
                           fromMe: true,
-                          id: options.editKey.stanzaId,
-                          ...(options.editKey.participant
-                              ? { participant: options.editKey.participant }
-                              : {})
+                          id: editId,
+                          ...(editParticipant ? { participant: editParticipant } : {})
                       },
                       editedMessage: withViewOnce,
-                      timestampMs: options.editKey.timestampMs ?? Date.now()
+                      timestampMs: editTimestamp ?? Date.now()
                   }
               }
             : withViewOnce

@@ -335,8 +335,8 @@ test('placeholder resend: decodes WebMessageInfo and re-emits as incoming messag
     await flushPromise
     assert.equal(harness.emitted.length, 1)
     const event = harness.emitted[0]
-    assert.equal(event.stanzaId, 'recover-1')
-    assert.equal(event.chatJid, '551122223333@s.whatsapp.net')
+    assert.equal(event.key.id, 'recover-1')
+    assert.equal(event.key.remoteJid, '551122223333@s.whatsapp.net')
     assert.equal(event.encryptionType, 'placeholder_recovery')
     assert.equal(event.message?.conversation, 'recovered')
 })
