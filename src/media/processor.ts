@@ -51,7 +51,7 @@ export interface WaMediaProcessor {
 
     /**
      * Infers the input's mime type (e.g. via magic-byte sniffing). Accepts the
-     * resolved on-disk shape — a path or a buffer; the message builder always
+     * resolved on-disk shape: a path or a buffer; the message builder always
      * stages streams to a temp file before calling this. Returns `null` when
      * the type can't be determined.
      */

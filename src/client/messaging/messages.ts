@@ -466,9 +466,15 @@ async function buildMediaMessage(
             })
         }
     }
+    const needsMimetypeDetection =
+        !content.mimetype &&
+        content.type !== 'sticker' &&
+        !!options.media?.processor?.detectMimetype &&
+        isReadableStream(content.media)
     const needsTempFile =
         hasMediaProcessingTasks(options.media, content) ||
-        (content.type === 'sticker' && content.firstFrameLength === undefined)
+        (content.type === 'sticker' && content.firstFrameLength === undefined) ||
+        needsMimetypeDetection
     const resolved = await resolveMediaInputs(needsTempFile, content.media)
     const mimetype = await resolveMimetype(content, options.media, resolved.processorInput)
 

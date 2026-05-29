@@ -67,7 +67,7 @@ interface WaSendMediaBase {
     /**
      * Mime type of the media. Optional when a {@link WaMediaProcessor} with
      * `detectMimetype` is configured (e.g. `@zapo-js/media-utils` with
-     * `file-type` installed) — the builder infers it from the input. Required
+     * `file-type` installed): the builder infers it from the input. Required
      * otherwise; a missing mimetype throws at build time.
      */
     readonly mimetype?: string
