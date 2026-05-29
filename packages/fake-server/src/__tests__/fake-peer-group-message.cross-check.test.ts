@@ -37,7 +37,7 @@ test('fake peer sends a SenderKey-encrypted group message and lib emits message 
 
     const messagePromise = waitForMessage(
         client,
-        (event) => event.chatJid === groupJid && event.message?.conversation === 'hello group'
+        (event) => event.key.remoteJid === groupJid && event.message?.conversation === 'hello group'
     )
 
     try {
@@ -54,9 +54,9 @@ test('fake peer sends a SenderKey-encrypted group message and lib emits message 
         await peer.sendGroupConversation(groupJid, 'hello group')
 
         const event = await messagePromise
-        assert.equal(event.chatJid, groupJid)
-        assert.equal(event.senderJid, peerJid)
-        assert.equal(event.isGroupChat, true)
+        assert.equal(event.key.remoteJid, groupJid)
+        assert.equal(event.key.participant ?? event.key.remoteJid, peerJid)
+        assert.equal(event.key.isGroup, true)
         assert.equal(event.message?.conversation, 'hello group')
     } finally {
         await client.disconnect().catch(() => undefined)

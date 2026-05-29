@@ -7,6 +7,7 @@ import type {
     WaNewsletterReactionEntry
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import { pickIncomingExpirationSeconds } from '@message/context-info'
 import { proto } from '@proto'
 import { WA_NODE_TAGS } from '@protocol/constants'
 import { WA_EDIT_ATTRS } from '@protocol/message'
@@ -136,6 +137,7 @@ export function processIncomingNewsletterMessage(
 
     const chatJid = node.attrs.from
     const serverId = parseOptionalInt(node.attrs.server_id)
+    const expirationSeconds = pickIncomingExpirationSeconds(decoded.message)
     options.emitIncomingMessage?.({
         rawNode: node,
         key: {
@@ -151,6 +153,7 @@ export function processIncomingNewsletterMessage(
         stanzaType: messageType,
         offline: node.attrs.offline !== undefined,
         timestampSeconds: parseOptionalInt(node.attrs.t),
+        ...(expirationSeconds !== undefined ? { expirationSeconds } : {}),
         encryptionType: 'plaintext',
         plaintext: decoded.plaintext,
         message: decoded.message

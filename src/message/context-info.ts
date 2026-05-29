@@ -86,6 +86,33 @@ export function applyContextInfo(
     return next
 }
 
+/**
+ * Reads the disappearing-message TTL (`contextInfo.expiration`) from the first
+ * submessage that carries it. Unwraps `ephemeralMessage` if present. Returns
+ * `undefined` when no submessage has an `expiration` set.
+ */
+export function pickIncomingExpirationSeconds(
+    message: Proto.IMessage | undefined
+): number | undefined {
+    if (!message) return undefined
+    const inner = message.ephemeralMessage?.message ?? message
+    for (const key of Object.keys(inner)) {
+        const value = (inner as Record<string, unknown>)[key]
+        if (
+            value &&
+            typeof value === 'object' &&
+            !Array.isArray(value) &&
+            !(value instanceof Uint8Array)
+        ) {
+            const ctx = (value as ContextInfoCarrier).contextInfo
+            if (ctx?.expiration !== undefined && ctx.expiration !== null) {
+                return ctx.expiration
+            }
+        }
+    }
+    return undefined
+}
+
 function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | null {
     for (const key of Object.keys(message)) {
         const value = (message as Record<string, unknown>)[key]
@@ -108,7 +135,11 @@ function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | nu
  * public `quote` option type enforces the concrete shape.
  */
 type WaQuoteSource = {
-    readonly key?: { readonly id?: string; readonly remoteJid?: string; readonly participant?: string }
+    readonly key?: {
+        readonly id?: string
+        readonly remoteJid?: string
+        readonly participant?: string
+    }
     readonly id?: string
     readonly remoteJid?: string
     readonly participant?: string

@@ -314,13 +314,13 @@ export function needsSecretPersistence(message: Proto.IMessage): boolean {
     )
 }
 
-export function resolveEditAttr(message: Proto.IMessage, subtype?: string): string | null {
+export function resolveEditAttr(message: Proto.IMessage): string | null {
     const msg = unwrapMessage(message)
 
     if (msg.protocolMessage) {
         const protocolType = msg.protocolMessage.type
         if (protocolType === proto.Message.ProtocolMessage.Type.REVOKE) {
-            return subtype === 'admin_revoke'
+            return msg.protocolMessage.key?.fromMe === false
                 ? WA_EDIT_ATTRS.ADMIN_REVOKE
                 : WA_EDIT_ATTRS.SENDER_REVOKE
         }

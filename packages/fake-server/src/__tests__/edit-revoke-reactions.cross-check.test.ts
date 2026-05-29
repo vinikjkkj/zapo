@@ -135,7 +135,7 @@ test('fake peer pushes a reaction message and the lib emits the message event', 
         })
 
         const event = await messagePromise
-        assert.equal(event.senderJid, peerJid)
+        assert.equal(event.key.participant ?? event.key.remoteJid, peerJid)
         assert.equal(event.message?.reactionMessage?.text, '\u2764\ufe0f')
         assert.equal(event.message?.reactionMessage?.key?.id, 'msg-to-react-to')
     } finally {

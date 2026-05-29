@@ -66,7 +66,7 @@ test('fake peer pushes an ephemeral wrapped conversation and the lib emits messa
         const ephemeral = event.message?.ephemeralMessage
         assert.ok(ephemeral, 'ephemeralMessage wrapper should be present')
         assert.equal(ephemeral.message?.conversation, 'this self-destructs')
-        assert.equal(event.senderJid, peerJid)
+        assert.equal(event.key.participant ?? event.key.remoteJid, peerJid)
         assert.equal(expirationSeconds, 604_800)
     } finally {
         await client.disconnect().catch(() => undefined)

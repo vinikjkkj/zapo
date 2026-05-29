@@ -347,7 +347,7 @@ export class WaMessageCoordinator {
         const options = (second as WaSendReceiptEventOptions | undefined) ?? {}
         const targets = events.map((event: WaIncomingMessageEvent) => {
             if (!event.key.remoteJid || !event.key.id) {
-                throw new Error('sendReceipt event is missing chatJid or stanzaId')
+                throw new Error('sendReceipt event is missing key.remoteJid or key.id')
             }
             const senderJid = event.key.participant ?? event.key.remoteJid
             return {

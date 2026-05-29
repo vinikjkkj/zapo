@@ -287,7 +287,8 @@ test('content helpers unwrap deeply nested wrappers for edit and media attrs', (
 test('resolveEditAttr maps protobuf to correct edit attribute values', () => {
     assert.equal(resolveEditAttr({ conversation: 'hello' }), null)
     assert.equal(resolveEditAttr({ protocolMessage: { type: 0 } }), '7')
-    assert.equal(resolveEditAttr({ protocolMessage: { type: 0 } }, 'admin_revoke'), '8')
+    assert.equal(resolveEditAttr({ protocolMessage: { type: 0, key: { fromMe: true } } }), '7')
+    assert.equal(resolveEditAttr({ protocolMessage: { type: 0, key: { fromMe: false } } }), '8')
     assert.equal(resolveEditAttr({ protocolMessage: { type: 14 } }), '1')
     assert.equal(resolveEditAttr({ reactionMessage: { text: '' } }), '7')
     assert.equal(resolveEditAttr({ reactionMessage: { text: '\u{1F44D}' } }), null)

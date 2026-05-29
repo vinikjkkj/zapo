@@ -60,11 +60,11 @@ type DecryptedPatchMutation = WaAppStateMutation & { operationCode: number }
  * Uses the proto `Proto.IMessageKey` attribute names so callers can pass an
  * incoming message's `key` verbatim (no field remapping).
  */
-export interface IncomingKeyEventContext {
+interface IncomingKeyEventContext {
     readonly remoteJid?: string
     readonly id?: string
     readonly participant?: string
-    readonly senderDevice?: number
+    readonly senderDevice: number
 }
 
 interface WaAppStateSyncClientOptions {

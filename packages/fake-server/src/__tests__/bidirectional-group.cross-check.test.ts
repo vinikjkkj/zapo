@@ -82,13 +82,14 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
 
         const round1ReceivedByLib = waitForMessage(
             client,
-            (event) => event.chatJid === groupJid && event.message?.conversation === 'peer-group #1'
+            (event) =>
+                event.key.remoteJid === groupJid && event.message?.conversation === 'peer-group #1'
         )
         await peer.sendGroupConversation(groupJid, 'peer-group #1')
         const round1 = await round1ReceivedByLib
-        assert.equal(round1.chatJid, groupJid)
-        assert.equal(round1.senderJid, peerJid)
-        assert.equal(round1.isGroupChat, true)
+        assert.equal(round1.key.remoteJid, groupJid)
+        assert.equal(round1.key.participant ?? round1.key.remoteJid, peerJid)
+        assert.equal(round1.key.isGroup, true)
         assert.equal(round1.message?.conversation, 'peer-group #1')
 
         const round2Promise = peer.expectGroupMessage(groupJid, {
@@ -102,7 +103,8 @@ test('bidirectional group ping-pong (peer\u2192client\u2192peer\u2192client) dec
 
         const round3ReceivedByLib = waitForMessage(
             client,
-            (event) => event.chatJid === groupJid && event.message?.conversation === 'peer-group #2'
+            (event) =>
+                event.key.remoteJid === groupJid && event.message?.conversation === 'peer-group #2'
         )
         await peer.sendGroupConversation(groupJid, 'peer-group #2')
         const round3 = await round3ReceivedByLib

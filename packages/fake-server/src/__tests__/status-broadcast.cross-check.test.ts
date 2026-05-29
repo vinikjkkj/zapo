@@ -55,9 +55,9 @@ test('fake peer pushes a status@broadcast message and the lib emits isBroadcastC
 
         const event = await messagePromise
         assert.equal(event.message?.conversation, statusText)
-        assert.equal(event.chatJid, 'status@broadcast')
-        assert.equal(event.isBroadcastChat, true)
-        assert.equal(event.senderJid, peerJid)
+        assert.equal(event.key.remoteJid, 'status@broadcast')
+        assert.equal(event.key.isBroadcast, true)
+        assert.equal(event.key.participant ?? event.key.remoteJid, peerJid)
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()

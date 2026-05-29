@@ -65,7 +65,7 @@ test('fake peer pushes a poll creation message and the lib emits message', async
         assert.equal(poll.options?.[0].optionName, 'Pizza')
         assert.equal(poll.options?.[1].optionName, 'Hambúrguer')
         assert.equal(poll.selectableOptionsCount, 1)
-        assert.equal(event.senderJid, peerJid)
+        assert.equal(event.key.participant ?? event.key.remoteJid, peerJid)
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()

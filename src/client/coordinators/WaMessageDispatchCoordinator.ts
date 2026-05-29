@@ -310,6 +310,9 @@ export class WaMessageDispatchCoordinator {
             ])
         }
         let optionsCtx = options.contextInfo
+        if (options.expirationSeconds !== undefined) {
+            optionsCtx = { ...optionsCtx, expirationSeconds: options.expirationSeconds }
+        }
         if (
             isGroupJid(recipientJid) &&
             optionsCtx?.expirationSeconds === undefined &&
@@ -417,7 +420,7 @@ export class WaMessageDispatchCoordinator {
         // omit enc.mediatype; sending type=media + mediatype=list/button alongside the
         // companion is rejected by the server as SMAX_INVALID (479).
         const type = buttonAddonKind ? 'text' : resolveMessageTypeAttr(messageWithIcdc)
-        const edit = resolveEditAttr(messageWithIcdc, sendOptions.subtype) ?? undefined
+        const edit = resolveEditAttr(messageWithIcdc) ?? undefined
         const mediatype = buttonAddonKind
             ? undefined
             : (resolveEncMediaType(messageWithIcdc) ?? undefined)
@@ -671,7 +674,7 @@ export class WaMessageDispatchCoordinator {
             type: resolveMessageTypeAttr(messageWithSecret),
             id: sendOptions.id,
             phash: extras.phash,
-            edit: resolveEditAttr(messageWithSecret, sendOptions.subtype) ?? undefined,
+            edit: resolveEditAttr(messageWithSecret) ?? undefined,
             mediatype: resolveEncMediaType(messageWithSecret) ?? undefined,
             decryptFail: resolveDecryptFailAttr(messageWithSecret),
             groupCiphertext: groupCiphertext.ciphertext,

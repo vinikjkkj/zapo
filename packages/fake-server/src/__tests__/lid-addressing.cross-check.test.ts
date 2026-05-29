@@ -49,10 +49,8 @@ test('fake peer in @lid space pushes a Signal message and the lib emits message'
         await peer.sendConversation(inboundText)
         const inbound = await inboundPromise
         assert.equal(inbound.message?.conversation, inboundText)
-        assert.ok(
-            inbound.senderJid?.includes('@lid'),
-            `senderJid should be @lid, got ${inbound.senderJid}`
-        )
+        const senderJid = inbound.key.participant ?? inbound.key.remoteJid
+        assert.ok(senderJid.includes('@lid'), `senderJid should be @lid, got ${senderJid}`)
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()

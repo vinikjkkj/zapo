@@ -309,14 +309,6 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
      */
     readonly expectedIdentity?: Uint8Array
     /**
-     * Disambiguator for the resolved `edit` stanza attribute. Today only
-     * `'admin_revoke'` is meaningful – pass it when a group admin is
-     * revoking another participant's message so the outgoing stanza is
-     * tagged `edit="8"` (admin revoke) instead of `edit="7"` (sender revoke).
-     * Any other value is ignored.
-     */
-    readonly subtype?: string
-    /**
      * Optional context info to merge into the outgoing message – quoted message,
      * mentioned JIDs, forward score, link-preview override, etc. (see {@link WaSendContextInfo}).
      */
@@ -339,9 +331,24 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
      */
     readonly mentions?: readonly string[]
     /**
+     * Disappearing-message expiration in seconds for this message. When set (any
+     * value, including `0`), this is the winner: it overrides both
+     * `contextInfo.expirationSeconds` and the automatic group-ephemeral inject
+     * (the latter is short-circuited because the value is now defined). To send a
+     * single message with NO expiration into a group with disappearing-mode on,
+     * prefer `disableGroupEphemeralAutoInject: true` over `expirationSeconds: 0` —
+     * the latter still writes `expiration=0` into the outgoing `contextInfo`.
+     */
+    readonly expirationSeconds?: number
+    /**
      * Skip the automatic `ephemeralSettingTimestamp`/`expiration` injection
-     * applied for messages sent into groups with disappearing-mode on. Off by
-     * default – only set when you're managing those fields manually.
+     * applied to messages sent into groups with disappearing-mode on (the cached
+     * group ephemeral is otherwise fetched and applied for you). Off by default.
+     *
+     * Relationship with {@link expirationSeconds}: a non-undefined
+     * `expirationSeconds` already short-circuits the auto-inject, so this flag is
+     * redundant in that case. Use this flag when you want to suppress the
+     * auto-inject AND not set any expiration yourself.
      */
     readonly disableGroupEphemeralAutoInject?: boolean
     /** Raw child nodes appended to the `<message>` stanza. Escape hatch for protocol features the typed API doesn't cover. */
@@ -461,6 +468,13 @@ export interface WaIncomingMessageEvent extends Omit<WaIncomingBaseEvent, 'chatJ
      */
     readonly key: WaIncomingMessageKey
     readonly timestampSeconds?: number
+    /**
+     * Disappearing-message TTL the sender attached to this message, in seconds.
+     * Read from the first submessage carrying `contextInfo.expiration`
+     * (`extendedTextMessage`, `imageMessage`, …). Undefined when the message is
+     * not ephemeral.
+     */
+    readonly expirationSeconds?: number
     readonly pushName?: string
     readonly encryptionType?: string
     readonly plaintext?: Uint8Array

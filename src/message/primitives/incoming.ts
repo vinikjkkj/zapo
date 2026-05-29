@@ -4,6 +4,7 @@ import type {
     WaIncomingUnhandledStanzaEvent
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import { pickIncomingExpirationSeconds } from '@message/context-info'
 import { unwrapDeviceSentMessage } from '@message/encode/device-sent'
 import { unpadPkcs7 } from '@message/encode/padding'
 import { processIncomingNewsletterMessage } from '@message/kinds/newsletter'
@@ -133,6 +134,8 @@ export function buildRecoveredIncomingEvent(
             ? longToNumber(webMessageInfo.messageTimestamp)
             : undefined
     const stanzaId = key.id ?? undefined
+    const message = webMessageInfo.message ?? undefined
+    const expirationSeconds = pickIncomingExpirationSeconds(message)
     const rawNode: BinaryNode = {
         tag: WA_MESSAGE_TAGS.MESSAGE,
         attrs: {
@@ -155,7 +158,8 @@ export function buildRecoveredIncomingEvent(
         },
         timestampSeconds,
         encryptionType: 'placeholder_recovery',
-        message: webMessageInfo.message ?? undefined
+        ...(expirationSeconds !== undefined ? { expirationSeconds } : {}),
+        message
     }
 }
 
@@ -408,6 +412,7 @@ async function decryptAndProcessEncNode(
             const isBroadcast = chatJid ? isBroadcastJid(chatJid) : false
             const senderUserJid = `${senderAddress.user}@${senderAddress.server}`
             const { pushName, ...keyIdentity } = extractMessageIdentityAttrs(node.attrs)
+            const expirationSeconds = pickIncomingExpirationSeconds(message)
             options.emitIncomingMessage?.({
                 rawNode: buildIncomingEventRawNode(node),
                 key: {
@@ -424,6 +429,7 @@ async function decryptAndProcessEncNode(
                 stanzaType: node.attrs.type,
                 offline: node.attrs.offline !== undefined,
                 timestampSeconds: parseOptionalInt(node.attrs.t),
+                ...(expirationSeconds !== undefined ? { expirationSeconds } : {}),
                 pushName,
                 encryptionType: encType,
                 plaintext: unpaddedPlaintext,

@@ -46,7 +46,7 @@ test('fake peer encrypts a Signal message and the lib emits message event', asyn
         const [event] = await messagePromise
         assert.ok(event.message, 'message event should carry a decoded Message proto')
         assert.equal(event.message?.conversation, 'hello from the fake server')
-        assert.equal(event.senderJid, '5511888888888@s.whatsapp.net')
+        assert.equal(event.key.participant ?? event.key.remoteJid, '5511888888888@s.whatsapp.net')
     } finally {
         await client.disconnect().catch(() => undefined)
         await server.stop()

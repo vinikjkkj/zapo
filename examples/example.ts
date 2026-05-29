@@ -144,7 +144,7 @@ async function startSession(client: WaClient): Promise<void> {
         if (!text || text.trim().toLowerCase() !== 'ping') {
             return
         }
-        const to = event.chatJid ?? event.senderJid
+        const to = event.key.remoteJid
         if (!to) {
             console.log('[incoming_message] ping sem destino para responder')
             return
