@@ -35,6 +35,8 @@
         "bench:usync": "node --expose-gc --import tsx bench/bulk-usync.bench.ts",
         "bench:group": "node --expose-gc --import tsx bench/group-provision.bench.ts",
         "bench:media": "node --expose-gc --import tsx bench/media-upload.bench.ts",
+        "bench:media:messaging": "node --expose-gc --import tsx bench/messaging-media.bench.ts",
+        "bench:retry": "node --expose-gc --import tsx bench/retry.bench.ts",
         "bench:receipts": "node --expose-gc --import tsx bench/receipts-flood.bench.ts",
         "bench:reconnect": "node --expose-gc --import tsx bench/reconnect-resume.bench.ts",
         "bench:appstate": "node --expose-gc --import tsx bench/appstate.bench.ts",

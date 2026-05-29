@@ -129,6 +129,7 @@ export class FakeWaServer {
     private readonly pendingStanzaExpectations = new Set<PendingStanzaExpectation>()
     private readonly authenticatedListeners = new Set<AuthenticatedPipelineListener>()
     private readonly inboundStanzaListeners = new Set<(node: BinaryNode) => void>()
+    private readonly capturedStanzaListeners = new Set<(node: BinaryNode) => void>()
     private rootCa: FakeNoiseRootCa | null = null
     private serverStaticKeyPair: SignalKeyPair | null = null
     private listenInfo: WaFakeWsServerListenInfo | null = null
@@ -428,6 +429,22 @@ export class FakeWaServer {
         return this.capturedStanzas.slice()
     }
 
+    /**
+     * Subscribes to every stanza captured from the client side (the lib).
+     * The listener is called synchronously for each new stanza as it
+     * arrives, in addition to `capturedStanzas` being appended. Returns
+     * an unsubscribe function. Useful for benches that need to count or
+     * react to a stream of receipts/messages without paying the O(N²)
+     * cost of polling `capturedStanzaSnapshot()` or queuing one
+     * `expectStanza(...)` per iteration.
+     */
+    public onCapturedStanza(listener: (node: BinaryNode) => void): () => void {
+        this.capturedStanzaListeners.add(listener)
+        return () => {
+            this.capturedStanzaListeners.delete(listener)
+        }
+    }
+
     public expectStanza(
         matcher: StanzaMatcher,
         options: ExpectStanzaOptions = {}
@@ -521,7 +538,16 @@ export class FakeWaServer {
 
     public get mediaProxyAgent(): HttpsAgent {
         if (!this.cachedMediaProxyAgent) {
-            this.cachedMediaProxyAgent = new HttpsAgent({ rejectUnauthorized: false })
+            // keepAlive is required for representative perf measurements
+            // and matches what real-world WhatsApp clients do – every
+            // media upload/download would otherwise pay a full TLS
+            // handshake. The `src/media/__tests__/media.test.ts` fixtures
+            // and a production-quality `proxy.mediaUpload` configuration
+            // all set this; mirroring it here keeps benches in line.
+            this.cachedMediaProxyAgent = new HttpsAgent({
+                rejectUnauthorized: false,
+                keepAlive: true
+            })
         }
         return this.cachedMediaProxyAgent
     }
@@ -721,6 +747,14 @@ export class FakeWaServer {
 
     private handleCapturedStanza(node: BinaryNode): void {
         this.capturedStanzas.push(node)
+
+        for (const listener of this.capturedStanzaListeners) {
+            try {
+                listener(node)
+            } catch (error) {
+                void error
+            }
+        }
 
         for (const listener of this.inboundStanzaListeners) {
             try {

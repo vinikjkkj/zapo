@@ -178,10 +178,215 @@ async function handleEnsurePreKeyPool(params: { requiredHeadroom: number }): Pro
     await server.triggerPreKeyUpload(pipeline, { force: true })
 }
 
-async function handlePeerSendConversation(params: { peerId: string; text: string }): Promise<void> {
+async function handlePeerSendConversation(params: {
+    peerId: string
+    text: string
+    id?: string
+    tamperMode?: 'last-byte-xor-ff'
+}): Promise<void> {
     const peer = peersById.get(params.peerId)
     if (!peer) throw new Error(`peer ${params.peerId} not found`)
-    await peer.sendConversation(params.text)
+    const tamper =
+        params.tamperMode === 'last-byte-xor-ff'
+            ? (bytes: Uint8Array): Uint8Array => {
+                  const out = new Uint8Array(bytes)
+                  out[out.byteLength - 1] ^= 0xff
+                  return out
+              }
+            : undefined
+    await peer.sendConversation(params.text, {
+        ...(params.id !== undefined ? { id: params.id } : {}),
+        ...(tamper ? { tamperCiphertext: tamper } : {})
+    })
+}
+
+interface MediaDescriptorBytes {
+    readonly directPath: string
+    readonly mediaKeyBytes: number[]
+    readonly fileSha256Bytes: number[]
+    readonly fileEncSha256Bytes: number[]
+    readonly fileLength: number
+    readonly mimetype?: string
+}
+
+function unpackMediaDescriptor(input: MediaDescriptorBytes): {
+    readonly directPath: string
+    readonly mediaKey: Uint8Array
+    readonly fileSha256: Uint8Array
+    readonly fileEncSha256: Uint8Array
+    readonly fileLength: number
+    readonly mimetype?: string
+} {
+    return {
+        directPath: input.directPath,
+        mediaKey: new Uint8Array(input.mediaKeyBytes),
+        fileSha256: new Uint8Array(input.fileSha256Bytes),
+        fileEncSha256: new Uint8Array(input.fileEncSha256Bytes),
+        fileLength: input.fileLength,
+        mimetype: input.mimetype
+    }
+}
+
+async function handlePeerSendImageMessage(params: {
+    peerId: string
+    descriptor: MediaDescriptorBytes
+}): Promise<void> {
+    const peer = peersById.get(params.peerId)
+    if (!peer) throw new Error(`peer ${params.peerId} not found`)
+    await peer.sendImageMessage(unpackMediaDescriptor(params.descriptor))
+}
+
+async function handlePeerSendVideoMessage(params: {
+    peerId: string
+    descriptor: MediaDescriptorBytes
+}): Promise<void> {
+    const peer = peersById.get(params.peerId)
+    if (!peer) throw new Error(`peer ${params.peerId} not found`)
+    await peer.sendVideoMessage(unpackMediaDescriptor(params.descriptor))
+}
+
+async function handlePublishMediaBlob(params: {
+    mediaType:
+        | 'image'
+        | 'video'
+        | 'audio'
+        | 'document'
+        | 'sticker'
+        | 'gif'
+        | 'ptt'
+        | 'history'
+        | 'md-app-state'
+    plaintextBytes: number[]
+}): Promise<{
+    path: string
+    mediaKeyBytes: number[]
+    fileSha256Bytes: number[]
+    fileEncSha256Bytes: number[]
+    fileLength: number
+}> {
+    if (!server) throw new Error('server not started')
+    const blob = await server.publishMediaBlob({
+        mediaType: params.mediaType,
+        plaintext: new Uint8Array(params.plaintextBytes)
+    })
+    return {
+        path: blob.path,
+        mediaKeyBytes: Array.from(blob.mediaKey),
+        fileSha256Bytes: Array.from(blob.fileSha256),
+        fileEncSha256Bytes: Array.from(blob.fileEncSha256),
+        fileLength: blob.fileLength
+    }
+}
+
+async function handleMediaUrl(params: { path: string }): Promise<{ url: string }> {
+    if (!server) throw new Error('server not started')
+    return { url: server.mediaUrl(params.path) }
+}
+
+async function handlePeerExpectMessage(params: {
+    peerId: string
+    timeoutMs?: number
+}): Promise<{ conversation: string | null; encType: 'pkmsg' | 'msg' | 'skmsg' }> {
+    const peer = peersById.get(params.peerId)
+    if (!peer) throw new Error(`peer ${params.peerId} not found`)
+    const received = await peer.expectMessage({ timeoutMs: params.timeoutMs ?? 30_000 })
+    return {
+        conversation: received.message.conversation ?? null,
+        encType: received.encType
+    }
+}
+
+async function handlePeerReplaySentMessage(params: {
+    peerId: string
+    originalMsgId: string
+    resendId?: string
+}): Promise<void> {
+    const peer = peersById.get(params.peerId)
+    if (!peer) throw new Error(`peer ${params.peerId} not found`)
+    await peer.replaySentMessage(params.originalMsgId, {
+        ...(params.resendId !== undefined ? { resendId: params.resendId } : {})
+    })
+}
+
+async function handlePeerRotateForRetry(params: { peerId: string }): Promise<void> {
+    const peer = peersById.get(params.peerId)
+    if (!peer) throw new Error(`peer ${params.peerId} not found`)
+    await peer.rotateForRetry()
+}
+
+async function handlePeerSendRetryReceipt(params: {
+    peerId: string
+    originalMsgId: string
+    includeKeys?: boolean
+    count?: number
+    receiptId?: string
+    t?: number
+}): Promise<void> {
+    const peer = peersById.get(params.peerId)
+    if (!peer) throw new Error(`peer ${params.peerId} not found`)
+    await peer.sendRetryReceipt(params.originalMsgId, {
+        ...(params.count !== undefined ? { count: params.count } : {}),
+        ...(params.receiptId !== undefined ? { receiptId: params.receiptId } : {}),
+        ...(params.t !== undefined ? { t: params.t } : {}),
+        ...(params.includeKeys !== undefined ? { includeKeys: params.includeKeys } : {})
+    })
+}
+
+async function handleWaitForRetryReceipt(params: {
+    stanzaId: string
+    timeoutMs?: number
+}): Promise<void> {
+    if (!server) throw new Error('server not started')
+    const timeoutMs = params.timeoutMs ?? 60_000
+    await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            offCapture()
+            reject(
+                new Error(`waitForRetryReceipt(${params.stanzaId}) timed out after ${timeoutMs}ms`)
+            )
+        }, timeoutMs)
+        timer.unref?.()
+        const offCapture = server!.onCapturedStanza((stanza) => {
+            if (stanza.tag !== 'receipt') return
+            if (stanza.attrs.type !== 'retry') return
+            if (stanza.attrs.id !== params.stanzaId) return
+            clearTimeout(timer)
+            offCapture()
+            resolve()
+        })
+    })
+}
+
+async function handleWaitForRetryReceipts(params: {
+    count: number
+    timeoutMs?: number
+}): Promise<{ ids: string[] }> {
+    if (!server) throw new Error('server not started')
+    const timeoutMs = params.timeoutMs ?? 60_000
+    const ids: string[] = []
+    await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            offCapture()
+            reject(
+                new Error(
+                    `waitForRetryReceipts stalled at ${ids.length}/${params.count} after ${timeoutMs}ms`
+                )
+            )
+        }, timeoutMs)
+        timer.unref?.()
+        const offCapture = server!.onCapturedStanza((stanza) => {
+            if (stanza.tag !== 'receipt') return
+            if (stanza.attrs.type !== 'retry') return
+            if (!stanza.attrs.id) return
+            ids.push(stanza.attrs.id)
+            if (ids.length >= params.count) {
+                clearTimeout(timer)
+                offCapture()
+                resolve()
+            }
+        })
+    })
+    return { ids }
 }
 
 async function handlePeerSendGroupConversation(params: {
@@ -554,6 +759,26 @@ const handlers: Record<
     peerSendGroupConversation: handlePeerSendGroupConversation as (
         p: Record<string, unknown>
     ) => Promise<void>,
+    peerSendImageMessage: handlePeerSendImageMessage as (
+        p: Record<string, unknown>
+    ) => Promise<void>,
+    peerSendVideoMessage: handlePeerSendVideoMessage as (
+        p: Record<string, unknown>
+    ) => Promise<void>,
+    publishMediaBlob: handlePublishMediaBlob as (p: Record<string, unknown>) => Promise<unknown>,
+    mediaUrl: handleMediaUrl as (p: Record<string, unknown>) => Promise<unknown>,
+    peerExpectMessage: handlePeerExpectMessage as (p: Record<string, unknown>) => Promise<unknown>,
+    peerReplaySentMessage: handlePeerReplaySentMessage as (
+        p: Record<string, unknown>
+    ) => Promise<void>,
+    peerRotateForRetry: handlePeerRotateForRetry as (p: Record<string, unknown>) => Promise<void>,
+    peerSendRetryReceipt: handlePeerSendRetryReceipt as (
+        p: Record<string, unknown>
+    ) => Promise<void>,
+    waitForRetryReceipt: handleWaitForRetryReceipt as (p: Record<string, unknown>) => Promise<void>,
+    waitForRetryReceipts: handleWaitForRetryReceipts as (
+        p: Record<string, unknown>
+    ) => Promise<unknown>,
     preKeysAvailable: handlePreKeysAvailable as () => number,
     dispenserMisses: handleDispenserMisses as () => number,
     stop: handleStop,

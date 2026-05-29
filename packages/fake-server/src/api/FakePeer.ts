@@ -67,18 +67,23 @@ interface FakePeerDeps {
 export class FakePeer {
     public readonly jid: string
     public readonly displayName?: string
-    public readonly keyBundle: FakePeerKeyBundle
+    public keyBundle: FakePeerKeyBundle
     public readonly identity: FakePeerIdentity
 
     private readonly deps: FakePeerDeps
-    private readonly ratchet: FakePeerDoubleRatchet
+    private ratchet: FakePeerDoubleRatchet
     private readonly skipOneTimePreKey: boolean
-    private readonly reservedOneTimePreKey: {
+    private reservedOneTimePreKey: {
         readonly keyId: number
         readonly publicKey: Uint8Array
     } | null
     private ratchetInitiated = false
     private nextMessageCounter = 0
+    private readonly sentPlaintextById = new Map<string, proto.IMessage>()
+    private readonly sentEncryptedById = new Map<
+        string,
+        { readonly type: 'pkmsg' | 'msg'; readonly ciphertext: Uint8Array }
+    >()
     private readonly senderKeysByGroup = new Map<string, FakeSenderKey>()
     private readonly groupsBootstrapped = new Set<string>()
     private readonly groupRecvSession = new FakePeerGroupRecvSession()
@@ -126,6 +131,15 @@ export class FakePeer {
 
         const enc: FakeEncChild = { type, ciphertext: finalCiphertext }
         const id = options.id ?? this.nextId()
+        // Stash the plaintext so the bench / a test can replay this
+        // exact payload later in response to an incoming retry receipt
+        // from the lib (replaySentMessage). Also stash the PRISTINE
+        // ciphertext (pre-tamper) + signal type so a replay can put the
+        // original frame back on the wire – this matches how a real
+        // Signal sender re-sends after a recipient asks for retry: the
+        // same counter + ratchet key, just an uncorrupted body.
+        this.sentPlaintextById.set(id, message)
+        this.sentEncryptedById.set(id, { type, ciphertext })
         const stanza = buildMessage({
             id,
             from: options.from ?? this.jid,
@@ -136,6 +150,82 @@ export class FakePeer {
             enc: [enc]
         })
         await this.deps.pushStanza(stanza)
+    }
+
+    /**
+     * Re-encrypts and re-pushes a previously sent message identified by
+     * `originalMsgId`. Used by tests / benches that exercise the lib's
+     * incoming-retry path: after the lib emits `<receipt type="retry">`
+     * back to this peer, the peer is expected to re-send the same
+     * plaintext so the lib can decrypt it successfully on the second
+     * attempt.
+     *
+     * The replay reuses the original stanza id by default so the lib's
+     * dedup logic (and tests that wait for a specific id) see the resend
+     * as a continuation of the same outbound. Pass `resendId` to use a
+     * different id.
+     */
+    public async replaySentMessage(
+        originalMsgId: string,
+        options: { readonly resendId?: string } = {}
+    ): Promise<void> {
+        const stored = this.sentEncryptedById.get(originalMsgId)
+        if (stored) {
+            // Re-send the pristine ciphertext – same Signal counter +
+            // ratchet key as the original send, just without the
+            // tamper. The lib's recv chain still has the message key
+            // for that counter, so this is the recovery path real
+            // WhatsApp peers walk after observing a retry receipt for
+            // a frame the recipient failed to decrypt.
+            const enc: FakeEncChild = { type: stored.type, ciphertext: stored.ciphertext }
+            const id = options.resendId ?? originalMsgId
+            const stanza = buildMessage({
+                id,
+                from: this.jid,
+                type: 'text',
+                notify: this.displayName,
+                enc: [enc]
+            })
+            await this.deps.pushStanza(stanza)
+            return
+        }
+        const message = this.sentPlaintextById.get(originalMsgId)
+        if (!message) {
+            throw new Error(`FakePeer.replaySentMessage: no sent plaintext for id ${originalMsgId}`)
+        }
+        await this.sendMessage(message, { id: options.resendId ?? originalMsgId })
+    }
+
+    /**
+     * Rotates the peer's prekey material and resets the Signal session
+     * state so the lib has to re-run X3DH on the next outbound. Keeps
+     * the identity key pair (same user) but issues a new signed prekey
+     * + new one-time prekey set. After this call:
+     *   - `keyBundle` reflects the new material;
+     *   - the underlying `FakePeerDoubleRatchet` is fresh – the next
+     *     inbound from the lib must be a `pkmsg` (initial signal
+     *     message), which the new `keyBundle` is wired to decrypt;
+     *   - any cached one-time prekey reservation in the dispenser is
+     *     dropped so subsequent retry-receipts include this peer's new
+     *     keys directly via {@link sendRetryReceipt}.
+     *
+     * Use this to simulate the "session lost" scenario that real
+     * WhatsApp clients trigger when they need the sender to fully
+     * re-bootstrap the Signal session via the retry-receipt path.
+     */
+    public async rotateForRetry(): Promise<void> {
+        const refreshed = await generateFakePeerKeyBundle({
+            identityKeyPair: this.keyBundle.identityKeyPair,
+            registrationId: this.keyBundle.registrationId,
+            signedPreKeyId: this.keyBundle.signedPreKey.id + 1,
+            firstOneTimePreKeyId:
+                (this.keyBundle.oneTimePreKeys[this.keyBundle.oneTimePreKeys.length - 1]?.id ?? 0) +
+                1
+        })
+        this.keyBundle = refreshed
+        this.ratchet = new FakePeerDoubleRatchet(refreshed)
+        this.ratchetInitiated = false
+        this.reservedOneTimePreKey = null
     }
 
     public sendConversation(text: string, options: SendMessageOptions = {}): Promise<void> {
@@ -459,6 +549,127 @@ export class FakePeer {
         await this.deps.pushStanza(groupStanza)
     }
 
+    /**
+     * Sends a `<receipt type="retry">` stanza to the lib asking it to
+     * re-encrypt and re-send the message identified by `originalMsgId`.
+     * Used by benches / tests that exercise the lib's outbound retry
+     * replay path.
+     *
+     * Shape matches WhatsApp Web's `WAWebRetryRequestParser`:
+     * `<receipt id type=retry from t><retry id count?/><registration>4B</registration>[<keys>...</keys>]</receipt>`.
+     *
+     * When `includeKeys` is true (default), the `<keys>` block carries
+     * the peer's current identity + signed prekey + one-time prekey.
+     * This forces the lib's `WaRetryCoordinator` to tear down the
+     * existing session and re-run X3DH against these fresh keys before
+     * re-encrypting the original payload, so the resend lands as a
+     * `pkmsg` against the peer's *new* prekey state. Pair this with
+     * {@link rotateForRetry} to simulate full session loss + recovery.
+     *
+     * `<device-identity>` is omitted: it's `maybeChild` in wa-web and
+     * also optional in the lib's parser. The fake-peer fixture doesn't
+     * have an ADV primary-device to sign one, and the lib's outbound
+     * retry replay path does not require it.
+     */
+    public async sendRetryReceipt(
+        originalMsgId: string,
+        options: {
+            readonly count?: number
+            readonly receiptId?: string
+            readonly t?: number
+            readonly error?: number
+            readonly includeKeys?: boolean
+        } = {}
+    ): Promise<void> {
+        const receiptId = options.receiptId ?? originalMsgId
+        const retryCount = options.count ?? 1
+        const t = options.t ?? Math.floor(Date.now() / 1_000)
+        const error = options.error
+        const includeKeys = options.includeKeys !== false
+        const registration = new Uint8Array(4)
+        const regId = this.keyBundle.registrationId & 0xffffffff
+        registration[0] = (regId >>> 24) & 0xff
+        registration[1] = (regId >>> 16) & 0xff
+        registration[2] = (regId >>> 8) & 0xff
+        registration[3] = regId & 0xff
+
+        const retryAttrs: Record<string, string> = {
+            v: '1',
+            count: String(retryCount),
+            id: originalMsgId,
+            t: String(t)
+        }
+        if (error !== undefined && error !== 0) {
+            retryAttrs.error = String(error)
+        }
+
+        const content: BinaryNode[] = [
+            {
+                tag: 'retry',
+                attrs: retryAttrs
+            },
+            {
+                tag: 'registration',
+                attrs: {},
+                content: registration
+            }
+        ]
+
+        if (includeKeys) {
+            content.push(this.buildRetryKeysNode())
+        }
+
+        const receipt: BinaryNode = {
+            tag: 'receipt',
+            attrs: {
+                id: receiptId,
+                from: this.jid,
+                type: 'retry',
+                t: String(t)
+            },
+            content
+        }
+        await this.deps.pushStanza(receipt)
+    }
+
+    private buildRetryKeysNode(): BinaryNode {
+        const skey = this.keyBundle.signedPreKey
+        const oneTime = this.keyBundle.oneTimePreKeys[0]
+        if (!oneTime) {
+            throw new Error('FakePeer.sendRetryReceipt: no one-time prekey available')
+        }
+        const skeyIdBytes = encodeUint3(skey.id)
+        const keyIdBytes = encodeUint3(oneTime.id)
+        return {
+            tag: 'keys',
+            attrs: {},
+            content: [
+                {
+                    tag: 'identity',
+                    attrs: {},
+                    content: this.keyBundle.identityKeyPair.pubKey
+                },
+                {
+                    tag: 'skey',
+                    attrs: {},
+                    content: [
+                        { tag: 'id', attrs: {}, content: skeyIdBytes },
+                        { tag: 'value', attrs: {}, content: skey.keyPair.pubKey },
+                        { tag: 'signature', attrs: {}, content: skey.signature }
+                    ]
+                },
+                {
+                    tag: 'key',
+                    attrs: {},
+                    content: [
+                        { tag: 'id', attrs: {}, content: keyIdBytes },
+                        { tag: 'value', attrs: {}, content: oneTime.keyPair.pubKey }
+                    ]
+                }
+            ]
+        }
+    }
+
     public expectMessage(options: ExpectMessageOptions = {}): Promise<ReceivedMessage> {
         const timeoutMs = options.timeoutMs ?? 5_000
         return new Promise<ReceivedMessage>((resolve, reject) => {
@@ -625,6 +836,17 @@ function findTopLevelEnc(stanza: BinaryNode, type: string): BinaryNode | null {
         }
     }
     return null
+}
+
+function encodeUint3(value: number): Uint8Array {
+    if (!Number.isInteger(value) || value < 0 || value > 0xffffff) {
+        throw new Error(`encodeUint3: value out of range: ${value}`)
+    }
+    const out = new Uint8Array(3)
+    out[0] = (value >>> 16) & 0xff
+    out[1] = (value >>> 8) & 0xff
+    out[2] = value & 0xff
+    return out
 }
 
 function encodePlaintextWithPadding(message: proto.IMessage): Uint8Array {

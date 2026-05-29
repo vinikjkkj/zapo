@@ -21,6 +21,31 @@ interface RpcResponse {
     readonly error?: string
 }
 
+function serializeDescriptor(descriptor: {
+    directPath: string
+    mediaKey: Uint8Array
+    fileSha256: Uint8Array
+    fileEncSha256: Uint8Array
+    fileLength: number
+    mimetype?: string
+}): {
+    directPath: string
+    mediaKeyBytes: number[]
+    fileSha256Bytes: number[]
+    fileEncSha256Bytes: number[]
+    fileLength: number
+    mimetype?: string
+} {
+    return {
+        directPath: descriptor.directPath,
+        mediaKeyBytes: Array.from(descriptor.mediaKey),
+        fileSha256Bytes: Array.from(descriptor.fileSha256),
+        fileEncSha256Bytes: Array.from(descriptor.fileEncSha256),
+        fileLength: descriptor.fileLength,
+        mimetype: descriptor.mimetype
+    }
+}
+
 export interface RemotePeerHandle {
     readonly peerId: string
     sendConversation(text: string): Promise<void>
@@ -109,7 +134,10 @@ export class ServerRpc {
             publicKey: new Uint8Array(result.noiseRootCa.publicKey),
             serial: result.noiseRootCa.serial
         }
-        this.mediaProxyAgent = new https.Agent({ rejectUnauthorized: false })
+        // keepAlive: true mirrors what real-world WhatsApp clients do and
+        // matches the in-process FakeWaServer.mediaProxyAgent so the
+        // --separate-process bench numbers stay comparable.
+        this.mediaProxyAgent = new https.Agent({ rejectUnauthorized: false, keepAlive: true })
     }
 
     public async waitForAuthenticatedPipeline(): Promise<void> {
@@ -177,8 +205,148 @@ export class ServerRpc {
         await this.call('ensurePreKeyPool', { requiredHeadroom })
     }
 
-    public async peerSendConversation(peerId: string, text: string): Promise<void> {
-        await this.call('peerSendConversation', { peerId, text })
+    public async peerSendConversation(
+        peerId: string,
+        text: string,
+        options: { id?: string; tamperMode?: 'last-byte-xor-ff' } = {}
+    ): Promise<void> {
+        await this.call('peerSendConversation', {
+            peerId,
+            text,
+            ...(options.id !== undefined ? { id: options.id } : {}),
+            ...(options.tamperMode !== undefined ? { tamperMode: options.tamperMode } : {})
+        })
+    }
+
+    public async peerSendImageMessage(
+        peerId: string,
+        descriptor: {
+            directPath: string
+            mediaKey: Uint8Array
+            fileSha256: Uint8Array
+            fileEncSha256: Uint8Array
+            fileLength: number
+            mimetype?: string
+        }
+    ): Promise<void> {
+        await this.call('peerSendImageMessage', {
+            peerId,
+            descriptor: serializeDescriptor(descriptor)
+        })
+    }
+
+    public async peerSendVideoMessage(
+        peerId: string,
+        descriptor: {
+            directPath: string
+            mediaKey: Uint8Array
+            fileSha256: Uint8Array
+            fileEncSha256: Uint8Array
+            fileLength: number
+            mimetype?: string
+        }
+    ): Promise<void> {
+        await this.call('peerSendVideoMessage', {
+            peerId,
+            descriptor: serializeDescriptor(descriptor)
+        })
+    }
+
+    public async publishMediaBlob(input: {
+        mediaType:
+            | 'image'
+            | 'video'
+            | 'audio'
+            | 'document'
+            | 'sticker'
+            | 'gif'
+            | 'ptt'
+            | 'history'
+            | 'md-app-state'
+        plaintext: Uint8Array
+    }): Promise<{
+        path: string
+        mediaKey: Uint8Array
+        fileSha256: Uint8Array
+        fileEncSha256: Uint8Array
+        fileLength: number
+    }> {
+        const result = (await this.call('publishMediaBlob', {
+            mediaType: input.mediaType,
+            plaintextBytes: Array.from(input.plaintext)
+        })) as {
+            path: string
+            mediaKeyBytes: number[]
+            fileSha256Bytes: number[]
+            fileEncSha256Bytes: number[]
+            fileLength: number
+        }
+        return {
+            path: result.path,
+            mediaKey: new Uint8Array(result.mediaKeyBytes),
+            fileSha256: new Uint8Array(result.fileSha256Bytes),
+            fileEncSha256: new Uint8Array(result.fileEncSha256Bytes),
+            fileLength: result.fileLength
+        }
+    }
+
+    public async mediaUrl(path: string): Promise<string> {
+        const result = (await this.call('mediaUrl', { path })) as { url: string }
+        return result.url
+    }
+
+    public async peerExpectMessage(
+        peerId: string,
+        timeoutMs = 30_000
+    ): Promise<{ conversation: string | null; encType: 'pkmsg' | 'msg' | 'skmsg' }> {
+        return (await this.call('peerExpectMessage', { peerId, timeoutMs })) as {
+            conversation: string | null
+            encType: 'pkmsg' | 'msg' | 'skmsg'
+        }
+    }
+
+    public async peerReplaySentMessage(
+        peerId: string,
+        originalMsgId: string,
+        options: { resendId?: string } = {}
+    ): Promise<void> {
+        await this.call('peerReplaySentMessage', {
+            peerId,
+            originalMsgId,
+            ...(options.resendId !== undefined ? { resendId: options.resendId } : {})
+        })
+    }
+
+    public async peerRotateForRetry(peerId: string): Promise<void> {
+        await this.call('peerRotateForRetry', { peerId })
+    }
+
+    public async peerSendRetryReceipt(
+        peerId: string,
+        originalMsgId: string,
+        options: {
+            includeKeys?: boolean
+            count?: number
+            receiptId?: string
+            t?: number
+        } = {}
+    ): Promise<void> {
+        await this.call('peerSendRetryReceipt', {
+            peerId,
+            originalMsgId,
+            ...options
+        })
+    }
+
+    public async waitForRetryReceipt(stanzaId: string, timeoutMs = 60_000): Promise<void> {
+        await this.call('waitForRetryReceipt', { stanzaId, timeoutMs })
+    }
+
+    public async waitForRetryReceipts(count: number, timeoutMs = 60_000): Promise<string[]> {
+        const result = (await this.call('waitForRetryReceipts', { count, timeoutMs })) as {
+            ids: string[]
+        }
+        return result.ids
     }
 
     public async peerSendGroupConversation(
