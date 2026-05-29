@@ -291,6 +291,8 @@ export {
     WA_APP_STATE_KEY_TYPES,
     WA_APP_STATE_SYNC_DATA_TYPE,
     WA_BROWSERS,
+    WA_BUSINESS_HOURS_DAYS,
+    WA_BUSINESS_HOURS_MODES,
     WA_COMPANION_PLATFORM_IDS,
     WA_DEFAULTS,
     WA_DIRTY_PROTOCOLS,
@@ -319,6 +321,8 @@ export {
 } from '@protocol'
 export type {
     ParsedJid,
+    WaBusinessHoursDay,
+    WaBusinessHoursMode,
     WaConnectionCode,
     WaConnectionOpenReason,
     WaDisconnectReason,

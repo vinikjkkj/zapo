@@ -1,4 +1,5 @@
 import type { WaDeviceListSnapshot, WaDeviceListStore } from 'zapo-js/store'
+import { TEXT_DECODER } from 'zapo-js/util'
 
 import { BaseMysqlStore } from './BaseMysqlStore'
 import { affectedRows, queryRows } from './helpers'
@@ -25,15 +26,17 @@ export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceLi
             for (const snapshot of snapshots) {
                 await conn.execute(
                     `INSERT INTO ${this.t('device_list_cache')} (
-                        session_id, user_jid, device_jids_json, updated_at_ms, expires_at_ms
-                    ) VALUES (?, ?, ?, ?, ?)
+                        session_id, user_jid, alt_user_jid, device_jids_json, updated_at_ms, expires_at_ms
+                    ) VALUES (?, ?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
+                        alt_user_jid = VALUES(alt_user_jid),
                         device_jids_json = VALUES(device_jids_json),
                         updated_at_ms = VALUES(updated_at_ms),
                         expires_at_ms = VALUES(expires_at_ms)`,
                     [
                         this.sessionId,
                         snapshot.userJid,
+                        snapshot.altUserJid ?? null,
                         JSON.stringify(snapshot.deviceJids),
                         snapshot.updatedAtMs,
                         snapshot.updatedAtMs + this.ttlMs
@@ -59,7 +62,7 @@ export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceLi
             while (batch.length < BATCH_SIZE) batch.push('')
             const rows = queryRows(
                 await this.pool.execute(
-                    `SELECT user_jid, device_jids_json, updated_at_ms, expires_at_ms
+                    `SELECT user_jid, alt_user_jid, device_jids_json, updated_at_ms, expires_at_ms
                      FROM ${this.t('device_list_cache')}
                      WHERE session_id = ? AND user_jid IN (${FIXED_IN_PLACEHOLDERS})`,
                     [this.sessionId, ...batch]
@@ -72,19 +75,7 @@ export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceLi
                     expiredUserJids.push(userJid)
                     continue
                 }
-                const rawJson =
-                    row.device_jids_json instanceof Uint8Array
-                        ? new TextDecoder().decode(row.device_jids_json)
-                        : String(row.device_jids_json)
-                const parsed: unknown = JSON.parse(rawJson)
-                if (!Array.isArray(parsed)) {
-                    throw new Error('device_list_cache.device_jids_json must be an array')
-                }
-                activeByUserJid.set(userJid, {
-                    userJid,
-                    deviceJids: parsed.map((entry: unknown) => String(entry)),
-                    updatedAtMs: Number(row.updated_at_ms)
-                })
+                activeByUserJid.set(userJid, decodeMysqlSnapshot(userJid, row))
             }
         }
 
@@ -101,6 +92,34 @@ export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceLi
         }
 
         return userJids.map((jid) => activeByUserJid.get(jid) ?? null)
+    }
+
+    public async findByAnyUserJid(
+        jid: string,
+        nowMs = Date.now()
+    ): Promise<WaDeviceListSnapshot | null> {
+        await this.ensureReady()
+        const rows = queryRows(
+            await this.pool.execute(
+                `SELECT user_jid, alt_user_jid, device_jids_json, updated_at_ms, expires_at_ms
+                 FROM ${this.t('device_list_cache')}
+                 WHERE session_id = ? AND (user_jid = ? OR alt_user_jid = ?)
+                 LIMIT 1`,
+                [this.sessionId, jid, jid]
+            )
+        )
+        if (rows.length === 0) return null
+        const row = rows[0]
+        const expiresAtMs = Number(row.expires_at_ms)
+        if (expiresAtMs <= nowMs) {
+            const expiredUserJid = String(row.user_jid)
+            await this.pool.execute(
+                `DELETE FROM ${this.t('device_list_cache')} WHERE session_id = ? AND user_jid = ?`,
+                [this.sessionId, expiredUserJid]
+            )
+            return null
+        }
+        return decodeMysqlSnapshot(String(row.user_jid), row)
     }
 
     public async deleteUserDevices(userJid: string): Promise<number> {
@@ -130,5 +149,29 @@ export class WaDeviceListMysqlStore extends BaseMysqlStore implements WaDeviceLi
         await this.pool.execute(`DELETE FROM ${this.t('device_list_cache')} WHERE session_id = ?`, [
             this.sessionId
         ])
+    }
+}
+
+function decodeMysqlSnapshot(
+    userJid: string,
+    row: Record<string, unknown>
+): WaDeviceListSnapshot {
+    const rawJson =
+        row.device_jids_json instanceof Uint8Array
+            ? TEXT_DECODER.decode(row.device_jids_json)
+            : String(row.device_jids_json)
+    const parsed: unknown = JSON.parse(rawJson)
+    if (!Array.isArray(parsed)) {
+        throw new Error('device_list_cache.device_jids_json must be an array')
+    }
+    const altUserJid =
+        row.alt_user_jid === null || row.alt_user_jid === undefined
+            ? undefined
+            : String(row.alt_user_jid)
+    return {
+        userJid,
+        ...(altUserJid !== undefined ? { altUserJid } : {}),
+        deviceJids: parsed.map((entry: unknown) => String(entry)),
+        updatedAtMs: Number(row.updated_at_ms)
     }
 }

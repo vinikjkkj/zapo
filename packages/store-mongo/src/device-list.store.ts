@@ -5,6 +5,7 @@ import type { WaMongoStorageOptions } from './types'
 
 interface DeviceListDoc {
     _id: { session_id: string; user_jid: string }
+    alt_user_jid?: string
     device_jids: string[]
     updated_at_ms: number
     expires_at: Date
@@ -26,25 +27,36 @@ export class WaDeviceListMongoStore extends BaseMongoStore implements WaDeviceLi
     protected override async createIndexes(): Promise<void> {
         const col = this.col<DeviceListDoc>('device_list_cache')
         await col.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 })
+        await col.createIndex(
+            { '_id.session_id': 1, alt_user_jid: 1 },
+            { name: 'alt_user_jid_lookup', sparse: true }
+        )
     }
 
     public async upsertUserDevicesBatch(snapshots: readonly WaDeviceListSnapshot[]): Promise<void> {
         if (snapshots.length === 0) return
         await this.ensureIndexes()
         const col = this.col<DeviceListDoc>('device_list_cache')
-        const ops = snapshots.map((snapshot) => ({
-            updateOne: {
-                filter: { _id: { session_id: this.sessionId, user_jid: snapshot.userJid } },
-                update: {
-                    $set: {
-                        device_jids: snapshot.deviceJids as string[],
-                        updated_at_ms: snapshot.updatedAtMs,
-                        expires_at: new Date(snapshot.updatedAtMs + this.ttlMs)
-                    }
-                },
-                upsert: true
+        const ops = snapshots.map((snapshot) => {
+            const set: Record<string, unknown> = {
+                device_jids: snapshot.deviceJids as string[],
+                updated_at_ms: snapshot.updatedAtMs,
+                expires_at: new Date(snapshot.updatedAtMs + this.ttlMs)
             }
-        }))
+            const update: Record<string, unknown> = { $set: set }
+            if (snapshot.altUserJid !== undefined) {
+                set.alt_user_jid = snapshot.altUserJid
+            } else {
+                update.$unset = { alt_user_jid: '' }
+            }
+            return {
+                updateOne: {
+                    filter: { _id: { session_id: this.sessionId, user_jid: snapshot.userJid } },
+                    update,
+                    upsert: true
+                }
+            }
+        })
         await col.bulkWrite(ops)
     }
 
@@ -66,13 +78,24 @@ export class WaDeviceListMongoStore extends BaseMongoStore implements WaDeviceLi
 
         const byUserJid = new Map<string, WaDeviceListSnapshot>()
         for (const doc of docs) {
-            byUserJid.set(doc._id.user_jid, {
-                userJid: doc._id.user_jid,
-                deviceJids: doc.device_jids,
-                updatedAtMs: doc.updated_at_ms
-            })
+            byUserJid.set(doc._id.user_jid, docToSnapshot(doc))
         }
         return userJids.map((jid) => byUserJid.get(jid) ?? null)
+    }
+
+    public async findByAnyUserJid(
+        jid: string,
+        nowMs = Date.now()
+    ): Promise<WaDeviceListSnapshot | null> {
+        await this.ensureIndexes()
+        const col = this.col<DeviceListDoc>('device_list_cache')
+        const doc = await col.findOne({
+            '_id.session_id': this.sessionId,
+            $or: [{ '_id.user_jid': jid }, { alt_user_jid: jid }],
+            expires_at: { $gt: new Date(nowMs) }
+        })
+        if (!doc) return null
+        return docToSnapshot(doc)
     }
 
     public async deleteUserDevices(userJid: string): Promise<number> {
@@ -92,5 +115,14 @@ export class WaDeviceListMongoStore extends BaseMongoStore implements WaDeviceLi
         await this.ensureIndexes()
         const col = this.col<DeviceListDoc>('device_list_cache')
         await col.deleteMany({ '_id.session_id': this.sessionId })
+    }
+}
+
+function docToSnapshot(doc: DeviceListDoc): WaDeviceListSnapshot {
+    return {
+        userJid: doc._id.user_jid,
+        ...(doc.alt_user_jid !== undefined ? { altUserJid: doc.alt_user_jid } : {}),
+        deviceJids: doc.device_jids,
+        updatedAtMs: doc.updated_at_ms
     }
 }

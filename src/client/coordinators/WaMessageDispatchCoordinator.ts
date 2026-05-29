@@ -62,6 +62,7 @@ import {
 } from '@protocol/jid'
 import type { OutboundRetryTracker } from '@retry/tracker'
 import type { WaRetryReplayPayload } from '@retry/types'
+import type { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import type { SignalResolvedSessionTarget, SignalSessionResolver } from '@signal/session/resolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
@@ -104,6 +105,7 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly sessionStore: WaSessionStore
     readonly identityStore: WaIdentityStore
     readonly deviceListStore: WaDeviceListStore
+    readonly signalDeviceSync: SignalDeviceSyncApi
     readonly messageSecretStore: WaMessageSecretStore
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
@@ -447,12 +449,43 @@ export class WaMessageDispatchCoordinator {
             sendOptions
         }
 
+        const directRecipientJid = isGroup
+            ? recipientJid
+            : await this.resolveDirectRecipientLid(toUserJid(recipientJid))
         const publishResult = isGroup
             ? this.shouldUseGroupDirectPath(messageWithIcdc)
                 ? await this.publishGroupDirectMessage(recipientJid, envelope)
                 : await this.publishGroupSenderKeyMessage(recipientJid, envelope)
-            : await this.publishDirectSignalMessageWithFanout(toUserJid(recipientJid), envelope)
+            : await this.publishDirectSignalMessageWithFanout(directRecipientJid, envelope)
         return upload ? { ...publishResult, upload } : publishResult
+    }
+
+    /**
+     * For a 1:1 recipient passed in PN form, returns the LID-addressed user JID
+     * (cache-first; falls back to a one-shot `queryLidsByPhoneJids`). Switching
+     * to LID before fanout ensures the envelope, eligible-requester list, and
+     * retry-receipt addressing all agree, which keeps the retry tracker from
+     * rejecting receipts that arrive in LID form. Returns the original PN if
+     * no LID is known/resolvable. Inputs already in LID form pass through.
+     */
+    private async resolveDirectRecipientLid(pnUserJid: string): Promise<string> {
+        if (isLidJid(pnUserJid)) return pnUserJid
+        const cached = await this.deps.deviceListStore.findByAnyUserJid(pnUserJid)
+        if (cached) {
+            if (isLidJid(cached.userJid)) return cached.userJid
+            if (cached.altUserJid && isLidJid(cached.altUserJid)) return cached.altUserJid
+        }
+        try {
+            const results = await this.deps.signalDeviceSync.queryLidsByPhoneJids([pnUserJid])
+            const match = results.find((entry) => entry.phoneJid === pnUserJid)
+            if (match?.lidJid) return match.lidJid
+        } catch (error) {
+            this.deps.logger.debug('lid resolution failed for direct recipient', {
+                pnUserJid,
+                message: toError(error).message
+            })
+        }
+        return pnUserJid
     }
 
     public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {

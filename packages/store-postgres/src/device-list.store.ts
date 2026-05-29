@@ -25,15 +25,17 @@ export class WaDeviceListPgStore extends BasePgStore implements WaDeviceListStor
                 await client.query({
                     name: this.stmtName('devlist_upsert'),
                     text: `INSERT INTO ${this.t('device_list_cache')} (
-                        session_id, user_jid, device_jids_json, updated_at_ms, expires_at_ms
-                    ) VALUES ($1, $2, $3, $4, $5)
+                        session_id, user_jid, alt_user_jid, device_jids_json, updated_at_ms, expires_at_ms
+                    ) VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (session_id, user_jid) DO UPDATE SET
+                        alt_user_jid = EXCLUDED.alt_user_jid,
                         device_jids_json = EXCLUDED.device_jids_json,
                         updated_at_ms = EXCLUDED.updated_at_ms,
                         expires_at_ms = EXCLUDED.expires_at_ms`,
                     values: [
                         this.sessionId,
                         snapshot.userJid,
+                        snapshot.altUserJid ?? null,
                         JSON.stringify(snapshot.deviceJids),
                         snapshot.updatedAtMs,
                         snapshot.updatedAtMs + this.ttlMs
@@ -61,7 +63,7 @@ export class WaDeviceListPgStore extends BasePgStore implements WaDeviceListStor
             const params: PgParam[] = [this.sessionId, ...batch]
             const rows = queryRows(
                 await this.pool.query(
-                    `SELECT user_jid, device_jids_json, updated_at_ms, expires_at_ms
+                    `SELECT user_jid, alt_user_jid, device_jids_json, updated_at_ms, expires_at_ms
                      FROM ${this.t('device_list_cache')}
                      WHERE session_id = $1 AND user_jid IN (${placeholders})`,
                     params
@@ -74,15 +76,7 @@ export class WaDeviceListPgStore extends BasePgStore implements WaDeviceListStor
                     expiredUserJids.push(userJid)
                     continue
                 }
-                const parsed: unknown = JSON.parse(row.device_jids_json as string)
-                if (!Array.isArray(parsed)) {
-                    throw new Error('device_list_cache.device_jids_json must be an array')
-                }
-                activeByUserJid.set(userJid, {
-                    userJid,
-                    deviceJids: parsed.map((entry: unknown) => String(entry)),
-                    updatedAtMs: Number(row.updated_at_ms)
-                })
+                activeByUserJid.set(userJid, decodePgSnapshot(userJid, row))
             }
         }
 
@@ -101,6 +95,37 @@ export class WaDeviceListPgStore extends BasePgStore implements WaDeviceListStor
         }
 
         return userJids.map((jid) => activeByUserJid.get(jid) ?? null)
+    }
+
+    public async findByAnyUserJid(
+        jid: string,
+        nowMs = Date.now()
+    ): Promise<WaDeviceListSnapshot | null> {
+        await this.ensureReady()
+        const rows = queryRows(
+            await this.pool.query({
+                name: this.stmtName('devlist_find_any'),
+                text: `SELECT user_jid, alt_user_jid, device_jids_json, updated_at_ms, expires_at_ms
+                       FROM ${this.t('device_list_cache')}
+                       WHERE session_id = $1 AND (user_jid = $2 OR alt_user_jid = $2)
+                       LIMIT 1`,
+                values: [this.sessionId, jid]
+            })
+        )
+        if (rows.length === 0) return null
+        const row = rows[0]
+        const expiresAtMs = Number(row.expires_at_ms)
+        if (expiresAtMs <= nowMs) {
+            const expiredUserJid = String(row.user_jid)
+            await this.pool.query({
+                name: this.stmtName('devlist_delete_user'),
+                text: `DELETE FROM ${this.t('device_list_cache')}
+                       WHERE session_id = $1 AND user_jid = $2`,
+                values: [this.sessionId, expiredUserJid]
+            })
+            return null
+        }
+        return decodePgSnapshot(String(row.user_jid), row)
     }
 
     public async deleteUserDevices(userJid: string): Promise<number> {
@@ -134,5 +159,25 @@ export class WaDeviceListPgStore extends BasePgStore implements WaDeviceListStor
             text: `DELETE FROM ${this.t('device_list_cache')} WHERE session_id = $1`,
             values: [this.sessionId]
         })
+    }
+}
+
+function decodePgSnapshot(
+    userJid: string,
+    row: Record<string, unknown>
+): WaDeviceListSnapshot {
+    const parsed: unknown = JSON.parse(row.device_jids_json as string)
+    if (!Array.isArray(parsed)) {
+        throw new Error('device_list_cache.device_jids_json must be an array')
+    }
+    const altUserJid =
+        row.alt_user_jid === null || row.alt_user_jid === undefined
+            ? undefined
+            : String(row.alt_user_jid)
+    return {
+        userJid,
+        ...(altUserJid !== undefined ? { altUserJid } : {}),
+        deviceJids: parsed.map((entry: unknown) => String(entry)),
+        updatedAtMs: Number(row.updated_at_ms)
     }
 }

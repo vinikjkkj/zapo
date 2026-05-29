@@ -21,6 +21,7 @@ export interface WaDeviceListMemoryStoreOptions {
 
 export class WaDeviceListMemoryStore implements WaDeviceListStore {
     private readonly records: Map<string, WaDeviceListMemoryStoreRecord>
+    private readonly altIndex: Map<string, string>
     private readonly ttlMs: number
     private readonly maxUsers: number
     private readonly cleanup: PeriodicCleanupHandle
@@ -30,6 +31,7 @@ export class WaDeviceListMemoryStore implements WaDeviceListStore {
             throw new Error('device-list ttlMs must be a positive finite number')
         }
         this.records = new Map()
+        this.altIndex = new Map()
         this.ttlMs = ttlMs
         this.maxUsers = resolvePositive(
             options.maxUsers,
@@ -44,6 +46,10 @@ export class WaDeviceListMemoryStore implements WaDeviceListStore {
     public async upsertUserDevicesBatch(snapshots: readonly WaDeviceListSnapshot[]): Promise<void> {
         for (let index = 0; index < snapshots.length; index += 1) {
             const snapshot = snapshots[index]
+            const previous = this.records.get(snapshot.userJid)
+            if (previous?.altUserJid && previous.altUserJid !== snapshot.altUserJid) {
+                this.altIndex.delete(previous.altUserJid)
+            }
             setBoundedMapEntry(
                 this.records,
                 snapshot.userJid,
@@ -53,6 +59,9 @@ export class WaDeviceListMemoryStore implements WaDeviceListStore {
                 },
                 this.maxUsers
             )
+            if (snapshot.altUserJid) {
+                this.altIndex.set(snapshot.altUserJid, snapshot.userJid)
+            }
         }
     }
 
@@ -62,30 +71,35 @@ export class WaDeviceListMemoryStore implements WaDeviceListStore {
     ): Promise<readonly (WaDeviceListSnapshot | null)[]> {
         const snapshots = new Array<WaDeviceListSnapshot | null>(userJids.length)
         for (let index = 0; index < userJids.length; index += 1) {
-            const userJid = userJids[index]
-            const record = this.records.get(userJid)
-            if (!record) {
-                snapshots[index] = null
-                continue
-            }
-            if (record.expiresAtMs <= nowMs) {
-                this.records.delete(userJid)
-                snapshots[index] = null
-                continue
-            }
-            snapshots[index] = record
+            snapshots[index] = this.readLive(userJids[index], nowMs)
         }
         return snapshots
     }
 
+    public async findByAnyUserJid(
+        jid: string,
+        nowMs = Date.now()
+    ): Promise<WaDeviceListSnapshot | null> {
+        const direct = this.readLive(jid, nowMs)
+        if (direct) return direct
+        const primary = this.altIndex.get(jid)
+        if (!primary) return null
+        return this.readLive(primary, nowMs)
+    }
+
     public async deleteUserDevices(userJid: string): Promise<number> {
-        return this.records.delete(userJid) ? 1 : 0
+        const record = this.records.get(userJid)
+        if (!record) return 0
+        if (record.altUserJid) this.altIndex.delete(record.altUserJid)
+        this.records.delete(userJid)
+        return 1
     }
 
     public async cleanupExpired(nowMs: number): Promise<number> {
         let removed = 0
         for (const [userJid, record] of this.records) {
             if (record.expiresAtMs > nowMs) continue
+            if (record.altUserJid) this.altIndex.delete(record.altUserJid)
             this.records.delete(userJid)
             removed += 1
         }
@@ -94,10 +108,22 @@ export class WaDeviceListMemoryStore implements WaDeviceListStore {
 
     public async clear(): Promise<void> {
         this.records.clear()
+        this.altIndex.clear()
     }
 
     public async destroy(): Promise<void> {
         this.cleanup.destroy()
         await this.clear()
+    }
+
+    private readLive(userJid: string, nowMs: number): WaDeviceListSnapshot | null {
+        const record = this.records.get(userJid)
+        if (!record) return null
+        if (record.expiresAtMs <= nowMs) {
+            if (record.altUserJid) this.altIndex.delete(record.altUserJid)
+            this.records.delete(userJid)
+            return null
+        }
+        return record
     }
 }

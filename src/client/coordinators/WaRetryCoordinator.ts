@@ -832,7 +832,7 @@ export class WaRetryCoordinator {
         try {
             requesterStatus = await this.deps.retryStore.getOutboundRequesterStatus(
                 outbound.messageId,
-                requesterNormalizedDeviceJid
+                toUserJid(requesterNormalizedDeviceJid)
             )
         } catch (error) {
             this.deps.logger.warn('failed to resolve outbound requester status from retry store', {

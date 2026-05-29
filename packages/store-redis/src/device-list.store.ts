@@ -19,14 +19,34 @@ export class WaDeviceListRedisStore extends BaseRedisStore implements WaDeviceLi
 
     public async upsertUserDevicesBatch(snapshots: readonly WaDeviceListSnapshot[]): Promise<void> {
         if (snapshots.length === 0) return
+        const previousAltKeys = await Promise.all(
+            snapshots.map((snapshot) =>
+                this.redis.hget(this.k('devlist', this.sessionId, snapshot.userJid), 'alt_user_jid')
+            )
+        )
         const pipeline = this.redis.pipeline()
-        for (const snapshot of snapshots) {
+        for (let index = 0; index < snapshots.length; index += 1) {
+            const snapshot = snapshots[index]
             const key = this.k('devlist', this.sessionId, snapshot.userJid)
-            pipeline.hset(key, {
+            const previousAlt = previousAltKeys[index]
+            if (previousAlt && previousAlt !== snapshot.altUserJid) {
+                pipeline.del(this.k('devlistalt', this.sessionId, previousAlt))
+            }
+            const fields: Record<string, string> = {
                 device_jids_json: JSON.stringify(snapshot.deviceJids),
                 updated_at_ms: String(snapshot.updatedAtMs)
-            })
+            }
+            if (snapshot.altUserJid !== undefined) {
+                fields.alt_user_jid = snapshot.altUserJid
+            } else {
+                pipeline.hdel(key, 'alt_user_jid')
+            }
+            pipeline.hset(key, fields)
             pipeline.pexpire(key, this.ttlMs)
+            if (snapshot.altUserJid !== undefined) {
+                const altKey = this.k('devlistalt', this.sessionId, snapshot.altUserJid)
+                pipeline.set(altKey, snapshot.userJid, 'PX', this.ttlMs)
+            }
         }
         await pipeline.exec()
     }
@@ -44,28 +64,30 @@ export class WaDeviceListRedisStore extends BaseRedisStore implements WaDeviceLi
         const results = await pipeline.exec()
         if (!results) return userJids.map(() => null)
 
-        return userJids.map((userJid, index) => {
-            const [err, data] = results[index]
-            if (err || !data || typeof data !== 'object') return null
-            const record = data as Record<string, string>
-            if (Object.keys(record).length === 0) return null
+        return userJids.map((userJid, index) => decodeSnapshot(userJid, results[index]))
+    }
 
-            const parsed: unknown = JSON.parse(record.device_jids_json)
-            if (!Array.isArray(parsed)) {
-                throw new Error('device_jids_json must be an array')
-            }
-
-            return {
-                userJid,
-                deviceJids: parsed.map((entry: unknown) => String(entry)),
-                updatedAtMs: Number(record.updated_at_ms)
-            }
-        })
+    public async findByAnyUserJid(
+        jid: string,
+        _nowMs?: number
+    ): Promise<WaDeviceListSnapshot | null> {
+        const direct = await this.redis.hgetall(this.k('devlist', this.sessionId, jid))
+        const directSnapshot = decodeSnapshot(jid, [null, direct])
+        if (directSnapshot) return directSnapshot
+        const primary = await this.redis.get(this.k('devlistalt', this.sessionId, jid))
+        if (!primary) return null
+        const data = await this.redis.hgetall(this.k('devlist', this.sessionId, primary))
+        return decodeSnapshot(primary, [null, data])
     }
 
     public async deleteUserDevices(userJid: string): Promise<number> {
         const key = this.k('devlist', this.sessionId, userJid)
-        return this.redis.del(key)
+        const altUserJid = await this.redis.hget(key, 'alt_user_jid')
+        const removed = await this.redis.del(key)
+        if (altUserJid) {
+            await this.redis.del(this.k('devlistalt', this.sessionId, altUserJid))
+        }
+        return removed
     }
 
     public async cleanupExpired(_nowMs: number): Promise<number> {
@@ -73,10 +95,37 @@ export class WaDeviceListRedisStore extends BaseRedisStore implements WaDeviceLi
     }
 
     public async clear(): Promise<void> {
-        const pattern = this.k('devlist', this.sessionId, '*')
-        const keys = await scanKeys(this.redis, pattern)
-        if (keys.length > 0) {
-            await deleteKeysChunked(this.redis, keys)
+        const patterns = [
+            this.k('devlist', this.sessionId, '*'),
+            this.k('devlistalt', this.sessionId, '*')
+        ]
+        for (const pattern of patterns) {
+            const keys = await scanKeys(this.redis, pattern)
+            if (keys.length > 0) {
+                await deleteKeysChunked(this.redis, keys)
+            }
         }
+    }
+}
+
+function decodeSnapshot(
+    userJid: string,
+    result: [Error | null, unknown] | undefined
+): WaDeviceListSnapshot | null {
+    if (!result) return null
+    const [err, data] = result
+    if (err || !data || typeof data !== 'object') return null
+    const record = data as Record<string, string>
+    if (Object.keys(record).length === 0) return null
+    const parsed: unknown = JSON.parse(record.device_jids_json)
+    if (!Array.isArray(parsed)) {
+        throw new Error('device_jids_json must be an array')
+    }
+    const altUserJid = record.alt_user_jid
+    return {
+        userJid,
+        ...(altUserJid ? { altUserJid } : {}),
+        deviceJids: parsed.map((entry: unknown) => String(entry)),
+        updatedAtMs: Number(record.updated_at_ms)
     }
 }

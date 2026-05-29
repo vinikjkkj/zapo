@@ -317,6 +317,15 @@ const MIGRATIONS: readonly Migration[] = [
             ALTER TABLE \`__PREFIX__group_participants_cache\`
                 ADD COLUMN ephemeral BIGINT
         `
+    },
+    {
+        name: '0013_device_list_cache_alt_user_jid',
+        domain: 'deviceList',
+        sql: `
+            ALTER TABLE \`__PREFIX__device_list_cache\`
+                ADD COLUMN alt_user_jid VARCHAR(255) NULL,
+                ADD INDEX \`__PREFIX__idx_device_list_alt_user_jid\` (session_id, alt_user_jid)
+        `
     }
 ]
 

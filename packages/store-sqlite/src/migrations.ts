@@ -368,6 +368,18 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
                 ALTER TABLE group_participants_cache ADD COLUMN ephemeral INTEGER;
             `)
         }
+    },
+    {
+        id: '0013_device_list_cache_alt_user_jid',
+        domain: 'deviceList',
+        up: (db) => {
+            db.exec(`
+                ALTER TABLE device_list_cache ADD COLUMN alt_user_jid TEXT;
+
+                CREATE INDEX IF NOT EXISTS device_list_cache_by_alt_user_jid
+                    ON device_list_cache (session_id, alt_user_jid);
+            `)
+        }
     }
 ]
 

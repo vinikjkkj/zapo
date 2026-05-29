@@ -331,6 +331,16 @@ const MIGRATIONS: readonly Migration[] = [
         sql: `
             ALTER TABLE "__PREFIX__group_participants_cache" ADD COLUMN IF NOT EXISTS ephemeral BIGINT
         `
+    },
+    {
+        name: '0013_device_list_cache_alt_user_jid',
+        domain: 'deviceList',
+        sql: `
+            ALTER TABLE "__PREFIX__device_list_cache" ADD COLUMN IF NOT EXISTS alt_user_jid TEXT;
+
+            CREATE INDEX IF NOT EXISTS "__PREFIX__idx_device_list_alt_user_jid"
+                ON "__PREFIX__device_list_cache" (session_id, alt_user_jid)
+        `
     }
 ]
 

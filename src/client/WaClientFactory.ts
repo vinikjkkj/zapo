@@ -728,6 +728,7 @@ export function buildWaClientDependencies(input: {
         sessionStore: sessionStore.session,
         identityStore: sessionStore.identity,
         deviceListStore: sessionStore.deviceList,
+        signalDeviceSync,
         messageSecretStore: sessionStore.messageSecret,
         getCurrentCredentials,
         resolvePrivacyTokenNode: (recipientJid) =>

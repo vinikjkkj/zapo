@@ -8,6 +8,7 @@ import type { WaSqliteStorageOptions } from './types'
 
 interface DeviceListRow extends Record<string, unknown> {
     readonly user_jid: unknown
+    readonly alt_user_jid: unknown
     readonly device_jids_json: unknown
     readonly updated_at_ms: unknown
     readonly expires_at_ms: unknown
@@ -70,7 +71,7 @@ export class WaDeviceListSqliteStore extends BaseSqliteStore implements WaDevice
                     params.push(uniqueUserJids[index])
                 }
                 const rows = db.all<DeviceListRow>(
-                    `SELECT user_jid, device_jids_json, updated_at_ms, expires_at_ms
+                    `SELECT user_jid, alt_user_jid, device_jids_json, updated_at_ms, expires_at_ms
                      FROM device_list_cache
                      WHERE session_id = ? AND user_jid IN (${placeholders})`,
                     params
@@ -85,11 +86,7 @@ export class WaDeviceListSqliteStore extends BaseSqliteStore implements WaDevice
                         expiredUserJids.push(userJid)
                         continue
                     }
-                    activeByUserJid.set(userJid, {
-                        userJid,
-                        deviceJids: decodeDeviceJids(row.device_jids_json),
-                        updatedAtMs: asNumber(row.updated_at_ms, 'device_list_cache.updated_at_ms')
-                    })
+                    activeByUserJid.set(userJid, decodeSnapshotRow(userJid, row))
                 }
             }
             if (expiredUserJids.length > 0) {
@@ -101,6 +98,32 @@ export class WaDeviceListSqliteStore extends BaseSqliteStore implements WaDevice
             }
             return snapshots
         })
+    }
+
+    public async findByAnyUserJid(
+        jid: string,
+        nowMs = Date.now()
+    ): Promise<WaDeviceListSnapshot | null> {
+        const db = await this.getConnection()
+        const row = db.get<DeviceListRow>(
+            `SELECT user_jid, alt_user_jid, device_jids_json, updated_at_ms, expires_at_ms
+             FROM device_list_cache
+             WHERE session_id = ? AND (user_jid = ? OR alt_user_jid = ?)
+             LIMIT 1`,
+            [this.options.sessionId, jid, jid]
+        )
+        if (!row) return null
+        const expiresAtMs = asNumber(row.expires_at_ms, 'device_list_cache.expires_at_ms')
+        if (expiresAtMs <= nowMs) {
+            const expiredUserJid = asString(row.user_jid, 'device_list_cache.user_jid')
+            db.run(
+                `DELETE FROM device_list_cache WHERE session_id = ? AND user_jid = ?`,
+                [this.options.sessionId, expiredUserJid]
+            )
+            return null
+        }
+        const userJid = asString(row.user_jid, 'device_list_cache.user_jid')
+        return decodeSnapshotRow(userJid, row)
     }
 
     public async deleteUserDevices(userJid: string): Promise<number> {
@@ -135,17 +158,20 @@ export class WaDeviceListSqliteStore extends BaseSqliteStore implements WaDevice
             `INSERT INTO device_list_cache (
                 session_id,
                 user_jid,
+                alt_user_jid,
                 device_jids_json,
                 updated_at_ms,
                 expires_at_ms
-            ) VALUES (?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id, user_jid) DO UPDATE SET
+                alt_user_jid=excluded.alt_user_jid,
                 device_jids_json=excluded.device_jids_json,
                 updated_at_ms=excluded.updated_at_ms,
                 expires_at_ms=excluded.expires_at_ms`,
             [
                 this.options.sessionId,
                 snapshot.userJid,
+                snapshot.altUserJid ?? null,
                 JSON.stringify(snapshot.deviceJids),
                 snapshot.updatedAtMs,
                 snapshot.updatedAtMs + this.ttlMs
@@ -171,6 +197,19 @@ export class WaDeviceListSqliteStore extends BaseSqliteStore implements WaDevice
                 params
             )
         }
+    }
+}
+
+function decodeSnapshotRow(userJid: string, row: DeviceListRow): WaDeviceListSnapshot {
+    const altUserJid =
+        row.alt_user_jid === null || row.alt_user_jid === undefined
+            ? undefined
+            : String(row.alt_user_jid)
+    return {
+        userJid,
+        ...(altUserJid !== undefined ? { altUserJid } : {}),
+        deviceJids: decodeDeviceJids(row.device_jids_json),
+        updatedAtMs: asNumber(row.updated_at_ms, 'device_list_cache.updated_at_ms')
     }
 }
 

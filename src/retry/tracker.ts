@@ -1,6 +1,6 @@
 import type { Logger } from '@infra/log/types'
 import type { WaMessagePublishResult } from '@message/types'
-import { isGroupOrBroadcastJid, normalizeDeviceJid } from '@protocol/jid'
+import { isGroupOrBroadcastJid, toUserJid } from '@protocol/jid'
 import { encodeRetryReplayPayload } from '@retry/codec'
 import { RETRY_OUTBOUND_TTL_MS } from '@retry/constants'
 import type { WaRetryOutboundMessageRecord, WaRetryReplayPayload } from '@retry/types'
@@ -55,7 +55,7 @@ export function createOutboundRetryTracker(options: {
                 continue
             }
             try {
-                deduped.add(normalizeDeviceJid(raw))
+                deduped.add(toUserJid(raw))
             } catch {
                 continue
             }
@@ -102,7 +102,7 @@ export function createOutboundRetryTracker(options: {
                 !isGroupOrBroadcastJid(resolvedToJid)
             ) {
                 try {
-                    eligibleRequesterDeviceJids = [normalizeDeviceJid(resolvedToJid)]
+                    eligibleRequesterDeviceJids = [toUserJid(resolvedToJid)]
                 } catch {
                     eligibleRequesterDeviceJids = undefined
                 }

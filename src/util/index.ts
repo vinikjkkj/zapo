@@ -5,6 +5,7 @@ export {
     bytesToHex,
     decodeBase64Url,
     hexToBytes,
+    TEXT_DECODER,
     toBytesView,
     uint8Equal
 } from '@util/bytes'
