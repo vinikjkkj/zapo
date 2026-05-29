@@ -270,10 +270,10 @@ function waitForMessage(
     timeoutMs: number
 ): Promise<Parameters<WaClientEventMap['message']>[0]> {
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(
-            () => reject(new Error('timed out waiting for matching message')),
-            timeoutMs
-        )
+        const timer = setTimeout(() => {
+            client.off('message', listener)
+            reject(new Error('timed out waiting for matching message'))
+        }, timeoutMs)
         const listener: WaClientEventMap['message'] = (event) => {
             if (predicate(event)) {
                 clearTimeout(timer)
@@ -296,7 +296,7 @@ async function runSendScenarioInProcess(
     config: BenchConfig
 ): Promise<{ result: ScenarioResult; totalBytes: number }> {
     await ensurePreKeyPool(server, pipeline, 2)
-    const peerJid = randomPeerJid('777')
+    const peerJid = buildRandomPeerJid('777')
     await server.createFakePeer({ jid: peerJid }, pipeline)
     return runSendScenarioWithJid(client, profiler, testCase, config, peerJid)
 }
@@ -309,7 +309,7 @@ async function runSendScenarioRpc(
     config: BenchConfig
 ): Promise<{ result: ScenarioResult; totalBytes: number }> {
     await rpc.ensurePreKeyPool(2)
-    const peerJid = randomPeerJid('777')
+    const peerJid = buildRandomPeerJid('777')
     await rpc.createFakePeer({ jid: peerJid })
     return runSendScenarioWithJid(client, profiler, testCase, config, peerJid)
 }
@@ -351,7 +351,7 @@ async function runGroupSendScenarioInProcess(
     profiler: BenchProfiler,
     config: BenchConfig
 ): Promise<{ result: ScenarioResult; totalBytes: number }> {
-    const groupJid = randomGroupJid()
+    const groupJid = buildRandomGroupJid()
     const members: FakePeer[] = []
     for (let m = 0; m < config.groupMembers; m += 1) {
         await ensurePreKeyPool(server, pipeline, 1)
@@ -373,7 +373,7 @@ async function runGroupSendScenarioRpc(
     profiler: BenchProfiler,
     config: BenchConfig
 ): Promise<{ result: ScenarioResult; totalBytes: number }> {
-    const groupJid = randomGroupJid()
+    const groupJid = buildRandomGroupJid()
     const memberPeerIds: string[] = []
     for (let m = 0; m < config.groupMembers; m += 1) {
         await rpc.ensurePreKeyPool(1)
@@ -436,7 +436,7 @@ async function runRecvScenarioInProcess(
     config: BenchConfig
 ): Promise<{ result: ScenarioResult; totalBytes: number }> {
     await ensurePreKeyPool(server, pipeline, 2)
-    const peerJid = randomPeerJid('666')
+    const peerJid = buildRandomPeerJid('666')
     const peer = await server.createFakePeer({ jid: peerJid }, pipeline)
     const plaintext = fillRandom(config.payloadBytes)
     const blob = await server.publishMediaBlob({ mediaType: testCase.mediaType, plaintext })
@@ -481,7 +481,7 @@ async function runRecvScenarioRpc(
     config: BenchConfig
 ): Promise<{ result: ScenarioResult; totalBytes: number }> {
     await rpc.ensurePreKeyPool(2)
-    const peerJid = randomPeerJid('666')
+    const peerJid = buildRandomPeerJid('666')
     const { peerId } = await rpc.createFakePeer({ jid: peerJid })
     const plaintext = fillRandom(config.payloadBytes)
     const blob = await rpc.publishMediaBlob({ mediaType: testCase.mediaType, plaintext })
@@ -518,17 +518,19 @@ async function runRecvScenarioRpc(
     return { result, totalBytes }
 }
 
+interface MediaDescriptor {
+    readonly directPath: string
+    readonly mediaKey: Uint8Array
+    readonly fileSha256: Uint8Array
+    readonly fileEncSha256: Uint8Array
+    readonly fileLength: number
+    readonly mimetype: string
+}
+
 async function sendPeerMediaInProcess(
     peer: FakePeer,
     mediaType: FakeMediaType,
-    descriptor: {
-        directPath: string
-        mediaKey: Uint8Array
-        fileSha256: Uint8Array
-        fileEncSha256: Uint8Array
-        fileLength: number
-        mimetype: string
-    }
+    descriptor: MediaDescriptor
 ): Promise<void> {
     if (mediaType === 'image') return peer.sendImageMessage(descriptor)
     if (mediaType === 'video') return peer.sendVideoMessage(descriptor)
@@ -539,27 +541,20 @@ async function sendPeerMediaRpc(
     rpc: ServerRpc,
     peerId: string,
     mediaType: FakeMediaType,
-    descriptor: {
-        directPath: string
-        mediaKey: Uint8Array
-        fileSha256: Uint8Array
-        fileEncSha256: Uint8Array
-        fileLength: number
-        mimetype: string
-    }
+    descriptor: MediaDescriptor
 ): Promise<void> {
     if (mediaType === 'image') return rpc.peerSendImageMessage(peerId, descriptor)
     if (mediaType === 'video') return rpc.peerSendVideoMessage(peerId, descriptor)
     throw new Error(`unsupported recv mediaType: ${mediaType}`)
 }
 
-function randomPeerJid(prefix: string): string {
+function buildRandomPeerJid(prefix: string): string {
     return `5511${prefix}${Math.floor(Math.random() * 1_000_000_000)
         .toString()
         .padStart(7, '0')}@s.whatsapp.net`
 }
 
-function randomGroupJid(): string {
+function buildRandomGroupJid(): string {
     return `120363${String(950_000_000_000 + (Date.now() % 1_000_000)).padStart(15, '0')}@g.us`
 }
 

@@ -28,6 +28,13 @@ export interface CreateFakePeerOptions {
     readonly displayName?: string
     readonly keyBundle?: FakePeerKeyBundle
     readonly skipOneTimePreKey?: boolean
+    /**
+     * Stash every outbound (id → plaintext + pristine ciphertext) so
+     * tests / benches can drive replays via {@link FakePeer.replaySentMessage}.
+     * Off by default to avoid inflating the fixture's heap on long
+     * memory-focused runs that never replay.
+     */
+    readonly enableReplayCache?: boolean
 }
 
 export interface SendMessageOptions {
@@ -79,6 +86,7 @@ export class FakePeer {
     } | null
     private ratchetInitiated = false
     private nextMessageCounter = 0
+    private readonly replayCacheEnabled: boolean
     private readonly sentPlaintextById = new Map<string, proto.IMessage>()
     private readonly sentEncryptedById = new Map<
         string,
@@ -102,6 +110,7 @@ export class FakePeer {
         this.displayName = options.displayName
         this.deps = deps
         this.skipOneTimePreKey = options.skipOneTimePreKey === true
+        this.replayCacheEnabled = options.enableReplayCache === true
         this.reservedOneTimePreKey =
             !this.skipOneTimePreKey && deps.reserveOneTimePreKey
                 ? deps.reserveOneTimePreKey()
@@ -131,15 +140,18 @@ export class FakePeer {
 
         const enc: FakeEncChild = { type, ciphertext: finalCiphertext }
         const id = options.id ?? this.nextId()
-        // Stash the plaintext so the bench / a test can replay this
-        // exact payload later in response to an incoming retry receipt
-        // from the lib (replaySentMessage). Also stash the PRISTINE
-        // ciphertext (pre-tamper) + signal type so a replay can put the
-        // original frame back on the wire – this matches how a real
-        // Signal sender re-sends after a recipient asks for retry: the
-        // same counter + ratchet key, just an uncorrupted body.
-        this.sentPlaintextById.set(id, message)
-        this.sentEncryptedById.set(id, { type, ciphertext })
+        if (this.replayCacheEnabled) {
+            // Stash the plaintext so the bench / a test can replay this
+            // exact payload later in response to an incoming retry
+            // receipt from the lib (replaySentMessage). Also stash the
+            // PRISTINE ciphertext (pre-tamper) + signal type so a
+            // replay can put the original frame back on the wire –
+            // matches how a real Signal sender re-sends after a
+            // recipient asks for retry: same counter + ratchet key,
+            // just an uncorrupted body.
+            this.sentPlaintextById.set(id, message)
+            this.sentEncryptedById.set(id, { type, ciphertext })
+        }
         const stanza = buildMessage({
             id,
             from: options.from ?? this.jid,

@@ -133,13 +133,17 @@ async function provisionPeers(
     server: FakeWaServer,
     pipeline: WaFakeConnectionPipeline,
     count: number,
-    jidPrefix: string
+    jidPrefix: string,
+    options: { readonly enableReplayCache?: boolean } = {}
 ): Promise<readonly BenchPeer[]> {
     const out: BenchPeer[] = new Array(count)
     for (let i = 0; i < count; i += 1) {
         await ensurePreKeyPool(server, pipeline, 1)
         const jid = `5511${jidPrefix}${String(i).padStart(7, '0')}@s.whatsapp.net`
-        const peer = await server.createFakePeer({ jid }, pipeline)
+        const peer = await server.createFakePeer(
+            { jid, enableReplayCache: options.enableReplayCache },
+            pipeline
+        )
         out[i] = { peer, jid }
     }
     return out
@@ -153,13 +157,17 @@ interface RpcBenchPeer {
 async function provisionPeersRpc(
     rpc: ServerRpc,
     count: number,
-    jidPrefix: string
+    jidPrefix: string,
+    options: { readonly enableReplayCache?: boolean } = {}
 ): Promise<readonly RpcBenchPeer[]> {
     const out: RpcBenchPeer[] = new Array(count)
     for (let i = 0; i < count; i += 1) {
         await rpc.ensurePreKeyPool(1)
         const jid = `5511${jidPrefix}${String(i).padStart(7, '0')}@s.whatsapp.net`
-        const { peerId } = await rpc.createFakePeer({ jid })
+        const { peerId } = await rpc.createFakePeer({
+            jid,
+            enableReplayCache: options.enableReplayCache
+        })
         out[i] = { peerId, jid }
     }
     return out
@@ -249,7 +257,9 @@ async function scenarioIncomingRetryRecoveryInProcess(
     profiler: BenchProfiler,
     config: BenchConfig
 ): Promise<ScenarioResult> {
-    const peers = await provisionPeers(server, pipeline, config.messages, '9200')
+    const peers = await provisionPeers(server, pipeline, config.messages, '9200', {
+        enableReplayCache: true
+    })
     const name = 'incoming_retry_recovery'
     await profiler.beforeScenario(name)
     const result = await runScenario(
@@ -322,7 +332,9 @@ async function scenarioIncomingRetryRecoveryRpc(
     profiler: BenchProfiler,
     config: BenchConfig
 ): Promise<ScenarioResult> {
-    const peers = await provisionPeersRpc(rpc, config.messages, '9200')
+    const peers = await provisionPeersRpc(rpc, config.messages, '9200', {
+        enableReplayCache: true
+    })
     const name = 'incoming_retry_recovery'
     await profiler.beforeScenario(name)
     const result = await runScenario(

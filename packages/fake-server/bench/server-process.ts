@@ -142,10 +142,15 @@ async function handleCreateFakePeerWithDevices(params: {
 async function handleCreateFakePeer(params: {
     jid: string
     skipOneTimePreKey?: boolean
+    enableReplayCache?: boolean
 }): Promise<{ peerId: string }> {
     if (!server || !pipeline) throw new Error('no pipeline')
     const peer = await server.createFakePeer(
-        { jid: params.jid, skipOneTimePreKey: params.skipOneTimePreKey },
+        {
+            jid: params.jid,
+            skipOneTimePreKey: params.skipOneTimePreKey,
+            enableReplayCache: params.enableReplayCache
+        },
         pipeline
     )
     const id = `peer-${peerIdCounter++}`
@@ -200,49 +205,34 @@ async function handlePeerSendConversation(params: {
     })
 }
 
-interface MediaDescriptorBytes {
-    readonly directPath: string
-    readonly mediaKeyBytes: number[]
-    readonly fileSha256Bytes: number[]
-    readonly fileEncSha256Bytes: number[]
-    readonly fileLength: number
-    readonly mimetype?: string
-}
-
-function unpackMediaDescriptor(input: MediaDescriptorBytes): {
+// IPC runs with `serialization: 'advanced'` (see ServerRpc.spawn), so
+// Uint8Array fields cross the boundary intact – no number[] round-trip
+// here.
+interface MediaDescriptorInput {
     readonly directPath: string
     readonly mediaKey: Uint8Array
     readonly fileSha256: Uint8Array
     readonly fileEncSha256: Uint8Array
     readonly fileLength: number
     readonly mimetype?: string
-} {
-    return {
-        directPath: input.directPath,
-        mediaKey: new Uint8Array(input.mediaKeyBytes),
-        fileSha256: new Uint8Array(input.fileSha256Bytes),
-        fileEncSha256: new Uint8Array(input.fileEncSha256Bytes),
-        fileLength: input.fileLength,
-        mimetype: input.mimetype
-    }
 }
 
 async function handlePeerSendImageMessage(params: {
     peerId: string
-    descriptor: MediaDescriptorBytes
+    descriptor: MediaDescriptorInput
 }): Promise<void> {
     const peer = peersById.get(params.peerId)
     if (!peer) throw new Error(`peer ${params.peerId} not found`)
-    await peer.sendImageMessage(unpackMediaDescriptor(params.descriptor))
+    await peer.sendImageMessage(params.descriptor)
 }
 
 async function handlePeerSendVideoMessage(params: {
     peerId: string
-    descriptor: MediaDescriptorBytes
+    descriptor: MediaDescriptorInput
 }): Promise<void> {
     const peer = peersById.get(params.peerId)
     if (!peer) throw new Error(`peer ${params.peerId} not found`)
-    await peer.sendVideoMessage(unpackMediaDescriptor(params.descriptor))
+    await peer.sendVideoMessage(params.descriptor)
 }
 
 async function handlePublishMediaBlob(params: {
@@ -256,24 +246,24 @@ async function handlePublishMediaBlob(params: {
         | 'ptt'
         | 'history'
         | 'md-app-state'
-    plaintextBytes: number[]
+    plaintext: Uint8Array
 }): Promise<{
     path: string
-    mediaKeyBytes: number[]
-    fileSha256Bytes: number[]
-    fileEncSha256Bytes: number[]
+    mediaKey: Uint8Array
+    fileSha256: Uint8Array
+    fileEncSha256: Uint8Array
     fileLength: number
 }> {
     if (!server) throw new Error('server not started')
     const blob = await server.publishMediaBlob({
         mediaType: params.mediaType,
-        plaintext: new Uint8Array(params.plaintextBytes)
+        plaintext: params.plaintext
     })
     return {
         path: blob.path,
-        mediaKeyBytes: Array.from(blob.mediaKey),
-        fileSha256Bytes: Array.from(blob.fileSha256),
-        fileEncSha256Bytes: Array.from(blob.fileEncSha256),
+        mediaKey: blob.mediaKey,
+        fileSha256: blob.fileSha256,
+        fileEncSha256: blob.fileEncSha256,
         fileLength: blob.fileLength
     }
 }
@@ -332,11 +322,32 @@ async function handlePeerSendRetryReceipt(params: {
     })
 }
 
+function isMatchingRetryReceipt(
+    stanza: BinaryNode,
+    stanzaId?: string
+): { readonly id: string } | null {
+    if (stanza.tag !== 'receipt') return null
+    if (stanza.attrs.type !== 'retry') return null
+    const id = stanza.attrs.id
+    if (!id) return null
+    if (stanzaId !== undefined && id !== stanzaId) return null
+    return { id }
+}
+
 async function handleWaitForRetryReceipt(params: {
     stanzaId: string
     timeoutMs?: number
 }): Promise<void> {
     if (!server) throw new Error('server not started')
+    // onCapturedStanza is future-only: the receipt may have already
+    // landed before this handler installs its listener (the bench fires
+    // the tampered send via an earlier RPC call, and capture happens on
+    // the child's event loop independent of waitForRetryReceipt arrival
+    // order). Scan the existing snapshot first; only subscribe if the
+    // receipt has not been seen yet.
+    for (const captured of server.capturedStanzaSnapshot()) {
+        if (isMatchingRetryReceipt(captured, params.stanzaId)) return
+    }
     const timeoutMs = params.timeoutMs ?? 60_000
     await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -347,9 +358,7 @@ async function handleWaitForRetryReceipt(params: {
         }, timeoutMs)
         timer.unref?.()
         const offCapture = server!.onCapturedStanza((stanza) => {
-            if (stanza.tag !== 'receipt') return
-            if (stanza.attrs.type !== 'retry') return
-            if (stanza.attrs.id !== params.stanzaId) return
+            if (!isMatchingRetryReceipt(stanza, params.stanzaId)) return
             clearTimeout(timer)
             offCapture()
             resolve()
@@ -362,8 +371,20 @@ async function handleWaitForRetryReceipts(params: {
     timeoutMs?: number
 }): Promise<{ ids: string[] }> {
     if (!server) throw new Error('server not started')
-    const timeoutMs = params.timeoutMs ?? 60_000
     const ids: string[] = []
+    // Drain any retry receipts already captured before this handler ran
+    // (same race as handleWaitForRetryReceipt). De-dupe by id so a single
+    // receipt isn't counted twice if it also slips into the future
+    // listener.
+    const seen = new Set<string>()
+    for (const captured of server.capturedStanzaSnapshot()) {
+        const match = isMatchingRetryReceipt(captured)
+        if (!match || seen.has(match.id)) continue
+        seen.add(match.id)
+        ids.push(match.id)
+        if (ids.length >= params.count) return { ids }
+    }
+    const timeoutMs = params.timeoutMs ?? 60_000
     await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
             offCapture()
@@ -375,10 +396,10 @@ async function handleWaitForRetryReceipts(params: {
         }, timeoutMs)
         timer.unref?.()
         const offCapture = server!.onCapturedStanza((stanza) => {
-            if (stanza.tag !== 'receipt') return
-            if (stanza.attrs.type !== 'retry') return
-            if (!stanza.attrs.id) return
-            ids.push(stanza.attrs.id)
+            const match = isMatchingRetryReceipt(stanza)
+            if (!match || seen.has(match.id)) return
+            seen.add(match.id)
+            ids.push(match.id)
             if (ids.length >= params.count) {
                 clearTimeout(timer)
                 offCapture()

@@ -21,29 +21,24 @@ interface RpcResponse {
     readonly error?: string
 }
 
-function serializeDescriptor(descriptor: {
-    directPath: string
-    mediaKey: Uint8Array
-    fileSha256: Uint8Array
-    fileEncSha256: Uint8Array
-    fileLength: number
-    mimetype?: string
-}): {
-    directPath: string
-    mediaKeyBytes: number[]
-    fileSha256Bytes: number[]
-    fileEncSha256Bytes: number[]
-    fileLength: number
-    mimetype?: string
-} {
-    return {
-        directPath: descriptor.directPath,
-        mediaKeyBytes: Array.from(descriptor.mediaKey),
-        fileSha256Bytes: Array.from(descriptor.fileSha256),
-        fileEncSha256Bytes: Array.from(descriptor.fileEncSha256),
-        fileLength: descriptor.fileLength,
-        mimetype: descriptor.mimetype
-    }
+/**
+ * Shape of a media-receive descriptor that the lib needs to download +
+ * decrypt an inbound media message. Used by {@link peerSendImageMessage}
+ * and {@link peerSendVideoMessage} as the payload sent to the child to
+ * have a FakePeer publish a media-bearing stanza.
+ *
+ * `Uint8Array` fields cross the IPC boundary in place because the child
+ * is forked with `serialization: 'advanced'` (V8 structured clone),
+ * which preserves typed-array byte buffers without the `number[]`
+ * round-trip the default JSON serializer would force.
+ */
+export interface MediaDescriptor {
+    readonly directPath: string
+    readonly mediaKey: Uint8Array
+    readonly fileSha256: Uint8Array
+    readonly fileEncSha256: Uint8Array
+    readonly fileLength: number
+    readonly mimetype?: string
 }
 
 export interface RemotePeerHandle {
@@ -81,9 +76,15 @@ export class ServerRpc {
 
     public async spawn(): Promise<void> {
         const entry = resolvePath(__dirname, 'server-process.ts')
+        // serialization: 'advanced' switches IPC to V8's structured
+        // clone, which preserves Uint8Array / Buffer in place. Without
+        // it every typed-array crossing the boundary would round-trip
+        // through `number[]` + JSON, inflating memory and CPU for
+        // multi-MB media payloads (publishMediaBlob, peerSend*Message).
         this.child = fork(entry, [], {
             execArgv: ['--import', 'tsx'],
-            stdio: ['pipe', 'inherit', 'inherit', 'ipc']
+            stdio: ['pipe', 'inherit', 'inherit', 'ipc'],
+            serialization: 'advanced'
         })
         this.child.on('message', (msg: RpcResponse & { ready?: boolean }) => {
             if (msg.ready) return // handled by readyPromise
@@ -189,6 +190,7 @@ export class ServerRpc {
     public async createFakePeer(input: {
         jid: string
         skipOneTimePreKey?: boolean
+        enableReplayCache?: boolean
     }): Promise<{ peerId: string }> {
         return (await this.call('createFakePeer', input)) as { peerId: string }
     }
@@ -218,42 +220,16 @@ export class ServerRpc {
         })
     }
 
-    public async peerSendImageMessage(
-        peerId: string,
-        descriptor: {
-            directPath: string
-            mediaKey: Uint8Array
-            fileSha256: Uint8Array
-            fileEncSha256: Uint8Array
-            fileLength: number
-            mimetype?: string
-        }
-    ): Promise<void> {
-        await this.call('peerSendImageMessage', {
-            peerId,
-            descriptor: serializeDescriptor(descriptor)
-        })
+    public async peerSendImageMessage(peerId: string, descriptor: MediaDescriptor): Promise<void> {
+        await this.call('peerSendImageMessage', { peerId, descriptor })
     }
 
-    public async peerSendVideoMessage(
-        peerId: string,
-        descriptor: {
-            directPath: string
-            mediaKey: Uint8Array
-            fileSha256: Uint8Array
-            fileEncSha256: Uint8Array
-            fileLength: number
-            mimetype?: string
-        }
-    ): Promise<void> {
-        await this.call('peerSendVideoMessage', {
-            peerId,
-            descriptor: serializeDescriptor(descriptor)
-        })
+    public async peerSendVideoMessage(peerId: string, descriptor: MediaDescriptor): Promise<void> {
+        await this.call('peerSendVideoMessage', { peerId, descriptor })
     }
 
     public async publishMediaBlob(input: {
-        mediaType:
+        readonly mediaType:
             | 'image'
             | 'video'
             | 'audio'
@@ -263,30 +239,23 @@ export class ServerRpc {
             | 'ptt'
             | 'history'
             | 'md-app-state'
-        plaintext: Uint8Array
+        readonly plaintext: Uint8Array
     }): Promise<{
-        path: string
-        mediaKey: Uint8Array
-        fileSha256: Uint8Array
-        fileEncSha256: Uint8Array
-        fileLength: number
+        readonly path: string
+        readonly mediaKey: Uint8Array
+        readonly fileSha256: Uint8Array
+        readonly fileEncSha256: Uint8Array
+        readonly fileLength: number
     }> {
-        const result = (await this.call('publishMediaBlob', {
+        return (await this.call('publishMediaBlob', {
             mediaType: input.mediaType,
-            plaintextBytes: Array.from(input.plaintext)
+            plaintext: input.plaintext
         })) as {
-            path: string
-            mediaKeyBytes: number[]
-            fileSha256Bytes: number[]
-            fileEncSha256Bytes: number[]
-            fileLength: number
-        }
-        return {
-            path: result.path,
-            mediaKey: new Uint8Array(result.mediaKeyBytes),
-            fileSha256: new Uint8Array(result.fileSha256Bytes),
-            fileEncSha256: new Uint8Array(result.fileEncSha256Bytes),
-            fileLength: result.fileLength
+            readonly path: string
+            readonly mediaKey: Uint8Array
+            readonly fileSha256: Uint8Array
+            readonly fileEncSha256: Uint8Array
+            readonly fileLength: number
         }
     }
 
