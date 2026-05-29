@@ -19,6 +19,23 @@ import {
     WA_STANZA_MSG_TYPES
 } from '@protocol/constants'
 
+/**
+ * Returns the content-type key of a message - `'conversation'`,
+ * `'imageMessage'`, `'extendedTextMessage'`, etc. - or `undefined` for an empty
+ * message. `senderKeyDistributionMessage` is skipped so group messages report
+ * their real payload type rather than the piggy-backed sender-key.
+ */
+export function getContentType(
+    content: Proto.IMessage | undefined
+): keyof Proto.IMessage | undefined {
+    if (!content) return undefined
+    const key = Object.keys(content).find(
+        (k) =>
+            (k === 'conversation' || k.includes('Message')) && k !== 'senderKeyDistributionMessage'
+    )
+    return key as keyof Proto.IMessage | undefined
+}
+
 export function isSendMediaMessage(content: unknown): content is WaSendMediaMessage {
     if (!content || typeof content !== 'object' || !('type' in content)) {
         return false

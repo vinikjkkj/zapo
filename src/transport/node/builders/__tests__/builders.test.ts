@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+    WA_BUSINESS_HOURS_MODES,
     WA_DEFAULTS,
     WA_EMAIL_CONTEXTS,
     WA_EMAIL_TAGS,
@@ -25,6 +26,7 @@ import {
     buildNewsletterMetadataSyncIq
 } from '@transport/node/builders/account-sync'
 import { buildBotListIq } from '@transport/node/builders/bot'
+import { buildEditBusinessProfileIq } from '@transport/node/builders/business'
 import { buildChatstateNode } from '@transport/node/builders/chatstate'
 import {
     buildDeactivateCommunityIq,
@@ -1843,4 +1845,44 @@ test('bot list builder targets s.whatsapp.net with xmlns="bot"', () => {
     const v3 = buildBotListIq('3')
     assert.ok(Array.isArray(v3.content))
     assert.equal(v3.content[0].attrs.v, '3')
+})
+
+test('buildEditBusinessProfileIq encodes business hours and rejects unknown mode', () => {
+    const iq = buildEditBusinessProfileIq({
+        businessHours: {
+            timezone: 'America/Sao_Paulo',
+            config: [
+                { dayOfWeek: 'mon', mode: 'specific_hours', openTime: 540, closeTime: 1080 },
+                { dayOfWeek: 'tue', mode: 'open_24h', openTime: 0, closeTime: 1440 },
+                { dayOfWeek: 'wed', mode: 'appointment_only' }
+            ]
+        }
+    })
+    const profile = (iq.content as readonly BinaryNode[])[0]
+    assert.equal(profile.tag, 'business_profile')
+    assert.equal(profile.attrs.mutation_type, 'delta')
+    const hours = (profile.content as readonly BinaryNode[]).find((c) => c.tag === 'business_hours')
+    assert.ok(hours)
+    assert.equal(hours.attrs.timezone, 'America/Sao_Paulo')
+    const configs = hours.content as readonly BinaryNode[]
+    assert.equal(configs.length, 3)
+    // specific_hours keeps open/close
+    assert.equal(configs[0].attrs.mode, WA_BUSINESS_HOURS_MODES.SPECIFIC_HOURS)
+    assert.equal(configs[0].attrs.open_time, '540')
+    assert.equal(configs[0].attrs.close_time, '1080')
+    // open_24h drops open/close even when supplied
+    assert.equal(configs[1].attrs.mode, WA_BUSINESS_HOURS_MODES.OPEN_24H)
+    assert.equal(configs[1].attrs.open_time, undefined)
+    assert.equal(configs[1].attrs.close_time, undefined)
+    // appointment_only carries no times
+    assert.equal(configs[2].attrs.mode, WA_BUSINESS_HOURS_MODES.APPOINTMENT_ONLY)
+    assert.equal(configs[2].attrs.open_time, undefined)
+
+    assert.throws(
+        () =>
+            buildEditBusinessProfileIq({
+                businessHours: { config: [{ dayOfWeek: 'sun', mode: 'open' as never }] }
+            }),
+        /invalid business hours mode/
+    )
 })

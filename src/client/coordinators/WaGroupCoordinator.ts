@@ -345,6 +345,13 @@ export interface WaGroupCoordinator {
     /** Leaves one or more groups (batched in a single IQ). */
     readonly leaveGroup: (groupJids: readonly string[]) => Promise<void>
     /**
+     * Fetches the current invite code for `groupJid` (the path segment of the
+     * `chat.whatsapp.com/<code>` link) without rotating it. Group admin
+     * operation - non-admins receive a `403 not-authorized` error. Use
+     * {@link revokeInvite} to issue a fresh code and invalidate the old one.
+     */
+    readonly queryInviteCode: (groupJid: string) => Promise<string>
+    /**
      * Revokes the current invite link. The server rotates the code
      * immediately - every previously-shared `chat.whatsapp.com/<code>` link
      * stops working. Returns the freshly-issued code.
@@ -815,6 +822,23 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
         return parseParticipantActionResults(result, action)
     }
 
+    const queryInvite = async (
+        type: Parameters<typeof buildIqNode>[0],
+        groupJid: string,
+        context: string
+    ): Promise<{ readonly result: BinaryNode; readonly code: string }> => {
+        const node = buildIqNode(type, groupJid, WA_XMLNS.GROUPS, [
+            { tag: WA_NODE_TAGS.INVITE, attrs: {} }
+        ])
+        const result = await queryWithContext(context, node)
+        assertIqResult(result, context)
+        const code = findNodeChild(result, WA_NODE_TAGS.INVITE)?.attrs.code
+        if (!code) {
+            throw new Error(`${context}: missing invite code in response`)
+        }
+        return { result, code }
+    }
+
     return {
         queryGroupMetadata: async (groupJid) => {
             const node = buildIqNode(WA_IQ_TYPES.GET, groupJid, WA_XMLNS.GROUPS, [
@@ -981,17 +1005,17 @@ export function createGroupCoordinator(options: WaGroupCoordinatorOptions): WaGr
             assertIqResult(result, 'group.leave')
         },
 
+        queryInviteCode: async (groupJid) => {
+            const { code } = await queryInvite(WA_IQ_TYPES.GET, groupJid, 'group.queryInviteCode')
+            return code
+        },
+
         revokeInvite: async (groupJid) => {
-            const node = buildIqNode(WA_IQ_TYPES.SET, groupJid, WA_XMLNS.GROUPS, [
-                { tag: WA_NODE_TAGS.INVITE, attrs: {} }
-            ])
-            const result = await queryWithContext('group.revokeInvite', node)
-            assertIqResult(result, 'group.revokeInvite')
-            const inviteNode = findNodeChild(result, WA_NODE_TAGS.INVITE)
-            const code = inviteNode?.attrs.code
-            if (!code) {
-                throw new Error('group.revokeInvite: missing invite code in response')
-            }
+            const { result, code } = await queryInvite(
+                WA_IQ_TYPES.SET,
+                groupJid,
+                'group.revokeInvite'
+            )
             const participantNodes = getNodeChildrenByTag(result, WA_NODE_TAGS.PARTICIPANT)
             const affectedParticipants: WaParticipantActionResult[] = new Array(
                 participantNodes.length

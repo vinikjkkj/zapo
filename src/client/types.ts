@@ -15,6 +15,7 @@ import type { WaDecodedAddon } from '@message/crypto/addon-crypto'
 import type { WaMessagePublishOptions, WaSendEditKey } from '@message/types'
 import type { Proto } from '@proto'
 import type { WaBotMsgEditType } from '@protocol/bot'
+import type { WaBusinessHoursDay, WaBusinessHoursMode } from '@protocol/business'
 import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
 import type { WaStore } from '@store/types'
 import type { ChatstateMedia, ChatstateState } from '@transport/node/builders/chatstate'
@@ -845,8 +846,8 @@ export interface WaBusinessCategory {
 }
 
 export interface WaBusinessHoursEntry {
-    readonly dayOfWeek: string
-    readonly mode: string
+    readonly dayOfWeek: WaBusinessHoursDay
+    readonly mode: WaBusinessHoursMode
     readonly openTime?: number
     readonly closeTime?: number
 }

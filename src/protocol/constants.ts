@@ -57,6 +57,8 @@ export {
     WA_NOTIFICATION_TYPES,
     WA_REGISTRATION_NOTIFICATION_TAGS
 } from '@protocol/notification'
+export { WA_BUSINESS_HOURS_DAYS, WA_BUSINESS_HOURS_MODES } from '@protocol/business'
+export type { WaBusinessHoursDay, WaBusinessHoursMode } from '@protocol/business'
 export {
     WA_CHATSTATE_MEDIA,
     WA_PRESENCE_LAST_SENTINELS,

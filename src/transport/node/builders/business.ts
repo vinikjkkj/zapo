@@ -1,4 +1,12 @@
-import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
+import {
+    WA_BUSINESS_HOURS_MODES,
+    WA_DEFAULTS,
+    WA_IQ_TYPES,
+    WA_NODE_TAGS,
+    WA_XMLNS,
+    type WaBusinessHoursDay,
+    type WaBusinessHoursMode
+} from '@protocol/constants'
 import { WA_BUSINESS_NOTIFICATION_TAGS } from '@protocol/notification'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
@@ -11,11 +19,18 @@ export interface WaEditBusinessProfileInput {
     readonly email?: string
     readonly websites?: readonly { readonly url: string }[]
     readonly categories?: readonly { readonly id: string }[]
+    /**
+     * Weekly opening schedule. List one entry per **open** day; closed days are
+     * expressed by omitting them, not by a separate mode. `openTime` / `closeTime`
+     * (minutes from midnight, e.g. `540` = 09:00) only apply to `specific_hours`
+     * and are ignored for `open_24h` / `appointment_only`. An unknown `mode` is
+     * rejected by the server with a `406 not-acceptable`.
+     */
     readonly businessHours?: {
         readonly timezone?: string
         readonly config: readonly {
-            readonly dayOfWeek: string
-            readonly mode: string
+            readonly dayOfWeek: WaBusinessHoursDay
+            readonly mode: WaBusinessHoursMode
             readonly openTime?: number
             readonly closeTime?: number
         }[]
@@ -94,21 +109,34 @@ export function buildEditBusinessProfileIq(input: WaEditBusinessProfileInput): B
     ])
 }
 
+const VALID_BUSINESS_HOURS_MODES: ReadonlySet<string> = new Set(
+    Object.values(WA_BUSINESS_HOURS_MODES)
+)
+
 function buildBusinessHoursNode(
     hours: NonNullable<WaEditBusinessProfileInput['businessHours']>
 ): BinaryNode {
     const configNodes: BinaryNode[] = new Array(hours.config.length)
     for (let i = 0; i < hours.config.length; i += 1) {
         const entry = hours.config[i]
+        if (!VALID_BUSINESS_HOURS_MODES.has(entry.mode)) {
+            throw new Error(
+                `invalid business hours mode '${entry.mode}' (expected one of ${Object.values(WA_BUSINESS_HOURS_MODES).join(', ')}; closed days must be omitted)`
+            )
+        }
         const attrs: Record<string, string> = {
             day_of_week: entry.dayOfWeek,
             mode: entry.mode
         }
-        if (entry.openTime !== undefined) {
-            attrs.open_time = `${entry.openTime}`
-        }
-        if (entry.closeTime !== undefined) {
-            attrs.close_time = `${entry.closeTime}`
+        // open_time / close_time only apply to specific_hours; the server drops
+        // them for open_24h / appointment_only.
+        if (entry.mode === WA_BUSINESS_HOURS_MODES.SPECIFIC_HOURS) {
+            if (entry.openTime !== undefined) {
+                attrs.open_time = `${entry.openTime}`
+            }
+            if (entry.closeTime !== undefined) {
+                attrs.close_time = `${entry.closeTime}`
+            }
         }
         configNodes[i] = { tag: 'business_hours_config', attrs }
     }

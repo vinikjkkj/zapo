@@ -13,6 +13,7 @@ import type {
     WaVerifiedNameResult
 } from '@client/types'
 import { proto } from '@proto'
+import type { WaBusinessHoursDay, WaBusinessHoursMode } from '@protocol/business'
 import { WA_BUSINESS_NOTIFICATION_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
@@ -115,12 +116,12 @@ function parseBusinessHoursNode(node: BinaryNode): WaBusinessHours {
     for (let i = 0; i < children.length; i += 1) {
         const child = children[i]
         if (child.tag !== 'business_hours_config') continue
-        const dayOfWeek = child.attrs.day_of_week as string | undefined
-        const mode = child.attrs.mode as string | undefined
+        const dayOfWeek = child.attrs.day_of_week as WaBusinessHoursDay | undefined
+        const mode = child.attrs.mode as WaBusinessHoursMode | undefined
         if (!dayOfWeek || !mode) continue
         const entry: {
-            dayOfWeek: string
-            mode: string
+            dayOfWeek: WaBusinessHoursDay
+            mode: WaBusinessHoursMode
             openTime?: number
             closeTime?: number
         } = { dayOfWeek, mode }

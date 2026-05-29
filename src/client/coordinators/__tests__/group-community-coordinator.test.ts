@@ -610,3 +610,21 @@ test('approve/reject/cancel/joinLinkedGroup send the correct stanza shape', asyn
     assert.equal(joinRoot.tag, 'join_linked_group')
     assert.equal(joinRoot.attrs.jid, 'sub@g.us')
 })
+
+test('queryInviteCode sends a get invite stanza and returns the code', async () => {
+    const mock = createMockQuery([iqResult([{ tag: 'invite', attrs: { code: 'ABC123code' } }])])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    const code = await coordinator.queryInviteCode('120363@g.us')
+    assert.equal(code, 'ABC123code')
+    assert.equal(mock.calls[0].node.attrs.type, 'get')
+    assert.equal(mock.calls[0].node.attrs.to, '120363@g.us')
+    assert.equal((mock.calls[0].node.content as BinaryNode[])[0].tag, 'invite')
+})
+
+test('queryInviteCode throws when the response has no code', async () => {
+    const mock = createMockQuery([iqResult([{ tag: 'invite', attrs: {} }])])
+    const coordinator = createGroupCoordinator({ queryWithContext: mock.queryWithContext })
+
+    await assert.rejects(coordinator.queryInviteCode('120363@g.us'), /missing invite code/)
+})

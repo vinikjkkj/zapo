@@ -204,6 +204,7 @@ export type {
     WaSendStickerPackTrayIcon,
     WaSendTextMessage
 } from '@message/types'
+export { getContentType } from '@message/encode/content'
 export type { WaSendContextInfo } from '@message/context-info'
 export type {
     WaLinkPreviewFetcher,
