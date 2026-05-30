@@ -252,7 +252,10 @@ export interface WaAddonOptions {
      * decrypt yourself via `client.message.tryDecryptAddon(event)`. The
      * parent message secret is looked up in the `messageSecret` cache
      * first, then in the `messages` store; setting both to `'none'`
-     * defeats addon decryption silently.
+     * defeats addon decryption. Failures are logged at `warn` for
+     * `secretEncryptedMessage` addons (whose parent can be any message
+     * type) and at `debug` for the dedicated addon types (reactions,
+     * poll votes, event responses, comments).
      */
     readonly autoDecrypt?: boolean
 }
@@ -507,15 +510,6 @@ export interface WaIncomingMessageEvent extends Omit<WaIncomingBaseEvent, 'chatJ
     readonly expirationSeconds?: number
     /** Sender's display name from the stanza's `notify` attr. */
     readonly pushName?: string
-    /**
-     * Signal envelope used to decrypt this message: `'pkmsg'` (PreKeySignalMessage),
-     * `'msg'` (1:1 SignalMessage), `'skmsg'` (group sender-key), `'msmsg'`
-     * (Meta-AI streaming), `'placeholder_recovery'` (retry-recovered placeholder),
-     * or `'plaintext'` (newsletter, no Signal layer).
-     */
-    readonly encryptionType?: string
-    /** Decrypted bytes before protobuf parsing. Kept so consumers can re-derive addon decryption material. */
-    readonly plaintext?: Uint8Array
     readonly message?: Proto.IMessage
 }
 

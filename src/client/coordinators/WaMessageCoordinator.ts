@@ -22,6 +22,7 @@ import {
     resolvePollOptionNames,
     shouldUseAddonAdditionalData
 } from '@message/crypto/addon-crypto'
+import { unwrapMessage } from '@message/encode/content'
 import { resolveMediaPayload } from '@message/encode/media-payload'
 import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import type {
@@ -440,10 +441,15 @@ export class WaMessageCoordinator {
      *
      * Called automatically by the client unless `options.addons.autoDecrypt`
      * is explicitly `false` - you rarely need to invoke it directly. The
-     * parent secret
-     * is looked up in the in-memory `messageSecret` cache first, then in
-     * the `messages` store; if both are `'none'`/missing, decryption fails
-     * silently (and the event never fires).
+     * parent secret is looked up in the in-memory `messageSecret` cache
+     * first, then in the `messages` store. If both are `'none'`/missing,
+     * decryption fails and the event never fires; failures are logged at
+     * `warn` for `secretEncryptedMessage` addons (whose parent can be
+     * any message type, so the secret is only available when the
+     * `messages` mailbox is active) and at `debug` for the dedicated
+     * addon types (reactions, poll votes, event responses, comments)
+     * whose parent always carries a persisted secret or is itself
+     * short-lived.
      */
     public async tryDecryptAddon(event: WaIncomingMessageEvent): Promise<void> {
         const message = event.message
@@ -461,10 +467,19 @@ export class WaMessageCoordinator {
             this.messageStore
         )
         if (!parentEntry) {
-            this.logger.debug('addon parent message secret not found', {
+            const logCtx = {
                 id: event.key.id,
-                targetId: targetMessageId
-            })
+                targetId: targetMessageId,
+                kind: addon.kind
+            }
+            if (unwrapMessage(message).secretEncryptedMessage) {
+                this.logger.warn(
+                    'addon parent message secret not found - enable the `messages` mailbox to support decryption of secretEncryptedMessage addons on arbitrary parents',
+                    logCtx
+                )
+            } else {
+                this.logger.debug('addon parent message secret not found', logCtx)
+            }
             return
         }
 
