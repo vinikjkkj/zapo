@@ -44,8 +44,16 @@ export class WaContactMemoryStore implements Contract {
     }
 
     private writeRecord(record: WaStoredContactRecord): void {
-        const merged = mergeContactRecords(this.contacts.get(record.jid), record)
+        const previous = this.contacts.get(record.jid)
+        const merged = mergeContactRecords(previous, record)
         setBoundedMapEntry(this.contacts, merged.jid, merged, this.maxContacts)
+        if (
+            previous?.phoneNumber &&
+            previous.phoneNumber !== merged.phoneNumber &&
+            this.phoneIndex.get(previous.phoneNumber) === merged.jid
+        ) {
+            this.phoneIndex.delete(previous.phoneNumber)
+        }
         if (merged.phoneNumber) {
             this.phoneIndex.set(merged.phoneNumber, merged.jid)
         }

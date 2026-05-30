@@ -345,14 +345,20 @@ const MIGRATIONS: readonly Migration[] = [
         `
     },
     {
-        name: '0016_retry_drop_dead_columns',
+        name: '0016_retry_outbound_drop_dead_columns',
         domain: 'retry',
         sql: `
             ALTER TABLE \`__PREFIX__retry_outbound_messages\`
                 DROP COLUMN participant_jid,
                 DROP COLUMN recipient_jid,
                 DROP COLUMN message_type,
-                DROP COLUMN created_at_ms;
+                DROP COLUMN created_at_ms
+        `
+    },
+    {
+        name: '0017_retry_inbound_drop_dead_columns',
+        domain: 'retry',
+        sql: `
             ALTER TABLE \`__PREFIX__retry_inbound_counters\`
                 DROP COLUMN updated_at_ms
         `

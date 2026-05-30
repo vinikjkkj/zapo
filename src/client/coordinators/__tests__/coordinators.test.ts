@@ -25,6 +25,7 @@ import {
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
 import { WaMessageMemoryStore } from '@store/memory/message.store'
 import type { BinaryNode } from '@transport/types'
+import type { ServerClock } from '@util/clock'
 
 function fakeSyncImpl(impl: (options?: WaAppStateSyncOptions) => Promise<WaAppStateSyncResult>) {
     return {
@@ -111,6 +112,7 @@ function createMessageDispatchCoordinator(
     overrides?: {
         readonly meJid?: string
         readonly mobileMessageIdFormat?: boolean
+        readonly serverClock?: ServerClock
     }
 ): WaMessageDispatchCoordinator {
     const groupMetadataCache = createGroupMetadataCache({
@@ -143,7 +145,10 @@ function createMessageDispatchCoordinator(
         resolvePrivacyTokenNode: async () => null,
         onDirectMessageSent: () => undefined,
         mobileMessageIdFormat: overrides?.mobileMessageIdFormat,
-        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) }
+        serverClock: overrides?.serverClock ?? {
+            nowMs: () => Date.now(),
+            nowSeconds: () => Math.floor(Date.now() / 1000)
+        }
     })
 }
 

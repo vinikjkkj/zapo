@@ -64,6 +64,9 @@ function persistContacts(
         const record = canonicalContact(senderPrimary, alt, nowMs)
         writeBehind.persistContact(record)
         written.add(record.jid)
+        if (record.phoneNumber) {
+            written.add(record.phoneNumber)
+        }
     }
     if (participantJid && !written.has(participantJid)) {
         writeBehind.persistContact({ jid: participantJid, lastUpdatedMs: nowMs })

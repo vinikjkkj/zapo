@@ -35,12 +35,15 @@
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@zapo-js/media-utils": "^0.1.0",
         "@zapo-js/store-sqlite": "^0.3.0",
-        "better-sqlite3": "^12.6.2",
+        "better-sqlite3": "^12.6.2"
+    },
+    "peerDependencies": {
         "zapo-js": "^0.3.0"
     },
     "devDependencies": {
         "@zapo-js/fake-server": "file:../fake-server",
-        "cross-env": "^7.0.3"
+        "cross-env": "^7.0.3",
+        "zapo-js": "file:../.."
     },
     "engines": {
         "node": ">=20.9.0"

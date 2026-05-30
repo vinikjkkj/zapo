@@ -5,6 +5,9 @@ import { safeLimit, scanKeys, toBytesOrNull, toRedisBuffer, toStringOrNull } fro
 import type { WaRedisStorageOptions } from './types'
 
 const BINARY_FIELDS = ['message_bytes'] as const
+// Legacy binary suffixes that older builds wrote alongside message_bytes; kept
+// for cleanup so deleteById/clear purge them on existing data.
+const LEGACY_BINARY_FIELDS = ['plaintext'] as const
 
 export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStore {
     public constructor(options: WaRedisStorageOptions) {
@@ -36,6 +39,9 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
 
         if (record.messageBytes !== undefined) {
             pipeline.set(`${key}:message_bytes`, toRedisBuffer(record.messageBytes))
+        }
+        for (const field of LEGACY_BINARY_FIELDS) {
+            pipeline.del(`${key}:${field}`)
         }
 
         await pipeline.exec()
@@ -71,6 +77,9 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
 
             if (record.messageBytes !== undefined) {
                 pipeline.set(`${key}:message_bytes`, toRedisBuffer(record.messageBytes))
+            }
+            for (const field of LEGACY_BINARY_FIELDS) {
+                pipeline.del(`${key}:${field}`)
             }
         }
         await pipeline.exec()
@@ -158,6 +167,9 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
         const pipeline = this.redis.pipeline()
         pipeline.del(key)
         for (const field of BINARY_FIELDS) {
+            pipeline.del(`${key}:${field}`)
+        }
+        for (const field of LEGACY_BINARY_FIELDS) {
             pipeline.del(`${key}:${field}`)
         }
         pipeline.zrem(this.idxKey(threadJid), id)

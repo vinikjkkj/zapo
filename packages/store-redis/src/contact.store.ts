@@ -57,6 +57,10 @@ export class WaContactRedisStore extends BaseRedisStore implements WaContactStor
         const newFields = recordToHash(record)
 
         let mergedRecord: WaStoredContactRecord
+        const previousPhone =
+            existing && Object.keys(existing).length > 0
+                ? (toStringOrNull(existing.phone_number) ?? undefined)
+                : undefined
         if (existing && Object.keys(existing).length > 0) {
             const merged: Record<string, string> = { ...existing }
             for (const [field, value] of Object.entries(newFields)) {
@@ -69,6 +73,13 @@ export class WaContactRedisStore extends BaseRedisStore implements WaContactStor
             mergedRecord = hashToRecord(newFields)
         }
 
+        if (previousPhone && previousPhone !== mergedRecord.phoneNumber) {
+            const staleKey = this.phoneLookupKey(previousPhone)
+            const owner = await this.redis.get(staleKey)
+            if (owner === mergedRecord.jid) {
+                await this.redis.del(staleKey)
+            }
+        }
         if (mergedRecord.phoneNumber) {
             await this.redis.set(this.phoneLookupKey(mergedRecord.phoneNumber), mergedRecord.jid)
         }
