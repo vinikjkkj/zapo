@@ -1,3 +1,4 @@
+import { WA_DEFAULTS } from '@protocol/constants'
 import {
     BINARY_20,
     BINARY_32,
@@ -5,8 +6,15 @@ import {
     DICTIONARY_0,
     DICTIONARY_TOKEN_MAPS,
     HEX_8,
+    JID_PAIR,
+    JID_U,
+    JID_U_DOMAIN_TYPE_HOSTED,
+    JID_U_DOMAIN_TYPE_HOSTED_LID,
+    JID_U_DOMAIN_TYPE_LID,
+    JID_U_DOMAIN_TYPE_PN,
     LIST_16,
     LIST_8,
+    LIST_EMPTY,
     NIBBLE_8,
     SINGLE_BYTE_TOKEN_MAP
 } from '@transport/binary/constants'
@@ -192,6 +200,65 @@ function writeString(value: string, writer: ByteWriter): void {
     writer.writeBytes(encoded)
 }
 
+function tryWriteJid(value: string, writer: ByteWriter): boolean {
+    const atIndex = value.indexOf('@')
+    if (atIndex <= 0 || atIndex === value.length - 1) {
+        return false
+    }
+    if (value.indexOf('@', atIndex + 1) !== -1) {
+        return false
+    }
+
+    let userEnd = atIndex
+    let device = 0
+    const colonIndex = value.indexOf(':')
+    if (colonIndex !== -1 && colonIndex < atIndex) {
+        if (colonIndex === atIndex - 1) {
+            return false
+        }
+        for (let i = colonIndex + 1; i < atIndex; i += 1) {
+            const digit = value.charCodeAt(i) - 48
+            if (digit < 0 || digit > 9) {
+                return false
+            }
+            device = device * 10 + digit
+            if (device > 255) {
+                return false
+            }
+        }
+        userEnd = colonIndex
+    }
+
+    const server = value.slice(atIndex + 1)
+    let domainType = -1
+    if (server === WA_DEFAULTS.LID_SERVER) {
+        domainType = JID_U_DOMAIN_TYPE_LID
+    } else if (server === WA_DEFAULTS.HOSTED_LID_SERVER) {
+        domainType = JID_U_DOMAIN_TYPE_HOSTED_LID
+    } else if (server === WA_DEFAULTS.HOST_DOMAIN) {
+        domainType = JID_U_DOMAIN_TYPE_PN
+    } else if (server === WA_DEFAULTS.HOSTED_SERVER) {
+        domainType = JID_U_DOMAIN_TYPE_HOSTED
+    }
+
+    if (domainType !== -1 && device !== 0 && userEnd > 0) {
+        writer.writeUint8(JID_U)
+        writer.writeUint8(domainType)
+        writer.writeUint8(device)
+        writeString(value.slice(0, userEnd), writer)
+        return true
+    }
+
+    writer.writeUint8(JID_PAIR)
+    if (userEnd === 0) {
+        writer.writeUint8(LIST_EMPTY)
+    } else {
+        writeString(value.slice(0, userEnd), writer)
+    }
+    writeString(server, writer)
+    return true
+}
+
 function writeListSize(size: number, writer: ByteWriter): void {
     if (!Number.isSafeInteger(size) || size < 0) {
         throw new Error(`invalid list size ${size}`)
@@ -220,7 +287,10 @@ function writeNodeInternal(node: BinaryNode, writer: ByteWriter): void {
     for (let i = 0; i < keys.length; i += 1) {
         const key = keys[i]
         writeString(key, writer)
-        writeString(node.attrs[key], writer)
+        const value = node.attrs[key]
+        if (!tryWriteJid(value, writer)) {
+            writeString(value, writer)
+        }
     }
 
     if (!hasContent) {

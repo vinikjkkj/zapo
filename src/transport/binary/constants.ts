@@ -16,6 +16,13 @@ export const BINARY_20 = 253
 export const BINARY_32 = 254
 export const NIBBLE_8 = 255
 
+export const JID_U_DOMAIN_TYPE_PN = 0x00
+export const JID_U_DOMAIN_TYPE_LID = 0x01
+export const JID_U_DOMAIN_TYPE_HOSTED = 0x80
+export const JID_U_DOMAIN_TYPE_HOSTED_LID = 0x81
+export const JID_U_DOMAIN_TYPE_HOSTED_MASK = 0x80
+export const JID_U_DOMAIN_TYPE_LID_MASK = 0x01
+
 export const NIBBLE_ALPHABET = Object.freeze([
     '0',
     '1',

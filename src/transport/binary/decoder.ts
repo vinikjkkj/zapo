@@ -14,6 +14,10 @@ import {
     JID_INTEROP,
     JID_PAIR,
     JID_U,
+    JID_U_DOMAIN_TYPE_HOSTED_LID,
+    JID_U_DOMAIN_TYPE_HOSTED_MASK,
+    JID_U_DOMAIN_TYPE_LID,
+    JID_U_DOMAIN_TYPE_LID_MASK,
     LIST_16,
     LIST_8,
     LIST_EMPTY,
@@ -27,10 +31,6 @@ import { TEXT_DECODER, TEXT_ENCODER, toBytesView } from '@util/bytes'
 
 const unzipAsync = promisify(unzip)
 const inflateRawAsync = promisify(inflateRaw)
-const JID_U_DOMAIN_TYPE_LID = 0x01
-const JID_U_DOMAIN_TYPE_HOSTED_LID = 0x81
-const JID_U_DOMAIN_TYPE_HOSTED_MASK = 0x80
-const JID_U_DOMAIN_TYPE_LID_MASK = 0x01
 
 class ByteReader {
     private readonly data: Uint8Array

@@ -311,7 +311,7 @@ export class WaPairingFlow {
         }
 
         const { signedIdentity, keyIndex, responseIdentityBytes } =
-            await this.buildPairSuccessResponseIdentity(credentials, wrappedDetails, isHosted)
+            await this.buildPairSuccessResponseIdentity(credentials, wrappedDetails)
         const nextCredentials: WaAuthCredentials = {
             ...credentials,
             signedIdentity,
@@ -355,8 +355,7 @@ export class WaPairingFlow {
 
     private async buildPairSuccessResponseIdentity(
         credentials: WaAuthCredentials,
-        wrappedDetails: Uint8Array,
-        isHosted: boolean
+        wrappedDetails: Uint8Array
     ): Promise<{
         readonly signedIdentity: ReturnType<typeof proto.ADVSignedDeviceIdentity.decode>
         readonly keyIndex: number
@@ -373,13 +372,15 @@ export class WaPairingFlow {
             'ADVSignedDeviceIdentity.accountSignatureKey'
         )
         const localIdentity = credentials.registrationInfo.identityKeyPair
+        const advDeviceIdentity = proto.ADVDeviceIdentity.decode(details)
+        const isDeviceHosted = advDeviceIdentity.deviceType === proto.ADVEncryptionType.HOSTED
         if (this.opts.dangerous?.disableAdvSignatureVerification !== true) {
             const validAccountSignature = await verifyDeviceIdentityAccountSignature(
                 details,
                 accountSignature,
                 localIdentity.pubKey,
                 accountSignatureKey,
-                isHosted
+                isDeviceHosted
             )
             if (!validAccountSignature) {
                 this.opts.logger.error('pair-success account signature invalid')
@@ -391,9 +392,8 @@ export class WaPairingFlow {
             details,
             localIdentity,
             accountSignatureKey,
-            isHosted
+            false
         )
-        const advDeviceIdentity = proto.ADVDeviceIdentity.decode(details)
         const responseIdentityBytes = proto.ADVSignedDeviceIdentity.encode({
             details: signedIdentity.details,
             accountSignature: signedIdentity.accountSignature,
