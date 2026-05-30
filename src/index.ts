@@ -23,6 +23,8 @@ export type {
     WaGroupEventMembershipRequest,
     WaGroupEventParticipant,
     WaGroupEventSubgroupSuggestion,
+    WaIgnoreKey,
+    WaIgnoreStanzaKind,
     WaIncomingAddonEvent,
     WaIncomingBaseEvent,
     WaIncomingBotChunkEvent,

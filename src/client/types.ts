@@ -426,6 +426,31 @@ export interface WaIncomingNodeHandlerRegistration {
  */
 export type WaIncomingStanzaFilter = (node: BinaryNode) => boolean | Promise<boolean>
 
+/** Stanza tags addressable through {@link WaIgnoreKey}. */
+export type WaIgnoreStanzaKind =
+    | 'message'
+    | 'receipt'
+    | 'notification'
+    | 'presence'
+    | 'chatstate'
+    | 'call'
+
+/**
+ * Match descriptor for {@link WaClient.ignoreKey}. Fields AND; `remoteJid`
+ * array ORs. `remoteJid` and `participant` also match the `sender_pn` /
+ * `sender_lid` / `participant_pn` / `participant_lid` alt attrs on `<message>`
+ * (and `sender_lid` on `<call>`), so one JID form catches the other for those
+ * tags. At least one of `remoteJid` / `fromMe` / `id` / `participant` required.
+ */
+export interface WaIgnoreKey {
+    readonly remoteJid?: string | readonly string[]
+    readonly fromMe?: boolean
+    readonly id?: string
+    readonly participant?: string
+    /** Restrict to specific kinds. Default: all six. */
+    readonly only?: readonly WaIgnoreStanzaKind[]
+}
+
 export interface WaIncomingBaseEvent {
     /** The raw decoded stanza, kept for forward-compat parsing of fields the typed event does not expose. */
     readonly rawNode: BinaryNode

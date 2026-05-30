@@ -15,12 +15,14 @@ import type { WaPresenceCoordinator } from '@client/coordinators/WaPresenceCoord
 import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordinator'
 import type { WaProfileCoordinator } from '@client/coordinators/WaProfileCoordinator'
 import type { WaStatusCoordinator } from '@client/coordinators/WaStatusCoordinator'
+import { createIgnoreKeyFilter, validateIgnoreKey } from '@client/messaging/ignore-key'
 import { runHistorySyncNotification } from '@client/persistence/history-sync'
 import { persistIncomingMailboxEntities } from '@client/persistence/mailbox'
 import { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type {
     WaClientEventMap,
     WaClientOptions,
+    WaIgnoreKey,
     WaIncomingMessageEvent,
     WaIncomingProtocolMessageEvent
 } from '@client/types'
@@ -492,6 +494,27 @@ export class WaClient extends EventEmitter {
             isLogout: false,
             isNewLogin: false
         })
+    }
+
+    /**
+     * Drops matching inbound stanzas before any handler runs. Server still
+     * gets the ack so it stops re-delivering. Returns an `unregister` function.
+     * Throws when the descriptor has no match field or empty arrays.
+     *
+     * @example
+     * ```ts
+     * const off = client.ignoreKey({ remoteJid: spammerJid })
+     * client.ignoreKey({ remoteJid: spammerJid, only: ['message'] })
+     * client.ignoreKey({ fromMe: true, only: ['message'] })
+     * ```
+     */
+    public ignoreKey(descriptor: WaIgnoreKey): () => void {
+        validateIgnoreKey(descriptor)
+        const filter = createIgnoreKeyFilter(
+            descriptor,
+            () => this.deps.authClient.getCurrentCredentials()?.meJid
+        )
+        return this.deps.incomingNode.registerIncomingStanzaFilter(filter)
     }
 
     /** Auth client: pairing, credentials, registration state. */
