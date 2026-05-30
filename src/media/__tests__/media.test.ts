@@ -21,6 +21,12 @@ import { WaMediaCrypto } from '@media/crypto/WaMediaCrypto'
 import { parseMediaConnResponse } from '@media/transfer/conn'
 import { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { BinaryNode } from '@transport/types'
+import type { ServerClock } from '@util/clock'
+
+const localServerClock: ServerClock = {
+    nowMs: () => Date.now(),
+    nowSeconds: () => Math.floor(Date.now() / 1000)
+}
 
 function buildMediaConnNode(auth = 'token', ttl = '120'): BinaryNode {
     return {
@@ -440,7 +446,8 @@ test('media message builder supports text passthrough and conn caching', async (
             getMediaConnCache: () => cache,
             setMediaConnCache: (value) => {
                 cache = value
-            }
+            },
+            serverClock: localServerClock
         },
         'hello'
     )
@@ -467,7 +474,8 @@ test('media message builder supports text passthrough and conn caching', async (
             getMediaConnCache: () => cache,
             setMediaConnCache: (value) => {
                 cache = value
-            }
+            },
+            serverClock: localServerClock
         },
         false
     )
@@ -484,7 +492,8 @@ test('media message builder supports text passthrough and conn caching', async (
             getMediaConnCache: () => cache,
             setMediaConnCache: (value) => {
                 cache = value
-            }
+            },
+            serverClock: localServerClock
         },
         false
     )
@@ -525,7 +534,8 @@ test('media message builder uploads ptv bytes and maps upload response fields', 
             } as never,
             queryWithContext: async () => buildMediaConnNode('auth-token', '120'),
             getMediaConnCache: () => null,
-            setMediaConnCache: () => undefined
+            setMediaConnCache: () => undefined,
+            serverClock: localServerClock
         },
         {
             type: 'ptv',
@@ -572,6 +582,7 @@ test('media message builder continues probe extraction when thumbnail generation
             queryWithContext: async () => buildMediaConnNode('auth-token', '120'),
             getMediaConnCache: () => null,
             setMediaConnCache: () => undefined,
+            serverClock: localServerClock,
             media: {
                 processor: {
                     generateVideoThumbnail: async () => {
@@ -619,6 +630,7 @@ test('media message builder fills only missing probe fields', async () => {
             queryWithContext: async () => buildMediaConnNode('auth-token', '120'),
             getMediaConnCache: () => null,
             setMediaConnCache: () => undefined,
+            serverClock: localServerClock,
             media: {
                 processor: {
                     probeMedia: async () => ({
@@ -663,6 +675,7 @@ test('media message builder reuses streamed media across processor steps', async
             queryWithContext: async () => buildMediaConnNode('auth-token', '120'),
             getMediaConnCache: () => null,
             setMediaConnCache: () => undefined,
+            serverClock: localServerClock,
             media: {
                 processor: {
                     probeMedia: async (input) => {
@@ -726,6 +739,7 @@ test('media message builder supports file path input for upload and processing',
                 queryWithContext: async () => buildMediaConnNode('auth-token', '120'),
                 getMediaConnCache: () => null,
                 setMediaConnCache: () => undefined,
+                serverClock: localServerClock,
                 media: {
                     processor: {
                         generateVideoThumbnail: async (input) => {
@@ -783,7 +797,8 @@ test('media message builder propagates upload response errors for byte uploads',
                     } as never,
                     queryWithContext: async () => buildMediaConnNode(),
                     getMediaConnCache: () => null,
-                    setMediaConnCache: () => undefined
+                    setMediaConnCache: () => undefined,
+                    serverClock: localServerClock
                 },
                 content
             ),
@@ -801,7 +816,8 @@ test('media message builder propagates upload response errors for byte uploads',
                     } as never,
                     queryWithContext: async () => buildMediaConnNode(),
                     getMediaConnCache: () => null,
-                    setMediaConnCache: () => undefined
+                    setMediaConnCache: () => undefined,
+                    serverClock: localServerClock
                 },
                 content
             ),
@@ -820,7 +836,8 @@ test('media message builder propagates upload response errors for byte uploads',
                     } as never,
                     queryWithContext: async () => buildMediaConnNode(),
                     getMediaConnCache: () => null,
-                    setMediaConnCache: () => undefined
+                    setMediaConnCache: () => undefined,
+                    serverClock: localServerClock
                 },
                 content
             ),
@@ -856,7 +873,8 @@ test('media message builder cleans encrypted temp file when stream upload fails'
                         } as never,
                         queryWithContext: async () => buildMediaConnNode(),
                         getMediaConnCache: () => null,
-                        setMediaConnCache: () => undefined
+                        setMediaConnCache: () => undefined,
+                        serverClock: localServerClock
                     },
                     {
                         type: 'audio',

@@ -27,13 +27,8 @@
         "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\""
     },
     "peerDependencies": {
-        "zapo-js": ">=0.1.0",
+        "zapo-js": "^0.3.0",
         "better-sqlite3": ">=11.0.0"
-    },
-    "peerDependenciesMeta": {
-        "zapo-js": {
-            "optional": true
-        }
     },
     "devDependencies": {
         "better-sqlite3": "^12.6.2",

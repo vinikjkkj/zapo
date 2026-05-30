@@ -20,6 +20,7 @@ export function withContactLock(store: WaContactStore): WithDestroyLifecycle<WaC
                 )
             ),
         getByJid: (jid) => gate.runShared(() => store.getByJid(jid)),
+        getByPhoneNumber: (pn) => gate.runShared(() => store.getByPhoneNumber(pn)),
         deleteByJid: (jid) =>
             gate.runShared(() => lock.run(`contact:${jid}`, () => store.deleteByJid(jid))),
         clear: () => gate.runExclusive(() => lock.run(WA_CONTACT_CLEAR_KEY, () => store.clear())),

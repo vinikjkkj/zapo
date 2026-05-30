@@ -72,11 +72,9 @@ test('memory retry/device-list stores expire entries and support cleanup', async
         messageId: 'id-1',
         toJid: 'to',
         eligibleRequesterDeviceJids: ['5511@s.whatsapp.net'],
-        messageType: 'text',
         replayMode: 'plaintext',
         replayPayload,
         state: 'pending',
-        createdAtMs: 1,
         updatedAtMs: 1,
         expiresAtMs: 5
     })

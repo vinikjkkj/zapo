@@ -85,6 +85,11 @@ export function isLidJid(jid: string): boolean {
     return isJidType(jid, WA_DEFAULTS.LID_SERVER)
 }
 
+/** Returns `true` for JIDs in the `@s.whatsapp.net` server (phone-number user JIDs). */
+export function isUserJid(jid: string): boolean {
+    return isJidType(jid, WA_DEFAULTS.HOST_DOMAIN)
+}
+
 /** Returns `true` for JIDs in the `@bot` server. */
 export function isBotJid(jid: string): boolean {
     return isJidType(jid, WA_DEFAULTS.BOT_SERVER)

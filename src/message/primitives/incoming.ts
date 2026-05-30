@@ -157,7 +157,6 @@ export function buildRecoveredIncomingEvent(
             senderDevice: senderDevice ?? 0
         },
         timestampSeconds,
-        encryptionType: 'placeholder_recovery',
         ...(expirationSeconds !== undefined ? { expirationSeconds } : {}),
         message
     }
@@ -342,8 +341,6 @@ function processMsmsgEncNode(
             offline: node.attrs.offline !== undefined,
             timestampSeconds: parseOptionalInt(node.attrs.t),
             pushName,
-            encryptionType: 'msmsg',
-            plaintext: payload,
             message
         })
         return { success: true, encType: 'msmsg' }
@@ -431,8 +428,6 @@ async function decryptAndProcessEncNode(
                 timestampSeconds: parseOptionalInt(node.attrs.t),
                 ...(expirationSeconds !== undefined ? { expirationSeconds } : {}),
                 pushName,
-                encryptionType: encType,
-                plaintext: unpaddedPlaintext,
                 message
             })
         }

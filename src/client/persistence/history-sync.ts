@@ -16,7 +16,8 @@ const HANDLED_SYNC_TYPES = new Set([
     proto.Message.HistorySyncType.RECENT,
     proto.Message.HistorySyncType.FULL,
     proto.Message.HistorySyncType.PUSH_NAME,
-    proto.Message.HistorySyncType.ON_DEMAND
+    proto.Message.HistorySyncType.ON_DEMAND,
+    proto.Message.HistorySyncType.NON_BLOCKING_DATA
 ])
 const HISTORY_SYNC_MAX_PENDING_WRITES = 1_024
 
@@ -37,6 +38,14 @@ interface WaHistorySyncDeps {
         }[]
     ) => Promise<void>
     readonly onNctSalt?: (salt: Uint8Array) => Promise<void>
+    /**
+     * Invoked once per recognized chunk after it has been fully processed (or
+     * after the early-return for `INITIAL_STATUS_V3` and other recognized-but-
+     * unhandled types). The WaClient wires this to the `hist_sync` receipt
+     * stanza required by wa-web so the primary device does not keep resending
+     * the same chunk.
+     */
+    readonly onProcessed?: (syncType: Proto.Message.HistorySyncType) => Promise<void>
 }
 
 export async function runHistorySyncNotification(
@@ -59,8 +68,17 @@ export async function processHistorySyncNotification(
     notification: Proto.Message.IHistorySyncNotification
 ): Promise<void> {
     const syncType = notification.syncType
-    if (syncType === null || syncType === undefined || !HANDLED_SYNC_TYPES.has(syncType)) {
+    if (syncType === null || syncType === undefined) {
+        deps.logger.debug('skipping history sync notification without syncType')
+        return
+    }
+    if (!HANDLED_SYNC_TYPES.has(syncType)) {
         deps.logger.debug('skipping unhandled history sync type', { syncType })
+        // INITIAL_STATUS_V3 is the only recognized syncType we do not process today;
+        // still ack it so the primary device does not keep resending the same chunk.
+        if (syncType === proto.Message.HistorySyncType.INITIAL_STATUS_V3 && deps.onProcessed) {
+            await deps.onProcessed(syncType)
+        }
         return
     }
 
@@ -78,15 +96,36 @@ export async function processHistorySyncNotification(
 
     const nowMs = Date.now()
     const pendingWrites: Promise<void>[] = []
+
+    // Build PN -> LID lookup from this chunk's mappings so pushnames and
+    // mappings land on a single canonical (LID-form) contact row instead of
+    // two mirror rows (one keyed by PN, one keyed by LID).
+    const pnToLid = new Map<string, string>()
+    for (const map of historySync.phoneNumberToLidMappings ?? []) {
+        if (map.pnJid && map.lidJid) {
+            pnToLid.set(map.pnJid, map.lidJid)
+        }
+    }
+
     for (const pn of historySync.pushnames) {
         if (!pn.id) {
             continue
         }
-        pendingWrites[pendingWrites.length] = deps.writeBehind.persistContactAsync({
-            jid: pn.id,
-            pushName: pn.pushname ?? undefined,
-            lastUpdatedMs: nowMs
-        })
+        const lidJid = pnToLid.get(pn.id)
+        pendingWrites[pendingWrites.length] = deps.writeBehind.persistContactAsync(
+            lidJid
+                ? {
+                      jid: lidJid,
+                      pushName: pn.pushname ?? undefined,
+                      phoneNumber: pn.id,
+                      lastUpdatedMs: nowMs
+                  }
+                : {
+                      jid: pn.id,
+                      pushName: pn.pushname ?? undefined,
+                      lastUpdatedMs: nowMs
+                  }
+        )
         if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
             await flushPendingWrites(pendingWrites)
         }
@@ -115,7 +154,11 @@ export async function processHistorySyncNotification(
         }
         for (const histMsg of conversation.messages ?? []) {
             const webMsg = histMsg.message
-            if (!webMsg?.key?.id) {
+            if (!webMsg?.key?.id || !webMsg.message) {
+                // Stubs (group system events: add/remove/promote, revokes, ephemeral toggles)
+                // arrive as WebMessageInfo with a key + messageStubType but no `.message`. They
+                // duplicate live `notification` stanzas that the client already processes, and
+                // storing them as content-less rows produces "ghost" entries — skip them here.
                 continue
             }
             const timestampMs = longToNumber(webMsg.messageTimestamp) * 1000
@@ -125,14 +168,26 @@ export async function processHistorySyncNotification(
                 senderJid: webMsg.key.participant ?? undefined,
                 fromMe: webMsg.key.fromMe === true,
                 timestampMs: timestampMs || undefined,
-                messageBytes: webMsg.message
-                    ? proto.Message.encode(webMsg.message).finish()
-                    : undefined
+                messageBytes: proto.Message.encode(webMsg.message).finish()
             })
             if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
                 await flushPendingWrites(pendingWrites)
             }
             messagesCount += 1
+        }
+    }
+
+    // Persist LID<->PN mappings as a single LID-canonical row per contact.
+    // Lookups by PN form fall through to `getByPhoneNumber` via the secondary
+    // index, so the mirror PN row is no longer needed.
+    for (const [pnJid, lidJid] of pnToLid) {
+        pendingWrites[pendingWrites.length] = deps.writeBehind.persistContactAsync({
+            jid: lidJid,
+            phoneNumber: pnJid,
+            lastUpdatedMs: nowMs
+        })
+        if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
+            await flushPendingWrites(pendingWrites)
         }
     }
 
@@ -177,6 +232,9 @@ export async function processHistorySyncNotification(
     }
     await flushPendingWrites(pendingWrites)
     deps.emitEvent('history_sync_chunk', event)
+    if (deps.onProcessed) {
+        await deps.onProcessed(syncType)
+    }
 }
 
 async function flushPendingWrites(pendingWrites: Promise<void>[]): Promise<void> {

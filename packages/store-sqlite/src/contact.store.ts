@@ -1,3 +1,4 @@
+import { isUserJid } from 'zapo-js'
 import type { WaContactStore as Contract, WaStoredContactRecord } from 'zapo-js/store'
 import { asNumber, asOptionalString, asString } from 'zapo-js/util'
 
@@ -53,6 +54,22 @@ export class WaContactSqliteStore extends BaseSqliteStore implements Contract {
              FROM mailbox_contacts
              WHERE session_id = ? AND jid = ?`,
             [this.options.sessionId, jid]
+        )
+        if (row) return decodeContactRow(row)
+        if (isUserJid(jid)) {
+            return this.getByPhoneNumber(jid)
+        }
+        return null
+    }
+
+    public async getByPhoneNumber(pn: string): Promise<WaStoredContactRecord | null> {
+        const db = await this.getConnection()
+        const row = db.get<ContactRow>(
+            `SELECT jid, display_name, push_name, lid, phone_number, last_updated_ms
+             FROM mailbox_contacts
+             WHERE session_id = ? AND phone_number = ?
+             LIMIT 1`,
+            [this.options.sessionId, pn]
         )
         return row ? decodeContactRow(row) : null
     }

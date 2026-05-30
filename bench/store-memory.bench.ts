@@ -133,7 +133,6 @@ function buildRecords(config: StoreBenchConfig): readonly WaStoredMessageRecord[
             senderJid: `5511999900${index % 512}@s.whatsapp.net`,
             fromMe: (index & 1) === 0,
             timestampMs: 1_700_000_000_000 + index,
-            plaintext: payload,
             messageBytes: payload
         }
     }

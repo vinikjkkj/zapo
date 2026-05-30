@@ -27,13 +27,8 @@
         "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\""
     },
     "peerDependencies": {
-        "zapo-js": ">=0.1.0",
+        "zapo-js": "^0.3.0",
         "mysql2": ">=3.0.0"
-    },
-    "peerDependenciesMeta": {
-        "zapo-js": {
-            "optional": true
-        }
     },
     "devDependencies": {
         "mysql2": "^3.14.0",

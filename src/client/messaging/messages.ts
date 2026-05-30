@@ -76,6 +76,7 @@ import { isBroadcastJid, isGroupJid, toUserJid } from '@protocol/jid'
 import { buildMediaConnIq } from '@transport/node/builders/media'
 import type { BinaryNode } from '@transport/types'
 import { bytesToBase64, TEXT_ENCODER, toBytesView } from '@util/bytes'
+import type { ServerClock } from '@util/clock'
 import { toError } from '@util/primitives'
 
 const VOICE_NOTE_MIMETYPE = 'audio/ogg; codecs=opus'
@@ -92,6 +93,7 @@ export interface WaMediaMessageOptions {
     ) => Promise<BinaryNode>
     readonly getMediaConnCache: () => WaMediaConn | null
     readonly setMediaConnCache: (mediaConn: WaMediaConn | null) => void
+    readonly serverClock: ServerClock
     readonly media?: WaMediaOptions
     readonly linkPreviewResolver?: (
         content: WaSendTextMessage
@@ -143,6 +145,7 @@ function targetMessageKey(remoteJid: string, key: WaMessageKey): Proto.IMessageK
 
 function buildReactionMessage(
     content: WaSendReactionMessage,
+    serverClock: ServerClock,
     ctx?: WaBuildMessageContext
 ): Proto.IMessage {
     requireCtxField(ctx, 'to', 'reaction')
@@ -150,7 +153,7 @@ function buildReactionMessage(
         reactionMessage: {
             key: targetMessageKey(ctx!.to, resolveMessageTarget(content.target)),
             text: content.emoji,
-            senderTimestampMs: content.senderTimestampMs ?? Date.now()
+            senderTimestampMs: content.senderTimestampMs ?? serverClock.nowMs()
         }
     }
 }
@@ -168,7 +171,11 @@ function buildRevokeMessage(
     }
 }
 
-function buildPinMessage(content: WaSendPinMessage, ctx?: WaBuildMessageContext): Proto.IMessage {
+function buildPinMessage(
+    content: WaSendPinMessage,
+    serverClock: ServerClock,
+    ctx?: WaBuildMessageContext
+): Proto.IMessage {
     requireCtxField(ctx, 'to', content.type)
     return {
         pinInChatMessage: {
@@ -177,12 +184,16 @@ function buildPinMessage(content: WaSendPinMessage, ctx?: WaBuildMessageContext)
                 content.type === 'pin'
                     ? proto.Message.PinInChatMessage.Type.PIN_FOR_ALL
                     : proto.Message.PinInChatMessage.Type.UNPIN_FOR_ALL,
-            senderTimestampMs: content.senderTimestampMs ?? Date.now()
+            senderTimestampMs: content.senderTimestampMs ?? serverClock.nowMs()
         }
     }
 }
 
-function buildKeepMessage(content: WaSendKeepMessage, ctx?: WaBuildMessageContext): Proto.IMessage {
+function buildKeepMessage(
+    content: WaSendKeepMessage,
+    serverClock: ServerClock,
+    ctx?: WaBuildMessageContext
+): Proto.IMessage {
     requireCtxField(ctx, 'to', content.type)
     return {
         keepInChatMessage: {
@@ -191,7 +202,7 @@ function buildKeepMessage(content: WaSendKeepMessage, ctx?: WaBuildMessageContex
                 content.type === 'keep'
                     ? proto.KeepType.KEEP_FOR_ALL
                     : proto.KeepType.UNDO_KEEP_FOR_ALL,
-            timestampMs: content.timestampMs ?? Date.now()
+            timestampMs: content.timestampMs ?? serverClock.nowMs()
         }
     }
 }
@@ -277,6 +288,7 @@ async function encryptAddonForOutgoing(input: {
 
 async function buildPollVoteMessage(
     content: WaSendPollVoteMessage,
+    serverClock: ServerClock,
     ctx?: WaBuildMessageContext
 ): Promise<Proto.IMessage> {
     requireCtxField(ctx, 'outgoingStanzaId', 'poll-vote')
@@ -305,20 +317,21 @@ async function buildPollVoteMessage(
                 content.poll.participant
             ),
             vote: { encPayload, encIv },
-            senderTimestampMs: content.senderTimestampMs ?? Date.now()
+            senderTimestampMs: content.senderTimestampMs ?? serverClock.nowMs()
         }
     }
 }
 
 async function buildEventResponseMessage(
     content: WaSendEventResponseMessage,
+    serverClock: ServerClock,
     ctx?: WaBuildMessageContext
 ): Promise<Proto.IMessage> {
     requireCtxField(ctx, 'outgoingStanzaId', 'event-response')
     requireCtxField(ctx, 'meJid', 'event-response')
     const responseProto: Proto.Message.IEventResponseMessage = {
         response: EVENT_RESPONSE_ENUM[content.response],
-        timestampMs: content.timestampMs ?? Date.now()
+        timestampMs: content.timestampMs ?? serverClock.nowMs()
     }
     if (content.extraGuestCount !== undefined) {
         responseProto.extraGuestCount = content.extraGuestCount
@@ -375,17 +388,23 @@ export async function buildMediaMessageContent(
         }
         return { message: { extendedTextMessage: { text: content.text } } }
     }
-    if (isSendReactionMessage(content)) return { message: buildReactionMessage(content, ctx) }
+    if (isSendReactionMessage(content)) {
+        return { message: buildReactionMessage(content, options.serverClock, ctx) }
+    }
     if (isSendRevokeMessage(content)) return { message: buildRevokeMessage(content, ctx) }
-    if (isSendPinMessage(content)) return { message: buildPinMessage(content, ctx) }
-    if (isSendKeepMessage(content)) return { message: buildKeepMessage(content, ctx) }
+    if (isSendPinMessage(content)) {
+        return { message: buildPinMessage(content, options.serverClock, ctx) }
+    }
+    if (isSendKeepMessage(content)) {
+        return { message: buildKeepMessage(content, options.serverClock, ctx) }
+    }
     if (isSendPollMessage(content)) return { message: buildPollCreationMessage(content) }
     if (isSendEventMessage(content)) return { message: buildEventMessage(content) }
     if (isSendPollVoteMessage(content)) {
-        return { message: await buildPollVoteMessage(content, ctx) }
+        return { message: await buildPollVoteMessage(content, options.serverClock, ctx) }
     }
     if (isSendEventResponseMessage(content)) {
-        return { message: await buildEventResponseMessage(content, ctx) }
+        return { message: await buildEventResponseMessage(content, options.serverClock, ctx) }
     }
     if (isSendMediaMessage(content)) {
         return buildMediaMessage(options, content)
@@ -512,7 +531,7 @@ async function buildMediaMessage(
         if (processResult.status === 'rejected') throw processResult.reason
         const uploaded = uploadResult.value
         const processed = processResult.value
-        const mediaKeyTimestamp = Math.floor(Date.now() / 1000)
+        const mediaKeyTimestamp = options.serverClock.nowSeconds()
         const uploadedFields = {
             url: uploaded.url,
             fileSha256: uploaded.fileSha256,
@@ -634,7 +653,7 @@ async function buildMediaMessage(
                             firstFrameLength: content.firstFrameLength ?? uploaded.firstFrameLength,
                             firstFrameSidecar:
                                 content.firstFrameSidecar ?? uploaded.firstFrameSidecar,
-                            stickerSentTs: content.stickerSentTs ?? Date.now()
+                            stickerSentTs: content.stickerSentTs ?? options.serverClock.nowMs()
                         }
                     }
                 }
@@ -890,7 +909,7 @@ async function buildStickerPackMediaMessage(
                 fileSha256: bundle.fileSha256,
                 fileEncSha256: bundle.fileEncSha256,
                 mediaKey,
-                mediaKeyTimestamp: Math.floor(Date.now() / 1000),
+                mediaKeyTimestamp: options.serverClock.nowSeconds(),
                 directPath: bundle.directPath,
                 thumbnailDirectPath: cover.directPath,
                 thumbnailSha256: cover.fileSha256,

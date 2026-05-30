@@ -5,8 +5,6 @@ export interface WaStoredMessageRecord {
     readonly participantJid?: string
     readonly fromMe: boolean
     readonly timestampMs?: number
-    readonly encType?: string
-    readonly plaintext?: Uint8Array
     readonly messageBytes?: Uint8Array
 }
 

@@ -79,15 +79,11 @@ export type WaRetryStoredReplayPayload = Uint8Array | WaRetryReplayPayload
 export interface WaRetryOutboundMessageRecord {
     readonly messageId: string
     readonly toJid: string
-    readonly participantJid?: string
-    readonly recipientJid?: string
     readonly eligibleRequesterDeviceJids?: readonly string[]
     readonly deliveredRequesterDeviceJids?: readonly string[]
-    readonly messageType: string
     readonly replayMode: WaRetryOutboundMode
     readonly replayPayload: WaRetryStoredReplayPayload
     readonly state: WaRetryOutboundState
-    readonly createdAtMs: number
     readonly updatedAtMs: number
     readonly expiresAtMs: number
 }

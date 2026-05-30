@@ -1,4 +1,5 @@
 import type { PoolConnection } from 'mysql2/promise'
+import { isUserJid } from 'zapo-js'
 import type { WaContactStore, WaStoredContactRecord } from 'zapo-js/store'
 
 import { BaseMysqlStore } from './BaseMysqlStore'
@@ -94,7 +95,29 @@ export class WaContactMysqlStore extends BaseMysqlStore implements WaContactStor
                 [this.sessionId, jid]
             )
         )
-        if (!row) return null
+        if (row) return this.decodeRow(row)
+        if (isUserJid(jid)) {
+            return this.getByPhoneNumber(jid)
+        }
+        return null
+    }
+
+    public async getByPhoneNumber(pn: string): Promise<WaStoredContactRecord | null> {
+        await this.ensureReady()
+        const row = queryFirst(
+            await this.pool.execute(
+                `SELECT jid, display_name, push_name, lid,
+                    phone_number, last_updated_ms
+             FROM ${this.t('mailbox_contacts')}
+             WHERE session_id = ? AND phone_number = ?
+             LIMIT 1`,
+                [this.sessionId, pn]
+            )
+        )
+        return row ? this.decodeRow(row) : null
+    }
+
+    private decodeRow(row: Record<string, unknown>): WaStoredContactRecord {
         return {
             jid: row.jid as string,
             displayName: (row.display_name as string | null) ?? undefined,

@@ -33,6 +33,7 @@ export type WaOutboundReceiptType =
     | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_PLAYED
     | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_PLAYED_SELF
     | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_INACTIVE
+    | typeof WA_MESSAGE_TYPES.RECEIPT_TYPE_HISTORY_SYNC
 
 export const WA_RETRYABLE_ACK_CODES = Object.freeze(['408', '429', '500', '503'] as const)
 

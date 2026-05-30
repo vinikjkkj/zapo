@@ -380,6 +380,48 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
                     ON device_list_cache (session_id, alt_user_jid);
             `)
         }
+    },
+    {
+        id: '0014_mailbox_contacts_phone_number_index',
+        domain: 'mailbox',
+        up: (db) => {
+            db.exec(`
+                CREATE INDEX IF NOT EXISTS mailbox_contacts_by_phone_number
+                    ON mailbox_contacts (session_id, phone_number)
+                    WHERE phone_number IS NOT NULL;
+            `)
+        }
+    },
+    {
+        id: '0015_mailbox_messages_drop_dead_columns',
+        domain: 'mailbox',
+        up: (db) => {
+            // enc_type and plaintext were write-only - nothing in the runtime
+            // ever read them back. Drop to reclaim space and stop persisting
+            // sensitive plaintext bytes that have no consumer.
+            db.exec(`
+                ALTER TABLE mailbox_messages DROP COLUMN enc_type;
+                ALTER TABLE mailbox_messages DROP COLUMN plaintext;
+            `)
+        }
+    },
+    {
+        id: '0016_retry_drop_dead_columns',
+        domain: 'retry',
+        up: (db) => {
+            // participant_jid, recipient_jid, message_type and created_at_ms on
+            // outbound were write-only: replay reconstructs the destination
+            // from requesterJid and reads type out of the encoded replay
+            // payload. updated_at_ms on inbound was equally write-only and
+            // never even tracked in the in-memory provider.
+            db.exec(`
+                ALTER TABLE retry_outbound_messages DROP COLUMN participant_jid;
+                ALTER TABLE retry_outbound_messages DROP COLUMN recipient_jid;
+                ALTER TABLE retry_outbound_messages DROP COLUMN message_type;
+                ALTER TABLE retry_outbound_messages DROP COLUMN created_at_ms;
+                ALTER TABLE retry_inbound_counters DROP COLUMN updated_at_ms;
+            `)
+        }
     }
 ]
 

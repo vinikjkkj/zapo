@@ -43,7 +43,7 @@
         "bench:all-stores": "node bench/run-all-stores.cjs"
     },
     "peerDependencies": {
-        "zapo-js": ">=0.1.0"
+        "zapo-js": "^0.3.0"
     },
     "dependencies": {
         "ws": "^8.18.0"

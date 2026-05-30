@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg'
+import { isUserJid } from 'zapo-js'
 import type { WaContactStore, WaStoredContactRecord } from 'zapo-js/store'
 
 import { BasePgStore } from './BasePgStore'
@@ -101,7 +102,30 @@ export class WaContactPgStore extends BasePgStore implements WaContactStore {
                 values: [this.sessionId, jid]
             })
         )
-        if (!row) return null
+        if (row) return this.decodeRow(row)
+        if (isUserJid(jid)) {
+            return this.getByPhoneNumber(jid)
+        }
+        return null
+    }
+
+    public async getByPhoneNumber(pn: string): Promise<WaStoredContactRecord | null> {
+        await this.ensureReady()
+        const row = queryFirst(
+            await this.pool.query({
+                name: this.stmtName('contact_get_by_phone_number'),
+                text: `SELECT jid, display_name, push_name, lid,
+                    phone_number, last_updated_ms
+             FROM ${this.t('mailbox_contacts')}
+             WHERE session_id = $1 AND phone_number = $2
+             LIMIT 1`,
+                values: [this.sessionId, pn]
+            })
+        )
+        return row ? this.decodeRow(row) : null
+    }
+
+    private decodeRow(row: Record<string, unknown>): WaStoredContactRecord {
         return {
             jid: row.jid as string,
             displayName: (row.display_name as string | null) ?? undefined,

@@ -293,6 +293,327 @@ test('history sync processor forwards privacy token payloads and nct salt hooks'
     assert.deepEqual(nctSalts, [new Uint8Array([9, 9, 9])])
 })
 
+test('history sync processor skips stub messages (system events)', async () => {
+    const historySyncBytes = proto.HistorySync.encode({
+        conversations: [
+            {
+                id: '120363000000000000@g.us',
+                messages: [
+                    {
+                        message: {
+                            key: { id: 'real-msg', fromMe: false },
+                            messageTimestamp: 100,
+                            message: { conversation: 'hello' }
+                        }
+                    },
+                    {
+                        message: {
+                            key: { id: '3672884721', fromMe: true },
+                            messageTimestamp: 101,
+                            messageStubType: proto.WebMessageInfo.StubType.GROUP_PARTICIPANT_LEAVE,
+                            messageStubParameters: ['someone@lid']
+                        }
+                    },
+                    {
+                        message: {
+                            key: { id: 'real-msg-2', fromMe: false },
+                            messageTimestamp: 102,
+                            message: { conversation: 'world' }
+                        }
+                    }
+                ]
+            }
+        ]
+    }).finish()
+    const zipped = gzipSync(historySyncBytes)
+
+    const persistedIds: string[] = []
+    const emitted: { type: string; payload: unknown }[] = []
+    await processHistorySyncNotification(
+        {
+            logger: createNoopLogger(),
+            mediaTransfer: {
+                downloadAndDecrypt: async () => {
+                    throw new Error('should not be called for inline payload')
+                }
+            } as never,
+            writeBehind: {
+                persistMessageAsync: async (record: { id: string }) => {
+                    persistedIds.push(record.id)
+                },
+                persistThreadAsync: async () => undefined,
+                persistContactAsync: async () => undefined
+            } as never,
+            emitEvent: (type, payload) => {
+                emitted.push({ type, payload })
+            }
+        },
+        {
+            syncType: proto.Message.HistorySyncType.RECENT,
+            initialHistBootstrapInlinePayload: zipped
+        }
+    )
+
+    assert.deepEqual(persistedIds, ['real-msg', 'real-msg-2'])
+    assert.equal(emitted.length, 1)
+    assert.equal((emitted[0].payload as { messagesCount: number }).messagesCount, 2)
+})
+
+test('history sync processor persists phoneNumberToLidMappings as a single LID-canonical row per pair', async () => {
+    const historySyncBytes = proto.HistorySync.encode({
+        phoneNumberToLidMappings: [
+            { pnJid: '5511999999999@s.whatsapp.net', lidJid: '111111111111111@lid' },
+            { pnJid: '5511888888888@s.whatsapp.net', lidJid: '222222222222222@lid' },
+            // invalid entries should be skipped
+            { pnJid: '', lidJid: '333333333333333@lid' },
+            { pnJid: '5511777777777@s.whatsapp.net', lidJid: '' }
+        ]
+    }).finish()
+    const zipped = gzipSync(historySyncBytes)
+
+    const contactWrites: Array<{ jid: string; lid?: string; phoneNumber?: string }> = []
+    await processHistorySyncNotification(
+        {
+            logger: createNoopLogger(),
+            mediaTransfer: {
+                downloadAndDecrypt: async () => {
+                    throw new Error('should not be called for inline payload')
+                }
+            } as never,
+            writeBehind: {
+                persistMessageAsync: async () => undefined,
+                persistThreadAsync: async () => undefined,
+                persistContactAsync: async (record: {
+                    jid: string
+                    lid?: string
+                    phoneNumber?: string
+                }) => {
+                    contactWrites.push(record)
+                }
+            } as never,
+            emitEvent: () => undefined
+        },
+        {
+            syncType: proto.Message.HistorySyncType.NON_BLOCKING_DATA,
+            initialHistBootstrapInlinePayload: zipped
+        }
+    )
+
+    const mapped = contactWrites.map((w) => ({
+        jid: w.jid,
+        lid: w.lid,
+        phoneNumber: w.phoneNumber
+    }))
+    assert.deepEqual(mapped, [
+        { jid: '111111111111111@lid', lid: undefined, phoneNumber: '5511999999999@s.whatsapp.net' },
+        { jid: '222222222222222@lid', lid: undefined, phoneNumber: '5511888888888@s.whatsapp.net' }
+    ])
+})
+
+test('history sync processor coalesces pushname onto the LID-canonical row when a mapping is in the same chunk', async () => {
+    const historySyncBytes = proto.HistorySync.encode({
+        phoneNumberToLidMappings: [
+            { pnJid: '5511999999999@s.whatsapp.net', lidJid: '111111111111111@lid' }
+        ],
+        pushnames: [
+            { id: '5511999999999@s.whatsapp.net', pushname: 'Vinicius' },
+            // pushname without matching mapping: keeps PN-form jid
+            { id: '5511888888888@s.whatsapp.net', pushname: 'Other' }
+        ]
+    }).finish()
+    const zipped = gzipSync(historySyncBytes)
+
+    const contactWrites: Array<{
+        jid: string
+        pushName?: string
+        phoneNumber?: string
+        lid?: string
+    }> = []
+    await processHistorySyncNotification(
+        {
+            logger: createNoopLogger(),
+            mediaTransfer: {
+                downloadAndDecrypt: async () => {
+                    throw new Error('should not be called for inline payload')
+                }
+            } as never,
+            writeBehind: {
+                persistMessageAsync: async () => undefined,
+                persistThreadAsync: async () => undefined,
+                persistContactAsync: async (record: {
+                    jid: string
+                    pushName?: string
+                    phoneNumber?: string
+                    lid?: string
+                }) => {
+                    contactWrites.push(record)
+                }
+            } as never,
+            emitEvent: () => undefined
+        },
+        {
+            syncType: proto.Message.HistorySyncType.PUSH_NAME,
+            initialHistBootstrapInlinePayload: zipped
+        }
+    )
+
+    const mappedPushname = contactWrites.find(
+        (w) => w.jid === '111111111111111@lid' && w.pushName === 'Vinicius'
+    )
+    assert.ok(mappedPushname, 'pushname for the mapped PN should land on the LID-canonical row')
+    assert.equal(mappedPushname.phoneNumber, '5511999999999@s.whatsapp.net')
+
+    const unmappedPushname = contactWrites.find(
+        (w) => w.jid === '5511888888888@s.whatsapp.net' && w.pushName === 'Other'
+    )
+    assert.ok(unmappedPushname, 'pushname without a mapping should fall back to the PN-form jid')
+    assert.equal(unmappedPushname.phoneNumber, undefined)
+
+    // No PN-form row is written for the mapped pair (would create the duplicate we are fixing).
+    const pnFormDuplicate = contactWrites.find((w) => w.jid === '5511999999999@s.whatsapp.net')
+    assert.equal(pnFormDuplicate, undefined)
+})
+
+test('history sync processor invokes onProcessed after handled chunk (for hist_sync receipt)', async () => {
+    const historySyncBytes = proto.HistorySync.encode({
+        conversations: [{ id: 'thread@s.whatsapp.net' }]
+    }).finish()
+    const zipped = gzipSync(historySyncBytes)
+
+    const ackedSyncTypes: number[] = []
+    await processHistorySyncNotification(
+        {
+            logger: createNoopLogger(),
+            mediaTransfer: {
+                downloadAndDecrypt: async () => {
+                    throw new Error('should not be called for inline payload')
+                }
+            } as never,
+            writeBehind: {
+                persistMessageAsync: async () => undefined,
+                persistThreadAsync: async () => undefined,
+                persistContactAsync: async () => undefined
+            } as never,
+            emitEvent: () => undefined,
+            onProcessed: async (syncType) => {
+                ackedSyncTypes.push(syncType)
+            }
+        },
+        {
+            syncType: proto.Message.HistorySyncType.RECENT,
+            initialHistBootstrapInlinePayload: zipped
+        }
+    )
+
+    assert.deepEqual(ackedSyncTypes, [proto.Message.HistorySyncType.RECENT])
+})
+
+test('history sync processor invokes onProcessed for INITIAL_STATUS_V3 (recognized but unhandled)', async () => {
+    const ackedSyncTypes: number[] = []
+    await processHistorySyncNotification(
+        {
+            logger: createNoopLogger(),
+            mediaTransfer: {
+                downloadAndDecrypt: async () => {
+                    throw new Error('should not be called - status_v3 is skipped before download')
+                }
+            } as never,
+            writeBehind: {
+                persistMessageAsync: async () => undefined,
+                persistThreadAsync: async () => undefined,
+                persistContactAsync: async () => undefined
+            } as never,
+            emitEvent: () => undefined,
+            onProcessed: async (syncType) => {
+                ackedSyncTypes.push(syncType)
+            }
+        },
+        {
+            syncType: proto.Message.HistorySyncType.INITIAL_STATUS_V3
+        }
+    )
+
+    assert.deepEqual(ackedSyncTypes, [proto.Message.HistorySyncType.INITIAL_STATUS_V3])
+})
+
+test('history sync processor does NOT invoke onProcessed when syncType is null', async () => {
+    const ackedSyncTypes: number[] = []
+    await processHistorySyncNotification(
+        {
+            logger: createNoopLogger(),
+            mediaTransfer: { downloadAndDecrypt: async () => new Uint8Array() } as never,
+            writeBehind: {
+                persistMessageAsync: async () => undefined,
+                persistThreadAsync: async () => undefined,
+                persistContactAsync: async () => undefined
+            } as never,
+            emitEvent: () => undefined,
+            onProcessed: async (syncType) => {
+                ackedSyncTypes.push(syncType)
+            }
+        },
+        {} as never
+    )
+    assert.deepEqual(ackedSyncTypes, [])
+})
+
+test('history sync processor handles NON_BLOCKING_DATA syncType (previously skipped)', async () => {
+    const historySyncBytes = proto.HistorySync.encode({
+        conversations: [
+            {
+                id: '120363000000000000@g.us',
+                name: 'Past Group'
+            }
+        ],
+        phoneNumberToLidMappings: [
+            { pnJid: '5511999999999@s.whatsapp.net', lidJid: '111111111111111@lid' }
+        ]
+    }).finish()
+    const zipped = gzipSync(historySyncBytes)
+
+    const threadWrites: Array<{ jid: string }> = []
+    const contactWrites: Array<{ jid: string }> = []
+    const emitted: { type: string; payload: unknown }[] = []
+    await processHistorySyncNotification(
+        {
+            logger: createNoopLogger(),
+            mediaTransfer: {
+                downloadAndDecrypt: async () => {
+                    throw new Error('should not be called for inline payload')
+                }
+            } as never,
+            writeBehind: {
+                persistMessageAsync: async () => undefined,
+                persistThreadAsync: async (record: { jid: string }) => {
+                    threadWrites.push(record)
+                },
+                persistContactAsync: async (record: { jid: string }) => {
+                    contactWrites.push(record)
+                }
+            } as never,
+            emitEvent: (type, payload) => {
+                emitted.push({ type, payload })
+            }
+        },
+        {
+            syncType: proto.Message.HistorySyncType.NON_BLOCKING_DATA,
+            initialHistBootstrapInlinePayload: zipped
+        }
+    )
+
+    assert.equal(threadWrites.length, 1)
+    assert.equal(threadWrites[0].jid, '120363000000000000@g.us')
+    // One canonical (LID-form) contact row per mapping, not the legacy pair of mirror rows.
+    assert.equal(contactWrites.length, 1)
+    assert.equal(contactWrites[0].jid, '111111111111111@lid')
+    assert.equal(emitted.length, 1)
+    assert.equal(emitted[0].type, 'history_sync_chunk')
+    assert.equal(
+        (emitted[0].payload as { syncType: number }).syncType,
+        proto.Message.HistorySyncType.NON_BLOCKING_DATA
+    )
+})
+
 test('resolveWaClientBase rejects invalid proxy transport shapes', () => {
     const minimalStore = {
         session: () => ({})

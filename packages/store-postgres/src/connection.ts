@@ -341,6 +341,34 @@ const MIGRATIONS: readonly Migration[] = [
             CREATE INDEX IF NOT EXISTS "__PREFIX__idx_device_list_alt_user_jid"
                 ON "__PREFIX__device_list_cache" (session_id, alt_user_jid)
         `
+    },
+    {
+        name: '0014_mailbox_contacts_phone_number_index',
+        domain: 'mailbox',
+        sql: `
+            CREATE INDEX IF NOT EXISTS "__PREFIX__idx_mailbox_contacts_phone_number"
+                ON "__PREFIX__mailbox_contacts" (session_id, phone_number)
+                WHERE phone_number IS NOT NULL
+        `
+    },
+    {
+        name: '0015_mailbox_messages_drop_dead_columns',
+        domain: 'mailbox',
+        sql: `
+            ALTER TABLE "__PREFIX__mailbox_messages" DROP COLUMN IF EXISTS enc_type;
+            ALTER TABLE "__PREFIX__mailbox_messages" DROP COLUMN IF EXISTS plaintext
+        `
+    },
+    {
+        name: '0016_retry_drop_dead_columns',
+        domain: 'retry',
+        sql: `
+            ALTER TABLE "__PREFIX__retry_outbound_messages" DROP COLUMN IF EXISTS participant_jid;
+            ALTER TABLE "__PREFIX__retry_outbound_messages" DROP COLUMN IF EXISTS recipient_jid;
+            ALTER TABLE "__PREFIX__retry_outbound_messages" DROP COLUMN IF EXISTS message_type;
+            ALTER TABLE "__PREFIX__retry_outbound_messages" DROP COLUMN IF EXISTS created_at_ms;
+            ALTER TABLE "__PREFIX__retry_inbound_counters" DROP COLUMN IF EXISTS updated_at_ms
+        `
     }
 ]
 

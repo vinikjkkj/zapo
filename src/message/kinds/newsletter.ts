@@ -154,8 +154,6 @@ export function processIncomingNewsletterMessage(
         offline: node.attrs.offline !== undefined,
         timestampSeconds: parseOptionalInt(node.attrs.t),
         ...(expirationSeconds !== undefined ? { expirationSeconds } : {}),
-        encryptionType: 'plaintext',
-        plaintext: decoded.plaintext,
         message: decoded.message
     })
 }

@@ -9,9 +9,16 @@ import type { WaGroupEvent, WaGroupEventAction } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
+import type { ServerClock } from '@util/clock'
+
+const localServerClock: ServerClock = {
+    nowMs: () => Date.now(),
+    nowSeconds: () => Math.floor(Date.now() / 1000)
+}
 
 const BUILD_OPTIONS = {
-    logger: createNoopLogger()
+    logger: createNoopLogger(),
+    serverClock: localServerClock
 } as unknown as WaMediaMessageOptions
 
 function createGroupEvent(input: {
@@ -631,4 +638,43 @@ test('buildMediaMessageContent encrypts event-response with addon-crypto and cho
     assert.ok(resp?.encPayload instanceof Uint8Array)
     assert.ok(resp?.encIv instanceof Uint8Array)
     assert.equal(resp?.encIv?.byteLength, 12)
+})
+
+test('buildMediaMessageContent applies server-clock skew when caller omits timestamps', async () => {
+    const fixedMs = 1_700_000_000_000
+    const fixedSeconds = Math.floor(fixedMs / 1000)
+    const skewedClock = {
+        logger: createNoopLogger(),
+        serverClock: {
+            nowMs: () => fixedMs,
+            nowSeconds: () => fixedSeconds
+        }
+    } as unknown as WaMediaMessageOptions
+
+    const chatJid = '551122222222@s.whatsapp.net'
+
+    const reaction = await buildMediaMessageContent(
+        skewedClock,
+        {
+            type: 'reaction',
+            emoji: '🔥',
+            target: { remoteJid: chatJid, id: 'STANZA_R', fromMe: true }
+        },
+        { to: chatJid }
+    )
+    assert.equal(reaction.message.reactionMessage?.senderTimestampMs, fixedMs)
+
+    const pin = await buildMediaMessageContent(
+        skewedClock,
+        { type: 'pin', target: { remoteJid: chatJid, id: 'STANZA_P', fromMe: true } },
+        { to: chatJid }
+    )
+    assert.equal(pin.message.pinInChatMessage?.senderTimestampMs, fixedMs)
+
+    const keep = await buildMediaMessageContent(
+        skewedClock,
+        { type: 'keep', target: { remoteJid: chatJid, id: 'STANZA_K', fromMe: true } },
+        { to: chatJid }
+    )
+    assert.equal(keep.message.keepInChatMessage?.timestampMs, fixedMs)
 })

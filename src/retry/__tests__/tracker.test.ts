@@ -37,7 +37,6 @@ test('outbound retry tracker persists once when hinted id matches publish result
         {
             messageIdHint: 'hinted-id',
             toJid: '551100000000@s.whatsapp.net',
-            type: 'text',
             replayPayload: {
                 mode: 'plaintext',
                 to: '551100000000@s.whatsapp.net',
@@ -90,7 +89,6 @@ test('outbound retry tracker skips codec when store supports raw replay payloads
     await tracker.track(
         {
             toJid: replayPayload.to,
-            type: replayPayload.type,
             replayPayload
         },
         async () => ({
@@ -135,7 +133,6 @@ test('outbound retry tracker persists publish result when id hint is not provide
     await tracker.track(
         {
             toJid: '551100000000@s.whatsapp.net',
-            type: 'text',
             replayPayload: {
                 mode: 'plaintext',
                 to: '551100000000@s.whatsapp.net',
@@ -181,7 +178,6 @@ test('outbound retry tracker persists only publish result when server rewrites i
         {
             messageIdHint: 'hinted-id',
             toJid: '551100000000@s.whatsapp.net',
-            type: 'text',
             replayPayload: {
                 mode: 'plaintext',
                 to: '551100000000@s.whatsapp.net',
@@ -226,7 +222,6 @@ test('outbound retry tracker does not default eligible requester list for group 
     await tracker.track(
         {
             toJid: '123456@g.us',
-            type: 'text',
             replayPayload: {
                 mode: 'plaintext',
                 to: '123456@g.us',

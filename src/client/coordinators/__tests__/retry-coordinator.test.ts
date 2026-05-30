@@ -337,7 +337,6 @@ test('placeholder resend: decodes WebMessageInfo and re-emits as incoming messag
     const event = harness.emitted[0]
     assert.equal(event.key.id, 'recover-1')
     assert.equal(event.key.remoteJid, '551122223333@s.whatsapp.net')
-    assert.equal(event.encryptionType, 'placeholder_recovery')
     assert.equal(event.message?.conversation, 'recovered')
 })
 
@@ -368,7 +367,6 @@ test('retry coordinator serializes outbound receipt tracking per message id', as
     const retryStore = new ControlledRetryStore({
         messageId: 'msg-1',
         toJid: '551100000000@s.whatsapp.net',
-        messageType: 'text',
         replayMode: 'plaintext',
         replayPayload: {
             mode: 'plaintext',
@@ -377,7 +375,6 @@ test('retry coordinator serializes outbound receipt tracking per message id', as
             plaintext: new Uint8Array([1, 2, 3])
         },
         state: 'pending',
-        createdAtMs: nowMs,
         updatedAtMs: nowMs,
         expiresAtMs: nowMs + 60_000
     })

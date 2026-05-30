@@ -81,6 +81,7 @@ import {
 } from '@transport/node/builders/message'
 import type { BinaryNode } from '@transport/types'
 import { bytesToHex, TEXT_ENCODER } from '@util/bytes'
+import type { ServerClock } from '@util/clock'
 import { toError } from '@util/primitives'
 
 interface WaMessageDispatchCoordinatorOptions {
@@ -118,6 +119,7 @@ interface WaMessageDispatchCoordinatorOptions {
     ) => Promise<WaMessagePublishResult>
     readonly getIcdcHashLength?: () => number
     readonly mobileMessageIdFormat?: boolean
+    readonly serverClock: ServerClock
 }
 
 type GroupAddressingMode = 'pn' | 'lid'
@@ -142,6 +144,7 @@ interface WaOutboundEnvelope {
 export class WaMessageDispatchCoordinator {
     private readonly deps: WaMessageDispatchCoordinatorOptions
     private readonly mobileMessageIdFormat: boolean
+    private readonly serverClock: ServerClock
     private readonly icdcDedup = new PromiseDedup()
     private readonly privacyTokenDedup = new PromiseDedup()
     private readonly distributionDedup = new PromiseDedup()
@@ -149,6 +152,7 @@ export class WaMessageDispatchCoordinator {
     public constructor(options: WaMessageDispatchCoordinatorOptions) {
         this.deps = options
         this.mobileMessageIdFormat = options.mobileMessageIdFormat ?? false
+        this.serverClock = options.serverClock
     }
 
     public async publishMessageNode(
@@ -160,7 +164,6 @@ export class WaMessageDispatchCoordinator {
             type: node.attrs.type,
             to: node.attrs.to
         })
-        const messageType = node.attrs.type ?? 'text'
         const replayPayload: WaRetryReplayPayload = {
             mode: 'opaque_node',
             node: encodeBinaryNode(node)
@@ -169,10 +172,7 @@ export class WaMessageDispatchCoordinator {
             {
                 messageIdHint: node.attrs.id,
                 toJid: node.attrs.to,
-                type: messageType,
-                replayPayload,
-                participantJid: node.attrs.participant,
-                recipientJid: node.attrs.recipient
+                replayPayload
             },
             async () => this.deps.messageClient.publishNode(node, options)
         )
@@ -199,9 +199,7 @@ export class WaMessageDispatchCoordinator {
             {
                 messageIdHint: input.id,
                 toJid: input.to,
-                type: input.type ?? 'text',
                 replayPayload,
-                participantJid: input.participant,
                 eligibleRequesterDeviceJids: [input.to]
             },
             async () => this.deps.messageClient.publishEncrypted(input, options)
@@ -243,9 +241,7 @@ export class WaMessageDispatchCoordinator {
             {
                 messageIdHint: input.id,
                 toJid: input.to,
-                type: messageType,
                 replayPayload,
-                participantJid: input.participant,
                 eligibleRequesterDeviceJids: [input.to]
             },
             async () =>
@@ -361,7 +357,7 @@ export class WaMessageDispatchCoordinator {
                           ...(editParticipant ? { participant: editParticipant } : {})
                       },
                       editedMessage: withViewOnce,
-                      timestampMs: editTimestamp ?? Date.now()
+                      timestampMs: editTimestamp ?? this.serverClock.nowMs()
                   }
               }
             : withViewOnce
@@ -730,7 +726,6 @@ export class WaMessageDispatchCoordinator {
             {
                 messageIdHint: messageNode.attrs.id ?? sendOptions.id,
                 toJid: input.groupJid,
-                type: messageNode.attrs.type,
                 replayPayload,
                 eligibleRequesterDeviceJids: undefined
             },
@@ -909,7 +904,6 @@ export class WaMessageDispatchCoordinator {
             {
                 messageIdHint: messageNode.attrs.id ?? sendOptions.id,
                 toJid: groupJid,
-                type,
                 replayPayload,
                 eligibleRequesterDeviceJids: undefined
             },
@@ -1107,7 +1101,6 @@ export class WaMessageDispatchCoordinator {
             {
                 messageIdHint: messageNode.attrs.id ?? sendOptions.id,
                 toJid: groupJid,
-                type,
                 replayPayload,
                 eligibleRequesterDeviceJids: undefined
             },
@@ -1584,7 +1577,6 @@ export class WaMessageDispatchCoordinator {
             {
                 messageIdHint: messageNode.attrs.id ?? sendOptions.id,
                 toJid: recipientJid,
-                type,
                 replayPayload,
                 eligibleRequesterDeviceJids: deviceJids
             },

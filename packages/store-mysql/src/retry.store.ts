@@ -110,41 +110,29 @@ export class WaRetryMysqlStore extends BaseMysqlStore implements WaRetryStore {
                 session_id,
                 message_id,
                 to_jid,
-                participant_jid,
-                recipient_jid,
-                message_type,
                 replay_mode,
                 replay_payload,
                 requesters_json,
                 state,
-                created_at_ms,
                 updated_at_ms,
                 expires_at_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 to_jid = VALUES(to_jid),
-                participant_jid = VALUES(participant_jid),
-                recipient_jid = VALUES(recipient_jid),
-                message_type = VALUES(message_type),
                 replay_mode = VALUES(replay_mode),
                 replay_payload = VALUES(replay_payload),
                 requesters_json = VALUES(requesters_json),
                 state = VALUES(state),
-                created_at_ms = VALUES(created_at_ms),
                 updated_at_ms = VALUES(updated_at_ms),
                 expires_at_ms = VALUES(expires_at_ms)`,
             [
                 this.sessionId,
                 record.messageId,
                 record.toJid,
-                record.participantJid ?? null,
-                record.recipientJid ?? null,
-                record.messageType,
                 record.replayMode,
                 replayPayload,
                 requestersJson,
                 record.state,
-                record.createdAtMs,
                 record.updatedAtMs,
                 record.expiresAtMs
             ]
@@ -171,14 +159,10 @@ export class WaRetryMysqlStore extends BaseMysqlStore implements WaRetryStore {
                 `SELECT
                 message_id,
                 to_jid,
-                participant_jid,
-                recipient_jid,
-                message_type,
                 replay_mode,
                 replay_payload,
                 requesters_json,
                 state,
-                created_at_ms,
                 updated_at_ms,
                 expires_at_ms
             FROM ${this.t('retry_outbound_messages')}
@@ -204,17 +188,13 @@ export class WaRetryMysqlStore extends BaseMysqlStore implements WaRetryStore {
         return {
             messageId: String(row.message_id),
             toJid: String(row.to_jid),
-            participantJid: row.participant_jid !== null ? String(row.participant_jid) : undefined,
-            recipientJid: row.recipient_jid !== null ? String(row.recipient_jid) : undefined,
             eligibleRequesterDeviceJids:
                 requesters.eligible.length > 0 ? requesters.eligible : undefined,
             deliveredRequesterDeviceJids:
                 requesters.delivered.length > 0 ? requesters.delivered : undefined,
-            messageType: String(row.message_type),
             replayMode: String(row.replay_mode) as WaRetryOutboundMessageRecord['replayMode'],
             replayPayload: toBytes(row.replay_payload),
             state: String(row.state) as WaRetryOutboundState,
-            createdAtMs: Number(row.created_at_ms),
             updatedAtMs: Number(row.updated_at_ms),
             expiresAtMs: Number(row.expires_at_ms)
         }
@@ -295,19 +275,18 @@ export class WaRetryMysqlStore extends BaseMysqlStore implements WaRetryStore {
     public async incrementInboundCounter(
         messageId: string,
         requesterJid: string,
-        updatedAtMs: number,
+        _updatedAtMs: number,
         expiresAtMs: number
     ): Promise<number> {
         return this.withTransaction(async (conn) => {
             await conn.execute(
                 `INSERT INTO ${this.t('retry_inbound_counters')} (
-                    session_id, message_id, requester_jid, retry_count, updated_at_ms, expires_at_ms
-                ) VALUES (?, ?, ?, LAST_INSERT_ID(1), ?, ?)
+                    session_id, message_id, requester_jid, retry_count, expires_at_ms
+                ) VALUES (?, ?, ?, LAST_INSERT_ID(1), ?)
                 ON DUPLICATE KEY UPDATE
                     retry_count = LAST_INSERT_ID(retry_count + 1),
-                    updated_at_ms = VALUES(updated_at_ms),
                     expires_at_ms = VALUES(expires_at_ms)`,
-                [this.sessionId, messageId, requesterJid, updatedAtMs, expiresAtMs]
+                [this.sessionId, messageId, requesterJid, expiresAtMs]
             )
             const row = queryFirst(await conn.execute('SELECT LAST_INSERT_ID() AS retry_count', []))
             return row ? Number(row.retry_count) : 1

@@ -8,14 +8,10 @@ import type { WaSqliteStorageOptions } from './types'
 interface RetryOutboundRow extends Record<string, unknown> {
     readonly message_id: unknown
     readonly to_jid: unknown
-    readonly participant_jid: unknown
-    readonly recipient_jid: unknown
-    readonly message_type: unknown
     readonly replay_mode: unknown
     readonly replay_payload: unknown
     readonly requesters_json: unknown
     readonly state: unknown
-    readonly created_at_ms: unknown
     readonly updated_at_ms: unknown
     readonly expires_at_ms: unknown
 }
@@ -121,41 +117,29 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
                 session_id,
                 message_id,
                 to_jid,
-                participant_jid,
-                recipient_jid,
-                message_type,
                 replay_mode,
                 replay_payload,
                 requesters_json,
                 state,
-                created_at_ms,
                 updated_at_ms,
                 expires_at_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id, message_id) DO UPDATE SET
                 to_jid=excluded.to_jid,
-                participant_jid=excluded.participant_jid,
-                recipient_jid=excluded.recipient_jid,
-                message_type=excluded.message_type,
                 replay_mode=excluded.replay_mode,
                 replay_payload=excluded.replay_payload,
                 requesters_json=excluded.requesters_json,
                 state=excluded.state,
-                created_at_ms=excluded.created_at_ms,
                 updated_at_ms=excluded.updated_at_ms,
                 expires_at_ms=excluded.expires_at_ms`,
             [
                 this.options.sessionId,
                 record.messageId,
                 record.toJid,
-                record.participantJid ?? null,
-                record.recipientJid ?? null,
-                record.messageType,
                 record.replayMode,
                 replayPayload,
                 requestersJson,
                 record.state,
-                record.createdAtMs,
                 record.updatedAtMs,
                 record.expiresAtMs
             ]
@@ -181,14 +165,10 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
             `SELECT
                 message_id,
                 to_jid,
-                participant_jid,
-                recipient_jid,
-                message_type,
                 replay_mode,
                 replay_payload,
                 requesters_json,
                 state,
-                created_at_ms,
                 updated_at_ms,
                 expires_at_ms
             FROM retry_outbound_messages
@@ -211,26 +191,16 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
         return {
             messageId: asString(row.message_id, 'retry_outbound_messages.message_id'),
             toJid: asString(row.to_jid, 'retry_outbound_messages.to_jid'),
-            participantJid: asOptionalString(
-                row.participant_jid,
-                'retry_outbound_messages.participant_jid'
-            ),
-            recipientJid: asOptionalString(
-                row.recipient_jid,
-                'retry_outbound_messages.recipient_jid'
-            ),
             eligibleRequesterDeviceJids:
                 requesters.eligible.length > 0 ? requesters.eligible : undefined,
             deliveredRequesterDeviceJids:
                 requesters.delivered.length > 0 ? requesters.delivered : undefined,
-            messageType: asString(row.message_type, 'retry_outbound_messages.message_type'),
             replayMode: asString(
                 row.replay_mode,
                 'retry_outbound_messages.replay_mode'
             ) as WaRetryOutboundMessageRecord['replayMode'],
             replayPayload: asBytes(row.replay_payload, 'retry_outbound_messages.replay_payload'),
             state: asString(row.state, 'retry_outbound_messages.state') as WaRetryOutboundState,
-            createdAtMs: asNumber(row.created_at_ms, 'retry_outbound_messages.created_at_ms'),
             updatedAtMs: asNumber(row.updated_at_ms, 'retry_outbound_messages.updated_at_ms'),
             expiresAtMs: asNumber(row.expires_at_ms, 'retry_outbound_messages.expires_at_ms')
         }
@@ -307,7 +277,7 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
     public async incrementInboundCounter(
         messageId: string,
         requesterJid: string,
-        updatedAtMs: number,
+        _updatedAtMs: number,
         expiresAtMs: number
     ): Promise<number> {
         const db = await this.getConnection()
@@ -317,15 +287,13 @@ export class WaRetrySqliteStore extends BaseSqliteStore implements WaRetryStore 
                 message_id,
                 requester_jid,
                 retry_count,
-                updated_at_ms,
                 expires_at_ms
-            ) VALUES (?, ?, ?, 1, ?, ?)
+            ) VALUES (?, ?, ?, 1, ?)
             ON CONFLICT(session_id, message_id, requester_jid) DO UPDATE SET
                 retry_count=retry_inbound_counters.retry_count + 1,
-                updated_at_ms=excluded.updated_at_ms,
                 expires_at_ms=excluded.expires_at_ms
             RETURNING retry_count`,
-            [this.options.sessionId, messageId, requesterJid, updatedAtMs, expiresAtMs]
+            [this.options.sessionId, messageId, requesterJid, expiresAtMs]
         )
         if (!row) {
             return 1

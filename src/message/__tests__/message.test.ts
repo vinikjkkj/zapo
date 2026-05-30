@@ -794,7 +794,6 @@ test('processIncomingNewsletterMessage decodes plaintext message and emits event
     const event = emitted as unknown as WaIncomingMessageEvent
     assert.equal(event.key.remoteJid, '120363025343298869@newsletter')
     assert.equal(event.key.participant, undefined)
-    assert.equal(event.encryptionType, 'plaintext')
     assert.equal(event.key.isNewsletter, true)
     assert.equal(event.key.isGroup, false)
     assert.equal(event.key.isBroadcast, false)

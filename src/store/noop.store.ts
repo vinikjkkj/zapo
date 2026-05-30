@@ -60,6 +60,7 @@ export const NOOP_CONTACT_STORE: WaContactStore = Object.freeze({
     upsert: async (_record: WaStoredContactRecord): Promise<void> => {},
     upsertBatch: async (_records: readonly WaStoredContactRecord[]): Promise<void> => {},
     getByJid: async (_jid: string): Promise<WaStoredContactRecord | null> => null,
+    getByPhoneNumber: async (_pn: string): Promise<WaStoredContactRecord | null> => null,
     deleteByJid: async (_jid: string): Promise<number> => 0,
     clear: async (): Promise<void> => {}
 })

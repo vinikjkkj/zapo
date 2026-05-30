@@ -12,11 +12,17 @@ import type {
 } from '@message/addons/link-preview/types'
 import { proto } from '@proto'
 import { TEXT_ENCODER } from '@util/bytes'
+import type { ServerClock } from '@util/clock'
 
 const fakeMediaConn: WaMediaConn = {
     auth: 'auth-token',
     expiresAtMs: Date.now() + 60_000,
     hosts: [{ hostname: 'mmg.whatsapp.net', isFallback: false }]
+}
+
+const localServerClock: ServerClock = {
+    nowMs: () => Date.now(),
+    nowSeconds: () => Math.floor(Date.now() / 1000)
 }
 
 function noopFetcher(result: WaLinkPreviewResolved | null = null): WaLinkPreviewFetcher {
@@ -76,6 +82,7 @@ test('resolveLinkPreview returns null when perMessage=false', async () => {
         logger: createNoopLogger(),
         mediaTransfer: uploadStubMediaTransfer('').transfer,
         getMediaConn: () => Promise.resolve(fakeMediaConn),
+        serverClock: localServerClock,
         fetcher: noopFetcher({
             matchedText: 'https://example.com',
             title: 'x',
@@ -91,6 +98,7 @@ test('resolveLinkPreview returns null when text has no url', async () => {
         logger: createNoopLogger(),
         mediaTransfer: uploadStubMediaTransfer('').transfer,
         getMediaConn: () => Promise.resolve(fakeMediaConn),
+        serverClock: localServerClock,
         fetcher: noopFetcher(),
         options: {}
     })
@@ -102,6 +110,7 @@ test('resolveLinkPreview returns null when global disabled and perMessage undefi
         logger: createNoopLogger(),
         mediaTransfer: uploadStubMediaTransfer('').transfer,
         getMediaConn: () => Promise.resolve(fakeMediaConn),
+        serverClock: localServerClock,
         fetcher: noopFetcher({
             matchedText: 'https://example.com',
             title: 'x',
@@ -118,6 +127,7 @@ test('resolveLinkPreview allows opt-in when global disabled', async () => {
         logger: createNoopLogger(),
         mediaTransfer: uploadStubMediaTransfer('').transfer,
         getMediaConn: () => Promise.resolve(fakeMediaConn),
+        serverClock: localServerClock,
         fetcher,
         options: { enabled: false }
     })
@@ -139,6 +149,7 @@ test('resolveLinkPreview uses override without invoking fetcher', async () => {
             logger: createNoopLogger(),
             mediaTransfer: uploadStubMediaTransfer('').transfer,
             getMediaConn: () => Promise.resolve(fakeMediaConn),
+            serverClock: localServerClock,
             fetcher,
             options: {}
         }
@@ -159,6 +170,7 @@ test('resolveLinkPreview inlines thumbnails ≤ 64KB', async () => {
             logger: createNoopLogger(),
             mediaTransfer: uploadStubMediaTransfer('').transfer,
             getMediaConn: () => Promise.resolve(fakeMediaConn),
+            serverClock: localServerClock,
             fetcher: noopFetcher(),
             options: {}
         }
@@ -176,6 +188,7 @@ test('resolveLinkPreview drops oversized thumbnail when uploadHqThumbnail=false'
             logger: createNoopLogger(),
             mediaTransfer: uploadStubMediaTransfer('').transfer,
             getMediaConn: () => Promise.resolve(fakeMediaConn),
+            serverClock: localServerClock,
             fetcher: noopFetcher(),
             options: { uploadHqThumbnail: false }
         }
@@ -194,6 +207,7 @@ test('resolveLinkPreview uploads HQ thumbnail when oversize and upload enabled',
             logger: createNoopLogger(),
             mediaTransfer: stub.transfer,
             getMediaConn: () => Promise.resolve(fakeMediaConn),
+            serverClock: localServerClock,
             fetcher: noopFetcher(),
             options: { uploadHqThumbnail: true }
         }
@@ -224,6 +238,7 @@ test('resolveLinkPreview drops thumbnail on upload failure', async () => {
             logger: createNoopLogger(),
             mediaTransfer: failingTransfer,
             getMediaConn: () => Promise.resolve(fakeMediaConn),
+            serverClock: localServerClock,
             fetcher: noopFetcher(),
             options: { uploadHqThumbnail: true }
         }
@@ -242,6 +257,7 @@ function makeBuildOptions(
         queryWithContext: async () => ({ tag: 'noop', attrs: {} }),
         getMediaConnCache: () => null,
         setMediaConnCache: () => {},
+        serverClock: localServerClock,
         linkPreviewResolver: resolver
     }
 }

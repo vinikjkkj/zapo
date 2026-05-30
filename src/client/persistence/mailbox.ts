@@ -3,7 +3,7 @@ import type { WaIncomingMessageEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { needsSecretPersistence } from '@message/encode/content'
 import { proto } from '@proto'
-import { toUserJid } from '@protocol/jid'
+import { isLidJid, isUserJid, toUserJid } from '@protocol/jid'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import { toError } from '@util/primitives'
 
@@ -14,22 +14,58 @@ interface WaPersistIncomingMailboxOptions {
     readonly event: WaIncomingMessageEvent
 }
 
+function pairLidPn(a: string | undefined, b: string | undefined): readonly [string, string] | null {
+    if (!a || !b) return null
+    if (isLidJid(a) && isUserJid(b)) return [a, b]
+    if (isLidJid(b) && isUserJid(a)) return [b, a]
+    return null
+}
+
+/**
+ * Returns the LID-canonical contact record for a primary jid and (optionally)
+ * its alternate addressing. When both forms are known, the row carries
+ * `jid=<lid>, phoneNumber=<pn>` so lookups by either form converge on a
+ * single row via the contact store's PN-fallback path. When only one form is
+ * known, the row falls back to that jid as canonical.
+ */
+function canonicalContact(
+    primary: string,
+    alt: string | undefined,
+    nowMs: number
+): { readonly jid: string; readonly phoneNumber?: string; readonly lastUpdatedMs: number } {
+    const pair = pairLidPn(primary, alt)
+    if (pair) {
+        const [lid, pn] = pair
+        return { jid: lid, phoneNumber: pn, lastUpdatedMs: nowMs }
+    }
+    return { jid: primary, lastUpdatedMs: nowMs }
+}
+
 function persistContacts(
     writeBehind: WriteBehindPersistence,
     event: WaIncomingMessageEvent,
     nowMs: number
 ): void {
-    const senderJid =
-        event.key.participant ?? event.rawNode.attrs.participant ?? event.key.remoteJid
     const rawParticipant = event.rawNode.attrs.participant
     const participantJid = rawParticipant ? toUserJid(rawParticipant) : undefined
-    if (!senderJid && !participantJid) {
+    const senderPrimary = event.key.participant ?? rawParticipant ?? event.key.remoteJid
+    if (!senderPrimary && !participantJid) {
         return
     }
-    if (senderJid) {
-        writeBehind.persistContact({ jid: senderJid, lastUpdatedMs: nowMs })
+
+    const written = new Set<string>()
+    if (senderPrimary) {
+        // For 1:1 chats the sender is the same person as remoteJid, so its
+        // cross-ref pair info lives in remoteJidAlt rather than participantAlt.
+        let alt = event.key.participantAlt
+        if (!alt && !event.key.isGroup && senderPrimary === event.key.remoteJid) {
+            alt = event.key.remoteJidAlt
+        }
+        const record = canonicalContact(senderPrimary, alt, nowMs)
+        writeBehind.persistContact(record)
+        written.add(record.jid)
     }
-    if (participantJid && participantJid !== senderJid) {
+    if (participantJid && !written.has(participantJid)) {
         writeBehind.persistContact({ jid: participantJid, lastUpdatedMs: nowMs })
     }
 }
@@ -56,8 +92,6 @@ export function persistIncomingMailboxEntities(options: WaPersistIncomingMailbox
             fromMe: false,
             timestampMs:
                 event.timestampSeconds === undefined ? undefined : event.timestampSeconds * 1_000,
-            encType: event.encryptionType,
-            plaintext: event.plaintext,
             messageBytes
         })
         persistContacts(writeBehind, event, nowMs)

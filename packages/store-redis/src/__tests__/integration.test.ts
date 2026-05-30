@@ -162,11 +162,9 @@ describe('store-redis integration', { timeout: 60_000 }, () => {
         await retry.upsertOutboundMessage({
             messageId: 'retry-1',
             toJid: 'to@s.whatsapp.net',
-            messageType: 'text',
             replayMode: 'plaintext',
             replayPayload: new Uint8Array([1, 2, 3]),
             state: 'pending',
-            createdAtMs: now,
             updatedAtMs: now,
             expiresAtMs: now + 60_000,
             eligibleRequesterDeviceJids: ['dev1@s.whatsapp.net'],
@@ -345,11 +343,9 @@ describe('store-redis integration', { timeout: 60_000 }, () => {
         await retry.upsertOutboundMessage({
             messageId: 'retry-status-1',
             toJid: 'to@s.whatsapp.net',
-            messageType: 'text',
             replayMode: 'plaintext',
             replayPayload: new Uint8Array([1, 2, 3]),
             state: 'pending',
-            createdAtMs: now,
             updatedAtMs: now,
             expiresAtMs,
             eligibleRequesterDeviceJids: ['dev1@s.whatsapp.net', 'dev2@s.whatsapp.net'],
@@ -639,11 +635,9 @@ describe('store-redis integration', { timeout: 60_000 }, () => {
         await retry.upsertOutboundMessage({
             messageId: 'retry-update-1',
             toJid: 'to@s.whatsapp.net',
-            messageType: 'text',
             replayMode: 'plaintext',
             replayPayload: new Uint8Array([31, 32]),
             state: 'pending',
-            createdAtMs: now,
             updatedAtMs: now,
             expiresAtMs
         })
@@ -870,8 +864,6 @@ describe('store-redis integration', { timeout: 60_000 }, () => {
             participantJid: 'alice:1@s.whatsapp.net',
             fromMe: false,
             timestampMs: 4_321,
-            encType: 'msg',
-            plaintext: new Uint8Array([1, 2, 3]),
             messageBytes: new Uint8Array([4, 5, 6, 7])
         })
 
@@ -879,8 +871,6 @@ describe('store-redis integration', { timeout: 60_000 }, () => {
         assert.ok(loaded)
         assert.equal(loaded.senderJid, 'alice@s.whatsapp.net')
         assert.equal(loaded.participantJid, 'alice:1@s.whatsapp.net')
-        assert.equal(loaded.encType, 'msg')
-        assert.deepEqual(Array.from(loaded.plaintext ?? []), [1, 2, 3])
         assert.deepEqual(Array.from(loaded.messageBytes ?? []), [4, 5, 6, 7])
 
         const listed = await messages.listByThread('thread-bin@s.whatsapp.net')
@@ -937,11 +927,9 @@ describe('store-redis integration', { timeout: 60_000 }, () => {
         await retry.upsertOutboundMessage({
             messageId: 'retry-no-eligible-1',
             toJid: 'to@s.whatsapp.net',
-            messageType: 'text',
             replayMode: 'plaintext',
             replayPayload: new Uint8Array([1]),
             state: 'pending',
-            createdAtMs: now,
             updatedAtMs: now,
             expiresAtMs
         })

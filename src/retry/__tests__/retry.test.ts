@@ -24,11 +24,9 @@ function buildOutboundRecord(
     return {
         messageId,
         toJid: 'target@s.whatsapp.net',
-        messageType: 'text',
         replayMode: replayPayload.mode,
         replayPayload: encodeRetryReplayPayload(replayPayload),
         state: 'pending',
-        createdAtMs: now,
         updatedAtMs: now,
         expiresAtMs: now + 60_000
     }
@@ -251,7 +249,6 @@ test('retry replay service accepts raw replay payloads from memory store', async
     const outbound: WaRetryOutboundMessageRecord = {
         messageId: 'm-plain-raw',
         toJid: '5511999999999@s.whatsapp.net',
-        messageType: 'text',
         replayMode: 'plaintext',
         replayPayload: {
             mode: 'plaintext',
@@ -260,7 +257,6 @@ test('retry replay service accepts raw replay payloads from memory store', async
             plaintext: new Uint8Array([1, 2, 3])
         },
         state: 'pending',
-        createdAtMs: now,
         updatedAtMs: now,
         expiresAtMs: now + 60_000
     }
@@ -384,7 +380,6 @@ test('retry replay service emits status@broadcast retry with meta and no address
     const outbound: WaRetryOutboundMessageRecord = {
         messageId: 'm-status-1',
         toJid: 'status@broadcast',
-        messageType: 'text',
         replayMode: 'plaintext',
         replayPayload: {
             mode: 'plaintext',
@@ -394,7 +389,6 @@ test('retry replay service emits status@broadcast retry with meta and no address
             statusSetting: 'denylist'
         },
         state: 'pending',
-        createdAtMs: now,
         updatedAtMs: now,
         expiresAtMs: now + 60_000
     }

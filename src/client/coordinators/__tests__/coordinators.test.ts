@@ -142,7 +142,8 @@ function createMessageDispatchCoordinator(
             overrides?.meJid ? ({ meJid: overrides.meJid } as never) : null,
         resolvePrivacyTokenNode: async () => null,
         onDirectMessageSent: () => undefined,
-        mobileMessageIdFormat: overrides?.mobileMessageIdFormat
+        mobileMessageIdFormat: overrides?.mobileMessageIdFormat,
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) }
     })
 }
 

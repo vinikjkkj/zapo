@@ -23,6 +23,7 @@ import type {
     WaLinkPreviewThumbnailStream
 } from '@message/addons/link-preview/types'
 import { proto } from '@proto'
+import type { ServerClock } from '@util/clock'
 import { toError } from '@util/primitives'
 
 const INLINE_THUMBNAIL_MAX_BYTES = 64 * 1024
@@ -33,6 +34,7 @@ export interface ResolveLinkPreviewDeps {
     readonly getMediaConn: () => Promise<WaMediaConn>
     readonly fetcher: WaLinkPreviewFetcher
     readonly options: WaLinkPreviewOptions
+    readonly serverClock: ServerClock
 }
 
 export interface ResolvedLinkPreviewResult {
@@ -163,7 +165,7 @@ async function uploadHqFromBytes(
         thumbnailSha256: encrypted.fileSha256,
         thumbnailEncSha256: encrypted.fileEncSha256,
         mediaKey,
-        mediaKeyTimestamp: Math.floor(Date.now() / 1000),
+        mediaKeyTimestamp: deps.serverClock.nowSeconds(),
         ...(thumbnail.width !== undefined ? { thumbnailWidth: thumbnail.width } : {}),
         ...(thumbnail.height !== undefined ? { thumbnailHeight: thumbnail.height } : {})
     }
@@ -194,7 +196,7 @@ async function uploadHqFromStream(
             thumbnailSha256: encrypted.fileSha256,
             thumbnailEncSha256: encrypted.fileEncSha256,
             mediaKey,
-            mediaKeyTimestamp: Math.floor(Date.now() / 1000),
+            mediaKeyTimestamp: deps.serverClock.nowSeconds(),
             ...(thumbnail.width !== undefined ? { thumbnailWidth: thumbnail.width } : {}),
             ...(thumbnail.height !== undefined ? { thumbnailHeight: thumbnail.height } : {})
         }

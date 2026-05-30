@@ -326,6 +326,36 @@ const MIGRATIONS: readonly Migration[] = [
                 ADD COLUMN alt_user_jid VARCHAR(255) NULL,
                 ADD INDEX \`__PREFIX__idx_device_list_alt_user_jid\` (session_id, alt_user_jid)
         `
+    },
+    {
+        name: '0014_mailbox_contacts_phone_number_index',
+        domain: 'mailbox',
+        sql: `
+            ALTER TABLE \`__PREFIX__mailbox_contacts\`
+                ADD INDEX \`__PREFIX__idx_mailbox_contacts_phone_number\` (session_id, phone_number)
+        `
+    },
+    {
+        name: '0015_mailbox_messages_drop_dead_columns',
+        domain: 'mailbox',
+        sql: `
+            ALTER TABLE \`__PREFIX__mailbox_messages\`
+                DROP COLUMN enc_type,
+                DROP COLUMN plaintext
+        `
+    },
+    {
+        name: '0016_retry_drop_dead_columns',
+        domain: 'retry',
+        sql: `
+            ALTER TABLE \`__PREFIX__retry_outbound_messages\`
+                DROP COLUMN participant_jid,
+                DROP COLUMN recipient_jid,
+                DROP COLUMN message_type,
+                DROP COLUMN created_at_ms;
+            ALTER TABLE \`__PREFIX__retry_inbound_counters\`
+                DROP COLUMN updated_at_ms
+        `
     }
 ]
 

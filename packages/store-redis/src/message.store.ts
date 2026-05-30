@@ -4,7 +4,7 @@ import { BaseRedisStore } from './BaseRedisStore'
 import { safeLimit, scanKeys, toBytesOrNull, toRedisBuffer, toStringOrNull } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
-const BINARY_FIELDS = ['plaintext', 'message_bytes'] as const
+const BINARY_FIELDS = ['message_bytes'] as const
 
 export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStore {
     public constructor(options: WaRedisStorageOptions) {
@@ -34,9 +34,6 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
         pipeline.hset(key, recordToHash(record))
         pipeline.zadd(idxKey, String(score), record.id)
 
-        if (record.plaintext !== undefined) {
-            pipeline.set(`${key}:plaintext`, toRedisBuffer(record.plaintext))
-        }
         if (record.messageBytes !== undefined) {
             pipeline.set(`${key}:message_bytes`, toRedisBuffer(record.messageBytes))
         }
@@ -72,9 +69,6 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
             pipeline.hset(key, recordToHash(record))
             pipeline.zadd(idxKey, String(score), record.id)
 
-            if (record.plaintext !== undefined) {
-                pipeline.set(`${key}:plaintext`, toRedisBuffer(record.plaintext))
-            }
             if (record.messageBytes !== undefined) {
                 pipeline.set(`${key}:message_bytes`, toRedisBuffer(record.messageBytes))
             }
@@ -96,7 +90,7 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
         const data = results[0][1] as Record<string, string>
         if (!data || Object.keys(data).length === 0) return null
 
-        return hashToRecord(data, toBytesOrNull(results[1][1]), toBytesOrNull(results[2][1]))
+        return hashToRecord(data, toBytesOrNull(results[1][1]))
     }
 
     public async listByThread(
@@ -148,13 +142,7 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
                 if (err) continue
                 const hash = data as Record<string, string>
                 if (hash && Object.keys(hash).length > 0) {
-                    records.push(
-                        hashToRecord(
-                            hash,
-                            toBytesOrNull(results[i + 1][1]),
-                            toBytesOrNull(results[i + 2][1])
-                        )
-                    )
+                    records.push(hashToRecord(hash, toBytesOrNull(results[i + 1][1])))
                 }
             }
         }
@@ -207,16 +195,12 @@ function recordToHash(record: WaStoredMessageRecord): Record<string, string> {
     if (record.timestampMs !== undefined) {
         fields.timestamp_ms = String(record.timestampMs)
     }
-    if (record.encType !== undefined) {
-        fields.enc_type = record.encType
-    }
 
     return fields
 }
 
 function hashToRecord(
     data: Record<string, string>,
-    plaintext: Uint8Array | null,
     messageBytes: Uint8Array | null
 ): WaStoredMessageRecord {
     return {
@@ -227,8 +211,6 @@ function hashToRecord(
         fromMe: data.from_me === '1',
         timestampMs:
             toStringOrNull(data.timestamp_ms) !== null ? Number(data.timestamp_ms) : undefined,
-        encType: toStringOrNull(data.enc_type) ?? undefined,
-        plaintext: plaintext ?? undefined,
         messageBytes: messageBytes ?? undefined
     }
 }

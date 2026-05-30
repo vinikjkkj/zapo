@@ -20,8 +20,6 @@ function rowToRecord(row: MysqlRow): WaStoredMessageRecord {
         participantJid: (row.participant_jid as string | null) ?? undefined,
         fromMe: Number(row.from_me) === 1,
         timestampMs: row.timestamp_ms !== null ? Number(row.timestamp_ms) : undefined,
-        encType: (row.enc_type as string | null) ?? undefined,
-        plaintext: toBytesOrNull(row.plaintext) ?? undefined,
         messageBytes: toBytesOrNull(row.message_bytes) ?? undefined
     }
 }
@@ -36,16 +34,14 @@ export class WaMessageMysqlStore extends BaseMysqlStore implements WaMessageStor
         await this.pool.execute(
             `INSERT INTO ${this.t('mailbox_messages')} (
                 session_id, message_id, thread_jid, sender_jid, participant_jid,
-                from_me, timestamp_ms, enc_type, plaintext, message_bytes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                from_me, timestamp_ms, message_bytes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 thread_jid = VALUES(thread_jid),
                 sender_jid = VALUES(sender_jid),
                 participant_jid = VALUES(participant_jid),
                 from_me = VALUES(from_me),
                 timestamp_ms = VALUES(timestamp_ms),
-                enc_type = VALUES(enc_type),
-                plaintext = VALUES(plaintext),
                 message_bytes = VALUES(message_bytes)`,
             [
                 this.sessionId,
@@ -55,8 +51,6 @@ export class WaMessageMysqlStore extends BaseMysqlStore implements WaMessageStor
                 record.participantJid ?? null,
                 record.fromMe ? 1 : 0,
                 record.timestampMs ?? null,
-                record.encType ?? null,
-                record.plaintext ?? null,
                 record.messageBytes ?? null
             ]
         )
@@ -68,7 +62,7 @@ export class WaMessageMysqlStore extends BaseMysqlStore implements WaMessageStor
             executor: { execute: PoolConnection['execute'] },
             chunk: readonly WaStoredMessageRecord[]
         ): Promise<void> => {
-            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
+            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
             const params: MysqlParam[] = []
             for (const record of chunk) {
                 params.push(
@@ -79,15 +73,13 @@ export class WaMessageMysqlStore extends BaseMysqlStore implements WaMessageStor
                     record.participantJid ?? null,
                     record.fromMe ? 1 : 0,
                     record.timestampMs ?? null,
-                    record.encType ?? null,
-                    record.plaintext ?? null,
                     record.messageBytes ?? null
                 )
             }
             await executor.execute(
                 `INSERT INTO ${this.t('mailbox_messages')} (
                     session_id, message_id, thread_jid, sender_jid, participant_jid,
-                    from_me, timestamp_ms, enc_type, plaintext, message_bytes
+                    from_me, timestamp_ms, message_bytes
                 ) VALUES ${placeholders}
                 ON DUPLICATE KEY UPDATE
                     thread_jid = VALUES(thread_jid),
@@ -95,8 +87,6 @@ export class WaMessageMysqlStore extends BaseMysqlStore implements WaMessageStor
                     participant_jid = VALUES(participant_jid),
                     from_me = VALUES(from_me),
                     timestamp_ms = VALUES(timestamp_ms),
-                    enc_type = VALUES(enc_type),
-                    plaintext = VALUES(plaintext),
                     message_bytes = VALUES(message_bytes)`,
                 params
             )
@@ -121,7 +111,7 @@ export class WaMessageMysqlStore extends BaseMysqlStore implements WaMessageStor
         const row = queryFirst(
             await this.pool.execute(
                 `SELECT message_id, thread_jid, sender_jid, participant_jid,
-                    from_me, timestamp_ms, enc_type, plaintext, message_bytes
+                    from_me, timestamp_ms, message_bytes
              FROM ${this.t('mailbox_messages')}
              WHERE session_id = ? AND message_id = ?`,
                 [this.sessionId, id]
@@ -143,7 +133,7 @@ export class WaMessageMysqlStore extends BaseMysqlStore implements WaMessageStor
             return queryRows(
                 await this.pool.execute(
                     `SELECT message_id, thread_jid, sender_jid, participant_jid,
-                        from_me, timestamp_ms, enc_type, plaintext, message_bytes
+                        from_me, timestamp_ms, message_bytes
                  FROM ${this.t('mailbox_messages')}
                  WHERE session_id = ? AND thread_jid = ? AND timestamp_ms < ?
                  ORDER BY timestamp_ms DESC, message_id DESC
@@ -156,7 +146,7 @@ export class WaMessageMysqlStore extends BaseMysqlStore implements WaMessageStor
         return queryRows(
             await this.pool.execute(
                 `SELECT message_id, thread_jid, sender_jid, participant_jid,
-                    from_me, timestamp_ms, enc_type, plaintext, message_bytes
+                    from_me, timestamp_ms, message_bytes
              FROM ${this.t('mailbox_messages')}
              WHERE session_id = ? AND thread_jid = ?
              ORDER BY timestamp_ms DESC, message_id DESC

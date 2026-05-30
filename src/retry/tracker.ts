@@ -10,10 +10,7 @@ import { toError } from '@util/primitives'
 export type OutboundRetryTrackHint = {
     readonly messageIdHint?: string
     readonly toJid?: string
-    readonly type: string
     readonly replayPayload: WaRetryReplayPayload
-    readonly participantJid?: string
-    readonly recipientJid?: string
     readonly eligibleRequesterDeviceJids?: readonly string[]
 }
 
@@ -86,7 +83,6 @@ export function createOutboundRetryTracker(options: {
 
     return {
         track: async (hint, publish) => {
-            const nowMs = Date.now()
             const replayMode = hint.replayPayload.mode
             const resolvedToJid =
                 hint.toJid ?? (replayMode === 'opaque_node' ? '' : hint.replayPayload.to)
@@ -115,15 +111,11 @@ export function createOutboundRetryTracker(options: {
             ): WaRetryOutboundMessageRecord => ({
                 messageId,
                 toJid: resolvedToJid,
-                participantJid: hint.participantJid,
-                recipientJid: hint.recipientJid,
                 eligibleRequesterDeviceJids,
                 deliveredRequesterDeviceJids: [],
-                messageType: hint.type,
                 replayMode,
                 replayPayload,
                 state: 'pending',
-                createdAtMs: nowMs,
                 updatedAtMs,
                 expiresAtMs
             })

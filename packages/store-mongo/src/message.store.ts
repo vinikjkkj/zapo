@@ -14,8 +14,6 @@ interface MessageDoc {
     participant_jid: string | null
     from_me: boolean
     timestamp_ms: number | null
-    enc_type: string | null
-    plaintext: Binary | null
     message_bytes: Binary | null
 }
 
@@ -27,8 +25,6 @@ function docToRecord(doc: MessageDoc): WaStoredMessageRecord {
         participantJid: doc.participant_jid ?? undefined,
         fromMe: doc.from_me,
         timestampMs: doc.timestamp_ms ?? undefined,
-        encType: doc.enc_type ?? undefined,
-        plaintext: fromBinaryOrNull(doc.plaintext) ?? undefined,
         messageBytes: fromBinaryOrNull(doc.message_bytes) ?? undefined
     }
 }
@@ -57,8 +53,6 @@ export class WaMessageMongoStore extends BaseMongoStore implements WaMessageStor
             participant_jid: record.participantJid ?? null,
             from_me: record.fromMe,
             timestamp_ms: record.timestampMs ?? null,
-            enc_type: record.encType ?? null,
-            plaintext: record.plaintext ? toBinary(record.plaintext) : null,
             message_bytes: record.messageBytes ? toBinary(record.messageBytes) : null
         }
     }

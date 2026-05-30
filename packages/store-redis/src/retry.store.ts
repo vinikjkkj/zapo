@@ -21,8 +21,7 @@ const DEFAULT_RETRY_TTL_MS = 60 * 1000
 const LUA_INCREMENT_INBOUND = `
 local key = KEYS[1]
 local count = redis.call('HINCRBY', key, 'retry_count', 1)
-redis.call('HSET', key, 'updated_at_ms', ARGV[1])
-redis.call('PEXPIREAT', key, tonumber(ARGV[2]))
+redis.call('PEXPIREAT', key, tonumber(ARGV[1]))
 return count
 `
 
@@ -133,18 +132,10 @@ export class WaRetryRedisStore extends BaseRedisStore implements WaRetryStore {
         const fields: Record<string, string> = {
             message_id: record.messageId,
             to_jid: record.toJid,
-            message_type: record.messageType,
             replay_mode: record.replayMode,
             state: record.state,
-            created_at_ms: String(record.createdAtMs),
             updated_at_ms: String(record.updatedAtMs),
             expires_at_ms: String(record.expiresAtMs)
-        }
-        if (record.participantJid !== undefined) {
-            fields.participant_jid = record.participantJid
-        }
-        if (record.recipientJid !== undefined) {
-            fields.recipient_jid = record.recipientJid
         }
         if (requestersJson !== null) {
             fields.requesters_json = requestersJson
@@ -202,17 +193,13 @@ export class WaRetryRedisStore extends BaseRedisStore implements WaRetryStore {
         return {
             messageId: data.message_id,
             toJid: data.to_jid,
-            participantJid: toStringOrNull(data.participant_jid) ?? undefined,
-            recipientJid: toStringOrNull(data.recipient_jid) ?? undefined,
             eligibleRequesterDeviceJids:
                 requesters.eligible.length > 0 ? requesters.eligible : undefined,
             deliveredRequesterDeviceJids:
                 requesters.delivered.length > 0 ? requesters.delivered : undefined,
-            messageType: data.message_type,
             replayMode: data.replay_mode as WaRetryOutboundMessageRecord['replayMode'],
             replayPayload,
             state: data.state as WaRetryOutboundState,
-            createdAtMs: Number(data.created_at_ms),
             updatedAtMs: Number(data.updated_at_ms),
             expiresAtMs: Number(data.expires_at_ms)
         }
@@ -264,17 +251,11 @@ export class WaRetryRedisStore extends BaseRedisStore implements WaRetryStore {
     public async incrementInboundCounter(
         messageId: string,
         requesterJid: string,
-        updatedAtMs: number,
+        _updatedAtMs: number,
         expiresAtMs: number
     ): Promise<number> {
         const key = this.k('retry:in', this.sessionId, messageId, requesterJid)
-        const count = await this.redis.eval(
-            LUA_INCREMENT_INBOUND,
-            1,
-            key,
-            String(updatedAtMs),
-            String(expiresAtMs)
-        )
+        const count = await this.redis.eval(LUA_INCREMENT_INBOUND, 1, key, String(expiresAtMs))
         return Number(count)
     }
 

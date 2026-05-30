@@ -1,3 +1,4 @@
+import { isUserJid } from 'zapo-js'
 import type { WaContactStore, WaStoredContactRecord } from 'zapo-js/store'
 
 import { BaseMongoStore } from './BaseMongoStore'
@@ -70,11 +71,30 @@ export class WaContactMongoStore extends BaseMongoStore implements WaContactStor
         await this.col<ContactDoc>(COLLECTION).bulkWrite(ops, { ordered: false })
     }
 
+    protected override async createIndexes(): Promise<void> {
+        await this.col<ContactDoc>(COLLECTION).createIndex(
+            { '_id.session_id': 1, phone_number: 1 },
+            { partialFilterExpression: { phone_number: { $type: 'string' } } }
+        )
+    }
+
     public async getByJid(jid: string): Promise<WaStoredContactRecord | null> {
         await this.ensureIndexes()
         const doc = await this.col<ContactDoc>(COLLECTION).findOne({ _id: this.makeId(jid) })
-        if (!doc) return null
-        return docToRecord(doc)
+        if (doc) return docToRecord(doc)
+        if (isUserJid(jid)) {
+            return this.getByPhoneNumber(jid)
+        }
+        return null
+    }
+
+    public async getByPhoneNumber(pn: string): Promise<WaStoredContactRecord | null> {
+        await this.ensureIndexes()
+        const doc = await this.col<ContactDoc>(COLLECTION).findOne({
+            '_id.session_id': this.sessionId,
+            phone_number: pn
+        })
+        return doc ? docToRecord(doc) : null
     }
 
     public async deleteByJid(jid: string): Promise<number> {

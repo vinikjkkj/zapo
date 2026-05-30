@@ -319,14 +319,10 @@ test('sqlite retry store tracks outbound state, inbound counters and expiration'
         const outbound: WaRetryOutboundMessageRecord = {
             messageId: 'm1',
             toJid: '5511@s.whatsapp.net',
-            participantJid: '5512@s.whatsapp.net',
-            recipientJid: '5513@s.whatsapp.net',
             eligibleRequesterDeviceJids: ['5511@s.whatsapp.net', '5511:1@s.whatsapp.net'],
-            messageType: 'text',
             replayMode: 'encrypted',
             replayPayload: makeBytes(12, 1),
             state: 'pending',
-            createdAtMs: 1000,
             updatedAtMs: 1000,
             expiresAtMs: 1500
         }

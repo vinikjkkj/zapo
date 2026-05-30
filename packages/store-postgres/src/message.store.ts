@@ -20,8 +20,6 @@ function rowToRecord(row: PgRow): WaStoredMessageRecord {
         participantJid: (row.participant_jid as string | null) ?? undefined,
         fromMe: Boolean(row.from_me),
         timestampMs: row.timestamp_ms !== null ? Number(row.timestamp_ms) : undefined,
-        encType: (row.enc_type as string | null) ?? undefined,
-        plaintext: toBytesOrNull(row.plaintext) ?? undefined,
         messageBytes: toBytesOrNull(row.message_bytes) ?? undefined
     }
 }
@@ -34,7 +32,7 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
     private upsertQuery(values: unknown[]) {
         return {
             name: this.stmtName('msg_upsert'),
-            text: `INSERT INTO ${this.t('mailbox_messages')} (session_id, message_id, thread_jid, sender_jid, participant_jid, from_me, timestamp_ms, enc_type, plaintext, message_bytes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (session_id, message_id) DO UPDATE SET thread_jid = EXCLUDED.thread_jid, sender_jid = EXCLUDED.sender_jid, participant_jid = EXCLUDED.participant_jid, from_me = EXCLUDED.from_me, timestamp_ms = EXCLUDED.timestamp_ms, enc_type = EXCLUDED.enc_type, plaintext = EXCLUDED.plaintext, message_bytes = EXCLUDED.message_bytes`,
+            text: `INSERT INTO ${this.t('mailbox_messages')} (session_id, message_id, thread_jid, sender_jid, participant_jid, from_me, timestamp_ms, message_bytes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (session_id, message_id) DO UPDATE SET thread_jid = EXCLUDED.thread_jid, sender_jid = EXCLUDED.sender_jid, participant_jid = EXCLUDED.participant_jid, from_me = EXCLUDED.from_me, timestamp_ms = EXCLUDED.timestamp_ms, message_bytes = EXCLUDED.message_bytes`,
             values
         }
     }
@@ -50,8 +48,6 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
                 record.participantJid ?? null,
                 record.fromMe,
                 record.timestampMs ?? null,
-                record.encType ?? null,
-                record.plaintext ?? null,
                 record.messageBytes ?? null
             ])
         )
@@ -66,8 +62,8 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
             let paramIdx = 1
             const placeholders = chunk
                 .map(() => {
-                    const p = `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6}, $${paramIdx + 7}, $${paramIdx + 8}, $${paramIdx + 9})`
-                    paramIdx += 10
+                    const p = `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6}, $${paramIdx + 7})`
+                    paramIdx += 8
                     return p
                 })
                 .join(', ')
@@ -81,8 +77,6 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
                     record.participantJid ?? null,
                     record.fromMe,
                     record.timestampMs ?? null,
-                    record.encType ?? null,
-                    record.plaintext ?? null,
                     record.messageBytes ?? null
                 )
             }
@@ -90,7 +84,7 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
                 name: this.stmtName(`msg_upsert_batch_${chunk.length}`),
                 text: `INSERT INTO ${this.t('mailbox_messages')} (
                     session_id, message_id, thread_jid, sender_jid, participant_jid,
-                    from_me, timestamp_ms, enc_type, plaintext, message_bytes
+                    from_me, timestamp_ms, message_bytes
                 ) VALUES ${placeholders}
                 ON CONFLICT (session_id, message_id) DO UPDATE SET
                     thread_jid = EXCLUDED.thread_jid,
@@ -98,8 +92,6 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
                     participant_jid = EXCLUDED.participant_jid,
                     from_me = EXCLUDED.from_me,
                     timestamp_ms = EXCLUDED.timestamp_ms,
-                    enc_type = EXCLUDED.enc_type,
-                    plaintext = EXCLUDED.plaintext,
                     message_bytes = EXCLUDED.message_bytes`,
                 values: params
             })
@@ -125,7 +117,7 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
             await this.pool.query({
                 name: this.stmtName('msg_get_by_id'),
                 text: `SELECT message_id, thread_jid, sender_jid, participant_jid,
-                    from_me, timestamp_ms, enc_type, plaintext, message_bytes
+                    from_me, timestamp_ms, message_bytes
              FROM ${this.t('mailbox_messages')}
              WHERE session_id = $1 AND message_id = $2`,
                 values: [this.sessionId, id]
@@ -148,7 +140,7 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
                 await this.pool.query({
                     name: this.stmtName('msg_list_thread_before'),
                     text: `SELECT message_id, thread_jid, sender_jid, participant_jid,
-                        from_me, timestamp_ms, enc_type, plaintext, message_bytes
+                        from_me, timestamp_ms, message_bytes
                  FROM ${this.t('mailbox_messages')}
                  WHERE session_id = $1 AND thread_jid = $2 AND timestamp_ms < $3
                  ORDER BY timestamp_ms DESC, message_id DESC
@@ -162,7 +154,7 @@ export class WaMessagePgStore extends BasePgStore implements WaMessageStore {
             await this.pool.query({
                 name: this.stmtName('msg_list_thread'),
                 text: `SELECT message_id, thread_jid, sender_jid, participant_jid,
-                    from_me, timestamp_ms, enc_type, plaintext, message_bytes
+                    from_me, timestamp_ms, message_bytes
              FROM ${this.t('mailbox_messages')}
              WHERE session_id = $1 AND thread_jid = $2
              ORDER BY timestamp_ms DESC, message_id DESC

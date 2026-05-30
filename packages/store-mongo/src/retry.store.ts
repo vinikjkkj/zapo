@@ -14,14 +14,10 @@ interface RetryRequesterStatusPayload {
 interface OutboundDoc {
     _id: { session_id: string; message_id: string }
     to_jid: string
-    participant_jid: string | null
-    recipient_jid: string | null
-    message_type: string
     replay_mode: string
     replay_payload: Binary
     requesters_json: string | null
     state: string
-    created_at_ms: number
     updated_at_ms: number
     expires_at: Date
 }
@@ -118,14 +114,10 @@ export class WaRetryMongoStore extends BaseMongoStore implements WaRetryStore {
             {
                 $set: {
                     to_jid: record.toJid,
-                    participant_jid: record.participantJid ?? null,
-                    recipient_jid: record.recipientJid ?? null,
-                    message_type: record.messageType,
                     replay_mode: record.replayMode,
                     replay_payload: toBinary(record.replayPayload),
                     requesters_json: requestersJson,
                     state: record.state,
-                    created_at_ms: record.createdAtMs,
                     updated_at_ms: record.updatedAtMs,
                     expires_at: new Date(record.expiresAtMs)
                 }
@@ -160,17 +152,13 @@ export class WaRetryMongoStore extends BaseMongoStore implements WaRetryStore {
         return {
             messageId: doc._id.message_id,
             toJid: doc.to_jid,
-            participantJid: doc.participant_jid ?? undefined,
-            recipientJid: doc.recipient_jid ?? undefined,
             eligibleRequesterDeviceJids:
                 requesters.eligible.length > 0 ? requesters.eligible : undefined,
             deliveredRequesterDeviceJids:
                 requesters.delivered.length > 0 ? requesters.delivered : undefined,
-            messageType: doc.message_type,
             replayMode: doc.replay_mode as WaRetryOutboundMessageRecord['replayMode'],
             replayPayload: fromBinary(doc.replay_payload),
             state: doc.state as WaRetryOutboundState,
-            createdAtMs: doc.created_at_ms,
             updatedAtMs: doc.updated_at_ms,
             expiresAtMs: doc.expires_at.getTime()
         }

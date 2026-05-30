@@ -18,8 +18,6 @@ interface MessageRow extends Record<string, unknown> {
     readonly participant_jid: unknown
     readonly from_me: unknown
     readonly timestamp_ms: unknown
-    readonly enc_type: unknown
-    readonly plaintext: unknown
     readonly message_bytes: unknown
 }
 
@@ -31,8 +29,6 @@ function decodeMessageRow(row: MessageRow): WaStoredMessageRecord {
         participantJid: asOptionalString(row.participant_jid, 'mailbox_messages.participant_jid'),
         fromMe: Number(row.from_me) === 1,
         timestampMs: asOptionalNumber(row.timestamp_ms, 'mailbox_messages.timestamp_ms'),
-        encType: asOptionalString(row.enc_type, 'mailbox_messages.enc_type'),
-        plaintext: asOptionalBytes(row.plaintext, 'mailbox_messages.plaintext'),
         messageBytes: asOptionalBytes(row.message_bytes, 'mailbox_messages.message_bytes')
     }
 }
@@ -68,8 +64,6 @@ export class WaMessageSqliteStore extends BaseSqliteStore implements Contract {
                 participant_jid,
                 from_me,
                 timestamp_ms,
-                enc_type,
-                plaintext,
                 message_bytes
              FROM mailbox_messages
              WHERE session_id = ? AND message_id = ?`,
@@ -95,8 +89,6 @@ export class WaMessageSqliteStore extends BaseSqliteStore implements Contract {
                           participant_jid,
                           from_me,
                           timestamp_ms,
-                          enc_type,
-                          plaintext,
                           message_bytes
                        FROM mailbox_messages
                        WHERE session_id = ? AND thread_jid = ?
@@ -112,8 +104,6 @@ export class WaMessageSqliteStore extends BaseSqliteStore implements Contract {
                           participant_jid,
                           from_me,
                           timestamp_ms,
-                          enc_type,
-                          plaintext,
                           message_bytes
                        FROM mailbox_messages
                        WHERE session_id = ?
@@ -157,18 +147,14 @@ export class WaMessageSqliteStore extends BaseSqliteStore implements Contract {
                 participant_jid,
                 from_me,
                 timestamp_ms,
-                enc_type,
-                plaintext,
                 message_bytes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id, message_id) DO UPDATE SET
                 thread_jid=excluded.thread_jid,
                 sender_jid=excluded.sender_jid,
                 participant_jid=excluded.participant_jid,
                 from_me=excluded.from_me,
                 timestamp_ms=excluded.timestamp_ms,
-                enc_type=excluded.enc_type,
-                plaintext=excluded.plaintext,
                 message_bytes=excluded.message_bytes`,
             [
                 this.options.sessionId,
@@ -178,8 +164,6 @@ export class WaMessageSqliteStore extends BaseSqliteStore implements Contract {
                 record.participantJid ?? null,
                 record.fromMe ? 1 : 0,
                 record.timestampMs ?? null,
-                record.encType ?? null,
-                record.plaintext ?? null,
                 record.messageBytes ?? null
             ]
         )

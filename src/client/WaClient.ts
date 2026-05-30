@@ -35,7 +35,7 @@ import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { proto, type Proto } from '@proto'
-import { WA_DEFAULTS } from '@protocol/constants'
+import { WA_DEFAULTS, WA_MESSAGE_TYPES } from '@protocol/constants'
 import { normalizeDeviceJid } from '@protocol/jid'
 import { WA_DISCONNECT_REASONS, WA_LOGOUT_REASONS, type WaLogoutReason } from '@protocol/stream'
 import { NOOP_MESSAGE_SECRET_STORE } from '@store/noop.store'
@@ -351,6 +351,8 @@ export class WaClient extends EventEmitter {
                     this.options.history?.enabled !== false &&
                     protocolMessage.historySyncNotification
                 ) {
+                    const peerRemoteJid = event.key.remoteJid
+                    const peerStanzaId = event.key.id
                     await runHistorySyncNotification(
                         {
                             logger: this.logger,
@@ -362,7 +364,27 @@ export class WaClient extends EventEmitter {
                             onPrivacyTokens: (conversations) =>
                                 this.deps.trustedContactToken.hydrateFromHistorySync(conversations),
                             onNctSalt: (salt) =>
-                                this.deps.trustedContactToken.hydrateNctSaltFromHistorySync(salt)
+                                this.deps.trustedContactToken.hydrateNctSaltFromHistorySync(salt),
+                            onProcessed:
+                                peerRemoteJid && peerStanzaId
+                                    ? async () => {
+                                          try {
+                                              await this.message.sendReceipt(
+                                                  peerRemoteJid,
+                                                  peerStanzaId,
+                                                  {
+                                                      type: WA_MESSAGE_TYPES.RECEIPT_TYPE_HISTORY_SYNC
+                                                  }
+                                              )
+                                          } catch (err) {
+                                              this.logger.warn('failed to send hist_sync receipt', {
+                                                  id: peerStanzaId,
+                                                  to: peerRemoteJid,
+                                                  message: toError(err).message
+                                              })
+                                          }
+                                      }
+                                    : undefined
                         },
                         protocolMessage.historySyncNotification
                     )

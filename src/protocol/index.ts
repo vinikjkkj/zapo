@@ -15,6 +15,7 @@ export {
     isLidJid,
     isNewsletterJid,
     isStatusBroadcastJid,
+    isUserJid,
     normalizeDeviceJid,
     normalizeRecipientJid,
     parseJidFull,

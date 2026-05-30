@@ -107,41 +107,29 @@ export class WaRetryPgStore extends BasePgStore implements WaRetryStore {
                 session_id,
                 message_id,
                 to_jid,
-                participant_jid,
-                recipient_jid,
-                message_type,
                 replay_mode,
                 replay_payload,
                 requesters_json,
                 state,
-                created_at_ms,
                 updated_at_ms,
                 expires_at_ms
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (session_id, message_id) DO UPDATE SET
                 to_jid = EXCLUDED.to_jid,
-                participant_jid = EXCLUDED.participant_jid,
-                recipient_jid = EXCLUDED.recipient_jid,
-                message_type = EXCLUDED.message_type,
                 replay_mode = EXCLUDED.replay_mode,
                 replay_payload = EXCLUDED.replay_payload,
                 requesters_json = EXCLUDED.requesters_json,
                 state = EXCLUDED.state,
-                created_at_ms = EXCLUDED.created_at_ms,
                 updated_at_ms = EXCLUDED.updated_at_ms,
                 expires_at_ms = EXCLUDED.expires_at_ms`,
             values: [
                 this.sessionId,
                 record.messageId,
                 record.toJid,
-                record.participantJid ?? null,
-                record.recipientJid ?? null,
-                record.messageType,
                 record.replayMode,
                 replayPayload,
                 requestersJson,
                 record.state,
-                record.createdAtMs,
                 record.updatedAtMs,
                 record.expiresAtMs
             ]
@@ -170,14 +158,10 @@ export class WaRetryPgStore extends BasePgStore implements WaRetryStore {
                 text: `SELECT
                     message_id,
                     to_jid,
-                    participant_jid,
-                    recipient_jid,
-                    message_type,
                     replay_mode,
                     replay_payload,
                     requesters_json,
                     state,
-                    created_at_ms,
                     updated_at_ms,
                     expires_at_ms
                 FROM ${this.t('retry_outbound_messages')}
@@ -198,17 +182,13 @@ export class WaRetryPgStore extends BasePgStore implements WaRetryStore {
         return {
             messageId: String(row.message_id),
             toJid: String(row.to_jid),
-            participantJid: row.participant_jid !== null ? String(row.participant_jid) : undefined,
-            recipientJid: row.recipient_jid !== null ? String(row.recipient_jid) : undefined,
             eligibleRequesterDeviceJids:
                 requesters.eligible.length > 0 ? requesters.eligible : undefined,
             deliveredRequesterDeviceJids:
                 requesters.delivered.length > 0 ? requesters.delivered : undefined,
-            messageType: String(row.message_type),
             replayMode: String(row.replay_mode) as WaRetryOutboundMessageRecord['replayMode'],
             replayPayload: toBytes(row.replay_payload),
             state: String(row.state) as WaRetryOutboundState,
-            createdAtMs: Number(row.created_at_ms),
             updatedAtMs: Number(row.updated_at_ms),
             expiresAtMs: Number(row.expires_at_ms)
         }
@@ -287,7 +267,7 @@ export class WaRetryPgStore extends BasePgStore implements WaRetryStore {
     public async incrementInboundCounter(
         messageId: string,
         requesterJid: string,
-        updatedAtMs: number,
+        _updatedAtMs: number,
         expiresAtMs: number
     ): Promise<number> {
         await this.ensureReady()
@@ -295,14 +275,13 @@ export class WaRetryPgStore extends BasePgStore implements WaRetryStore {
         const result = await this.pool.query({
             name: this.stmtName('retry_inc_inbound'),
             text: `INSERT INTO ${tbl} (
-                session_id, message_id, requester_jid, retry_count, updated_at_ms, expires_at_ms
-            ) VALUES ($1, $2, $3, 1, $4, $5)
+                session_id, message_id, requester_jid, retry_count, expires_at_ms
+            ) VALUES ($1, $2, $3, 1, $4)
             ON CONFLICT (session_id, message_id, requester_jid) DO UPDATE SET
                 retry_count = ${tbl}.retry_count + 1,
-                updated_at_ms = EXCLUDED.updated_at_ms,
                 expires_at_ms = EXCLUDED.expires_at_ms
             RETURNING retry_count`,
-            values: [this.sessionId, messageId, requesterJid, updatedAtMs, expiresAtMs]
+            values: [this.sessionId, messageId, requesterJid, expiresAtMs]
         })
         const row = queryFirst(result)
         return row ? Number(row.retry_count) : 1

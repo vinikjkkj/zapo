@@ -495,6 +495,7 @@ export function buildWaClientDependencies(input: {
             mediaConnCacheFallback = mediaConn
             connectionManager?.setMediaConnCache(mediaConn)
         },
+        serverClock,
         media: options.media,
         linkPreviewResolver: (content) =>
             resolveLinkPreview(content.text, content.linkPreview, {
@@ -502,7 +503,8 @@ export function buildWaClientDependencies(input: {
                 mediaTransfer,
                 getMediaConn: () => getClientMediaConn(mediaMessageBuildOptions),
                 fetcher: linkPreviewFetcher,
-                options: linkPreviewOptions
+                options: linkPreviewOptions,
+                serverClock
             })
     }
 
@@ -748,7 +750,8 @@ export function buildWaClientDependencies(input: {
                 additionalAttributes: sendOptions.additionalAttributes
             }),
         getIcdcHashLength: () => abPropsCoordinator.getConfigValue('md_icdc_hash_length'),
-        mobileMessageIdFormat: options.mobileTransport !== undefined
+        mobileMessageIdFormat: options.mobileTransport !== undefined,
+        serverClock
     })
 
     const presenceCoordinator = createPresenceCoordinator({
