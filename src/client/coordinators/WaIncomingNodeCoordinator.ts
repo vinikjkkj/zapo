@@ -202,6 +202,12 @@ export class WaIncomingNodeCoordinator {
             if (!verdict) {
                 continue
             }
+            this.logger.debug('incoming stanza dropped by filter', {
+                tag: node.tag,
+                id: node.attrs.id,
+                type: node.attrs.type,
+                from: node.attrs.from
+            })
             const ack = buildInboundAck(node)
             if (ack) {
                 await sendSafeAck(this.logger, this.runtime.sendNode, ack)
