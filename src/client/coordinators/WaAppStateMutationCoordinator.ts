@@ -497,7 +497,7 @@ export class WaAppStateMutationCoordinator {
 
     private handleContactMutation(mutation: WaAppStateMutation): void {
         if (!this.contactSink) return
-        // Cheap reject before JSON.parse — Contact mutations always carry
+        // Cheap reject before JSON.parse: Contact mutations always carry
         // the literal "contact" as their first index segment.
         if (!mutation.index.includes('"contact"')) return
         let parts: unknown
@@ -511,12 +511,11 @@ export class WaAppStateMutationCoordinator {
         }
         const indexJid = parts[1]
         const lastUpdatedMs = mutation.timestamp > 0 ? mutation.timestamp : Date.now()
-        if (mutation.operation === 'remove') {
-            // Contact left the primary address book. Keep the row (chat may
-            // still be open); only invalidate the synced display name.
-            this.contactSink({ jid: indexJid, lastUpdatedMs })
-            return
-        }
+        // Remove operations are a no-op for the contact store: `mergeContact`
+        // preserves prior displayName when incoming.displayName is undefined,
+        // and the row should stay around (the chat may still be open). The
+        // public mutation event still fires below so consumers can react.
+        if (mutation.operation === 'remove') return
         const action = mutation.value?.contactAction
         if (!action) return
         // Resolve canonical (LID-preferred) jid + cross-reference: the index

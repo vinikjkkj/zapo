@@ -6,7 +6,7 @@ import type { WaClientEventMap, WaHistorySyncChunkEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { proto, type Proto } from '@proto'
-import { isGroupJid } from '@protocol/jid'
+import { isUserJid } from '@protocol/jid'
 import { decodeProtoBytes, toBytesView } from '@util/bytes'
 import { longToNumber, toError } from '@util/primitives'
 
@@ -99,10 +99,10 @@ export async function processHistorySyncNotification(
     const nowMs = Date.now()
     const pendingWrites: Promise<void>[] = []
 
-    // Build PN -> LID lookup from this chunk's mappings (and inline contacts,
-    // which carry the same pair) so pushnames and mappings land on a single
-    // canonical (LID-form) contact row instead of two mirror rows (one keyed
-    // by PN, one keyed by LID).
+    // Build PN -> LID lookup from this chunk's mappings (and inline contacts
+    // and conversation-level pn/lid pairs, which carry the same pair) so
+    // pushnames and mappings land on a single canonical (LID-form) contact
+    // row instead of two mirror rows (one keyed by PN, one keyed by LID).
     const pnToLid = new Map<string, string>()
     for (const map of historySync.phoneNumberToLidMappings ?? []) {
         if (map.pnJid && map.lidJid) {
@@ -112,6 +112,13 @@ export async function processHistorySyncNotification(
     for (const c of historySync.inlineContacts ?? []) {
         if (c.pnJid && c.lidJid) {
             pnToLid.set(c.pnJid, c.lidJid)
+        }
+    }
+    for (const conversation of historySync.conversations) {
+        const pnJid = conversation.pnJid
+        const lidJid = conversation.lidJid ?? conversation.accountLid
+        if (pnJid && lidJid) {
+            pnToLid.set(pnJid, lidJid)
         }
     }
 
@@ -181,7 +188,7 @@ export async function processHistorySyncNotification(
             await flushPendingWrites(pendingWrites)
         }
 
-        if (!isGroupJid(threadJid)) {
+        if (isUserJid(threadJid) || (conversation.lidJid ?? conversation.accountLid)) {
             const contactDisplay = conversation.displayName || conversation.username || undefined
             const contactPn = conversation.pnJid ?? undefined
             const contactLid = conversation.lidJid ?? conversation.accountLid ?? undefined
@@ -193,9 +200,6 @@ export async function processHistorySyncNotification(
                     phoneNumber: contactPn,
                     lastUpdatedMs: nowMs
                 })
-                if (contactPn && contactLid) {
-                    pnToLid.set(contactPn, contactLid)
-                }
                 if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
                     await flushPendingWrites(pendingWrites)
                 }
