@@ -6,17 +6,12 @@ export interface WaRedisStorageOptions {
     readonly sessionId: string
     readonly keyPrefix?: string
     /**
-     * Logger used for slow-command warnings and connection events. Bound
-     * automatically by `createRedisStore` with `{ scope: 'store',
-     * provider: 'redis', domain: '<name>', sessionId }`. Leave unset for
-     * silent operation.
+     * Logger used for connection lifecycle events emitted by the
+     * factory. Bound automatically by `createRedisStore` with
+     * `{ scope: 'store', provider: 'redis', domain: '<name>', sessionId }`.
+     * Leave unset for silent operation.
      */
     readonly logger?: Logger
-    /**
-     * Threshold in milliseconds above which a Redis command emits a
-     * `warn`. Defaults to `250`.
-     */
-    readonly slowOperationThresholdMs?: number
 }
 
 export interface WaRedisCreateStoreOptions {

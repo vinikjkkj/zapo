@@ -44,17 +44,13 @@ export interface WaRedisStoreConfig {
         readonly messageSecretMs?: number
     }
     /**
-     * Logger for connection lifecycle, slow commands, and degraded paths.
-     * The factory binds `{ scope: 'store', provider: 'redis' }` and each
-     * per-domain store binds its own `{ domain: '<name>' }`. When unset,
-     * the Redis layer stays silent.
+     * Logger for connection lifecycle and degraded paths emitted by the
+     * factory (connect/ready/reconnecting/end/error). The factory binds
+     * `{ scope: 'store', provider: 'redis' }` and each per-domain store
+     * binds its own `{ domain: '<name>' }`. When unset, the Redis layer
+     * stays silent.
      */
     readonly logger?: Logger
-    /**
-     * Threshold in milliseconds above which a command emits a `warn`.
-     * Defaults to `250`.
-     */
-    readonly slowOperationThresholdMs?: number
 }
 
 export interface WaRedisStoreResult {
@@ -120,7 +116,6 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsRedis = !isRedis(config.redis)
     const baseLogger = config.logger?.child({ scope: 'store', provider: 'redis' })
-    const slowOperationThresholdMs = config.slowOperationThresholdMs
 
     if (baseLogger && ownsRedis) {
         // Only attach lifecycle listeners on connections we own; externally
@@ -140,8 +135,7 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
         redis,
         sessionId,
         keyPrefix,
-        logger: baseLogger?.child({ domain, sessionId }),
-        slowOperationThresholdMs
+        logger: baseLogger?.child({ domain, sessionId })
     })
 
     return {

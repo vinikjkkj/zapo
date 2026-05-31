@@ -127,29 +127,6 @@ export abstract class BasePgStore {
         }
     }
 
-    /**
-     * Wraps a non-transactional operation in slow-timing telemetry. No-op
-     * when no logger is set.
-     */
-    protected async timed<T>(operation: string, run: () => Promise<T> | T): Promise<T> {
-        if (!this.logger) {
-            return run()
-        }
-        const startedAt = Date.now()
-        try {
-            return await run()
-        } finally {
-            const durationMs = Date.now() - startedAt
-            if (durationMs >= this.slowOperationThresholdMs) {
-                this.logger.warn('slow postgres operation', {
-                    operation,
-                    durationMs,
-                    thresholdMs: this.slowOperationThresholdMs
-                })
-            }
-        }
-    }
-
     public async destroy(): Promise<void> {
         this.migrationPromise = null
     }

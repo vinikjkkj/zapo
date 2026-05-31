@@ -45,29 +45,6 @@ export abstract class BaseMongoStore {
         // Override in subclasses that need indexes
     }
 
-    /**
-     * Wraps a non-session operation with slow-timing telemetry. Use for
-     * batch reads or expensive single commands. No-op when no logger.
-     */
-    protected async timed<T>(operation: string, run: () => Promise<T> | T): Promise<T> {
-        if (!this.logger) {
-            return run()
-        }
-        const startedAt = Date.now()
-        try {
-            return await run()
-        } finally {
-            const durationMs = Date.now() - startedAt
-            if (durationMs >= this.slowOperationThresholdMs) {
-                this.logger.warn('slow mongo operation', {
-                    operation,
-                    durationMs,
-                    thresholdMs: this.slowOperationThresholdMs
-                })
-            }
-        }
-    }
-
     protected async withSession<T>(run: (session: ClientSession) => Promise<T>): Promise<T> {
         await this.ensureIndexes()
         const startedAt = this.logger ? Date.now() : 0

@@ -69,30 +69,6 @@ export abstract class BaseSqliteStore {
         }
     }
 
-    /**
-     * Wraps a non-transactional operation in slow-timing telemetry. Use
-     * for batch reads or expensive single statements where logging slow
-     * cases is worth the timing overhead. No-op when no logger is set.
-     */
-    protected async timed<T>(operation: string, run: () => Promise<T> | T): Promise<T> {
-        if (!this.logger) {
-            return run()
-        }
-        const startedAt = Date.now()
-        try {
-            return await run()
-        } finally {
-            const durationMs = Date.now() - startedAt
-            if (durationMs >= this.slowOperationThresholdMs) {
-                this.logger.warn('slow sqlite operation', {
-                    operation,
-                    durationMs,
-                    thresholdMs: this.slowOperationThresholdMs
-                })
-            }
-        }
-    }
-
     public async destroy(): Promise<void> {
         const connectionPromise = this.connectionPromise
         this.connectionPromise = null
