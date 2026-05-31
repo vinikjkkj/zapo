@@ -108,5 +108,6 @@ export const WA_XMLNS = Object.freeze({
     ABPROPS: 'abt',
     MEX: 'w:mex',
     BOT: 'bot',
-    DISAPPEARING_MODE: 'disappearing_mode'
+    DISAPPEARING_MODE: 'disappearing_mode',
+    PASSIVE: 'passive'
 } as const)

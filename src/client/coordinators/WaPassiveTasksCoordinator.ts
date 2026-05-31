@@ -16,6 +16,7 @@ import type { SignalRotateKeyApi } from '@signal/api/SignalRotateKeyApi'
 import { generatePreKeyPair } from '@signal/registration/keygen'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
+import { buildPassiveModeIqNode } from '@transport/node/builders/passive'
 import type { BinaryNode } from '@transport/types'
 import { toError } from '@util/primitives'
 
@@ -149,6 +150,21 @@ export class WaPassiveTasksCoordinator {
         await this.validateDigestAndRecoverPreKeys(prefetchedLocalKeyBundle)
         await this.rotateSignedPreKeyIfDue(signedPreKeyRotationTs)
         await this.flushDanglingReceipts()
+        await this.sendActiveModeIq()
+    }
+
+    private async sendActiveModeIq(): Promise<void> {
+        try {
+            await this.runtime.queryWithContext(
+                'passive.active',
+                buildPassiveModeIqNode('active'),
+                WA_DEFAULTS.IQ_TIMEOUT_MS
+            )
+        } catch (error) {
+            this.logger.warn('passive active iq failed', {
+                message: toError(error).message
+            })
+        }
     }
 
     private async validateDigestAndRecoverPreKeys(
