@@ -6,10 +6,10 @@ export interface WaRedisStorageOptions {
     readonly sessionId: string
     readonly keyPrefix?: string
     /**
-     * Logger used for connection lifecycle events emitted by the
-     * factory. Bound automatically by `createRedisStore` with
-     * `{ scope: 'store', provider: 'redis', domain: '<name>', sessionId }`.
-     * Leave unset for silent operation.
+     * Logger passed through by `createRedisStore`. The factory binds
+     * `{ scope: 'store', provider: 'redis' }` for Redis connection lifecycle
+     * logs, then adds `{ domain: '<name>', sessionId }` on the child logger
+     * passed into each store/cache. Leave unset for silent operation.
      */
     readonly logger?: Logger
 }
