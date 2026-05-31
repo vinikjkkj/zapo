@@ -192,6 +192,16 @@ test('createIgnoreKeyFilter with predicate routes the parsed context, drops non-
     assert.equal(filter({ tag: 'iq', attrs: { from: PN, id: 'DROP' } }), false)
 })
 
+test('createIgnoreKeyFilter forwards non-message addressable kinds to the predicate', () => {
+    const filter = createIgnoreKeyFilter(
+        (m) => m.kind === 'receipt' && m.id === 'DROP',
+        () => ME_JID
+    )
+    assert.equal(filter(receipt({ from: PN, id: 'DROP' })), true)
+    assert.equal(filter(receipt({ from: PN, id: 'KEEP' })), false)
+    assert.equal(filter(message({ from: PN, id: 'DROP' })), false)
+})
+
 test('createIgnoreKeyFilter with descriptor delegates to matchesIgnoreKey', () => {
     const filter = createIgnoreKeyFilter({ remoteJid: PN, only: ['message'] }, () => ME_JID)
     assert.equal(filter(message({ from: PN, id: 'X' })), true)
