@@ -297,6 +297,7 @@ export interface WaSignalMessagePublishInput {
     readonly pushPriority?: string
     readonly participant?: string
     readonly deviceFanout?: string
+    readonly metaNode?: BinaryNode
 }
 
 export interface WaSendMessageOptions extends WaMessagePublishOptions {

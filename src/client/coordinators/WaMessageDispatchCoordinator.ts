@@ -231,6 +231,8 @@ export class WaMessageDispatchCoordinator {
             input.expectedIdentity
         )
         const messageType = input.type ?? 'text'
+        const deviceIdentity =
+            encrypted.type === 'pkmsg' ? this.getEncodedSignedDeviceIdentity() : undefined
         const replayPayload: WaRetryReplayPayload = {
             mode: 'plaintext',
             to: input.to,
@@ -255,7 +257,9 @@ export class WaMessageDispatchCoordinator {
                         category: input.category,
                         pushPriority: input.pushPriority,
                         participant: input.participant,
-                        deviceFanout: input.deviceFanout
+                        deviceFanout: input.deviceFanout,
+                        deviceIdentity,
+                        metaNode: input.metaNode
                     },
                     options
                 )
@@ -503,13 +507,28 @@ export class WaMessageDispatchCoordinator {
         protocolMessage: Proto.Message.IProtocolMessage,
         options?: { readonly id?: string; readonly pushPriority?: 'high' | 'high_force' }
     ): Promise<WaMessagePublishResult> {
+        const meJid = this.deps.getCurrentCredentials()?.meJid
+        const meParsed = meJid ? parseJidFull(meJid) : undefined
+        const meUserJid = meParsed?.userJid
+        let senderIcdc: IcdcMeta | null = null
+        if (meUserJid) {
+            const regInfo = await this.deps.signalStore.getRegistrationInfo()
+            const localPubKey = regInfo?.identityKeyPair.pubKey
+            const localIdentity =
+                meParsed && localPubKey
+                    ? { address: meParsed.address, pubKey: localPubKey }
+                    : undefined
+            senderIcdc = await this.resolveUserIcdc(meUserJid, localIdentity)
+        }
+        const message = injectDeviceListMetadata({ protocolMessage }, senderIcdc, null)
         return this.publishSignalMessage({
             to: deviceJid,
-            plaintext: proto.Message.encode({ protocolMessage }).finish(),
+            plaintext: proto.Message.encode(message).finish(),
             id: options?.id,
             type: 'text',
             category: 'peer',
-            pushPriority: options?.pushPriority ?? 'high'
+            pushPriority: options?.pushPriority ?? 'high',
+            metaNode: buildMetaNode({ appdata: 'default' })
         })
     }
 
