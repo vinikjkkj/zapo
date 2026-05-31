@@ -790,15 +790,9 @@ export class WaMessageDispatchCoordinator {
         await this.deps.groupMetadataCache.mutateFromGroupEvent(event)
     }
 
+    // noop for now
     private shouldUseGroupDirectPath(message: Proto.IMessage): boolean {
-        const protocolType = message.protocolMessage?.type
-        if (
-            protocolType === proto.Message.ProtocolMessage.Type.REVOKE ||
-            protocolType === proto.Message.ProtocolMessage.Type.MESSAGE_EDIT
-        ) {
-            return true
-        }
-        return message.keepInChatMessage?.keepType === proto.KeepType.UNDO_KEEP_FOR_ALL
+        return false
     }
 
     private async publishGroupDirectMessage(

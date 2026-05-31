@@ -138,6 +138,13 @@ export interface WaSendPinMessage {
     /** An explicit {@link WaMessageKey} or a received `message` event passed verbatim. */
     readonly target: WaMessageTargetInput
     readonly senderTimestampMs?: number
+    /**
+     * Pin expiry in seconds. wa-web's UI offers three presets: 86_400 (24h),
+     * 604_800 (7d), 2_592_000 (30d). Defaults to 86_400 on `pin` and is
+     * ignored on `unpin`. Without it the receiving clients drop the pin
+     * silently, so this is effectively required to make the pin visible.
+     */
+    readonly durationSecs?: number
 }
 
 export interface WaSendEditKey {

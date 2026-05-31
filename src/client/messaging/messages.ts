@@ -173,20 +173,29 @@ function buildRevokeMessage(
     }
 }
 
+// wa-web default pin expiry preset (24h). Receivers drop pins that arrive
+// without a duration, so always advertise one. Override via `durationSecs`.
+const WA_PIN_DEFAULT_DURATION_SECS = 86_400
+
 function buildPinMessage(
     content: WaSendPinMessage,
     serverClock: ServerClock,
     ctx?: WaBuildMessageContext
 ): Proto.IMessage {
     requireCtxField(ctx, 'to', content.type)
+    const isPin = content.type === 'pin'
     return {
         pinInChatMessage: {
             key: targetMessageKey(ctx!.to, resolveMessageTarget(content.target)),
-            type:
-                content.type === 'pin'
-                    ? proto.Message.PinInChatMessage.Type.PIN_FOR_ALL
-                    : proto.Message.PinInChatMessage.Type.UNPIN_FOR_ALL,
+            type: isPin
+                ? proto.Message.PinInChatMessage.Type.PIN_FOR_ALL
+                : proto.Message.PinInChatMessage.Type.UNPIN_FOR_ALL,
             senderTimestampMs: content.senderTimestampMs ?? serverClock.nowMs()
+        },
+        messageContextInfo: {
+            messageAddOnDurationInSecs: isPin
+                ? (content.durationSecs ?? WA_PIN_DEFAULT_DURATION_SECS)
+                : 0
         }
     }
 }
