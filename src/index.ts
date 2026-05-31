@@ -24,6 +24,8 @@ export type {
     WaGroupEventParticipant,
     WaGroupEventSubgroupSuggestion,
     WaIgnoreKey,
+    WaIgnoreKeyContext,
+    WaIgnoreKeyPredicate,
     WaIgnoreStanzaKind,
     WaIncomingAddonEvent,
     WaIncomingBaseEvent,

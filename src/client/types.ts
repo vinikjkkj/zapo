@@ -455,6 +455,28 @@ export interface WaIgnoreKey {
     readonly only?: readonly WaIgnoreStanzaKind[]
 }
 
+/**
+ * Parsed view of an inbound stanza passed to {@link WaIgnoreKeyPredicate}.
+ * Lib does the wire-format parsing (kind detection, PN↔LID alt-attr lookup,
+ * `fromMe` resolution against `meJid`); the predicate only decides.
+ */
+export interface WaIgnoreKeyContext {
+    readonly kind: WaIgnoreStanzaKind
+    /** Raw `from` attr (group JID for groups, PN or LID device JID for 1:1). */
+    readonly remoteJid: string | null
+    readonly fromMe: boolean
+    readonly id: string | undefined
+    /** Raw `participant` attr; `null` for non-group stanzas. */
+    readonly participant: string | null
+}
+
+/**
+ * Predicate form of {@link WaClient.ignoreKey}. Return `true` to drop the
+ * stanza, `false` to let it through. Receives the same fields the descriptor
+ * matches against, already parsed from the wire-format node.
+ */
+export type WaIgnoreKeyPredicate = (ctx: WaIgnoreKeyContext) => boolean
+
 export interface WaIncomingBaseEvent {
     /** The raw decoded stanza, kept for forward-compat parsing of fields the typed event does not expose. */
     readonly rawNode: BinaryNode

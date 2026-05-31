@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { matchesIgnoreKey, validateIgnoreKey } from '@client/messaging/ignore-key'
+import {
+    createIgnoreKeyFilter,
+    extractIgnoreKeyContext,
+    matchesIgnoreKey,
+    validateIgnoreKey
+} from '@client/messaging/ignore-key'
 import type { WaIgnoreKey } from '@client/types'
 import type { BinaryNode } from '@transport/types'
 
@@ -152,4 +157,43 @@ test('validate accepts valid combinations', () => {
     validateIgnoreKey({ fromMe: true, only: ['message'] })
     validateIgnoreKey({ participant: PN, only: ['message', 'notification'] })
     validateIgnoreKey({ id: 'X', only: ['message'] })
+})
+
+test('extractIgnoreKeyContext returns parsed context with kind/from/fromMe/id/participant', () => {
+    const node = message({ from: 'group@g.us', participant: LID, id: 'X' })
+    const ctx = extractIgnoreKeyContext(node, ME_JID)
+    assert.deepEqual(ctx, {
+        kind: 'message',
+        remoteJid: 'group@g.us',
+        fromMe: false,
+        id: 'X',
+        participant: LID
+    })
+})
+
+test('extractIgnoreKeyContext fromMe resolves against sender_pn alt attr', () => {
+    const ownEcho = message({ from: LID, sender_pn: ME_JID, id: 'X' })
+    assert.equal(extractIgnoreKeyContext(ownEcho, ME_JID)?.fromMe, true)
+})
+
+test('extractIgnoreKeyContext returns null for non-addressable tags', () => {
+    const iq: BinaryNode = { tag: 'iq', attrs: { from: PN } }
+    assert.equal(extractIgnoreKeyContext(iq, ME_JID), null)
+})
+
+test('createIgnoreKeyFilter with predicate routes the parsed context, drops non-addressable', () => {
+    const filter = createIgnoreKeyFilter(
+        (m) => m.kind === 'message' && m.id === 'DROP',
+        () => ME_JID
+    )
+    assert.equal(filter(message({ from: PN, id: 'DROP' })), true)
+    assert.equal(filter(message({ from: PN, id: 'KEEP' })), false)
+    assert.equal(filter(receipt({ from: PN, id: 'DROP' })), false)
+    assert.equal(filter({ tag: 'iq', attrs: { from: PN, id: 'DROP' } }), false)
+})
+
+test('createIgnoreKeyFilter with descriptor delegates to matchesIgnoreKey', () => {
+    const filter = createIgnoreKeyFilter({ remoteJid: PN, only: ['message'] }, () => ME_JID)
+    assert.equal(filter(message({ from: PN, id: 'X' })), true)
+    assert.equal(filter(receipt({ from: PN, id: 'X' })), false)
 })

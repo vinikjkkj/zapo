@@ -23,6 +23,7 @@ import type {
     WaClientEventMap,
     WaClientOptions,
     WaIgnoreKey,
+    WaIgnoreKeyPredicate,
     WaIncomingMessageEvent,
     WaIncomingProtocolMessageEvent
 } from '@client/types'
@@ -521,19 +522,26 @@ export class WaClient extends EventEmitter {
     /**
      * Drops matching inbound stanzas before any handler runs. Server still
      * gets the ack so it stops re-delivering. Returns an `unregister` function.
-     * Throws when the descriptor has no match field or empty arrays.
+     *
+     * Accepts either a declarative descriptor or a predicate. The descriptor
+     * matches by `remoteJid`/`fromMe`/`id`/`participant` (PN ↔ LID alt-attrs
+     * resolved automatically) and throws when no match field is given or
+     * arrays are empty. The predicate receives a parsed
+     * {@link WaIgnoreKeyContext} and returns `true` to drop the stanza.
      *
      * @example
      * ```ts
-     * const off = client.ignoreKey({ remoteJid: spammerJid })
-     * client.ignoreKey({ remoteJid: spammerJid, only: ['message'] })
+     * client.ignoreKey({ remoteJid: spammerJid })
      * client.ignoreKey({ fromMe: true, only: ['message'] })
+     * client.ignoreKey((m) => m.kind === 'message' && isGroupJid(m.remoteJid ?? ''))
      * ```
      */
-    public ignoreKey(descriptor: WaIgnoreKey): () => void {
-        validateIgnoreKey(descriptor)
+    public ignoreKey(input: WaIgnoreKey | WaIgnoreKeyPredicate): () => void {
+        if (typeof input !== 'function') {
+            validateIgnoreKey(input)
+        }
         const filter = createIgnoreKeyFilter(
-            descriptor,
+            input,
             () => this.deps.authClient.getCurrentCredentials()?.meJid
         )
         return this.deps.incomingNode.registerIncomingStanzaFilter(filter)

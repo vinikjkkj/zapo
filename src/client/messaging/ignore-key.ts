@@ -1,4 +1,10 @@
-import type { WaIgnoreKey, WaIgnoreStanzaKind, WaIncomingStanzaFilter } from '@client/types'
+import type {
+    WaIgnoreKey,
+    WaIgnoreKeyContext,
+    WaIgnoreKeyPredicate,
+    WaIgnoreStanzaKind,
+    WaIncomingStanzaFilter
+} from '@client/types'
 import { parseJidFull } from '@protocol/jid'
 import { WA_MESSAGE_TAGS } from '@protocol/message'
 import { WA_NODE_TAGS } from '@protocol/nodes'
@@ -48,25 +54,67 @@ function matchesAnyJid(actual: string | undefined, candidates: readonly string[]
     return false
 }
 
+function collectFromCandidates(kind: WaIgnoreStanzaKind, attrs: BinaryNode['attrs']): string[] {
+    const list: string[] = []
+    if (attrs.from) list.push(attrs.from)
+    if (kind === 'message') {
+        if (attrs.sender_pn) list.push(attrs.sender_pn)
+        if (attrs.sender_lid) list.push(attrs.sender_lid)
+    } else if (kind === 'call' && attrs.sender_lid) {
+        list.push(attrs.sender_lid)
+    }
+    return list
+}
+
+function collectParticipantCandidates(
+    kind: WaIgnoreStanzaKind,
+    attrs: BinaryNode['attrs']
+): string[] {
+    const list: string[] = []
+    if (attrs.participant) list.push(attrs.participant)
+    if (kind === 'message') {
+        if (attrs.participant_pn) list.push(attrs.participant_pn)
+        if (attrs.participant_lid) list.push(attrs.participant_lid)
+    }
+    return list
+}
+
+/**
+ * Builds the parsed context handed to a {@link WaIgnoreKeyPredicate}. Returns
+ * `null` when the node's tag is not one of the addressable kinds (`<iq>`, etc.).
+ */
+export function extractIgnoreKeyContext(
+    node: BinaryNode,
+    meJid: string | null | undefined
+): WaIgnoreKeyContext | null {
+    const kind = TAG_TO_KIND[node.tag]
+    if (kind === undefined) return null
+    const a = node.attrs
+    const me = tryParseJid(meJid)
+    const fromCandidates = collectFromCandidates(kind, a)
+    const fromMe =
+        me !== null && fromCandidates.some((f) => tryParseJid(f)?.address.user === me.address.user)
+    return {
+        kind,
+        remoteJid: a.from ?? null,
+        fromMe,
+        id: a.id,
+        participant: a.participant ?? null
+    }
+}
+
 /** Pure matcher. Exported for direct testing without a coordinator. */
 export function matchesIgnoreKey(
     node: BinaryNode,
     d: WaIgnoreKey,
     meJid: string | null | undefined
 ): boolean {
-    const kind = TAG_TO_KIND[node.tag]
-    if (kind === undefined) return false
-    if (d.only !== undefined && !d.only.includes(kind)) return false
+    const ctx = extractIgnoreKeyContext(node, meJid)
+    if (ctx === null) return false
+    if (d.only !== undefined && !d.only.includes(ctx.kind)) return false
 
     const a = node.attrs
-    const fromCandidates: string[] = []
-    if (a.from) fromCandidates.push(a.from)
-    if (kind === 'message') {
-        if (a.sender_pn) fromCandidates.push(a.sender_pn)
-        if (a.sender_lid) fromCandidates.push(a.sender_lid)
-    } else if (kind === 'call' && a.sender_lid) {
-        fromCandidates.push(a.sender_lid)
-    }
+    const fromCandidates = collectFromCandidates(ctx.kind, a)
 
     if (d.remoteJid !== undefined) {
         const candidates = Array.isArray(d.remoteJid) ? d.remoteJid : [d.remoteJid]
@@ -74,31 +122,26 @@ export function matchesIgnoreKey(
     }
 
     if (d.participant !== undefined) {
-        const pCandidates: string[] = []
-        if (a.participant) pCandidates.push(a.participant)
-        if (kind === 'message') {
-            if (a.participant_pn) pCandidates.push(a.participant_pn)
-            if (a.participant_lid) pCandidates.push(a.participant_lid)
-        }
+        const pCandidates = collectParticipantCandidates(ctx.kind, a)
         if (!pCandidates.some((p) => matchesAnyJid(p, [d.participant!]))) return false
     }
 
-    if (d.id !== undefined && a.id !== d.id) return false
+    if (d.id !== undefined && ctx.id !== d.id) return false
 
-    if (d.fromMe !== undefined) {
-        const me = tryParseJid(meJid)
-        const isFromMe =
-            me !== null &&
-            fromCandidates.some((f) => tryParseJid(f)?.address.user === me.address.user)
-        if (d.fromMe !== isFromMe) return false
-    }
+    if (d.fromMe !== undefined && d.fromMe !== ctx.fromMe) return false
 
     return true
 }
 
 export function createIgnoreKeyFilter(
-    descriptor: WaIgnoreKey,
+    input: WaIgnoreKey | WaIgnoreKeyPredicate,
     getMeJid: () => string | null | undefined
 ): WaIncomingStanzaFilter {
-    return (node) => matchesIgnoreKey(node, descriptor, getMeJid())
+    if (typeof input === 'function') {
+        return (node) => {
+            const ctx = extractIgnoreKeyContext(node, getMeJid())
+            return ctx !== null && input(ctx)
+        }
+    }
+    return (node) => matchesIgnoreKey(node, input, getMeJid())
 }
