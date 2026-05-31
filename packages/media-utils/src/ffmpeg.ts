@@ -32,7 +32,12 @@ function which(bin: string): Promise<boolean> {
 }
 
 const binCache = new Map<string, boolean>()
-const warnedBins = new Set<string>()
+
+// Per-logger dedup: each Logger instance warns at most once per missing binary
+// path. The previous module-scoped Set warned only the first session in the
+// process to call hasBin, which silently hid the issue from every other
+// session that shares the same stateless processor.
+const warnedBinsByLogger = new WeakMap<Logger, Set<string>>()
 
 async function hasBin(path: string, label: string, logger?: Logger): Promise<boolean> {
     let available = binCache.get(path)
@@ -40,12 +45,19 @@ async function hasBin(path: string, label: string, logger?: Logger): Promise<boo
         available = await which(path)
         binCache.set(path, available)
     }
-    if (!available && logger && !warnedBins.has(path)) {
-        warnedBins.add(path)
-        logger.warn('media-utils binary not found, related processing will be skipped', {
-            binary: label,
-            path
-        })
+    if (!available && logger) {
+        let warned = warnedBinsByLogger.get(logger)
+        if (!warned) {
+            warned = new Set()
+            warnedBinsByLogger.set(logger, warned)
+        }
+        if (!warned.has(path)) {
+            warned.add(path)
+            logger.warn('media-utils binary not found, related processing will be skipped', {
+                binary: label,
+                path
+            })
+        }
     }
     return available
 }

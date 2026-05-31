@@ -123,7 +123,8 @@ export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
                     senderJid: entries[i].entry.senderJid,
                     expiresAtMs: nowMs + this.ttlMs
                 },
-                this.maxSecrets
+                this.maxSecrets,
+                () => this.warnCapacity()
             )
         }
     }

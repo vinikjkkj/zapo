@@ -467,6 +467,21 @@ async function runProcessorStep<T>(
     }
 }
 
+// Reuse one scoped child logger per parent. The processor is allowed to be
+// shared across WaClient sessions; without this cache, each call would mint
+// a fresh child logger and any package-side dedup keyed by Logger identity
+// (e.g. ffmpeg's missing-binary warn) would reset on every send.
+const SCOPED_MEDIA_LOGGER_CACHE = new WeakMap<Logger, Logger>()
+
+export function getScopedMediaLogger(parent: Logger): Logger {
+    let scoped = SCOPED_MEDIA_LOGGER_CACHE.get(parent)
+    if (!scoped) {
+        scoped = parent.child({ scope: 'media-utils' })
+        SCOPED_MEDIA_LOGGER_CACHE.set(parent, scoped)
+    }
+    return scoped
+}
+
 export async function runMediaProcessor(
     media: WaMediaOptions | undefined,
     input: Uint8Array | string | undefined,
@@ -477,7 +492,7 @@ export async function runMediaProcessor(
     if (!processor || !hasMediaProcessingTasks(media, content) || !input) return EMPTY_PROCESSED
 
     const result: MutableProcessedMediaFields = {}
-    const ctx = { logger: logger.child({ scope: 'media-utils' }) }
+    const ctx = { logger: getScopedMediaLogger(logger) }
 
     const isVideo = content.type === 'video' || content.type === 'ptv'
     const thumbFn = isVideo ? processor.generateVideoThumbnail : processor.generateImageThumbnail

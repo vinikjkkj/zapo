@@ -5,6 +5,7 @@ import {
     assertMediaUploadStatus,
     buildMediaUploadUrl,
     cleanupTempFile,
+    getScopedMediaLogger,
     hasMediaProcessingTasks,
     isReadableStream,
     parseMediaUploadJsonBody,
@@ -473,7 +474,7 @@ async function buildMediaMessage(
         return buildStickerPackMediaMessage(options, content)
     }
     const processorCtx: WaMediaProcessorCallContext = {
-        logger: options.logger.child({ scope: 'media-utils' })
+        logger: getScopedMediaLogger(options.logger)
     }
     if (shouldNormalizeVoiceNote(options.media, content)) {
         const sourceInput =

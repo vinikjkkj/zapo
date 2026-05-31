@@ -127,7 +127,9 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
         redis.on('reconnecting', (delayMs: number) =>
             baseLogger.warn('redis reconnecting', { delayMs })
         )
-        redis.on('end', () => baseLogger.warn('redis connection ended'))
+        // 'end' also fires on the redis.quit() path during graceful destroy(),
+        // so this stays at debug to avoid spurious warns on intentional teardown.
+        redis.on('end', () => baseLogger.debug('redis connection ended'))
         redis.on('error', (err: Error) => baseLogger.warn('redis error', { message: err.message }))
     }
 
