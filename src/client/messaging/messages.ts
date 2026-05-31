@@ -21,6 +21,7 @@ import { aesGcmEncrypt, randomBytesAsync, sha256 } from '@crypto'
 import type { Logger } from '@infra/log/types'
 import { MEDIA_CONN_CACHE_GRACE_MS, MEDIA_UPLOAD_PATHS } from '@media/constants'
 import { WaMediaCrypto } from '@media/crypto/WaMediaCrypto'
+import type { WaMediaProcessorCallContext } from '@media/processor'
 import { createStickerPackZipStream } from '@media/sticker/sticker-pack'
 import { parseMediaConnResponse } from '@media/transfer/conn'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
@@ -449,13 +450,14 @@ function resolveUploadType(
 async function resolveMimetype(
     content: Exclude<WaSendMediaMessage, WaSendStickerPackMessage>,
     media: WaMediaOptions | undefined,
-    processorInput: string | Uint8Array | undefined
+    processorInput: string | Uint8Array | undefined,
+    ctx: WaMediaProcessorCallContext
 ): Promise<string> {
     if (content.mimetype) return content.mimetype
     if (content.type === 'sticker') return 'image/webp'
     const detect = media?.processor?.detectMimetype
     if (detect && processorInput !== undefined) {
-        const detected = await detect(processorInput)
+        const detected = await detect(processorInput, ctx)
         if (detected) return detected
     }
     throw new Error(
@@ -470,12 +472,17 @@ async function buildMediaMessage(
     if (content.type === 'sticker-pack') {
         return buildStickerPackMediaMessage(options, content)
     }
+    const processorCtx: WaMediaProcessorCallContext = {
+        logger: options.logger.child({ scope: 'media-utils' })
+    }
     if (shouldNormalizeVoiceNote(options.media, content)) {
         const sourceInput =
             content.media instanceof ArrayBuffer ? toBytesView(content.media) : content.media
         try {
-            const normalizedStream =
-                await options.media!.processor!.normalizeVoiceNote!(sourceInput)
+            const normalizedStream = await options.media!.processor!.normalizeVoiceNote!(
+                sourceInput,
+                processorCtx
+            )
             if (normalizedStream) {
                 content = { ...content, media: normalizedStream, mimetype: VOICE_NOTE_MIMETYPE }
             }
@@ -495,7 +502,12 @@ async function buildMediaMessage(
         (content.type === 'sticker' && content.firstFrameLength === undefined) ||
         needsMimetypeDetection
     const resolved = await resolveMediaInputs(needsTempFile, content.media)
-    const mimetype = await resolveMimetype(content, options.media, resolved.processorInput)
+    const mimetype = await resolveMimetype(
+        content,
+        options.media,
+        resolved.processorInput,
+        processorCtx
+    )
 
     try {
         let detectedFirstFrameLength: number | undefined

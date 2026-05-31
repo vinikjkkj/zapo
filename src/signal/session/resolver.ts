@@ -71,6 +71,7 @@ export function createSignalSessionResolver(options: {
         prefetchedBundle?: SignalPreKeyBundle,
         knownAbsent = false
     ): Promise<SignalSessionRecord | null> => {
+        const jidLogger = logger.child({ jid })
         const expectedSerializedIdentity = expectedIdentity
             ? toSerializedPubKey(expectedIdentity)
             : null
@@ -81,6 +82,11 @@ export function createSignalSessionResolver(options: {
             if (expectedSerializedIdentity) {
                 const storedIdentity = await identityStore.getRemoteIdentity(address)
                 if (!storedIdentity || !uint8Equal(storedIdentity, expectedSerializedIdentity)) {
+                    jidLogger.warn('signal identity mismatch on stored identity', {
+                        source: 'stored_vs_expected',
+                        expected: bytesToHex(expectedSerializedIdentity),
+                        stored: storedIdentity ? bytesToHex(storedIdentity) : null
+                    })
                     throw new Error('identity mismatch')
                 }
             }
@@ -93,7 +99,7 @@ export function createSignalSessionResolver(options: {
                 bundle: prefetchedBundle
             }
         } else {
-            logger.info('signal session missing, fetching remote key bundle', { jid })
+            jidLogger.debug('signal session missing, fetching remote key bundle')
             fetched = await signalSessionSync.fetchKeyBundle({
                 jid,
                 reasonIdentity
@@ -103,18 +109,27 @@ export function createSignalSessionResolver(options: {
         if (reasonIdentity) {
             const storedIdentity = await identityStore.getRemoteIdentity(address)
             if (storedIdentity && !uint8Equal(remoteIdentity, storedIdentity)) {
+                jidLogger.warn('signal identity mismatch on fetched bundle vs stored', {
+                    source: 'remote_vs_stored',
+                    remote: bytesToHex(remoteIdentity),
+                    stored: bytesToHex(storedIdentity)
+                })
                 throw new Error('identity mismatch')
             }
         }
         if (expectedSerializedIdentity && !uint8Equal(remoteIdentity, expectedSerializedIdentity)) {
+            jidLogger.warn('signal identity mismatch on fetched bundle vs expected', {
+                source: 'remote_vs_expected',
+                remote: bytesToHex(remoteIdentity),
+                expected: bytesToHex(expectedSerializedIdentity)
+            })
             throw new Error('identity mismatch')
         }
         const session = await signalProtocol.establishOutgoingSession(address, fetched.bundle, {
             reuseExisting: true,
             knownAbsent
         })
-        logger.info('signal session synchronized', {
-            jid,
+        jidLogger.debug('signal session synchronized', {
             regId: fetched.bundle.regId,
             hasOneTimeKey: fetched.bundle.oneTimeKey !== undefined
         })
@@ -228,7 +243,14 @@ export function createSignalSessionResolver(options: {
                 normalizedTargetJids[index]
             )
             if (session && expectedIdentity) {
-                if (!uint8Equal(session.remote.pubKey, toSerializedPubKey(expectedIdentity))) {
+                const expectedSerialized = toSerializedPubKey(expectedIdentity)
+                if (!uint8Equal(session.remote.pubKey, expectedSerialized)) {
+                    logger.warn('signal identity mismatch on existing session vs expected', {
+                        jid: normalizedTargetJids[index],
+                        source: 'session_vs_expected',
+                        session: bytesToHex(session.remote.pubKey),
+                        expected: bytesToHex(expectedSerialized)
+                    })
                     throw new Error('identity mismatch')
                 }
             }
@@ -265,6 +287,7 @@ export function createSignalSessionResolver(options: {
             }>
         >(missingIndices.length)
         let prepareCount = 0
+        const missingBundleTargets: { jid: string; reason: string }[] = []
         for (let index = 0; index < missingIndices.length; index += 1) {
             const targetIndex = missingIndices[index]
             const targetJid = normalizedTargetJids[targetIndex]
@@ -272,9 +295,9 @@ export function createSignalSessionResolver(options: {
                 | { readonly bundle?: SignalPreKeyBundle; readonly errorText?: string }
                 | undefined
             if (!batchResult?.bundle) {
-                logger.warn('signal batch key fetch returned target without bundle', {
+                missingBundleTargets.push({
                     jid: targetJid,
-                    message: batchResult?.errorText ?? 'missing key bundle user in response'
+                    reason: batchResult?.errorText ?? 'missing key bundle user in response'
                 })
                 continue
             }
@@ -287,6 +310,12 @@ export function createSignalSessionResolver(options: {
                 expectedSerializedIdentity &&
                 !uint8Equal(bundleIdentity, expectedSerializedIdentity)
             ) {
+                logger.warn('signal identity mismatch on fetched batch bundle vs expected', {
+                    jid: targetJid,
+                    source: 'bundle_vs_expected',
+                    bundle: bytesToHex(bundleIdentity),
+                    expected: bytesToHex(expectedSerializedIdentity)
+                })
                 throw new Error('identity mismatch')
             }
             const targetAddress = normalizedTargetAddresses[targetIndex]
@@ -302,6 +331,13 @@ export function createSignalSessionResolver(options: {
                     remoteIdentity: prep.remoteIdentity
                 }))
             prepareCount += 1
+        }
+        if (missingBundleTargets.length > 0) {
+            logger.warn('signal batch key fetch returned targets without bundle', {
+                droppedCount: missingBundleTargets.length,
+                totalRequested: missingIndices.length,
+                sample: missingBundleTargets.slice(0, 3)
+            })
         }
         if (prepareCount === 0) {
             return collectResolvedTargets()

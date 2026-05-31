@@ -106,7 +106,7 @@ export class WaNoiseSession {
         this.trustedRootCa = config.trustedRootCa
 
         if (config.serverStaticKey && config.serverStaticKey.length === 32) {
-            this.logger.info('noise session attempting resume handshake (IK)')
+            this.logger.debug('noise session attempting resume handshake (IK)')
             this.noiseSocket = await this.resumeHandshake(
                 config.serverStaticKey,
                 config.clientStaticKeyPair,
@@ -116,11 +116,11 @@ export class WaNoiseSession {
                 verifyCertificates
             )
             await this.decodeBufferedPostHandshakeFrames()
-            this.logger.info('noise session established via resume/full fallback path')
+            this.logger.info('noise session established', { mode: 'resume_or_fallback' })
             return
         }
 
-        this.logger.info('noise session starting full handshake (XX)')
+        this.logger.debug('noise session starting full handshake (XX)')
         this.noiseSocket = await this.fullHandshake(
             config.clientStaticKeyPair,
             ephemeralKeyPair,
@@ -129,7 +129,7 @@ export class WaNoiseSession {
             verifyCertificates
         )
         await this.decodeBufferedPostHandshakeFrames()
-        this.logger.info('noise session established via full handshake')
+        this.logger.info('noise session established', { mode: 'full' })
     }
 
     public encryptFrame(frame: Uint8Array): Promise<Uint8Array> {
@@ -274,7 +274,7 @@ export class WaNoiseSession {
         if (resumeResult.socket) {
             return resumeResult.socket
         }
-        this.logger.info('noise resume handshake fallback to XX')
+        this.logger.debug('noise resume handshake fallback to XX')
         return this.resumeHandshakeWithFallback(
             clientStaticKeyPair,
             ephemeralKeyPair,
@@ -349,7 +349,7 @@ export class WaNoiseSession {
 
         handshake.decrypt(serverHello.payload)
         this.serverStaticKey = serverStaticKey
-        this.logger.info('noise resume handshake successful without fallback')
+        this.logger.debug('noise resume handshake successful without fallback')
         return { socket: handshake.finish(), serverHelloFrame: null }
     }
 

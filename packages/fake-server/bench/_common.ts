@@ -68,7 +68,7 @@ export function forceGcIfAvailable(): void {
     if (gc) gc()
 }
 
-export const NOOP_LOGGER: Logger = {
+const benchLogger: Logger = {
     level: 'error',
     trace: () => {},
     debug: () => {},
@@ -78,8 +78,10 @@ export const NOOP_LOGGER: Logger = {
     },
     error: (...args: unknown[]) => {
         if (process.env.ZAPO_BENCH_VERBOSE) console.error('[lib error]', ...args)
-    }
+    },
+    child: () => benchLogger
 }
+export const NOOP_LOGGER: Logger = benchLogger
 
 // ─── Profiler ─────────────────────────────────────────────────────────
 

@@ -84,9 +84,9 @@ RUN apk add --no-cache ffmpeg
 ```
 
 Confirm `ffmpeg -version` and `ffprobe -version` resolve before starting your
-app. The processor is non-fatal on missing binaries (calls `onWarning`
-instead of throwing), so a misconfigured deploy degrades to "no thumbnails /
-no waveform" instead of crashing.
+app. The processor is non-fatal on missing binaries (emits a `warn` through
+the per-call logger context instead of throwing), so a misconfigured deploy
+degrades to "no thumbnails / no waveform" instead of crashing.
 
 ## Quick start
 
@@ -94,14 +94,15 @@ no waveform" instead of crashing.
 import { WaClient } from 'zapo-js'
 import { createMediaProcessor } from '@zapo-js/media-utils'
 
+// One processor can be shared across many WaClient sessions. The runtime
+// passes a per-call `ctx.logger` to each method so warnings always land
+// in the right session log without any per-session setup.
+const processor = createMediaProcessor()
+
 const client = new WaClient({
     store,
     sessionId: 'default',
-    media: {
-        processor: createMediaProcessor({
-            onWarning: (msg) => console.warn('[media]', msg)
-        })
-    }
+    media: { processor }
 })
 
 // Now sending a video produces a real thumbnail + correct duration/dimensions:
@@ -117,18 +118,25 @@ await client.message.send(jid, {
 
 `createMediaProcessor(options)` accepts:
 
-| Field                                                               | Description                                                           |
-| ------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `ffmpegPath` / `ffprobePath`                                        | Override binary paths (default: resolved from `PATH`).                |
-| `imageThumbMaxEdge`                                                 | Override the per-call `maxEdge` for image/video thumbnails.           |
-| `imageThumbQuality`                                                 | JPEG quality (1-100) for image thumbnails.                            |
-| `waveformPoints`                                                    | Number of waveform points for voice notes (WA default: 64).           |
-| `voiceNoteBitRate` / `voiceNoteSampleRate` / `voiceNoteApplication` | Opus encoding params for voice-note normalization.                    |
-| `onWarning`                                                         | Callback for non-fatal warnings (missing binary, probe failure, ...). |
+| Field                                                               | Description                                                 |
+| ------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `ffmpegPath` / `ffprobePath`                                        | Override binary paths (default: resolved from `PATH`).      |
+| `imageThumbMaxEdge`                                                 | Override the per-call `maxEdge` for image/video thumbnails. |
+| `imageThumbQuality`                                                 | JPEG quality (1-100) for image thumbnails.                  |
+| `waveformPoints`                                                    | Number of waveform points for voice notes (WA default: 64). |
+| `voiceNoteBitRate` / `voiceNoteSampleRate` / `voiceNoteApplication` | Opus encoding params for voice-note normalization.          |
+
+Logging is wired automatically when the processor is invoked from a
+`WaClient`: every method receives a per-call `ctx: { logger?: Logger }`
+the runtime fills in with that session's logger (carrying its
+`{ session, scope: 'media-utils' }` bindings). No callback to plumb, no
+mutable state on the processor - so a single `createMediaProcessor()`
+result is safe to share across multiple `WaClient` instances. When used
+standalone (no `ctx`), the processor stays silent.
 
 ## Notes
 
-- **Missing binaries are non-fatal.** If `ffmpeg`/`ffprobe` isn't installed, the affected operation is skipped and `onWarning` fires - the rest of the media path still works. This means you can ship the processor as a soft dependency.
+- **Missing binaries are non-fatal.** If `ffmpeg`/`ffprobe` isn't installed, the affected operation is skipped and a `warn` is emitted through the per-call logger context - the rest of the media path still works. This means you can ship the processor as a soft dependency.
 - The thumbnail / waveform code paths follow what the official client produces - sticker first-frame extraction matches WhatsApp's expected layout, waveforms render natively on iOS/Android/desktop.
 - Voice-note normalization is needed because WhatsApp only renders Opus 16k mono in the chat UI - other formats play but lose the waveform.
 

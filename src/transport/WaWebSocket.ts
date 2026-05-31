@@ -513,8 +513,12 @@ export class WaWebSocket {
     private closeSocketSafe(socket: RawWebSocket, code: number, reason: string): void {
         try {
             socket.close(code, reason)
-        } catch {
-            // no-op
+        } catch (error) {
+            this.logger.trace('socket close ignored', {
+                code,
+                reason,
+                message: toError(error).message
+            })
         }
     }
 

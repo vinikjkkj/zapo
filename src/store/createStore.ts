@@ -192,6 +192,8 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
     const providers = options.providers ?? {}
     const cacheProviders = options.cacheProviders ?? {}
     const cacheLayer = options.cacheLayer ?? {}
+    const storeLogger = options.logger?.child({ scope: 'store' })
+    const memoryLogger = storeLogger?.child({ provider: 'memory' })
 
     if (Object.keys(backends).length > 0) {
         const missingProviders = REQUIRED_PROVIDER_DOMAINS.filter(
@@ -367,7 +369,8 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                     cacheProviders.retry === 'memory' || !cacheProviders.retry
                         ? new WaRetryMemoryStore(cacheTtlsMs.retry, {
                               maxOutboundMessages: ml.retryOutboundMessages,
-                              maxInboundCounters: ml.retryInboundCounters
+                              maxInboundCounters: ml.retryInboundCounters,
+                              logger: memoryLogger?.child({ domain: 'retry', sessionId: id })
                           })
                         : NOOP_RETRY_STORE
             )
@@ -380,7 +383,11 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                 () =>
                     cacheProviders.groupMetadata === 'memory' || !cacheProviders.groupMetadata
                         ? new WaGroupMetadataMemoryStore(cacheTtlsMs.groupMetadata, {
-                              maxGroups: ml.groupMetadataGroups
+                              maxGroups: ml.groupMetadataGroups,
+                              logger: memoryLogger?.child({
+                                  domain: 'groupMetadata',
+                                  sessionId: id
+                              })
                           })
                         : NOOP_GROUP_METADATA_STORE
             )
@@ -393,7 +400,8 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                 () =>
                     cacheProviders.deviceList === 'memory'
                         ? new WaDeviceListMemoryStore(cacheTtlsMs.deviceList, {
-                              maxUsers: ml.deviceListUsers
+                              maxUsers: ml.deviceListUsers,
+                              logger: memoryLogger?.child({ domain: 'deviceList', sessionId: id })
                           })
                         : NOOP_DEVICE_LIST_STORE
             )
@@ -406,7 +414,11 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                 () =>
                     cacheProviders.messageSecret === 'memory' || !cacheProviders.messageSecret
                         ? new WaMessageSecretMemoryStore(cacheTtlsMs.messageSecret, {
-                              maxSecrets: ml.messageSecrets
+                              maxSecrets: ml.messageSecrets,
+                              logger: memoryLogger?.child({
+                                  domain: 'messageSecret',
+                                  sessionId: id
+                              })
                           })
                         : NOOP_MESSAGE_SECRET_STORE
             )

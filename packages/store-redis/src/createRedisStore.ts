@@ -1,4 +1,5 @@
 import Redis, { type RedisOptions } from 'ioredis'
+import type { Logger } from 'zapo-js'
 
 import { WaAppStateRedisStore } from './appstate.store'
 import { WaAuthRedisStore } from './auth.store'
@@ -42,6 +43,18 @@ export interface WaRedisStoreConfig {
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
+    /**
+     * Logger for connection lifecycle, slow commands, and degraded paths.
+     * The factory binds `{ scope: 'store', provider: 'redis' }` and each
+     * per-domain store binds its own `{ domain: '<name>' }`. When unset,
+     * the Redis layer stays silent.
+     */
+    readonly logger?: Logger
+    /**
+     * Threshold in milliseconds above which a command emits a `warn`.
+     * Defaults to `250`.
+     */
+    readonly slowOperationThresholdMs?: number
 }
 
 export interface WaRedisStoreResult {
@@ -106,35 +119,55 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsRedis = !isRedis(config.redis)
+    const baseLogger = config.logger?.child({ scope: 'store', provider: 'redis' })
+    const slowOperationThresholdMs = config.slowOperationThresholdMs
 
-    const opts = (sessionId: string): WaRedisStorageOptions => ({
+    if (baseLogger && ownsRedis) {
+        // Only attach lifecycle listeners on connections we own; externally
+        // supplied clients keep their existing event surface untouched.
+        redis.on('connect', () =>
+            baseLogger.info('redis connected', { keyPrefix: keyPrefix || undefined })
+        )
+        redis.on('ready', () => baseLogger.debug('redis ready'))
+        redis.on('reconnecting', (delayMs: number) =>
+            baseLogger.warn('redis reconnecting', { delayMs })
+        )
+        redis.on('end', () => baseLogger.warn('redis connection ended'))
+        redis.on('error', (err: Error) => baseLogger.warn('redis error', { message: err.message }))
+    }
+
+    const opts = (sessionId: string, domain: string): WaRedisStorageOptions => ({
         redis,
         sessionId,
-        keyPrefix
+        keyPrefix,
+        logger: baseLogger?.child({ domain, sessionId }),
+        slowOperationThresholdMs
     })
 
     return {
         redis,
         stores: {
-            auth: (sessionId) => new WaAuthRedisStore(opts(sessionId)),
-            preKey: (sessionId) => new WaPreKeyRedisStore(opts(sessionId)),
-            session: (sessionId) => new WaSessionRedisStore(opts(sessionId)),
-            identity: (sessionId) => new WaIdentityRedisStore(opts(sessionId)),
-            signal: (sessionId) => new WaSignalRedisStore(opts(sessionId)),
-            senderKey: (sessionId) => new WaSenderKeyRedisStore(opts(sessionId)),
-            appState: (sessionId) => new WaAppStateRedisStore(opts(sessionId)),
-            messages: (sessionId) => new WaMessageRedisStore(opts(sessionId)),
-            threads: (sessionId) => new WaThreadRedisStore(opts(sessionId)),
-            contacts: (sessionId) => new WaContactRedisStore(opts(sessionId)),
-            privacyToken: (sessionId) => new WaPrivacyTokenRedisStore(opts(sessionId))
+            auth: (sessionId) => new WaAuthRedisStore(opts(sessionId, 'auth')),
+            preKey: (sessionId) => new WaPreKeyRedisStore(opts(sessionId, 'preKey')),
+            session: (sessionId) => new WaSessionRedisStore(opts(sessionId, 'session')),
+            identity: (sessionId) => new WaIdentityRedisStore(opts(sessionId, 'identity')),
+            signal: (sessionId) => new WaSignalRedisStore(opts(sessionId, 'signal')),
+            senderKey: (sessionId) => new WaSenderKeyRedisStore(opts(sessionId, 'senderKey')),
+            appState: (sessionId) => new WaAppStateRedisStore(opts(sessionId, 'appState')),
+            messages: (sessionId) => new WaMessageRedisStore(opts(sessionId, 'messages')),
+            threads: (sessionId) => new WaThreadRedisStore(opts(sessionId, 'threads')),
+            contacts: (sessionId) => new WaContactRedisStore(opts(sessionId, 'contacts')),
+            privacyToken: (sessionId) =>
+                new WaPrivacyTokenRedisStore(opts(sessionId, 'privacyToken'))
         },
         caches: {
-            retry: (sessionId) => new WaRetryRedisStore(opts(sessionId), retryTtlMs),
+            retry: (sessionId) => new WaRetryRedisStore(opts(sessionId, 'retry'), retryTtlMs),
             groupMetadata: (sessionId) =>
-                new WaGroupMetadataRedisStore(opts(sessionId), groupMetadataTtlMs),
-            deviceList: (sessionId) => new WaDeviceListRedisStore(opts(sessionId), deviceListTtlMs),
+                new WaGroupMetadataRedisStore(opts(sessionId, 'groupMetadata'), groupMetadataTtlMs),
+            deviceList: (sessionId) =>
+                new WaDeviceListRedisStore(opts(sessionId, 'deviceList'), deviceListTtlMs),
             messageSecret: (sessionId) =>
-                new WaMessageSecretRedisStore(opts(sessionId), messageSecretTtlMs)
+                new WaMessageSecretRedisStore(opts(sessionId, 'messageSecret'), messageSecretTtlMs)
         },
         async destroy(): Promise<void> {
             if (ownsRedis) {

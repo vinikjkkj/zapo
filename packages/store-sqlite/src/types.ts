@@ -1,3 +1,5 @@
+import type { Logger } from 'zapo-js'
+
 import type { WaSqliteConnection } from './connection'
 
 export type WaSqliteDriver = 'auto' | 'better-sqlite3' | 'bun'
@@ -46,6 +48,18 @@ export interface WaSqliteStorageOptions {
     readonly driver?: WaSqliteDriver
     readonly pragmas?: Readonly<Record<string, string | number>>
     readonly tableNames?: WaSqliteTableNameOverrides
+    /**
+     * Logger used for connection lifecycle, migration progress, and
+     * slow-operation warnings. Typically a child logger pre-bound with
+     * `{ scope: 'store', provider: 'sqlite' }` (or `{ domain: '...' }`
+     * downstream). When unset, the store is silent.
+     */
+    readonly logger?: Logger
+    /**
+     * Threshold in milliseconds above which a SQLite transaction or
+     * timed-helper call emits a `warn` log. Defaults to `250`.
+     */
+    readonly slowOperationThresholdMs?: number
 }
 
 export type WaSqliteMigrationDomain =

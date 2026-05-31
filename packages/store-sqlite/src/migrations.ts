@@ -1,3 +1,5 @@
+import type { Logger } from 'zapo-js'
+
 import type { WaSqliteConnection } from './connection'
 
 const UNIQUE_CONSTRAINT_ID_RE = /UNIQUE constraint failed: [A-Za-z_][A-Za-z0-9_]*\.id/
@@ -464,7 +466,8 @@ function hasDomain(
 
 export async function ensureSqliteMigrations(
     db: WaSqliteConnection,
-    domains: readonly WaSqliteMigrationDomain[]
+    domains: readonly WaSqliteMigrationDomain[],
+    logger?: Logger
 ): Promise<void> {
     ensureMigrationTable(db)
     const domainSet = new Set(domains)
@@ -479,6 +482,7 @@ export async function ensureSqliteMigrations(
         if (hasMigration(db, migration.id)) {
             continue
         }
+        const startedAt = Date.now()
         try {
             await db.runInTransaction(() => {
                 if (hasMigration(db, migration.id)) {
@@ -491,10 +495,25 @@ export async function ensureSqliteMigrations(
                 )
                 migration.up(db)
             })
+            logger?.info('sqlite migration applied', {
+                id: migration.id,
+                migrationDomain: migration.domain,
+                durationMs: Date.now() - startedAt
+            })
         } catch (error) {
             if (isMigrationAlreadyAppliedRace(error)) {
+                logger?.debug('sqlite migration skipped due to concurrent apply race', {
+                    id: migration.id,
+                    migrationDomain: migration.domain
+                })
                 continue
             }
+            logger?.error('sqlite migration failed', {
+                id: migration.id,
+                migrationDomain: migration.domain,
+                durationMs: Date.now() - startedAt,
+                message: error instanceof Error ? error.message : String(error)
+            })
             throw error
         }
     }

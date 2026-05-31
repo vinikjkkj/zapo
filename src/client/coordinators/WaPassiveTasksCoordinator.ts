@@ -241,6 +241,7 @@ export class WaPassiveTasksCoordinator {
         const failure = parsePreKeyUploadFailure(response)
         this.logger.warn('upload prekeys failed', {
             count: preKeys.length,
+            lastPreKeyId,
             errorCode: failure.errorCode,
             errorText: failure.errorText
         })

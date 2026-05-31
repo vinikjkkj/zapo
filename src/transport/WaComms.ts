@@ -165,7 +165,7 @@ export class WaComms {
     }
 
     public startComms(handleStanza: StanzaHandler, inflateFrame?: InflateFrame): void {
-        this.logger.info('comms start requested')
+        this.logger.debug('comms start requested')
         this.stanzaHandler = handleStanza
         this.inflateFrame = inflateFrame ?? null
         this.clearPendingFrames()
@@ -213,7 +213,7 @@ export class WaComms {
     }
 
     public async stopComms(): Promise<void> {
-        this.logger.info('comms stop requested')
+        this.logger.debug('comms stop requested')
         this.resetConnectionState({
             started: false,
             connected: false,
@@ -227,7 +227,7 @@ export class WaComms {
     }
 
     public async closeSocketAndResume(): Promise<void> {
-        this.logger.info('comms close socket and resume requested')
+        this.logger.debug('comms close socket and resume requested')
         this.resetConnectionState({
             started: true,
             connected: false,
@@ -344,7 +344,8 @@ export class WaComms {
         this.logger.info('socket closed, scheduling reconnect', {
             code: info.code,
             reason: info.reason,
-            reconnectAfterMs: this.config.reconnectIntervalMs
+            reconnectAfterMs: this.config.reconnectIntervalMs,
+            reconnectAttempts: this.reconnectAttempts
         })
     }
 
@@ -426,7 +427,7 @@ export class WaComms {
         this.lastServerStaticKey = session.getServerStaticKey()
         this.connected = true
         this.reconnectAttempts = 0
-        this.logger.info('comms connected and noise session established')
+        this.logger.debug('comms connected and noise session established')
         this.drainWaiters((waiter) => waiter.resolve())
     }
 

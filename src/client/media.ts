@@ -477,17 +477,18 @@ export async function runMediaProcessor(
     if (!processor || !hasMediaProcessingTasks(media, content) || !input) return EMPTY_PROCESSED
 
     const result: MutableProcessedMediaFields = {}
+    const ctx = { logger: logger.child({ scope: 'media-utils' }) }
 
     const isVideo = content.type === 'video' || content.type === 'ptv'
     const thumbFn = isVideo ? processor.generateVideoThumbnail : processor.generateImageThumbnail
     const thumbMaxEdge = isVideo ? VIDEO_THUMB_MAX_EDGE : IMAGE_THUMB_MAX_EDGE
 
     const thumbTask = shouldGenerateThumbnail(media, content)
-        ? runProcessorStep('thumbnail', content, logger, () => thumbFn!(input, thumbMaxEdge))
+        ? runProcessorStep('thumbnail', content, logger, () => thumbFn!(input, thumbMaxEdge, ctx))
         : null
 
     const probeTask = shouldProbeMedia(media, content)
-        ? runProcessorStep('probe', content, logger, () => processor.probeMedia!(input))
+        ? runProcessorStep('probe', content, logger, () => processor.probeMedia!(input, ctx))
         : null
 
     const [thumb, probe] = await Promise.all([thumbTask, probeTask])
@@ -517,7 +518,7 @@ export async function runMediaProcessor(
 
     if (shouldGenerateWaveform(media, content)) {
         const waveformResult = await runProcessorStep('waveform', content, logger, () =>
-            processor.computeWaveform!(input)
+            processor.computeWaveform!(input, ctx)
         )
         if (waveformResult) {
             result.waveform = waveformResult.waveform
@@ -533,7 +534,7 @@ export async function runMediaProcessor(
     if (content.type === 'sticker') {
         if (shouldGenerateStickerThumbnail(media, content)) {
             const stickerThumb = await runProcessorStep('stickerThumbnail', content, logger, () =>
-                processor.generateStickerThumbnail!(input, STICKER_THUMB_MAX_EDGE)
+                processor.generateStickerThumbnail!(input, STICKER_THUMB_MAX_EDGE, ctx)
             )
             if (stickerThumb) {
                 result.pngThumbnail = stickerThumb.pngThumbnail

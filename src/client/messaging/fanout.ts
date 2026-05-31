@@ -71,7 +71,7 @@ export function createDeviceFanoutResolver(options: {
 
             return [...fanout]
         } catch (error) {
-            logger.warn('signal device fanout sync failed, falling back to direct recipient', {
+            logger.debug('signal device fanout sync failed, falling back to direct recipient', {
                 to: recipientJid,
                 message: toError(error).message
             })
@@ -140,7 +140,7 @@ export function createDeviceFanoutResolver(options: {
             }
             return [...fanout]
         } catch (error) {
-            logger.warn(
+            logger.debug(
                 'group participant device sync failed, falling back to participant user jids',
                 {
                     participants: candidateUsers.length,

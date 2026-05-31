@@ -1,12 +1,17 @@
 import type { ClientSession, Collection, Db, Document } from 'mongodb'
+import type { Logger } from 'zapo-js'
 
 import { assertSafeCollectionPrefix } from './helpers'
 import type { WaMongoStorageOptions } from './types'
+
+const DEFAULT_SLOW_OPERATION_THRESHOLD_MS = 250
 
 export abstract class BaseMongoStore {
     protected readonly db: Db
     protected readonly sessionId: string
     protected readonly collectionPrefix: string
+    protected readonly logger: Logger | undefined
+    protected readonly slowOperationThresholdMs: number
     private indexPromise: Promise<void> | null
     private transactionSupportPromise: Promise<boolean> | null
 
@@ -14,6 +19,9 @@ export abstract class BaseMongoStore {
         this.db = options.db
         this.sessionId = options.sessionId
         this.collectionPrefix = options.collectionPrefix ?? ''
+        this.logger = options.logger
+        this.slowOperationThresholdMs =
+            options.slowOperationThresholdMs ?? DEFAULT_SLOW_OPERATION_THRESHOLD_MS
         assertSafeCollectionPrefix(this.collectionPrefix)
         this.indexPromise = null
         this.transactionSupportPromise = null
@@ -37,13 +45,37 @@ export abstract class BaseMongoStore {
         // Override in subclasses that need indexes
     }
 
+    /**
+     * Wraps a non-session operation with slow-timing telemetry. Use for
+     * batch reads or expensive single commands. No-op when no logger.
+     */
+    protected async timed<T>(operation: string, run: () => Promise<T> | T): Promise<T> {
+        if (!this.logger) {
+            return run()
+        }
+        const startedAt = Date.now()
+        try {
+            return await run()
+        } finally {
+            const durationMs = Date.now() - startedAt
+            if (durationMs >= this.slowOperationThresholdMs) {
+                this.logger.warn('slow mongo operation', {
+                    operation,
+                    durationMs,
+                    thresholdMs: this.slowOperationThresholdMs
+                })
+            }
+        }
+    }
+
     protected async withSession<T>(run: (session: ClientSession) => Promise<T>): Promise<T> {
         await this.ensureIndexes()
+        const startedAt = this.logger ? Date.now() : 0
         const session = this.db.client.startSession()
         try {
             const supportsTransactions = await this.canUseTransactions()
             if (!supportsTransactions) {
-                return run(session)
+                return await run(session)
             }
             try {
                 let result: T | undefined
@@ -61,10 +93,21 @@ export abstract class BaseMongoStore {
                     throw error
                 }
                 this.transactionSupportPromise = Promise.resolve(false)
-                return run(session)
+                this.logger?.warn('mongo transactions unsupported by deployment, falling back')
+                return await run(session)
             }
         } finally {
             await session.endSession()
+            if (this.logger) {
+                const durationMs = Date.now() - startedAt
+                if (durationMs >= this.slowOperationThresholdMs) {
+                    this.logger.warn('slow mongo session', {
+                        operation: 'withSession',
+                        durationMs,
+                        thresholdMs: this.slowOperationThresholdMs
+                    })
+                }
+            }
         }
     }
 

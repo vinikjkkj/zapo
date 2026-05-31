@@ -278,9 +278,10 @@ export class WaRetryCoordinator {
             retryCount,
             retryKeys:
                 forceKeysForHosted || retryCount >= RETRY_KEYS_MIN_COUNT
-                    ? ((await this.buildRetryKeysSection(
-                          registrationInfo.identityKeyPair.pubKey
-                      )) ?? undefined)
+                    ? ((await this.buildRetryKeysSection(registrationInfo.identityKeyPair.pubKey, {
+                          stanzaId: context.stanzaId,
+                          from: context.from
+                      })) ?? undefined)
                     : undefined,
             retryReason: mapRetryReasonFromError(error),
             timestamp: context.t ?? String(Math.trunc(nowMs / 1000)),
@@ -307,7 +308,7 @@ export class WaRetryCoordinator {
             keys: prepared.retryKeys
         })
         await this.deps.sendNode(retryReceiptNode)
-        this.deps.logger.debug('sent retry receipt for decrypt failure', {
+        this.deps.logger.trace('sent retry receipt for decrypt failure', {
             id: context.stanzaId,
             to: context.from,
             participant: context.participant,
@@ -343,7 +344,7 @@ export class WaRetryCoordinator {
         request: WaParsedRetryRequest
     ): Promise<void> {
         if (request.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_ENC_REKEY_RETRY) {
-            this.deps.logger.info('received enc_rekey_retry request (voip path deferred)', {
+            this.deps.logger.debug('received enc_rekey_retry request (voip path deferred)', {
                 id: request.stanzaId,
                 originalMsgId: request.originalMsgId,
                 from: request.from,
@@ -364,25 +365,24 @@ export class WaRetryCoordinator {
         if (!prepared) {
             return
         }
+        const requestLogger = this.deps.logger.child({
+            id: request.stanzaId,
+            originalMsgId: request.originalMsgId,
+            requester: prepared.requesterJid
+        })
         const resendResult = await this.retryReplayService.resendOutboundMessage(
             prepared.outbound,
             prepared.requesterJid,
             request.retryCount
         )
         if (resendResult === 'ineligible') {
-            this.deps.logger.info('retry request marked ineligible for resend', {
-                id: request.stanzaId,
-                originalMsgId: request.originalMsgId,
-                requester: prepared.requesterJid,
+            requestLogger.debug('retry request marked ineligible for resend', {
                 mode: prepared.outbound.replayMode
             })
             return
         }
 
-        this.deps.logger.info('retry request processed and resent', {
-            id: request.stanzaId,
-            originalMsgId: request.originalMsgId,
-            requester: prepared.requesterJid,
+        requestLogger.debug('retry request processed and resent', {
             mode: prepared.outbound.replayMode,
             remoteRetryCount: request.retryCount,
             ...getRemoteRetryReasonLogFields(request.retryReason)
@@ -392,14 +392,16 @@ export class WaRetryCoordinator {
     private async prepareRetryResend(
         request: WaParsedRetryRequest
     ): Promise<RetryResendPreparation | null> {
+        const requestLogger = this.deps.logger.child({
+            id: request.stanzaId,
+            originalMsgId: request.originalMsgId
+        })
         const requesterJid = request.participant ?? request.from ?? null
         if (!requesterJid) {
-            this.deps.logger.warn('retry request ignored: missing requester jid', {
-                id: request.stanzaId,
-                originalMsgId: request.originalMsgId
-            })
+            requestLogger.warn('retry request ignored: missing requester jid')
             return null
         }
+        const requesterLogger = requestLogger.child({ requester: requesterJid })
         let requesterAddress: ReturnType<typeof parseSignalAddressFromJid>
         let requesterNormalizedDeviceJid: string
         try {
@@ -407,20 +409,14 @@ export class WaRetryCoordinator {
             requesterAddress = requesterParsed.address
             requesterNormalizedDeviceJid = requesterParsed.normalizedJid
         } catch (error) {
-            this.deps.logger.info('retry request rejected: invalid requester jid', {
-                id: request.stanzaId,
-                originalMsgId: request.originalMsgId,
-                requester: requesterJid,
+            requesterLogger.debug('retry request rejected: invalid requester jid', {
                 message: toError(error).message
             })
             return null
         }
 
         if (request.retryCount >= MAX_RETRY_ATTEMPTS) {
-            this.deps.logger.info('retry request rejected: retry count exceeded', {
-                id: request.stanzaId,
-                originalMsgId: request.originalMsgId,
-                requester: requesterJid,
+            requesterLogger.debug('retry request rejected: retry count exceeded', {
                 remoteRetryCount: request.retryCount,
                 ...getRemoteRetryReasonLogFields(request.retryReason)
             })
@@ -429,11 +425,7 @@ export class WaRetryCoordinator {
 
         const outbound = await this.deps.retryStore.getOutboundMessage(request.originalMsgId)
         if (!outbound) {
-            this.deps.logger.info('retry request ignored: outbound message not found', {
-                id: request.stanzaId,
-                originalMsgId: request.originalMsgId,
-                requester: requesterJid
-            })
+            requesterLogger.debug('retry request ignored: outbound message not found')
             return null
         }
 
@@ -444,10 +436,7 @@ export class WaRetryCoordinator {
             requesterNormalizedDeviceJid
         )
         if (!sessionReady) {
-            this.deps.logger.info('retry request rejected: missing compatible session', {
-                id: request.stanzaId,
-                originalMsgId: request.originalMsgId,
-                requester: requesterJid,
+            requesterLogger.debug('retry request rejected: missing compatible session', {
                 remoteRetryCount: request.retryCount,
                 ...getRemoteRetryReasonLogFields(request.retryReason)
             })
@@ -462,10 +451,7 @@ export class WaRetryCoordinator {
             requesterNormalizedDeviceJid
         )
         if (!authorization.authorized) {
-            this.deps.logger.info('retry request rejected', {
-                id: request.stanzaId,
-                originalMsgId: request.originalMsgId,
-                requester: requesterJid,
+            requesterLogger.debug('retry request rejected', {
                 reason: authorization.reason,
                 remoteRetryCount: request.retryCount,
                 ...getRemoteRetryReasonLogFields(request.retryReason)
@@ -560,13 +546,19 @@ export class WaRetryCoordinator {
         }
     }
 
-    private async buildRetryKeysSection(identity: Uint8Array): Promise<WaRetryKeyBundle | null> {
+    private async buildRetryKeysSection(
+        identity: Uint8Array,
+        logContext: { readonly stanzaId?: string; readonly from?: string }
+    ): Promise<WaRetryKeyBundle | null> {
         const [signedPreKey, preKey] = await Promise.all([
             this.deps.signalStore.getSignedPreKey(),
             this.deps.preKeyStore.getOrGenSinglePreKey(generatePreKeyPair)
         ])
         if (!signedPreKey) {
-            this.deps.logger.warn('retry keys section skipped: signed prekey unavailable')
+            this.deps.logger.warn('retry keys section skipped: signed prekey unavailable', {
+                id: logContext.stanzaId,
+                from: logContext.from
+            })
             return null
         }
         await this.deps.preKeyStore.markKeyAsUploaded(preKey.keyId)
@@ -594,6 +586,11 @@ export class WaRetryCoordinator {
         requesterAddress: ReturnType<typeof parseSignalAddressFromJid>,
         requesterNormalizedDeviceJid: string
     ): Promise<boolean> {
+        const requestLogger = this.deps.logger.child({
+            id: request.stanzaId,
+            originalMsgId: request.originalMsgId,
+            requester: requesterJid
+        })
         const [, currentSession] = await Promise.all([
             this.markRetryRequesterSenderKeyAsStale(request, requesterJid, requesterAddress),
             this.deps.sessionStore.getSession(requesterAddress)
@@ -609,12 +606,9 @@ export class WaRetryCoordinator {
             }
             if (request.offline) {
                 if (!currentSession) {
-                    this.deps.logger.info(
+                    requestLogger.debug(
                         'retry request rejected: offline retry missing existing session',
                         {
-                            id: request.stanzaId,
-                            originalMsgId: request.originalMsgId,
-                            requester: requesterJid,
                             remoteRetryCount: request.retryCount,
                             ...getRemoteRetryReasonLogFields(request.retryReason)
                         }
@@ -623,12 +617,9 @@ export class WaRetryCoordinator {
                     return false
                 }
                 if (regIdMismatch) {
-                    this.deps.logger.info(
+                    requestLogger.debug(
                         'retry request rejected: offline retry registration id mismatch',
                         {
-                            id: request.stanzaId,
-                            originalMsgId: request.originalMsgId,
-                            requester: requesterJid,
                             remoteRetryCount: request.retryCount,
                             ...getRemoteRetryReasonLogFields(request.retryReason)
                         }
@@ -722,7 +713,7 @@ export class WaRetryCoordinator {
         }
 
         await this.deps.sessionStore.deleteSession(requesterAddress)
-        this.deps.logger.info('retry request forcing session refresh due to repeated base key', {
+        this.deps.logger.debug('retry request forcing session refresh due to repeated base key', {
             id: request.stanzaId,
             originalMsgId: request.originalMsgId,
             requester: requesterJid,
@@ -774,6 +765,7 @@ export class WaRetryCoordinator {
         requesterNormalizedDeviceJid: string,
         requesterRegistrationId: number
     ): Promise<SignalPreKeyBundle | null> {
+        const requesterLogger = this.deps.logger.child({ requester: requesterJid })
         try {
             const results = await this.deps.signalMissingPreKeysSync.fetchMissingPreKeys([
                 {
@@ -788,8 +780,7 @@ export class WaRetryCoordinator {
             ])
             const first = results[0]
             if (!first || !('devices' in first)) {
-                this.deps.logger.warn('missing prekeys fetch returned user error', {
-                    requester: requesterJid,
+                requesterLogger.debug('missing prekeys fetch returned user error', {
                     errorText: first && 'errorText' in first ? first.errorText : 'unknown'
                 })
                 return null
@@ -799,16 +790,14 @@ export class WaRetryCoordinator {
                 (device) => normalizeDeviceJid(device.deviceJid) === requesterNormalizedDeviceJid
             )
             if (!matched) {
-                this.deps.logger.warn('missing prekeys fetch did not return requested device', {
-                    requester: requesterJid,
+                requesterLogger.debug('missing prekeys fetch did not return requested device', {
                     devices: first.devices.length
                 })
                 return null
             }
             return matched.bundle
         } catch (error) {
-            this.deps.logger.warn('failed to fetch missing prekeys for retry requester', {
-                requester: requesterJid,
+            requesterLogger.debug('failed to fetch missing prekeys for retry requester', {
                 message: toError(error).message
             })
             return null

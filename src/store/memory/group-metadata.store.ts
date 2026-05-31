@@ -1,3 +1,4 @@
+import type { Logger } from '@infra/log/types'
 import type {
     WaGroupMetadataSnapshot,
     WaGroupMetadataStore
@@ -20,6 +21,12 @@ const DEFAULTS = Object.freeze({
 
 export interface WaGroupMetadataMemoryStoreOptions {
     readonly maxGroups?: number
+    /**
+     * Logger for capacity-saturation warnings. Emits a single `warn` the
+     * first time the bounded map evicts an entry; subsequent evictions are
+     * silent to avoid spam.
+     */
+    readonly logger?: Logger
 }
 
 export class WaGroupMetadataMemoryStore implements WaGroupMetadataStore {
@@ -27,6 +34,8 @@ export class WaGroupMetadataMemoryStore implements WaGroupMetadataStore {
     private readonly ttlMs: number
     private readonly maxGroups: number
     private readonly cleanup: PeriodicCleanupHandle
+    private readonly logger: Logger | undefined
+    private capacityWarned: boolean
 
     public constructor(ttlMs = DEFAULTS.ttlMs, options: WaGroupMetadataMemoryStoreOptions = {}) {
         if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -39,8 +48,18 @@ export class WaGroupMetadataMemoryStore implements WaGroupMetadataStore {
             DEFAULTS.maxGroups,
             'WaGroupMetadataMemoryStoreOptions.maxGroups'
         )
+        this.logger = options.logger
+        this.capacityWarned = false
         this.cleanup = createPeriodicCleanup(ttlMs, () => {
             void this.cleanupExpired(Date.now())
+        })
+    }
+
+    private warnCapacity(): void {
+        if (this.capacityWarned || !this.logger) return
+        this.capacityWarned = true
+        this.logger.warn('group metadata store at capacity, evicting oldest', {
+            max: this.maxGroups
         })
     }
 
@@ -52,7 +71,8 @@ export class WaGroupMetadataMemoryStore implements WaGroupMetadataStore {
                 ...snapshot,
                 expiresAtMs: snapshot.updatedAtMs + this.ttlMs
             },
-            this.maxGroups
+            this.maxGroups,
+            () => this.warnCapacity()
         )
     }
 
