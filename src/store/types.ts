@@ -1,3 +1,4 @@
+import type { Logger } from '@infra/log/types'
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
@@ -284,6 +285,15 @@ export interface WaCreateStoreOptions<B extends string = string> {
      * up for high-traffic accounts (lots of groups / contacts) and down on
      * memory-constrained runtimes.
      */
+    /**
+     * Logger for store-wide events: provider topology at boot, in-memory
+     * capacity saturation warnings, and downstream slow-operation warnings
+     * cascaded through backend factories. When unset, the store layer is
+     * silent. Backend packages (e.g. `@zapo-js/store-sqlite`,
+     * `@zapo-js/store-redis`) receive a `child({ scope: 'store', provider:
+     * '<name>' })` if they accept the same convention in their own factory.
+     */
+    readonly logger?: Logger
     readonly memory?: {
         readonly limits?: WaStoreMemoryLimitSelection
         readonly cacheTtlMs?: {

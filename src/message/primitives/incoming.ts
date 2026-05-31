@@ -262,7 +262,7 @@ async function sendRetryReceiptForDecryptFailure(
     })
     try {
         await options.sendNode(retryReceiptNode)
-        options.logger.debug('sent retry receipt for undecryptable incoming message', {
+        options.logger.trace('sent retry receipt for undecryptable incoming message', {
             id: stanzaId,
             to: from,
             participant: retryReceiptNode.attrs.participant,
@@ -370,6 +370,11 @@ async function decryptAndProcessEncNode(
     options: WaIncomingMessageAckHandlerOptions,
     decrypt: (ciphertext: Uint8Array, senderAddress: SignalAddress) => Promise<Uint8Array>
 ): Promise<DecryptEncNodeResult> {
+    const log = options.logger.child({
+        id: node.attrs.id,
+        from: node.attrs.from,
+        participant: node.attrs.participant
+    })
     try {
         const senderAddress = parseSignalAddressFromJid(senderJid)
         const decryptedPayload = await decrypt(
@@ -387,17 +392,11 @@ async function decryptAndProcessEncNode(
                     senderAddress,
                     senderKeyDistribution.payload
                 )
-                options.logger.debug('processed incoming sender key distribution', {
-                    id: node.attrs.id,
-                    from: node.attrs.from,
-                    participant: node.attrs.participant,
+                log.trace('processed incoming sender key distribution', {
                     groupId: senderKeyDistribution.groupId
                 })
             } catch (error) {
-                options.logger.warn('failed to process incoming sender key distribution', {
-                    id: node.attrs.id,
-                    from: node.attrs.from,
-                    participant: node.attrs.participant,
+                log.warn('failed to process incoming sender key distribution', {
                     groupId: senderKeyDistribution.groupId,
                     message: toError(error).message
                 })
@@ -433,10 +432,7 @@ async function decryptAndProcessEncNode(
         }
         return { success: true, encType }
     } catch (error) {
-        options.logger.warn('failed to decrypt incoming message', {
-            id: node.attrs.id,
-            from: node.attrs.from,
-            participant: node.attrs.participant,
+        log.warn('failed to decrypt incoming message', {
             encType,
             message: toError(error).message
         })
@@ -584,7 +580,7 @@ export async function handleIncomingMessageAck(
             to: from,
             from: options.getMeJid?.()
         })
-        options.logger.debug('sending inbound message ack', {
+        options.logger.trace('sending inbound message ack', {
             id,
             to: from,
             type: ackNode.attrs.type,
@@ -604,7 +600,7 @@ export async function handleIncomingMessageAck(
         id,
         to: from
     })
-    options.logger.debug('sending inbound message receipt', {
+    options.logger.trace('sending inbound message receipt', {
         id,
         to: from,
         type: receiptNode.attrs.type,
@@ -642,7 +638,7 @@ async function handleIncomingNewsletterMessage(
         id,
         to: from
     })
-    options.logger.debug('sending inbound newsletter message ack', {
+    options.logger.trace('sending inbound newsletter message ack', {
         id,
         to: from,
         type: ackNode.attrs.type

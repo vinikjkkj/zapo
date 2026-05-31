@@ -98,6 +98,7 @@ export class WaConnectionManager {
                     return
                 }
                 this.logger.warn('failed to reconnect after pairing', {
+                    meJid: this.authClient.getCurrentCredentials()?.meJid,
                     message: toError(error).message
                 })
             })
@@ -168,7 +169,7 @@ export class WaConnectionManager {
             return
         }
 
-        this.logger.info('wa client connect start')
+        this.logger.debug('wa client connect start')
         let credentials = await this.authClient.loadOrCreateCredentials()
         this.assertLifecycleCurrent(lifecycleGeneration, 'connect')
 
@@ -258,7 +259,7 @@ export class WaConnectionManager {
             return
         }
 
-        this.logger.info('wa client disconnect start')
+        this.logger.debug('wa client disconnect start')
         if (this.pairingReconnectTimeout) {
             clearTimeout(this.pairingReconnectTimeout)
             this.pairingReconnectTimeout = null
@@ -290,7 +291,7 @@ export class WaConnectionManager {
         ])
 
         if (this.isLifecycleCurrent(lifecycleGeneration)) {
-            this.logger.info('wa client disconnected')
+            this.logger.debug('wa client disconnected')
         }
     }
 
@@ -324,7 +325,7 @@ export class WaConnectionManager {
             this.comms = comms
             this.pendingComms = null
             this.nodeTransport.bindComms(comms)
-            this.logger.info('comms connected')
+            this.logger.debug('comms connected')
             comms.startHandlingRequests()
 
             if (credentials.meJid) {

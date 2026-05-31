@@ -1,4 +1,5 @@
 import type { Pool, PoolConnection } from 'mysql2/promise'
+import type { Logger } from 'zapo-js'
 import { resolvePositive } from 'zapo-js/util'
 
 import { ensureMysqlMigrations } from './connection'
@@ -6,11 +7,14 @@ import { assertSafeTablePrefix } from './helpers'
 import type { WaMysqlMigrationDomain, WaMysqlStorageOptions } from './types'
 
 const DEFAULT_BATCH_INSERT_CHUNK_SIZE = 500
+const DEFAULT_SLOW_OPERATION_THRESHOLD_MS = 250
 
 export abstract class BaseMysqlStore {
     protected readonly pool: Pool
     protected readonly sessionId: string
     protected readonly tablePrefix: string
+    protected readonly logger: Logger | undefined
+    protected readonly slowOperationThresholdMs: number
     /**
      * Largest power-of-two sub-chunk used by multi-row INSERT helpers.
      * Caller passes `batchInsertChunkSize`; we round down to the nearest
@@ -31,6 +35,9 @@ export abstract class BaseMysqlStore {
         this.pool = options.pool
         this.sessionId = options.sessionId
         this.tablePrefix = options.tablePrefix ?? ''
+        this.logger = options.logger
+        this.slowOperationThresholdMs =
+            options.slowOperationThresholdMs ?? DEFAULT_SLOW_OPERATION_THRESHOLD_MS
         assertSafeTablePrefix(this.tablePrefix)
         const requested = resolvePositive(
             options.batchInsertChunkSize,
@@ -89,6 +96,21 @@ export abstract class BaseMysqlStore {
 
     protected async withTransaction<T>(run: (conn: PoolConnection) => Promise<T>): Promise<T> {
         await this.ensureReady()
+        if (!this.logger) {
+            const conn = await this.pool.getConnection()
+            try {
+                await conn.beginTransaction()
+                const result = await run(conn)
+                await conn.commit()
+                return result
+            } catch (err) {
+                await conn.rollback()
+                throw err
+            } finally {
+                conn.release()
+            }
+        }
+        const startedAt = Date.now()
         const conn = await this.pool.getConnection()
         try {
             await conn.beginTransaction()
@@ -100,6 +122,14 @@ export abstract class BaseMysqlStore {
             throw err
         } finally {
             conn.release()
+            const durationMs = Date.now() - startedAt
+            if (durationMs >= this.slowOperationThresholdMs) {
+                this.logger.warn('slow mysql transaction', {
+                    operation: 'withTransaction',
+                    durationMs,
+                    thresholdMs: this.slowOperationThresholdMs
+                })
+            }
         }
     }
 

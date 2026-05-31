@@ -1,3 +1,4 @@
+import type { Logger } from 'zapo-js'
 import { isBunRuntime, toSafeNumber } from 'zapo-js/util'
 
 import {
@@ -424,7 +425,8 @@ function createConnectionHandle(
 }
 
 export async function openSqliteConnection(
-    options: WaSqliteStorageOptions
+    options: WaSqliteStorageOptions,
+    logger?: Logger
 ): Promise<WaSqliteConnection> {
     const { path } = options
     if (!path) {
@@ -440,6 +442,7 @@ export async function openSqliteConnection(
         .join(';')}|${serializeSqliteTableNames(resolvedTableNames)}`
     let entry = SQLITE_CONNECTION_CACHE.get(cacheKey)
     if (!entry) {
+        const startedAt = Date.now()
         const createdConnection =
             driver === 'bun'
                 ? openBunSqlite(path, resolveSql, normalizedPragmas)
@@ -452,12 +455,23 @@ export async function openSqliteConnection(
         createdEntry.connectionPromise = createdConnection
             .then((connection) => {
                 createdEntry.connection = connection
+                logger?.info('sqlite connection opened', {
+                    path,
+                    driver,
+                    pragmas: normalizedPragmas,
+                    durationMs: Date.now() - startedAt
+                })
                 return connection
             })
             .catch((error) => {
                 if (SQLITE_CONNECTION_CACHE.get(cacheKey) === createdEntry) {
                     SQLITE_CONNECTION_CACHE.delete(cacheKey)
                 }
+                logger?.error('sqlite connection failed to open', {
+                    path,
+                    driver,
+                    message: error instanceof Error ? error.message : String(error)
+                })
                 throw error
             })
         SQLITE_CONNECTION_CACHE.set(cacheKey, createdEntry)

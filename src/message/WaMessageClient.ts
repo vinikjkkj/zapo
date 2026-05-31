@@ -105,14 +105,24 @@ export class WaMessageClient {
                         isRetryableNegativeAck(ackNode)
                     )
                 }
-                this.logger.info('message publish acknowledged', {
-                    id,
-                    tag: ackNode.tag,
-                    type: ackNode.attrs.type,
-                    phash: ackNode.attrs.phash,
-                    addressingMode: ackNode.attrs.addressing_mode,
-                    attempts: attempt
-                })
+                if (attempt > 1) {
+                    this.logger.info('message publish acknowledged after retry', {
+                        id,
+                        tag: ackNode.tag,
+                        type: ackNode.attrs.type,
+                        phash: ackNode.attrs.phash,
+                        addressingMode: ackNode.attrs.addressing_mode,
+                        attempts: attempt
+                    })
+                } else {
+                    this.logger.trace('message publish acknowledged', {
+                        id,
+                        tag: ackNode.tag,
+                        type: ackNode.attrs.type,
+                        phash: ackNode.attrs.phash,
+                        addressingMode: ackNode.attrs.addressing_mode
+                    })
+                }
                 return {
                     id,
                     attempts: attempt,
@@ -126,17 +136,23 @@ export class WaMessageClient {
                 const canRetry =
                     attempt < maxAttempts &&
                     (this.isRetryablePublishError(lastError) || nackRetryable)
+                if (canRetry) {
+                    this.logger.debug('message publish attempt failed, will retry', {
+                        attempt,
+                        maxAttempts,
+                        nackRetryable,
+                        message: lastError.message
+                    })
+                    await delay(retryDelayMs * attempt)
+                    continue
+                }
                 this.logger.warn('message publish attempt failed', {
                     attempt,
                     maxAttempts,
-                    canRetry,
                     nackRetryable,
                     message: lastError.message
                 })
-                if (!canRetry) {
-                    throw lastError
-                }
-                await delay(retryDelayMs * attempt)
+                throw lastError
             }
         }
 

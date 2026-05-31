@@ -195,35 +195,25 @@ export class WaAppStateSyncClient {
         context: IncomingKeyEventContext,
         protocolMessage: Proto.Message.IProtocolMessage
     ): Promise<void> {
+        const log = this.logger.child({ id: context.id, from: context.remoteJid })
         const share = protocolMessage.appStateSyncKeyShare
         if (!share) {
-            this.logger.warn('incoming app-state key share protocol message without payload', {
-                id: context.id,
-                from: context.remoteJid
-            })
+            log.warn('incoming app-state key share protocol message without payload')
             return
         }
 
         try {
             const imported = await this.importSyncKeyShare(share)
-            this.logger.info('imported app-state sync key share from protocol message', {
-                id: context.id,
-                from: context.remoteJid,
-                imported
-            })
+            log.info('imported app-state sync key share from protocol message', { imported })
             if (imported > 0 && this.triggerSync) {
                 void this.triggerSync().catch((error) => {
-                    this.logger.warn('failed to sync app-state after key share import', {
-                        id: context.id,
-                        from: context.remoteJid,
+                    log.warn('failed to sync app-state after key share import', {
                         message: toError(error).message
                     })
                 })
             }
         } catch (error) {
-            this.logger.warn('failed to import app-state sync key share from protocol message', {
-                id: context.id,
-                from: context.remoteJid,
+            log.warn('failed to import app-state sync key share from protocol message', {
                 message: toError(error).message
             })
         }
@@ -234,20 +224,16 @@ export class WaAppStateSyncClient {
         context: IncomingKeyEventContext,
         protocolMessage: Proto.Message.IProtocolMessage
     ): Promise<void> {
+        const log = this.logger.child({ id: context.id, from: context.remoteJid })
         const request = protocolMessage.appStateSyncKeyRequest
         if (!request) {
-            this.logger.warn('incoming app-state key request protocol message without payload', {
-                id: context.id,
-                from: context.remoteJid
-            })
+            log.warn('incoming app-state key request protocol message without payload')
             return
         }
 
         const senderJid = context.participant ?? context.remoteJid
         if (!senderJid) {
-            this.logger.warn('incoming app-state key request missing sender jid', {
-                id: context.id
-            })
+            log.warn('incoming app-state key request missing sender jid')
             return
         }
 
@@ -256,36 +242,27 @@ export class WaAppStateSyncClient {
             const requesterRaw = applyDeviceToJid(senderJid, context.senderDevice)
             requesterDeviceJid = normalizeDeviceJid(requesterRaw)
         } catch (error) {
-            this.logger.warn('incoming app-state key request has malformed sender jid', {
-                id: context.id,
-                from: senderJid,
+            log.warn('incoming app-state key request has malformed sender jid', {
+                senderJid,
                 message: toError(error).message
             })
             return
         }
 
+        const deviceLog = log.child({ to: requesterDeviceJid })
         if (this.isOwnAccountDevice && !this.isOwnAccountDevice(requesterDeviceJid)) {
-            this.logger.warn('incoming app-state key request ignored: sender is not own account', {
-                id: context.id,
-                from: requesterDeviceJid
-            })
+            deviceLog.warn('incoming app-state key request ignored: sender is not own account')
             return
         }
 
         const requestedKeyIds = this.extractKeyRequestIds(request)
         if (requestedKeyIds.length === 0) {
-            this.logger.warn('incoming app-state key request has no valid key ids', {
-                id: context.id,
-                from: requesterDeviceJid
-            })
+            deviceLog.warn('incoming app-state key request has no valid key ids')
             return
         }
 
         if (!this.sendKeyShare) {
-            this.logger.warn('incoming app-state key request received but no sendKeyShare wired', {
-                id: context.id,
-                from: requesterDeviceJid
-            })
+            deviceLog.warn('incoming app-state key request received but no sendKeyShare wired')
             return
         }
 
@@ -303,17 +280,13 @@ export class WaAppStateSyncClient {
 
         try {
             await this.sendKeyShare(requesterDeviceJid, availableKeys, missingKeyIds)
-            this.logger.info('responded to app-state key request', {
-                id: context.id,
-                to: requesterDeviceJid,
+            deviceLog.info('responded to app-state key request', {
                 requested: requestedKeyIds.length,
                 shared: availableKeys.length,
                 missing: missingKeyIds.length
             })
         } catch (error) {
-            this.logger.warn('failed to respond to app-state key request', {
-                id: context.id,
-                to: requesterDeviceJid,
+            deviceLog.warn('failed to respond to app-state key request', {
                 requested: requestedKeyIds.length,
                 shared: availableKeys.length,
                 missing: missingKeyIds.length,
@@ -415,7 +388,7 @@ export class WaAppStateSyncClient {
                 context.collections.set(collections[index], initialCollectionStates[index])
             }
 
-            this.logger.info('app-state sync start', {
+            this.logger.debug('app-state sync start', {
                 collections: collections.length,
                 pendingMutations: options.pendingMutations?.length ?? 0
             })
@@ -475,7 +448,7 @@ export class WaAppStateSyncClient {
 
             if (stateChanged && context.dirtyCollections.size > 0) {
                 await this.persistCollectionUpdates()
-                this.logger.info('app-state sync persisted updated state')
+                this.logger.debug('app-state sync persisted updated state')
             }
 
             const orderedResults = collections.map(
@@ -486,7 +459,7 @@ export class WaAppStateSyncClient {
                     }
             )
 
-            this.logger.info('app-state sync finished', {
+            this.logger.debug('app-state sync finished', {
                 collections: orderedResults.length,
                 stateChanged
             })
@@ -716,12 +689,13 @@ export class WaAppStateSyncClient {
         readonly result: WaAppStateCollectionSyncResult
         readonly missingKeyId: Uint8Array | null
     }> {
+        const collectionLogger = this.logger.child({ collection })
         const payload = payloadByCollection.get(collection)
         let shouldRefetch = false
         let collectionStateChanged = false
 
         if (!payload) {
-            this.logger.warn('app-state sync response missing collection payload', { collection })
+            collectionLogger.warn('app-state sync response missing collection payload')
             return this.createCollectionOutcome(
                 collection,
                 WA_APP_STATE_COLLECTION_STATES.ERROR_RETRY
@@ -822,8 +796,7 @@ export class WaAppStateSyncClient {
                 (payload.state === WA_APP_STATE_COLLECTION_STATES.SUCCESS &&
                     skippedUploadCollections.has(collection))
 
-            this.logger.debug('app-state collection processed', {
-                collection: payload.collection,
+            collectionLogger.debug('app-state collection processed', {
                 state: payload.state,
                 version: payload.version,
                 appliedMutations: appliedMutations.length
@@ -838,8 +811,7 @@ export class WaAppStateSyncClient {
             )
         } catch (error) {
             if (error instanceof WaAppStateMissingKeyError) {
-                this.logger.warn('app-state blocked by missing key', {
-                    collection: payload.collection,
+                collectionLogger.debug('app-state blocked by missing key', {
                     message: error.message
                 })
                 return this.createCollectionOutcome(
@@ -852,8 +824,7 @@ export class WaAppStateSyncClient {
                     error.keyId
                 )
             }
-            this.logger.warn('app-state collection processing failed', {
-                collection: payload.collection,
+            collectionLogger.debug('app-state collection processing failed', {
                 message: toError(error).message
             })
             return this.createCollectionOutcome(
@@ -907,10 +878,12 @@ export class WaAppStateSyncClient {
         }
 
         const keyIdsHex = keyIds.map((keyId) => bytesToHex(keyId))
-        this.logger.info('app-state requesting missing sync keys', {
+        const requestLogger = this.logger.child({
             keys: keyIdsHex.length,
-            keyIds: keyIdsHex.join(','),
             collections: collections.join(',')
+        })
+        requestLogger.debug('app-state requesting missing sync keys', {
+            keyIds: keyIdsHex.join(',')
         })
 
         try {
@@ -919,9 +892,7 @@ export class WaAppStateSyncClient {
                 collections
             })
         } catch (error) {
-            this.logger.warn('app-state missing key callback failed', {
-                keys: keyIdsHex.length,
-                collections: collections.join(','),
+            requestLogger.warn('app-state missing key callback failed', {
                 message: toError(error).message
             })
         }
@@ -1331,7 +1302,7 @@ export class WaAppStateSyncClient {
         )
         // non-fatal: wa-mob/wa-web tolerate this – patchMac below covers payload integrity.
         if (!uint8TimingSafeEqual(expectedSnapshotMac, snapshotMac)) {
-            this.logger.warn('patch snapshot MAC mismatch (tolerated)', {
+            this.logger.debug('patch snapshot MAC mismatch (tolerated)', {
                 collection,
                 patchVersion
             })

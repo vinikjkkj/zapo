@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
+import type { Logger } from 'zapo-js'
 import type {
     WaMediaProcessorImageResult,
     WaMediaProcessorInput,
@@ -14,8 +15,6 @@ import type {
 } from 'zapo-js/media'
 
 import { generateImageThumbnail } from './sharp'
-
-export type FfmpegWarnFn = (message: string) => void
 
 const WAVEFORM_POINTS = 64
 const WAVEFORM_MIN_POINTS = 64
@@ -33,17 +32,32 @@ function which(bin: string): Promise<boolean> {
 }
 
 const binCache = new Map<string, boolean>()
-const warnedBins = new Set<string>()
 
-async function hasBin(path: string, label: string, warn?: FfmpegWarnFn): Promise<boolean> {
+// Per-logger dedup: each Logger instance warns at most once per missing binary
+// path. The previous module-scoped Set warned only the first session in the
+// process to call hasBin, which silently hid the issue from every other
+// session that shares the same stateless processor.
+const warnedBinsByLogger = new WeakMap<Logger, Set<string>>()
+
+async function hasBin(path: string, label: string, logger?: Logger): Promise<boolean> {
     let available = binCache.get(path)
     if (available === undefined) {
         available = await which(path)
         binCache.set(path, available)
     }
-    if (!available && warn && !warnedBins.has(path)) {
-        warnedBins.add(path)
-        warn(`${label} not found at '${path}', related processing will be skipped`)
+    if (!available && logger) {
+        let warned = warnedBinsByLogger.get(logger)
+        if (!warned) {
+            warned = new Set()
+            warnedBinsByLogger.set(logger, warned)
+        }
+        if (!warned.has(path)) {
+            warned.add(path)
+            logger.warn('media-utils binary not found, related processing will be skipped', {
+                binary: label,
+                path
+            })
+        }
     }
     return available
 }
@@ -51,10 +65,10 @@ async function hasBin(path: string, label: string, warn?: FfmpegWarnFn): Promise
 export async function probeWithFfmpeg(
     input: WaMediaProcessorInput,
     ffprobePath?: string,
-    warn?: FfmpegWarnFn
+    logger?: Logger
 ): Promise<WaMediaProcessorProbeResult | null> {
     const bin = ffprobePath ?? 'ffprobe'
-    if (!(await hasBin(bin, 'ffprobe', warn))) return null
+    if (!(await hasBin(bin, 'ffprobe', logger))) return null
 
     let filePath: string
     let needsCleanup: boolean
@@ -141,10 +155,10 @@ export async function generateVideoThumbnailWithFfmpeg(
     input: WaMediaProcessorInput,
     maxEdge: number,
     ffmpegPath?: string,
-    warn?: FfmpegWarnFn
+    logger?: Logger
 ): Promise<WaMediaProcessorImageResult | null> {
     const bin = ffmpegPath ?? 'ffmpeg'
-    if (!(await hasBin(bin, 'ffmpeg', warn))) return null
+    if (!(await hasBin(bin, 'ffmpeg', logger))) return null
 
     let filePath: string
     let needsCleanup: boolean
@@ -186,10 +200,10 @@ export async function computeWaveformWithFfmpeg(
     input: WaMediaProcessorInput,
     ffmpegPath?: string,
     points?: number,
-    warn?: FfmpegWarnFn
+    logger?: Logger
 ): Promise<WaMediaProcessorWaveformResult | null> {
     const bin = ffmpegPath ?? 'ffmpeg'
-    if (!(await hasBin(bin, 'ffmpeg', warn))) return null
+    if (!(await hasBin(bin, 'ffmpeg', logger))) return null
 
     const useFile = typeof input === 'string'
     const args = [
@@ -304,7 +318,7 @@ export interface NormalizeVoiceNoteOptions {
     readonly sampleRate?: number
     readonly application?: 'voip' | 'audio'
     readonly ffmpegPath?: string
-    readonly onWarning?: FfmpegWarnFn
+    readonly logger?: Logger
 }
 
 const VOICE_NOTE_DEFAULT_BITRATE = 64_000
@@ -316,7 +330,7 @@ export async function normalizeVoiceNoteWithFfmpeg(
     options: NormalizeVoiceNoteOptions = {}
 ): Promise<Readable | null> {
     const bin = options.ffmpegPath ?? 'ffmpeg'
-    if (!(await hasBin(bin, 'ffmpeg', options.onWarning))) return null
+    if (!(await hasBin(bin, 'ffmpeg', options.logger))) return null
 
     const useFile = typeof input === 'string'
     const bitRate = options.bitRate ?? VOICE_NOTE_DEFAULT_BITRATE

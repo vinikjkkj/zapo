@@ -359,7 +359,7 @@ export class WaAuthClient {
     ): Promise<string> {
         this.requireConnected()
         this.requireCredentials()
-        this.logger.info('auth client requesting pairing code')
+        this.logger.debug('auth client requesting pairing code')
         return this.runHandled(() =>
             this.pairingFlow.requestPairingCode(phoneNumber, shouldShowPushNotification, customCode)
         )

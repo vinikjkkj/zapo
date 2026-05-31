@@ -1,6 +1,13 @@
 /**
  * Tuning knobs for the {@link createMediaProcessor} factory. Every field
  * is optional; defaults match what the official WhatsApp clients produce.
+ *
+ * For logging, this package does not accept a callback. The runtime
+ * passes a `Logger` per call via the `ctx` argument the
+ * `WaMediaProcessor` methods receive, so all warnings flow into the same
+ * `Logger` the rest of the runtime uses - including any per-session
+ * bindings the caller has attached. Without a runtime-supplied `ctx`,
+ * the processor stays silent.
  */
 export interface WaMediaProcessorOptions {
     /**
@@ -31,10 +38,4 @@ export interface WaMediaProcessorOptions {
     readonly voiceNoteSampleRate?: number
     /** Opus `application` flag - `'voip'` favors speech, `'audio'` favors general audio. */
     readonly voiceNoteApplication?: 'voip' | 'audio'
-    /**
-     * Callback for non-fatal warnings (missing ffmpeg/ffprobe, probe
-     * field coercion failures, etc.). The processor never throws on
-     * missing binaries - it skips the feature and forwards a warning.
-     */
-    readonly onWarning?: (message: string) => void
 }

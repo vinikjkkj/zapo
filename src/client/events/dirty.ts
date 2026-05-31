@@ -177,7 +177,7 @@ async function handleAccountSyncDirtyBit(
     protocols: readonly string[]
 ): Promise<void> {
     const selectedProtocols = resolveAccountSyncProtocols(protocols)
-    runtime.logger.info('received account_sync dirty bit', {
+    runtime.logger.debug('received account_sync dirty bit', {
         protocols: selectedProtocols.join(',')
     })
     const failures: string[] = []
@@ -220,7 +220,7 @@ async function runAccountSyncProtocol(
             await syncAccountBlocklistDirtyBit(runtime)
             return
         case WA_DIRTY_PROTOCOLS.NOTICE:
-            runtime.logger.info(
+            runtime.logger.debug(
                 'account_sync notice protocol received (no GraphQL/MEX job configured)'
             )
             return
@@ -232,7 +232,7 @@ async function runAccountSyncProtocol(
 }
 
 async function handleSyncdAppStateDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {
-    runtime.logger.info('received syncd_app_state dirty bit, starting sync')
+    runtime.logger.debug('received syncd_app_state dirty bit, starting sync')
     await runtime.syncAppState()
 }
 
@@ -240,13 +240,13 @@ async function syncAccountDevicesDirtyBit(runtime: WaDirtySyncRuntime): Promise<
     const credentials = runtime.getCurrentCredentials()
     const meJid = credentials?.meJid ?? null
     if (!meJid) {
-        runtime.logger.warn('account_sync devices skipped: meJid is missing')
+        runtime.logger.trace('account_sync devices skipped: meJid is missing')
         return
     }
 
     const userJids = resolveAccountSyncDeviceTargets(credentials)
     if (userJids.length === 0) {
-        runtime.logger.warn('account_sync devices skipped: no valid account_sync targets')
+        runtime.logger.trace('account_sync devices skipped: no valid account_sync targets')
         return
     }
 
@@ -261,7 +261,7 @@ async function syncAccountDevicesDirtyBit(runtime: WaDirtySyncRuntime): Promise<
 async function syncAccountPictureDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {
     const meJid = runtime.getCurrentCredentials()?.meJid ?? null
     if (!meJid) {
-        runtime.logger.warn('account_sync picture skipped: meJid is missing')
+        runtime.logger.trace('account_sync picture skipped: meJid is missing')
         return
     }
     const targetJid = toUserJid(meJid)
@@ -389,7 +389,7 @@ async function clearDirtyBits(
             },
             { useSystemId: true }
         )
-        runtime.logger.info('dirty bits cleared', {
+        runtime.logger.debug('dirty bits cleared', {
             count: dirtyBits.length
         })
     } catch (error) {

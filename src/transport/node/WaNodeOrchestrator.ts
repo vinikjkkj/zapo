@@ -128,8 +128,8 @@ export class WaNodeOrchestrator {
         if (this.pendingQueries.has(id)) {
             throw new Error(`pending node id collision: ${id}`)
         }
-        this.logger.debug('sending query node', {
-            id,
+        const queryLogger = this.logger.child({ id })
+        queryLogger.debug('sending query node', {
             tag: outbound.tag,
             type: outbound.attrs.type,
             timeoutMs
@@ -138,7 +138,7 @@ export class WaNodeOrchestrator {
         return new Promise<BinaryNode>((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pendingQueries.delete(id)
-                this.logger.warn('query node timeout', { id, timeoutMs })
+                queryLogger.warn('query node timeout', { timeoutMs })
                 reject(new Error(`query timeout (${id}) after ${timeoutMs}ms`))
             }, timeoutMs)
 
@@ -151,8 +151,7 @@ export class WaNodeOrchestrator {
             this.sendNodeFn(outbound).catch((error) => {
                 clearTimeout(timer)
                 this.pendingQueries.delete(id)
-                this.logger.warn('failed to send query node', {
-                    id,
+                queryLogger.warn('failed to send query node', {
                     message: toError(error).message
                 })
                 reject(toError(error))

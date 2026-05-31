@@ -1,3 +1,5 @@
+import type { Logger } from 'zapo-js'
+
 import { WaAppStateSqliteStore } from './appstate.store'
 import { WaAuthSqliteStore } from './auth.store'
 import type { WaSqliteConnection } from './connection'
@@ -76,6 +78,19 @@ export interface WaSqliteStoreConfig {
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
+    /**
+     * Logger for connection lifecycle, migration progress, and
+     * slow-operation warnings. The factory binds `{ scope: 'store',
+     * provider: 'sqlite' }` to it, then each per-domain store binds its
+     * own `{ domain: '<name>' }`. When unset, the SQLite layer stays
+     * silent.
+     */
+    readonly logger?: Logger
+    /**
+     * Threshold in milliseconds above which a transaction emits a `warn`.
+     * Defaults to `250`.
+     */
+    readonly slowOperationThresholdMs?: number
 }
 
 export interface WaSqliteStoreResult {
@@ -151,48 +166,56 @@ export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreRes
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const batchSizes = config.batchSizes
+    const baseLogger = config.logger?.child({ scope: 'store', provider: 'sqlite' })
+    const slowOperationThresholdMs = config.slowOperationThresholdMs
 
-    const opts = (sessionId: string): WaSqliteStorageOptions => ({
+    const opts = (sessionId: string, domain: string): WaSqliteStorageOptions => ({
         sessionId,
         path: config.path,
         connection: config.connection,
         driver: config.driver,
         pragmas: config.pragmas,
-        tableNames: config.tableNames
+        tableNames: config.tableNames,
+        logger: baseLogger?.child({ domain, sessionId }),
+        slowOperationThresholdMs
     })
 
     return {
         stores: {
-            auth: (sessionId) => new WaAuthSqliteStore(opts(sessionId)),
+            auth: (sessionId) => new WaAuthSqliteStore(opts(sessionId, 'auth')),
             preKey: (sessionId) =>
-                new WaPreKeySqliteStore(opts(sessionId), {
+                new WaPreKeySqliteStore(opts(sessionId, 'preKey'), {
                     preKeyBatchSize: batchSizes?.signalPreKey
                 }),
             session: (sessionId) =>
-                new WaSessionSqliteStore(opts(sessionId), {
+                new WaSessionSqliteStore(opts(sessionId, 'session'), {
                     hasSessionBatchSize: batchSizes?.signalHasSession
                 }),
-            identity: (sessionId) => new WaIdentitySqliteStore(opts(sessionId)),
-            signal: (sessionId) => new WaSignalSqliteStore(opts(sessionId)),
-            senderKey: (sessionId) => new SenderKeySqliteStore(opts(sessionId)),
-            appState: (sessionId) => new WaAppStateSqliteStore(opts(sessionId)),
-            messages: (sessionId) => new WaMessageSqliteStore(opts(sessionId)),
-            threads: (sessionId) => new WaThreadSqliteStore(opts(sessionId)),
-            contacts: (sessionId) => new WaContactSqliteStore(opts(sessionId)),
-            privacyToken: (sessionId) => new WaPrivacyTokenSqliteStore(opts(sessionId))
+            identity: (sessionId) => new WaIdentitySqliteStore(opts(sessionId, 'identity')),
+            signal: (sessionId) => new WaSignalSqliteStore(opts(sessionId, 'signal')),
+            senderKey: (sessionId) => new SenderKeySqliteStore(opts(sessionId, 'senderKey')),
+            appState: (sessionId) => new WaAppStateSqliteStore(opts(sessionId, 'appState')),
+            messages: (sessionId) => new WaMessageSqliteStore(opts(sessionId, 'messages')),
+            threads: (sessionId) => new WaThreadSqliteStore(opts(sessionId, 'threads')),
+            contacts: (sessionId) => new WaContactSqliteStore(opts(sessionId, 'contacts')),
+            privacyToken: (sessionId) =>
+                new WaPrivacyTokenSqliteStore(opts(sessionId, 'privacyToken'))
         },
         caches: {
-            retry: (sessionId) => new WaRetrySqliteStore(opts(sessionId), retryTtlMs),
+            retry: (sessionId) => new WaRetrySqliteStore(opts(sessionId, 'retry'), retryTtlMs),
             groupMetadata: (sessionId) =>
-                new WaGroupMetadataSqliteStore(opts(sessionId), groupMetadataTtlMs),
+                new WaGroupMetadataSqliteStore(
+                    opts(sessionId, 'groupMetadata'),
+                    groupMetadataTtlMs
+                ),
             deviceList: (sessionId) =>
                 new WaDeviceListSqliteStore(
-                    opts(sessionId),
+                    opts(sessionId, 'deviceList'),
                     deviceListTtlMs,
                     batchSizes?.deviceList
                 ),
             messageSecret: (sessionId) =>
-                new WaMessageSecretSqliteStore(opts(sessionId), messageSecretTtlMs)
+                new WaMessageSecretSqliteStore(opts(sessionId, 'messageSecret'), messageSecretTtlMs)
         }
     }
 }

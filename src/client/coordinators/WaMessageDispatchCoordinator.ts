@@ -159,7 +159,7 @@ export class WaMessageDispatchCoordinator {
         node: BinaryNode,
         options: WaMessagePublishOptions = {}
     ): Promise<WaMessagePublishResult> {
-        this.deps.logger.debug('wa client publish message node', {
+        this.deps.logger.trace('wa client publish message node', {
             tag: node.tag,
             type: node.attrs.type,
             to: node.attrs.to
@@ -182,7 +182,7 @@ export class WaMessageDispatchCoordinator {
         input: WaEncryptedMessageInput,
         options: WaMessagePublishOptions = {}
     ): Promise<WaMessagePublishResult> {
-        this.deps.logger.debug('wa client publish encrypted message', {
+        this.deps.logger.trace('wa client publish encrypted message', {
             to: input.to,
             type: input.type,
             encType: input.encType
@@ -217,7 +217,7 @@ export class WaMessageDispatchCoordinator {
                 'publishSignalMessage currently supports only direct chats; use sender-key flow for groups'
             )
         }
-        this.deps.logger.debug('wa client publish signal message', {
+        this.deps.logger.trace('wa client publish signal message', {
             to: input.to,
             type: input.type
         })
@@ -388,6 +388,7 @@ export class WaMessageDispatchCoordinator {
                 .catch((error) => {
                     this.deps.logger.warn('failed to persist outgoing message secret', {
                         id: sendOptions.id,
+                        to: recipientJid,
                         message: toError(error).message
                     })
                 })
@@ -742,14 +743,12 @@ export class WaMessageDispatchCoordinator {
                 distributedAddresses
             )
         } catch (error) {
-            this.deps.logger.warn(
-                `failed to mark ${input.logTag} sender key distribution targets`,
-                {
-                    groupJid: input.groupJid,
-                    participants: distributedAddresses.length,
-                    message: toError(error).message
-                }
-            )
+            this.deps.logger.warn('failed to mark sender key distribution targets', {
+                logTag: input.logTag,
+                groupJid: input.groupJid,
+                participants: distributedAddresses.length,
+                message: toError(error).message
+            })
         }
         return result
     }
@@ -812,13 +811,19 @@ export class WaMessageDispatchCoordinator {
         for (let index = 0; index < fanoutDeviceJids.length; index += 1) {
             uniqueNormalizedFanoutJids.add(normalizeDeviceJid(fanoutDeviceJids[index]))
         }
+        const droppedDevices: string[] = []
         for (const expected of uniqueNormalizedFanoutJids) {
             if (!resolvedNormalizedJids.has(expected)) {
-                this.deps.logger.warn(
-                    'group direct fanout dropping device without signal session',
-                    { groupJid, device: expected }
-                )
+                droppedDevices.push(expected)
             }
+        }
+        if (droppedDevices.length > 0) {
+            this.deps.logger.warn('group direct fanout dropping devices without signal session', {
+                groupJid,
+                droppedCount: droppedDevices.length,
+                totalExpected: uniqueNormalizedFanoutJids.size,
+                sample: droppedDevices.slice(0, 3)
+            })
         }
         if (resolvedFanoutTargets.length === 0) {
             throw new Error('group direct send resolved no signal sessions')
@@ -958,7 +963,7 @@ export class WaMessageDispatchCoordinator {
         try {
             address = parseSignalAddressFromJid(botJid)
         } catch (error) {
-            this.deps.logger.warn('bot sidecar: failed to parse bot jid', {
+            this.deps.logger.debug('bot sidecar: failed to parse bot jid', {
                 botJid,
                 message: toError(error).message
             })
@@ -969,14 +974,14 @@ export class WaMessageDispatchCoordinator {
         try {
             resolvedTargets = await this.deps.sessionResolver.ensureSessionsBatch([botJid])
         } catch (error) {
-            this.deps.logger.warn('bot sidecar: signal session sync failed', {
+            this.deps.logger.debug('bot sidecar: signal session sync failed', {
                 botJid,
                 message: toError(error).message
             })
             return null
         }
         if (resolvedTargets.length === 0) {
-            this.deps.logger.warn('bot sidecar: signal session not established', { botJid })
+            this.deps.logger.debug('bot sidecar: signal session not established', { botJid })
             return null
         }
 
@@ -997,14 +1002,14 @@ export class WaMessageDispatchCoordinator {
                 }))
             )
             if (!encrypted) return null
-            this.deps.logger.debug('bot sidecar encrypted', { botJid, encType: encrypted.type })
+            this.deps.logger.trace('bot sidecar encrypted', { botJid, encType: encrypted.type })
             return {
                 jid: botJid,
                 encType: encrypted.type,
                 ciphertext: encrypted.ciphertext
             }
         } catch (error) {
-            this.deps.logger.warn('bot sidecar: encryption failed', {
+            this.deps.logger.debug('bot sidecar: encryption failed', {
                 botJid,
                 message: toError(error).message
             })
@@ -1392,7 +1397,7 @@ export class WaMessageDispatchCoordinator {
         const recipientUserJid = toUserJid(recipientJid)
         const meUserJid = toUserJid(selfDeviceJidForRecipient)
 
-        this.deps.logger.debug('wa client publish signal fanout', {
+        this.deps.logger.trace('wa client publish signal fanout', {
             to: recipientJid,
             devices: deviceJids.length,
             type
@@ -1416,6 +1421,7 @@ export class WaMessageDispatchCoordinator {
             resolvedFanoutTargetsByJid.set(normalizeDeviceJid(target.jid), target)
         }
         const liveTargets: typeof targets = []
+        const droppedSecondaryDevices: string[] = []
         for (let index = 0; index < targets.length; index += 1) {
             const target = targets[index]
             if (resolvedFanoutTargetsByJid.has(target.normalizedJid)) {
@@ -1424,18 +1430,25 @@ export class WaMessageDispatchCoordinator {
             }
             const isPrimaryRecipient =
                 target.userJid === recipientUserJid && target.normalizedJid === target.userJid
-            const logContext = { to: recipientJid, device: target.jid }
             if (isPrimaryRecipient) {
                 this.deps.logger.error(
                     'direct fanout dropping primary recipient device without signal session',
-                    logContext
+                    { to: recipientJid, device: target.jid }
                 )
             } else {
-                this.deps.logger.warn(
-                    'direct fanout dropping device without signal session',
-                    logContext
-                )
+                droppedSecondaryDevices.push(target.jid)
             }
+        }
+        if (droppedSecondaryDevices.length > 0) {
+            this.deps.logger.warn(
+                'direct fanout dropping secondary devices without signal session',
+                {
+                    to: recipientJid,
+                    droppedCount: droppedSecondaryDevices.length,
+                    totalExpected: targets.length,
+                    sample: droppedSecondaryDevices.slice(0, 3)
+                }
+            )
         }
         if (liveTargets.length === 0) {
             throw new Error('direct fanout missing signal sessions for all targets')

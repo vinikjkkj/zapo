@@ -11,6 +11,7 @@ export type { MediaCryptoType, MediaKind, WaMediaConn } from '@media/types'
 export { WaMediaCrypto } from '@media/crypto/WaMediaCrypto'
 export type {
     WaMediaProcessor,
+    WaMediaProcessorCallContext,
     WaMediaProcessorImageResult,
     WaMediaProcessorInput,
     WaMediaProcessorProbeResult,

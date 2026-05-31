@@ -1,9 +1,15 @@
+import type { Logger } from 'zapo-js'
+
 import { type NonPromise, openSqliteConnection, type WaSqliteConnection } from './connection'
 import { ensureSqliteMigrations, type WaSqliteMigrationDomain } from './migrations'
 import type { WaSqliteStorageOptions } from './types'
 
+const DEFAULT_SLOW_OPERATION_THRESHOLD_MS = 250
+
 export abstract class BaseSqliteStore {
     protected readonly options: WaSqliteStorageOptions
+    protected readonly logger: Logger | undefined
+    protected readonly slowOperationThresholdMs: number
     private readonly migrationDomains: readonly WaSqliteMigrationDomain[]
     private connectionPromise: Promise<WaSqliteConnection> | null
 
@@ -12,6 +18,9 @@ export abstract class BaseSqliteStore {
         migrationDomains: readonly WaSqliteMigrationDomain[]
     ) {
         this.options = options
+        this.logger = options.logger
+        this.slowOperationThresholdMs =
+            options.slowOperationThresholdMs ?? DEFAULT_SLOW_OPERATION_THRESHOLD_MS
         this.migrationDomains = migrationDomains
         this.connectionPromise = null
     }
@@ -28,9 +37,11 @@ export abstract class BaseSqliteStore {
             }
             const open: Promise<WaSqliteConnection> = supplied
                 ? Promise.resolve(supplied)
-                : openSqliteConnection(this.options)
+                : openSqliteConnection(this.options, this.logger)
             this.connectionPromise = open.then((connection) =>
-                ensureSqliteMigrations(connection, this.migrationDomains).then(() => connection)
+                ensureSqliteMigrations(connection, this.migrationDomains, this.logger).then(
+                    () => connection
+                )
             )
         }
         return this.connectionPromise
@@ -40,7 +51,22 @@ export abstract class BaseSqliteStore {
         run: (connection: WaSqliteConnection) => NonPromise<T>
     ): Promise<NonPromise<T>> {
         const db = await this.getConnection()
-        return db.runInTransaction(() => run(db))
+        if (!this.logger) {
+            return db.runInTransaction(() => run(db))
+        }
+        const startedAt = Date.now()
+        try {
+            return await db.runInTransaction(() => run(db))
+        } finally {
+            const durationMs = Date.now() - startedAt
+            if (durationMs >= this.slowOperationThresholdMs) {
+                this.logger.warn('slow sqlite transaction', {
+                    operation: 'withTransaction',
+                    durationMs,
+                    thresholdMs: this.slowOperationThresholdMs
+                })
+            }
+        }
     }
 
     public async destroy(): Promise<void> {

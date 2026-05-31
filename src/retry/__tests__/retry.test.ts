@@ -33,7 +33,7 @@ function buildOutboundRecord(
 }
 
 function createLogger(warnings: string[] = []): Logger {
-    return {
+    const logger: Logger = {
         level: 'trace',
         trace: () => undefined,
         debug: () => undefined,
@@ -41,8 +41,10 @@ function createLogger(warnings: string[] = []): Logger {
         warn: (message) => {
             warnings.push(message)
         },
-        error: () => undefined
+        error: () => undefined,
+        child: () => logger
     }
+    return logger
 }
 
 const NOOP_SESSION_RESOLVER: SignalSessionResolver = {

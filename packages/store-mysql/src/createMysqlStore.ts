@@ -1,4 +1,5 @@
 import type { Pool, PoolOptions } from 'mysql2/promise'
+import type { Logger } from 'zapo-js'
 
 import { WaAppStateMysqlStore } from './appstate.store'
 import { WaAuthMysqlStore } from './auth.store'
@@ -69,6 +70,17 @@ export interface WaMysqlStoreConfig {
      * workloads where `N` varies widely.
      */
     readonly batchInsertChunkSize?: number
+    /**
+     * Logger for pool lifecycle, slow queries, and migration progress.
+     * The factory binds `{ scope: 'store', provider: 'mysql' }` and each
+     * per-domain store binds its own `{ domain: '<name>' }`.
+     */
+    readonly logger?: Logger
+    /**
+     * Threshold in milliseconds above which a transaction emits a `warn`.
+     * Defaults to `250`.
+     */
+    readonly slowOperationThresholdMs?: number
 }
 
 export interface WaMysqlStoreResult {
@@ -132,13 +144,23 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsPool = !isPool(config.pool)
+    const baseLogger = config.logger?.child({ scope: 'store', provider: 'mysql' })
+    const slowOperationThresholdMs = config.slowOperationThresholdMs
+
+    if (baseLogger && ownsPool) {
+        baseLogger.info('mysql store created', {
+            tablePrefix: tablePrefix || undefined
+        })
+    }
 
     const batchInsertChunkSize = config.batchInsertChunkSize
-    const opts = (sessionId: string): WaMysqlStorageOptions => ({
+    const opts = (sessionId: string, domain: string): WaMysqlStorageOptions => ({
         pool,
         sessionId,
         tablePrefix,
-        batchInsertChunkSize
+        batchInsertChunkSize,
+        logger: baseLogger?.child({ domain, sessionId }),
+        slowOperationThresholdMs
     })
 
     const cleanupPollers = new Set<MysqlCleanupPoller>()
@@ -146,34 +168,44 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
     return {
         pool,
         stores: {
-            auth: (sessionId) => new WaAuthMysqlStore(opts(sessionId)),
-            preKey: (sessionId) => new WaPreKeyMysqlStore(opts(sessionId)),
-            session: (sessionId) => new WaSessionMysqlStore(opts(sessionId)),
-            identity: (sessionId) => new WaIdentityMysqlStore(opts(sessionId)),
-            signal: (sessionId) => new WaSignalMysqlStore(opts(sessionId)),
-            senderKey: (sessionId) => new WaSenderKeyMysqlStore(opts(sessionId)),
-            appState: (sessionId) => new WaAppStateMysqlStore(opts(sessionId)),
-            messages: (sessionId) => new WaMessageMysqlStore(opts(sessionId)),
-            threads: (sessionId) => new WaThreadMysqlStore(opts(sessionId)),
-            contacts: (sessionId) => new WaContactMysqlStore(opts(sessionId)),
-            privacyToken: (sessionId) => new WaPrivacyTokenMysqlStore(opts(sessionId))
+            auth: (sessionId) => new WaAuthMysqlStore(opts(sessionId, 'auth')),
+            preKey: (sessionId) => new WaPreKeyMysqlStore(opts(sessionId, 'preKey')),
+            session: (sessionId) => new WaSessionMysqlStore(opts(sessionId, 'session')),
+            identity: (sessionId) => new WaIdentityMysqlStore(opts(sessionId, 'identity')),
+            signal: (sessionId) => new WaSignalMysqlStore(opts(sessionId, 'signal')),
+            senderKey: (sessionId) => new WaSenderKeyMysqlStore(opts(sessionId, 'senderKey')),
+            appState: (sessionId) => new WaAppStateMysqlStore(opts(sessionId, 'appState')),
+            messages: (sessionId) => new WaMessageMysqlStore(opts(sessionId, 'messages')),
+            threads: (sessionId) => new WaThreadMysqlStore(opts(sessionId, 'threads')),
+            contacts: (sessionId) => new WaContactMysqlStore(opts(sessionId, 'contacts')),
+            privacyToken: (sessionId) =>
+                new WaPrivacyTokenMysqlStore(opts(sessionId, 'privacyToken'))
         },
         caches: {
-            retry: (sessionId) => new WaRetryMysqlStore(opts(sessionId), retryTtlMs),
+            retry: (sessionId) => new WaRetryMysqlStore(opts(sessionId, 'retry'), retryTtlMs),
             groupMetadata: (sessionId) =>
-                new WaGroupMetadataMysqlStore(opts(sessionId), groupMetadataTtlMs),
-            deviceList: (sessionId) => new WaDeviceListMysqlStore(opts(sessionId), deviceListTtlMs),
+                new WaGroupMetadataMysqlStore(opts(sessionId, 'groupMetadata'), groupMetadataTtlMs),
+            deviceList: (sessionId) =>
+                new WaDeviceListMysqlStore(opts(sessionId, 'deviceList'), deviceListTtlMs),
             messageSecret: (sessionId) =>
-                new WaMessageSecretMysqlStore(opts(sessionId), messageSecretTtlMs)
+                new WaMessageSecretMysqlStore(opts(sessionId, 'messageSecret'), messageSecretTtlMs)
         },
         startCleanup(sessionId: string): MysqlCleanupPoller {
-            const o = opts(sessionId)
             const poller = new MysqlCleanupPoller({
                 intervalMs: config.cleanup?.intervalMs,
-                retry: new WaRetryMysqlStore(o, retryTtlMs),
-                groupMetadata: new WaGroupMetadataMysqlStore(o, groupMetadataTtlMs),
-                deviceList: new WaDeviceListMysqlStore(o, deviceListTtlMs),
-                messageSecret: new WaMessageSecretMysqlStore(o, messageSecretTtlMs),
+                retry: new WaRetryMysqlStore(opts(sessionId, 'retry'), retryTtlMs),
+                groupMetadata: new WaGroupMetadataMysqlStore(
+                    opts(sessionId, 'groupMetadata'),
+                    groupMetadataTtlMs
+                ),
+                deviceList: new WaDeviceListMysqlStore(
+                    opts(sessionId, 'deviceList'),
+                    deviceListTtlMs
+                ),
+                messageSecret: new WaMessageSecretMysqlStore(
+                    opts(sessionId, 'messageSecret'),
+                    messageSecretTtlMs
+                ),
                 onError: config.cleanup?.onError
             })
             poller.start()

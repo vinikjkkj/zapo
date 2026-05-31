@@ -187,14 +187,13 @@ export class WaIncomingNodeCoordinator {
         if (this.stanzaFilters.length === 0 || FILTER_PROTECTED_TAGS.has(node.tag)) {
             return false
         }
+        const filterLogger = this.logger.child({ tag: node.tag, id: node.attrs.id })
         for (let i = 0; i < this.stanzaFilters.length; i += 1) {
             let verdict: boolean
             try {
                 verdict = await this.stanzaFilters[i](node)
             } catch (error) {
-                this.logger.warn('incoming stanza filter threw', {
-                    tag: node.tag,
-                    id: node.attrs.id,
+                filterLogger.warn('incoming stanza filter threw', {
                     message: toError(error).message
                 })
                 continue
@@ -202,9 +201,7 @@ export class WaIncomingNodeCoordinator {
             if (!verdict) {
                 continue
             }
-            this.logger.debug('incoming stanza dropped by filter', {
-                tag: node.tag,
-                id: node.attrs.id,
+            filterLogger.trace('incoming stanza dropped by filter', {
                 type: node.attrs.type,
                 from: node.attrs.from
             })

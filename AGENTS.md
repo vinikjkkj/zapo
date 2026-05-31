@@ -261,11 +261,101 @@ try {
 
 ### 5.7 Logging
 
-- Use structured logs: message + context object.
-- Keep log messages lowercase and descriptive.
+The `Logger` interface lives in `@infra/log/types` with 5 levels (trace,
+debug, info, warn, error), a `(message, context?)` signature, and a
+`child(bindings)` method that returns a derived logger with pre-bound
+fields. Adapters: `ConsoleLogger` (zero-dep default) and `PinoLogger`
+(optional pino-backed).
+
+#### General rules
+
+- Use structured logs: lowercase static message + context object. Never
+  interpolate variables into the message string (`'failed to send'` +
+  `{ kind }`, **not** `` `failed to send ${kind}` ``). String interpolation
+  in the message breaks log-aggregator deduplication.
+- Use `toError(e).message` in catches; never log the raw error or stack.
 - Log IDs/tags/sizes/durations when relevant.
 - Never log key material, secret values, or raw sensitive payload bytes.
-- Avoid `console.log` in runtime source (`src/`), except explicit example/test contexts.
+  `keyId` rendered as hex (`bytesToHex(...)`) is public and safe.
+- Avoid `console.log` in runtime source (`src/`), except explicit example
+  or test contexts.
+
+#### Level rubric
+
+Apply these semantics consistently; mis-leveling makes `level: debug`
+unusable in staging because hot paths drown the operator.
+
+| Level | Meaning                                                         | Examples                                                                                              |
+| ----- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| error | invariant violation / non-recoverable failure (rare)            | noise handshake failed, MAC validation failed, pending-frame buffer overflow, primary recipient drop  |
+| warn  | abnormal but auto-handled (fallback / retry / degraded path)    | socket open failed (will retry), ack mismatch triggering refetch, fanout dropping secondary devices   |
+| info  | lifecycle boundary, once per long-lived event                   | `wa client connected`, `pair-success credentials updated`, `noise session established`, prekey upload |
+| debug | per-operation internals for active troubleshooting              | per-send envelope build, per-retry-request rejection, sync key request response                       |
+| trace | per-frame / per-iteration / hot path; only with explicit filter | per-incoming-stanza ack/receipt, per-frame noise codec calls, filter-dropped stanzas                  |
+
+Concrete rules that fall out of this:
+
+- **Per-message / per-frame / per-send logs must never exceed `trace`.**
+  In a high-volume account, anything at `debug` here will drown the log.
+- **Auto-recovered fallback paths are `debug`, not `warn`.** Warn is for
+  things the operator should actually see at default level.
+- **`info` is for operator-visible lifecycle events**, not for narration of
+  what a method is doing. `'X started'` / `'X finished'` pairs around
+  routine syncs belong at `debug`.
+- **Aggregate per-target failures in batch operations.** A per-device
+  warn in fanout fires N times per group send. Collect into a single warn
+  with `{ droppedCount, totalExpected, sample: jids.slice(0, 3) }` after
+  the loop.
+
+#### Use `child(bindings)` for repeated context
+
+When a function emits 3+ logs that all carry the same field (`jid`, `id`,
+`from`, `requester`, etc.), bind it once with `logger.child({ ... })` and
+drop the field from every per-call context object. Bindings stack;
+per-call context wins on key conflicts.
+
+```ts
+const requesterLogger = this.deps.logger.child({
+    id: request.stanzaId,
+    originalMsgId: request.originalMsgId,
+    requester: requesterJid
+})
+requesterLogger.debug('retry request rejected: retry count exceeded', {
+    remoteRetryCount: request.retryCount
+})
+```
+
+Current adopters worth modeling after:
+`signal/session/resolver.ts` (`{ jid }`),
+`client/coordinators/WaRetryCoordinator.ts` (`{ id, originalMsgId, requester }`),
+`appstate/sync/WaAppStateSyncClient.ts` (`{ id, from }`).
+
+#### Optional packages: receive the logger via per-call `ctx`, never a callback or a mutable slot
+
+Optional packages (`@zapo-js/media-utils`, future store/transport addons)
+that need to emit warnings must NOT accept a logging callback in their
+options, and must NOT keep a mutable logger slot the caller has to wire
+up. Instead, accept the logger via a per-call context arg on each method
+of the contract:
+
+```ts
+export interface WaSomeProcessorCallContext {
+    readonly logger?: Logger
+}
+
+export interface WaSomeProcessor {
+    readonly doSomething?: (input: Input, ctx?: WaSomeProcessorCallContext) => Promise<Result>
+    // ...rest of the contract
+}
+```
+
+The runtime fills `ctx.logger` with the relevant child logger (typically
+`callerLogger.child({ scope: '@zapo-js/<name>' })`) on every call. This
+keeps the package implementation **stateless**, so a single instance is
+safe to share across multiple `WaClient` sessions - each invocation
+lands its warnings in the right session log without any per-session
+plumbing. Canonical example: `WaMediaProcessor` in
+`src/media/processor.ts` + `packages/media-utils/src/index.ts`.
 
 ### 5.8 Sensitive types
 
@@ -534,7 +624,7 @@ Use flow tests for auth/transport/signal/retry changes that need real protocol v
 
 Do not redefine common fixtures inline. Shared helpers live in `@infra/log/types`:
 
-- `createNoopLogger(level?)` – silent `Logger` for tests. Use instead of redefining a local `function createLogger(): Logger { return { level: 'trace', trace: () => undefined, ... } }`.
+- `createNoopLogger(level?)` – silent `Logger` for tests. Use instead of redefining a local `function createLogger(): Logger { return { level: 'trace', trace: () => undefined, child: () => ... } }`. Also re-exported from the public root (`'zapo-js'`) so optional packages can import it the same way.
 
 Add new shared test-only helpers to a sibling `__tests__/_helpers.ts` only when reused across 3+ files.
 
@@ -570,10 +660,12 @@ PR comment script (`scripts/build-bench-comment.cjs`) consumes:
 - `Buffer` usage in runtime modules
 - silent catches without logs/context
 - secret leakage in logs
+- per-message / per-frame / per-send logs above `trace` level (§5.7). In high-volume accounts, a per-send `debug` drowns the log and makes `level: debug` unusable in staging.
 - duplicate protocol parsing/building across modules when a shared helper is appropriate
 - monolithic coordinators doing build + parse + orchestration inline without separation
 - `uint8Equal()` / `===` for MAC/signature comparison instead of `uint8TimingSafeEqual()` (§7.5)
 - allocating a fixed-size buffer (e.g. AES nonce) per call in a hot path instead of using a per-instance scratch (§7.6)
+- accepting a logging callback (`onWarning`, `onLog`, ...) or a mutable `bindLogger(logger)` slot in an optional package's options instead of the per-call `ctx.logger` contract (§5.7). Callbacks lose level/structure; a mutable slot breaks when one processor is shared across multiple `WaClient` sessions (last-write-wins on the slot).
 
 ### Frequent review nits
 
@@ -585,6 +677,11 @@ PR comment script (`scripts/build-bench-comment.cjs`) consumes:
 - applying perf "optimizations" (`.slice()` → loop, `+=` → array+join, batched lookup over linear scan) without a benchmark proving the gain – V8 often beats the rewrite (§7.7)
 - deleting an export flagged by `knip`/`ts-prune` without verifying internal usage (default parameter values, same-file consumers, dynamic-import-only consumers, type-only imports)
 - redefining `function createLogger(): Logger { return { level: 'trace', ... } }` in test files instead of importing `createNoopLogger` from `@infra/log/types` (§9.2.1)
+- using `warn` for an auto-recovered fallback / retry path (§5.7). Warn is for things the operator should see at default level; auto-recovered paths are `debug`.
+- using `info` to narrate routine method internals (`'X start'` / `'X finished'` pairs around a sync). Info is reserved for once-per-lifecycle events.
+- string interpolation in the log message itself (`` `failed to send ${kind}` ``) instead of the context object (`'failed to send'` + `{ kind }`) (§5.7). Breaks log aggregator dedup.
+- emitting per-target `warn` in a loop over devices/jids in batch operations instead of aggregating after the loop with `{ droppedCount, totalExpected, sample: jids.slice(0, 3) }` (§5.7).
+- repeating the same field (`jid`, `id`, `requester`) in every log call inside a function with 3+ logs instead of binding it once via `logger.child({ ... })` (§5.7).
 - citing this guide (`AGENTS.md §N`, `see AGENTS`) in source comments, JSDoc, or commit messages. This guide is the contract for contributors, not runtime documentation. Section numbers and headings rot when the guide is reorganized, leaving stale pointers in source. Comments must stand on their own – explain _why_ the code is the way it is in plain language; if a rule needs the guide to be understood, restate the rule briefly in the comment.
 
 ---

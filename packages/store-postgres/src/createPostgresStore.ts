@@ -1,4 +1,5 @@
 import type { Pool, PoolConfig } from 'pg'
+import type { Logger } from 'zapo-js'
 
 import { WaAppStatePgStore } from './appstate.store'
 import { WaAuthPgStore } from './auth.store'
@@ -64,6 +65,17 @@ export interface WaPgStoreConfig {
      * statement cache stable even when `N` varies widely.
      */
     readonly batchInsertChunkSize?: number
+    /**
+     * Logger for pool lifecycle, slow queries, and migration progress. The
+     * factory binds `{ scope: 'store', provider: 'postgres' }` and each
+     * per-domain store binds its own `{ domain: '<name>' }`.
+     */
+    readonly logger?: Logger
+    /**
+     * Threshold in milliseconds above which a transaction emits a `warn`.
+     * Defaults to `250`.
+     */
+    readonly slowOperationThresholdMs?: number
 }
 
 export interface WaPgStoreResult {
@@ -127,13 +139,25 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsPool = !isPool(config.pool)
+    const baseLogger = config.logger?.child({ scope: 'store', provider: 'postgres' })
+    const slowOperationThresholdMs = config.slowOperationThresholdMs
+
+    if (baseLogger && ownsPool) {
+        pool.on('error', (err) => baseLogger.warn('postgres pool error', { message: err.message }))
+        pool.on('connect', () => baseLogger.debug('postgres client connected to pool'))
+        baseLogger.info('postgres store created', {
+            tablePrefix: tablePrefix || undefined
+        })
+    }
 
     const batchInsertChunkSize = config.batchInsertChunkSize
-    const opts = (sessionId: string): WaPgStorageOptions => ({
+    const opts = (sessionId: string, domain: string): WaPgStorageOptions => ({
         pool,
         sessionId,
         tablePrefix,
-        batchInsertChunkSize
+        batchInsertChunkSize,
+        logger: baseLogger?.child({ domain, sessionId }),
+        slowOperationThresholdMs
     })
 
     const cleanupPollers = new Set<PgCleanupPoller>()
@@ -141,34 +165,40 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
     return {
         pool,
         stores: {
-            auth: (sessionId) => new WaAuthPgStore(opts(sessionId)),
-            preKey: (sessionId) => new WaPreKeyPgStore(opts(sessionId)),
-            session: (sessionId) => new WaSessionPgStore(opts(sessionId)),
-            identity: (sessionId) => new WaIdentityPgStore(opts(sessionId)),
-            signal: (sessionId) => new WaSignalPgStore(opts(sessionId)),
-            senderKey: (sessionId) => new WaSenderKeyPgStore(opts(sessionId)),
-            appState: (sessionId) => new WaAppStatePgStore(opts(sessionId)),
-            messages: (sessionId) => new WaMessagePgStore(opts(sessionId)),
-            threads: (sessionId) => new WaThreadPgStore(opts(sessionId)),
-            contacts: (sessionId) => new WaContactPgStore(opts(sessionId)),
-            privacyToken: (sessionId) => new WaPrivacyTokenPgStore(opts(sessionId))
+            auth: (sessionId) => new WaAuthPgStore(opts(sessionId, 'auth')),
+            preKey: (sessionId) => new WaPreKeyPgStore(opts(sessionId, 'preKey')),
+            session: (sessionId) => new WaSessionPgStore(opts(sessionId, 'session')),
+            identity: (sessionId) => new WaIdentityPgStore(opts(sessionId, 'identity')),
+            signal: (sessionId) => new WaSignalPgStore(opts(sessionId, 'signal')),
+            senderKey: (sessionId) => new WaSenderKeyPgStore(opts(sessionId, 'senderKey')),
+            appState: (sessionId) => new WaAppStatePgStore(opts(sessionId, 'appState')),
+            messages: (sessionId) => new WaMessagePgStore(opts(sessionId, 'messages')),
+            threads: (sessionId) => new WaThreadPgStore(opts(sessionId, 'threads')),
+            contacts: (sessionId) => new WaContactPgStore(opts(sessionId, 'contacts')),
+            privacyToken: (sessionId) => new WaPrivacyTokenPgStore(opts(sessionId, 'privacyToken'))
         },
         caches: {
-            retry: (sessionId) => new WaRetryPgStore(opts(sessionId), retryTtlMs),
+            retry: (sessionId) => new WaRetryPgStore(opts(sessionId, 'retry'), retryTtlMs),
             groupMetadata: (sessionId) =>
-                new WaGroupMetadataPgStore(opts(sessionId), groupMetadataTtlMs),
-            deviceList: (sessionId) => new WaDeviceListPgStore(opts(sessionId), deviceListTtlMs),
+                new WaGroupMetadataPgStore(opts(sessionId, 'groupMetadata'), groupMetadataTtlMs),
+            deviceList: (sessionId) =>
+                new WaDeviceListPgStore(opts(sessionId, 'deviceList'), deviceListTtlMs),
             messageSecret: (sessionId) =>
-                new WaMessageSecretPgStore(opts(sessionId), messageSecretTtlMs)
+                new WaMessageSecretPgStore(opts(sessionId, 'messageSecret'), messageSecretTtlMs)
         },
         startCleanup(sessionId: string): PgCleanupPoller {
-            const o = opts(sessionId)
             const poller = new PgCleanupPoller({
                 intervalMs: config.cleanup?.intervalMs,
-                retry: new WaRetryPgStore(o, retryTtlMs),
-                groupMetadata: new WaGroupMetadataPgStore(o, groupMetadataTtlMs),
-                deviceList: new WaDeviceListPgStore(o, deviceListTtlMs),
-                messageSecret: new WaMessageSecretPgStore(o, messageSecretTtlMs),
+                retry: new WaRetryPgStore(opts(sessionId, 'retry'), retryTtlMs),
+                groupMetadata: new WaGroupMetadataPgStore(
+                    opts(sessionId, 'groupMetadata'),
+                    groupMetadataTtlMs
+                ),
+                deviceList: new WaDeviceListPgStore(opts(sessionId, 'deviceList'), deviceListTtlMs),
+                messageSecret: new WaMessageSecretPgStore(
+                    opts(sessionId, 'messageSecret'),
+                    messageSecretTtlMs
+                ),
                 onError: config.cleanup?.onError
             })
             poller.start()

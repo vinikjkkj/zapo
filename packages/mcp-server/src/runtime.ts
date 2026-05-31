@@ -42,6 +42,43 @@ export interface LogEntry {
  *   - a bounded in-memory ring buffer queryable via the `logs` MCP tool
  *   - an optional append-only file (controlled by MCP_LOG_FILE)
  */
+class BoundLogger implements Logger {
+    public readonly level: LogLevel
+    private readonly parent: Logger
+    private readonly bindings: Readonly<Record<string, unknown>>
+
+    public constructor(parent: Logger, bindings: Readonly<Record<string, unknown>>) {
+        this.parent = parent
+        this.level = parent.level
+        this.bindings = bindings
+    }
+
+    public trace(message: string, context?: Readonly<Record<string, unknown>>): void {
+        this.parent.trace(message, this.merge(context))
+    }
+    public debug(message: string, context?: Readonly<Record<string, unknown>>): void {
+        this.parent.debug(message, this.merge(context))
+    }
+    public info(message: string, context?: Readonly<Record<string, unknown>>): void {
+        this.parent.info(message, this.merge(context))
+    }
+    public warn(message: string, context?: Readonly<Record<string, unknown>>): void {
+        this.parent.warn(message, this.merge(context))
+    }
+    public error(message: string, context?: Readonly<Record<string, unknown>>): void {
+        this.parent.error(message, this.merge(context))
+    }
+    public child(bindings: Readonly<Record<string, unknown>>): Logger {
+        return new BoundLogger(this.parent, { ...this.bindings, ...bindings })
+    }
+
+    private merge(
+        context: Readonly<Record<string, unknown>> | undefined
+    ): Readonly<Record<string, unknown>> {
+        return context ? { ...this.bindings, ...context } : this.bindings
+    }
+}
+
 class BufferedTeeLogger implements Logger {
     public readonly level: LogLevel
     private readonly minPriority: number
@@ -89,6 +126,9 @@ class BufferedTeeLogger implements Logger {
     }
     public error(message: string, context?: Record<string, unknown>): void {
         this.write('error', message, context)
+    }
+    public child(bindings: Readonly<Record<string, unknown>>): Logger {
+        return new BoundLogger(this, { ...bindings })
     }
 
     public listLogs(
@@ -630,9 +670,7 @@ export class McpRuntime {
                 nodeQueryTimeoutMs: 30_000,
                 chatSocketUrls: this.config.chatSocketUrls,
                 media: {
-                    processor: createMediaProcessor({
-                        onWarning: (message) => sessionLogger.warn(message)
-                    })
+                    processor: createMediaProcessor()
                 },
                 testHooks: this.config.noiseRootCa
                     ? { noiseRootCa: this.config.noiseRootCa }
@@ -650,22 +688,12 @@ export class McpRuntime {
     }
 
     /**
-     * Wrap the shared logger so every line a session's `WaClient` emits is
-     * tagged with `context.session`. Lets the `logs` tool scope by session
-     * while keeping a single ring buffer (and a single optional log file).
+     * Returns a logger that tags every line with `context.session`. Lets
+     * the `logs` tool scope by session while keeping a single ring buffer
+     * (and a single optional log file).
      */
     private createSessionLogger(sessionId: string): Logger {
-        const base = this.logger
-        const tag = (context?: Record<string, unknown>): Record<string, unknown> =>
-            context ? { ...context, session: sessionId } : { session: sessionId }
-        return {
-            level: base.level,
-            trace: (message, context) => base.trace(message, tag(context)),
-            debug: (message, context) => base.debug(message, tag(context)),
-            info: (message, context) => base.info(message, tag(context)),
-            warn: (message, context) => base.warn(message, tag(context)),
-            error: (message, context) => base.error(message, tag(context))
-        }
+        return this.logger.child({ session: sessionId })
     }
 
     public getClient(session?: string): WaClient | null {

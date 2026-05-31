@@ -7,6 +7,7 @@ type PinoLikeLogger = {
     info: (...args: unknown[]) => void
     warn: (...args: unknown[]) => void
     error: (...args: unknown[]) => void
+    child?: (bindings: Readonly<Record<string, unknown>>) => PinoLikeLogger
 }
 
 type PinoFactory = (options?: Readonly<Record<string, unknown>>) => PinoLikeLogger
@@ -112,6 +113,18 @@ export class PinoLogger implements Logger {
         this.write('error', message, context)
     }
 
+    /**
+     * Returns a derived logger that pre-binds `bindings` into every log
+     * call's context. Delegates to the underlying pino `child()` when
+     * available; otherwise wraps with a parent + bindings merge.
+     */
+    public child(bindings: Readonly<Record<string, unknown>>): Logger {
+        if (typeof this.logger.child === 'function') {
+            return new PinoLogger(this.logger.child(bindings), this.level)
+        }
+        return new BoundLogger(this, bindings)
+    }
+
     private write(
         level: LogLevel,
         message: string,
@@ -128,6 +141,53 @@ export class PinoLogger implements Logger {
             }
         }
         this.logger[level](message)
+    }
+}
+
+/**
+ * Fallback {@link Logger} that pre-binds context fields by merging them
+ * into every call before delegating to a parent logger. Used when the
+ * underlying logger does not support `child()` natively.
+ */
+class BoundLogger implements Logger {
+    public readonly level: LogLevel
+    private readonly parent: Logger
+    private readonly bindings: Readonly<Record<string, unknown>>
+
+    public constructor(parent: Logger, bindings: Readonly<Record<string, unknown>>) {
+        this.parent = parent
+        this.level = parent.level
+        this.bindings = bindings
+    }
+
+    public trace(message: string, context?: Readonly<Record<string, unknown>>): void {
+        this.parent.trace(message, this.merge(context))
+    }
+
+    public debug(message: string, context?: Readonly<Record<string, unknown>>): void {
+        this.parent.debug(message, this.merge(context))
+    }
+
+    public info(message: string, context?: Readonly<Record<string, unknown>>): void {
+        this.parent.info(message, this.merge(context))
+    }
+
+    public warn(message: string, context?: Readonly<Record<string, unknown>>): void {
+        this.parent.warn(message, this.merge(context))
+    }
+
+    public error(message: string, context?: Readonly<Record<string, unknown>>): void {
+        this.parent.error(message, this.merge(context))
+    }
+
+    public child(bindings: Readonly<Record<string, unknown>>): Logger {
+        return new BoundLogger(this.parent, { ...this.bindings, ...bindings })
+    }
+
+    private merge(
+        context: Readonly<Record<string, unknown>> | undefined
+    ): Readonly<Record<string, unknown>> {
+        return context ? { ...this.bindings, ...context } : this.bindings
     }
 }
 

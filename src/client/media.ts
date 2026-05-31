@@ -467,6 +467,21 @@ async function runProcessorStep<T>(
     }
 }
 
+// Reuse one scoped child logger per parent. The processor is allowed to be
+// shared across WaClient sessions; without this cache, each call would mint
+// a fresh child logger and any package-side dedup keyed by Logger identity
+// (e.g. ffmpeg's missing-binary warn) would reset on every send.
+const SCOPED_MEDIA_LOGGER_CACHE = new WeakMap<Logger, Logger>()
+
+export function getScopedMediaLogger(parent: Logger): Logger {
+    let scoped = SCOPED_MEDIA_LOGGER_CACHE.get(parent)
+    if (!scoped) {
+        scoped = parent.child({ scope: 'media-utils' })
+        SCOPED_MEDIA_LOGGER_CACHE.set(parent, scoped)
+    }
+    return scoped
+}
+
 export async function runMediaProcessor(
     media: WaMediaOptions | undefined,
     input: Uint8Array | string | undefined,
@@ -477,17 +492,18 @@ export async function runMediaProcessor(
     if (!processor || !hasMediaProcessingTasks(media, content) || !input) return EMPTY_PROCESSED
 
     const result: MutableProcessedMediaFields = {}
+    const ctx = { logger: getScopedMediaLogger(logger) }
 
     const isVideo = content.type === 'video' || content.type === 'ptv'
     const thumbFn = isVideo ? processor.generateVideoThumbnail : processor.generateImageThumbnail
     const thumbMaxEdge = isVideo ? VIDEO_THUMB_MAX_EDGE : IMAGE_THUMB_MAX_EDGE
 
     const thumbTask = shouldGenerateThumbnail(media, content)
-        ? runProcessorStep('thumbnail', content, logger, () => thumbFn!(input, thumbMaxEdge))
+        ? runProcessorStep('thumbnail', content, logger, () => thumbFn!(input, thumbMaxEdge, ctx))
         : null
 
     const probeTask = shouldProbeMedia(media, content)
-        ? runProcessorStep('probe', content, logger, () => processor.probeMedia!(input))
+        ? runProcessorStep('probe', content, logger, () => processor.probeMedia!(input, ctx))
         : null
 
     const [thumb, probe] = await Promise.all([thumbTask, probeTask])
@@ -517,7 +533,7 @@ export async function runMediaProcessor(
 
     if (shouldGenerateWaveform(media, content)) {
         const waveformResult = await runProcessorStep('waveform', content, logger, () =>
-            processor.computeWaveform!(input)
+            processor.computeWaveform!(input, ctx)
         )
         if (waveformResult) {
             result.waveform = waveformResult.waveform
@@ -533,7 +549,7 @@ export async function runMediaProcessor(
     if (content.type === 'sticker') {
         if (shouldGenerateStickerThumbnail(media, content)) {
             const stickerThumb = await runProcessorStep('stickerThumbnail', content, logger, () =>
-                processor.generateStickerThumbnail!(input, STICKER_THUMB_MAX_EDGE)
+                processor.generateStickerThumbnail!(input, STICKER_THUMB_MAX_EDGE, ctx)
             )
             if (stickerThumb) {
                 result.pngThumbnail = stickerThumb.pngThumbnail

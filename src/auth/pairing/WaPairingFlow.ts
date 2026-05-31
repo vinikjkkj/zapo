@@ -145,7 +145,7 @@ export class WaPairingFlow {
             finished: false
         }
         this.opts.callbacks.emitPairingCode(companionHello.pairingCode)
-        this.opts.logger.info('pairing code emitted', {
+        this.opts.logger.debug('pairing code emitted', {
             phoneJid,
             createdAtSeconds: this.pairingSession.createdAtSeconds
         })
@@ -168,21 +168,19 @@ export class WaPairingFlow {
     }
 
     public async handleIncomingIqSet(node: BinaryNode): Promise<boolean> {
-        this.opts.logger.trace('pairing flow received iq:set', {
-            id: node.attrs.id,
-            from: node.attrs.from
-        })
+        const iqLogger = this.opts.logger.child({ id: node.attrs.id })
+        iqLogger.trace('pairing flow received iq:set', { from: node.attrs.from })
         const firstChild = getFirstNodeChild(node)
         if (!firstChild) {
             return false
         }
         if (firstChild.tag === WA_NODE_TAGS.PAIR_DEVICE) {
-            this.opts.logger.debug('handling pair-device stanza', { id: node.attrs.id })
+            iqLogger.debug('handling pair-device stanza')
             await this.handlePairDevice(node, firstChild)
             return true
         }
         if (firstChild.tag === WA_NODE_TAGS.PAIR_SUCCESS) {
-            this.opts.logger.debug('handling pair-success stanza', { id: node.attrs.id })
+            iqLogger.debug('handling pair-success stanza')
             await this.handlePairSuccess(node, firstChild)
             return true
         }
@@ -216,7 +214,7 @@ export class WaPairingFlow {
                 'refresh_code.link_code_pairing_ref'
             )
             if (uint8Equal(ref, this.pairingSession.ref)) {
-                this.opts.logger.info('received pairing refresh notification', {
+                this.opts.logger.debug('received pairing refresh notification', {
                     forceManualRefresh: linkCodeNode.attrs.force_manual_refresh === 'true'
                 })
                 this.opts.callbacks.emitPairingRefresh(
@@ -250,7 +248,7 @@ export class WaPairingFlow {
                 typeOverride: WA_SIGNALING.COMPANION_REG_REFRESH_NOTIFICATION
             })
         )
-        this.opts.logger.info('handled companion_reg_refresh notification')
+        this.opts.logger.debug('handled companion_reg_refresh notification')
         this.opts.qrFlow.refreshCurrentQr()
         return true
     }
@@ -265,14 +263,14 @@ export class WaPairingFlow {
         await this.rotateAdvSecret(this.requireCredentials())
         await this.opts.socket.sendNode(buildIqResultNode(iqNode))
         this.opts.qrFlow.setRefs(refs)
-        this.opts.logger.info('pair-device refs updated', { refsCount: refs.length })
+        this.opts.logger.debug('pair-device refs updated', { refsCount: refs.length })
     }
 
     private async handlePairSuccess(
         iqNode: BinaryNode,
         pairSuccessNode: BinaryNode
     ): Promise<void> {
-        this.opts.logger.info('processing pair-success node')
+        this.opts.logger.debug('processing pair-success node')
         const credentials = this.requireCredentials()
         const [deviceIdentityNode, deviceNode, platformNode] = findNodeChildrenByTags(
             pairSuccessNode,
@@ -305,7 +303,12 @@ export class WaPairingFlow {
                 : wrappedDetails
             const expectedHmac = computeAdvIdentityHmac(credentials.advSecretKey, hmacInput)
             if (!uint8TimingSafeEqual(expectedHmac, wrappedHmac)) {
-                this.opts.logger.error('pair-success hmac mismatch')
+                this.opts.logger.error('pair-success hmac mismatch', {
+                    meJid: deviceNode.attrs.jid,
+                    meLid: deviceNode.attrs.lid,
+                    platform: platformNode.attrs.name,
+                    isHosted
+                })
                 throw new Error('pair-success HMAC validation failed')
             }
         }
@@ -383,7 +386,10 @@ export class WaPairingFlow {
                 isDeviceHosted
             )
             if (!validAccountSignature) {
-                this.opts.logger.error('pair-success account signature invalid')
+                this.opts.logger.error('pair-success account signature invalid', {
+                    keyIndex: advDeviceIdentity.keyIndex ?? 0,
+                    isDeviceHosted
+                })
                 throw new Error('pair-success account signature validation failed')
             }
         }
@@ -439,7 +445,9 @@ export class WaPairingFlow {
             'primary_hello.link_code_pairing_ref'
         )
         if (!pairingSession.ref || !uint8Equal(ref, pairingSession.ref)) {
-            this.opts.logger.warn('primary_hello ref mismatch ignored')
+            this.opts.logger.warn('primary_hello ref mismatch ignored', {
+                phoneJid: pairingSession.phoneJid
+            })
             return
         }
 
@@ -482,7 +490,7 @@ export class WaPairingFlow {
             advSecretKey: finish.advSecret
         })
         pairingSession.finished = true
-        this.opts.logger.info('primary_hello completed with companion_finish success')
+        this.opts.logger.debug('primary_hello completed with companion_finish success')
     }
 
     private async rotateAdvSecret(credentials: WaAuthCredentials): Promise<WaAuthCredentials> {

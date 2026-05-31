@@ -1,4 +1,5 @@
 import { type Db, MongoClient, type MongoClientOptions } from 'mongodb'
+import type { Logger } from 'zapo-js'
 
 import { WaAppStateMongoStore } from './appstate.store'
 import { WaAuthMongoStore } from './auth.store'
@@ -48,6 +49,17 @@ export interface WaMongoStoreConfig {
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
+    /**
+     * Logger for connection lifecycle, slow operations, and degraded
+     * paths. The factory binds `{ scope: 'store', provider: 'mongo' }`
+     * and each per-domain store binds its own `{ domain: '<name>' }`.
+     */
+    readonly logger?: Logger
+    /**
+     * Threshold in milliseconds above which a Mongo operation emits a
+     * `warn`. Defaults to `250`.
+     */
+    readonly slowOperationThresholdMs?: number
 }
 
 export interface WaMongoStoreResult {
@@ -115,35 +127,61 @@ export function createMongoStore(config: WaMongoStoreConfig): WaMongoStoreResult
     const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
+    const baseLogger = config.logger?.child({ scope: 'store', provider: 'mongo' })
+    const slowOperationThresholdMs = config.slowOperationThresholdMs
 
-    const opts = (sessionId: string): WaMongoStorageOptions => ({
+    if (baseLogger && client) {
+        client.on('serverHeartbeatFailed', (event) =>
+            baseLogger.warn('mongo heartbeat failed', {
+                connectionId: event.connectionId,
+                message: event.failure?.message
+            })
+        )
+        client.on('connectionPoolCleared', () => baseLogger.warn('mongo connection pool cleared'))
+        client.on('topologyDescriptionChanged', (event) =>
+            baseLogger.debug('mongo topology changed', {
+                previousType: event.previousDescription.type,
+                newType: event.newDescription.type
+            })
+        )
+        baseLogger.info('mongo store created', {
+            database: db.databaseName,
+            collectionPrefix: collectionPrefix || undefined
+        })
+    }
+
+    const opts = (sessionId: string, domain: string): WaMongoStorageOptions => ({
         db,
         sessionId,
-        collectionPrefix
+        collectionPrefix,
+        logger: baseLogger?.child({ domain, sessionId }),
+        slowOperationThresholdMs
     })
 
     return {
         db,
         stores: {
-            auth: (sessionId) => new WaAuthMongoStore(opts(sessionId)),
-            preKey: (sessionId) => new WaPreKeyMongoStore(opts(sessionId)),
-            session: (sessionId) => new WaSessionMongoStore(opts(sessionId)),
-            identity: (sessionId) => new WaIdentityMongoStore(opts(sessionId)),
-            signal: (sessionId) => new WaSignalMongoStore(opts(sessionId)),
-            senderKey: (sessionId) => new WaSenderKeyMongoStore(opts(sessionId)),
-            appState: (sessionId) => new WaAppStateMongoStore(opts(sessionId)),
-            messages: (sessionId) => new WaMessageMongoStore(opts(sessionId)),
-            threads: (sessionId) => new WaThreadMongoStore(opts(sessionId)),
-            contacts: (sessionId) => new WaContactMongoStore(opts(sessionId)),
-            privacyToken: (sessionId) => new WaPrivacyTokenMongoStore(opts(sessionId))
+            auth: (sessionId) => new WaAuthMongoStore(opts(sessionId, 'auth')),
+            preKey: (sessionId) => new WaPreKeyMongoStore(opts(sessionId, 'preKey')),
+            session: (sessionId) => new WaSessionMongoStore(opts(sessionId, 'session')),
+            identity: (sessionId) => new WaIdentityMongoStore(opts(sessionId, 'identity')),
+            signal: (sessionId) => new WaSignalMongoStore(opts(sessionId, 'signal')),
+            senderKey: (sessionId) => new WaSenderKeyMongoStore(opts(sessionId, 'senderKey')),
+            appState: (sessionId) => new WaAppStateMongoStore(opts(sessionId, 'appState')),
+            messages: (sessionId) => new WaMessageMongoStore(opts(sessionId, 'messages')),
+            threads: (sessionId) => new WaThreadMongoStore(opts(sessionId, 'threads')),
+            contacts: (sessionId) => new WaContactMongoStore(opts(sessionId, 'contacts')),
+            privacyToken: (sessionId) =>
+                new WaPrivacyTokenMongoStore(opts(sessionId, 'privacyToken'))
         },
         caches: {
-            retry: (sessionId) => new WaRetryMongoStore(opts(sessionId), retryTtlMs),
+            retry: (sessionId) => new WaRetryMongoStore(opts(sessionId, 'retry'), retryTtlMs),
             groupMetadata: (sessionId) =>
-                new WaGroupMetadataMongoStore(opts(sessionId), groupMetadataTtlMs),
-            deviceList: (sessionId) => new WaDeviceListMongoStore(opts(sessionId), deviceListTtlMs),
+                new WaGroupMetadataMongoStore(opts(sessionId, 'groupMetadata'), groupMetadataTtlMs),
+            deviceList: (sessionId) =>
+                new WaDeviceListMongoStore(opts(sessionId, 'deviceList'), deviceListTtlMs),
             messageSecret: (sessionId) =>
-                new WaMessageSecretMongoStore(opts(sessionId), messageSecretTtlMs)
+                new WaMessageSecretMongoStore(opts(sessionId, 'messageSecret'), messageSecretTtlMs)
         },
         async destroy(): Promise<void> {
             if (client) {

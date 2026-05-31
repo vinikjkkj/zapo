@@ -1,3 +1,4 @@
+import type { Logger } from '@infra/log/types'
 import type { WaRetryOutboundMessageRecord, WaRetryOutboundState } from '@retry/types'
 import type { WaRetryStore } from '@store/contracts/retry.store'
 import { resolvePositive } from '@util/coercion'
@@ -21,6 +22,13 @@ const DEFAULTS = Object.freeze({
 export interface WaRetryMemoryStoreOptions {
     readonly maxOutboundMessages?: number
     readonly maxInboundCounters?: number
+    /**
+     * Logger for capacity-saturation warnings. Emits a single `warn` the
+     * first time either bounded map evicts an entry (signals you've hit
+     * `maxOutboundMessages` / `maxInboundCounters`). Subsequent evictions
+     * are silent to avoid spam.
+     */
+    readonly logger?: Logger
 }
 
 export class WaRetryMemoryStore implements WaRetryStore {
@@ -31,6 +39,9 @@ export class WaRetryMemoryStore implements WaRetryStore {
     private readonly maxOutboundMessages: number
     private readonly maxInboundCounters: number
     private readonly cleanup: PeriodicCleanupHandle
+    private readonly logger: Logger | undefined
+    private outboundCapacityWarned: boolean
+    private inboundCapacityWarned: boolean
 
     public constructor(ttlMs = DEFAULTS.ttlMs, options: WaRetryMemoryStoreOptions = {}) {
         if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -50,8 +61,27 @@ export class WaRetryMemoryStore implements WaRetryStore {
             DEFAULTS.maxInboundCounters,
             'WaRetryMemoryStoreOptions.maxInboundCounters'
         )
+        this.logger = options.logger
+        this.outboundCapacityWarned = false
+        this.inboundCapacityWarned = false
         this.cleanup = createPeriodicCleanup(this.ttlMs, () => {
             void this.cleanupExpired(Date.now())
+        })
+    }
+
+    private warnOutboundCapacity(): void {
+        if (this.outboundCapacityWarned || !this.logger) return
+        this.outboundCapacityWarned = true
+        this.logger.warn('retry outbound store at capacity, evicting oldest', {
+            max: this.maxOutboundMessages
+        })
+    }
+
+    private warnInboundCapacity(): void {
+        if (this.inboundCapacityWarned || !this.logger) return
+        this.inboundCapacityWarned = true
+        this.logger.warn('retry inbound counters at capacity, evicting oldest', {
+            max: this.maxInboundCounters
         })
     }
 
@@ -122,6 +152,7 @@ export class WaRetryMemoryStore implements WaRetryStore {
             this.maxOutboundMessages,
             (messageId) => {
                 this.eligibleSets.delete(messageId)
+                this.warnOutboundCapacity()
             }
         )
         if (record.eligibleRequesterDeviceJids && record.eligibleRequesterDeviceJids.length > 0) {
@@ -165,6 +196,7 @@ export class WaRetryMemoryStore implements WaRetryStore {
             this.maxOutboundMessages,
             (evictedMessageId) => {
                 this.eligibleSets.delete(evictedMessageId)
+                this.warnOutboundCapacity()
             }
         )
     }
@@ -193,6 +225,7 @@ export class WaRetryMemoryStore implements WaRetryStore {
             this.maxOutboundMessages,
             (evictedMessageId) => {
                 this.eligibleSets.delete(evictedMessageId)
+                this.warnOutboundCapacity()
             }
         )
     }
@@ -210,7 +243,8 @@ export class WaRetryMemoryStore implements WaRetryStore {
             this.inboundCounters,
             key,
             { count, expiresAtMs },
-            this.maxInboundCounters
+            this.maxInboundCounters,
+            () => this.warnInboundCapacity()
         )
         return count
     }

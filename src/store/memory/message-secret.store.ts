@@ -1,3 +1,4 @@
+import type { Logger } from '@infra/log/types'
 import type {
     WaMessageSecretEntry,
     WaMessageSecretStore
@@ -22,6 +23,12 @@ const DEFAULTS = Object.freeze({
 
 export interface WaMessageSecretMemoryStoreOptions {
     readonly maxSecrets?: number
+    /**
+     * Logger for capacity-saturation warnings. Emits a single `warn` the
+     * first time the bounded map evicts an entry; subsequent evictions are
+     * silent to avoid spam.
+     */
+    readonly logger?: Logger
 }
 
 export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
@@ -29,6 +36,8 @@ export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
     private readonly ttlMs: number
     private readonly maxSecrets: number
     private readonly cleanup: PeriodicCleanupHandle
+    private readonly logger: Logger | undefined
+    private capacityWarned: boolean
 
     public constructor(ttlMs = DEFAULTS.ttlMs, options: WaMessageSecretMemoryStoreOptions = {}) {
         if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -41,8 +50,18 @@ export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
             DEFAULTS.maxSecrets,
             'WaMessageSecretMemoryStoreOptions.maxSecrets'
         )
+        this.logger = options.logger
+        this.capacityWarned = false
         this.cleanup = createPeriodicCleanup(ttlMs, () => {
             void this.cleanupExpired(Date.now())
+        })
+    }
+
+    private warnCapacity(): void {
+        if (this.capacityWarned || !this.logger) return
+        this.capacityWarned = true
+        this.logger.warn('message secret store at capacity, evicting oldest', {
+            max: this.maxSecrets
         })
     }
 
@@ -86,7 +105,8 @@ export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
                 senderJid: entry.senderJid,
                 expiresAtMs: Date.now() + this.ttlMs
             },
-            this.maxSecrets
+            this.maxSecrets,
+            () => this.warnCapacity()
         )
     }
 
@@ -103,7 +123,8 @@ export class WaMessageSecretMemoryStore implements WaMessageSecretStore {
                     senderJid: entries[i].entry.senderJid,
                     expiresAtMs: nowMs + this.ttlMs
                 },
-                this.maxSecrets
+                this.maxSecrets,
+                () => this.warnCapacity()
             )
         }
     }
