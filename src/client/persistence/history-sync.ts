@@ -6,6 +6,7 @@ import type { WaClientEventMap, WaHistorySyncChunkEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { proto, type Proto } from '@proto'
+import { isGroupJid } from '@protocol/jid'
 import { decodeProtoBytes, toBytesView } from '@util/bytes'
 import { longToNumber, toError } from '@util/primitives'
 
@@ -91,19 +92,26 @@ export async function processHistorySyncNotification(
         chunkOrder: historySync.chunkOrder,
         progress: historySync.progress,
         conversations: historySync.conversations.length,
-        pushnames: historySync.pushnames.length
+        pushnames: historySync.pushnames.length,
+        inlineContacts: historySync.inlineContacts?.length ?? 0
     })
 
     const nowMs = Date.now()
     const pendingWrites: Promise<void>[] = []
 
-    // Build PN -> LID lookup from this chunk's mappings so pushnames and
-    // mappings land on a single canonical (LID-form) contact row instead of
-    // two mirror rows (one keyed by PN, one keyed by LID).
+    // Build PN -> LID lookup from this chunk's mappings (and inline contacts,
+    // which carry the same pair) so pushnames and mappings land on a single
+    // canonical (LID-form) contact row instead of two mirror rows (one keyed
+    // by PN, one keyed by LID).
     const pnToLid = new Map<string, string>()
     for (const map of historySync.phoneNumberToLidMappings ?? []) {
         if (map.pnJid && map.lidJid) {
             pnToLid.set(map.pnJid, map.lidJid)
+        }
+    }
+    for (const c of historySync.inlineContacts ?? []) {
+        if (c.pnJid && c.lidJid) {
+            pnToLid.set(c.pnJid, c.lidJid)
         }
     }
 
@@ -131,6 +139,26 @@ export async function processHistorySyncNotification(
         }
     }
 
+    for (const c of historySync.inlineContacts ?? []) {
+        const jid = c.lidJid ?? c.pnJid
+        if (!jid) {
+            continue
+        }
+        const displayName = c.fullName || c.firstName || undefined
+        if (!displayName && !c.pnJid) {
+            continue
+        }
+        pendingWrites[pendingWrites.length] = deps.writeBehind.persistContactAsync({
+            jid,
+            displayName,
+            phoneNumber: c.pnJid ?? undefined,
+            lastUpdatedMs: nowMs
+        })
+        if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
+            await flushPendingWrites(pendingWrites)
+        }
+    }
+
     let messagesCount = 0
     for (const conversation of historySync.conversations) {
         const threadJid = conversation.id
@@ -151,6 +179,27 @@ export async function processHistorySyncNotification(
         })
         if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
             await flushPendingWrites(pendingWrites)
+        }
+
+        if (!isGroupJid(threadJid)) {
+            const contactDisplay = conversation.displayName || conversation.username || undefined
+            const contactPn = conversation.pnJid ?? undefined
+            const contactLid = conversation.lidJid ?? conversation.accountLid ?? undefined
+            if (contactDisplay || contactPn || contactLid) {
+                const contactJid = contactLid ?? threadJid
+                pendingWrites[pendingWrites.length] = deps.writeBehind.persistContactAsync({
+                    jid: contactJid,
+                    displayName: contactDisplay,
+                    phoneNumber: contactPn,
+                    lastUpdatedMs: nowMs
+                })
+                if (contactPn && contactLid) {
+                    pnToLid.set(contactPn, contactLid)
+                }
+                if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
+                    await flushPendingWrites(pendingWrites)
+                }
+            }
         }
         for (const histMsg of conversation.messages ?? []) {
             const webMsg = histMsg.message
@@ -227,6 +276,7 @@ export async function processHistorySyncNotification(
         messagesCount,
         conversationsCount: historySync.conversations.length,
         pushnamesCount: historySync.pushnames.length,
+        inlineContactsCount: historySync.inlineContacts?.length ?? 0,
         chunkOrder: historySync.chunkOrder ?? undefined,
         progress: historySync.progress ?? undefined
     }

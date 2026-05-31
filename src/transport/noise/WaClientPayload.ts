@@ -138,7 +138,8 @@ function defaultDeviceProps(
             supportHostedGroupMsg: true,
             supportBizHostedMsg: true,
             supportFbidBotChatHistory: true,
-            supportMessageAssociation: true
+            supportMessageAssociation: true,
+            supportInlineContacts: true
         }
     }).finish()
 }

@@ -173,7 +173,8 @@ export class WaClient extends EventEmitter {
                     return () => {
                         this.off('message_protocol', handler)
                     }
-                }
+                },
+                persistContact: (record) => this.writeBehind.persistContact(record)
             }
         })
         this.deps = dependencies
@@ -469,6 +470,8 @@ export class WaClient extends EventEmitter {
             this.logger.trace('wa client connect already in-flight')
             return this.connectPromise
         }
+
+        this.writeBehind.restart()
 
         this.acceptingIncomingEvents = true
         this.connectPromise = this.deps.connectionManager
