@@ -52,12 +52,15 @@ function mergeContact(
 
 export class WriteBehindPersistence {
     private readonly logger: Logger
-    private readonly queues: {
+    private readonly stores: WriteBehindStores
+    private readonly options: WaWriteBehindOptions
+    private queues: {
         readonly messages: BackgroundQueue<string, WaStoredMessageRecord>
         readonly threads: BackgroundQueue<string, WaStoredThreadRecord>
         readonly contacts: BackgroundQueue<string, WaStoredContactRecord>
     }
     private readonly flushTimeoutMs: number
+    private destroyed: boolean
 
     public constructor(
         stores: WriteBehindStores,
@@ -65,7 +68,16 @@ export class WriteBehindPersistence {
         options: WaWriteBehindOptions = {}
     ) {
         this.logger = logger
+        this.stores = stores
+        this.options = options
         this.flushTimeoutMs = options.flushTimeoutMs ?? 5_000
+        this.queues = this.buildQueues()
+        this.destroyed = false
+    }
+
+    private buildQueues(): typeof this.queues {
+        const stores = this.stores
+        const options = this.options
         const queueOptions = (domain: string) => ({
             maxPendingKeys: options.maxPendingKeys ?? 4_096,
             maxWriteConcurrency: options.maxWriteConcurrency ?? 4,
@@ -91,7 +103,7 @@ export class WriteBehindPersistence {
                 })
             }
         })
-        this.queues = {
+        return {
             messages: new BackgroundQueue((_key, value) => stores.messageStore.upsert(value), {
                 ...queueOptions('messages'),
                 batchWriter: (entries) =>
@@ -110,6 +122,20 @@ export class WriteBehindPersistence {
                     stores.contactStore.upsertBatch(entries.map((e) => e.value))
             })
         }
+    }
+
+    /**
+     * Re-arm the queues after a previous {@link destroy} call. Idempotent —
+     * a no-op when the persistence is already live. Used by `WaClient.connect`
+     * to recover from a logout/clear-stored-state cycle without leaking the
+     * old destroyed queues into the next session.
+     */
+    public restart(): void {
+        if (!this.destroyed) {
+            return
+        }
+        this.queues = this.buildQueues()
+        this.destroyed = false
     }
 
     public persistMessage(record: WaStoredMessageRecord): void {
@@ -159,6 +185,7 @@ export class WriteBehindPersistence {
             this.queues.threads.destroy(timeoutMs),
             this.queues.contacts.destroy(timeoutMs)
         ])
+        this.destroyed = true
         const result = this.toDrainResult(messages, threads, contacts)
         if (result.remaining > 0) {
             this.logger.warn('write-behind destroy finished with pending writes', {

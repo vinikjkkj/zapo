@@ -167,3 +167,61 @@ test('write-behind flush and destroy expose remaining pending entries', async ()
     const finalFlush = await writeBehind.flush(2_000)
     assert.equal(finalFlush.remaining, 0)
 })
+
+test('write-behind restart re-arms queues after destroy so new sessions enqueue', async () => {
+    const writes: WaStoredContactRecord[] = []
+    const writeBehind = new WriteBehindPersistence(
+        {
+            messageStore: {
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
+            } as never,
+            threadStore: {
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
+            } as never,
+            contactStore: {
+                upsert: async (record: WaStoredContactRecord) => {
+                    writes.push(record)
+                },
+                upsertBatch: async (records: readonly WaStoredContactRecord[]) => {
+                    for (const r of records) writes.push(r)
+                }
+            } as never
+        },
+        createNoopLogger()
+    )
+
+    await writeBehind.destroy(10)
+    // Without restart, the next enqueue would throw "background queue is destroyed".
+    writeBehind.restart()
+    writeBehind.persistContact({ jid: 'after-restart@s.whatsapp.net', lastUpdatedMs: 1 })
+    await writeBehind.flush(2_000)
+
+    assert.equal(writes.length, 1)
+    assert.equal(writes[0].jid, 'after-restart@s.whatsapp.net')
+})
+
+test('write-behind restart is a no-op when queues are live', () => {
+    const writeBehind = new WriteBehindPersistence(
+        {
+            messageStore: {
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
+            } as never,
+            threadStore: {
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
+            } as never,
+            contactStore: {
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
+            } as never
+        },
+        createNoopLogger()
+    )
+
+    // Calling restart twice on a live instance must not throw or rebuild queues.
+    writeBehind.restart()
+    writeBehind.restart()
+})

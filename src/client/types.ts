@@ -1137,6 +1137,7 @@ export interface WaHistorySyncChunkEvent {
     readonly messagesCount: number
     readonly conversationsCount: number
     readonly pushnamesCount: number
+    readonly inlineContactsCount: number
     readonly chunkOrder?: number
     /** Server-reported progress, 0–100. */
     readonly progress?: number

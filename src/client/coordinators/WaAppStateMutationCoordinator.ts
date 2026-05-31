@@ -1,6 +1,7 @@
 import type { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'
 import type {
     AppStateCollectionName,
+    WaAppStateMutation,
     WaAppStateMutationInput,
     WaAppStateSyncOptions,
     WaAppStateSyncResult
@@ -31,10 +32,13 @@ import { WA_APP_STATE_COLLECTION_STATES } from '@protocol/constants'
 import {
     isGroupJid,
     isGroupOrBroadcastJid,
+    isLidJid,
+    isUserJid,
     normalizeDeviceJid,
     normalizeRecipientJid,
     toUserJid
 } from '@protocol/jid'
+import type { WaStoredContactRecord } from '@store/contracts/contact.store'
 import type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
 import type { ServerClock } from '@util/clock'
 import { resolvePositive } from '@util/coercion'
@@ -282,6 +286,13 @@ interface WaAppStateMutationCoordinatorOptions {
     readonly emitMutation?: (event: WaAppStateMutationEvent) => void
     readonly emitSnapshotMutations?: boolean
     readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
+    /**
+     * Persistence sink for `Contact` collection mutations (the locally-saved
+     * address-book name the primary device synced over app-state). Invoked on
+     * every winning mutation including snapshot ones, so the contact store is
+     * bootstrapped at pair-time regardless of `emitSnapshotMutations`.
+     */
+    readonly contactSink?: (record: WaStoredContactRecord) => void
 }
 
 export interface WaSetStatusPrivacyInput {
@@ -319,6 +330,7 @@ export class WaAppStateMutationCoordinator {
     private readonly emitMutation?: (event: WaAppStateMutationEvent) => void
     private readonly emitSnapshotMutations: boolean
     private readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
+    private readonly contactSink?: (record: WaStoredContactRecord) => void
     private readonly pendingMutations: Map<string, WaAppStateMutationInput>
     private flushPromise: Promise<void> | null
 
@@ -337,6 +349,7 @@ export class WaAppStateMutationCoordinator {
         this.emitMutation = options.emitMutation
         this.emitSnapshotMutations = options.emitSnapshotMutations === true
         this.nctSaltSink = options.nctSaltSink
+        this.contactSink = options.contactSink
         this.pendingMutations = new Map()
         this.flushPromise = null
     }
@@ -388,6 +401,34 @@ export class WaAppStateMutationCoordinator {
     public emitEventsFromSyncResult(syncResult: WaAppStateSyncResult): void {
         for (const collectionResult of syncResult.collections) {
             const mutations = collectionResult.mutations ?? []
+
+            // Persistence sinks (contact store, ...): run on the last-wins
+            // mutation per key INCLUDING snapshot sources, so pair-time
+            // bootstrap of the address book always lands in the store even
+            // when public events are suppressed for snapshot mutations.
+            if (this.contactSink) {
+                const sinkLastIndex = new Map<string, number>()
+                for (let i = 0; i < mutations.length; i += 1) {
+                    const m = mutations[i]
+                    sinkLastIndex.set(`${m.collection}\u0001${m.index}`, i)
+                }
+                for (let i = 0; i < mutations.length; i += 1) {
+                    const m = mutations[i]
+                    if (sinkLastIndex.get(`${m.collection}\u0001${m.index}`) !== i) {
+                        continue
+                    }
+                    try {
+                        this.handleContactMutation(m)
+                    } catch (error) {
+                        this.logger.debug('contact sink failed', {
+                            collection: m.collection,
+                            index: m.index,
+                            message: toError(error).message
+                        })
+                    }
+                }
+            }
+
             const lastMutationIndexByKey = new Map<string, number>()
             for (let mutationIndex = 0; mutationIndex < mutations.length; mutationIndex += 1) {
                 const mutation = mutations[mutationIndex]
@@ -452,6 +493,50 @@ export class WaAppStateMutationCoordinator {
                 })
             )
         }
+    }
+
+    private handleContactMutation(mutation: WaAppStateMutation): void {
+        if (!this.contactSink) return
+        // Cheap reject before JSON.parse: Contact mutations always carry
+        // the literal "contact" as their first index segment.
+        if (!mutation.index.includes('"contact"')) return
+        let parts: unknown
+        try {
+            parts = JSON.parse(mutation.index)
+        } catch {
+            return
+        }
+        if (!Array.isArray(parts) || parts[0] !== 'contact' || typeof parts[1] !== 'string') {
+            return
+        }
+        const indexJid = parts[1]
+        const lastUpdatedMs = mutation.timestamp > 0 ? mutation.timestamp : Date.now()
+        // Remove operations are a no-op for the contact store: `mergeContact`
+        // preserves prior displayName when incoming.displayName is undefined,
+        // and the row should stay around (the chat may still be open). The
+        // public mutation event still fires below so consumers can react.
+        if (mutation.operation === 'remove') return
+        const action = mutation.value?.contactAction
+        if (!action) return
+        // Resolve canonical (LID-preferred) jid + cross-reference: the index
+        // typically carries the PN form, and `contactAction.lidJid` carries
+        // the LID counterpart. Store one row keyed by LID when both are known
+        // (mirrors what the contact store does for history-sync writes), with
+        // `phoneNumber` populated so PN-form lookups still resolve.
+        const lid = action.lidJid && isLidJid(action.lidJid) ? action.lidJid : undefined
+        const indexIsPn = isUserJid(indexJid)
+        const indexIsLid = isLidJid(indexJid)
+        const jid = lid ?? indexJid
+        const phoneNumber = indexIsPn ? indexJid : undefined
+        const lidField = lid ?? (indexIsLid ? indexJid : undefined)
+        const displayName = action.fullName || action.firstName || undefined
+        this.contactSink({
+            jid,
+            displayName,
+            lid: lidField,
+            phoneNumber,
+            lastUpdatedMs
+        })
     }
 
     /**

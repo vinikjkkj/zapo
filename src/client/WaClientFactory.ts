@@ -113,6 +113,7 @@ import { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
 import { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import { createSignalSessionResolver } from '@signal/session/resolver'
 import { SignalProtocol } from '@signal/session/SignalProtocol'
+import type { WaStoredContactRecord } from '@store/contracts/contact.store'
 import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 import { buildAckNode } from '@transport/node/builders/global'
 import { buildPresenceNode } from '@transport/node/builders/presence'
@@ -162,6 +163,13 @@ interface WaClientBuildRuntime {
     readonly subscribeProtocolMessage: (
         handler: (event: WaIncomingProtocolMessageEvent) => void
     ) => () => void
+    /**
+     * Sink for address-book contact rows synced over app-state. Wired by
+     * `WaClient` to {@link WriteBehindPersistence.persistContact} so Contact
+     * mutations land in the contact store at pair-time (snapshot) and on
+     * every incremental sync.
+     */
+    readonly persistContact: (record: WaStoredContactRecord) => void
 }
 
 export interface WaClientDependencies {
@@ -854,7 +862,8 @@ export function buildWaClientDependencies(input: {
         serverClock,
         emitSnapshotMutations: options.chatEvents?.emitSnapshotMutations === true,
         emitMutation: (event) => runtime.emitEvent('mutation', event),
-        nctSaltSink: (salt) => trustedContactToken.handleNctSaltSync(salt)
+        nctSaltSink: (salt) => trustedContactToken.handleNctSaltSync(salt),
+        contactSink: runtime.persistContact
     })
 
     const profileCoordinator = createProfileCoordinator({
