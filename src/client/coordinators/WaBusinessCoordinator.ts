@@ -203,24 +203,34 @@ export function createBusinessCoordinator(
             )
             assertMediaUploadStatus(upload.status, 'business cover photo upload')
             const parsed = parseMediaUploadJsonBody<{
-                readonly fbid?: string
-                readonly ts?: string
+                readonly fbid?: string | number
+                readonly ts?: string | number
                 readonly meta_hmac?: string
             }>(upload.responseBytes, 'business cover photo upload')
-            if (!parsed.fbid || !parsed.ts || !parsed.meta_hmac) {
+            if (
+                parsed.fbid === undefined ||
+                parsed.fbid === null ||
+                parsed.fbid === '' ||
+                parsed.ts === undefined ||
+                parsed.ts === null ||
+                parsed.ts === '' ||
+                !parsed.meta_hmac
+            ) {
                 throw new Error('business cover photo upload response missing fbid/ts/meta_hmac')
             }
+            const id = String(parsed.fbid)
+            const ts = String(parsed.ts)
             const node = buildCoverPhotoIq({
                 op: 'update',
-                id: parsed.fbid,
-                timestamp: parsed.ts,
+                id,
+                timestamp: ts,
                 token: parsed.meta_hmac
             })
             const result = await queryWithContext('business.updateCoverPhoto', node, undefined, {
-                id: parsed.fbid
+                id
             })
             assertIqResult(result, 'business.updateCoverPhoto')
-            return { id: parsed.fbid }
+            return { id }
         },
 
         deleteCoverPhoto: async (id) => {
