@@ -43,7 +43,7 @@ function resolveDiffieHellmanAsync(): DiffieHellmanAsync | null {
             ) => Buffer | undefined
         )({ privateKey: probe.privateKey, publicKey: probe.publicKey }, () => {})
         if (result === undefined) {
-            diffieHellmanAsync = promisify(diffieHellmanWithCallback) as DiffieHellmanAsync
+            diffieHellmanAsync = promisify(diffieHellmanWithCallback)
         }
     } catch {
         // callback form not supported by this runtime; stay on sync path

@@ -88,7 +88,7 @@ export function parseUsyncResultEnvelope(result: BinaryNode): WaUsyncResultEnvel
         if (errorNode) {
             errors[protoNode.tag] = {
                 code: parseOptionalInt(errorNode.attrs.code) ?? null,
-                text: (errorNode.attrs.text as string | undefined) ?? null,
+                text: errorNode.attrs.text ?? null,
                 backoffSeconds: parseOptionalInt(errorNode.attrs.backoff) ?? null
             }
             continue

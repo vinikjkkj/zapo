@@ -62,7 +62,7 @@ export function isSendMediaMessage(content: unknown): content is WaSendMediaMess
     if ('media' in content) {
         return true
     }
-    return (content as { type: unknown }).type === 'sticker-pack' && 'stickers' in content
+    return content.type === 'sticker-pack' && 'stickers' in content
 }
 
 export function isSendTextMessage(content: unknown): content is WaSendTextMessage {
@@ -70,7 +70,7 @@ export function isSendTextMessage(content: unknown): content is WaSendTextMessag
         !!content &&
         typeof content === 'object' &&
         'type' in content &&
-        (content as { type: unknown }).type === 'text' &&
+        content.type === 'text' &&
         'text' in content
     )
 }
@@ -80,7 +80,7 @@ export function isSendReactionMessage(content: unknown): content is WaSendReacti
         !!content &&
         typeof content === 'object' &&
         'type' in content &&
-        (content as { type: unknown }).type === 'reaction' &&
+        content.type === 'reaction' &&
         'target' in content
     )
 }
@@ -90,7 +90,7 @@ export function isSendRevokeMessage(content: unknown): content is WaSendRevokeMe
         !!content &&
         typeof content === 'object' &&
         'type' in content &&
-        (content as { type: unknown }).type === 'revoke' &&
+        content.type === 'revoke' &&
         'target' in content
     )
 }
@@ -116,7 +116,7 @@ export function isSendPollMessage(content: unknown): content is WaSendPollMessag
         !!content &&
         typeof content === 'object' &&
         'type' in content &&
-        (content as { type: unknown }).type === 'poll' &&
+        content.type === 'poll' &&
         'name' in content &&
         'options' in content
     )
@@ -127,7 +127,7 @@ export function isSendPollVoteMessage(content: unknown): content is WaSendPollVo
         !!content &&
         typeof content === 'object' &&
         'type' in content &&
-        (content as { type: unknown }).type === 'poll-vote' &&
+        content.type === 'poll-vote' &&
         'poll' in content &&
         'selectedOptionNames' in content
     )
@@ -138,7 +138,7 @@ export function isSendEventMessage(content: unknown): content is WaSendEventMess
         !!content &&
         typeof content === 'object' &&
         'type' in content &&
-        (content as { type: unknown }).type === 'event' &&
+        content.type === 'event' &&
         'name' in content &&
         'startTime' in content
     )
@@ -151,7 +151,7 @@ export function isSendEventResponseMessage(
         !!content &&
         typeof content === 'object' &&
         'type' in content &&
-        (content as { type: unknown }).type === 'event-response' &&
+        content.type === 'event-response' &&
         'event' in content &&
         'response' in content
     )
@@ -468,5 +468,5 @@ export function resolveMetaAttrs(message: Proto.IMessage): MessageMetaAttrs | nu
     if (polltype) attrs.polltype = polltype
     if (eventType) attrs.event_type = eventType
     if (viewOnce) attrs.view_once = viewOnce
-    return attrs as MessageMetaAttrs
+    return attrs
 }

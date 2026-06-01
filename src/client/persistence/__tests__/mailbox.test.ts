@@ -49,7 +49,7 @@ function baseEvent(
             attrs: {}
         },
         ...rest
-    } as unknown as WaIncomingMessageEvent
+    }
 }
 
 test('mailbox persist writes ONE LID-canonical row when participant+participantAlt form a LID/PN pair', () => {

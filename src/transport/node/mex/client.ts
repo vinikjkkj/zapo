@@ -61,7 +61,7 @@ export async function runMexQuery<K extends WaMexOpKey, T = WaMexOperationRespon
         docId: persist.docId,
         clientDocId: persist.clientDocId,
         opName: opKey,
-        variables: variables as Readonly<Record<string, unknown>>
+        variables: variables
     })
     return data as T
 }

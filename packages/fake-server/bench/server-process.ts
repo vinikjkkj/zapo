@@ -493,10 +493,7 @@ async function handleStopProfiling(params: {
             treatGlobalObjectsAsRoots: true
         })
         await profilerSession.post('HeapProfiler.stopTrackingHeapObjects')
-        profilerSession.removeListener(
-            'HeapProfiler.addHeapSnapshotChunk',
-            onChunk as unknown as (m: object) => void
-        )
+        profilerSession.removeListener('HeapProfiler.addHeapSnapshotChunk', onChunk)
         const out = resolvePath(outDir, `heap-server-${Date.now()}.heaptimeline`)
         await writeFile(out, chunks.join(''))
         result.heapPath = out
@@ -519,10 +516,7 @@ async function handleTakeSnapshot(params: {
     }
     session.on('HeapProfiler.addHeapSnapshotChunk', onChunk as unknown as (m: object) => void)
     await session.post('HeapProfiler.takeHeapSnapshot', { reportProgress: false })
-    session.removeListener(
-        'HeapProfiler.addHeapSnapshotChunk',
-        onChunk as unknown as (m: object) => void
-    )
+    session.removeListener('HeapProfiler.addHeapSnapshotChunk', onChunk)
     session.disconnect()
     const label = params.label ?? 'server'
     const outDir = params.outDir ?? process.cwd()
@@ -702,7 +696,7 @@ async function handleSetupAppStateBootstrap(params: {
     await coll.applyMutation({
         operation: params.mutation.operation,
         index: params.mutation.index,
-        value: (params.mutation.value ?? null) as never,
+        value: params.mutation.value ?? null,
         version: params.mutation.version
     })
     const patch = await coll.encodePendingPatch()
@@ -729,7 +723,7 @@ async function handleSetupAppStateExternalSnapshot(params: {
         await coll.applyMutation({
             operation: m.operation,
             index: m.index,
-            value: (m.value ?? null) as never,
+            value: m.value ?? null,
             version: m.version
         })
     const snapshotBytes = await coll.encodeSnapshot()
@@ -767,7 +761,7 @@ const handlers: Record<
     waitForAuthenticatedPipeline: handleWaitForAuthenticatedPipeline,
     waitForNextAuthenticatedPipeline: handleWaitForNextAuthenticatedPipeline,
     runPairing: handleRunPairing as (p: Record<string, unknown>) => Promise<void>,
-    triggerPreKeyUpload: handleTriggerPreKeyUpload as (p: Record<string, unknown>) => Promise<void>,
+    triggerPreKeyUpload: handleTriggerPreKeyUpload,
     createFakePeerWithDevices: handleCreateFakePeerWithDevices as (
         p: Record<string, unknown>
     ) => Promise<unknown>,
@@ -800,13 +794,13 @@ const handlers: Record<
     waitForRetryReceipts: handleWaitForRetryReceipts as (
         p: Record<string, unknown>
     ) => Promise<unknown>,
-    preKeysAvailable: handlePreKeysAvailable as () => number,
-    dispenserMisses: handleDispenserMisses as () => number,
+    preKeysAvailable: handlePreKeysAvailable,
+    dispenserMisses: handleDispenserMisses,
     stop: handleStop,
     mediaProxyAgent: handleMediaProxyAgent,
-    startProfiling: handleStartProfiling as (p: Record<string, unknown>) => Promise<void>,
-    stopProfiling: handleStopProfiling as (p: Record<string, unknown>) => Promise<unknown>,
-    takeSnapshot: handleTakeSnapshot as (p: Record<string, unknown>) => Promise<unknown>,
+    startProfiling: handleStartProfiling,
+    stopProfiling: handleStopProfiling,
+    takeSnapshot: handleTakeSnapshot,
     peerSendHistorySync: handlePeerSendHistorySync as (p: Record<string, unknown>) => Promise<void>,
     peerSendAppStateSyncKeyShare: handlePeerSendAppStateSyncKeyShare as (
         p: Record<string, unknown>
@@ -814,7 +808,7 @@ const handlers: Record<
     pipelineSendReceiptBatch: handlePipelineSendReceiptBatch as (
         p: Record<string, unknown>
     ) => Promise<void>,
-    setupGroupBenchHandlers: handleSetupGroupBenchHandlers as (p: Record<string, unknown>) => void,
+    setupGroupBenchHandlers: handleSetupGroupBenchHandlers,
     registerAppStateSyncKey: handleRegisterAppStateSyncKey as (p: Record<string, unknown>) => void,
     setupAppStateBootstrap: handleSetupAppStateBootstrap as (
         p: Record<string, unknown>

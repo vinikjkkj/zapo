@@ -299,7 +299,7 @@ function parseBotProfileUsync(result: BinaryNode): WaBotProfileResult | null {
                 category: getNodeTextContent(findNodeChild(profileNode, 'category')) || null,
                 isDefault: getNodeTextContent(findNodeChild(profileNode, 'default')) === 'true',
                 prompts: parseBotProfilePrompts(findNodeChild(profileNode, 'prompts')),
-                personaId: (profileNode.attrs.persona_id as string | undefined) ?? null,
+                personaId: profileNode.attrs.persona_id ?? null,
                 commands,
                 commandsDescription,
                 isMetaCreated: isMetaCreatedRaw === undefined ? null : isMetaCreatedRaw === 'true',
@@ -445,14 +445,13 @@ export function createBotCoordinator(options: WaBotCoordinatorOptions): WaBotCoo
             if (!targetMessageId) return
 
             const editAttr = botNode.attrs[WA_BOT_NODE_ATTRS.EDIT]
-            const editType = (
+            const editType =
                 editAttr === WA_BOT_MSG_EDIT_TYPES.FIRST ||
                 editAttr === WA_BOT_MSG_EDIT_TYPES.INNER ||
                 editAttr === WA_BOT_MSG_EDIT_TYPES.LAST ||
                 editAttr === WA_BOT_MSG_EDIT_TYPES.FULL
                     ? editAttr
                     : WA_BOT_MSG_EDIT_TYPES.FULL
-            ) as WaBotMsgEditType
             const editTargetId = botNode.attrs[WA_BOT_NODE_ATTRS.EDIT_TARGET_ID] || undefined
 
             const useEditTargetSalt =

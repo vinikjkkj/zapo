@@ -52,7 +52,7 @@ const encode = (value: unknown, seen: WeakSet<object>, depth: number): unknown =
     if (type !== 'object') {
         return String(value)
     }
-    const obj = value as object
+    const obj = value
     if (seen.has(obj)) {
         return '[Circular]'
     }

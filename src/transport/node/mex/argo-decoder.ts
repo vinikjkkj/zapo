@@ -29,7 +29,7 @@ let cachedArgo: ArgoModule | null | undefined
 async function loadArgo(): Promise<ArgoModule | null> {
     if (cachedArgo !== undefined) return cachedArgo
     try {
-        cachedArgo = (await import('argo-codec')) as unknown as ArgoModule
+        cachedArgo = await import('argo-codec')
     } catch {
         cachedArgo = null
     }

@@ -130,5 +130,4 @@ function parseTcpUrl(url: string): { host: string; port: number } {
 }
 
 /** {@link RawWebSocketConstructor} alias for {@link WaMobileTcpSocket} – drop in via `WaCommsConfig.rawWebSocketConstructor`. */
-export const WaMobileTcpSocketCtor: RawWebSocketConstructor =
-    WaMobileTcpSocket as unknown as RawWebSocketConstructor
+export const WaMobileTcpSocketCtor: RawWebSocketConstructor = WaMobileTcpSocket

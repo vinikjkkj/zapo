@@ -7,8 +7,8 @@ import { fetchLatestWaWebVersion } from '@transport/wa-web-version-fetcher'
 function makeFetchStub(
     handler: (url: string, init: RequestInit) => Promise<Response> | Response
 ): typeof fetch {
-    return (async (input: Parameters<typeof fetch>[0], init: RequestInit = {}) =>
-        handler(typeof input === 'string' ? input : input.toString(), init)) as typeof fetch
+    return async (input: Parameters<typeof fetch>[0], init: RequestInit = {}) =>
+        handler(typeof input === 'string' ? input : input.toString(), init)
 }
 
 test('fetchLatestWaWebVersion parses client_revision and returns versioned result', async () => {
@@ -102,7 +102,7 @@ test('fetchLatestWaWebVersion wraps network failures', async () => {
 })
 
 function hangingFetchStub(): typeof fetch {
-    return ((_input: Parameters<typeof fetch>[0], init: RequestInit = {}) =>
+    return (_input: Parameters<typeof fetch>[0], init: RequestInit = {}) =>
         new Promise<Response>((resolve, reject) => {
             // ref'd timer keeps the event loop alive so the source's
             // unref'd timeout (or external abort) can fire under node:test.
@@ -115,7 +115,7 @@ function hangingFetchStub(): typeof fetch {
                 },
                 { once: true }
             )
-        })) as typeof fetch
+        })
 }
 
 test('fetchLatestWaWebVersion times out when fetch hangs', async () => {

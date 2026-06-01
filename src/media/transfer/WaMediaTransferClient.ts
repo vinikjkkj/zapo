@@ -318,7 +318,7 @@ export class WaMediaTransferClient {
                 url,
                 {
                     method: init.method ?? 'GET',
-                    headers: init.headers as Record<string, string>,
+                    headers: init.headers,
                     signal: init.signal ?? undefined,
                     agent: agent ?? undefined
                 },

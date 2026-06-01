@@ -303,7 +303,7 @@ async function scenarioIncomingRetryRecoveryInProcess(
                                 await peer.replaySentMessage(id, { resendId: `${id}-replay` })
                                 resolve()
                             } catch (err) {
-                                reject(err as Error)
+                                reject(err)
                             }
                         })
                     })

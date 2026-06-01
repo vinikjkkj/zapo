@@ -454,7 +454,7 @@ function resolveUploadType(
 ): MediaCryptoType {
     if (content.type === 'video' && content.gifPlayback) return 'gif'
     if (content.type === 'audio' && content.ptt) return 'ptt'
-    return content.type as MediaCryptoType
+    return content.type
 }
 
 async function resolveMimetype(

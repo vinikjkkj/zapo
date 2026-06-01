@@ -96,7 +96,7 @@ const buildFakeRuntime = (client: FakeClient): SpyableFakeRuntime => {
                 regex?: boolean
             } = {}
         ) => {
-            lastLogsFilter.value = filter as Record<string, unknown>
+            lastLogsFilter.value = filter
             const lvSet = filter.levels && filter.levels.length > 0 ? new Set(filter.levels) : null
             const since = filter.since ?? 0
             const limit = filter.limit && filter.limit > 0 ? filter.limit : 100
@@ -238,11 +238,14 @@ test('lifecycle rejects unknown actions', async () => {
 
 test('call tool with root=lib invokes a pure helper without touching client', async () => {
     let ensureCalls = 0
-    const proxy = new Proxy({} as object, {
-        get() {
-            return undefined
+    const proxy = new Proxy(
+        {},
+        {
+            get() {
+                return undefined
+            }
         }
-    })
+    )
     const runtime = buildFakeRuntime(proxy as never)
     const original = (runtime as unknown as { ensureClient: () => Promise<unknown> }).ensureClient
     ;(runtime as unknown as { ensureClient: () => Promise<unknown> }).ensureClient = async () => {

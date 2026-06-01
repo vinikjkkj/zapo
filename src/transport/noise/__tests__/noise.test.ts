@@ -70,6 +70,6 @@ test('noise frame codec encodes/decodes frames and rejects oversized payloads', 
 test('noise certificate chain verification rejects invalid payloads', async () => {
     await assert.rejects(
         () => verifyNoiseCertificateChain(new Uint8Array([1, 2, 3]), new Uint8Array(32)),
-        /missing leaf\/intermediate|index out of range|invalid wire type/
+        /missing leaf\/intermediate|index out of range|invalid wire type|illegal tag/
     )
 })

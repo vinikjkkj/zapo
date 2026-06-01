@@ -1347,7 +1347,7 @@ function createPassiveTasksCoordinator(overrides: {
             setSignedPreKey: async () => undefined,
             getSignedPreKeyById: async () => null,
             clear: async () => undefined
-        } as never,
+        },
         preKeyStore: {
             getServerHasPreKeys: async () => true,
             setServerHasPreKeys: async () => undefined,
@@ -1359,7 +1359,7 @@ function createPassiveTasksCoordinator(overrides: {
             consumePreKeyById: async () => null,
             markKeyAsUploaded: async () => undefined,
             clear: async () => undefined
-        } as never,
+        },
         signalDigestSync: {
             validateLocalKeyBundle: async () => ({ valid: true, preKeyCount: 10 })
         } as never,

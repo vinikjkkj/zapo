@@ -98,9 +98,7 @@ export function parseNewsletterMetadata(
 
     return {
         jid: envelope?.id ?? '',
-        state:
-            (envelope?.state?.type as WaNewsletterStateType | undefined) ??
-            WA_NEWSLETTER_STATE_TYPES.ACTIVE,
+        state: envelope?.state?.type ?? WA_NEWSLETTER_STATE_TYPES.ACTIVE,
         creationTime: asUndef(tryAsNumber(meta?.creation_time)),
         name: name?.text,
         nameUpdateTime: asUndef(tryAsNumber(name?.update_time)),
@@ -112,7 +110,7 @@ export function parseNewsletterMetadata(
         handle: meta?.handle,
         subscribersCount: asUndef(tryAsNumber(meta?.subscribers_count)),
         verification: meta?.verification,
-        viewerRole: viewer?.role as WaNewsletterRole | undefined,
+        viewerRole: viewer?.role,
         mutedAdmin,
         mutedFollower
     }
@@ -158,7 +156,7 @@ export function parseFollowers(
         followers.push({
             id: node.id,
             displayName: node.display_name,
-            role: edge.role as WaNewsletterRole | undefined,
+            role: edge.role,
             phoneJid: node.pn,
             username: node.username_info?.username,
             followTime: asUndef(tryAsNumber(edge.follow_time)),

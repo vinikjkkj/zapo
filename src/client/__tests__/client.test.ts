@@ -552,7 +552,7 @@ test('history sync processor does NOT invoke onProcessed when syncType is null',
                 ackedSyncTypes.push(syncType)
             }
         },
-        {} as never
+        {}
     )
     assert.deepEqual(ackedSyncTypes, [])
 })

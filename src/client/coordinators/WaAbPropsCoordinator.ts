@@ -180,7 +180,7 @@ function parseConfigValue(
         return value === '1' || value === 'true' || value === 'True'
     }
     if (type === 'int') {
-        return parseOptionalInt(value) ?? (defaultValue as number)
+        return parseOptionalInt(value) ?? defaultValue
     }
     return value
 }

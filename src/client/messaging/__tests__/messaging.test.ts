@@ -200,7 +200,7 @@ test('group metadata cache stores and updates ephemeral from events', async () =
             action: 'ephemeral',
             groupJid: '120@g.us',
             expirationSeconds: 7_776_000
-        } as WaGroupEvent)
+        })
 
         assert.equal(await cache.getEphemeral('120@g.us'), 7_776_000)
 
@@ -210,7 +210,7 @@ test('group metadata cache stores and updates ephemeral from events', async () =
             action: 'ephemeral',
             groupJid: '120@g.us',
             expirationSeconds: 0
-        } as WaGroupEvent)
+        })
 
         assert.equal(await cache.getEphemeral('120@g.us'), 0)
     } finally {
@@ -233,7 +233,7 @@ test('group metadata cache ignores ephemeral events for uncached groups', async 
             action: 'ephemeral',
             groupJid: '120@g.us',
             expirationSeconds: 86_400
-        } as WaGroupEvent)
+        })
 
         assert.equal(await cache.getEphemeral('120@g.us'), null)
         assert.equal(await groupMetadataStore.getGroupMetadata('120@g.us'), null)
@@ -292,7 +292,7 @@ test('group metadata cache create event preserves cached ephemeral', async () =>
             action: 'create',
             groupJid: '120@g.us',
             participants: [{ jid: '552200000000@s.whatsapp.net' }]
-        } as WaGroupEvent)
+        })
 
         const after = await groupMetadataStore.getGroupMetadata('120@g.us')
         assert.equal(after?.ephemeral, 86_400)

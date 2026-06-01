@@ -164,11 +164,9 @@ function buildCommonPayload(
         connectReason: proto.ClientPayload.ConnectReason.USER_ACTIVATED,
         userAgent:
             config.userAgent ?? defaultUserAgent(versionBase, config.deviceOsDisplayName, version),
-        webInfo:
-            config.webInfo ??
-            ({
-                webSubPlatform: defaultWebSubPlatform()
-            } as typeof proto.ClientPayload.prototype.webInfo)
+        webInfo: config.webInfo ?? {
+            webSubPlatform: defaultWebSubPlatform()
+        }
     }
 }
 
