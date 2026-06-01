@@ -372,7 +372,7 @@ async function buildMysqlStore(): Promise<BenchStoreFixture> {
 
 async function buildRedisStore(): Promise<BenchStoreFixture> {
     const { createRedisStore } = await import('@zapo-js/store-redis')
-    const Redis = (await import('ioredis')).default
+    const { Redis } = await import('ioredis')
     const host = requireEnv('ZAPO_TEST_REDIS_HOST')
     const port = parsePort('ZAPO_TEST_REDIS_PORT')
     const keyPrefix = uniquePrefix('redis')

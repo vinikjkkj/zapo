@@ -846,7 +846,7 @@ async function mainSeparateProcess(
     results: ScenarioResult[]
     cleanup: () => Promise<void>
 }> {
-    const { ServerRpc } = await import('./server-rpc')
+    const { ServerRpc } = await import('./server-rpc.js')
     const rpc = new ServerRpc()
     await rpc.spawn()
     await rpc.start()
