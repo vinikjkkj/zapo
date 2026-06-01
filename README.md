@@ -26,9 +26,9 @@
 
 ## Stability Notice
 
-> Frequent breaking changes are expected until the first major release.
-> If you run `zapo` in long-lived environments, pin exact versions and
-> validate upgrades carefully.
+> `zapo-js` is stable as of `1.0.0`. The public API follows SemVer:
+> breaking changes ship only in a major release; minors add features,
+> patches fix bugs.
 
 ## Install
 

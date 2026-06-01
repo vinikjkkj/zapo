@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/mcp-server",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "description": "MCP server exposing zapo-js WaClient as dynamic tools for end-to-end testing",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
@@ -33,12 +33,12 @@
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
-        "@zapo-js/media-utils": "^0.1.0",
-        "@zapo-js/store-sqlite": "^0.3.0",
+        "@zapo-js/media-utils": "^1.0.0",
+        "@zapo-js/store-sqlite": "^1.0.0",
         "better-sqlite3": "^12.6.2"
     },
     "peerDependencies": {
-        "zapo-js": "^0.3.0"
+        "zapo-js": "^1.0.0"
     },
     "devDependencies": {
         "@zapo-js/fake-server": "file:../fake-server",

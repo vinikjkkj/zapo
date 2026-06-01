@@ -887,11 +887,11 @@ After editing source: rebuild → call `restart` with `mode: "process_exit"` →
 
 ## 14. Versioning
 
-This project follows [Semantic Versioning](https://semver.org/). While on `0.x`, the API is not yet stable and breaking changes may occur in minor bumps. Use changesets (`npx changeset`) to track version bumps across all packages.
+This project follows [Semantic Versioning](https://semver.org/). From `1.0.0` the public API is stable: breaking changes ship only in a major bump. Use changesets (`npx changeset`) to track version bumps across all packages.
 
 - `patch` – bug fixes, internal refactors with no API change
-- `minor` – new features, non-breaking additions (or breaking changes while `0.x`)
-- `major` – breaking API changes (after `1.0.0`)
+- `minor` – new features, non-breaking additions
+- `major` – breaking API changes
 
 ---
 

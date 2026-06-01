@@ -154,8 +154,8 @@ Two PR automations also run on every pull request:
 ## Versioning and Releases
 
 Versioning is managed with
-[Changesets](https://github.com/changesets/changesets). While on `0.x`,
-the API is not yet stable and breaking changes may occur in minor bumps.
+[Changesets](https://github.com/changesets/changesets). From `1.0.0` the
+public API is stable - breaking changes ship only in a major bump.
 
 ```bash
 npm run changeset
@@ -182,11 +182,11 @@ type, with contributor list) when a version tag is pushed.
 Trigger example:
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-If the tag contains `-` (example: `v0.2.0-rc.1`), the release is marked as
+If the tag contains `-` (example: `v1.0.0-rc.0`), the release is marked as
 prerelease.
 
 ## Protobuf Generation
@@ -229,7 +229,7 @@ Before opening a PR:
 - Run `npm run typecheck:all`, `npm run lint`, `npm run format:check`,
   `npm run test`, and `npm run test:flow` locally before pushing.
 - Add a changeset (`npm run changeset`) when your change affects public
-  API or behavior, even on `0.x`.
+  API or behavior.
 
 PR title must follow conventional commits (`feat:`, `fix:`, `chore:`,
 `perf:`, `refactor:`, `docs:`, `test:`, `build:`, `ci:`, `style:`,

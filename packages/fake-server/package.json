@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/fake-server",
-    "version": "0.3.0",
+    "version": "1.0.0",
     "description": "Fake WhatsApp Web server used to test zapo-js",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
@@ -43,7 +43,7 @@
         "bench:all-stores": "node bench/run-all-stores.cjs"
     },
     "peerDependencies": {
-        "zapo-js": "^0.3.0"
+        "zapo-js": "^1.0.0"
     },
     "dependencies": {
         "ws": "^8.18.0"

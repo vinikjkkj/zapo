@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/store-postgres",
-    "version": "0.3.0",
+    "version": "1.0.0",
     "description": "PostgreSQL store provider for zapo-js",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
@@ -27,7 +27,7 @@
         "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\""
     },
     "peerDependencies": {
-        "zapo-js": "^0.3.0",
+        "zapo-js": "^1.0.0",
         "pg": ">=8.0.0"
     },
     "devDependencies": {

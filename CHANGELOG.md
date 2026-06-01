@@ -1,5 +1,26 @@
 # zapo-js
 
+## 1.0.0
+
+### Major Changes
+
+First stable release. The public API is now frozen under SemVer: from `1.0.0`, breaking changes ship only in a major bump.
+
+- `WaClient` surface split into coordinator namespaces (`client.message`, `client.group`, `client.profile`, `client.privacy`, ...); send method names unified across coordinators.
+- `WaClientEventMap` regrouped and receipt status typed; newsletter per-message updates unified into a single `newsletter_message_update` event.
+- Message addressing consolidated into a proto-aligned `key` (no remapping adapters); DMs sent in LID form for retry eligibility.
+- `createStore` now requires explicit `providers` when `backends` is set; default `providers.auth` moved to the in-memory `WaAuthMemoryStore`.
+- Three opinionated client defaults flipped; group result parsers typed; `getLidsByPhoneNumbers` moved to the profile coordinator.
+- `additionalAttributes` supported on the `<message />` stanza.
+- Client dependency wiring, store contracts, and session resolution consolidated (breaking for custom store and session integrations).
+- Channels (newsletter), communities (parent groups), full group metadata, and membership-approval methods.
+- Business surface: interactive/list/button messages, business notifications, cover-photo upload, typed business hours.
+- Bot coordinator (Meta AI and other WhatsApp bots), presence/chatstate, typed `sendReceipt` with auto-aggregation, `contextInfo` (quote/forward/mentions), link previews, status/broadcast.
+- Hosted-device support, peer-message wire-format parity, placeholder resend PDO fallback, clock-skew resync on keepalive.
+- Store: opt-in read-through `cacheLayer` for hot signal domains, batched write-behind persistence across sqlite/mysql/postgres/redis/mongo.
+- Structured logging overhaul; dual ESM/CJS builds for all optional packages.
+- Performance: `node:crypto` migration, sync crypto primitives with thread-pool DH, single-pass packed-string encoder, reduced hot-path allocations.
+
 ## 0.3.0
 
 ### Minor Changes

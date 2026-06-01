@@ -1,5 +1,11 @@
 # @zapo-js/fake-server
 
+## 1.0.0
+
+### Major Changes
+
+- Align with the `zapo-js` 1.0.0 stable release. Now requires `zapo-js@^1.0.0`.
+
 ## 0.3.0
 
 ### Minor Changes

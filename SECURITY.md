@@ -7,15 +7,14 @@ from regular bugs.
 
 ## Supported Versions
 
-While the project is on `0.x` the API is not yet stable. Only the latest
-published minor version receives security patches.
+From `1.0.0` the public API is stable. Security patches target the latest
+published minor of the current major.
 
-| Version            | Supported                        |
-| ------------------ | -------------------------------- |
-| `0.x` latest minor | ✅                               |
-| Older `0.x` minors | ❌ – upgrade to the latest minor |
-
-After `1.0.0` a longer support window will be defined.
+| Version             | Supported                        |
+| ------------------- | -------------------------------- |
+| `1.x` latest minor  | ✅                               |
+| Older `1.x` minors  | ❌ – upgrade to the latest minor |
+| `0.x` (pre-release) | ❌ – upgrade to `1.x`            |
 
 ## Reporting a Vulnerability
 

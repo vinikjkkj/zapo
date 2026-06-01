@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/media-utils",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "description": "Media processing utilities for zapo-js (thumbnails, waveforms, probing)",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
@@ -27,7 +27,7 @@
         "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\""
     },
     "peerDependencies": {
-        "zapo-js": "^0.3.0",
+        "zapo-js": "^1.0.0",
         "sharp": ">=0.33.0",
         "file-type": ">=19.0.0"
     },
