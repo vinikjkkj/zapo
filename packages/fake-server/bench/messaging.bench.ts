@@ -267,10 +267,7 @@ class BenchProfiler {
         try {
             await this.session.post('HeapProfiler.takeHeapSnapshot', { reportProgress: false })
         } finally {
-            this.session.removeListener(
-                'HeapProfiler.addHeapSnapshotChunk',
-                onChunk as unknown as (m: object) => void
-            )
+            this.session.removeListener('HeapProfiler.addHeapSnapshotChunk', onChunk)
         }
         const out = this.fileName(`snapshot-${label}`, 'heapsnapshot')
         const content = chunks.join('')
@@ -298,10 +295,7 @@ class BenchProfiler {
             })
             await this.session.post('HeapProfiler.stopTrackingHeapObjects')
         } finally {
-            this.session.removeListener(
-                'HeapProfiler.addHeapSnapshotChunk',
-                onChunk as unknown as (m: object) => void
-            )
+            this.session.removeListener('HeapProfiler.addHeapSnapshotChunk', onChunk)
         }
         const out = this.fileName('heap', 'heaptimeline')
         const content = chunks.join('')

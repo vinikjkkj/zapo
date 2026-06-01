@@ -206,10 +206,10 @@ function parseProfilePicture(result: BinaryNode): WaProfilePictureResult {
         return {}
     }
     return {
-        url: pictureNode.attrs.url as string | undefined,
-        directPath: pictureNode.attrs.direct_path as string | undefined,
-        id: pictureNode.attrs.id as string | undefined,
-        type: pictureNode.attrs.type as string | undefined
+        url: pictureNode.attrs.url,
+        directPath: pictureNode.attrs.direct_path,
+        id: pictureNode.attrs.id,
+        type: pictureNode.attrs.type
     }
 }
 
@@ -322,15 +322,11 @@ function parseUsyncTextStatuses(result: BinaryNode): readonly WaTextStatusResult
             const emojiNode = findNodeChild(textStatusNode, 'emoji')
             entry = {
                 jid,
-                text: (textStatusNode.attrs.text as string | undefined) ?? null,
+                text: textStatusNode.attrs.text ?? null,
                 emoji: emojiNode?.attrs.content ?? null,
                 ephemeralDurationSec:
-                    parseOptionalSignedInt(
-                        textStatusNode.attrs.ephemeral_duration_sec as string | undefined
-                    ) ?? null,
-                lastUpdateTime:
-                    parseOptionalInt(textStatusNode.attrs.last_update_time as string | undefined) ??
-                    null
+                    parseOptionalSignedInt(textStatusNode.attrs.ephemeral_duration_sec) ?? null,
+                lastUpdateTime: parseOptionalInt(textStatusNode.attrs.last_update_time) ?? null
             }
         }
 

@@ -806,9 +806,9 @@ export class McpRuntime {
             const handler = (payload: unknown): void => {
                 this.recordEvent(name, payload, state.sessionId)
             }
-            client.on(name, handler as never)
+            client.on(name, handler)
             state.listenersDetach.push(() => {
-                client.off(name, handler as never)
+                client.off(name, handler)
             })
         }
     }

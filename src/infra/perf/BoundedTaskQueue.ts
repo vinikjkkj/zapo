@@ -55,7 +55,7 @@ export class BoundedTaskQueue {
 
         return new Promise<T>((resolve, reject) => {
             this.queue.push({
-                task: task as Task<unknown>,
+                task: task,
                 resolve: resolve as (value: unknown) => void,
                 reject
             })

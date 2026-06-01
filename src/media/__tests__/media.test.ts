@@ -996,10 +996,10 @@ test('media transfer client routes through optional got when proxy agent is set'
 
     const originalFetch = globalThis.fetch
     let fetchCalled = false
-    globalThis.fetch = (async () => {
+    globalThis.fetch = async () => {
         fetchCalled = true
         throw new Error('fetch should not be called when agent path is enabled')
-    }) as typeof fetch
+    }
 
     try {
         const bytes = await mediaTransfer.downloadBytes({
@@ -1059,10 +1059,10 @@ test('media transfer client uploads readable stream through optional got agent',
 
     const originalFetch = globalThis.fetch
     let fetchCalled = false
-    globalThis.fetch = (async () => {
+    globalThis.fetch = async () => {
         fetchCalled = true
         throw new Error('fetch should not be called when upload agent path is enabled')
-    }) as typeof fetch
+    }
 
     try {
         const uploadBody = Readable.from(['hello-', 'stream'])

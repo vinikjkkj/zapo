@@ -230,7 +230,7 @@ function parseSubscriptionsList(node: BinaryNode): readonly WaBusinessSubscripti
             id,
             status,
             tier: parseOptionalInt(sub.attrs.subscription_tier),
-            source: sub.attrs.source as string | undefined,
+            source: sub.attrs.source,
             startTime: parseOptionalInt(sub.attrs.subscription_start_time),
             creationTime: parseOptionalInt(sub.attrs.subscription_creation_time),
             expirationDate: parseOptionalInt(sub.attrs.subscription_end_time)
@@ -398,7 +398,7 @@ function parseSingleBusinessEvent(notificationNode: BinaryNode): WaBusinessEvent
         return {
             ...base,
             action: 'subscriptions_update',
-            bizJid: notificationNode.attrs.from as string | undefined,
+            bizJid: notificationNode.attrs.from,
             subscriptions: subscriptions ? parseSubscriptionsList(subscriptions) : [],
             featureFlags: featureFlags ? parseFeatureFlagsList(featureFlags) : []
         }

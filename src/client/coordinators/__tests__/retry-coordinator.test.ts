@@ -173,7 +173,7 @@ function buildPlaceholderContext(
         recipient: overrides.recipient,
         t: overrides.t,
         ...overrides
-    } as WaRetryDecryptFailureContext
+    }
 }
 
 function createPlaceholderHarness(): PlaceholderHarness {
@@ -186,7 +186,7 @@ function createPlaceholderHarness(): PlaceholderHarness {
     > = []
     const peerDataOperation: PeerDataOperationRequester = {
         request: async (_type, body) => {
-            captured.push((body.placeholderMessageResendRequest ?? []) as never)
+            captured.push(body.placeholderMessageResendRequest ?? [])
             return new Promise((resolve) => {
                 pendingResolvers.push(resolve)
             })

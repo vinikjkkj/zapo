@@ -197,9 +197,9 @@ function wrapData(
     const encoded = applyEnumEncodeToData(schema.valueEnumFields, data)
     const field = schema.valueField
     if (field === null) {
-        return encoded as Proto.ISyncActionValue
+        return encoded
     }
-    return { [field]: encoded } as Proto.ISyncActionValue
+    return { [field]: encoded }
 }
 
 function applyEnumEncodeToData(
@@ -1044,7 +1044,7 @@ export class WaAppStateMutationCoordinator {
      */
     public async set(input: WaSetMutationInput): Promise<void> {
         const resolved = WA_APPSTATE_SCHEMAS[input.schema] as WaAppstateSchema
-        const { indexArgs, data } = splitFlatInput(resolved, input as Record<string, unknown>)
+        const { indexArgs, data } = splitFlatInput(resolved, input)
         const value = wrapData(resolved, data)
         const timestamp = this.serverClock.nowMs()
         const mutation = buildSetMutationFromSchema({
@@ -1086,7 +1086,7 @@ export class WaAppStateMutationCoordinator {
      */
     public async remove(input: WaRemoveMutationInput): Promise<void> {
         const resolved = WA_APPSTATE_SCHEMAS[input.schema] as WaAppstateSchema
-        const { indexArgs } = splitFlatInput(resolved, input as Record<string, unknown>)
+        const { indexArgs } = splitFlatInput(resolved, input)
         const timestamp = this.serverClock.nowMs()
         const mutation = buildRemoveMutationFromSchema({
             schema: resolved,

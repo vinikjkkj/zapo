@@ -36,8 +36,8 @@ function parseNoiseCertificate(
     assertByteLength(signatureBytes, 64, 'invalid certificate signature size')
 
     const details = proto.CertChain.NoiseCertificate.Details.decode(detailsBytes)
-    const serial = toSafeNumber(details.serial as number, 'certificate.serial')
-    const issuerSerial = toSafeNumber(details.issuerSerial as number, 'certificate.issuerSerial')
+    const serial = toSafeNumber(details.serial, 'certificate.serial')
+    const issuerSerial = toSafeNumber(details.issuerSerial, 'certificate.issuerSerial')
     const key = decodeProtoBytes(details.key, 'certificate.key')
 
     return {

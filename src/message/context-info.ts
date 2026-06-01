@@ -123,7 +123,7 @@ function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | nu
             !Array.isArray(value) &&
             !(value instanceof Uint8Array)
         ) {
-            return value as ContextInfoCarrier
+            return value
         }
     }
     return null

@@ -132,7 +132,7 @@ function parsePrivacySettings(result: BinaryNode): WaPrivacySettings {
         }
     }
 
-    return settings as WaPrivacySettings
+    return settings
 }
 
 function parseDisallowedList(result: BinaryNode): WaPrivacyDisallowedListResult {

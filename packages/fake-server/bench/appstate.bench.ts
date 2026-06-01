@@ -126,7 +126,7 @@ async function runOutgoingScenarioInProcess(
         keyId: syncKeyId,
         keyData: syncKeyData
     })
-    await seedCollection.applyMutation(buildSeedMutation(2) as never)
+    await seedCollection.applyMutation(buildSeedMutation(2))
     const bootstrapPatch = await seedCollection.encodePendingPatch()
     const bootstrapVersion = seedCollection.version
 
@@ -211,7 +211,7 @@ async function runIncomingScenarioInProcess(
         keyData: syncKeyData
     })
     for (const m of buildIncomingMutations(mutations)) {
-        await collection.applyMutation(m as never)
+        await collection.applyMutation(m)
     }
     const snapshotBytes = await collection.encodeSnapshot()
     const snapshotVersion = collection.version

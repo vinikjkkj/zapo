@@ -39,7 +39,7 @@ export class WaDeviceListMongoStore extends BaseMongoStore implements WaDeviceLi
         const col = this.col<DeviceListDoc>('device_list_cache')
         const ops = snapshots.map((snapshot) => {
             const set: Record<string, unknown> = {
-                device_jids: snapshot.deviceJids as string[],
+                device_jids: snapshot.deviceJids,
                 updated_at_ms: snapshot.updatedAtMs,
                 expires_at: new Date(snapshot.updatedAtMs + this.ttlMs)
             }

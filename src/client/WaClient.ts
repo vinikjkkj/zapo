@@ -157,10 +157,7 @@ export class WaClient extends EventEmitter {
                 syncAppState: () => this.deps.chatCoordinator.sync().then(() => {}),
                 syncAppStateWithOptions: (syncOptions) =>
                     this.deps.chatCoordinator.sync(syncOptions),
-                emitEvent: this.emit.bind(this) as <K extends keyof WaClientEventMap>(
-                    event: K,
-                    ...args: Parameters<WaClientEventMap[K]>
-                ) => void,
+                emitEvent: this.emit.bind(this),
                 handleIncomingMessageEvent: this.handleIncomingMessageEvent.bind(this),
                 handleError: this.handleError.bind(this),
                 handleIncomingFrame: this.handleIncomingFrame.bind(this),
@@ -360,9 +357,7 @@ export class WaClient extends EventEmitter {
                             logger: this.logger,
                             mediaTransfer: this.mediaTransfer,
                             writeBehind: this.writeBehind,
-                            emitEvent: this.emit.bind(this) as Parameters<
-                                typeof runHistorySyncNotification
-                            >[0]['emitEvent'],
+                            emitEvent: this.emit.bind(this),
                             onPrivacyTokens: (conversations) =>
                                 this.deps.trustedContactToken.hydrateFromHistorySync(conversations),
                             onNctSalt: (salt) =>

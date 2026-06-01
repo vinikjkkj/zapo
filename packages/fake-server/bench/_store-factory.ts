@@ -188,7 +188,7 @@ async function buildPostgresStore(): Promise<BenchStoreFixture> {
             }
             recordCall(sql, start)
             return result
-        } as typeof c.query
+        }
     }
     const pool = !trace
         ? rawPool
@@ -200,7 +200,7 @@ async function buildPostgresStore(): Promise<BenchStoreFixture> {
                           return (target.connect as Function).call(
                               target,
                               (err: unknown, client: unknown, done: unknown) => {
-                                  if (client) wrapClient(client as object)
+                                  if (client) wrapClient(client)
                                   cb(err, client, done)
                               }
                           )
