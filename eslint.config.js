@@ -8,6 +8,8 @@ module.exports = [
         ignores: [
             'dist/**',
             'packages/*/dist/**',
+            'packages/*/binding.js',
+            'packages/*/binding.d.ts',
             'wa-web/**',
             'wa-mob/**',
             'coverage/**',
