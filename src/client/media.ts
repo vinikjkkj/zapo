@@ -102,8 +102,8 @@ export function parseWebpAnimation(data: Uint8Array): WebpAnimInfo | null {
     return null
 }
 
-const IMAGE_THUMB_MAX_EDGE = 320
-const VIDEO_THUMB_MAX_EDGE = 48
+const IMAGE_THUMB_MAX_EDGE = 100
+const VIDEO_THUMB_MAX_EDGE = 100
 const STICKER_THUMB_MAX_EDGE = 100
 const EMPTY_PROCESSED: ProcessedMediaFields = {}
 type MediaProcessorStep = 'thumbnail' | 'probe' | 'waveform' | 'stickerThumbnail'
