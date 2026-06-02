@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/logo.png" alt="zapo" width="400" />
+  <img src="https://raw.githubusercontent.com/vinikjkkj/zapo/master/.github/assets/logo.png" alt="zapo" width="400" />
 </p>
 
 <p align="center">
