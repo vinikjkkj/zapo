@@ -94,11 +94,10 @@ export function createStreamControlHandler(
         const reason = WA_DISCONNECT_REASONS.STREAM_ERROR_FORCE_LOGIN
         stopCommsImmediately()
         await runStreamControlLifecycle(reason, async () => {
-            logger.warn('received forced login stream error; starting login lifecycle', {
+            logger.warn('received forced login stream error; reconnecting, keeping credentials', {
                 code
             })
-            await disconnect(reason, true, code)
-            await clearStoredCredentials()
+            await disconnect(reason, false, code)
             await restartBackendAfterStreamControl(reason)
         })
     }

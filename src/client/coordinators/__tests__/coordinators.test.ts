@@ -511,11 +511,11 @@ test('stream control handler runs force-login and resume flows', async () => {
         code: WA_STREAM_SIGNALING.FORCE_LOGIN_CODE
     })
 
-    assert.deepEqual(calls, ['stopComms', 'disconnect', 'clear_credentials', 'connect'])
+    assert.deepEqual(calls, ['stopComms', 'disconnect', 'connect'])
     assert.deepEqual(disconnectCalls, [
         {
             reason: WA_DISCONNECT_REASONS.STREAM_ERROR_FORCE_LOGIN,
-            isLogout: true,
+            isLogout: false,
             code: WA_STREAM_SIGNALING.FORCE_LOGIN_CODE
         }
     ])
