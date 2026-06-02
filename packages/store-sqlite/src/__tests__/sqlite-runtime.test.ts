@@ -531,6 +531,21 @@ test('sqlite signal store covers prekeys, sessions, identities and state helpers
         await preKeyStore.setServerHasPreKeys(true)
         assert.equal(await preKeyStore.getServerHasPreKeys(), true)
 
+        // Regression: a generator returning an already-stored keyId must fail fast
+        // (insert is a no-op) instead of looping forever - the bootstrap hang.
+        const collidingPair = await X25519.generateKeyPair()
+        await preKeyStore.putPreKey({ keyId: 4242, keyPair: collidingPair, uploaded: false })
+        await preKeyStore.markKeyAsUploaded(4242)
+        await assert.rejects(
+            () =>
+                preKeyStore.getOrGenSinglePreKey(async () => ({
+                    keyId: 4242,
+                    keyPair: collidingPair,
+                    uploaded: false
+                })),
+            /made no progress/
+        )
+
         const sessionAddressA = makeAddress('5511', 0)
         const sessionAddressB = makeAddress('5522', 0)
         assert.equal(await sessionStore.hasSession(sessionAddressA), false)

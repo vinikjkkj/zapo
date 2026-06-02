@@ -68,6 +68,10 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
             throw new Error(`invalid prekey count: ${count}`)
         }
 
+        // Bail if a round adds no available prekey (a colliding keyId makes the
+        // upsert a no-op); without this the loop would spin forever.
+        let lastAvailableCount = -1
+
         while (true) {
             await this.ensureIndexes()
             const metaCol = this.col<MetaDoc>('signal_meta')
@@ -143,6 +147,13 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
             if (finalAvailable.length >= count) {
                 return finalAvailable
             }
+            if (finalAvailable.length <= lastAvailableCount) {
+                throw new Error(
+                    'getOrGenPreKeys made no progress; the generator returned key ids ' +
+                        'that collide with stored prekeys'
+                )
+            }
+            lastAvailableCount = finalAvailable.length
         }
     }
 

@@ -37,6 +37,10 @@ export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore 
             throw new Error(`invalid prekey count: ${count}`)
         }
 
+        // Bail if a round adds no available prekey (a colliding keyId makes the
+        // insert a no-op); without this the loop would spin forever.
+        let lastAvailableCount = -1
+
         while (true) {
             const reservation = await this.withTransaction(async (conn) => {
                 await this.ensureMetaRow(conn)
@@ -112,6 +116,13 @@ export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore 
             if (available.length >= count) {
                 return available
             }
+            if (available.length <= lastAvailableCount) {
+                throw new Error(
+                    'getOrGenPreKeys made no progress; the generator returned key ids ' +
+                        'that collide with stored prekeys'
+                )
+            }
+            lastAvailableCount = available.length
         }
     }
 

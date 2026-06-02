@@ -71,6 +71,10 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
             throw new Error(`invalid prekey count: ${count}`)
         }
 
+        // Bail if a round adds no available prekey; without this the loop would
+        // spin forever.
+        let lastAvailableCount = -1
+
         while (true) {
             await this.ensureMetaHash()
             const availKey = this.k('signal:pk:avail', this.sessionId)
@@ -188,6 +192,13 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
                     return finalKeys.slice(0, count)
                 }
             }
+            if (recheckIds.length <= lastAvailableCount) {
+                throw new Error(
+                    'getOrGenPreKeys made no progress; the generator returned key ids ' +
+                        'that collide with stored prekeys'
+                )
+            }
+            lastAvailableCount = recheckIds.length
         }
     }
 

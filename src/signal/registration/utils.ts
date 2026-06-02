@@ -31,8 +31,9 @@ export async function createAndStoreInitialKeys(
     // Keep writes ordered so partial commit failures don't leave split registration bootstrap state.
     await store.setRegistrationInfo(registrationInfo)
     await store.setSignedPreKey(signedPreKey)
-    // eslint-disable-next-line @typescript-eslint/require-await
-    await preKeyStore.getOrGenSinglePreKey(async () => firstPreKey)
+    // putPreKey (idempotent), not getOrGenSinglePreKey: a fixed-keyId generator
+    // collides with a stale keyId 1 and would spin forever inside getOrGen*.
+    await preKeyStore.putPreKey(firstPreKey)
 
     return {
         registrationInfo,

@@ -6,6 +6,9 @@ import type { WithDestroyLifecycle } from '@store/types'
 const WA_PREKEY_KEY = 'prekey:prekeys'
 const WA_PREKEY_SERVER_KEY = 'prekey:serverHasPreKeys'
 const WA_PREKEY_CLEAR_KEY = 'prekey:clear'
+// consume is independent of the counter/generation and atomic in the store, so it
+// uses a per-id key instead of WA_PREKEY_KEY: no queueing behind generation/upload.
+const WA_PREKEY_CONSUME_PREFIX = 'prekey:consume:'
 
 export function withPreKeyLock(store: WaPreKeyStore): WithDestroyLifecycle<WaPreKeyStore> {
     const lock = new StoreLock()
@@ -21,7 +24,11 @@ export function withPreKeyLock(store: WaPreKeyStore): WithDestroyLifecycle<WaPre
         getPreKeyById: (keyId) => gate.runShared(() => store.getPreKeyById(keyId)),
         getPreKeysById: (keyIds) => gate.runShared(() => store.getPreKeysById(keyIds)),
         consumePreKeyById: (keyId) =>
-            gate.runShared(() => lock.run(WA_PREKEY_KEY, () => store.consumePreKeyById(keyId))),
+            gate.runShared(() =>
+                lock.run(`${WA_PREKEY_CONSUME_PREFIX}${keyId}`, () =>
+                    store.consumePreKeyById(keyId)
+                )
+            ),
         getOrGenSinglePreKey: (generator) =>
             gate.runShared(() =>
                 lock.run(WA_PREKEY_KEY, () => store.getOrGenSinglePreKey(generator))

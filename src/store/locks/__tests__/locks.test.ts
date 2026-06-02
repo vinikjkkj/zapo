@@ -2,11 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { WaMessageStore, WaStoredMessageRecord } from '@store/contracts/message.store'
+import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type {
     WaPrivacyTokenStore,
     WaStoredPrivacyTokenRecord
 } from '@store/contracts/privacy-token.store'
 import { withMessageLock } from '@store/locks/message.lock'
+import { withPreKeyLock } from '@store/locks/pre-key.lock'
 import { withPrivacyTokenLock } from '@store/locks/privacy-token.lock'
 import { delay } from '@util/async'
 
@@ -95,6 +97,36 @@ function createPrivacyTokenStore(
         clear: async () => {
             records.clear()
         }
+    }
+}
+
+function createPreKeyStore(handlers: {
+    readonly onGenerate?: () => Promise<void>
+    readonly onConsume?: () => Promise<void>
+}): WaPreKeyStore {
+    return {
+        putPreKey: async () => undefined,
+        getOrGenPreKeys: async () => {
+            if (handlers.onGenerate) {
+                await handlers.onGenerate()
+            }
+            return []
+        },
+        getPreKeyById: async () => null,
+        getPreKeysById: async () => [],
+        consumePreKeyById: async () => {
+            if (handlers.onConsume) {
+                await handlers.onConsume()
+            }
+            return null
+        },
+        getOrGenSinglePreKey: async () => {
+            throw new Error('unused')
+        },
+        markKeyAsUploaded: async () => undefined,
+        setServerHasPreKeys: async () => undefined,
+        getServerHasPreKeys: async () => false,
+        clear: async () => undefined
     }
 }
 
@@ -218,4 +250,37 @@ test('privacy token lock allows parallel writes for different jids', async (t) =
     await done
 
     assert.equal(maxInFlight, 2)
+})
+
+test('prekey lock lets consume run while a generation holds the lock', async () => {
+    let releaseGeneration: () => void = () => undefined
+    const generationBlocked = new Promise<void>((resolve) => {
+        releaseGeneration = resolve
+    })
+    let signalGenerationStarted: () => void = () => undefined
+    const generationStarted = new Promise<void>((resolve) => {
+        signalGenerationStarted = resolve
+    })
+
+    const store = withPreKeyLock(
+        createPreKeyStore({
+            onGenerate: async () => {
+                signalGenerationStarted()
+                await generationBlocked
+            }
+        })
+    )
+
+    const generation = store.getOrGenPreKeys(8, (keyId) => ({
+        keyId,
+        keyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) },
+        uploaded: false
+    }))
+    await generationStarted
+
+    // Shared with the generation lock this would deadlock; per-id it resolves now.
+    assert.equal(await store.consumePreKeyById(5), null)
+
+    releaseGeneration()
+    await generation
 })
