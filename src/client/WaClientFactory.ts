@@ -363,7 +363,8 @@ function createIncomingNodeRuntime(input: {
         emitRegistrationCode: (event) => emitEvent('mobile_registration_code', event),
         emitAccountTakeoverNotice: (event) => emitEvent('mobile_account_takeover_notice', event),
         emitGroupEvent: (event) => {
-            emitEvent('group', event)
+            // Register the cache mutation before emitting so a handler that
+            // sends synchronously sees the fresh participants, not the stale ones.
             void messageDispatch.mutateGroupMetadataCacheFromGroupEvent(event).catch((error) => {
                 logger.warn('failed to mutate group metadata cache from group event', {
                     action: event.action,
@@ -372,6 +373,7 @@ function createIncomingNodeRuntime(input: {
                     message: toError(error).message
                 })
             })
+            emitEvent('group', event)
         },
         emitBusinessEvent: (event) => emitEvent('business', event),
         emitPictureEvent: (event) => emitEvent('picture', event),

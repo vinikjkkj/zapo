@@ -28,6 +28,7 @@ export function createGroupMetadataCache(options: {
 }): GroupMetadataCache {
     const { groupMetadataStore, queryGroupMetadata, logger } = options
     const dedup = new PromiseDedup()
+    const pendingMutations = new Map<string, Promise<void>>()
 
     const sanitizeParticipantUsers = (participants: readonly string[]): readonly string[] => {
         const deduped = new Set<string>()
@@ -170,14 +171,9 @@ export function createGroupMetadataCache(options: {
     const extractParticipantUsersFromGroupEvent = (event: WaGroupEvent): readonly string[] => {
         const candidates: string[] = []
         for (const participant of event.participants ?? []) {
-            if (participant.jid) {
-                candidates.push(participant.jid)
-            }
-            if (participant.lidJid) {
-                candidates.push(participant.lidJid)
-            }
-            if (participant.phoneJid) {
-                candidates.push(participant.phoneJid)
+            const canonical = participant.jid ?? participant.lidJid ?? participant.phoneJid
+            if (canonical) {
+                candidates.push(canonical)
             }
         }
         return sanitizeParticipantUsers(candidates)
@@ -198,6 +194,7 @@ export function createGroupMetadataCache(options: {
 
     const resolveParticipantUsers = (groupJid: string): Promise<readonly string[]> =>
         dedup.run(`resolve:${groupJid}`, async () => {
+            await pendingMutations.get(groupJid)?.catch(() => undefined)
             const cached = await groupMetadataStore.getGroupMetadata(groupJid)
             if (cached && cached.participants.length > 0) {
                 return sanitizeParticipantUsers(cached.participants)
@@ -220,7 +217,7 @@ export function createGroupMetadataCache(options: {
         return refreshed?.ephemeral ?? null
     }
 
-    const mutateFromGroupEvent = async (event: WaGroupEvent): Promise<void> => {
+    const applyGroupEvent = async (event: WaGroupEvent): Promise<void> => {
         const groupJid = resolveGroupJidForGroupCacheEvent(event)
         if (!groupJid) {
             return
@@ -304,6 +301,24 @@ export function createGroupMetadataCache(options: {
                 participantUsers
             )
         }
+    }
+
+    const mutateFromGroupEvent = (event: WaGroupEvent): Promise<void> => {
+        const groupJid = resolveGroupJidForGroupCacheEvent(event)
+        if (!groupJid) {
+            return applyGroupEvent(event)
+        }
+        const prev = pendingMutations.get(groupJid) ?? Promise.resolve()
+        const next = prev.then(
+            () => applyGroupEvent(event),
+            () => applyGroupEvent(event)
+        )
+        pendingMutations.set(groupJid, next)
+        return next.finally(() => {
+            if (pendingMutations.get(groupJid) === next) {
+                pendingMutations.delete(groupJid)
+            }
+        })
     }
 
     return {

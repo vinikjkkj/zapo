@@ -178,6 +178,76 @@ test('group metadata cache mutates membership from events', async () => {
     }
 })
 
+test('group metadata cache add stores only the canonical (lid) participant form', async () => {
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    try {
+        const cache = createGroupMetadataCache({
+            groupMetadataStore,
+            queryGroupMetadata: async () => ({ participants: [] }),
+            logger: createNoopLogger()
+        })
+
+        await cache.mutateFromGroupEvent(
+            createGroupEvent({
+                action: 'create',
+                groupJid: '120@g.us',
+                participants: ['108869518913624@lid']
+            })
+        )
+
+        await cache.mutateFromGroupEvent({
+            rawNode: { tag: 'notification', attrs: {} },
+            rawActionNode: { tag: 'add', attrs: {} },
+            action: 'add',
+            groupJid: '120@g.us',
+            participants: [
+                {
+                    jid: '75935072161893@lid',
+                    phoneJid: '554796129545@s.whatsapp.net'
+                }
+            ]
+        })
+
+        const cached = await groupMetadataStore.getGroupMetadata('120@g.us')
+        assert.deepEqual(cached?.participants, ['108869518913624@lid', '75935072161893@lid'])
+    } finally {
+        await groupMetadataStore.destroy()
+    }
+})
+
+test('group metadata cache resolve awaits an in-flight membership mutation', async () => {
+    const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
+    try {
+        const cache = createGroupMetadataCache({
+            groupMetadataStore,
+            queryGroupMetadata: async () => ({ participants: [] }),
+            logger: createNoopLogger()
+        })
+
+        await cache.mutateFromGroupEvent(
+            createGroupEvent({
+                action: 'create',
+                groupJid: '120@g.us',
+                participants: ['551100000000@s.whatsapp.net']
+            })
+        )
+
+        const joinMutation = cache.mutateFromGroupEvent(
+            createGroupEvent({
+                action: 'add',
+                groupJid: '120@g.us',
+                participants: ['552200000000@s.whatsapp.net']
+            })
+        )
+        const resolved = await cache.resolveParticipantUsers('120@g.us')
+        await joinMutation
+
+        assert.deepEqual(resolved, ['551100000000@s.whatsapp.net', '552200000000@s.whatsapp.net'])
+    } finally {
+        await groupMetadataStore.destroy()
+    }
+})
+
 test('group metadata cache stores and updates ephemeral from events', async () => {
     const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
     try {
