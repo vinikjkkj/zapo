@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/store-mysql",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "MySQL/MariaDB store provider for zapo-js",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",

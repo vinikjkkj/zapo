@@ -1,5 +1,16 @@
 # zapo-js
 
+## 1.0.1
+
+### Patch Changes
+
+- Keep credentials on a forced-login stream error instead of clearing them, so the next connect can recover the existing session.
+- Order the group-event cache mutation before the event emit and store the canonical participant, so listeners observe consistent cached metadata.
+- Stop `getOrGenPreKeys` from spinning when generated pre-key ids collide with already-stored ids.
+- Send the E.164-prefixed contact in the device-sync usync query.
+- Use a 100px max edge when generating image and video thumbnails.
+- Resolve tsc-alias path mapping by pointing every `tsconfig.json` alias at its parent directory instead of an entry file, so emitted `.d.ts` files no longer contain unresolved `@module` / `zapo-js/*` import specifiers.
+
 ## 1.0.0
 
 ### Major Changes

@@ -1,5 +1,12 @@
 # @zapo-js/mcp-server
 
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies
+    - @zapo-js/store-sqlite@1.0.1
+
 ## 1.0.0
 
 ### Major Changes

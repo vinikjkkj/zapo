@@ -1,5 +1,11 @@
 # @zapo-js/store-postgres
 
+## 1.0.1
+
+### Patch Changes
+
+- Stop `getOrGenPreKeys` from spinning when generated pre-key ids collide with already-stored ids.
+
 ## 1.0.0
 
 ### Major Changes
