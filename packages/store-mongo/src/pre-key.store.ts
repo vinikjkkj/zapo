@@ -68,10 +68,6 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
             throw new Error(`invalid prekey count: ${count}`)
         }
 
-        // Bail if a round adds no available prekey (a colliding keyId makes the
-        // upsert a no-op); without this the loop would spin forever.
-        let lastAvailableCount = -1
-
         while (true) {
             await this.ensureIndexes()
             const metaCol = this.col<MetaDoc>('signal_meta')
@@ -119,6 +115,7 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
             }
 
             const prekeys = this.col<PreKeyDoc>('signal_prekeys')
+            let insertedCount = 0
             if (generated.length > 0) {
                 const ops = generated.map((record) => ({
                     updateOne: {
@@ -135,7 +132,8 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
                         upsert: true
                     }
                 }))
-                await prekeys.bulkWrite(ops, { ordered: false })
+                const result = await prekeys.bulkWrite(ops, { ordered: false })
+                insertedCount = result.upsertedCount
             }
 
             await metaCol.updateOne(
@@ -143,17 +141,19 @@ export class WaPreKeyMongoStore extends BaseMongoStore implements WaPreKeyStore 
                 { $max: { next_prekey_id: maxId + 1 } }
             )
 
-            const finalAvailable = await this.selectAvailablePreKeys(count)
-            if (finalAvailable.length >= count) {
-                return finalAvailable
-            }
-            if (finalAvailable.length <= lastAvailableCount) {
+            // No new docs: the generator returned already-stored key ids (upsert
+            // no-op). Bail instead of looping; robust to a concurrent consume.
+            if (insertedCount === 0) {
                 throw new Error(
                     'getOrGenPreKeys made no progress; the generator returned key ids ' +
                         'that collide with stored prekeys'
                 )
             }
-            lastAvailableCount = finalAvailable.length
+
+            const finalAvailable = await this.selectAvailablePreKeys(count)
+            if (finalAvailable.length >= count) {
+                return finalAvailable
+            }
         }
     }
 

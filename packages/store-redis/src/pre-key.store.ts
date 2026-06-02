@@ -71,10 +71,6 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
             throw new Error(`invalid prekey count: ${count}`)
         }
 
-        // Bail if a round adds no available prekey; without this the loop would
-        // spin forever.
-        let lastAvailableCount = -1
-
         while (true) {
             await this.ensureMetaHash()
             const availKey = this.k('signal:pk:avail', this.sessionId)
@@ -133,8 +129,10 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
 
             const pipeline = this.redis.pipeline()
             const idsKey = this.k('signal:pk:ids', this.sessionId)
+            const idStrs: string[] = []
             for (const record of generated) {
                 const idStr = String(record.keyId)
+                idStrs.push(idStr)
                 const pkKey = this.k('signal:pk', this.sessionId, idStr)
                 ;(pipeline.hset as (...args: unknown[]) => unknown)(
                     pkKey,
@@ -145,12 +143,19 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
                     'priv',
                     toRedisBuffer(record.keyPair.privKey)
                 )
-                pipeline.sadd(idsKey, idStr)
                 if (record.uploaded !== true) {
                     pipeline.zadd(availKey, record.keyId, idStr)
                 }
             }
-            await pipeline.exec()
+            // One variadic SADD (the last command) returns how many ids were
+            // genuinely new, i.e. how many prekeys this round actually inserted.
+            pipeline.sadd(idsKey, ...idStrs)
+            const execResults = await pipeline.exec()
+            const saddResult = execResults ? execResults[execResults.length - 1] : undefined
+            const insertedCount =
+                saddResult && saddResult[0] === null && typeof saddResult[1] === 'number'
+                    ? saddResult[1]
+                    : 0
             // Atomically reconcile if the generator produced IDs beyond the reserved range
             if (maxId + 1 > reservedIds[reservedIds.length - 1] + 1) {
                 await this.redis.eval(
@@ -192,13 +197,14 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
                     return finalKeys.slice(0, count)
                 }
             }
-            if (recheckIds.length <= lastAvailableCount) {
+            // No new ids: the generator returned already-stored key ids. Bail
+            // instead of looping; robust to a concurrent consume.
+            if (insertedCount === 0) {
                 throw new Error(
                     'getOrGenPreKeys made no progress; the generator returned key ids ' +
                         'that collide with stored prekeys'
                 )
             }
-            lastAvailableCount = recheckIds.length
         }
     }
 

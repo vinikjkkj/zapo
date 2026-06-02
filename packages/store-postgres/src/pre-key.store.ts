@@ -31,10 +31,6 @@ export class WaPreKeyPgStore extends BasePgStore implements WaPreKeyStore {
             throw new Error(`invalid prekey count: ${count}`)
         }
 
-        // Bail if a round adds no available prekey (a colliding keyId makes the
-        // insert a no-op); without this the loop would spin forever.
-        let lastAvailableCount = -1
-
         while (true) {
             const reservation = await this.withTransaction(async (client) => {
                 await this.ensureMetaRow(client)
@@ -66,10 +62,11 @@ export class WaPreKeyPgStore extends BasePgStore implements WaPreKeyStore {
                 }
             }
 
-            await this.withTransaction(async (client) => {
+            const insertedCount = await this.withTransaction(async (client) => {
                 await this.ensureMetaRow(client)
                 const sizes = this.powerOfTwoChunks(generated.length)
                 let cursor = 0
+                let inserted = 0
                 for (const size of sizes) {
                     const chunk = generated.slice(cursor, cursor + size)
                     cursor += size
@@ -91,7 +88,7 @@ export class WaPreKeyPgStore extends BasePgStore implements WaPreKeyStore {
                             record.uploaded === true ? 1 : 0
                         )
                     }
-                    await client.query({
+                    const result = await client.query({
                         name: this.stmtName(`prekey_insert_batch_${chunk.length}`),
                         text: `INSERT INTO ${this.t('signal_prekey')} (
                             session_id, key_id, pub_key, priv_key, uploaded
@@ -99,9 +96,20 @@ export class WaPreKeyPgStore extends BasePgStore implements WaPreKeyStore {
                         ON CONFLICT (session_id, key_id) DO NOTHING`,
                         values: params
                     })
+                    inserted += result.rowCount ?? 0
                 }
                 await this.updateNextPreKeyId(client, maxId + 1)
+                return inserted
             })
+
+            // No new rows: the generator returned already-stored key ids (insert
+            // no-op). Bail instead of looping; robust to a concurrent consume.
+            if (insertedCount === 0) {
+                throw new Error(
+                    'getOrGenPreKeys made no progress; the generator returned key ids ' +
+                        'that collide with stored prekeys'
+                )
+            }
 
             const available = await this.withTransaction(async (client) =>
                 this.selectAvailablePreKeys(client, count)
@@ -109,13 +117,6 @@ export class WaPreKeyPgStore extends BasePgStore implements WaPreKeyStore {
             if (available.length >= count) {
                 return available
             }
-            if (available.length <= lastAvailableCount) {
-                throw new Error(
-                    'getOrGenPreKeys made no progress; the generator returned key ids ' +
-                        'that collide with stored prekeys'
-                )
-            }
-            lastAvailableCount = available.length
         }
     }
 

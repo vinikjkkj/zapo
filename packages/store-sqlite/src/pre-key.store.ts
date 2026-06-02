@@ -54,9 +54,6 @@ export class WaPreKeySqliteStore extends BaseSqliteStore implements WaPreKeyStor
         if (!Number.isSafeInteger(count) || count <= 0) {
             throw new Error(`invalid prekey count: ${count}`)
         }
-        // Bail if a round adds no available prekey (a colliding keyId makes the
-        // insert a no-op); without this the loop would spin forever.
-        let lastAvailableCount = -1
         while (true) {
             const reservation = await this.withTransaction((db) => {
                 this.ensureMetaRow(db)
@@ -101,8 +98,9 @@ export class WaPreKeySqliteStore extends BaseSqliteStore implements WaPreKeyStor
                 }
             }
 
-            await this.withTransaction((db) => {
+            const insertedCount = await this.withTransaction((db) => {
                 this.ensureMetaRow(db)
+                const before = this.countPreKeys(db)
                 for (const record of generated) {
                     this.insertPreKeyIfMissing(db, record)
                 }
@@ -112,7 +110,17 @@ export class WaPreKeySqliteStore extends BaseSqliteStore implements WaPreKeyStor
                      WHERE session_id = ?`,
                     [maxGeneratedKeyId + 1, this.options.sessionId]
                 )
+                return this.countPreKeys(db) - before
             })
+
+            // No new rows: the generator returned already-stored key ids (insert
+            // no-op). Bail instead of looping; robust to a concurrent consume.
+            if (insertedCount === 0) {
+                throw new Error(
+                    'getOrGenPreKeys made no progress; the generator returned key ids ' +
+                        'that collide with stored prekeys'
+                )
+            }
 
             const available = await this.withTransaction((db) =>
                 this.selectAvailablePreKeys(db, count)
@@ -120,13 +128,6 @@ export class WaPreKeySqliteStore extends BaseSqliteStore implements WaPreKeyStor
             if (available.length >= count) {
                 return available
             }
-            if (available.length <= lastAvailableCount) {
-                throw new Error(
-                    'getOrGenPreKeys made no progress; the generator returned key ids ' +
-                        'that collide with stored prekeys'
-                )
-            }
-            lastAvailableCount = available.length
         }
     }
 
@@ -260,6 +261,14 @@ export class WaPreKeySqliteStore extends BaseSqliteStore implements WaPreKeyStor
             records[index] = decodeSignalPreKeyRow(rows[index])
         }
         return records
+    }
+
+    private countPreKeys(db: WaSqliteConnection): number {
+        const row = db.get<{ count: number }>(
+            `SELECT COUNT(*) AS count FROM signal_prekey WHERE session_id = ?`,
+            [this.options.sessionId]
+        )
+        return row?.count ?? 0
     }
 
     private upsertPreKey(db: WaSqliteConnection, record: PreKeyRecord): void {

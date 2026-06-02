@@ -3,7 +3,7 @@ import type { PreKeyRecord } from 'zapo-js/signal'
 import type { WaPreKeyStore } from 'zapo-js/store'
 
 import { BaseMysqlStore } from './BaseMysqlStore'
-import { type MysqlRow, queryFirst, queryRows, safeLimit, toBytes } from './helpers'
+import { affectedRows, type MysqlRow, queryFirst, queryRows, safeLimit, toBytes } from './helpers'
 import type { MysqlParam, WaMysqlStorageOptions } from './types'
 
 const BATCH_SIZE = 250
@@ -36,10 +36,6 @@ export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore 
         if (!Number.isSafeInteger(count) || count <= 0) {
             throw new Error(`invalid prekey count: ${count}`)
         }
-
-        // Bail if a round adds no available prekey (a colliding keyId makes the
-        // insert a no-op); without this the loop would spin forever.
-        let lastAvailableCount = -1
 
         while (true) {
             const reservation = await this.withTransaction(async (conn) => {
@@ -77,10 +73,11 @@ export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore 
                 }
             }
 
-            await this.withTransaction(async (conn) => {
+            const insertedCount = await this.withTransaction(async (conn) => {
                 await this.ensureMetaRow(conn)
                 const sizes = this.powerOfTwoChunks(generated.length)
                 let cursor = 0
+                let inserted = 0
                 for (const size of sizes) {
                     const chunk = generated.slice(cursor, cursor + size)
                     cursor += size
@@ -95,11 +92,13 @@ export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore 
                             record.uploaded === true ? 1 : 0
                         )
                     }
-                    await conn.execute(
-                        `INSERT IGNORE INTO ${this.t('signal_prekey')} (
-                            session_id, key_id, pub_key, priv_key, uploaded
-                        ) VALUES ${placeholders}`,
-                        params
+                    inserted += affectedRows(
+                        await conn.execute(
+                            `INSERT IGNORE INTO ${this.t('signal_prekey')} (
+                                session_id, key_id, pub_key, priv_key, uploaded
+                            ) VALUES ${placeholders}`,
+                            params
+                        )
                     )
                 }
                 await conn.execute(
@@ -108,7 +107,17 @@ export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore 
                      WHERE session_id = ?`,
                     [maxId + 1, this.sessionId]
                 )
+                return inserted
             })
+
+            // No new rows: the generator returned already-stored key ids (insert
+            // no-op). Bail instead of looping; robust to a concurrent consume.
+            if (insertedCount === 0) {
+                throw new Error(
+                    'getOrGenPreKeys made no progress; the generator returned key ids ' +
+                        'that collide with stored prekeys'
+                )
+            }
 
             const available = await this.withTransaction(async (conn) =>
                 this.selectAvailablePreKeys(conn, count)
@@ -116,13 +125,6 @@ export class WaPreKeyMysqlStore extends BaseMysqlStore implements WaPreKeyStore 
             if (available.length >= count) {
                 return available
             }
-            if (available.length <= lastAvailableCount) {
-                throw new Error(
-                    'getOrGenPreKeys made no progress; the generator returned key ids ' +
-                        'that collide with stored prekeys'
-                )
-            }
-            lastAvailableCount = available.length
         }
     }
 
