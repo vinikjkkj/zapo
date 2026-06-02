@@ -252,35 +252,39 @@ test('privacy token lock allows parallel writes for different jids', async (t) =
     assert.equal(maxInFlight, 2)
 })
 
-test('prekey lock lets consume run while a generation holds the lock', async () => {
-    let releaseGeneration: () => void = () => undefined
-    const generationBlocked = new Promise<void>((resolve) => {
-        releaseGeneration = resolve
-    })
-    let signalGenerationStarted: () => void = () => undefined
-    const generationStarted = new Promise<void>((resolve) => {
-        signalGenerationStarted = resolve
-    })
-
-    const store = withPreKeyLock(
-        createPreKeyStore({
-            onGenerate: async () => {
-                signalGenerationStarted()
-                await generationBlocked
-            }
+test(
+    'prekey lock lets consume run while a generation holds the lock',
+    { timeout: 5_000 },
+    async () => {
+        let releaseGeneration: () => void = () => undefined
+        const generationBlocked = new Promise<void>((resolve) => {
+            releaseGeneration = resolve
         })
-    )
+        let signalGenerationStarted: () => void = () => undefined
+        const generationStarted = new Promise<void>((resolve) => {
+            signalGenerationStarted = resolve
+        })
 
-    const generation = store.getOrGenPreKeys(8, (keyId) => ({
-        keyId,
-        keyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) },
-        uploaded: false
-    }))
-    await generationStarted
+        const store = withPreKeyLock(
+            createPreKeyStore({
+                onGenerate: async () => {
+                    signalGenerationStarted()
+                    await generationBlocked
+                }
+            })
+        )
 
-    // Shared with the generation lock this would deadlock; per-id it resolves now.
-    assert.equal(await store.consumePreKeyById(5), null)
+        const generation = store.getOrGenPreKeys(8, (keyId) => ({
+            keyId,
+            keyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) },
+            uploaded: false
+        }))
+        await generationStarted
 
-    releaseGeneration()
-    await generation
-})
+        // Shared with the generation lock this would deadlock; per-id it resolves now.
+        assert.equal(await store.consumePreKeyById(5), null)
+
+        releaseGeneration()
+        await generation
+    }
+)
