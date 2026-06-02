@@ -314,7 +314,9 @@ export class SignalDeviceSyncApi {
                     {
                         tag: WA_NODE_TAGS.CONTACT,
                         attrs: {},
-                        content: splitJid(jid).user
+                        // E.164 '+': without it the server normalizes under the
+                        // account's country and resolves the wrong contact.
+                        content: `+${splitJid(jid).user}`
                     }
                 ]
             }
