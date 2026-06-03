@@ -169,6 +169,39 @@ test('resolveSendContextInfo uses peer for a flat WaMessageKey quote not fromMe'
     assert.equal(result?.quotedParticipant, 'peer@lid')
 })
 
+test('resolveSendContextInfo omits quotedRemoteJid for a same-chat quote', () => {
+    const result = resolveSendContextInfo({
+        quote: { id: 'm-9', remoteJid: 'peer@lid', fromMe: false },
+        targetJid: 'peer@lid'
+    })
+    assert.equal(result?.quotedRemoteJid, undefined)
+    assert.equal(result?.quotedParticipant, 'peer@lid')
+    assert.equal(result?.quotedMessageId, 'm-9')
+})
+
+test('resolveSendContextInfo emits quotedRemoteJid for a cross-chat quote', () => {
+    const result = resolveSendContextInfo({
+        quote: { id: 'm-10', remoteJid: 'other@lid', fromMe: false },
+        targetJid: 'peer@lid'
+    })
+    assert.equal(result?.quotedRemoteJid, 'other@lid')
+})
+
+test('resolveSendContextInfo treats a device-suffixed target as the same chat', () => {
+    const result = resolveSendContextInfo({
+        quote: { id: 'm-11', remoteJid: 'peer@lid', fromMe: false },
+        targetJid: 'peer:3@lid'
+    })
+    assert.equal(result?.quotedRemoteJid, undefined)
+})
+
+test('resolveSendContextInfo emits quotedRemoteJid when no target is provided', () => {
+    const result = resolveSendContextInfo({
+        quote: { id: 'm-12', remoteJid: 'peer@lid', fromMe: false }
+    })
+    assert.equal(result?.quotedRemoteJid, 'peer@lid')
+})
+
 test('resolveSendContextInfo applies forward with default score', () => {
     const result = resolveSendContextInfo({ forward: true })
     assert.equal(result?.isForwarded, true)
