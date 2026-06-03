@@ -1,5 +1,5 @@
 import type { Proto } from '@proto'
-import { isGroupOrBroadcastJid } from '@protocol/jid'
+import { isGroupOrBroadcastJid, toUserJid } from '@protocol/jid'
 
 export interface WaSendContextInfo {
     readonly quotedMessageId?: string
@@ -158,6 +158,14 @@ export interface WaSendContextResolveInput {
     readonly forward?: WaForwardSource
     readonly mentions?: readonly string[]
     /**
+     * Chat the message is being sent to. When provided, the quote's
+     * `remoteJid` is emitted only for a cross-chat quote (the quoted message
+     * lives in a different chat), mirroring wa-web's `msgContextInfo`, which
+     * sets `remoteJid` only when `quotedMsg.remote !== targetChat`. Omit it to
+     * keep emitting `remoteJid` unconditionally.
+     */
+    readonly targetJid?: string
+    /**
      * LID-form self user JID. Used as the DM-quote `participant` fallback when
      * the quoted message is `fromMe` and no explicit participant was provided.
      * Mirrors wa-web's `getSender(msg)` (returns `msg.from`, which for 1:1 is
@@ -187,7 +195,16 @@ export function resolveSendContextInfo(input: WaSendContextResolveInput): WaSend
                     : quotedRemote
                 : undefined
         ctx.quotedParticipant = explicit ?? dmFallback ?? ctx.quotedParticipant
-        ctx.quotedRemoteJid = quotedRemote ?? ctx.quotedRemoteJid
+        const crossChat =
+            quotedRemote !== undefined &&
+            (input.targetJid === undefined || !isSameChatJid(quotedRemote, input.targetJid))
+        if (quotedRemote !== undefined) {
+            if (crossChat) {
+                ctx.quotedRemoteJid = quotedRemote
+            } else {
+                delete ctx.quotedRemoteJid
+            }
+        }
         ctx.quotedMessage = q.message ?? ctx.quotedMessage
     }
 
@@ -210,4 +227,8 @@ function hasAnyKey(value: object): boolean {
         return true
     }
     return false
+}
+
+function isSameChatJid(a: string, b: string): boolean {
+    return toUserJid(a) === toUserJid(b)
 }
