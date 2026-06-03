@@ -97,7 +97,8 @@ export type {
     WaBusinessCoordinator,
     WaVerifiedNameBatchEntry
 } from '@client/coordinators/WaBusinessCoordinator'
-export type { WaUploadMediaSource } from '@client/media'
+export { downloadMediaMessage } from '@client/media'
+export type { WaDownloadMediaMessageOptions, WaUploadMediaSource } from '@client/media'
 export type { WaEditBusinessProfileInput } from '@transport/node/builders/business'
 export type {
     WaEmailCoordinator,
@@ -211,6 +212,8 @@ export type {
     WaSendTextMessage
 } from '@message/types'
 export { getContentType, resolveMessageTarget } from '@message/encode/content'
+export { resolveMediaPayload } from '@message/encode/media-payload'
+export type { WaResolvedMediaPayload } from '@message/encode/media-payload'
 export type { WaSendContextInfo } from '@message/context-info'
 export type {
     WaLinkPreviewFetcher,
