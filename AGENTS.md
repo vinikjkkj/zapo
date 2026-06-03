@@ -903,11 +903,18 @@ Changesets tracks the optional packages **only**, not the core. The root `packag
 
 ### Release process (on `master`, before pushing the tag)
 
-1. Confirm every add-on change in the release has a changeset: `npm run changeset:status`.
-2. Apply the add-on bumps + changelogs: `npm run version:packages` (runs `changeset version`, consumes the `.changeset/*.md`).
-3. Bump the core by hand if it changed: `npm version <level> --no-git-tag-version`.
-4. Commit everything as one release commit: `chore: release vX.Y.Z`, where `X.Y.Z` is the core version.
-5. Tag with the core version and push it: `git tag vX.Y.Z && git push && git push origin vX.Y.Z`.
+1. List every commit since the last release and have the AI triage it. The input is `git log $(git describe --tags --match 'v*' --abbrev=0)..HEAD --stat`. Ask the AI to:
+    - attribute each commit to the **core** (`src/`) or an **add-on** (`packages/<name>/`) by the files it touched;
+    - propose the SemVer bump per area from the conventional-commit prefix – `feat` → minor, `fix`/`perf` → patch, a `!` marker or `BREAKING CHANGE` footer → major, and `chore`/`docs`/`ci`/`test`-only commits that ship no code → no bump (the highest wins per area);
+    - draft the changeset body for each touched add-on and the release-notes summary for the core.
+
+    The AI proposes; you decide.
+
+2. Write a changeset for every add-on the AI flagged that does not have one yet (`npx changeset`), then confirm with `npm run changeset:status`.
+3. Apply the add-on bumps + changelogs: `npm run version:packages` (runs `changeset version`, consumes the `.changeset/*.md`).
+4. Bump the core by hand if it changed, at the level the AI proposed: `npm version <level> --no-git-tag-version`.
+5. Commit everything as one release commit: `chore: release vX.Y.Z`, where `X.Y.Z` is the core version.
+6. Tag with the core version and push it: `git tag vX.Y.Z && git push && git push origin vX.Y.Z`.
 
 Pushing the `v*` tag triggers `.github/workflows/release.yml`, which publishes via npm trusted publishing (OIDC, no `NPM_TOKEN`): the core through a guarded `npm publish` (skipped when its version is already on the registry) and the add-ons through `changeset publish` (only the `@zapo-js/*` whose version is not yet on npm). `.github/workflows/github-release.yml` creates the GitHub Release from the same tag.
 
