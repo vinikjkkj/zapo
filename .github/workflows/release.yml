@@ -22,6 +22,8 @@ jobs:
 
         steps:
             - uses: actions/checkout@v4
+              with:
+                  persist-credentials: false # job publishes via OIDC and never git-pushes
 
             - uses: ./.github/actions/setup-node
 
