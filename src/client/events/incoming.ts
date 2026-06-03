@@ -4,6 +4,7 @@ import { parseCallNode } from '@client/events/call'
 import { parseGroupNotificationEvents } from '@client/events/group'
 import { parseMexNotification } from '@client/events/mex-notification'
 import { parsePictureNotificationEvents } from '@client/events/picture'
+import { extractReceiptIds } from '@client/events/receipt'
 import { parseRegistrationNotification } from '@client/events/registration'
 import type {
     WaAccountTakeoverNoticeEvent,
@@ -286,7 +287,8 @@ export function createIncomingReceiptHandler(
                 status: mapped.status,
                 fromSelfDevice: mapped.fromSelfDevice,
                 participantJid: node.attrs.participant,
-                recipientJid: node.attrs.recipient
+                recipientJid: node.attrs.recipient,
+                messageIds: extractReceiptIds(node)
             })
         } else if (node.attrs.type && !INTERNAL_ONLY_RECEIPT_TYPES.has(node.attrs.type)) {
             options.logger.warn('unrecognized receipt type suppressed', {

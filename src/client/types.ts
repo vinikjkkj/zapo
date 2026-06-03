@@ -556,6 +556,13 @@ export interface WaIncomingReceiptEvent extends WaIncomingBaseEvent {
     readonly fromSelfDevice: boolean
     readonly participantJid?: string
     readonly recipientJid?: string
+    /**
+     * All message ids this receipt acknowledges. For batch read/delivery
+     * receipts this is the `<list><item>` ids plus the top-level `stanzaId`;
+     * for single receipts it is just `[stanzaId]`. Mirrors WhatsApp Web's
+     * `externalIds`.
+     */
+    readonly messageIds: readonly string[]
 }
 
 export interface WaIncomingPresenceEvent extends WaIncomingBaseEvent {

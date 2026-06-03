@@ -9,7 +9,7 @@ import { parseGroupNotificationEvents } from '@client/events/group'
 import { parseMexNotification } from '@client/events/mex-notification'
 import { parsePresenceNode } from '@client/events/presence'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
-import { aggregateReceiptTargets } from '@client/events/receipt'
+import { aggregateReceiptTargets, extractReceiptIds } from '@client/events/receipt'
 import { parseRegistrationNotification } from '@client/events/registration'
 import { proto } from '@proto'
 import {
@@ -535,6 +535,65 @@ test('aggregateReceiptTargets groups by chat and sender, batching same-author id
         }
     ])
     assert.equal(broadcastExplicit[0].participant, 'erin@s.whatsapp.net')
+})
+
+test('extractReceiptIds returns just the top-level id for a single receipt', () => {
+    const node: BinaryNode = {
+        tag: 'receipt',
+        attrs: { id: 'A1', from: 'peer@s.whatsapp.net', type: 'read' }
+    }
+    assert.deepEqual(extractReceiptIds(node), ['A1'])
+})
+
+test('extractReceiptIds appends the top-level id after the <list><item> ids', () => {
+    const node: BinaryNode = {
+        tag: 'receipt',
+        attrs: { id: 'TOP', from: 'peer@s.whatsapp.net', type: 'read' },
+        content: [
+            {
+                tag: 'list',
+                attrs: {},
+                content: [
+                    { tag: 'item', attrs: { id: 'A' } },
+                    { tag: 'item', attrs: { id: 'B' } }
+                ]
+            }
+        ]
+    }
+    assert.deepEqual(extractReceiptIds(node), ['A', 'B', 'TOP'])
+})
+
+test('extractReceiptIds uses server_id and omits the top-level id for view receipts', () => {
+    const node: BinaryNode = {
+        tag: 'receipt',
+        attrs: { id: 'TOP', from: 'status@broadcast', type: 'view' },
+        content: [
+            {
+                tag: 'list',
+                attrs: {},
+                content: [
+                    { tag: 'item', attrs: { server_id: 'S1' } },
+                    { tag: 'item', attrs: { server_id: 'S2' } }
+                ]
+            }
+        ]
+    }
+    assert.deepEqual(extractReceiptIds(node), ['S1', 'S2'])
+})
+
+test('extractReceiptIds falls back to the top-level id for aggregated <participants> receipts', () => {
+    const node: BinaryNode = {
+        tag: 'receipt',
+        attrs: { id: 'TOP', from: 'group@g.us', type: 'read' },
+        content: [
+            {
+                tag: 'participants',
+                attrs: { key: 'k1' },
+                content: [{ tag: 'user', attrs: { jid: 'alice@s.whatsapp.net', t: '1' } }]
+            }
+        ]
+    }
+    assert.deepEqual(extractReceiptIds(node), ['TOP'])
 })
 
 function buildVerifiedNameCertBytes(opts: {
