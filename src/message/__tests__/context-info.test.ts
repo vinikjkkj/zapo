@@ -152,6 +152,23 @@ test('resolveSendContextInfo prefers explicit quote participant over DM fallback
     assert.equal(result?.quotedParticipant, 'explicit@lid')
 })
 
+test('resolveSendContextInfo reads top-level fromMe from a flat WaMessageKey quote', () => {
+    const result = resolveSendContextInfo({
+        quote: { id: 'm-7', remoteJid: 'peer@lid', fromMe: true },
+        meLid: 'me@lid'
+    })
+    assert.equal(result?.quotedParticipant, 'me@lid')
+    assert.equal(result?.quotedRemoteJid, 'peer@lid')
+})
+
+test('resolveSendContextInfo uses peer for a flat WaMessageKey quote not fromMe', () => {
+    const result = resolveSendContextInfo({
+        quote: { id: 'm-8', remoteJid: 'peer@lid', fromMe: false },
+        meLid: 'me@lid'
+    })
+    assert.equal(result?.quotedParticipant, 'peer@lid')
+})
+
 test('resolveSendContextInfo applies forward with default score', () => {
     const result = resolveSendContextInfo({ forward: true })
     assert.equal(result?.isForwarded, true)

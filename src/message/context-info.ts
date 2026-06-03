@@ -145,6 +145,7 @@ type WaQuoteSource = {
     readonly id?: string
     readonly remoteJid?: string
     readonly participant?: string
+    readonly fromMe?: boolean
     readonly message?: Proto.IMessage
 }
 
@@ -178,9 +179,10 @@ export function resolveSendContextInfo(input: WaSendContextResolveInput): WaSend
         ctx.quotedMessageId = q.id ?? q.key?.id ?? ctx.quotedMessageId
         const explicit = q.participant ?? q.key?.participant
         const quotedRemote = q.remoteJid ?? q.key?.remoteJid
+        const quotedFromMe = q.fromMe ?? q.key?.fromMe
         const dmFallback =
             explicit === undefined && quotedRemote && !isGroupOrBroadcastJid(quotedRemote)
-                ? q.key?.fromMe
+                ? quotedFromMe
                     ? input.meLid
                     : quotedRemote
                 : undefined
