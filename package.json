@@ -11,88 +11,88 @@
     "packageManager": "npm@10.0.0",
     "main": "dist/index.js",
     "module": "dist/esm/index.js",
-    "types": "dist/types/index.d.ts",
+    "types": "dist/index.d.ts",
     "exports": {
         ".": {
-            "types": "./dist/types/index.d.ts",
+            "types": "./dist/index.d.ts",
             "require": "./dist/index.js",
             "import": "./dist/esm/index.js",
             "default": "./dist/index.js"
         },
         "./client": {
-            "types": "./dist/types/client/index.d.ts",
+            "types": "./dist/client/index.d.ts",
             "require": "./dist/client/index.js",
             "import": "./dist/esm/client/index.js",
             "default": "./dist/client/index.js"
         },
         "./appstate": {
-            "types": "./dist/types/appstate/index.d.ts",
+            "types": "./dist/appstate/index.d.ts",
             "require": "./dist/appstate/index.js",
             "import": "./dist/esm/appstate/index.js",
             "default": "./dist/appstate/index.js"
         },
         "./auth": {
-            "types": "./dist/types/auth/index.d.ts",
+            "types": "./dist/auth/index.d.ts",
             "require": "./dist/auth/index.js",
             "import": "./dist/esm/auth/index.js",
             "default": "./dist/auth/index.js"
         },
         "./crypto": {
-            "types": "./dist/types/crypto/index.d.ts",
+            "types": "./dist/crypto/index.d.ts",
             "require": "./dist/crypto/index.js",
             "import": "./dist/esm/crypto/index.js",
             "default": "./dist/crypto/index.js"
         },
         "./media": {
-            "types": "./dist/types/media/index.d.ts",
+            "types": "./dist/media/index.d.ts",
             "require": "./dist/media/index.js",
             "import": "./dist/esm/media/index.js",
             "default": "./dist/media/index.js"
         },
         "./message": {
-            "types": "./dist/types/message/index.d.ts",
+            "types": "./dist/message/index.d.ts",
             "require": "./dist/message/index.js",
             "import": "./dist/esm/message/index.js",
             "default": "./dist/message/index.js"
         },
         "./signal": {
-            "types": "./dist/types/signal/index.d.ts",
+            "types": "./dist/signal/index.d.ts",
             "require": "./dist/signal/index.js",
             "import": "./dist/esm/signal/index.js",
             "default": "./dist/signal/index.js"
         },
         "./store": {
-            "types": "./dist/types/store/index.d.ts",
+            "types": "./dist/store/index.d.ts",
             "require": "./dist/store/index.js",
             "import": "./dist/esm/store/index.js",
             "default": "./dist/store/index.js"
         },
         "./transport": {
-            "types": "./dist/types/transport/index.d.ts",
+            "types": "./dist/transport/index.d.ts",
             "require": "./dist/transport/index.js",
             "import": "./dist/esm/transport/index.js",
             "default": "./dist/transport/index.js"
         },
         "./protocol": {
-            "types": "./dist/types/protocol/index.d.ts",
+            "types": "./dist/protocol/index.d.ts",
             "require": "./dist/protocol/index.js",
             "import": "./dist/esm/protocol/index.js",
             "default": "./dist/protocol/index.js"
         },
         "./retry": {
-            "types": "./dist/types/retry/index.d.ts",
+            "types": "./dist/retry/index.d.ts",
             "require": "./dist/retry/index.js",
             "import": "./dist/esm/retry/index.js",
             "default": "./dist/retry/index.js"
         },
         "./util": {
-            "types": "./dist/types/util/index.d.ts",
+            "types": "./dist/util/index.d.ts",
             "require": "./dist/util/index.js",
             "import": "./dist/esm/util/index.js",
             "default": "./dist/util/index.js"
         },
         "./proto": {
-            "types": "./dist/types/proto.d.ts",
+            "types": "./dist/proto.d.ts",
             "require": "./dist/proto.js",
             "import": "./dist/esm/proto.js",
             "default": "./dist/proto.js"

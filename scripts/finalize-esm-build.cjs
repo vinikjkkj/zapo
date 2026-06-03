@@ -108,5 +108,30 @@ function resolveSpecifier(filePath, specifier) {
         return `${specifier}/index.js`
     }
 
+    const specBridge = resolveSpecBridgeSpecifier(fileDirectory, specifier)
+    if (specBridge) {
+        return specBridge
+    }
+
     return specifier
+}
+
+// The vendored spec lives at <projectRoot>/spec, outside dist. The spec bridges
+// (proto/appstate-spec/mex/version-spec) import it via '../spec/<name>', which
+// only resolves from dist/ (depth 1); from dist/esm/ (depth 2) it would point at
+// the non-existent dist/spec. Repoint such specifiers at the real
+// <projectRoot>/spec/<name>/index.js with a correct relative path.
+function resolveSpecBridgeSpecifier(fileDirectory, specifier) {
+    const match = /^\.\.\/spec\/(.+)$/.exec(specifier)
+    if (!match) {
+        return null
+    }
+
+    const target = path.join(projectRoot, 'spec', match[1], 'index.js')
+    if (!existsSync(target)) {
+        return null
+    }
+
+    const relative = path.relative(fileDirectory, target).replaceAll(path.sep, '/')
+    return relative.startsWith('.') ? relative : `./${relative}`
 }

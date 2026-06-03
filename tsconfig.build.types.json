@@ -5,7 +5,7 @@
         "moduleResolution": "Node",
         "declaration": true,
         "emitDeclarationOnly": true,
-        "outDir": "dist/types"
+        "outDir": "dist"
     },
     "exclude": ["dist", "node_modules", "src/**/__tests__/**"]
 }
