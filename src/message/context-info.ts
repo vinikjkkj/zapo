@@ -198,8 +198,12 @@ export function resolveSendContextInfo(input: WaSendContextResolveInput): WaSend
         const crossChat =
             quotedRemote !== undefined &&
             (input.targetJid === undefined || !isSameChatJid(quotedRemote, input.targetJid))
-        if (crossChat) {
-            ctx.quotedRemoteJid = quotedRemote
+        if (quotedRemote !== undefined) {
+            if (crossChat) {
+                ctx.quotedRemoteJid = quotedRemote
+            } else {
+                delete ctx.quotedRemoteJid
+            }
         }
         ctx.quotedMessage = q.message ?? ctx.quotedMessage
     }

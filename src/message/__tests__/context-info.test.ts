@@ -202,6 +202,15 @@ test('resolveSendContextInfo emits quotedRemoteJid when no target is provided', 
     assert.equal(result?.quotedRemoteJid, 'peer@lid')
 })
 
+test('resolveSendContextInfo clears an inherited quotedRemoteJid for a same-chat quote', () => {
+    const result = resolveSendContextInfo({
+        optionsLevel: { quotedRemoteJid: 'stale@lid' },
+        quote: { id: 'm-13', remoteJid: 'peer@lid', fromMe: false },
+        targetJid: 'peer@lid'
+    })
+    assert.equal(result?.quotedRemoteJid, undefined)
+})
+
 test('resolveSendContextInfo applies forward with default score', () => {
     const result = resolveSendContextInfo({ forward: true })
     assert.equal(result?.isForwarded, true)
