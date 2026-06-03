@@ -94,6 +94,7 @@ Other important directories:
 - `examples/` runnable example scripts (can import `zapo-js` and `@zapo-js/*` by name)
 - `.github/workflows/ci.yml` lint + format + typecheck + build-core + typecheck-packages + per-provider tests (core, fake-server, media-utils, sqlite, mcp-server, mysql, postgres, redis, mongo) gated by an `all-checks` job
 - `.github/workflows/github-release.yml` auto-generates release notes when a `v*` tag is pushed (categories in `.github/release.yml`)
+- `.github/workflows/release.yml` publishes to npm on a `v*` tag via trusted publishing (OIDC, no `NPM_TOKEN`): core (`zapo-js`) through a guarded `npm publish`, add-ons (`@zapo-js/*`) through `changeset publish`
 - `.github/workflows/pr-auto-label.yml` labels PRs from conventional-commit prefixes in the title
 - `.github/workflows/pr-validate-title.yml` enforces a conventional-commit PR title (`amannn/action-semantic-pull-request`)
 - `.changeset/` release management config (Changesets)
@@ -887,11 +888,34 @@ After editing source: rebuild → call `restart` with `mode: "process_exit"` →
 
 ## 14. Versioning
 
-This project follows [Semantic Versioning](https://semver.org/). From `1.0.0` the public API is stable: breaking changes ship only in a major bump. Use changesets (`npx changeset`) to track version bumps across all packages.
+This project follows [Semantic Versioning](https://semver.org/). From `1.0.0` the public API is stable: breaking changes ship only in a major bump.
 
 - `patch` – bug fixes, internal refactors with no API change
 - `minor` – new features, non-breaking additions
 - `major` – breaking API changes
+
+### Two version tracks
+
+Changesets tracks the optional packages **only**, not the core. The root `package.json` (`zapo-js`) is the workspace anchor, so `@manypkg`/Changesets exclude it from the releasable set – `npx changeset add` does not even list it.
+
+- **Optional packages (`@zapo-js/*`)** – versioned with Changesets. Add a changeset in the PR that changes them: `npx changeset`, pick the packages and bump levels, write the summary. The file lands in `.changeset/`.
+- **Core (`zapo-js`)** – versioned by hand. Bump the root `version` directly with `npm version <patch|minor|major> --no-git-tag-version` (bumps the root only); Changesets never touches it.
+
+### Release process (on `master`, before pushing the tag)
+
+1. Confirm every add-on change in the release has a changeset: `npm run changeset:status`.
+2. Apply the add-on bumps + changelogs: `npm run version:packages` (runs `changeset version`, consumes the `.changeset/*.md`).
+3. Bump the core by hand if it changed: `npm version <level> --no-git-tag-version`.
+4. Commit everything as one release commit: `chore: release vX.Y.Z`, where `X.Y.Z` is the core version.
+5. Tag with the core version and push it: `git tag vX.Y.Z && git push && git push origin vX.Y.Z`.
+
+Pushing the `v*` tag triggers `.github/workflows/release.yml`, which publishes via npm trusted publishing (OIDC, no `NPM_TOKEN`): the core through a guarded `npm publish` (skipped when its version is already on the registry) and the add-ons through `changeset publish` (only the `@zapo-js/*` whose version is not yet on npm). `.github/workflows/github-release.yml` creates the GitHub Release from the same tag.
+
+Every published package must be registered as a trusted publisher on npmjs.com (repo `vinikjkkj/zapo`, workflow `release.yml`) before its first CI publish. A brand new package name cannot be pre-configured – publish it once manually, then switch to trusted publishing.
+
+### Core major bumps and peer ranges
+
+Optional packages declare `zapo-js` as a `peerDependency` (`^1.0.0`). A core **major** bump (for example `1.x` → `2.0.0`) leaves that range unsatisfied: manually widen `peerDependencies.zapo-js` in every affected package and add a changeset for it, even with no code change of its own. Minor/patch core bumps stay within the range and need nothing.
 
 ---
 
