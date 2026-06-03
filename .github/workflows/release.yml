@@ -4,6 +4,7 @@ on:
     push:
         tags:
             - 'v*'
+    workflow_dispatch: # manual re-publish from the default branch (e.g. retry a tag publish that failed after the tag was already consumed)
 
 permissions: {}
 
