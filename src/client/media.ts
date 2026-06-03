@@ -641,7 +641,7 @@ export async function downloadMediaMessage(
         throw new Error('message has no downloadable media')
     }
     const transfer = options.transfer ?? new WaMediaTransferClient()
-    const { plaintext, metadata } = await transfer.downloadAndDecryptStream({
+    const { plaintext } = await transfer.downloadAndDecryptStream({
         directPath: payload.directPath,
         mediaType: payload.mediaType,
         mediaKey: payload.mediaKey,
@@ -652,6 +652,5 @@ export async function downloadMediaMessage(
         signal: options.signal,
         maxBytes: options.maxBytes
     })
-    metadata.catch(() => undefined)
     return plaintext
 }

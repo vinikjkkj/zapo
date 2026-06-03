@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { Agent } from 'node:http'
+import { Agent as HttpAgent } from 'node:http'
+import { Agent as HttpsAgent } from 'node:https'
 import { Readable } from 'node:stream'
 import test from 'node:test'
 
@@ -55,22 +56,23 @@ test('downloadMediaMessage forwards the resolved payload to the transfer client'
     assert.equal(captured?.agent, undefined)
 })
 
-test('downloadMediaMessage forwards an http.Agent proxy as the request agent', async () => {
-    let captured: Record<string, unknown> | undefined
-    const transfer = fakeTransfer((req) => {
-        captured = req
-    }, Readable.from([]))
-    const agent = new Agent()
+test('downloadMediaMessage forwards an http(s).Agent proxy as the request agent', async () => {
+    for (const agent of [new HttpAgent(), new HttpsAgent()]) {
+        let captured: Record<string, unknown> | undefined
+        const transfer = fakeTransfer((req) => {
+            captured = req
+        }, Readable.from([]))
 
-    await downloadMediaMessage(
-        { imageMessage: { directPath: '/i', mediaKey: key } },
-        { transfer, proxy: agent }
-    )
+        await downloadMediaMessage(
+            { imageMessage: { directPath: '/i', mediaKey: key } },
+            { transfer, proxy: agent }
+        )
 
-    assert.equal(captured?.agent, agent)
+        assert.equal(captured?.agent, agent)
+    }
 })
 
-test('downloadMediaMessage ignores a non-agent (dispatcher) proxy', async () => {
+test('downloadMediaMessage ignores an undici-style dispatcher proxy', async () => {
     let captured: Record<string, unknown> | undefined
     const transfer = fakeTransfer((req) => {
         captured = req
