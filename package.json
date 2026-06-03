@@ -8,6 +8,10 @@
         "type": "github",
         "url": "https://github.com/sponsors/vinikjkkj"
     },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vinikjkkj/zapo.git"
+    },
     "packageManager": "npm@10.0.0",
     "main": "dist/index.js",
     "module": "dist/esm/index.js",
