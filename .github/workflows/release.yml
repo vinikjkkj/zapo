@@ -1,0 +1,47 @@
+name: release
+
+on:
+    push:
+        tags:
+            - 'v*'
+
+permissions: {}
+
+concurrency:
+    group: release-publish
+    cancel-in-progress: false
+
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        permissions:
+            contents: read
+            id-token: write # OIDC token exchanged for npm publish credentials
+        # environment: npm-publish   # optional: gate publishes behind required reviewers
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/setup-node
+
+            - name: upgrade npm for trusted publishing
+              run: npm install -g npm@latest # OIDC publishing needs npm >= 11.5.1 (Node 22 ships npm 10.x)
+
+            - name: build core + packages
+              run: |
+                  npm run build
+                  npm run build:packages
+
+            - name: publish core (zapo-js), skip if version already on npm
+              run: |
+                  VERSION="$(node -p "require('./package.json').version")"
+                  PUBLISHED="$(npm view "zapo-js@$VERSION" version 2>/dev/null || true)"
+                  if [ -n "$PUBLISHED" ]; then
+                    echo "zapo-js@$VERSION already on npm, skipping"
+                  else
+                    npm publish
+                  fi
+
+            - name: publish add-ons (@zapo-js/*)
+              run: npx changeset publish # publishes only the @zapo-js/* whose version is not yet on npm
