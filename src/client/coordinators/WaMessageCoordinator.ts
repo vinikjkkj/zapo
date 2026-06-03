@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises'
 import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import type { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
 import { aggregateReceiptTargets } from '@client/events/receipt'
+import { downloadMediaMessage } from '@client/media'
 import type {
     WaDownloadMediaOptions,
     WaIncomingAddonEvent,
@@ -23,7 +24,6 @@ import {
     shouldUseAddonAdditionalData
 } from '@message/crypto/addon-crypto'
 import { unwrapMessage } from '@message/encode/content'
-import { resolveMediaPayload } from '@message/encode/media-payload'
 import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import type {
     WaMessagePublishResult,
@@ -385,24 +385,7 @@ export class WaMessageCoordinator {
         source: WaIncomingMessageEvent | Proto.IMessage,
         options: WaDownloadMediaOptions = {}
     ): Promise<Readable> {
-        const message: Proto.IMessage | null | undefined =
-            'rawNode' in source ? source.message : source
-        const payload = resolveMediaPayload(message)
-        if (!payload) {
-            throw new Error('message has no downloadable media')
-        }
-        const { plaintext, metadata } = await this.mediaTransfer.downloadAndDecryptStream({
-            directPath: payload.directPath,
-            mediaType: payload.mediaType,
-            mediaKey: payload.mediaKey,
-            fileSha256: payload.fileSha256,
-            fileEncSha256: payload.fileEncSha256,
-            timeoutMs: options.timeoutMs,
-            signal: options.signal,
-            maxBytes: options.maxBytes
-        })
-        metadata.catch(() => undefined)
-        return plaintext
+        return downloadMediaMessage(source, { ...options, transfer: this.mediaTransfer })
     }
 
     /**

@@ -6,12 +6,16 @@ import { join } from 'node:path'
 import { type Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
-import type { WaMediaOptions } from '@client/types'
+import type { WaDownloadMediaOptions, WaIncomingMessageEvent, WaMediaOptions } from '@client/types'
 import { randomIntAsync, sha256 } from '@crypto/core'
 import type { Logger } from '@infra/log/types'
-import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
+import { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { WaMediaConn } from '@media/types'
+import { resolveMediaPayload } from '@message/encode/media-payload'
 import type { WaSendMediaMessage } from '@message/types'
+import type { Proto } from '@proto'
+import { toProxyAgent } from '@transport/proxy'
+import type { WaProxyTransport } from '@transport/types'
 import { bytesToBase64UrlSafe, TEXT_DECODER, toBytesView, toChunkBytes } from '@util/bytes'
 import { toError } from '@util/primitives'
 
@@ -570,4 +574,84 @@ export async function runMediaProcessor(
     }
 
     return result
+}
+
+export interface WaDownloadMediaMessageOptions extends WaDownloadMediaOptions {
+    /**
+     * Reuse an existing transfer client instead of creating a fresh one. Lets
+     * the download inherit proxy agents, timeouts, and the MAC-verification
+     * toggle, and avoids spinning up a new HTTP client per call in a loop. A
+     * stateless {@link WaMediaTransferClient} is created when omitted - fine
+     * for one-off downloads.
+     */
+    readonly transfer?: WaMediaTransferClient
+    /**
+     * Proxy for the CDN download leg, mirroring `proxy.mediaDownload` on the
+     * client. The fetch runs over `node:http`/`node:https`, so only the Node
+     * `http.Agent` form is used; an undici dispatcher is ignored (same as the
+     * client treats `mediaDownload`). Takes precedence over the default agent
+     * of a `transfer` you pass.
+     */
+    readonly proxy?: WaProxyTransport
+}
+
+/**
+ * Streams and decrypts the media attached to a message without a connected
+ * `WaClient`. Resolves the encrypted payload (directPath, mediaKey, file
+ * hashes) from `source`, fetches the ciphertext from the WhatsApp media CDN,
+ * and decrypts it on the fly.
+ *
+ * The media keys come from the (already decrypted) message itself, so this is
+ * for re-downloading media you have persisted - not for fetching media you
+ * never received. The CDN download needs no session or auth token; only the
+ * upload path does.
+ *
+ * **The caller owns the returned stream** - pipe it somewhere or call
+ * `.destroy()` to release the socket; an unconsumed stream leaks the
+ * connection. MAC + SHA-256 verification runs as bytes are consumed, so
+ * aborting mid-read leaves you with unverified bytes. Pass `options.signal`
+ * to cancel cleanly.
+ *
+ * @throws when `source` carries no downloadable media.
+ * @example
+ * ```ts
+ * import { downloadMediaMessage } from 'zapo-js'
+ * import { createWriteStream } from 'node:fs'
+ *
+ * const stream = await downloadMediaMessage(event)
+ * stream.pipe(createWriteStream('photo.jpg'))
+ * ```
+ * @example
+ * ```ts
+ * // Route the CDN download through an http.Agent-style proxy
+ * import { HttpsProxyAgent } from 'https-proxy-agent'
+ *
+ * const stream = await downloadMediaMessage(event, {
+ *     proxy: new HttpsProxyAgent('http://127.0.0.1:8080')
+ * })
+ * ```
+ */
+export async function downloadMediaMessage(
+    source: Proto.IMessage | WaIncomingMessageEvent,
+    options: WaDownloadMediaMessageOptions = {}
+): Promise<Readable> {
+    const message: Proto.IMessage | null | undefined = 'rawNode' in source ? source.message : source
+    const payload = resolveMediaPayload(message)
+    if (!payload) {
+        throw new Error('message has no downloadable media')
+    }
+    const transfer = options.transfer ?? new WaMediaTransferClient()
+    const { plaintext, metadata } = await transfer.downloadAndDecryptStream({
+        directPath: payload.directPath,
+        mediaType: payload.mediaType,
+        mediaKey: payload.mediaKey,
+        fileSha256: payload.fileSha256,
+        fileEncSha256: payload.fileEncSha256,
+        agent: toProxyAgent(options.proxy),
+        timeoutMs: options.timeoutMs,
+        signal: options.signal,
+        maxBytes: options.maxBytes
+    })
+    metadata.catch(() => undefined)
+    return plaintext
 }
