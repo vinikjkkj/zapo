@@ -4,6 +4,11 @@
     "description": "MCP server exposing zapo-js WaClient as dynamic tools for end-to-end testing",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vinikjkkj/zapo.git",
+        "directory": "packages/mcp-server"
+    },
     "main": "dist/index.js",
     "module": "dist/esm/index.js",
     "types": "dist/index.d.ts",

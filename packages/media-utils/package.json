@@ -4,6 +4,11 @@
     "description": "Media processing utilities for zapo-js (thumbnails, waveforms, probing)",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vinikjkkj/zapo.git",
+        "directory": "packages/media-utils"
+    },
     "main": "dist/index.js",
     "module": "dist/esm/index.js",
     "types": "dist/index.d.ts",

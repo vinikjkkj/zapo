@@ -4,6 +4,11 @@
     "description": "MySQL/MariaDB store provider for zapo-js",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vinikjkkj/zapo.git",
+        "directory": "packages/store-mysql"
+    },
     "main": "dist/index.js",
     "module": "dist/esm/index.js",
     "types": "dist/index.d.ts",
