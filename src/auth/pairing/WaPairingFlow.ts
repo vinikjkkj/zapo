@@ -31,6 +31,7 @@ import {
     getNodeChildrenNonEmptyUtf8ByTag,
     hasNodeChild
 } from '@transport/node/helpers'
+import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { concatBytes, decodeProtoBytes, uint8Equal, uint8TimingSafeEqual } from '@util/bytes'
 
@@ -124,6 +125,7 @@ export class WaPairingFlow {
             responseTag: response.tag,
             responseType: response.attrs.type
         })
+        assertIqResult(response, 'companion hello')
 
         const linkCodeNode = findNodeChild(response, WA_NODE_TAGS.LINK_CODE_COMPANION_REG)
         if (!linkCodeNode) {
