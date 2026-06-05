@@ -317,7 +317,7 @@ function processMsmsgEncNode(
                 encPayload: decoded.encPayload
             }
         }
-        const chatJid = node.attrs.from
+        const chatJid = node.attrs.from ? toUserJid(node.attrs.from) : node.attrs.from
         const sender = senderJid ? parseJidFull(senderJid) : null
         const isGroup = chatJid ? isGroupJid(chatJid) : false
         const isBroadcast = chatJid ? isBroadcastJid(chatJid) : false
@@ -403,7 +403,11 @@ async function decryptAndProcessEncNode(
             }
         }
         if (shouldEmitIncomingMessage(message)) {
-            const chatJid = node.attrs.from
+            // remoteJid is the chat identity, which is deviceless: the device
+            // lives in senderDevice (from senderAddress), so strip any `:device`
+            // segment the `from` attr carries for 1:1 chats.
+            const fromAttr = node.attrs.from
+            const chatJid = fromAttr ? toUserJid(fromAttr) : fromAttr
             const isGroup = chatJid ? isGroupJid(chatJid) : false
             const isBroadcast = chatJid ? isBroadcastJid(chatJid) : false
             const senderUserJid = `${senderAddress.user}@${senderAddress.server}`
