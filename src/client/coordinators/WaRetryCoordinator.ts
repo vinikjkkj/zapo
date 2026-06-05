@@ -293,7 +293,7 @@ export class WaRetryCoordinator {
         context: WaRetryDecryptFailureContext,
         prepared: RetryDecryptFailurePreparation
     ): Promise<void> {
-        const recipient = context.recipient ?? this.resolvePeerRetryRecipient(context)
+        const { recipient } = context
         const retryReceiptNode = buildRetryReceiptNode({
             stanzaId: context.stanzaId,
             to: context.from,
@@ -317,26 +317,6 @@ export class WaRetryCoordinator {
             reason: prepared.retryReason,
             withKeys: prepared.retryKeys !== undefined
         })
-    }
-
-    private resolvePeerRetryRecipient(context: WaRetryDecryptFailureContext): string | undefined {
-        if (!context.participant) {
-            return undefined
-        }
-        const meLid = this.deps.getCurrentCredentials()?.meLid
-        if (!meLid) {
-            return undefined
-        }
-        try {
-            const participantUser = toUserJid(context.participant)
-            const meUserLid = toUserJid(meLid)
-            if (participantUser !== meUserLid) {
-                return undefined
-            }
-            return meUserLid
-        } catch {
-            return undefined
-        }
     }
 
     private async handleParsedRetryRequest(
