@@ -460,28 +460,31 @@ export interface WaIgnoreKey {
  * Lib derives `kind` from the stanza tag and resolves `fromMe` by comparing
  * every from-candidate (`from`, `sender_pn`, `sender_lid`) against `meJid`.
  *
- * `remoteJid` and `participant` expose the **raw** `from` / `participant`
- * attrs verbatim and do NOT include the descriptor-style alt-attr lookups
- * (`sender_pn` / `sender_lid` / `participant_pn` / `participant_lid`) or
- * PN↔LID normalization. If the predicate needs to match by user identity
- * regardless of addressing mode, run the raw JID through `parseJidFull` and
- * compare on `userJid`, or use the descriptor form which handles it.
+ * `remoteJid` and `participant` are the `from` / `participant` attrs with the
+ * `:device` segment stripped (bare `user@server`), matching the JID form used
+ * by message events and keys. A value that does not parse as a JID (e.g. a
+ * userless server `from` like `s.whatsapp.net`) is passed through unchanged.
+ * They do NOT include the descriptor-style
+ * alt-attr lookups (`sender_pn` / `sender_lid` / `participant_pn` /
+ * `participant_lid`) or PN↔LID normalization, so they stay in whichever
+ * addressing mode the stanza arrived in. To match by user identity regardless
+ * of addressing mode, use the descriptor form, which handles it.
  */
 export interface WaIgnoreKeyContext {
     readonly kind: WaIgnoreStanzaKind
-    /** Raw `from` attr (group JID for groups, PN or LID device JID for 1:1). */
+    /** `from` attr without `:device` (group JID for groups, PN or LID user JID for 1:1). */
     readonly remoteJid: string | null
     readonly fromMe: boolean
     readonly id: string | undefined
-    /** Raw `participant` attr; `null` for non-group stanzas. */
+    /** `participant` attr without `:device`; `null` for non-group stanzas. */
     readonly participant: string | null
 }
 
 /**
  * Predicate form of {@link WaClient.ignoreKey}. Return `true` to drop the
  * stanza, `false` to let it through. Receives a {@link WaIgnoreKeyContext}
- * with the raw `from`/`participant` attrs (see the context's JSDoc for the
- * PN↔LID caveat) plus lib-resolved `kind` and `fromMe`.
+ * with the device-stripped `from`/`participant` (see the context's JSDoc for
+ * the addressing-mode caveat) plus lib-resolved `kind` and `fromMe`.
  */
 export type WaIgnoreKeyPredicate = (ctx: WaIgnoreKeyContext) => boolean
 

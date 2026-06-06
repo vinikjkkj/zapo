@@ -94,12 +94,14 @@ export function extractIgnoreKeyContext(
     const fromCandidates = collectFromCandidates(kind, a)
     const fromMe =
         me !== null && fromCandidates.some((f) => tryParseJid(f)?.address.user === me.address.user)
+    // Device-stripped to match the JID form used by events/keys; a userless
+    // server `from` like `s.whatsapp.net` is unparseable, so fall back to raw.
     return {
         kind,
-        remoteJid: a.from ?? null,
+        remoteJid: tryParseJid(a.from)?.userJid ?? a.from ?? null,
         fromMe,
         id: a.id,
-        participant: a.participant ?? null
+        participant: tryParseJid(a.participant)?.userJid ?? a.participant ?? null
     }
 }
 

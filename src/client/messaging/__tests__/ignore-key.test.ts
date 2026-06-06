@@ -181,6 +181,30 @@ test('extractIgnoreKeyContext returns null for non-addressable tags', () => {
     assert.equal(extractIgnoreKeyContext(iq, ME_JID), null)
 })
 
+test('extractIgnoreKeyContext strips the device segment from remoteJid and participant', () => {
+    const direct = message({ from: '5511999990000:12@s.whatsapp.net', id: 'X' })
+    assert.equal(extractIgnoreKeyContext(direct, ME_JID)?.remoteJid, PN)
+
+    const group = message({ from: 'group@g.us', participant: '99887766554433:7@lid', id: 'X' })
+    assert.equal(extractIgnoreKeyContext(group, ME_JID)?.participant, LID)
+})
+
+test('predicate sees device-stripped remoteJid so a bare-JID compare catches device stanzas', () => {
+    const filter = createIgnoreKeyFilter(
+        (m) => m.remoteJid === PN,
+        () => ME_JID
+    )
+    assert.equal(filter(message({ from: '5511999990000:12@s.whatsapp.net', id: 'X' })), true)
+    assert.equal(filter(message({ from: PN, id: 'X' })), true)
+    assert.equal(filter(message({ from: '5511000001111:3@s.whatsapp.net', id: 'X' })), false)
+})
+
+test('userless server JID (from=s.whatsapp.net) passes through without throwing', () => {
+    const node = notification({ from: 's.whatsapp.net' })
+    assert.equal(extractIgnoreKeyContext(node, ME_JID)?.remoteJid, 's.whatsapp.net')
+    assert.equal(matchesIgnoreKey(node, { remoteJid: PN }, null), false)
+})
+
 test('createIgnoreKeyFilter with predicate routes the parsed context, drops non-addressable', () => {
     const filter = createIgnoreKeyFilter(
         (m) => m.kind === 'message' && m.id === 'DROP',
