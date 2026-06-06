@@ -346,12 +346,29 @@ export class WaClient extends EventEmitter {
             }
 
             if (protocolType === proto.Message.ProtocolMessage.Type.HISTORY_SYNC_NOTIFICATION) {
-                if (
-                    this.options.history?.enabled !== false &&
-                    protocolMessage.historySyncNotification
-                ) {
-                    const peerRemoteJid = event.key.remoteJid
-                    const peerStanzaId = event.key.id
+                if (!protocolMessage.historySyncNotification) {
+                    return
+                }
+                const peerRemoteJid = event.key.remoteJid
+                const peerStanzaId = event.key.id
+                const sendHistSyncReceipt =
+                    peerRemoteJid && peerStanzaId
+                        ? async () => {
+                              try {
+                                  await this.message.sendReceipt(peerRemoteJid, peerStanzaId, {
+                                      type: WA_MESSAGE_TYPES.RECEIPT_TYPE_HISTORY_SYNC
+                                  })
+                              } catch (err) {
+                                  this.logger.warn('failed to send hist_sync receipt', {
+                                      id: peerStanzaId,
+                                      to: peerRemoteJid,
+                                      message: toError(err).message
+                                  })
+                              }
+                          }
+                        : undefined
+
+                if (this.options.history?.enabled !== false) {
                     await runHistorySyncNotification(
                         {
                             logger: this.logger,
@@ -362,29 +379,12 @@ export class WaClient extends EventEmitter {
                                 this.deps.trustedContactToken.hydrateFromHistorySync(conversations),
                             onNctSalt: (salt) =>
                                 this.deps.trustedContactToken.hydrateNctSaltFromHistorySync(salt),
-                            onProcessed:
-                                peerRemoteJid && peerStanzaId
-                                    ? async () => {
-                                          try {
-                                              await this.message.sendReceipt(
-                                                  peerRemoteJid,
-                                                  peerStanzaId,
-                                                  {
-                                                      type: WA_MESSAGE_TYPES.RECEIPT_TYPE_HISTORY_SYNC
-                                                  }
-                                              )
-                                          } catch (err) {
-                                              this.logger.warn('failed to send hist_sync receipt', {
-                                                  id: peerStanzaId,
-                                                  to: peerRemoteJid,
-                                                  message: toError(err).message
-                                              })
-                                          }
-                                      }
-                                    : undefined
+                            onProcessed: sendHistSyncReceipt
                         },
                         protocolMessage.historySyncNotification
                     )
+                } else if (sendHistSyncReceipt) {
+                    await sendHistSyncReceipt()
                 }
                 return
             }
