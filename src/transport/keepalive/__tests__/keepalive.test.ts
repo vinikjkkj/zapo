@@ -182,3 +182,43 @@ test('keepalive ignores invalid t attribute', async (t) => {
 
     assert.equal(skewUpdates.length, 0)
 })
+
+test('keepalive does not resume when stopped while a ping is in flight', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+
+    let resumed = 0
+    let rejectPing: (error: Error) => void = () => undefined
+    const keepAlive = new WaKeepAlive({
+        logger: createNoopLogger(),
+        nodeOrchestrator: {
+            hasPending: () => false,
+            query: () =>
+                new Promise<never>((_resolve, reject) => {
+                    rejectPing = reject
+                })
+        },
+        getComms: () =>
+            ({
+                getCommsState: () => ({ connected: true }),
+                closeSocketAndResume: async () => {
+                    resumed += 1
+                }
+            }) as never,
+        intervalMs: 5,
+        timeoutMs: 5,
+        jitterRatio: 0,
+        minJitterMs: 0
+    })
+
+    keepAlive.start()
+    t.mock.timers.tick(5)
+    await Promise.resolve()
+
+    keepAlive.stop()
+    rejectPing(new Error('client disconnected'))
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(resumed, 0)
+})

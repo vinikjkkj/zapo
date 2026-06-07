@@ -227,6 +227,10 @@ export class WaComms {
     }
 
     public async closeSocketAndResume(): Promise<void> {
+        if (!this.started || this.preventRetry) {
+            this.logger.debug('comms resume skipped: comms stopped or retry disabled')
+            return
+        }
         this.logger.debug('comms close socket and resume requested')
         this.resetConnectionState({
             started: true,

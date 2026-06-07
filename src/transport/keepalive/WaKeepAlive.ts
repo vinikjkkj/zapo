@@ -145,6 +145,10 @@ export class WaKeepAlive {
                 }
             }
         } catch (error) {
+            if (generation !== this.generation) {
+                this.logger.trace('keepalive stopped during in-flight ping, not resuming')
+                return
+            }
             this.logger.warn('keepalive ping failed, reconnecting socket', {
                 message: toError(error).message
             })
