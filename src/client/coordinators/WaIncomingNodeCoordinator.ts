@@ -535,7 +535,7 @@ export class WaIncomingNodeCoordinator {
                         `ib.${WA_NODE_TAGS.EDGE_ROUTING}.${WA_NODE_TAGS.ROUTING_INFO}`
                     )
                     await this.runtime.persistRoutingInfo(routingInfo)
-                    this.logger.info('updated routing info from info bulletin', {
+                    this.logger.debug('updated routing info from info bulletin', {
                         byteLength: routingInfo.byteLength
                     })
                 } catch (error) {
