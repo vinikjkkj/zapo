@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { APP_STATE_EMPTY_LT_HASH } from '@appstate/constants'
 import { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'
+import { keyEpoch } from '@appstate/utils'
 import { createNoopLogger } from '@infra/log/types'
 import { type Proto, proto } from '@proto'
 import {
@@ -351,7 +352,10 @@ test('ensureInitialSyncKey mints a 32-byte key with fingerprint when store is em
 
     assert.equal(await store.getActiveSyncKey(), null)
     const first = await client.ensureInitialSyncKey()
-    assert.equal(first.keyId.length, 2)
+    assert.equal(first.keyId.length, 6)
+    assert.equal(first.keyId[0], 0)
+    assert.equal(first.keyId[1], 0)
+    assert.ok(keyEpoch(first.keyId) >= 1)
     assert.equal(first.keyData.length, 32)
     assert.ok(first.fingerprint)
     assert.equal(first.fingerprint?.currentIndex, 0)
@@ -361,4 +365,151 @@ test('ensureInitialSyncKey mints a 32-byte key with fingerprint when store is em
     const second = await client.ensureInitialSyncKey()
     assert.deepEqual(second.keyId, first.keyId)
     assert.deepEqual(second.keyData, first.keyData)
+})
+
+test('appstate sync applies catch-up patches on 409 conflict and re-uploads the pending mutation', async () => {
+    const store = new WaAppStateMemoryStore()
+    const key = {
+        keyId: new Uint8Array([0, 0, 0, 0, 0, 8]),
+        keyData: new Uint8Array(32).fill(9),
+        timestamp: 4
+    }
+    await store.upsertSyncKeys([key])
+
+    const conflictPatches = [
+        {
+            tag: WA_NODE_TAGS.PATCH,
+            attrs: {},
+            content: proto.SyncdPatch.encode({ version: { version: 1 } }).finish()
+        },
+        {
+            tag: WA_NODE_TAGS.PATCH,
+            attrs: {},
+            content: proto.SyncdPatch.encode({ version: { version: 2 } }).finish()
+        }
+    ]
+
+    let call = 0
+    const patchByCall: boolean[] = []
+    const query = async (node: BinaryNode): Promise<BinaryNode> => {
+        call += 1
+        const syncNode = (node.content as readonly BinaryNode[])[0]
+        const collectionNode = (syncNode.content as readonly BinaryNode[])[0]
+        const content = collectionNode.content as readonly BinaryNode[] | undefined
+        patchByCall.push(content?.some((child) => child.tag === WA_NODE_TAGS.PATCH) ?? false)
+        const collection: BinaryNode =
+            call === 1
+                ? {
+                      tag: WA_NODE_TAGS.COLLECTION,
+                      attrs: { type: 'error', name: WA_APP_STATE_COLLECTIONS.CRITICAL_BLOCK },
+                      content: [
+                          {
+                              tag: WA_NODE_TAGS.ERROR,
+                              attrs: { code: '409', text: 'conflict' }
+                          },
+                          { tag: WA_NODE_TAGS.PATCHES, attrs: {}, content: conflictPatches }
+                      ]
+                  }
+                : {
+                      tag: WA_NODE_TAGS.COLLECTION,
+                      attrs: { name: WA_APP_STATE_COLLECTIONS.CRITICAL_BLOCK, version: '3' }
+                  }
+        return {
+            tag: WA_NODE_TAGS.IQ,
+            attrs: { type: WA_IQ_TYPES.RESULT },
+            content: [{ tag: WA_NODE_TAGS.SYNC, attrs: {}, content: [collection] }]
+        }
+    }
+
+    const client = new WaAppStateSyncClient({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
+        logger: createNoopLogger(),
+        query,
+        store,
+        mobilePrimary: true,
+        skipMacVerification: true
+    })
+
+    const result = await client.sync({
+        collections: [WA_APP_STATE_COLLECTIONS.CRITICAL_BLOCK],
+        pendingMutations: [
+            {
+                collection: WA_APP_STATE_COLLECTIONS.CRITICAL_BLOCK,
+                operation: 'set',
+                index: JSON.stringify(['setting_pushName']),
+                value: { timestamp: 4_000, pushNameSetting: { name: 'Maria' } },
+                version: 1,
+                timestamp: 4_000
+            }
+        ]
+    })
+
+    assert.equal(call, 2)
+    assert.deepEqual(patchByCall, [true, true])
+    assert.equal(result.collections[0].state, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+    const persisted = await store.getCollectionState(WA_APP_STATE_COLLECTIONS.CRITICAL_BLOCK)
+    assert.equal(persisted.version, 3)
+})
+
+test('mobile primary uploads patch from fresh state without requesting a snapshot', async () => {
+    const store = new WaAppStateMemoryStore()
+    const key = {
+        keyId: new Uint8Array([0, 0, 0, 0, 0, 7]),
+        keyData: new Uint8Array(32).fill(9),
+        timestamp: 4
+    }
+    await store.upsertSyncKeys([key])
+
+    const returnSnapshotByCall: string[] = []
+    const patchByCall: boolean[] = []
+    const query = async (node: BinaryNode): Promise<BinaryNode> => {
+        const syncNode = (node.content as readonly BinaryNode[])[0]
+        const collectionNode = (syncNode.content as readonly BinaryNode[])[0]
+        const content = collectionNode.content as readonly BinaryNode[] | undefined
+        returnSnapshotByCall.push(collectionNode.attrs.return_snapshot)
+        patchByCall.push(content?.some((child) => child.tag === WA_NODE_TAGS.PATCH) ?? false)
+        return {
+            tag: WA_NODE_TAGS.IQ,
+            attrs: { type: WA_IQ_TYPES.RESULT },
+            content: [
+                {
+                    tag: WA_NODE_TAGS.SYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.COLLECTION,
+                            attrs: { name: WA_APP_STATE_COLLECTIONS.CRITICAL_BLOCK, version: '1' }
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+
+    const client = new WaAppStateSyncClient({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
+        logger: createNoopLogger(),
+        query,
+        store,
+        mobilePrimary: true,
+        skipMacVerification: true
+    })
+
+    const result = await client.sync({
+        collections: [WA_APP_STATE_COLLECTIONS.CRITICAL_BLOCK],
+        pendingMutations: [
+            {
+                collection: WA_APP_STATE_COLLECTIONS.CRITICAL_BLOCK,
+                operation: 'set',
+                index: JSON.stringify(['setting_pushName']),
+                value: { timestamp: 4_000, pushNameSetting: { name: 'Maria' } },
+                version: 1,
+                timestamp: 4_000
+            }
+        ]
+    })
+
+    assert.deepEqual(returnSnapshotByCall, ['false'])
+    assert.deepEqual(patchByCall, [true])
+    assert.equal(result.collections[0].state, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
 })

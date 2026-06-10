@@ -155,13 +155,26 @@ export class WaAppStateSyncClient {
     /**
      * Returns the active app-state sync key, generating and persisting a new
      * one when the store is empty (used during initial setup).
+     *
+     * The key id mirrors the primary device layout: 2 big-endian bytes of
+     * device id followed by a 4 big-endian byte epoch. `keyEpoch` and
+     * `pickActiveSyncKey` read that structure, so a shorter id would make the
+     * generated key invisible to active-key selection.
      */
     public async ensureInitialSyncKey(): Promise<WaAppStateSyncKey> {
         const existing = await this.store.getActiveSyncKey()
         if (existing) {
             return existing
         }
-        const keyIdBytes = await randomBytesAsync(2)
+        const deviceId = this.resolveDeviceIndex() ?? 0
+        const epoch = await randomIntAsync(1, 65_537)
+        const keyIdBytes = new Uint8Array(6)
+        keyIdBytes[0] = (deviceId >>> 8) & 0xff
+        keyIdBytes[1] = deviceId & 0xff
+        keyIdBytes[2] = (epoch >>> 24) & 0xff
+        keyIdBytes[3] = (epoch >>> 16) & 0xff
+        keyIdBytes[4] = (epoch >>> 8) & 0xff
+        keyIdBytes[5] = epoch & 0xff
         const keyData = await randomBytesAsync(32)
         const rawId = await randomIntAsync(0, 0xffff_ffff)
         const key: WaAppStateSyncKey = {
@@ -174,6 +187,7 @@ export class WaAppStateSyncClient {
         this.crypto.clearCache()
         this.logger.info('app-state initial sync key generated (mobile primary)', {
             keyId: bytesToHex(keyIdBytes),
+            epoch,
             rawId
         })
         return key
@@ -578,12 +592,13 @@ export class WaAppStateSyncClient {
     }> {
         const collectionState = await this.getCollectionState(collection)
         const hasPersistedState = collectionState.initialized
+        const requestSnapshot = !this.mobilePrimary && !hasPersistedState
         const attrs: Record<string, string> = {
             name: collection,
             version: String(
                 hasPersistedState ? collectionState.version : APP_STATE_DEFAULT_COLLECTION_VERSION
             ),
-            return_snapshot: hasPersistedState ? 'false' : 'true'
+            return_snapshot: requestSnapshot ? 'true' : 'false'
         }
 
         const children: BinaryNode[] = []
@@ -591,7 +606,7 @@ export class WaAppStateSyncClient {
         let outgoingContext: OutgoingPatchContext | undefined
         let skippedUpload = false
         if (pendingMutations.length > 0) {
-            if (!hasPersistedState) {
+            if (!hasPersistedState && !this.mobilePrimary) {
                 skippedUpload = true
                 this.logger.debug(
                     'app-state skipped outgoing patch upload until snapshot bootstrap',
@@ -710,28 +725,20 @@ export class WaAppStateSyncClient {
         }
 
         const pendingMutationsCount = pendingByCollection.get(collection)?.length ?? 0
-        if (
+        const isConflict =
             payload.state === WA_APP_STATE_COLLECTION_STATES.CONFLICT ||
             payload.state === WA_APP_STATE_COLLECTION_STATES.CONFLICT_HAS_MORE
-        ) {
+        if (isConflict) {
             shouldRefetch =
                 payload.state === WA_APP_STATE_COLLECTION_STATES.CONFLICT_HAS_MORE ||
                 pendingMutationsCount > 0
-            return this.createCollectionOutcome(
-                collection,
-                payload.state === WA_APP_STATE_COLLECTION_STATES.CONFLICT
-                    ? pendingMutationsCount > 0
-                        ? WA_APP_STATE_COLLECTION_STATES.CONFLICT
-                        : WA_APP_STATE_COLLECTION_STATES.SUCCESS
-                    : payload.state,
-                payload.version,
-                shouldRefetch
-            )
         }
 
         try {
             let appliedMutations: WaAppStateMutation[] = []
-            if (payload.snapshotReference) {
+            if (payload.snapshotReference && this.mobilePrimary) {
+                collectionLogger.debug('app-state ignoring server snapshot on primary device')
+            } else if (payload.snapshotReference) {
                 const downloader = options.downloadExternalBlob
                 if (!downloader) {
                     throw new Error(
@@ -796,14 +803,22 @@ export class WaAppStateSyncClient {
                 (payload.state === WA_APP_STATE_COLLECTION_STATES.SUCCESS &&
                     skippedUploadCollections.has(collection))
 
+            const resolvedState = !isConflict
+                ? payload.state
+                : payload.state === WA_APP_STATE_COLLECTION_STATES.CONFLICT
+                  ? pendingMutationsCount > 0
+                      ? WA_APP_STATE_COLLECTION_STATES.CONFLICT
+                      : WA_APP_STATE_COLLECTION_STATES.SUCCESS
+                  : payload.state
+
             collectionLogger.debug('app-state collection processed', {
-                state: payload.state,
+                state: resolvedState,
                 version: payload.version,
                 appliedMutations: appliedMutations.length
             })
             return this.createCollectionOutcome(
                 collection,
-                payload.state,
+                resolvedState,
                 payload.version,
                 shouldRefetch,
                 collectionStateChanged,
