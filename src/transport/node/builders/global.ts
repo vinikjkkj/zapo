@@ -26,6 +26,7 @@ export type BuildAckNodeInput =
           readonly typeOverride?: string
           readonly participant?: string
           readonly recipient?: string
+          readonly error?: number | string
       }
     | {
           readonly kind: 'receipt'
@@ -125,6 +126,9 @@ export function buildAckNode(input: BuildAckNodeInput): BinaryNode {
             id: input.id,
             to: input.to,
             class: WA_MESSAGE_TYPES.ACK_CLASS_MESSAGE
+        }
+        if (input.error !== undefined) {
+            attrs.error = String(input.error)
         }
         const type = input.typeOverride ?? input.node.attrs.type
         if (type) {
