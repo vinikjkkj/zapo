@@ -293,6 +293,12 @@ interface WaAppStateMutationCoordinatorOptions {
      * bootstrapped at pair-time regardless of `emitSnapshotMutations`.
      */
     readonly contactSink?: (record: WaStoredContactRecord) => void
+    /**
+     * Sink for applied `SettingPushName` mutations (the account's own display
+     * name). Invoked on every winning mutation including snapshot ones, so the
+     * local display name is bootstrapped at pair-time.
+     */
+    readonly pushNameSink?: (name: string) => void
 }
 
 export interface WaSetStatusPrivacyInput {
@@ -331,6 +337,7 @@ export class WaAppStateMutationCoordinator {
     private readonly emitSnapshotMutations: boolean
     private readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
     private readonly contactSink?: (record: WaStoredContactRecord) => void
+    private readonly pushNameSink?: (name: string) => void
     private readonly pendingMutations: Map<string, WaAppStateMutationInput>
     private flushPromise: Promise<void> | null
 
@@ -350,6 +357,7 @@ export class WaAppStateMutationCoordinator {
         this.emitSnapshotMutations = options.emitSnapshotMutations === true
         this.nctSaltSink = options.nctSaltSink
         this.contactSink = options.contactSink
+        this.pushNameSink = options.pushNameSink
         this.pendingMutations = new Map()
         this.flushPromise = null
     }
@@ -402,11 +410,10 @@ export class WaAppStateMutationCoordinator {
         for (const collectionResult of syncResult.collections) {
             const mutations = collectionResult.mutations ?? []
 
-            // Persistence sinks (contact store, ...): run on the last-wins
-            // mutation per key INCLUDING snapshot sources, so pair-time
-            // bootstrap of the address book always lands in the store even
-            // when public events are suppressed for snapshot mutations.
-            if (this.contactSink) {
+            // Persistence sinks (contact store, own pushName): run on the
+            // last-wins mutation per key INCLUDING snapshot sources, so
+            // pair-time bootstrap lands even when snapshot events are suppressed.
+            if (this.contactSink || this.pushNameSink) {
                 const sinkLastIndex = new Map<string, number>()
                 for (let i = 0; i < mutations.length; i += 1) {
                     const m = mutations[i]
@@ -421,6 +428,15 @@ export class WaAppStateMutationCoordinator {
                         this.handleContactMutation(m)
                     } catch (error) {
                         this.logger.debug('contact sink failed', {
+                            collection: m.collection,
+                            index: m.index,
+                            message: toError(error).message
+                        })
+                    }
+                    try {
+                        this.handlePushNameMutation(m)
+                    } catch (error) {
+                        this.logger.debug('pushName sink failed', {
                             collection: m.collection,
                             index: m.index,
                             message: toError(error).message
@@ -537,6 +553,17 @@ export class WaAppStateMutationCoordinator {
             phoneNumber,
             lastUpdatedMs
         })
+    }
+
+    private handlePushNameMutation(mutation: WaAppStateMutation): void {
+        if (!this.pushNameSink) return
+        // A `set` under the literal index ["setting_pushName"]; cheap reject
+        // before reading the value.
+        if (mutation.operation !== 'set') return
+        if (!mutation.index.includes('setting_pushName')) return
+        const name = mutation.value?.pushNameSetting?.name
+        if (typeof name !== 'string') return
+        this.pushNameSink(name)
     }
 
     /**
