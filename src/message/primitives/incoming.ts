@@ -117,16 +117,26 @@ function buildIncomingEventRawNode(node: BinaryNode): BinaryNode {
     }
 }
 
+/**
+ * Rebuilds a `message` event from a recovered {@link proto.IWebMessageInfo}
+ * (placeholder resend). `meJid` is the current account user JID, used as the
+ * author fallback for self-sent group messages when the proto carries no
+ * participant and no `originalSelfAuthorUserJidString`.
+ */
 export function buildRecoveredIncomingEvent(
-    webMessageInfo: proto.IWebMessageInfo
+    webMessageInfo: proto.IWebMessageInfo,
+    meJid?: string | null
 ): WaIncomingMessageEvent {
     const key = webMessageInfo.key ?? {}
     const chatJid = key.remoteJid ?? undefined
     const fromMe = key.fromMe === true
-    const participant = webMessageInfo.participant ?? key.participant ?? undefined
-    const pushName = webMessageInfo.pushName ?? undefined
     const isGroup = chatJid ? isGroupJid(chatJid) : false
     const isBroadcast = chatJid ? isBroadcastJid(chatJid) : false
+    const rawSelfAuthor = webMessageInfo.originalSelfAuthorUserJidString ?? meJid ?? undefined
+    const selfAuthor =
+        fromMe && (isGroup || isBroadcast) && rawSelfAuthor ? toUserJid(rawSelfAuthor) : undefined
+    const participant = webMessageInfo.participant ?? key.participant ?? selfAuthor
+    const pushName = webMessageInfo.pushName ?? undefined
     const rawSender = fromMe ? undefined : isGroup || isBroadcast ? participant : chatJid
     const sender = rawSender ? parseJidFull(rawSender) : null
     const senderDevice = sender?.address.device

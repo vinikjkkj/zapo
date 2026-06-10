@@ -1142,6 +1142,7 @@ export class WaRetryCoordinator {
                         }))
                     }
                 )
+                const meJid = this.deps.getCurrentCredentials()?.meJid
                 for (const result of results) {
                     const bytes = result.placeholderMessageResendResponse?.webMessageInfoBytes
                     if (!bytes) {
@@ -1149,7 +1150,7 @@ export class WaRetryCoordinator {
                     }
                     try {
                         const recovered = proto.WebMessageInfo.decode(bytes)
-                        emitIncomingMessage(buildRecoveredIncomingEvent(recovered))
+                        emitIncomingMessage(buildRecoveredIncomingEvent(recovered, meJid))
                     } catch (error) {
                         this.deps.logger.warn(
                             'placeholder resend: failed to decode WebMessageInfo',
