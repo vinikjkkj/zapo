@@ -46,7 +46,7 @@ import type {
 } from '@message/types'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
-import { WA_DEFAULTS, type WaStatusDistributionSetting } from '@protocol/constants'
+import { WA_DEFAULTS, WA_NACK_REASONS, type WaStatusDistributionSetting } from '@protocol/constants'
 import {
     isBotJid,
     isGroupJid,
@@ -934,7 +934,7 @@ export class WaMessageDispatchCoordinator {
         const hasPhashMismatch = !!serverPhash && serverPhash !== localPhash
         const hasAddressingMismatch =
             !!serverAddressingMode && serverAddressingMode !== addressingMode
-        const hasAddressingError = ackError === 421
+        const hasAddressingError = ackError === WA_NACK_REASONS.STALE_GROUP_ADDRESSING_MODE
         if (
             !retryContext.retried &&
             (hasPhashMismatch || hasAddressingMismatch || hasAddressingError)
@@ -1148,7 +1148,7 @@ export class WaMessageDispatchCoordinator {
         const hasPhashMismatch = !!serverPhash && serverPhash !== localPhash
         const hasAddressingMismatch =
             !!serverAddressingMode && serverAddressingMode !== addressingMode
-        const hasAddressingError = ackError === 421
+        const hasAddressingError = ackError === WA_NACK_REASONS.STALE_GROUP_ADDRESSING_MODE
         if (
             !retryContext.retried &&
             (hasPhashMismatch || hasAddressingMismatch || hasAddressingError)

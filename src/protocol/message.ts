@@ -38,6 +38,29 @@ export type WaOutboundReceiptType =
 
 export const WA_RETRYABLE_ACK_CODES = Object.freeze(['408', '429', '500', '503'] as const)
 
+/**
+ * Stanza-ack `error` attr codes (nack reasons): sent when nacking a stanza
+ * that could not be handled, and matched against the `error` carried by an
+ * inbound publish ack (e.g. stale group addressing mode).
+ */
+export const WA_NACK_REASONS = Object.freeze({
+    STALE_GROUP_ADDRESSING_MODE: 421,
+    NEW_CHAT_MESSAGES_CAPPED: 475,
+    PARSING_ERROR: 487,
+    UNRECOGNIZED_STANZA: 488,
+    UNRECOGNIZED_STANZA_CLASS: 489,
+    UNRECOGNIZED_STANZA_TYPE: 490,
+    INVALID_PROTOBUF: 491,
+    INVALID_HOSTED_COMPANION_STANZA: 493,
+    MISSING_MESSAGE_SECRET: 495,
+    SIGNAL_ERROR_OLD_COUNTER: 496,
+    MESSAGE_DELETED_ON_PEER: 499,
+    UNHANDLED_ERROR: 500,
+    UNSUPPORTED_ADMIN_REVOKE: 550,
+    UNSUPPORTED_LID_GROUP: 551,
+    DB_OPERATION_FAILED: 552
+} as const)
+
 export const WA_STANZA_MSG_TYPES = Object.freeze({
     TEXT: 'text',
     MEDIA: 'media',
