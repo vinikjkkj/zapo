@@ -121,12 +121,11 @@ export interface WaProfileCoordinator {
     readonly setStatus: (text: string) => Promise<void>
     /**
      * Sets the account's pushName - the display name broadcast to other
-     * users in chats and group participant lists. WhatsApp Web applies the
-     * change via a `SettingPushName` app-state mutation (collection
-     * `critical_block`); the new value reaches peers as their next
-     * incoming-message envelope from this account carries the updated
-     * `notify` attr. Empty strings are accepted but reset the display name
-     * to the device fingerprint default.
+     * users in chats and group participant lists. Writes a `SettingPushName`
+     * app-state mutation to sync the account's other devices, persists the
+     * name locally, and re-broadcasts an available presence carrying it (the
+     * step that propagates the name on primary connections, where no phone
+     * re-broadcasts on this device's behalf). Empty strings clear the name.
      */
     readonly setPushName: (name: string) => Promise<void>
     /** Batched usync fetch of picture id + status for many JIDs. */
@@ -197,6 +196,12 @@ interface WaProfileCoordinatorOptions {
      * mutations.
      */
     readonly mutations: WaAppStateMutationCoordinator
+    /**
+     * Applies a pushName change locally: persists the display name and
+     * re-broadcasts an available presence carrying it. Expected to be
+     * idempotent (a no-op when the name already matches).
+     */
+    readonly applyOwnPushName: (name: string) => Promise<void>
     readonly logger: Logger
 }
 
@@ -431,8 +436,15 @@ function buildTextStatusMutationInput(input: WaSetTextStatusInput): {
 export function createProfileCoordinator(
     options: WaProfileCoordinatorOptions
 ): WaProfileCoordinator {
-    const { queryWithContext, generateSid, mexSocket, queryLidsByPhoneJids, mutations, logger } =
-        options
+    const {
+        queryWithContext,
+        generateSid,
+        mexSocket,
+        queryLidsByPhoneJids,
+        mutations,
+        applyOwnPushName,
+        logger
+    } = options
 
     return {
         getProfilePicture: async (jid, type, existingId) => {
@@ -488,6 +500,9 @@ export function createProfileCoordinator(
         },
 
         setPushName: async (name) => {
+            // Local apply first: the app-state echo of this same write then
+            // collapses into a no-op via applyOwnPushName's idempotency guard.
+            await applyOwnPushName(name)
             await mutations.set({ schema: 'SettingPushName', name })
         },
 

@@ -857,6 +857,19 @@ export function buildWaClientDependencies(input: {
         }
     })
 
+    // Persists a pushName change and re-broadcasts presence carrying it (how the
+    // name reaches peers on primary connections). No-op when unchanged, which
+    // also collapses the app-state echo of our own SettingPushName write.
+    const applyOwnPushName = async (name: string): Promise<void> => {
+        if (getCurrentCredentials()?.meDisplayName === name) {
+            return
+        }
+        await authClient.persistSuccessAttributes({ meDisplayName: name })
+        if (connectionManager?.isConnected()) {
+            await presenceCoordinator.send()
+        }
+    }
+
     const appStateMutations = new WaAppStateMutationCoordinator({
         logger,
         messageStore: sessionStore.messages,
@@ -867,7 +880,14 @@ export function buildWaClientDependencies(input: {
         emitSnapshotMutations: options.chatEvents?.emitSnapshotMutations === true,
         emitMutation: (event) => runtime.emitEvent('mutation', event),
         nctSaltSink: (salt) => trustedContactToken.handleNctSaltSync(salt),
-        contactSink: runtime.persistContact
+        contactSink: runtime.persistContact,
+        pushNameSink: (name) => {
+            void applyOwnPushName(name).catch((error) =>
+                logger.debug('apply own pushName from app-state sync failed', {
+                    message: toError(error).message
+                })
+            )
+        }
     })
 
     const profileCoordinator = createProfileCoordinator({
@@ -876,6 +896,7 @@ export function buildWaClientDependencies(input: {
         mexSocket: { query: runtime.query },
         queryLidsByPhoneJids: (phoneJids) => signalDeviceSync.queryLidsByPhoneJids(phoneJids),
         mutations: appStateMutations,
+        applyOwnPushName,
         logger
     })
 

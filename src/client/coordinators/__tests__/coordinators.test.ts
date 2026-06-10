@@ -1329,6 +1329,45 @@ test('app-state mutation coordinator emits business_broadcast_list set/remove pa
     assert.deepEqual(JSON.parse(removeMutation.index), ['business_broadcast_list', 'list-1'])
 })
 
+test('app-state mutation coordinator routes applied SettingPushName to pushNameSink', () => {
+    const names: string[] = []
+    const coordinator = new WaAppStateMutationCoordinator({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
+        logger: createNoopLogger(),
+        messageStore: new WaMessageMemoryStore(),
+        ...fakeSyncImpl(async () => ({ collections: [] })),
+        pushNameSink: (name) => {
+            names.push(name)
+        }
+    })
+
+    // Snapshot-source mutations still route to the sink (pair-time bootstrap).
+    coordinator.emitEventsFromSyncResult({
+        collections: [
+            {
+                collection: 'critical_block',
+                state: WA_APP_STATE_COLLECTION_STATES.SUCCESS,
+                mutations: [
+                    {
+                        collection: 'critical_block',
+                        operation: 'set',
+                        source: 'snapshot',
+                        index: JSON.stringify(['setting_pushName']),
+                        value: { pushNameSetting: { name: 'Maria' } },
+                        version: 1,
+                        indexMac: new Uint8Array(),
+                        valueMac: new Uint8Array(),
+                        keyId: new Uint8Array(),
+                        timestamp: 1_000
+                    }
+                ]
+            }
+        ]
+    })
+
+    assert.deepEqual(names, ['Maria'])
+})
+
 function createPassiveTasksCoordinator(overrides: {
     readonly takeDanglingReceipts: () => BinaryNode[]
     readonly sendNodeDirect: (node: BinaryNode) => Promise<void>
