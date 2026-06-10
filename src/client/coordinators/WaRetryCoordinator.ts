@@ -1,5 +1,6 @@
 import type { WaAuthCredentials } from '@auth/types'
 import type { WaIncomingMessageEvent } from '@client/types'
+import { toRawPubKey } from '@crypto/core/keys'
 import type { Logger } from '@infra/log/types'
 import type { IcdcMeta } from '@message/crypto/icdc'
 import { buildRecoveredIncomingEvent } from '@message/primitives/incoming'
@@ -544,14 +545,14 @@ export class WaRetryCoordinator {
         await this.deps.preKeyStore.markKeyAsUploaded(preKey.keyId)
         const signedIdentity = this.deps.getCurrentCredentials()?.signedIdentity
         return {
-            identity,
+            identity: toRawPubKey(identity),
             key: {
                 id: preKey.keyId,
-                publicKey: preKey.keyPair.pubKey
+                publicKey: toRawPubKey(preKey.keyPair.pubKey)
             },
             skey: {
                 id: signedPreKey.keyId,
-                publicKey: signedPreKey.keyPair.pubKey,
+                publicKey: toRawPubKey(signedPreKey.keyPair.pubKey),
                 signature: signedPreKey.signature
             },
             deviceIdentity: signedIdentity
