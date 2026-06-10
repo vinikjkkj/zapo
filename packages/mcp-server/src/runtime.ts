@@ -656,10 +656,21 @@ export class McpRuntime {
         await mkdir(dirname(this.config.authPath), { recursive: true })
         const store = this.ensureStore()
         const sessionLogger = this.createSessionLogger(state.sessionId)
+        // Mobile-registered credentials carry deviceInfo: pass mobileTransport so
+        // the factory's mobilePrimary gating matches the transport auto-detection.
+        const persisted = await store
+            .session(state.sessionId)
+            .auth.load()
+            .catch(() => null)
+        const mobileTransport =
+            persisted?.deviceInfo !== undefined && persisted?.deviceInfo !== null
+                ? { deviceInfo: persisted.deviceInfo, passive: false }
+                : undefined
         const client = new WaClient(
             {
                 store,
                 sessionId: state.sessionId,
+                ...(mobileTransport ? { mobileTransport } : {}),
                 connectTimeoutMs: 60_000,
                 deviceBrowser: this.config.deviceBrowser ?? 'Chrome',
                 deviceOsDisplayName: this.config.deviceOsDisplayName ?? 'Windows',
