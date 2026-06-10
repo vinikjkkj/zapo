@@ -230,12 +230,12 @@ export async function decryptMsg(
         }
     } catch (error) {
         for (let i = 0; i < session.prevSessions.length; i += 1) {
-            const decodedPrev = decodeSignalSessionSnapshot(
-                session.prevSessions[i],
-                `prevSessions[${i}]`
-            )
-            const prevSession = snapshotToRecord(decodedPrev)
             try {
+                const decodedPrev = decodeSignalSessionSnapshot(
+                    session.prevSessions[i],
+                    `prevSessions[${i}]`
+                )
+                const prevSession = snapshotToRecord(decodedPrev)
                 const [updatedPrev, plaintext] = await decryptMsgFromSession(prevSession, parsed)
                 const updatedSession = {
                     ...updatedPrev,

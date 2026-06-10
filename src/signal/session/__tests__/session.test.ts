@@ -10,15 +10,21 @@ import {
     generateRegistrationInfo,
     generateSignedPreKey
 } from '@signal/registration/keygen'
+import { encodeSignalSessionSnapshot } from '@signal/session/encoding'
 import { SignalProtocol } from '@signal/session/SignalProtocol'
-import { deriveMsgKey, selectMessageKey } from '@signal/session/SignalRatchet'
+import { decryptMsg, deriveMsgKey, selectMessageKey } from '@signal/session/SignalRatchet'
 import {
     deserializeMsg,
     deserializePkMsg,
     requirePreKey,
     requireSignedPreKey
 } from '@signal/session/SignalSerializer'
-import type { SignalAddress, SignalRecvChain, SignalSessionRecord } from '@signal/types'
+import type {
+    SignalAddress,
+    SignalRecvChain,
+    SignalSessionRecord,
+    SignalSessionSnapshot
+} from '@signal/types'
 import { WaIdentityMemoryStore } from '@store/memory/identity.store'
 import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
 import { WaSessionMemoryStore } from '@store/memory/session.store'
@@ -432,4 +438,56 @@ test('signal protocol reloads sessions from store even when prefetched sessions 
     )
 
     assert.equal(aliceSessionStore.getSessionsBatchCalls > 0, true)
+})
+
+function makeSessionSnapshot(seed: number): SignalSessionSnapshot {
+    return {
+        local: { regId: 1, pubKey: makeBytes(33, seed) },
+        remote: { regId: 2, pubKey: makeBytes(33, seed + 1) },
+        rootKey: makeBytes(32, seed + 2),
+        sendChain: {
+            ratchetKey: { pubKey: makeBytes(33, seed + 3), privKey: makeBytes(32, seed + 4) },
+            nextMsgIndex: 0,
+            chainKey: makeBytes(32, seed + 5)
+        },
+        recvChains: [],
+        initialExchangeInfo: null,
+        prevSendChainHighestIndex: 0,
+        aliceBaseKey: makeBytes(33, seed + 6)
+    }
+}
+
+test('decryptMsg skips an undecodable prev session and rethrows the original error', async () => {
+    const validPrev = encodeSignalSessionSnapshot(makeSessionSnapshot(200))
+    const corruptPrev = {
+        sessionVersion: 3,
+        localIdentityPublic: makeBytes(33, 300),
+        remoteIdentityPublic: makeBytes(33, 301),
+        localRegistrationId: 1,
+        remoteRegistrationId: 2,
+        rootKey: makeBytes(32, 302),
+        aliceBaseKey: makeBytes(33, 306)
+    }
+    const session: SignalSessionRecord = {
+        ...makeSessionSnapshot(100),
+        prevSessions: [corruptPrev, validPrev]
+    }
+
+    const parsed = deserializeMsg(createSignalMsgEnvelope())
+    const reported: Array<{ index: number; message: string }> = []
+
+    await assert.rejects(
+        () =>
+            decryptMsg(session, parsed, (error, index) => {
+                reported.push({ index, message: error.message })
+            }),
+        /invalid message mac/
+    )
+
+    assert.deepEqual(
+        reported.map((entry) => entry.index),
+        [0, 1]
+    )
+    assert.match(reported[0].message, /missing prevSessions\[0\]\.senderChain/)
+    assert.match(reported[1].message, /invalid message mac/)
 })
