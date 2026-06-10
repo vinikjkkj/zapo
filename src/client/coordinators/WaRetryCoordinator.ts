@@ -1,12 +1,13 @@
 import type { WaAuthCredentials } from '@auth/types'
 import type { WaIncomingMessageEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import { BoundedTaskQueue, BoundedTaskQueueFullError } from '@infra/perf/BoundedTaskQueue'
 import type { IcdcMeta } from '@message/crypto/icdc'
 import { buildRecoveredIncomingEvent } from '@message/primitives/incoming'
 import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto } from '@proto'
-import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES } from '@protocol/constants'
+import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NACK_REASONS } from '@protocol/constants'
 import {
     isGroupOrBroadcastJid,
     isHostedDeviceJid,
@@ -92,6 +93,11 @@ interface RetryResendPreparation {
 const RETRY_CLEANUP_INTERVAL_MS = 30_000
 const RETRY_SESSION_BASE_KEY_CACHE_MAX_ENTRIES = 8_192
 
+// Decrypt-failure handling runs off the inbound pipeline (keys-section builds
+// serialize on the prekey lock and hit the store); excess under flood is dropped.
+const DECRYPT_FAILURE_QUEUE_MAX_SIZE = 1_024
+const DECRYPT_FAILURE_QUEUE_MAX_CONCURRENCY = 8
+
 const PLACEHOLDER_RESEND_RETRY_THRESHOLD = 3
 const PLACEHOLDER_RESEND_BATCH_SIZE = 32
 const PLACEHOLDER_RESEND_DEBOUNCE_MS = 200
@@ -147,6 +153,7 @@ export class WaRetryCoordinator {
     private readonly placeholderInFlight: Set<string> = new Set()
     private placeholderQueue: PlaceholderResendQueueItem[] = []
     private placeholderTimer: ReturnType<typeof setTimeout> | null = null
+    private readonly decryptFailureQueue: BoundedTaskQueue
 
     public constructor(options: WaRetryCoordinatorOptions) {
         this.deps = options
@@ -161,22 +168,52 @@ export class WaRetryCoordinator {
         })
         this.retryProcessingByMessageId = new Map()
         this.retrySessionBaseKeys = new Map()
+        this.decryptFailureQueue = new BoundedTaskQueue(
+            DECRYPT_FAILURE_QUEUE_MAX_SIZE,
+            DECRYPT_FAILURE_QUEUE_MAX_CONCURRENCY
+        )
     }
 
-    public async onDecryptFailure(
+    public onDecryptFailure(
         context: WaRetryDecryptFailureContext,
         error: unknown
     ): Promise<boolean> {
+        // Deferred to the bounded queue: building the receipt inline would stall
+        // the inbound node pipeline.
+        void this.decryptFailureQueue
+            .enqueue(() => this.handleDecryptFailure(context, error))
+            .catch((queueError) => {
+                if (queueError instanceof BoundedTaskQueueFullError) {
+                    this.deps.logger.warn('decrypt-failure retry dropped: queue saturated', {
+                        id: context.stanzaId,
+                        from: context.from,
+                        participant: context.participant
+                    })
+                    return
+                }
+                this.deps.logger.warn('failed to schedule decrypt-failure retry', {
+                    id: context.stanzaId,
+                    from: context.from,
+                    participant: context.participant,
+                    message: toError(queueError).message
+                })
+            })
+        return Promise.resolve(true)
+    }
+
+    private async handleDecryptFailure(
+        context: WaRetryDecryptFailureContext,
+        error: unknown
+    ): Promise<void> {
         try {
             const prepared = await this.prepareDecryptFailureRetry(context, error)
-            if (!prepared) {
-                return false
+            if (prepared && !prepared.delegatedToPlaceholderResend) {
+                await this.sendDecryptFailureRetryReceipt(context, prepared)
             }
-            if (prepared.delegatedToPlaceholderResend) {
-                return true
-            }
-            await this.sendDecryptFailureRetryReceipt(context, prepared)
-            return true
+            // Ack the failed stanza even on the give-up path: the retry receipt
+            // asks for a resend but does not consume the message, so without the
+            // ack it is redelivered on every offline resume.
+            await this.sendDecryptFailureAck(context)
         } catch (sendError) {
             this.deps.logger.warn('failed to send retry receipt for decrypt failure', {
                 id: context.stanzaId,
@@ -184,7 +221,6 @@ export class WaRetryCoordinator {
                 participant: context.participant,
                 message: toError(sendError).message
             })
-            return false
         }
     }
 
@@ -259,6 +295,17 @@ export class WaRetryCoordinator {
             nowMs,
             expiresAtMs
         )
+        if (retryCount > MAX_RETRY_ATTEMPTS) {
+            // Give up past the ceiling: each attempt rebuilds an expensive keys
+            // section, so an uncapped retry on redelivered backlog hammers the store.
+            this.deps.logger.debug('retry receipt skipped: inbound retry limit exceeded', {
+                id: context.stanzaId,
+                from: context.from,
+                participant: context.participant,
+                retryCount
+            })
+            return null
+        }
         const delegatedToPlaceholderResend =
             retryCount >= PLACEHOLDER_RESEND_RETRY_THRESHOLD &&
             this.enqueuePlaceholderResend(context)
@@ -317,6 +364,37 @@ export class WaRetryCoordinator {
             reason: prepared.retryReason,
             withKeys: prepared.retryKeys !== undefined
         })
+    }
+
+    private async sendDecryptFailureAck(context: WaRetryDecryptFailureContext): Promise<void> {
+        if (!context.stanzaId || !context.from) {
+            return
+        }
+        try {
+            await this.deps.sendNode(
+                buildAckNode({
+                    kind: 'message',
+                    node: context.messageNode,
+                    id: context.stanzaId,
+                    to: context.from,
+                    participant: context.participant,
+                    from: this.deps.getCurrentCredentials()?.meJid ?? undefined,
+                    error: WA_NACK_REASONS.UNHANDLED_ERROR
+                })
+            )
+            this.deps.logger.trace('acked undecryptable stanza', {
+                id: context.stanzaId,
+                from: context.from,
+                participant: context.participant
+            })
+        } catch (error) {
+            this.deps.logger.warn('failed to ack undecryptable stanza', {
+                id: context.stanzaId,
+                from: context.from,
+                participant: context.participant,
+                message: toError(error).message
+            })
+        }
     }
 
     private async handleParsedRetryRequest(

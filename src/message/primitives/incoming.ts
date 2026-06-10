@@ -123,7 +123,8 @@ export function buildRecoveredIncomingEvent(
     const key = webMessageInfo.key ?? {}
     const chatJid = key.remoteJid ?? undefined
     const fromMe = key.fromMe === true
-    const participant = key.participant ?? undefined
+    const participant = webMessageInfo.participant ?? key.participant ?? undefined
+    const pushName = webMessageInfo.pushName ?? undefined
     const isGroup = chatJid ? isGroupJid(chatJid) : false
     const isBroadcast = chatJid ? isBroadcastJid(chatJid) : false
     const rawSender = fromMe ? undefined : isGroup || isBroadcast ? participant : chatJid
@@ -141,7 +142,8 @@ export function buildRecoveredIncomingEvent(
         attrs: {
             ...(stanzaId !== undefined ? { id: stanzaId } : {}),
             ...(chatJid !== undefined ? { from: chatJid } : {}),
-            ...(participant !== undefined ? { participant } : {})
+            ...(participant !== undefined ? { participant } : {}),
+            ...(pushName !== undefined ? { notify: pushName } : {})
         }
     }
     return {
@@ -158,6 +160,7 @@ export function buildRecoveredIncomingEvent(
         },
         timestampSeconds,
         ...(expirationSeconds !== undefined ? { expirationSeconds } : {}),
+        ...(pushName !== undefined ? { pushName } : {}),
         message
     }
 }

@@ -362,6 +362,68 @@ test('placeholder resend: releases in-flight slots after each batch completes', 
     assert.equal(harness.captured.length, 2)
 })
 
+test('decrypt-failure retry gives up past the retry ceiling (acks stanza, no receipt/placeholder)', async () => {
+    const sentNodes: BinaryNode[] = []
+    const placeholderRequests: number[] = []
+    const coordinator = new WaRetryCoordinator({
+        logger: createNoopLogger(),
+        retryStore: {
+            getTtlMs: () => 60_000,
+            // Past MAX_RETRY_ATTEMPTS (5): a redelivered stanza that keeps failing.
+            incrementInboundCounter: async () => 6,
+            cleanupExpired: async () => 0
+        } as unknown as WaRetryStore,
+        signalStore: {
+            getRegistrationInfo: async () => ({
+                registrationId: 42,
+                identityKeyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) }
+            }),
+            getSignedPreKey: async () => {
+                throw new Error('should not build keys past the ceiling')
+            }
+        } as never,
+        preKeyStore: {} as never,
+        sessionStore: {} as never,
+        senderKeyStore: {} as never,
+        signalProtocol: {} as never,
+        sessionResolver: {} as never,
+        signalDeviceSync: {} as never,
+        signalMissingPreKeysSync: {} as never,
+        messageClient: {} as never,
+        sendNode: async (node: BinaryNode) => {
+            sentNodes.push(node)
+        },
+        getCurrentCredentials: () => null,
+        peerDataOperation: {
+            request: async () => {
+                placeholderRequests.push(1)
+                return []
+            },
+            send: async () => ({ messageId: 'unused' })
+        },
+        emitIncomingMessage: () => undefined
+    })
+
+    const handled = await coordinator.onDecryptFailure(
+        buildPlaceholderContext({
+            stanzaId: 'over-limit',
+            t: String(Math.trunc(Date.now() / 1000))
+        }),
+        new Error('signal session not found')
+    )
+
+    assert.equal(handled, true)
+    // Retry handling is deferred to a bounded background queue; let it drain.
+    await flushMicrotasks()
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    // Past the ceiling: no retry receipt, no placeholder, only the consuming ack.
+    assert.equal(sentNodes.length, 1)
+    assert.equal(sentNodes[0].tag, 'ack')
+    assert.equal(sentNodes[0].attrs.class, 'message')
+    assert.equal(sentNodes[0].attrs.error, '500')
+    assert.equal(placeholderRequests.length, 0)
+})
+
 test('retry coordinator serializes outbound receipt tracking per message id', async () => {
     const nowMs = Date.now()
     const retryStore = new ControlledRetryStore({
