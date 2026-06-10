@@ -37,6 +37,12 @@ export interface WaRetryReplayServiceOptions {
     readonly sessionResolver: SignalSessionResolver
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly resolveUserIcdc?: (userJid: string) => Promise<IcdcMeta | null>
+    /**
+     * Resolves the trusted-contact (privacy) token node for a recipient user
+     * jid. A resend without it is nacked with error 463 by privacy-gated
+     * recipients.
+     */
+    readonly resolvePrivacyTokenNode?: (recipientJid: string) => Promise<BinaryNode | null>
 }
 
 export type WaRetryResendResult = 'resent' | 'ineligible'
@@ -138,6 +144,9 @@ export class WaRetryReplayService {
         const metaNode = isHostedDeviceJid(requesterJid)
             ? buildMetaNode({ sender_intent: 'hosted' })
             : undefined
+        const privacyTokenNode = requesterIsSelf
+            ? undefined
+            : await this.resolvePrivacyToken(requesterJid)
         await this.options.messageClient.sendEncrypted({
             to: requesterJid,
             encType: encrypted.type,
@@ -146,7 +155,8 @@ export class WaRetryReplayService {
             id: outbound.messageId,
             type: payload.type,
             deviceIdentity,
-            metaNode
+            metaNode,
+            privacyTokenNode
         })
         return 'resent'
     }
@@ -160,6 +170,31 @@ export class WaRetryReplayService {
             return undefined
         }
         return proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
+    }
+
+    /**
+     * Resolves the trusted-contact token node for the requester's user jid. A
+     * failure (or absent resolver) yields no node and the resend still goes out.
+     */
+    private async resolvePrivacyToken(requesterJid: string): Promise<BinaryNode | undefined> {
+        if (!this.options.resolvePrivacyTokenNode) {
+            return undefined
+        }
+        let recipientUserJid: string
+        try {
+            recipientUserJid = toUserJid(requesterJid)
+        } catch {
+            return undefined
+        }
+        try {
+            return (await this.options.resolvePrivacyTokenNode(recipientUserJid)) ?? undefined
+        } catch (error) {
+            this.options.logger.warn('retry resend privacy token resolution failed', {
+                to: recipientUserJid,
+                message: toError(error).message
+            })
+            return undefined
+        }
     }
 
     private async refreshRetryPlaintext(
@@ -304,6 +339,9 @@ export class WaRetryReplayService {
         const metaNode = isHostedDeviceJid(requesterJid)
             ? buildMetaNode({ sender_intent: 'hosted' })
             : undefined
+        const privacyTokenNode = this.isRequesterCurrentAccount(requesterJid)
+            ? undefined
+            : await this.resolvePrivacyToken(requesterJid)
         await this.options.messageClient.sendEncrypted({
             to: requesterJid,
             encType: payload.encType,
@@ -313,7 +351,8 @@ export class WaRetryReplayService {
             type: payload.type,
             participant: payload.participant,
             deviceIdentity,
-            metaNode
+            metaNode,
+            privacyTokenNode
         })
         return 'resent'
     }

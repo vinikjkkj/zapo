@@ -805,6 +805,8 @@ export function buildWaClientDependencies(input: {
         sendNode: runtime.sendNode,
         getCurrentCredentials,
         resolveUserIcdc: (userJid) => messageDispatch.resolveUserIcdc(userJid),
+        resolvePrivacyTokenNode: (recipientJid) =>
+            trustedContactToken.resolveTokenForMessage(recipientJid),
         peerDataOperation,
         emitIncomingMessage: (event) => {
             void runtime

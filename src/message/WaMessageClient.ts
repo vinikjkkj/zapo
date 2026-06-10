@@ -240,6 +240,9 @@ export class WaMessageClient {
         if (input.metaNode) {
             content.push(input.metaNode)
         }
+        if (input.privacyTokenNode) {
+            content.push(input.privacyTokenNode)
+        }
         const node: BinaryNode = {
             tag: WA_MESSAGE_TAGS.MESSAGE,
             attrs,

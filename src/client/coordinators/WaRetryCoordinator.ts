@@ -67,6 +67,12 @@ interface WaRetryCoordinatorOptions {
     readonly resolveUserIcdc?: (userJid: string) => Promise<IcdcMeta | null>
     readonly peerDataOperation?: PeerDataOperationRequester
     readonly emitIncomingMessage?: (event: WaIncomingMessageEvent) => void
+    /**
+     * Resolves the trusted-contact (privacy) token node for a recipient user
+     * jid: retry resends must carry the same `<tctoken>` the original send did,
+     * or privacy-gated recipients nack them with error 463.
+     */
+    readonly resolvePrivacyTokenNode?: (recipientJid: string) => Promise<BinaryNode | null>
 }
 
 type RetryAuthorization =
@@ -157,7 +163,8 @@ export class WaRetryCoordinator {
             signalProtocol: options.signalProtocol,
             sessionResolver: options.sessionResolver,
             getCurrentCredentials: options.getCurrentCredentials,
-            resolveUserIcdc: options.resolveUserIcdc
+            resolveUserIcdc: options.resolveUserIcdc,
+            resolvePrivacyTokenNode: options.resolvePrivacyTokenNode
         })
         this.retryProcessingByMessageId = new Map()
         this.retrySessionBaseKeys = new Map()

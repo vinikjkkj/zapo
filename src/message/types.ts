@@ -354,6 +354,11 @@ export interface WaEncryptedMessageInput {
     readonly participant?: string
     readonly deviceFanout?: string
     readonly metaNode?: BinaryNode
+    /**
+     * Trusted-contact (privacy) token node, appended as a `<tctoken>` child.
+     * Recipients that require one nack a token-less send with error 463.
+     */
+    readonly privacyTokenNode?: BinaryNode
 }
 
 export interface WaSendReceiptInput {
