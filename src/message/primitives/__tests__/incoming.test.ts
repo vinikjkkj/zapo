@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import type { WaIncomingMessageEvent } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
-import { handleIncomingMessageAck } from '@message/primitives/incoming'
+import { buildRecoveredIncomingEvent, handleIncomingMessageAck } from '@message/primitives/incoming'
 import { proto } from '@proto'
 import type { BinaryNode } from '@transport/types'
 
@@ -137,6 +137,65 @@ test('group incoming message keeps the group remoteJid and carries the device on
     assert.equal(key.isGroup, true)
     assert.equal(key.participant, '5511999999999@s.whatsapp.net')
     assert.equal(key.senderDevice, 7)
+})
+
+test('recovered self group message resolves participant from originalSelfAuthorUserJidString', () => {
+    const event = buildRecoveredIncomingEvent(
+        {
+            key: { remoteJid: '120363000000000000@g.us', fromMe: true, id: 'ID-0' },
+            message: { conversation: 'hello' },
+            messageTimestamp: 1700000000,
+            originalSelfAuthorUserJidString: '133300000000000@lid'
+        },
+        '5511999999999:2@s.whatsapp.net'
+    )
+
+    assert.equal(event.key.fromMe, true)
+    assert.equal(event.key.isGroup, true)
+    assert.equal(event.key.participant, '133300000000000@lid')
+    assert.equal(event.rawNode.attrs.participant, '133300000000000@lid')
+})
+
+test('recovered self group message falls back to the me user when no self author is present', () => {
+    const event = buildRecoveredIncomingEvent(
+        {
+            key: { remoteJid: '120363000000000000@g.us', fromMe: true, id: 'ID-1' },
+            message: { conversation: 'hello' }
+        },
+        '5511999999999:2@s.whatsapp.net'
+    )
+
+    assert.equal(event.key.participant, '5511999999999@s.whatsapp.net')
+})
+
+test('recovered self group message keeps an explicit participant over the self author', () => {
+    const event = buildRecoveredIncomingEvent(
+        {
+            key: {
+                remoteJid: '120363000000000000@g.us',
+                fromMe: true,
+                id: 'ID-2',
+                participant: '5511777777777@s.whatsapp.net'
+            },
+            originalSelfAuthorUserJidString: '133300000000000@lid'
+        },
+        '5511999999999:2@s.whatsapp.net'
+    )
+
+    assert.equal(event.key.participant, '5511777777777@s.whatsapp.net')
+})
+
+test('recovered self 1:1 message keeps participant unset', () => {
+    const event = buildRecoveredIncomingEvent(
+        {
+            key: { remoteJid: '5511888888888@s.whatsapp.net', fromMe: true, id: 'ID-3' },
+            message: { conversation: 'hello' },
+            originalSelfAuthorUserJidString: '133300000000000@lid'
+        },
+        '5511999999999:2@s.whatsapp.net'
+    )
+
+    assert.equal(event.key.participant, undefined)
 })
 
 test('incoming message ack falls back to retry receipt when decrypt fails', async () => {
