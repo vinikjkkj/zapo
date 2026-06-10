@@ -807,12 +807,18 @@ export function buildWaClientDependencies(input: {
         resolveUserIcdc: (userJid) => messageDispatch.resolveUserIcdc(userJid),
         resolvePrivacyTokenNode: (recipientJid) =>
             trustedContactToken.resolveTokenForMessage(recipientJid),
-        peerDataOperation,
-        emitIncomingMessage: (event) => {
-            void runtime
-                .handleIncomingMessageEvent(event)
-                .catch((err) => runtime.handleError(toError(err)))
-        }
+        // Placeholder resend asks the primary phone (a peer) for the plaintext.
+        // A mobile primary has no peer to ask, so withhold the deps and fall
+        // back to plain retry receipts.
+        peerDataOperation: options.mobileTransport !== undefined ? undefined : peerDataOperation,
+        emitIncomingMessage:
+            options.mobileTransport !== undefined
+                ? undefined
+                : (event) => {
+                      void runtime
+                          .handleIncomingMessageEvent(event)
+                          .catch((err) => runtime.handleError(toError(err)))
+                  }
     })
 
     const botCoordinator = createBotCoordinator({

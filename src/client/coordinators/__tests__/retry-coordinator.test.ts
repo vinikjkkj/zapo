@@ -362,6 +362,99 @@ test('placeholder resend: releases in-flight slots after each batch completes', 
     assert.equal(harness.captured.length, 2)
 })
 
+test('mobile primary does not delegate to placeholder resend and keeps sending retry receipts', async () => {
+    const sentNodes: BinaryNode[] = []
+    const emitted: WaIncomingMessageEvent[] = []
+    const placeholderRequests: number[] = []
+    const peerDataOperation: PeerDataOperationRequester = {
+        request: async () => {
+            placeholderRequests.push(1)
+            return []
+        },
+        send: async () => ({ messageId: 'unused' })
+    }
+
+    const sharedDeps = {
+        logger: createNoopLogger(),
+        retryStore: {
+            getTtlMs: () => 60_000,
+            incrementInboundCounter: async () => 3,
+            cleanupExpired: async () => 0
+        } as unknown as WaRetryStore,
+        signalStore: {
+            getRegistrationInfo: async () => ({
+                registrationId: 42,
+                identityKeyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) }
+            }),
+            getSignedPreKey: async () => ({
+                keyId: 7,
+                keyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) },
+                signature: new Uint8Array(64)
+            })
+        } as never,
+        preKeyStore: {
+            getOrGenSinglePreKey: async () => ({
+                keyId: 11,
+                keyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) }
+            }),
+            markKeyAsUploaded: async () => undefined
+        } as never,
+        sessionStore: {} as never,
+        senderKeyStore: {} as never,
+        signalProtocol: {} as never,
+        sessionResolver: {} as never,
+        signalDeviceSync: {} as never,
+        signalMissingPreKeysSync: {} as never,
+        messageClient: {} as never,
+        sendNode: async (node: BinaryNode) => {
+            sentNodes.push(node)
+        },
+        getCurrentCredentials: () => null
+    }
+
+    const freshT = String(Math.trunc(Date.now() / 1000))
+    const context = buildPlaceholderContext({ stanzaId: 'mobile-1', t: freshT })
+
+    // Mobile primary: placeholder deps withheld, a high retry count must still
+    // go out as a retry receipt.
+    const mobileCoordinator = new WaRetryCoordinator(sharedDeps)
+    const mobileHandled = await mobileCoordinator.onDecryptFailure(context, new Error('boom'))
+    assert.equal(mobileHandled, true)
+    // Retry handling is deferred to a bounded background queue; let it drain.
+    await flushMicrotasks()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    assert.equal(placeholderRequests.length, 0)
+    assert.equal(emitted.length, 0)
+    // Mobile: retry receipt + transport ack (no placeholder).
+    assert.equal(sentNodes.length, 2)
+    assert.equal(sentNodes[0].tag, 'receipt')
+    assert.equal(sentNodes[0].attrs.type, 'retry')
+    assert.equal(sentNodes[1].tag, 'ack')
+    assert.equal(sentNodes[1].attrs.class, 'message')
+    assert.equal(sentNodes[1].attrs.error, '500')
+
+    // Companion: the same retry count delegates to placeholder resend; the
+    // stanza is still acked.
+    const companionCoordinator = new WaRetryCoordinator({
+        ...sharedDeps,
+        peerDataOperation,
+        emitIncomingMessage: (event) => emitted.push(event)
+    })
+    const companionHandled = await companionCoordinator.onDecryptFailure(
+        buildPlaceholderContext({ stanzaId: 'companion-1', t: freshT }),
+        new Error('boom')
+    )
+    assert.equal(companionHandled, true)
+    // Drain the deferred queue, then wait out the placeholder debounce.
+    await flushMicrotasks()
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    // Only an ack was added for the companion path (no retry receipt).
+    assert.equal(sentNodes.length, 3)
+    assert.equal(sentNodes[2].tag, 'ack')
+    assert.equal(sentNodes[2].attrs.class, 'message')
+    assert.equal(placeholderRequests.length, 1)
+})
+
 test('decrypt-failure retry gives up past the retry ceiling (acks stanza, no receipt/placeholder)', async () => {
     const sentNodes: BinaryNode[] = []
     const placeholderRequests: number[] = []

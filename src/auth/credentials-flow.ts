@@ -58,6 +58,8 @@ export async function loadOrCreateCredentials(
 
     await restoreSignalStore(args.signalStore, args.preKeyStore, existing)
     args.logger.trace('auth credentials restored into signal store')
+    // A mobile primary has no self-signed device-identity and no key-index-list:
+    // both are companion-only (set at pairing). Do not re-add them here.
     return existing
 }
 
