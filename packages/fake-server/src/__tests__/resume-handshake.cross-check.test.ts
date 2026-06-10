@@ -4,6 +4,7 @@ import test from 'node:test'
 import { createStore, WaAuthMemoryStore, WaClient, type WaClientEventMap } from 'zapo-js'
 
 import { FakeWaServer } from '../api/FakeWaServer'
+import { parsePairingQrString } from '../protocol/auth/pair-device'
 
 function noopStore(): never {
     throw new Error('unexpected store call in resume cross-check')
@@ -78,25 +79,76 @@ function waitForEvent<K extends keyof WaClientEventMap>(
     })
 }
 
-test('resume handshake: second connection uses IK and reaches debug_connection_success', async () => {
+async function waitForServerStaticKey(
+    authStore: WaAuthMemoryStore,
+    timeoutMs = 5_000
+): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    for (;;) {
+        const creds = await authStore.load()
+        if (creds?.meJid && creds.serverStaticKey?.byteLength === 32) {
+            return
+        }
+        if (Date.now() >= deadline) {
+            throw new Error('timed out waiting for server static key to be cached')
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+}
+
+test('resume handshake: server static key is withheld until registered, then reconnect uses IK', async () => {
     const server = await FakeWaServer.start()
     const authStore = new WaAuthMemoryStore()
 
     try {
         const firstClient = buildClientFor(server, authStore, 'resume-1')
-        const firstSuccess = waitForEvent(firstClient, 'debug_connection_success')
-        await firstClient.connect()
-        await firstSuccess
 
-        const credsAfterXx = await authStore.load()
-        assert.ok(credsAfterXx, 'auth store should have credentials after first connect')
-        assert.ok(
-            credsAfterXx.serverStaticKey && credsAfterXx.serverStaticKey.byteLength === 32,
-            'server static key should be persisted after XX handshake'
+        const materialPromise = new Promise<{
+            readonly advSecretKey: Uint8Array
+            readonly identityPublicKey: Uint8Array
+        }>((resolve) => {
+            firstClient.once('auth_qr', (event: Parameters<WaClientEventMap['auth_qr']>[0]) => {
+                const parsed = parsePairingQrString(event.qr)
+                resolve({
+                    advSecretKey: parsed.advSecretKey,
+                    identityPublicKey: parsed.identityPublicKey
+                })
+            })
+        })
+        const pairedPromise = waitForEvent(firstClient, 'auth_paired', 60_000)
+
+        await firstClient.connect()
+        const pipeline = await server.waitForAuthenticatedPipeline()
+
+        // The unregistered (pre-pairing) connection does the full XX handshake and
+        // must NOT cache the server static key, matching WhatsApp Web.
+        const unregisteredCreds = await authStore.load()
+        assert.ok(unregisteredCreds, 'auth store should have credentials after first connect')
+        assert.equal(
+            unregisteredCreds.meJid ?? null,
+            null,
+            'session should still be unregistered before pairing'
+        )
+        assert.equal(
+            unregisteredCreds.serverStaticKey ?? null,
+            null,
+            'server static key must not be cached while unregistered'
         )
 
+        const reconnectPipelinePromise = server.waitForNextAuthenticatedPipeline()
+        await server.runPairing(
+            pipeline,
+            { deviceJid: '5511999999999:1@s.whatsapp.net' },
+            () => materialPromise
+        )
+        await pairedPromise
+        await reconnectPipelinePromise
+
+        // The registered reconnect caches the server static key.
+        await waitForServerStaticKey(authStore)
         await firstClient.disconnect()
 
+        // A fresh registered connection now resumes via the IK handshake.
         const secondClient = buildClientFor(server, authStore, 'resume-2')
         const secondSuccess = waitForEvent(secondClient, 'debug_connection_success')
         await secondClient.connect()

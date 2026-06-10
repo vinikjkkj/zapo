@@ -337,6 +337,8 @@ export class WaConnectionManager {
             const serverStaticKey = comms.getServerStaticKey()
             if (!serverStaticKey) {
                 this.logger.trace('no server static key available to persist')
+            } else if (!credentials.meJid) {
+                this.logger.trace('skipping server static key persist while unregistered')
             } else {
                 await this.authClient.persistServerStaticKey(serverStaticKey)
                 this.assertLifecycleCurrent(lifecycleGeneration, 'start comms')

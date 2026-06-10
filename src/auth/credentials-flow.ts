@@ -187,7 +187,7 @@ export async function buildCommsConfig(
         noise: {
             clientStaticKeyPair: credentials.noiseKeyPair,
             isRegistered: registered,
-            serverStaticKey: credentials.serverStaticKey,
+            serverStaticKey: registered ? credentials.serverStaticKey : undefined,
             routingInfo: credentials.routingInfo,
             trustedRootCa: clientOptions.noiseTrustedRootCa,
             verifyCertificateChain: clientOptions.disableNoiseCertificateChainVerification
