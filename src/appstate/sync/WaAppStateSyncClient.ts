@@ -77,7 +77,12 @@ interface WaAppStateSyncClientOptions {
     readonly defaultTimeoutMs?: number
     readonly onMissingKeys?: (event: WaAppStateMissingKeysEvent) => Promise<void>
     readonly skipMacVerification?: boolean
-    readonly mobilePrimary?: boolean
+    /**
+     * Resolved per sync operation (post-connect, after credentials load) so a
+     * registered mobile-primary session reconnecting without an explicit
+     * `mobileTransport` option still drives the primary-authoritative sync path.
+     */
+    readonly mobilePrimary?: () => boolean
     readonly isOwnAccountDevice?: (deviceJid: string) => boolean
     readonly sendKeyShare?: (
         toDeviceJid: string,
@@ -125,7 +130,7 @@ export class WaAppStateSyncClient {
     ) => Promise<void>
     private readonly triggerSync?: () => Promise<void>
     private readonly crypto: WaAppStateCrypto
-    private readonly mobilePrimary: boolean
+    private readonly mobilePrimary: () => boolean
     private syncContext: {
         readonly keys: Map<string, Uint8Array | null>
         readonly collections: Map<AppStateCollectionName, WaAppStateCollectionStoreState>
@@ -147,7 +152,7 @@ export class WaAppStateSyncClient {
         this.triggerSync = options.triggerSync
 
         this.crypto = new WaAppStateCrypto(undefined, options.skipMacVerification === true)
-        this.mobilePrimary = options.mobilePrimary ?? false
+        this.mobilePrimary = options.mobilePrimary ?? (() => false)
         this.syncContext = null
         this.syncPromise = null
     }
@@ -592,7 +597,7 @@ export class WaAppStateSyncClient {
     }> {
         const collectionState = await this.getCollectionState(collection)
         const hasPersistedState = collectionState.initialized
-        const requestSnapshot = !this.mobilePrimary && !hasPersistedState
+        const requestSnapshot = !this.mobilePrimary() && !hasPersistedState
         const attrs: Record<string, string> = {
             name: collection,
             version: String(
@@ -606,7 +611,7 @@ export class WaAppStateSyncClient {
         let outgoingContext: OutgoingPatchContext | undefined
         let skippedUpload = false
         if (pendingMutations.length > 0) {
-            if (!hasPersistedState && !this.mobilePrimary) {
+            if (!hasPersistedState && !this.mobilePrimary()) {
                 skippedUpload = true
                 this.logger.debug(
                     'app-state skipped outgoing patch upload until snapshot bootstrap',
@@ -654,7 +659,7 @@ export class WaAppStateSyncClient {
             content: [
                 {
                     tag: WA_NODE_TAGS.SYNC,
-                    attrs: this.mobilePrimary ? { data_namespace: '3' } : {},
+                    attrs: this.mobilePrimary() ? { data_namespace: '3' } : {},
                     content: collectionNodes
                 }
             ]
@@ -736,7 +741,7 @@ export class WaAppStateSyncClient {
 
         try {
             let appliedMutations: WaAppStateMutation[] = []
-            if (payload.snapshotReference && this.mobilePrimary) {
+            if (payload.snapshotReference && this.mobilePrimary()) {
                 collectionLogger.debug('app-state ignoring server snapshot on primary device')
             } else if (payload.snapshotReference) {
                 const downloader = options.downloadExternalBlob

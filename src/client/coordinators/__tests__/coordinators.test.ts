@@ -111,7 +111,7 @@ function createMessageDispatchCoordinator(
     groupMetadataStore: WaGroupMetadataMemoryStore,
     overrides?: {
         readonly meJid?: string
-        readonly mobileMessageIdFormat?: boolean
+        readonly mobileMessageIdFormat?: () => boolean
         readonly serverClock?: ServerClock
     }
 ): WaMessageDispatchCoordinator {
@@ -742,7 +742,7 @@ test('mobile message id format: AC + 30 hex chars uppercase', async () => {
     const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
     const coordinator = createMessageDispatchCoordinator(groupMetadataStore, {
         meJid: '5596965746475@s.whatsapp.net',
-        mobileMessageIdFormat: true
+        mobileMessageIdFormat: () => true
     })
     const gen = coordinator as unknown as {
         generateOutgoingMessageId(): Promise<string>

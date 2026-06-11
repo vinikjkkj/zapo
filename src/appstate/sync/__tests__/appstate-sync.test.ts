@@ -426,7 +426,7 @@ test('appstate sync applies catch-up patches on 409 conflict and re-uploads the 
         logger: createNoopLogger(),
         query,
         store,
-        mobilePrimary: true,
+        mobilePrimary: () => true,
         skipMacVerification: true
     })
 
@@ -491,7 +491,7 @@ test('mobile primary uploads patch from fresh state without requesting a snapsho
         logger: createNoopLogger(),
         query,
         store,
-        mobilePrimary: true,
+        mobilePrimary: () => true,
         skipMacVerification: true
     })
 

@@ -70,6 +70,15 @@ interface WaRetryCoordinatorOptions {
     readonly peerDataOperation?: PeerDataOperationRequester
     readonly emitIncomingMessage?: (event: WaIncomingMessageEvent) => void
     /**
+     * Placeholder resend asks the primary phone (a peer) for the plaintext. A
+     * mobile primary is itself the phone and has no peer to ask, so when this
+     * resolves true the coordinator skips the resend and falls back to plain
+     * retry receipts. Resolved per failure (post-connect, after credentials
+     * load) so a registered mobile session reconnecting without an explicit
+     * `mobileTransport` option still takes the fallback path.
+     */
+    readonly isMobilePrimary?: () => boolean
+    /**
      * Resolves the trusted-contact (privacy) token node for a recipient user
      * jid: retry resends must carry the same `<tctoken>` the original send did,
      * or privacy-gated recipients nack them with error 463.
@@ -1079,6 +1088,9 @@ export class WaRetryCoordinator {
 
     private enqueuePlaceholderResend(context: WaRetryDecryptFailureContext): boolean {
         if (!this.deps.peerDataOperation || !this.deps.emitIncomingMessage) {
+            return false
+        }
+        if (this.deps.isMobilePrimary?.()) {
             return false
         }
         const subtype = context.messageNode.attrs.subtype

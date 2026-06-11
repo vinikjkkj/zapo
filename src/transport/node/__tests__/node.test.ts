@@ -244,6 +244,40 @@ test('WaNodeOrchestrator query timeout supports fake timers', async (t) => {
     await assert.rejects(() => pending, /query timeout/)
 })
 
+test('WaNodeOrchestrator resolves the mobile id format lazily at first send', async () => {
+    const sentNodes: BinaryNode[] = []
+    let mobile = false
+    const orchestrator = new WaNodeOrchestrator({
+        logger: createNoopLogger(),
+        sendNode: async (node) => {
+            sentNodes.push(node)
+        },
+        mobileIqIdFormat: () => mobile
+    })
+
+    mobile = true
+    await orchestrator.sendNode({ tag: 'iq', attrs: { type: 'get', xmlns: 'w:test' } })
+
+    const id = sentNodes[0]?.attrs.id ?? ''
+    assert.match(id, /^0[0-9a-f]*$/, `id '${id}' is not the mobile format`)
+})
+
+test('WaNodeOrchestrator uses the web id format when the mobile thunk stays false', async () => {
+    const sentNodes: BinaryNode[] = []
+    const orchestrator = new WaNodeOrchestrator({
+        logger: createNoopLogger(),
+        sendNode: async (node) => {
+            sentNodes.push(node)
+        },
+        mobileIqIdFormat: () => false
+    })
+
+    await orchestrator.sendNode({ tag: 'iq', attrs: { type: 'get', xmlns: 'w:test' } })
+
+    const id = sentNodes[0]?.attrs.id ?? ''
+    assert.match(id, /^\d+\.\d+-\d+$/, `id '${id}' is not the web format`)
+})
+
 test('xml formatter escapes attributes and supports string bytes and children nodes', () => {
     const xml = formatBinaryNodeAsXml({
         tag: 'iq',

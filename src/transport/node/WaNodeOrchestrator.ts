@@ -16,7 +16,12 @@ interface WaNodeOrchestratorOptions {
     readonly sendNode: (node: BinaryNode) => Promise<void>
     readonly defaultTimeoutMs?: number
     readonly hostDomain?: string
-    readonly mobileIqIdFormat?: boolean
+    /**
+     * Resolved lazily on first id-generator creation (post-connect, after
+     * credentials load) so a registered mobile session reconnecting without an
+     * explicit `mobileTransport` option still picks the mobile id format.
+     */
+    readonly mobileIqIdFormat?: () => boolean
 }
 
 /**
@@ -29,7 +34,7 @@ export class WaNodeOrchestrator {
     private readonly sendNodeFn: (node: BinaryNode) => Promise<void>
     private readonly defaultTimeoutMs: number
     private readonly hostDomain: string
-    private readonly mobileIqIdFormat: boolean
+    private readonly mobileIqIdFormat: () => boolean
     private idGenerator: NodeIdGenerator | null
     private idGeneratorReady: Promise<NodeIdGenerator> | null
     private readonly pendingQueries: Map<string, PendingNodeQuery>
@@ -39,7 +44,7 @@ export class WaNodeOrchestrator {
         this.sendNodeFn = options.sendNode
         this.defaultTimeoutMs = options.defaultTimeoutMs ?? WA_DEFAULTS.NODE_QUERY_TIMEOUT_MS
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
-        this.mobileIqIdFormat = options.mobileIqIdFormat === true
+        this.mobileIqIdFormat = options.mobileIqIdFormat ?? (() => false)
         this.idGenerator = null
         this.idGeneratorReady = null
         this.pendingQueries = new Map()
@@ -180,7 +185,7 @@ export class WaNodeOrchestrator {
         if (this.idGenerator) {
             return this.idGenerator
         }
-        if (this.mobileIqIdFormat) {
+        if (this.mobileIqIdFormat()) {
             this.idGenerator = createMobileNodeIdGenerator()
             this.logger.debug('generated stanza prefix (mobile)', {
                 prefix: this.idGenerator.prefix

@@ -118,7 +118,12 @@ interface WaMessageDispatchCoordinatorOptions {
         contextInfo: WaSendContextInfo | null
     ) => Promise<WaMessagePublishResult>
     readonly getIcdcHashLength?: () => number
-    readonly mobileMessageIdFormat?: boolean
+    /**
+     * Resolved per outgoing message (post-connect, after credentials load) so a
+     * registered mobile session reconnecting without an explicit
+     * `mobileTransport` option still emits the mobile message-id format.
+     */
+    readonly mobileMessageIdFormat?: () => boolean
     readonly serverClock: ServerClock
 }
 
@@ -143,7 +148,7 @@ interface WaOutboundEnvelope {
 
 export class WaMessageDispatchCoordinator {
     private readonly deps: WaMessageDispatchCoordinatorOptions
-    private readonly mobileMessageIdFormat: boolean
+    private readonly mobileMessageIdFormat: () => boolean
     private readonly serverClock: ServerClock
     private readonly icdcDedup = new PromiseDedup()
     private readonly privacyTokenDedup = new PromiseDedup()
@@ -151,7 +156,7 @@ export class WaMessageDispatchCoordinator {
 
     public constructor(options: WaMessageDispatchCoordinatorOptions) {
         this.deps = options
-        this.mobileMessageIdFormat = options.mobileMessageIdFormat ?? false
+        this.mobileMessageIdFormat = options.mobileMessageIdFormat ?? (() => false)
         this.serverClock = options.serverClock
     }
 
@@ -1642,7 +1647,7 @@ export class WaMessageDispatchCoordinator {
                 timestampBytes.byteOffset,
                 timestampBytes.byteLength
             )
-            if (this.mobileMessageIdFormat) {
+            if (this.mobileMessageIdFormat()) {
                 dv.setBigUint64(0, BigInt(Date.now()), false)
                 const digest = md5Bytes([
                     timestampBytes,
@@ -1663,7 +1668,7 @@ export class WaMessageDispatchCoordinator {
             this.deps.logger.warn('failed to generate message id, falling back to random', {
                 message: toError(error).message
             })
-            if (this.mobileMessageIdFormat) {
+            if (this.mobileMessageIdFormat()) {
                 const bytes = await randomBytesAsync(16)
                 bytes[0] = 0xac
                 return bytesToHex(bytes).toUpperCase()
