@@ -457,7 +457,7 @@ export function buildWaClientDependencies(input: {
         logger,
         defaultTimeoutMs: options.nodeQueryTimeoutMs,
         hostDomain: WA_DEFAULTS.HOST_DOMAIN,
-        mobileIqIdFormat: options.mobileTransport !== undefined
+        mobileIqIdFormat: () => isMobilePrimary()
     })
     const keepAlive = new WaKeepAlive({
         logger,
@@ -617,6 +617,9 @@ export function buildWaClientDependencies(input: {
 
     const getCurrentCredentials = authClient.getCurrentCredentials.bind(authClient)
 
+    const isMobilePrimary = (): boolean =>
+        options.mobileTransport !== undefined || Boolean(getCurrentCredentials()?.deviceInfo)
+
     const groupCoordinator = createGroupCoordinator({
         queryWithContext: runtime.queryWithContext,
         mexSocket: { query: runtime.query }
@@ -760,7 +763,7 @@ export function buildWaClientDependencies(input: {
                 additionalAttributes: sendOptions.additionalAttributes
             }),
         getIcdcHashLength: () => abPropsCoordinator.getConfigValue('md_icdc_hash_length'),
-        mobileMessageIdFormat: options.mobileTransport !== undefined,
+        mobileMessageIdFormat: isMobilePrimary,
         serverClock
     })
 
@@ -808,17 +811,13 @@ export function buildWaClientDependencies(input: {
         resolvePrivacyTokenNode: (recipientJid) =>
             trustedContactToken.resolveTokenForMessage(recipientJid),
         // Placeholder resend asks the primary phone (a peer) for the plaintext.
-        // A mobile primary has no peer to ask, so withhold the deps and fall
-        // back to plain retry receipts.
-        peerDataOperation: options.mobileTransport !== undefined ? undefined : peerDataOperation,
-        emitIncomingMessage:
-            options.mobileTransport !== undefined
-                ? undefined
-                : (event) => {
-                      void runtime
-                          .handleIncomingMessageEvent(event)
-                          .catch((err) => runtime.handleError(toError(err)))
-                  }
+        peerDataOperation,
+        emitIncomingMessage: (event) => {
+            void runtime
+                .handleIncomingMessageEvent(event)
+                .catch((err) => runtime.handleError(toError(err)))
+        },
+        isMobilePrimary
     })
 
     const botCoordinator = createBotCoordinator({
@@ -846,7 +845,7 @@ export function buildWaClientDependencies(input: {
             await messageDispatch.requestAppStateSyncKeys(keyIds)
         },
         skipMacVerification: options.dangerous?.disableAppStateMacVerification,
-        mobilePrimary: options.mobileTransport !== undefined,
+        mobilePrimary: isMobilePrimary,
         isOwnAccountDevice: (deviceJid) => {
             const credentials = getCurrentCredentials()
             if (!credentials) return false
@@ -1360,7 +1359,7 @@ export function buildWaClientDependencies(input: {
             abPropsCoordinator,
             markOnlineOnConnect: options.markOnlineOnConnect ?? false
         }),
-        mobilePrimary: options.mobileTransport !== undefined,
+        mobilePrimary: isMobilePrimary,
         appStateSync
     })
 
