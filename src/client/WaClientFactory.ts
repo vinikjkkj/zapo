@@ -769,7 +769,8 @@ export function buildWaClientDependencies(input: {
 
     const presenceCoordinator = createPresenceCoordinator({
         sendNode: (node) => nodeOrchestrator.sendNode(node, false),
-        getCurrentCredentials
+        getCurrentCredentials,
+        resolvePrivacyTokenNode: (jid) => trustedContactToken.resolveReceiverTokenNode(jid)
     })
 
     const peerDataOperation = createPeerDataOperationRequester({
@@ -902,6 +903,7 @@ export function buildWaClientDependencies(input: {
         queryLidsByPhoneJids: (phoneJids) => signalDeviceSync.queryLidsByPhoneJids(phoneJids),
         mutations: appStateMutations,
         applyOwnPushName,
+        resolvePrivacyTokenNode: (jid) => trustedContactToken.resolveReceiverTokenNode(jid),
         logger
     })
 

@@ -7,7 +7,8 @@ export type WaProfilePictureType = 'preview' | 'image'
 export function buildGetProfilePictureIq(
     targetJid: string,
     type: WaProfilePictureType = 'preview',
-    existingId?: string
+    existingId?: string,
+    privacyTokenNode?: BinaryNode
 ): BinaryNode {
     const pictureAttrs: Record<string, string> = {
         type,
@@ -23,7 +24,8 @@ export function buildGetProfilePictureIq(
         [
             {
                 tag: WA_NODE_TAGS.PICTURE,
-                attrs: pictureAttrs
+                attrs: pictureAttrs,
+                ...(privacyTokenNode ? { content: [privacyTokenNode] } : {})
             }
         ],
         {

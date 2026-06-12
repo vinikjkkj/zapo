@@ -110,17 +110,31 @@ export class WaTrustedContactTokenCoordinator {
         }
     }
 
-    public async resolveTokenForMessage(recipientJid: string): Promise<BinaryNode | null> {
-        const record = await this.store.getByJid(recipientJid)
-        const nowS = this.serverClock.nowSeconds()
-
+    /**
+     * Resolves the receiver-mode `<tctoken>` node to echo back on outbound
+     * queries against a contact's privacy-gated data (presence subscribe,
+     * profile-picture get, about/status usync). Returns the token only when a
+     * non-expired receiver token exists for `jid`; unlike
+     * {@link resolveTokenForMessage} it does **not** fall back to a `<cstoken>`
+     * (the gated query flows attach the trusted-contact token only).
+     */
+    public async resolveReceiverTokenNode(jid: string): Promise<BinaryNode | null> {
+        const record = await this.store.getByJid(jid)
+        if (!record?.tcToken || record.tcTokenTimestamp === undefined) {
+            return null
+        }
         const config = this.resolveConfig()
-        if (
-            record?.tcToken &&
-            record.tcTokenTimestamp !== undefined &&
-            !isTokenExpired(record.tcTokenTimestamp, nowS, config.durationS, config.numBuckets)
-        ) {
-            return buildTcTokenMessageNode(record.tcToken)
+        const nowS = this.serverClock.nowSeconds()
+        if (isTokenExpired(record.tcTokenTimestamp, nowS, config.durationS, config.numBuckets)) {
+            return null
+        }
+        return buildTcTokenMessageNode(record.tcToken)
+    }
+
+    public async resolveTokenForMessage(recipientJid: string): Promise<BinaryNode | null> {
+        const tcTokenNode = await this.resolveReceiverTokenNode(recipientJid)
+        if (tcTokenNode) {
+            return tcTokenNode
         }
 
         const nctSalt = await this.getNctSalt()
