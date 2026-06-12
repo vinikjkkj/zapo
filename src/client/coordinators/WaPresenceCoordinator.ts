@@ -1,4 +1,5 @@
 import type { WaAuthCredentials } from '@auth/types'
+import { isGroupJid } from '@protocol/jid'
 import {
     buildChatstateNode,
     type BuildChatstateNodeInput
@@ -36,13 +37,19 @@ export interface WaPresenceCoordinator {
 interface WaPresenceCoordinatorOptions {
     readonly sendNode: (node: BinaryNode) => Promise<void>
     readonly getCurrentCredentials: () => WaAuthCredentials | null
+    /**
+     * Resolves the receiver-mode `<tctoken>` node for a contact, echoed back
+     * on a user presence subscription to unlock the target's presence
+     * visibility. Returns `null` when no valid token is held.
+     */
+    readonly resolvePrivacyTokenNode: (jid: string) => Promise<BinaryNode | null>
 }
 
 /** Builds a {@link WaPresenceCoordinator} from its node-send dependency. */
 export function createPresenceCoordinator(
     options: WaPresenceCoordinatorOptions
 ): WaPresenceCoordinator {
-    const { sendNode, getCurrentCredentials } = options
+    const { sendNode, getCurrentCredentials, resolvePrivacyTokenNode } = options
     return {
         send: async (type) => {
             const credentials = getCurrentCredentials()
@@ -54,7 +61,14 @@ export function createPresenceCoordinator(
             await sendNode(buildChatstateNode({ jid, ...opts }))
         },
         subscribe: async (jid, opts) => {
-            await sendNode(buildPresenceSubscribeNode({ jid, ...opts }))
+            const privacyTokenNode = isGroupJid(jid) ? null : await resolvePrivacyTokenNode(jid)
+            await sendNode(
+                buildPresenceSubscribeNode({
+                    jid,
+                    ...opts,
+                    ...(privacyTokenNode ? { privacyTokenNode } : {})
+                })
+            )
         }
     }
 }

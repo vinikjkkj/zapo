@@ -202,6 +202,13 @@ interface WaProfileCoordinatorOptions {
      * idempotent (a no-op when the name already matches).
      */
     readonly applyOwnPushName: (name: string) => Promise<void>
+    /**
+     * Resolves the receiver-mode `<tctoken>` node for a contact, echoed back on
+     * privacy-gated profile queries (picture get, about/status usync) to prove
+     * this account is a trusted contact. Returns `null` when no valid token is
+     * held for the JID.
+     */
+    readonly resolvePrivacyTokenNode: (jid: string) => Promise<BinaryNode | null>
     readonly logger: Logger
 }
 
@@ -443,12 +450,14 @@ export function createProfileCoordinator(
         queryLidsByPhoneJids,
         mutations,
         applyOwnPushName,
+        resolvePrivacyTokenNode,
         logger
     } = options
 
     return {
         getProfilePicture: async (jid, type, existingId) => {
-            const node = buildGetProfilePictureIq(jid, type, existingId)
+            const privacyTokenNode = (await resolvePrivacyTokenNode(jid)) ?? undefined
+            const node = buildGetProfilePictureIq(jid, type, existingId, privacyTokenNode)
             const result = await queryWithContext('profile.getPicture', node, undefined, {
                 jid,
                 type: type ?? 'preview'
@@ -478,10 +487,11 @@ export function createProfileCoordinator(
         getStatus: async (jid) => {
             const sid = await generateSid()
             const queryNodes = buildGetStatusUsyncQueryNodes()
+            const privacyTokenNode = await resolvePrivacyTokenNode(jid)
             const usyncNode = buildUsyncIq({
                 sid,
                 queryProtocolNodes: [queryNodes[1]],
-                users: [{ jid }]
+                users: [{ jid, ...(privacyTokenNode ? { content: [privacyTokenNode] } : {}) }]
             })
             const result = await queryWithContext('profile.getStatus', usyncNode, undefined, {
                 jid
@@ -512,10 +522,16 @@ export function createProfileCoordinator(
             }
             const sid = await generateSid()
             const queryProtocolNodes = buildGetStatusUsyncQueryNodes()
+            const users = await Promise.all(
+                jids.map(async (jid) => {
+                    const privacyTokenNode = await resolvePrivacyTokenNode(jid)
+                    return { jid, ...(privacyTokenNode ? { content: [privacyTokenNode] } : {}) }
+                })
+            )
             const usyncNode = buildUsyncIq({
                 sid,
                 queryProtocolNodes,
-                users: jids.map((jid) => ({ jid }))
+                users
             })
             const result = await queryWithContext('profile.getProfiles', usyncNode, undefined, {
                 count: jids.length

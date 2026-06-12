@@ -25,6 +25,7 @@ test('profile coordinator gets profile picture url', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -68,6 +69,7 @@ test('profile coordinator returns empty result when no picture node', async () =
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -88,6 +90,7 @@ test('profile coordinator gets full image picture with existing id', async () =>
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -126,6 +129,7 @@ test('profile coordinator sets profile picture and returns id', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -162,6 +166,7 @@ test('profile coordinator sets group profile picture with target jid', async () 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -186,6 +191,7 @@ test('profile coordinator deletes profile picture', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -214,6 +220,7 @@ test('profile coordinator gets status via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -261,6 +268,7 @@ test('profile coordinator returns null status when no content', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -296,6 +304,7 @@ test('profile coordinator returns empty string for status code 401', async () =>
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -336,6 +345,7 @@ test('profile coordinator gets multiple profiles via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -402,6 +412,7 @@ test('profile coordinator sets status text', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -434,6 +445,7 @@ test('profile coordinator setPushName applies locally before the SettingPushName
             events.push('apply')
             appliedNames.push(name)
         },
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: {
             set: async (input: unknown) => {
@@ -467,6 +479,7 @@ test('profile coordinator sets account default disappearing mode', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -496,6 +509,7 @@ test('profile coordinator gets disappearing mode via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -558,6 +572,7 @@ test('profile coordinator returns empty disappearing mode for empty jids', async
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -582,6 +597,7 @@ test('profile coordinator gets text statuses via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -666,6 +682,7 @@ test('profile coordinator emits null text_status entry on error nodes', async ()
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -721,6 +738,7 @@ test('profile coordinator returns empty text statuses for empty jids', async () 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -761,6 +779,7 @@ test('profile coordinator sets text status via mex', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -814,6 +833,7 @@ test('profile coordinator setTextStatus normalizes empty inputs to clear payload
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -839,6 +859,7 @@ test('profile coordinator gets usernames via usync', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -914,6 +935,7 @@ test('profile coordinator returns empty usernames for empty jids', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -932,6 +954,7 @@ test('profile coordinator getOwnUsername parses mex payload', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -970,6 +993,7 @@ test('profile coordinator getOwnUsername swallows 404 GraphQL errors', async () 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -1006,6 +1030,7 @@ test('profile coordinator getOwnUsername returns nulls when info missing', async
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -1035,6 +1060,7 @@ test('profile coordinator setUsername sends mex variables with defaults', async 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -1082,6 +1108,7 @@ test('profile coordinator setUsername returns false on non-SUCCESS result', asyn
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -1110,6 +1137,7 @@ test('profile coordinator deleteUsername sends empty variables', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -1154,6 +1182,7 @@ test('profile coordinator returns empty array for empty jids list', async () => 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         queryLidsByPhoneJids: async () => [],
@@ -1175,6 +1204,7 @@ test('profile coordinator resolves lids by phone numbers', async () => {
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
@@ -1209,6 +1239,7 @@ test('profile coordinator returns empty lid result without calling port', async 
     const coordinator = createProfileCoordinator({
         generateSid: async () => 'test-sid',
         applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
         logger: createNoopLogger(),
         mutations: { set: async () => undefined } as never,
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
