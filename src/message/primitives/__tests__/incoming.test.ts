@@ -37,12 +37,21 @@ function paddedPlaintext(message: proto.IMessage): Uint8Array {
     return out
 }
 
-function createDecryptingOptions(emitted: WaIncomingMessageEvent[]) {
+function createDecryptingOptions(
+    emitted: WaIncomingMessageEvent[],
+    overrides: {
+        readonly message?: proto.IMessage
+        readonly getMeJid?: () => string | null | undefined
+        readonly getMeLid?: () => string | null | undefined
+    } = {}
+) {
     return {
         logger: createNoopLogger(),
         sendNode: async () => undefined,
+        getMeJid: overrides.getMeJid,
+        getMeLid: overrides.getMeLid,
         signalProtocol: {
-            decryptMessage: async () => paddedPlaintext({ conversation: 'hi' })
+            decryptMessage: async () => paddedPlaintext(overrides.message ?? { conversation: 'hi' })
         } as never,
         emitIncomingMessage: (event: WaIncomingMessageEvent) => {
             emitted.push(event)
@@ -112,6 +121,112 @@ test('1:1 incoming message strips the device from remoteJid and keeps it in send
     assert.equal(key.senderDevice, 12)
     assert.equal(key.isGroup, false)
     assert.equal(key.participant, undefined)
+})
+
+test('1:1 message authored by my own other device is fromMe with the recipient as remoteJid', async () => {
+    const emitted: WaIncomingMessageEvent[] = []
+    const handled = await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-self',
+                from: '5511999999999:12@s.whatsapp.net',
+                recipient: '5511888888888@s.whatsapp.net',
+                t: '123'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        createDecryptingOptions(emitted, {
+            getMeJid: () => '5511999999999:2@s.whatsapp.net'
+        })
+    )
+
+    assert.equal(handled, true)
+    assert.equal(emitted.length, 1)
+    const { key } = emitted[0]
+    assert.equal(key.fromMe, true)
+    assert.equal(key.remoteJid, '5511888888888@s.whatsapp.net')
+    assert.equal(key.senderDevice, 12)
+    assert.equal(key.isGroup, false)
+    assert.equal(key.participant, undefined)
+})
+
+test('1:1 self-sent message resolves the chat from the deviceSentMessage destination', async () => {
+    const emitted: WaIncomingMessageEvent[] = []
+    const handled = await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-dsm',
+                from: '5511999999999:12@s.whatsapp.net',
+                t: '123'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        createDecryptingOptions(emitted, {
+            getMeJid: () => '5511999999999@s.whatsapp.net',
+            message: {
+                deviceSentMessage: {
+                    destinationJid: '5511888888888@s.whatsapp.net',
+                    message: { conversation: 'hi from my phone' }
+                }
+            }
+        })
+    )
+
+    assert.equal(handled, true)
+    assert.equal(emitted.length, 1)
+    const { key } = emitted[0]
+    assert.equal(key.fromMe, true)
+    assert.equal(key.remoteJid, '5511888888888@s.whatsapp.net')
+})
+
+test('1:1 message from my lid identity is detected as fromMe', async () => {
+    const emitted: WaIncomingMessageEvent[] = []
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-self-lid',
+                from: '133300000000000:5@lid',
+                recipient: '144400000000000@lid',
+                t: '123'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        createDecryptingOptions(emitted, {
+            getMeJid: () => '5511999999999@s.whatsapp.net',
+            getMeLid: () => '133300000000000@lid'
+        })
+    )
+
+    assert.equal(emitted.length, 1)
+    const { key } = emitted[0]
+    assert.equal(key.fromMe, true)
+    assert.equal(key.remoteJid, '144400000000000@lid')
+})
+
+test('1:1 incoming message from a peer stays fromMe false with the peer as remoteJid', async () => {
+    const emitted: WaIncomingMessageEvent[] = []
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-peer',
+                from: '5511888888888:3@s.whatsapp.net',
+                t: '123'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        createDecryptingOptions(emitted, {
+            getMeJid: () => '5511999999999@s.whatsapp.net'
+        })
+    )
+
+    assert.equal(emitted.length, 1)
+    const { key } = emitted[0]
+    assert.equal(key.fromMe, false)
+    assert.equal(key.remoteJid, '5511888888888@s.whatsapp.net')
 })
 
 test('group incoming message keeps the group remoteJid and carries the device on the participant', async () => {

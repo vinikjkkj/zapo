@@ -222,6 +222,23 @@ export function toUserJid(
 }
 
 /**
+ * True when `jid` is the account's own user, matching the `meJid` (pn) or
+ * `meLid` (lid) identity device-insensitively. Mirrors WhatsApp Web's
+ * `isMeAccount`.
+ */
+export function isOwnAccountJid(
+    jid: string,
+    meJid: string | null | undefined,
+    meLid: string | null | undefined
+): boolean {
+    const candidateUser = toUserJid(jid)
+    return (
+        (!!meJid && toUserJid(meJid) === candidateUser) ||
+        (!!meLid && toUserJid(meLid) === candidateUser)
+    )
+}
+
+/**
  * Returns the JID in its full device form. JIDs with `device === 0` lose the
  * device segment (`user@server`); all others keep `user:device@server`.
  */

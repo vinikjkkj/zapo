@@ -1,5 +1,6 @@
 import type {
     WaIncomingMessageEvent,
+    WaIncomingMessageKey,
     WaIncomingNewsletterMessageUpdateEvent,
     WaIncomingUnhandledStanzaEvent
 } from '@client/types'
@@ -14,6 +15,7 @@ import {
     isBroadcastJid,
     isGroupJid,
     isNewsletterJid,
+    isOwnAccountJid,
     parseJidFull,
     parseSignalAddressFromJid,
     toUserJid
@@ -31,6 +33,7 @@ interface WaIncomingMessageAckHandlerOptions {
     readonly logger: Logger
     readonly sendNode: (node: BinaryNode) => Promise<void>
     readonly getMeJid?: () => string | null | undefined
+    readonly getMeLid?: () => string | null | undefined
     readonly signalProtocol?: SignalProtocol
     readonly senderKeyManager?: SenderKeyManager
     readonly onDecryptFailure?: (
@@ -68,6 +71,62 @@ function extractMessageIdentityAttrs(attrs: BinaryNode['attrs']): MessageIdentit
         ...(rawRecipient ? { recipientJid: toUserJid(rawRecipient) } : {}),
         ...(rawRecipientAlt ? { recipientAlt: toUserJid(rawRecipientAlt) } : {}),
         pushName: attrs.notify
+    }
+}
+
+type MessageKeyIdentity = Omit<MessageIdentityAttrs, 'pushName'>
+
+/**
+ * Self-authored 1:1 chat is the recipient, so its alternate addressing is the
+ * `recipient*` attrs (the `sender*` attrs describe me). Promotes `recipientAlt`
+ * to `remoteJidAlt` and drops the stale sender/recipient fields.
+ */
+function promoteRecipientAddressing(identity: MessageKeyIdentity): MessageKeyIdentity {
+    return {
+        ...(identity.recipientAlt ? { remoteJidAlt: identity.recipientAlt } : {}),
+        ...(identity.senderUsername !== undefined
+            ? { senderUsername: identity.senderUsername }
+            : {})
+    }
+}
+
+/**
+ * Resolves the {@link WaIncomingMessageKey} for a decrypted stanza. `remoteJid`
+ * is the chat: the `from`, or the recipient (`recipient` attr, then the
+ * deviceSentMessage `destinationJid`) when the message is `fromMe`.
+ */
+function buildIncomingMessageKey(
+    node: BinaryNode,
+    sender: { readonly userJid: string; readonly device: number } | null,
+    options: WaIncomingMessageAckHandlerOptions,
+    destinationJid?: string
+): { readonly key: WaIncomingMessageKey; readonly pushName: string | undefined } {
+    const fromUserJid = node.attrs.from ? toUserJid(node.attrs.from) : node.attrs.from
+    const isGroup = fromUserJid ? isGroupJid(fromUserJid) : false
+    const isBroadcast = fromUserJid ? isBroadcastJid(fromUserJid) : false
+    const fromMe = sender
+        ? isOwnAccountJid(sender.userJid, options.getMeJid?.(), options.getMeLid?.())
+        : false
+    const selfSentChat =
+        fromMe && !isGroup && !isBroadcast
+            ? (node.attrs.recipient ?? destinationJid ?? undefined)
+            : undefined
+    const chatJid = selfSentChat ? toUserJid(selfSentChat) : fromUserJid
+    const { pushName, ...identity } = extractMessageIdentityAttrs(node.attrs)
+    const keyIdentity = selfSentChat ? promoteRecipientAddressing(identity) : identity
+    return {
+        pushName,
+        key: {
+            remoteJid: chatJid ?? '',
+            id: node.attrs.id ?? '',
+            fromMe,
+            isGroup,
+            isBroadcast,
+            isNewsletter: false,
+            ...keyIdentity,
+            senderDevice: sender?.device ?? 0,
+            ...((isGroup || isBroadcast) && sender ? { participant: sender.userJid } : {})
+        }
     }
 }
 
@@ -330,26 +389,15 @@ function processMsmsgEncNode(
                 encPayload: decoded.encPayload
             }
         }
-        const chatJid = node.attrs.from ? toUserJid(node.attrs.from) : node.attrs.from
         const sender = senderJid ? parseJidFull(senderJid) : null
-        const isGroup = chatJid ? isGroupJid(chatJid) : false
-        const isBroadcast = chatJid ? isBroadcastJid(chatJid) : false
-        const { pushName, ...keyIdentity } = extractMessageIdentityAttrs(node.attrs)
+        const { key, pushName } = buildIncomingMessageKey(
+            node,
+            sender ? { userJid: sender.userJid, device: sender.address.device } : null,
+            options
+        )
         options.emitIncomingMessage?.({
             rawNode: buildIncomingEventRawNode(node),
-            key: {
-                remoteJid: chatJid ?? '',
-                id: node.attrs.id ?? '',
-                fromMe: false,
-                isGroup,
-                isBroadcast,
-                isNewsletter: false,
-                ...keyIdentity,
-                ...((isGroup || isBroadcast) && sender?.userJid
-                    ? { participant: sender.userJid }
-                    : {}),
-                senderDevice: sender?.address.device ?? 0
-            },
+            key,
             stanzaType: node.attrs.type,
             offline: node.attrs.offline !== undefined,
             timestampSeconds: parseOptionalInt(node.attrs.t),
@@ -416,29 +464,19 @@ async function decryptAndProcessEncNode(
             }
         }
         if (shouldEmitIncomingMessage(message)) {
-            // remoteJid is the chat identity, which is deviceless: the device
-            // lives in senderDevice (from senderAddress), so strip any `:device`
-            // segment the `from` attr carries for 1:1 chats.
-            const fromAttr = node.attrs.from
-            const chatJid = fromAttr ? toUserJid(fromAttr) : fromAttr
-            const isGroup = chatJid ? isGroupJid(chatJid) : false
-            const isBroadcast = chatJid ? isBroadcastJid(chatJid) : false
-            const senderUserJid = `${senderAddress.user}@${senderAddress.server}`
-            const { pushName, ...keyIdentity } = extractMessageIdentityAttrs(node.attrs)
+            const { key, pushName } = buildIncomingMessageKey(
+                node,
+                {
+                    userJid: `${senderAddress.user}@${senderAddress.server}`,
+                    device: senderAddress.device
+                },
+                options,
+                decodedMessage.deviceSentMessage?.destinationJid ?? undefined
+            )
             const expirationSeconds = pickIncomingExpirationSeconds(message)
             options.emitIncomingMessage?.({
                 rawNode: buildIncomingEventRawNode(node),
-                key: {
-                    remoteJid: chatJid ?? '',
-                    id: node.attrs.id ?? '',
-                    fromMe: false,
-                    isGroup,
-                    isBroadcast,
-                    isNewsletter: false,
-                    ...keyIdentity,
-                    senderDevice: senderAddress.device,
-                    ...(isGroup || isBroadcast ? { participant: senderUserJid } : {})
-                },
+                key,
                 stanzaType: node.attrs.type,
                 offline: node.attrs.offline !== undefined,
                 timestampSeconds: parseOptionalInt(node.attrs.t),

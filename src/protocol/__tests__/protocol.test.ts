@@ -30,6 +30,7 @@ import {
     isHostedDeviceJid,
     isHostedServer,
     isNewsletterJid,
+    isOwnAccountJid,
     isStatusBroadcastJid,
     normalizeDeviceJid,
     normalizeRecipientJid,
@@ -83,6 +84,12 @@ test('jid type detection and device handling', () => {
     assert.throws(() => parseSignalAddressFromJid('5511:x@s.whatsapp.net'), /invalid jid device/)
 
     assert.equal(toUserJid('5511:3@s.whatsapp.net'), '5511@s.whatsapp.net')
+
+    assert.equal(isOwnAccountJid('5511:7@s.whatsapp.net', '5511@s.whatsapp.net', null), true)
+    assert.equal(isOwnAccountJid('1330@lid', '5511@s.whatsapp.net', '1330@lid'), true)
+    assert.equal(isOwnAccountJid('5599@s.whatsapp.net', '5511@s.whatsapp.net', '1330@lid'), false)
+    assert.equal(isOwnAccountJid('5511@s.whatsapp.net', null, null), false)
+
     assert.equal(normalizeDeviceJid('5511:0@s.whatsapp.net'), '5511@s.whatsapp.net')
     assert.equal(normalizeDeviceJid('5511:5@s.whatsapp.net'), '5511:5@s.whatsapp.net')
 

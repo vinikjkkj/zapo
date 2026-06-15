@@ -99,7 +99,12 @@ import {
     WA_NOTIFICATION_TYPES,
     WA_PRIVACY_TOKEN_NOTIFICATION_TYPE
 } from '@protocol/constants'
-import { isNewsletterJid, parseSignalAddressFromJid, toUserJid } from '@protocol/jid'
+import {
+    isNewsletterJid,
+    isOwnAccountJid,
+    parseSignalAddressFromJid,
+    toUserJid
+} from '@protocol/jid'
 import { WA_PRESENCE_TYPES } from '@protocol/presence'
 import type { WaConnectionCode, WaConnectionOpenReason, WaDisconnectReason } from '@protocol/stream'
 import { createOutboundRetryTracker } from '@retry/tracker'
@@ -850,11 +855,7 @@ export function buildWaClientDependencies(input: {
         isOwnAccountDevice: (deviceJid) => {
             const credentials = getCurrentCredentials()
             if (!credentials) return false
-            const candidateUser = toUserJid(deviceJid)
-            return (
-                (!!credentials.meJid && toUserJid(credentials.meJid) === candidateUser) ||
-                (!!credentials.meLid && toUserJid(credentials.meLid) === candidateUser)
-            )
+            return isOwnAccountJid(deviceJid, credentials.meJid, credentials.meLid)
         },
         sendKeyShare: (toDeviceJid, keys, missingKeyIds) =>
             messageDispatch.sendAppStateSyncKeyShare(toDeviceJid, keys, missingKeyIds),
@@ -999,6 +1000,7 @@ export function buildWaClientDependencies(input: {
         logger,
         sendNode: runtime.sendNode,
         getMeJid: () => getCurrentCredentials()?.meJid,
+        getMeLid: () => getCurrentCredentials()?.meLid,
         signalProtocol,
         senderKeyManager,
         onDecryptFailure: (context: WaRetryDecryptFailureContext, error: unknown) =>
