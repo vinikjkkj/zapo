@@ -111,6 +111,14 @@ test('retry state ranking and reason mapping favor higher-priority states', () =
         mapRetryReasonFromError(new Error('invalid signature data')),
         RETRY_REASON.SignalErrorInvalidSignature
     )
+    assert.equal(
+        mapRetryReasonFromError(new Error('message too far in future')),
+        RETRY_REASON.SignalErrorFutureMessage
+    )
+    assert.equal(
+        mapRetryReasonFromError(new Error('sender key message is too far in future')),
+        RETRY_REASON.SignalErrorFutureMessage
+    )
     assert.equal(mapRetryReasonFromError(new Error('totally unknown error')), undefined)
 })
 
