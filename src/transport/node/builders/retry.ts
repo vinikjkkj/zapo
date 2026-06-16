@@ -89,10 +89,8 @@ export function buildRetryReceiptNode(input: {
         v: RETRY_RECEIPT_VERSION,
         count: String(input.retryCount),
         id: input.originalMsgId,
-        t: input.t
-    }
-    if (input.error !== undefined && input.error !== 0) {
-        retryAttrs.error = String(input.error)
+        t: input.t,
+        error: String(input.error ?? 0)
     }
 
     const content: BinaryNode[] = [

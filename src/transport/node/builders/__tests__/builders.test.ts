@@ -1313,6 +1313,7 @@ test('retry builder emits registration and key bundle payload', () => {
     assert.ok(Array.isArray(node.content))
     assert.ok(node.content.some((child) => child.tag === WA_NODE_TAGS.REGISTRATION))
     assert.ok(node.content.some((child) => child.tag === 'keys'))
+    assert.equal(node.content[0].attrs.error, '0')
 
     const nodeWithoutKeys = buildRetryReceiptNode({
         stanzaId: 'stanza-2',
