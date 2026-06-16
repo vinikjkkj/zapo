@@ -124,7 +124,7 @@
     },
     "scripts": {
         "preinstall": "node ./scripts/check-node-version.cjs",
-        "prepack": "npm run build",
+        "prepare": "npm run build",
         "changeset": "changeset",
         "changeset:status": "changeset status --verbose",
         "version:packages": "changeset version",
