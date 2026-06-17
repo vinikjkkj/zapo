@@ -55,8 +55,12 @@ export class WaNodeOrchestrator {
     }
 
     public clearPending(reason: Error): void {
-        this.logger.warn('clearing pending node queries', {
-            count: this.pendingQueries.size,
+        const count = this.pendingQueries.size
+        if (count === 0) {
+            return
+        }
+        this.logger.debug('clearing pending node queries', {
+            count,
             reason: reason.message
         })
         for (const pending of this.pendingQueries.values()) {
