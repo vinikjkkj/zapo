@@ -48,6 +48,7 @@ import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS, WA_NACK_REASONS, type WaStatusDistributionSetting } from '@protocol/constants'
 import {
+    canonicalizeOwnAccountJid,
     isBotJid,
     isGroupJid,
     isHostedDeviceJid,
@@ -216,7 +217,13 @@ export class WaMessageDispatchCoordinator {
         options: WaMessagePublishOptions = {}
     ): Promise<WaMessagePublishResult> {
         this.requireCurrentMeJid('publishSignalMessage')
-        const address = parseSignalAddressFromJid(input.to)
+        const credentials = this.deps.getCurrentCredentials()
+        const sessionJid = canonicalizeOwnAccountJid(
+            input.to,
+            credentials?.meJid,
+            credentials?.meLid
+        )
+        const address = parseSignalAddressFromJid(sessionJid)
         if (address.server === WA_DEFAULTS.GROUP_SERVER) {
             throw new Error(
                 'publishSignalMessage currently supports only direct chats; use sender-key flow for groups'
@@ -224,11 +231,12 @@ export class WaMessageDispatchCoordinator {
         }
         this.deps.logger.trace('wa client publish signal message', {
             to: input.to,
+            sessionJid,
             type: input.type
         })
         const [paddedPlaintext] = await Promise.all([
             writeRandomPadMax16(input.plaintext),
-            this.deps.sessionResolver.ensureSession(address, input.to, input.expectedIdentity)
+            this.deps.sessionResolver.ensureSession(address, sessionJid, input.expectedIdentity)
         ])
         const encrypted = await this.deps.signalProtocol.encryptMessage(
             address,
@@ -513,7 +521,8 @@ export class WaMessageDispatchCoordinator {
         protocolMessage: Proto.Message.IProtocolMessage,
         options?: { readonly id?: string; readonly pushPriority?: 'high' | 'high_force' }
     ): Promise<WaMessagePublishResult> {
-        const meJid = this.deps.getCurrentCredentials()?.meJid
+        const credentials = this.deps.getCurrentCredentials()
+        const meJid = credentials?.meJid
         const meParsed = meJid ? parseJidFull(meJid) : undefined
         const meUserJid = meParsed?.userJid
         let senderIcdc: IcdcMeta | null = null

@@ -239,6 +239,38 @@ export function isOwnAccountJid(
 }
 
 /**
+ * Rewrites the account's own PN device JID to its LID equivalent so self traffic
+ * keys one LID session instead of forking into separate PN and LID ratchets.
+ * No-op for other users, already-LID/unparseable JIDs, or unknown identity.
+ */
+export function canonicalizeOwnAccountJid(
+    jid: string,
+    meJid: string | null | undefined,
+    meLid: string | null | undefined
+): string {
+    if (!meJid || !meLid) return jid
+    let address: SignalAddress
+    try {
+        address = parseSignalAddressFromJid(jid)
+    } catch {
+        return jid
+    }
+    if ((address.server ?? WA_DEFAULTS.HOST_DOMAIN) !== WA_DEFAULTS.HOST_DOMAIN) return jid
+    let mePnUser: string
+    let meLidUser: string
+    try {
+        mePnUser = parseSignalAddressFromJid(meJid).user
+        meLidUser = parseSignalAddressFromJid(meLid).user
+    } catch {
+        return jid
+    }
+    if (address.user !== mePnUser) return jid
+    return address.device === 0
+        ? `${meLidUser}@${WA_DEFAULTS.LID_SERVER}`
+        : `${meLidUser}:${address.device}@${WA_DEFAULTS.LID_SERVER}`
+}
+
+/**
  * Returns the JID in its full device form. JIDs with `device === 0` lose the
  * device segment (`user@server`); all others keep `user:device@server`.
  */

@@ -12,6 +12,7 @@ import { processIncomingNewsletterMessage } from '@message/kinds/newsletter'
 import { proto } from '@proto'
 import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES } from '@protocol/constants'
 import {
+    canonicalizeOwnAccountJid,
     isBroadcastJid,
     isGroupJid,
     isNewsletterJid,
@@ -575,11 +576,22 @@ export async function handleIncomingMessageAck(
                         encType,
                         senderJid,
                         options,
-                        (ciphertext, senderAddress) =>
-                            options.signalProtocol!.decryptMessage(senderAddress, {
-                                type: encType,
-                                ciphertext
-                            })
+                        (ciphertext, senderAddress) => {
+                            const sessionJid = canonicalizeOwnAccountJid(
+                                senderJid,
+                                options.getMeJid?.(),
+                                options.getMeLid?.()
+                            )
+                            return options.signalProtocol!.decryptMessage(
+                                sessionJid === senderJid
+                                    ? senderAddress
+                                    : parseSignalAddressFromJid(sessionJid),
+                                {
+                                    type: encType,
+                                    ciphertext
+                                }
+                            )
+                        }
                     )
                     break
                 }

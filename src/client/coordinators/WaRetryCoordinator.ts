@@ -705,19 +705,23 @@ export class WaRetryCoordinator {
             } else if (regIdMismatch) {
                 await this.deps.sessionStore.deleteSession(requesterAddress)
             }
-            await this.deps.signalProtocol.establishOutgoingSession(requesterAddress, {
-                regId: request.regId,
-                identity: request.keyBundle.identity,
-                signedKey: {
-                    id: request.keyBundle.skey.id,
-                    publicKey: request.keyBundle.skey.publicKey,
-                    signature: request.keyBundle.skey.signature
+            await this.deps.signalProtocol.establishOutgoingSession(
+                requesterAddress,
+                {
+                    regId: request.regId,
+                    identity: request.keyBundle.identity,
+                    signedKey: {
+                        id: request.keyBundle.skey.id,
+                        publicKey: request.keyBundle.skey.publicKey,
+                        signature: request.keyBundle.skey.signature
+                    },
+                    oneTimeKey: {
+                        id: request.keyBundle.key.id,
+                        publicKey: request.keyBundle.key.publicKey
+                    }
                 },
-                oneTimeKey: {
-                    id: request.keyBundle.key.id,
-                    publicKey: request.keyBundle.key.publicKey
-                }
-            })
+                { reuseExisting: true }
+            )
             return this.applySessionBaseKeyPolicy(
                 request,
                 requesterJid,

@@ -19,6 +19,7 @@ import {
 import {
     applyDeviceToJid,
     buildDeviceJid,
+    canonicalizeOwnAccountJid,
     canonicalizeSignalJid,
     canonicalizeSignalServer,
     getLoginIdentity,
@@ -43,6 +44,35 @@ import type {
     WaPrivacyDisallowedListSettingName,
     WaPrivacySettingValueMap
 } from '@protocol/privacy'
+
+test('canonicalizeOwnAccountJid maps own PN device JIDs to LID', () => {
+    const meJid = '5512988950329:15@s.whatsapp.net'
+    const meLid = '91379841634519:15@lid'
+    assert.equal(
+        canonicalizeOwnAccountJid('5512988950329@s.whatsapp.net', meJid, meLid),
+        '91379841634519@lid'
+    )
+    assert.equal(
+        canonicalizeOwnAccountJid('5512988950329:0@s.whatsapp.net', meJid, meLid),
+        '91379841634519@lid'
+    )
+    assert.equal(
+        canonicalizeOwnAccountJid('5512988950329:12@s.whatsapp.net', meJid, meLid),
+        '91379841634519:12@lid'
+    )
+    assert.equal(
+        canonicalizeOwnAccountJid('91379841634519@lid', meJid, meLid),
+        '91379841634519@lid'
+    )
+    assert.equal(
+        canonicalizeOwnAccountJid('5511999999999@s.whatsapp.net', meJid, meLid),
+        '5511999999999@s.whatsapp.net'
+    )
+    assert.equal(
+        canonicalizeOwnAccountJid('5512988950329@s.whatsapp.net', meJid, null),
+        '5512988950329@s.whatsapp.net'
+    )
+})
 
 test('jid split and normalization helpers', () => {
     assert.deepEqual(splitJid('123@s.whatsapp.net'), {

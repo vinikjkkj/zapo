@@ -6,7 +6,10 @@ import type { WaIncomingMessageEvent } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import { proto, type Proto } from '@proto'
+import { WA_MESSAGE_TYPES } from '@protocol/constants'
+import { parseJidFull } from '@protocol/jid'
 import type {
+    WaParsedRetryRequest,
     WaRetryDecryptFailureContext,
     WaRetryOutboundMessageRecord,
     WaRetryOutboundState
@@ -560,4 +563,142 @@ test('retry coordinator serializes outbound receipt tracking per message id', as
 
     assert.equal(retryStore.getCurrentState(), 'read')
     assert.deepEqual(retryStore.getTransitions(), ['delivered', 'read'])
+})
+
+function buildKeyBundleRequest(retryCount: number, requesterJid: string): WaParsedRetryRequest {
+    return {
+        type: WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY,
+        stanzaId: `retry-${retryCount}`,
+        from: requesterJid,
+        offline: false,
+        isLid: false,
+        originalMsgId: 'churn-msg',
+        retryCount,
+        regId: 555,
+        keyBundle: {
+            identity: new Uint8Array(33),
+            key: { id: 1, publicKey: new Uint8Array(32) },
+            skey: { id: 2, publicKey: new Uint8Array(32), signature: new Uint8Array(64) }
+        }
+    }
+}
+
+type RetrySessionInternals = {
+    updateLocalSessionFromRetryRequest: (
+        request: WaParsedRetryRequest,
+        requesterJid: string,
+        requesterAddress: ReturnType<typeof parseJidFull>['address'],
+        requesterNormalizedDeviceJid: string
+    ) => Promise<boolean>
+}
+
+test('retry session update reuses an existing compatible session instead of re-keying', async () => {
+    const existingSession = {
+        remote: { regId: 555, pubKey: new Uint8Array(33) },
+        aliceBaseKey: new Uint8Array([9, 9, 9])
+    } as never
+
+    const establishOptions: unknown[] = []
+    const coordinator = new WaRetryCoordinator({
+        logger: createNoopLogger(),
+        retryStore: { getTtlMs: () => 60_000 } as unknown as WaRetryStore,
+        signalStore: {} as never,
+        preKeyStore: {} as never,
+        sessionStore: {
+            getSession: async () => existingSession,
+            deleteSession: async () => undefined
+        } as never,
+        senderKeyStore: {} as never,
+        signalProtocol: {
+            establishOutgoingSession: async (
+                _address: unknown,
+                _bundle: unknown,
+                options: unknown
+            ) => {
+                establishOptions.push(options)
+                return existingSession
+            }
+        } as never,
+        sessionResolver: {} as never,
+        signalDeviceSync: {} as never,
+        signalMissingPreKeysSync: {} as never,
+        messageClient: {} as never,
+        sendNode: async () => undefined,
+        getCurrentCredentials: () => null
+    })
+
+    const internals = coordinator as unknown as RetrySessionInternals
+    const requesterJid = '551100000000:3@s.whatsapp.net'
+    const parsed = parseJidFull(requesterJid)
+    const ready = await internals.updateLocalSessionFromRetryRequest(
+        buildKeyBundleRequest(2, requesterJid),
+        requesterJid,
+        parsed.address,
+        parsed.normalizedJid
+    )
+
+    assert.equal(ready, true)
+    // The keyBundle establish reuses the existing session rather than minting a
+    // fresh base key on every retry.
+    assert.deepEqual(establishOptions, [{ reuseExisting: true }])
+})
+
+test('retry session update resets the session once the base key repeats at retry 3', async () => {
+    const existingSession = {
+        remote: { regId: 555, pubKey: new Uint8Array(33) },
+        aliceBaseKey: new Uint8Array([7, 7, 7])
+    } as never
+
+    let deleteCount = 0
+    let fetchCount = 0
+    const coordinator = new WaRetryCoordinator({
+        logger: createNoopLogger(),
+        retryStore: { getTtlMs: () => 60_000 } as unknown as WaRetryStore,
+        signalStore: {} as never,
+        preKeyStore: {} as never,
+        sessionStore: {
+            getSession: async () => existingSession,
+            deleteSession: async () => {
+                deleteCount += 1
+            }
+        } as never,
+        senderKeyStore: {} as never,
+        signalProtocol: {
+            establishOutgoingSession: async () => existingSession
+        } as never,
+        sessionResolver: {} as never,
+        signalDeviceSync: {} as never,
+        signalMissingPreKeysSync: {
+            fetchMissingPreKeys: async () => {
+                fetchCount += 1
+                return [{ devices: [{ deviceJid: '551100000000:3@s.whatsapp.net', bundle: {} }] }]
+            }
+        } as never,
+        messageClient: {} as never,
+        sendNode: async () => undefined,
+        getCurrentCredentials: () => null
+    })
+
+    const internals = coordinator as unknown as RetrySessionInternals
+    const requesterJid = '551100000000:3@s.whatsapp.net'
+    const parsed = parseJidFull(requesterJid)
+    const run = (retryCount: number): Promise<boolean> =>
+        internals.updateLocalSessionFromRetryRequest(
+            buildKeyBundleRequest(retryCount, requesterJid),
+            requesterJid,
+            parsed.address,
+            parsed.normalizedJid
+        )
+
+    // Retry 2 only records the session base key.
+    await run(2)
+    assert.equal(deleteCount, 0)
+    assert.equal(fetchCount, 0)
+
+    // Retry 3 sees the same (reused) base key and forces a clean session:
+    // delete + fetch fresh prekeys + re-establish.
+    const ready = await run(3)
+    assert.equal(ready, true)
+    assert.equal(deleteCount, 1)
+    assert.equal(fetchCount, 1)
 })
