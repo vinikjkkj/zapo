@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/mcp-server",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "MCP server exposing zapo-js WaClient as dynamic tools for end-to-end testing",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",

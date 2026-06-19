@@ -1,5 +1,16 @@
 # zapo-js
 
+## 1.2.0
+
+### Minor Changes
+
+- Emit a typed `message_unavailable` event when an incoming message is an unavailable placeholder, so consumers can handle it explicitly instead of inferring it from a missing body.
+- Add the opt-in `addons.persistAllSecrets` option to persist the message secret of every sent and received message (not just polls, events, and bot prompts), so encrypted addons whose parent can be any message type (reactions, comments, edits) stay decryptable after a restart without archiving full message bodies.
+
+### Patch Changes
+
+- Stamp `peer_recipient_pn` on LID-addressed 1:1 sends so the cross-reference matches wa-web.
+
 ## 1.1.3
 
 ### Patch Changes

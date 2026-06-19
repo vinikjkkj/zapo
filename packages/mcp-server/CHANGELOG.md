@@ -1,5 +1,11 @@
 # @zapo-js/mcp-server
 
+## 1.0.3
+
+### Patch Changes
+
+- Capture the new `message_unavailable` event in the buffered event ring.
+
 ## 1.0.2
 
 ### Patch Changes
