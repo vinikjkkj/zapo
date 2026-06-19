@@ -39,7 +39,6 @@ import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS, WA_MESSAGE_TYPES } from '@protocol/constants'
 import { normalizeDeviceJid } from '@protocol/jid'
 import { WA_DISCONNECT_REASONS, WA_LOGOUT_REASONS, type WaLogoutReason } from '@protocol/stream'
-import { NOOP_MESSAGE_SECRET_STORE } from '@store/noop.store'
 import { buildRemoveCompanionDeviceIq } from '@transport/node/builders/device'
 import { assertIqResult, queryWithContext as queryNodeWithContext } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
@@ -135,17 +134,6 @@ export class WaClient extends EventEmitter {
             this.logger,
             this.options.writeBehind
         )
-
-        if (
-            this.options.addons?.autoDecrypt !== false &&
-            this.stores.messageSecret === NOOP_MESSAGE_SECRET_STORE
-        ) {
-            this.logger.warn(
-                'addons.autoDecrypt is on (default) but messageSecret cache is noop – ' +
-                    'addon decryption will only work if secrets are in the message store. ' +
-                    'Set addons.autoDecrypt: false to silence this warning.'
-            )
-        }
 
         const dependencies = buildWaClientDependencies({
             base,
@@ -296,6 +284,7 @@ export class WaClient extends EventEmitter {
                 logger: this.logger,
                 writeBehind: this.writeBehind,
                 messageSecretStore: this.stores.messageSecret,
+                persistAllSecrets: this.options.addons?.persistAllSecrets === true,
                 event
             })
             if (this.options.addons?.autoDecrypt !== false && event.message) {

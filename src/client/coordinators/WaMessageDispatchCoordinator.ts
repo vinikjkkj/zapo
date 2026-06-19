@@ -110,6 +110,12 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly deviceListStore: WaDeviceListStore
     readonly signalDeviceSync: SignalDeviceSyncApi
     readonly messageSecretStore: WaMessageSecretStore
+    /**
+     * When `true`, persist the message secret for every outgoing message, not
+     * only the poll / event / bot prompts that `needsSecretPersistence` flags.
+     * Wired from the client-level `addons.persistAllSecrets` option.
+     */
+    readonly persistAllMessageSecrets?: boolean
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly resolvePrivacyTokenNode: (recipientJid: string) => Promise<BinaryNode | null>
     readonly onDirectMessageSent: (recipientJid: string) => void
@@ -399,7 +405,7 @@ export class WaMessageDispatchCoordinator {
             rawSecret &&
             rawSecret.length > 0 &&
             sendOptions.id &&
-            needsSecretPersistence(messageWithSecret)
+            (this.deps.persistAllMessageSecrets || needsSecretPersistence(messageWithSecret))
         ) {
             const meJid = this.deps.getCurrentCredentials()?.meJid ?? ''
             void this.deps.messageSecretStore
