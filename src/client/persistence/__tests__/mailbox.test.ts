@@ -27,6 +27,19 @@ function captureWriteBehind(): {
     return { captured, writeBehind }
 }
 
+function captureSecretStore(): {
+    readonly sets: { readonly id: string }[]
+    readonly store: unknown
+} {
+    const sets: { id: string }[] = []
+    const store = {
+        set: async (id: string) => {
+            sets.push({ id })
+        }
+    }
+    return { sets, store }
+}
+
 function baseEvent(
     overrides: Partial<WaIncomingMessageEvent> & {
         readonly keyOverrides?: Partial<WaIncomingMessageEvent['key']>
@@ -134,4 +147,43 @@ test('mailbox persist does NOT treat remoteJid pair as user pair for groups', ()
     const crossRefRows = captured.contacts.filter((c) => c.phoneNumber || c.lid)
     assert.equal(crossRefRows.length, 1)
     assert.equal(crossRefRows[0].jid, '111111111111111@lid')
+})
+
+const PLAIN_SECRET = new Uint8Array(32).fill(7)
+
+function plainSecretEvent(): WaIncomingMessageEvent {
+    return baseEvent({
+        keyOverrides: {
+            id: 'plain-1',
+            remoteJid: '5511999999999@s.whatsapp.net',
+            isGroup: false
+        },
+        message: { conversation: 'oi', messageContextInfo: { messageSecret: PLAIN_SECRET } }
+    })
+}
+
+test('mailbox persist skips a plain-message secret by default (only poll/event/bot persist)', () => {
+    const { writeBehind } = captureWriteBehind()
+    const { sets, store } = captureSecretStore()
+    persistIncomingMailboxEntities({
+        logger: createNoopLogger(),
+        writeBehind: writeBehind as never,
+        messageSecretStore: store as never,
+        event: plainSecretEvent()
+    })
+    assert.equal(sets.length, 0)
+})
+
+test('mailbox persist stores a plain-message secret when persistAllSecrets is set', () => {
+    const { writeBehind } = captureWriteBehind()
+    const { sets, store } = captureSecretStore()
+    persistIncomingMailboxEntities({
+        logger: createNoopLogger(),
+        writeBehind: writeBehind as never,
+        messageSecretStore: store as never,
+        persistAllSecrets: true,
+        event: plainSecretEvent()
+    })
+    assert.equal(sets.length, 1)
+    assert.equal(sets[0].id, 'plain-1')
 })

@@ -258,6 +258,26 @@ export interface WaAddonOptions {
      * poll votes, event responses, comments).
      */
     readonly autoDecrypt?: boolean
+    /**
+     * Persist the 32-byte message secret of every sent and received message,
+     * not just the poll / event / bot-prompt messages the library knows will
+     * get a follow-up. Off by default.
+     *
+     * Encrypted addons whose parent can be any message type - reactions,
+     * comments, and `secretEncryptedMessage` edits - need the parent's secret
+     * to decrypt. Without this, those parents stay decryptable after a restart
+     * only when the full `messages` archive is persistent. Enable this to keep
+     * them decryptable while storing only the secret, not the message body
+     * (e.g. with `messages: 'none'`).
+     *
+     * Has no effect when the `messageSecret` cache is `'none'`: every write
+     * lands in the noop store and is silently discarded. With the default
+     * `'memory'` provider it works for the lifetime of the process but is lost
+     * on restart and bounded by the cache's LRU and `messageSecretMs` TTL;
+     * point `messageSecret` at a persistent backend to keep the secrets across
+     * restarts.
+     */
+    readonly persistAllSecrets?: boolean
 }
 
 export interface WaPrivacyTokenOptions {

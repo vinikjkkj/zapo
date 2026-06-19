@@ -11,6 +11,12 @@ interface WaPersistIncomingMailboxOptions {
     readonly logger: Logger
     readonly writeBehind: WriteBehindPersistence
     readonly messageSecretStore: WaMessageSecretStore
+    /**
+     * When `true`, persist the secret of every incoming message, not only the
+     * poll / event / bot prompts that `needsSecretPersistence` flags. Wired
+     * from the client-level `addons.persistAllSecrets` option.
+     */
+    readonly persistAllSecrets?: boolean
     readonly event: WaIncomingMessageEvent
 }
 
@@ -74,7 +80,7 @@ function persistContacts(
 }
 
 export function persistIncomingMailboxEntities(options: WaPersistIncomingMailboxOptions): void {
-    const { logger, writeBehind, messageSecretStore, event } = options
+    const { logger, writeBehind, messageSecretStore, persistAllSecrets, event } = options
     const stanzaId = event.key.id
     const chatJid = event.key.remoteJid
     if (!stanzaId || !chatJid) {
@@ -103,7 +109,7 @@ export function persistIncomingMailboxEntities(options: WaPersistIncomingMailbox
             rawSecret &&
             rawSecret.length > 0 &&
             event.message &&
-            needsSecretPersistence(event.message)
+            (persistAllSecrets || needsSecretPersistence(event.message))
         ) {
             const rawSender =
                 event.key.participant ?? event.rawNode.attrs.participant ?? event.key.remoteJid

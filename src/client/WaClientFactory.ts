@@ -750,6 +750,7 @@ export function buildWaClientDependencies(input: {
         deviceListStore: sessionStore.deviceList,
         signalDeviceSync,
         messageSecretStore: sessionStore.messageSecret,
+        persistAllMessageSecrets: options.addons?.persistAllSecrets === true,
         getCurrentCredentials,
         resolvePrivacyTokenNode: (recipientJid) =>
             trustedContactToken.resolveTokenForMessage(recipientJid),
