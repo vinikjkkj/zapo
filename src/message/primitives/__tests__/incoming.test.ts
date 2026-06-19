@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { WaIncomingMessageEvent } from '@client/types'
+import type { WaIncomingMessageEvent, WaIncomingUnavailableMessageEvent } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import { buildRecoveredIncomingEvent, handleIncomingMessageAck } from '@message/primitives/incoming'
 import { proto } from '@proto'
@@ -311,6 +311,59 @@ test('recovered self 1:1 message keeps participant unset', () => {
     )
 
     assert.equal(event.key.participant, undefined)
+})
+
+test('view-once-unavailable message acks instead of delivery-receipting and emits a typed event', async () => {
+    const sentNodes: BinaryNode[] = []
+    const unavailable: WaIncomingUnavailableMessageEvent[] = []
+
+    const handled = await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-vou',
+                from: '53979165777985@lid',
+                type: 'media',
+                notify: 'vini',
+                sender_pn: '5511982905991@s.whatsapp.net',
+                t: '1781885732'
+            },
+            content: [
+                {
+                    tag: 'reporting',
+                    attrs: {},
+                    content: [{ tag: 'reporting_tag', attrs: {}, content: new Uint8Array([1]) }]
+                },
+                { tag: 'unavailable', attrs: { type: 'view_once' } }
+            ]
+        },
+        {
+            logger: createNoopLogger(),
+            sendNode: async (node) => {
+                sentNodes.push(node)
+            },
+            getMeJid: () => '5511999999999@s.whatsapp.net',
+            emitUnavailableMessage: (event) => {
+                unavailable.push(event)
+            }
+        }
+    )
+
+    assert.equal(handled, true)
+    assert.equal(unavailable.length, 1)
+    const event = unavailable[0]
+    assert.equal(event.kind, 'view_once')
+    assert.equal(event.key.remoteJid, '53979165777985@lid')
+    assert.equal(event.key.id, 'msg-vou')
+    assert.equal(event.key.fromMe, false)
+    assert.equal(event.pushName, 'vini')
+    assert.equal(event.timestampSeconds, 1781885732)
+    assert.equal(sentNodes.length, 1)
+    assert.equal(sentNodes[0].tag, 'ack')
+    assert.equal(sentNodes[0].attrs.class, 'message')
+    assert.equal(sentNodes[0].attrs.id, 'msg-vou')
+    assert.equal(sentNodes[0].attrs.to, '53979165777985@lid')
+    assert.equal(sentNodes[0].attrs.type, 'media')
 })
 
 test('incoming message ack falls back to retry receipt when decrypt fails', async () => {

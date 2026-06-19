@@ -852,6 +852,32 @@ export interface WaIncomingUnhandledStanzaEvent extends WaIncomingBaseEvent {
     readonly reason: string
 }
 
+/**
+ * Why an incoming message arrived as a content-less placeholder. `view_once`:
+ * a view-once already consumed elsewhere. `hosted`: a hosted/bot message that
+ * could not be fanned out. `other`: an `unavailable` marker the lib does not
+ * categorize yet.
+ */
+export type WaUnavailableMessageKind = 'view_once' | 'hosted' | 'other'
+
+export interface WaIncomingUnavailableMessageEvent extends Omit<
+    WaIncomingBaseEvent,
+    'chatJid' | 'stanzaId'
+> {
+    /** Which flavour of content the server signalled as unavailable. */
+    readonly kind: WaUnavailableMessageKind
+    /**
+     * The message key (chat, stanza id, author, addressing metadata) – same
+     * shape the `message` event carries, so it can be stored or correlated. There
+     * is no decrypted `message`: the payload is unavailable and cannot be fetched.
+     */
+    readonly key: WaIncomingMessageKey
+    /** Stanza `t` attr (seconds since epoch). */
+    readonly timestampSeconds?: number
+    /** Sender's display name from the stanza's `notify` attr. */
+    readonly pushName?: string
+}
+
 export interface WaIncomingErrorStanzaEvent extends WaIncomingBaseEvent {
     readonly code?: number
     readonly text?: string
@@ -1261,6 +1287,14 @@ export interface WaClientEventMap {
      * typed protocol payload directly.
      */
     readonly message_protocol: (event: WaIncomingProtocolMessageEvent) => void
+    /**
+     * A message the server delivered as a content-less placeholder: the payload
+     * is unavailable and cannot be recovered (a view-once already consumed, or a
+     * hosted/bot message that could not be fanned out). The lib acks it and emits
+     * this instead of a `message` event for the same stanza. Branch on
+     * `event.kind`.
+     */
+    readonly message_unavailable: (event: WaIncomingUnavailableMessageEvent) => void
     /**
      * Inbound `<receipt>` for an outgoing message – delivery, read, played,
      * server, etc. Use this to track message ACK progression.

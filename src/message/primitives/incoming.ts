@@ -2,7 +2,9 @@ import type {
     WaIncomingMessageEvent,
     WaIncomingMessageKey,
     WaIncomingNewsletterMessageUpdateEvent,
-    WaIncomingUnhandledStanzaEvent
+    WaIncomingUnavailableMessageEvent,
+    WaIncomingUnhandledStanzaEvent,
+    WaUnavailableMessageKind
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import { pickIncomingExpirationSeconds } from '@message/context-info'
@@ -43,6 +45,7 @@ interface WaIncomingMessageAckHandlerOptions {
     ) => Promise<boolean>
     readonly emitIncomingMessage?: (event: WaIncomingMessageEvent) => void
     readonly emitNewsletterMessageUpdate?: (event: WaIncomingNewsletterMessageUpdateEvent) => void
+    readonly emitUnavailableMessage?: (event: WaIncomingUnavailableMessageEvent) => void
     readonly emitUnhandledStanza?: (event: WaIncomingUnhandledStanzaEvent) => void
 }
 
@@ -652,6 +655,48 @@ export async function handleIncomingMessageAck(
             to: from,
             type: ackNode.attrs.type,
             participant: ackNode.attrs.participant
+        })
+        await options.sendNode(ackNode)
+        return true
+    }
+
+    const unavailableNode = findNodeChild(node, 'unavailable')
+    if (unavailableNode) {
+        const kind: WaUnavailableMessageKind =
+            unavailableNode.attrs.hosted === 'true'
+                ? 'hosted'
+                : unavailableNode.attrs.type === 'view_once'
+                  ? 'view_once'
+                  : 'other'
+        const senderJid = node.attrs.participant ?? node.attrs.from
+        const sender = senderJid ? parseJidFull(senderJid) : null
+        const { key, pushName } = buildIncomingMessageKey(
+            node,
+            sender ? { userJid: sender.userJid, device: sender.address.device } : null,
+            options
+        )
+        options.emitUnavailableMessage?.({
+            rawNode: buildIncomingEventRawNode(node),
+            key,
+            kind,
+            stanzaType: node.attrs.type,
+            offline: node.attrs.offline !== undefined,
+            timestampSeconds: parseOptionalInt(node.attrs.t),
+            pushName
+        })
+        const ackNode = buildAckNode({
+            kind: 'message',
+            node,
+            id,
+            to: from,
+            from: options.getMeJid?.()
+        })
+        options.logger.trace('acking unavailable incoming message', {
+            id,
+            to: from,
+            type: ackNode.attrs.type,
+            participant: ackNode.attrs.participant,
+            unavailableKind: kind
         })
         await options.sendNode(ackNode)
         return true

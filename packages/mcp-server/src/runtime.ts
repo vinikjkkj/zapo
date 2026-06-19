@@ -276,6 +276,7 @@ const ALL_EVENT_NAMES = [
     'message_addon',
     'message_bot_chunk',
     'message_protocol',
+    'message_unavailable',
     'receipt',
     'newsletter',
     'newsletter_message_update',

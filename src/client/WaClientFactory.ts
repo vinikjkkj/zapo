@@ -1012,6 +1012,7 @@ export function buildWaClientDependencies(input: {
         },
         emitNewsletterMessageUpdate: (event) =>
             runtime.emitEvent('newsletter_message_update', event),
+        emitUnavailableMessage: (event) => runtime.emitEvent('message_unavailable', event),
         emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) =>
             runtime.emitEvent('debug_unhandled_stanza', event)
     }
