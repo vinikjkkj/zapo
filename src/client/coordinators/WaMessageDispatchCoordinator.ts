@@ -54,6 +54,7 @@ import {
     isHostedDeviceJid,
     isLidJid,
     isNewsletterJid,
+    isUserJid,
     normalizeDeviceJid,
     normalizeRecipientJid,
     parseJidFull,
@@ -468,11 +469,18 @@ export class WaMessageDispatchCoordinator {
         const directRecipientJid = isGroup
             ? recipientJid
             : await this.resolveDirectRecipientLid(toUserJid(recipientJid))
+        const peerRecipientPn = isGroup
+            ? undefined
+            : await this.resolvePeerRecipientPn(toUserJid(recipientJid), directRecipientJid)
         const publishResult = isGroup
             ? this.shouldUseGroupDirectPath(messageWithIcdc)
                 ? await this.publishGroupDirectMessage(recipientJid, envelope)
                 : await this.publishGroupSenderKeyMessage(recipientJid, envelope)
-            : await this.publishDirectSignalMessageWithFanout(directRecipientJid, envelope)
+            : await this.publishDirectSignalMessageWithFanout(
+                  directRecipientJid,
+                  envelope,
+                  peerRecipientPn
+              )
         return upload ? { ...publishResult, upload } : publishResult
     }
 
@@ -502,6 +510,34 @@ export class WaMessageDispatchCoordinator {
             })
         }
         return pnUserJid
+    }
+
+    /**
+     * Resolves the `peer_recipient_pn` cross-reference for a 1:1 send, or
+     * `undefined` to drop the attribute. Only set when the envelope is
+     * LID-addressed (`directRecipientJid` is a LID): the PN is the caller's own
+     * JID when they passed a PN (zapo switched it to LID for sending), else the
+     * device-list snapshot counterpart for a recipient passed in LID form.
+     * Mirrors wa-web, which sets `peer_recipient_pn = getPhoneNumber($)` for a
+     * LID destination.
+     */
+    private async resolvePeerRecipientPn(
+        recipientUserJid: string,
+        directRecipientJid: string
+    ): Promise<string | undefined> {
+        if (!isLidJid(directRecipientJid)) return undefined
+        if (isUserJid(recipientUserJid)) return recipientUserJid
+        try {
+            const snapshot = await this.deps.deviceListStore.findByAnyUserJid(directRecipientJid)
+            if (snapshot?.userJid && isUserJid(snapshot.userJid)) return snapshot.userJid
+            if (snapshot?.altUserJid && isUserJid(snapshot.altUserJid)) return snapshot.altUserJid
+        } catch (error) {
+            this.deps.logger.trace('peer_recipient_pn store lookup failed', {
+                lid: directRecipientJid,
+                message: toError(error).message
+            })
+        }
+        return undefined
     }
 
     public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {
@@ -1394,7 +1430,8 @@ export class WaMessageDispatchCoordinator {
 
     private async publishDirectSignalMessageWithFanout(
         recipientJid: string,
-        envelope: WaOutboundEnvelope
+        envelope: WaOutboundEnvelope,
+        peerRecipientPn?: string
     ): Promise<WaMessagePublishResult> {
         const { message, plaintext, type, edit, mediatype, sendOptions } = envelope
         const meJid = this.requireCurrentMeJid('sendMessage')
@@ -1605,6 +1642,7 @@ export class WaMessageDispatchCoordinator {
             customNodes: customNodes.length > 0 ? customNodes : undefined,
             mediatype,
             decryptFail: envelope.decryptFail,
+            peerRecipientPn,
             additionalAttributes: sendOptions.additionalAttributes
         })
 

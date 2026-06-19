@@ -113,6 +113,9 @@ function createMessageDispatchCoordinator(
         readonly meJid?: string
         readonly mobileMessageIdFormat?: () => boolean
         readonly serverClock?: ServerClock
+        readonly deviceListStore?: {
+            readonly findByAnyUserJid: (jid: string) => Promise<unknown>
+        }
     }
 ): WaMessageDispatchCoordinator {
     const groupMetadataCache = createGroupMetadataCache({
@@ -135,7 +138,7 @@ function createMessageDispatchCoordinator(
         signalStore: {} as never,
         sessionStore: {} as never,
         identityStore: {} as never,
-        deviceListStore: {} as never,
+        deviceListStore: (overrides?.deviceListStore ?? {}) as never,
         signalDeviceSync: {} as never,
         messageSecretStore: {
             set: async (_id: string, _entry: { secret: Uint8Array; senderJid: string }) => {}
@@ -164,6 +167,61 @@ function buildAppStateSyncResult(
     )
     return { collections }
 }
+
+function callResolvePeerRecipientPn(
+    coordinator: WaMessageDispatchCoordinator,
+    recipientUserJid: string,
+    directRecipientJid: string
+): Promise<string | undefined> {
+    return (
+        coordinator as unknown as {
+            resolvePeerRecipientPn(a: string, b: string): Promise<string | undefined>
+        }
+    ).resolvePeerRecipientPn(recipientUserJid, directRecipientJid)
+}
+
+test('resolvePeerRecipientPn: a PN-addressed caller on a LID envelope stamps that PN', async () => {
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore())
+    const pn = await callResolvePeerRecipientPn(
+        coordinator,
+        '5511999999999@s.whatsapp.net',
+        '88880000@lid'
+    )
+    assert.equal(pn, '5511999999999@s.whatsapp.net')
+})
+
+test('resolvePeerRecipientPn: a LID-addressed caller resolves the PN from the device-list store', async () => {
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        deviceListStore: {
+            findByAnyUserJid: async () => ({
+                userJid: '5511999999999@s.whatsapp.net',
+                altUserJid: '88880000@lid',
+                deviceJids: [],
+                updatedAtMs: 0
+            })
+        }
+    })
+    const pn = await callResolvePeerRecipientPn(coordinator, '88880000@lid', '88880000@lid')
+    assert.equal(pn, '5511999999999@s.whatsapp.net')
+})
+
+test('resolvePeerRecipientPn: a LID-addressed caller with a device-list miss drops the attribute', async () => {
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        deviceListStore: { findByAnyUserJid: async () => null }
+    })
+    const pn = await callResolvePeerRecipientPn(coordinator, '88880000@lid', '88880000@lid')
+    assert.equal(pn, undefined)
+})
+
+test('resolvePeerRecipientPn: a PN-addressed envelope stamps nothing', async () => {
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore())
+    const pn = await callResolvePeerRecipientPn(
+        coordinator,
+        '5511999999999@s.whatsapp.net',
+        '5511999999999@s.whatsapp.net'
+    )
+    assert.equal(pn, undefined)
+})
 
 test('incoming node coordinator supports dynamic handler registration and unregistration', async () => {
     const { runtime, unhandled } = createIncomingRuntime()

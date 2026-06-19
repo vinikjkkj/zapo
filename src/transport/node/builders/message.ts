@@ -18,6 +18,8 @@ type DirectMessageFanoutInput = {
     readonly customNodes?: readonly BinaryNode[]
     readonly mediatype?: string
     readonly decryptFail?: string
+    // 1:1 only: PN counterpart stamped as `peer_recipient_pn` when `to` is a LID.
+    readonly peerRecipientPn?: string
     readonly additionalAttributes?: Readonly<Record<string, string>>
 }
 
@@ -78,6 +80,7 @@ function buildMessageAttrs(input: {
     readonly edit?: string
     readonly phash?: string
     readonly addressingMode?: string
+    readonly peerRecipientPn?: string
     readonly additionalAttributes?: Readonly<Record<string, string>>
 }): Record<string, string> {
     const attrs: Record<string, string> = {
@@ -95,6 +98,9 @@ function buildMessageAttrs(input: {
     }
     if (input.addressingMode) {
         attrs.addressing_mode = input.addressingMode
+    }
+    if (input.peerRecipientPn) {
+        attrs.peer_recipient_pn = input.peerRecipientPn
     }
     if (input.additionalAttributes) {
         Object.assign(attrs, input.additionalAttributes)
