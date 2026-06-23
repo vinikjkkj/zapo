@@ -27,6 +27,7 @@ import type {
     WaIncomingMessageEvent,
     WaIncomingProtocolMessageEvent
 } from '@client/types'
+import { createWaVoipSocket, type WaVoipSocket } from '@client/voip'
 import {
     buildWaClientDependencies,
     resolveWaClientBase,
@@ -106,6 +107,7 @@ export class WaClient extends EventEmitter {
     private readonly logger!: Logger
     private readonly stores!: ReturnType<WaClientOptions['store']['session']>
     private readonly deps!: WaClientDependencies
+    private voipSocket: WaVoipSocket | null = null
     private readonly appStateSync!: WaAppStateSyncClient
     private readonly mediaTransfer!: WaMediaTransferClient
     private readonly writeBehind!: WriteBehindPersistence
@@ -245,6 +247,34 @@ export class WaClient extends EventEmitter {
      */
     public getCredentials() {
         return this.deps.authClient.getCurrentCredentials()
+    }
+
+    /**
+     * Lazily-built {@link WaVoipSocket} adapter exposing the signal, USync, send
+     * and credential primitives the `@zapo-js/voip` calling engine needs. Pass
+     * it straight to `createVoipManager(client.voip)`.
+     */
+    public get voip(): WaVoipSocket {
+        if (!this.voipSocket) {
+            this.voipSocket = createWaVoipSocket({
+                getCredentials: () => this.getCredentials(),
+                sendNode: (node) => this.deps.lowLevelCoordinator.sendNode(node),
+                query: (node) => this.deps.lowLevelCoordinator.query(node),
+                encryptMessage: (address, plaintext) =>
+                    this.deps.signalProtocol.encryptMessage(address, plaintext),
+                encryptMessagesBatch: (requests) =>
+                    this.deps.signalProtocol.encryptMessagesBatch(requests),
+                decryptMessage: (address, envelope) =>
+                    this.deps.signalProtocol.decryptMessage(address, envelope),
+                syncSignalSession: (jid) => this.deps.messageDispatch.syncSignalSession(jid),
+                syncDeviceList: (jids) => this.deps.signalDeviceSync.syncDeviceList(jids),
+                queryLidsByPhoneJids: (jids) =>
+                    this.deps.signalDeviceSync.queryLidsByPhoneJids(jids),
+                getPrivacyToken: async (jid) =>
+                    (await this.stores.privacyToken.getByJid(jid))?.tcToken ?? null
+            })
+        }
+        return this.voipSocket
     }
 
     /**

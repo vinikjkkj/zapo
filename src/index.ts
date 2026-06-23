@@ -1,4 +1,6 @@
 export { WaClient } from '@client'
+export { createWaVoipSocket } from '@client'
+export type { WaVoipSignalRepository, WaVoipSocket, WaVoipSocketContext } from '@client'
 export type {
     WaClientEventMap,
     WaClientOptions,

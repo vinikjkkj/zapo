@@ -34,8 +34,27 @@ if needed.
 
 The engine needs a handful of primitives from your WhatsApp client — sending
 stanzas, Signal encrypt/decrypt of the per-call key, USync device discovery and
-participant-node fan-out. `zapo-js` keeps these on internal coordinators, so you
-adapt them into a `VoipSocket` (see `src/voip-socket.ts` for the full contract):
+participant-node fan-out. The media stack is otherwise library-agnostic, so this
+adapter is the only WhatsApp-library specific part.
+
+### With `zapo-js` (recommended)
+
+`WaClient` exposes a ready-made adapter at **`client.voip`** — just hand it to
+`createVoipManager`, no manual wiring:
+
+```ts
+import { WaClient } from "zapo-js";
+import { createVoipManager } from "@zapo-js/voip";
+
+const client = new WaClient(/* ... */);
+await client.connect();
+
+const manager = createVoipManager(client.voip, { debug: true });
+```
+
+### Any other library
+
+Implement the `VoipSocket` contract yourself (see `src/voip-socket.ts`):
 
 ```ts
 import type { VoipSocket } from "@zapo-js/voip";
@@ -57,7 +76,7 @@ const socket: VoipSocket = {
 ```ts
 import { createVoipManager, EndCallReason } from "@zapo-js/voip";
 
-const manager = createVoipManager(socket, { debug: true });
+const manager = createVoipManager(client.voip, { debug: true });
 await manager.loadAudio("./hello.mp3");
 
 manager.on("call:state", (call) => console.log(call.stateData.state));
@@ -71,7 +90,7 @@ await manager.endCall(EndCallReason.UserEnded);
 ## Outgoing call — live audio
 
 ```ts
-const manager = createVoipManager(socket);
+const manager = createVoipManager(client.voip);
 manager.setExternalAudioMode(true);           // live input mode
 const callId = await manager.startCall({ peerJid });
 
@@ -90,11 +109,11 @@ provided routers. They ACK the stanza and dispatch to the manager:
 import { routeCallStanza, routeCallAck, routeCallReceipt } from "@zapo-js/voip";
 
 // raw "call" stanza  → offer/accept/transport/... handlers
-await routeCallStanza(manager, socket, node);
+await routeCallStanza(manager, client.voip, node);
 // class="call" ack   → relay allocation
 await routeCallAck(manager, node);
 // call-related receipt → ack back
-await routeCallReceipt(socket, node);
+await routeCallReceipt(client.voip, node);
 
 manager.on("call:incoming", (call) => manager.acceptCall(call.callId));
 ```

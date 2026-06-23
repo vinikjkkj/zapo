@@ -8,8 +8,20 @@ import type { NodeInfo, RelayEndpoint } from './types.js'
 // baileys utility shims, re-implemented against zapo primitives.
 // `encodeWAMessage` / `encodeSignedDeviceIdentity` are thin wrappers over the
 // generated protobufs; `unpadRandomMax16` mirrors baileys' PKCS#7-style unpad.
+
+// WhatsApp pad-to-random-max-16: append N bytes of value N (N in 1..16). Mirrors
+// baileys' `writeRandomPadMax16`; `encodeWAMessage` pads so the peer's
+// `unpadRandomMax16` round-trips the encrypted call key.
+function writeRandomPadMax16(message: Uint8Array): Uint8Array {
+    const padLength = (randomBytes(1)[0] & 0x0f) + 1
+    const out = new Uint8Array(message.length + padLength)
+    out.set(message, 0)
+    out.fill(padLength, message.length)
+    return out
+}
+
 function encodeWAMessage(message: Parameters<typeof proto.Message.encode>[0]): Uint8Array {
-    return proto.Message.encode(message).finish()
+    return writeRandomPadMax16(proto.Message.encode(message).finish())
 }
 
 function encodeSignedDeviceIdentity(
