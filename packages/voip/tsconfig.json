@@ -1,0 +1,11 @@
+{
+    "extends": ["../../tsconfig.packages.json", "../tsconfig.paths.json"],
+    "compilerOptions": {
+        "types": ["node"],
+        "lib": ["ES2020", "DOM"],
+        "rootDir": "../..",
+        "noEmit": true
+    },
+    "include": ["src"],
+    "exclude": ["dist", "node_modules"]
+}

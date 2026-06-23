@@ -1,0 +1,15 @@
+{
+    "extends": ["../../tsconfig.packages.json", "../tsconfig.build.paths.json"],
+    "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist",
+        "noEmit": false,
+        "lib": ["ES2020", "DOM"],
+        "types": ["node"],
+        "declaration": true,
+        "declarationMap": false,
+        "sourceMap": false
+    },
+    "include": ["src"],
+    "exclude": ["src/**/__tests__/**"]
+}
