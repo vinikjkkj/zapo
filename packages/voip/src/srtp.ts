@@ -1,7 +1,7 @@
 import { createCipheriv, createHmac } from 'node:crypto'
 
 import { RtpHeader, RtpPacket } from './rtp.js'
-import { SRTP_AUTH_TAG_LEN , SRTP_LABEL, type SrtpKeyingMaterial } from './types.js'
+import { SRTP_AUTH_TAG_LEN, SRTP_LABEL, type SrtpKeyingMaterial } from './types.js'
 
 export class SrtpContext {
     private sessionKey: Buffer
@@ -12,7 +12,6 @@ export class SrtpContext {
     private initialized = false
     private authTagLen: number
 
-    // Pre-allocated reusable buffers for generateIv/computeAuthTag
     private readonly ivBuffer: Buffer = Buffer.alloc(16)
     private readonly ssrcBuffer: Buffer = Buffer.alloc(4)
     private readonly indexBuffer: Buffer = Buffer.alloc(8)

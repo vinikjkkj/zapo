@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 
-import { type AudioEngineConfig, type AudioSender , DEFAULT_AUDIO_CONFIG } from './types.js'
+import { type AudioEngineConfig, type AudioSender, DEFAULT_AUDIO_CONFIG } from './types.js'
 
 export class AudioEngine {
     private audioSender: AudioSender | null = null
@@ -26,16 +26,14 @@ export class AudioEngine {
     private debug = false
     private silenceMode = false
 
-    // External audio mode (for live calls) — uses same audioBuffer as file playback
     private externalMode = false
     private liveWritePos = 0
     private extStarted = false
     private readonly extPreBufferSize: number
-    private readonly extTargetBuffer: number // ideal buffer level (~200ms)
-    private readonly extHighWater: number // skip ahead when buffer exceeds this (~500ms)
+    private readonly extTargetBuffer: number
+    private readonly extHighWater: number
     private extSkipCount = 0
 
-    // Pre-allocated reusable buffers (avoid per-tick allocations)
     private readonly captureChunkBuffer: Float32Array
     private readonly silenceChunkBuffer: Float32Array
     private readonly playbackOutputBuffer: Float32Array
@@ -49,14 +47,11 @@ export class AudioEngine {
         this.intervalMs = c.intervalMs
         this.circularBuffer = new Float32Array(this.maxBuffer)
         this.captureChunkBuffer = new Float32Array(this.captureChunkSize)
-        this.silenceChunkBuffer = new Float32Array(this.captureChunkSize) // always zeros
+        this.silenceChunkBuffer = new Float32Array(this.captureChunkSize)
         this.playbackOutputBuffer = new Float32Array(this.outputSize)
 
-        // Pre-buffer ~60ms before starting to read (1 Opus frame of jitter protection)
         this.extPreBufferSize = Math.floor(this.sampleRate * 0.06)
-        // Target buffer level: ~60ms — what we skip to when buffer overflows
         this.extTargetBuffer = Math.floor(this.sampleRate * 0.06)
-        // High water mark: ~200ms — skip ahead to target when exceeded (clock drift compensation)
         this.extHighWater = Math.floor(this.sampleRate * 0.2)
     }
 
@@ -77,8 +72,6 @@ export class AudioEngine {
         this.extStarted = false
         this.extSkipCount = 0
         if (enabled) {
-            // Allocate linear buffer for live audio — same type as file playback
-            // Start with 60s, grows dynamically if needed
             const initialSize = this.sampleRate * 60
             this.audioBuffer = new Float32Array(initialSize)
             this.audioPosition = 0
@@ -99,7 +92,6 @@ export class AudioEngine {
     feedExternalAudio(data: Float32Array): void {
         if (!this.audioBuffer) return
 
-        // Compact: shift unread data to front when read position passes half
         if (this.audioPosition > this.audioBuffer.length / 2) {
             const remaining = this.liveWritePos - this.audioPosition
             if (remaining > 0) {
@@ -109,7 +101,6 @@ export class AudioEngine {
             this.audioPosition = 0
         }
 
-        // Grow buffer if needed
         if (this.liveWritePos + data.length > this.audioBuffer.length) {
             const newSize = Math.max(this.audioBuffer.length * 2, this.liveWritePos + data.length)
             const newBuf = new Float32Array(newSize)
@@ -120,7 +111,6 @@ export class AudioEngine {
             }
         }
 
-        // Append linearly — same buffer that getNextChunk reads from
         this.audioBuffer.set(data, this.liveWritePos)
         this.liveWritePos += data.length
     }
@@ -161,7 +151,6 @@ export class AudioEngine {
     }
 
     private async decodeWithFFmpeg(inputPath: string): Promise<Int16Array> {
-        // @ts-ignore
         const ffmpegModule = await import('fluent-ffmpeg')
         const ffmpeg = ffmpegModule.default
 
@@ -264,11 +253,8 @@ export class AudioEngine {
         this.silenceMode = false
 
         if (this.externalMode) {
-            // Live mode: skip stale ringing audio, start reading from near current write pos
-            // Keep extPreBufferSize samples of runway ahead for jitter absorption
             this.audioPosition = Math.max(0, this.liveWritePos - this.extPreBufferSize)
             const available = this.liveWritePos - this.audioPosition
-            // Only start if we have enough runway, otherwise let jitter buffer fill first
             this.extStarted = available >= this.extPreBufferSize
             if (this.debug) {
                 console.log(
@@ -360,18 +346,15 @@ export class AudioEngine {
             return this.silenceChunkBuffer
         }
 
-        // Boundary: for file playback = audioBuffer.length, for live = liveWritePos
         const endPos = this.externalMode ? this.liveWritePos : this.audioBuffer.length
 
         if (endPos === 0 || (this.audioFinished && !this.externalMode)) {
             return this.silenceChunkBuffer
         }
 
-        // === LIVE MODE: adaptive buffer management ===
         if (this.externalMode) {
             const available = endPos - this.audioPosition
 
-            // Phase 1: Pre-buffer — wait until we have enough data before starting
             if (!this.extStarted) {
                 if (available < this.extPreBufferSize) {
                     return this.silenceChunkBuffer
@@ -384,8 +367,6 @@ export class AudioEngine {
                 }
             }
 
-            // Phase 2: Overflow — browser clock faster than server, buffer growing
-            // Skip ahead to target level to prevent runaway latency
             if (available > this.extHighWater) {
                 const skipTo = endPos - this.extTargetBuffer
                 const skipped = skipTo - this.audioPosition
@@ -398,18 +379,14 @@ export class AudioEngine {
                 }
             }
 
-            // Phase 3: Underrun — server clock faster than browser, buffer empty
-            // Return last chunk (keeps Opus encoder fed, avoids DTX silence transition)
             if (this.audioPosition >= endPos) {
                 return this.captureChunkBuffer
             }
         }
 
-        // === Read loop — identical for file playback and live ===
         this.captureChunkBuffer.fill(0)
         for (let i = 0; i < this.captureChunkSize; i++) {
             if (this.audioPosition >= endPos) {
-                // File playback: audio finished
                 if (!this.externalMode && !this.audioFinished) {
                     this.audioFinished = true
                     if (this.debug) {

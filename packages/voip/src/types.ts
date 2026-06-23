@@ -168,8 +168,7 @@ export const DEFAULT_AUDIO_CONFIG: AudioEngineConfig = {
 
 export const SRTP_SEND_AUTH_TAG_LEN = 4
 export const SRTP_RECV_AUTH_TAG_LEN = 4
-// WhatsApp uses 32-bit (4-byte) SRTP auth tags; matches Go SrtpAuthTagLen.
-// (Keeping this at 4 makes the send-side auth padding 0, like the reference.)
+
 export const SRTP_AUTH_TAG_LEN = 4
 
 export const SRTP_LABEL = {
