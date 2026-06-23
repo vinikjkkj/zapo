@@ -8,9 +8,6 @@ export { SrtpContext, SrtpSession, SrtpError } from './srtp.js'
 
 export { derivePerJidSrtpKey, generateCallKey } from './encryption.js'
 
-export { UdpRelayTransport } from './udp-relay.js'
-export type { UdpRelayConfig } from './udp-relay.js'
-
 export { AudioEngine } from './audio-engine.js'
 
 export { MLowCodec } from './mlow-codec.js'
@@ -20,8 +17,6 @@ export {
     generateCallStanzaId,
     extractNodeInfo,
     extractRelayEndpoints,
-    processOfferNode,
-    processAcceptNode,
     decryptCallKeyInNode,
     buildOfferStanza,
     buildAcceptStanza,
@@ -61,7 +56,6 @@ export {
     DEFAULT_AUDIO_CONFIG
 } from './types.js'
 
-// Host integration seam (the only library-specific part).
 export { createVoipManager, routeCallStanza, routeCallAck, routeCallReceipt } from './bridge.js'
 export type { CreateVoipManagerOptions } from './bridge.js'
 export type { VoipSocket, VoipSignalRepository, VoipAuthState } from './voip-socket.js'

@@ -167,7 +167,6 @@ export class RtpSession {
     }
 
     static whatsappOpus(ssrc: number): RtpSession {
-        // WhatsApp Opus uses a 16 kHz RTP clock (matches Go reference rtp.go).
         return new RtpSession(ssrc, PayloadType.WhatsAppOpus, 16000, 960)
     }
 
@@ -186,11 +185,7 @@ export class RtpSession {
         return new RtpPacket(header, payload)
     }
 
-    createPacketWithDuration(
-        payload: Buffer,
-        durationSamples: number,
-        marker = false
-    ): RtpPacket {
+    createPacketWithDuration(payload: Buffer, durationSamples: number, marker = false): RtpPacket {
         const header = new RtpHeader(
             this.payloadType,
             this.sequenceNumber,

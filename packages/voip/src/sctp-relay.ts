@@ -122,7 +122,6 @@ export class NodeSctpRelayManager extends EventEmitter {
 
         modified = modified.replace(/a=setup:actpass/g, 'a=setup:passive')
 
-        // Go uses the auth-token as ice-ufrag, falling back to the token (sdp_munger.go).
         const iceUfrag = relayInfo.authToken || relayInfo.token || ''
         const icePwd = relayInfo.key
         modified = modified.replace(/a=ice-ufrag:[^\r\n]+/g, `a=ice-ufrag:${iceUfrag}`)
@@ -395,12 +394,9 @@ export class NodeSctpRelayManager extends EventEmitter {
         return undefined
     }
 
-    // Mirrors Go (*UdpRelayTransport).sendSubscriptionsToChannel: a single push
-    // sends 4 STUN variants (v1/v2 ICE bindings, v3 no-MI binding, v4 allocate).
     private sendStunAllocateOnOpen(conn: Connection, relayInfo: RelayInfo): void {
         const connectionId = `${relayInfo.ip}:${relayInfo.port}`
 
-        // Go prefers the auth-token ufrag, falling back to the token.
         const remoteUfrag = relayInfo.authToken || relayInfo.token
         if (!remoteUfrag) {
             console.log(` [STUN] Registration — skipped, no ufrag: ${connectionId}`)
@@ -429,7 +425,6 @@ export class NodeSctpRelayManager extends EventEmitter {
 
             const subs = buildSenderSubscriptions(ssrc)
 
-            // v1: auth-token-preferred ufrag, binding + sender-subs + ICE-controlling + fingerprint + MI.
             if (localUfrag) {
                 const username = Buffer.from(`${remoteUfrag}:${localUfrag}`)
                 const v1 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
@@ -439,7 +434,6 @@ export class NodeSctpRelayManager extends EventEmitter {
                 )
             }
 
-            // v2: token ufrag, only when distinct from v1.
             if (relayInfo.token && relayInfo.token !== remoteUfrag && localUfrag) {
                 const username = Buffer.from(`${relayInfo.token}:${localUfrag}`)
                 const v2 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
@@ -447,12 +441,10 @@ export class NodeSctpRelayManager extends EventEmitter {
                 console.log(` [STUN] v2 token ufrag (${label}): ${v2.length}B → ${connectionId}`)
             }
 
-            // v3: subs only — no username / no MI / no ICE-controlling / no fingerprint.
             const v3 = buildBindingRequestWithSubs(undefined, undefined, subs, false, false)
             this.sendToChannel(conn, this.bufferToArrayBuffer(v3))
             console.log(` [STUN] v3 no-MI (${label}): ${v3.length}B → ${connectionId}`)
 
-            // v4: Allocate carrying sender-subs (raw token) + SSRC subscription list.
             if (relayInfo.rawToken && relayInfo.rawToken.length > 0) {
                 const peerSsrcs = peerSsrc ? [peerSsrc] : []
                 const ssrcList = buildSSRCSubscriptionList([selfSsrc], peerSsrcs, 0, 0)
@@ -468,7 +460,6 @@ export class NodeSctpRelayManager extends EventEmitter {
             }
         }
 
-        // Match Go retry schedule: initial + 50/150/500ms + 3s.
         sendRegistration('initial')
         setTimeout(() => sendRegistration('retry-50ms'), 50)
         setTimeout(() => sendRegistration('retry-150ms'), 150)

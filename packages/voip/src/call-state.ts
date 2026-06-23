@@ -1,4 +1,11 @@
-import { CallDirection, CallMediaType , CallState, type CallTransition, type EndCallReason, type RelayData } from './types.js'
+import {
+    CallDirection,
+    CallMediaType,
+    CallState,
+    type CallTransition,
+    type EndCallReason,
+    type RelayData
+} from './types.js'
 
 export interface CallStateData {
     state: CallState

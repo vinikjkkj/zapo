@@ -1,35 +1,28 @@
+import type { Logger } from 'zapo-js'
 import { buildDeviceJid, parseSignalAddressFromJid } from 'zapo-js/protocol'
 import type { BinaryNode } from 'zapo-js/transport'
 
-import { NativeCallManager ,type  NativeCallManagerConfig } from './call-manager.js'
+import { NativeCallManager, type NativeCallManagerConfig } from './call-manager.js'
 import { createCallAck } from './signaling.js'
 import type { VoipSocket } from './voip-socket.js'
 
 export interface CreateVoipManagerOptions {
+    logger?: Logger
     debug?: boolean
 }
 
-/**
- * Builds a {@link NativeCallManager} bound to a host {@link VoipSocket}. The
- * socket adapts whatever WhatsApp library you run (zapo's `WaClient`, baileys,
- * …) into the signal/usync/send primitives the engine needs.
- */
 export function createVoipManager(
     socket: VoipSocket,
     options: CreateVoipManagerOptions = {}
 ): NativeCallManager {
     const config: NativeCallManagerConfig = {
         sock: socket,
+        logger: options.logger,
         debug: options.debug ?? false
     }
     return new NativeCallManager(config)
 }
 
-/**
- * Normalize an incoming peer JID to a stable `user[:device]@server` form. Uses
- * zapo's JID helpers in place of baileys' `jidDecode`/`jidEncode`; falls back
- * to the raw JID when it cannot be parsed.
- */
 function normalizePeerJid(peerJid: string): string {
     try {
         const { user, server, device } = parseSignalAddressFromJid(peerJid)
@@ -42,11 +35,6 @@ function normalizePeerJid(peerJid: string): string {
 
 const RECEIPT_CALL_TAGS = new Set(['offer', 'accept', 'preaccept', 'terminate', 'transport'])
 
-/**
- * Route an incoming `<call>` stanza to the call manager. ACKs the stanza first
- * (as the WhatsApp client does), then dispatches by the inner payload tag.
- * Returns the dispatched tag, or `null` when the node carried no payload.
- */
 export async function routeCallStanza(
     manager: NativeCallManager,
     socket: VoipSocket,
@@ -88,7 +76,6 @@ export async function routeCallStanza(
             manager.handleRelayElection(node)
             break
         case 'reject':
-            // Peer declined — the manager learns this via a subsequent terminate.
             break
         default:
             break
@@ -97,17 +84,10 @@ export async function routeCallStanza(
     return tag
 }
 
-/**
- * Route a `class="call"` ACK stanza (relay allocation reply) to the manager.
- */
 export async function routeCallAck(manager: NativeCallManager, node: BinaryNode): Promise<void> {
     await manager.handleCallAck(node)
 }
 
-/**
- * Acknowledge a call-related `<receipt>` stanza. WhatsApp expects an `ack` back
- * for receipts whose inner payload is a known call tag.
- */
 export async function routeCallReceipt(socket: VoipSocket, node: BinaryNode): Promise<boolean> {
     if (!Array.isArray(node.content)) return false
 
@@ -122,7 +102,7 @@ export async function routeCallReceipt(socket: VoipSocket, node: BinaryNode): Pr
             id: node.attrs.id,
             to: peerJid,
             class: 'receipt',
-            type: (node.attrs.type) || 'retry'
+            type: node.attrs.type || 'retry'
         }
     })
 

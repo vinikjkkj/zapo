@@ -4,10 +4,6 @@ import { dirname, join } from 'node:path'
 
 import koffi from 'koffi'
 
-// Resolve the package's bundled `native/` directory without relying on
-// `import.meta` (illegal in the CommonJS build) or `__dirname` (absent in the
-// ESM build). `createRequire` is importable from both module formats, so we
-// resolve our own package manifest from the cwd and read its location.
 function packageNativeDir(): string | null {
     try {
         const req = createRequire(join(process.cwd(), 'index.js'))
@@ -37,8 +33,7 @@ function resolveLibPath(): string {
     if (process.env.MLOW_LIB_PATH && existsSync(process.env.MLOW_LIB_PATH)) {
         return process.env.MLOW_LIB_PATH
     }
-    // Platform + arch aware. macOS ships a universal (arm64+x86_64) dylib (one file);
-    // Linux/Windows are per-arch, so prefer an arch-tagged name then fall back.
+
     const names =
         process.platform === 'darwin'
             ? ['libopus_mlow.dylib']
@@ -97,12 +92,9 @@ let globalInitDone = false
 function getApi() {
     if (api) return api
     lib = koffi.load(resolveLibPath())
-    // Opaque pointer type for OpusEncoder*/OpusDecoder*.
+
     const ptr = 'void *'
-    // opus_*_ctl is VARIADIC in C: (st, int request, ...). koffi requires the variadic
-    // form (`...`) and each variadic arg passed as a (type, value) pair — otherwise the
-    // value never reaches the callee and the CTL silently no-ops (e.g. SMPL stays off,
-    // giving plain-Opus garbage). Wrap so call sites can pass a plain int.
+
     const rawDecCtl = lib.func('int opus_decoder_ctl(void *, int, ...)')
     const rawEncCtl = lib.func('int opus_encoder_ctl(void *, int, ...)')
     api = {
@@ -131,8 +123,8 @@ function ensureGlobalInit() {
 export class MLowCodec {
     private encoder: unknown = null
     private decoder: unknown = null
-    private readonly frameSize = 960 // 60ms @ 16kHz — matches WhatsApp MLow frames
-    private readonly maxOut = 5760 // 120ms safety buffer (samples)
+    private readonly frameSize = 960
+    private readonly maxOut = 5760
     private decodeErrors = 0
     private decodeSuccess = 0
     private plcFrames = 0
@@ -148,7 +140,7 @@ export class MLowCodec {
         const err = new Uint8Array(4)
         this.decoder = a.decoder_create(MLOW_SAMPLE_RATE, MLOW_CHANNELS, err)
         if (!this.decoder) throw new Error('[MLowCodec] opus_decoder_create failed')
-        // Enable MLow/SMPL decode path.
+
         a.decoder_ctl(this.decoder, CTL.SET_USING_SMPL, 1)
     }
 
@@ -165,7 +157,6 @@ export class MLowCodec {
         a.encoder_ctl(this.encoder, CTL.SET_DTX, 1)
     }
 
-    /** PCM (Float32, [-1,1]) -> MLow frame. */
     encode(float32Audio: Float32Array): Buffer {
         const a = getApi()
         const pcm = Buffer.alloc(float32Audio.length * 2)
@@ -179,7 +170,6 @@ export class MLowCodec {
         return Buffer.from(out.subarray(0, n))
     }
 
-    /** MLow frame -> PCM (Float32). Pass null for packet-loss concealment. */
     decode(mlowFrame: Buffer | null): Float32Array {
         const a = getApi()
         const out = Buffer.alloc(this.maxOut * 2)
