@@ -8,6 +8,7 @@ import type {
 } from '@auth/types'
 import type { WaCallGroupParticipant, WaCallType } from '@client/events/call'
 import type { IncomingPresenceType, PresenceLastSeen } from '@client/events/presence'
+import type { WaClientPluginDefinition } from '@client/plugins/types'
 import type { WaMediaProcessor } from '@media/processor'
 import type { WaLinkPreviewOptions } from '@message/addons/link-preview/types'
 import type { WaQuoteRef, WaSendContextInfo } from '@message/context-info'
@@ -186,6 +187,11 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      * default auto-fetch globally.
      */
     readonly linkPreview?: WaLinkPreviewOptions
+    /**
+     * Optional client plugins – behavior hooks and/or coordinators exposed at
+     * `client[exposeAs]`. See {@link defineWaClientPlugin}.
+     */
+    readonly plugins?: readonly WaClientPluginDefinition[]
     /**
      * Test-only overrides intended for running against a fake server.
      *
@@ -1253,6 +1259,16 @@ export type WaConnectionEvent =
  * `history_sync_chunk`, `mex_notification`, `call`), **mobile-only**
  * (`mobile_*`), and **debug_** (raw stanzas/frames – opt-in observability).
  */
+/**
+ * Empty by default – augment from plugin packages to register custom events.
+ * Prefer prefixed names (`voip_*`, `myplugin_*`) to avoid colliding with core
+ * events.
+ */
+export interface WaClientPluginEventMap {}
+
+/** Core plus plugin events – used by {@link WaClient} `on`/`emit` typings. */
+export type WaClientAllEventMap = WaClientEventMap & WaClientPluginEventMap
+
 export interface WaClientEventMap {
     /**
      * Pairing QR refresh – emitted while {@link WaClient.connect} runs and the
