@@ -3,9 +3,12 @@ export {
     bytesToBase64,
     bytesToBase64UrlSafe,
     bytesToHex,
+    concatBytes,
     decodeBase64Url,
     hexToBytes,
+    intToBytes,
     TEXT_DECODER,
+    TEXT_ENCODER,
     toBytesView,
     uint8Equal
 } from '@util/bytes'

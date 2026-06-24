@@ -4,18 +4,15 @@ import { RtpHeader, RtpPacket } from './rtp.js'
 import { SRTP_AUTH_TAG_LEN, SRTP_LABEL, type SrtpKeyingMaterial } from './types.js'
 
 export class SrtpContext {
-    private sessionKey: Buffer
-    private sessionSalt: Buffer
-    private authKey: Buffer
+    private sessionKey: Uint8Array
+    private sessionSalt: Uint8Array
+    private authKey: Uint8Array
     private roc = 0
     private lastSeq = 0
     private initialized = false
     private authTagLen: number
 
-    private readonly ivBuffer: Buffer = Buffer.alloc(16)
-    private readonly ssrcBuffer: Buffer = Buffer.alloc(4)
-    private readonly indexBuffer: Buffer = Buffer.alloc(8)
-    private readonly rocBuffer: Buffer = Buffer.alloc(4)
+    private readonly ivBuffer: Uint8Array = new Uint8Array(16)
 
     constructor(keying: SrtpKeyingMaterial, authTagLen?: number) {
         this.authTagLen = authTagLen ?? SRTP_AUTH_TAG_LEN
@@ -28,12 +25,12 @@ export class SrtpContext {
         this.authKey = deriveKey(keying.masterKey, keying.masterSalt, SRTP_LABEL.AUTH, 20)
     }
 
-    protect(packet: RtpPacket): Buffer {
+    protect(packet: RtpPacket): Uint8Array {
         this.updateRoc(packet.header.sequenceNumber)
         const index = this.packetIndex(packet.header.sequenceNumber)
 
         const headerSize = packet.header.size()
-        const output = Buffer.alloc(headerSize + packet.payload.length + this.authTagLen)
+        const output = new Uint8Array(headerSize + packet.payload.length + this.authTagLen)
 
         packet.header.encode(output)
 
@@ -42,18 +39,18 @@ export class SrtpContext {
         const encrypted = cipher.update(packet.payload)
         cipher.final()
 
-        encrypted.copy(output, headerSize)
+        output.set(encrypted, headerSize)
 
         if (this.authTagLen > 0) {
             const authData = output.subarray(0, headerSize + packet.payload.length)
             const tag = this.computeAuthTag(authData, this.roc, this.authTagLen)
-            tag.copy(output, headerSize + packet.payload.length)
+            output.set(tag, headerSize + packet.payload.length)
         }
 
         return output
     }
 
-    unprotect(data: Buffer): RtpPacket {
+    unprotect(data: Uint8Array): RtpPacket {
         if (data.length < 12) {
             throw new SrtpError('packet_too_short', `Packet too short: ${data.length} bytes`)
         }
@@ -100,29 +97,38 @@ export class SrtpContext {
         return (BigInt(this.roc) << 16n) | BigInt(seq)
     }
 
-    private generateIv(ssrc: number, index: bigint): Buffer {
+    private generateIv(ssrc: number, index: bigint): Uint8Array {
         this.ivBuffer.fill(0)
-        this.sessionSalt.copy(this.ivBuffer, 0, 0, 14)
+        this.ivBuffer.set(this.sessionSalt.subarray(0, 14), 0)
 
-        this.ssrcBuffer.writeUInt32BE(ssrc, 0)
-        for (let i = 0; i < 4; i++) {
-            this.ivBuffer[4 + i] ^= this.ssrcBuffer[i]
-        }
+        // XOR the 32-bit SSRC into bytes 4..7 (big-endian)
+        this.ivBuffer[4] ^= (ssrc >>> 24) & 0xff
+        this.ivBuffer[5] ^= (ssrc >>> 16) & 0xff
+        this.ivBuffer[6] ^= (ssrc >>> 8) & 0xff
+        this.ivBuffer[7] ^= ssrc & 0xff
 
-        this.indexBuffer.writeBigUInt64BE(index, 0)
+        // XOR the low 48 bits of the packet index into bytes 8..13 (big-endian)
         for (let i = 0; i < 6; i++) {
-            this.ivBuffer[8 + i] ^= this.indexBuffer[2 + i]
+            this.ivBuffer[8 + i] ^= Number((index >> BigInt(8 * (5 - i))) & 0xffn)
         }
 
         return this.ivBuffer
     }
 
-    private computeAuthTag(data: Buffer, roc: number, tagLen: number = SRTP_AUTH_TAG_LEN): Buffer {
+    private computeAuthTag(
+        data: Uint8Array,
+        roc: number,
+        tagLen: number = SRTP_AUTH_TAG_LEN
+    ): Uint8Array {
         const hmac = createHmac('sha1', this.authKey)
         hmac.update(data)
 
-        this.rocBuffer.writeUInt32BE(roc, 0)
-        hmac.update(this.rocBuffer)
+        const rocBytes = new Uint8Array(4)
+        rocBytes[0] = (roc >>> 24) & 0xff
+        rocBytes[1] = (roc >>> 16) & 0xff
+        rocBytes[2] = (roc >>> 8) & 0xff
+        rocBytes[3] = roc & 0xff
+        hmac.update(rocBytes)
 
         const result = hmac.digest()
         return result.subarray(0, tagLen)
@@ -143,11 +149,11 @@ export class SrtpSession {
         this.recvCtx = new SrtpContext(recvKey, recvAuthLen)
     }
 
-    protect(packet: RtpPacket): Buffer {
+    protect(packet: RtpPacket): Uint8Array {
         return this.sendCtx.protect(packet)
     }
 
-    unprotect(data: Buffer): RtpPacket {
+    unprotect(data: Uint8Array): RtpPacket {
         return this.recvCtx.unprotect(data)
     }
 
@@ -156,12 +162,17 @@ export class SrtpSession {
     }
 }
 
-function deriveKey(masterKey: Buffer, masterSalt: Buffer, label: number, length: number): Buffer {
-    const iv = Buffer.alloc(16)
-    masterSalt.copy(iv, 0, 0, 14)
+function deriveKey(
+    masterKey: Uint8Array,
+    masterSalt: Uint8Array,
+    label: number,
+    length: number
+): Uint8Array {
+    const iv = new Uint8Array(16)
+    iv.set(masterSalt.subarray(0, 14), 0)
     iv[7] ^= label
 
-    const zeros = Buffer.alloc(length)
+    const zeros = new Uint8Array(length)
     const cipher = createCipheriv('aes-128-ctr', masterKey, iv)
     const output = cipher.update(zeros)
     cipher.final()

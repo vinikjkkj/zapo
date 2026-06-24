@@ -1,12 +1,13 @@
 import { hkdfSync } from 'node:crypto'
 
+import { TEXT_ENCODER } from 'zapo-js/util'
+
 export function generateSecureSsrc(callId: string, selfJid: string, counter = 0): number {
-    const key = Buffer.from(callId, 'ascii')
-    const salt = Buffer.alloc(4)
-    salt.writeUInt32LE(counter, 0)
-    const info = Buffer.from(selfJid, 'ascii')
+    const key = TEXT_ENCODER.encode(callId)
+    const salt = new Uint8Array(4)
+    new DataView(salt.buffer).setUint32(0, counter, true)
+    const info = TEXT_ENCODER.encode(selfJid)
 
     const result = hkdfSync('sha256', key, salt, info, 4)
-    const buf = Buffer.from(result)
-    return buf.readUInt32LE(0)
+    return new DataView(result).getUint32(0, true)
 }

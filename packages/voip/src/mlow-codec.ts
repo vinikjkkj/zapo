@@ -75,14 +75,20 @@ let api: {
         dec: unknown,
         data: Uint8Array | null,
         len: number,
-        pcm: Buffer,
+        pcm: Int16Array,
         frameSize: number,
         fec: number
     ) => number
     decoder_destroy: (dec: unknown) => void
     encoder_create: (fs: number, ch: number, app: number, err: Uint8Array | null) => unknown
     encoder_ctl: (enc: unknown, req: number, val: number) => number
-    encode: (enc: unknown, pcm: Buffer, frameSize: number, data: Buffer, max: number) => number
+    encode: (
+        enc: unknown,
+        pcm: Int16Array,
+        frameSize: number,
+        data: Uint8Array,
+        max: number
+    ) => number
     encoder_destroy: (enc: unknown) => void
     strerror: (code: number) => string
 } | null = null
@@ -140,7 +146,6 @@ export class MLowCodec {
         const err = new Uint8Array(4)
         this.decoder = a.decoder_create(MLOW_SAMPLE_RATE, MLOW_CHANNELS, err)
         if (!this.decoder) throw new Error('[MLowCodec] opus_decoder_create failed')
-
         a.decoder_ctl(this.decoder, CTL.SET_USING_SMPL, 1)
     }
 
@@ -157,22 +162,22 @@ export class MLowCodec {
         a.encoder_ctl(this.encoder, CTL.SET_DTX, 1)
     }
 
-    encode(float32Audio: Float32Array): Buffer {
+    encode(float32Audio: Float32Array): Uint8Array {
         const a = getApi()
-        const pcm = Buffer.alloc(float32Audio.length * 2)
+        const pcm = new Int16Array(float32Audio.length)
         for (let i = 0; i < float32Audio.length; i++) {
             const s = Math.max(-1, Math.min(1, float32Audio[i]))
-            pcm.writeInt16LE(Math.round(s * 32767), i * 2)
+            pcm[i] = Math.round(s * 32767)
         }
-        const out = Buffer.alloc(4000)
+        const out = new Uint8Array(4000)
         const n = a.encode(this.encoder, pcm, float32Audio.length, out, out.length)
         if (n < 0) throw new Error(`[MLowCodec] encode failed: ${a.strerror(n)}`)
-        return Buffer.from(out.subarray(0, n))
+        return out.slice(0, n)
     }
 
-    decode(mlowFrame: Buffer | null): Float32Array {
+    decode(mlowFrame: Uint8Array | null): Float32Array {
         const a = getApi()
-        const out = Buffer.alloc(this.maxOut * 2)
+        const out = new Int16Array(this.maxOut)
         let samples: number
         if (mlowFrame === null) {
             samples = a.decode(this.decoder, null, 0, out, this.frameSize, 0)
@@ -187,7 +192,7 @@ export class MLowCodec {
         }
         if (samples <= 0) return this.silence()
         const f32 = new Float32Array(samples)
-        for (let i = 0; i < samples; i++) f32[i] = out.readInt16LE(i * 2) / 32768.0
+        for (let i = 0; i < samples; i++) f32[i] = out[i] / 32768.0
         return f32
     }
 

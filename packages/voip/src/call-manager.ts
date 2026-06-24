@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 
 import { createNoopLogger, type Logger } from 'zapo-js'
 import type { BinaryNode } from 'zapo-js/transport'
+import { bytesToHex, concatBytes, toError, uint8Equal } from 'zapo-js/util'
 
 import { AudioEngine } from './audio-engine.js'
 import { CallInfo } from './call-state.js'
@@ -104,8 +105,9 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
 
         const callId = generateCallId()
         const mediaType = options.isVideo ? CallMediaType.Video : CallMediaType.Audio
-        const meLid = this.sock.authState?.creds?.me?.lid
-        const meId = this.sock.authState?.creds?.me?.id
+        const creds = this.sock.getCredentials()
+        const meLid = creds?.meLid
+        const meId = creds?.meJid
         const callCreator = meLid || meId || ''
         const peerJid = await this.resolvePeerLid(options.peerJid)
 
@@ -116,7 +118,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         const callKey = generateCallKey()
         this.currentCall.encryptionKey = callKey
 
-        const selfLid = this.sock.authState?.creds?.me?.lid || this.sock.user?.lid || meId || ''
+        const selfLid = meLid || meId || ''
         const ssrc = generateSecureSsrc(callId, selfLid)
         this.rtpSession = RtpSession.whatsappOpus(ssrc)
         this.selfSsrc = ssrc
@@ -136,7 +138,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         this.opusCodec = new MLowCodec()
 
         if (!this.audioEngine.hasAudio()) {
-            this.logger.debug('[CallManager] No audio loaded — use "audio <path>" to load')
+            this.logger.debug('[CallManager] No audio loaded - use "audio <path>" to load')
         }
 
         const offerStanza = await buildOfferStanza(
@@ -303,8 +305,9 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             this.currentCall.relayData = { endpoints: relays }
         }
 
-        const meId = this.sock.authState?.creds?.me?.id
-        const meLid = this.sock.authState?.creds?.me?.lid || this.sock.user?.lid
+        const creds = this.sock.getCredentials()
+        const meId = creds?.meJid
+        const meLid = creds?.meLid
         const selfLid = meLid || meId || ''
         const ssrc = generateSecureSsrc(callId, selfLid)
         this.rtpSession = RtpSession.whatsappOpus(ssrc)
@@ -316,7 +319,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         this.opusCodec = new MLowCodec()
 
         if (!this.audioEngine.hasAudio()) {
-            this.logger.debug('[CallManager] No audio loaded — use "audio <path>" to load')
+            this.logger.debug('[CallManager] No audio loaded - use "audio <path>" to load')
         }
 
         try {
@@ -352,10 +355,11 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                 )
                 if (peerCallKey) {
                     const ourCallKey = this.currentCall.encryptionKey
-                    const keysMatch = ourCallKey ? ourCallKey.equals(peerCallKey) : false
+                    const keysMatch = ourCallKey ? uint8Equal(ourCallKey, peerCallKey) : false
                     if (!keysMatch && ourCallKey) {
-                        const meLid2 = this.sock.authState?.creds?.me?.lid
-                        const meId2 = this.sock.authState?.creds?.me?.id
+                        const creds2 = this.sock.getCredentials()
+                        const meLid2 = creds2?.meLid
+                        const meId2 = creds2?.meJid
                         const ourCredJid2 = meLid2 || meId2 || ''
                         const ourBase2 = ourCredJid2.replace(/:\d+@/, '@')
                         const participants = this.currentCall.relayData?.participantJids || []
@@ -397,10 +401,15 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         try {
             this.currentCall.applyTransition({ type: 'remote_accepted' })
             this.emitState()
-        } catch {}
+        } catch (err) {
+            this.logger.debug('[CallManager] remote_accepted transition skipped', {
+                message: toError(err).message
+            })
+        }
 
-        const meId = this.sock.authState?.creds?.me?.id ?? ''
-        const meLid = this.sock.authState?.creds?.me?.lid
+        const creds = this.sock.getCredentials()
+        const meId = creds?.meJid ?? ''
+        const meLid = creds?.meLid
         const ourJid = meLid || meId
         const ourBase = ourJid.replace(/:\d+@/, '@')
         const callId = this.currentCall.callId
@@ -521,7 +530,11 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                 this.currentCall.applyTransition({ type: 'media_connected' })
                 this.emitState()
                 this.startMediaFlow()
-            } catch {}
+            } catch (err) {
+                this.logger.debug('[CallManager] media_connected transition skipped', {
+                    message: toError(err).message
+                })
+            }
         } else {
             if (this.currentCall.relayData) {
                 await this.connectRelays(this.currentCall.relayData.endpoints)
@@ -536,7 +549,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         if (!nodeInfo) return
 
         if (this.currentCall.direction === CallDirection.Outgoing && this.currentCall.relayData) {
-            const meId = this.sock.authState?.creds?.me?.id ?? ''
+            const meId = this.sock.getCredentials()?.meJid ?? ''
             const callId = this.currentCall.callId
             const callCreator = this.currentCall.callCreator
 
@@ -634,8 +647,9 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
 
             const callKey = this.currentCall.encryptionKey
             if (participantJids.length > 0 && this.currentCall) {
-                const meLid = this.sock.authState?.creds?.me?.lid
-                const meId = this.sock.authState?.creds?.me?.id
+                const creds = this.sock.getCredentials()
+                const meLid = creds?.meLid
+                const meId = creds?.meJid
                 const ourCredJid = meLid || meId || ''
                 const ourBase = ourCredJid.replace(/:\d+@/, '@')
 
@@ -669,7 +683,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                 if (callKey) {
                     await this.initSrtpKeys()
                 } else {
-                    this.logger.debug(`[CallManager] WARNING: No call_key — SRTP not initialized!`)
+                    this.logger.debug(`[CallManager] WARNING: No call_key - SRTP not initialized!`)
                 }
             }
 
@@ -768,10 +782,15 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             electedRelayIdx = parseInt(inner.attrs['elected_relay_idx'])
         } else if (inner.attrs?.['relay_id'] !== undefined) {
             electedRelayIdx = parseInt(inner.attrs['relay_id'])
-        } else if (Buffer.isBuffer(inner.content)) {
+        } else if (inner.content instanceof Uint8Array) {
             const bytes = inner.content
-            if (bytes.length >= 4) electedRelayIdx = bytes.readUInt32BE(0)
-            else if (bytes.length > 0) electedRelayIdx = bytes[0]
+            if (bytes.length >= 4) {
+                electedRelayIdx = new DataView(
+                    bytes.buffer,
+                    bytes.byteOffset,
+                    bytes.byteLength
+                ).getUint32(0, false)
+            } else if (bytes.length > 0) electedRelayIdx = bytes[0]
         }
 
         if (electedRelayIdx !== undefined) {
@@ -786,7 +805,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
 
-        const meId = this.sock.authState?.creds?.me?.id ?? ''
+        const meId = this.sock.getCredentials()?.meJid ?? ''
         const callId = this.currentCall.callId
         const callCreator = this.currentCall.callCreator
 
@@ -807,7 +826,11 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                 type: 'terminated',
                 reason: EndCallReason.UserEnded
             })
-        } catch {}
+        } catch (err) {
+            this.logger.debug('[CallManager] terminate transition skipped', {
+                message: toError(err).message
+            })
+        }
 
         this.emit('call:ended', this.currentCall)
         this.emitState()
@@ -818,14 +841,14 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
     private audioDropCount = 0
     private realAudioSendCount = 0
 
-    private static readonly EMPTY_BUFFER = Buffer.alloc(0)
+    private static readonly EMPTY_BUFFER = new Uint8Array(0)
 
     private encodeBufferA: Float32Array | null = null
     private encodeBufferB: Float32Array | null = null
     private encodeBuffer: Float32Array | null = null
     private encodeBufferPos = 0
 
-    private authPaddingBuffer: Buffer | null = null
+    private authPaddingBuffer: Uint8Array | null = null
 
     private get encodeFrameSamples(): number {
         return this.opusCodec?.getFrameSize() ?? 960
@@ -849,7 +872,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                     .filter(Boolean)
                     .join(', ')
                 this.logger.debug(
-                    `[CallManager] Audio dropped #${this.audioDropCount} — missing: ${missing}`
+                    `[CallManager] Audio dropped #${this.audioDropCount} - missing: ${missing}`
                 )
             }
             return
@@ -910,18 +933,18 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         }
     }
 
-    private sendOpusFrame(opusFrame: Buffer, isSilence: boolean): void {
+    private sendOpusFrame(opusFrame: Uint8Array, isSilence: boolean): void {
         if (!this.rtpSession || !this.srtpSession) return
 
         try {
-            let rtpPayload: Buffer = opusFrame
+            let rtpPayload: Uint8Array = opusFrame
 
             const authPadding = SRTP_AUTH_TAG_LEN - SRTP_SEND_AUTH_TAG_LEN
             if (authPadding > 0) {
                 if (!this.authPaddingBuffer || this.authPaddingBuffer.length !== authPadding) {
-                    this.authPaddingBuffer = Buffer.alloc(authPadding)
+                    this.authPaddingBuffer = new Uint8Array(authPadding)
                 }
-                rtpPayload = Buffer.concat([rtpPayload, this.authPaddingBuffer])
+                rtpPayload = concatBytes([rtpPayload, this.authPaddingBuffer])
             }
 
             const marker = !this.firstPacketSent
@@ -942,18 +965,17 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             }
 
             const srtpData = this.srtpSession.protect(rtpPacket)
-            const srtpBuf = Buffer.from(srtpData)
 
-            const srtpArrayBuf = srtpBuf.buffer.slice(
-                srtpBuf.byteOffset,
-                srtpBuf.byteOffset + srtpBuf.byteLength
-            )
+            const srtpArrayBuf = srtpData.buffer.slice(
+                srtpData.byteOffset,
+                srtpData.byteOffset + srtpData.byteLength
+            ) as ArrayBuffer
             this.sctpRelay.broadcast(srtpArrayBuf)
 
             this.audioSendCount++
             if (this.audioSendCount === 1 || this.audioSendCount % 500 === 0) {
                 this.logger.debug(
-                    `[SEND] #${this.audioSendCount}: opus=${opusFrame.length}B SRTP=${srtpBuf.length}B SCTP(${this.sctpRelay.getConnectedCount()}) ${isSilence ? '(silence)' : `(${tsDelta / 16}ms)`}`
+                    `[SEND] #${this.audioSendCount}: opus=${opusFrame.length}B SRTP=${srtpData.length}B SCTP(${this.sctpRelay.getConnectedCount()}) ${isSilence ? '(silence)' : `(${tsDelta / 16}ms)`}`
                 )
             }
         } catch (err: any) {
@@ -971,12 +993,13 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
 
         const callKey = this.currentCall.encryptionKey
         if (!callKey) {
-            this.logger.debug(`[SRTP] No call_key — SRTP not initialized!`)
+            this.logger.debug(`[SRTP] No call_key - SRTP not initialized!`)
             return
         }
 
-        const meLid = this.sock.authState?.creds?.me?.lid
-        const meId = this.sock.authState?.creds?.me?.id
+        const creds = this.sock.getCredentials()
+        const meLid = creds?.meLid
+        const meId = creds?.meJid
         const ourCredJid = meLid || meId || ''
         const ourBase = ourCredJid.replace(/:\d+@/, '@')
         const participants = this.currentCall.relayData?.participantJids || []
@@ -1033,7 +1056,11 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                 this.emitState()
                 this.startMediaFlow()
                 this.logger.debug('[CallManager] Relay connected + call accepted → Active')
-            } catch {}
+            } catch (err) {
+                this.logger.debug('[CallManager] relay-connected activation failed', {
+                    message: toError(err).message
+                })
+            }
         }
     }
 
@@ -1080,7 +1107,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                 const knownSsrc = this.peerSsrcs.includes(ssrc)
                 if (!knownSsrc) {
                     this.logger.debug(
-                        `[RECV] Peer actual SSRC=0x${ssrc.toString(16)} does NOT match calculated peerSsrcs=[${this.peerSsrcs.map((s) => '0x' + s.toString(16))}] — re-subscribing relay`
+                        `[RECV] Peer actual SSRC=0x${ssrc.toString(16)} does NOT match calculated peerSsrcs=[${this.peerSsrcs.map((s) => '0x' + s.toString(16))}] - re-subscribing relay`
                     )
                     this.peerSsrcs = [ssrc]
                     this.ssrcResubscribed = true
@@ -1088,16 +1115,17 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                     this.sctpRelay.resendSubscriptions()
                 } else {
                     this.logger.debug(
-                        `[RECV] Peer actual SSRC=0x${ssrc.toString(16)} matches calculated — no re-subscribe needed`
+                        `[RECV] Peer actual SSRC=0x${ssrc.toString(16)} matches calculated - no re-subscribe needed`
                     )
                 }
             }
         }
 
-        const buf = Buffer.from(data)
-
         if (this.audioRecvCount === 0) {
-            const ssrc = buf.readUInt32BE(8)
+            const ssrc = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(
+                8,
+                false
+            )
             const ext = ((data[0] >> 4) & 0x01) !== 0
             const csrc = data[0] & 0x0f
             this.logger.debug(
@@ -1106,7 +1134,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         }
 
         try {
-            const rtpPacket = this.srtpSession.unprotect(Buffer.from(data))
+            const rtpPacket = this.srtpSession.unprotect(data)
             const opusPayload = rtpPacket.payload
 
             this.audioRecvCount++
@@ -1132,10 +1160,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             if (isDtx) this.recvDtxCount++
             else this.recvRealCount++
 
-            const hexDump =
-                this.audioRecvCount <= 30
-                    ? Buffer.from(opusPayload).subarray(0, 8).toString('hex')
-                    : ''
+            const hexDump = this.audioRecvCount <= 30 ? bytesToHex(opusPayload.subarray(0, 8)) : ''
 
             const statsBefore = this.opusCodec.getStats()
             let audioData = this.opusCodec.decode(opusPayload)
@@ -1177,7 +1202,10 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         } catch (err: any) {
             this.srtpErrorCount++
             if (this.srtpErrorCount <= 5) {
-                const ssrc = buf.readUInt32BE(8)
+                const ssrc = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(
+                    8,
+                    false
+                )
                 const ext = ((data[0] >> 4) & 0x01) !== 0
                 this.logger.debug(
                     `[RECV] SRTP err #${this.srtpErrorCount}: ${err.message} ssrc=0x${ssrc.toString(16)} ext=${ext} size=${data.length}B`
@@ -1242,7 +1270,6 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         )
 
         this.audioEngine.startPlayback()
-
         this.audioEngine.startCapture()
     }
 
@@ -1294,12 +1321,11 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         if (peerJid.includes('@lid')) return peerJid
 
         try {
-            const lidMapping = this.sock.signalRepository?.lidMapping
-            if (lidMapping?.getLIDForPN) {
-                const lid = await lidMapping.getLIDForPN(peerJid)
-                if (lid) return lid
-            }
-        } catch {}
+            const [result] = await this.sock.queryLidsByPhoneJids([peerJid])
+            if (result?.lidJid) return result.lidJid
+        } catch {
+            /* fall back to the phone JID if LID resolution fails */
+        }
 
         return peerJid
     }

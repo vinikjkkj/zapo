@@ -1,10 +1,12 @@
 import { randomBytes } from 'node:crypto'
 
 import { proto } from 'zapo-js/proto'
+import { parseSignalAddressFromJid } from 'zapo-js/protocol'
 import type { BinaryNode } from 'zapo-js/transport'
+import { bytesToHex } from 'zapo-js/util'
 
 import type { NodeInfo, RelayEndpoint } from './types.js'
-import type { VoipSocket } from './voip-socket.js'
+import type { VoipSignalEnvelopeType, VoipSocket } from './voip-socket.js'
 
 function writeRandomPadMax16(message: Uint8Array): Uint8Array {
     const padLength = (randomBytes(1)[0] & 0x0f) + 1
@@ -42,11 +44,11 @@ export function generateCallId(): string {
         bytes[i] = Math.floor(Math.random() * 256)
     }
 
-    return Buffer.from(bytes).toString('hex').toUpperCase()
+    return bytesToHex(bytes).toUpperCase()
 }
 
 export function generateCallStanzaId(): string {
-    return randomBytes(16).toString('hex').toUpperCase()
+    return bytesToHex(randomBytes(16)).toUpperCase()
 }
 
 export function extractNodeInfo(node: BinaryNode): NodeInfo | null {
@@ -137,7 +139,7 @@ export async function decryptCallKeyInNode(
     sock: VoipSocket,
     node: BinaryNode,
     peerJid: string
-): Promise<{ node: BinaryNode; callKey?: Buffer }> {
+): Promise<{ node: BinaryNode; callKey?: Uint8Array }> {
     const cloned = structuredClone(node)
     if (!cloned.content || !Array.isArray(cloned.content)) {
         return { node: cloned }
@@ -191,10 +193,9 @@ export async function decryptCallKeyInNode(
         const encType = encNode.attrs.type
         const encContent = encNode.content as Uint8Array
         if (encContent instanceof Uint8Array) {
-            const decrypted = await sock.signalRepository.decryptMessage({
-                jid: peerJid,
-                type: encType,
-                ciphertext: Buffer.from(encContent)
+            const decrypted = await sock.decryptMessage(parseSignalAddressFromJid(peerJid), {
+                type: encType as VoipSignalEnvelopeType,
+                ciphertext: encContent
             })
 
             const unpadded = unpadRandomMax16(decrypted)
@@ -211,7 +212,7 @@ export async function decryptCallKeyInNode(
                 content: new Uint8Array(callKey)
             }
 
-            return { node: cloned, callKey: Buffer.from(callKey) }
+            return { node: cloned, callKey: new Uint8Array(callKey) }
         }
     } catch (err: any) {
         console.error(`[Signaling] Decrypt error: ${err.message}`)
@@ -223,56 +224,73 @@ export async function decryptCallKeyInNode(
 const CAPABILITY_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07])
 const CAPABILITY_PREACCEPT = new Uint8Array([0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07])
 
+async function assertSessions(sock: VoipSocket, jids: readonly string[]): Promise<void> {
+    await Promise.all(jids.map((jid) => sock.syncSignalSession(jid)))
+}
+
+async function buildParticipantNodes(
+    sock: VoipSocket,
+    devices: string[],
+    message: Parameters<typeof proto.Message.encode>[0],
+    count: string
+): Promise<{ nodes: BinaryNode[]; shouldIncludeDeviceIdentity: boolean }> {
+    await assertSessions(sock, devices)
+    const plaintext = encodeWAMessage(message)
+    const encrypted = await sock.encryptMessagesBatch(
+        devices.map((jid) => ({ address: parseSignalAddressFromJid(jid), plaintext }))
+    )
+    const nodes: BinaryNode[] = devices.map((jid, index) => ({
+        tag: 'to',
+        attrs: { jid },
+        content: [
+            {
+                tag: 'enc',
+                attrs: { v: '2', type: encrypted[index].type, count },
+                content: encrypted[index].ciphertext
+            }
+        ]
+    }))
+    return {
+        nodes,
+        shouldIncludeDeviceIdentity: encrypted.some((entry) => entry.type === 'pkmsg')
+    }
+}
+
 export async function buildOfferStanza(
     sock: VoipSocket,
     callId: string,
-    callKey: Buffer,
+    callKey: Uint8Array,
     peerJid: string,
     _deviceJids: string[],
     isVideo: boolean
 ): Promise<BinaryNode> {
-    const meLid = sock.authState?.creds?.me?.lid
-    const meId = sock.authState?.creds?.me?.id
-    const callCreator = meLid || meId || ''
+    const creds = sock.getCredentials()
+    const callCreator = creds?.meLid || creds?.meJid || ''
 
-    const rawDevices = await sock.getUSyncDevices([peerJid], true, false)
-
-    const devices = rawDevices
-        .map((d: any) => {
-            if (d.jid) return d.jid as string
-            if (d.user) {
-                return `${d.user}${d.device ? `:${d.device}` : ''}@lid`
-            }
-            return null
-        })
-        .filter((jid: string | null): jid is string => typeof jid === 'string' && jid.includes('@'))
+    const synced = await sock.syncDeviceList([peerJid])
+    const devices = synced.flatMap((entry) => [...entry.deviceJids])
 
     if (devices.length === 0) {
-        console.warn(`[buildOfferStanza] No valid device JIDs for ${peerJid}, raw:`, rawDevices)
+        console.warn(`[buildOfferStanza] No device JIDs for ${peerJid}`)
     }
 
-    await sock.assertSessions(devices)
-
-    const { nodes: destinations, shouldIncludeDeviceIdentity } = await sock.createParticipantNodes(
+    const { nodes: destinations, shouldIncludeDeviceIdentity } = await buildParticipantNodes(
+        sock,
         devices,
         { call: { callKey: new Uint8Array(callKey) } },
-        { count: '0' }
+        '0'
     )
 
     const offerContent: BinaryNode[] = []
 
     try {
-        const peerJidNormalized = peerJid.replace(/:\d+@/, '@')
-        const tctokenData = await sock.authState?.keys?.get?.('tctoken', [peerJidNormalized])
-        const tctoken = tctokenData?.[peerJidNormalized]?.token
+        const tctoken = await sock.getPrivacyToken(peerJid.replace(/:\d+@/, '@'))
         if (tctoken) {
-            offerContent.push({
-                tag: 'privacy',
-                attrs: {},
-                content: tctoken instanceof Uint8Array ? tctoken : new Uint8Array(tctoken)
-            })
+            offerContent.push({ tag: 'privacy', attrs: {}, content: tctoken })
         }
-    } catch {}
+    } catch {
+        /* tctoken is optional; proceed without it */
+    }
 
     offerContent.push(
         { tag: 'audio', attrs: { enc: 'opus', rate: '8000' }, content: undefined },
@@ -295,26 +313,23 @@ export async function buildOfferStanza(
     }
 
     offerContent.push({ tag: 'net', attrs: { medium: '3' }, content: undefined })
-
     offerContent.push({
         tag: 'capability',
         attrs: { ver: '1' },
         content: CAPABILITY_OFFER
     })
-
     offerContent.push({ tag: 'destination', attrs: {}, content: destinations })
-
     offerContent.push({
         tag: 'encopt',
         attrs: { keygen: '2' },
         content: undefined
     })
 
-    if (shouldIncludeDeviceIdentity && sock.authState?.creds?.account) {
+    if (shouldIncludeDeviceIdentity && creds?.signedIdentity) {
         offerContent.push({
             tag: 'device-identity',
             attrs: {},
-            content: encodeSignedDeviceIdentity(sock.authState.creds.account)
+            content: encodeSignedDeviceIdentity(creds.signedIdentity)
         })
     }
 
@@ -334,12 +349,12 @@ export async function buildOfferStanza(
 export async function buildAcceptStanza(
     sock: VoipSocket,
     callId: string,
-    callKey: Buffer,
+    callKey: Uint8Array,
     peerJid: string,
     callCreator: string,
     isVideo: boolean
 ): Promise<BinaryNode> {
-    await sock.assertSessions([callCreator], true)
+    await assertSessions(sock, [callCreator])
 
     const callMessage = { call: { callKey: new Uint8Array(callKey) } }
     const bytes = encodeWAMessage(callMessage)
@@ -348,10 +363,10 @@ export async function buildAcceptStanza(
     let shouldIncludeDeviceIdentity = false
 
     try {
-        const { type, ciphertext } = await sock.signalRepository.encryptMessage({
-            jid: callCreator,
-            data: bytes
-        })
+        const { type, ciphertext } = await sock.encryptMessage(
+            parseSignalAddressFromJid(callCreator),
+            bytes
+        )
 
         if (type === 'pkmsg') {
             shouldIncludeDeviceIdentity = true
@@ -373,11 +388,12 @@ export async function buildAcceptStanza(
         { tag: 'encopt', attrs: { keygen: '2' } }
     ]
 
-    if (shouldIncludeDeviceIdentity && sock.authState?.creds?.account) {
+    const creds = sock.getCredentials()
+    if (shouldIncludeDeviceIdentity && creds?.signedIdentity) {
         acceptContent.push({
             tag: 'device-identity',
             attrs: {},
-            content: encodeSignedDeviceIdentity(sock.authState.creds.account)
+            content: encodeSignedDeviceIdentity(creds.signedIdentity)
         })
     }
 

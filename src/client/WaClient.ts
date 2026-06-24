@@ -27,7 +27,7 @@ import type {
     WaIncomingMessageEvent,
     WaIncomingProtocolMessageEvent
 } from '@client/types'
-import { createWaVoipSocket, type WaVoipSocket } from '@client/voip'
+import type { WaVoipSocket } from '@client/voip'
 import {
     buildWaClientDependencies,
     resolveWaClientBase,
@@ -250,13 +250,13 @@ export class WaClient extends EventEmitter {
     }
 
     /**
-     * Lazily-built {@link WaVoipSocket} adapter exposing the signal, USync, send
-     * and credential primitives the `@zapo-js/voip` calling engine needs. Pass
-     * it straight to `createVoipManager(client.voip)`.
+     * Lazily-built {@link WaVoipSocket} exposing the signal, USync, send and
+     * credential primitives the `@zapo-js/voip` calling engine needs, in zapo's
+     * native shape. Pass it straight to `createVoipManager(client.voip)`.
      */
     public get voip(): WaVoipSocket {
         if (!this.voipSocket) {
-            this.voipSocket = createWaVoipSocket({
+            this.voipSocket = {
                 getCredentials: () => this.getCredentials(),
                 sendNode: (node) => this.deps.lowLevelCoordinator.sendNode(node),
                 query: (node) => this.deps.lowLevelCoordinator.query(node),
@@ -272,7 +272,7 @@ export class WaClient extends EventEmitter {
                     this.deps.signalDeviceSync.queryLidsByPhoneJids(jids),
                 getPrivacyToken: async (jid) =>
                     (await this.stores.privacyToken.getByJid(jid))?.tcToken ?? null
-            })
+            }
         }
         return this.voipSocket
     }

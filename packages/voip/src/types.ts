@@ -46,8 +46,8 @@ export type CallTransition =
     | { type: 'video_state_changed'; off: boolean }
 
 export interface SrtpKeyingMaterial {
-    masterKey: Buffer
-    masterSalt: Buffer
+    masterKey: Uint8Array
+    masterSalt: Uint8Array
 }
 
 export enum PayloadType {
@@ -77,8 +77,8 @@ export interface RelayEndpoint {
     port: number
     token: string
     authToken?: string
-    rawAuthToken?: Buffer
-    rawToken?: Buffer
+    rawAuthToken?: Uint8Array
+    rawToken?: Uint8Array
     key: string
     relayId: number
     protocol?: number
@@ -94,7 +94,7 @@ export interface RelayData {
     uuid?: string
     selfPid?: number
     peerPid?: number
-    hbhKey?: Buffer
+    hbhKey?: Uint8Array
 }
 
 export interface CallStateData {
@@ -116,7 +116,7 @@ export interface CallSession {
     groupJid?: string
     isOffline: boolean
     callerPn?: string
-    encryptionKey?: Buffer
+    encryptionKey?: Uint8Array
     relayData?: RelayData
     isInitiator: boolean
 }

@@ -132,13 +132,11 @@ module.exports = [
         }
     },
     {
-        // Ported native VOIP engine: silent best-effort catches and async
-        // signature-preserving wrappers are idiomatic in this media/protocol
-        // code, so relax the two rules that fight that style here.
+        // Ported native VOIP engine: async signature-preserving wrappers are
+        // idiomatic in this media/protocol code, so relax require-await here.
         files: ['packages/voip/src/**/*.ts'],
         rules: {
-            '@typescript-eslint/require-await': 'off',
-            'no-empty': ['error', { allowEmptyCatch: true }]
+            '@typescript-eslint/require-await': 'off'
         }
     },
     {

@@ -1,6 +1,5 @@
 export { WaClient } from '@client/WaClient'
-export { createWaVoipSocket } from '@client/voip'
-export type { WaVoipSignalRepository, WaVoipSocket, WaVoipSocketContext } from '@client/voip'
+export type { WaVoipCredentials, WaVoipEncryptedEnvelope, WaVoipSocket } from '@client/voip'
 export type {
     WaAppStateMessageKey,
     WaAppStateMutationEvent,

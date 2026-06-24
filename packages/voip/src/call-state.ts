@@ -30,7 +30,7 @@ export class CallInfo {
     groupJid?: string
     isOffline: boolean
     callerPn?: string
-    encryptionKey?: Buffer
+    encryptionKey?: Uint8Array
     relayData?: RelayData
     electedRelayIdx?: number
 

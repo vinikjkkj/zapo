@@ -58,4 +58,9 @@ export {
 
 export { createVoipManager, routeCallStanza, routeCallAck, routeCallReceipt } from './bridge.js'
 export type { CreateVoipManagerOptions } from './bridge.js'
-export type { VoipSocket, VoipSignalRepository, VoipAuthState } from './voip-socket.js'
+export type {
+    VoipSocket,
+    VoipCredentials,
+    VoipEncryptedEnvelope,
+    VoipSignalEnvelopeType
+} from './voip-socket.js'

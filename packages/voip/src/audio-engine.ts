@@ -1,5 +1,7 @@
 import * as fs from 'node:fs'
 
+import { concatBytes } from 'zapo-js/util'
+
 import { type AudioEngineConfig, type AudioSender, DEFAULT_AUDIO_CONFIG } from './types.js'
 
 export class AudioEngine {
@@ -155,7 +157,7 @@ export class AudioEngine {
         const ffmpeg = ffmpegModule.default
 
         return new Promise((resolve, reject) => {
-            const chunks: Buffer[] = []
+            const chunks: Uint8Array[] = []
 
             ffmpeg(inputPath)
                 .audioFrequency(this.sampleRate)
@@ -164,7 +166,7 @@ export class AudioEngine {
                 .format('s16le')
                 .on('error', reject)
                 .on('end', () => {
-                    const pcmBuffer = Buffer.concat(chunks)
+                    const pcmBuffer = concatBytes(chunks)
                     const int16Array = new Int16Array(
                         pcmBuffer.buffer,
                         pcmBuffer.byteOffset,
@@ -173,7 +175,7 @@ export class AudioEngine {
                     resolve(int16Array)
                 })
                 .pipe()
-                .on('data', (chunk: Buffer) => chunks.push(chunk))
+                .on('data', (chunk: Uint8Array) => chunks.push(chunk))
         })
     }
 
@@ -235,7 +237,9 @@ export class AudioEngine {
             if (this.audioSender) {
                 try {
                     this.audioSender.sendCapturedAudio(this.silenceChunkBuffer)
-                } catch {}
+                } catch {
+                    /* best-effort: drop the frame if the audio sender is gone */
+                }
             }
         }, this.intervalMs)
     }
@@ -269,7 +273,7 @@ export class AudioEngine {
                     console.log(`[AudioEngine] Starting capture (${duration}s audio loaded)`)
                 } else {
                     console.log(
-                        '[AudioEngine] Starting capture (sending silence — no audio loaded)'
+                        '[AudioEngine] Starting capture (sending silence - no audio loaded)'
                     )
                 }
             }
@@ -284,7 +288,9 @@ export class AudioEngine {
             if (this.audioSender) {
                 try {
                     this.audioSender.sendCapturedAudio(chunk)
-                } catch {}
+                } catch {
+                    /* best-effort: drop the frame if the audio sender is gone */
+                }
             }
 
             if (this.debug && frameCount % 500 === 0) {
@@ -374,7 +380,7 @@ export class AudioEngine {
                 this.extSkipCount++
                 if (this.debug || this.extSkipCount <= 5) {
                     console.log(
-                        `[AudioEngine] Live buffer overflow (${available} samples) — skipped ${skipped} samples to target (${this.extTargetBuffer})`
+                        `[AudioEngine] Live buffer overflow (${available} samples) - skipped ${skipped} samples to target (${this.extTargetBuffer})`
                     )
                 }
             }
@@ -390,7 +396,7 @@ export class AudioEngine {
                 if (!this.externalMode && !this.audioFinished) {
                     this.audioFinished = true
                     if (this.debug) {
-                        console.log('[AudioEngine] Audio playback finished — sending silence')
+                        console.log('[AudioEngine] Audio playback finished - sending silence')
                     }
                     if (this.onAudioFinished) {
                         const cb = this.onAudioFinished

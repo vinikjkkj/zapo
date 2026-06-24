@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 
 import wrtc from '@roamhq/wrtc'
+import { bytesToHex, TEXT_ENCODER, toBytesView } from 'zapo-js/util'
 
 import {
     buildAllocateForRelay,
@@ -39,8 +40,8 @@ interface RelayInfo {
     port: number
     token: string
     authToken?: string
-    rawAuthToken?: Buffer
-    rawToken?: Buffer
+    rawAuthToken?: Uint8Array
+    rawToken?: Uint8Array
     key: string
     relayId: number
     name?: string
@@ -126,7 +127,6 @@ export class NodeSctpRelayManager extends EventEmitter {
         const icePwd = relayInfo.key
         modified = modified.replace(/a=ice-ufrag:[^\r\n]+/g, `a=ice-ufrag:${iceUfrag}`)
         modified = modified.replace(/a=ice-pwd:[^\r\n]+/g, `a=ice-pwd:${icePwd}`)
-
         modified = modified.replace(
             /a=fingerprint:[^\r\n]+/g,
             `a=fingerprint:${CONFIG.FIXED_FINGERPRINT}`
@@ -213,7 +213,9 @@ export class NodeSctpRelayManager extends EventEmitter {
                                 }
                             })
                         }
-                    } catch {}
+                    } catch {
+                        /* best-effort diagnostics */
+                    }
                 }
             }
 
@@ -246,14 +248,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                 incomingChannel.binaryType = 'arraybuffer'
 
                 incomingChannel.onmessage = (ev: MessageEvent) => {
-                    let buffer: Buffer
-                    if (ev.data instanceof ArrayBuffer) {
-                        buffer = Buffer.from(ev.data)
-                    } else if (Buffer.isBuffer(ev.data)) {
-                        buffer = ev.data
-                    } else {
-                        buffer = Buffer.from(ev.data)
-                    }
+                    const buffer = toBytesView(ev.data)
                     console.log(
                         ` [SCTP] Data from INCOMING channel (${buffer.length}B): ${classifyPacket(buffer)}`
                     )
@@ -287,9 +282,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                 }
 
                 this.sendStunAllocateOnOpen(conn, relayInfo)
-
                 this.startKeepalive(connectionId, conn)
-
                 this.drainBuffer(connectionId)
                 this.emit('relay:connected', { ip: relayInfo.ip, port: relayInfo.port })
             }
@@ -300,14 +293,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             }
 
             channel.onmessage = (event: MessageEvent) => {
-                let buffer: Buffer
-                if (event.data instanceof ArrayBuffer) {
-                    buffer = Buffer.from(event.data)
-                } else if (Buffer.isBuffer(event.data)) {
-                    buffer = event.data
-                } else {
-                    buffer = Buffer.from(event.data)
-                }
+                const buffer = toBytesView(event.data)
                 if (conn.stats.receivedPackets === 0) {
                     console.log(
                         ` [SCTP] *** FIRST MESSAGE on DC from ${connectionId}: ${buffer.length}B type=${typeof event.data} ***`
@@ -367,21 +353,27 @@ export class NodeSctpRelayManager extends EventEmitter {
         if (conn.channel)
             try {
                 conn.channel.close()
-            } catch {}
+            } catch {
+                /* already closing */
+            }
         for (const ch of conn.incomingChannels) {
             try {
                 ch.close()
-            } catch {}
+            } catch {
+                /* already closing */
+            }
         }
         if (conn.peerConnection)
             try {
                 conn.peerConnection.close()
-            } catch {}
+            } catch {
+                /* already closing */
+            }
 
         this.connections.delete(conn.id)
     }
 
-    private bufferToArrayBuffer(buf: Buffer): ArrayBuffer {
+    private bufferToArrayBuffer(buf: Uint8Array): ArrayBuffer {
         return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
     }
 
@@ -399,12 +391,12 @@ export class NodeSctpRelayManager extends EventEmitter {
 
         const remoteUfrag = relayInfo.authToken || relayInfo.token
         if (!remoteUfrag) {
-            console.log(` [STUN] Registration — skipped, no ufrag: ${connectionId}`)
+            console.log(` [STUN] Registration - skipped, no ufrag: ${connectionId}`)
             return
         }
 
         const localUfrag = conn.localUfrag
-        const hmacKey = Buffer.from(relayInfo.key)
+        const hmacKey = TEXT_ENCODER.encode(relayInfo.key)
 
         const sendRegistration = (label: string) => {
             if (
@@ -419,14 +411,14 @@ export class NodeSctpRelayManager extends EventEmitter {
             const peerSsrc = this.subscriptionSsrc
             const ssrc = peerSsrc || selfSsrc
             if (!ssrc) {
-                console.log(` [STUN] Registration(${label}) — skipped, no SSRC: ${connectionId}`)
+                console.log(` [STUN] Registration(${label}) - skipped, no SSRC: ${connectionId}`)
                 return
             }
 
             const subs = buildSenderSubscriptions(ssrc)
 
             if (localUfrag) {
-                const username = Buffer.from(`${remoteUfrag}:${localUfrag}`)
+                const username = TEXT_ENCODER.encode(`${remoteUfrag}:${localUfrag}`)
                 const v1 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
                 this.sendToChannel(conn, this.bufferToArrayBuffer(v1))
                 console.log(
@@ -435,7 +427,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             }
 
             if (relayInfo.token && relayInfo.token !== remoteUfrag && localUfrag) {
-                const username = Buffer.from(`${relayInfo.token}:${localUfrag}`)
+                const username = TEXT_ENCODER.encode(`${relayInfo.token}:${localUfrag}`)
                 const v2 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
                 this.sendToChannel(conn, this.bufferToArrayBuffer(v2))
                 console.log(` [STUN] v2 token ufrag (${label}): ${v2.length}B → ${connectionId}`)
@@ -508,7 +500,9 @@ export class NodeSctpRelayManager extends EventEmitter {
                     if (buffered !== undefined) {
                         console.log(` [DIAG]   dc.bufferedAmount=${buffered}`)
                     }
-                } catch {}
+                } catch {
+                    /* best-effort diagnostics */
+                }
             }
         }, CONFIG.KEEPALIVE_INTERVAL_MS)
 
@@ -537,12 +531,16 @@ export class NodeSctpRelayManager extends EventEmitter {
         for (const ch of conn.incomingChannels) {
             try {
                 ch.close()
-            } catch {}
+            } catch {
+                /* already closing */
+            }
         }
         if (conn.peerConnection)
             try {
                 conn.peerConnection.close()
-            } catch {}
+            } catch {
+                /* already closing */
+            }
 
         this.stats.connected = Math.max(0, this.stats.connected - 1)
         this.connections.delete(connectionId)
@@ -586,12 +584,12 @@ export class NodeSctpRelayManager extends EventEmitter {
             this.sendCount++
 
             if (this.sendCount <= 10 || this.sendCount % 100 === 0) {
-                const buf = Buffer.from(data)
+                const buf = toBytesView(data)
                 const firstByte = buf[0] || 0
                 const twoBits = (firstByte & 0xc0) >> 6
                 const pktType = twoBits === 0 ? 'STUN' : twoBits === 2 ? 'RTP/SRTP' : 'OTHER'
                 console.log(
-                    ` [SEND] #${this.sendCount} ${pktType} ${data.byteLength}B → ${conn.id} hex[0:20]: ${buf.subarray(0, 20).toString('hex')}`
+                    ` [SEND] #${this.sendCount} ${pktType} ${data.byteLength}B → ${conn.id} hex[0:20]: ${bytesToHex(buf.subarray(0, 20))}`
                 )
             }
 
@@ -606,7 +604,7 @@ export class NodeSctpRelayManager extends EventEmitter {
     private rtpRecvCount = 0
     private unknownRecvCount = 0
 
-    private handleRelayMessage(data: Buffer, relayInfo: RelayInfo, conn: Connection): void {
+    private handleRelayMessage(data: Uint8Array, relayInfo: RelayInfo, conn: Connection): void {
         conn.stats.receivedPackets++
         conn.stats.receivedBytes += data.length
         this.stats.received++
@@ -614,7 +612,7 @@ export class NodeSctpRelayManager extends EventEmitter {
         const firstByte = data[0]
         const twoBits = (firstByte & 0xc0) >> 6
 
-        const hexPreview = data.subarray(0, Math.min(24, data.length)).toString('hex')
+        const hexPreview = bytesToHex(data.subarray(0, Math.min(24, data.length)))
         const pktType =
             twoBits === 0 ? 'STUN' : twoBits === 2 ? 'RTP/SRTP' : twoBits === 1 ? 'DTLS' : 'UNKNOWN'
 
@@ -647,7 +645,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                     console.log(
                         ` [STUN] === Response from ${conn.id}: ${formatStunResponse(stunInfo)} ===`
                     )
-                    console.log(` [STUN] Full hex: ${data.toString('hex')}`)
+                    console.log(` [STUN] Full hex: ${bytesToHex(data)}`)
                     if (
                         stunInfo.isSuccess &&
                         (stunInfo.method === 'binding' || stunInfo.method === 'allocate')
@@ -669,13 +667,13 @@ export class NodeSctpRelayManager extends EventEmitter {
                     }
                     for (const attr of stunInfo.attributes) {
                         console.log(
-                            ` [STUN] attr: ${attr.typeName} (0x${attr.type.toString(16)}) ${attr.length}B = ${attr.data.subarray(0, Math.min(32, attr.data.length)).toString('hex')}`
+                            ` [STUN] attr: ${attr.typeName} (0x${attr.type.toString(16)}) ${attr.length}B = ${bytesToHex(attr.data.subarray(0, Math.min(32, attr.data.length)))}`
                         )
                     }
                 }
             } else {
                 console.log(
-                    ` [RECV] Unparseable STUN-like: ${data.length}B hex: ${data.toString('hex').substring(0, 80)}`
+                    ` [RECV] Unparseable STUN-like: ${data.length}B hex: ${bytesToHex(data).substring(0, 80)}`
                 )
             }
         }
@@ -684,19 +682,25 @@ export class NodeSctpRelayManager extends EventEmitter {
             this.rtpRecvCount++
             const pt = data[1] & 0x7f
             const seq = data.length >= 4 ? (data[2] << 8) | data[3] : 0
-            const ssrc = data.length >= 12 ? data.readUInt32BE(8) : 0
+            const ssrc =
+                data.length >= 12
+                    ? new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(
+                          8,
+                          false
+                      )
+                    : 0
             console.log(
                 ` [RTP-RECV] #${this.rtpRecvCount} PT=${pt} seq=${seq} ssrc=0x${ssrc.toString(16)} ${data.length}B from ${conn.id}`
             )
             if (this.rtpRecvCount <= 3) {
-                console.log(` [RTP-RECV] Full hex: ${data.toString('hex').substring(0, 160)}`)
+                console.log(` [RTP-RECV] Full hex: ${bytesToHex(data).substring(0, 160)}`)
             }
         }
 
         if (twoBits !== 0 && twoBits !== 2) {
             this.unknownRecvCount++
             console.log(
-                ` [RECV] Unknown type #${this.unknownRecvCount}: 0x${firstByte.toString(16)} ${data.length}B hex: ${data.toString('hex').substring(0, 80)}`
+                ` [RECV] Unknown type #${this.unknownRecvCount}: 0x${firstByte.toString(16)} ${data.length}B hex: ${bytesToHex(data).substring(0, 80)}`
             )
         }
 
@@ -707,7 +711,7 @@ export class NodeSctpRelayManager extends EventEmitter {
         })
     }
 
-    private isPong(data: Buffer): boolean {
+    private isPong(data: Uint8Array): boolean {
         if (data.length < 2) return false
         const msgType = (data[0] << 8) | data[1]
         return msgType === 0x0802
@@ -719,8 +723,8 @@ export class NodeSctpRelayManager extends EventEmitter {
             port: number
             token: string
             authToken?: string
-            rawAuthToken?: Buffer
-            rawToken?: Buffer
+            rawAuthToken?: Uint8Array
+            rawToken?: Uint8Array
             key: string
             relayId: number
             name?: string
@@ -856,16 +860,22 @@ export class NodeSctpRelayManager extends EventEmitter {
             if (conn.channel)
                 try {
                     conn.channel.close()
-                } catch {}
+                } catch {
+                    /* already closing */
+                }
             for (const ch of conn.incomingChannels) {
                 try {
                     ch.close()
-                } catch {}
+                } catch {
+                    /* already closing */
+                }
             }
             if (conn.peerConnection)
                 try {
                     conn.peerConnection.close()
-                } catch {}
+                } catch {
+                    /* already closing */
+                }
         }
 
         this.connections.clear()

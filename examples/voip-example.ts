@@ -16,6 +16,9 @@
 import { mkdir, rm } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
+import { createSqliteStore } from '@zapo-js/store-sqlite'
+import qrcode from 'qrcode-terminal'
+
 import {
     createVoipManager,
     type NativeCallManager,
@@ -23,9 +26,6 @@ import {
     routeCallReceipt,
     routeCallStanza
 } from '@zapo-js/voip'
-import qrcode from 'qrcode-terminal'
-
-import { createSqliteStore } from '@zapo-js/store-sqlite'
 
 import { createPinoLogger, createStore, WaClient } from '../src'
 import type { BinaryNode } from '../src/transport'
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
         console.log(`[info] auth reset: ${authPath}`)
     }
 
-    const logger = await createPinoLogger({ level: 'info', pretty: true })
+    const logger = await createPinoLogger({ level: 'trace', pretty: true })
     const store = createStore({
         backends: { sqlite: createSqliteStore({ path: authPath, driver: 'auto' }) },
         providers: {

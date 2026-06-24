@@ -2,9 +2,9 @@
 
 Native WhatsApp **VOIP / calling** engine for [`zapo-js`](https://github.com/vinikjkkj/zapo).
 
-It ports the full call media stack — the **MLow** voice codec (WhatsApp's Opus
+It ports the full call media stack - the **MLow** voice codec (WhatsApp's Opus
 variant, loaded from a bundled native library via [`koffi`](https://koffi.dev)),
-RTP/SRTP packetization, STUN, and the WebRTC/SCTP relay transport — plus the
+RTP/SRTP packetization, STUN, and the WebRTC/SCTP relay transport - plus the
 `<call>` signaling (offer / accept / preaccept / transport / relaylatency /
 mute / terminate). The media stack is library-agnostic; the only WhatsApp-library
 specific part is a small **`VoipSocket`** adapter you wire from your client.
@@ -32,14 +32,14 @@ if needed.
 
 ## The `VoipSocket` seam
 
-The engine needs a handful of primitives from your WhatsApp client — sending
+The engine needs a handful of primitives from your WhatsApp client - sending
 stanzas, Signal encrypt/decrypt of the per-call key, USync device discovery and
 participant-node fan-out. The media stack is otherwise library-agnostic, so this
 adapter is the only WhatsApp-library specific part.
 
 ### With `zapo-js` (recommended)
 
-`WaClient` exposes a ready-made adapter at **`client.voip`** — just hand it to
+`WaClient` exposes a ready-made adapter at **`client.voip`** - just hand it to
 `createVoipManager`, no manual wiring:
 
 ```ts
@@ -71,7 +71,7 @@ const socket: VoipSocket = {
 }
 ```
 
-## Outgoing call — pre-recorded audio
+## Outgoing call - pre-recorded audio
 
 ```ts
 import { createVoipManager, EndCallReason } from '@zapo-js/voip'
@@ -89,7 +89,7 @@ const callId = await manager.startCall({ peerJid: '5511999999999@s.whatsapp.net'
 await manager.endCall(EndCallReason.UserEnded)
 ```
 
-## Outgoing call — live audio
+## Outgoing call - live audio
 
 ```ts
 const manager = createVoipManager(client.voip)
