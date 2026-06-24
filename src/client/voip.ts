@@ -159,9 +159,7 @@ export function createWaVoipSocket(ctx: WaVoipSocketContext): WaVoipSocket {
         },
         async createParticipantNodes(devices, message, attrs) {
             await assertSessions(devices)
-            const plaintext = await writeRandomPadMax16(
-                proto.Message.encode(message).finish()
-            )
+            const plaintext = await writeRandomPadMax16(proto.Message.encode(message).finish())
             const requests = devices.map((jid) => ({
                 address: parseSignalAddressFromJid(jid),
                 plaintext

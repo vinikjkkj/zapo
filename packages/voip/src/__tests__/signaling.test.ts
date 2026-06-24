@@ -28,7 +28,7 @@ test('buildTerminateStanza targets a device-less JID with a terminate payload', 
 
 test('buildRejectStanza emits a reject payload', () => {
     const node = buildRejectStanza('12345@lid', 'CALLID', '12345@lid')
-    const inner = (node.content as Array<{ tag: string }>)[0]
+    const inner = (node.content as ReadonlyArray<{ tag: string }>)[0]
     assert.equal(inner.tag, 'reject')
 })
 

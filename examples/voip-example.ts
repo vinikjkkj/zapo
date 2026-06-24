@@ -16,16 +16,16 @@
 import { mkdir, rm } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
-import { createSqliteStore } from '@zapo-js/store-sqlite'
 import {
     createVoipManager,
+    type NativeCallManager,
     routeCallAck,
     routeCallReceipt,
-    routeCallStanza,
-    type NativeCallManager
+    routeCallStanza
 } from '@zapo-js/voip'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 import qrcode from 'qrcode-terminal'
+
+import { createSqliteStore } from '@zapo-js/store-sqlite'
 
 import { createPinoLogger, createStore, WaClient } from '../src'
 import type { BinaryNode } from '../src/transport'

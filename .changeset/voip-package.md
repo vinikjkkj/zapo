@@ -1,5 +1,5 @@
 ---
-"@zapo-js/voip": major
+'@zapo-js/voip': major
 ---
 
 Add `@zapo-js/voip`: a native WhatsApp VOIP (calling) engine. Ships the MLow

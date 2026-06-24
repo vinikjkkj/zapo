@@ -56,7 +56,7 @@ test('keys.get resolves tctoken privacy tokens keyed by jid', async () => {
 })
 
 test('signalRepository.decryptMessage normalizes ciphertext to Uint8Array', async () => {
-    let seen: Uint8Array | null = null
+    let seen: unknown = null
     const socket = createWaVoipSocket(
         buildContext({
             decryptMessage: async (_address, envelope) => {
@@ -76,16 +76,16 @@ test('signalRepository.decryptMessage normalizes ciphertext to Uint8Array', asyn
 
 test('lidMapping.getLIDForPN returns the resolved LID', async () => {
     const socket = createWaVoipSocket(buildContext())
-    assert.equal(await socket.signalRepository.lidMapping.getLIDForPN('111@s.whatsapp.net'), '333@lid')
+    assert.equal(
+        await socket.signalRepository.lidMapping.getLIDForPN('111@s.whatsapp.net'),
+        '333@lid'
+    )
 })
 
 test('getUSyncDevices flattens device lists into { jid } entries', async () => {
     const socket = createWaVoipSocket(buildContext())
     const devices = await socket.getUSyncDevices(['111@s.whatsapp.net'])
-    assert.deepEqual(devices, [
-        { jid: '111@s.whatsapp.net/0' },
-        { jid: '111@s.whatsapp.net/1' }
-    ])
+    assert.deepEqual(devices, [{ jid: '111@s.whatsapp.net/0' }, { jid: '111@s.whatsapp.net/1' }])
 })
 
 test('createParticipantNodes builds encrypted <to>/<enc> nodes and flags pkmsg', async () => {
