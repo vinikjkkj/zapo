@@ -13,6 +13,7 @@ export class SrtpContext {
     private authTagLen: number
 
     private readonly ivBuffer: Uint8Array = new Uint8Array(16)
+    private readonly rocBuffer: Uint8Array = new Uint8Array(4)
 
     constructor(keying: SrtpKeyingMaterial, authTagLen?: number) {
         this.authTagLen = authTagLen ?? SRTP_AUTH_TAG_LEN
@@ -123,12 +124,11 @@ export class SrtpContext {
         const hmac = createHmac('sha1', this.authKey)
         hmac.update(data)
 
-        const rocBytes = new Uint8Array(4)
-        rocBytes[0] = (roc >>> 24) & 0xff
-        rocBytes[1] = (roc >>> 16) & 0xff
-        rocBytes[2] = (roc >>> 8) & 0xff
-        rocBytes[3] = roc & 0xff
-        hmac.update(rocBytes)
+        this.rocBuffer[0] = (roc >>> 24) & 0xff
+        this.rocBuffer[1] = (roc >>> 16) & 0xff
+        this.rocBuffer[2] = (roc >>> 8) & 0xff
+        this.rocBuffer[3] = roc & 0xff
+        hmac.update(this.rocBuffer)
 
         const result = hmac.digest()
         return result.subarray(0, tagLen)
