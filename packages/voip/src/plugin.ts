@@ -1,0 +1,38 @@
+import { defineWaClientPlugin } from 'zapo-js'
+
+import { WaVoipCoordinator, type WaVoipCoordinatorOptions } from './coordinator.js'
+
+export interface VoipPluginOptions extends WaVoipCoordinatorOptions {}
+
+/**
+ * WaClient plugin that exposes {@link WaVoipCoordinator} at `client.voip`.
+ *
+ * @example
+ * ```ts
+ * import { WaClient } from 'zapo-js'
+ * import { voipPlugin } from '@zapo-js/voip'
+ * import '@zapo-js/voip/type-extensions'
+ *
+ * const client = new WaClient({
+ *   store,
+ *   sessionId: 'main',
+ *   plugins: [voipPlugin()]
+ * })
+ *
+ * client.on('voip_call_incoming', (call) => {
+ *   console.log('incoming', call.callId)
+ * })
+ * ```
+ */
+export function voipPlugin(options: VoipPluginOptions = {}) {
+    return defineWaClientPlugin<'voip', WaVoipCoordinator>({
+        id: '@zapo-js/voip',
+        exposeAs: 'voip',
+        setup(ctx) {
+            return new WaVoipCoordinator(ctx, options)
+        },
+        dispose(coordinator) {
+            coordinator.dispose()
+        }
+    })
+}

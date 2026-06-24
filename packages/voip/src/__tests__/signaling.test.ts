@@ -21,14 +21,14 @@ test('buildTerminateStanza targets a device-less JID with a terminate payload', 
     const node = buildTerminateStanza('12345:7@s.whatsapp.net', 'CALLID', '12345@s.whatsapp.net')
     assert.equal(node.tag, 'call')
     assert.equal(node.attrs.to, '12345@s.whatsapp.net')
-    const inner = (node.content as Array<{ tag: string; attrs: Record<string, string> }>)[0]
+    const inner = (node.content as unknown as Array<{ tag: string; attrs: Record<string, string> }>)[0]
     assert.equal(inner.tag, 'terminate')
     assert.equal(inner.attrs['call-id'], 'CALLID')
 })
 
 test('buildRejectStanza emits a reject payload', () => {
     const node = buildRejectStanza('12345@lid', 'CALLID', '12345@lid')
-    const inner = (node.content as Array<{ tag: string }>)[0]
+    const inner = (node.content as unknown as Array<{ tag: string }>)[0]
     assert.equal(inner.tag, 'reject')
 })
 

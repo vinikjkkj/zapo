@@ -1,103 +1,161 @@
 # @zapo-js/voip
 
-Native WhatsApp **VOIP / calling** engine for [`zapo-js`](https://github.com/vinikjkkj/zapo).
+WhatsApp **VOIP / calling** plugin for [`zapo-js`](https://github.com/vinikjkkj/zapo).
 
-It ports the full call media stack — the **MLow** voice codec (WhatsApp's Opus
-variant, loaded from a bundled native library via [`koffi`](https://koffi.dev)),
-RTP/SRTP packetization, STUN, and the WebRTC/SCTP relay transport — plus the
-`<call>` signaling (offer / accept / preaccept / transport / relaylatency /
-mute / terminate). The media stack is library-agnostic; the only WhatsApp-library
-specific part is a small **`VoipSocket`** adapter you wire from your client.
+Registers on `WaClient` via the plugin system and exposes everything at **`client.voip`**: MLow voice codec (WhatsApp's Opus variant through [`libmlow-wasm`](https://www.npmjs.com/package/libmlow-wasm)), RTP/SRTP, STUN, WebRTC/SCTP relay transport, and `<call>` signaling (offer / accept / preaccept / transport / relaylatency / mute / terminate).
 
-> Calls flow over WhatsApp's relay servers using the MLow codec. This package
-> handles **audio** calls with either **pre-recorded** files or **live** PCM
-> streaming. Video is offered but not encoded.
+Incoming `<call>`, call-class `<ack>`, and call `<receipt>` stanzas are handled automatically (prepend handlers return `true` so the core client does not double-ack).
+
+> Calls flow over WhatsApp relay servers using the MLow codec. This package handles **audio** calls with **pre-recorded** files or **live** 16 kHz mono PCM. Video is offered in signaling but not encoded.
 
 ## Install
 
 ```bash
-npm install @zapo-js/voip
+npm install zapo-js @zapo-js/voip libmlow-wasm
 ```
 
-`koffi` is a required peer dependency (loads the native MLow codec). `@roamhq/wrtc`
-is an optional peer dependency required for the relay transport (real calls):
+Peer dependencies:
+
+| Package | Required | Purpose |
+| --- | --- | --- |
+| `zapo-js` | yes | `WaClient` and plugin host |
+| `libmlow-wasm` | yes | MLow encode/decode (WASM, no native build step) |
+| `@roamhq/wrtc` | for real calls | SCTP relay transport |
+| `fluent-ffmpeg` | optional | Decode pre-recorded audio files (`loadAudio`) |
 
 ```bash
-npm install koffi @roamhq/wrtc
+npm install @roamhq/wrtc fluent-ffmpeg
 ```
 
-Prebuilt MLow binaries for macOS (universal), Linux (x64/arm64) and Windows ship
-inside the package's `native/` directory. Override the path with `MLOW_LIB_PATH`
-if needed.
+Node **20.9+**. `libmlow-wasm` is ESM-only; the codec loads it via dynamic `import()`.
 
-## The `VoipSocket` seam
+## Quick start
 
-The engine needs a handful of primitives from your WhatsApp client — sending
-stanzas, Signal encrypt/decrypt of the per-call key, USync device discovery and
-participant-node fan-out. `zapo-js` keeps these on internal coordinators, so you
-adapt them into a `VoipSocket` (see `src/voip-socket.ts` for the full contract):
+Import type extensions once so `client.voip` and VOIP events type-check:
 
 ```ts
-import type { VoipSocket } from "@zapo-js/voip";
+import { WaClient } from 'zapo-js'
+import { voipPlugin, EndCallReason } from '@zapo-js/voip'
+import '@zapo-js/voip/type-extensions'
 
-const socket: VoipSocket = {
-  authState,                 // { creds: { me, account }, keys }
-  user,                      // { lid, id }
-  sendNode,                  // (node) => Promise<void>
-  query,                     // (node) => Promise<BinaryNode>
-  signalRepository,          // { encryptMessage, decryptMessage, lidMapping }
-  assertSessions,            // (jids, force?) => Promise<void>
-  getUSyncDevices,           // (jids, ...) => Promise<Device[]>
-  createParticipantNodes,    // (devices, message, attrs) => { nodes, shouldIncludeDeviceIdentity }
-};
+const client = new WaClient({
+    store,
+    sessionId: 'main',
+    plugins: [voipPlugin({ debug: true })]
+})
+
+await client.connect()
+
+client.on('voip_call_incoming', async (call) => {
+    await client.voip.acceptCall(call.callId)
+})
+
+client.on('voip_call_state', (call) => {
+    console.log(call.callId, call.stateData.state)
+})
+
+client.on('voip_call_audio', (pcm) => {
+    // Float32Array @ 16 kHz mono from the peer
+})
 ```
 
-## Outgoing call — pre-recorded audio
+## Outgoing call – pre-recorded audio
+
+`loadAudio` uses `fluent-ffmpeg` when installed to decode the file to 16 kHz mono PCM before encoding.
 
 ```ts
-import { createVoipManager, EndCallReason } from "@zapo-js/voip";
+await client.voip.loadAudio('./hello.mp3')
 
-const manager = createVoipManager(socket, { debug: true });
-await manager.loadAudio("./hello.mp3");
+const callId = await client.voip.startCall({
+    peerJid: '5511999999999@s.whatsapp.net'
+})
 
-manager.on("call:state", (call) => console.log(call.stateData.state));
-manager.on("call:audio", (pcm) => {/* received audio (Float32Array @16kHz) */});
-
-const callId = await manager.startCall({ peerJid: "5511999999999@s.whatsapp.net" });
-// ...later
-await manager.endCall(EndCallReason.UserEnded);
+// ... later
+await client.voip.endCall(EndCallReason.UserEnded)
 ```
 
-## Outgoing call — live audio
+## Outgoing call – live audio
 
 ```ts
-const manager = createVoipManager(socket);
-manager.setExternalAudioMode(true);           // live input mode
-const callId = await manager.startCall({ peerJid });
+client.voip.setExternalAudioMode(true)
 
-// feed live 16 kHz mono PCM as it arrives
-manager.feedLiveAudio(pcmChunk);              // Float32Array
+await client.voip.startCall({ peerJid: '5511999999999@s.whatsapp.net' })
 
-manager.on("call:audio", (pcm) => {/* peer audio */});
+// feed 16 kHz mono Float32 chunks as they arrive
+client.voip.feedLiveAudio(pcmChunk)
 ```
 
-## Routing incoming call stanzas
+## Incoming calls
 
-Feed raw `<call>` / call-`ack` / call-`receipt` nodes from your client to the
-provided routers. They ACK the stanza and dispatch to the manager:
+The plugin registers incoming handlers; you only need to react to events:
 
 ```ts
-import { routeCallStanza, routeCallAck, routeCallReceipt } from "@zapo-js/voip";
+client.on('voip_call_incoming', (call) => {
+    console.log('ringing from', call.peerJid, call.callId)
+})
 
-// raw "call" stanza  → offer/accept/transport/... handlers
-await routeCallStanza(manager, socket, node);
-// class="call" ack   → relay allocation
-await routeCallAck(manager, node);
-// call-related receipt → ack back
-await routeCallReceipt(socket, node);
-
-manager.on("call:incoming", (call) => manager.acceptCall(call.callId));
+// accept / reject / end
+await client.voip.acceptCall(callId)
+await client.voip.rejectCall(callId)
+await client.voip.endCall()
 ```
+
+`getCurrentCall()` returns the active `CallInfo`, or `null`.
+
+## Events
+
+Emitted on `WaClient` (after `import '@zapo-js/voip/type-extensions'`):
+
+| Event | Payload | When |
+| --- | --- | --- |
+| `voip_call_incoming` | `CallInfo` | Remote offer received |
+| `voip_call_state` | `CallInfo` | State transition |
+| `voip_call_ended` | `CallInfo` | Call finished |
+| `voip_call_audio` | `Float32Array` | Decoded peer audio (16 kHz) |
+| `voip_call_error` | `Error` | Engine error |
+| `voip_signaling_send` | `BinaryNode` | Outbound signaling stanza |
+
+You can also use `client.voip.on('call:state', ...)` etc. on the underlying `EventEmitter` (`CallManagerEvents`).
+
+## `client.voip` API
+
+| Method | Description |
+| --- | --- |
+| `startCall({ peerJid, isVideo? })` | Place an outgoing call; returns `callId` |
+| `acceptCall(callId)` | Accept an incoming call |
+| `rejectCall(callId, reason?)` | Reject |
+| `endCall(reason?)` | Hang up |
+| `loadAudio(path)` | Load a file for outbound audio |
+| `setExternalAudioMode(enabled)` | Switch to live PCM input |
+| `feedLiveAudio(Float32Array)` | Push a capture chunk (external mode) |
+| `setMute(muted)` | Mute/unmute local capture |
+| `getCurrentCall()` | Active call or `null` |
+| `on` / `off` / `once` | Manager-level events |
+
+## Codec
+
+MLow runs through **`libmlow-wasm`** (≥ 0.1.1): 16 kHz, mono, 960-sample frames (60 ms), `useSmpl: true`, DTX enabled. No `koffi`, no bundled native libraries.
+
+## Advanced / low-level API
+
+For custom wiring without `WaClient`, the engine and routers are still exported:
+
+```ts
+import {
+    createVoipManager,
+    createWaVoipSocket,
+    routeCallStanza,
+    routeCallAck,
+    routeCallReceipt,
+    type VoipSocket
+} from '@zapo-js/voip'
+```
+
+- **`createWaVoipSocket(ctx)`** – builds a `VoipSocket` from `WaClientPluginContext` deps (used internally by the plugin).
+- **`createVoipManager(socket)`** – standalone `NativeCallManager` when you route stanzas yourself.
+- **`routeCallStanza` / `routeCallAck` / `routeCallReceipt`** – ACK + dispatch helpers for manual integration.
+
+See `src/voip-socket.ts` for the `VoipSocket` contract.
 
 ## License
 

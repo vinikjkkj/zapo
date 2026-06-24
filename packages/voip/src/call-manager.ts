@@ -133,7 +133,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             )
         }
 
-        this.opusCodec = new MLowCodec()
+        this.opusCodec = await MLowCodec.create()
 
         if (!this.audioEngine.hasAudio()) {
             this.logger.debug('[CallManager] No audio loaded — use "audio <path>" to load')
@@ -313,7 +313,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         const peerSsrc = generateSecureSsrc(callId, peerJid)
         this.peerSsrcs = [peerSsrc]
 
-        this.opusCodec = new MLowCodec()
+        this.opusCodec = await MLowCodec.create()
 
         if (!this.audioEngine.hasAudio()) {
             this.logger.debug('[CallManager] No audio loaded — use "audio <path>" to load')
@@ -896,7 +896,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                     )
                 }
 
-                this.sendOpusFrame(opusFrame, false)
+                this.sendOpusFrame(Buffer.from(opusFrame), false)
                 this.realAudioSendCount++
 
                 if (this.realAudioSendCount % 500 === 0) {

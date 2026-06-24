@@ -3,8 +3,8 @@
     "compilerOptions": {
         "rootDir": "src",
         "outDir": "dist/esm",
-        "module": "ES2020",
-        "moduleResolution": "Node",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
         "noEmit": false,
         "lib": ["ES2020", "DOM"],
         "types": ["node"],

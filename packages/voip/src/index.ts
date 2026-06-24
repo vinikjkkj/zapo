@@ -1,6 +1,14 @@
 export { NativeCallManager } from './call-manager.js'
 export type { NativeCallManagerConfig } from './call-manager.js'
 
+export { WaVoipCoordinator } from './coordinator.js'
+export type { WaVoipCoordinatorOptions } from './coordinator.js'
+
+export { voipPlugin } from './plugin.js'
+export type { VoipPluginOptions } from './plugin.js'
+
+export { createWaVoipSocket } from './socket.js'
+
 export { CallInfo, InvalidTransition } from './call-state.js'
 
 export { RtpHeader, RtpPacket, RtpSession } from './rtp.js'
@@ -11,6 +19,7 @@ export { derivePerJidSrtpKey, generateCallKey } from './encryption.js'
 export { AudioEngine } from './audio-engine.js'
 
 export { MLowCodec } from './mlow-codec.js'
+export type { MLowCodecOptions } from './mlow-codec.js'
 
 export {
     generateCallId,

@@ -1,5 +1,7 @@
 import type { BinaryNode } from 'zapo-js/transport'
 
+import type { CallInfo } from './call-state.js'
+
 export enum CallState {
     Initiating = 'initiating',
     Ringing = 'ringing',
@@ -140,7 +142,9 @@ export interface CallOfferOptions {
 }
 
 export interface CallManagerEvents {
-    'call:state': (session: CallSession) => void
+    'call:state': (call: CallInfo) => void
+    'call:incoming': (call: CallInfo) => void
+    'call:ended': (call: CallInfo) => void
     'call:audio': (data: Float32Array) => void
     'signaling:send': (node: BinaryNode) => void
     'call:error': (error: Error) => void
