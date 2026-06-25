@@ -2,9 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { APP_STATE_EMPTY_LT_HASH } from '@appstate/constants'
+import { WaAppStateCrypto } from '@appstate/crypto/WaAppStateCrypto'
 import { WaAppStateSyncClient } from '@appstate/sync/WaAppStateSyncClient'
 import { keyEpoch } from '@appstate/utils'
-import { createNoopLogger } from '@infra/log/types'
+import { createNoopLogger, type Logger } from '@infra/log/types'
 import { type Proto, proto } from '@proto'
 import {
     WA_APP_STATE_COLLECTION_STATES,
@@ -512,4 +513,120 @@ test('mobile primary uploads patch from fresh state without requesting a snapsho
     assert.deepEqual(returnSnapshotByCall, ['false'])
     assert.deepEqual(patchByCall, [true])
     assert.equal(result.collections[0].state, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+})
+
+test('appstate sync tolerates a poisoned snapshot MAC and persists partial state', async () => {
+    const store = new WaAppStateMemoryStore()
+    const key = {
+        keyId: new Uint8Array([0, 0, 0, 0, 0, 9]),
+        keyData: new Uint8Array(32).fill(11),
+        timestamp: 9
+    }
+    await store.upsertSyncKeys([key])
+
+    // Build a real, fully decryptable snapshot, then corrupt only its aggregate
+    // MAC - exactly the server-side LT-hash inconsistency observed in production.
+    const snapshotCrypto = new WaAppStateCrypto()
+    const record = await snapshotCrypto.encryptMutation({
+        operation: proto.SyncdMutation.SyncdOperation.SET,
+        keyId: key.keyId,
+        keyData: key.keyData,
+        index: JSON.stringify(['mute', '120363078720039631@g.us']),
+        value: { timestamp: 1_000, muteAction: { muted: true } },
+        version: 1
+    })
+    const version = 7
+    const ltHash = await snapshotCrypto.ltHashAdd(APP_STATE_EMPTY_LT_HASH, [record.valueMac])
+    const validMac = await snapshotCrypto.generateSnapshotMac(
+        key.keyData,
+        ltHash,
+        version,
+        WA_APP_STATE_COLLECTIONS.REGULAR_HIGH
+    )
+    const poisonedMac = Uint8Array.from(validMac)
+    poisonedMac[0] ^= 0xff
+
+    const snapshotBytes = proto.SyncdSnapshot.encode({
+        version: { version },
+        records: [
+            {
+                index: { blob: record.indexMac },
+                value: { blob: record.valueBlob },
+                keyId: { id: key.keyId }
+            }
+        ],
+        keyId: { id: key.keyId },
+        mac: poisonedMac
+    }).finish()
+
+    const snapshotRef = proto.ExternalBlobReference.encode({
+        directPath: '/snapshot/blob',
+        mediaKey: new Uint8Array(32).fill(1),
+        fileSha256: new Uint8Array(32).fill(2),
+        fileEncSha256: new Uint8Array(32).fill(3)
+    }).finish()
+
+    const query = async (): Promise<BinaryNode> => ({
+        tag: WA_NODE_TAGS.IQ,
+        attrs: { type: WA_IQ_TYPES.RESULT },
+        content: [
+            {
+                tag: WA_NODE_TAGS.SYNC,
+                attrs: {},
+                content: [
+                    {
+                        tag: WA_NODE_TAGS.COLLECTION,
+                        attrs: {
+                            name: WA_APP_STATE_COLLECTIONS.REGULAR_HIGH,
+                            version: String(version)
+                        },
+                        content: [{ tag: WA_NODE_TAGS.SNAPSHOT, attrs: {}, content: snapshotRef }]
+                    }
+                ]
+            }
+        ]
+    })
+
+    let warnCount = 0
+    const makeLogger = (): Logger => ({
+        level: 'trace',
+        trace: () => undefined,
+        debug: () => undefined,
+        info: () => undefined,
+        warn: () => {
+            warnCount += 1
+        },
+        error: () => undefined,
+        child: () => makeLogger()
+    })
+
+    const client = new WaAppStateSyncClient({
+        serverClock: { nowMs: () => Date.now(), nowSeconds: () => Math.floor(Date.now() / 1000) },
+        logger: makeLogger(),
+        query,
+        store
+    })
+
+    let downloadCalls = 0
+    const result = await client.sync({
+        collections: [WA_APP_STATE_COLLECTIONS.REGULAR_HIGH],
+        downloadExternalBlob: async (_collection, kind) => {
+            downloadCalls += 1
+            assert.equal(kind, 'snapshot')
+            return snapshotBytes
+        }
+    })
+
+    // Does not throw, does not loop into ERROR_RETRY: one download, success state.
+    assert.equal(downloadCalls, 1)
+    assert.equal(result.collections.length, 1)
+    assert.equal(result.collections[0].state, WA_APP_STATE_COLLECTION_STATES.SUCCESS)
+    assert.ok(warnCount >= 1)
+
+    // Partial state is persisted so the collection leaves version 0 and later
+    // patches apply incrementally instead of re-requesting the same snapshot.
+    const persisted = await store.getCollectionState(WA_APP_STATE_COLLECTIONS.REGULAR_HIGH)
+    assert.equal(persisted.version, version)
+    assert.equal(persisted.initialized, true)
+    assert.equal(persisted.indexValueMap.size, 1)
 })

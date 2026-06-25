@@ -1083,7 +1083,15 @@ export class WaAppStateSyncClient {
                 collection
             )
             if (!uint8TimingSafeEqual(expectedSnapshotMac, snapshot.mac as Uint8Array)) {
-                throw new Error(`snapshot MAC mismatch for ${collection}`)
+                // Poisoned server-side snapshot (MAC unverifiable by any client):
+                // keep partial state instead of throwing, which would loop refetch forever.
+                this.logger.warn(
+                    'snapshot LT-hash verification failed, continuing with partial state',
+                    {
+                        collection,
+                        version
+                    }
+                )
             }
         }
         this.setCollectionState(collection, version, ltHash, indexValueMap)
