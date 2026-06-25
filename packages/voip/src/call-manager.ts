@@ -82,10 +82,15 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         this.logger = config.logger ?? createNoopLogger()
         this.debug = config.debug ?? false
 
-        this.sctpRelay = new NodeSctpRelayManager()
+        this.sctpRelay = new NodeSctpRelayManager({
+            logger: this.logger.child({ component: 'sctp' }),
+            debug: this.debug
+        })
 
-        this.audioEngine = new AudioEngine()
-        this.audioEngine.setDebug(this.debug)
+        this.audioEngine = new AudioEngine({
+            logger: this.logger.child({ component: 'audio-engine' }),
+            debug: this.debug
+        })
         this.audioEngine.setAudioSender(this)
 
         this.sctpRelay.on('relay:connected', (info: { ip: string; port: number }) => {
@@ -147,7 +152,8 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             callKey,
             peerJid,
             [],
-            options.isVideo ?? false
+            options.isVideo ?? false,
+            this.logger.child({ component: 'signaling' })
         )
 
         await this.sock.sendNode(offerStanza)
@@ -322,7 +328,8 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         const { node: decryptedNode, callKey } = await decryptCallKeyInNode(
             this.sock,
             nodeInfo.innerNode,
-            peerJid
+            peerJid,
+            this.logger.child({ component: 'signaling' })
         )
 
         const { relays, participantJids, uuid, selfPid, peerPid, hbhKey } =
@@ -434,7 +441,8 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                 const { callKey: peerCallKey } = await decryptCallKeyInNode(
                     this.sock,
                     nodeInfo.innerNode,
-                    peerJid
+                    peerJid,
+                    this.logger.child({ component: 'signaling' })
                 )
                 if (peerCallKey) {
                     const ourCallKey = this.currentCall.encryptionKey

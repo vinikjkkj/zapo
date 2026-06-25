@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto'
 
+import { createNoopLogger, type Logger } from 'zapo-js'
 import { proto } from 'zapo-js/proto'
 import type { BinaryNode } from 'zapo-js/transport'
-import { bytesToHex, toBytesView } from 'zapo-js/util'
+import { bytesToHex, toBytesView, toError } from 'zapo-js/util'
 
 import type { NodeInfo, RelayEndpoint } from './types.js'
 import type { VoipSocket } from './voip-socket.js'
@@ -137,8 +138,10 @@ export function extractRelayEndpoints(node: BinaryNode): RelayEndpoint[] {
 export async function decryptCallKeyInNode(
     sock: VoipSocket,
     node: BinaryNode,
-    peerJid: string
+    peerJid: string,
+    logger?: Logger
 ): Promise<{ node: BinaryNode; callKey?: Uint8Array }> {
+    const log = logger ?? createNoopLogger()
     const cloned = structuredClone(node)
     if (!cloned.content || !Array.isArray(cloned.content)) {
         return { node: cloned }
@@ -214,8 +217,8 @@ export async function decryptCallKeyInNode(
 
             return { node: cloned, callKey: new Uint8Array(callKey) }
         }
-    } catch (err: any) {
-        console.error(`[Signaling] Decrypt error: ${err.message}`)
+    } catch (err) {
+        log.error('call key decrypt failed', { message: toError(err).message })
     }
 
     return { node: cloned }
@@ -230,8 +233,10 @@ export async function buildOfferStanza(
     callKey: Uint8Array,
     peerJid: string,
     _deviceJids: string[],
-    isVideo: boolean
+    isVideo: boolean,
+    logger?: Logger
 ): Promise<BinaryNode> {
+    const log = logger ?? createNoopLogger()
     const meLid = sock.authState?.creds?.me?.lid
     const meId = sock.authState?.creds?.me?.id
     const callCreator = meLid || meId || ''
@@ -249,7 +254,7 @@ export async function buildOfferStanza(
         .filter((jid: string | null): jid is string => typeof jid === 'string' && jid.includes('@'))
 
     if (devices.length === 0) {
-        console.warn(`[buildOfferStanza] No valid device JIDs for ${peerJid}, raw:`, rawDevices)
+        log.warn('no valid device jids for offer', { peerJid, rawDevices })
     }
 
     await sock.assertSessions(devices)

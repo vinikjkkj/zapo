@@ -1,11 +1,18 @@
 import * as fs from 'node:fs'
 
+import { createNoopLogger, type Logger } from 'zapo-js'
 import { toBytesView } from 'zapo-js/util'
 
 import { concatBytes } from './bytes.js'
 import { type AudioEngineConfig, type AudioSender, DEFAULT_AUDIO_CONFIG } from './types.js'
 
+export interface AudioEngineOptions extends Partial<AudioEngineConfig> {
+    readonly logger?: Logger
+    readonly debug?: boolean
+}
+
 export class AudioEngine {
+    private readonly logger: Logger
     private audioSender: AudioSender | null = null
     private audioBuffer: Float32Array | null = null
     private audioPosition = 0
@@ -41,8 +48,10 @@ export class AudioEngine {
     private readonly silenceChunkBuffer: Float32Array
     private readonly playbackOutputBuffer: Float32Array
 
-    constructor(config: Partial<AudioEngineConfig> = {}) {
+    constructor(config: AudioEngineOptions = {}) {
         const c = { ...DEFAULT_AUDIO_CONFIG, ...config }
+        this.logger = config.logger ?? createNoopLogger()
+        this.debug = config.debug ?? false
         this.sampleRate = c.sampleRate
         this.captureChunkSize = c.captureChunkSize
         this.maxBuffer = c.maxBufferSize
@@ -82,9 +91,10 @@ export class AudioEngine {
             this.audioFinished = false
         }
         if (this.debug) {
-            console.log(
-                `[AudioEngine] External mode: ${enabled}, preBuffer: ${this.extPreBufferSize} samples`
-            )
+            this.logger.debug('external audio mode changed', {
+                enabled,
+                preBufferSamples: this.extPreBufferSize
+            })
         }
     }
 
@@ -110,7 +120,7 @@ export class AudioEngine {
             newBuf.set(this.audioBuffer.subarray(0, this.liveWritePos))
             this.audioBuffer = newBuf
             if (this.debug) {
-                console.log(`[AudioEngine] Live buffer grew to ${newSize} samples`)
+                this.logger.debug('live buffer grew', { samples: newSize })
             }
         }
 
@@ -124,7 +134,7 @@ export class AudioEngine {
 
     async loadAudioFile(audioPath: string): Promise<void> {
         if (this.debug) {
-            console.log(`[AudioEngine] Loading ${audioPath}...`)
+            this.logger.debug('loading audio file', { audioPath })
         }
 
         if (!fs.existsSync(audioPath)) {
@@ -138,9 +148,10 @@ export class AudioEngine {
 
         if (this.debug) {
             const duration = this.audioBuffer.length / this.sampleRate
-            console.log(
-                `[AudioEngine] Loaded: ${this.audioBuffer.length} samples (${duration.toFixed(2)}s)`
-            )
+            this.logger.debug('audio file loaded', {
+                samples: this.audioBuffer.length,
+                durationSec: duration
+            })
         }
     }
 
@@ -192,7 +203,7 @@ export class AudioEngine {
         }
 
         if (this.debug) {
-            console.log(`[AudioEngine] Test tone generated: ${samples} samples (${duration}s)`)
+            this.logger.debug('test tone generated', { samples, durationSec: duration })
         }
     }
 
@@ -202,7 +213,7 @@ export class AudioEngine {
         }
 
         if (this.debug) {
-            console.log('[AudioEngine] Starting playback...')
+            this.logger.debug('starting playback')
         }
 
         this.resetBuffer()
@@ -231,7 +242,7 @@ export class AudioEngine {
         this.silenceMode = true
 
         if (this.debug) {
-            console.log('[AudioEngine] Starting silence capture (pre-accept warmup)')
+            this.logger.debug('starting silence capture for pre-accept warmup')
         }
 
         this.captureInterval = setInterval(() => {
@@ -260,20 +271,21 @@ export class AudioEngine {
             const available = this.liveWritePos - this.audioPosition
             this.extStarted = available >= this.extPreBufferSize
             if (this.debug) {
-                console.log(
-                    `[AudioEngine] Starting live capture (readPos=${this.audioPosition}, writePos=${this.liveWritePos}, runway=${available} samples, started=${this.extStarted})`
-                )
+                this.logger.debug('starting live capture', {
+                    readPos: this.audioPosition,
+                    writePos: this.liveWritePos,
+                    runwaySamples: available,
+                    started: this.extStarted
+                })
             }
         } else {
             this.audioPosition = 0
             if (this.debug) {
                 if (this.audioBuffer) {
-                    const duration = (this.audioBuffer.length / this.sampleRate).toFixed(1)
-                    console.log(`[AudioEngine] Starting capture (${duration}s audio loaded)`)
+                    const durationSec = this.audioBuffer.length / this.sampleRate
+                    this.logger.debug('starting capture with loaded audio', { durationSec })
                 } else {
-                    console.log(
-                        '[AudioEngine] Starting capture (sending silence — no audio loaded)'
-                    )
+                    this.logger.debug('starting capture with silence, no audio loaded')
                 }
             }
         }
@@ -292,10 +304,10 @@ export class AudioEngine {
 
             if (this.debug && frameCount % 500 === 0) {
                 if (this.audioBuffer) {
-                    const pos = (this.audioPosition / this.sampleRate).toFixed(1)
-                    console.log(`[AudioEngine] Capture frame #${frameCount}, pos: ${pos}s`)
+                    const positionSec = this.audioPosition / this.sampleRate
+                    this.logger.trace('capture frame', { frameCount, positionSec })
                 } else {
-                    console.log(`[AudioEngine] Capture frame #${frameCount} (silence)`)
+                    this.logger.trace('capture frame with silence', { frameCount })
                 }
             }
         }, this.intervalMs)
@@ -364,9 +376,9 @@ export class AudioEngine {
                 }
                 this.extStarted = true
                 if (this.debug) {
-                    console.log(
-                        `[AudioEngine] Live buffer ready (${available} samples), starting read`
-                    )
+                    this.logger.debug('live buffer ready, starting read', {
+                        availableSamples: available
+                    })
                 }
             }
 
@@ -376,9 +388,12 @@ export class AudioEngine {
                 this.audioPosition = skipTo
                 this.extSkipCount++
                 if (this.debug || this.extSkipCount <= 5) {
-                    console.log(
-                        `[AudioEngine] Live buffer overflow (${available} samples) — skipped ${skipped} samples to target (${this.extTargetBuffer})`
-                    )
+                    this.logger.warn('live buffer overflow, skipped samples', {
+                        availableSamples: available,
+                        skippedSamples: skipped,
+                        targetSamples: this.extTargetBuffer,
+                        skipCount: this.extSkipCount
+                    })
                 }
             }
 
@@ -393,7 +408,7 @@ export class AudioEngine {
                 if (!this.externalMode && !this.audioFinished) {
                     this.audioFinished = true
                     if (this.debug) {
-                        console.log('[AudioEngine] Audio playback finished — sending silence')
+                        this.logger.debug('audio playback finished, sending silence')
                     }
                     if (this.onAudioFinished) {
                         const cb = this.onAudioFinished
