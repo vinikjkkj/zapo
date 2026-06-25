@@ -5,11 +5,7 @@ export interface VoipSignalRepository {
         jid: string
         data: Uint8Array
     }): Promise<{ type: string; ciphertext: Uint8Array }>
-    decryptMessage(args: {
-        jid: string
-        type: string
-        ciphertext: Uint8Array
-    }): Promise<Uint8Array>
+    decryptMessage(args: { jid: string; type: string; ciphertext: Uint8Array }): Promise<Uint8Array>
     lidMapping?: {
         getLIDForPN?(pn: string): Promise<string | null | undefined>
     }

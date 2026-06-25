@@ -1,5 +1,5 @@
 ---
-"@zapo-js/voip": major
+'@zapo-js/voip': major
 ---
 
 Add `@zapo-js/voip`: WhatsApp VOIP plugin for `WaClient`. Ships MLow voice

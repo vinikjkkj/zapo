@@ -17,11 +17,13 @@ test('generateCallId / generateCallStanzaId produce 32-char uppercase hex', () =
     }
 })
 
-test('buildTerminateStanza targets a device-less JID with a terminate payload', () => {
+test('buildTerminateStanza targets the peer device JID with a terminate payload', () => {
     const node = buildTerminateStanza('12345:7@s.whatsapp.net', 'CALLID', '12345@s.whatsapp.net')
     assert.equal(node.tag, 'call')
-    assert.equal(node.attrs.to, '12345@s.whatsapp.net')
-    const inner = (node.content as unknown as Array<{ tag: string; attrs: Record<string, string> }>)[0]
+    assert.equal(node.attrs.to, '12345:7@s.whatsapp.net')
+    const inner = (
+        node.content as unknown as Array<{ tag: string; attrs: Record<string, string> }>
+    )[0]
     assert.equal(inner.tag, 'terminate')
     assert.equal(inner.attrs['call-id'], 'CALLID')
 })

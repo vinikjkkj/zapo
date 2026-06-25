@@ -1,29 +1,9 @@
-import type { Logger } from 'zapo-js'
 import { buildDeviceJid, parseSignalAddressFromJid } from 'zapo-js/protocol'
 import type { BinaryNode } from 'zapo-js/transport'
 
-import { NativeCallManager, type NativeCallManagerConfig } from './call-manager.js'
+import type { NativeCallManager } from './call-manager.js'
 import { createCallAck } from './signaling.js'
 import type { VoipSocket } from './voip-socket.js'
-
-export interface CreateVoipManagerOptions {
-    logger?: Logger
-    debug?: boolean
-    maxConcurrentCalls?: number
-}
-
-export function createVoipManager(
-    socket: VoipSocket,
-    options: CreateVoipManagerOptions = {}
-): NativeCallManager {
-    const config: NativeCallManagerConfig = {
-        sock: socket,
-        logger: options.logger,
-        debug: options.debug ?? false,
-        maxConcurrentCalls: options.maxConcurrentCalls
-    }
-    return new NativeCallManager(config)
-}
 
 function normalizePeerJid(peerJid: string): string {
     try {

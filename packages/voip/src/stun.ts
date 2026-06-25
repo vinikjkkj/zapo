@@ -5,7 +5,6 @@ import { bytesToHex, toBytesView } from 'zapo-js/util'
 import {
     concatBytes,
     decodeUtf8,
-    encodeAscii,
     readBigUInt64BE,
     readUInt16BE,
     readUInt32BE,
@@ -56,7 +55,7 @@ function encodeAttribute(attrType: number, data: Uint8Array): Uint8Array {
 function crc32(data: Uint8Array): number {
     let crc = 0xffffffff
     for (let i = 0; i < data.length; i++) {
-        crc ^= data[i]!
+        crc ^= data[i]
         for (let j = 0; j < 8; j++) {
             if (crc & 1) {
                 crc = (crc >>> 1) ^ 0xedb88320
@@ -186,7 +185,7 @@ function encodeXorRelayedAddress(ip: string, port: number): Uint8Array {
     data[1] = 0x01
     writeUInt16BE(data, port ^ (STUN_MAGIC_COOKIE >>> 16), 2)
     const parts = ip.split('.').map(Number)
-    const ipNum = ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0
+    const ipNum = ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0
     writeUInt32BE(data, (ipNum ^ STUN_MAGIC_COOKIE) >>> 0, 4)
     return data
 }
@@ -366,12 +365,12 @@ export function buildWhatsAppPing(): Uint8Array {
 
 export function isStunPacket(data: Uint8Array): boolean {
     if (data.length < 2) return false
-    return (data[0]! & 0xc0) === 0
+    return (data[0] & 0xc0) === 0
 }
 
 export function isRtpPacket(data: Uint8Array): boolean {
     if (data.length < 2) return false
-    return (data[0]! & 0xc0) === 0x80
+    return (data[0] & 0xc0) === 0x80
 }
 
 export interface StunResponseInfo {
@@ -498,8 +497,8 @@ export function parseStunResponse(data: Uint8Array): StunResponseInfo | null {
         })
 
         if (attrType === 0x0009 && attrLength >= 4) {
-            const errorClass = attrData[2]! & 0x07
-            const errorNumber = attrData[3]!
+            const errorClass = attrData[2] & 0x07
+            const errorNumber = attrData[3]
             errorCode = errorClass * 100 + errorNumber
             if (attrLength > 4) {
                 errorReason = decodeUtf8(attrData.subarray(4))
@@ -547,20 +546,20 @@ export function formatStunResponse(info: StunResponseInfo): string {
 export function classifyPacket(data: Uint8Array): string {
     if (data.length < 2) return `tiny(${data.length}B)`
 
-    const firstByte = data[0]!
+    const firstByte = data[0]
     const twoBits = (firstByte & 0xc0) >> 6
 
     if (twoBits === 0) {
         const info = parseStunResponse(data)
         if (info) return formatStunResponse(info)
-        const msgType = (data[0]! << 8) | data[1]!
+        const msgType = (data[0] << 8) | data[1]
         return `STUN? 0x${msgType.toString(16)} (${data.length}B)`
     }
 
     if (twoBits === 2) {
-        const pt = data[1]! & 0x7f
-        const marker = (data[1]! >> 7) & 1
-        const seq = data.length >= 4 ? (data[2]! << 8) | data[3]! : 0
+        const pt = data[1] & 0x7f
+        const marker = (data[1] >> 7) & 1
+        const seq = data.length >= 4 ? (data[2] << 8) | data[3] : 0
         return `RTP/SRTP PT=${pt} M=${marker} seq=${seq} (${data.length}B)`
     }
 

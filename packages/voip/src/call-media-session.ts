@@ -195,14 +195,7 @@ export class CallMediaSession implements AudioSender {
         }
 
         try {
-            const transportNode = buildTransportStanza(
-                peerJid,
-                callId,
-                callCreator,
-                meId,
-                '1',
-                '1'
-            )
+            const transportNode = buildTransportStanza(peerJid, callId, callCreator, meId, '1', '1')
             await this.sock.sendNode(transportNode)
         } catch (err: unknown) {
             if (this.debug) {
@@ -245,11 +238,7 @@ export class CallMediaSession implements AudioSender {
     rejectCall(reason: EndCallReason = EndCallReason.Declined): void {
         this.info.applyTransition({ type: 'local_rejected', reason })
 
-        const node = buildRejectStanza(
-            this.info.peerJid,
-            this.info.callId,
-            this.info.callCreator
-        )
+        const node = buildRejectStanza(this.info.peerJid, this.info.callId, this.info.callCreator)
         this.sock.sendNode(node).catch(() => {})
         this.delegate.emitState(this.info)
         this.cleanup()

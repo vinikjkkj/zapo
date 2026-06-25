@@ -2,10 +2,7 @@ import { createCipheriv, createHmac } from 'node:crypto'
 
 import { toBytesView } from 'zapo-js/util'
 
-import {
-    writeBigUInt64BE,
-    writeUInt32BE
-} from './bytes.js'
+import { writeBigUInt64BE, writeUInt32BE } from './bytes.js'
 import { RtpHeader, RtpPacket } from './rtp.js'
 import { SRTP_AUTH_TAG_LEN, SRTP_LABEL, type SrtpKeyingMaterial } from './types.js'
 
@@ -80,7 +77,9 @@ export class SrtpContext {
 
         const iv = this.generateIv(header.ssrc, index)
         const decipher = createCipheriv('aes-128-ctr', this.sessionKey, iv)
-        const decrypted = toBytesView(decipher.update(data.subarray(headerSize, headerSize + payloadLen)))
+        const decrypted = toBytesView(
+            decipher.update(data.subarray(headerSize, headerSize + payloadLen))
+        )
         decipher.final()
 
         return new RtpPacket(header, decrypted)
@@ -112,12 +111,12 @@ export class SrtpContext {
 
         writeUInt32BE(this.ssrcBuffer, ssrc, 0)
         for (let i = 0; i < 4; i++) {
-            this.ivBuffer[4 + i]! ^= this.ssrcBuffer[i]!
+            this.ivBuffer[4 + i] ^= this.ssrcBuffer[i]
         }
 
         writeBigUInt64BE(this.indexBuffer, index, 0)
         for (let i = 0; i < 6; i++) {
-            this.ivBuffer[8 + i]! ^= this.indexBuffer[2 + i]!
+            this.ivBuffer[8 + i] ^= this.indexBuffer[2 + i]
         }
 
         return this.ivBuffer
@@ -174,7 +173,7 @@ function deriveKey(
 ): Uint8Array {
     const iv = new Uint8Array(16)
     iv.set(masterSalt.subarray(0, 14), 0)
-    iv[7]! ^= label
+    iv[7] ^= label
 
     const zeros = new Uint8Array(length)
     const cipher = createCipheriv('aes-128-ctr', masterKey, iv)

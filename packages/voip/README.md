@@ -16,12 +16,12 @@ npm install zapo-js @zapo-js/voip libmlow-wasm
 
 Peer dependencies:
 
-| Package | Required | Purpose |
-| --- | --- | --- |
-| `zapo-js` | yes | `WaClient` and plugin host |
-| `libmlow-wasm` | yes | MLow encode/decode (WASM, no native build step) |
-| `@roamhq/wrtc` | for real calls | SCTP relay transport |
-| `fluent-ffmpeg` | optional | Decode pre-recorded audio files (`loadAudio`) |
+| Package         | Required       | Purpose                                         |
+| --------------- | -------------- | ----------------------------------------------- |
+| `zapo-js`       | yes            | `WaClient` and plugin host                      |
+| `libmlow-wasm`  | yes            | MLow encode/decode (WASM, no native build step) |
+| `@roamhq/wrtc`  | for real calls | SCTP relay transport                            |
+| `fluent-ffmpeg` | optional       | Decode pre-recorded audio files (`loadAudio`)   |
 
 ```bash
 npm install @roamhq/wrtc fluent-ffmpeg
@@ -31,12 +31,11 @@ Node **20.9+**. `libmlow-wasm` is ESM-only; the codec loads it via dynamic `impo
 
 ## Quick start
 
-Import type extensions once so `client.voip` and VOIP events type-check:
+Importing from `@zapo-js/voip` applies `WaClient` type extensions (`client.voip` and `voip_*` events):
 
 ```ts
 import { WaClient } from 'zapo-js'
 import { voipPlugin, EndCallReason } from '@zapo-js/voip'
-import '@zapo-js/voip/type-extensions'
 
 const client = new WaClient({
     store,
@@ -125,36 +124,36 @@ await client.voip.endCall(callId)
 
 ## Events
 
-Emitted on `WaClient` (after `import '@zapo-js/voip/type-extensions'`):
+Emitted on `WaClient`:
 
-| Event | Payload | When |
-| --- | --- | --- |
-| `voip_call_incoming` | `CallInfo` | Remote offer received |
-| `voip_call_state` | `CallInfo` | State transition |
-| `voip_call_ended` | `CallInfo` | Call finished |
-| `voip_call_inbound_audio` | `CallInfo`, `Float32Array` | Decoded peer audio received (16 kHz) |
-| `voip_call_outbound_audio_finished` | `CallInfo` | Preloaded outbound audio finished sending |
-| `voip_call_error` | `Error` | Engine error |
-| `voip_signaling_send` | `BinaryNode` | Outbound signaling stanza |
+| Event                               | Payload                    | When                                      |
+| ----------------------------------- | -------------------------- | ----------------------------------------- |
+| `voip_call_incoming`                | `CallInfo`                 | Remote offer received                     |
+| `voip_call_state`                   | `CallInfo`                 | State transition                          |
+| `voip_call_ended`                   | `CallInfo`                 | Call finished                             |
+| `voip_call_inbound_audio`           | `CallInfo`, `Float32Array` | Decoded peer audio received (16 kHz)      |
+| `voip_call_outbound_audio_finished` | `CallInfo`                 | Preloaded outbound audio finished sending |
+| `voip_call_error`                   | `Error`                    | Engine error                              |
+| `voip_signaling_send`               | `BinaryNode`               | Outbound signaling stanza                 |
 
 You can also use `client.voip.on('call:state', ...)` etc. on the underlying `EventEmitter` (`CallManagerEvents`).
 
 ## `client.voip` API
 
-| Method | Description |
-| --- | --- |
-| `startCall({ peerJid, isVideo? })` | Place an outgoing call; returns `callId` |
-| `acceptCall(callId)` | Accept an incoming call |
-| `rejectCall(callId, reason?)` | Reject |
-| `endCall(callId, reason?)` | Hang up |
-| `loadAudio(callId, path)` | Load a file for outbound audio on that call |
-| `setExternalAudioMode(callId, enabled)` | Switch to live PCM input for that call |
-| `feedLiveAudio(callId, Float32Array)` | Push a capture chunk (external mode) |
-| `setMute(callId, muted)` | Mute/unmute local capture for that call |
-| `getCall(callId)` | One call or `null` |
-| `getCalls()` | All tracked calls |
-| `getCurrentCall()` | Deprecated – sole active call or `null` |
-| `on` / `off` / `once` | Manager-level events |
+| Method                                  | Description                                 |
+| --------------------------------------- | ------------------------------------------- |
+| `startCall({ peerJid, isVideo? })`      | Place an outgoing call; returns `callId`    |
+| `acceptCall(callId)`                    | Accept an incoming call                     |
+| `rejectCall(callId, reason?)`           | Reject                                      |
+| `endCall(callId, reason?)`              | Hang up                                     |
+| `loadAudio(callId, path)`               | Load a file for outbound audio on that call |
+| `setExternalAudioMode(callId, enabled)` | Switch to live PCM input for that call      |
+| `feedLiveAudio(callId, Float32Array)`   | Push a capture chunk (external mode)        |
+| `setMute(callId, muted)`                | Mute/unmute local capture for that call     |
+| `getCall(callId)`                       | One call or `null`                          |
+| `getCalls()`                            | All tracked calls                           |
+| `getCurrentCall()`                      | Deprecated – sole active call or `null`     |
+| `on` / `off` / `once`                   | Manager-level events                        |
 
 Plugin options: `debug?: boolean`, `maxConcurrentCalls?: number` (default `1`).
 
@@ -162,26 +161,7 @@ Plugin options: `debug?: boolean`, `maxConcurrentCalls?: number` (default `1`).
 
 MLow runs through **`libmlow-wasm`** (≥ 0.1.1): 16 kHz, mono, 960-sample frames (60 ms), `useSmpl: true`, DTX enabled. No `koffi`, no bundled native libraries.
 
-## Advanced / low-level API
-
-For custom wiring without `WaClient`, the engine and routers are still exported:
-
-```ts
-import {
-    createVoipManager,
-    createWaVoipSocket,
-    routeCallStanza,
-    routeCallAck,
-    routeCallReceipt,
-    type VoipSocket
-} from '@zapo-js/voip'
-```
-
-- **`createWaVoipSocket(ctx)`** – builds a `VoipSocket` from `WaClientPluginContext` deps (used internally by the plugin).
-- **`createVoipManager(socket, { maxConcurrentCalls? })`** – standalone `NativeCallManager` when you route stanzas yourself.
-- **`routeCallStanza` / `routeCallAck` / `routeCallReceipt`** – ACK + dispatch helpers for manual integration.
-
-See `src/voip-socket.ts` for the `VoipSocket` contract.
+The signaling and media stack (RTP/SRTP, SCTP relay, codec, audio engine) is internal to the package; use `client.voip` and the events above.
 
 ## License
 

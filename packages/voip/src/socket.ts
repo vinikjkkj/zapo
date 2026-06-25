@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 
-import { proto ,type  WaClientPluginContext } from 'zapo-js'
+import { proto, type WaClientPluginContext } from 'zapo-js'
 import { parseSignalAddressFromJid } from 'zapo-js/protocol'
 import type { SignalAddress } from 'zapo-js/signal'
 import type { BinaryNode } from 'zapo-js/transport'
@@ -119,8 +119,8 @@ export function createWaVoipSocket(ctx: WaClientPluginContext): VoipSocket {
                 content: [
                     {
                         tag: 'enc',
-                        attrs: { v: '2', type: encrypted[index]!.type, count },
-                        content: encrypted[index]!.ciphertext
+                        attrs: { v: '2', type: encrypted[index].type, count },
+                        content: encrypted[index].ciphertext
                     }
                 ]
             }))

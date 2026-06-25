@@ -123,9 +123,7 @@ export class CallInfo {
     }
 
     get canAccept(): boolean {
-        return (
-            this.stateData.state === CallState.IncomingRinging && !this.stateData.acceptBlocked
-        )
+        return this.stateData.state === CallState.IncomingRinging && !this.stateData.acceptBlocked
     }
 
     get isAcceptBlocked(): boolean {

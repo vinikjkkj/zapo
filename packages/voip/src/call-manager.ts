@@ -111,10 +111,7 @@ export class NativeCallManager extends EventEmitter {
         await this.maybeUnblockWaitingCalls()
     }
 
-    async endCall(
-        callId: string,
-        reason: EndCallReason = EndCallReason.UserEnded
-    ): Promise<void> {
+    async endCall(callId: string, reason: EndCallReason = EndCallReason.UserEnded): Promise<void> {
         const session = this.calls.get(callId)
         if (!session || session.info.isEnded) return
 
@@ -342,8 +339,7 @@ export class NativeCallManager extends EventEmitter {
                 emitIncoming: (call) => this.emit('call:incoming', call),
                 emitEnded: (call) => this.emit('call:ended', call),
                 emitInboundAudio: (call, pcm) => this.emit('call:inbound_audio', call, pcm),
-                emitOutboundAudioFinished: (call) =>
-                    this.emit('call:outbound_audio_finished', call)
+                emitOutboundAudioFinished: (call) => this.emit('call:outbound_audio_finished', call)
             }
         })
 

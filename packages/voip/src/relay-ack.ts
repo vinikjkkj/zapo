@@ -143,7 +143,7 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
 
                 if (addrBytes.length === 6) {
                     const ip = `${addrBytes[0]}.${addrBytes[1]}.${addrBytes[2]}.${addrBytes[3]}`
-                    const port = (addrBytes[4]! << 8) | addrBytes[5]!
+                    const port = (addrBytes[4] << 8) | addrBytes[5]
 
                     relays.push({
                         ip,

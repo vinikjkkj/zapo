@@ -1,8 +1,7 @@
 import { randomBytes } from 'node:crypto'
 
-import { toBytesView } from 'zapo-js/util'
-
 import { hkdf } from 'zapo-js/crypto'
+import { toBytesView } from 'zapo-js/util'
 
 import type { SrtpKeyingMaterial } from './types.js'
 

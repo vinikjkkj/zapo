@@ -1,12 +1,6 @@
 import { randomInt } from 'node:crypto'
 
-import {
-    EMPTY_BYTES,
-    readUInt16BE,
-    readUInt32BE,
-    writeUInt16BE,
-    writeUInt32BE
-} from './bytes.js'
+import { EMPTY_BYTES, readUInt16BE, readUInt32BE, writeUInt16BE, writeUInt32BE } from './bytes.js'
 import { PayloadType } from './types.js'
 
 const RTP_VERSION = 2
@@ -61,7 +55,7 @@ export class RtpHeader {
 
         let offset = 12
         for (let i = 0; i < this.csrc.length; i++) {
-            writeUInt32BE(buf, this.csrc[i]!, offset)
+            writeUInt32BE(buf, this.csrc[i], offset)
             offset += 4
         }
 
@@ -79,16 +73,16 @@ export class RtpHeader {
             throw new Error('buffer too small for RTP header')
         }
 
-        const version = (buf[0]! >> 6) & 0x03
+        const version = (buf[0] >> 6) & 0x03
         if (version !== RTP_VERSION) {
             throw new Error(`invalid RTP version: ${version}`)
         }
 
-        const padding = ((buf[0]! >> 5) & 0x01) !== 0
-        const extension = ((buf[0]! >> 4) & 0x01) !== 0
-        const csrcCount = buf[0]! & 0x0f
-        const marker = ((buf[1]! >> 7) & 0x01) !== 0
-        const payloadType = buf[1]! & 0x7f
+        const padding = ((buf[0] >> 5) & 0x01) !== 0
+        const extension = ((buf[0] >> 4) & 0x01) !== 0
+        const csrcCount = buf[0] & 0x0f
+        const marker = ((buf[1] >> 7) & 0x01) !== 0
+        const payloadType = buf[1] & 0x7f
         const sequenceNumber = readUInt16BE(buf, 2)
         const timestamp = readUInt32BE(buf, 4)
         const ssrc = readUInt32BE(buf, 8)
@@ -190,7 +184,11 @@ export class RtpSession {
         return new RtpPacket(header, payload)
     }
 
-    createPacketWithDuration(payload: Uint8Array, durationSamples: number, marker = false): RtpPacket {
+    createPacketWithDuration(
+        payload: Uint8Array,
+        durationSamples: number,
+        marker = false
+    ): RtpPacket {
         const header = new RtpHeader(
             this.payloadType,
             this.sequenceNumber,

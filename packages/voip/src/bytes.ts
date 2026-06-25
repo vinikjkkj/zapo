@@ -1,10 +1,4 @@
-import {
-    base64ToBytes,
-    bytesToBase64,
-    bytesToHex,
-    TEXT_DECODER,
-    toBytesView
-} from 'zapo-js/util'
+import { base64ToBytes, bytesToBase64, bytesToHex, TEXT_DECODER, toBytesView } from 'zapo-js/util'
 
 export { bytesToBase64, bytesToHex, base64ToBytes, TEXT_DECODER, toBytesView }
 

@@ -11,7 +11,6 @@ export interface VoipPluginOptions extends WaVoipCoordinatorOptions {}
  * ```ts
  * import { WaClient } from 'zapo-js'
  * import { voipPlugin } from '@zapo-js/voip'
- * import '@zapo-js/voip/type-extensions'
  *
  * const client = new WaClient({
  *   store,

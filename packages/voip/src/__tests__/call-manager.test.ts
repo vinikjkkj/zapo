@@ -167,7 +167,10 @@ test('incoming offer with capacity creates a second session', async () => {
 
     await manager.startCall({ peerJid: '2222222222@lid' })
 
-    await manager.handleCallOffer(buildOfferNode('INCOMINGCALL0000000000000002'), '3333333333:0@lid')
+    await manager.handleCallOffer(
+        buildOfferNode('INCOMINGCALL0000000000000002'),
+        '3333333333:0@lid'
+    )
 
     assert.equal(manager.getCalls().length, 2)
 })
@@ -190,11 +193,20 @@ test('getCurrentCall returns the sole active call only', () => {
     const { sock } = createMockSocket()
     const manager = new NativeCallManager({ sock, maxConcurrentCalls: 2 })
 
-    const infoA = CallInfo.newOutgoing('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'a@lid', 'me@lid', CallMediaType.Audio)
-    const infoB = CallInfo.newOutgoing('BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB', 'b@lid', 'me@lid', CallMediaType.Audio)
+    const infoA = CallInfo.newOutgoing(
+        'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'a@lid',
+        'me@lid',
+        CallMediaType.Audio
+    )
+    const infoB = CallInfo.newOutgoing(
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'b@lid',
+        'me@lid',
+        CallMediaType.Audio
+    )
     infoA.applyTransition({ type: 'offer_sent' })
     infoB.applyTransition({ type: 'offer_sent' })
-
     ;(manager as unknown as { createSession: (info: CallInfo) => unknown }).createSession(infoA)
     ;(manager as unknown as { createSession: (info: CallInfo) => unknown }).createSession(infoB)
 

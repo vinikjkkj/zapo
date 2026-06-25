@@ -671,7 +671,7 @@ export class NodeSctpRelayManager extends EventEmitter {
         conn.stats.receivedBytes += data.length
         this.stats.received++
 
-        const firstByte = data[0]!
+        const firstByte = data[0]
         const twoBits = (firstByte & 0xc0) >> 6
 
         const hexPreview = bytesToHex(data.subarray(0, Math.min(24, data.length)))
@@ -761,8 +761,8 @@ export class NodeSctpRelayManager extends EventEmitter {
 
         if (twoBits === 2) {
             this.rtpRecvCount++
-            const pt = data[1]! & 0x7f
-            const seq = data.length >= 4 ? (data[2]! << 8) | data[3]! : 0
+            const pt = data[1] & 0x7f
+            const seq = data.length >= 4 ? (data[2] << 8) | data[3] : 0
             const ssrc = data.length >= 12 ? readUInt32BE(data, 8) : 0
             this.trace('rtp packet received', {
                 count: this.rtpRecvCount,
@@ -800,7 +800,7 @@ export class NodeSctpRelayManager extends EventEmitter {
 
     private isPong(data: Uint8Array): boolean {
         if (data.length < 2) return false
-        const msgType = (data[0]! << 8) | data[1]!
+        const msgType = (data[0] << 8) | data[1]
         return msgType === 0x0802
     }
 

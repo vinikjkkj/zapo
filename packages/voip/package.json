@@ -18,12 +18,6 @@
             "require": "./dist/index.js",
             "import": "./dist/esm/index.js",
             "default": "./dist/index.js"
-        },
-        "./type-extensions": {
-            "types": "./dist/type-extensions.d.ts",
-            "require": "./dist/type-extensions.js",
-            "import": "./dist/esm/type-extensions.js",
-            "default": "./dist/type-extensions.js"
         }
     },
     "files": [
