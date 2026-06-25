@@ -21,7 +21,8 @@ import {
     scanKeys,
     toBytesOrNull,
     toRedisBuffer,
-    uint8Equal
+    uint8Equal,
+    uint8TimingSafeEqual
 } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
@@ -376,11 +377,29 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
         for (const update of updates) {
             const colKey = this.k('appstate:col', this.sessionId, update.collection)
             const idxSetKey = this.k('appstate:idx:set', this.sessionId, update.collection)
+            const buildIdxKey = (macHex: string): string =>
+                this.k('appstate:idx', this.sessionId, update.collection, macHex)
 
             const oldMacs = await this.redis.smembers(idxSetKey)
+            const oldMacSet = new Set(oldMacs)
+            const oldValues = new Map<string, Uint8Array>()
+            if (oldMacs.length > 0) {
+                const readPipeline = this.redis.pipeline()
+                for (const macHex of oldMacs) {
+                    readPipeline.getBuffer(buildIdxKey(macHex))
+                }
+                const results = await readPipeline.exec()
+                if (results) {
+                    for (let i = 0; i < results.length; i += 1) {
+                        const value = toBytesOrNull(results[i][1])
+                        if (value) {
+                            oldValues.set(oldMacs[i], value)
+                        }
+                    }
+                }
+            }
 
             const multi = this.redis.multi()
-
             multi.hset(colKey, {
                 version: String(update.version)
             })
@@ -389,26 +408,28 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
                 toRedisBuffer(update.hash)
             )
 
-            if (oldMacs.length > 0) {
-                for (const macHex of oldMacs) {
-                    multi.del(this.k('appstate:idx', this.sessionId, update.collection, macHex))
-                }
-                multi.del(idxSetKey)
-            }
-
-            const newMacs: string[] = []
+            const addMacs: string[] = []
             for (const [indexMacHex, valueMac] of update.indexValueMap.entries()) {
-                const idxBinKey = this.k(
-                    'appstate:idx',
-                    this.sessionId,
-                    update.collection,
-                    indexMacHex
-                )
-                multi.set(idxBinKey, toRedisBuffer(valueMac))
-                newMacs.push(indexMacHex)
+                const current = oldValues.get(indexMacHex)
+                if (!current || !uint8TimingSafeEqual(current, valueMac)) {
+                    multi.set(buildIdxKey(indexMacHex), toRedisBuffer(valueMac))
+                }
+                if (!oldMacSet.has(indexMacHex)) {
+                    addMacs.push(indexMacHex)
+                }
             }
-            if (newMacs.length > 0) {
-                multi.sadd(idxSetKey, ...newMacs)
+            const delMacs: string[] = []
+            for (const macHex of oldMacs) {
+                if (!update.indexValueMap.has(macHex)) {
+                    multi.del(buildIdxKey(macHex))
+                    delMacs.push(macHex)
+                }
+            }
+            if (addMacs.length > 0) {
+                multi.sadd(idxSetKey, ...addMacs)
+            }
+            if (delMacs.length > 0) {
+                multi.srem(idxSetKey, ...delMacs)
             }
 
             await multi.exec()

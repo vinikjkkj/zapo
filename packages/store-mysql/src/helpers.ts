@@ -1,5 +1,11 @@
 import type { FieldPacket, ResultSetHeader } from 'mysql2/promise'
-import { bytesToHex, normalizeQueryLimit, toBytesView, uint8Equal } from 'zapo-js/util'
+import {
+    bytesToHex,
+    normalizeQueryLimit,
+    toBytesView,
+    uint8Equal,
+    uint8TimingSafeEqual
+} from 'zapo-js/util'
 
 export type MysqlRow = Record<string, unknown>
 type QueryOutput = [unknown, FieldPacket[]]
@@ -36,4 +42,4 @@ export function assertSafeTablePrefix(prefix: string): void {
     }
 }
 
-export { bytesToHex, normalizeQueryLimit as safeLimit, uint8Equal }
+export { bytesToHex, normalizeQueryLimit as safeLimit, uint8Equal, uint8TimingSafeEqual }

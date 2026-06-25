@@ -1,5 +1,12 @@
 import type Redis from 'ioredis'
-import { bytesToHex, hexToBytes, normalizeQueryLimit, toBytesView, uint8Equal } from 'zapo-js/util'
+import {
+    bytesToHex,
+    hexToBytes,
+    normalizeQueryLimit,
+    toBytesView,
+    uint8Equal,
+    uint8TimingSafeEqual
+} from 'zapo-js/util'
 
 function toBytes(value: unknown): Uint8Array {
     if (value instanceof Uint8Array) return value
@@ -63,4 +70,10 @@ export function toRedisBuffer(bytes: Uint8Array): Buffer {
     return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
 }
 
-export { bytesToHex, hexToBytes, normalizeQueryLimit as safeLimit, uint8Equal }
+export {
+    bytesToHex,
+    hexToBytes,
+    normalizeQueryLimit as safeLimit,
+    uint8Equal,
+    uint8TimingSafeEqual
+}

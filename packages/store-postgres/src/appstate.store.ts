@@ -15,7 +15,15 @@ import type {
 } from 'zapo-js/store'
 
 import { BasePgStore } from './BasePgStore'
-import { bytesToHex, queryFirst, queryRows, toBytes, toBytesOrNull, uint8Equal } from './helpers'
+import {
+    bytesToHex,
+    queryFirst,
+    queryRows,
+    toBytes,
+    toBytesOrNull,
+    uint8Equal,
+    uint8TimingSafeEqual
+} from './helpers'
 import type { PgParam, WaPgStorageOptions } from './types'
 
 const BATCH_SIZE = 500
@@ -309,24 +317,72 @@ export class WaAppStatePgStore extends BasePgStore implements WaAppStateStore {
                     values: [this.sessionId, update.collection, update.version, update.hash]
                 })
 
-                await client.query({
-                    name: this.stmtName('appstate_delete_collection_values'),
-                    text: `DELETE FROM ${this.t('appstate_collection_index_values')}
-                     WHERE session_id = $1 AND collection = $2`,
-                    values: [this.sessionId, update.collection]
-                })
-
-                for (const [indexMacHex, valueMac] of update.indexValueMap.entries()) {
-                    await client.query({
-                        name: this.stmtName('appstate_insert_collection_value'),
-                        text: `INSERT INTO ${this.t('appstate_collection_index_values')} (
-                            session_id, collection, index_mac_hex, value_mac
-                        ) VALUES ($1, $2, $3, $4)`,
-                        values: [this.sessionId, update.collection, indexMacHex, valueMac]
-                    })
-                }
+                await this.applyIndexValueDiff(client, update)
             }
         })
+    }
+
+    private async applyIndexValueDiff(
+        client: PoolClient,
+        update: WaAppStateCollectionStateUpdate
+    ): Promise<void> {
+        const existingRows = queryRows(
+            await client.query({
+                name: this.stmtName('appstate_select_collection_values'),
+                text: `SELECT index_mac_hex, value_mac
+                     FROM ${this.t('appstate_collection_index_values')}
+                     WHERE session_id = $1 AND collection = $2`,
+                values: [this.sessionId, update.collection]
+            })
+        )
+        const existing = new Map<string, Uint8Array>()
+        for (const row of existingRows) {
+            existing.set(String(row.index_mac_hex), toBytes(row.value_mac))
+        }
+
+        const toUpsert: [string, Uint8Array][] = []
+        for (const [indexMacHex, valueMac] of update.indexValueMap.entries()) {
+            const current = existing.get(indexMacHex)
+            if (!current || !uint8TimingSafeEqual(current, valueMac)) {
+                toUpsert.push([indexMacHex, valueMac])
+            }
+        }
+        const toDelete: string[] = []
+        for (const indexMacHex of existing.keys()) {
+            if (!update.indexValueMap.has(indexMacHex)) {
+                toDelete.push(indexMacHex)
+            }
+        }
+
+        for (let start = 0; start < toUpsert.length; start += BATCH_SIZE) {
+            const chunk = toUpsert.slice(start, start + BATCH_SIZE)
+            const rows: string[] = []
+            const params: PgParam[] = []
+            let paramIdx = 1
+            for (const [indexMacHex, valueMac] of chunk) {
+                rows.push(`($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`)
+                params.push(this.sessionId, update.collection, indexMacHex, valueMac)
+            }
+            await client.query(
+                `INSERT INTO ${this.t('appstate_collection_index_values')} (
+                    session_id, collection, index_mac_hex, value_mac
+                ) VALUES ${rows.join(', ')}
+                ON CONFLICT (session_id, collection, index_mac_hex)
+                DO UPDATE SET value_mac = EXCLUDED.value_mac`,
+                params
+            )
+        }
+
+        for (let start = 0; start < toDelete.length; start += BATCH_SIZE) {
+            const chunk = toDelete.slice(start, start + BATCH_SIZE)
+            let paramIdx = 3
+            const placeholders = chunk.map(() => `$${paramIdx++}`).join(', ')
+            await client.query(
+                `DELETE FROM ${this.t('appstate_collection_index_values')}
+                 WHERE session_id = $1 AND collection = $2 AND index_mac_hex IN (${placeholders})`,
+                [this.sessionId, update.collection, ...chunk]
+            )
+        }
     }
 
     public async clear(): Promise<void> {

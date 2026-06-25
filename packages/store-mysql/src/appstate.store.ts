@@ -15,7 +15,15 @@ import type {
 } from 'zapo-js/store'
 
 import { BaseMysqlStore } from './BaseMysqlStore'
-import { bytesToHex, queryFirst, queryRows, toBytes, toBytesOrNull, uint8Equal } from './helpers'
+import {
+    bytesToHex,
+    queryFirst,
+    queryRows,
+    toBytes,
+    toBytesOrNull,
+    uint8Equal,
+    uint8TimingSafeEqual
+} from './helpers'
 import type { MysqlParam, WaMysqlStorageOptions } from './types'
 
 const BATCH_SIZE = 500
@@ -303,22 +311,71 @@ export class WaAppStateMysqlStore extends BaseMysqlStore implements WaAppStateSt
                     [this.sessionId, update.collection, update.version, update.hash]
                 )
 
-                await conn.execute(
-                    `DELETE FROM ${this.t('appstate_collection_index_values')}
-                     WHERE session_id = ? AND collection = ?`,
-                    [this.sessionId, update.collection]
-                )
-
-                for (const [indexMacHex, valueMac] of update.indexValueMap.entries()) {
-                    await conn.execute(
-                        `INSERT INTO ${this.t('appstate_collection_index_values')} (
-                            session_id, collection, index_mac_hex, value_mac
-                        ) VALUES (?, ?, ?, ?)`,
-                        [this.sessionId, update.collection, indexMacHex, valueMac]
-                    )
-                }
+                await this.applyIndexValueDiff(conn, update)
             }
         })
+    }
+
+    private async applyIndexValueDiff(
+        conn: PoolConnection,
+        update: WaAppStateCollectionStateUpdate
+    ): Promise<void> {
+        const existingRows = queryRows(
+            await conn.execute(
+                `SELECT index_mac_hex, value_mac
+                 FROM ${this.t('appstate_collection_index_values')}
+                 WHERE session_id = ? AND collection = ?`,
+                [this.sessionId, update.collection]
+            )
+        )
+        const existing = new Map<string, Uint8Array>()
+        for (const row of existingRows) {
+            existing.set(String(row.index_mac_hex), toBytes(row.value_mac))
+        }
+
+        const toUpsert: [string, Uint8Array][] = []
+        for (const [indexMacHex, valueMac] of update.indexValueMap.entries()) {
+            const current = existing.get(indexMacHex)
+            if (!current || !uint8TimingSafeEqual(current, valueMac)) {
+                toUpsert.push([indexMacHex, valueMac])
+            }
+        }
+        const toDelete: string[] = []
+        for (const indexMacHex of existing.keys()) {
+            if (!update.indexValueMap.has(indexMacHex)) {
+                toDelete.push(indexMacHex)
+            }
+        }
+
+        let cursor = 0
+        for (const size of this.powerOfTwoChunks(toUpsert.length)) {
+            const chunk = toUpsert.slice(cursor, cursor + size)
+            cursor += size
+            const placeholders = chunk.map(() => '(?, ?, ?, ?)').join(', ')
+            const params: MysqlParam[] = []
+            for (const [indexMacHex, valueMac] of chunk) {
+                params.push(this.sessionId, update.collection, indexMacHex, valueMac)
+            }
+            await conn.execute(
+                `INSERT INTO ${this.t('appstate_collection_index_values')} (
+                    session_id, collection, index_mac_hex, value_mac
+                ) VALUES ${placeholders}
+                ON DUPLICATE KEY UPDATE value_mac = VALUES(value_mac)`,
+                params
+            )
+        }
+
+        cursor = 0
+        for (const size of this.powerOfTwoChunks(toDelete.length)) {
+            const chunk = toDelete.slice(cursor, cursor + size)
+            cursor += size
+            const placeholders = chunk.map(() => '?').join(', ')
+            await conn.execute(
+                `DELETE FROM ${this.t('appstate_collection_index_values')}
+                 WHERE session_id = ? AND collection = ? AND index_mac_hex IN (${placeholders})`,
+                [this.sessionId, update.collection, ...chunk]
+            )
+        }
     }
 
     public async clear(): Promise<void> {

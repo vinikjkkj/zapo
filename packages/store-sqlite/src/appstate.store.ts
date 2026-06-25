@@ -14,7 +14,14 @@ import type {
     WaAppStateCollectionStoreState,
     WaAppStateStore
 } from 'zapo-js/store'
-import { asBytes, asNumber, asString, bytesToHex, uint8Equal } from 'zapo-js/util'
+import {
+    asBytes,
+    asNumber,
+    asString,
+    bytesToHex,
+    uint8Equal,
+    uint8TimingSafeEqual
+} from 'zapo-js/util'
 
 import { BaseSqliteStore } from './BaseSqliteStore'
 import type { WaSqliteConnection } from './connection'
@@ -303,24 +310,62 @@ export class WaAppStateSqliteStore extends BaseSqliteStore implements WaAppState
                     [this.options.sessionId, update.collection, update.version, update.hash]
                 )
 
-                db.run(
-                    `DELETE FROM appstate_collection_index_values
-                     WHERE session_id = ? AND collection = ?`,
-                    [this.options.sessionId, update.collection]
-                )
-                for (const [indexMacHex, valueMac] of update.indexValueMap.entries()) {
-                    db.run(
-                        `INSERT INTO appstate_collection_index_values (
-                            session_id,
-                            collection,
-                            index_mac_hex,
-                            value_mac
-                        ) VALUES (?, ?, ?, ?)`,
-                        [this.options.sessionId, update.collection, indexMacHex, valueMac]
-                    )
-                }
+                this.applyIndexValueDiff(db, update)
             }
         })
+    }
+
+    private applyIndexValueDiff(
+        db: WaSqliteConnection,
+        update: WaAppStateCollectionStateUpdate
+    ): void {
+        const existingRows = db.all<Readonly<Record<string, unknown>>>(
+            `SELECT index_mac_hex, value_mac
+             FROM appstate_collection_index_values
+             WHERE session_id = ? AND collection = ?`,
+            [this.options.sessionId, update.collection]
+        )
+        const existing = new Map<string, Uint8Array>()
+        for (const row of existingRows) {
+            existing.set(
+                asString(row.index_mac_hex, 'appstate_collection_index_values.index_mac_hex'),
+                asBytes(row.value_mac, 'appstate_collection_index_values.value_mac')
+            )
+        }
+
+        for (const [indexMacHex, valueMac] of update.indexValueMap.entries()) {
+            const current = existing.get(indexMacHex)
+            if (!current || !uint8TimingSafeEqual(current, valueMac)) {
+                db.run(
+                    `INSERT INTO appstate_collection_index_values (
+                        session_id,
+                        collection,
+                        index_mac_hex,
+                        value_mac
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(session_id, collection, index_mac_hex)
+                    DO UPDATE SET value_mac = excluded.value_mac`,
+                    [this.options.sessionId, update.collection, indexMacHex, valueMac]
+                )
+            }
+        }
+
+        const toDelete: string[] = []
+        for (const indexMacHex of existing.keys()) {
+            if (!update.indexValueMap.has(indexMacHex)) {
+                toDelete.push(indexMacHex)
+            }
+        }
+        const deleteBatchSize = 500
+        for (let start = 0; start < toDelete.length; start += deleteBatchSize) {
+            const chunk = toDelete.slice(start, start + deleteBatchSize)
+            const placeholders = repeatSqlToken('?', chunk.length, ', ')
+            db.run(
+                `DELETE FROM appstate_collection_index_values
+                 WHERE session_id = ? AND collection = ? AND index_mac_hex IN (${placeholders})`,
+                [this.options.sessionId, update.collection, ...chunk]
+            )
+        }
     }
 
     public async clear(): Promise<void> {

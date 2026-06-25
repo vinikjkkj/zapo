@@ -15,8 +15,17 @@ import type {
 } from 'zapo-js/store'
 
 import { BaseMongoStore } from './BaseMongoStore'
-import { bytesToHex, fromBinary, fromBinaryOrNull, toBinary, uint8Equal } from './helpers'
+import {
+    bytesToHex,
+    fromBinary,
+    fromBinaryOrNull,
+    toBinary,
+    uint8Equal,
+    uint8TimingSafeEqual
+} from './helpers'
 import type { WaMongoStorageOptions } from './types'
+
+const INDEX_VALUE_DELETE_BATCH = 1000
 
 interface SyncKeyDoc {
     _id: { session_id: string; key_id: Binary }
@@ -355,16 +364,26 @@ export class WaAppStateMongoStore extends BaseMongoStore implements WaAppStateSt
             await versionsCol.bulkWrite(versionOps, { session })
 
             for (const update of updates) {
-                await valuesCol.deleteMany(
-                    {
-                        '_id.session_id': this.sessionId,
-                        '_id.collection': update.collection
-                    },
-                    { session }
-                )
+                const existingDocs = await valuesCol
+                    .find(
+                        {
+                            '_id.session_id': this.sessionId,
+                            '_id.collection': update.collection
+                        },
+                        { session }
+                    )
+                    .toArray()
+                const existing = new Map<string, Uint8Array>()
+                for (const doc of existingDocs) {
+                    existing.set(doc._id.index_mac_hex, fromBinary(doc.value_mac))
+                }
 
                 const valueOps: AnyBulkWriteOperation<IndexValueDoc>[] = []
                 for (const [indexMacHex, valueMac] of update.indexValueMap.entries()) {
+                    const current = existing.get(indexMacHex)
+                    if (current && uint8TimingSafeEqual(current, valueMac)) {
+                        continue
+                    }
                     valueOps.push({
                         updateOne: {
                             filter: {
@@ -381,6 +400,27 @@ export class WaAppStateMongoStore extends BaseMongoStore implements WaAppStateSt
                         }
                     })
                 }
+
+                const toDelete: string[] = []
+                for (const indexMacHex of existing.keys()) {
+                    if (!update.indexValueMap.has(indexMacHex)) {
+                        toDelete.push(indexMacHex)
+                    }
+                }
+                for (let start = 0; start < toDelete.length; start += INDEX_VALUE_DELETE_BATCH) {
+                    valueOps.push({
+                        deleteMany: {
+                            filter: {
+                                '_id.session_id': this.sessionId,
+                                '_id.collection': update.collection,
+                                '_id.index_mac_hex': {
+                                    $in: toDelete.slice(start, start + INDEX_VALUE_DELETE_BATCH)
+                                }
+                            }
+                        }
+                    })
+                }
+
                 if (valueOps.length > 0) {
                     await valuesCol.bulkWrite(valueOps, { session })
                 }

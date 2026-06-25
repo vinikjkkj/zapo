@@ -17,7 +17,7 @@ import {
 } from 'zapo-js/signal'
 
 import { WaAppStateSqliteStore } from '../appstate.store'
-import type { WaSqliteConnection } from '../connection'
+import { openSqliteConnection, type WaSqliteConnection } from '../connection'
 import { WaDeviceListSqliteStore } from '../device-list.store'
 import { WaGroupMetadataSqliteStore } from '../group-metadata.store'
 import { WaIdentitySqliteStore } from '../identity.store'
@@ -187,6 +187,81 @@ test('sqlite appstate store handles sync keys, collection state and session scop
         assert.deepEqual(afterClear.collections, {})
     } finally {
         await Promise.all([storeA.destroy(), storeB.destroy()])
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+test('sqlite appstate setCollectionStates writes only the index/value delta', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-sqlite-appstate-diff-'))
+    const connection = await openSqliteConnection({
+        path: join(dir, 'state.sqlite'),
+        sessionId: 'session-diff',
+        driver: 'better-sqlite3'
+    })
+
+    // Count write statements so the test asserts the delta is written, not a
+    // full delete-and-reinsert.
+    const writes = { INSERT: 0, DELETE: 0 }
+    const runImpl = connection.run.bind(connection)
+    ;(connection as unknown as { run: WaSqliteConnection['run'] }).run = (sql, params) => {
+        const verb = sql.trim().split(/\s+/)[0]?.toUpperCase()
+        if (verb === 'INSERT' || verb === 'DELETE') writes[verb] += 1
+        return runImpl(sql, params)
+    }
+
+    const store = new WaAppStateSqliteStore({ connection, sessionId: 'session-diff' })
+    const COL = WA_APP_STATE_COLLECTIONS.REGULAR_HIGH
+
+    try {
+        const seed = new Map<string, Uint8Array>()
+        for (let i = 0; i < 200; i += 1) seed.set('idx' + i, makeBytes(8, i & 0xff))
+        await store.setCollectionStates([
+            { collection: COL, version: 1, hash: makeBytes(128, 1), indexValueMap: seed }
+        ])
+
+        // Change exactly one of the 200 entries: only the version row and that
+        // single value row are written, nothing is deleted.
+        writes.INSERT = 0
+        writes.DELETE = 0
+        const changed = new Map(seed)
+        changed.set('idx7', makeBytes(8, 0xee))
+        await store.setCollectionStates([
+            { collection: COL, version: 2, hash: makeBytes(128, 9), indexValueMap: changed }
+        ])
+        assert.equal(writes.INSERT, 2) // 1 version upsert + 1 changed value
+        assert.equal(writes.DELETE, 0)
+
+        // Change one, add one, remove one.
+        writes.INSERT = 0
+        writes.DELETE = 0
+        const mixed = new Map(changed)
+        mixed.delete('idx0')
+        mixed.set('idx200', makeBytes(8, 0x55))
+        mixed.set('idx9', makeBytes(8, 0xcd))
+        await store.setCollectionStates([
+            { collection: COL, version: 3, hash: makeBytes(128, 3), indexValueMap: mixed }
+        ])
+        assert.equal(writes.INSERT, 3) // version + changed + added
+        assert.equal(writes.DELETE, 1) // only the removed entry
+
+        const state = await store.getCollectionState(COL)
+        assert.equal(state.version, 3)
+        assert.equal(state.indexValueMap.size, 200)
+        assert.deepEqual(state.indexValueMap.get('idx7'), makeBytes(8, 0xee))
+        assert.deepEqual(state.indexValueMap.get('idx9'), makeBytes(8, 0xcd))
+        assert.deepEqual(state.indexValueMap.get('idx200'), makeBytes(8, 0x55))
+        assert.equal(state.indexValueMap.has('idx0'), false)
+
+        // Emptying the map deletes the remaining rows.
+        await store.setCollectionStates([
+            { collection: COL, version: 4, hash: APP_STATE_EMPTY_LT_HASH, indexValueMap: new Map() }
+        ])
+        const emptied = await store.getCollectionState(COL)
+        assert.equal(emptied.version, 4)
+        assert.equal(emptied.indexValueMap.size, 0)
+    } finally {
+        await store.destroy()
+        connection.close()
         await rm(dir, { recursive: true, force: true })
     }
 })
