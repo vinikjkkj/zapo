@@ -1,5 +1,18 @@
 import { createHmac, randomBytes } from 'node:crypto'
 
+import { bytesToHex, toBytesView } from 'zapo-js/util'
+
+import {
+    concatBytes,
+    decodeUtf8,
+    encodeAscii,
+    readBigUInt64BE,
+    readUInt16BE,
+    readUInt32BE,
+    writeUInt16BE,
+    writeUInt32BE
+} from './bytes.js'
+
 const STUN_MAGIC_COOKIE = 0x2112a442
 const STUN_FINGERPRINT_XOR = 0x5354554e
 
@@ -21,29 +34,29 @@ const ATTR_FINGERPRINT = 0x8028
 
 const DEFAULT_ICE_PRIORITY = 16_777_215
 
-function generateTransactionId(): Buffer {
-    const id = Buffer.alloc(12)
+function generateTransactionId(): Uint8Array {
+    const id = new Uint8Array(12)
     for (let i = 0; i < 12; i++) {
         id[i] = Math.floor(Math.random() * 256)
     }
     return id
 }
 
-function encodeAttribute(attrType: number, data: Buffer): Buffer {
-    const header = Buffer.alloc(4)
-    header.writeUInt16BE(attrType, 0)
-    header.writeUInt16BE(data.length, 2)
+function encodeAttribute(attrType: number, data: Uint8Array): Uint8Array {
+    const header = new Uint8Array(4)
+    writeUInt16BE(header, attrType, 0)
+    writeUInt16BE(header, data.length, 2)
 
     const padding = (4 - (data.length % 4)) % 4
-    const pad = Buffer.alloc(padding)
+    const pad = new Uint8Array(padding)
 
-    return Buffer.concat([header, data, pad])
+    return concatBytes([header, data, pad])
 }
 
-function crc32(data: Buffer): number {
+function crc32(data: Uint8Array): number {
     let crc = 0xffffffff
     for (let i = 0; i < data.length; i++) {
-        crc ^= data[i]
+        crc ^= data[i]!
         for (let j = 0; j < 8; j++) {
             if (crc & 1) {
                 crc = (crc >>> 1) ^ 0xedb88320
@@ -57,53 +70,53 @@ function crc32(data: Buffer): number {
 
 function buildStunMessage(
     msgType: number,
-    attrs: Buffer,
-    transactionId: Buffer,
-    integrityKey?: Buffer,
+    attrs: Uint8Array,
+    transactionId: Uint8Array,
+    integrityKey?: Uint8Array,
     includeFingerprint = true
-): Buffer {
+): Uint8Array {
     let attrsData = attrs
 
     if (integrityKey) {
         const msgLenForHmac = attrsData.length + 24
-        const hmacHeader = Buffer.alloc(20)
-        hmacHeader.writeUInt16BE(msgType, 0)
-        hmacHeader.writeUInt16BE(msgLenForHmac, 2)
-        hmacHeader.writeUInt32BE(STUN_MAGIC_COOKIE, 4)
-        transactionId.copy(hmacHeader, 8)
+        const hmacHeader = new Uint8Array(20)
+        writeUInt16BE(hmacHeader, msgType, 0)
+        writeUInt16BE(hmacHeader, msgLenForHmac, 2)
+        writeUInt32BE(hmacHeader, STUN_MAGIC_COOKIE, 4)
+        hmacHeader.set(transactionId, 8)
 
-        const hmacInput = Buffer.concat([hmacHeader, attrsData])
-        const hmac = createHmac('sha1', integrityKey).update(hmacInput).digest()
+        const hmacInput = concatBytes([hmacHeader, attrsData])
+        const hmac = toBytesView(createHmac('sha1', integrityKey).update(hmacInput).digest())
         const miAttr = encodeAttribute(ATTR_MESSAGE_INTEGRITY, hmac)
-        attrsData = Buffer.concat([attrsData, miAttr])
+        attrsData = concatBytes([attrsData, miAttr])
     }
 
     if (includeFingerprint) {
         const msgLenForCrc = attrsData.length + 8
-        const crcHeader = Buffer.alloc(20)
-        crcHeader.writeUInt16BE(msgType, 0)
-        crcHeader.writeUInt16BE(msgLenForCrc, 2)
-        crcHeader.writeUInt32BE(STUN_MAGIC_COOKIE, 4)
-        transactionId.copy(crcHeader, 8)
+        const crcHeader = new Uint8Array(20)
+        writeUInt16BE(crcHeader, msgType, 0)
+        writeUInt16BE(crcHeader, msgLenForCrc, 2)
+        writeUInt32BE(crcHeader, STUN_MAGIC_COOKIE, 4)
+        crcHeader.set(transactionId, 8)
 
-        const crcInput = Buffer.concat([crcHeader, attrsData])
+        const crcInput = concatBytes([crcHeader, attrsData])
         const fingerprint = (crc32(crcInput) ^ STUN_FINGERPRINT_XOR) >>> 0
-        const fpBuf = Buffer.alloc(4)
-        fpBuf.writeUInt32BE(fingerprint, 0)
+        const fpBuf = new Uint8Array(4)
+        writeUInt32BE(fpBuf, fingerprint, 0)
         const fpAttr = encodeAttribute(ATTR_FINGERPRINT, fpBuf)
-        attrsData = Buffer.concat([attrsData, fpAttr])
+        attrsData = concatBytes([attrsData, fpAttr])
     }
 
-    const header = Buffer.alloc(20)
-    header.writeUInt16BE(msgType, 0)
-    header.writeUInt16BE(attrsData.length, 2)
-    header.writeUInt32BE(STUN_MAGIC_COOKIE, 4)
-    transactionId.copy(header, 8)
+    const header = new Uint8Array(20)
+    writeUInt16BE(header, msgType, 0)
+    writeUInt16BE(header, attrsData.length, 2)
+    writeUInt32BE(header, STUN_MAGIC_COOKIE, 4)
+    header.set(transactionId, 8)
 
-    return Buffer.concat([header, attrsData])
+    return concatBytes([header, attrsData])
 }
 
-function encodeVarint(value: number): Buffer {
+function encodeVarint(value: number): Uint8Array {
     const bytes: number[] = []
     let v = value >>> 0
     while (v > 0x7f) {
@@ -111,23 +124,23 @@ function encodeVarint(value: number): Buffer {
         v >>>= 7
     }
     bytes.push(v & 0x7f)
-    return Buffer.from(bytes)
+    return new Uint8Array(bytes)
 }
 
-function encodeProtobufVarintField(fieldNumber: number, value: number): Buffer {
+function encodeProtobufVarintField(fieldNumber: number, value: number): Uint8Array {
     const tag = encodeVarint((fieldNumber << 3) | 0)
     const val = encodeVarint(value)
-    return Buffer.concat([tag, val])
+    return concatBytes([tag, val])
 }
 
-function encodeProtobufLengthDelimited(fieldNumber: number, data: Buffer): Buffer {
+function encodeProtobufLengthDelimited(fieldNumber: number, data: Uint8Array): Uint8Array {
     const tag = encodeVarint((fieldNumber << 3) | 2)
     const len = encodeVarint(data.length)
-    return Buffer.concat([tag, len, data])
+    return concatBytes([tag, len, data])
 }
 
-export function buildSenderSubscriptions(ssrc: number): Buffer {
-    const inner = Buffer.concat([
+export function buildSenderSubscriptions(ssrc: number): Uint8Array {
+    const inner = concatBytes([
         encodeProtobufVarintField(3, ssrc),
         encodeProtobufVarintField(5, 0),
         encodeProtobufVarintField(6, 0)
@@ -141,12 +154,12 @@ export function buildSSRCSubscriptionList(
     peerSsrcs: number[],
     selfPid: number,
     peerPid: number
-): Buffer {
-    const entries: Buffer[] = []
+): Uint8Array {
+    const entries: Uint8Array[] = []
 
     for (const ssrc of selfSsrcs) {
         if (ssrc === 0) continue
-        const inner = Buffer.concat([
+        const inner = concatBytes([
             encodeProtobufVarintField(1, selfPid),
             encodeProtobufVarintField(2, 1),
             encodeProtobufVarintField(3, ssrc)
@@ -156,7 +169,7 @@ export function buildSSRCSubscriptionList(
 
     for (const peerSsrc of peerSsrcs) {
         if (peerSsrc === 0) continue
-        const inner = Buffer.concat([
+        const inner = concatBytes([
             encodeProtobufVarintField(1, peerPid),
             encodeProtobufVarintField(2, 1),
             encodeProtobufVarintField(3, peerSsrc)
@@ -164,32 +177,31 @@ export function buildSSRCSubscriptionList(
         entries.push(encodeProtobufLengthDelimited(1, inner))
     }
 
-    return Buffer.concat(entries)
+    return concatBytes(entries)
 }
 
-function encodeXorRelayedAddress(ip: string, port: number): Buffer {
-    const data = Buffer.alloc(8)
+function encodeXorRelayedAddress(ip: string, port: number): Uint8Array {
+    const data = new Uint8Array(8)
     data[0] = 0x00
     data[1] = 0x01
-    data.writeUInt16BE(port ^ (STUN_MAGIC_COOKIE >>> 16), 2)
+    writeUInt16BE(data, port ^ (STUN_MAGIC_COOKIE >>> 16), 2)
     const parts = ip.split('.').map(Number)
-    const ipNum = ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0
-    data.writeUInt32BE((ipNum ^ STUN_MAGIC_COOKIE) >>> 0, 4)
+    const ipNum = ((parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!) >>> 0
+    writeUInt32BE(data, (ipNum ^ STUN_MAGIC_COOKIE) >>> 0, 4)
     return data
 }
 
 export function buildAllocateForRelay(
-    senderSubscriptions: Buffer,
-    ssrcList: Buffer,
-    hmacKey: Buffer,
+    senderSubscriptions: Uint8Array,
+    ssrcList: Uint8Array,
+    hmacKey: Uint8Array,
     relayIp?: string,
     relayPort?: number
-): Buffer {
+): Uint8Array {
     const transactionId = generateTransactionId()
-    const parts: Buffer[] = []
+    const parts: Uint8Array[] = []
 
     parts.push(encodeAttribute(ATTR_SENDER_SUBSCRIPTIONS, senderSubscriptions))
-
     parts.push(encodeAttribute(ATTR_SSRC_LIST, ssrcList))
 
     if (relayIp && relayPort) {
@@ -198,15 +210,15 @@ export function buildAllocateForRelay(
         )
     }
 
-    const attrs = Buffer.concat(parts)
+    const attrs = concatBytes(parts)
 
     return buildStunMessage(STUN_ALLOCATE_REQUEST, attrs, transactionId, hmacKey, false)
 }
 
 export function buildBindingRequest(
-    username: Buffer,
-    hmacKey: Buffer | undefined,
-    senderSubscriptions?: Buffer,
+    username: Uint8Array,
+    hmacKey: Uint8Array | undefined,
+    senderSubscriptions?: Uint8Array,
     includeIceControllingOrOptions:
         | boolean
         | {
@@ -214,7 +226,7 @@ export function buildBindingRequest(
               includePriority?: boolean
               includeUsername?: boolean
           } = true
-): Buffer {
+): Uint8Array {
     const options: {
         iceRole?: 'none' | 'controlling' | 'controlled'
         includePriority?: boolean
@@ -232,18 +244,18 @@ export function buildBindingRequest(
 
     const priorityAttr = includePriority
         ? (() => {
-              const priorityBuf = Buffer.alloc(4)
-              priorityBuf.writeUInt32BE(DEFAULT_ICE_PRIORITY, 0)
+              const priorityBuf = new Uint8Array(4)
+              writeUInt32BE(priorityBuf, DEFAULT_ICE_PRIORITY, 0)
               return encodeAttribute(ATTR_PRIORITY, priorityBuf)
           })()
         : undefined
 
-    const parts = []
+    const parts: Uint8Array[] = []
     if (usernameAttr) parts.push(usernameAttr)
     if (priorityAttr) parts.push(priorityAttr)
 
     if (iceRole === 'controlling' || iceRole === 'controlled') {
-        const tieBreaker = Buffer.alloc(8)
+        const tieBreaker = new Uint8Array(8)
         for (let i = 0; i < 8; i++) {
             tieBreaker[i] = Math.floor(Math.random() * 256)
         }
@@ -255,31 +267,31 @@ export function buildBindingRequest(
         parts.push(encodeAttribute(ATTR_SENDER_SUBSCRIPTIONS, senderSubscriptions))
     }
 
-    const attrs = Buffer.concat(parts)
+    const attrs = concatBytes(parts)
 
     return buildStunMessage(STUN_BINDING_REQUEST, attrs, transactionId, hmacKey, true)
 }
 
 export function buildBindingRequestWithSubs(
-    username: Buffer | undefined,
-    hmacKey: Buffer | undefined,
-    senderSubscriptions: Buffer | undefined,
+    username: Uint8Array | undefined,
+    hmacKey: Uint8Array | undefined,
+    senderSubscriptions: Uint8Array | undefined,
     includeIceControlling: boolean,
     includeFingerprint: boolean
-): Buffer {
+): Uint8Array {
     const transactionId = generateTransactionId()
-    const parts: Buffer[] = []
+    const parts: Uint8Array[] = []
 
     if (username && username.length > 0) {
         parts.push(encodeAttribute(ATTR_USERNAME, username))
     }
 
-    const priorityBuf = Buffer.alloc(4)
-    priorityBuf.writeUInt32BE(DEFAULT_ICE_PRIORITY, 0)
+    const priorityBuf = new Uint8Array(4)
+    writeUInt32BE(priorityBuf, DEFAULT_ICE_PRIORITY, 0)
     parts.push(encodeAttribute(ATTR_PRIORITY, priorityBuf))
 
     if (includeIceControlling) {
-        const tieBreaker = randomBytes(8)
+        const tieBreaker = toBytesView(randomBytes(8))
         parts.push(encodeAttribute(ATTR_ICE_CONTROLLING, tieBreaker))
     }
 
@@ -287,15 +299,15 @@ export function buildBindingRequestWithSubs(
         parts.push(encodeAttribute(ATTR_SENDER_SUBSCRIPTIONS, senderSubscriptions))
     }
 
-    const attrs = Buffer.concat(parts)
+    const attrs = concatBytes(parts)
 
     return buildStunMessage(STUN_BINDING_REQUEST, attrs, transactionId, hmacKey, includeFingerprint)
 }
 
 export function buildMinimalBindingWithSubs(
-    senderSubscriptions: Buffer,
+    senderSubscriptions: Uint8Array,
     includeFingerprint = false
-): Buffer {
+): Uint8Array {
     const transactionId = generateTransactionId()
     const attrs = encodeAttribute(ATTR_SENDER_SUBSCRIPTIONS, senderSubscriptions)
     return buildStunMessage(
@@ -308,9 +320,9 @@ export function buildMinimalBindingWithSubs(
 }
 
 export function buildMinimalAllocateWithSubs(
-    senderSubscriptions: Buffer,
+    senderSubscriptions: Uint8Array,
     includeFingerprint = false
-): Buffer {
+): Uint8Array {
     const transactionId = generateTransactionId()
     const attrs = encodeAttribute(ATTR_SENDER_SUBSCRIPTIONS, senderSubscriptions)
     return buildStunMessage(
@@ -322,41 +334,44 @@ export function buildMinimalAllocateWithSubs(
     )
 }
 
-export function buildAllocateRequest(username: Buffer, hmacKey: Buffer, lifetime = 3600): Buffer {
+export function buildAllocateRequest(
+    username: Uint8Array,
+    hmacKey: Uint8Array,
+    lifetime = 3600
+): Uint8Array {
     const transactionId = generateTransactionId()
-    const parts: Buffer[] = []
+    const parts: Uint8Array[] = []
 
-    parts.push(encodeAttribute(ATTR_REQUESTED_TRANSPORT, Buffer.from([17, 0, 0, 0])))
-
+    parts.push(encodeAttribute(ATTR_REQUESTED_TRANSPORT, new Uint8Array([17, 0, 0, 0])))
     parts.push(encodeAttribute(ATTR_USERNAME, username))
 
-    const lifetimeBuf = Buffer.alloc(4)
-    lifetimeBuf.writeUInt32BE(lifetime, 0)
+    const lifetimeBuf = new Uint8Array(4)
+    writeUInt32BE(lifetimeBuf, lifetime, 0)
     parts.push(encodeAttribute(ATTR_LIFETIME, lifetimeBuf))
 
-    const attrs = Buffer.concat(parts)
+    const attrs = concatBytes(parts)
 
     return buildStunMessage(STUN_ALLOCATE_REQUEST, attrs, transactionId, hmacKey, true)
 }
 
-export function buildWhatsAppPing(): Buffer {
+export function buildWhatsAppPing(): Uint8Array {
     const transactionId = generateTransactionId()
-    const header = Buffer.alloc(20)
-    header.writeUInt16BE(WHATSAPP_PING, 0)
-    header.writeUInt16BE(0, 2)
-    header.writeUInt32BE(STUN_MAGIC_COOKIE, 4)
-    transactionId.copy(header, 8)
+    const header = new Uint8Array(20)
+    writeUInt16BE(header, WHATSAPP_PING, 0)
+    writeUInt16BE(header, 0, 2)
+    writeUInt32BE(header, STUN_MAGIC_COOKIE, 4)
+    header.set(transactionId, 8)
     return header
 }
 
 export function isStunPacket(data: Uint8Array): boolean {
     if (data.length < 2) return false
-    return (data[0] & 0xc0) === 0
+    return (data[0]! & 0xc0) === 0
 }
 
 export function isRtpPacket(data: Uint8Array): boolean {
     if (data.length < 2) return false
-    return (data[0] & 0xc0) === 0x80
+    return (data[0]! & 0xc0) === 0x80
 }
 
 export interface StunResponseInfo {
@@ -377,7 +392,7 @@ interface StunAttribute {
     type: number
     typeName: string
     length: number
-    data: Buffer
+    data: Uint8Array
 }
 
 const STUN_ATTR_NAMES: Record<number, string> = {
@@ -405,11 +420,9 @@ const STUN_ATTR_NAMES: Record<number, string> = {
 export function parseStunResponse(data: Uint8Array): StunResponseInfo | null {
     if (data.length < 20) return null
 
-    const buf = Buffer.from(data)
-
-    const cookie = buf.readUInt32BE(4)
+    const cookie = readUInt32BE(data, 4)
     if (cookie !== STUN_MAGIC_COOKIE) {
-        const msgType = buf.readUInt16BE(0)
+        const msgType = readUInt16BE(data, 0)
         if (msgType === 0x0801 || msgType === 0x0802) {
             return {
                 rawType: msgType,
@@ -417,7 +430,7 @@ export function parseStunResponse(data: Uint8Array): StunResponseInfo | null {
                 stunClass: 'indication',
                 isSuccess: false,
                 isError: false,
-                transactionId: buf.subarray(8, 20).toString('hex'),
+                transactionId: bytesToHex(data.subarray(8, 20)),
                 length: data.length,
                 attributes: []
             }
@@ -425,9 +438,9 @@ export function parseStunResponse(data: Uint8Array): StunResponseInfo | null {
         return null
     }
 
-    const rawType = buf.readUInt16BE(0)
-    const msgLength = buf.readUInt16BE(2)
-    const transactionId = buf.subarray(8, 20).toString('hex')
+    const rawType = readUInt16BE(data, 0)
+    const msgLength = readUInt16BE(data, 2)
+    const transactionId = bytesToHex(data.subarray(8, 20))
 
     const c0 = (rawType >> 4) & 0x1
     const c1 = (rawType >> 8) & 0x1
@@ -470,13 +483,13 @@ export function parseStunResponse(data: Uint8Array): StunResponseInfo | null {
     let offset = 20
 
     while (offset + 4 <= 20 + msgLength && offset + 4 <= data.length) {
-        const attrType = buf.readUInt16BE(offset)
-        const attrLength = buf.readUInt16BE(offset + 2)
+        const attrType = readUInt16BE(data, offset)
+        const attrLength = readUInt16BE(data, offset + 2)
         const attrEnd = offset + 4 + attrLength
 
         if (attrEnd > data.length) break
 
-        const attrData = buf.subarray(offset + 4, attrEnd)
+        const attrData = data.subarray(offset + 4, attrEnd)
         attributes.push({
             type: attrType,
             typeName: STUN_ATTR_NAMES[attrType] || `0x${attrType.toString(16).padStart(4, '0')}`,
@@ -485,16 +498,16 @@ export function parseStunResponse(data: Uint8Array): StunResponseInfo | null {
         })
 
         if (attrType === 0x0009 && attrLength >= 4) {
-            const errorClass = attrData[2] & 0x07
-            const errorNumber = attrData[3]
+            const errorClass = attrData[2]! & 0x07
+            const errorNumber = attrData[3]!
             errorCode = errorClass * 100 + errorNumber
             if (attrLength > 4) {
-                errorReason = attrData.subarray(4).toString('utf-8')
+                errorReason = decodeUtf8(attrData.subarray(4))
             }
         }
 
         if (attrType === 0x4033 && stunClass === 'success' && attrLength === 8) {
-            stableRoutingConnId = attrData.readBigUInt64BE(0)
+            stableRoutingConnId = readBigUInt64BE(attrData, 0)
         }
 
         offset = attrEnd + ((4 - (attrLength % 4)) % 4)
@@ -534,20 +547,20 @@ export function formatStunResponse(info: StunResponseInfo): string {
 export function classifyPacket(data: Uint8Array): string {
     if (data.length < 2) return `tiny(${data.length}B)`
 
-    const firstByte = data[0]
+    const firstByte = data[0]!
     const twoBits = (firstByte & 0xc0) >> 6
 
     if (twoBits === 0) {
         const info = parseStunResponse(data)
         if (info) return formatStunResponse(info)
-        const msgType = (data[0] << 8) | data[1]
+        const msgType = (data[0]! << 8) | data[1]!
         return `STUN? 0x${msgType.toString(16)} (${data.length}B)`
     }
 
     if (twoBits === 2) {
-        const pt = data[1] & 0x7f
-        const marker = (data[1] >> 7) & 1
-        const seq = data.length >= 4 ? (data[2] << 8) | data[3] : 0
+        const pt = data[1]! & 0x7f
+        const marker = (data[1]! >> 7) & 1
+        const seq = data.length >= 4 ? (data[2]! << 8) | data[3]! : 0
         return `RTP/SRTP PT=${pt} M=${marker} seq=${seq} (${data.length}B)`
     }
 

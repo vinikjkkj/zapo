@@ -1,5 +1,12 @@
 import { randomInt } from 'node:crypto'
 
+import {
+    EMPTY_BYTES,
+    readUInt16BE,
+    readUInt32BE,
+    writeUInt16BE,
+    writeUInt32BE
+} from './bytes.js'
 import { PayloadType } from './types.js'
 
 const RTP_VERSION = 2
@@ -18,7 +25,7 @@ export class RtpHeader {
     ssrc: number
     csrc: number[] = []
     extensionProfile = 0
-    extensionData: Buffer = Buffer.alloc(0)
+    extensionData: Uint8Array = EMPTY_BYTES
 
     constructor(payloadType: number, sequenceNumber: number, timestamp: number, ssrc: number) {
         this.payloadType = payloadType
@@ -35,7 +42,7 @@ export class RtpHeader {
         return s
     }
 
-    encode(buf: Buffer): number {
+    encode(buf: Uint8Array): number {
         if (buf.length < this.size()) {
             throw new Error('buffer too small for RTP header')
         }
@@ -48,45 +55,43 @@ export class RtpHeader {
 
         buf[1] = ((this.marker ? 1 : 0) << 7) | (this.payloadType & 0x7f)
 
-        buf.writeUInt16BE(this.sequenceNumber, 2)
-
-        buf.writeUInt32BE(this.timestamp, 4)
-
-        buf.writeUInt32BE(this.ssrc, 8)
+        writeUInt16BE(buf, this.sequenceNumber, 2)
+        writeUInt32BE(buf, this.timestamp, 4)
+        writeUInt32BE(buf, this.ssrc, 8)
 
         let offset = 12
         for (let i = 0; i < this.csrc.length; i++) {
-            buf.writeUInt32BE(this.csrc[i], offset)
+            writeUInt32BE(buf, this.csrc[i]!, offset)
             offset += 4
         }
 
         if (this.extension) {
-            buf.writeUInt16BE(this.extensionProfile, offset)
-            buf.writeUInt16BE(this.extensionData.length / 4, offset + 2)
-            this.extensionData.copy(buf, offset + 4)
+            writeUInt16BE(buf, this.extensionProfile, offset)
+            writeUInt16BE(buf, this.extensionData.length / 4, offset + 2)
+            buf.set(this.extensionData, offset + 4)
         }
 
         return this.size()
     }
 
-    static decode(buf: Buffer): RtpHeader {
+    static decode(buf: Uint8Array): RtpHeader {
         if (buf.length < MIN_HEADER_SIZE) {
             throw new Error('buffer too small for RTP header')
         }
 
-        const version = (buf[0] >> 6) & 0x03
+        const version = (buf[0]! >> 6) & 0x03
         if (version !== RTP_VERSION) {
             throw new Error(`invalid RTP version: ${version}`)
         }
 
-        const padding = ((buf[0] >> 5) & 0x01) !== 0
-        const extension = ((buf[0] >> 4) & 0x01) !== 0
-        const csrcCount = buf[0] & 0x0f
-        const marker = ((buf[1] >> 7) & 0x01) !== 0
-        const payloadType = buf[1] & 0x7f
-        const sequenceNumber = buf.readUInt16BE(2)
-        const timestamp = buf.readUInt32BE(4)
-        const ssrc = buf.readUInt32BE(8)
+        const padding = ((buf[0]! >> 5) & 0x01) !== 0
+        const extension = ((buf[0]! >> 4) & 0x01) !== 0
+        const csrcCount = buf[0]! & 0x0f
+        const marker = ((buf[1]! >> 7) & 0x01) !== 0
+        const payloadType = buf[1]! & 0x7f
+        const sequenceNumber = readUInt16BE(buf, 2)
+        const timestamp = readUInt32BE(buf, 4)
+        const ssrc = readUInt32BE(buf, 8)
 
         const headerSize = MIN_HEADER_SIZE + csrcCount * 4
         if (buf.length < headerSize) {
@@ -96,7 +101,7 @@ export class RtpHeader {
         const csrc: number[] = []
         let offset = 12
         for (let i = 0; i < csrcCount; i++) {
-            csrc.push(buf.readUInt32BE(offset))
+            csrc.push(readUInt32BE(buf, offset))
             offset += 4
         }
 
@@ -109,12 +114,12 @@ export class RtpHeader {
         header.csrc = csrc
 
         if (extension && buf.length >= offset + 4) {
-            header.extensionProfile = buf.readUInt16BE(offset)
-            const extWords = buf.readUInt16BE(offset + 2)
+            header.extensionProfile = readUInt16BE(buf, offset)
+            const extWords = readUInt16BE(buf, offset + 2)
             const extBytes = extWords * 4
             offset += 4
             if (buf.length >= offset + extBytes) {
-                header.extensionData = Buffer.from(buf.subarray(offset, offset + extBytes))
+                header.extensionData = buf.slice(offset, offset + extBytes)
             }
         }
 
@@ -124,9 +129,9 @@ export class RtpHeader {
 
 export class RtpPacket {
     header: RtpHeader
-    payload: Buffer
+    payload: Uint8Array
 
-    constructor(header: RtpHeader, payload: Buffer) {
+    constructor(header: RtpHeader, payload: Uint8Array) {
         this.header = header
         this.payload = payload
     }
@@ -135,16 +140,16 @@ export class RtpPacket {
         return this.header.size() + this.payload.length
     }
 
-    encode(): Buffer {
-        const buf = Buffer.alloc(this.size())
+    encode(): Uint8Array {
+        const buf = new Uint8Array(this.size())
         const headerSize = this.header.encode(buf)
-        this.payload.copy(buf, headerSize)
+        buf.set(this.payload, headerSize)
         return buf
     }
 
-    static decode(buf: Buffer): RtpPacket {
+    static decode(buf: Uint8Array): RtpPacket {
         const header = RtpHeader.decode(buf)
-        const payload = Buffer.from(buf.subarray(header.size()))
+        const payload = buf.slice(header.size())
         return new RtpPacket(header, payload)
     }
 }
@@ -170,7 +175,7 @@ export class RtpSession {
         return new RtpSession(ssrc, PayloadType.WhatsAppOpus, 16000, 960)
     }
 
-    createPacket(payload: Buffer, marker = false): RtpPacket {
+    createPacket(payload: Uint8Array, marker = false): RtpPacket {
         const header = new RtpHeader(
             this.payloadType,
             this.sequenceNumber,
@@ -185,7 +190,7 @@ export class RtpSession {
         return new RtpPacket(header, payload)
     }
 
-    createPacketWithDuration(payload: Buffer, durationSamples: number, marker = false): RtpPacket {
+    createPacketWithDuration(payload: Uint8Array, durationSamples: number, marker = false): RtpPacket {
         const header = new RtpHeader(
             this.payloadType,
             this.sequenceNumber,

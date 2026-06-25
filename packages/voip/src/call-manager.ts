@@ -2,8 +2,10 @@ import { EventEmitter } from 'node:events'
 
 import { createNoopLogger, type Logger } from 'zapo-js'
 import type { BinaryNode } from 'zapo-js/transport'
+import { bytesToHex, uint8Equal } from 'zapo-js/util'
 
 import { AudioEngine } from './audio-engine.js'
+import { concatBytes, EMPTY_BYTES, readUInt32BE, toArrayBuffer } from './bytes.js'
 import { CallInfo } from './call-state.js'
 import { derivePerJidSrtpKey, generateCallKey } from './encryption.js'
 import { MLowCodec } from './mlow-codec.js'
@@ -352,7 +354,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                 )
                 if (peerCallKey) {
                     const ourCallKey = this.currentCall.encryptionKey
-                    const keysMatch = ourCallKey ? ourCallKey.equals(peerCallKey) : false
+                    const keysMatch = ourCallKey ? uint8Equal(ourCallKey, peerCallKey) : false
                     if (!keysMatch && ourCallKey) {
                         const meLid2 = this.sock.authState?.creds?.me?.lid
                         const meId2 = this.sock.authState?.creds?.me?.id
@@ -768,9 +770,9 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             electedRelayIdx = parseInt(inner.attrs['elected_relay_idx'])
         } else if (inner.attrs?.['relay_id'] !== undefined) {
             electedRelayIdx = parseInt(inner.attrs['relay_id'])
-        } else if (Buffer.isBuffer(inner.content)) {
+        } else if (inner.content instanceof Uint8Array) {
             const bytes = inner.content
-            if (bytes.length >= 4) electedRelayIdx = bytes.readUInt32BE(0)
+            if (bytes.length >= 4) electedRelayIdx = readUInt32BE(bytes, 0)
             else if (bytes.length > 0) electedRelayIdx = bytes[0]
         }
 
@@ -818,14 +820,14 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
     private audioDropCount = 0
     private realAudioSendCount = 0
 
-    private static readonly EMPTY_BUFFER = Buffer.alloc(0)
+    private static readonly EMPTY_BYTES = EMPTY_BYTES
 
     private encodeBufferA: Float32Array | null = null
     private encodeBufferB: Float32Array | null = null
     private encodeBuffer: Float32Array | null = null
     private encodeBufferPos = 0
 
-    private authPaddingBuffer: Buffer | null = null
+    private authPaddingBuffer: Uint8Array | null = null
 
     private get encodeFrameSamples(): number {
         return this.opusCodec?.getFrameSize() ?? 960
@@ -896,7 +898,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                     )
                 }
 
-                this.sendOpusFrame(Buffer.from(opusFrame), false)
+                this.sendOpusFrame(opusFrame, false)
                 this.realAudioSendCount++
 
                 if (this.realAudioSendCount % 500 === 0) {
@@ -910,18 +912,18 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         }
     }
 
-    private sendOpusFrame(opusFrame: Buffer, isSilence: boolean): void {
+    private sendOpusFrame(opusFrame: Uint8Array, isSilence: boolean): void {
         if (!this.rtpSession || !this.srtpSession) return
 
         try {
-            let rtpPayload: Buffer = opusFrame
+            let rtpPayload: Uint8Array = opusFrame
 
             const authPadding = SRTP_AUTH_TAG_LEN - SRTP_SEND_AUTH_TAG_LEN
             if (authPadding > 0) {
                 if (!this.authPaddingBuffer || this.authPaddingBuffer.length !== authPadding) {
-                    this.authPaddingBuffer = Buffer.alloc(authPadding)
+                    this.authPaddingBuffer = new Uint8Array(authPadding)
                 }
-                rtpPayload = Buffer.concat([rtpPayload, this.authPaddingBuffer])
+                rtpPayload = concatBytes([rtpPayload, this.authPaddingBuffer])
             }
 
             const marker = !this.firstPacketSent
@@ -931,7 +933,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             if (this.debeEnabled) {
                 rtpPacket.header.extension = true
                 rtpPacket.header.extensionProfile = 0xdebe
-                rtpPacket.header.extensionData = NativeCallManager.EMPTY_BUFFER
+                rtpPacket.header.extensionData = NativeCallManager.EMPTY_BYTES
             }
 
             if (!this.firstPacketSent) {
@@ -942,18 +944,12 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             }
 
             const srtpData = this.srtpSession.protect(rtpPacket)
-            const srtpBuf = Buffer.from(srtpData)
-
-            const srtpArrayBuf = srtpBuf.buffer.slice(
-                srtpBuf.byteOffset,
-                srtpBuf.byteOffset + srtpBuf.byteLength
-            )
-            this.sctpRelay.broadcast(srtpArrayBuf)
+            this.sctpRelay.broadcast(toArrayBuffer(srtpData))
 
             this.audioSendCount++
             if (this.audioSendCount === 1 || this.audioSendCount % 500 === 0) {
                 this.logger.debug(
-                    `[SEND] #${this.audioSendCount}: opus=${opusFrame.length}B SRTP=${srtpBuf.length}B SCTP(${this.sctpRelay.getConnectedCount()}) ${isSilence ? '(silence)' : `(${tsDelta / 16}ms)`}`
+                    `[SEND] #${this.audioSendCount}: opus=${opusFrame.length}B SRTP=${srtpData.length}B SCTP(${this.sctpRelay.getConnectedCount()}) ${isSilence ? '(silence)' : `(${tsDelta / 16}ms)`}`
                 )
             }
         } catch (err: any) {
@@ -1094,19 +1090,17 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             }
         }
 
-        const buf = Buffer.from(data)
-
         if (this.audioRecvCount === 0) {
-            const ssrc = buf.readUInt32BE(8)
-            const ext = ((data[0] >> 4) & 0x01) !== 0
-            const csrc = data[0] & 0x0f
+            const ssrc = readUInt32BE(data, 8)
+            const ext = ((data[0]! >> 4) & 0x01) !== 0
+            const csrc = data[0]! & 0x0f
             this.logger.debug(
                 `[RECV] First RTP: ${data.length}B ssrc=0x${ssrc.toString(16)} ext=${ext} csrc=${csrc} selfSsrc=0x${this.selfSsrc.toString(16)} peerSsrcs=[${this.peerSsrcs.map((s) => '0x' + s.toString(16))}]`
             )
         }
 
         try {
-            const rtpPacket = this.srtpSession.unprotect(Buffer.from(data))
+            const rtpPacket = this.srtpSession.unprotect(data)
             const opusPayload = rtpPacket.payload
 
             this.audioRecvCount++
@@ -1134,7 +1128,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
 
             const hexDump =
                 this.audioRecvCount <= 30
-                    ? Buffer.from(opusPayload).subarray(0, 8).toString('hex')
+                    ? bytesToHex(opusPayload.subarray(0, 8))
                     : ''
 
             const statsBefore = this.opusCodec.getStats()
@@ -1177,8 +1171,8 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         } catch (err: any) {
             this.srtpErrorCount++
             if (this.srtpErrorCount <= 5) {
-                const ssrc = buf.readUInt32BE(8)
-                const ext = ((data[0] >> 4) & 0x01) !== 0
+                const ssrc = readUInt32BE(data, 8)
+                const ext = ((data[0]! >> 4) & 0x01) !== 0
                 this.logger.debug(
                     `[RECV] SRTP err #${this.srtpErrorCount}: ${err.message} ssrc=0x${ssrc.toString(16)} ext=${ext} size=${data.length}B`
                 )
@@ -1240,6 +1234,8 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         this.logger.debug(
             `[MEDIA] startMediaFlow: audio=${this.audioEngine.hasAudio()} ext=${this.audioEngine.isExternalMode()} srtp=${!!this.srtpSession} sctp=${this.sctpRelay.hasConnection()} PT=120 clock=16kHz ts_delta=${this.rtpTsDelta} (${this.rtpTsDelta / 16}ms)`
         )
+
+        this.resetEncodeState()
 
         this.audioEngine.startPlayback()
 

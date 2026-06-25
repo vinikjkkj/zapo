@@ -8,7 +8,7 @@ export interface VoipSignalRepository {
     decryptMessage(args: {
         jid: string
         type: string
-        ciphertext: Uint8Array | Buffer
+        ciphertext: Uint8Array
     }): Promise<Uint8Array>
     lidMapping?: {
         getLIDForPN?(pn: string): Promise<string | null | undefined>

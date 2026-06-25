@@ -1,5 +1,7 @@
 import type { BinaryNode } from 'zapo-js/transport'
+import { base64ToBytes, bytesToBase64 } from 'zapo-js/util'
 
+import { decodeUtf8 } from './bytes.js'
 import type { RelayEndpoint } from './types.js'
 
 export function parseRelayFromAck(ackNode: BinaryNode): {
@@ -8,7 +10,7 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
     uuid: string
     selfPid?: number
     peerPid?: number
-    hbhKey?: Buffer
+    hbhKey?: Uint8Array
 } {
     const relays: RelayEndpoint[] = []
     const participantJids: string[] = []
@@ -16,7 +18,7 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
     let uuid = ''
     let selfPid: number | undefined
     let peerPid: number | undefined
-    let hbhKey: Buffer | undefined
+    let hbhKey: Uint8Array | undefined
 
     if (!ackNode.content || !Array.isArray(ackNode.content)) {
         return { relays, participantJids, uuid }
@@ -64,8 +66,8 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
         let relayKey = ''
         const tokens: Map<string, string> = new Map()
         const authTokens: Map<string, string> = new Map()
-        const rawTokens: Map<string, Buffer> = new Map()
-        const rawAuthTokens: Map<string, Buffer> = new Map()
+        const rawTokens: Map<string, Uint8Array> = new Map()
+        const rawAuthTokens: Map<string, Uint8Array> = new Map()
 
         for (const rc of relayContent) {
             if (typeof rc !== 'object' || !('tag' in rc)) continue
@@ -74,24 +76,24 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
             if (rcNode.tag === 'key' && rcNode.content) {
                 relayKey =
                     rcNode.content instanceof Uint8Array
-                        ? Buffer.from(rcNode.content).toString('utf-8')
+                        ? decodeUtf8(rcNode.content)
                         : String(rcNode.content)
             }
 
             if (rcNode.tag === 'hbh_key' && rcNode.content) {
-                let rawKey: Buffer | undefined
+                let rawKey: Uint8Array | undefined
                 if (rcNode.content instanceof Uint8Array) {
-                    rawKey = Buffer.from(rcNode.content)
+                    rawKey = rcNode.content
                 } else if (typeof rcNode.content === 'string') {
-                    rawKey = Buffer.from(rcNode.content, 'base64')
+                    rawKey = base64ToBytes(rcNode.content)
                 }
 
                 if (rawKey) {
                     if (rawKey.length === 30) {
                         hbhKey = rawKey
                     } else if (rawKey.length > 30) {
-                        const asB64 = rawKey.toString('utf-8').trim()
-                        const decoded = Buffer.from(asB64, 'base64')
+                        const asB64 = decodeUtf8(rawKey).trim()
+                        const decoded = base64ToBytes(asB64)
                         if (decoded.length === 30) hbhKey = decoded
                     }
                 }
@@ -101,11 +103,11 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
                 const tokenId = rcNode.attrs?.id || '0'
                 const tokenData =
                     rcNode.content instanceof Uint8Array
-                        ? Buffer.from(rcNode.content).toString('base64')
+                        ? bytesToBase64(rcNode.content)
                         : String(rcNode.content)
                 tokens.set(tokenId, tokenData)
                 if (rcNode.content instanceof Uint8Array) {
-                    rawTokens.set(tokenId, Buffer.from(rcNode.content))
+                    rawTokens.set(tokenId, rcNode.content)
                 }
             }
 
@@ -113,11 +115,11 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
                 const authTokenId = rcNode.attrs?.id || '0'
                 const authTokenData =
                     rcNode.content instanceof Uint8Array
-                        ? Buffer.from(rcNode.content).toString('base64')
+                        ? bytesToBase64(rcNode.content)
                         : String(rcNode.content)
                 authTokens.set(authTokenId, authTokenData)
                 if (rcNode.content instanceof Uint8Array) {
-                    rawAuthTokens.set(authTokenId, Buffer.from(rcNode.content))
+                    rawAuthTokens.set(authTokenId, rcNode.content)
                 }
             }
         }
@@ -141,7 +143,7 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
 
                 if (addrBytes.length === 6) {
                     const ip = `${addrBytes[0]}.${addrBytes[1]}.${addrBytes[2]}.${addrBytes[3]}`
-                    const port = (addrBytes[4] << 8) | addrBytes[5]
+                    const port = (addrBytes[4]! << 8) | addrBytes[5]!
 
                     relays.push({
                         ip,

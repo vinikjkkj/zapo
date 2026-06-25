@@ -1,5 +1,8 @@
 import * as fs from 'node:fs'
 
+import { toBytesView } from 'zapo-js/util'
+
+import { concatBytes } from './bytes.js'
 import { type AudioEngineConfig, type AudioSender, DEFAULT_AUDIO_CONFIG } from './types.js'
 
 export class AudioEngine {
@@ -155,7 +158,7 @@ export class AudioEngine {
         const ffmpeg = ffmpegModule.default
 
         return new Promise((resolve, reject) => {
-            const chunks: Buffer[] = []
+            const chunks: Uint8Array[] = []
 
             ffmpeg(inputPath)
                 .audioFrequency(this.sampleRate)
@@ -164,16 +167,16 @@ export class AudioEngine {
                 .format('s16le')
                 .on('error', reject)
                 .on('end', () => {
-                    const pcmBuffer = Buffer.concat(chunks)
+                    const pcmBytes = concatBytes(chunks)
                     const int16Array = new Int16Array(
-                        pcmBuffer.buffer,
-                        pcmBuffer.byteOffset,
-                        pcmBuffer.byteLength / 2
+                        pcmBytes.buffer,
+                        pcmBytes.byteOffset,
+                        pcmBytes.byteLength / 2
                     )
                     resolve(int16Array)
                 })
                 .pipe()
-                .on('data', (chunk: Buffer) => chunks.push(chunk))
+                .on('data', (chunk: Uint8Array | Buffer) => chunks.push(toBytesView(chunk)))
         })
     }
 

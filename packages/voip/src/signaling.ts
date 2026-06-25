@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 
 import { proto } from 'zapo-js/proto'
 import type { BinaryNode } from 'zapo-js/transport'
+import { bytesToHex, toBytesView } from 'zapo-js/util'
 
 import type { NodeInfo, RelayEndpoint } from './types.js'
 import type { VoipSocket } from './voip-socket.js'
@@ -42,11 +43,11 @@ export function generateCallId(): string {
         bytes[i] = Math.floor(Math.random() * 256)
     }
 
-    return Buffer.from(bytes).toString('hex').toUpperCase()
+    return bytesToHex(bytes).toUpperCase()
 }
 
 export function generateCallStanzaId(): string {
-    return randomBytes(16).toString('hex').toUpperCase()
+    return bytesToHex(toBytesView(randomBytes(16))).toUpperCase()
 }
 
 export function extractNodeInfo(node: BinaryNode): NodeInfo | null {
@@ -137,7 +138,7 @@ export async function decryptCallKeyInNode(
     sock: VoipSocket,
     node: BinaryNode,
     peerJid: string
-): Promise<{ node: BinaryNode; callKey?: Buffer }> {
+): Promise<{ node: BinaryNode; callKey?: Uint8Array }> {
     const cloned = structuredClone(node)
     if (!cloned.content || !Array.isArray(cloned.content)) {
         return { node: cloned }
@@ -194,7 +195,7 @@ export async function decryptCallKeyInNode(
             const decrypted = await sock.signalRepository.decryptMessage({
                 jid: peerJid,
                 type: encType,
-                ciphertext: Buffer.from(encContent)
+                ciphertext: encContent
             })
 
             const unpadded = unpadRandomMax16(decrypted)
@@ -211,7 +212,7 @@ export async function decryptCallKeyInNode(
                 content: new Uint8Array(callKey)
             }
 
-            return { node: cloned, callKey: Buffer.from(callKey) }
+            return { node: cloned, callKey: new Uint8Array(callKey) }
         }
     } catch (err: any) {
         console.error(`[Signaling] Decrypt error: ${err.message}`)
@@ -226,7 +227,7 @@ const CAPABILITY_PREACCEPT = new Uint8Array([0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb,
 export async function buildOfferStanza(
     sock: VoipSocket,
     callId: string,
-    callKey: Buffer,
+    callKey: Uint8Array,
     peerJid: string,
     _deviceJids: string[],
     isVideo: boolean
@@ -334,7 +335,7 @@ export async function buildOfferStanza(
 export async function buildAcceptStanza(
     sock: VoipSocket,
     callId: string,
-    callKey: Buffer,
+    callKey: Uint8Array,
     peerJid: string,
     callCreator: string,
     isVideo: boolean
