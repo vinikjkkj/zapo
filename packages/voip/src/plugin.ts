@@ -16,7 +16,7 @@ export interface VoipPluginOptions extends WaVoipCoordinatorOptions {}
  * const client = new WaClient({
  *   store,
  *   sessionId: 'main',
- *   plugins: [voipPlugin()]
+ *   plugins: [voipPlugin({ maxConcurrentCalls: 2 })]
  * })
  *
  * client.on('voip_call_incoming', (call) => {

@@ -1,4 +1,4 @@
-import { type  Logger ,type WaClientPluginContext } from 'zapo-js'
+import { type Logger, type WaClientPluginContext } from 'zapo-js'
 import { WA_MESSAGE_TAGS } from 'zapo-js/protocol'
 import type { BinaryNode } from 'zapo-js/transport'
 
@@ -11,6 +11,11 @@ import type { VoipSocket } from './voip-socket.js'
 
 export interface WaVoipCoordinatorOptions {
     readonly debug?: boolean
+    /**
+     * Maximum simultaneous non-ended calls (ringing, connecting, or active).
+     * Default is `1`. Increase to enable parallel multi-call.
+     */
+    readonly maxConcurrentCalls?: number
 }
 
 /**
@@ -31,7 +36,8 @@ export class WaVoipCoordinator {
         this.manager = new NativeCallManager({
             sock: this.socket,
             logger: this.logger,
-            debug: options.debug ?? false
+            debug: options.debug ?? false,
+            maxConcurrentCalls: options.maxConcurrentCalls
         })
         this.registerIncomingHandlers(ctx)
         this.wireClientEvents(ctx)
@@ -49,26 +55,37 @@ export class WaVoipCoordinator {
         return this.manager.rejectCall(callId, reason)
     }
 
-    async endCall(reason?: EndCallReason): Promise<void> {
-        return this.manager.endCall(reason)
+    async endCall(callId: string, reason?: EndCallReason): Promise<void> {
+        return this.manager.endCall(callId, reason)
     }
 
-    async loadAudio(audioPath: string): Promise<void> {
-        return this.manager.loadAudio(audioPath)
+    async loadAudio(callId: string, audioPath: string): Promise<void> {
+        return this.manager.loadAudio(callId, audioPath)
     }
 
-    setMute(muted: boolean): void {
-        this.manager.setMute(muted)
+    setMute(callId: string, muted: boolean): void {
+        this.manager.setMute(callId, muted)
     }
 
-    setExternalAudioMode(enabled: boolean): void {
-        this.manager.setExternalAudioMode(enabled)
+    setExternalAudioMode(callId: string, enabled: boolean): void {
+        this.manager.setExternalAudioMode(callId, enabled)
     }
 
-    feedLiveAudio(data: Float32Array): void {
-        this.manager.feedLiveAudio(data)
+    feedLiveAudio(callId: string, data: Float32Array): void {
+        this.manager.feedLiveAudio(callId, data)
     }
 
+    getCall(callId: string): CallInfo | null {
+        return this.manager.getCall(callId)
+    }
+
+    getCalls(): readonly CallInfo[] {
+        return this.manager.getCalls()
+    }
+
+    /**
+     * @deprecated Use {@link getCalls} or {@link getCall} instead.
+     */
     getCurrentCall(): CallInfo | null {
         return this.manager.getCurrentCall()
     }
@@ -134,8 +151,11 @@ export class WaVoipCoordinator {
         this.manager.on('call:ended', (call) => {
             ctx.emit('voip_call_ended', call)
         })
-        this.manager.on('call:audio', (data) => {
-            ctx.emit('voip_call_audio', data)
+        this.manager.on('call:inbound_audio', (call, pcm) => {
+            ctx.emit('voip_call_inbound_audio', call, pcm)
+        })
+        this.manager.on('call:outbound_audio_finished', (call) => {
+            ctx.emit('voip_call_outbound_audio_finished', call)
         })
         this.manager.on('call:error', (error) => {
             ctx.emit('voip_call_error', error)

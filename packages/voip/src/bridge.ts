@@ -9,6 +9,7 @@ import type { VoipSocket } from './voip-socket.js'
 export interface CreateVoipManagerOptions {
     logger?: Logger
     debug?: boolean
+    maxConcurrentCalls?: number
 }
 
 export function createVoipManager(
@@ -18,7 +19,8 @@ export function createVoipManager(
     const config: NativeCallManagerConfig = {
         sock: socket,
         logger: options.logger,
-        debug: options.debug ?? false
+        debug: options.debug ?? false,
+        maxConcurrentCalls: options.maxConcurrentCalls
     }
     return new NativeCallManager(config)
 }
@@ -64,7 +66,7 @@ export async function routeCallStanza(
             await manager.handleCallTransport(node, normalizedPeerJid)
             break
         case 'terminate':
-            manager.handleCallTerminate(node)
+            await manager.handleCallTerminate(node)
             break
         case 'relaylatency':
             await manager.handleCallRelaylatency(node, normalizedPeerJid)

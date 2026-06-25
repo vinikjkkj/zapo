@@ -15,6 +15,8 @@ export interface CallStateData {
     audioMuted: boolean
     videoOff: boolean
     silenced?: boolean
+    /** Incoming call waiting for a free slot; cannot accept until unblocked. */
+    acceptBlocked?: boolean
     endReason?: EndCallReason
     durationSecs?: number
 }
@@ -121,7 +123,13 @@ export class CallInfo {
     }
 
     get canAccept(): boolean {
-        return this.stateData.state === CallState.IncomingRinging
+        return (
+            this.stateData.state === CallState.IncomingRinging && !this.stateData.acceptBlocked
+        )
+    }
+
+    get isAcceptBlocked(): boolean {
+        return this.stateData.acceptBlocked === true
     }
 
     get canReject(): boolean {

@@ -105,6 +105,7 @@ export interface CallStateData {
     audioMuted: boolean
     videoOff: boolean
     silenced?: boolean
+    acceptBlocked?: boolean
 }
 
 export interface CallSession {
@@ -145,7 +146,10 @@ export interface CallManagerEvents {
     'call:state': (call: CallInfo) => void
     'call:incoming': (call: CallInfo) => void
     'call:ended': (call: CallInfo) => void
-    'call:audio': (data: Float32Array) => void
+    /** Decoded peer audio received on this call (16 kHz mono PCM). */
+    'call:inbound_audio': (call: CallInfo, pcm: Float32Array) => void
+    /** Preloaded outbound audio finished sending on this call. */
+    'call:outbound_audio_finished': (call: CallInfo) => void
     'signaling:send': (node: BinaryNode) => void
     'call:error': (error: Error) => void
 }
