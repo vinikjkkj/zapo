@@ -176,8 +176,37 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         this.currentCall.applyTransition({ type: 'local_accepted' })
         this.emitState()
 
+        const meId = this.sock.authState?.creds?.me?.id ?? ''
+        const callCreator = this.currentCall.callCreator
+        const peerJid = this.currentCall.peerJid
+        const isVideo = this.currentCall.mediaType === CallMediaType.Video
+
+        this.acceptedByJid = peerJid
+        await this.initSrtpKeys()
+
+        try {
+            const muteNode = buildMuteV2Stanza(peerJid, callId, callCreator, 0, meId)
+            await this.sock.sendNode(muteNode)
+        } catch (err: any) {
+            if (this.debug) this.logger.error(`[CallManager] Error sending mute_v2: ${err.message}`)
+        }
+
+        try {
+            const transportNode = buildTransportStanza(
+                peerJid,
+                callId,
+                callCreator,
+                meId,
+                '1',
+                '1'
+            )
+            await this.sock.sendNode(transportNode)
+        } catch (err: any) {
+            if (this.debug)
+                this.logger.error(`[CallManager] Error sending transport: ${err.message}`)
+        }
+
         if (this.currentCall.encryptionKey) {
-            const isVideo = this.currentCall.mediaType === CallMediaType.Video
             const acceptStanza = await buildAcceptStanza(
                 this.sock,
                 this.currentCall.callId,
@@ -188,10 +217,10 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             )
 
             try {
-                await this.sock.query(acceptStanza)
+                await this.sock.sendNode(acceptStanza)
             } catch (err: any) {
                 if (this.debug)
-                    this.logger.error(`[CallManager] Accept query error: ${err.message}`)
+                    this.logger.error(`[CallManager] Accept send error: ${err.message}`)
             }
         }
 
@@ -217,7 +246,7 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             this.currentCall.callId,
             this.currentCall.callCreator
         )
-        this.sock.query(node).catch(() => {})
+        this.sock.sendNode(node).catch(() => {})
         this.emitState()
         this.cleanupMedia()
     }
@@ -225,14 +254,19 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
     async endCall(reason: EndCallReason = EndCallReason.UserEnded): Promise<void> {
         if (!this.currentCall || this.currentCall.isEnded) return
 
+        const connectedAt = this.currentCall.stateData.connectedAt
+        const audioDurationMs = connectedAt ? Date.now() - connectedAt.getTime() : undefined
+
         this.currentCall.applyTransition({ type: 'terminated', reason })
 
+        const terminateTarget = this.acceptedByJid ?? this.currentCall.peerJid
         const node = buildTerminateStanza(
-            this.currentCall.peerJid,
+            terminateTarget,
             this.currentCall.callId,
-            this.currentCall.callCreator
+            this.currentCall.callCreator,
+            audioDurationMs
         )
-        this.sock.query(node).catch(() => {})
+        this.sock.sendNode(node).catch(() => {})
         this.emit('call:ended', this.currentCall)
         this.emitState()
         this.cleanupMedia()
@@ -291,7 +325,8 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             peerJid
         )
 
-        const relays = extractRelayEndpoints(decryptedNode)
+        const { relays, participantJids, uuid, selfPid, peerPid, hbhKey } =
+            parseRelayFromAck(decryptedNode)
 
         const mediaType = isVideo ? CallMediaType.Video : CallMediaType.Audio
         this.currentCall = CallInfo.newIncoming(callId, peerJid, callCreator, undefined, mediaType)
@@ -302,7 +337,14 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         }
 
         if (relays.length > 0) {
-            this.currentCall.relayData = { endpoints: relays }
+            this.currentCall.relayData = {
+                endpoints: relays,
+                participantJids,
+                uuid,
+                selfPid,
+                peerPid,
+                hbhKey
+            }
         }
 
         const meId = this.sock.authState?.creds?.me?.id
@@ -329,6 +371,8 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
                 this.logger.error(`[CallManager] Error sending preaccept: ${err.message}`)
         }
 
+        await this.sendIncomingRelayLatency()
+
         this.emit('call:incoming', this.currentCall)
         this.emitState()
 
@@ -336,6 +380,46 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
             this.logger.debug(
                 `[CallManager] Incoming call: ${callId} from ${peerJid} (creator=${callCreator}, video=${isVideo}, relays=${relays.length})`
             )
+        }
+    }
+
+    private async sendIncomingRelayLatency(): Promise<void> {
+        if (!this.currentCall?.relayData) return
+
+        const meId = this.sock.authState?.creds?.me?.id ?? ''
+        const callId = this.currentCall.callId
+        const callCreator = this.currentCall.callCreator
+        const destinationJids = this.currentCall.relayData.participantJids || []
+        const seenRelayNames = new Set<string>()
+
+        for (const ep of this.currentCall.relayData.endpoints) {
+            const name = ep.relayName || ''
+            if (!name || seenRelayNames.has(name)) continue
+            seenRelayNames.add(name)
+
+            try {
+                const relayData = [
+                    {
+                        relayName: name,
+                        latency: ep.c2rRtt || 0,
+                        addressBytes: ep.addressBytes
+                    }
+                ]
+                const relayLatencyNode = buildRelayLatencyStanza(
+                    this.currentCall.peerJid,
+                    callId,
+                    callCreator,
+                    relayData,
+                    destinationJids,
+                    meId
+                )
+                await this.sock.sendNode(relayLatencyNode)
+            } catch (err: any) {
+                if (this.debug)
+                    this.logger.error(
+                        `[CallManager] Error sending incoming relaylatency for ${name}: ${err.message}`
+                    )
+            }
         }
     }
 
@@ -466,28 +550,14 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
         }
 
         try {
-            const transportNode: BinaryNode = {
-                tag: 'call',
-                attrs: { to: acceptingDeviceJid, id: generateCallStanzaId() },
-                content: [
-                    {
-                        tag: 'transport',
-                        attrs: {
-                            'call-id': callId,
-                            'call-creator': callCreator,
-                            'transport-message-type': '1',
-                            'p2p-cand-round': '1'
-                        },
-                        content: [
-                            {
-                                tag: 'net',
-                                attrs: { medium: '2', protocol: '0' },
-                                content: undefined
-                            }
-                        ]
-                    }
-                ]
-            }
+            const transportNode = buildTransportStanza(
+                acceptingDeviceJid,
+                callId,
+                callCreator,
+                meId,
+                '1',
+                '1'
+            )
             await this.sock.sendNode(transportNode)
         } catch (err: any) {
             if (this.debug)
@@ -577,7 +647,13 @@ export class NativeCallManager extends EventEmitter implements AudioSender {
 
             if (!this.initialTransportSent) {
                 try {
-                    const transportNode = buildTransportStanza(peerJid, callId, callCreator, meId)
+                    const basePeerJid = peerJid.replace(/:\d+@/, '@')
+                    const transportNode = buildTransportStanza(
+                        basePeerJid,
+                        callId,
+                        callCreator,
+                        meId
+                    )
                     await this.sock.sendNode(transportNode)
                     this.initialTransportSent = true
                 } catch (err: any) {

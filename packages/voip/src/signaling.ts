@@ -403,16 +403,26 @@ export async function buildAcceptStanza(
 export function buildTerminateStanza(
     peerJid: string,
     callId: string,
-    callCreator: string
+    callCreator: string,
+    audioDurationMs?: number
 ): BinaryNode {
-    const toJidClean = peerJid.replace(/:\d+@/, '@')
+    const attrs: Record<string, string> = {
+        'call-id': callId,
+        'call-creator': callCreator
+    }
+    if (audioDurationMs !== undefined && audioDurationMs >= 0) {
+        const ms = String(Math.floor(audioDurationMs))
+        attrs.duration = ms
+        attrs.audio_duration = ms
+    }
+
     return {
         tag: 'call',
-        attrs: { to: toJidClean, id: generateCallStanzaId() },
+        attrs: { to: peerJid, id: generateCallStanzaId() },
         content: [
             {
                 tag: 'terminate',
-                attrs: { 'call-id': callId, 'call-creator': callCreator },
+                attrs,
                 content: undefined
             }
         ]
@@ -527,20 +537,21 @@ export function buildTransportStanza(
     peerJid: string,
     callId: string,
     callCreator: string,
-    meId: string
+    meId: string,
+    messageType = '0',
+    p2pCandRound = '0'
 ): BinaryNode {
-    const toJidClean = peerJid.replace(/:\d+@/, '@')
     return {
         tag: 'call',
-        attrs: { to: toJidClean, id: generateCallStanzaId() },
+        attrs: { to: peerJid, id: generateCallStanzaId() },
         content: [
             {
                 tag: 'transport',
                 attrs: {
                     'call-id': callId,
                     'call-creator': callCreator,
-                    'transport-message-type': '0',
-                    'p2p-cand-round': '0'
+                    'transport-message-type': messageType,
+                    'p2p-cand-round': p2pCandRound
                 },
                 content: [
                     {
