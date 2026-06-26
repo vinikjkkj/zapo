@@ -1,7 +1,7 @@
 import type { BinaryNode } from 'zapo-js/transport'
 
-import type { CallInfo } from './call-state.js'
-import type { WaVoipCoordinator } from './coordinator.js'
+import type { CallInfo } from './call/call-state.js'
+import type { WaVoipCoordinator } from './WaVoipCoordinator.js'
 
 declare module 'zapo-js' {
     interface WaClientPluginRegistry {

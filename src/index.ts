@@ -226,6 +226,7 @@ export type {
 } from '@message/types'
 export { getContentType, resolveMessageTarget } from '@message/encode/content'
 export { resolveMediaPayload } from '@message/encode/media-payload'
+export { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
 export type { WaResolvedMediaPayload } from '@message/encode/media-payload'
 export type { WaSendContextInfo } from '@message/context-info'
 export type {

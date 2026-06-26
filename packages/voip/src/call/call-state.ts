@@ -5,7 +5,7 @@ import {
     type CallTransition,
     type EndCallReason,
     type RelayData
-} from './types.js'
+} from '../types.js'
 
 export interface CallStateData {
     state: CallState

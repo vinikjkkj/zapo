@@ -1,6 +1,6 @@
 import type { BinaryNode } from 'zapo-js/transport'
 
-import type { CallInfo } from './call-state.js'
+import type { CallInfo } from './call/call-state.js'
 
 export enum CallState {
     Initiating = 'initiating',
@@ -143,22 +143,22 @@ export interface CallOfferOptions {
 }
 
 export interface CallManagerEvents {
-    'call:state': (call: CallInfo) => void
-    'call:incoming': (call: CallInfo) => void
-    'call:ended': (call: CallInfo) => void
+    call_state: (call: CallInfo) => void
+    call_incoming: (call: CallInfo) => void
+    call_ended: (call: CallInfo) => void
     /** Decoded peer audio received on this call (16 kHz mono PCM). */
-    'call:inbound_audio': (call: CallInfo, pcm: Float32Array) => void
+    call_inbound_audio: (call: CallInfo, pcm: Float32Array) => void
     /** Preloaded outbound audio finished sending on this call. */
-    'call:outbound_audio_finished': (call: CallInfo) => void
-    'signaling:send': (node: BinaryNode) => void
-    'call:error': (error: Error) => void
+    call_outbound_audio_finished: (call: CallInfo) => void
+    signaling_send: (node: BinaryNode) => void
+    call_error: (error: Error) => void
 }
 
 export interface AudioSender {
     sendCapturedAudio(data: Float32Array): void
 }
 
-export interface AudioEngineConfig {
+export interface WaAudioEngineConfig {
     sampleRate: number
     captureChunkSize: number
     playbackOutputSize: number
@@ -166,7 +166,7 @@ export interface AudioEngineConfig {
     intervalMs: number
 }
 
-export const DEFAULT_AUDIO_CONFIG: AudioEngineConfig = {
+export const DEFAULT_AUDIO_CONFIG: WaAudioEngineConfig = {
     sampleRate: 16000,
     captureChunkSize: 960,
     playbackOutputSize: 256,

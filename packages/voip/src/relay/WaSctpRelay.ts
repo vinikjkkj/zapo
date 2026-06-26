@@ -4,7 +4,8 @@ import wrtc from '@roamhq/wrtc'
 import { createNoopLogger, type Logger } from 'zapo-js'
 import { bytesToHex, toBytesView, toError } from 'zapo-js/util'
 
-import { encodeAscii, readUInt32BE, toArrayBuffer } from './bytes.js'
+import { encodeAscii, readUInt32BE, toArrayBuffer } from '../bytes.js'
+
 import {
     buildAllocateForRelay,
     buildBindingRequestWithSubs,
@@ -71,14 +72,12 @@ interface Connection {
     }
 }
 
-export interface NodeSctpRelayManagerOptions {
+export interface WaSctpRelayOptions {
     readonly logger?: Logger
-    readonly debug?: boolean
 }
 
-export class NodeSctpRelayManager extends EventEmitter {
+export class WaSctpRelay extends EventEmitter {
     private readonly logger: Logger
-    private readonly debug: boolean
     private connections = new Map<string, Connection>()
     private relayMap = new Map<string, RelayInfo>()
     private stats = {
@@ -89,36 +88,22 @@ export class NodeSctpRelayManager extends EventEmitter {
     private configuring = false
     private globalBuffer: Array<{ ip: string; port: number; data: ArrayBuffer }> = []
     private keepaliveTimers = new Map<string, NodeJS.Timeout>()
-    private sdpLogged = false
     private audioSsrc = 0
     private subscriptionSsrc = 0
 
-    constructor(options: NodeSctpRelayManagerOptions = {}) {
+    constructor(options: WaSctpRelayOptions = {}) {
         super()
         this.logger = options.logger ?? createNoopLogger()
-        this.debug = options.debug ?? false
-    }
-
-    private trace(message: string, context?: Record<string, unknown>): void {
-        if (this.debug) {
-            this.logger.trace(message, context)
-        }
-    }
-
-    private logDebug(message: string, context?: Record<string, unknown>): void {
-        if (this.debug) {
-            this.logger.debug(message, context)
-        }
     }
 
     setSsrc(ssrc: number): void {
         this.audioSsrc = ssrc
-        this.logDebug('sctp ssrc set', { ssrc: `0x${ssrc.toString(16).padStart(8, '0')}` })
+        this.logger.debug('sctp ssrc set', { ssrc: `0x${ssrc.toString(16).padStart(8, '0')}` })
     }
 
     setSubscriptionSsrc(ssrc: number): void {
         this.subscriptionSsrc = ssrc
-        this.logDebug('sctp subscription ssrc set', {
+        this.logger.debug('sctp subscription ssrc set', {
             ssrc: `0x${ssrc.toString(16).padStart(8, '0')}`
         })
     }
@@ -131,7 +116,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                 conn.channel.readyState === 'open'
             ) {
                 this.sendStunAllocateOnOpen(conn, conn.relayInfo)
-                this.logDebug('sctp subscriptions resent', { connectionId: conn.id })
+                this.logger.debug('sctp subscriptions resent', { connectionId: conn.id })
             }
         }
     }
@@ -180,7 +165,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             relayInfo.authTokenId
         )
 
-        this.logDebug('sctp connecting to relay', {
+        this.logger.debug('sctp connecting to relay', {
             connectionId,
             relayName: relayInfo.name
         })
@@ -220,7 +205,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             conn.peerConnection = pc
 
             pc.oniceconnectionstatechange = () => {
-                this.logDebug('ice connection state changed', {
+                this.logger.debug('ice connection state changed', {
                     connectionId,
                     state: pc.iceConnectionState
                 })
@@ -234,7 +219,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                     pc.iceConnectionState === 'connected' ||
                     pc.iceConnectionState === 'completed'
                 ) {
-                    this.logDebug('ice connected', { connectionId })
+                    this.logger.debug('ice connected', { connectionId })
                     try {
                         const stats = (pc as any).getStats?.()
                         if (stats) {
@@ -243,7 +228,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                                     report.type === 'candidate-pair' &&
                                     report.state === 'succeeded'
                                 ) {
-                                    this.trace('ice candidate pair succeeded', {
+                                    this.logger.trace('ice candidate pair succeeded', {
                                         connectionId,
                                         localCandidateId: report.localCandidateId,
                                         remoteCandidateId: report.remoteCandidateId
@@ -257,9 +242,12 @@ export class NodeSctpRelayManager extends EventEmitter {
 
             pc.onconnectionstatechange = () => {
                 const connState = (pc as any).connectionState
-                this.logDebug('peer connection state changed', { connectionId, state: connState })
+                this.logger.debug('peer connection state changed', {
+                    connectionId,
+                    state: connState
+                })
                 if (connState === 'connected') {
-                    this.logDebug('sctp dtls fully connected', { connectionId })
+                    this.logger.debug('sctp dtls fully connected', { connectionId })
                 }
                 if (connState === 'failed') {
                     this.logger.warn('sctp peer connection failed', { connectionId })
@@ -268,21 +256,21 @@ export class NodeSctpRelayManager extends EventEmitter {
             }
 
             pc.onicegatheringstatechange = () => {
-                this.logDebug('ice gathering state changed', {
+                this.logger.debug('ice gathering state changed', {
                     connectionId,
                     state: pc.iceGatheringState
                 })
             }
 
             pc.onsignalingstatechange = () => {
-                this.logDebug('signaling state changed', {
+                this.logger.debug('signaling state changed', {
                     connectionId,
                     state: pc.signalingState
                 })
             }
             ;(pc as any).ondatachannel = (event: any) => {
                 const incomingChannel = event.channel as DataChannelClass
-                this.logDebug('incoming data channel from relay', {
+                this.logger.debug('incoming data channel from relay', {
                     connectionId,
                     label: incomingChannel.label,
                     channelId: incomingChannel.id
@@ -293,7 +281,7 @@ export class NodeSctpRelayManager extends EventEmitter {
 
                 incomingChannel.onmessage = (ev: MessageEvent) => {
                     const buffer = toBytesView(ev.data as ArrayBuffer | ArrayBufferView)
-                    this.trace('data from incoming channel', {
+                    this.logger.trace('data from incoming channel', {
                         connectionId,
                         size: buffer.length,
                         packetKind: classifyPacket(buffer)
@@ -302,14 +290,14 @@ export class NodeSctpRelayManager extends EventEmitter {
                 }
 
                 incomingChannel.onopen = () => {
-                    this.logDebug('incoming data channel opened', {
+                    this.logger.debug('incoming data channel opened', {
                         connectionId,
                         label: incomingChannel.label
                     })
                 }
 
                 incomingChannel.onclose = () => {
-                    this.logDebug('incoming data channel closed', {
+                    this.logger.debug('incoming data channel closed', {
                         connectionId,
                         label: incomingChannel.label
                     })
@@ -324,7 +312,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             channel.binaryType = 'arraybuffer'
 
             channel.onopen = () => {
-                this.logDebug('sctp data channel open', { connectionId })
+                this.logger.debug('sctp data channel open', { connectionId })
                 conn.state = ConnectionState.Open
                 this.stats.connected++
 
@@ -338,18 +326,18 @@ export class NodeSctpRelayManager extends EventEmitter {
                 this.startKeepalive(connectionId, conn)
 
                 this.drainBuffer(connectionId)
-                this.emit('relay:connected', { ip: relayInfo.ip, port: relayInfo.port })
+                this.emit('relay_connected', { ip: relayInfo.ip, port: relayInfo.port })
             }
 
             channel.onclose = () => {
-                this.logDebug('sctp data channel closed', { connectionId })
+                this.logger.debug('sctp data channel closed', { connectionId })
                 this.closeConnection(connectionId)
             }
 
             channel.onmessage = (event: MessageEvent) => {
                 const buffer = toBytesView(event.data as ArrayBuffer | ArrayBufferView)
                 if (conn.stats.receivedPackets === 0) {
-                    this.trace('first message on data channel', {
+                    this.logger.trace('first message on data channel', {
                         connectionId,
                         size: buffer.length,
                         dataType: typeof event.data
@@ -372,7 +360,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             const modifiedSdp = this.modifySdpForRelay(offer.sdp!, relayInfo)
 
             const chosenUfrag = relayInfo.authToken || relayInfo.token
-            this.logDebug('sdp relay candidate configured', {
+            this.logger.debug('sdp relay candidate configured', {
                 connectionId,
                 candidate: `${relayInfo.ip}:${relayInfo.port}`,
                 ufragPrefix: chosenUfrag.substring(0, 16),
@@ -380,17 +368,17 @@ export class NodeSctpRelayManager extends EventEmitter {
                 authTokenSize: relayInfo.rawAuthToken?.length ?? 0
             })
 
-            if (!this.sdpLogged) {
-                this.sdpLogged = true
-                this.trace('full modified sdp', { connectionId, sdp: modifiedSdp })
-            }
+            this.logger.trace('modified sdp', {
+                connectionId,
+                sdp: modifiedSdp
+            })
 
             await pc.setRemoteDescription({
                 type: 'answer',
                 sdp: modifiedSdp
             })
 
-            this.logDebug('sctp relay configured, waiting for ice', { connectionId })
+            this.logger.debug('sctp relay configured, waiting for ice', { connectionId })
 
             return conn
         } catch (err) {
@@ -442,7 +430,7 @@ export class NodeSctpRelayManager extends EventEmitter {
 
         const remoteUfrag = relayInfo.authToken || relayInfo.token
         if (!remoteUfrag) {
-            this.logDebug('stun registration skipped, no ufrag', { connectionId })
+            this.logger.debug('stun registration skipped, no ufrag', { connectionId })
             return
         }
 
@@ -462,7 +450,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             const peerSsrc = this.subscriptionSsrc
             const ssrc = peerSsrc || selfSsrc
             if (!ssrc) {
-                this.logDebug('stun registration skipped, no ssrc', { connectionId, label })
+                this.logger.debug('stun registration skipped, no ssrc', { connectionId, label })
                 return
             }
 
@@ -472,7 +460,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                 const username = encodeAscii(`${remoteUfrag}:${localUfrag}`)
                 const v1 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
                 this.sendToChannel(conn, toArrayBuffer(v1))
-                this.trace('stun v1 auth token ufrag sent', {
+                this.logger.trace('stun v1 auth token ufrag sent', {
                     connectionId,
                     label,
                     size: v1.length,
@@ -484,12 +472,16 @@ export class NodeSctpRelayManager extends EventEmitter {
                 const username = encodeAscii(`${relayInfo.token}:${localUfrag}`)
                 const v2 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
                 this.sendToChannel(conn, toArrayBuffer(v2))
-                this.trace('stun v2 token ufrag sent', { connectionId, label, size: v2.length })
+                this.logger.trace('stun v2 token ufrag sent', {
+                    connectionId,
+                    label,
+                    size: v2.length
+                })
             }
 
             const v3 = buildBindingRequestWithSubs(undefined, undefined, subs, false, false)
             this.sendToChannel(conn, toArrayBuffer(v3))
-            this.trace('stun v3 no-mi sent', { connectionId, label, size: v3.length })
+            this.logger.trace('stun v3 no-mi sent', { connectionId, label, size: v3.length })
 
             if (relayInfo.rawToken && relayInfo.rawToken.length > 0) {
                 const peerSsrcs = peerSsrc ? [peerSsrc] : []
@@ -502,7 +494,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                     relayInfo.port
                 )
                 this.sendToChannel(conn, toArrayBuffer(v4))
-                this.trace('stun v4 allocate sent', { connectionId, label, size: v4.length })
+                this.logger.trace('stun v4 allocate sent', { connectionId, label, size: v4.length })
             }
         }
 
@@ -518,7 +510,7 @@ export class NodeSctpRelayManager extends EventEmitter {
 
         const firstPing = buildWhatsAppPing()
         this.sendToChannel(conn, toArrayBuffer(firstPing))
-        this.logDebug('keepalive first ping sent', { connectionId })
+        this.logger.debug('keepalive first ping sent', { connectionId })
 
         let keepaliveCount = 0
         const timer = setInterval(() => {
@@ -546,7 +538,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                         bufferedAmount = buffered
                     }
                 } catch {}
-                this.logDebug('sctp relay diagnostics', {
+                this.logger.debug('sctp relay diagnostics', {
                     connectionId,
                     dcState,
                     iceState,
@@ -565,7 +557,7 @@ export class NodeSctpRelayManager extends EventEmitter {
         }, CONFIG.KEEPALIVE_INTERVAL_MS)
 
         this.keepaliveTimers.set(connectionId, timer)
-        this.logDebug('keepalive started', {
+        this.logger.debug('keepalive started', {
             connectionId,
             intervalMs: CONFIG.KEEPALIVE_INTERVAL_MS
         })
@@ -643,7 +635,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                 const firstByte = buf[0] || 0
                 const twoBits = (firstByte & 0xc0) >> 6
                 const pktType = twoBits === 0 ? 'STUN' : twoBits === 2 ? 'RTP/SRTP' : 'OTHER'
-                this.trace('sctp relay send', {
+                this.logger.trace('sctp relay send', {
                     count: this.sendCount,
                     packetType: pktType,
                     size: data.byteLength,
@@ -680,7 +672,7 @@ export class NodeSctpRelayManager extends EventEmitter {
 
         if (!conn.hasReceivedFirstPacket) {
             conn.hasReceivedFirstPacket = true
-            this.trace('first packet received from relay', { connectionId: conn.id })
+            this.logger.trace('first packet received from relay', { connectionId: conn.id })
         }
 
         const shouldLog =
@@ -690,7 +682,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             (twoBits === 0 && data.length >= 20 && !this.isPong(data))
 
         if (shouldLog) {
-            this.trace('sctp relay receive', {
+            this.logger.trace('sctp relay receive', {
                 count: conn.stats.receivedPackets,
                 packetType: pktType,
                 size: data.length,
@@ -705,14 +697,14 @@ export class NodeSctpRelayManager extends EventEmitter {
                 if (stunInfo.method === 'wa-pong') {
                     this.pongCount++
                     if (this.pongCount <= 3 || this.pongCount % 20 === 0) {
-                        this.trace('stun pong received', {
+                        this.logger.trace('stun pong received', {
                             count: this.pongCount,
                             connectionId: conn.id,
                             size: data.length
                         })
                     }
                 } else {
-                    this.trace('stun response received', {
+                    this.logger.trace('stun response received', {
                         connectionId: conn.id,
                         summary: formatStunResponse(stunInfo),
                         hex: bytesToHex(data)
@@ -721,14 +713,14 @@ export class NodeSctpRelayManager extends EventEmitter {
                         stunInfo.isSuccess &&
                         (stunInfo.method === 'binding' || stunInfo.method === 'allocate')
                     ) {
-                        this.logDebug('stun binding or allocate success', {
+                        this.logger.debug('stun binding or allocate success', {
                             connectionId: conn.id,
                             method: stunInfo.method
                         })
                     }
                     if (stunInfo.stableRoutingConnId && conn.stableRoutingConnId === 0n) {
                         conn.stableRoutingConnId = stunInfo.stableRoutingConnId
-                        this.logDebug('stun stable routing latched', {
+                        this.logger.debug('stun stable routing latched', {
                             connectionId: conn.id,
                             connId: `0x${stunInfo.stableRoutingConnId.toString(16)}`
                         })
@@ -741,7 +733,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                         })
                     }
                     for (const attr of stunInfo.attributes) {
-                        this.trace('stun attribute', {
+                        this.logger.trace('stun attribute', {
                             connectionId: conn.id,
                             typeName: attr.typeName,
                             type: `0x${attr.type.toString(16)}`,
@@ -751,7 +743,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                     }
                 }
             } else {
-                this.trace('unparseable stun-like packet', {
+                this.logger.trace('unparseable stun-like packet', {
                     connectionId: conn.id,
                     size: data.length,
                     hex: bytesToHex(data.subarray(0, 80))
@@ -764,7 +756,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             const pt = data[1] & 0x7f
             const seq = data.length >= 4 ? (data[2] << 8) | data[3] : 0
             const ssrc = data.length >= 12 ? readUInt32BE(data, 8) : 0
-            this.trace('rtp packet received', {
+            this.logger.trace('rtp packet received', {
                 count: this.rtpRecvCount,
                 payloadType: pt,
                 sequence: seq,
@@ -773,7 +765,7 @@ export class NodeSctpRelayManager extends EventEmitter {
                 connectionId: conn.id
             })
             if (this.rtpRecvCount <= 3) {
-                this.trace('rtp packet hex preview', {
+                this.logger.trace('rtp packet hex preview', {
                     connectionId: conn.id,
                     hex: bytesToHex(data.subarray(0, 160))
                 })
@@ -782,7 +774,7 @@ export class NodeSctpRelayManager extends EventEmitter {
 
         if (twoBits !== 0 && twoBits !== 2) {
             this.unknownRecvCount++
-            this.trace('unknown relay packet type', {
+            this.logger.trace('unknown relay packet type', {
                 count: this.unknownRecvCount,
                 firstByte: `0x${firstByte.toString(16)}`,
                 size: data.length,
@@ -791,7 +783,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             })
         }
 
-        this.emit('relay:receive', {
+        this.emit('relay_receive', {
             ip: relayInfo.ip,
             port: relayInfo.port,
             data
@@ -818,7 +810,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             authTokenId?: string
         }>
     ): Promise<void> {
-        this.logDebug('sctp configuring relays', { count: relays.length })
+        this.logger.debug('sctp configuring relays', { count: relays.length })
 
         this.configuring = true
 
@@ -843,7 +835,7 @@ export class NodeSctpRelayManager extends EventEmitter {
             this.relayMap.set(connectionId, relayInfo)
         }
 
-        this.logDebug('sctp relays registered', { count: this.relayMap.size })
+        this.logger.debug('sctp relays registered', { count: this.relayMap.size })
 
         const connectionPromises: Array<Promise<Connection | null>> = []
         for (const [, relayInfo] of this.relayMap) {
@@ -859,7 +851,7 @@ export class NodeSctpRelayManager extends EventEmitter {
 
         await Promise.all(connectionPromises)
 
-        this.logDebug('sctp relay configuration done', { connected: this.stats.connected })
+        this.logger.debug('sctp relay configuration done', { connected: this.stats.connected })
 
         this.configuring = false
 
@@ -936,7 +928,7 @@ export class NodeSctpRelayManager extends EventEmitter {
     }
 
     cleanup(): void {
-        this.logDebug('sctp cleaning up connections', { count: this.connections.size })
+        this.logger.debug('sctp cleaning up connections', { count: this.connections.size })
 
         for (const [id] of this.keepaliveTimers) {
             this.stopKeepalive(id)
@@ -971,6 +963,6 @@ export class NodeSctpRelayManager extends EventEmitter {
         this.unknownRecvCount = 0
         this.sendCount = 0
 
-        this.logDebug('sctp all connections cleaned')
+        this.logger.debug('sctp all connections cleaned')
     }
 }

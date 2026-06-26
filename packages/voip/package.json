@@ -33,22 +33,11 @@
     },
     "peerDependencies": {
         "@roamhq/wrtc": ">=0.10.0",
-        "fluent-ffmpeg": ">=2.1.0",
         "libmlow-wasm": "^0.1.1",
         "zapo-js": "^1.0.0"
     },
-    "peerDependenciesMeta": {
-        "@roamhq/wrtc": {
-            "optional": true
-        },
-        "fluent-ffmpeg": {
-            "optional": true
-        }
-    },
     "devDependencies": {
         "@roamhq/wrtc": "^0.10.0",
-        "@types/fluent-ffmpeg": "^2.1.27",
-        "fluent-ffmpeg": "^2.1.3",
         "libmlow-wasm": "^0.1.1",
         "zapo-js": "file:../.."
     },

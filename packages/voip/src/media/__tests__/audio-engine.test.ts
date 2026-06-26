@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { AudioEngine } from '../audio-engine.js'
+import { WaAudioEngine } from '../WaAudioEngine.js'
 
 test('fires onAudioFinished when preloaded buffer is exhausted', async () => {
-    const engine = new AudioEngine({
+    const engine = new WaAudioEngine({
         captureChunkSize: 960,
         intervalMs: 5
     })
@@ -25,7 +25,7 @@ test('fires onAudioFinished when preloaded buffer is exhausted', async () => {
 })
 
 test('does not fire onAudioFinished in external live mode', async () => {
-    const engine = new AudioEngine({
+    const engine = new WaAudioEngine({
         captureChunkSize: 960,
         intervalMs: 5
     })

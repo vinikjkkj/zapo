@@ -1,8 +1,6 @@
-import { hkdfSync } from 'node:crypto'
+import { hkdf } from 'zapo-js/crypto'
 
-import { toBytesView } from 'zapo-js/util'
-
-import { encodeAscii, readUInt32LE, writeUInt32LE } from './bytes.js'
+import { encodeAscii, readUInt32LE, writeUInt32LE } from '../bytes.js'
 
 export function generateSecureSsrc(callId: string, selfJid: string, counter = 0): number {
     const key = encodeAscii(callId)
@@ -10,6 +8,6 @@ export function generateSecureSsrc(callId: string, selfJid: string, counter = 0)
     writeUInt32LE(salt, counter, 0)
     const info = encodeAscii(selfJid)
 
-    const result = toBytesView(hkdfSync('sha256', key, salt, info, 4))
+    const result = hkdf(key, salt, info, 4)
     return readUInt32LE(result, 0)
 }

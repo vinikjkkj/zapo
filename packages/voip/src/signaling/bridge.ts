@@ -1,36 +1,34 @@
-import { buildDeviceJid, parseSignalAddressFromJid } from 'zapo-js/protocol'
-import type { BinaryNode } from 'zapo-js/transport'
+import { normalizeDeviceJid } from 'zapo-js/protocol'
+import { type BinaryNode, buildAckNode, getFirstNodeChild } from 'zapo-js/transport'
 
-import type { NativeCallManager } from './call-manager.js'
-import { createCallAck } from './signaling.js'
+import type { WaCallManager } from '../call/WaCallManager.js'
+
 import type { VoipSocket } from './voip-socket.js'
-
-function normalizePeerJid(peerJid: string): string {
-    try {
-        const { user, server, device } = parseSignalAddressFromJid(peerJid)
-        if (!server) return peerJid
-        return buildDeviceJid(user, server, device)
-    } catch {
-        return peerJid
-    }
-}
 
 const RECEIPT_CALL_TAGS = new Set(['offer', 'accept', 'preaccept', 'terminate', 'transport'])
 
 export async function routeCallStanza(
-    manager: NativeCallManager,
+    manager: WaCallManager,
     socket: VoipSocket,
     node: BinaryNode
 ): Promise<string | null> {
-    const inner = Array.isArray(node.content) ? (node.content[0] as BinaryNode) : null
+    const inner = getFirstNodeChild(node)
     if (!inner) return null
 
     const tag = inner.tag
     const peerJid = node.attrs.from
 
-    await socket.sendNode(createCallAck(node.attrs.id, peerJid, tag))
+    await socket.sendNode(
+        buildAckNode({
+            kind: 'custom',
+            ackClass: 'call',
+            to: peerJid,
+            id: node.attrs.id,
+            type: tag
+        })
+    )
 
-    const normalizedPeerJid = normalizePeerJid(peerJid)
+    const normalizedPeerJid = normalizeDeviceJid(peerJid)
 
     switch (tag) {
         case 'offer':
@@ -66,27 +64,25 @@ export async function routeCallStanza(
     return tag
 }
 
-export async function routeCallAck(manager: NativeCallManager, node: BinaryNode): Promise<void> {
+export async function routeCallAck(manager: WaCallManager, node: BinaryNode): Promise<void> {
     await manager.handleCallAck(node)
 }
 
 export async function routeCallReceipt(socket: VoipSocket, node: BinaryNode): Promise<boolean> {
-    if (!Array.isArray(node.content)) return false
-
-    const inner = node.content[0] as BinaryNode
-    if (!inner || typeof inner !== 'object') return false
+    const inner = getFirstNodeChild(node)
+    if (!inner) return false
     if (!RECEIPT_CALL_TAGS.has(inner.tag)) return false
 
     const peerJid = node.attrs.from
-    await socket.sendNode({
-        tag: 'ack',
-        attrs: {
-            id: node.attrs.id,
+    await socket.sendNode(
+        buildAckNode({
+            kind: 'custom',
+            ackClass: 'receipt',
             to: peerJid,
-            class: 'receipt',
+            id: node.attrs.id,
             type: node.attrs.type || 'retry'
-        }
-    })
+        })
+    )
 
     return true
 }

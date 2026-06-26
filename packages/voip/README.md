@@ -16,15 +16,15 @@ npm install zapo-js @zapo-js/voip libmlow-wasm
 
 Peer dependencies:
 
-| Package         | Required       | Purpose                                         |
-| --------------- | -------------- | ----------------------------------------------- |
-| `zapo-js`       | yes            | `WaClient` and plugin host                      |
-| `libmlow-wasm`  | yes            | MLow encode/decode (WASM, no native build step) |
-| `@roamhq/wrtc`  | for real calls | SCTP relay transport                            |
-| `fluent-ffmpeg` | optional       | Decode pre-recorded audio files (`loadAudio`)   |
+| Package        | Required       | Purpose                                         |
+| -------------- | -------------- | ----------------------------------------------- |
+| `zapo-js`      | yes            | `WaClient` and plugin host                      |
+| `libmlow-wasm` | yes            | MLow encode/decode (WASM, no native build step) |
+| `@roamhq/wrtc` | for real calls | SCTP relay transport                            |
+| `ffmpeg` (CLI) | optional       | Decode pre-recorded audio files (`loadAudio`)   |
 
 ```bash
-npm install @roamhq/wrtc fluent-ffmpeg
+npm install @roamhq/wrtc
 ```
 
 Node **20.9+**. `libmlow-wasm` is ESM-only; the codec loads it via dynamic `import()`.
@@ -76,7 +76,7 @@ Every audio/control API is scoped by `callId`. To mirror the same microphone int
 
 ## Outgoing call – pre-recorded audio
 
-`loadAudio` uses `fluent-ffmpeg` when installed to decode the file to 16 kHz mono PCM before encoding.
+`loadAudio` shells out to the `ffmpeg` binary (must be on `PATH`) to decode the file to 16 kHz mono PCM before encoding.
 
 ```ts
 const callId = await client.voip.startCall({
@@ -120,7 +120,7 @@ await client.voip.rejectCall(callId)
 await client.voip.endCall(callId)
 ```
 
-`getCalls()` returns every tracked call. `getCall(callId)` returns one call or `null`. `getCurrentCall()` is deprecated and only returns a value when exactly one call is active.
+`getCalls()` returns every tracked call. `getCall(callId)` returns one call or `null`.
 
 ## Events
 
@@ -152,7 +152,6 @@ You can also use `client.voip.on('call:state', ...)` etc. on the underlying `Eve
 | `setMute(callId, muted)`                | Mute/unmute local capture for that call     |
 | `getCall(callId)`                       | One call or `null`                          |
 | `getCalls()`                            | All tracked calls                           |
-| `getCurrentCall()`                      | Deprecated – sole active call or `null`     |
 | `on` / `off` / `once`                   | Manager-level events                        |
 
 Plugin options: `debug?: boolean`, `maxConcurrentCalls?: number` (default `1`).

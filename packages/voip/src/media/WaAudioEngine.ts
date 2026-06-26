@@ -1,17 +1,17 @@
-import * as fs from 'node:fs'
+import { spawn } from 'node:child_process'
+import { access } from 'node:fs/promises'
 
 import { createNoopLogger, type Logger } from 'zapo-js'
 import { toBytesView } from 'zapo-js/util'
 
-import { concatBytes } from './bytes.js'
-import { type AudioEngineConfig, type AudioSender, DEFAULT_AUDIO_CONFIG } from './types.js'
+import { concatBytes, TEXT_DECODER } from '../bytes.js'
+import { type AudioSender, DEFAULT_AUDIO_CONFIG, type WaAudioEngineConfig } from '../types.js'
 
-export interface AudioEngineOptions extends Partial<AudioEngineConfig> {
+export interface WaAudioEngineOptions extends Partial<WaAudioEngineConfig> {
     readonly logger?: Logger
-    readonly debug?: boolean
 }
 
-export class AudioEngine {
+export class WaAudioEngine {
     private readonly logger: Logger
     private audioSender: AudioSender | null = null
     private audioBuffer: Float32Array | null = null
@@ -33,7 +33,6 @@ export class AudioEngine {
     private readonly outputSize: number
     private readonly intervalMs: number
 
-    private debug = false
     private silenceMode = false
 
     private externalMode = false
@@ -48,10 +47,9 @@ export class AudioEngine {
     private readonly silenceChunkBuffer: Float32Array
     private readonly playbackOutputBuffer: Float32Array
 
-    constructor(config: AudioEngineOptions = {}) {
+    constructor(config: WaAudioEngineOptions = {}) {
         const c = { ...DEFAULT_AUDIO_CONFIG, ...config }
         this.logger = config.logger ?? createNoopLogger()
-        this.debug = config.debug ?? false
         this.sampleRate = c.sampleRate
         this.captureChunkSize = c.captureChunkSize
         this.maxBuffer = c.maxBufferSize
@@ -65,10 +63,6 @@ export class AudioEngine {
         this.extPreBufferSize = Math.floor(this.sampleRate * 0.06)
         this.extTargetBuffer = Math.floor(this.sampleRate * 0.06)
         this.extHighWater = Math.floor(this.sampleRate * 0.2)
-    }
-
-    setDebug(enabled: boolean): void {
-        this.debug = enabled
     }
 
     setAudioSender(sender: AudioSender): void {
@@ -90,12 +84,10 @@ export class AudioEngine {
             this.liveWritePos = 0
             this.audioFinished = false
         }
-        if (this.debug) {
-            this.logger.debug('external audio mode changed', {
-                enabled,
-                preBufferSamples: this.extPreBufferSize
-            })
-        }
+        this.logger.debug('external audio mode changed', {
+            enabled,
+            preBufferSamples: this.extPreBufferSize
+        })
     }
 
     isExternalMode(): boolean {
@@ -119,9 +111,7 @@ export class AudioEngine {
             const newBuf = new Float32Array(newSize)
             newBuf.set(this.audioBuffer.subarray(0, this.liveWritePos))
             this.audioBuffer = newBuf
-            if (this.debug) {
-                this.logger.debug('live buffer grew', { samples: newSize })
-            }
+            this.logger.debug('live buffer grew', { samples: newSize })
         }
 
         this.audioBuffer.set(data, this.liveWritePos)
@@ -133,11 +123,11 @@ export class AudioEngine {
     }
 
     async loadAudioFile(audioPath: string): Promise<void> {
-        if (this.debug) {
-            this.logger.debug('loading audio file', { audioPath })
-        }
+        this.logger.debug('loading audio file', { audioPath })
 
-        if (!fs.existsSync(audioPath)) {
+        try {
+            await access(audioPath)
+        } catch {
             throw new Error(`File not found: ${audioPath}`)
         }
 
@@ -146,13 +136,11 @@ export class AudioEngine {
         this.audioPosition = 0
         this.audioFinished = false
 
-        if (this.debug) {
-            const duration = this.audioBuffer.length / this.sampleRate
-            this.logger.debug('audio file loaded', {
-                samples: this.audioBuffer.length,
-                durationSec: duration
-            })
-        }
+        const duration = this.audioBuffer.length / this.sampleRate
+        this.logger.debug('audio file loaded', {
+            samples: this.audioBuffer.length,
+            durationSec: duration
+        })
     }
 
     private int16ToFloat32(pcmData: Int16Array): Float32Array {
@@ -165,29 +153,47 @@ export class AudioEngine {
     }
 
     private async decodeWithFFmpeg(inputPath: string): Promise<Int16Array> {
-        const ffmpegModule = await import('fluent-ffmpeg')
-        const ffmpeg = ffmpegModule.default
+        return new Promise<Int16Array>((resolve, reject) => {
+            const proc = spawn(
+                'ffmpeg',
+                [
+                    '-hide_banner',
+                    '-loglevel',
+                    'error',
+                    '-i',
+                    inputPath,
+                    '-ac',
+                    '1',
+                    '-ar',
+                    String(this.sampleRate),
+                    '-acodec',
+                    'pcm_s16le',
+                    '-f',
+                    's16le',
+                    'pipe:1'
+                ],
+                { stdio: ['ignore', 'pipe', 'pipe'] }
+            )
 
-        return new Promise((resolve, reject) => {
             const chunks: Uint8Array[] = []
-
-            ffmpeg(inputPath)
-                .audioFrequency(this.sampleRate)
-                .audioChannels(1)
-                .audioCodec('pcm_s16le')
-                .format('s16le')
-                .on('error', reject)
-                .on('end', () => {
-                    const pcmBytes = concatBytes(chunks)
-                    const int16Array = new Int16Array(
-                        pcmBytes.buffer,
-                        pcmBytes.byteOffset,
-                        pcmBytes.byteLength / 2
-                    )
-                    resolve(int16Array)
-                })
-                .pipe()
-                .on('data', (chunk: Uint8Array | Buffer) => chunks.push(toBytesView(chunk)))
+            let stderr = ''
+            proc.stdout?.on('data', (chunk: Uint8Array) => chunks.push(toBytesView(chunk)))
+            proc.stderr?.on('data', (chunk: Uint8Array) => {
+                stderr += TEXT_DECODER.decode(chunk)
+            })
+            proc.on('error', (err) =>
+                reject(new Error(`ffmpeg not available (install ffmpeg on PATH): ${err.message}`))
+            )
+            proc.on('close', (code) => {
+                if (code !== 0) {
+                    reject(new Error(`ffmpeg exited with code ${code}: ${stderr.trim()}`))
+                    return
+                }
+                const pcmBytes = concatBytes(chunks)
+                resolve(
+                    new Int16Array(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength >> 1)
+                )
+            })
         })
     }
 
@@ -202,9 +208,7 @@ export class AudioEngine {
             this.audioBuffer[i] = Math.sin(2 * Math.PI * frequency * t) * amplitude
         }
 
-        if (this.debug) {
-            this.logger.debug('test tone generated', { samples, durationSec: duration })
-        }
+        this.logger.debug('test tone generated', { samples, durationSec: duration })
     }
 
     startPlayback(): void {
@@ -212,9 +216,7 @@ export class AudioEngine {
             return
         }
 
-        if (this.debug) {
-            this.logger.debug('starting playback')
-        }
+        this.logger.debug('starting playback')
 
         this.resetBuffer()
 
@@ -241,9 +243,7 @@ export class AudioEngine {
 
         this.silenceMode = true
 
-        if (this.debug) {
-            this.logger.debug('starting silence capture for pre-accept warmup')
-        }
+        this.logger.debug('starting silence capture for pre-accept warmup')
 
         this.captureInterval = setInterval(() => {
             if (this.audioSender) {
@@ -270,23 +270,19 @@ export class AudioEngine {
             this.audioPosition = Math.max(0, this.liveWritePos - this.extPreBufferSize)
             const available = this.liveWritePos - this.audioPosition
             this.extStarted = available >= this.extPreBufferSize
-            if (this.debug) {
-                this.logger.debug('starting live capture', {
-                    readPos: this.audioPosition,
-                    writePos: this.liveWritePos,
-                    runwaySamples: available,
-                    started: this.extStarted
-                })
-            }
+            this.logger.debug('starting live capture', {
+                readPos: this.audioPosition,
+                writePos: this.liveWritePos,
+                runwaySamples: available,
+                started: this.extStarted
+            })
         } else {
             this.audioPosition = 0
-            if (this.debug) {
-                if (this.audioBuffer) {
-                    const durationSec = this.audioBuffer.length / this.sampleRate
-                    this.logger.debug('starting capture with loaded audio', { durationSec })
-                } else {
-                    this.logger.debug('starting capture with silence, no audio loaded')
-                }
+            if (this.audioBuffer) {
+                const durationSec = this.audioBuffer.length / this.sampleRate
+                this.logger.debug('starting capture with loaded audio', { durationSec })
+            } else {
+                this.logger.debug('starting capture with silence, no audio loaded')
             }
         }
 
@@ -302,7 +298,7 @@ export class AudioEngine {
                 } catch {}
             }
 
-            if (this.debug && frameCount % 500 === 0) {
+            if (frameCount % 500 === 0) {
                 if (this.audioBuffer) {
                     const positionSec = this.audioPosition / this.sampleRate
                     this.logger.trace('capture frame', { frameCount, positionSec })
@@ -375,11 +371,9 @@ export class AudioEngine {
                     return this.silenceChunkBuffer
                 }
                 this.extStarted = true
-                if (this.debug) {
-                    this.logger.debug('live buffer ready, starting read', {
-                        availableSamples: available
-                    })
-                }
+                this.logger.debug('live buffer ready, starting read', {
+                    availableSamples: available
+                })
             }
 
             if (available > this.extHighWater) {
@@ -387,8 +381,8 @@ export class AudioEngine {
                 const skipped = skipTo - this.audioPosition
                 this.audioPosition = skipTo
                 this.extSkipCount++
-                if (this.debug || this.extSkipCount <= 5) {
-                    this.logger.warn('live buffer overflow, skipped samples', {
+                if (this.extSkipCount <= 5) {
+                    this.logger.debug('live buffer overflow, skipped samples', {
                         availableSamples: available,
                         skippedSamples: skipped,
                         targetSamples: this.extTargetBuffer,
@@ -407,9 +401,7 @@ export class AudioEngine {
             if (this.audioPosition >= endPos) {
                 if (!this.externalMode && !this.audioFinished) {
                     this.audioFinished = true
-                    if (this.debug) {
-                        this.logger.debug('audio playback finished, sending silence')
-                    }
+                    this.logger.debug('audio playback finished, sending silence')
                     if (this.onAudioFinished) {
                         const cb = this.onAudioFinished
                         setTimeout(() => cb(), 0)

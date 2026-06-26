@@ -1,7 +1,6 @@
-import { randomInt } from 'node:crypto'
-
-import { EMPTY_BYTES, readUInt16BE, readUInt32BE, writeUInt16BE, writeUInt32BE } from './bytes.js'
-import { PayloadType } from './types.js'
+import { EMPTY_BYTES, readUInt16BE, readUInt32BE, writeUInt16BE, writeUInt32BE } from '../bytes.js'
+import { randomInt } from '../crypto/primitives.js'
+import { PayloadType } from '../types.js'
 
 const RTP_VERSION = 2
 

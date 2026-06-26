@@ -1,10 +1,8 @@
-import { createCipheriv, createHmac } from 'node:crypto'
+import { writeBigUInt64BE, writeUInt32BE } from '../bytes.js'
+import { RtpHeader, RtpPacket } from '../media/rtp.js'
+import { SRTP_AUTH_TAG_LEN, SRTP_LABEL, type SrtpKeyingMaterial } from '../types.js'
 
-import { toBytesView } from 'zapo-js/util'
-
-import { writeBigUInt64BE, writeUInt32BE } from './bytes.js'
-import { RtpHeader, RtpPacket } from './rtp.js'
-import { SRTP_AUTH_TAG_LEN, SRTP_LABEL, type SrtpKeyingMaterial } from './types.js'
+import { aesCtr128, hmacSha1 } from './primitives.js'
 
 export class SrtpContext {
     private sessionKey: Uint8Array
@@ -41,9 +39,7 @@ export class SrtpContext {
         packet.header.encode(output)
 
         const iv = this.generateIv(packet.header.ssrc, index)
-        const cipher = createCipheriv('aes-128-ctr', this.sessionKey, iv)
-        const encrypted = toBytesView(cipher.update(packet.payload))
-        cipher.final()
+        const encrypted = aesCtr128(this.sessionKey, iv, packet.payload)
 
         output.set(encrypted, headerSize)
 
@@ -76,11 +72,11 @@ export class SrtpContext {
         const index = this.packetIndex(header.sequenceNumber)
 
         const iv = this.generateIv(header.ssrc, index)
-        const decipher = createCipheriv('aes-128-ctr', this.sessionKey, iv)
-        const decrypted = toBytesView(
-            decipher.update(data.subarray(headerSize, headerSize + payloadLen))
+        const decrypted = aesCtr128(
+            this.sessionKey,
+            iv,
+            data.subarray(headerSize, headerSize + payloadLen)
         )
-        decipher.final()
 
         return new RtpPacket(header, decrypted)
     }
@@ -127,13 +123,8 @@ export class SrtpContext {
         roc: number,
         tagLen: number = SRTP_AUTH_TAG_LEN
     ): Uint8Array {
-        const hmac = createHmac('sha1', this.authKey)
-        hmac.update(data)
-
         writeUInt32BE(this.rocBuffer, roc, 0)
-        hmac.update(this.rocBuffer)
-
-        const result = toBytesView(hmac.digest())
+        const result = hmacSha1(this.authKey, data, this.rocBuffer)
         return result.subarray(0, tagLen)
     }
 }
@@ -176,11 +167,7 @@ function deriveKey(
     iv[7] ^= label
 
     const zeros = new Uint8Array(length)
-    const cipher = createCipheriv('aes-128-ctr', masterKey, iv)
-    const output = toBytesView(cipher.update(zeros))
-    cipher.final()
-
-    return output
+    return aesCtr128(masterKey, iv, zeros)
 }
 
 export class SrtpError extends Error {

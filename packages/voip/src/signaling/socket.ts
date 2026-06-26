@@ -1,21 +1,12 @@
-import { randomBytes } from 'node:crypto'
-
-import { proto, type WaClientPluginContext } from 'zapo-js'
+import type { WaClientPluginContext } from 'zapo-js'
 import { parseSignalAddressFromJid } from 'zapo-js/protocol'
 import type { SignalAddress } from 'zapo-js/signal'
 import type { BinaryNode } from 'zapo-js/transport'
 
+import { encodeWAMessage } from './signaling.js'
 import type { VoipSocket } from './voip-socket.js'
 
 type SignalEnvelopeType = 'msg' | 'pkmsg'
-
-async function writeRandomPadMax16(message: Uint8Array): Promise<Uint8Array> {
-    const padLength = (randomBytes(1)[0] & 0x0f) + 1
-    const out = new Uint8Array(message.length + padLength)
-    out.set(message, 0)
-    out.fill(padLength, message.length)
-    return out
-}
 
 /**
  * Builds a {@link VoipSocket} from {@link WaClientPluginContext}, translating
@@ -97,7 +88,7 @@ export function createWaVoipSocket(ctx: WaClientPluginContext): VoipSocket {
                 }
             }
         },
-        assertSessions: (jids) => assertSessions(jids),
+        assertSessions,
         async getUSyncDevices(jids) {
             const synced = await deps.signalDeviceSync.syncDeviceList(jids)
             return synced.flatMap((entry) =>
@@ -106,7 +97,7 @@ export function createWaVoipSocket(ctx: WaClientPluginContext): VoipSocket {
         },
         async createParticipantNodes(devices, message, attrs) {
             await assertSessions(devices)
-            const plaintext = await writeRandomPadMax16(proto.Message.encode(message).finish())
+            const plaintext = await encodeWAMessage(message)
             const requests = devices.map((jid) => ({
                 address: parseSignalAddressFromJid(jid),
                 plaintext

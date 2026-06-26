@@ -1,50 +1,54 @@
 import { EventEmitter } from 'node:events'
 
 import { createNoopLogger, type Logger } from 'zapo-js'
-import type { BinaryNode } from 'zapo-js/transport'
+import { isLidJid } from 'zapo-js/protocol'
+import { type BinaryNode, hasNodeChild } from 'zapo-js/transport'
+import { resolvePositive } from 'zapo-js/util'
 
-import { CallMediaSession } from './call-media-session.js'
-import { CallInfo } from './call-state.js'
-import { generateCallKey } from './encryption.js'
-import { parseRelayFromAck } from './relay-ack.js'
+import { generateCallKey } from '../crypto/encryption.js'
+import { parseRelayFromAck } from '../relay/relay-ack.js'
 import {
     buildOfferStanza,
     decryptCallKeyInNode,
     extractNodeInfo,
     generateCallId
-} from './signaling.js'
+} from '../signaling/signaling.js'
+import type { VoipSocket } from '../signaling/voip-socket.js'
 import {
     CallDirection,
     CallMediaType,
     type CallOfferOptions,
     CallState,
     EndCallReason
-} from './types.js'
-import type { VoipSocket } from './voip-socket.js'
+} from '../types.js'
+
+import { CallInfo } from './call-state.js'
+import { WaCallMediaSession } from './WaCallMediaSession.js'
 
 const DEFAULT_MAX_CONCURRENT_CALLS = 1
 
-export interface NativeCallManagerConfig {
+export interface WaCallManagerConfig {
     sock: VoipSocket
     logger?: Logger
-    debug?: boolean
     maxConcurrentCalls?: number
 }
 
-export class NativeCallManager extends EventEmitter {
+export class WaCallManager extends EventEmitter {
     private readonly sock: VoipSocket
     private readonly logger: Logger
-    private readonly debug: boolean
     private readonly maxConcurrentCalls: number
 
-    private readonly calls = new Map<string, CallMediaSession>()
+    private readonly calls = new Map<string, WaCallMediaSession>()
 
-    constructor(config: NativeCallManagerConfig) {
+    constructor(config: WaCallManagerConfig) {
         super()
         this.sock = config.sock
         this.logger = config.logger ?? createNoopLogger()
-        this.debug = config.debug ?? false
-        this.maxConcurrentCalls = resolveMaxConcurrentCalls(config.maxConcurrentCalls)
+        this.maxConcurrentCalls = resolvePositive(
+            config.maxConcurrentCalls,
+            DEFAULT_MAX_CONCURRENT_CALLS,
+            'maxConcurrentCalls'
+        )
     }
 
     async startCall(options: CallOfferOptions): Promise<string> {
@@ -84,9 +88,7 @@ export class NativeCallManager extends EventEmitter {
         info.applyTransition({ type: 'offer_sent' })
         this.emitState(info)
 
-        if (this.debug) {
-            this.logger.debug('outgoing offer sent', { callId, peerJid })
-        }
+        this.logger.debug('outgoing offer sent', { callId, peerJid })
 
         return callId
     }
@@ -152,15 +154,6 @@ export class NativeCallManager extends EventEmitter {
         return result
     }
 
-    /**
-     * @deprecated Use {@link getCalls} or {@link getCall} instead.
-     */
-    getCurrentCall(): CallInfo | null {
-        const active = [...this.calls.values()].filter((s) => !s.info.isEnded)
-        if (active.length === 1) return active[0].info
-        return null
-    }
-
     async handleCallOffer(node: BinaryNode, peerJid: string): Promise<void> {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo?.callId) return
@@ -177,7 +170,7 @@ export class NativeCallManager extends EventEmitter {
         }
 
         const callCreator = nodeInfo.innerNode.attrs?.['call-creator'] || peerJid
-        const isVideo = this.hasVideoNode(nodeInfo.innerNode)
+        const isVideo = hasNodeChild(nodeInfo.innerNode, 'video')
 
         const { node: decryptedNode, callKey } = await decryptCallKeyInNode(
             this.sock,
@@ -225,19 +218,17 @@ export class NativeCallManager extends EventEmitter {
             })
         }
 
-        this.emit('call:incoming', info)
+        this.emit('call_incoming', info)
         this.emitState(info)
 
-        if (this.debug) {
-            this.logger.debug('incoming call', {
-                callId,
-                peerJid,
-                callCreator,
-                isVideo,
-                relayCount: relays.length,
-                acceptBlocked: atCapacity
-            })
-        }
+        this.logger.debug('incoming call', {
+            callId,
+            peerJid,
+            callCreator,
+            isVideo,
+            relayCount: relays.length,
+            acceptBlocked: atCapacity
+        })
     }
 
     async handleCallAccept(node: BinaryNode, peerJid: string): Promise<void> {
@@ -309,7 +300,7 @@ export class NativeCallManager extends EventEmitter {
     private createSession(
         info: CallInfo,
         options: { acceptBlocked?: boolean } = {}
-    ): CallMediaSession {
+    ): WaCallMediaSession {
         const prior = this.calls.get(info.callId)
         if (prior) {
             if (!prior.info.isEnded) {
@@ -329,17 +320,16 @@ export class NativeCallManager extends EventEmitter {
         }
 
         const sessionLogger = this.logger.child({ callId: info.callId })
-        const session = new CallMediaSession({
+        const session = new WaCallMediaSession({
             sock: this.sock,
             logger: sessionLogger,
-            debug: this.debug,
             info,
             delegate: {
                 emitState: (call) => this.emitState(call),
-                emitIncoming: (call) => this.emit('call:incoming', call),
-                emitEnded: (call) => this.emit('call:ended', call),
-                emitInboundAudio: (call, pcm) => this.emit('call:inbound_audio', call, pcm),
-                emitOutboundAudioFinished: (call) => this.emit('call:outbound_audio_finished', call)
+                emitIncoming: (call) => this.emit('call_incoming', call),
+                emitEnded: (call) => this.emit('call_ended', call),
+                emitInboundAudio: (call, pcm) => this.emit('call_inbound_audio', call, pcm),
+                emitOutboundAudioFinished: (call) => this.emit('call_outbound_audio_finished', call)
             }
         })
 
@@ -347,7 +337,7 @@ export class NativeCallManager extends EventEmitter {
         return session
     }
 
-    private getSessionOrThrow(callId: string): CallMediaSession {
+    private getSessionOrThrow(callId: string): WaCallMediaSession {
         const session = this.calls.get(callId)
         if (!session) {
             throw new Error(`No call with id ${callId}`)
@@ -355,7 +345,7 @@ export class NativeCallManager extends EventEmitter {
         return session
     }
 
-    private resolveSessionFromNode(node: BinaryNode): CallMediaSession | null {
+    private resolveSessionFromNode(node: BinaryNode): WaCallMediaSession | null {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo?.callId) {
             this.logger.debug('stanza missing call-id, ignored')
@@ -371,14 +361,14 @@ export class NativeCallManager extends EventEmitter {
         return session
     }
 
-    private resolveSessionForOfferAck(node: BinaryNode): CallMediaSession | null {
+    private resolveSessionForOfferAck(node: BinaryNode): WaCallMediaSession | null {
         const callId = node.attrs?.['call-id']
         if (callId) {
             const session = this.calls.get(callId)
             if (session) return session
         }
 
-        const outgoing: CallMediaSession[] = []
+        const outgoing: WaCallMediaSession[] = []
         for (const session of this.calls.values()) {
             if (session.info.isInitiator && !session.info.isEnded) {
                 const state = session.info.stateData.state
@@ -398,11 +388,11 @@ export class NativeCallManager extends EventEmitter {
     }
 
     private emitState(call: CallInfo): void {
-        this.emit('call:state', call)
+        this.emit('call_state', call)
     }
 
     private async resolvePeerLid(peerJid: string): Promise<string> {
-        if (peerJid.includes('@lid')) return peerJid
+        if (isLidJid(peerJid)) return peerJid
 
         try {
             const lidMapping = this.sock.signalRepository?.lidMapping
@@ -413,13 +403,6 @@ export class NativeCallManager extends EventEmitter {
         } catch {}
 
         return peerJid
-    }
-
-    private hasVideoNode(node: BinaryNode): boolean {
-        if (!node.content || !Array.isArray(node.content)) return false
-        return node.content.some(
-            (c: unknown) => typeof c === 'object' && c !== null && 'tag' in c && c.tag === 'video'
-        )
     }
 
     private async maybeUnblockWaitingCalls(): Promise<void> {
@@ -435,7 +418,7 @@ export class NativeCallManager extends EventEmitter {
         }
     }
 
-    private async activateWaitingIncoming(session: CallMediaSession): Promise<void> {
+    private async activateWaitingIncoming(session: WaCallMediaSession): Promise<void> {
         session.info.stateData.acceptBlocked = false
 
         const meId = this.sock.authState?.creds?.me?.id
@@ -448,16 +431,6 @@ export class NativeCallManager extends EventEmitter {
 
         this.emitState(session.info)
 
-        if (this.debug) {
-            this.logger.debug('waiting incoming call unblocked', { callId: session.callId })
-        }
+        this.logger.debug('waiting incoming call unblocked', { callId: session.callId })
     }
-}
-
-function resolveMaxConcurrentCalls(value: number | undefined): number {
-    const resolved = value ?? DEFAULT_MAX_CONCURRENT_CALLS
-    if (!Number.isInteger(resolved) || resolved < 1) {
-        throw new Error('maxConcurrentCalls must be an integer >= 1')
-    }
-    return resolved
 }

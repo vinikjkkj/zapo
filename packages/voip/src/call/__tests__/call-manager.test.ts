@@ -3,10 +3,10 @@ import { test } from 'node:test'
 
 import type { BinaryNode } from 'zapo-js/transport'
 
-import { NativeCallManager } from '../call-manager.js'
-import { CallInfo } from '../call-state.js'
-import { CallMediaType, CallState } from '../types.js'
-import type { VoipSocket } from '../voip-socket.js'
+import type { VoipSocket } from '../../signaling/voip-socket.js'
+import { CallState } from '../../types.js'
+import { type CallInfo } from '../call-state.js'
+import { WaCallManager } from '../WaCallManager.js'
 
 function createMockSocket(): { sock: VoipSocket; sent: BinaryNode[] } {
     const sent: BinaryNode[] = []
@@ -74,17 +74,17 @@ function buildTerminateNode(callId: string, from = '2222222222:0@lid'): BinaryNo
     }
 }
 
-test('NativeCallManager rejects invalid maxConcurrentCalls', () => {
+test('WaCallManager rejects invalid maxConcurrentCalls', () => {
     const { sock } = createMockSocket()
     assert.throws(
-        () => new NativeCallManager({ sock, maxConcurrentCalls: 0 }),
-        /maxConcurrentCalls must be an integer >= 1/
+        () => new WaCallManager({ sock, maxConcurrentCalls: 0 }),
+        /maxConcurrentCalls must be a positive safe integer/
     )
 })
 
 test('startCall blocks when maxConcurrentCalls is reached', async () => {
     const { sock } = createMockSocket()
-    const manager = new NativeCallManager({ sock, maxConcurrentCalls: 1 })
+    const manager = new WaCallManager({ sock, maxConcurrentCalls: 1 })
 
     await manager.startCall({ peerJid: '2222222222@lid' })
 
@@ -96,7 +96,7 @@ test('startCall blocks when maxConcurrentCalls is reached', async () => {
 
 test('startCall allows parallel calls when maxConcurrentCalls > 1', async () => {
     const { sock } = createMockSocket()
-    const manager = new NativeCallManager({ sock, maxConcurrentCalls: 2 })
+    const manager = new WaCallManager({ sock, maxConcurrentCalls: 2 })
 
     const callIdA = await manager.startCall({ peerJid: '2222222222@lid' })
     const callIdB = await manager.startCall({ peerJid: '3333333333@lid' })
@@ -107,7 +107,7 @@ test('startCall allows parallel calls when maxConcurrentCalls > 1', async () => 
 
 test('incoming offer at capacity is tracked with canAccept false', async () => {
     const { sock, sent } = createMockSocket()
-    const manager = new NativeCallManager({ sock, maxConcurrentCalls: 1 })
+    const manager = new WaCallManager({ sock, maxConcurrentCalls: 1 })
 
     await manager.startCall({ peerJid: '2222222222@lid' })
     const before = sent.length
@@ -138,7 +138,7 @@ test('incoming offer at capacity is tracked with canAccept false', async () => {
 
 test('waiting incoming call unblocks when a slot frees', async () => {
     const { sock, sent } = createMockSocket()
-    const manager = new NativeCallManager({ sock, maxConcurrentCalls: 1 })
+    const manager = new WaCallManager({ sock, maxConcurrentCalls: 1 })
 
     const activeCallId = await manager.startCall({ peerJid: '2222222222@lid' })
     const incomingCallId = 'INCOMINGCALL0000000000000003'
@@ -163,7 +163,7 @@ test('waiting incoming call unblocks when a slot frees', async () => {
 
 test('incoming offer with capacity creates a second session', async () => {
     const { sock } = createMockSocket()
-    const manager = new NativeCallManager({ sock, maxConcurrentCalls: 2 })
+    const manager = new WaCallManager({ sock, maxConcurrentCalls: 2 })
 
     await manager.startCall({ peerJid: '2222222222@lid' })
 
@@ -177,7 +177,7 @@ test('incoming offer with capacity creates a second session', async () => {
 
 test('handleCallTerminate only ends the matching call', async () => {
     const { sock } = createMockSocket()
-    const manager = new NativeCallManager({ sock, maxConcurrentCalls: 2 })
+    const manager = new WaCallManager({ sock, maxConcurrentCalls: 2 })
 
     const callIdA = await manager.startCall({ peerJid: '2222222222@lid' })
     const callIdB = await manager.startCall({ peerJid: '3333333333@lid' })
@@ -189,44 +189,19 @@ test('handleCallTerminate only ends the matching call', async () => {
     assert.equal(manager.getCall(callIdB)!.stateData.state, CallState.Ringing)
 })
 
-test('getCurrentCall returns the sole active call only', () => {
+test('call_inbound_audio event includes CallInfo', async () => {
     const { sock } = createMockSocket()
-    const manager = new NativeCallManager({ sock, maxConcurrentCalls: 2 })
-
-    const infoA = CallInfo.newOutgoing(
-        'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-        'a@lid',
-        'me@lid',
-        CallMediaType.Audio
-    )
-    const infoB = CallInfo.newOutgoing(
-        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-        'b@lid',
-        'me@lid',
-        CallMediaType.Audio
-    )
-    infoA.applyTransition({ type: 'offer_sent' })
-    infoB.applyTransition({ type: 'offer_sent' })
-    ;(manager as unknown as { createSession: (info: CallInfo) => unknown }).createSession(infoA)
-    ;(manager as unknown as { createSession: (info: CallInfo) => unknown }).createSession(infoB)
-
-    assert.equal(manager.getCurrentCall(), null)
-    assert.equal(manager.getCalls().length, 2)
-})
-
-test('call:inbound_audio event includes CallInfo', async () => {
-    const { sock } = createMockSocket()
-    const manager = new NativeCallManager({ sock, maxConcurrentCalls: 1 })
+    const manager = new WaCallManager({ sock, maxConcurrentCalls: 1 })
 
     const callId = await manager.startCall({ peerJid: '2222222222@lid' })
     const call = manager.getCall(callId)
     assert.ok(call)
 
     let receivedCall: CallInfo | null = null
-    manager.on('call:inbound_audio', (info) => {
+    manager.on('call_inbound_audio', (info) => {
         receivedCall = info
     })
 
-    manager.emit('call:inbound_audio', call, new Float32Array(960))
+    manager.emit('call_inbound_audio', call, new Float32Array(960))
     assert.equal(receivedCall, call)
 })

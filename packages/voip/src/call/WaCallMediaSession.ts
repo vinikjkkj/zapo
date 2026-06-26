@@ -1,33 +1,34 @@
 import type { Logger } from 'zapo-js'
-import type { BinaryNode } from 'zapo-js/transport'
+import { toUserJid } from 'zapo-js/protocol'
+import { type BinaryNode, getFirstNodeChild, getNodeChildrenByTag } from 'zapo-js/transport'
 import { uint8Equal } from 'zapo-js/util'
 
-import { AudioEngine } from './audio-engine.js'
-import { concatBytes, EMPTY_BYTES, readUInt32BE, toArrayBuffer } from './bytes.js'
-import { type CallInfo } from './call-state.js'
-import { derivePerJidSrtpKey } from './encryption.js'
-import { MLowCodec } from './mlow-codec.js'
-import { parseRelayFromAck } from './relay-ack.js'
-import { RtpSession } from './rtp.js'
-import { NodeSctpRelayManager } from './sctp-relay.js'
+import { concatBytes, EMPTY_BYTES, readUInt32BE, toArrayBuffer } from '../bytes.js'
+import { derivePerJidSrtpKey } from '../crypto/encryption.js'
+import { SrtpSession } from '../crypto/srtp.js'
+import { generateSecureSsrc } from '../crypto/ssrc.js'
+import { MLowCodec } from '../media/mlow-codec.js'
+import { RtpSession } from '../media/rtp.js'
+import { WaAudioEngine } from '../media/WaAudioEngine.js'
+import { parseRelayFromAck } from '../relay/relay-ack.js'
+import { isRtpPacket, isStunPacket } from '../relay/stun.js'
+import { WaSctpRelay } from '../relay/WaSctpRelay.js'
 import {
     buildAcceptReceiptStanza,
     buildAcceptStanza,
     buildMuteV2Stanza,
     buildPreacceptStanza,
     buildRejectStanza,
+    buildRelaylatencyForwardStanza,
     buildRelayLatencyStanza,
     buildTerminateStanza,
     buildTransportStanza,
     decryptCallKeyInNode,
     extractNodeInfo,
     extractRelayEndpoints,
-    generateCallStanzaId,
     needsDecryption
-} from './signaling.js'
-import { SrtpSession } from './srtp.js'
-import { generateSecureSsrc } from './ssrc.js'
-import { isRtpPacket, isStunPacket } from './stun.js'
+} from '../signaling/signaling.js'
+import type { VoipSocket } from '../signaling/voip-socket.js'
 import {
     type AudioSender,
     CallDirection,
@@ -38,10 +39,11 @@ import {
     SRTP_AUTH_TAG_LEN,
     SRTP_RECV_AUTH_TAG_LEN,
     SRTP_SEND_AUTH_TAG_LEN
-} from './types.js'
-import type { VoipSocket } from './voip-socket.js'
+} from '../types.js'
 
-export interface CallMediaSessionDelegate {
+import { type CallInfo } from './call-state.js'
+
+export interface WaCallMediaSessionDelegate {
     emitState(call: CallInfo): void
     emitIncoming(call: CallInfo): void
     emitEnded(call: CallInfo): void
@@ -49,27 +51,25 @@ export interface CallMediaSessionDelegate {
     emitOutboundAudioFinished(call: CallInfo): void
 }
 
-export interface CallMediaSessionOptions {
+export interface WaCallMediaSessionOptions {
     readonly sock: VoipSocket
     readonly logger: Logger
-    readonly debug: boolean
     readonly info: CallInfo
-    readonly delegate: CallMediaSessionDelegate
+    readonly delegate: WaCallMediaSessionDelegate
 }
 
-export class CallMediaSession implements AudioSender {
+export class WaCallMediaSession implements AudioSender {
     readonly info: CallInfo
 
     private readonly sock: VoipSocket
     private readonly logger: Logger
-    private readonly debug: boolean
-    private readonly delegate: CallMediaSessionDelegate
+    private readonly delegate: WaCallMediaSessionDelegate
 
     private rtpSession: RtpSession | null = null
     private srtpSession: SrtpSession | null = null
     private opusCodec: MLowCodec | null = null
-    private readonly sctpRelay: NodeSctpRelayManager
-    private readonly audioEngine: AudioEngine
+    private readonly sctpRelay: WaSctpRelay
+    private readonly audioEngine: WaAudioEngine
     private initialTransportSent = false
     private outgoingPreacceptSent = false
 
@@ -104,32 +104,29 @@ export class CallMediaSession implements AudioSender {
     private actualPeerSsrc: number | null = null
     private ssrcResubscribed = false
 
-    constructor(options: CallMediaSessionOptions) {
+    constructor(options: WaCallMediaSessionOptions) {
         this.sock = options.sock
         this.logger = options.logger
-        this.debug = options.debug
         this.info = options.info
         this.delegate = options.delegate
 
-        this.sctpRelay = new NodeSctpRelayManager({
-            logger: this.logger.child({ component: 'sctp' }),
-            debug: this.debug
+        this.sctpRelay = new WaSctpRelay({
+            logger: this.logger.child({ component: 'sctp' })
         })
 
-        this.audioEngine = new AudioEngine({
-            logger: this.logger.child({ component: 'audio-engine' }),
-            debug: this.debug
+        this.audioEngine = new WaAudioEngine({
+            logger: this.logger.child({ component: 'audio-engine' })
         })
         this.audioEngine.setAudioSender(this)
         this.audioEngine.setOnAudioFinished(() => {
             this.delegate.emitOutboundAudioFinished(this.info)
         })
 
-        this.sctpRelay.on('relay:connected', () => {
+        this.sctpRelay.on('relay_connected', () => {
             this.onRelayConnected()
         })
         this.sctpRelay.on(
-            'relay:receive',
+            'relay_receive',
             (relayInfo: { ip: string; port: number; data: Uint8Array }) => {
                 this.onRelayData(relayInfo.data)
             }
@@ -148,13 +145,11 @@ export class CallMediaSession implements AudioSender {
         const peerSsrc = generateSecureSsrc(this.info.callId, peerJid)
         this.peerSsrcs = [peerSsrc]
 
-        if (this.debug) {
-            this.logger.debug('call media initialized', {
-                callId: this.info.callId,
-                selfSsrc: `0x${ssrc.toString(16).toUpperCase()}`,
-                peerSsrc: `0x${peerSsrc.toString(16).toUpperCase()}`
-            })
-        }
+        this.logger.debug('call media initialized', {
+            callId: this.info.callId,
+            selfSsrc: `0x${ssrc.toString(16).toUpperCase()}`,
+            peerSsrc: `0x${peerSsrc.toString(16).toUpperCase()}`
+        })
 
         this.opusCodec = await MLowCodec.create()
     }
@@ -187,22 +182,18 @@ export class CallMediaSession implements AudioSender {
             const muteNode = buildMuteV2Stanza(peerJid, callId, callCreator, 0, meId)
             await this.sock.sendNode(muteNode)
         } catch (err: unknown) {
-            if (this.debug) {
-                this.logger.error('error sending mute_v2', {
-                    message: err instanceof Error ? err.message : String(err)
-                })
-            }
+            this.logger.error('error sending mute_v2', {
+                message: err instanceof Error ? err.message : String(err)
+            })
         }
 
         try {
             const transportNode = buildTransportStanza(peerJid, callId, callCreator, meId, '1', '1')
             await this.sock.sendNode(transportNode)
         } catch (err: unknown) {
-            if (this.debug) {
-                this.logger.error('error sending transport', {
-                    message: err instanceof Error ? err.message : String(err)
-                })
-            }
+            this.logger.error('error sending transport', {
+                message: err instanceof Error ? err.message : String(err)
+            })
         }
 
         if (this.info.encryptionKey) {
@@ -218,11 +209,9 @@ export class CallMediaSession implements AudioSender {
             try {
                 await this.sock.sendNode(acceptStanza)
             } catch (err: unknown) {
-                if (this.debug) {
-                    this.logger.error('accept send error', {
-                        message: err instanceof Error ? err.message : String(err)
-                    })
-                }
+                this.logger.error('accept send error', {
+                    message: err instanceof Error ? err.message : String(err)
+                })
             }
         }
 
@@ -230,9 +219,7 @@ export class CallMediaSession implements AudioSender {
             await this.connectRelays(this.info.relayData.endpoints)
         }
 
-        if (this.debug) {
-            this.logger.debug('call accepted', { callId })
-        }
+        this.logger.debug('call accepted', { callId })
     }
 
     rejectCall(reason: EndCallReason = EndCallReason.Declined): void {
@@ -305,11 +292,9 @@ export class CallMediaSession implements AudioSender {
             )
             await this.sock.sendNode(preacceptNode)
         } catch (err: unknown) {
-            if (this.debug) {
-                this.logger.error('error sending preaccept', {
-                    message: err instanceof Error ? err.message : String(err)
-                })
-            }
+            this.logger.error('error sending preaccept', {
+                message: err instanceof Error ? err.message : String(err)
+            })
         }
     }
 
@@ -345,12 +330,10 @@ export class CallMediaSession implements AudioSender {
                 )
                 await this.sock.sendNode(relayLatencyNode)
             } catch (err: unknown) {
-                if (this.debug) {
-                    this.logger.error('error sending incoming relaylatency', {
-                        relayName: name,
-                        message: err instanceof Error ? err.message : String(err)
-                    })
-                }
+                this.logger.error('error sending incoming relaylatency', {
+                    relayName: name,
+                    message: err instanceof Error ? err.message : String(err)
+                })
             }
         }
     }
@@ -374,11 +357,11 @@ export class CallMediaSession implements AudioSender {
                         const meLid2 = this.sock.authState?.creds?.me?.lid
                         const meId2 = this.sock.authState?.creds?.me?.id
                         const ourCredJid2 = meLid2 || meId2 || ''
-                        const ourBase2 = ourCredJid2.replace(/:\d+@/, '@')
+                        const ourBase2 = toUserJid(ourCredJid2)
                         const participants = this.info.relayData?.participantJids || []
                         const ourDeviceJid2 =
                             participants.find((jid) => {
-                                const jBase = jid.replace(/:\d+@/, '@')
+                                const jBase = toUserJid(jid)
                                 return jBase === ourBase2 && /:\d+@/.test(jid)
                             }) || ourCredJid2
 
@@ -421,7 +404,7 @@ export class CallMediaSession implements AudioSender {
         const meId = this.sock.authState?.creds?.me?.id ?? ''
         const meLid = this.sock.authState?.creds?.me?.lid
         const ourJid = meLid || meId
-        const ourBase = ourJid.replace(/:\d+@/, '@')
+        const ourBase = toUserJid(ourJid)
         const callId = this.info.callId
         const callCreator = this.info.callCreator
         const acceptingDeviceJid = peerJid
@@ -453,35 +436,26 @@ export class CallMediaSession implements AudioSender {
         if (this.info.relayData?.participantJids) {
             const otherDevices = this.info.relayData.participantJids.filter((jid) => {
                 if (jid === acceptingDeviceJid) return false
-                const jidBase = jid.replace(/:\d+@/, '@')
+                const jidBase = toUserJid(jid)
                 if (jidBase === ourBase) return false
                 return true
             })
 
             for (const deviceJid of otherDevices) {
                 try {
-                    const terminateNode: BinaryNode = {
-                        tag: 'call',
-                        attrs: { to: deviceJid, id: generateCallStanzaId() },
-                        content: [
-                            {
-                                tag: 'terminate',
-                                attrs: {
-                                    'call-id': callId,
-                                    'call-creator': callCreator,
-                                    reason: 'accepted_elsewhere'
-                                }
-                            }
-                        ]
-                    }
+                    const terminateNode = buildTerminateStanza(
+                        deviceJid,
+                        callId,
+                        callCreator,
+                        undefined,
+                        'accepted_elsewhere'
+                    )
                     await this.sock.sendNode(terminateNode)
                 } catch (err: unknown) {
-                    if (this.debug) {
-                        this.logger.error('error sending terminate_elsewhere', {
-                            deviceJid,
-                            message: err instanceof Error ? err.message : String(err)
-                        })
-                    }
+                    this.logger.error('error sending terminate_elsewhere', {
+                        deviceJid,
+                        message: err instanceof Error ? err.message : String(err)
+                    })
                 }
             }
         }
@@ -497,22 +471,18 @@ export class CallMediaSession implements AudioSender {
             )
             await this.sock.sendNode(transportNode)
         } catch (err: unknown) {
-            if (this.debug) {
-                this.logger.error('error sending transport', {
-                    message: err instanceof Error ? err.message : String(err)
-                })
-            }
+            this.logger.error('error sending transport', {
+                message: err instanceof Error ? err.message : String(err)
+            })
         }
 
         try {
             const muteNode = buildMuteV2Stanza(acceptingDeviceJid, callId, callCreator, 0, meId)
             await this.sock.sendNode(muteNode)
         } catch (err: unknown) {
-            if (this.debug) {
-                this.logger.error('error sending mute_v2', {
-                    message: err instanceof Error ? err.message : String(err)
-                })
-            }
+            this.logger.error('error sending mute_v2', {
+                message: err instanceof Error ? err.message : String(err)
+            })
         }
 
         const acceptMsgId = node.attrs?.id
@@ -527,11 +497,9 @@ export class CallMediaSession implements AudioSender {
                 )
                 await this.sock.sendNode(receiptNode)
             } catch (err: unknown) {
-                if (this.debug) {
-                    this.logger.error('error sending accept receipt', {
-                        message: err instanceof Error ? err.message : String(err)
-                    })
-                }
+                this.logger.error('error sending accept receipt', {
+                    message: err instanceof Error ? err.message : String(err)
+                })
             }
         }
 
@@ -581,18 +549,16 @@ export class CallMediaSession implements AudioSender {
                     )
                     await this.sock.sendNode(relayLatencyNode)
                 } catch (err: unknown) {
-                    if (this.debug) {
-                        this.logger.error('error sending relaylatency', {
-                            relayName: name,
-                            message: err instanceof Error ? err.message : String(err)
-                        })
-                    }
+                    this.logger.error('error sending relaylatency', {
+                        relayName: name,
+                        message: err instanceof Error ? err.message : String(err)
+                    })
                 }
             }
 
             if (!this.initialTransportSent) {
                 try {
-                    const basePeerJid = peerJid.replace(/:\d+@/, '@')
+                    const basePeerJid = toUserJid(peerJid)
                     const transportNode = buildTransportStanza(
                         basePeerJid,
                         callId,
@@ -602,11 +568,9 @@ export class CallMediaSession implements AudioSender {
                     await this.sock.sendNode(transportNode)
                     this.initialTransportSent = true
                 } catch (err: unknown) {
-                    if (this.debug) {
-                        this.logger.error('error sending initial transport', {
-                            message: err instanceof Error ? err.message : String(err)
-                        })
-                    }
+                    this.logger.error('error sending initial transport', {
+                        message: err instanceof Error ? err.message : String(err)
+                    })
                 }
             }
         }
@@ -659,17 +623,17 @@ export class CallMediaSession implements AudioSender {
                 const meLid = this.sock.authState?.creds?.me?.lid
                 const meId = this.sock.authState?.creds?.me?.id
                 const ourCredJid = meLid || meId || ''
-                const ourBase = ourCredJid.replace(/:\d+@/, '@')
+                const ourBase = toUserJid(ourCredJid)
 
                 const ourDeviceJid = this.ensureDeviceJid(
                     participantJids.find((jid) => {
-                        const jidBase = jid.replace(/:\d+@/, '@')
+                        const jidBase = toUserJid(jid)
                         return jidBase === ourBase && /:\d+@/.test(jid)
                     }) || ourCredJid
                 )
 
                 const peerJids = participantJids.filter((jid) => {
-                    const jidBase = jid.replace(/:\d+@/, '@')
+                    const jidBase = toUserJid(jid)
                     return jidBase !== ourBase
                 })
                 const peerDeviceJid = peerJids[0] ? this.ensureDeviceJid(peerJids[0]) : undefined
@@ -704,11 +668,9 @@ export class CallMediaSession implements AudioSender {
                     await this.sock.sendNode(preacceptNode)
                     this.outgoingPreacceptSent = true
                 } catch (err: unknown) {
-                    if (this.debug) {
-                        this.logger.error('error sending preaccept (caller)', {
-                            message: err instanceof Error ? err.message : String(err)
-                        })
-                    }
+                    this.logger.error('error sending preaccept (caller)', {
+                        message: err instanceof Error ? err.message : String(err)
+                    })
                 }
             }
 
@@ -733,55 +695,32 @@ export class CallMediaSession implements AudioSender {
         const callId = inner.attrs?.['call-id'] || this.info.callId
         const callCreator = inner.attrs?.['call-creator'] || this.info.callCreator
 
-        const teNodes: BinaryNode[] = []
-        if (Array.isArray(inner.content)) {
-            for (const child of inner.content) {
-                if (typeof child === 'object' && 'tag' in child && child.tag === 'te') {
-                    teNodes.push(child as BinaryNode)
-                }
-            }
-        }
+        const teNodes = getNodeChildrenByTag(inner, 'te')
 
         if (teNodes.length === 0) return
 
         const destinationJids = this.info.relayData?.participantJids || []
         if (destinationJids.length > 0) {
-            const peerBaseJid = peerJid.replace(/:\d+@/, '@')
-            const destinationContent: BinaryNode[] = destinationJids.map((jid) => ({
-                tag: 'to',
-                attrs: { jid },
-                content: undefined
-            }))
-
-            const forwardNode: BinaryNode = {
-                tag: 'call',
-                attrs: { to: peerBaseJid, id: generateCallStanzaId() },
-                content: [
-                    {
-                        tag: 'relaylatency',
-                        attrs: { 'call-id': callId, 'call-creator': callCreator },
-                        content: [
-                            ...teNodes,
-                            { tag: 'destination', attrs: {}, content: destinationContent }
-                        ]
-                    }
-                ]
-            }
+            const forwardNode = buildRelaylatencyForwardStanza(
+                peerJid,
+                callId,
+                callCreator,
+                teNodes,
+                destinationJids
+            )
 
             try {
                 await this.sock.sendNode(forwardNode)
             } catch (err: unknown) {
-                if (this.debug) {
-                    this.logger.error('error forwarding relaylatency', {
-                        message: err instanceof Error ? err.message : String(err)
-                    })
-                }
+                this.logger.error('error forwarding relaylatency', {
+                    message: err instanceof Error ? err.message : String(err)
+                })
             }
         }
     }
 
     handleRelayElection(node: BinaryNode): void {
-        const inner = Array.isArray(node.content) ? (node.content[0] as BinaryNode) : null
+        const inner = getFirstNodeChild(node)
         if (!inner) return
 
         let electedRelayIdx: number | undefined
@@ -816,11 +755,9 @@ export class CallMediaSession implements AudioSender {
             const muteNode = buildMuteV2Stanza(peerJid, callId, callCreator, 0, meId)
             await this.sock.sendNode(muteNode)
         } catch (err: unknown) {
-            if (this.debug) {
-                this.logger.error('error sending mute_v2 response', {
-                    message: err instanceof Error ? err.message : String(err)
-                })
-            }
+            this.logger.error('error sending mute_v2 response', {
+                message: err instanceof Error ? err.message : String(err)
+            })
         }
     }
 
@@ -978,7 +915,7 @@ export class CallMediaSession implements AudioSender {
             if (this.debeEnabled) {
                 rtpPacket.header.extension = true
                 rtpPacket.header.extensionProfile = 0xdebe
-                rtpPacket.header.extensionData = CallMediaSession.EMPTY_BYTES
+                rtpPacket.header.extensionData = WaCallMediaSession.EMPTY_BYTES
             }
 
             if (!this.firstPacketSent) {
@@ -1021,12 +958,12 @@ export class CallMediaSession implements AudioSender {
         const meLid = this.sock.authState?.creds?.me?.lid
         const meId = this.sock.authState?.creds?.me?.id
         const ourCredJid = meLid || meId || ''
-        const ourBase = ourCredJid.replace(/:\d+@/, '@')
+        const ourBase = toUserJid(ourCredJid)
         const participants = this.info.relayData?.participantJids || []
 
         const ourDeviceJid = this.ensureDeviceJid(
             participants.find((jid) => {
-                const jBase = jid.replace(/:\d+@/, '@')
+                const jBase = toUserJid(jid)
                 return jBase === ourBase && /:\d+@/.test(jid)
             }) || ourCredJid
         )
@@ -1034,7 +971,7 @@ export class CallMediaSession implements AudioSender {
         let rawPeerJid = this.acceptedByJid || this.info.peerJid
         if (!this.acceptedByJid) {
             const peerFromParticipants = participants.find((jid) => {
-                const jBase = jid.replace(/:\d+@/, '@')
+                const jBase = toUserJid(jid)
                 return jBase !== ourBase
             })
             if (peerFromParticipants) rawPeerJid = peerFromParticipants

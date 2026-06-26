@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { bytesToHex } from 'zapo-js/util'
 
-import { encodeAscii } from '../bytes.js'
+import { encodeAscii } from '../../bytes.js'
 import {
     buildBindingRequestWithSubs,
     buildSenderSubscriptions,

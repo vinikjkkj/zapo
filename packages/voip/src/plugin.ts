@@ -1,6 +1,6 @@
 import { defineWaClientPlugin } from 'zapo-js'
 
-import { WaVoipCoordinator, type WaVoipCoordinatorOptions } from './coordinator.js'
+import { WaVoipCoordinator, type WaVoipCoordinatorOptions } from './WaVoipCoordinator.js'
 
 export interface VoipPluginOptions extends WaVoipCoordinatorOptions {}
 

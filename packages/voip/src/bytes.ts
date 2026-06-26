@@ -1,21 +1,23 @@
-import { base64ToBytes, bytesToBase64, bytesToHex, TEXT_DECODER, toBytesView } from 'zapo-js/util'
+import {
+    base64ToBytes,
+    bytesToBase64,
+    bytesToHex,
+    concatBytes,
+    EMPTY_BYTES,
+    TEXT_DECODER,
+    TEXT_ENCODER,
+    toBytesView
+} from 'zapo-js/util'
 
-export { bytesToBase64, bytesToHex, base64ToBytes, TEXT_DECODER, toBytesView }
-
-export const EMPTY_BYTES = new Uint8Array(0)
-
-export const TEXT_ENCODER = new TextEncoder()
-
-export function concatBytes(arrays: Uint8Array[]): Uint8Array {
-    let totalLength = 0
-    for (const arr of arrays) totalLength += arr.length
-    const result = new Uint8Array(totalLength)
-    let offset = 0
-    for (const arr of arrays) {
-        result.set(arr, offset)
-        offset += arr.length
-    }
-    return result
+export {
+    base64ToBytes,
+    bytesToBase64,
+    bytesToHex,
+    concatBytes,
+    EMPTY_BYTES,
+    TEXT_DECODER,
+    TEXT_ENCODER,
+    toBytesView
 }
 
 export function readUInt16BE(buf: Uint8Array, offset: number): number {

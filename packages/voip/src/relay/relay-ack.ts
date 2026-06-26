@@ -1,8 +1,13 @@
-import type { BinaryNode } from 'zapo-js/transport'
+import {
+    type BinaryNode,
+    getNodeChildren,
+    getNodeChildrenByTag,
+    getNodeTextContent
+} from 'zapo-js/transport'
 import { base64ToBytes, bytesToBase64 } from 'zapo-js/util'
 
-import { decodeUtf8 } from './bytes.js'
-import type { RelayEndpoint } from './types.js'
+import { decodeUtf8 } from '../bytes.js'
+import type { RelayEndpoint } from '../types.js'
 
 export function parseRelayFromAck(ackNode: BinaryNode): {
     relays: RelayEndpoint[]
@@ -50,16 +55,13 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
         uuid = relayNode.attrs?.uuid || ''
         if (relayNode.attrs?.self_pid) selfPid = parseInt(relayNode.attrs.self_pid, 10)
         if (relayNode.attrs?.peer_pid) peerPid = parseInt(relayNode.attrs.peer_pid, 10)
-        const relayContent = Array.isArray(relayNode.content) ? relayNode.content : []
+        const relayContent = getNodeChildren(relayNode)
 
-        for (const rc of relayContent) {
-            if (typeof rc !== 'object' || !('tag' in rc)) continue
-            if (rc.tag === 'participant' && rc.attrs?.jid) {
-                const jid = rc.attrs.jid as string
-                if (!participantSeen.has(jid)) {
-                    participantSeen.add(jid)
-                    participantJids.push(jid)
-                }
+        for (const rc of getNodeChildrenByTag(relayNode, 'participant')) {
+            const jid = rc.attrs?.jid
+            if (jid && !participantSeen.has(jid)) {
+                participantSeen.add(jid)
+                participantJids.push(jid)
             }
         }
 
@@ -71,13 +73,10 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
 
         for (const rc of relayContent) {
             if (typeof rc !== 'object' || !('tag' in rc)) continue
-            const rcNode = rc as BinaryNode
+            const rcNode = rc
 
             if (rcNode.tag === 'key' && rcNode.content) {
-                relayKey =
-                    rcNode.content instanceof Uint8Array
-                        ? decodeUtf8(rcNode.content)
-                        : String(rcNode.content)
+                relayKey = getNodeTextContent(rcNode) ?? ''
             }
 
             if (rcNode.tag === 'hbh_key' && rcNode.content) {
@@ -124,45 +123,38 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
             }
         }
 
-        for (const rc of relayContent) {
-            if (typeof rc !== 'object' || !('tag' in rc)) continue
-            const rcNode = rc as BinaryNode
+        for (const rcNode of getNodeChildrenByTag(relayNode, 'te2')) {
+            const tokenId = rcNode.attrs?.token_id || '0'
+            const authTokenId = rcNode.attrs?.auth_token_id || ''
+            const token = tokens.get(tokenId) || ''
+            const authToken = authTokenId ? authTokens.get(authTokenId) : undefined
+            const relayName = rcNode.attrs?.relay_name || ''
+            const protocol = rcNode.attrs?.protocol ? parseInt(rcNode.attrs.protocol, 10) : 0
 
-            if (rcNode.tag === 'te2') {
-                const tokenId = rcNode.attrs?.token_id || '0'
-                const authTokenId = rcNode.attrs?.auth_token_id || ''
-                const token = tokens.get(tokenId) || ''
-                const authToken = authTokenId ? authTokens.get(authTokenId) : undefined
-                const relayName = rcNode.attrs?.relay_name || ''
-                const protocol = rcNode.attrs?.protocol ? parseInt(rcNode.attrs.protocol, 10) : 0
+            if (!(rcNode.content instanceof Uint8Array) || rcNode.content.length < 6) continue
 
-                if (!(rcNode.content instanceof Uint8Array) || rcNode.content.length < 6) continue
+            const addrBytes = rcNode.content
+            const addressBytes = new Uint8Array(addrBytes)
 
-                const addrBytes = rcNode.content
-                const addressBytes = new Uint8Array(addrBytes)
+            if (addrBytes.length === 6) {
+                const ip = `${addrBytes[0]}.${addrBytes[1]}.${addrBytes[2]}.${addrBytes[3]}`
+                const port = (addrBytes[4] << 8) | addrBytes[5]
 
-                if (addrBytes.length === 6) {
-                    const ip = `${addrBytes[0]}.${addrBytes[1]}.${addrBytes[2]}.${addrBytes[3]}`
-                    const port = (addrBytes[4] << 8) | addrBytes[5]
-
-                    relays.push({
-                        ip,
-                        port,
-                        token,
-                        authToken,
-                        rawAuthToken: authTokenId ? rawAuthTokens.get(authTokenId) : undefined,
-                        rawToken: rawTokens.get(tokenId),
-                        key: relayKey,
-                        relayId: parseInt(rcNode.attrs?.relay_id || '0', 10),
-                        protocol,
-                        c2rRtt: rcNode.attrs?.c2r_rtt
-                            ? parseInt(rcNode.attrs.c2r_rtt, 10)
-                            : undefined,
-                        relayName,
-                        addressBytes,
-                        authTokenId: authTokenId || tokenId
-                    })
-                }
+                relays.push({
+                    ip,
+                    port,
+                    token,
+                    authToken,
+                    rawAuthToken: authTokenId ? rawAuthTokens.get(authTokenId) : undefined,
+                    rawToken: rawTokens.get(tokenId),
+                    key: relayKey,
+                    relayId: parseInt(rcNode.attrs?.relay_id || '0', 10),
+                    protocol,
+                    c2rRtt: rcNode.attrs?.c2r_rtt ? parseInt(rcNode.attrs.c2r_rtt, 10) : undefined,
+                    relayName,
+                    addressBytes,
+                    authTokenId: authTokenId || tokenId
+                })
             }
         }
     }

@@ -1,22 +1,24 @@
-import { randomBytes } from 'node:crypto'
-
-import { createNoopLogger, type Logger } from 'zapo-js'
+import { createNoopLogger, type Logger, unpadPkcs7, writeRandomPadMax16 } from 'zapo-js'
 import { proto } from 'zapo-js/proto'
-import type { BinaryNode } from 'zapo-js/transport'
-import { bytesToHex, toBytesView, toError } from 'zapo-js/util'
+import { buildDeviceJid, toUserJid } from 'zapo-js/protocol'
+import {
+    type BinaryNode,
+    buildReceiptNode,
+    findNodeChild,
+    getFirstNodeChild,
+    getNodeChildren,
+    getNodeChildrenByTag
+} from 'zapo-js/transport'
+import { bytesToHex, toError } from 'zapo-js/util'
 
-import type { NodeInfo, RelayEndpoint } from './types.js'
+import { randomBytes } from '../crypto/primitives.js'
+import type { NodeInfo, RelayEndpoint } from '../types.js'
+
 import type { VoipSocket } from './voip-socket.js'
 
-function writeRandomPadMax16(message: Uint8Array): Uint8Array {
-    const padLength = (randomBytes(1)[0] & 0x0f) + 1
-    const out = new Uint8Array(message.length + padLength)
-    out.set(message, 0)
-    out.fill(padLength, message.length)
-    return out
-}
-
-function encodeWAMessage(message: Parameters<typeof proto.Message.encode>[0]): Uint8Array {
+export async function encodeWAMessage(
+    message: Parameters<typeof proto.Message.encode>[0]
+): Promise<Uint8Array> {
     return writeRandomPadMax16(proto.Message.encode(message).finish())
 }
 
@@ -24,18 +26,6 @@ function encodeSignedDeviceIdentity(
     account: Parameters<typeof proto.ADVSignedDeviceIdentity.encode>[0]
 ): Uint8Array {
     return proto.ADVSignedDeviceIdentity.encode(account).finish()
-}
-
-function unpadRandomMax16(bytes: Uint8Array): Uint8Array {
-    const data = new Uint8Array(bytes)
-    if (data.length === 0) {
-        throw new Error('unpadRandomMax16 given empty bytes')
-    }
-    const pad = data[data.length - 1]
-    if (pad > data.length) {
-        throw new Error(`unpad given ${data.length} bytes, but pad is ${pad}`)
-    }
-    return data.subarray(0, data.length - pad)
 }
 
 export function generateCallId(): string {
@@ -48,16 +38,12 @@ export function generateCallId(): string {
 }
 
 export function generateCallStanzaId(): string {
-    return bytesToHex(toBytesView(randomBytes(16))).toUpperCase()
+    return bytesToHex(randomBytes(16)).toUpperCase()
 }
 
 export function extractNodeInfo(node: BinaryNode): NodeInfo | null {
-    if (!node.content || !Array.isArray(node.content)) {
-        return null
-    }
-
-    const innerNode = node.content[0] as BinaryNode
-    if (!innerNode || typeof innerNode !== 'object') {
+    const innerNode = getFirstNodeChild(node)
+    if (!innerNode) {
         return null
     }
 
@@ -73,60 +59,30 @@ export function extractNodeInfo(node: BinaryNode): NodeInfo | null {
     }
 }
 
-export function extractRelayEndpoints(node: BinaryNode): RelayEndpoint[] {
-    const relays: RelayEndpoint[] = []
-    if (!node.content || !Array.isArray(node.content)) {
-        return relays
+function toRelayEndpoint(node: BinaryNode): RelayEndpoint | null {
+    const relay: RelayEndpoint = {
+        ip: node.attrs?.ip || '',
+        port: parseInt(node.attrs?.port || '3480', 10),
+        token: node.attrs?.token || '',
+        key: node.attrs?.['relay-key'] || node.attrs?.key || '',
+        relayId: parseInt(node.attrs?.['relay-id'] || '0', 10),
+        c2rRtt: node.attrs?.['c2r-rtt'] ? parseInt(node.attrs['c2r-rtt'], 10) : undefined
     }
 
-    for (const child of node.content) {
-        if (typeof child !== 'object' || !('tag' in child)) {
-            continue
-        }
+    return relay.ip && relay.token ? relay : null
+}
 
-        if (child.tag === 'relay') {
-            const relay: RelayEndpoint = {
-                ip: (child.attrs?.ip as string) || '',
-                port: parseInt((child.attrs?.port as string) || '3480', 10),
-                token: (child.attrs?.token as string) || '',
-                key: (child.attrs?.['relay-key'] as string) || (child.attrs?.key as string) || '',
-                relayId: parseInt((child.attrs?.['relay-id'] as string) || '0', 10),
-                c2rRtt: child.attrs?.['c2r-rtt']
-                    ? parseInt(child.attrs['c2r-rtt'] as string, 10)
-                    : undefined
-            }
+export function extractRelayEndpoints(node: BinaryNode): RelayEndpoint[] {
+    const relayNodes = [...getNodeChildrenByTag(node, 'relay')]
+    for (const wrapper of getNodeChildrenByTag(node, 'relays')) {
+        relayNodes.push(...getNodeChildrenByTag(wrapper, 'relay'))
+    }
 
-            if (relay.ip && relay.token) {
-                relays.push(relay)
-            }
-        }
-
-        if (child.tag === 'relays' && Array.isArray(child.content)) {
-            for (const relayNode of child.content) {
-                if (
-                    typeof relayNode === 'object' &&
-                    'tag' in relayNode &&
-                    relayNode.tag === 'relay'
-                ) {
-                    const relay: RelayEndpoint = {
-                        ip: (relayNode.attrs?.ip as string) || '',
-                        port: parseInt((relayNode.attrs?.port as string) || '3480', 10),
-                        token: (relayNode.attrs?.token as string) || '',
-                        key:
-                            (relayNode.attrs?.['relay-key'] as string) ||
-                            (relayNode.attrs?.key as string) ||
-                            '',
-                        relayId: parseInt((relayNode.attrs?.['relay-id'] as string) || '0', 10),
-                        c2rRtt: relayNode.attrs?.['c2r-rtt']
-                            ? parseInt(relayNode.attrs['c2r-rtt'] as string, 10)
-                            : undefined
-                    }
-
-                    if (relay.ip && relay.token) {
-                        relays.push(relay)
-                    }
-                }
-            }
+    const relays: RelayEndpoint[] = []
+    for (const relayNode of relayNodes) {
+        const relay = toRelayEndpoint(relayNode)
+        if (relay) {
+            relays.push(relay)
         }
     }
 
@@ -162,16 +118,14 @@ export async function decryptCallKeyInNode(
     }
 
     if (!encNode) {
-        const destinationNode = cloned.content.find(
-            (c: any) => typeof c === 'object' && 'tag' in c && c.tag === 'destination'
-        ) as BinaryNode | undefined
+        const destinationNode = findNodeChild(cloned, 'destination')
 
         if (destinationNode && Array.isArray(destinationNode.content)) {
             for (const toNode of destinationNode.content) {
                 if (typeof toNode === 'object' && 'tag' in toNode && toNode.tag === 'to') {
-                    const toContent = Array.isArray(toNode.content) ? toNode.content : []
+                    const toContent = getNodeChildren(toNode)
                     for (let i = 0; i < toContent.length; i++) {
-                        const child = toContent[i] as BinaryNode
+                        const child = toContent[i]
                         if (child?.tag === 'enc' && child.attrs?.type) {
                             encNode = child
                             encParent = toContent
@@ -201,7 +155,7 @@ export async function decryptCallKeyInNode(
                 ciphertext: encContent
             })
 
-            const unpadded = unpadRandomMax16(decrypted)
+            const unpadded = unpadPkcs7(decrypted)
             const message = proto.Message.decode(unpadded)
             const callKey = message.call?.callKey
 
@@ -247,7 +201,7 @@ export async function buildOfferStanza(
         .map((d: any) => {
             if (d.jid) return d.jid as string
             if (d.user) {
-                return `${d.user}${d.device ? `:${d.device}` : ''}@lid`
+                return buildDeviceJid(d.user, 'lid', Number(d.device) || 0)
             }
             return null
         })
@@ -268,7 +222,7 @@ export async function buildOfferStanza(
     const offerContent: BinaryNode[] = []
 
     try {
-        const peerJidNormalized = peerJid.replace(/:\d+@/, '@')
+        const peerJidNormalized = toUserJid(peerJid)
         const tctokenData = await sock.authState?.keys?.get?.('tctoken', [peerJidNormalized])
         const tctoken = tctokenData?.[peerJidNormalized]?.token
         if (tctoken) {
@@ -348,7 +302,7 @@ export async function buildAcceptStanza(
     await sock.assertSessions([callCreator], true)
 
     const callMessage = { call: { callKey: new Uint8Array(callKey) } }
-    const bytes = encodeWAMessage(callMessage)
+    const bytes = await encodeWAMessage(callMessage)
 
     let encNode: BinaryNode
     let shouldIncludeDeviceIdentity = false
@@ -391,7 +345,7 @@ export async function buildAcceptStanza(
         acceptContent.push({ tag: 'video', attrs: { enc: 'vp8' } })
     }
 
-    const toJidClean = peerJid.replace(/:\d+@/, '@')
+    const toJidClean = toUserJid(peerJid)
     return {
         tag: 'call',
         attrs: { to: toJidClean, id: generateCallStanzaId() },
@@ -409,7 +363,8 @@ export function buildTerminateStanza(
     peerJid: string,
     callId: string,
     callCreator: string,
-    audioDurationMs?: number
+    audioDurationMs?: number,
+    reason?: string
 ): BinaryNode {
     const attrs: Record<string, string> = {
         'call-id': callId,
@@ -419,6 +374,9 @@ export function buildTerminateStanza(
         const ms = String(Math.floor(audioDurationMs))
         attrs.duration = ms
         attrs.audio_duration = ms
+    }
+    if (reason !== undefined) {
+        attrs.reason = reason
     }
 
     return {
@@ -434,12 +392,41 @@ export function buildTerminateStanza(
     }
 }
 
+export function buildRelaylatencyForwardStanza(
+    peerJid: string,
+    callId: string,
+    callCreator: string,
+    teNodes: readonly BinaryNode[],
+    destinationJids: string[]
+): BinaryNode {
+    const destinationContent: BinaryNode[] = destinationJids.map((jid) => ({
+        tag: 'to',
+        attrs: { jid },
+        content: undefined
+    }))
+
+    return {
+        tag: 'call',
+        attrs: { to: toUserJid(peerJid), id: generateCallStanzaId() },
+        content: [
+            {
+                tag: 'relaylatency',
+                attrs: { 'call-id': callId, 'call-creator': callCreator },
+                content: [
+                    ...teNodes,
+                    { tag: 'destination', attrs: {}, content: destinationContent }
+                ]
+            }
+        ]
+    }
+}
+
 export function buildRejectStanza(
     peerJid: string,
     callId: string,
     callCreator: string
 ): BinaryNode {
-    const toJidClean = peerJid.replace(/:\d+@/, '@')
+    const toJidClean = toUserJid(peerJid)
     return {
         tag: 'call',
         attrs: { to: toJidClean, id: generateCallStanzaId() },
@@ -471,13 +458,6 @@ export function buildPreacceptStanza(
                 ]
             }
         ]
-    }
-}
-
-export function createCallAck(nodeId: string, peerJid: string, type: string): BinaryNode {
-    return {
-        tag: 'ack',
-        attrs: { id: nodeId, to: peerJid, class: 'call', type }
     }
 }
 
@@ -524,7 +504,7 @@ export function buildRelayLatencyStanza(
         })
     }
 
-    const toJidClean = peerJid.replace(/:\d+@/, '@')
+    const toJidClean = toUserJid(peerJid)
     return {
         tag: 'call',
         attrs: { to: toJidClean, id: generateCallStanzaId() },
@@ -600,23 +580,11 @@ export function buildAcceptReceiptStanza(
     callCreator: string,
     ourJid: string
 ): BinaryNode {
-    return {
-        tag: 'receipt',
-        attrs: {
-            to: peerDeviceJid,
-            id: acceptMsgId,
-            from: ourJid
-        },
-        content: [
-            {
-                tag: 'accept',
-                attrs: {
-                    'call-id': callId,
-                    'call-creator': callCreator
-                }
-            }
-        ]
-    }
+    return buildReceiptNode({
+        kind: 'custom',
+        attrs: { to: peerDeviceJid, id: acceptMsgId, from: ourJid },
+        content: [{ tag: 'accept', attrs: { 'call-id': callId, 'call-creator': callCreator } }]
+    })
 }
 
 export const ENCRYPTED_TAGS = ['preaccept', 'accept'] as const

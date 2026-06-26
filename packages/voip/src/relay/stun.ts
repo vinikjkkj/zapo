@@ -1,6 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto'
-
-import { bytesToHex, toBytesView } from 'zapo-js/util'
+import { bytesToHex } from 'zapo-js/util'
 
 import {
     concatBytes,
@@ -10,7 +8,8 @@ import {
     readUInt32BE,
     writeUInt16BE,
     writeUInt32BE
-} from './bytes.js'
+} from '../bytes.js'
+import { hmacSha1, randomBytes } from '../crypto/primitives.js'
 
 const STUN_MAGIC_COOKIE = 0x2112a442
 const STUN_FINGERPRINT_XOR = 0x5354554e
@@ -85,7 +84,7 @@ function buildStunMessage(
         hmacHeader.set(transactionId, 8)
 
         const hmacInput = concatBytes([hmacHeader, attrsData])
-        const hmac = toBytesView(createHmac('sha1', integrityKey).update(hmacInput).digest())
+        const hmac = hmacSha1(integrityKey, hmacInput)
         const miAttr = encodeAttribute(ATTR_MESSAGE_INTEGRITY, hmac)
         attrsData = concatBytes([attrsData, miAttr])
     }
@@ -290,7 +289,7 @@ export function buildBindingRequestWithSubs(
     parts.push(encodeAttribute(ATTR_PRIORITY, priorityBuf))
 
     if (includeIceControlling) {
-        const tieBreaker = toBytesView(randomBytes(8))
+        const tieBreaker = randomBytes(8)
         parts.push(encodeAttribute(ATTR_ICE_CONTROLLING, tieBreaker))
     }
 

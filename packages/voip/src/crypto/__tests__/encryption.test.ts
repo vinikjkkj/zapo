@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { derivePerJidSrtpKey, generateCallKey } from '../encryption.js'
-import { RtpHeader, RtpPacket } from '../rtp.js'
 import { SrtpSession } from '../srtp.js'
 
 test('generateCallKey returns 32 bytes', () => {
