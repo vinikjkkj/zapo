@@ -12,6 +12,39 @@ const PREFIX_SIGNATURE_RANDOM = new Uint8Array([
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 ])
 
+interface NativeBinding {
+    readonly xeddsaSign: (privateKey: Uint8Array, message: Uint8Array) => Uint8Array
+    readonly xeddsaVerify: (
+        publicKey: Uint8Array,
+        message: Uint8Array,
+        signature: Uint8Array
+    ) => boolean
+}
+
+const nativeBinding: NativeBinding | null = (() => {
+    if (process.env.ZAPO_XEDDSA_FORCE_JS) return null
+    try {
+        const mod = require('@zapo-js/native') as {
+            xeddsaSign?: NativeBinding['xeddsaSign']
+            xeddsaVerify?: NativeBinding['xeddsaVerify']
+        }
+        if (
+            mod &&
+            typeof mod.xeddsaSign === 'function' &&
+            typeof mod.xeddsaVerify === 'function'
+        ) {
+            return { xeddsaSign: mod.xeddsaSign, xeddsaVerify: mod.xeddsaVerify }
+        }
+    } catch {
+        // optional native binding not installed; fall through to JS implementation
+    }
+    return null
+})()
+
+export function isNativeXeddsaEnabled(): boolean {
+    return nativeBinding !== null
+}
+
 /**
  * Verifies an XEdDSA signature over `message` against an X25519 (Montgomery)
  * public key, converting to the Edwards form internally. Returns `false`
@@ -22,6 +55,9 @@ export async function xeddsaVerify(
     message: Uint8Array,
     signature: Uint8Array
 ): Promise<boolean> {
+    if (nativeBinding) {
+        return nativeBinding.xeddsaVerify(curvePublicKey, message, signature)
+    }
     if (signature.length !== 64) {
         return false
     }
@@ -48,6 +84,10 @@ export async function xeddsaVerify(
  */
 export async function xeddsaSign(privateKey: Uint8Array, message: Uint8Array): Promise<Uint8Array> {
     assertByteLength(privateKey, 32, `invalid curve25519 private key length ${privateKey.length}`)
+
+    if (nativeBinding) {
+        return nativeBinding.xeddsaSign(privateKey, message)
+    }
 
     const clampedPrivateKey = clampCurvePrivateKeyInPlace(privateKey)
     const privateScalar = bytesToBigIntLE(clampedPrivateKey)
