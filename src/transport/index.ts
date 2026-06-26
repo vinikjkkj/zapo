@@ -47,3 +47,13 @@ export type {
     WaMobileTransportDeviceInfo
 } from '@transport/noise/WaMobileClientPayload'
 export { assertIqResult, buildIqNode, parseIqError, queryWithContext } from '@transport/node/query'
+export { buildAckNode, buildReceiptNode } from '@transport/node/builders/global'
+export type { BuildAckNodeInput, BuildReceiptNodeInput } from '@transport/node/builders/global'
+export {
+    findNodeChild,
+    getFirstNodeChild,
+    getNodeChildren,
+    getNodeChildrenByTag,
+    getNodeTextContent,
+    hasNodeChild
+} from '@transport/node/helpers'

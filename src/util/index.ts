@@ -3,9 +3,12 @@ export {
     bytesToBase64,
     bytesToBase64UrlSafe,
     bytesToHex,
+    concatBytes,
     decodeBase64Url,
+    EMPTY_BYTES,
     hexToBytes,
     TEXT_DECODER,
+    TEXT_ENCODER,
     toBytesView,
     uint8Equal,
     uint8TimingSafeEqual

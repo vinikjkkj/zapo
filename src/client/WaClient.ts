@@ -19,8 +19,10 @@ import { createIgnoreKeyFilter, validateIgnoreKey } from '@client/messaging/igno
 import { runHistorySyncNotification } from '@client/persistence/history-sync'
 import { persistIncomingMailboxEntities } from '@client/persistence/mailbox'
 import { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
+import { installWaClientPlugins } from '@client/plugins/install'
+import type { WaClientPluginRegistry } from '@client/plugins/types'
 import type {
-    WaClientEventMap,
+    WaClientAllEventMap,
     WaClientOptions,
     WaIgnoreKey,
     WaIgnoreKeyPredicate,
@@ -113,6 +115,7 @@ export class WaClient extends EventEmitter {
     private acceptingIncomingEvents = true
     private activeIncomingHandlers = 0
     private readonly incomingHandlersDrainedWaiters: Array<() => void> = []
+    private disposePlugins: (() => Promise<void>) | null = null
 
     /**
      * @param options Client configuration (store, transport, addons, history...).
@@ -166,6 +169,18 @@ export class WaClient extends EventEmitter {
         this.appStateSync = dependencies.appStateSync
         this.mediaTransfer = dependencies.mediaTransfer
 
+        this.disposePlugins = installWaClientPlugins(
+            this,
+            {
+                options: this.options,
+                logger: this.logger,
+                stores: this.stores,
+                deps: this.deps,
+                queryWithContext: this.queryWithContext.bind(this)
+            },
+            this.options.plugins ?? []
+        )
+
         this.bindNodeTransportEvents()
         this.on('connection', (event) => {
             if (event.status !== 'close') return
@@ -198,31 +213,37 @@ export class WaClient extends EventEmitter {
         }
     }
 
-    /** Strongly-typed `EventEmitter#on` over {@link WaClientEventMap}. */
-    public on<K extends keyof WaClientEventMap>(event: K, listener: WaClientEventMap[K]): this
+    /** Strongly-typed `EventEmitter#on` over {@link WaClientAllEventMap}. */
+    public on<K extends keyof WaClientAllEventMap>(event: K, listener: WaClientAllEventMap[K]): this
     public on(event: string | symbol, listener: (...args: unknown[]) => void): this
     public on(event: string | symbol, listener: (...args: unknown[]) => void): this {
         return super.on(event, listener)
     }
 
-    /** Strongly-typed `EventEmitter#once` over {@link WaClientEventMap}. */
-    public once<K extends keyof WaClientEventMap>(event: K, listener: WaClientEventMap[K]): this
+    /** Strongly-typed `EventEmitter#once` over {@link WaClientAllEventMap}. */
+    public once<K extends keyof WaClientAllEventMap>(
+        event: K,
+        listener: WaClientAllEventMap[K]
+    ): this
     public once(event: string | symbol, listener: (...args: unknown[]) => void): this
     public once(event: string | symbol, listener: (...args: unknown[]) => void): this {
         return super.once(event, listener)
     }
 
-    /** Strongly-typed `EventEmitter#off` over {@link WaClientEventMap}. */
-    public off<K extends keyof WaClientEventMap>(event: K, listener: WaClientEventMap[K]): this
+    /** Strongly-typed `EventEmitter#off` over {@link WaClientAllEventMap}. */
+    public off<K extends keyof WaClientAllEventMap>(
+        event: K,
+        listener: WaClientAllEventMap[K]
+    ): this
     public off(event: string | symbol, listener: (...args: unknown[]) => void): this
     public off(event: string | symbol, listener: (...args: unknown[]) => void): this {
         return super.off(event, listener)
     }
 
-    /** Strongly-typed `EventEmitter#emit` over {@link WaClientEventMap}. */
-    public emit<K extends keyof WaClientEventMap>(
+    /** Strongly-typed `EventEmitter#emit` over {@link WaClientAllEventMap}. */
+    public emit<K extends keyof WaClientAllEventMap>(
         event: K,
-        payload: Parameters<WaClientEventMap[K]>[0]
+        payload: Parameters<WaClientAllEventMap[K]>[0]
     ): boolean
     public emit(event: string | symbol, ...args: unknown[]): boolean
     public emit(event: string | symbol, ...args: unknown[]): boolean {
@@ -496,6 +517,9 @@ export class WaClient extends EventEmitter {
                 remaining: writeBehindFlush.remaining
             })
         }
+        if (this.disposePlugins) {
+            await this.disposePlugins()
+        }
         await this.deps.connectionManager.disconnect()
         this.emit('connection', {
             status: 'close',
@@ -721,3 +745,6 @@ export class WaClient extends EventEmitter {
         this.emit('debug_client_error', { error })
     }
 }
+
+/** Merged with plugin {@link WaClientPluginRegistry} augmentations for `client.*` getters. */
+export interface WaClient extends WaClientPluginRegistry {}

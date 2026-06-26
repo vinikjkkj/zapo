@@ -177,6 +177,11 @@ interface WaClientBuildRuntime {
     readonly persistContact: (record: WaStoredContactRecord) => void
 }
 
+/**
+ * Internal coordinator graph wired by {@link buildWaClientDependencies}. Exposed
+ * to {@link WaClientPluginContext.deps} for plugin authors – advanced API; new
+ * coordinators may appear in minor releases.
+ */
 export interface WaClientDependencies {
     readonly nodeTransport: WaNodeTransport
     readonly nodeOrchestrator: WaNodeOrchestrator

@@ -1,0 +1,17 @@
+{
+    "extends": ["../../tsconfig.packages.json", "../tsconfig.build.paths.json"],
+    "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist/esm",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "noEmit": false,
+        "lib": ["ES2020", "DOM"],
+        "types": ["node"],
+        "declaration": false,
+        "declarationMap": false,
+        "sourceMap": false
+    },
+    "include": ["src"],
+    "exclude": ["src/**/__tests__/**"]
+}

@@ -1,0 +1,47 @@
+{
+    "name": "@zapo-js/voip",
+    "version": "1.0.0",
+    "description": "WhatsApp VOIP (calling) plugin for zapo-js — MLow/WASM codec, SRTP, STUN and WebRTC/SCTP relay transport",
+    "license": "MIT",
+    "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vinikjkkj/zapo.git",
+        "directory": "packages/voip"
+    },
+    "main": "dist/index.js",
+    "module": "dist/esm/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/esm/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.build.cjs.json && tsc -p tsconfig.build.esm.json && node ../../scripts/finalize-esm-build.cjs",
+        "typecheck": "tsc --noEmit",
+        "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\""
+    },
+    "peerDependencies": {
+        "@roamhq/wrtc": ">=0.10.0",
+        "libmlow-wasm": "^0.1.1",
+        "zapo-js": "^1.0.0"
+    },
+    "devDependencies": {
+        "@roamhq/wrtc": "^0.10.0",
+        "libmlow-wasm": "^0.1.1",
+        "zapo-js": "file:../.."
+    },
+    "engines": {
+        "node": ">=20.9.0"
+    }
+}
