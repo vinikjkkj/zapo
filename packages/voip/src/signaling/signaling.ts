@@ -1,6 +1,6 @@
 import { createNoopLogger, type Logger, unpadPkcs7, writeRandomPadMax16 } from 'zapo-js'
 import { proto } from 'zapo-js/proto'
-import { buildDeviceJid, toUserJid } from 'zapo-js/protocol'
+import { parseSignalAddressFromJid, toUserJid } from 'zapo-js/protocol'
 import {
     type BinaryNode,
     buildReceiptNode,
@@ -12,9 +12,7 @@ import {
 import { bytesToHex, toError } from 'zapo-js/util'
 
 import { randomBytes } from '../crypto/primitives.js'
-import type { NodeInfo, RelayEndpoint } from '../types.js'
-
-import type { VoipSocket } from './voip-socket.js'
+import type { NodeInfo, RelayEndpoint, WaVoipDeps, WaVoipStores } from '../types.js'
 
 export async function encodeWAMessage(
     message: Parameters<typeof proto.Message.encode>[0]
@@ -91,140 +89,121 @@ export function extractRelayEndpoints(node: BinaryNode): RelayEndpoint[] {
     return relays
 }
 
-export async function decryptCallKeyInNode(
-    sock: VoipSocket,
+export async function decryptCallKey(
+    deps: WaVoipDeps,
     node: BinaryNode,
     peerJid: string,
     logger?: Logger
-): Promise<{ node: BinaryNode; callKey?: Uint8Array }> {
+): Promise<Uint8Array | undefined> {
     const log = logger ?? createNoopLogger()
-    const cloned = structuredClone(node)
-    if (!cloned.content || !Array.isArray(cloned.content)) {
-        return { node: cloned }
-    }
 
-    let encNode: BinaryNode | undefined
-    let encParent: any = null
-    let encIndex = -1
-
-    for (let i = 0; i < cloned.content.length; i++) {
-        const child = cloned.content[i] as BinaryNode
-        if (child?.tag === 'enc' && child.attrs?.type) {
-            encNode = child
-            encParent = cloned.content
-            encIndex = i
-            break
-        }
-    }
+    const isEnc = (child: BinaryNode): boolean => child.tag === 'enc' && !!child.attrs?.type
+    let encNode = getNodeChildren(node).find(isEnc)
 
     if (!encNode) {
-        const destinationNode = findNodeChild(cloned, 'destination')
-
-        if (destinationNode && Array.isArray(destinationNode.content)) {
-            for (const toNode of destinationNode.content) {
-                if (typeof toNode === 'object' && 'tag' in toNode && toNode.tag === 'to') {
-                    const toContent = getNodeChildren(toNode)
-                    for (let i = 0; i < toContent.length; i++) {
-                        const child = toContent[i]
-                        if (child?.tag === 'enc' && child.attrs?.type) {
-                            encNode = child
-                            encParent = toContent
-                            encIndex = i
-                            break
-                        }
-                    }
-                    if (encNode) {
-                        break
-                    }
-                }
-            }
+        const destinationNode = findNodeChild(node, 'destination')
+        for (const toNode of destinationNode ? getNodeChildren(destinationNode) : []) {
+            if (toNode.tag !== 'to') continue
+            encNode = getNodeChildren(toNode).find(isEnc)
+            if (encNode) break
         }
     }
 
-    if (!encNode || !encNode.content) {
-        return { node: cloned }
+    if (!encNode || !(encNode.content instanceof Uint8Array)) {
+        return undefined
     }
 
     try {
-        const encType = encNode.attrs.type
-        const encContent = encNode.content as Uint8Array
-        if (encContent instanceof Uint8Array) {
-            const decrypted = await sock.signalRepository.decryptMessage({
-                jid: peerJid,
-                type: encType,
-                ciphertext: encContent
-            })
+        const decrypted = await deps.signalProtocol.decryptMessage(
+            parseSignalAddressFromJid(peerJid),
+            { type: encNode.attrs.type as 'msg' | 'pkmsg', ciphertext: encNode.content }
+        )
 
-            const unpadded = unpadPkcs7(decrypted)
-            const message = proto.Message.decode(unpadded)
-            const callKey = message.call?.callKey
+        const message = proto.Message.decode(unpadPkcs7(decrypted))
+        const callKey = message.call?.callKey
 
-            if (!callKey || callKey.length !== 32) {
-                throw new Error(`invalid callKey: expected 32 bytes, got ${callKey?.length || 0}`)
-            }
-
-            encParent[encIndex] = {
-                tag: 'enc',
-                attrs: { v: '2' },
-                content: new Uint8Array(callKey)
-            }
-
-            return { node: cloned, callKey: new Uint8Array(callKey) }
+        if (!callKey || callKey.length !== 32) {
+            throw new Error(`invalid callKey: expected 32 bytes, got ${callKey?.length || 0}`)
         }
+
+        return new Uint8Array(callKey)
     } catch (err) {
         log.error('call key decrypt failed', { message: toError(err).message })
+        return undefined
     }
-
-    return { node: cloned }
 }
 
 const CAPABILITY_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07])
 const CAPABILITY_PREACCEPT = new Uint8Array([0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07])
 
+export interface CallParticipantNodes {
+    nodes: BinaryNode[]
+    shouldIncludeDeviceIdentity: boolean
+}
+
+export async function buildCallParticipantNodes(
+    deps: WaVoipDeps,
+    devices: string[],
+    callKey: Uint8Array
+): Promise<CallParticipantNodes> {
+    const resolved = await deps.sessionResolver.ensureSessionsBatch(devices)
+
+    const plaintext = await encodeWAMessage({ call: { callKey } })
+    const encrypted = await deps.signalProtocol.encryptMessagesBatch(
+        devices.map((jid) => ({ address: parseSignalAddressFromJid(jid), plaintext })),
+        resolved.map((target) => ({ address: target.address, session: target.session }))
+    )
+
+    const nodes: BinaryNode[] = devices.map((jid, index) => ({
+        tag: 'to',
+        attrs: { jid },
+        content: [
+            {
+                tag: 'enc',
+                attrs: { v: '2', type: encrypted[index].type, count: '0' },
+                content: encrypted[index].ciphertext
+            }
+        ]
+    }))
+
+    return {
+        nodes,
+        shouldIncludeDeviceIdentity: encrypted.some((entry) => entry.type === 'pkmsg')
+    }
+}
+
 export async function buildOfferStanza(
-    sock: VoipSocket,
+    deps: WaVoipDeps,
+    stores: WaVoipStores,
     callId: string,
     callKey: Uint8Array,
     peerJid: string,
-    _deviceJids: string[],
     isVideo: boolean,
     logger?: Logger
 ): Promise<BinaryNode> {
     const log = logger ?? createNoopLogger()
-    const meLid = sock.authState?.creds?.me?.lid
-    const meId = sock.authState?.creds?.me?.id
-    const callCreator = meLid || meId || ''
+    const creds = deps.authClient.getCurrentCredentials()
+    const callCreator = creds?.meLid || creds?.meJid || ''
 
-    const rawDevices = await sock.getUSyncDevices([peerJid], true, false)
-
-    const devices = rawDevices
-        .map((d: any) => {
-            if (d.jid) return d.jid as string
-            if (d.user) {
-                return buildDeviceJid(d.user, 'lid', Number(d.device) || 0)
-            }
-            return null
-        })
-        .filter((jid: string | null): jid is string => typeof jid === 'string' && jid.includes('@'))
+    const synced = await deps.signalDeviceSync.syncDeviceList([peerJid])
+    const devices = synced.flatMap((entry) => entry.deviceJids)
 
     if (devices.length === 0) {
-        log.warn('no valid device jids for offer', { peerJid, rawDevices })
+        log.warn('no valid device jids for offer', { peerJid })
     }
 
-    await sock.assertSessions(devices)
-
-    const { nodes: destinations, shouldIncludeDeviceIdentity } = await sock.createParticipantNodes(
+    const { nodes: destinations, shouldIncludeDeviceIdentity } = await buildCallParticipantNodes(
+        deps,
         devices,
-        { call: { callKey: new Uint8Array(callKey) } },
-        { count: '0' }
+        callKey
     )
 
     const offerContent: BinaryNode[] = []
 
     try {
         const peerJidNormalized = toUserJid(peerJid)
-        const tctokenData = await sock.authState?.keys?.get?.('tctoken', [peerJidNormalized])
-        const tctoken = tctokenData?.[peerJidNormalized]?.token
+        const tcTokenRecord = await stores.privacyToken.getByJid(peerJidNormalized)
+        const tctoken = tcTokenRecord?.tcToken
         if (tctoken) {
             offerContent.push({
                 tag: 'privacy',
@@ -232,7 +211,9 @@ export async function buildOfferStanza(
                 content: tctoken instanceof Uint8Array ? tctoken : new Uint8Array(tctoken)
             })
         }
-    } catch {}
+    } catch (err) {
+        log.trace('tctoken lookup failed', { message: toError(err).message })
+    }
 
     offerContent.push(
         { tag: 'audio', attrs: { enc: 'opus', rate: '8000' }, content: undefined },
@@ -270,11 +251,11 @@ export async function buildOfferStanza(
         content: undefined
     })
 
-    if (shouldIncludeDeviceIdentity && sock.authState?.creds?.account) {
+    if (shouldIncludeDeviceIdentity && creds?.signedIdentity) {
         offerContent.push({
             tag: 'device-identity',
             attrs: {},
-            content: encodeSignedDeviceIdentity(sock.authState.creds.account)
+            content: encodeSignedDeviceIdentity(creds.signedIdentity)
         })
     }
 
@@ -292,26 +273,25 @@ export async function buildOfferStanza(
 }
 
 export async function buildAcceptStanza(
-    sock: VoipSocket,
+    deps: WaVoipDeps,
     callId: string,
     callKey: Uint8Array,
     peerJid: string,
     callCreator: string,
     isVideo: boolean
 ): Promise<BinaryNode> {
-    await sock.assertSessions([callCreator], true)
+    await deps.messageDispatch.syncSignalSession(callCreator)
 
-    const callMessage = { call: { callKey: new Uint8Array(callKey) } }
-    const bytes = await encodeWAMessage(callMessage)
+    const bytes = await encodeWAMessage({ call: { callKey } })
 
     let encNode: BinaryNode
     let shouldIncludeDeviceIdentity = false
 
     try {
-        const { type, ciphertext } = await sock.signalRepository.encryptMessage({
-            jid: callCreator,
-            data: bytes
-        })
+        const { type, ciphertext } = await deps.signalProtocol.encryptMessage(
+            parseSignalAddressFromJid(callCreator),
+            bytes
+        )
 
         if (type === 'pkmsg') {
             shouldIncludeDeviceIdentity = true
@@ -333,11 +313,12 @@ export async function buildAcceptStanza(
         { tag: 'encopt', attrs: { keygen: '2' } }
     ]
 
-    if (shouldIncludeDeviceIdentity && sock.authState?.creds?.account) {
+    const acceptSignedIdentity = deps.authClient.getCurrentCredentials()?.signedIdentity
+    if (shouldIncludeDeviceIdentity && acceptSignedIdentity) {
         acceptContent.push({
             tag: 'device-identity',
             attrs: {},
-            content: encodeSignedDeviceIdentity(sock.authState.creds.account)
+            content: encodeSignedDeviceIdentity(acceptSignedIdentity)
         })
     }
 

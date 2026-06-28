@@ -2,14 +2,13 @@ import { normalizeDeviceJid } from 'zapo-js/protocol'
 import { type BinaryNode, buildAckNode, getFirstNodeChild } from 'zapo-js/transport'
 
 import type { WaCallManager } from '../call/WaCallManager.js'
-
-import type { VoipSocket } from './voip-socket.js'
+import type { WaVoipDeps } from '../types.js'
 
 const RECEIPT_CALL_TAGS = new Set(['offer', 'accept', 'preaccept', 'terminate', 'transport'])
 
 export async function routeCallStanza(
     manager: WaCallManager,
-    socket: VoipSocket,
+    deps: WaVoipDeps,
     node: BinaryNode
 ): Promise<string | null> {
     const inner = getFirstNodeChild(node)
@@ -18,7 +17,7 @@ export async function routeCallStanza(
     const tag = inner.tag
     const peerJid = node.attrs.from
 
-    await socket.sendNode(
+    await deps.lowLevelCoordinator.sendNode(
         buildAckNode({
             kind: 'custom',
             ackClass: 'call',
@@ -68,13 +67,13 @@ export async function routeCallAck(manager: WaCallManager, node: BinaryNode): Pr
     await manager.handleCallAck(node)
 }
 
-export async function routeCallReceipt(socket: VoipSocket, node: BinaryNode): Promise<boolean> {
+export async function routeCallReceipt(deps: WaVoipDeps, node: BinaryNode): Promise<boolean> {
     const inner = getFirstNodeChild(node)
     if (!inner) return false
     if (!RECEIPT_CALL_TAGS.has(inner.tag)) return false
 
     const peerJid = node.attrs.from
-    await socket.sendNode(
+    await deps.lowLevelCoordinator.sendNode(
         buildAckNode({
             kind: 'custom',
             ackClass: 'receipt',

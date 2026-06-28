@@ -3,23 +3,24 @@ import { EventEmitter } from 'node:events'
 import { createNoopLogger, type Logger } from 'zapo-js'
 import { isLidJid } from 'zapo-js/protocol'
 import { type BinaryNode, hasNodeChild } from 'zapo-js/transport'
-import { resolvePositive } from 'zapo-js/util'
+import { resolvePositive, toError } from 'zapo-js/util'
 
 import { generateCallKey } from '../crypto/encryption.js'
 import { parseRelayFromAck } from '../relay/relay-ack.js'
 import {
     buildOfferStanza,
-    decryptCallKeyInNode,
+    decryptCallKey,
     extractNodeInfo,
     generateCallId
 } from '../signaling/signaling.js'
-import type { VoipSocket } from '../signaling/voip-socket.js'
 import {
     CallDirection,
     CallMediaType,
     type CallOfferOptions,
     CallState,
-    EndCallReason
+    EndCallReason,
+    type WaVoipDeps,
+    type WaVoipStores
 } from '../types.js'
 
 import { CallInfo } from './call-state.js'
@@ -28,13 +29,15 @@ import { WaCallMediaSession } from './WaCallMediaSession.js'
 const DEFAULT_MAX_CONCURRENT_CALLS = 1
 
 export interface WaCallManagerConfig {
-    sock: VoipSocket
+    deps: WaVoipDeps
+    stores: WaVoipStores
     logger?: Logger
     maxConcurrentCalls?: number
 }
 
 export class WaCallManager extends EventEmitter {
-    private readonly sock: VoipSocket
+    private readonly deps: WaVoipDeps
+    private readonly stores: WaVoipStores
     private readonly logger: Logger
     private readonly maxConcurrentCalls: number
 
@@ -42,7 +45,8 @@ export class WaCallManager extends EventEmitter {
 
     constructor(config: WaCallManagerConfig) {
         super()
-        this.sock = config.sock
+        this.deps = config.deps
+        this.stores = config.stores
         this.logger = config.logger ?? createNoopLogger()
         this.maxConcurrentCalls = resolvePositive(
             config.maxConcurrentCalls,
@@ -58,9 +62,8 @@ export class WaCallManager extends EventEmitter {
 
         const callId = generateCallId()
         const mediaType = options.isVideo ? CallMediaType.Video : CallMediaType.Audio
-        const meLid = this.sock.authState?.creds?.me?.lid
-        const meId = this.sock.authState?.creds?.me?.id
-        const callCreator = meLid || meId || ''
+        const creds = this.deps.authClient.getCurrentCredentials()
+        const callCreator = creds?.meLid || creds?.meJid || ''
         const peerJid = await this.resolvePeerLid(options.peerJid)
 
         const info = CallInfo.newOutgoing(callId, peerJid, callCreator, mediaType)
@@ -70,20 +73,20 @@ export class WaCallManager extends EventEmitter {
         const session = this.createSession(info)
         session.resetOutgoingFlags()
 
-        const selfLid = this.sock.authState?.creds?.me?.lid || this.sock.user?.lid || meId || ''
+        const selfLid = creds?.meLid || creds?.meJid || ''
         await session.initMedia(selfLid, peerJid)
 
         const offerStanza = await buildOfferStanza(
-            this.sock,
+            this.deps,
+            this.stores,
             callId,
             callKey,
             peerJid,
-            [],
             options.isVideo ?? false,
             this.logger.child({ component: 'signaling' })
         )
 
-        await this.sock.sendNode(offerStanza)
+        await this.deps.lowLevelCoordinator.sendNode(offerStanza)
 
         info.applyTransition({ type: 'offer_sent' })
         this.emitState(info)
@@ -172,15 +175,16 @@ export class WaCallManager extends EventEmitter {
         const callCreator = nodeInfo.innerNode.attrs?.['call-creator'] || peerJid
         const isVideo = hasNodeChild(nodeInfo.innerNode, 'video')
 
-        const { node: decryptedNode, callKey } = await decryptCallKeyInNode(
-            this.sock,
+        const callKey = await decryptCallKey(
+            this.deps,
             nodeInfo.innerNode,
             peerJid,
             this.logger.child({ component: 'signaling' })
         )
 
-        const { relays, participantJids, uuid, selfPid, peerPid, hbhKey } =
-            parseRelayFromAck(decryptedNode)
+        const { relays, participantJids, uuid, selfPid, peerPid, hbhKey } = parseRelayFromAck(
+            nodeInfo.innerNode
+        )
 
         const mediaType = isVideo ? CallMediaType.Video : CallMediaType.Audio
         const info = CallInfo.newIncoming(callId, peerJid, callCreator, undefined, mediaType)
@@ -204,9 +208,8 @@ export class WaCallManager extends EventEmitter {
         const session = this.createSession(info, { acceptBlocked: atCapacity })
 
         if (!atCapacity) {
-            const meId = this.sock.authState?.creds?.me?.id
-            const meLid = this.sock.authState?.creds?.me?.lid || this.sock.user?.lid
-            const selfLid = meLid || meId || ''
+            const creds = this.deps.authClient.getCurrentCredentials()
+            const selfLid = creds?.meLid || creds?.meJid || ''
             await session.initMedia(selfLid, peerJid)
             await session.sendIncomingPreaccept(peerJid)
             await session.sendIncomingRelayLatency()
@@ -321,7 +324,7 @@ export class WaCallManager extends EventEmitter {
 
         const sessionLogger = this.logger.child({ callId: info.callId })
         const session = new WaCallMediaSession({
-            sock: this.sock,
+            deps: this.deps,
             logger: sessionLogger,
             info,
             delegate: {
@@ -395,12 +398,11 @@ export class WaCallManager extends EventEmitter {
         if (isLidJid(peerJid)) return peerJid
 
         try {
-            const lidMapping = this.sock.signalRepository?.lidMapping
-            if (lidMapping?.getLIDForPN) {
-                const lid = await lidMapping.getLIDForPN(peerJid)
-                if (lid) return lid
-            }
-        } catch {}
+            const [mapped] = await this.deps.signalDeviceSync.queryLidsByPhoneJids([peerJid])
+            if (mapped?.lidJid) return mapped.lidJid
+        } catch (err) {
+            this.logger.trace('lid resolution failed', { message: toError(err).message })
+        }
 
         return peerJid
     }
@@ -421,9 +423,8 @@ export class WaCallManager extends EventEmitter {
     private async activateWaitingIncoming(session: WaCallMediaSession): Promise<void> {
         session.info.stateData.acceptBlocked = false
 
-        const meId = this.sock.authState?.creds?.me?.id
-        const meLid = this.sock.authState?.creds?.me?.lid || this.sock.user?.lid
-        const selfLid = meLid || meId || ''
+        const creds = this.deps.authClient.getCurrentCredentials()
+        const selfLid = creds?.meLid || creds?.meJid || ''
 
         await session.initMedia(selfLid, session.info.peerJid)
         await session.sendIncomingPreaccept(session.info.peerJid)

@@ -11,7 +11,6 @@ function buildRelayAck(): BinaryNode {
     const tokenBytes = new Uint8Array([0xaa, 0xbb, 0xcc])
     const authTokenBytes = new Uint8Array([0x11, 0x22])
     const hbhKey = new Uint8Array(30).fill(7)
-    // 192.168.1.1:3478  (0x0d96 = 3478)
     const te2Addr = new Uint8Array([192, 168, 1, 1, 0x0d, 0x96])
 
     return {
@@ -61,7 +60,6 @@ test('parseRelayFromAck extracts relay metadata, participants and hbh key', () =
     assert.equal(result.peerPid, 7)
     assert.deepEqual([...(result.hbhKey ?? [])], new Array(30).fill(7))
 
-    // user devices first (doc order), then the relay participant
     assert.deepEqual(result.participantJids, ['111@lid', '222@lid', '333@lid'])
 
     assert.equal(result.relays.length, 1)

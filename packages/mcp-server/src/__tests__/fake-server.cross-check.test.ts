@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { FakeWaServer } from '@zapo-js/fake-server'
 import type { WaClient, WaClientEventMap } from 'zapo-js'
+
+import { FakeWaServer } from '@zapo-js/fake-server'
 
 import { type BufferedEvent, McpRuntime } from '../runtime'
 import { type ToolDefinition, TOOLS } from '../tools'

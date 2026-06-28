@@ -3,40 +3,48 @@ import { test } from 'node:test'
 
 import type { BinaryNode } from 'zapo-js/transport'
 
-import type { VoipSocket } from '../../signaling/voip-socket.js'
-import { CallState } from '../../types.js'
+import { CallState, type WaVoipDeps, type WaVoipStores } from '../../types.js'
 import { type CallInfo } from '../call-state.js'
 import { WaCallManager } from '../WaCallManager.js'
 
-function createMockSocket(): { sock: VoipSocket; sent: BinaryNode[] } {
+function createMockDeps(): { deps: WaVoipDeps; stores: WaVoipStores; sent: BinaryNode[] } {
     const sent: BinaryNode[] = []
-    const sock: VoipSocket = {
-        authState: {
-            creds: {
-                me: { id: '1111111111@lid', lid: '1111111111@lid' }
-            }
+    const deps = {
+        authClient: {
+            getCurrentCredentials: () => ({
+                meJid: '1111111111@lid',
+                meLid: '1111111111@lid',
+                signedIdentity: undefined
+            })
         },
-        user: { lid: '1111111111@lid' },
-        sendNode: async (node) => {
-            sent.push(node)
+        lowLevelCoordinator: {
+            sendNode: async (node: BinaryNode) => {
+                sent.push(node)
+            },
+            query: async () => undefined
         },
-        query: async () => undefined,
-        signalRepository: {
-            encryptMessage: async () => ({
-                type: 'msg',
-                ciphertext: new Uint8Array([1, 2, 3])
-            }),
+        signalProtocol: {
+            encryptMessage: async () => ({ type: 'msg', ciphertext: new Uint8Array([1, 2, 3]) }),
+            encryptMessagesBatch: async (requests: readonly unknown[]) =>
+                requests.map(() => ({ type: 'msg', ciphertext: new Uint8Array([1, 2, 3]) })),
             decryptMessage: async () => new Uint8Array([1, 2, 3])
         },
-        assertSessions: async () => undefined,
-        getUSyncDevices: async () => [{ jid: '2222222222:0@lid' }],
-        createParticipantNodes: async () => ({
-            nodes: [],
-            shouldIncludeDeviceIdentity: false
-        })
-    }
+        signalDeviceSync: {
+            syncDeviceList: async () => [{ deviceJids: ['2222222222:0@lid'] }],
+            queryLidsByPhoneJids: async () => []
+        },
+        messageDispatch: {
+            syncSignalSession: async () => undefined
+        },
+        sessionResolver: {
+            ensureSessionsBatch: async () => []
+        }
+    } as unknown as WaVoipDeps
+    const stores = {
+        privacyToken: { getByJid: async () => undefined }
+    } as unknown as WaVoipStores
 
-    return { sock, sent }
+    return { deps, stores, sent }
 }
 
 function buildOfferNode(callId: string, from = '2222222222:0@lid'): BinaryNode {
@@ -75,16 +83,16 @@ function buildTerminateNode(callId: string, from = '2222222222:0@lid'): BinaryNo
 }
 
 test('WaCallManager rejects invalid maxConcurrentCalls', () => {
-    const { sock } = createMockSocket()
+    const { deps, stores } = createMockDeps()
     assert.throws(
-        () => new WaCallManager({ sock, maxConcurrentCalls: 0 }),
+        () => new WaCallManager({ deps, stores, maxConcurrentCalls: 0 }),
         /maxConcurrentCalls must be a positive safe integer/
     )
 })
 
 test('startCall blocks when maxConcurrentCalls is reached', async () => {
-    const { sock } = createMockSocket()
-    const manager = new WaCallManager({ sock, maxConcurrentCalls: 1 })
+    const { deps, stores } = createMockDeps()
+    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
 
     await manager.startCall({ peerJid: '2222222222@lid' })
 
@@ -95,8 +103,8 @@ test('startCall blocks when maxConcurrentCalls is reached', async () => {
 })
 
 test('startCall allows parallel calls when maxConcurrentCalls > 1', async () => {
-    const { sock } = createMockSocket()
-    const manager = new WaCallManager({ sock, maxConcurrentCalls: 2 })
+    const { deps, stores } = createMockDeps()
+    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 2 })
 
     const callIdA = await manager.startCall({ peerJid: '2222222222@lid' })
     const callIdB = await manager.startCall({ peerJid: '3333333333@lid' })
@@ -106,8 +114,8 @@ test('startCall allows parallel calls when maxConcurrentCalls > 1', async () => 
 })
 
 test('incoming offer at capacity is tracked with canAccept false', async () => {
-    const { sock, sent } = createMockSocket()
-    const manager = new WaCallManager({ sock, maxConcurrentCalls: 1 })
+    const { deps, stores, sent } = createMockDeps()
+    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
 
     await manager.startCall({ peerJid: '2222222222@lid' })
     const before = sent.length
@@ -137,8 +145,8 @@ test('incoming offer at capacity is tracked with canAccept false', async () => {
 })
 
 test('waiting incoming call unblocks when a slot frees', async () => {
-    const { sock, sent } = createMockSocket()
-    const manager = new WaCallManager({ sock, maxConcurrentCalls: 1 })
+    const { deps, stores, sent } = createMockDeps()
+    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
 
     const activeCallId = await manager.startCall({ peerJid: '2222222222@lid' })
     const incomingCallId = 'INCOMINGCALL0000000000000003'
@@ -162,8 +170,8 @@ test('waiting incoming call unblocks when a slot frees', async () => {
 })
 
 test('incoming offer with capacity creates a second session', async () => {
-    const { sock } = createMockSocket()
-    const manager = new WaCallManager({ sock, maxConcurrentCalls: 2 })
+    const { deps, stores } = createMockDeps()
+    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 2 })
 
     await manager.startCall({ peerJid: '2222222222@lid' })
 
@@ -176,8 +184,8 @@ test('incoming offer with capacity creates a second session', async () => {
 })
 
 test('handleCallTerminate only ends the matching call', async () => {
-    const { sock } = createMockSocket()
-    const manager = new WaCallManager({ sock, maxConcurrentCalls: 2 })
+    const { deps, stores } = createMockDeps()
+    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 2 })
 
     const callIdA = await manager.startCall({ peerJid: '2222222222@lid' })
     const callIdB = await manager.startCall({ peerJid: '3333333333@lid' })
@@ -190,8 +198,8 @@ test('handleCallTerminate only ends the matching call', async () => {
 })
 
 test('call_inbound_audio event includes CallInfo', async () => {
-    const { sock } = createMockSocket()
-    const manager = new WaCallManager({ sock, maxConcurrentCalls: 1 })
+    const { deps, stores } = createMockDeps()
+    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
 
     const callId = await manager.startCall({ peerJid: '2222222222@lid' })
     const call = manager.getCall(callId)

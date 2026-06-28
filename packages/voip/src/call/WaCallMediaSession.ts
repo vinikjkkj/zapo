@@ -1,7 +1,7 @@
 import type { Logger } from 'zapo-js'
 import { toUserJid } from 'zapo-js/protocol'
 import { type BinaryNode, getFirstNodeChild, getNodeChildrenByTag } from 'zapo-js/transport'
-import { uint8Equal } from 'zapo-js/util'
+import { toError, uint8Equal } from 'zapo-js/util'
 
 import { concatBytes, EMPTY_BYTES, readUInt32BE, toArrayBuffer } from '../bytes.js'
 import { derivePerJidSrtpKey } from '../crypto/encryption.js'
@@ -23,12 +23,11 @@ import {
     buildRelayLatencyStanza,
     buildTerminateStanza,
     buildTransportStanza,
-    decryptCallKeyInNode,
+    decryptCallKey,
     extractNodeInfo,
     extractRelayEndpoints,
     needsDecryption
 } from '../signaling/signaling.js'
-import type { VoipSocket } from '../signaling/voip-socket.js'
 import {
     type AudioSender,
     CallDirection,
@@ -38,7 +37,8 @@ import {
     type RelayEndpoint,
     SRTP_AUTH_TAG_LEN,
     SRTP_RECV_AUTH_TAG_LEN,
-    SRTP_SEND_AUTH_TAG_LEN
+    SRTP_SEND_AUTH_TAG_LEN,
+    type WaVoipDeps
 } from '../types.js'
 
 import { type CallInfo } from './call-state.js'
@@ -52,7 +52,7 @@ export interface WaCallMediaSessionDelegate {
 }
 
 export interface WaCallMediaSessionOptions {
-    readonly sock: VoipSocket
+    readonly deps: WaVoipDeps
     readonly logger: Logger
     readonly info: CallInfo
     readonly delegate: WaCallMediaSessionDelegate
@@ -61,7 +61,7 @@ export interface WaCallMediaSessionOptions {
 export class WaCallMediaSession implements AudioSender {
     readonly info: CallInfo
 
-    private readonly sock: VoipSocket
+    private readonly deps: WaVoipDeps
     private readonly logger: Logger
     private readonly delegate: WaCallMediaSessionDelegate
 
@@ -105,7 +105,7 @@ export class WaCallMediaSession implements AudioSender {
     private ssrcResubscribed = false
 
     constructor(options: WaCallMediaSessionOptions) {
-        this.sock = options.sock
+        this.deps = options.deps
         this.logger = options.logger
         this.info = options.info
         this.delegate = options.delegate
@@ -169,18 +169,18 @@ export class WaCallMediaSession implements AudioSender {
         this.info.applyTransition({ type: 'local_accepted' })
         this.delegate.emitState(this.info)
 
-        const meId = this.sock.authState?.creds?.me?.id ?? ''
+        const meId = this.deps.authClient.getCurrentCredentials()?.meJid ?? ''
         const callId = this.info.callId
         const callCreator = this.info.callCreator
         const peerJid = this.info.peerJid
         const isVideo = this.info.mediaType === CallMediaType.Video
 
         this.acceptedByJid = peerJid
-        await this.initSrtpKeys()
+        this.initSrtpKeys()
 
         try {
             const muteNode = buildMuteV2Stanza(peerJid, callId, callCreator, 0, meId)
-            await this.sock.sendNode(muteNode)
+            await this.deps.lowLevelCoordinator.sendNode(muteNode)
         } catch (err: unknown) {
             this.logger.error('error sending mute_v2', {
                 message: err instanceof Error ? err.message : String(err)
@@ -189,7 +189,7 @@ export class WaCallMediaSession implements AudioSender {
 
         try {
             const transportNode = buildTransportStanza(peerJid, callId, callCreator, meId, '1', '1')
-            await this.sock.sendNode(transportNode)
+            await this.deps.lowLevelCoordinator.sendNode(transportNode)
         } catch (err: unknown) {
             this.logger.error('error sending transport', {
                 message: err instanceof Error ? err.message : String(err)
@@ -198,7 +198,7 @@ export class WaCallMediaSession implements AudioSender {
 
         if (this.info.encryptionKey) {
             const acceptStanza = await buildAcceptStanza(
-                this.sock,
+                this.deps,
                 this.info.callId,
                 this.info.encryptionKey,
                 this.info.peerJid,
@@ -207,7 +207,7 @@ export class WaCallMediaSession implements AudioSender {
             )
 
             try {
-                await this.sock.sendNode(acceptStanza)
+                await this.deps.lowLevelCoordinator.sendNode(acceptStanza)
             } catch (err: unknown) {
                 this.logger.error('accept send error', {
                     message: err instanceof Error ? err.message : String(err)
@@ -226,7 +226,7 @@ export class WaCallMediaSession implements AudioSender {
         this.info.applyTransition({ type: 'local_rejected', reason })
 
         const node = buildRejectStanza(this.info.peerJid, this.info.callId, this.info.callCreator)
-        this.sock.sendNode(node).catch(() => {})
+        this.deps.lowLevelCoordinator.sendNode(node).catch(() => {})
         this.delegate.emitState(this.info)
         this.cleanup()
     }
@@ -246,7 +246,7 @@ export class WaCallMediaSession implements AudioSender {
             this.info.callCreator,
             audioDurationMs
         )
-        this.sock.sendNode(node).catch(() => {})
+        this.deps.lowLevelCoordinator.sendNode(node).catch(() => {})
         this.delegate.emitEnded(this.info)
         this.delegate.emitState(this.info)
         this.cleanup()
@@ -290,7 +290,7 @@ export class WaCallMediaSession implements AudioSender {
                 this.info.callId,
                 this.info.callCreator
             )
-            await this.sock.sendNode(preacceptNode)
+            await this.deps.lowLevelCoordinator.sendNode(preacceptNode)
         } catch (err: unknown) {
             this.logger.error('error sending preaccept', {
                 message: err instanceof Error ? err.message : String(err)
@@ -301,7 +301,7 @@ export class WaCallMediaSession implements AudioSender {
     async sendIncomingRelayLatency(): Promise<void> {
         if (!this.info.relayData) return
 
-        const meId = this.sock.authState?.creds?.me?.id ?? ''
+        const meId = this.deps.authClient.getCurrentCredentials()?.meJid ?? ''
         const callId = this.info.callId
         const callCreator = this.info.callCreator
         const destinationJids = this.info.relayData.participantJids || []
@@ -328,7 +328,7 @@ export class WaCallMediaSession implements AudioSender {
                     destinationJids,
                     meId
                 )
-                await this.sock.sendNode(relayLatencyNode)
+                await this.deps.lowLevelCoordinator.sendNode(relayLatencyNode)
             } catch (err: unknown) {
                 this.logger.error('error sending incoming relaylatency', {
                     relayName: name,
@@ -344,8 +344,8 @@ export class WaCallMediaSession implements AudioSender {
 
         if (needsDecryption(nodeInfo.tag)) {
             try {
-                const { callKey: peerCallKey } = await decryptCallKeyInNode(
-                    this.sock,
+                const peerCallKey = await decryptCallKey(
+                    this.deps,
                     nodeInfo.innerNode,
                     peerJid,
                     this.logger.child({ component: 'signaling' })
@@ -354,8 +354,8 @@ export class WaCallMediaSession implements AudioSender {
                     const ourCallKey = this.info.encryptionKey
                     const keysMatch = ourCallKey ? uint8Equal(ourCallKey, peerCallKey) : false
                     if (!keysMatch && ourCallKey) {
-                        const meLid2 = this.sock.authState?.creds?.me?.lid
-                        const meId2 = this.sock.authState?.creds?.me?.id
+                        const meLid2 = this.deps.authClient.getCurrentCredentials()?.meLid
+                        const meId2 = this.deps.authClient.getCurrentCredentials()?.meJid
                         const ourCredJid2 = meLid2 || meId2 || ''
                         const ourBase2 = toUserJid(ourCredJid2)
                         const participants = this.info.relayData?.participantJids || []
@@ -367,11 +367,8 @@ export class WaCallMediaSession implements AudioSender {
 
                         if (ourDeviceJid2 && peerJid) {
                             try {
-                                const sendKeying = await derivePerJidSrtpKey(
-                                    ourCallKey,
-                                    ourDeviceJid2
-                                )
-                                const recvKeying = await derivePerJidSrtpKey(peerCallKey, peerJid)
+                                const sendKeying = derivePerJidSrtpKey(ourCallKey, ourDeviceJid2)
+                                const recvKeying = derivePerJidSrtpKey(peerCallKey, peerJid)
                                 this.srtpSession = new SrtpSession(
                                     sendKeying,
                                     recvKeying,
@@ -399,10 +396,12 @@ export class WaCallMediaSession implements AudioSender {
         try {
             this.info.applyTransition({ type: 'remote_accepted' })
             this.delegate.emitState(this.info)
-        } catch {}
+        } catch (err) {
+            this.logger.trace('call transition skipped', { message: toError(err).message })
+        }
 
-        const meId = this.sock.authState?.creds?.me?.id ?? ''
-        const meLid = this.sock.authState?.creds?.me?.lid
+        const meId = this.deps.authClient.getCurrentCredentials()?.meJid ?? ''
+        const meLid = this.deps.authClient.getCurrentCredentials()?.meLid
         const ourJid = meLid || meId
         const ourBase = toUserJid(ourJid)
         const callId = this.info.callId
@@ -431,7 +430,7 @@ export class WaCallMediaSession implements AudioSender {
         this.sctpRelay.setSubscriptionSsrc(this.peerSsrcs[0] ?? 0)
         this.sctpRelay.resendSubscriptions()
 
-        await this.initSrtpKeys()
+        this.initSrtpKeys()
 
         if (this.info.relayData?.participantJids) {
             const otherDevices = this.info.relayData.participantJids.filter((jid) => {
@@ -450,7 +449,7 @@ export class WaCallMediaSession implements AudioSender {
                         undefined,
                         'accepted_elsewhere'
                     )
-                    await this.sock.sendNode(terminateNode)
+                    await this.deps.lowLevelCoordinator.sendNode(terminateNode)
                 } catch (err: unknown) {
                     this.logger.error('error sending terminate_elsewhere', {
                         deviceJid,
@@ -469,7 +468,7 @@ export class WaCallMediaSession implements AudioSender {
                 '1',
                 '1'
             )
-            await this.sock.sendNode(transportNode)
+            await this.deps.lowLevelCoordinator.sendNode(transportNode)
         } catch (err: unknown) {
             this.logger.error('error sending transport', {
                 message: err instanceof Error ? err.message : String(err)
@@ -478,7 +477,7 @@ export class WaCallMediaSession implements AudioSender {
 
         try {
             const muteNode = buildMuteV2Stanza(acceptingDeviceJid, callId, callCreator, 0, meId)
-            await this.sock.sendNode(muteNode)
+            await this.deps.lowLevelCoordinator.sendNode(muteNode)
         } catch (err: unknown) {
             this.logger.error('error sending mute_v2', {
                 message: err instanceof Error ? err.message : String(err)
@@ -495,7 +494,7 @@ export class WaCallMediaSession implements AudioSender {
                     callCreator,
                     ourJid
                 )
-                await this.sock.sendNode(receiptNode)
+                await this.deps.lowLevelCoordinator.sendNode(receiptNode)
             } catch (err: unknown) {
                 this.logger.error('error sending accept receipt', {
                     message: err instanceof Error ? err.message : String(err)
@@ -508,7 +507,9 @@ export class WaCallMediaSession implements AudioSender {
                 this.info.applyTransition({ type: 'media_connected' })
                 this.delegate.emitState(this.info)
                 this.startMediaFlow()
-            } catch {}
+            } catch (err) {
+                this.logger.trace('call transition skipped', { message: toError(err).message })
+            }
         } else if (this.info.relayData) {
             await this.connectRelays(this.info.relayData.endpoints)
         }
@@ -519,7 +520,7 @@ export class WaCallMediaSession implements AudioSender {
         if (!nodeInfo) return
 
         if (this.info.direction === CallDirection.Outgoing && this.info.relayData) {
-            const meId = this.sock.authState?.creds?.me?.id ?? ''
+            const meId = this.deps.authClient.getCurrentCredentials()?.meJid ?? ''
             const callId = this.info.callId
             const callCreator = this.info.callCreator
 
@@ -547,7 +548,7 @@ export class WaCallMediaSession implements AudioSender {
                         destinationJids,
                         meId
                     )
-                    await this.sock.sendNode(relayLatencyNode)
+                    await this.deps.lowLevelCoordinator.sendNode(relayLatencyNode)
                 } catch (err: unknown) {
                     this.logger.error('error sending relaylatency', {
                         relayName: name,
@@ -565,7 +566,7 @@ export class WaCallMediaSession implements AudioSender {
                         callCreator,
                         meId
                     )
-                    await this.sock.sendNode(transportNode)
+                    await this.deps.lowLevelCoordinator.sendNode(transportNode)
                     this.initialTransportSent = true
                 } catch (err: unknown) {
                     this.logger.error('error sending initial transport', {
@@ -620,8 +621,8 @@ export class WaCallMediaSession implements AudioSender {
 
             const callKey = this.info.encryptionKey
             if (participantJids.length > 0) {
-                const meLid = this.sock.authState?.creds?.me?.lid
-                const meId = this.sock.authState?.creds?.me?.id
+                const meLid = this.deps.authClient.getCurrentCredentials()?.meLid
+                const meId = this.deps.authClient.getCurrentCredentials()?.meJid
                 const ourCredJid = meLid || meId || ''
                 const ourBase = toUserJid(ourCredJid)
 
@@ -650,7 +651,7 @@ export class WaCallMediaSession implements AudioSender {
                 }
 
                 if (callKey) {
-                    await this.initSrtpKeys()
+                    this.initSrtpKeys()
                 } else {
                     this.logger.debug('no call_key, srtp not initialized', {
                         callId: this.info.callId
@@ -665,7 +666,7 @@ export class WaCallMediaSession implements AudioSender {
                         this.info.callId,
                         this.info.callCreator
                     )
-                    await this.sock.sendNode(preacceptNode)
+                    await this.deps.lowLevelCoordinator.sendNode(preacceptNode)
                     this.outgoingPreacceptSent = true
                 } catch (err: unknown) {
                     this.logger.error('error sending preaccept (caller)', {
@@ -710,7 +711,7 @@ export class WaCallMediaSession implements AudioSender {
             )
 
             try {
-                await this.sock.sendNode(forwardNode)
+                await this.deps.lowLevelCoordinator.sendNode(forwardNode)
             } catch (err: unknown) {
                 this.logger.error('error forwarding relaylatency', {
                     message: err instanceof Error ? err.message : String(err)
@@ -747,13 +748,13 @@ export class WaCallMediaSession implements AudioSender {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
 
-        const meId = this.sock.authState?.creds?.me?.id ?? ''
+        const meId = this.deps.authClient.getCurrentCredentials()?.meJid ?? ''
         const callId = this.info.callId
         const callCreator = this.info.callCreator
 
         try {
             const muteNode = buildMuteV2Stanza(peerJid, callId, callCreator, 0, meId)
-            await this.sock.sendNode(muteNode)
+            await this.deps.lowLevelCoordinator.sendNode(muteNode)
         } catch (err: unknown) {
             this.logger.error('error sending mute_v2 response', {
                 message: err instanceof Error ? err.message : String(err)
@@ -767,7 +768,9 @@ export class WaCallMediaSession implements AudioSender {
                 type: 'terminated',
                 reason: EndCallReason.UserEnded
             })
-        } catch {}
+        } catch (err) {
+            this.logger.trace('call transition skipped', { message: toError(err).message })
+        }
 
         this.delegate.emitEnded(this.info)
         this.delegate.emitState(this.info)
@@ -948,15 +951,15 @@ export class WaCallMediaSession implements AudioSender {
         return jid.replace('@', ':0@')
     }
 
-    private async initSrtpKeys(): Promise<void> {
+    private initSrtpKeys(): void {
         const callKey = this.info.encryptionKey
         if (!callKey) {
             this.logger.debug('no call_key, srtp not initialized', { callId: this.info.callId })
             return
         }
 
-        const meLid = this.sock.authState?.creds?.me?.lid
-        const meId = this.sock.authState?.creds?.me?.id
+        const meLid = this.deps.authClient.getCurrentCredentials()?.meLid
+        const meId = this.deps.authClient.getCurrentCredentials()?.meJid
         const ourCredJid = meLid || meId || ''
         const ourBase = toUserJid(ourCredJid)
         const participants = this.info.relayData?.participantJids || []
@@ -979,10 +982,8 @@ export class WaCallMediaSession implements AudioSender {
         const peerDeviceJid = this.ensureDeviceJid(rawPeerJid)
 
         try {
-            const [sendKeying, recvKeying] = await Promise.all([
-                derivePerJidSrtpKey(callKey, ourDeviceJid),
-                derivePerJidSrtpKey(callKey, peerDeviceJid)
-            ])
+            const sendKeying = derivePerJidSrtpKey(callKey, ourDeviceJid)
+            const recvKeying = derivePerJidSrtpKey(callKey, peerDeviceJid)
 
             this.srtpSession = new SrtpSession(
                 sendKeying,
@@ -1016,7 +1017,9 @@ export class WaCallMediaSession implements AudioSender {
                 this.delegate.emitState(this.info)
                 this.startMediaFlow()
                 this.logger.debug('relay connected, call active', { callId: this.info.callId })
-            } catch {}
+            } catch (err) {
+                this.logger.trace('call transition skipped', { message: toError(err).message })
+            }
         }
     }
 

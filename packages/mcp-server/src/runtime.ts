@@ -2,8 +2,6 @@ import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
-import { createMediaProcessor } from '@zapo-js/media-utils'
-import { createSqliteStore } from '@zapo-js/store-sqlite'
 import {
     createStore,
     type Logger,
@@ -13,6 +11,9 @@ import {
     type WaStore
 } from 'zapo-js'
 import { hexToBytes, resolvePositive, toError } from 'zapo-js/util'
+
+import { createMediaProcessor } from '@zapo-js/media-utils'
+import { createSqliteStore } from '@zapo-js/store-sqlite'
 
 import { encodeForJson } from './serializer'
 

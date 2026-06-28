@@ -116,7 +116,7 @@ import { SignalMissingPreKeysSyncApi } from '@signal/api/SignalMissingPreKeysSyn
 import { SignalRotateKeyApi } from '@signal/api/SignalRotateKeyApi'
 import { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
 import { SenderKeyManager } from '@signal/group/SenderKeyManager'
-import { createSignalSessionResolver } from '@signal/session/resolver'
+import { createSignalSessionResolver, type SignalSessionResolver } from '@signal/session/resolver'
 import { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { WaStoredContactRecord } from '@store/contracts/contact.store'
 import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
@@ -197,6 +197,7 @@ export interface WaClientDependencies {
     readonly signalMissingPreKeysSync: SignalMissingPreKeysSyncApi
     readonly signalRotateKey: SignalRotateKeyApi
     readonly signalSessionSync: SignalSessionSyncApi
+    readonly sessionResolver: SignalSessionResolver
     readonly authClient: WaAuthClient
     readonly messageDispatch: WaMessageDispatchCoordinator
     readonly messageCoordinator: WaMessageCoordinator
@@ -1398,6 +1399,7 @@ export function buildWaClientDependencies(input: {
         signalMissingPreKeysSync,
         signalRotateKey,
         signalSessionSync,
+        sessionResolver,
         authClient,
         messageDispatch,
         messageCoordinator,

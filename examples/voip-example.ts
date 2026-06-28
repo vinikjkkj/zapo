@@ -33,9 +33,9 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
-import { createSqliteStore } from '@zapo-js/store-sqlite'
 import { createPinoLogger, createStore, type LogLevel, WaClient } from 'zapo-js'
 
+import { createSqliteStore } from '@zapo-js/store-sqlite'
 import { CallState, EndCallReason, voipPlugin } from '@zapo-js/voip'
 
 const SAMPLE_RATE = 16_000
@@ -254,7 +254,7 @@ async function main(): Promise<void> {
             connectTimeoutMs: 15_000,
             deviceBrowser: 'Chrome',
             deviceOsDisplayName: 'Windows',
-            plugins: [voipPlugin({ maxConcurrentCalls: cli.maxCalls })]
+            plugins: [voipPlugin({ maxConcurrentCalls: cli.maxCalls, logLevel: 'info' })]
         },
         logger
     )

@@ -1,6 +1,11 @@
+import type { WaClientPluginContext } from 'zapo-js'
 import type { BinaryNode } from 'zapo-js/transport'
 
 import type { CallInfo } from './call/call-state.js'
+
+export type WaVoipDeps = WaClientPluginContext['deps']
+
+export type WaVoipStores = WaClientPluginContext['stores']
 
 export enum CallState {
     Initiating = 'initiating',

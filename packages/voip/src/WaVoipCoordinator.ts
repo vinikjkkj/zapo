@@ -1,12 +1,10 @@
-import { type Logger, type WaClientPluginContext } from 'zapo-js'
+import { type Logger, type LogLevel, type WaClientPluginContext } from 'zapo-js'
 import { WA_MESSAGE_TAGS } from 'zapo-js/protocol'
 import type { BinaryNode } from 'zapo-js/transport'
 
 import type { CallInfo } from './call/call-state.js'
 import { WaCallManager } from './call/WaCallManager.js'
 import { routeCallAck, routeCallReceipt, routeCallStanza } from './signaling/bridge.js'
-import { createWaVoipSocket } from './signaling/socket.js'
-import type { VoipSocket } from './signaling/voip-socket.js'
 import type { CallManagerEvents, CallOfferOptions, EndCallReason } from './types.js'
 
 export interface WaVoipCoordinatorOptions {
@@ -15,6 +13,12 @@ export interface WaVoipCoordinatorOptions {
      * Default is `1`. Increase to enable parallel multi-call.
      */
     readonly maxConcurrentCalls?: number
+    /**
+     * Minimum log level for the VOIP plugin. Defaults to the host client's
+     * level; set it to cap the (chatty) VOIP diagnostics independently of the
+     * host — e.g. `'warn'` to keep them out of a `trace` host logger.
+     */
+    readonly logLevel?: LogLevel
 }
 
 /**
@@ -25,15 +29,16 @@ export interface WaVoipCoordinatorOptions {
  */
 export class WaVoipCoordinator {
     private readonly manager: WaCallManager
-    private readonly socket: VoipSocket
+    private readonly deps: WaClientPluginContext['deps']
     private readonly logger: Logger
     private readonly unregisterHandlers: Array<() => void> = []
 
     constructor(ctx: WaClientPluginContext, options: WaVoipCoordinatorOptions = {}) {
-        this.socket = createWaVoipSocket(ctx)
-        this.logger = ctx.logger.child({ scope: '@zapo-js/voip' })
+        this.deps = ctx.deps
+        this.logger = ctx.logger.child({ scope: '@zapo-js/voip' }, { level: options.logLevel })
         this.manager = new WaCallManager({
-            sock: this.socket,
+            deps: ctx.deps,
+            stores: ctx.stores,
             logger: this.logger,
             maxConcurrentCalls: options.maxConcurrentCalls
         })
@@ -109,7 +114,7 @@ export class WaVoipCoordinator {
                 tag: 'call',
                 prepend: true,
                 handler: async (node) => {
-                    const tag = await routeCallStanza(this.manager, this.socket, node)
+                    const tag = await routeCallStanza(this.manager, this.deps, node)
                     return tag !== null
                 }
             }),
@@ -127,7 +132,7 @@ export class WaVoipCoordinator {
             ctx.registerIncomingHandler({
                 tag: WA_MESSAGE_TAGS.RECEIPT,
                 prepend: true,
-                handler: async (node) => routeCallReceipt(this.socket, node)
+                handler: async (node) => routeCallReceipt(this.deps, node)
             })
         )
     }

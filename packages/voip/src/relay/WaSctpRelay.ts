@@ -17,6 +17,14 @@ import {
     parseStunResponse
 } from './stun.js'
 
+function closeQuietly(closeable: { close(): void } | null | undefined, logger: Logger): void {
+    try {
+        closeable?.close()
+    } catch (err) {
+        logger.trace('close failed', { message: toError(err).message })
+    }
+}
+
 type PeerConnectionClass = RTCPeerConnection
 type DataChannelClass = RTCDataChannel
 
@@ -236,7 +244,9 @@ export class WaSctpRelay extends EventEmitter {
                                 }
                             })
                         }
-                    } catch {}
+                    } catch (err) {
+                        this.logger.trace('getStats failed', { message: toError(err).message })
+                    }
                 }
             }
 
@@ -399,19 +409,9 @@ export class WaSctpRelay extends EventEmitter {
 
         this.stopKeepalive(conn.id)
         if (conn.connectionTimeout) clearTimeout(conn.connectionTimeout)
-        if (conn.channel)
-            try {
-                conn.channel.close()
-            } catch {}
-        for (const ch of conn.incomingChannels) {
-            try {
-                ch.close()
-            } catch {}
-        }
-        if (conn.peerConnection)
-            try {
-                conn.peerConnection.close()
-            } catch {}
+        closeQuietly(conn.channel, this.logger)
+        for (const ch of conn.incomingChannels) closeQuietly(ch, this.logger)
+        closeQuietly(conn.peerConnection, this.logger)
 
         this.connections.delete(conn.id)
     }
@@ -537,7 +537,11 @@ export class WaSctpRelay extends EventEmitter {
                     if (buffered !== undefined) {
                         bufferedAmount = buffered
                     }
-                } catch {}
+                } catch (err) {
+                    this.logger.trace('bufferedAmount unavailable', {
+                        message: toError(err).message
+                    })
+                }
                 this.logger.debug('sctp relay diagnostics', {
                     connectionId,
                     dcState,
@@ -579,15 +583,8 @@ export class WaSctpRelay extends EventEmitter {
 
         this.stopKeepalive(connectionId)
         if (conn.connectionTimeout) clearTimeout(conn.connectionTimeout)
-        for (const ch of conn.incomingChannels) {
-            try {
-                ch.close()
-            } catch {}
-        }
-        if (conn.peerConnection)
-            try {
-                conn.peerConnection.close()
-            } catch {}
+        for (const ch of conn.incomingChannels) closeQuietly(ch, this.logger)
+        closeQuietly(conn.peerConnection, this.logger)
 
         this.stats.connected = Math.max(0, this.stats.connected - 1)
         this.connections.delete(connectionId)
@@ -936,19 +933,9 @@ export class WaSctpRelay extends EventEmitter {
 
         for (const [, conn] of this.connections) {
             if (conn.connectionTimeout) clearTimeout(conn.connectionTimeout)
-            if (conn.channel)
-                try {
-                    conn.channel.close()
-                } catch {}
-            for (const ch of conn.incomingChannels) {
-                try {
-                    ch.close()
-                } catch {}
-            }
-            if (conn.peerConnection)
-                try {
-                    conn.peerConnection.close()
-                } catch {}
+            closeQuietly(conn.channel, this.logger)
+            for (const ch of conn.incomingChannels) closeQuietly(ch, this.logger)
+            closeQuietly(conn.peerConnection, this.logger)
         }
 
         this.connections.clear()

@@ -4,17 +4,19 @@ import { test } from 'node:test'
 import type { BinaryNode } from 'zapo-js/transport'
 
 import type { WaCallManager } from '../../call/WaCallManager.js'
+import type { WaVoipDeps } from '../../types.js'
 import { routeCallReceipt, routeCallStanza } from '../bridge.js'
-import type { VoipSocket } from '../voip-socket.js'
 
 function mocks() {
     const sent: BinaryNode[] = []
     const dispatched: string[] = []
-    const socket = {
-        sendNode: async (node: BinaryNode) => {
-            sent.push(node)
+    const deps = {
+        lowLevelCoordinator: {
+            sendNode: async (node: BinaryNode) => {
+                sent.push(node)
+            }
         }
-    } as unknown as VoipSocket
+    } as unknown as WaVoipDeps
     const manager = {
         handleCallOffer: async () => void dispatched.push('offer'),
         handleCallPreaccept: async () => void dispatched.push('preaccept'),
@@ -25,7 +27,7 @@ function mocks() {
         handleCallMuteV2: async () => void dispatched.push('mute_v2'),
         handleRelayElection: () => void dispatched.push('relay_election')
     } as unknown as WaCallManager
-    return { sent, dispatched, socket, manager }
+    return { sent, dispatched, deps, manager }
 }
 
 function callNode(innerTag: string): BinaryNode {
@@ -37,8 +39,8 @@ function callNode(innerTag: string): BinaryNode {
 }
 
 test('routeCallStanza acks with class=call and dispatches the offer', async () => {
-    const { sent, dispatched, socket, manager } = mocks()
-    const tag = await routeCallStanza(manager, socket, callNode('offer'))
+    const { sent, dispatched, deps, manager } = mocks()
+    const tag = await routeCallStanza(manager, deps, callNode('offer'))
 
     assert.equal(tag, 'offer')
     assert.deepEqual(dispatched, ['offer'])
@@ -52,15 +54,15 @@ test('routeCallStanza acks with class=call and dispatches the offer', async () =
 
 test('routeCallStanza routes each call tag to its handler', async () => {
     for (const tag of ['preaccept', 'accept', 'transport', 'terminate']) {
-        const { dispatched, socket, manager } = mocks()
-        await routeCallStanza(manager, socket, callNode(tag))
+        const { dispatched, deps, manager } = mocks()
+        await routeCallStanza(manager, deps, callNode(tag))
         assert.deepEqual(dispatched, [tag])
     }
 })
 
 test('routeCallStanza ignores a call node with no inner child', async () => {
-    const { sent, dispatched, socket, manager } = mocks()
-    const tag = await routeCallStanza(manager, socket, {
+    const { sent, dispatched, deps, manager } = mocks()
+    const tag = await routeCallStanza(manager, deps, {
         tag: 'call',
         attrs: { from: 'x@lid' },
         content: undefined
@@ -78,12 +80,12 @@ test('routeCallReceipt acks receipt-class call tags and skips others', async () 
     })
 
     const handled = mocks()
-    assert.equal(await routeCallReceipt(handled.socket, receipt('offer')), true)
+    assert.equal(await routeCallReceipt(handled.deps, receipt('offer')), true)
     assert.equal(handled.sent.length, 1)
     assert.equal(handled.sent[0].attrs.class, 'receipt')
     assert.equal(handled.sent[0].attrs.type, 'delivery')
 
     const skipped = mocks()
-    assert.equal(await routeCallReceipt(skipped.socket, receipt('message')), false)
+    assert.equal(await routeCallReceipt(skipped.deps, receipt('message')), false)
     assert.equal(skipped.sent.length, 0)
 })

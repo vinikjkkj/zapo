@@ -1,11 +1,30 @@
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { access } from 'node:fs/promises'
 
 import { createNoopLogger, type Logger } from 'zapo-js'
-import { toBytesView } from 'zapo-js/util'
+import { toBytesView, toError } from 'zapo-js/util'
 
 import { concatBytes, TEXT_DECODER } from '../bytes.js'
 import { type AudioSender, DEFAULT_AUDIO_CONFIG, type WaAudioEngineConfig } from '../types.js'
+
+const FFMPEG_BIN = 'ffmpeg'
+
+const ffmpegProbeCache = new Map<string, boolean>()
+
+function probeBinary(bin: string): Promise<boolean> {
+    return new Promise((resolve) => {
+        execFile(bin, ['-version'], { timeout: 5_000 }, (err) => resolve(!err))
+    })
+}
+
+async function hasFfmpeg(bin: string): Promise<boolean> {
+    let available = ffmpegProbeCache.get(bin)
+    if (available === undefined) {
+        available = await probeBinary(bin)
+        ffmpegProbeCache.set(bin, available)
+    }
+    return available
+}
 
 export interface WaAudioEngineOptions extends Partial<WaAudioEngineConfig> {
     readonly logger?: Logger
@@ -131,6 +150,10 @@ export class WaAudioEngine {
             throw new Error(`File not found: ${audioPath}`)
         }
 
+        if (!(await hasFfmpeg(FFMPEG_BIN))) {
+            throw new Error('ffmpeg not found on PATH (install ffmpeg to load audio files)')
+        }
+
         const pcmData = await this.decodeWithFFmpeg(audioPath)
         this.audioBuffer = this.int16ToFloat32(pcmData)
         this.audioPosition = 0
@@ -155,7 +178,7 @@ export class WaAudioEngine {
     private async decodeWithFFmpeg(inputPath: string): Promise<Int16Array> {
         return new Promise<Int16Array>((resolve, reject) => {
             const proc = spawn(
-                'ffmpeg',
+                FFMPEG_BIN,
                 [
                     '-hide_banner',
                     '-loglevel',
@@ -249,7 +272,9 @@ export class WaAudioEngine {
             if (this.audioSender) {
                 try {
                     this.audioSender.sendCapturedAudio(this.silenceChunkBuffer)
-                } catch {}
+                } catch (err) {
+                    this.logger.trace('silence send failed', { message: toError(err).message })
+                }
             }
         }, this.intervalMs)
     }
@@ -295,7 +320,11 @@ export class WaAudioEngine {
             if (this.audioSender) {
                 try {
                     this.audioSender.sendCapturedAudio(chunk)
-                } catch {}
+                } catch (err) {
+                    this.logger.trace('captured audio send failed', {
+                        message: toError(err).message
+                    })
+                }
             }
 
             if (frameCount % 500 === 0) {

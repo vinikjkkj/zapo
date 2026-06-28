@@ -140,3 +140,48 @@ test('noop logger child returns itself and stays silent', () => {
     assert.equal(child, noop)
     assert.doesNotThrow(() => child.info('nothing happens', { whatever: 1 }))
 })
+
+test('child accepts an independent stricter level without touching the parent', () => {
+    const captured: string[] = []
+    const origInfo = console.info
+    const origWarn = console.warn
+    console.info = (() => captured.push('info')) as typeof console.info
+    console.warn = (() => captured.push('warn')) as typeof console.warn
+    try {
+        const parent = new ConsoleLogger('trace')
+        const quiet = parent.child({ scope: 'voip' }, { level: 'warn' })
+        assert.equal(quiet.level, 'warn')
+        quiet.info('dropped')
+        quiet.warn('kept')
+        assert.deepEqual(captured, ['warn'])
+        assert.equal(parent.level, 'trace')
+    } finally {
+        console.info = origInfo
+        console.warn = origWarn
+    }
+})
+
+test('child level override gates the manual-binding fallback', () => {
+    const captured: string[] = []
+    const fake = {
+        level: 'trace',
+        trace: () => captured.push('trace'),
+        debug: () => captured.push('debug'),
+        info: () => captured.push('info'),
+        warn: () => captured.push('warn'),
+        error: () => captured.push('error')
+    }
+    const quiet = new PinoLogger(fake, 'trace').child({ session: 'x' }, { level: 'warn' })
+    assert.equal(quiet.level, 'warn')
+    quiet.trace('t')
+    quiet.info('i')
+    quiet.warn('w')
+    quiet.error('e')
+    assert.deepEqual(captured, ['warn', 'error'])
+})
+
+test('noop logger child can take its own level', () => {
+    const quiet = createNoopLogger('trace').child({ x: 1 }, { level: 'warn' })
+    assert.equal(quiet.level, 'warn')
+    assert.doesNotThrow(() => quiet.trace('silent'))
+})

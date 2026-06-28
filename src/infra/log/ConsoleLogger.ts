@@ -1,12 +1,4 @@
-import type { Logger, LogLevel } from '@infra/log/types'
-
-const LOG_LEVEL_PRIORITY: Readonly<Record<LogLevel, number>> = {
-    trace: 10,
-    debug: 20,
-    info: 30,
-    warn: 40,
-    error: 50
-}
+import { LOG_LEVEL_PRIORITY, type Logger, type LogLevel } from '@infra/log/types'
 
 const CONSOLE_WRITERS: Readonly<Record<LogLevel, (...args: unknown[]) => void>> = {
     trace: (...args) => console.debug(...args),
@@ -65,9 +57,12 @@ export class ConsoleLogger implements Logger {
      * Returns a derived logger with `bindings` merged into the parent's
      * bindings. Per-call context still wins on key conflicts.
      */
-    public child(bindings: Readonly<Record<string, unknown>>): Logger {
+    public child(
+        bindings: Readonly<Record<string, unknown>>,
+        options?: { readonly level?: LogLevel }
+    ): Logger {
         const merged = this.bindings ? { ...this.bindings, ...bindings } : { ...bindings }
-        return new ConsoleLogger(this.level, merged)
+        return new ConsoleLogger(options?.level ?? this.level, merged)
     }
 
     private write(level: LogLevel, message: string, context?: Record<string, unknown>): void {

@@ -69,6 +69,7 @@ module.exports = [
             'import/parsers': {
                 '@typescript-eslint/parser': ['.ts', '.tsx']
             },
+            'import/internal-regex': '^@zapo-js/',
             'import/resolver': {
                 node: {
                     extensions: ['.ts', '.tsx', '.js', '.mjs', '.cjs']
@@ -129,16 +130,6 @@ module.exports = [
         ],
         rules: {
             '@typescript-eslint/require-await': 'off'
-        }
-    },
-    {
-        // Ported native VOIP engine: silent best-effort catches and async
-        // signature-preserving wrappers are idiomatic in this media/protocol
-        // code, so relax the two rules that fight that style here.
-        files: ['packages/voip/src/**/*.ts'],
-        rules: {
-            '@typescript-eslint/require-await': 'off',
-            'no-empty': ['error', { allowEmptyCatch: true }]
         }
     },
     {

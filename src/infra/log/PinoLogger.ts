@@ -1,4 +1,4 @@
-import type { Logger, LogLevel } from '@infra/log/types'
+import { LOG_LEVEL_PRIORITY, type Logger, type LogLevel } from '@infra/log/types'
 
 type PinoLikeLogger = {
     level: string
@@ -118,11 +118,14 @@ export class PinoLogger implements Logger {
      * call's context. Delegates to the underlying pino `child()` when
      * available; otherwise wraps with a parent + bindings merge.
      */
-    public child(bindings: Readonly<Record<string, unknown>>): Logger {
+    public child(
+        bindings: Readonly<Record<string, unknown>>,
+        options?: { readonly level?: LogLevel }
+    ): Logger {
         if (typeof this.logger.child === 'function') {
-            return new PinoLogger(this.logger.child(bindings), this.level)
+            return new PinoLogger(this.logger.child(bindings), options?.level ?? this.level)
         }
-        return new BoundLogger(this, bindings)
+        return new BoundLogger(this, bindings, options?.level)
     }
 
     private write(
@@ -153,35 +156,58 @@ class BoundLogger implements Logger {
     public readonly level: LogLevel
     private readonly parent: Logger
     private readonly bindings: Readonly<Record<string, unknown>>
+    private readonly minPriority: number
 
-    public constructor(parent: Logger, bindings: Readonly<Record<string, unknown>>) {
+    public constructor(
+        parent: Logger,
+        bindings: Readonly<Record<string, unknown>>,
+        level?: LogLevel
+    ) {
         this.parent = parent
-        this.level = parent.level
+        this.level = level ?? parent.level
         this.bindings = bindings
+        this.minPriority = LOG_LEVEL_PRIORITY[this.level]
     }
 
     public trace(message: string, context?: Readonly<Record<string, unknown>>): void {
-        this.parent.trace(message, this.merge(context))
+        if (LOG_LEVEL_PRIORITY.trace >= this.minPriority) {
+            this.parent.trace(message, this.merge(context))
+        }
     }
 
     public debug(message: string, context?: Readonly<Record<string, unknown>>): void {
-        this.parent.debug(message, this.merge(context))
+        if (LOG_LEVEL_PRIORITY.debug >= this.minPriority) {
+            this.parent.debug(message, this.merge(context))
+        }
     }
 
     public info(message: string, context?: Readonly<Record<string, unknown>>): void {
-        this.parent.info(message, this.merge(context))
+        if (LOG_LEVEL_PRIORITY.info >= this.minPriority) {
+            this.parent.info(message, this.merge(context))
+        }
     }
 
     public warn(message: string, context?: Readonly<Record<string, unknown>>): void {
-        this.parent.warn(message, this.merge(context))
+        if (LOG_LEVEL_PRIORITY.warn >= this.minPriority) {
+            this.parent.warn(message, this.merge(context))
+        }
     }
 
     public error(message: string, context?: Readonly<Record<string, unknown>>): void {
-        this.parent.error(message, this.merge(context))
+        if (LOG_LEVEL_PRIORITY.error >= this.minPriority) {
+            this.parent.error(message, this.merge(context))
+        }
     }
 
-    public child(bindings: Readonly<Record<string, unknown>>): Logger {
-        return new BoundLogger(this.parent, { ...this.bindings, ...bindings })
+    public child(
+        bindings: Readonly<Record<string, unknown>>,
+        options?: { readonly level?: LogLevel }
+    ): Logger {
+        return new BoundLogger(
+            this.parent,
+            { ...this.bindings, ...bindings },
+            options?.level ?? this.level
+        )
     }
 
     private merge(
