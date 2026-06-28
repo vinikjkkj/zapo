@@ -8,4 +8,4 @@ export { CallState, CallDirection, CallMediaType, EndCallReason } from './types.
 
 export type { CallOfferOptions, CallManagerEvents } from './types.js'
 
-import './type-extensions.js'
+export type { VoipEvents } from './events.js'

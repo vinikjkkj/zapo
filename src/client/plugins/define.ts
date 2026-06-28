@@ -1,4 +1,5 @@
 import type { WaClientPluginContext, WaClientPluginDefinition } from '@client/plugins/types'
+import type { WaClient } from '@client/WaClient'
 
 interface WaClientBehaviorPluginInput {
     readonly id: string
@@ -15,11 +16,14 @@ interface WaClientExposePluginInput<K extends string, T> {
 
 /** Type-safe helper for authoring {@link WaClientPluginDefinition} values. */
 export function defineWaClientPlugin(input: WaClientBehaviorPluginInput): WaClientPluginDefinition
-export function defineWaClientPlugin<K extends string, T>(
-    input: WaClientExposePluginInput<K, T>
+export function defineWaClientPlugin<K extends string, T, E = {}>(
+    input: WaClientExposePluginInput<K, T> & {
+        readonly exposeAs: K extends keyof WaClient ? never : K
+    }
 ): WaClientPluginDefinition & {
     readonly exposeAs: K
     readonly setup: (ctx: WaClientPluginContext) => T
+    readonly __pluginEvents?: E
 }
 export function defineWaClientPlugin(
     input: WaClientBehaviorPluginInput | WaClientExposePluginInput<string, unknown>

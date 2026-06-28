@@ -1,5 +1,6 @@
 import { defineWaClientPlugin } from 'zapo-js'
 
+import type { VoipEvents } from './events.js'
 import { WaVoipCoordinator, type WaVoipCoordinatorOptions } from './WaVoipCoordinator.js'
 
 export interface VoipPluginOptions extends WaVoipCoordinatorOptions {}
@@ -24,7 +25,7 @@ export interface VoipPluginOptions extends WaVoipCoordinatorOptions {}
  * ```
  */
 export function voipPlugin(options: VoipPluginOptions = {}) {
-    return defineWaClientPlugin<'voip', WaVoipCoordinator>({
+    return defineWaClientPlugin<'voip', WaVoipCoordinator, VoipEvents>({
         id: '@zapo-js/voip',
         exposeAs: 'voip',
         setup(ctx) {

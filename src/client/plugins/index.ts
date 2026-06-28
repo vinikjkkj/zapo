@@ -4,7 +4,6 @@ export type {
     WaClientBehaviorPluginDefinition,
     WaClientExposePluginDefinition,
     WaClientPluginContext,
-    WaClientPluginDefinition,
-    WaClientPluginRegistry
+    WaClientPluginDefinition
 } from '@client/plugins/types'
 export { isWaClientExposePluginDefinition } from '@client/plugins/types'

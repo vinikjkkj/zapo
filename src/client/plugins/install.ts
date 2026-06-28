@@ -41,7 +41,7 @@ export function installWaClientPlugins(
         logger: input.logger,
         stores: input.stores,
         deps: input.deps,
-        emit: client.emit.bind(client),
+        emit: client.emit.bind(client) as unknown as WaClientPluginContext['emit'],
         on: client.on.bind(client),
         off: client.off.bind(client),
         once: client.once.bind(client),
@@ -70,6 +70,12 @@ export function installWaClientPlugins(
                 throw new Error(`duplicate wa client plugin exposeAs: ${plugin.exposeAs}`)
             }
             seenExposeAs.add(plugin.exposeAs)
+
+            if (plugin.exposeAs in client) {
+                throw new Error(
+                    `wa client plugin exposeAs "${plugin.exposeAs}" collides with a reserved client member`
+                )
+            }
 
             const instance = plugin.setup(pluginCtx)
             Object.defineProperty(client, plugin.exposeAs, {

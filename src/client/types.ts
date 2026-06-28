@@ -1259,16 +1259,6 @@ export type WaConnectionEvent =
  * `history_sync_chunk`, `mex_notification`, `call`), **mobile-only**
  * (`mobile_*`), and **debug_** (raw stanzas/frames – opt-in observability).
  */
-/**
- * Empty by default – augment from plugin packages to register custom events.
- * Prefer prefixed names (`voip_*`, `myplugin_*`) to avoid colliding with core
- * events.
- */
-export interface WaClientPluginEventMap {}
-
-/** Core plus plugin events – used by {@link WaClient} `on`/`emit` typings. */
-export type WaClientAllEventMap = WaClientEventMap & WaClientPluginEventMap
-
 export interface WaClientEventMap {
     /**
      * Pairing QR refresh – emitted while {@link WaClient.connect} runs and the

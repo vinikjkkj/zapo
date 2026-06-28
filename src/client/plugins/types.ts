@@ -7,13 +7,6 @@ import type { WaStore } from '@store/types'
 import type { BinaryNode } from '@transport/types'
 
 /**
- * Augment this interface from plugin packages to expose coordinator getters on
- * {@link WaClient} (e.g. `client.voip`). Only plugins with `exposeAs` create
- * runtime properties – augmentation is type-only until the plugin is registered.
- */
-export interface WaClientPluginRegistry {}
-
-/**
  * Host context passed to every {@link WaClientPluginDefinition.setup}. Carries
  * the full {@link WaClientDependencies} graph plus event/handler helpers.
  *
@@ -30,7 +23,8 @@ export interface WaClientPluginContext {
      * new coordinators may appear in minor releases.
      */
     readonly deps: WaClientDependencies
-    readonly emit: WaClient['emit']
+    /** Loose so a plugin can emit its own events; consumers see them typed on the client. */
+    readonly emit: (event: string | symbol, ...args: unknown[]) => boolean
     readonly on: WaClient['on']
     readonly off: WaClient['off']
     readonly once: WaClient['once']
@@ -76,3 +70,42 @@ export function isWaClientExposePluginDefinition(
 ): plugin is WaClientPluginDefinition & { readonly exposeAs: string } {
     return plugin.exposeAs !== undefined && plugin.exposeAs.length > 0
 }
+
+type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
+    k: infer I
+) => void
+    ? I
+    : never
+
+/** `{ [exposeAs]: setup-return }` for one plugin definition; `{}` (no-op) for behavior plugins. */
+type ExposedOf<P> = P extends {
+    readonly exposeAs: infer K extends string
+    readonly setup: (...args: never) => infer T
+}
+    ? { readonly [Q in K]: T }
+    : {}
+
+/**
+ * Getters contributed by a tuple of plugin definitions, derived from the values
+ * passed to the client (no global augmentation). `[voipPlugin()]` yields
+ * `{ readonly voip: WaVoipCoordinator }`.
+ */
+export type WaClientExposedFromPlugins<P extends readonly unknown[]> = UnionToIntersection<
+    ExposedOf<P[number]>
+>
+
+/** Event map a plugin contributes, carried as a phantom marker on its definition. */
+type EventsOf<P> = P extends { readonly __pluginEvents?: infer E }
+    ? unknown extends E
+        ? {}
+        : E
+    : {}
+
+/**
+ * Client events contributed by a tuple of plugin definitions, derived from the
+ * plugin values (no global augmentation). Threaded into the client's
+ * `on`/`once`/`off`/`emit` so a `voip_*` event exists only when voip is installed.
+ */
+export type WaClientPluginEventsFromPlugins<P extends readonly unknown[]> = UnionToIntersection<
+    EventsOf<P[number]>
+>

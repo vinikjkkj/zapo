@@ -2,10 +2,8 @@ export { WaClient } from '@client'
 export { defineWaClientPlugin } from '@client/plugins'
 export type { WaClientDependencies } from '@client/WaClientFactory'
 export type {
-    WaClientAllEventMap,
     WaClientEventMap,
     WaClientOptions,
-    WaClientPluginEventMap,
     WaClientProxyOptions,
     WaDownloadMediaOptions,
     WaHistorySyncChunkEvent,
@@ -16,8 +14,7 @@ export type {
     WaClientBehaviorPluginDefinition,
     WaClientExposePluginDefinition,
     WaClientPluginContext,
-    WaClientPluginDefinition,
-    WaClientPluginRegistry
+    WaClientPluginDefinition
 } from '@client/plugins'
 export type { WaMessageCoordinator } from '@client/coordinators/WaMessageCoordinator'
 export type {
