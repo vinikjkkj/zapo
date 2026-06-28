@@ -16,7 +16,7 @@ export interface WaVoipCoordinatorOptions {
     /**
      * Minimum log level for the VOIP plugin. Defaults to the host client's
      * level; set it to cap the (chatty) VOIP diagnostics independently of the
-     * host — e.g. `'warn'` to keep them out of a `trace` host logger.
+     * host, e.g. `'warn'` to keep them out of a `trace` host logger.
      */
     readonly logLevel?: LogLevel
 }
@@ -114,7 +114,7 @@ export class WaVoipCoordinator {
                 tag: 'call',
                 prepend: true,
                 handler: async (node) => {
-                    const tag = await routeCallStanza(this.manager, this.deps, node)
+                    const tag = await routeCallStanza(this.manager, this.deps, node, this.logger)
                     return tag !== null
                 }
             }),
@@ -148,7 +148,7 @@ export class WaVoipCoordinator {
             ctx.emit('voip_call_ended', call)
         })
         this.manager.on('call_inbound_audio', (call, pcm) => {
-            ctx.emit('voip_call_inbound_audio', call, pcm)
+            ctx.emit('voip_call_inbound_audio', { call, pcm })
         })
         this.manager.on('call_outbound_audio_finished', (call) => {
             ctx.emit('voip_call_outbound_audio_finished', call)

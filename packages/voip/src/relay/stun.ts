@@ -2,10 +2,10 @@ import { bytesToHex } from 'zapo-js/util'
 
 import {
     concatBytes,
-    decodeUtf8,
     readBigUInt64BE,
     readUInt16BE,
     readUInt32BE,
+    TEXT_DECODER,
     writeUInt16BE,
     writeUInt32BE
 } from '../bytes.js'
@@ -33,11 +33,7 @@ const ATTR_FINGERPRINT = 0x8028
 const DEFAULT_ICE_PRIORITY = 16_777_215
 
 function generateTransactionId(): Uint8Array {
-    const id = new Uint8Array(12)
-    for (let i = 0; i < 12; i++) {
-        id[i] = Math.floor(Math.random() * 256)
-    }
-    return id
+    return randomBytes(12)
 }
 
 function encodeAttribute(attrType: number, data: Uint8Array): Uint8Array {
@@ -253,10 +249,7 @@ export function buildBindingRequest(
     if (priorityAttr) parts.push(priorityAttr)
 
     if (iceRole === 'controlling' || iceRole === 'controlled') {
-        const tieBreaker = new Uint8Array(8)
-        for (let i = 0; i < 8; i++) {
-            tieBreaker[i] = Math.floor(Math.random() * 256)
-        }
+        const tieBreaker = randomBytes(8)
         const attrType = iceRole === 'controlled' ? ATTR_ICE_CONTROLLED : ATTR_ICE_CONTROLLING
         parts.push(encodeAttribute(attrType, tieBreaker))
     }
@@ -363,8 +356,9 @@ export function buildWhatsAppPing(): Uint8Array {
 }
 
 export function isStunPacket(data: Uint8Array): boolean {
-    if (data.length < 2) return false
-    return (data[0] & 0xc0) === 0
+    if (data.length < 8) return false
+    if ((data[0] & 0xc0) !== 0) return false
+    return readUInt32BE(data, 4) === STUN_MAGIC_COOKIE
 }
 
 export function isRtpPacket(data: Uint8Array): boolean {
@@ -500,7 +494,7 @@ export function parseStunResponse(data: Uint8Array): StunResponseInfo | null {
             const errorNumber = attrData[3]
             errorCode = errorClass * 100 + errorNumber
             if (attrLength > 4) {
-                errorReason = decodeUtf8(attrData.subarray(4))
+                errorReason = TEXT_DECODER.decode(attrData.subarray(4))
             }
         }
 

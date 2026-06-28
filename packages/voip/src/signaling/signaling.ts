@@ -98,39 +98,38 @@ export async function decryptCallKey(
     const log = logger ?? createNoopLogger()
 
     const isEnc = (child: BinaryNode): boolean => child.tag === 'enc' && !!child.attrs?.type
-    let encNode = getNodeChildren(node).find(isEnc)
+    const encNodes = getNodeChildren(node).filter(isEnc)
 
-    if (!encNode) {
-        const destinationNode = findNodeChild(node, 'destination')
-        for (const toNode of destinationNode ? getNodeChildren(destinationNode) : []) {
-            if (toNode.tag !== 'to') continue
-            encNode = getNodeChildren(toNode).find(isEnc)
-            if (encNode) break
+    const destinationNode = findNodeChild(node, 'destination')
+    if (destinationNode) {
+        for (const toNode of getNodeChildren(destinationNode)) {
+            if (toNode.tag === 'to') {
+                encNodes.push(...getNodeChildren(toNode).filter(isEnc))
+            }
         }
     }
 
-    if (!encNode || !(encNode.content instanceof Uint8Array)) {
-        return undefined
-    }
-
-    try {
-        const decrypted = await deps.signalProtocol.decryptMessage(
-            parseSignalAddressFromJid(peerJid),
-            { type: encNode.attrs.type as 'msg' | 'pkmsg', ciphertext: encNode.content }
-        )
-
-        const message = proto.Message.decode(unpadPkcs7(decrypted))
-        const callKey = message.call?.callKey
-
-        if (!callKey || callKey.length !== 32) {
-            throw new Error(`invalid callKey: expected 32 bytes, got ${callKey?.length || 0}`)
+    const address = parseSignalAddressFromJid(peerJid)
+    for (const encNode of encNodes) {
+        if (!(encNode.content instanceof Uint8Array)) {
+            continue
         }
-
-        return new Uint8Array(callKey)
-    } catch (err) {
-        log.error('call key decrypt failed', { message: toError(err).message })
-        return undefined
+        try {
+            const decrypted = await deps.signalProtocol.decryptMessage(address, {
+                type: encNode.attrs.type as 'msg' | 'pkmsg',
+                ciphertext: encNode.content
+            })
+            const message = proto.Message.decode(unpadPkcs7(decrypted))
+            const callKey = message.call?.callKey
+            if (callKey && callKey.length === 32) {
+                return new Uint8Array(callKey)
+            }
+        } catch (err) {
+            log.trace('call key decrypt candidate failed', { message: toError(err).message })
+        }
     }
+
+    return undefined
 }
 
 const CAPABILITY_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07])
@@ -189,7 +188,7 @@ export async function buildOfferStanza(
     const devices = synced.flatMap((entry) => entry.deviceJids)
 
     if (devices.length === 0) {
-        log.warn('no valid device jids for offer', { peerJid })
+        throw new Error(`no device sessions to encrypt the call offer for ${peerJid}`)
     }
 
     const { nodes: destinations, shouldIncludeDeviceIdentity } = await buildCallParticipantNodes(

@@ -38,3 +38,20 @@ test('SrtpSession protect/unprotect round-trips RTP payload', async () => {
     assert.equal(unprotected.header.ssrc, 0x11223344)
     assert.deepEqual(unprotected.payload, payload)
 })
+
+test('SrtpSession unprotect rejects a tampered packet', async () => {
+    const callKey = new Uint8Array(32)
+    callKey.fill(0x22)
+
+    const keying = derivePerJidSrtpKey(callKey, 'self:0@lid')
+    const session = new SrtpSession(keying, keying, 4, 4)
+
+    const header = new RtpHeader(120, 9, 1920, 0x55667788)
+    const payload = new Uint8Array([0x01, 0x02, 0x03, 0x04])
+    const protectedPacket = session.protect(new RtpPacket(header, payload))
+
+    const tampered = protectedPacket.slice()
+    tampered[12] ^= 0x80
+
+    assert.throws(() => session.unprotect(tampered), /auth tag verification failed/)
+})

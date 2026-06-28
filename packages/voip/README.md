@@ -40,7 +40,7 @@ import { voipPlugin, EndCallReason } from '@zapo-js/voip'
 const client = new WaClient({
     store,
     sessionId: 'main',
-    plugins: [voipPlugin({ debug: true })]
+    plugins: [voipPlugin()]
 })
 
 await client.connect()
@@ -53,7 +53,7 @@ client.on('voip_call_state', (call) => {
     console.log(call.callId, call.stateData.state)
 })
 
-client.on('voip_call_inbound_audio', (call, pcm) => {
+client.on('voip_call_inbound_audio', ({ call, pcm }) => {
     // Float32Array @ 16 kHz mono from the peer for this call
 })
 
@@ -126,15 +126,15 @@ await client.voip.endCall(callId)
 
 Emitted on `WaClient`:
 
-| Event                               | Payload                    | When                                      |
-| ----------------------------------- | -------------------------- | ----------------------------------------- |
-| `voip_call_incoming`                | `CallInfo`                 | Remote offer received                     |
-| `voip_call_state`                   | `CallInfo`                 | State transition                          |
-| `voip_call_ended`                   | `CallInfo`                 | Call finished                             |
-| `voip_call_inbound_audio`           | `CallInfo`, `Float32Array` | Decoded peer audio received (16 kHz)      |
-| `voip_call_outbound_audio_finished` | `CallInfo`                 | Preloaded outbound audio finished sending |
-| `voip_call_error`                   | `Error`                    | Engine error                              |
-| `voip_signaling_send`               | `BinaryNode`               | Outbound signaling stanza                 |
+| Event                               | Payload                                 | When                                      |
+| ----------------------------------- | --------------------------------------- | ----------------------------------------- |
+| `voip_call_incoming`                | `CallInfo`                              | Remote offer received                     |
+| `voip_call_state`                   | `CallInfo`                              | State transition                          |
+| `voip_call_ended`                   | `CallInfo`                              | Call finished                             |
+| `voip_call_inbound_audio`           | `{ call: CallInfo; pcm: Float32Array }` | Decoded peer audio received (16 kHz)      |
+| `voip_call_outbound_audio_finished` | `CallInfo`                              | Preloaded outbound audio finished sending |
+| `voip_call_error`                   | `Error`                                 | Engine error                              |
+| `voip_signaling_send`               | `BinaryNode`                            | Outbound signaling stanza                 |
 
 You can also use `client.voip.on('call:state', ...)` etc. on the underlying `EventEmitter` (`CallManagerEvents`).
 
@@ -154,7 +154,7 @@ You can also use `client.voip.on('call:state', ...)` etc. on the underlying `Eve
 | `getCalls()`                            | All tracked calls                           |
 | `on` / `off` / `once`                   | Manager-level events                        |
 
-Plugin options: `debug?: boolean`, `maxConcurrentCalls?: number` (default `1`).
+Plugin options: `maxConcurrentCalls?: number` (default `1`), `logLevel?: LogLevel` (caps VOIP diagnostics; defaults to the host client's level).
 
 ## Codec
 

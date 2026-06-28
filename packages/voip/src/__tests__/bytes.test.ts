@@ -3,8 +3,6 @@ import { test } from 'node:test'
 
 import {
     concatBytes,
-    decodeUtf8,
-    encodeAscii,
     readBigUInt64BE,
     readUInt16BE,
     readUInt32BE,
@@ -53,10 +51,4 @@ test('toArrayBuffer returns a standalone ArrayBuffer slice', () => {
     const ab = toArrayBuffer(bytes)
     assert.ok(ab instanceof ArrayBuffer)
     assert.deepEqual(new Uint8Array(ab), bytes)
-})
-
-test('encodeAscii and decodeUtf8 handle ASCII strings', () => {
-    const encoded = encodeAscii('token:ufrag')
-    assert.deepEqual(encoded, new Uint8Array([116, 111, 107, 101, 110, 58, 117, 102, 114, 97, 103]))
-    assert.equal(decodeUtf8(encoded), 'token:ufrag')
 })

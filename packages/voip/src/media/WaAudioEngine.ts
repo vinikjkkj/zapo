@@ -21,7 +21,9 @@ async function hasFfmpeg(bin: string): Promise<boolean> {
     let available = ffmpegProbeCache.get(bin)
     if (available === undefined) {
         available = await probeBinary(bin)
-        ffmpegProbeCache.set(bin, available)
+        if (available) {
+            ffmpegProbeCache.set(bin, available)
+        }
     }
     return available
 }
@@ -421,7 +423,7 @@ export class WaAudioEngine {
             }
 
             if (this.audioPosition >= endPos) {
-                return this.captureChunkBuffer
+                return this.silenceChunkBuffer
             }
         }
 

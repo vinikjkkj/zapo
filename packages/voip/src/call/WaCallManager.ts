@@ -71,22 +71,29 @@ export class WaCallManager extends EventEmitter {
         info.encryptionKey = callKey
 
         const session = this.createSession(info)
-        session.resetOutgoingFlags()
 
-        const selfLid = creds?.meLid || creds?.meJid || ''
-        await session.initMedia(selfLid, peerJid)
+        try {
+            session.resetOutgoingFlags()
 
-        const offerStanza = await buildOfferStanza(
-            this.deps,
-            this.stores,
-            callId,
-            callKey,
-            peerJid,
-            options.isVideo ?? false,
-            this.logger.child({ component: 'signaling' })
-        )
+            const selfLid = creds?.meLid || creds?.meJid || ''
+            await session.initMedia(selfLid, peerJid)
 
-        await this.deps.lowLevelCoordinator.sendNode(offerStanza)
+            const offerStanza = await buildOfferStanza(
+                this.deps,
+                this.stores,
+                callId,
+                callKey,
+                peerJid,
+                options.isVideo ?? false,
+                this.logger.child({ component: 'signaling' })
+            )
+
+            await this.deps.lowLevelCoordinator.sendNode(offerStanza)
+        } catch (err) {
+            session.cleanup()
+            this.calls.delete(callId)
+            throw err
+        }
 
         info.applyTransition({ type: 'offer_sent' })
         this.emitState(info)

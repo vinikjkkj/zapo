@@ -1,5 +1,7 @@
+import { createNoopLogger, type Logger } from 'zapo-js'
 import { normalizeDeviceJid } from 'zapo-js/protocol'
 import { type BinaryNode, buildAckNode, getFirstNodeChild } from 'zapo-js/transport'
+import { toError } from 'zapo-js/util'
 
 import type { WaCallManager } from '../call/WaCallManager.js'
 import type { WaVoipDeps } from '../types.js'
@@ -9,8 +11,10 @@ const RECEIPT_CALL_TAGS = new Set(['offer', 'accept', 'preaccept', 'terminate', 
 export async function routeCallStanza(
     manager: WaCallManager,
     deps: WaVoipDeps,
-    node: BinaryNode
+    node: BinaryNode,
+    logger?: Logger
 ): Promise<string | null> {
+    const log = logger ?? createNoopLogger()
     const inner = getFirstNodeChild(node)
     if (!inner) return null
 
@@ -27,7 +31,16 @@ export async function routeCallStanza(
         })
     )
 
-    const normalizedPeerJid = normalizeDeviceJid(peerJid)
+    let normalizedPeerJid: string
+    try {
+        normalizedPeerJid = normalizeDeviceJid(peerJid)
+    } catch (err) {
+        log.warn('failed to normalize call peer jid', {
+            from: peerJid,
+            message: toError(err).message
+        })
+        return tag
+    }
 
     switch (tag) {
         case 'offer':

@@ -518,7 +518,9 @@ export class WaClient extends EventEmitter {
             })
         }
         if (this.disposePlugins) {
-            await this.disposePlugins()
+            const dispose = this.disposePlugins
+            this.disposePlugins = null
+            await dispose()
         }
         await this.deps.connectionManager.disconnect()
         this.emit('connection', {

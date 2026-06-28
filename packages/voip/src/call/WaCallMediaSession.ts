@@ -342,6 +342,8 @@ export class WaCallMediaSession implements AudioSender {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
 
+        let srtpFromPeerKey = false
+
         if (needsDecryption(nodeInfo.tag)) {
             try {
                 const peerCallKey = await decryptCallKey(
@@ -357,7 +359,7 @@ export class WaCallMediaSession implements AudioSender {
                         const meLid2 = this.deps.authClient.getCurrentCredentials()?.meLid
                         const meId2 = this.deps.authClient.getCurrentCredentials()?.meJid
                         const ourCredJid2 = meLid2 || meId2 || ''
-                        const ourBase2 = toUserJid(ourCredJid2)
+                        const ourBase2 = ourCredJid2 ? toUserJid(ourCredJid2) : ''
                         const participants = this.info.relayData?.participantJids || []
                         const ourDeviceJid2 =
                             participants.find((jid) => {
@@ -375,6 +377,7 @@ export class WaCallMediaSession implements AudioSender {
                                     SRTP_SEND_AUTH_TAG_LEN,
                                     SRTP_RECV_AUTH_TAG_LEN
                                 )
+                                srtpFromPeerKey = true
                                 this.logger.debug('srtp re-initialized with peer call_key', {
                                     callId: this.info.callId
                                 })
@@ -403,7 +406,7 @@ export class WaCallMediaSession implements AudioSender {
         const meId = this.deps.authClient.getCurrentCredentials()?.meJid ?? ''
         const meLid = this.deps.authClient.getCurrentCredentials()?.meLid
         const ourJid = meLid || meId
-        const ourBase = toUserJid(ourJid)
+        const ourBase = ourJid ? toUserJid(ourJid) : ''
         const callId = this.info.callId
         const callCreator = this.info.callCreator
         const acceptingDeviceJid = peerJid
@@ -430,7 +433,9 @@ export class WaCallMediaSession implements AudioSender {
         this.sctpRelay.setSubscriptionSsrc(this.peerSsrcs[0] ?? 0)
         this.sctpRelay.resendSubscriptions()
 
-        this.initSrtpKeys()
+        if (!srtpFromPeerKey) {
+            this.initSrtpKeys()
+        }
 
         if (this.info.relayData?.participantJids) {
             const otherDevices = this.info.relayData.participantJids.filter((jid) => {
@@ -624,7 +629,7 @@ export class WaCallMediaSession implements AudioSender {
                 const meLid = this.deps.authClient.getCurrentCredentials()?.meLid
                 const meId = this.deps.authClient.getCurrentCredentials()?.meJid
                 const ourCredJid = meLid || meId || ''
-                const ourBase = toUserJid(ourCredJid)
+                const ourBase = ourCredJid ? toUserJid(ourCredJid) : ''
 
                 const ourDeviceJid = this.ensureDeviceJid(
                     participantJids.find((jid) => {

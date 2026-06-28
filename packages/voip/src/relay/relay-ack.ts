@@ -6,7 +6,7 @@ import {
 } from 'zapo-js/transport'
 import { base64ToBytes, bytesToBase64 } from 'zapo-js/util'
 
-import { decodeUtf8 } from '../bytes.js'
+import { TEXT_DECODER } from '../bytes.js'
 import type { RelayEndpoint } from '../types.js'
 
 export function parseRelayFromAck(ackNode: BinaryNode): {
@@ -91,7 +91,7 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
                     if (rawKey.length === 30) {
                         hbhKey = rawKey
                     } else if (rawKey.length > 30) {
-                        const asB64 = decodeUtf8(rawKey).trim()
+                        const asB64 = TEXT_DECODER.decode(rawKey).trim()
                         const decoded = base64ToBytes(asB64)
                         if (decoded.length === 30) hbhKey = decoded
                     }

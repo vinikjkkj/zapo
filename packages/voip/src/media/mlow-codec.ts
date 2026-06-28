@@ -27,11 +27,16 @@ let wasmReady: Promise<MlowModule> | null = null
 
 function loadMlowModule(): Promise<MlowModule> {
     if (!wasmReady) {
-        wasmReady = import('libmlow-wasm').then(async (mod) => {
-            const lib = mod as unknown as MlowModule
-            await lib.loadLibopus()
-            return lib
-        })
+        wasmReady = import('libmlow-wasm')
+            .then(async (mod) => {
+                const lib = mod as unknown as MlowModule
+                await lib.loadLibopus()
+                return lib
+            })
+            .catch((err) => {
+                wasmReady = null
+                throw err
+            })
     }
     return wasmReady
 }
@@ -49,6 +54,7 @@ export class MLowCodec {
     private decodeErrors = 0
     private decodeSuccess = 0
     private plcFrames = 0
+    private opts: MLowCodecOptions = {}
 
     private constructor() {}
 
@@ -59,6 +65,7 @@ export class MLowCodec {
     }
 
     private async init(opts: MLowCodecOptions): Promise<void> {
+        this.opts = opts
         const lib = await loadMlowModule()
 
         this.decoder = await lib.createDecoder({
@@ -68,18 +75,24 @@ export class MLowCodec {
             maxFrameSize: MAX_FRAME_SIZE
         })
 
-        this.encoder = await lib.createEncoder({
-            channels: MLOW_CHANNELS,
-            sampleRate: MLOW_SAMPLE_RATE,
-            application: APPLICATION_VOIP,
-            frameSize: FRAME_SIZE,
-            useSmpl: true,
-            dtx: true,
-            fec: opts.fec ?? false,
-            bitrate: opts.bitrate ?? 25_000,
-            complexity: opts.complexity ?? 9,
-            signal: SIGNAL_VOICE
-        })
+        try {
+            this.encoder = await lib.createEncoder({
+                channels: MLOW_CHANNELS,
+                sampleRate: MLOW_SAMPLE_RATE,
+                application: APPLICATION_VOIP,
+                frameSize: FRAME_SIZE,
+                useSmpl: true,
+                dtx: true,
+                fec: opts.fec ?? false,
+                bitrate: opts.bitrate ?? 25_000,
+                complexity: opts.complexity ?? 9,
+                signal: SIGNAL_VOICE
+            })
+        } catch (err) {
+            this.decoder?.free()
+            this.decoder = null
+            throw err
+        }
     }
 
     encode(float32Audio: Float32Array): Uint8Array {
@@ -140,7 +153,7 @@ export class MLowCodec {
 
     async reset(): Promise<void> {
         this.destroy()
-        await this.init({})
+        await this.init(this.opts)
         this.decodeErrors = 0
         this.decodeSuccess = 0
         this.plcFrames = 0

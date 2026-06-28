@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { bytesToHex } from 'zapo-js/util'
 
-import { encodeAscii } from '../../bytes.js'
+import { TEXT_ENCODER } from '../../bytes.js'
 import {
     buildBindingRequestWithSubs,
     buildSenderSubscriptions,
@@ -47,8 +47,8 @@ test('parseStunResponse reads transaction id as hex', () => {
 })
 
 test('buildBindingRequestWithSubs accepts Uint8Array username and key', () => {
-    const username = encodeAscii('remote:local')
-    const key = encodeAscii('ice-password')
+    const username = TEXT_ENCODER.encode('remote:local')
+    const key = TEXT_ENCODER.encode('ice-password')
     const subs = buildSenderSubscriptions(0xdeadbeef)
     const packet = buildBindingRequestWithSubs(username, key, subs, true, true)
     assert.ok(packet.length >= 20)

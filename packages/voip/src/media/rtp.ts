@@ -10,7 +10,6 @@ export class RtpHeader {
     version: number = RTP_VERSION
     padding = false
     extension = false
-    csrcCount = 0
     marker = false
     payloadType: number
     sequenceNumber: number
@@ -19,6 +18,10 @@ export class RtpHeader {
     csrc: number[] = []
     extensionProfile = 0
     extensionData: Uint8Array = EMPTY_BYTES
+
+    get csrcCount(): number {
+        return this.csrc.length
+    }
 
     constructor(payloadType: number, sequenceNumber: number, timestamp: number, ssrc: number) {
         this.payloadType = payloadType
@@ -59,6 +62,9 @@ export class RtpHeader {
         }
 
         if (this.extension) {
+            if (this.extensionData.length % 4 !== 0) {
+                throw new Error('RTP extension data must be 32-bit aligned')
+            }
             writeUInt16BE(buf, this.extensionProfile, offset)
             writeUInt16BE(buf, this.extensionData.length / 4, offset + 2)
             buf.set(this.extensionData, offset + 4)
@@ -102,18 +108,21 @@ export class RtpHeader {
         header.version = version
         header.padding = padding
         header.extension = extension
-        header.csrcCount = csrcCount
         header.marker = marker
         header.csrc = csrc
 
-        if (extension && buf.length >= offset + 4) {
+        if (extension) {
+            if (buf.length < offset + 4) {
+                throw new Error('buffer too small for RTP extension header')
+            }
             header.extensionProfile = readUInt16BE(buf, offset)
             const extWords = readUInt16BE(buf, offset + 2)
             const extBytes = extWords * 4
             offset += 4
-            if (buf.length >= offset + extBytes) {
-                header.extensionData = buf.slice(offset, offset + extBytes)
+            if (buf.length < offset + extBytes) {
+                throw new Error('buffer too small for RTP extension data')
             }
+            header.extensionData = buf.slice(offset, offset + extBytes)
         }
 
         return header
@@ -142,7 +151,14 @@ export class RtpPacket {
 
     static decode(buf: Uint8Array): RtpPacket {
         const header = RtpHeader.decode(buf)
-        const payload = buf.slice(header.size())
+        let end = buf.length
+        if (header.padding) {
+            const padLen = buf[buf.length - 1]
+            if (padLen > 0 && header.size() + padLen <= buf.length) {
+                end = buf.length - padLen
+            }
+        }
+        const payload = buf.slice(header.size(), end)
         return new RtpPacket(header, payload)
     }
 }

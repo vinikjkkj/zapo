@@ -4,7 +4,7 @@ import wrtc from '@roamhq/wrtc'
 import { createNoopLogger, type Logger } from 'zapo-js'
 import { bytesToHex, toBytesView, toError } from 'zapo-js/util'
 
-import { encodeAscii, readUInt32BE, toArrayBuffer } from '../bytes.js'
+import { readUInt32BE, TEXT_ENCODER, toArrayBuffer } from '../bytes.js'
 
 import {
     buildAllocateForRelay,
@@ -95,6 +95,7 @@ export class WaSctpRelay extends EventEmitter {
     }
     private configuring = false
     private globalBuffer: Array<{ ip: string; port: number; data: ArrayBuffer }> = []
+    private globalBufferedBytes = 0
     private keepaliveTimers = new Map<string, NodeJS.Timeout>()
     private audioSsrc = 0
     private subscriptionSsrc = 0
@@ -369,18 +370,10 @@ export class WaSctpRelay extends EventEmitter {
 
             const modifiedSdp = this.modifySdpForRelay(offer.sdp!, relayInfo)
 
-            const chosenUfrag = relayInfo.authToken || relayInfo.token
             this.logger.debug('sdp relay candidate configured', {
                 connectionId,
                 candidate: `${relayInfo.ip}:${relayInfo.port}`,
-                ufragPrefix: chosenUfrag.substring(0, 16),
-                localUfrag: conn.localUfrag,
                 authTokenSize: relayInfo.rawAuthToken?.length ?? 0
-            })
-
-            this.logger.trace('modified sdp', {
-                connectionId,
-                sdp: modifiedSdp
             })
 
             await pc.setRemoteDescription({
@@ -435,7 +428,7 @@ export class WaSctpRelay extends EventEmitter {
         }
 
         const localUfrag = conn.localUfrag
-        const hmacKey = encodeAscii(relayInfo.key)
+        const hmacKey = TEXT_ENCODER.encode(relayInfo.key)
 
         const sendRegistration = (label: string) => {
             if (
@@ -457,7 +450,7 @@ export class WaSctpRelay extends EventEmitter {
             const subs = buildSenderSubscriptions(ssrc)
 
             if (localUfrag) {
-                const username = encodeAscii(`${remoteUfrag}:${localUfrag}`)
+                const username = TEXT_ENCODER.encode(`${remoteUfrag}:${localUfrag}`)
                 const v1 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
                 this.sendToChannel(conn, toArrayBuffer(v1))
                 this.logger.trace('stun v1 auth token ufrag sent', {
@@ -469,7 +462,7 @@ export class WaSctpRelay extends EventEmitter {
             }
 
             if (relayInfo.token && relayInfo.token !== remoteUfrag && localUfrag) {
-                const username = encodeAscii(`${relayInfo.token}:${localUfrag}`)
+                const username = TEXT_ENCODER.encode(`${relayInfo.token}:${localUfrag}`)
                 const v2 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
                 this.sendToChannel(conn, toArrayBuffer(v2))
                 this.logger.trace('stun v2 token ufrag sent', {
@@ -857,12 +850,21 @@ export class WaSctpRelay extends EventEmitter {
                 this.sendToRelay(item.ip, item.port, item.data)
             }
             this.globalBuffer = []
+            this.globalBufferedBytes = 0
         }
     }
 
     sendToRelay(ip: string, port: number, data: ArrayBuffer): boolean {
         if (this.configuring) {
+            while (
+                this.globalBufferedBytes + data.byteLength > CONFIG.MAX_BUFFER_SIZE &&
+                this.globalBuffer.length > 0
+            ) {
+                const oldest = this.globalBuffer.shift()
+                if (oldest) this.globalBufferedBytes -= oldest.data.byteLength
+            }
             this.globalBuffer.push({ ip, port, data })
+            this.globalBufferedBytes += data.byteLength
             return true
         }
 

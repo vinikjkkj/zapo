@@ -1,3 +1,5 @@
+import { uint8TimingSafeEqual } from 'zapo-js/util'
+
 import { writeBigUInt64BE, writeUInt32BE } from '../bytes.js'
 import { RtpHeader, RtpPacket } from '../media/rtp.js'
 import { SRTP_AUTH_TAG_LEN, SRTP_LABEL, type SrtpKeyingMaterial } from '../types.js'
@@ -68,8 +70,22 @@ export class SrtpContext {
             )
         }
 
-        this.updateRoc(header.sequenceNumber)
-        const index = this.packetIndex(header.sequenceNumber)
+        const seq = header.sequenceNumber
+        const estimatedRoc =
+            this.initialized && seq - this.lastSeq < -32768 ? (this.roc + 1) >>> 0 : this.roc
+
+        if (this.authTagLen > 0) {
+            const authStart = headerSize + payloadLen
+            const authData = data.subarray(0, authStart)
+            const expected = this.computeAuthTag(authData, estimatedRoc, this.authTagLen)
+            const received = data.subarray(authStart, authStart + this.authTagLen)
+            if (!uint8TimingSafeEqual(expected, received)) {
+                throw new SrtpError('auth_failed', 'SRTP auth tag verification failed')
+            }
+        }
+
+        this.updateRoc(seq)
+        const index = this.packetIndex(seq)
 
         const iv = this.generateIv(header.ssrc, index)
         const decrypted = aesCtr128(

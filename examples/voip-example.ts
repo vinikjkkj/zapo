@@ -20,7 +20,7 @@
  *   --max-calls <n>        maxConcurrentCalls (default 1)
  *   --no-accept            do NOT auto-accept incoming calls
  *   --hangup-after-audio   hang up once the played audio finishes sending
- *   --session <id>         session id (default default_2)
+ *   --session <id>         session id (default voip)
  *   --auth <path>          auth sqlite path (default ./.auth/voip.sqlite)
  *   --reset-auth           wipe stored auth and re-pair
  *   --help                 show this help
@@ -62,7 +62,7 @@ const USAGE = `usage: npx tsx examples/voip-example.ts [flags]
   --max-calls <n>        maxConcurrentCalls (default 1)
   --no-accept            do NOT auto-accept incoming calls
   --hangup-after-audio   hang up once the played audio finishes
-  --session <id>         session id (default default_2)
+  --session <id>         session id (default voip)
   --auth <path>          auth sqlite path (default ./.auth/voip.sqlite)
   --reset-auth           wipe stored auth and re-pair
   --help                 show this help`
@@ -138,6 +138,9 @@ function toJid(input: string): string {
         return input
     }
     const digits = input.replace(/[^0-9]/g, '')
+    if (!digits) {
+        throw new Error(`invalid --to "${input}": expected a phone number or JID`)
+    }
     return `${digits}@s.whatsapp.net`
 }
 
@@ -254,7 +257,7 @@ async function main(): Promise<void> {
             connectTimeoutMs: 15_000,
             deviceBrowser: 'Chrome',
             deviceOsDisplayName: 'Windows',
-            plugins: [voipPlugin({ maxConcurrentCalls: cli.maxCalls, logLevel: 'info' })]
+            plugins: [voipPlugin({ maxConcurrentCalls: cli.maxCalls })]
         },
         logger
     )
@@ -292,6 +295,18 @@ async function main(): Promise<void> {
         console.log(`[paired] meJid=${credentials.meJid ?? 'unknown'}`)
     })
 
+    const autoAcceptAttempted = new Set<string>()
+    const tryAutoAccept = async (callId: string, canAccept: boolean): Promise<void> => {
+        if (!cli.autoAccept || !canAccept || autoAcceptAttempted.has(callId)) return
+        autoAcceptAttempted.add(callId)
+        try {
+            await client.voip.acceptCall(callId)
+            console.log(`[voip] accepted ${callId}`)
+        } catch (error) {
+            console.log('[voip] acceptCall failed:', error instanceof Error ? error.message : error)
+        }
+    }
+
     client.on('voip_call_incoming', async (call) => {
         console.log(
             `[voip] incoming call ${call.callId} from ${call.peerJid}` +
@@ -305,22 +320,18 @@ async function main(): Promise<void> {
             console.log('[voip] cannot accept yet (slot busy); it will wait for a free slot')
             return
         }
-        try {
-            await client.voip.acceptCall(call.callId)
-            console.log(`[voip] accepted ${call.callId}`)
-        } catch (error) {
-            console.log('[voip] acceptCall failed:', error instanceof Error ? error.message : error)
-        }
+        await tryAutoAccept(call.callId, call.canAccept)
     })
 
     client.on('voip_call_state', async (call) => {
         console.log(`[voip] call ${call.callId} -> ${call.stateData.state}`)
+        await tryAutoAccept(call.callId, call.canAccept)
         if (call.stateData.state === CallState.Active) {
             await maybePlayAudio(call.callId)
         }
     })
 
-    client.on('voip_call_inbound_audio', (call, pcm) => {
+    client.on('voip_call_inbound_audio', ({ call, pcm }) => {
         recordInbound(call.callId, pcm)
     })
 

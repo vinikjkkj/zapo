@@ -53,7 +53,15 @@ test('routeCallStanza acks with class=call and dispatches the offer', async () =
 })
 
 test('routeCallStanza routes each call tag to its handler', async () => {
-    for (const tag of ['preaccept', 'accept', 'transport', 'terminate']) {
+    for (const tag of [
+        'preaccept',
+        'accept',
+        'transport',
+        'terminate',
+        'relaylatency',
+        'mute_v2',
+        'relay_election'
+    ]) {
         const { dispatched, deps, manager } = mocks()
         await routeCallStanza(manager, deps, callNode(tag))
         assert.deepEqual(dispatched, [tag])
@@ -72,6 +80,21 @@ test('routeCallStanza ignores a call node with no inner child', async () => {
     assert.deepEqual(dispatched, [])
 })
 
+test('routeCallStanza acks but skips routing when the peer jid is malformed', async () => {
+    const { sent, dispatched, deps, manager } = mocks()
+    const node: BinaryNode = {
+        tag: 'call',
+        attrs: { from: '5:x@lid', id: 'STANZA2' },
+        content: [{ tag: 'offer', attrs: {}, content: undefined }]
+    }
+    const tag = await routeCallStanza(manager, deps, node)
+
+    assert.equal(tag, 'offer')
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].attrs.class, 'call')
+    assert.deepEqual(dispatched, [])
+})
+
 test('routeCallReceipt acks receipt-class call tags and skips others', async () => {
     const receipt = (innerTag: string): BinaryNode => ({
         tag: 'receipt',
@@ -84,6 +107,8 @@ test('routeCallReceipt acks receipt-class call tags and skips others', async () 
     assert.equal(handled.sent.length, 1)
     assert.equal(handled.sent[0].attrs.class, 'receipt')
     assert.equal(handled.sent[0].attrs.type, 'delivery')
+    assert.equal(handled.sent[0].attrs.to, '5511:0@lid')
+    assert.equal(handled.sent[0].attrs.id, 'R1')
 
     const skipped = mocks()
     assert.equal(await routeCallReceipt(skipped.deps, receipt('message')), false)

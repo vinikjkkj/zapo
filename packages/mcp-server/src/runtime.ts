@@ -47,30 +47,53 @@ class BoundLogger implements Logger {
     public readonly level: LogLevel
     private readonly parent: Logger
     private readonly bindings: Readonly<Record<string, unknown>>
+    private readonly minPriority: number
 
-    public constructor(parent: Logger, bindings: Readonly<Record<string, unknown>>) {
+    public constructor(
+        parent: Logger,
+        bindings: Readonly<Record<string, unknown>>,
+        level?: LogLevel
+    ) {
         this.parent = parent
-        this.level = parent.level
+        this.level = level ?? parent.level
         this.bindings = bindings
+        this.minPriority = LOG_LEVEL_PRIORITY[this.level]
     }
 
     public trace(message: string, context?: Readonly<Record<string, unknown>>): void {
-        this.parent.trace(message, this.merge(context))
+        if (LOG_LEVEL_PRIORITY.trace >= this.minPriority) {
+            this.parent.trace(message, this.merge(context))
+        }
     }
     public debug(message: string, context?: Readonly<Record<string, unknown>>): void {
-        this.parent.debug(message, this.merge(context))
+        if (LOG_LEVEL_PRIORITY.debug >= this.minPriority) {
+            this.parent.debug(message, this.merge(context))
+        }
     }
     public info(message: string, context?: Readonly<Record<string, unknown>>): void {
-        this.parent.info(message, this.merge(context))
+        if (LOG_LEVEL_PRIORITY.info >= this.minPriority) {
+            this.parent.info(message, this.merge(context))
+        }
     }
     public warn(message: string, context?: Readonly<Record<string, unknown>>): void {
-        this.parent.warn(message, this.merge(context))
+        if (LOG_LEVEL_PRIORITY.warn >= this.minPriority) {
+            this.parent.warn(message, this.merge(context))
+        }
     }
     public error(message: string, context?: Readonly<Record<string, unknown>>): void {
-        this.parent.error(message, this.merge(context))
+        if (LOG_LEVEL_PRIORITY.error >= this.minPriority) {
+            this.parent.error(message, this.merge(context))
+        }
     }
-    public child(bindings: Readonly<Record<string, unknown>>): Logger {
-        return new BoundLogger(this.parent, { ...this.bindings, ...bindings })
+    public child(
+        bindings: Readonly<Record<string, unknown>>,
+        options?: { readonly level?: LogLevel }
+    ): Logger {
+        return new BoundLogger(
+            this.parent,
+            { ...this.bindings, ...bindings },
+            options?.level ?? this.level
+        )
     }
 
     private merge(
@@ -128,8 +151,11 @@ class BufferedTeeLogger implements Logger {
     public error(message: string, context?: Record<string, unknown>): void {
         this.write('error', message, context)
     }
-    public child(bindings: Readonly<Record<string, unknown>>): Logger {
-        return new BoundLogger(this, { ...bindings })
+    public child(
+        bindings: Readonly<Record<string, unknown>>,
+        options?: { readonly level?: LogLevel }
+    ): Logger {
+        return new BoundLogger(this, { ...bindings }, options?.level)
     }
 
     public listLogs(

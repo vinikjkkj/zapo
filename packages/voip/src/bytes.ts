@@ -84,11 +84,3 @@ export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
     }
     return bytes.slice().buffer
 }
-
-export function encodeAscii(text: string): Uint8Array {
-    return TEXT_ENCODER.encode(text)
-}
-
-export function decodeUtf8(bytes: Uint8Array): string {
-    return TEXT_DECODER.decode(bytes)
-}
