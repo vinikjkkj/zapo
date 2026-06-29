@@ -295,6 +295,21 @@ async function main(): Promise<void> {
         console.log(`[paired] meJid=${credentials.meJid ?? 'unknown'}`)
     })
 
+    client.on('message', async (event) => {
+        if (event.key.fromMe) return
+        const text = event.message?.conversation ?? event.message?.extendedTextMessage?.text ?? ''
+        if (text.trim().toLowerCase() !== 'ligar') return
+        const target = event.key.participant ?? event.key.remoteJid
+        if (!target) return
+        console.log(`[voip] "ligar" from ${target}; placing a call`)
+        try {
+            const callId = await client.voip.startCall({ peerJid: target })
+            console.log(`[voip] calling ${target} (${callId})`)
+        } catch (error) {
+            console.log('[voip] startCall failed:', error instanceof Error ? error.message : error)
+        }
+    })
+
     const autoAcceptAttempted = new Set<string>()
     const tryAutoAccept = async (callId: string, canAccept: boolean): Promise<void> => {
         if (!cli.autoAccept || !canAccept || autoAcceptAttempted.has(callId)) return
@@ -303,6 +318,7 @@ async function main(): Promise<void> {
             await client.voip.acceptCall(callId)
             console.log(`[voip] accepted ${callId}`)
         } catch (error) {
+            autoAcceptAttempted.delete(callId)
             console.log('[voip] acceptCall failed:', error instanceof Error ? error.message : error)
         }
     }
@@ -347,6 +363,7 @@ async function main(): Promise<void> {
         const duration = call.stateData.durationSecs ?? 0
         console.log(`[voip] call ${call.callId} ended (reason=${reason}, duration=${duration}s)`)
         played.delete(call.callId)
+        autoAcceptAttempted.delete(call.callId)
         await flushRecording(call.callId, cli.out).catch((error) =>
             console.log('[voip] failed to save recording:', error)
         )

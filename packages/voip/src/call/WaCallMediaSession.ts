@@ -138,11 +138,11 @@ export class WaCallMediaSession implements AudioSender {
     }
 
     async initMedia(selfLid: string, peerJid: string): Promise<void> {
-        const ssrc = generateSecureSsrc(this.info.callId, selfLid)
+        const ssrc = generateSecureSsrc(this.info.callId, this.ensureDeviceJid(selfLid))
         this.rtpSession = RtpSession.whatsappOpus(ssrc)
         this.selfSsrc = ssrc
 
-        const peerSsrc = generateSecureSsrc(this.info.callId, peerJid)
+        const peerSsrc = generateSecureSsrc(this.info.callId, this.ensureDeviceJid(peerJid))
         this.peerSsrcs = [peerSsrc]
 
         this.logger.debug('call media initialized', {
@@ -356,21 +356,27 @@ export class WaCallMediaSession implements AudioSender {
                     const ourCallKey = this.info.encryptionKey
                     const keysMatch = ourCallKey ? uint8Equal(ourCallKey, peerCallKey) : false
                     if (!keysMatch && ourCallKey) {
-                        const meLid2 = this.deps.authClient.getCurrentCredentials()?.meLid
-                        const meId2 = this.deps.authClient.getCurrentCredentials()?.meJid
-                        const ourCredJid2 = meLid2 || meId2 || ''
-                        const ourBase2 = ourCredJid2 ? toUserJid(ourCredJid2) : ''
+                        const meLid = this.deps.authClient.getCurrentCredentials()?.meLid
+                        const meJid = this.deps.authClient.getCurrentCredentials()?.meJid
+                        const ourCredJid = meLid || meJid || ''
+                        const ourBase = ourCredJid ? toUserJid(ourCredJid) : ''
                         const participants = this.info.relayData?.participantJids || []
-                        const ourDeviceJid2 =
+                        const ourDeviceJid =
                             participants.find((jid) => {
                                 const jBase = toUserJid(jid)
-                                return jBase === ourBase2 && /:\d+@/.test(jid)
-                            }) || ourCredJid2
+                                return jBase === ourBase && /:\d+@/.test(jid)
+                            }) || ourCredJid
 
-                        if (ourDeviceJid2 && peerJid) {
+                        if (ourDeviceJid && peerJid) {
                             try {
-                                const sendKeying = derivePerJidSrtpKey(ourCallKey, ourDeviceJid2)
-                                const recvKeying = derivePerJidSrtpKey(peerCallKey, peerJid)
+                                const sendKeying = derivePerJidSrtpKey(
+                                    ourCallKey,
+                                    this.ensureDeviceJid(ourDeviceJid)
+                                )
+                                const recvKeying = derivePerJidSrtpKey(
+                                    peerCallKey,
+                                    this.ensureDeviceJid(peerJid)
+                                )
                                 this.srtpSession = new SrtpSession(
                                     sendKeying,
                                     recvKeying,

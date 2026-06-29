@@ -17,6 +17,7 @@ const STUN_FINGERPRINT_XOR = 0x5354554e
 const STUN_BINDING_REQUEST = 0x0001
 const STUN_ALLOCATE_REQUEST = 0x0003
 const WHATSAPP_PING = 0x0801
+const WHATSAPP_PONG = 0x0802
 
 const ATTR_USERNAME = 0x0006
 const ATTR_MESSAGE_INTEGRITY = 0x0008
@@ -356,9 +357,11 @@ export function buildWhatsAppPing(): Uint8Array {
 }
 
 export function isStunPacket(data: Uint8Array): boolean {
-    if (data.length < 8) return false
+    if (data.length < 2) return false
     if ((data[0] & 0xc0) !== 0) return false
-    return readUInt32BE(data, 4) === STUN_MAGIC_COOKIE
+    const type = readUInt16BE(data, 0)
+    if (type === WHATSAPP_PING || type === WHATSAPP_PONG) return true
+    return data.length >= 8 && readUInt32BE(data, 4) === STUN_MAGIC_COOKIE
 }
 
 export function isRtpPacket(data: Uint8Array): boolean {

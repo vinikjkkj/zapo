@@ -943,6 +943,7 @@ export class WaSctpRelay extends EventEmitter {
         this.connections.clear()
         this.relayMap.clear()
         this.globalBuffer = []
+        this.globalBufferedBytes = 0
         this.configuring = false
         this.stats.connected = 0
         this.audioSsrc = 0

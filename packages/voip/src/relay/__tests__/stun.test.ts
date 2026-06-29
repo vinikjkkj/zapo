@@ -39,6 +39,18 @@ test('isRtpPacket and isStunPacket classify first-byte families', () => {
     assert.equal(isStunPacket(rtp), false)
 })
 
+test('isStunPacket accepts cookieless wa-ping/pong and rejects DTLS', () => {
+    const pong = new Uint8Array(20)
+    pong[0] = 0x08
+    pong[1] = 0x02
+    assert.equal(isStunPacket(pong), true)
+
+    const dtls = new Uint8Array(13)
+    dtls[0] = 0x16
+    dtls[1] = 0xfe
+    assert.equal(isStunPacket(dtls), false)
+})
+
 test('parseStunResponse reads transaction id as hex', () => {
     const ping = buildWhatsAppPing()
     const info = parseStunResponse(ping)

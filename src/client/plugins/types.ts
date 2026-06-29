@@ -80,7 +80,7 @@ type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) exten
 /** `{ [exposeAs]: setup-return }` for one plugin definition; `{}` (no-op) for behavior plugins. */
 type ExposedOf<P> = P extends {
     readonly exposeAs: infer K extends string
-    readonly setup: (...args: never) => infer T
+    readonly setup: (...args: never[]) => infer T
 }
     ? { readonly [Q in K]: T }
     : {}

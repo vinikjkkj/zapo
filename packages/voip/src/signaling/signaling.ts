@@ -122,7 +122,7 @@ export async function decryptCallKey(
             const message = proto.Message.decode(unpadPkcs7(decrypted))
             const callKey = message.call?.callKey
             if (callKey && callKey.length === 32) {
-                return new Uint8Array(callKey)
+                return callKey
             }
         } catch (err) {
             log.trace('call key decrypt candidate failed', { message: toError(err).message })

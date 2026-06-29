@@ -724,14 +724,14 @@ export interface WaClient<TPluginEvents = {}> extends WaClientImpl {
     emit<K extends keyof (WaClientEventMap & TPluginEvents)>(
         event: K,
         payload: Parameters<
-            Extract<(WaClientEventMap & TPluginEvents)[K], (...args: never) => unknown>
+            Extract<(WaClientEventMap & TPluginEvents)[K], (...args: never[]) => unknown>
         >[0]
     ): boolean
 }
 
 /**
  * Constructor surface for {@link WaClient}. `new WaClient({ plugins })` infers the
- * exposed plugin getters (e.g. `client.voip`) from the plugin values passed —
+ * exposed plugin getters (e.g. `client.voip`) from the plugin values passed:
  * no global type augmentation, so a getter exists only when its plugin is installed.
  */
 export interface WaClientConstructor {
@@ -752,7 +752,7 @@ export interface WaClientConstructor {
  * to shut down cleanly or {@link logout} to remove the companion device.
  *
  * Pass `plugins` to expose plugin getters and events on the returned client,
- * typed from the values you pass — e.g. `plugins: [voipPlugin()]` adds
+ * typed from the values you pass: e.g. `plugins: [voipPlugin()]` adds
  * `client.voip` and the `voip_*` events, and only then. See
  * {@link WaClientConstructor}.
  *
