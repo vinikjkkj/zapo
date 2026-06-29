@@ -55,3 +55,55 @@ test('SrtpSession unprotect rejects a tampered packet', async () => {
 
     assert.throws(() => session.unprotect(tampered), /auth tag verification failed/)
 })
+
+test('SrtpSession round-trips across the sequence-number rollover', () => {
+    const callKey = new Uint8Array(32)
+    callKey.fill(0x33)
+    const keying = derivePerJidSrtpKey(callKey, 'self:0@lid')
+    const session = new SrtpSession(keying, keying, 4, 4)
+    const payload = new Uint8Array([0xaa, 0xbb, 0xcc])
+
+    for (const seq of [65533, 65534, 65535, 0, 1, 2]) {
+        const header = new RtpHeader(120, seq, (seq * 960) >>> 0, 0x0a0b0c0d)
+        const out = session.unprotect(session.protect(new RtpPacket(header, payload)))
+        assert.equal(out.header.sequenceNumber, seq)
+        assert.deepEqual(out.payload, payload)
+    }
+})
+
+test('SrtpSession authenticates a reordered packet delayed across rollover', () => {
+    const callKey = new Uint8Array(32)
+    callKey.fill(0x44)
+    const keying = derivePerJidSrtpKey(callKey, 'self:0@lid')
+    const session = new SrtpSession(keying, keying, 4, 4)
+    const payload = new Uint8Array([0x10, 0x20, 0x30, 0x40])
+    const mk = (seq: number): Uint8Array => {
+        const header = new RtpHeader(120, seq, (seq * 960) >>> 0, 0x0b0c0d0e)
+        return session.protect(new RtpPacket(header, payload))
+    }
+
+    const delayed = mk(65532)
+    const a = mk(65535)
+    const b = mk(0)
+    const c = mk(1)
+
+    session.unprotect(a)
+    session.unprotect(b)
+    session.unprotect(c)
+    const out = session.unprotect(delayed)
+    assert.equal(out.header.sequenceNumber, 65532)
+    assert.deepEqual(out.payload, payload)
+})
+
+test('SrtpSession rejects a replayed packet', () => {
+    const callKey = new Uint8Array(32)
+    callKey.fill(0x55)
+    const keying = derivePerJidSrtpKey(callKey, 'self:0@lid')
+    const session = new SrtpSession(keying, keying, 4, 4)
+    const payload = new Uint8Array([0x09, 0x08, 0x07])
+    const header = new RtpHeader(120, 100, 96000, 0x0c0d0e0f)
+    const packet = session.protect(new RtpPacket(header, payload))
+
+    session.unprotect(packet)
+    assert.throws(() => session.unprotect(packet), /replay/)
+})

@@ -20,11 +20,21 @@ export {
     toBytesView
 }
 
+function ensureBounds(buf: Uint8Array, offset: number, size: number): void {
+    if (offset < 0 || offset + size > buf.length) {
+        throw new RangeError(
+            `byte access out of range: offset ${offset}, size ${size}, length ${buf.length}`
+        )
+    }
+}
+
 export function readUInt16BE(buf: Uint8Array, offset: number): number {
+    ensureBounds(buf, offset, 2)
     return (buf[offset] << 8) | buf[offset + 1]
 }
 
 export function readUInt32BE(buf: Uint8Array, offset: number): number {
+    ensureBounds(buf, offset, 4)
     return (
         ((buf[offset] << 24) |
             (buf[offset + 1] << 16) |
@@ -35,6 +45,7 @@ export function readUInt32BE(buf: Uint8Array, offset: number): number {
 }
 
 export function readUInt32LE(buf: Uint8Array, offset: number): number {
+    ensureBounds(buf, offset, 4)
     return (
         (buf[offset] |
             (buf[offset + 1] << 8) |
@@ -51,11 +62,13 @@ export function readBigUInt64BE(buf: Uint8Array, offset: number): bigint {
 }
 
 export function writeUInt16BE(buf: Uint8Array, value: number, offset: number): void {
+    ensureBounds(buf, offset, 2)
     buf[offset] = (value >> 8) & 0xff
     buf[offset + 1] = value & 0xff
 }
 
 export function writeUInt32BE(buf: Uint8Array, value: number, offset: number): void {
+    ensureBounds(buf, offset, 4)
     buf[offset] = (value >> 24) & 0xff
     buf[offset + 1] = (value >> 16) & 0xff
     buf[offset + 2] = (value >> 8) & 0xff
@@ -63,6 +76,7 @@ export function writeUInt32BE(buf: Uint8Array, value: number, offset: number): v
 }
 
 export function writeUInt32LE(buf: Uint8Array, value: number, offset: number): void {
+    ensureBounds(buf, offset, 4)
     buf[offset] = value & 0xff
     buf[offset + 1] = (value >> 8) & 0xff
     buf[offset + 2] = (value >> 16) & 0xff

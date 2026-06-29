@@ -45,30 +45,62 @@ export class WaVoipCoordinator {
         this.wireClientEvents(ctx)
     }
 
+    /**
+     * Place an outgoing call to `options.peerJid` (optionally video, with a
+     * preloaded `audioFile`). Resolves with the new call id once the offer is
+     * sent; progress then arrives via `voip_call_state`. Rejects when at the
+     * concurrent-call limit or if the offer fails to send.
+     */
     async startCall(options: CallOfferOptions): Promise<string> {
         return this.manager.startCall(options)
     }
 
+    /**
+     * Accept a ringing incoming call. Throws if `callId` is unknown or not in
+     * an acceptable state.
+     */
     async acceptCall(callId: string): Promise<void> {
         return this.manager.acceptCall(callId)
     }
 
+    /**
+     * Reject a ringing incoming call, optionally with an {@link EndCallReason}
+     * (defaults to `Declined`). Sends the reject stanza, then tears the call
+     * down.
+     */
     async rejectCall(callId: string, reason?: EndCallReason): Promise<void> {
         return this.manager.rejectCall(callId, reason)
     }
 
+    /**
+     * End an active or connecting call, optionally with an {@link EndCallReason}
+     * (defaults to `UserEnded`). Sends the terminate stanza, then tears the
+     * call down. No-op if the call is unknown or already ended.
+     */
     async endCall(callId: string, reason?: EndCallReason): Promise<void> {
         return this.manager.endCall(callId, reason)
     }
 
+    /**
+     * Preload an audio file (decoded via ffmpeg) as the outbound audio for
+     * `callId`, played once the call is active. For an unbounded or live source
+     * use {@link setExternalAudioMode} + {@link feedLiveAudio} instead. Needs
+     * ffmpeg on PATH; throws if the file is missing or ffmpeg is unavailable.
+     */
     async loadAudio(callId: string, audioPath: string): Promise<void> {
         return this.manager.loadAudio(callId, audioPath)
     }
 
+    /** Mute or unmute the local outbound audio for `callId`. */
     setMute(callId: string, muted: boolean): void {
         this.manager.setMute(callId, muted)
     }
 
+    /**
+     * Switch `callId` to external (live) audio mode. While enabled, outbound
+     * audio comes from {@link feedLiveAudio} through a bounded jitter buffer
+     * instead of a preloaded file. Disable to return to preloaded playback.
+     */
     setExternalAudioMode(callId: string, enabled: boolean): void {
         this.manager.setExternalAudioMode(callId, enabled)
     }
@@ -106,29 +138,43 @@ export class WaVoipCoordinator {
         return this.manager.getFeedWatermarksMs()
     }
 
+    /** Current {@link CallInfo} snapshot for `callId`, or `null` if unknown. */
     getCall(callId: string): CallInfo | null {
         return this.manager.getCall(callId)
     }
 
+    /** Snapshot of every tracked call (ringing, connecting, or active). */
     getCalls(): readonly CallInfo[] {
         return this.manager.getCalls()
     }
 
+    /**
+     * Subscribe directly to a low-level {@link CallManagerEvents} event. Most
+     * consumers should use the client-level `client.on('voip_*')` events
+     * instead. Returns `this` for chaining.
+     */
     on<K extends keyof CallManagerEvents>(event: K, listener: CallManagerEvents[K]): this {
         this.manager.on(event, listener)
         return this
     }
 
+    /** Remove a listener registered via {@link on}. Returns `this`. */
     off<K extends keyof CallManagerEvents>(event: K, listener: CallManagerEvents[K]): this {
         this.manager.off(event, listener)
         return this
     }
 
+    /** Like {@link on}, but the listener fires at most once. Returns `this`. */
     once<K extends keyof CallManagerEvents>(event: K, listener: CallManagerEvents[K]): this {
         this.manager.once(event, listener)
         return this
     }
 
+    /**
+     * Tear down the coordinator: unregister the incoming `<call>` / ack /
+     * receipt handlers and destroy all active calls. Invoked by the plugin
+     * system on client disconnect; not normally called directly.
+     */
     dispose(): void {
         for (const unregister of this.unregisterHandlers.splice(0)) {
             unregister()

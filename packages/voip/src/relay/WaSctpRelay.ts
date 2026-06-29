@@ -1,5 +1,6 @@
 import dgram from 'node:dgram'
 import { EventEmitter } from 'node:events'
+import { isIPv6 } from 'node:net'
 
 import wrtc from '@roamhq/wrtc'
 import { createNoopLogger, type Logger } from 'zapo-js'
@@ -227,10 +228,7 @@ export class WaSctpRelay extends EventEmitter {
                     connectionId,
                     state: pc.iceConnectionState
                 })
-                if (
-                    pc.iceConnectionState === 'failed' ||
-                    pc.iceConnectionState === 'disconnected'
-                ) {
+                if (pc.iceConnectionState === 'failed') {
                     this.failConnection(conn, 'ice_connection_failed')
                 }
                 if (
@@ -428,7 +426,7 @@ export class WaSctpRelay extends EventEmitter {
     private setupUdpRelay(conn: Connection, relayInfo: RelayInfo): void {
         const connectionId = conn.id
         try {
-            const socket = dgram.createSocket('udp4')
+            const socket = dgram.createSocket(isIPv6(relayInfo.ip) ? 'udp6' : 'udp4')
             conn.udpSocket = socket
 
             socket.on('message', (msg: Buffer) => {

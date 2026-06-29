@@ -6,6 +6,9 @@ import { SRTP_AUTH_TAG_LEN, SRTP_LABEL, type SrtpKeyingMaterial } from '../types
 
 import { aesCtr128, hmacSha1 } from './primitives.js'
 
+const SRTP_REPLAY_WINDOW = 64n
+const SRTP_INDEX_MASK = (1n << 64n) - 1n
+
 export class SrtpContext {
     private sessionKey: Uint8Array
     private sessionSalt: Uint8Array
@@ -13,6 +16,8 @@ export class SrtpContext {
     private roc = 0
     private lastSeq = 0
     private initialized = false
+    private highestIndex = 0n
+    private replayMask = 0n
     private authTagLen: number
 
     private readonly ivBuffer: Uint8Array = new Uint8Array(16)
@@ -71,8 +76,12 @@ export class SrtpContext {
         }
 
         const seq = header.sequenceNumber
-        const estimatedRoc =
-            this.initialized && seq - this.lastSeq < -32768 ? (this.roc + 1) >>> 0 : this.roc
+        const estimatedRoc = this.estimateRoc(seq)
+        const index = (BigInt(estimatedRoc) << 16n) | BigInt(seq)
+
+        if (this.isReplayed(index)) {
+            throw new SrtpError('replay', `SRTP replay detected: index ${index}`)
+        }
 
         if (this.authTagLen > 0) {
             const authStart = headerSize + payloadLen
@@ -84,15 +93,14 @@ export class SrtpContext {
             }
         }
 
-        this.updateRoc(seq)
-        const index = this.packetIndex(seq)
-
         const iv = this.generateIv(header.ssrc, index)
         const decrypted = aesCtr128(
             this.sessionKey,
             iv,
             data.subarray(headerSize, headerSize + payloadLen)
         )
+
+        this.advanceReplay(index, estimatedRoc, seq)
 
         return new RtpPacket(header, decrypted)
     }
@@ -111,6 +119,47 @@ export class SrtpContext {
         }
 
         this.lastSeq = seq
+    }
+
+    private estimateRoc(seq: number): number {
+        if (!this.initialized) {
+            return this.roc
+        }
+        if (this.lastSeq < 32768) {
+            return seq - this.lastSeq > 32768 ? (this.roc - 1) >>> 0 : this.roc
+        }
+        return this.lastSeq - seq > 32768 ? (this.roc + 1) >>> 0 : this.roc
+    }
+
+    private isReplayed(index: bigint): boolean {
+        if (!this.initialized) {
+            return false
+        }
+        if (index > this.highestIndex) {
+            return false
+        }
+        const offset = this.highestIndex - index
+        if (offset >= SRTP_REPLAY_WINDOW) {
+            return true
+        }
+        return (this.replayMask & (1n << offset)) !== 0n
+    }
+
+    private advanceReplay(index: bigint, estimatedRoc: number, seq: number): void {
+        if (this.initialized && index <= this.highestIndex) {
+            const offset = this.highestIndex - index
+            if (offset < SRTP_REPLAY_WINDOW) {
+                this.replayMask |= 1n << offset
+            }
+            return
+        }
+        const shift = this.initialized ? index - this.highestIndex : SRTP_REPLAY_WINDOW
+        this.replayMask =
+            shift >= SRTP_REPLAY_WINDOW ? 1n : ((this.replayMask << shift) | 1n) & SRTP_INDEX_MASK
+        this.highestIndex = index
+        this.roc = estimatedRoc
+        this.lastSeq = seq
+        this.initialized = true
     }
 
     private packetIndex(seq: number): bigint {
@@ -187,7 +236,7 @@ function deriveKey(
 }
 
 export class SrtpError extends Error {
-    type: 'packet_too_short' | 'auth_failed' | 'encryption' | 'decryption'
+    type: 'packet_too_short' | 'auth_failed' | 'replay' | 'encryption' | 'decryption'
 
     constructor(type: SrtpError['type'], message: string) {
         super(message)

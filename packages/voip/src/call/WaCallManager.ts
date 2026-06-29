@@ -119,7 +119,7 @@ export class WaCallManager extends EventEmitter {
         reason: EndCallReason = EndCallReason.Declined
     ): Promise<void> {
         const session = this.getSessionOrThrow(callId)
-        session.rejectCall(reason)
+        await session.rejectCall(reason)
         this.calls.delete(callId)
         await this.maybeUnblockWaitingCalls()
     }
@@ -128,7 +128,7 @@ export class WaCallManager extends EventEmitter {
         const session = this.calls.get(callId)
         if (!session || session.info.isEnded) return
 
-        session.endCall(reason)
+        await session.endCall(reason)
         this.calls.delete(callId)
         await this.maybeUnblockWaitingCalls()
     }
@@ -225,11 +225,21 @@ export class WaCallManager extends EventEmitter {
         const session = this.createSession(info, { acceptBlocked: atCapacity })
 
         if (!atCapacity) {
-            const creds = this.deps.authClient.getCurrentCredentials()
-            const selfLid = creds?.meLid || creds?.meJid || ''
-            await session.initMedia(selfLid, peerJid)
-            await session.sendIncomingPreaccept(peerJid)
-            await session.sendIncomingRelayLatency()
+            try {
+                const creds = this.deps.authClient.getCurrentCredentials()
+                const selfLid = creds?.meLid || creds?.meJid || ''
+                await session.initMedia(selfLid, peerJid)
+                await session.sendIncomingPreaccept(peerJid)
+                await session.sendIncomingRelayLatency()
+            } catch (err) {
+                session.cleanup()
+                this.calls.delete(callId)
+                this.logger.error('incoming call activation failed', {
+                    callId,
+                    message: toError(err).message
+                })
+                return
+            }
         } else {
             this.logger.debug('incoming call waiting, at capacity', {
                 callId,

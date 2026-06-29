@@ -6,7 +6,15 @@ import { toError } from 'zapo-js/util'
 import type { WaCallManager } from '../call/WaCallManager.js'
 import type { WaVoipDeps } from '../types.js'
 
-const RECEIPT_CALL_TAGS = new Set(['offer', 'accept', 'preaccept', 'terminate', 'transport'])
+const RECEIPT_CALL_TAGS = new Set([
+    'offer',
+    'accept',
+    'preaccept',
+    'terminate',
+    'transport',
+    'relaylatency',
+    'mute_v2'
+])
 
 export async function routeCallStanza(
     manager: WaCallManager,

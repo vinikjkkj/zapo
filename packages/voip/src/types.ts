@@ -141,10 +141,15 @@ export interface NodeInfo {
     innerNode: BinaryNode
 }
 
+/** Options for placing an outgoing call via `client.voip.startCall`. */
 export interface CallOfferOptions {
+    /** Bare or device JID to call. */
     peerJid: string
+    /** Place a video call instead of audio-only (default `false`). */
     isVideo?: boolean
+    /** Audio file to preload and play once the call connects (needs ffmpeg). */
     audioFile?: string
+    /** Explicit peer device JIDs to ring; omit to resolve them automatically. */
     peerDevices?: string[]
 }
 

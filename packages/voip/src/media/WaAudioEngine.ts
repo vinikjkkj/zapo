@@ -12,6 +12,9 @@ const FFMPEG_BIN = 'ffmpeg'
 const EXT_FEED_PAUSE_FRACTION = 0.12
 const EXT_FEED_RESUME_FRACTION = 0.06
 
+const MAX_DECODE_BYTES = 128 * 1024 * 1024
+const MAX_STDERR_CHARS = 16 * 1024
+
 const ffmpegProbeCache = new Map<string, boolean>()
 
 function probeBinary(bin: string): Promise<boolean> {
@@ -128,7 +131,7 @@ export class WaAudioEngine {
      * its cap.
      */
     feedExternalAudio(data: Float32Array): number {
-        if (!this.audioBuffer) return 0
+        if (!this.externalMode || !this.audioBuffer) return 0
 
         let incoming = data
         if (incoming.length > this.extMaxBuffer) {
@@ -245,15 +248,30 @@ export class WaAudioEngine {
             )
 
             const chunks: Uint8Array[] = []
+            let decodedBytes = 0
             let stderr = ''
-            proc.stdout?.on('data', (chunk: Uint8Array) => chunks.push(toBytesView(chunk)))
+            let aborted = false
+            proc.stdout?.on('data', (chunk: Uint8Array) => {
+                if (aborted) return
+                decodedBytes += chunk.length
+                if (decodedBytes > MAX_DECODE_BYTES) {
+                    aborted = true
+                    proc.kill('SIGKILL')
+                    reject(
+                        new Error(`ffmpeg output exceeded ${MAX_DECODE_BYTES} bytes: ${inputPath}`)
+                    )
+                    return
+                }
+                chunks.push(toBytesView(chunk))
+            })
             proc.stderr?.on('data', (chunk: Uint8Array) => {
-                stderr += TEXT_DECODER.decode(chunk)
+                stderr = (stderr + TEXT_DECODER.decode(chunk)).slice(0, MAX_STDERR_CHARS)
             })
             proc.on('error', (err) =>
                 reject(new Error(`ffmpeg not available (install ffmpeg on PATH): ${err.message}`))
             )
             proc.on('close', (code) => {
+                if (aborted) return
                 if (code !== 0) {
                     reject(new Error(`ffmpeg exited with code ${code}: ${stderr.trim()}`))
                     return

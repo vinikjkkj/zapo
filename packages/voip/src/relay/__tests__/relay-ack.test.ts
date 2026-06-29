@@ -121,7 +121,7 @@ test('parseRelayFromAck deprioritizes FNA relays after non-FNA regardless of rtt
                         tag: 'te2',
                         attrs: {
                             token_id: '0',
-                            relay_name: 'fna',
+                            relay_name: 'alpha',
                             relay_id: '0',
                             c2r_rtt: '18',
                             is_fna: '1'
@@ -130,7 +130,7 @@ test('parseRelayFromAck deprioritizes FNA relays after non-FNA regardless of rtt
                     },
                     {
                         tag: 'te2',
-                        attrs: { token_id: '0', relay_name: 'edge', relay_id: '1', c2r_rtt: '40' },
+                        attrs: { token_id: '0', relay_name: 'zulu', relay_id: '1', c2r_rtt: '40' },
                         content: edgeAddr
                     }
                 ]
@@ -140,8 +140,8 @@ test('parseRelayFromAck deprioritizes FNA relays after non-FNA regardless of rtt
 
     const { relays } = parseRelayFromAck(ack)
     assert.equal(relays.length, 2)
-    assert.equal(relays[0].relayName, 'edge')
+    assert.equal(relays[0].relayName, 'zulu')
     assert.equal(relays[0].isFna, false)
-    assert.equal(relays[1].relayName, 'fna')
+    assert.equal(relays[1].relayName, 'alpha')
     assert.equal(relays[1].isFna, true)
 })

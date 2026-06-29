@@ -138,6 +138,9 @@ function parseArgs(argv: readonly string[]): Cli {
                 throw new Error(`unknown flag: ${key} (try --help)`)
         }
     }
+    if (cli.stream && !cli.audio) {
+        throw new Error('--stream requires --audio <path>')
+    }
     return cli
 }
 
@@ -316,9 +319,11 @@ async function main(): Promise<void> {
             }
         })
         ff.stderr?.on('data', (d: Buffer) => console.log('[ffmpeg]', d.toString().trim()))
-        ff.on('error', (err) =>
+        ff.on('error', (err) => {
+            audioStreams.delete(callId)
+            played.delete(callId)
             console.log('[voip] ffmpeg spawn error (is it on PATH?):', err.message)
-        )
+        })
         ff.on('close', (code) => {
             audioStreams.delete(callId)
             console.log(`[voip] ffmpeg stream ended (code ${code ?? 'null'}) for ${callId}`)
@@ -351,6 +356,7 @@ async function main(): Promise<void> {
                 console.log(`[voip] playing ${cli.audio} into ${callId} (preloaded)`)
             }
         } catch (error) {
+            played.delete(callId)
             console.log(
                 `[voip] audio failed for ${callId} (is ffmpeg installed?):`,
                 error instanceof Error ? error.message : error
@@ -499,6 +505,10 @@ async function main(): Promise<void> {
                 await client.voip.endCall(call.callId).catch(() => undefined)
             }
         }
+        for (const ff of audioStreams.values()) {
+            ff.kill('SIGKILL')
+        }
+        audioStreams.clear()
         // The voip_call_ended handler writes asynchronously; flush whatever is
         // still buffered here so a recording is never lost to process.exit.
         for (const callId of [...recordings.keys()]) {

@@ -1,7 +1,7 @@
 import type { Logger } from 'zapo-js'
 import { toUserJid } from 'zapo-js/protocol'
 import { type BinaryNode, getFirstNodeChild, getNodeChildrenByTag } from 'zapo-js/transport'
-import { toError, uint8Equal } from 'zapo-js/util'
+import { toError, uint8TimingSafeEqual } from 'zapo-js/util'
 
 import { concatBytes, EMPTY_BYTES, readUInt32BE, toArrayBuffer } from '../bytes.js'
 import { derivePerJidSrtpKey } from '../crypto/encryption.js'
@@ -183,7 +183,7 @@ export class WaCallMediaSession implements AudioSender {
             await this.deps.lowLevelCoordinator.sendNode(muteNode)
         } catch (err: unknown) {
             this.logger.error('error sending mute_v2', {
-                message: err instanceof Error ? err.message : String(err)
+                message: toError(err).message
             })
         }
 
@@ -192,7 +192,7 @@ export class WaCallMediaSession implements AudioSender {
             await this.deps.lowLevelCoordinator.sendNode(transportNode)
         } catch (err: unknown) {
             this.logger.error('error sending transport', {
-                message: err instanceof Error ? err.message : String(err)
+                message: toError(err).message
             })
         }
 
@@ -210,7 +210,7 @@ export class WaCallMediaSession implements AudioSender {
                 await this.deps.lowLevelCoordinator.sendNode(acceptStanza)
             } catch (err: unknown) {
                 this.logger.error('accept send error', {
-                    message: err instanceof Error ? err.message : String(err)
+                    message: toError(err).message
                 })
             }
         }
@@ -222,16 +222,20 @@ export class WaCallMediaSession implements AudioSender {
         this.logger.debug('call accepted', { callId })
     }
 
-    rejectCall(reason: EndCallReason = EndCallReason.Declined): void {
+    async rejectCall(reason: EndCallReason = EndCallReason.Declined): Promise<void> {
         this.info.applyTransition({ type: 'local_rejected', reason })
+        this.delegate.emitState(this.info)
 
         const node = buildRejectStanza(this.info.peerJid, this.info.callId, this.info.callCreator)
-        this.deps.lowLevelCoordinator.sendNode(node).catch(() => {})
-        this.delegate.emitState(this.info)
+        try {
+            await this.deps.lowLevelCoordinator.sendNode(node)
+        } catch (err) {
+            this.logger.warn('reject send failed', { message: toError(err).message })
+        }
         this.cleanup()
     }
 
-    endCall(reason: EndCallReason = EndCallReason.UserEnded): void {
+    async endCall(reason: EndCallReason = EndCallReason.UserEnded): Promise<void> {
         if (this.info.isEnded) return
 
         const connectedAt = this.info.stateData.connectedAt
@@ -246,9 +250,13 @@ export class WaCallMediaSession implements AudioSender {
             this.info.callCreator,
             audioDurationMs
         )
-        this.deps.lowLevelCoordinator.sendNode(node).catch(() => {})
         this.delegate.emitEnded(this.info)
         this.delegate.emitState(this.info)
+        try {
+            await this.deps.lowLevelCoordinator.sendNode(node)
+        } catch (err) {
+            this.logger.warn('terminate send failed', { message: toError(err).message })
+        }
         this.cleanup()
     }
 
@@ -297,7 +305,7 @@ export class WaCallMediaSession implements AudioSender {
             await this.deps.lowLevelCoordinator.sendNode(preacceptNode)
         } catch (err: unknown) {
             this.logger.error('error sending preaccept', {
-                message: err instanceof Error ? err.message : String(err)
+                message: toError(err).message
             })
         }
     }
@@ -338,7 +346,7 @@ export class WaCallMediaSession implements AudioSender {
             } catch (err: unknown) {
                 this.logger.error('error sending incoming relaylatency', {
                     relayName: name,
-                    message: err instanceof Error ? err.message : String(err)
+                    message: toError(err).message
                 })
             }
         }
@@ -360,7 +368,9 @@ export class WaCallMediaSession implements AudioSender {
                 )
                 if (peerCallKey) {
                     const ourCallKey = this.info.encryptionKey
-                    const keysMatch = ourCallKey ? uint8Equal(ourCallKey, peerCallKey) : false
+                    const keysMatch = ourCallKey
+                        ? uint8TimingSafeEqual(ourCallKey, peerCallKey)
+                        : false
                     if (!keysMatch && ourCallKey) {
                         const meLid = this.deps.authClient.getCurrentCredentials()?.meLid
                         const meJid = this.deps.authClient.getCurrentCredentials()?.meJid
@@ -395,7 +405,7 @@ export class WaCallMediaSession implements AudioSender {
                                 })
                             } catch (err: unknown) {
                                 this.logger.error('per-jid srtp re-derivation failed', {
-                                    message: err instanceof Error ? err.message : String(err)
+                                    message: toError(err).message
                                 })
                             }
                         }
@@ -403,7 +413,7 @@ export class WaCallMediaSession implements AudioSender {
                 }
             } catch (err: unknown) {
                 this.logger.error('accept decrypt error', {
-                    message: err instanceof Error ? err.message : String(err)
+                    message: toError(err).message
                 })
             }
         }
@@ -470,7 +480,7 @@ export class WaCallMediaSession implements AudioSender {
                 } catch (err: unknown) {
                     this.logger.error('error sending terminate_elsewhere', {
                         deviceJid,
-                        message: err instanceof Error ? err.message : String(err)
+                        message: toError(err).message
                     })
                 }
             }
@@ -488,7 +498,7 @@ export class WaCallMediaSession implements AudioSender {
             await this.deps.lowLevelCoordinator.sendNode(transportNode)
         } catch (err: unknown) {
             this.logger.error('error sending transport', {
-                message: err instanceof Error ? err.message : String(err)
+                message: toError(err).message
             })
         }
 
@@ -497,7 +507,7 @@ export class WaCallMediaSession implements AudioSender {
             await this.deps.lowLevelCoordinator.sendNode(muteNode)
         } catch (err: unknown) {
             this.logger.error('error sending mute_v2', {
-                message: err instanceof Error ? err.message : String(err)
+                message: toError(err).message
             })
         }
 
@@ -514,7 +524,7 @@ export class WaCallMediaSession implements AudioSender {
                 await this.deps.lowLevelCoordinator.sendNode(receiptNode)
             } catch (err: unknown) {
                 this.logger.error('error sending accept receipt', {
-                    message: err instanceof Error ? err.message : String(err)
+                    message: toError(err).message
                 })
             }
         }
@@ -569,7 +579,7 @@ export class WaCallMediaSession implements AudioSender {
                 } catch (err: unknown) {
                     this.logger.error('error sending relaylatency', {
                         relayName: name,
-                        message: err instanceof Error ? err.message : String(err)
+                        message: toError(err).message
                     })
                 }
             }
@@ -587,7 +597,7 @@ export class WaCallMediaSession implements AudioSender {
                     this.initialTransportSent = true
                 } catch (err: unknown) {
                     this.logger.error('error sending initial transport', {
-                        message: err instanceof Error ? err.message : String(err)
+                        message: toError(err).message
                     })
                 }
             }
@@ -687,7 +697,7 @@ export class WaCallMediaSession implements AudioSender {
                     this.outgoingPreacceptSent = true
                 } catch (err: unknown) {
                     this.logger.error('error sending preaccept (caller)', {
-                        message: err instanceof Error ? err.message : String(err)
+                        message: toError(err).message
                     })
                 }
             }
@@ -731,7 +741,7 @@ export class WaCallMediaSession implements AudioSender {
                 await this.deps.lowLevelCoordinator.sendNode(forwardNode)
             } catch (err: unknown) {
                 this.logger.error('error forwarding relaylatency', {
-                    message: err instanceof Error ? err.message : String(err)
+                    message: toError(err).message
                 })
             }
         }
@@ -743,9 +753,11 @@ export class WaCallMediaSession implements AudioSender {
 
         let electedRelayIdx: number | undefined
         if (inner.attrs?.['elected_relay_idx'] !== undefined) {
-            electedRelayIdx = parseInt(inner.attrs['elected_relay_idx'])
+            const parsed = Number(inner.attrs['elected_relay_idx'])
+            if (Number.isSafeInteger(parsed) && parsed >= 0) electedRelayIdx = parsed
         } else if (inner.attrs?.['relay_id'] !== undefined) {
-            electedRelayIdx = parseInt(inner.attrs['relay_id'])
+            const parsed = Number(inner.attrs['relay_id'])
+            if (Number.isSafeInteger(parsed) && parsed >= 0) electedRelayIdx = parsed
         } else if (inner.content instanceof Uint8Array) {
             const bytes = inner.content
             if (bytes.length >= 4) electedRelayIdx = readUInt32BE(bytes, 0)
@@ -774,7 +786,7 @@ export class WaCallMediaSession implements AudioSender {
             await this.deps.lowLevelCoordinator.sendNode(muteNode)
         } catch (err: unknown) {
             this.logger.error('error sending mute_v2 response', {
-                message: err instanceof Error ? err.message : String(err)
+                message: toError(err).message
             })
         }
     }
@@ -853,7 +865,7 @@ export class WaCallMediaSession implements AudioSender {
             } catch (err: unknown) {
                 this.logger.error('encode error', {
                     callId: this.info.callId,
-                    message: err instanceof Error ? err.message : String(err)
+                    message: toError(err).message
                 })
             }
         }
@@ -958,7 +970,7 @@ export class WaCallMediaSession implements AudioSender {
         } catch (err: unknown) {
             this.logger.error('error sending audio', {
                 callId: this.info.callId,
-                message: err instanceof Error ? err.message : String(err)
+                message: toError(err).message
             })
         }
     }
@@ -1016,7 +1028,7 @@ export class WaCallMediaSession implements AudioSender {
         } catch (err: unknown) {
             this.logger.debug('srtp key derivation failed', {
                 callId: this.info.callId,
-                message: err instanceof Error ? err.message : String(err)
+                message: toError(err).message
             })
         }
     }
@@ -1120,11 +1132,11 @@ export class WaCallMediaSession implements AudioSender {
         } catch (err: unknown) {
             this.srtpErrorCount++
             if (this.srtpErrorCount <= 5) {
-                const ssrc = readUInt32BE(data, 8)
+                const ssrc = data.length >= 12 ? readUInt32BE(data, 8) : 0
                 this.logger.debug('srtp recv error', {
                     callId: this.info.callId,
                     errorCount: this.srtpErrorCount,
-                    message: err instanceof Error ? err.message : String(err),
+                    message: toError(err).message,
                     ssrc: `0x${ssrc.toString(16)}`
                 })
             }
@@ -1182,7 +1194,7 @@ export class WaCallMediaSession implements AudioSender {
         } catch (err: unknown) {
             this.logger.error('sctp relay error', {
                 callId: this.info.callId,
-                message: err instanceof Error ? err.message : String(err)
+                message: toError(err).message
             })
         }
     }
