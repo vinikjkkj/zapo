@@ -279,8 +279,12 @@ export class WaCallMediaSession implements AudioSender {
         }
     }
 
-    feedLiveAudio(data: Float32Array): void {
-        this.audioEngine.feedExternalAudio(data)
+    feedLiveAudio(data: Float32Array): number {
+        return this.audioEngine.feedExternalAudio(data)
+    }
+
+    getLiveBufferMs(): number {
+        return this.audioEngine.getLiveBufferMs()
     }
 
     async sendIncomingPreaccept(peerJid: string): Promise<void> {
@@ -306,8 +310,10 @@ export class WaCallMediaSession implements AudioSender {
         const callCreator = this.info.callCreator
         const destinationJids = this.info.relayData.participantJids || []
         const seenRelayNames = new Set<string>()
+        const hasNonFna = this.info.relayData.endpoints.some((ep) => !ep.isFna)
 
         for (const ep of this.info.relayData.endpoints) {
+            if (ep.isFna && hasNonFna) continue
             const name = ep.relayName || ''
             if (!name || seenRelayNames.has(name)) continue
             seenRelayNames.add(name)
@@ -1155,7 +1161,8 @@ export class WaCallMediaSession implements AudioSender {
                 key: ep.key,
                 relayId: ep.relayId,
                 name: ep.relayName || `${ep.ip}:${WA_RELAY_PORT}`,
-                authTokenId: ep.authTokenId
+                authTokenId: ep.authTokenId,
+                isFna: ep.isFna
             }))
 
         if (relays.length === 0) {

@@ -130,6 +130,7 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
             const authToken = authTokenId ? authTokens.get(authTokenId) : undefined
             const relayName = rcNode.attrs?.relay_name || ''
             const protocol = rcNode.attrs?.protocol ? parseInt(rcNode.attrs.protocol, 10) : 0
+            const isFna = rcNode.attrs?.is_fna === '1'
 
             if (!(rcNode.content instanceof Uint8Array) || rcNode.content.length < 6) continue
 
@@ -153,12 +154,16 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
                     c2rRtt: rcNode.attrs?.c2r_rtt ? parseInt(rcNode.attrs.c2r_rtt, 10) : undefined,
                     relayName,
                     addressBytes,
-                    authTokenId: authTokenId || tokenId
+                    authTokenId: authTokenId || tokenId,
+                    isFna
                 })
             }
         }
     }
 
-    relays.sort((a, b) => (a.c2rRtt ?? Infinity) - (b.c2rRtt ?? Infinity))
+    relays.sort((a, b) => {
+        if (!!a.isFna !== !!b.isFna) return a.isFna ? 1 : -1
+        return (a.c2rRtt ?? Infinity) - (b.c2rRtt ?? Infinity)
+    })
     return { relays, participantJids, uuid, selfPid, peerPid, hbhKey }
 }

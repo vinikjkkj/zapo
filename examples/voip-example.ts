@@ -16,6 +16,7 @@
  * Flags:
  *   --to <number|jid>      place an outgoing call after connecting
  *   --audio <path>         audio file to play into the call once active (needs ffmpeg on PATH)
+ *   --stream               stream --audio via ffmpeg feed + backpressure instead of preloading
  *   --out <dir>            directory for inbound recordings (default ./recordings)
  *   --max-calls <n>        maxConcurrentCalls (default 1)
  *   --no-accept            do NOT auto-accept incoming calls
@@ -30,6 +31,7 @@
  *   - `--audio` additionally needs an `ffmpeg` binary on PATH.
  */
 
+import { type ChildProcess, spawn } from 'node:child_process'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
@@ -45,6 +47,7 @@ const MAX_RECORD_SAMPLES = SAMPLE_RATE * 60 * 10
 interface Cli {
     to?: string
     audio?: string
+    stream: boolean
     out: string
     maxCalls: number
     autoAccept: boolean
@@ -58,6 +61,7 @@ const USAGE = `usage: npx tsx examples/voip-example.ts [flags]
 
   --to <number|jid>      place an outgoing call after connecting
   --audio <path>         audio file to play into the call once active (needs ffmpeg)
+  --stream               stream --audio via ffmpeg feed + backpressure (default: preload)
   --out <dir>            directory for inbound recordings (default ./recordings)
   --max-calls <n>        maxConcurrentCalls (default 1)
   --no-accept            do NOT auto-accept incoming calls
@@ -73,6 +77,7 @@ function parseArgs(argv: readonly string[]): Cli {
         maxCalls: 1,
         autoAccept: true,
         hangupAfterAudio: false,
+        stream: false,
         session: 'voip',
         authPath: resolve(process.cwd(), '.auth', 'voip.sqlite'),
         resetAuth: false
@@ -99,6 +104,9 @@ function parseArgs(argv: readonly string[]): Cli {
                 break
             case '--audio':
                 cli.audio = value()
+                break
+            case '--stream':
+                cli.stream = true
                 break
             case '--out':
                 cli.out = resolve(value())
@@ -264,6 +272,67 @@ async function main(): Promise<void> {
 
     // Tracks calls we already started playback on, so an Active re-emit does not double-play.
     const played = new Set<string>()
+    const audioStreams = new Map<string, ChildProcess>()
+
+    const streamAudioFile = (callId: string, audioPath: string): void => {
+        const ff = spawn('ffmpeg', [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-re',
+            '-i',
+            audioPath,
+            '-f',
+            'f32le',
+            '-ar',
+            '16000',
+            '-ac',
+            '1',
+            'pipe:1'
+        ])
+        audioStreams.set(callId, ff)
+        const stdout = ff.stdout
+        if (!stdout) return
+
+        let leftover = Buffer.alloc(0)
+        const { pauseMs, resumeMs } = client.voip.getFeedWatermarksMs()
+
+        stdout.on('data', (chunk: Buffer) => {
+            const buf = leftover.length ? Buffer.concat([leftover, chunk]) : chunk
+            const usable = buf.length - (buf.length % 4)
+            leftover = usable < buf.length ? Buffer.from(buf.subarray(usable)) : Buffer.alloc(0)
+            if (usable === 0) return
+            const samples = new Float32Array(
+                buf.buffer.slice(buf.byteOffset, buf.byteOffset + usable)
+            )
+            const level = client.voip.feedLiveAudio(callId, samples)
+            if (level >= pauseMs && !stdout.isPaused()) {
+                stdout.pause()
+                const drain = (): void => {
+                    if (client.voip.getLiveBufferMs(callId) <= resumeMs) stdout.resume()
+                    else setTimeout(drain, 20)
+                }
+                setTimeout(drain, 20)
+            }
+        })
+        ff.stderr?.on('data', (d: Buffer) => console.log('[ffmpeg]', d.toString().trim()))
+        ff.on('error', (err) =>
+            console.log('[voip] ffmpeg spawn error (is it on PATH?):', err.message)
+        )
+        ff.on('close', (code) => {
+            audioStreams.delete(callId)
+            console.log(`[voip] ffmpeg stream ended (code ${code ?? 'null'}) for ${callId}`)
+            if (!cli.hangupAfterAudio) return
+            const waitDrain = (): void => {
+                if (client.voip.getLiveBufferMs(callId) <= 1) {
+                    void client.voip.endCall(callId, EndCallReason.UserEnded).catch(() => undefined)
+                } else {
+                    setTimeout(waitDrain, 50)
+                }
+            }
+            waitDrain()
+        })
+    }
 
     const maybePlayAudio = async (callId: string): Promise<void> => {
         if (!cli.audio || played.has(callId)) {
@@ -271,11 +340,19 @@ async function main(): Promise<void> {
         }
         played.add(callId)
         try {
-            await client.voip.loadAudio(callId, cli.audio)
-            console.log(`[voip] playing ${cli.audio} into ${callId}`)
+            if (cli.stream) {
+                client.voip.setExternalAudioMode(callId, true)
+                streamAudioFile(callId, cli.audio)
+                console.log(
+                    `[voip] streaming ${cli.audio} into ${callId} (ffmpeg feed + backpressure)`
+                )
+            } else {
+                await client.voip.loadAudio(callId, cli.audio)
+                console.log(`[voip] playing ${cli.audio} into ${callId} (preloaded)`)
+            }
         } catch (error) {
             console.log(
-                `[voip] loadAudio failed for ${callId} (is ffmpeg installed?):`,
+                `[voip] audio failed for ${callId} (is ffmpeg installed?):`,
                 error instanceof Error ? error.message : error
             )
         }
@@ -293,6 +370,34 @@ async function main(): Promise<void> {
     })
     client.on('auth_paired', ({ credentials }) => {
         console.log(`[paired] meJid=${credentials.meJid ?? 'unknown'}`)
+    })
+
+    let inboundAudioFrames = 0
+    client.on('voip_call_state', (call) => {
+        console.log(
+            `[voip:event] voip_call_state callId=${call.callId} state=${call.stateData.state}`
+        )
+    })
+    client.on('voip_call_incoming', (call) => {
+        console.log(`[voip:event] voip_call_incoming callId=${call.callId} from=${call.peerJid}`)
+    })
+    client.on('voip_call_ended', (call) => {
+        console.log(
+            `[voip:event] voip_call_ended callId=${call.callId} reason=${call.stateData.endReason ?? ''}`
+        )
+    })
+    client.on('voip_call_outbound_audio_finished', (call) => {
+        console.log(`[voip:event] voip_call_outbound_audio_finished callId=${call.callId}`)
+    })
+    client.on('voip_call_error', (error) => {
+        console.log('[voip:event] voip_call_error', error instanceof Error ? error.message : error)
+    })
+    client.on('voip_call_inbound_audio', ({ call, pcm }) => {
+        if (inboundAudioFrames++ % 50 === 0) {
+            console.log(
+                `[voip:event] voip_call_inbound_audio callId=${call.callId} frames=${inboundAudioFrames} samples=${pcm.length}`
+            )
+        }
     })
 
     client.on('message', async (event) => {
@@ -364,6 +469,8 @@ async function main(): Promise<void> {
         console.log(`[voip] call ${call.callId} ended (reason=${reason}, duration=${duration}s)`)
         played.delete(call.callId)
         autoAcceptAttempted.delete(call.callId)
+        audioStreams.get(call.callId)?.kill('SIGKILL')
+        audioStreams.delete(call.callId)
         await flushRecording(call.callId, cli.out).catch((error) =>
             console.log('[voip] failed to save recording:', error)
         )

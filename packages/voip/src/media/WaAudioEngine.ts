@@ -9,6 +9,9 @@ import { type AudioSender, DEFAULT_AUDIO_CONFIG, type WaAudioEngineConfig } from
 
 const FFMPEG_BIN = 'ffmpeg'
 
+const EXT_FEED_PAUSE_FRACTION = 0.12
+const EXT_FEED_RESUME_FRACTION = 0.06
+
 const ffmpegProbeCache = new Map<string, boolean>()
 
 function probeBinary(bin: string): Promise<boolean> {
@@ -62,7 +65,9 @@ export class WaAudioEngine {
     private readonly extPreBufferSize: number
     private readonly extTargetBuffer: number
     private readonly extHighWater: number
+    private readonly extMaxBuffer: number
     private extSkipCount = 0
+    private extDropCount = 0
 
     private readonly captureChunkBuffer: Float32Array
     private readonly silenceChunkBuffer: Float32Array
@@ -81,9 +86,10 @@ export class WaAudioEngine {
         this.silenceChunkBuffer = new Float32Array(this.captureChunkSize)
         this.playbackOutputBuffer = new Float32Array(this.outputSize)
 
-        this.extPreBufferSize = Math.floor(this.sampleRate * 0.06)
+        this.extPreBufferSize = Math.floor(this.sampleRate * EXT_FEED_RESUME_FRACTION)
         this.extTargetBuffer = Math.floor(this.sampleRate * 0.06)
         this.extHighWater = Math.floor(this.sampleRate * 0.2)
+        this.extMaxBuffer = Math.floor(this.sampleRate * 0.5)
     }
 
     setAudioSender(sender: AudioSender): void {
@@ -98,9 +104,9 @@ export class WaAudioEngine {
         this.externalMode = enabled
         this.extStarted = false
         this.extSkipCount = 0
+        this.extDropCount = 0
         if (enabled) {
-            const initialSize = this.sampleRate * 60
-            this.audioBuffer = new Float32Array(initialSize)
+            this.audioBuffer = new Float32Array(this.extMaxBuffer)
             this.audioPosition = 0
             this.liveWritePos = 0
             this.audioFinished = false
@@ -115,28 +121,66 @@ export class WaAudioEngine {
         return this.externalMode
     }
 
-    feedExternalAudio(data: Float32Array): void {
-        if (!this.audioBuffer) return
+    /**
+     * Append live PCM to the external-mode buffer and return the buffered
+     * level in milliseconds. Bounded: an oversized chunk keeps only its tail,
+     * and overflow drops the oldest samples, so the buffer never grows past
+     * its cap.
+     */
+    feedExternalAudio(data: Float32Array): number {
+        if (!this.audioBuffer) return 0
 
-        if (this.audioPosition > this.audioBuffer.length / 2) {
-            const remaining = this.liveWritePos - this.audioPosition
-            if (remaining > 0) {
+        let incoming = data
+        if (incoming.length > this.extMaxBuffer) {
+            incoming = incoming.subarray(incoming.length - this.extMaxBuffer)
+        }
+
+        if (this.liveWritePos + incoming.length > this.audioBuffer.length) {
+            const unconsumed = this.liveWritePos - this.audioPosition
+            if (unconsumed > 0 && this.audioPosition > 0) {
                 this.audioBuffer.copyWithin(0, this.audioPosition, this.liveWritePos)
             }
-            this.liveWritePos = Math.max(0, remaining)
+            this.liveWritePos = Math.max(0, unconsumed)
             this.audioPosition = 0
         }
 
-        if (this.liveWritePos + data.length > this.audioBuffer.length) {
-            const newSize = Math.max(this.audioBuffer.length * 2, this.liveWritePos + data.length)
-            const newBuf = new Float32Array(newSize)
-            newBuf.set(this.audioBuffer.subarray(0, this.liveWritePos))
-            this.audioBuffer = newBuf
-            this.logger.debug('live buffer grew', { samples: newSize })
+        const overflow = this.liveWritePos + incoming.length - this.extMaxBuffer
+        if (overflow > 0) {
+            const drop = Math.min(overflow, this.liveWritePos)
+            if (drop > 0) {
+                this.audioBuffer.copyWithin(0, drop, this.liveWritePos)
+                this.liveWritePos -= drop
+            }
+            this.extDropCount++
+            if (this.extDropCount <= 5 || this.extDropCount % 100 === 0) {
+                this.logger.debug('live buffer overflow, dropped oldest', {
+                    droppedSamples: drop,
+                    dropCount: this.extDropCount
+                })
+            }
         }
 
-        this.audioBuffer.set(data, this.liveWritePos)
-        this.liveWritePos += data.length
+        this.audioBuffer.set(incoming, this.liveWritePos)
+        this.liveWritePos += incoming.length
+
+        return ((this.liveWritePos - this.audioPosition) / this.sampleRate) * 1000
+    }
+
+    getLiveBufferMs(): number {
+        if (!this.externalMode || !this.audioBuffer) return 0
+        return ((this.liveWritePos - this.audioPosition) / this.sampleRate) * 1000
+    }
+
+    /**
+     * Backpressure watermarks for the live feed, in milliseconds: pause a
+     * producer once the buffered level reaches `pauseMs`, resume once it drains
+     * to `resumeMs`. Derived from the engine config, independent of any call.
+     */
+    static feedWatermarksMs(): { pauseMs: number; resumeMs: number } {
+        return {
+            pauseMs: Math.round(EXT_FEED_PAUSE_FRACTION * 1000),
+            resumeMs: Math.round(EXT_FEED_RESUME_FRACTION * 1000)
+        }
     }
 
     isAudioFinished(): boolean {

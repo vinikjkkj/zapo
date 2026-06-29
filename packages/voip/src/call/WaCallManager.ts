@@ -6,6 +6,7 @@ import { type BinaryNode, hasNodeChild } from 'zapo-js/transport'
 import { resolvePositive, toError } from 'zapo-js/util'
 
 import { generateCallKey } from '../crypto/encryption.js'
+import { WaAudioEngine } from '../media/WaAudioEngine.js'
 import { parseRelayFromAck } from '../relay/relay-ack.js'
 import {
     buildOfferStanza,
@@ -147,9 +148,18 @@ export class WaCallManager extends EventEmitter {
         session.setExternalAudioMode(enabled)
     }
 
-    feedLiveAudio(callId: string, data: Float32Array): void {
+    feedLiveAudio(callId: string, data: Float32Array): number {
         const session = this.calls.get(callId)
-        session?.feedLiveAudio(data)
+        return session?.feedLiveAudio(data) ?? 0
+    }
+
+    getLiveBufferMs(callId: string): number {
+        const session = this.calls.get(callId)
+        return session?.getLiveBufferMs() ?? 0
+    }
+
+    getFeedWatermarksMs(): { pauseMs: number; resumeMs: number } {
+        return WaAudioEngine.feedWatermarksMs()
     }
 
     getCall(callId: string): CallInfo | null {

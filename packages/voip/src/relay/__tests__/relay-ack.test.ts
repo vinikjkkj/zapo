@@ -102,3 +102,46 @@ test('parseRelayFromAck returns an empty result for a childless ack', () => {
     assert.equal(result.uuid, '')
     assert.equal(result.hbhKey, undefined)
 })
+
+test('parseRelayFromAck deprioritizes FNA relays after non-FNA regardless of rtt', () => {
+    const fnaAddr = new Uint8Array([10, 0, 0, 1, 0x0d, 0x96])
+    const edgeAddr = new Uint8Array([192, 168, 1, 1, 0x0d, 0x96])
+
+    const ack: BinaryNode = {
+        tag: 'ack',
+        attrs: {},
+        content: [
+            {
+                tag: 'relay',
+                attrs: { uuid: 'U' },
+                content: [
+                    { tag: 'key', attrs: {}, content: enc('K') },
+                    { tag: 'token', attrs: { id: '0' }, content: new Uint8Array([1]) },
+                    {
+                        tag: 'te2',
+                        attrs: {
+                            token_id: '0',
+                            relay_name: 'fna',
+                            relay_id: '0',
+                            c2r_rtt: '18',
+                            is_fna: '1'
+                        },
+                        content: fnaAddr
+                    },
+                    {
+                        tag: 'te2',
+                        attrs: { token_id: '0', relay_name: 'edge', relay_id: '1', c2r_rtt: '40' },
+                        content: edgeAddr
+                    }
+                ]
+            }
+        ]
+    }
+
+    const { relays } = parseRelayFromAck(ack)
+    assert.equal(relays.length, 2)
+    assert.equal(relays[0].relayName, 'edge')
+    assert.equal(relays[0].isFna, false)
+    assert.equal(relays[1].relayName, 'fna')
+    assert.equal(relays[1].isFna, true)
+})

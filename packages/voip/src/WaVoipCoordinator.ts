@@ -1,6 +1,5 @@
 import { type Logger, type LogLevel, type WaClientPluginContext } from 'zapo-js'
 import { WA_MESSAGE_TAGS } from 'zapo-js/protocol'
-import type { BinaryNode } from 'zapo-js/transport'
 
 import type { CallInfo } from './call/call-state.js'
 import { WaCallManager } from './call/WaCallManager.js'
@@ -74,8 +73,37 @@ export class WaVoipCoordinator {
         this.manager.setExternalAudioMode(callId, enabled)
     }
 
-    feedLiveAudio(callId: string, data: Float32Array): void {
-        this.manager.feedLiveAudio(callId, data)
+    /**
+     * Feed a chunk of live mono PCM (`Float32Array` at the engine sample rate)
+     * into an active call's outbound audio. Requires external audio mode (see
+     * {@link setExternalAudioMode}). Returns the audio currently buffered
+     * ahead of the sender in milliseconds, so a producer can pace itself
+     * against {@link getFeedWatermarksMs}; returns `0` when no session exists
+     * for `callId`. The buffer is bounded and drops the oldest samples on
+     * overflow.
+     */
+    feedLiveAudio(callId: string, data: Float32Array): number {
+        return this.manager.feedLiveAudio(callId, data)
+    }
+
+    /**
+     * Milliseconds of live audio currently buffered ahead of the sender for
+     * `callId` (`0` when no session exists or external mode is off). Poll it to
+     * drive backpressure against {@link getFeedWatermarksMs}.
+     */
+    getLiveBufferMs(callId: string): number {
+        return this.manager.getLiveBufferMs(callId)
+    }
+
+    /**
+     * Backpressure watermarks for the live feed, in milliseconds. Constants of
+     * the feed contract, independent of any specific call: pause feeding once
+     * {@link getLiveBufferMs} reaches `pauseMs`, resume once it drains to
+     * `resumeMs`. `pauseMs` stays below the engine's internal drop threshold,
+     * so a producer that respects it never loses audio.
+     */
+    getFeedWatermarksMs(): { pauseMs: number; resumeMs: number } {
+        return this.manager.getFeedWatermarksMs()
     }
 
     getCall(callId: string): CallInfo | null {
@@ -155,9 +183,6 @@ export class WaVoipCoordinator {
         })
         this.manager.on('call_error', (error) => {
             ctx.emit('voip_call_error', error)
-        })
-        this.manager.on('signaling_send', (node: BinaryNode) => {
-            ctx.emit('voip_signaling_send', node)
         })
     }
 }

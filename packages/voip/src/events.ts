@@ -1,5 +1,3 @@
-import type { BinaryNode } from 'zapo-js/transport'
-
 import type { CallInfo } from './call/call-state.js'
 
 /**
@@ -14,5 +12,4 @@ export interface VoipEvents {
     readonly voip_call_inbound_audio: (payload: { call: CallInfo; pcm: Float32Array }) => void
     readonly voip_call_outbound_audio_finished: (call: CallInfo) => void
     readonly voip_call_error: (error: Error) => void
-    readonly voip_signaling_send: (node: BinaryNode) => void
 }

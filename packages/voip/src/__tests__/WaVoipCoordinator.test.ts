@@ -3,7 +3,6 @@ import { test } from 'node:test'
 
 import { createNoopLogger, type WaClientPluginContext } from 'zapo-js'
 import { WA_MESSAGE_TAGS } from 'zapo-js/protocol'
-import type { BinaryNode } from 'zapo-js/transport'
 
 import { WaVoipCoordinator } from '../WaVoipCoordinator.js'
 
@@ -49,12 +48,12 @@ test('WaVoipCoordinator re-emits manager events on the host client', () => {
     const manager = (
         coordinator as unknown as { manager: { emit: (event: string, ...args: unknown[]) => void } }
     ).manager
-    const node: BinaryNode = { tag: 'call', attrs: {}, content: undefined }
-    manager.emit('signaling_send', node)
+    const error = new Error('boom')
+    manager.emit('call_error', error)
 
-    const forwarded = emitted.find(([event]) => event === 'voip_signaling_send')
+    const forwarded = emitted.find(([event]) => event === 'voip_call_error')
     assert.ok(forwarded)
-    assert.equal(forwarded[1][0], node)
+    assert.equal(forwarded[1][0], error)
 
     coordinator.dispose()
 })

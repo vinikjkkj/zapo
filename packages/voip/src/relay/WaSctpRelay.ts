@@ -1,3 +1,4 @@
+import dgram from 'node:dgram'
 import { EventEmitter } from 'node:events'
 
 import wrtc from '@roamhq/wrtc'
@@ -57,12 +58,14 @@ interface RelayInfo {
     relayId: number
     name?: string
     authTokenId?: string
+    isFna?: boolean
 }
 
 interface Connection {
     state: ConnectionState
     peerConnection: PeerConnectionClass | null
     channel: DataChannelClass | null
+    udpSocket: dgram.Socket | null
     incomingChannels: DataChannelClass[]
     buffer: ArrayBuffer[]
     bufferedBytes: number
@@ -188,6 +191,7 @@ export class WaSctpRelay extends EventEmitter {
             state: ConnectionState.Connecting,
             peerConnection: null,
             channel: null,
+            udpSocket: null,
             incomingChannels: [],
             buffer: [],
             bufferedBytes: 0,
@@ -201,6 +205,11 @@ export class WaSctpRelay extends EventEmitter {
         }
 
         this.connections.set(connectionId, conn)
+
+        if (relayInfo.isFna) {
+            this.setupUdpRelay(conn, relayInfo)
+            return conn
+        }
 
         conn.connectionTimeout = setTimeout(() => {
             if (conn.state === ConnectionState.Connecting) {
@@ -405,8 +414,54 @@ export class WaSctpRelay extends EventEmitter {
         closeQuietly(conn.channel, this.logger)
         for (const ch of conn.incomingChannels) closeQuietly(ch, this.logger)
         closeQuietly(conn.peerConnection, this.logger)
+        closeQuietly(conn.udpSocket, this.logger)
 
         this.connections.delete(conn.id)
+    }
+
+    private isConnOpen(conn: Connection): boolean {
+        if (conn.state !== ConnectionState.Open) return false
+        if (conn.udpSocket) return true
+        return conn.channel?.readyState === 'open'
+    }
+
+    private setupUdpRelay(conn: Connection, relayInfo: RelayInfo): void {
+        const connectionId = conn.id
+        try {
+            const socket = dgram.createSocket('udp4')
+            conn.udpSocket = socket
+
+            socket.on('message', (msg: Buffer) => {
+                this.handleRelayMessage(toBytesView(msg), relayInfo, conn)
+            })
+            socket.on('error', (err: Error) => {
+                this.logger.warn('udp relay socket error', {
+                    connectionId,
+                    message: err.message
+                })
+                this.failConnection(conn, 'udp_socket_error')
+            })
+
+            socket.connect(relayInfo.port, relayInfo.ip, () => {
+                if (conn.state === ConnectionState.Failed) return
+                conn.state = ConnectionState.Open
+                this.stats.connected++
+                this.logger.debug('udp relay connected (FNA)', {
+                    connectionId,
+                    ip: relayInfo.ip,
+                    port: relayInfo.port
+                })
+                this.sendStunAllocateOnOpen(conn, relayInfo)
+                this.startKeepalive(connectionId, conn)
+                this.emit('relay_connected', { ip: relayInfo.ip, port: relayInfo.port })
+            })
+        } catch (err) {
+            this.logger.error('udp relay setup failed', {
+                connectionId,
+                message: toError(err).message
+            })
+            this.failConnection(conn, 'udp_setup_error')
+        }
     }
 
     private findConnectionByIpPort(ip: string, port: number): Connection | undefined {
@@ -431,11 +486,7 @@ export class WaSctpRelay extends EventEmitter {
         const hmacKey = TEXT_ENCODER.encode(relayInfo.key)
 
         const sendRegistration = (label: string) => {
-            if (
-                conn.state !== ConnectionState.Open ||
-                !conn.channel ||
-                conn.channel.readyState !== 'open'
-            ) {
+            if (!this.isConnOpen(conn)) {
                 return
             }
 
@@ -507,11 +558,7 @@ export class WaSctpRelay extends EventEmitter {
 
         let keepaliveCount = 0
         const timer = setInterval(() => {
-            if (
-                conn.state !== ConnectionState.Open ||
-                !conn.channel ||
-                conn.channel.readyState !== 'open'
-            ) {
+            if (!this.isConnOpen(conn)) {
                 this.stopKeepalive(connectionId)
                 return
             }
@@ -578,6 +625,7 @@ export class WaSctpRelay extends EventEmitter {
         if (conn.connectionTimeout) clearTimeout(conn.connectionTimeout)
         for (const ch of conn.incomingChannels) closeQuietly(ch, this.logger)
         closeQuietly(conn.peerConnection, this.logger)
+        closeQuietly(conn.udpSocket, this.logger)
 
         this.stats.connected = Math.max(0, this.stats.connected - 1)
         this.connections.delete(connectionId)
@@ -600,6 +648,16 @@ export class WaSctpRelay extends EventEmitter {
 
     private sendToChannel(conn: Connection, data: ArrayBuffer): boolean {
         try {
+            if (conn.udpSocket) {
+                if (conn.state !== ConnectionState.Open) return false
+                conn.udpSocket.send(new Uint8Array(data))
+                conn.stats.sentPackets++
+                conn.stats.sentBytes += data.byteLength
+                this.stats.sent++
+                this.sendCount++
+                return true
+            }
+
             if (!conn.channel || conn.channel.readyState !== 'open') {
                 return false
             }
@@ -798,6 +856,7 @@ export class WaSctpRelay extends EventEmitter {
             relayId: number
             name?: string
             authTokenId?: string
+            isFna?: boolean
         }>
     ): Promise<void> {
         this.logger.debug('sctp configuring relays', { count: relays.length })
@@ -819,7 +878,8 @@ export class WaSctpRelay extends EventEmitter {
                 key: relay.key,
                 relayId: relay.relayId,
                 name: relay.name || 'unknown',
-                authTokenId: relay.authTokenId
+                authTokenId: relay.authTokenId,
+                isFna: relay.isFna
             }
 
             this.relayMap.set(connectionId, relayInfo)
@@ -874,11 +934,7 @@ export class WaSctpRelay extends EventEmitter {
             return false
         }
 
-        if (
-            conn.state === ConnectionState.Open &&
-            conn.channel &&
-            conn.channel.readyState === 'open'
-        ) {
+        if (this.isConnOpen(conn)) {
             if (conn.buffer.length > 0) {
                 this.bufferData(conn, data)
                 this.drainBuffer(conn.id)
@@ -909,7 +965,7 @@ export class WaSctpRelay extends EventEmitter {
 
     broadcast(data: ArrayBuffer): void {
         for (const conn of this.connections.values()) {
-            if (conn.state === ConnectionState.Open && conn.channel?.readyState === 'open') {
+            if (this.isConnOpen(conn)) {
                 this.sendToChannel(conn, data)
             }
         }
@@ -938,6 +994,7 @@ export class WaSctpRelay extends EventEmitter {
             closeQuietly(conn.channel, this.logger)
             for (const ch of conn.incomingChannels) closeQuietly(ch, this.logger)
             closeQuietly(conn.peerConnection, this.logger)
+            closeQuietly(conn.udpSocket, this.logger)
         }
 
         this.connections.clear()

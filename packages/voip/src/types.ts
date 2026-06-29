@@ -93,6 +93,7 @@ export interface RelayEndpoint {
     relayName?: string
     addressBytes?: Uint8Array
     authTokenId?: string
+    isFna?: boolean
 }
 
 export interface RelayData {
@@ -155,7 +156,6 @@ export interface CallManagerEvents {
     call_inbound_audio: (call: CallInfo, pcm: Float32Array) => void
     /** Preloaded outbound audio finished sending on this call. */
     call_outbound_audio_finished: (call: CallInfo) => void
-    signaling_send: (node: BinaryNode) => void
     call_error: (error: Error) => void
 }
 
