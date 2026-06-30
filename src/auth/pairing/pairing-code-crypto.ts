@@ -15,7 +15,7 @@ const CROCKFORD_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTVWXYZ'
 export const PBKDF2_ITERATIONS = 2 << 16
 const PAIRING_AES_KEY_BYTES = 32
 
-function bytesToCrockford(bytes: Uint8Array): string {
+export function bytesToCrockford(bytes: Uint8Array): string {
     let bitCount = 0
     let value = 0
     let out = ''
