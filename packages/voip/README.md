@@ -101,8 +101,12 @@ const callId = await client.voip.startCall({ peerJid: '5511999999999@s.whatsapp.
 
 client.voip.setExternalAudioMode(callId, true)
 
-// feed 16 kHz mono Float32 chunks as they arrive
-client.voip.feedLiveAudio(callId, pcmChunk)
+// feed 16 kHz mono Float32 chunks as they arrive;
+// feedLiveAudio returns the buffered ms still queued to send
+const bufferedMs = client.voip.feedLiveAudio(callId, pcmChunk)
+
+// backpressure: pause your source above pauseMs, resume below resumeMs
+const { pauseMs, resumeMs } = client.voip.getFeedWatermarksMs()
 ```
 
 ## Incoming calls
@@ -134,21 +138,22 @@ Emitted on `WaClient`:
 | `voip_call_inbound_audio`           | `{ call: CallInfo; pcm: Float32Array }` | Decoded peer audio received (16 kHz)      |
 | `voip_call_outbound_audio_finished` | `CallInfo`                              | Preloaded outbound audio finished sending |
 | `voip_call_error`                   | `Error`                                 | Engine error                              |
-| `voip_signaling_send`               | `BinaryNode`                            | Outbound signaling stanza                 |
 
-You can also use `client.voip.on('call:state', ...)` etc. on the underlying `EventEmitter` (`CallManagerEvents`).
+You can also use `client.voip.on('call_state', ...)` etc. for the manager-level events (`CallManagerEvents`).
 
 ## `client.voip` API
 
 | Method                                  | Description                                 |
 | --------------------------------------- | ------------------------------------------- |
-| `startCall({ peerJid, isVideo? })`      | Place an outgoing call; returns `callId`    |
+| `startCall({ peerJid, isVideo?, audioFile?, peerDevices? })` | Place an outgoing call; returns `callId` |
 | `acceptCall(callId)`                    | Accept an incoming call                     |
 | `rejectCall(callId, reason?)`           | Reject                                      |
 | `endCall(callId, reason?)`              | Hang up                                     |
 | `loadAudio(callId, path)`               | Load a file for outbound audio on that call |
 | `setExternalAudioMode(callId, enabled)` | Switch to live PCM input for that call      |
-| `feedLiveAudio(callId, Float32Array)`   | Push a capture chunk (external mode)        |
+| `feedLiveAudio(callId, Float32Array)`   | Push a capture chunk (external mode); returns buffered ms |
+| `getLiveBufferMs(callId)`               | Buffered live-audio ms not yet sent         |
+| `getFeedWatermarksMs()`                 | `{ pauseMs, resumeMs }` backpressure thresholds |
 | `setMute(callId, muted)`                | Mute/unmute local capture for that call     |
 | `getCall(callId)`                       | One call or `null`                          |
 | `getCalls()`                            | All tracked calls                           |
@@ -161,6 +166,14 @@ Plugin options: `maxConcurrentCalls?: number` (default `1`), `logLevel?: LogLeve
 MLow runs through **`libmlow-wasm`** (≥ 0.1.1): 16 kHz, mono, 960-sample frames (60 ms), `useSmpl: true`, DTX enabled. No `koffi`, no bundled native libraries.
 
 The signaling and media stack (RTP/SRTP, SCTP relay, codec, audio engine) is internal to the package; use `client.voip` and the events above.
+
+## Credits
+
+The VOIP plugin was built by:
+
+- [@vinikjkkj](https://github.com/vinikjkkj)
+- [@edgardmessias](https://github.com/edgardmessias) — Edgard Lorraine Messias
+- [@w3nder](https://github.com/w3nder) — Wender Teixeira
 
 ## License
 
