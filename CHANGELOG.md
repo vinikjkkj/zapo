@@ -1,5 +1,11 @@
 # zapo-js
 
+## 1.3.0
+
+### Minor Changes
+
+- Add a `WaClient` plugin system via `defineWaClientPlugin`: a plugin either runs setup side effects or exposes an API at `client[exposeAs]`, with the accessor type and its events inferred from the plugin definition. Powers `@zapo-js/voip`.
+
 ## 1.2.1
 
 ### Patch Changes

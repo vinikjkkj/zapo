@@ -1,5 +1,11 @@
 # @zapo-js/store-redis
 
+## 1.1.0
+
+### Minor Changes
+
+- Add an optional `storeTtlMs` option for a per-domain key TTL, so cached keys expire automatically.
+
 ## 1.0.2
 
 ### Patch Changes

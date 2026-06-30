@@ -143,21 +143,21 @@ You can also use `client.voip.on('call_state', ...)` etc. for the manager-level 
 
 ## `client.voip` API
 
-| Method                                  | Description                                 |
-| --------------------------------------- | ------------------------------------------- |
-| `startCall({ peerJid, isVideo?, audioFile?, peerDevices? })` | Place an outgoing call; returns `callId` |
-| `acceptCall(callId)`                    | Accept an incoming call                     |
-| `rejectCall(callId, reason?)`           | Reject                                      |
-| `endCall(callId, reason?)`              | Hang up                                     |
-| `loadAudio(callId, path)`               | Load a file for outbound audio on that call |
-| `setExternalAudioMode(callId, enabled)` | Switch to live PCM input for that call      |
-| `feedLiveAudio(callId, Float32Array)`   | Push a capture chunk (external mode); returns buffered ms |
-| `getLiveBufferMs(callId)`               | Buffered live-audio ms not yet sent         |
-| `getFeedWatermarksMs()`                 | `{ pauseMs, resumeMs }` backpressure thresholds |
-| `setMute(callId, muted)`                | Mute/unmute local capture for that call     |
-| `getCall(callId)`                       | One call or `null`                          |
-| `getCalls()`                            | All tracked calls                           |
-| `on` / `off` / `once`                   | Manager-level events                        |
+| Method                                                       | Description                                               |
+| ------------------------------------------------------------ | --------------------------------------------------------- |
+| `startCall({ peerJid, isVideo?, audioFile?, peerDevices? })` | Place an outgoing call; returns `callId`                  |
+| `acceptCall(callId)`                                         | Accept an incoming call                                   |
+| `rejectCall(callId, reason?)`                                | Reject                                                    |
+| `endCall(callId, reason?)`                                   | Hang up                                                   |
+| `loadAudio(callId, path)`                                    | Load a file for outbound audio on that call               |
+| `setExternalAudioMode(callId, enabled)`                      | Switch to live PCM input for that call                    |
+| `feedLiveAudio(callId, Float32Array)`                        | Push a capture chunk (external mode); returns buffered ms |
+| `getLiveBufferMs(callId)`                                    | Buffered live-audio ms not yet sent                       |
+| `getFeedWatermarksMs()`                                      | `{ pauseMs, resumeMs }` backpressure thresholds           |
+| `setMute(callId, muted)`                                     | Mute/unmute local capture for that call                   |
+| `getCall(callId)`                                            | One call or `null`                                        |
+| `getCalls()`                                                 | All tracked calls                                         |
+| `on` / `off` / `once`                                        | Manager-level events                                      |
 
 Plugin options: `maxConcurrentCalls?: number` (default `1`), `logLevel?: LogLevel` (caps VOIP diagnostics; defaults to the host client's level).
 

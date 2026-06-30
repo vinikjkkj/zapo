@@ -10,10 +10,7 @@ export type {
     WaHistorySyncOptions,
     WaWriteBehindOptions
 } from '@client/types'
-export type {
-    WaClientPluginContext,
-    WaClientPluginDefinition
-} from '@client/plugins'
+export type { WaClientPluginContext, WaClientPluginDefinition } from '@client/plugins'
 export type { WaMessageCoordinator } from '@client/coordinators/WaMessageCoordinator'
 export type {
     WaAccountTakeoverNoticeEvent,
