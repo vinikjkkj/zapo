@@ -53,18 +53,6 @@ export interface WaClientPluginDefinition {
     readonly dispose?: (instance: unknown, ctx: WaClientPluginContext) => void | Promise<void>
 }
 
-/** @deprecated Use {@link WaClientPluginDefinition} without `exposeAs`. */
-export type WaClientBehaviorPluginDefinition = Omit<WaClientPluginDefinition, 'exposeAs'>
-
-/** @deprecated Use {@link WaClientPluginDefinition} with `exposeAs`. */
-export type WaClientExposePluginDefinition<
-    K extends string = string,
-    T = unknown
-> = WaClientPluginDefinition & {
-    readonly exposeAs: K
-    readonly setup: (ctx: WaClientPluginContext) => T
-}
-
 export function isWaClientExposePluginDefinition(
     plugin: WaClientPluginDefinition
 ): plugin is WaClientPluginDefinition & { readonly exposeAs: string } {

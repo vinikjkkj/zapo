@@ -11,8 +11,6 @@ export type {
     WaWriteBehindOptions
 } from '@client/types'
 export type {
-    WaClientBehaviorPluginDefinition,
-    WaClientExposePluginDefinition,
     WaClientPluginContext,
     WaClientPluginDefinition
 } from '@client/plugins'
