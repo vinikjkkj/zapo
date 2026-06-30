@@ -102,6 +102,10 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
                         if (record) available.push(record)
                     }
                 }
+                await this.refreshTtl([
+                    ...availableIds.map((id) => this.k('signal:pk', this.sessionId, id)),
+                    availKey
+                ])
             }
 
             const missing = count - available.length
@@ -315,7 +319,6 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
     public async getServerHasPreKeys(): Promise<boolean> {
         const metaKey = this.k('signal:meta', this.sessionId)
         const raw = await this.redis.hget(metaKey, 'server_has_prekeys')
-        if (raw !== null) await this.refreshTtl([metaKey])
         return raw === '1'
     }
 
@@ -348,7 +351,6 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
             await this.redis.hsetnx(metaKey, 'server_has_prekeys', '0')
             await this.redis.hsetnx(metaKey, 'next_prekey_id', '1')
         }
-        await this.refreshTtl([metaKey])
     }
 
     private decodePreKey(

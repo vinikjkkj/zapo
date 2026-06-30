@@ -49,6 +49,20 @@ export abstract class BaseRedisStore {
     }
 
     /**
+     * Atomic single-key `SET` that also stamps the sliding TTL in the same
+     * command (`SET ... PX`), so a write never leaves a key without its expiry
+     * even if the connection drops mid-sequence. Falls back to a plain `SET`
+     * when `ttlMs` is unset.
+     */
+    protected async setWithTtl(key: string, value: Buffer | string): Promise<void> {
+        if (this.keyTtlMs === undefined) {
+            await this.redis.set(key, value)
+        } else {
+            await this.redis.set(key, value, 'PX', this.keyTtlMs)
+        }
+    }
+
+    /**
      * Refreshes the sliding TTL on keys outside a write pipeline - used by
      * single-command writes and by read paths (touch-on-access) so an actively
      * used session keeps its keys alive. No-op (no round-trip) when `ttlMs` is

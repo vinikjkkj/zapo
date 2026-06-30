@@ -84,14 +84,12 @@ export class WaSignalRedisStore extends BaseRedisStore implements WaSignalStore 
         } else {
             await this.redis.hdel(metaKey, 'signed_prekey_rotation_ts')
         }
-        await this.refreshTtl([metaKey])
     }
 
     public async getSignedPreKeyRotationTs(): Promise<number | null> {
         const metaKey = this.k('signal:meta', this.sessionId)
         const raw = await this.redis.hget(metaKey, 'signed_prekey_rotation_ts')
         if (raw === null || raw === '') return null
-        await this.refreshTtl([metaKey])
         return Number(raw)
     }
 
@@ -123,7 +121,6 @@ export class WaSignalRedisStore extends BaseRedisStore implements WaSignalStore 
             await this.redis.hsetnx(metaKey, 'server_has_prekeys', '0')
             await this.redis.hsetnx(metaKey, 'next_prekey_id', '1')
         }
-        await this.refreshTtl([metaKey])
     }
 
     private async readSignedPreKey(): Promise<SignedPreKeyRecord | null> {

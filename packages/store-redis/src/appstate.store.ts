@@ -166,6 +166,7 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
         const existingResults = await existingPipeline.exec()
 
         const writePipeline = this.redis.pipeline()
+        const refreshUnchanged: string[] = []
         for (let i = 0; i < syncKeys.length; i += 1) {
             const sk = syncKeys[i]
             const keyIdHex = bytesToHex(sk.keyId)
@@ -175,6 +176,11 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
                 if (!err && data) {
                     const existingData = toBytesOrNull(data)
                     if (existingData && uint8Equal(existingData, sk.keyData)) {
+                        refreshUnchanged.push(
+                            this.k('appstate:key', this.sessionId, keyIdHex),
+                            this.k('appstate:key', this.sessionId, keyIdHex, 'data'),
+                            this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
+                        )
                         continue
                     }
                 }
@@ -203,6 +209,9 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
 
         if (inserted > 0) {
             await writePipeline.exec()
+        }
+        if (refreshUnchanged.length > 0) {
+            await this.refreshTtl([...refreshUnchanged, idxKey])
         }
         return inserted
     }
@@ -247,6 +256,9 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
                 this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
             )
         }
+        if (refreshKeys.length > 0) {
+            refreshKeys.push(this.k('appstate:key:idx', this.sessionId))
+        }
         await this.refreshTtl(refreshKeys)
         return out
     }
@@ -259,7 +271,8 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
         await this.refreshTtl([
             this.k('appstate:key', this.sessionId, keyIdHex),
             binKey,
-            this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
+            this.k('appstate:key', this.sessionId, keyIdHex, 'fp'),
+            this.k('appstate:key:idx', this.sessionId)
         ])
         return new Uint8Array(raw)
     }
@@ -287,6 +300,9 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
                 this.k('appstate:key', this.sessionId, keyIdHex, 'data'),
                 this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
             )
+        }
+        if (refreshKeys.length > 0) {
+            refreshKeys.push(this.k('appstate:key:idx', this.sessionId))
         }
         await this.refreshTtl(refreshKeys)
         return out

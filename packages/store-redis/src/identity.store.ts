@@ -56,8 +56,7 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
             target.server,
             String(target.device)
         )
-        await this.redis.set(key, toRedisBuffer(identityKey))
-        await this.refreshTtl([key])
+        await this.setWithTtl(key, toRedisBuffer(identityKey))
     }
 
     public async setRemoteIdentities(
@@ -81,10 +80,10 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
             keys.push(key)
             args.push(key, toRedisBuffer(entry.identityKey))
         }
-        await (this.redis as unknown as { mset: (...args: unknown[]) => Promise<unknown> }).mset(
-            ...args
-        )
-        await this.refreshTtl(keys)
+        const pipeline = this.redis.pipeline()
+        ;(pipeline.mset as (...args: unknown[]) => unknown)(...args)
+        this.touch(pipeline, keys)
+        await pipeline.exec()
     }
 
     // ── Clear ─────────────────────────────────────────────────────────

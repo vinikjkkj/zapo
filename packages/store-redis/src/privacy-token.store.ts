@@ -33,16 +33,13 @@ export class WaPrivacyTokenRedisStore extends BaseRedisStore implements WaPrivac
             pipeline.hset(key, newFields)
         }
 
-        const ttlKeys = [key]
         if (record.tcToken !== undefined) {
             pipeline.set(`${key}:tc_token`, toRedisBuffer(record.tcToken))
-            ttlKeys.push(`${key}:tc_token`)
         }
         if (record.nctSalt !== undefined) {
             pipeline.set(`${key}:nct_salt`, toRedisBuffer(record.nctSalt))
-            ttlKeys.push(`${key}:nct_salt`)
         }
-        this.touch(pipeline, ttlKeys)
+        this.touch(pipeline, [key, `${key}:tc_token`, `${key}:nct_salt`])
 
         await pipeline.exec()
     }

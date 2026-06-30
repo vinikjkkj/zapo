@@ -27,7 +27,9 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
             target.server,
             String(target.device)
         )
-        return (await this.redis.exists(key)) === 1
+        const exists = (await this.redis.exists(key)) === 1
+        if (exists) await this.refreshTtl([key])
+        return exists
     }
 
     public async hasSessions(addresses: readonly SignalAddress[]): Promise<readonly boolean[]> {
@@ -47,6 +49,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
             )
         }
         const values = await this.redis.mget(...keys)
+        await this.refreshTtl(keys.filter((_key, i) => values[i] !== null))
         return values.map((v) => v !== null)
     }
 
@@ -99,8 +102,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
             String(target.device)
         )
         const encoded = encodeSignalSessionRecord(session)
-        await this.redis.set(key, toRedisBuffer(encoded))
-        await this.refreshTtl([key])
+        await this.setWithTtl(key, toRedisBuffer(encoded))
     }
 
     public async setSessionsBatch(
@@ -127,10 +129,10 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
             keys.push(key)
             args.push(key, toRedisBuffer(encodeSignalSessionRecord(entry.session)))
         }
-        await (this.redis as unknown as { mset: (...args: unknown[]) => Promise<unknown> }).mset(
-            ...args
-        )
-        await this.refreshTtl(keys)
+        const pipeline = this.redis.pipeline()
+        ;(pipeline.mset as (...args: unknown[]) => unknown)(...args)
+        this.touch(pipeline, keys)
+        await pipeline.exec()
     }
 
     public async deleteSession(address: SignalAddress): Promise<void> {

@@ -28,19 +28,22 @@ export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKey
             String(sender.device)
         )
         const encoded = encodeSenderKeyRecord(record)
-        await this.redis.set(key, toRedisBuffer(encoded))
-
         const groupIdxKey = this.k('sk:grp', this.sessionId, record.groupId)
-        await this.redis.sadd(groupIdxKey, `${sender.user}:${sender.server}:${sender.device}`)
-        await this.refreshTtl([key, groupIdxKey])
+        const pipeline = this.redis.pipeline()
+        pipeline.set(key, toRedisBuffer(encoded))
+        pipeline.sadd(groupIdxKey, `${sender.user}:${sender.server}:${sender.device}`)
+        this.touch(pipeline, [key, groupIdxKey])
+        await pipeline.exec()
     }
 
     public async upsertSenderKeyDistribution(record: SenderKeyDistributionRecord): Promise<void> {
         const sender = toSignalAddressParts(record.sender)
         const hashKey = this.k('skd', this.sessionId, record.groupId)
         const field = `${sender.user}:${sender.server}:${sender.device}`
-        await this.redis.hset(hashKey, field, `${record.keyId}:${record.timestampMs}`)
-        await this.refreshTtl([hashKey])
+        const pipeline = this.redis.pipeline()
+        pipeline.hset(hashKey, field, `${record.keyId}:${record.timestampMs}`)
+        this.touch(pipeline, [hashKey])
+        await pipeline.exec()
     }
 
     public async upsertSenderKeyDistributions(
@@ -62,8 +65,10 @@ export class WaSenderKeyRedisStore extends BaseRedisStore implements WaSenderKey
         }
         if (byGroupKey.size === 1) {
             const [hashKey, args] = byGroupKey.entries().next().value as [string, string[]]
-            await this.redis.hset(hashKey, ...args)
-            await this.refreshTtl([hashKey])
+            const pipeline = this.redis.pipeline()
+            pipeline.hset(hashKey, ...args)
+            this.touch(pipeline, [hashKey])
+            await pipeline.exec()
             return
         }
         const pipeline = this.redis.pipeline()
