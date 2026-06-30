@@ -27,7 +27,9 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
             target.server,
             String(target.device)
         )
-        return (await this.redis.exists(key)) === 1
+        const exists = (await this.redis.exists(key)) === 1
+        if (exists) await this.refreshTtl([key])
+        return exists
     }
 
     public async hasSessions(addresses: readonly SignalAddress[]): Promise<readonly boolean[]> {
@@ -47,6 +49,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
             )
         }
         const values = await this.redis.mget(...keys)
+        await this.refreshTtl(keys.filter((_key, i) => values[i] !== null))
         return values.map((v) => v !== null)
     }
 
@@ -61,6 +64,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         )
         const data = await this.redis.getBuffer(key)
         if (!data) return null
+        await this.refreshTtl([key])
         return decodeSignalSessionRecord(new Uint8Array(data))
     }
 
@@ -81,6 +85,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         }
         // mgetBuffer: single MGET command server-side returning binary values.
         const values = await this.redis.mgetBuffer(...keys)
+        await this.refreshTtl(keys.filter((_key, i) => values[i] !== null))
         return values.map((data) => {
             if (!data) return null
             return decodeSignalSessionRecord(new Uint8Array(data))
@@ -97,7 +102,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
             String(target.device)
         )
         const encoded = encodeSignalSessionRecord(session)
-        await this.redis.set(key, toRedisBuffer(encoded))
+        await this.setWithTtl(key, toRedisBuffer(encoded))
     }
 
     public async setSessionsBatch(
@@ -107,26 +112,19 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         }[]
     ): Promise<void> {
         if (entries.length === 0) return
-        // Single MSET — ioredis accepts variadic (key, value) pairs and the
-        // command is processed as one unit server-side, replacing what would
-        // otherwise be N pipelined SETs.
-        const args: Array<string | Buffer> = []
+        const pairs: Array<readonly [string, Buffer]> = []
         for (const entry of entries) {
             const target = toSignalAddressParts(entry.address)
-            args.push(
-                this.k(
-                    'signal:sess',
-                    this.sessionId,
-                    target.user,
-                    target.server,
-                    String(target.device)
-                ),
-                toRedisBuffer(encodeSignalSessionRecord(entry.session))
+            const key = this.k(
+                'signal:sess',
+                this.sessionId,
+                target.user,
+                target.server,
+                String(target.device)
             )
+            pairs.push([key, toRedisBuffer(encodeSignalSessionRecord(entry.session))])
         }
-        await (this.redis as unknown as { mset: (...args: unknown[]) => Promise<unknown> }).mset(
-            ...args
-        )
+        await this.msetWithTtl(pairs)
     }
 
     public async deleteSession(address: SignalAddress): Promise<void> {

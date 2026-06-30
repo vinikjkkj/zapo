@@ -43,6 +43,7 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
         for (const field of LEGACY_BINARY_FIELDS) {
             pipeline.del(`${key}:${field}`)
         }
+        this.touch(pipeline, [key, idxKey, `${key}:message_bytes`])
 
         await pipeline.exec()
     }
@@ -81,6 +82,7 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
             for (const field of LEGACY_BINARY_FIELDS) {
                 pipeline.del(`${key}:${field}`)
             }
+            this.touch(pipeline, [key, idxKey, `${key}:message_bytes`])
         }
         await pipeline.exec()
     }

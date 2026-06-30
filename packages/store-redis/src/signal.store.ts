@@ -14,10 +14,12 @@ export class WaSignalRedisStore extends BaseRedisStore implements WaSignalStore 
 
     public async getRegistrationInfo(): Promise<RegistrationInfo | null> {
         const baseKey = this.k('signal:reg', this.sessionId)
+        const pubRef = this.k('signal:reg', this.sessionId, 'pub')
+        const privRef = this.k('signal:reg', this.sessionId, 'priv')
         const pipeline = this.redis.pipeline()
         pipeline.hgetall(baseKey)
-        pipeline.getBuffer(this.k('signal:reg', this.sessionId, 'pub'))
-        pipeline.getBuffer(this.k('signal:reg', this.sessionId, 'priv'))
+        pipeline.getBuffer(pubRef)
+        pipeline.getBuffer(privRef)
         const results = await pipeline.exec()
         if (!results) return null
         const [, hashData] = results[0]
@@ -26,6 +28,7 @@ export class WaSignalRedisStore extends BaseRedisStore implements WaSignalStore 
         const pubKey = toBytesOrNull(results[1][1])
         const privKey = toBytesOrNull(results[2][1])
         if (!pubKey || !privKey) return null
+        await this.refreshTtl([baseKey, pubRef, privRef])
         return {
             registrationId: Number(data.registration_id),
             identityKeyPair: { pubKey, privKey }
@@ -34,16 +37,13 @@ export class WaSignalRedisStore extends BaseRedisStore implements WaSignalStore 
 
     public async setRegistrationInfo(info: RegistrationInfo): Promise<void> {
         const baseKey = this.k('signal:reg', this.sessionId)
+        const pubRef = this.k('signal:reg', this.sessionId, 'pub')
+        const privRef = this.k('signal:reg', this.sessionId, 'priv')
         const pipeline = this.redis.pipeline()
         pipeline.hset(baseKey, { registration_id: String(info.registrationId) })
-        pipeline.set(
-            this.k('signal:reg', this.sessionId, 'pub'),
-            toRedisBuffer(info.identityKeyPair.pubKey)
-        )
-        pipeline.set(
-            this.k('signal:reg', this.sessionId, 'priv'),
-            toRedisBuffer(info.identityKeyPair.privKey)
-        )
+        pipeline.set(pubRef, toRedisBuffer(info.identityKeyPair.pubKey))
+        pipeline.set(privRef, toRedisBuffer(info.identityKeyPair.privKey))
+        this.touch(pipeline, [baseKey, pubRef, privRef])
         await pipeline.exec()
     }
 
@@ -55,20 +55,18 @@ export class WaSignalRedisStore extends BaseRedisStore implements WaSignalStore 
 
     public async setSignedPreKey(record: SignedPreKeyRecord): Promise<void> {
         const baseKey = this.k('signal:spk', this.sessionId)
+        const pubRef = this.k('signal:spk', this.sessionId, 'pub')
+        const privRef = this.k('signal:spk', this.sessionId, 'priv')
+        const sigRef = this.k('signal:spk', this.sessionId, 'sig')
         const pipeline = this.redis.pipeline()
         pipeline.hset(baseKey, {
             key_id: String(record.keyId),
             uploaded: record.uploaded === true ? '1' : '0'
         })
-        pipeline.set(
-            this.k('signal:spk', this.sessionId, 'pub'),
-            toRedisBuffer(record.keyPair.pubKey)
-        )
-        pipeline.set(
-            this.k('signal:spk', this.sessionId, 'priv'),
-            toRedisBuffer(record.keyPair.privKey)
-        )
-        pipeline.set(this.k('signal:spk', this.sessionId, 'sig'), toRedisBuffer(record.signature))
+        pipeline.set(pubRef, toRedisBuffer(record.keyPair.pubKey))
+        pipeline.set(privRef, toRedisBuffer(record.keyPair.privKey))
+        pipeline.set(sigRef, toRedisBuffer(record.signature))
+        this.touch(pipeline, [baseKey, pubRef, privRef, sigRef])
         await pipeline.exec()
     }
 
@@ -127,11 +125,14 @@ export class WaSignalRedisStore extends BaseRedisStore implements WaSignalStore 
 
     private async readSignedPreKey(): Promise<SignedPreKeyRecord | null> {
         const baseKey = this.k('signal:spk', this.sessionId)
+        const pubRef = this.k('signal:spk', this.sessionId, 'pub')
+        const privRef = this.k('signal:spk', this.sessionId, 'priv')
+        const sigRef = this.k('signal:spk', this.sessionId, 'sig')
         const pipeline = this.redis.pipeline()
         pipeline.hgetall(baseKey)
-        pipeline.getBuffer(this.k('signal:spk', this.sessionId, 'pub'))
-        pipeline.getBuffer(this.k('signal:spk', this.sessionId, 'priv'))
-        pipeline.getBuffer(this.k('signal:spk', this.sessionId, 'sig'))
+        pipeline.getBuffer(pubRef)
+        pipeline.getBuffer(privRef)
+        pipeline.getBuffer(sigRef)
         const results = await pipeline.exec()
         if (!results) return null
         const [, hashData] = results[0]
@@ -141,6 +142,7 @@ export class WaSignalRedisStore extends BaseRedisStore implements WaSignalStore 
         const privKey = toBytesOrNull(results[2][1])
         const signature = toBytesOrNull(results[3][1])
         if (!pubKey || !privKey || !signature) return null
+        await this.refreshTtl([baseKey, pubRef, privRef, sigRef])
         return {
             keyId: Number(data.key_id),
             keyPair: { pubKey, privKey },

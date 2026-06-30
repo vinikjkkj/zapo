@@ -39,6 +39,7 @@ export class WaPrivacyTokenRedisStore extends BaseRedisStore implements WaPrivac
         if (record.nctSalt !== undefined) {
             pipeline.set(`${key}:nct_salt`, toRedisBuffer(record.nctSalt))
         }
+        this.touch(pipeline, [key, `${key}:tc_token`, `${key}:nct_salt`])
 
         await pipeline.exec()
     }

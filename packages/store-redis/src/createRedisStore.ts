@@ -44,6 +44,35 @@ export interface WaRedisStoreConfig {
         readonly messageSecretMs?: number
     }
     /**
+     * Opt-in sliding TTLs (in ms) for the otherwise-persistent store domains,
+     * applied as Redis `PEXPIRE` on each write - no background cleanup. Any
+     * domain left unset stays persistent (current behavior).
+     *
+     * Two semantics, by domain kind:
+     * - Data (`messagesMs`/`threadsMs`/`contactsMs`/`privacyTokenMs`): expire
+     *   N ms after the last write - history/retention bounding.
+     * - Crypto & session (`preKeyMs`/`sessionMs`/`identityMs`/`signalMs`/
+     *   `senderKeyMs`/`appStateMs`): TTL also refreshed on read, so an actively
+     *   used session never expires and only idle sessions are evicted.
+     *
+     * `auth` is intentionally absent: expiring login credentials would log the
+     * device out. Set a TTL short relative to how often a session is used at
+     * your own risk - an idle window longer than the crypto TTL evicts the
+     * Signal/app-state keys and forces a re-handshake or re-sync.
+     */
+    readonly storeTtlMs?: {
+        readonly preKeyMs?: number
+        readonly sessionMs?: number
+        readonly identityMs?: number
+        readonly signalMs?: number
+        readonly senderKeyMs?: number
+        readonly appStateMs?: number
+        readonly messagesMs?: number
+        readonly threadsMs?: number
+        readonly contactsMs?: number
+        readonly privacyTokenMs?: number
+    }
+    /**
      * Logger for connection lifecycle and degraded paths emitted by the
      * factory (connect/ready/reconnecting/end/error). The factory binds
      * `{ scope: 'store', provider: 'redis' }` and each per-domain store
@@ -114,6 +143,7 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
     const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
+    const storeTtl = config.storeTtlMs ?? {}
     const ownsRedis = !isRedis(config.redis)
     const baseLogger = config.logger?.child({ scope: 'store', provider: 'redis' })
 
@@ -133,10 +163,11 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
         redis.on('error', (err: Error) => baseLogger.warn('redis error', { message: err.message }))
     }
 
-    const opts = (sessionId: string, domain: string): WaRedisStorageOptions => ({
+    const opts = (sessionId: string, domain: string, ttlMs?: number): WaRedisStorageOptions => ({
         redis,
         sessionId,
         keyPrefix,
+        ttlMs,
         logger: baseLogger?.child({ domain, sessionId })
     })
 
@@ -144,17 +175,28 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
         redis,
         stores: {
             auth: (sessionId) => new WaAuthRedisStore(opts(sessionId, 'auth')),
-            preKey: (sessionId) => new WaPreKeyRedisStore(opts(sessionId, 'preKey')),
-            session: (sessionId) => new WaSessionRedisStore(opts(sessionId, 'session')),
-            identity: (sessionId) => new WaIdentityRedisStore(opts(sessionId, 'identity')),
-            signal: (sessionId) => new WaSignalRedisStore(opts(sessionId, 'signal')),
-            senderKey: (sessionId) => new WaSenderKeyRedisStore(opts(sessionId, 'senderKey')),
-            appState: (sessionId) => new WaAppStateRedisStore(opts(sessionId, 'appState')),
-            messages: (sessionId) => new WaMessageRedisStore(opts(sessionId, 'messages')),
-            threads: (sessionId) => new WaThreadRedisStore(opts(sessionId, 'threads')),
-            contacts: (sessionId) => new WaContactRedisStore(opts(sessionId, 'contacts')),
+            preKey: (sessionId) =>
+                new WaPreKeyRedisStore(opts(sessionId, 'preKey', storeTtl.preKeyMs)),
+            session: (sessionId) =>
+                new WaSessionRedisStore(opts(sessionId, 'session', storeTtl.sessionMs)),
+            identity: (sessionId) =>
+                new WaIdentityRedisStore(opts(sessionId, 'identity', storeTtl.identityMs)),
+            signal: (sessionId) =>
+                new WaSignalRedisStore(opts(sessionId, 'signal', storeTtl.signalMs)),
+            senderKey: (sessionId) =>
+                new WaSenderKeyRedisStore(opts(sessionId, 'senderKey', storeTtl.senderKeyMs)),
+            appState: (sessionId) =>
+                new WaAppStateRedisStore(opts(sessionId, 'appState', storeTtl.appStateMs)),
+            messages: (sessionId) =>
+                new WaMessageRedisStore(opts(sessionId, 'messages', storeTtl.messagesMs)),
+            threads: (sessionId) =>
+                new WaThreadRedisStore(opts(sessionId, 'threads', storeTtl.threadsMs)),
+            contacts: (sessionId) =>
+                new WaContactRedisStore(opts(sessionId, 'contacts', storeTtl.contactsMs)),
             privacyToken: (sessionId) =>
-                new WaPrivacyTokenRedisStore(opts(sessionId, 'privacyToken'))
+                new WaPrivacyTokenRedisStore(
+                    opts(sessionId, 'privacyToken', storeTtl.privacyTokenMs)
+                )
         },
         caches: {
             retry: (sessionId) => new WaRetryRedisStore(opts(sessionId, 'retry'), retryTtlMs),

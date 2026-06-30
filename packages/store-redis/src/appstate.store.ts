@@ -26,6 +26,8 @@ import {
 } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
+const ACTIVE_SYNC_KEY_PAGE_SIZE = 16
+
 export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateStore {
     public constructor(options: WaRedisStorageOptions) {
         super(options)
@@ -166,6 +168,7 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
         const existingResults = await existingPipeline.exec()
 
         const writePipeline = this.redis.pipeline()
+        const refreshUnchanged: string[] = []
         for (let i = 0; i < syncKeys.length; i += 1) {
             const sk = syncKeys[i]
             const keyIdHex = bytesToHex(sk.keyId)
@@ -175,35 +178,42 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
                 if (!err && data) {
                     const existingData = toBytesOrNull(data)
                     if (existingData && uint8Equal(existingData, sk.keyData)) {
+                        refreshUnchanged.push(
+                            this.k('appstate:key', this.sessionId, keyIdHex),
+                            this.k('appstate:key', this.sessionId, keyIdHex, 'data'),
+                            this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
+                        )
                         continue
                     }
                 }
             }
 
             const hashKey = this.k('appstate:key', this.sessionId, keyIdHex)
+            const dataKey = this.k('appstate:key', this.sessionId, keyIdHex, 'data')
             const epoch = keyEpoch(sk.keyId)
             writePipeline.hset(hashKey, {
                 key_id_hex: keyIdHex,
                 timestamp: String(sk.timestamp),
                 key_epoch: String(epoch)
             })
-            writePipeline.set(
-                this.k('appstate:key', this.sessionId, keyIdHex, 'data'),
-                toRedisBuffer(sk.keyData)
-            )
+            writePipeline.set(dataKey, toRedisBuffer(sk.keyData))
+            const ttlKeys = [hashKey, dataKey, idxKey]
             const fingerprint = encodeAppStateFingerprint(sk.fingerprint)
             if (fingerprint) {
-                writePipeline.set(
-                    this.k('appstate:key', this.sessionId, keyIdHex, 'fp'),
-                    toRedisBuffer(fingerprint)
-                )
+                const fpKey = this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
+                writePipeline.set(fpKey, toRedisBuffer(fingerprint))
+                ttlKeys.push(fpKey)
             }
             writePipeline.zadd(idxKey, epoch, keyIdHex)
+            this.touch(writePipeline, ttlKeys)
             inserted += 1
         }
 
         if (inserted > 0) {
             await writePipeline.exec()
+        }
+        if (refreshUnchanged.length > 0) {
+            await this.refreshTtl([...refreshUnchanged, idxKey])
         }
         return inserted
     }
@@ -222,7 +232,7 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
         const results = await pipeline.exec()
         if (!results) return keyIds.map(() => null)
 
-        return keyIds.map((keyId, index) => {
+        const out = keyIds.map((keyId, index) => {
             const base = index * 3
             const [err, hashData] = results[base]
             if (err || !hashData || typeof hashData !== 'object') return null
@@ -238,12 +248,34 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
                 fingerprint: decodeAppStateFingerprint(fingerprint)
             }
         })
+        const refreshKeys: string[] = []
+        for (let index = 0; index < keyIds.length; index += 1) {
+            if (out[index] === null) continue
+            const keyIdHex = bytesToHex(keyIds[index])
+            refreshKeys.push(
+                this.k('appstate:key', this.sessionId, keyIdHex),
+                this.k('appstate:key', this.sessionId, keyIdHex, 'data'),
+                this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
+            )
+        }
+        if (refreshKeys.length > 0) {
+            refreshKeys.push(this.k('appstate:key:idx', this.sessionId))
+        }
+        await this.refreshTtl(refreshKeys)
+        return out
     }
 
     public async getSyncKeyData(keyId: Uint8Array): Promise<Uint8Array | null> {
-        const binKey = this.k('appstate:key', this.sessionId, bytesToHex(keyId), 'data')
+        const keyIdHex = bytesToHex(keyId)
+        const binKey = this.k('appstate:key', this.sessionId, keyIdHex, 'data')
         const raw = await this.redis.getBuffer(binKey)
         if (!raw) return null
+        await this.refreshTtl([
+            this.k('appstate:key', this.sessionId, keyIdHex),
+            binKey,
+            this.k('appstate:key', this.sessionId, keyIdHex, 'fp'),
+            this.k('appstate:key:idx', this.sessionId)
+        ])
         return new Uint8Array(raw)
     }
 
@@ -257,39 +289,87 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
         }
         const results = await pipeline.exec()
         if (!results) return keyIds.map(() => null)
-        return results.map(([err, data]) => {
+        const out = results.map(([err, data]) => {
             if (err || !data) return null
             return new Uint8Array(data as Uint8Array)
         })
+        const refreshKeys: string[] = []
+        for (let index = 0; index < keyIds.length; index += 1) {
+            if (out[index] === null) continue
+            const keyIdHex = bytesToHex(keyIds[index])
+            refreshKeys.push(
+                this.k('appstate:key', this.sessionId, keyIdHex),
+                this.k('appstate:key', this.sessionId, keyIdHex, 'data'),
+                this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
+            )
+        }
+        if (refreshKeys.length > 0) {
+            refreshKeys.push(this.k('appstate:key:idx', this.sessionId))
+        }
+        await this.refreshTtl(refreshKeys)
+        return out
     }
 
     public async getActiveSyncKey(): Promise<WaAppStateSyncKey | null> {
         const idxKey = this.k('appstate:key:idx', this.sessionId)
-        const topMembers = await this.redis.zrevrange(idxKey, 0, 0)
-        if (topMembers.length === 0) return null
+        const stale: string[] = []
+        let start = 0
 
-        const keyIdHex = topMembers[0]
-        const pipeline = this.redis.pipeline()
-        pipeline.hgetall(this.k('appstate:key', this.sessionId, keyIdHex))
-        pipeline.getBuffer(this.k('appstate:key', this.sessionId, keyIdHex, 'data'))
-        pipeline.getBuffer(this.k('appstate:key', this.sessionId, keyIdHex, 'fp'))
-        const results = await pipeline.exec()
-        if (!results) return null
+        for (;;) {
+            const members = await this.redis.zrevrange(
+                idxKey,
+                start,
+                start + ACTIVE_SYNC_KEY_PAGE_SIZE - 1
+            )
+            if (members.length === 0) break
 
-        const [err, hashData] = results[0]
-        if (err || !hashData || typeof hashData !== 'object') return null
-        const data = hashData as Record<string, string>
-        if (Object.keys(data).length === 0) return null
-        const keyData = toBytesOrNull(results[1][1])
-        if (!keyData) return null
-        const fingerprint = toBytesOrNull(results[2][1])
+            const pipeline = this.redis.pipeline()
+            for (const keyIdHex of members) {
+                pipeline.hgetall(this.k('appstate:key', this.sessionId, keyIdHex))
+                pipeline.getBuffer(this.k('appstate:key', this.sessionId, keyIdHex, 'data'))
+                pipeline.getBuffer(this.k('appstate:key', this.sessionId, keyIdHex, 'fp'))
+            }
+            const results = await pipeline.exec()
+            if (!results) break
 
-        return {
-            keyId: hexToBytes(keyIdHex),
-            keyData,
-            timestamp: Number(data.timestamp),
-            fingerprint: decodeAppStateFingerprint(fingerprint)
+            for (let i = 0; i < members.length; i += 1) {
+                const base = i * 3
+                const keyIdHex = members[i]
+                const [err, hashData] = results[base]
+                const data =
+                    !err && hashData && typeof hashData === 'object'
+                        ? (hashData as Record<string, string>)
+                        : null
+                const keyData =
+                    data && Object.keys(data).length > 0
+                        ? toBytesOrNull(results[base + 1][1])
+                        : null
+                if (!data || !keyData) {
+                    stale.push(keyIdHex)
+                    continue
+                }
+                const fingerprint = toBytesOrNull(results[base + 2][1])
+                const hashKey = this.k('appstate:key', this.sessionId, keyIdHex)
+                const dataKey = this.k('appstate:key', this.sessionId, keyIdHex, 'data')
+                const fpKey = this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
+
+                if (stale.length > 0) await this.redis.zrem(idxKey, ...stale)
+                await this.refreshTtl([idxKey, hashKey, dataKey, fpKey])
+
+                return {
+                    keyId: hexToBytes(keyIdHex),
+                    keyData,
+                    timestamp: Number(data.timestamp),
+                    fingerprint: decodeAppStateFingerprint(fingerprint)
+                }
+            }
+
+            if (members.length < ACTIVE_SYNC_KEY_PAGE_SIZE) break
+            start += ACTIVE_SYNC_KEY_PAGE_SIZE
         }
+
+        if (stale.length > 0) await this.redis.zrem(idxKey, ...stale)
+        return null
     }
 
     public async getCollectionState(
@@ -350,6 +430,13 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
             }
         }
 
+        await this.refreshTtl([
+            colKey,
+            this.k('appstate:col', this.sessionId, collection, 'hash'),
+            idxSetKey,
+            ...indexMacs.map((macHex) => this.k('appstate:idx', this.sessionId, collection, macHex))
+        ])
+
         return {
             initialized: true,
             version: Number(data.version),
@@ -399,14 +486,12 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
                 }
             }
 
+            const colHashKey = this.k('appstate:col', this.sessionId, update.collection, 'hash')
             const multi = this.redis.multi()
             multi.hset(colKey, {
                 version: String(update.version)
             })
-            multi.set(
-                this.k('appstate:col', this.sessionId, update.collection, 'hash'),
-                toRedisBuffer(update.hash)
-            )
+            multi.set(colHashKey, toRedisBuffer(update.hash))
 
             const addMacs: string[] = []
             for (const [indexMacHex, valueMac] of update.indexValueMap.entries()) {
@@ -431,6 +516,13 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
             if (delMacs.length > 0) {
                 multi.srem(idxSetKey, ...delMacs)
             }
+
+            this.touch(multi, [
+                colKey,
+                colHashKey,
+                idxSetKey,
+                ...[...update.indexValueMap.keys()].map(buildIdxKey)
+            ])
 
             await multi.exec()
         }

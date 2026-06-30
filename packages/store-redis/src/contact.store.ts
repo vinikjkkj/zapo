@@ -81,7 +81,11 @@ export class WaContactRedisStore extends BaseRedisStore implements WaContactStor
             }
         }
         if (mergedRecord.phoneNumber) {
-            await this.redis.set(this.phoneLookupKey(mergedRecord.phoneNumber), mergedRecord.jid)
+            const lookupKey = this.phoneLookupKey(mergedRecord.phoneNumber)
+            await this.redis.set(lookupKey, mergedRecord.jid)
+            await this.refreshTtl([key, lookupKey])
+        } else {
+            await this.refreshTtl([key])
         }
     }
 
