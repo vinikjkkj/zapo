@@ -26,6 +26,8 @@ import {
 } from './helpers'
 import type { WaRedisStorageOptions } from './types'
 
+const ACTIVE_SYNC_KEY_PAGE_SIZE = 16
+
 export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateStore {
     public constructor(options: WaRedisStorageOptions) {
         super(options)
@@ -310,41 +312,63 @@ export class WaAppStateRedisStore extends BaseRedisStore implements WaAppStateSt
 
     public async getActiveSyncKey(): Promise<WaAppStateSyncKey | null> {
         const idxKey = this.k('appstate:key:idx', this.sessionId)
-        const members = await this.redis.zrevrange(idxKey, 0, -1)
+        const stale: string[] = []
+        let start = 0
 
-        for (const keyIdHex of members) {
-            const hashKey = this.k('appstate:key', this.sessionId, keyIdHex)
-            const dataKey = this.k('appstate:key', this.sessionId, keyIdHex, 'data')
-            const fpKey = this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
+        for (;;) {
+            const members = await this.redis.zrevrange(
+                idxKey,
+                start,
+                start + ACTIVE_SYNC_KEY_PAGE_SIZE - 1
+            )
+            if (members.length === 0) break
+
             const pipeline = this.redis.pipeline()
-            pipeline.hgetall(hashKey)
-            pipeline.getBuffer(dataKey)
-            pipeline.getBuffer(fpKey)
+            for (const keyIdHex of members) {
+                pipeline.hgetall(this.k('appstate:key', this.sessionId, keyIdHex))
+                pipeline.getBuffer(this.k('appstate:key', this.sessionId, keyIdHex, 'data'))
+                pipeline.getBuffer(this.k('appstate:key', this.sessionId, keyIdHex, 'fp'))
+            }
             const results = await pipeline.exec()
-            if (!results) return null
+            if (!results) break
 
-            const [err, hashData] = results[0]
-            const data =
-                !err && hashData && typeof hashData === 'object'
-                    ? (hashData as Record<string, string>)
-                    : null
-            const keyData =
-                data && Object.keys(data).length > 0 ? toBytesOrNull(results[1][1]) : null
-            if (!data || !keyData) {
-                await this.redis.zrem(idxKey, keyIdHex)
-                continue
+            for (let i = 0; i < members.length; i += 1) {
+                const base = i * 3
+                const keyIdHex = members[i]
+                const [err, hashData] = results[base]
+                const data =
+                    !err && hashData && typeof hashData === 'object'
+                        ? (hashData as Record<string, string>)
+                        : null
+                const keyData =
+                    data && Object.keys(data).length > 0
+                        ? toBytesOrNull(results[base + 1][1])
+                        : null
+                if (!data || !keyData) {
+                    stale.push(keyIdHex)
+                    continue
+                }
+                const fingerprint = toBytesOrNull(results[base + 2][1])
+                const hashKey = this.k('appstate:key', this.sessionId, keyIdHex)
+                const dataKey = this.k('appstate:key', this.sessionId, keyIdHex, 'data')
+                const fpKey = this.k('appstate:key', this.sessionId, keyIdHex, 'fp')
+
+                if (stale.length > 0) await this.redis.zrem(idxKey, ...stale)
+                await this.refreshTtl([idxKey, hashKey, dataKey, fpKey])
+
+                return {
+                    keyId: hexToBytes(keyIdHex),
+                    keyData,
+                    timestamp: Number(data.timestamp),
+                    fingerprint: decodeAppStateFingerprint(fingerprint)
+                }
             }
-            const fingerprint = toBytesOrNull(results[2][1])
 
-            await this.refreshTtl([idxKey, hashKey, dataKey, fpKey])
-
-            return {
-                keyId: hexToBytes(keyIdHex),
-                keyData,
-                timestamp: Number(data.timestamp),
-                fingerprint: decodeAppStateFingerprint(fingerprint)
-            }
+            if (members.length < ACTIVE_SYNC_KEY_PAGE_SIZE) break
+            start += ACTIVE_SYNC_KEY_PAGE_SIZE
         }
+
+        if (stale.length > 0) await this.redis.zrem(idxKey, ...stale)
         return null
     }
 
