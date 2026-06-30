@@ -63,6 +63,31 @@ export abstract class BaseRedisStore {
     }
 
     /**
+     * Batch equivalent of {@link setWithTtl}: a single `MSET` when no TTL is
+     * configured, otherwise a pipeline of per-key `SET ... PX` so every key is
+     * born with its expiry rather than stamped by a follow-up `PEXPIRE` that a
+     * dropped connection could skip.
+     */
+    protected async msetWithTtl(pairs: ReadonlyArray<readonly [string, Buffer]>): Promise<void> {
+        if (pairs.length === 0) return
+        if (this.keyTtlMs === undefined) {
+            const args: (string | Buffer)[] = []
+            for (const [key, value] of pairs) {
+                args.push(key, value)
+            }
+            await (
+                this.redis as unknown as { mset: (...args: unknown[]) => Promise<unknown> }
+            ).mset(...args)
+            return
+        }
+        const pipeline = this.redis.pipeline()
+        for (const [key, value] of pairs) {
+            pipeline.set(key, value, 'PX', this.keyTtlMs)
+        }
+        await pipeline.exec()
+    }
+
+    /**
      * Refreshes the sliding TTL on keys outside a write pipeline - used by
      * single-command writes and by read paths (touch-on-access) so an actively
      * used session keeps its keys alive. No-op (no round-trip) when `ttlMs` is

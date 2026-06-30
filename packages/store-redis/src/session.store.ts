@@ -112,11 +112,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         }[]
     ): Promise<void> {
         if (entries.length === 0) return
-        // Single MSET — ioredis accepts variadic (key, value) pairs and the
-        // command is processed as one unit server-side, replacing what would
-        // otherwise be N pipelined SETs.
-        const args: Array<string | Buffer> = []
-        const keys: string[] = []
+        const pairs: Array<readonly [string, Buffer]> = []
         for (const entry of entries) {
             const target = toSignalAddressParts(entry.address)
             const key = this.k(
@@ -126,13 +122,9 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
                 target.server,
                 String(target.device)
             )
-            keys.push(key)
-            args.push(key, toRedisBuffer(encodeSignalSessionRecord(entry.session)))
+            pairs.push([key, toRedisBuffer(encodeSignalSessionRecord(entry.session))])
         }
-        const pipeline = this.redis.pipeline()
-        ;(pipeline.mset as (...args: unknown[]) => unknown)(...args)
-        this.touch(pipeline, keys)
-        await pipeline.exec()
+        await this.msetWithTtl(pairs)
     }
 
     public async deleteSession(address: SignalAddress): Promise<void> {

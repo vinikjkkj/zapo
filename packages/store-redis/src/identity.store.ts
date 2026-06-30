@@ -66,8 +66,7 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
         }[]
     ): Promise<void> {
         if (entries.length === 0) return
-        const args: Array<string | Buffer> = []
-        const keys: string[] = []
+        const pairs: Array<readonly [string, Buffer]> = []
         for (const entry of entries) {
             const target = toSignalAddressParts(entry.address)
             const key = this.k(
@@ -77,13 +76,9 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
                 target.server,
                 String(target.device)
             )
-            keys.push(key)
-            args.push(key, toRedisBuffer(entry.identityKey))
+            pairs.push([key, toRedisBuffer(entry.identityKey)])
         }
-        const pipeline = this.redis.pipeline()
-        ;(pipeline.mset as (...args: unknown[]) => unknown)(...args)
-        this.touch(pipeline, keys)
-        await pipeline.exec()
+        await this.msetWithTtl(pairs)
     }
 
     // ── Clear ─────────────────────────────────────────────────────────
