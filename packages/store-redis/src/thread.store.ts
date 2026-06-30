@@ -77,6 +77,7 @@ export class WaThreadRedisStore extends BaseRedisStore implements WaThreadStore 
         } else {
             await this.redis.hset(key, newFields)
         }
+        await this.refreshTtl([key])
     }
 
     public async upsertBatch(records: readonly WaStoredThreadRecord[]): Promise<void> {

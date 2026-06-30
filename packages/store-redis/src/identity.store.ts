@@ -23,6 +23,7 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
         )
         const data = await this.redis.getBuffer(key)
         if (!data) return null
+        await this.refreshTtl([key])
         return new Uint8Array(data)
     }
 
@@ -42,6 +43,7 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
             )
         }
         const values = await this.redis.mgetBuffer(...keys)
+        await this.refreshTtl(keys.filter((_key, i) => values[i] !== null))
         return values.map((data) => (data ? new Uint8Array(data) : null))
     }
 
@@ -55,6 +57,7 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
             String(target.device)
         )
         await this.redis.set(key, toRedisBuffer(identityKey))
+        await this.refreshTtl([key])
     }
 
     public async setRemoteIdentities(
@@ -65,22 +68,23 @@ export class WaIdentityRedisStore extends BaseRedisStore implements WaIdentitySt
     ): Promise<void> {
         if (entries.length === 0) return
         const args: Array<string | Buffer> = []
+        const keys: string[] = []
         for (const entry of entries) {
             const target = toSignalAddressParts(entry.address)
-            args.push(
-                this.k(
-                    'signal:ident',
-                    this.sessionId,
-                    target.user,
-                    target.server,
-                    String(target.device)
-                ),
-                toRedisBuffer(entry.identityKey)
+            const key = this.k(
+                'signal:ident',
+                this.sessionId,
+                target.user,
+                target.server,
+                String(target.device)
             )
+            keys.push(key)
+            args.push(key, toRedisBuffer(entry.identityKey))
         }
         await (this.redis as unknown as { mset: (...args: unknown[]) => Promise<unknown> }).mset(
             ...args
         )
+        await this.refreshTtl(keys)
     }
 
     // ── Clear ─────────────────────────────────────────────────────────

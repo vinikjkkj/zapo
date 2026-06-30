@@ -147,10 +147,15 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
                     pipeline.zadd(availKey, record.keyId, idStr)
                 }
             }
+            this.touch(pipeline, [
+                ...idStrs.map((id) => this.k('signal:pk', this.sessionId, id)),
+                availKey
+            ])
             // One variadic SADD (the last command) returns how many ids were
             // genuinely new, i.e. how many prekeys this round actually inserted.
             pipeline.sadd(idsKey, ...idStrs)
             const execResults = await pipeline.exec()
+            await this.refreshTtl([idsKey])
             const saddResult = execResults ? execResults[execResults.length - 1] : undefined
             const insertedCount =
                 saddResult && saddResult[0] === null && typeof saddResult[1] === 'number'
@@ -209,10 +214,11 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
     }
 
     public async getPreKeyById(keyId: number): Promise<PreKeyRecord | null> {
-        const data = await this.redis.hgetallBuffer(
-            this.k('signal:pk', this.sessionId, String(keyId))
-        )
-        return this.decodePreKey(keyId, data)
+        const pkKey = this.k('signal:pk', this.sessionId, String(keyId))
+        const data = await this.redis.hgetallBuffer(pkKey)
+        const record = this.decodePreKey(keyId, data)
+        if (record) await this.refreshTtl([pkKey])
+        return record
     }
 
     public async getPreKeysById(
@@ -227,11 +233,17 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
         }
         const results = await pipeline.exec()
         if (!results) return keyIds.map(() => null)
-        return keyIds.map((keyId, index) => {
+        const out = keyIds.map((keyId, index) => {
             const [err, data] = results[index]
             if (err || !data) return null
             return this.decodePreKey(keyId, data as Record<string, Buffer>)
         })
+        await this.refreshTtl(
+            keyIds
+                .filter((_keyId, index) => out[index] !== null)
+                .map((keyId) => this.k('signal:pk', this.sessionId, String(keyId)))
+        )
+        return out
     }
 
     public async consumePreKeyById(keyId: number): Promise<PreKeyRecord | null> {
@@ -276,13 +288,18 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
         const allIds = await this.redis.smembers(idsKey)
         const availKey = this.k('signal:pk:avail', this.sessionId)
         const pipeline = this.redis.pipeline()
+        const touchedKeys: string[] = []
         for (const idStr of allIds) {
             const id = Number(idStr)
             if (id <= keyId) {
                 const pkKey = this.k('signal:pk', this.sessionId, idStr)
                 pipeline.hset(pkKey, 'uploaded', '1')
                 pipeline.zrem(availKey, idStr)
+                touchedKeys.push(pkKey)
             }
+        }
+        if (touchedKeys.length > 0) {
+            this.touch(pipeline, [...touchedKeys, availKey])
         }
         await pipeline.exec()
     }
@@ -298,6 +315,7 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
     public async getServerHasPreKeys(): Promise<boolean> {
         const metaKey = this.k('signal:meta', this.sessionId)
         const raw = await this.redis.hget(metaKey, 'server_has_prekeys')
+        if (raw !== null) await this.refreshTtl([metaKey])
         return raw === '1'
     }
 
@@ -330,6 +348,7 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
             await this.redis.hsetnx(metaKey, 'server_has_prekeys', '0')
             await this.redis.hsetnx(metaKey, 'next_prekey_id', '1')
         }
+        await this.refreshTtl([metaKey])
     }
 
     private decodePreKey(
@@ -371,6 +390,7 @@ export class WaPreKeyRedisStore extends BaseRedisStore implements WaPreKeyStore 
         } else {
             pipeline.zrem(availKey, idStr)
         }
+        this.touch(pipeline, [pkKey, idsKey, availKey])
         await pipeline.exec()
     }
 }

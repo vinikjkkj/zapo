@@ -37,12 +37,15 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
         pipeline.hset(key, recordToHash(record))
         pipeline.zadd(idxKey, String(score), record.id)
 
+        const ttlKeys = [key, idxKey]
         if (record.messageBytes !== undefined) {
             pipeline.set(`${key}:message_bytes`, toRedisBuffer(record.messageBytes))
+            ttlKeys.push(`${key}:message_bytes`)
         }
         for (const field of LEGACY_BINARY_FIELDS) {
             pipeline.del(`${key}:${field}`)
         }
+        this.touch(pipeline, ttlKeys)
 
         await pipeline.exec()
     }
@@ -75,12 +78,15 @@ export class WaMessageRedisStore extends BaseRedisStore implements WaMessageStor
             pipeline.hset(key, recordToHash(record))
             pipeline.zadd(idxKey, String(score), record.id)
 
+            const ttlKeys = [key, idxKey]
             if (record.messageBytes !== undefined) {
                 pipeline.set(`${key}:message_bytes`, toRedisBuffer(record.messageBytes))
+                ttlKeys.push(`${key}:message_bytes`)
             }
             for (const field of LEGACY_BINARY_FIELDS) {
                 pipeline.del(`${key}:${field}`)
             }
+            this.touch(pipeline, ttlKeys)
         }
         await pipeline.exec()
     }

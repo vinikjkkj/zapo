@@ -61,6 +61,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         )
         const data = await this.redis.getBuffer(key)
         if (!data) return null
+        await this.refreshTtl([key])
         return decodeSignalSessionRecord(new Uint8Array(data))
     }
 
@@ -81,6 +82,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         }
         // mgetBuffer: single MGET command server-side returning binary values.
         const values = await this.redis.mgetBuffer(...keys)
+        await this.refreshTtl(keys.filter((_key, i) => values[i] !== null))
         return values.map((data) => {
             if (!data) return null
             return decodeSignalSessionRecord(new Uint8Array(data))
@@ -98,6 +100,7 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         )
         const encoded = encodeSignalSessionRecord(session)
         await this.redis.set(key, toRedisBuffer(encoded))
+        await this.refreshTtl([key])
     }
 
     public async setSessionsBatch(
@@ -111,22 +114,23 @@ export class WaSessionRedisStore extends BaseRedisStore implements WaSessionStor
         // command is processed as one unit server-side, replacing what would
         // otherwise be N pipelined SETs.
         const args: Array<string | Buffer> = []
+        const keys: string[] = []
         for (const entry of entries) {
             const target = toSignalAddressParts(entry.address)
-            args.push(
-                this.k(
-                    'signal:sess',
-                    this.sessionId,
-                    target.user,
-                    target.server,
-                    String(target.device)
-                ),
-                toRedisBuffer(encodeSignalSessionRecord(entry.session))
+            const key = this.k(
+                'signal:sess',
+                this.sessionId,
+                target.user,
+                target.server,
+                String(target.device)
             )
+            keys.push(key)
+            args.push(key, toRedisBuffer(encodeSignalSessionRecord(entry.session)))
         }
         await (this.redis as unknown as { mset: (...args: unknown[]) => Promise<unknown> }).mset(
             ...args
         )
+        await this.refreshTtl(keys)
     }
 
     public async deleteSession(address: SignalAddress): Promise<void> {
