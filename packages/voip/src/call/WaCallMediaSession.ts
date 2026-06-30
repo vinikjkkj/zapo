@@ -318,10 +318,8 @@ export class WaCallMediaSession implements AudioSender {
         const callCreator = this.info.callCreator
         const destinationJids = this.info.relayData.participantJids || []
         const seenRelayNames = new Set<string>()
-        const hasNonFna = this.info.relayData.endpoints.some((ep) => !ep.isFna)
 
         for (const ep of this.info.relayData.endpoints) {
-            if (ep.isFna && hasNonFna) continue
             const name = ep.relayName || ''
             if (!name || seenRelayNames.has(name)) continue
             seenRelayNames.add(name)

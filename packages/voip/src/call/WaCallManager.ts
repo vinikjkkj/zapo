@@ -247,6 +247,7 @@ export class WaCallManager extends EventEmitter {
                 this.emitState(info)
                 session.cleanup()
                 this.calls.delete(callId)
+                await this.maybeUnblockWaitingCalls()
                 return
             }
         } else {
