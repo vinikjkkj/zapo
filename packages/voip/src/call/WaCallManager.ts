@@ -232,12 +232,21 @@ export class WaCallManager extends EventEmitter {
                 await session.sendIncomingPreaccept(peerJid)
                 await session.sendIncomingRelayLatency()
             } catch (err) {
-                session.cleanup()
-                this.calls.delete(callId)
                 this.logger.error('incoming call activation failed', {
                     callId,
                     message: toError(err).message
                 })
+                try {
+                    info.applyTransition({ type: 'terminated', reason: EndCallReason.Failed })
+                } catch (transitionErr) {
+                    this.logger.trace('failed-activation transition skipped', {
+                        message: toError(transitionErr).message
+                    })
+                }
+                this.emit('call_ended', info)
+                this.emitState(info)
+                session.cleanup()
+                this.calls.delete(callId)
                 return
             }
         } else {

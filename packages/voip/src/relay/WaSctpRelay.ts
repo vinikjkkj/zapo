@@ -35,6 +35,7 @@ const CONFIG = {
     CONNECTION_TIMEOUT: 20000,
     MAX_BUFFER_SIZE: 10 * 1024,
     KEEPALIVE_INTERVAL_MS: 1100,
+    ICE_DISCONNECT_GRACE_MS: 4000,
     FIXED_FINGERPRINT:
         'sha-256 F9:CA:0C:98:A3:CC:71:D6:42:CE:5A:E2:53:D2:15:20:D3:1B:BA:D8:57:A4:F0:AF:BE:0B:FB:F3:6B:0C:A0:68'
 }
@@ -230,6 +231,17 @@ export class WaSctpRelay extends EventEmitter {
                 })
                 if (pc.iceConnectionState === 'failed') {
                     this.failConnection(conn, 'ice_connection_failed')
+                }
+                if (pc.iceConnectionState === 'disconnected') {
+                    setTimeout(() => {
+                        if (
+                            conn.state !== ConnectionState.Failed &&
+                            conn.state !== ConnectionState.Closed &&
+                            pc.iceConnectionState === 'disconnected'
+                        ) {
+                            this.failConnection(conn, 'ice_disconnected_timeout')
+                        }
+                    }, CONFIG.ICE_DISCONNECT_GRACE_MS)
                 }
                 if (
                     pc.iceConnectionState === 'connected' ||

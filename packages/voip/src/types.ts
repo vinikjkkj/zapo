@@ -145,7 +145,10 @@ export interface NodeInfo {
 export interface CallOfferOptions {
     /** Bare or device JID to call. */
     peerJid: string
-    /** Place a video call instead of audio-only (default `false`). */
+    /**
+     * Flag the call as video in the signaling stanzas (default `false`). Video
+     * media encode/transport is not implemented; only audio media flows.
+     */
     isVideo?: boolean
     /** Audio file to preload and play once the call connects (needs ffmpeg). */
     audioFile?: string

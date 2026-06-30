@@ -21,7 +21,7 @@ export {
 }
 
 function ensureBounds(buf: Uint8Array, offset: number, size: number): void {
-    if (offset < 0 || offset + size > buf.length) {
+    if (!Number.isInteger(offset) || offset < 0 || offset + size > buf.length) {
         throw new RangeError(
             `byte access out of range: offset ${offset}, size ${size}, length ${buf.length}`
         )
