@@ -316,7 +316,7 @@ test('retry replay service returns ineligible on plaintext destination mismatch'
     assert.equal(result, 'ineligible')
 })
 
-test('retry replay service handles group plaintext retries and pkmsg identity guard', async () => {
+test('retry replay service handles group plaintext retries and omits device-identity when unsigned', async () => {
     const sendNodeCalls: BinaryNode[] = []
     const warnings: string[] = []
     let encType: 'msg' | 'pkmsg' = 'pkmsg'
@@ -349,10 +349,16 @@ test('retry replay service handles group plaintext retries and pkmsg identity gu
         '5511999999999:2@s.whatsapp.net',
         1
     )
-    assert.equal(pkmsgResult, 'ineligible')
+    assert.equal(pkmsgResult, 'resent')
     assert.ok(warnings.some((message) => message.includes('missing signed identity')))
-    assert.equal(sendNodeCalls.length, 0)
+    assert.equal(sendNodeCalls.length, 1)
+    assert.ok(Array.isArray(sendNodeCalls[0].content))
+    assert.equal(
+        (sendNodeCalls[0].content as BinaryNode[]).some((child) => child.tag === 'device-identity'),
+        false
+    )
 
+    sendNodeCalls.length = 0
     encType = 'msg'
     const msgResult = await service.resendOutboundMessage(
         outbound,
@@ -368,6 +374,51 @@ test('retry replay service handles group plaintext retries and pkmsg identity gu
     assert.equal(sendNodeCalls[0].content[0].tag, 'enc')
     assert.equal(sendNodeCalls[0].content[0].attrs.type, 'msg')
     assert.equal(sendNodeCalls[0].content[0].attrs.count, '1')
+})
+
+test('retry replay service resends group pkmsg without device-identity for mobile primary', async () => {
+    const sendNodeCalls: BinaryNode[] = []
+    const warnings: string[] = []
+    const service = new WaRetryReplayService({
+        logger: createLogger(warnings),
+        messageClient: {
+            sendEncrypted: async () => undefined,
+            sendMessageNode: async (node: BinaryNode) => {
+                sendNodeCalls.push(node)
+            }
+        } as unknown as WaMessageClient,
+        signalProtocol: {
+            encryptMessage: async () => ({
+                type: 'pkmsg' as const,
+                ciphertext: new Uint8Array([5, 6, 7])
+            })
+        } as unknown as SignalProtocol,
+        getCurrentCredentials: () => null,
+        isMobilePrimary: () => true,
+        sessionResolver: NOOP_SESSION_RESOLVER
+    })
+
+    const outbound = buildOutboundRecord('m-group-mobile', {
+        mode: 'plaintext',
+        to: '123456@g.us',
+        type: 'text',
+        plaintext: new Uint8Array([1, 2, 3, 4])
+    })
+    const result = await service.resendOutboundMessage(
+        outbound,
+        '5511999999999:2@s.whatsapp.net',
+        1
+    )
+    assert.equal(result, 'resent')
+    assert.equal(sendNodeCalls.length, 1)
+    assert.equal(
+        (sendNodeCalls[0].content as BinaryNode[]).some((child) => child.tag === 'device-identity'),
+        false
+    )
+    assert.equal(
+        warnings.some((message) => message.includes('missing signed identity')),
+        false
+    )
 })
 
 test('retry replay service emits status@broadcast retry with meta and no addressing_mode', async () => {

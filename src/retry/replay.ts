@@ -36,6 +36,7 @@ export interface WaRetryReplayServiceOptions {
     readonly signalProtocol: SignalProtocol
     readonly sessionResolver: SignalSessionResolver
     readonly getCurrentCredentials: () => WaAuthCredentials | null
+    readonly isMobilePrimary?: () => boolean
     readonly resolveUserIcdc?: (userJid: string) => Promise<IcdcMeta | null>
     /**
      * Resolves the trusted-contact (privacy) token node for a recipient user
@@ -164,9 +165,12 @@ export class WaRetryReplayService {
     private resolveSignedDeviceIdentity(context: string): Uint8Array | undefined {
         const signedIdentity = this.options.getCurrentCredentials()?.signedIdentity
         if (!signedIdentity) {
-            this.options.logger.warn('retry request missing signed identity for pkmsg envelope', {
-                context
-            })
+            if (!this.options.isMobilePrimary?.()) {
+                this.options.logger.warn(
+                    'retry request missing signed identity for pkmsg envelope',
+                    { context }
+                )
+            }
             return undefined
         }
         return proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
@@ -277,18 +281,8 @@ export class WaRetryReplayService {
             requesterAddress,
             plaintext
         )
-        let deviceIdentity: Uint8Array | undefined
-
-        if (encrypted.type === 'pkmsg') {
-            const signedIdentity = this.options.getCurrentCredentials()?.signedIdentity
-            if (!signedIdentity) {
-                this.options.logger.warn(
-                    'retry request rejected: missing signed identity for pkmsg group retry'
-                )
-                return 'ineligible'
-            }
-            deviceIdentity = proto.ADVSignedDeviceIdentity.encode(signedIdentity).finish()
-        }
+        const deviceIdentity =
+            encrypted.type === 'pkmsg' ? this.resolveSignedDeviceIdentity('group') : undefined
 
         const isStatus = isStatusBroadcastJid(payload.to)
         const metaAttrs: Record<string, string> = {}

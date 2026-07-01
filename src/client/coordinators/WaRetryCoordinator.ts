@@ -180,6 +180,7 @@ export class WaRetryCoordinator {
             signalProtocol: options.signalProtocol,
             sessionResolver: options.sessionResolver,
             getCurrentCredentials: options.getCurrentCredentials,
+            isMobilePrimary: options.isMobilePrimary,
             resolveUserIcdc: options.resolveUserIcdc,
             resolvePrivacyTokenNode: options.resolvePrivacyTokenNode
         })
