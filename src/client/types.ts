@@ -1,5 +1,6 @@
 import type { AppStateCollectionName } from '@appstate/types'
 import type { DataForKey, WaAppstateActionKey, WaAppstateIndexArgs } from '@appstate-spec'
+import type { WaShortcakeAssertionSigner } from '@auth/pairing/WaShortcakeFlow'
 import type {
     WaAuthClientOptions,
     WaAuthCredentials,
@@ -206,6 +207,14 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      * disables a security check the production code path enforces.
      */
     readonly dangerous?: WaClientDangerousOptions
+    /**
+     * External WebAuthn signer. Configuring it enables handling a server-forced
+     * passkey ("Shortcake") prologue – e.g. when the server demands a passkey
+     * right after a successful pairing-code `companion_finish`. Called with the
+     * server's request options; returns the assertion + credential id. The
+     * credential source (real/virtual authenticator) stays outside the library.
+     */
+    readonly signPasskeyAssertion?: WaShortcakeAssertionSigner
 }
 
 export interface WaClientDangerousOptions extends WaAuthDangerousOptions {
