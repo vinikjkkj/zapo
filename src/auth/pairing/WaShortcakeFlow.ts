@@ -137,16 +137,11 @@ export class WaShortcakeFlow {
     ): Promise<void> {
         const deviceType = this.opts.deviceType ?? proto.DeviceProps.PlatformType.CHROME
 
-        // The server usually embeds the WebAuthn options in the prologue-request
-        // notification; fall back to an explicit `get` only when it does not.
         const requestOptions = args.requestOptions ?? (await this.requestPasskeyRequestOptions())
         const assertion = await this.opts.signAssertion(requestOptions)
         const ref = await this.requestRef()
         const companion = await generateCompanionEphemeralIdentity({ ref, deviceType })
 
-        // Attach a pairing handoff proof when a fresh handoff key is held: HMAC
-        // over the prologue payload proves linking continuity and lets the
-        // server skip the code-matching UX.
         let pairingHandoffProof = args.pairingHandoffProof
         const handoffKey = this.handoffKey
         this.handoffKey = null
@@ -254,7 +249,6 @@ export class WaShortcakeFlow {
             decodeNodeContentUtf8OrBytes(child.content, 'shortcake.primary_ephemeral_identity')
         )
 
-        // Reveal the committed companion nonce.
         const nonceResponse = await this.opts.socket.query(
             buildSetCompanionNonceRequestNode(session.companion.companionNonce),
             WA_DEFAULTS.IQ_TIMEOUT_MS
@@ -276,8 +270,6 @@ export class WaShortcakeFlow {
         session.stage = Stage.WaitingForConfirmation
         this.opts.logger.debug('shortcake verification code ready')
         this.opts.callbacks?.emitVerificationCode?.(verificationCode)
-        // Headless companion: there is no user to compare the code, so confirm
-        // automatically and finish the handshake.
         await this.confirmVerificationCode()
         return true
     }
@@ -300,9 +292,6 @@ export class WaShortcakeFlow {
         if (!credentials) {
             throw new Error('shortcake: credentials are not initialized')
         }
-        // PairingRequest is the companion's own registration payload (same keys
-        // the QR/pairing-code flow registers), built from credentials – not a
-        // passkey/caller concern.
         const plaintext = proto.PairingRequest.encode({
             companionPublicKey: credentials.noiseKeyPair.pubKey,
             companionIdentityKey: credentials.registrationInfo.identityKeyPair.pubKey,

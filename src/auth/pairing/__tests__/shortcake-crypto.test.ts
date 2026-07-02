@@ -6,8 +6,7 @@ import {
     deriveEncryptionKey,
     deriveVerificationCode,
     encryptPairingRequest,
-    generateCompanionEphemeralIdentity,
-    verifyCommitment
+    generateCompanionEphemeralIdentity
 } from '@auth/pairing/shortcake-crypto'
 import { aesGcmDecrypt, hkdf, randomBytesAsync, sha256 } from '@crypto'
 import { X25519 } from '@crypto/curves/X25519'
@@ -27,7 +26,6 @@ test('companion ephemeral identity carries a verifiable commitment', async () =>
     assert.equal(companion.commitmentHash.length, 32)
     assert.ok(companion.prologuePayloadBytes.length > 0)
 
-    // the prologue decodes back to the same identity + commitment
     const prologue = proto.ProloguePayload.decode(companion.prologuePayloadBytes)
     assert.deepEqual(
         new Uint8Array(prologue.companionEphemeralIdentity!),
@@ -38,23 +36,13 @@ test('companion ephemeral identity carries a verifiable commitment', async () =>
         new Uint8Array(companion.commitmentHash)
     )
 
-    // commitment validates, and a swapped nonce is rejected
-    assert.equal(
-        verifyCommitment(
-            companion.companionEphemeralIdentityBytes,
-            companion.companionNonce,
-            companion.commitmentHash
+    assert.deepEqual(
+        new Uint8Array(
+            sha256(
+                concatBytes([companion.companionEphemeralIdentityBytes, companion.companionNonce])
+            )
         ),
-        true
-    )
-    const tampered = await randomBytesAsync(32)
-    assert.equal(
-        verifyCommitment(
-            companion.companionEphemeralIdentityBytes,
-            tampered,
-            companion.commitmentHash
-        ),
-        false
+        new Uint8Array(companion.commitmentHash)
     )
 })
 
@@ -69,11 +57,9 @@ test('verification code is deterministic and matches the independent derivation'
 
     const primary = decodePrimaryEphemeralIdentity(primaryBytes)
     const code = deriveVerificationCode(companionNonce, primary)
-    // 5 bytes -> 8 Crockford chars, deterministic
     assert.equal(code.length, 8)
     assert.equal(deriveVerificationCode(companionNonce, primary), code)
 
-    // re-derive the way the primary does it
     const digest = sha256(concatBytes([companionNonce, primaryPub]))
     const expected = new Uint8Array(5)
     for (let i = 0; i < 5; i += 1) expected[i] = primaryNonce[i] ^ digest[i]
@@ -105,7 +91,6 @@ test('encryption key agrees with the primary side (ECDH symmetry)', async () => 
         ref
     })
 
-    // primary derives from the mirrored shared secret with identical salt/info
     const sharedFromPrimary = await X25519.scalarMult(primaryKp.privKey, companionKp.pubKey)
     const salt = TEXT_ENCODER.encode(`Companion Pairing ${String(DEVICE_TYPE)} with ref ${ref}`)
     const info = TEXT_ENCODER.encode('Pairing Information Encryption Key')

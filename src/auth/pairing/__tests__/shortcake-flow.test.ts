@@ -10,8 +10,6 @@ import { proto } from '@proto'
 import type { BinaryNode } from '@transport/types'
 import { TEXT_DECODER, TEXT_ENCODER } from '@util/bytes'
 
-// Real `passkey_request_options` content captured from a client the server
-// forced into the passkey flow right after a pairing-code `companion_finish`.
 const REAL_OPTIONS_B64 =
     'eyJjaGFsbGVuZ2UiOiJGQzZ2Y0pnUC1Pdl82NnlmV2dvaDF3OG1fdHJSOTJCbkZEaGctZTVKRXdrIiwidGltZW91dCI6NjAwMDAwLCJycElkIjoid2hhdHNhcHAuY29tIiwiYWxsb3dDcmVkZW50aWFscyI6W10sInVzZXJWZXJpZmljYXRpb24iOiJyZXF1aXJlZCIsImV4dGVuc2lvbnMiOnsidXZtIjp0cnVlfX0='
 const REAL_OPTIONS = new Uint8Array(Buffer.from(REAL_OPTIONS_B64, 'base64'))
@@ -95,7 +93,6 @@ test('shortcake flow completes the handshake driven by the real server notificat
         callbacks: { emitVerificationCode: (code) => (emittedCode = code) }
     })
 
-    // 1) server pushes the prologue request with embedded options (the real one)
     const prologueRequest: BinaryNode = {
         tag: 'notification',
         attrs: { from: 's.whatsapp.net', type: 'passkey_prologue_request', id: '169361451' },
@@ -103,7 +100,6 @@ test('shortcake flow completes the handshake driven by the real server notificat
     }
     assert.equal(await flow.handleIncomingNotification(prologueRequest), true)
 
-    // the embedded options reached the signer, and the prologue IQ went out
     assert.ok(capturedOptions)
     const parsedOptions = JSON.parse(TEXT_DECODER.decode(capturedOptions))
     assert.equal(parsedOptions.rpId, 'whatsapp.com')
@@ -113,15 +109,12 @@ test('shortcake flow completes the handshake driven by the real server notificat
     const prologueNode: BinaryNode = prologue
     assert.deepEqual(leaf(prologueNode, 'credential_id'), TEXT_ENCODER.encode('cred-id'))
 
-    // a handoff proof is attached (ADV-derived HMAC over the prologue payload)
     const handoffProof = (prologueNode.content as BinaryNode[]).find(
         (c) => c.tag === 'pairing_handoff_proof'
     )
     assert.ok(handoffProof, 'pairing_handoff_proof attached')
-    // and the ADV secret was rotated away from the original
     assert.notDeepEqual(new Uint8Array(creds.advSecretKey), new Uint8Array(32).fill(9))
 
-    // 2) act as the primary: read the companion identity from the prologue
     const prologuePayload = proto.ProloguePayload.decode(leaf(prologue, 'prologue_payload'))
     const companionIdentity = proto.CompanionEphemeralIdentity.decode(
         prologuePayload.companionEphemeralIdentity!
@@ -136,7 +129,6 @@ test('shortcake flow completes the handshake driven by the real server notificat
         nonce: primaryNonce
     }).finish()
 
-    // 3) server relays primary identity as crsc_continuation
     const continuation: BinaryNode = {
         tag: 'notification',
         attrs: { from: 's.whatsapp.net', type: 'crsc_continuation', id: '2' },
@@ -144,12 +136,10 @@ test('shortcake flow completes the handshake driven by the real server notificat
     }
     assert.equal(await flow.handleIncomingNotification(continuation), true)
 
-    // companion revealed its nonce + emitted a verification code
     assert.ok(companionNonce, 'companion_nonce IQ sent')
     assert.ok(emittedCode, 'verification code emitted')
     assert.equal(emittedCode, flow.getVerificationCode())
 
-    // primary derives the same code (commit-reveal agreement)
     const digest = (await import('@crypto')).sha256(
         new Uint8Array([...companionNonce, ...primaryKp.pubKey])
     )
@@ -170,8 +160,6 @@ test('shortcake flow completes the handshake driven by the real server notificat
     if (bits > 0) primaryCode += ALPHABET[(val << (5 - bits)) & 31]
     assert.equal(emittedCode, primaryCode)
 
-    // 4) the flow auto-confirmed -> encrypted pairing request already sent;
-    //    the primary decrypts it under the agreed key
     assert.ok(envelope, 'encrypted_pairing_request IQ sent')
     const env = proto.EncryptedPairingRequest.decode(envelope)
     const sharedFromPrimary = await X25519.scalarMult(primaryKp.privKey, companionPub)
@@ -190,13 +178,11 @@ test('shortcake flow completes the handshake driven by the real server notificat
         new Uint8Array(env.iv!),
         new Uint8Array(env.encryptedPayload!)
     )
-    // the sealed payload is the companion's PairingRequest, built from credentials
     const pairingRequest = proto.PairingRequest.decode(decrypted)
     assert.deepEqual(new Uint8Array(pairingRequest.companionPublicKey!), new Uint8Array(32).fill(7))
     assert.deepEqual(
         new Uint8Array(pairingRequest.companionIdentityKey!),
         new Uint8Array(32).fill(8)
     )
-    // advSecret is the ROTATED secret (whatsmeow/web rotate on the prologue)
     assert.deepEqual(new Uint8Array(pairingRequest.advSecret!), new Uint8Array(creds.advSecretKey))
 })

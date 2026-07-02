@@ -233,6 +233,7 @@ export type {
 } from '@message/addons/link-preview/types'
 export type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 export type { WaAuthCredentials, WaVersionResolver } from '@auth/types'
+export type { WaShortcakeAssertionSigner } from '@auth/pairing/WaShortcakeFlow'
 export type { BinaryNode } from '@transport/types'
 export { fetchLatestWaWebVersion } from '@transport/wa-web-version-fetcher'
 export type {

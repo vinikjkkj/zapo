@@ -3,7 +3,7 @@ import { aesGcmEncrypt, hkdf, randomBytesAsync, sha256 } from '@crypto'
 import type { SignalKeyPair } from '@crypto/curves/types'
 import { X25519 } from '@crypto/curves/X25519'
 import { proto } from '@proto'
-import { concatBytes, TEXT_ENCODER, uint8Equal } from '@util/bytes'
+import { concatBytes, TEXT_ENCODER } from '@util/bytes'
 
 /**
  * Cryptographic core of the WhatsApp "Shortcake" companion-linking protocol
@@ -149,18 +149,4 @@ export async function encryptPairingRequest(
     const iv = await randomBytesAsync(GCM_IV_BYTES)
     const encryptedPayload = aesGcmEncrypt(encryptionKey, iv, plaintext)
     return proto.EncryptedPairingRequest.encode({ encryptedPayload, iv }).finish()
-}
-
-/**
- * Verifies that a revealed companion nonce matches a previously sent commitment
- * hash (defends the primary against a swapped nonce). Mirrors the check the
- * primary performs before honoring a prologue.
- */
-export function verifyCommitment(
-    companionEphemeralIdentityBytes: Uint8Array,
-    companionNonce: Uint8Array,
-    commitmentHash: Uint8Array
-): boolean {
-    const expected = sha256(concatBytes([companionEphemeralIdentityBytes, companionNonce]))
-    return uint8Equal(expected, commitmentHash)
 }
