@@ -1290,6 +1290,14 @@ export interface WaClientEventMap {
      */
     readonly auth_paired: (event: { readonly credentials: WaAuthCredentials }) => void
     /**
+     * The server is forcing a passkey (Shortcake) to link this device – emitted
+     * when the server pushes the prologue request. `hasSigner` is `true` when a
+     * `signPasskeyAssertion` is configured (the handshake proceeds) and `false`
+     * when none is set (the request is acked but the link cannot complete
+     * headless, so the user should be told a passkey is required).
+     */
+    readonly auth_passkey_required: (event: { readonly hasSigner: boolean }) => void
+    /**
      * Connection-state transitions: `'open'` (handshake + auth complete),
      * `'connecting'`, or `'close'` (with a `reason` and optional `code`). The
      * client does **not** auto-reconnect on close – call {@link WaClient.connect} again.

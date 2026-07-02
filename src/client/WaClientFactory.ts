@@ -622,6 +622,8 @@ export function buildWaClientDependencies(input: {
                     scheduleReconnectAfterPairing()
                 },
                 onError: (error) => runtime.handleError(error),
+                onPasskeyRequired: (hasSigner) =>
+                    runtime.emitEvent('auth_passkey_required', { hasSigner }),
                 signPasskeyAssertion: options.signPasskeyAssertion
             }
         }

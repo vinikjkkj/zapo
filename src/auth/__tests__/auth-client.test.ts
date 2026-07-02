@@ -6,6 +6,7 @@ import { WaAuthClient } from '@auth/WaAuthClient'
 import { createNoopLogger } from '@infra/log/types'
 import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
 import { WaSignalMemoryStore } from '@store/memory/signal.store'
+import type { BinaryNode } from '@transport/types'
 
 function createInMemoryAuthStore(initial: WaAuthCredentials | null = null) {
     let current = initial
@@ -72,6 +73,50 @@ test('WaAuthClient creates credentials, persists fields and clears state', async
     assert.equal(client.getCurrentCredentials(), null)
     assert.equal(auth.getCurrent(), null)
     assert.ok(auth.getSaves() >= 1)
+})
+
+test('WaAuthClient emits onPasskeyRequired when the server forces a passkey', async () => {
+    const auth = createInMemoryAuthStore(null)
+    const sent: BinaryNode[] = []
+    let passkeyHasSigner: boolean | null = null
+
+    const client = new WaAuthClient(
+        {
+            deviceBrowser: 'Chrome',
+            deviceOsDisplayName: 'Windows'
+        },
+        {
+            logger: createNoopLogger(),
+            authStore: auth.store,
+            signalStore: new WaSignalMemoryStore(),
+            preKeyStore: new WaPreKeyMemoryStore(),
+            socket: {
+                sendNode: async (node: BinaryNode) => {
+                    sent.push(node)
+                },
+                query: async () => ({ tag: 'iq', attrs: { type: 'result' } })
+            },
+            callbacks: {
+                onPasskeyRequired: (hasSigner) => {
+                    passkeyHasSigner = hasSigner
+                }
+            }
+        }
+    )
+
+    const node: BinaryNode = {
+        tag: 'notification',
+        attrs: { from: 's.whatsapp.net', type: 'passkey_prologue_request', id: '1' }
+    }
+    const handled = await client.handleLinkCodeNotification(node)
+
+    // no signPasskeyAssertion configured: hasSigner is false and the request is acked
+    assert.equal(handled, true)
+    assert.equal(passkeyHasSigner, false)
+    assert.ok(
+        sent.some((n) => n.tag === 'ack'),
+        'the passkey prologue request was acked'
+    )
 })
 
 test('WaAuthClient throws when credentials are required but missing', async () => {

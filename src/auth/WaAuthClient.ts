@@ -41,6 +41,8 @@ type WaAuthClientDeps = Readonly<{
         readonly onPairingRefresh?: (forceManual: boolean) => void
         readonly onPaired?: (credentials: WaAuthCredentials) => void
         readonly onError?: (error: Error) => void
+        /** Server forced a passkey (Shortcake) prologue; `hasSigner` = a signer is configured. */
+        readonly onPasskeyRequired?: (hasSigner: boolean) => void
         /** External WebAuthn signer – enables handling forced passkey (Shortcake) prologues. */
         readonly signPasskeyAssertion?: WaShortcakeAssertionSigner
     }
@@ -426,6 +428,9 @@ export class WaAuthClient {
      * `companion_finish`.
      */
     private async handleShortcakeNotification(node: BinaryNode): Promise<boolean> {
+        if (node.attrs.type === WA_NOTIFICATION_TYPES.PASSKEY_PROLOGUE_REQUEST) {
+            this.callbacks.onPasskeyRequired?.(this.shortcakeFlow !== null)
+        }
         if (this.shortcakeFlow) {
             return this.shortcakeFlow.handleIncomingNotification(node)
         }
