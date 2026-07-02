@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { WaShortcakeFlow } from '@auth/pairing/WaShortcakeFlow'
 import type { WaAuthCredentials } from '@auth/types'
-import { hkdf, randomBytesAsync } from '@crypto'
+import { aesGcmDecrypt, hkdf, randomBytesAsync, sha256 } from '@crypto'
 import { X25519 } from '@crypto/curves/X25519'
 import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
@@ -140,9 +140,7 @@ test('shortcake flow completes the handshake driven by the real server notificat
     assert.ok(emittedCode, 'verification code emitted')
     assert.equal(emittedCode, flow.getVerificationCode())
 
-    const digest = (await import('@crypto')).sha256(
-        new Uint8Array([...companionNonce, ...primaryKp.pubKey])
-    )
+    const digest = sha256(new Uint8Array([...companionNonce, ...primaryKp.pubKey]))
     const codeBytes = new Uint8Array(5)
     for (let i = 0; i < 5; i += 1) codeBytes[i] = primaryNonce[i] ^ digest[i]
     const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTVWXYZ'
@@ -172,7 +170,6 @@ test('shortcake flow completes the handshake driven by the real server notificat
         TEXT_ENCODER.encode('Pairing Information Encryption Key'),
         32
     )
-    const { aesGcmDecrypt } = await import('@crypto')
     const decrypted = aesGcmDecrypt(
         key,
         new Uint8Array(env.iv!),

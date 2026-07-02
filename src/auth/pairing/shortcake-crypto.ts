@@ -1,4 +1,4 @@
-import { bytesToCrockford } from '@auth/pairing/pairing-code-crypto'
+import { encodeBytesToCrockford } from '@auth/pairing/pairing-code-crypto'
 import { aesGcmEncrypt, hkdf, randomBytesAsync, sha256 } from '@crypto'
 import type { SignalKeyPair } from '@crypto/curves/types'
 import { X25519 } from '@crypto/curves/X25519'
@@ -36,6 +36,11 @@ export interface ShortcakePrimaryEphemeralIdentity {
     readonly nonce: Uint8Array
 }
 
+/**
+ * @sensitive Carries the companion's ephemeral X25519 private key
+ * (`keyPair.privKey`) and the pre-image `companionNonce`. Hold these in memory
+ * for the handshake only; never log or `JSON.stringify` an instance.
+ */
 export interface ShortcakeCompanionEphemeralIdentity {
     /** Companion ephemeral X25519 keypair (private half kept for the ECDH). */
     readonly keyPair: SignalKeyPair
@@ -115,7 +120,7 @@ export function deriveVerificationCode(
     for (let i = 0; i < VERIFICATION_CODE_BYTES; i += 1) {
         code[i] = primary.nonce[i] ^ digest[i]
     }
-    return bytesToCrockford(code)
+    return encodeBytesToCrockford(code)
 }
 
 /**

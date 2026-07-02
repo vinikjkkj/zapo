@@ -49,7 +49,9 @@ function defaultWebSubPlatform(): number {
     return proto.ClientPayload.WebInfo.WebSubPlatform.WEB_BROWSER
 }
 
-function resolveDevicePropsPlatformType(deviceBrowser?: string): number {
+export function resolveDevicePropsPlatformType(
+    deviceBrowser?: string
+): proto.DeviceProps.PlatformType {
     const normalized = deviceBrowser?.trim().toLowerCase()
     switch (normalized) {
         case 'chrome':

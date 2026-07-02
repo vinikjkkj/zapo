@@ -15,7 +15,7 @@ const CROCKFORD_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTVWXYZ'
 export const PBKDF2_ITERATIONS = 2 << 16
 const PAIRING_AES_KEY_BYTES = 32
 
-export function bytesToCrockford(bytes: Uint8Array): string {
+export function encodeBytesToCrockford(bytes: Uint8Array): string {
     let bitCount = 0
     let value = 0
     let out = ''
@@ -65,7 +65,7 @@ export async function createCompanionHello(
         randomBytesAsync(16),
         normalizedCustomCode !== null ? Promise.resolve(null) : randomBytesAsync(5)
     ])
-    const pairingCode = normalizedCustomCode ?? bytesToCrockford(codeBytes!)
+    const pairingCode = normalizedCustomCode ?? encodeBytesToCrockford(codeBytes!)
     const cipherKey = await pbkdf2Sha256(
         TEXT_ENCODER.encode(pairingCode),
         salt,

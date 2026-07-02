@@ -18,6 +18,7 @@ import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { buildAckNode } from '@transport/node/builders/global'
+import { resolveDevicePropsPlatformType } from '@transport/noise/WaClientPayload'
 import type { WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
 import type { BinaryNode, WaCommsConfig } from '@transport/types'
 import { uint8Equal } from '@util/bytes'
@@ -127,7 +128,8 @@ export class WaAuthClient {
                   auth: {
                       getCredentials: () => this.credentials,
                       updateCredentials: this.updateCredentials.bind(this)
-                  }
+                  },
+                  deviceType: resolveDevicePropsPlatformType(deviceBrowser)
               })
             : null
     }
@@ -217,6 +219,7 @@ export class WaAuthClient {
         this.logger.trace('auth client clear transient state')
         this.qrFlow.clear()
         this.pairingFlow.clearSession()
+        this.shortcakeFlow?.clearSession()
     }
 
     /**

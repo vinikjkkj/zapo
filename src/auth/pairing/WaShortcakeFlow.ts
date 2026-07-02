@@ -19,11 +19,7 @@ import {
     buildSetPasskeyPrologueRequestNode,
     buildShortcakeGetRefRequestNode
 } from '@transport/node/builders/shortcake'
-import {
-    decodeNodeContentUtf8OrBytes,
-    findNodeChild,
-    getFirstNodeChild
-} from '@transport/node/helpers'
+import { decodeNodeContentUtf8OrBytes, findNodeChild } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { TEXT_DECODER, TEXT_ENCODER } from '@util/bytes'
@@ -52,12 +48,13 @@ interface PasskeyHandoffKey {
     readonly ts: number
 }
 
-const enum Stage {
-    Idle = 'idle',
-    WaitingForPrimaryIdentity = 'waiting_for_primary_identity',
-    WaitingForConfirmation = 'waiting_for_confirmation',
-    WaitingForPairing = 'waiting_for_pairing'
-}
+const Stage = Object.freeze({
+    Idle: 'idle',
+    WaitingForPrimaryIdentity: 'waiting_for_primary_identity',
+    WaitingForConfirmation: 'waiting_for_confirmation',
+    WaitingForPairing: 'waiting_for_pairing'
+} as const)
+type Stage = (typeof Stage)[keyof typeof Stage]
 
 interface ShortcakeSession {
     readonly companion: ShortcakeCompanionEphemeralIdentity
@@ -122,6 +119,7 @@ export class WaShortcakeFlow {
 
     public clearSession(): void {
         this.session = null
+        this.handoffKey = null
     }
 
     /**
@@ -232,8 +230,8 @@ export class WaShortcakeFlow {
     }
 
     private async handlePrimaryEphemeralIdentity(node: BinaryNode): Promise<boolean> {
-        const child = getFirstNodeChild(node)
-        if (!child || child.tag !== PRIMARY_EPHEMERAL_IDENTITY_TAG) {
+        const child = findNodeChild(node, PRIMARY_EPHEMERAL_IDENTITY_TAG)
+        if (!child) {
             return false
         }
         const session = this.session
