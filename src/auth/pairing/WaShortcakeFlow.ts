@@ -10,7 +10,7 @@ import type { WaAuthCredentials } from '@auth/types'
 import { hkdf, hmacSha256Sign, randomBytesAsync } from '@crypto'
 import type { Logger } from '@infra/log/types'
 import { proto } from '@proto'
-import { WA_DEFAULTS } from '@protocol/constants'
+import { WA_DEFAULTS, WA_NODE_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
 import { buildAckNode } from '@transport/node/builders/global'
 import {
     buildGetPasskeyRequestOptionsRequestNode,
@@ -33,11 +33,6 @@ import { TEXT_DECODER, TEXT_ENCODER } from '@util/bytes'
 export type WaShortcakeAssertionSigner = (
     requestOptions: Uint8Array
 ) => Promise<{ readonly credentialId: Uint8Array; readonly webauthnAssertion: Uint8Array }>
-
-const PASSKEY_PROLOGUE_REQUEST_TYPE = 'passkey_prologue_request'
-const PASSKEY_REQUEST_OPTIONS_TAG = 'passkey_request_options'
-const SHORTCAKE_NOTIFICATION_TYPE = 'crsc_continuation'
-const PRIMARY_EPHEMERAL_IDENTITY_TAG = 'primary_ephemeral_identity'
 
 /** HKDF info for the pairing handoff HMAC key (derived from the ADV secret). */
 const HANDOFF_KEY_INFO = TEXT_ENCODER.encode('shortcake-passkey-handoff-v1')
@@ -185,10 +180,10 @@ export class WaShortcakeFlow {
      * - `crsc_continuation` carries the primary's ephemeral identity.
      */
     public async handleIncomingNotification(node: BinaryNode): Promise<boolean> {
-        if (node.attrs.type === PASSKEY_PROLOGUE_REQUEST_TYPE) {
+        if (node.attrs.type === WA_NOTIFICATION_TYPES.PASSKEY_PROLOGUE_REQUEST) {
             return this.handlePasskeyPrologueRequest(node)
         }
-        if (node.attrs.type === SHORTCAKE_NOTIFICATION_TYPE) {
+        if (node.attrs.type === WA_NOTIFICATION_TYPES.CRSC_CONTINUATION) {
             return this.handlePrimaryEphemeralIdentity(node)
         }
         return false
@@ -197,7 +192,7 @@ export class WaShortcakeFlow {
     private async handlePasskeyPrologueRequest(node: BinaryNode): Promise<boolean> {
         await this.ackNotification(node)
         await this.stashHandoffKeyAndRotateAdv()
-        const optionsNode = findNodeChild(node, PASSKEY_REQUEST_OPTIONS_TAG)
+        const optionsNode = findNodeChild(node, WA_NODE_TAGS.PASSKEY_REQUEST_OPTIONS)
         const requestOptions = optionsNode
             ? decodeNodeContentUtf8OrBytes(optionsNode.content, 'shortcake.passkey_request_options')
             : undefined
@@ -230,7 +225,7 @@ export class WaShortcakeFlow {
     }
 
     private async handlePrimaryEphemeralIdentity(node: BinaryNode): Promise<boolean> {
-        const child = findNodeChild(node, PRIMARY_EPHEMERAL_IDENTITY_TAG)
+        const child = findNodeChild(node, WA_NODE_TAGS.PRIMARY_EPHEMERAL_IDENTITY)
         if (!child) {
             return false
         }
@@ -253,15 +248,13 @@ export class WaShortcakeFlow {
         )
         assertIqResult(nonceResponse, 'shortcake set-companion-nonce')
 
-        const [verificationCode, encryptionKey] = await Promise.all([
-            Promise.resolve(deriveVerificationCode(session.companion.companionNonce, primary)),
-            deriveEncryptionKey({
-                companionPrivKey: session.companion.keyPair.privKey,
-                primaryPublicKey: primary.publicKey,
-                deviceType: session.deviceType,
-                ref: session.ref
-            })
-        ])
+        const verificationCode = deriveVerificationCode(session.companion.companionNonce, primary)
+        const encryptionKey = await deriveEncryptionKey({
+            companionPrivKey: session.companion.keyPair.privKey,
+            primaryPublicKey: primary.publicKey,
+            deviceType: session.deviceType,
+            ref: session.ref
+        })
 
         session.encryptionKey = encryptionKey
         session.verificationCode = verificationCode
@@ -312,7 +305,7 @@ export class WaShortcakeFlow {
             WA_DEFAULTS.IQ_TIMEOUT_MS
         )
         assertIqResult(response, 'shortcake get-passkey-request-options')
-        const optionsNode = findNodeChild(response, 'passkey_request_options')
+        const optionsNode = findNodeChild(response, WA_NODE_TAGS.PASSKEY_REQUEST_OPTIONS)
         if (!optionsNode) {
             throw new Error('shortcake: get-passkey-request-options response missing options')
         }
@@ -328,7 +321,7 @@ export class WaShortcakeFlow {
             WA_DEFAULTS.IQ_TIMEOUT_MS
         )
         assertIqResult(response, 'shortcake get-ref')
-        const refNode = findNodeChild(response, 'ref')
+        const refNode = findNodeChild(response, WA_NODE_TAGS.REF)
         if (!refNode) {
             throw new Error('shortcake: get-ref response missing ref')
         }

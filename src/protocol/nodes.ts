@@ -50,6 +50,8 @@ export const WA_NODE_TAGS = Object.freeze({
     COUNTRY_CODE: 'country_code',
     DEVICE_IDENTITY: 'device-identity',
     PLATFORM: 'platform',
+    PASSKEY_REQUEST_OPTIONS: 'passkey_request_options',
+    PRIMARY_EPHEMERAL_IDENTITY: 'primary_ephemeral_identity',
     SUBJECT: 'subject',
     BODY: 'body',
     PARTICIPANT: 'participant',

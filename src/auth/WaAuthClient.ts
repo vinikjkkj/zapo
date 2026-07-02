@@ -13,7 +13,7 @@ import type {
     WaSuccessPersistAttributes
 } from '@auth/types'
 import type { Logger } from '@infra/log/types'
-import { getWaCompanionPlatformId, WA_DEFAULTS } from '@protocol/constants'
+import { getWaCompanionPlatformId, WA_DEFAULTS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
@@ -408,7 +408,10 @@ export class WaAuthClient {
     /** Dispatcher: returns `true` when `node` is a link-code companion notification. */
     public async handleLinkCodeNotification(node: BinaryNode): Promise<boolean> {
         const type = node.attrs.type
-        if (type === 'passkey_prologue_request' || type === 'crsc_continuation') {
+        if (
+            type === WA_NOTIFICATION_TYPES.PASSKEY_PROLOGUE_REQUEST ||
+            type === WA_NOTIFICATION_TYPES.CRSC_CONTINUATION
+        ) {
             return this.runHandled(() => this.handleShortcakeNotification(node))
         }
         this.logger.trace('auth client handleLinkCodeNotification', { id: node.attrs.id })
@@ -426,7 +429,7 @@ export class WaAuthClient {
         if (this.shortcakeFlow) {
             return this.shortcakeFlow.handleIncomingNotification(node)
         }
-        if (node.attrs.type === 'passkey_prologue_request') {
+        if (node.attrs.type === WA_NOTIFICATION_TYPES.PASSKEY_PROLOGUE_REQUEST) {
             this.logger.warn(
                 'auth client: server requested passkey prologue but no signPasskeyAssertion configured',
                 { id: node.attrs.id }

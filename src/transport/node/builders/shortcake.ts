@@ -1,4 +1,5 @@
 import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
+import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
 /**
@@ -8,28 +9,23 @@ import type { BinaryNode } from '@transport/types'
  * query layer, matching the other pairing builders.
  */
 
-function mdIq(type: string, content: BinaryNode['content']): BinaryNode {
-    return {
-        tag: WA_NODE_TAGS.IQ,
-        attrs: {
-            to: WA_DEFAULTS.HOST_DOMAIN,
-            type,
-            xmlns: WA_XMLNS.MD
-        },
-        content
-    }
+function mdIq(
+    type: typeof WA_IQ_TYPES.GET | typeof WA_IQ_TYPES.SET,
+    content: BinaryNode['content']
+): BinaryNode {
+    return buildIqNode(type, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.MD, content)
 }
 
 /** `<iq type="get" xmlns="md"><passkey_request_options/></iq>` */
 export function buildGetPasskeyRequestOptionsRequestNode(): BinaryNode {
     return mdIq(WA_IQ_TYPES.GET, [
-        { tag: 'passkey_request_options', attrs: {}, content: undefined }
+        { tag: WA_NODE_TAGS.PASSKEY_REQUEST_OPTIONS, attrs: {}, content: undefined }
     ])
 }
 
 /** `<iq type="get" xmlns="md"><ref/></iq>` */
 export function buildShortcakeGetRefRequestNode(): BinaryNode {
-    return mdIq(WA_IQ_TYPES.GET, [{ tag: 'ref', attrs: {}, content: undefined }])
+    return mdIq(WA_IQ_TYPES.GET, [{ tag: WA_NODE_TAGS.REF, attrs: {}, content: undefined }])
 }
 
 /**

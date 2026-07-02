@@ -6,7 +6,9 @@ export const WA_NOTIFICATION_TYPES = Object.freeze({
     REGISTRATION: 'registration',
     NEWSLETTER: 'newsletter',
     BUSINESS: 'business',
-    PICTURE: 'picture'
+    PICTURE: 'picture',
+    PASSKEY_PROLOGUE_REQUEST: 'passkey_prologue_request',
+    CRSC_CONTINUATION: 'crsc_continuation'
 } as const)
 
 export const WA_BUSINESS_NOTIFICATION_TAGS = Object.freeze({
