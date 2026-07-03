@@ -1,20 +1,17 @@
 {
-    "name": "@zapo-js/mcp-server",
-    "version": "1.0.3",
-    "description": "MCP server exposing zapo-js WaClient as dynamic tools for end-to-end testing",
+    "name": "@zapo-js/wam",
+    "version": "1.0.0",
+    "description": "WhatsApp Web WAM (analytics/telemetry) plugin for zapo-js — emits the client-side metrics batches WA Web sends, for wire parity and anti-fingerprinting",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/vinikjkkj/zapo.git",
-        "directory": "packages/mcp-server"
+        "directory": "packages/wam"
     },
     "main": "dist/index.js",
     "module": "dist/esm/index.js",
     "types": "dist/index.d.ts",
-    "bin": {
-        "zapo-mcp-server": "./dist/bin.js"
-    },
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
@@ -24,7 +21,8 @@
         }
     },
     "files": [
-        "dist"
+        "dist",
+        "README.md"
     ],
     "publishConfig": {
         "access": "public"
@@ -32,23 +30,15 @@
     "scripts": {
         "build": "tsc -p tsconfig.build.cjs.json && tsc -p tsconfig.build.esm.json && node ../../scripts/finalize-esm-build.cjs",
         "typecheck": "tsc --noEmit",
-        "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\"",
-        "start": "node --import tsx src/bin.ts",
-        "dev": "cross-env MCP_TRANSPORT=http MCP_EVAL_ENABLED=1 MCP_LOG_LEVEL=trace MCP_AUTH_PATH=../../.auth/state.sqlite node --watch --import tsx src/bin.ts"
+        "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\""
     },
     "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.29.0",
-        "@zapo-js/media-utils": "^1.0.0",
-        "@zapo-js/store-sqlite": "^1.0.1",
-        "@zapo-js/wam": "^1.0.0",
-        "better-sqlite3": "^12.6.2"
+        "@vinikjkkj/wa-wam": "2.3000.1041713829-1ec0d3b"
     },
     "peerDependencies": {
         "zapo-js": "^1.0.0"
     },
     "devDependencies": {
-        "@zapo-js/fake-server": "file:../fake-server",
-        "cross-env": "^7.0.3",
         "zapo-js": "file:../.."
     },
     "engines": {

@@ -1,4 +1,11 @@
-export { getWaCompanionPlatformId, WA_BROWSERS, WA_COMPANION_PLATFORM_IDS } from '@protocol/browser'
+export {
+    getWaBrowserDisplayName,
+    getWaCompanionPlatformId,
+    WA_BROWSERS,
+    WA_COMPANION_PLATFORM_IDS
+} from '@protocol/browser'
+export { resolveWaDeviceIdentity } from '@protocol/device-identity'
+export type { WaDeviceIdentity, WaDeviceIdentityOptions } from '@protocol/device-identity'
 export { WA_SIGNALING, WA_PAIRING_KDF_INFO } from '@protocol/auth'
 export {
     WA_CONNECTION_REASONS,

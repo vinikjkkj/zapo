@@ -53,7 +53,8 @@ module.exports = [
                     './packages/media-utils/tsconfig.json',
                     './packages/voip/tsconfig.json',
                     './packages/fake-server/tsconfig.json',
-                    './packages/mcp-server/tsconfig.json'
+                    './packages/mcp-server/tsconfig.json',
+                    './packages/wam/tsconfig.json'
                 ]
             }
         }

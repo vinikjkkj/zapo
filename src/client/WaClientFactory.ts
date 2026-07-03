@@ -92,7 +92,7 @@ import {
 } from '@message/primitives/peer-data-operation'
 import { WaMessageClient } from '@message/WaMessageClient'
 import {
-    getWaCompanionPlatformId,
+    resolveWaDeviceIdentity,
     WA_DEFAULTS,
     WA_DISCONNECT_REASONS,
     WA_NEWSLETTER_NOTIFICATION_TAGS,
@@ -131,7 +131,6 @@ import { isProxyTransport, toProxyAgent } from '@transport/proxy'
 import type { BinaryNode } from '@transport/types'
 import { createServerClock } from '@util/clock'
 import { toError } from '@util/primitives'
-import { getRuntimeOsDisplayName } from '@util/runtime'
 
 interface WaClientBase {
     readonly options: Readonly<WaClientOptions>
@@ -259,7 +258,7 @@ function validateProxyOptions(options: WaClientOptions): void {
 export function resolveWaClientBase(options: WaClientOptions, logger: Logger): WaClientBase {
     validateProxyOptions(options)
 
-    const deviceBrowser = options.deviceBrowser ?? WA_DEFAULTS.DEVICE_BROWSER
+    const device = resolveWaDeviceIdentity(options)
     const sessionId = options.sessionId.trim()
     if (sessionId.length === 0) {
         throw new Error('sessionId must be a non-empty string')
@@ -269,9 +268,9 @@ export function resolveWaClientBase(options: WaClientOptions, logger: Logger): W
     const normalizedOptions = Object.freeze({
         ...options,
         sessionId,
-        deviceBrowser,
-        deviceOsDisplayName: options.deviceOsDisplayName ?? getRuntimeOsDisplayName(),
-        devicePlatform: options.devicePlatform ?? getWaCompanionPlatformId(deviceBrowser),
+        deviceBrowser: device.browser,
+        deviceOsDisplayName: device.osDisplayName,
+        devicePlatform: device.platform,
         urls: options.urls ?? options.chatSocketUrls ?? WA_DEFAULTS.CHAT_SOCKET_URLS,
         iqTimeoutMs: options.iqTimeoutMs ?? WA_DEFAULTS.IQ_TIMEOUT_MS,
         nodeQueryTimeoutMs: options.nodeQueryTimeoutMs ?? WA_DEFAULTS.NODE_QUERY_TIMEOUT_MS,

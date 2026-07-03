@@ -167,6 +167,21 @@ jobs:
             - run: npx turbo run build --filter=@zapo-js/voip
             - run: npm test -w packages/voip
 
+    test-wam:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        needs: build-core
+
+        steps:
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - uses: actions/download-artifact@v4
+              with:
+                  name: core-build
+                  path: dist/
+            - run: npx turbo run build --filter=@zapo-js/wam
+            - run: npm test -w packages/wam
+
     test-mysql:
         runs-on: ubuntu-latest
         timeout-minutes: 15
@@ -305,6 +320,7 @@ jobs:
             - test-sqlite
             - test-mcp-server
             - test-voip
+            - test-wam
             - test-mysql
             - test-postgres
             - test-redis

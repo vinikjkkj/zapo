@@ -15,6 +15,7 @@ import { hexToBytes, resolvePositive, toError } from 'zapo-js/util'
 
 import { createMediaProcessor } from '@zapo-js/media-utils'
 import { createSqliteStore } from '@zapo-js/store-sqlite'
+import { wamPlugin } from '@zapo-js/wam'
 
 import { encodeForJson } from './serializer'
 
@@ -711,6 +712,7 @@ export class McpRuntime {
                         )
                     )
                 },
+                plugins: [wamPlugin()],
                 ...(mobileTransport ? { mobileTransport } : {}),
                 connectTimeoutMs: 60_000,
                 deviceBrowser: this.config.deviceBrowser ?? 'Chrome',

@@ -13,7 +13,7 @@ import type {
     WaSuccessPersistAttributes
 } from '@auth/types'
 import type { Logger } from '@infra/log/types'
-import { getWaCompanionPlatformId, WA_DEFAULTS, WA_NOTIFICATION_TYPES } from '@protocol/constants'
+import { resolveWaDeviceIdentity, WA_NOTIFICATION_TYPES } from '@protocol/constants'
 import type { WaAuthStore } from '@store/contracts/auth.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
@@ -23,7 +23,6 @@ import type { WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
 import type { BinaryNode, WaCommsConfig } from '@transport/types'
 import { uint8Equal } from '@util/bytes'
 import { toError } from '@util/primitives'
-import { getRuntimeOsDisplayName } from '@util/runtime'
 
 type WaAuthClientDeps = Readonly<{
     readonly logger: Logger
@@ -73,12 +72,7 @@ export class WaAuthClient {
     private versionOverride: string | null = null
 
     public constructor(options: WaAuthClientOptions, deps: WaAuthClientDeps) {
-        const deviceBrowser = options.deviceBrowser ?? WA_DEFAULTS.DEVICE_BROWSER
-        const device = Object.freeze({
-            browser: deviceBrowser,
-            osDisplayName: options.deviceOsDisplayName ?? getRuntimeOsDisplayName(),
-            platform: options.devicePlatform ?? getWaCompanionPlatformId(deviceBrowser)
-        })
+        const device = resolveWaDeviceIdentity(options)
         this.options = Object.freeze({
             ...options,
             deviceBrowser: device.browser,
@@ -131,7 +125,7 @@ export class WaAuthClient {
                       getCredentials: () => this.credentials,
                       updateCredentials: this.updateCredentials.bind(this)
                   },
-                  deviceType: resolveDevicePropsPlatformType(deviceBrowser)
+                  deviceType: resolveDevicePropsPlatformType(device.browser)
               })
             : null
     }

@@ -1,3 +1,4 @@
+export { delay } from '@util/async'
 export {
     base64ToBytes,
     bytesToBase64,

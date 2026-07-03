@@ -255,6 +255,7 @@ export { PinoLogger, createPinoLogger } from '@infra/log/PinoLogger'
 export type { PinoLoggerOptions } from '@infra/log/PinoLogger'
 export { createNoopLogger } from '@infra/log/types'
 export type { Logger, LogLevel } from '@infra/log/types'
+export { WA_VERSION } from '@version-spec'
 export { createStore, WaAuthMemoryStore } from '@store'
 export type {
     WaAppStateCollectionStoreState,
