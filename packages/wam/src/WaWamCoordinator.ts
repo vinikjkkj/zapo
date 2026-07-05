@@ -11,6 +11,7 @@ import { toError } from 'zapo-js/util'
 import { resolveWamGlobals, type WamGlobalsInput } from './globals.js'
 import { resolveWamEventFields } from './registry.js'
 import { WaWamAutoEmitter } from './WaWamAutoEmitter.js'
+import { WaWamSyntheticUi, type WaWamSyntheticUiOptions } from './WaWamSyntheticUi.js'
 import { WaWamUploader } from './WaWamUploader.js'
 import { WamBatch, type WamGlobalValue } from './wire/WamBatch.js'
 
@@ -29,6 +30,12 @@ export interface WaWamCoordinatorOptions {
     readonly serviceImprovementOptOut?: boolean
     /** Auto-emit protocol events by observing the client (default `true`). */
     readonly autoEmit?: boolean
+    /**
+     * Fabricate plausible UI (`UiAction`) telemetry so the event profile mimics a
+     * human WA Web session. Opt-in and off by default: it is best-effort
+     * anti-fingerprinting, and badly-timed fabrication is a worse tell than none.
+     */
+    readonly syntheticUi?: boolean | WaWamSyntheticUiOptions
 }
 
 /**
@@ -52,6 +59,7 @@ export class WaWamCoordinator {
     private readonly flushIntervalMs: number
     private readonly maxBufferSize: number
     private readonly autoEmitter: WaWamAutoEmitter | null
+    private readonly syntheticUi: WaWamSyntheticUi | null
     private flushTimer: ReturnType<typeof setTimeout> | null = null
     private disposed = false
 
@@ -73,6 +81,14 @@ export class WaWamCoordinator {
             serviceImprovementOptOut: options.serviceImprovementOptOut
         }
         this.autoEmitter = options.autoEmit === false ? null : new WaWamAutoEmitter(this, ctx)
+        this.syntheticUi =
+            options.syntheticUi === undefined || options.syntheticUi === false
+                ? null
+                : new WaWamSyntheticUi(
+                      this,
+                      ctx,
+                      typeof options.syntheticUi === 'object' ? options.syntheticUi : {}
+                  )
     }
 
     /**
@@ -106,6 +122,7 @@ export class WaWamCoordinator {
     async dispose(): Promise<void> {
         this.disposed = true
         this.autoEmitter?.dispose()
+        this.syntheticUi?.dispose()
         await this.flush()
     }
 

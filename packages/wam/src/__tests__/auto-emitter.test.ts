@@ -236,13 +236,60 @@ test('auto-emitter does not report clock skew for an in-sync timestamp', () => {
     assert.equal(h.commits.length, 0)
 })
 
-test('auto-emitter commits WebcSocketConnect with PAGE_LOAD on a fresh login', () => {
+test('auto-emitter commits WebcSocketConnect with PAGE_LOAD then SYNCING on a fresh login', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
     h.emit('connection', openEvent(true))
     assert.deepEqual(h.commits, [
-        { name: 'WebcSocketConnect', payload: { webcSocketConnectReason: 'PAGE_LOAD' } }
+        { name: 'WebcSocketConnect', payload: { webcSocketConnectReason: 'PAGE_LOAD' } },
+        { name: 'WebcStreamModeChange', payload: { webcStreamMode: 'SYNCING' } }
     ])
+})
+
+const offlineIb = () => ({
+    node: {
+        tag: 'ib',
+        attrs: { from: 's.whatsapp.net' },
+        content: [{ tag: 'offline', attrs: { count: '0' } }]
+    }
+})
+
+test('auto-emitter walks the stream mode SYNCING -> MAIN -> OFFLINE across a session', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('connection', openEvent(false))
+    h.emit('debug_transport_node_in', offlineIb())
+    h.emit('connection', { status: 'close', reason: 'lost', isNewLogin: false })
+    const modes = h.commits
+        .filter((c) => c.name === 'WebcStreamModeChange')
+        .map((c) => (c.payload as { webcStreamMode: string }).webcStreamMode)
+    assert.deepEqual(modes, ['SYNCING', 'MAIN', 'OFFLINE'])
+})
+
+test('auto-emitter reaches MAIN on the offline ib even with an empty queue (no preview)', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('connection', openEvent(false))
+    h.emit('debug_transport_node_in', offlineIb())
+    const main = h.commits.find(
+        (c) =>
+            c.name === 'WebcStreamModeChange' &&
+            (c.payload as { webcStreamMode: string }).webcStreamMode === 'MAIN'
+    )
+    assert.ok(main)
+})
+
+test('auto-emitter emits MAIN once and ignores ibs without an offline child', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('connection', openEvent(false))
+    h.emit('debug_transport_node_in', offlineIb())
+    h.commits.length = 0
+    h.emit('debug_transport_node_in', {
+        node: { tag: 'ib', attrs: {}, content: [{ tag: 'notice', attrs: { id: '1' } }] }
+    })
+    h.emit('debug_transport_node_in', offlineIb())
+    assert.equal(h.commits.length, 0)
 })
 
 test('auto-emitter uses RECONNECT when it is not a new login', () => {
@@ -278,7 +325,7 @@ test('auto-emitter maps a history-sync chunk to MdBootstrapHistoryDataReceived',
     })
 })
 
-test('auto-emitter ignores non-open connection events and detaches on dispose', () => {
+test('auto-emitter emits no stream mode for a close before any open, and detaches on dispose', () => {
     const h = makeHarness()
     const emitter = new WaWamAutoEmitter(h.coordinator, h.ctx)
     h.emit('connection', { status: 'close', reason: 'lost', isNewLogin: false })

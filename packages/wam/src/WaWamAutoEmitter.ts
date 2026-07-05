@@ -60,6 +60,7 @@ export class WaWamAutoEmitter {
     private readonly unsubscribes: Array<() => void> = []
     private readonly sentMessages = new Map<string, SentMessageInfo>()
     private clockSkewReported = false
+    private streamMode: 'MAIN' | 'SYNCING' | 'OFFLINE' | null = null
 
     constructor(
         private readonly coordinator: WaWamCoordinator,
@@ -92,10 +93,21 @@ export class WaWamAutoEmitter {
     }
 
     private onConnection(event: WaConnectionEvent): void {
-        if (event.status !== 'open') return
+        if (event.status === 'close') {
+            if (this.streamMode !== null) this.setStreamMode('OFFLINE')
+            return
+        }
         this.coordinator.commit('WebcSocketConnect', {
             webcSocketConnectReason: event.isNewLogin ? 'PAGE_LOAD' : 'RECONNECT'
         })
+        this.setStreamMode('SYNCING')
+    }
+
+    /** Mirrors WA Web's stream model: emit on each real mode transition, deduped. */
+    private setStreamMode(mode: 'MAIN' | 'SYNCING' | 'OFFLINE'): void {
+        if (this.streamMode === mode) return
+        this.streamMode = mode
+        this.coordinator.commit('WebcStreamModeChange', { webcStreamMode: mode })
     }
 
     private onMessage(event: WaIncomingMessageEvent): void {
@@ -170,6 +182,10 @@ export class WaWamAutoEmitter {
     }
 
     private onNodeIn(node: BinaryNode): void {
+        if (node.tag === 'ib') {
+            if (findNodeChild(node, 'offline') !== null) this.setStreamMode('MAIN')
+            return
+        }
         if (!this.clockSkewReported && node.attrs.t !== undefined) {
             this.clockSkewReported = true
             const serverSeconds = Number(node.attrs.t)
