@@ -2,6 +2,7 @@ import type {
     BinaryNode,
     WaClientPluginContext,
     WaConnectionEvent,
+    WaGroupEvent,
     WaHistorySyncChunkEvent,
     WaIncomingMessageEvent,
     WaIncomingReceiptEvent,
@@ -42,7 +43,12 @@ const HIGH_RETRY_THRESHOLD = 5
 const SECONDS_PER_HOUR = 3600
 
 /** Subset of the plugin context the auto-emitter subscribes through. */
-export type WaWamAutoEmitterContext = Pick<WaClientPluginContext, 'on' | 'off'>
+export type WaWamAutoEmitterContext = Pick<WaClientPluginContext, 'on' | 'off' | 'client'>
+
+/** True when `candidate` addresses this account (either its PN or LID jid). */
+function isSelfJid(candidate: string | undefined, meJid?: string, meLid?: string): boolean {
+    return candidate !== undefined && (candidate === meJid || candidate === meLid)
+}
 
 /** MESSAGE_TYPE enum key for the chat a received message belongs to. */
 function messageTypeKey(
@@ -66,12 +72,16 @@ export class WaWamAutoEmitter {
     private streamMode: 'MAIN' | 'SYNCING' | 'OFFLINE' | null = null
     private connectedOnce = false
     private resumeCount = 0
+    private platformReported = false
+    private readonly client: WaWamAutoEmitterContext['client']
 
     constructor(
         private readonly coordinator: WaWamCoordinator,
         ctx: WaWamAutoEmitterContext
     ) {
+        this.client = ctx.client
         const onConnection = (event: WaConnectionEvent): void => this.onConnection(event)
+        const onGroup = (event: WaGroupEvent): void => this.onGroup(event)
         const onMessage = (event: WaIncomingMessageEvent): void => this.onMessage(event)
         const onReceipt = (event: WaIncomingReceiptEvent): void => this.onReceipt(event)
         const onNodeOut = (event: { readonly node: BinaryNode }): void => this.onNodeOut(event.node)
@@ -80,6 +90,7 @@ export class WaWamAutoEmitter {
             this.onUnhandledStanza(event)
         const onHistory = (event: WaHistorySyncChunkEvent): void => this.onHistorySyncChunk(event)
         ctx.on('connection', onConnection)
+        ctx.on('group', onGroup)
         ctx.on('message', onMessage)
         ctx.on('receipt', onReceipt)
         ctx.on('debug_transport_node_out', onNodeOut)
@@ -88,6 +99,7 @@ export class WaWamAutoEmitter {
         ctx.on('history_sync_chunk', onHistory)
         this.unsubscribes.push(
             () => ctx.off('connection', onConnection),
+            () => ctx.off('group', onGroup),
             () => ctx.off('message', onMessage),
             () => ctx.off('receipt', onReceipt),
             () => ctx.off('debug_transport_node_out', onNodeOut),
@@ -111,6 +123,32 @@ export class WaWamAutoEmitter {
             this.coordinator.commit('WebcPageResume', { webcResumeCount: this.resumeCount })
         }
         this.connectedOnce = true
+        if (!this.platformReported) {
+            const platform = this.client.getCredentials()?.platform
+            if (platform !== undefined) {
+                this.platformReported = true
+                this.coordinator.commit('WebcRawPlatforms', { webcRawPlatform: platform })
+            }
+        }
+    }
+
+    private onGroup(event: WaGroupEvent): void {
+        if (event.action !== 'create' && event.action !== 'add') return
+        const creds = this.client.getCredentials()
+        const meJid = creds?.meJid
+        const meLid = creds?.meLid
+        if (isSelfJid(event.authorJid, meJid, meLid)) return
+        if (event.action === 'add') {
+            const added = event.participants ?? []
+            const meAdded = added.some(
+                (p) =>
+                    isSelfJid(p.jid, meJid, meLid) ||
+                    isSelfJid(p.lidJid, meJid, meLid) ||
+                    isSelfJid(p.phoneJid, meJid, meLid)
+            )
+            if (!meAdded) return
+        }
+        this.coordinator.commit('GroupJoinC', {})
     }
 
     /** Mirrors WA Web's stream model: emit on each real mode transition, deduped. */

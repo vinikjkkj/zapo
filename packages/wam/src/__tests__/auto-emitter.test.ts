@@ -14,6 +14,7 @@ interface Commit {
 function makeHarness() {
     const commits: Commit[] = []
     const handlers = new Map<string, (event: unknown) => void>()
+    let creds: Record<string, unknown> | undefined
     const coordinator = {
         commit: (name: string, payload: unknown) => commits.push({ name, payload })
     } as unknown as WaWamCoordinator
@@ -21,10 +22,14 @@ function makeHarness() {
         on: (event: string, handler: (event: unknown) => void) => handlers.set(event, handler),
         off: (event: string, handler: (event: unknown) => void) => {
             if (handlers.get(event) === handler) handlers.delete(event)
-        }
+        },
+        client: { getCredentials: () => creds }
     } as unknown as WaWamAutoEmitterContext
     const emit = (event: string, payload: unknown) => handlers.get(event)?.(payload)
-    return { commits, handlers, coordinator, ctx, emit }
+    const setCreds = (next: Record<string, unknown> | undefined) => {
+        creds = next
+    }
+    return { commits, handlers, coordinator, ctx, emit, setCreds }
 }
 
 const openEvent = (isNewLogin: boolean): WaConnectionEvent =>
@@ -316,6 +321,59 @@ test('auto-emitter emits WebcPageResume with an incrementing count on each recon
         .filter((c) => c.name === 'WebcPageResume')
         .map((c) => (c.payload as { webcResumeCount: number }).webcResumeCount)
     assert.deepEqual(resumes, [1, 2])
+})
+
+test('auto-emitter reports WebcRawPlatforms once from the primary platform on connect', () => {
+    const h = makeHarness()
+    h.setCreds({ platform: 'android' })
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('connection', openEvent(false))
+    h.emit('connection', { status: 'close', reason: 'lost', isNewLogin: false })
+    h.emit('connection', openEvent(false))
+    const raw = h.commits.filter((c) => c.name === 'WebcRawPlatforms')
+    assert.equal(raw.length, 1)
+    assert.deepEqual(raw[0]?.payload, { webcRawPlatform: 'android' })
+})
+
+test('auto-emitter emits no WebcRawPlatforms when the platform is unknown', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('connection', openEvent(false))
+    assert.equal(h.commits.filter((c) => c.name === 'WebcRawPlatforms').length, 0)
+})
+
+test('auto-emitter fires GroupJoinC when added to a group by someone else', () => {
+    const h = makeHarness()
+    h.setCreds({ meJid: 'me@s.whatsapp.net', meLid: 'me@lid' })
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('group', {
+        action: 'add',
+        authorJid: 'admin@s.whatsapp.net',
+        participants: [{ jid: 'other@s.whatsapp.net' }, { jid: 'me@s.whatsapp.net' }]
+    })
+    assert.equal(h.commits.filter((c) => c.name === 'GroupJoinC').length, 1)
+})
+
+test('auto-emitter fires GroupJoinC on a group created by someone else', () => {
+    const h = makeHarness()
+    h.setCreds({ meJid: 'me@s.whatsapp.net', meLid: 'me@lid' })
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('group', { action: 'create', authorJid: 'founder@s.whatsapp.net' })
+    assert.equal(h.commits.filter((c) => c.name === 'GroupJoinC').length, 1)
+})
+
+test('auto-emitter does not fire GroupJoinC for self-authored actions or others being added', () => {
+    const h = makeHarness()
+    h.setCreds({ meJid: 'me@s.whatsapp.net', meLid: 'me@lid' })
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('group', { action: 'create', authorJid: 'me@s.whatsapp.net' })
+    h.emit('group', {
+        action: 'add',
+        authorJid: 'admin@s.whatsapp.net',
+        participants: [{ jid: 'other@s.whatsapp.net' }]
+    })
+    h.emit('group', { action: 'subject', authorJid: 'admin@s.whatsapp.net' })
+    assert.equal(h.commits.filter((c) => c.name === 'GroupJoinC').length, 0)
 })
 
 test('auto-emitter maps a device-switch notification to WaOldCode', () => {
