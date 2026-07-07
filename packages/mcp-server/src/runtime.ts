@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
 import {
+    createFileCompanionHostPersistence,
     createStore,
     type Logger,
     type LogLevel,
@@ -702,6 +703,14 @@ export class McpRuntime {
             {
                 store,
                 sessionId: state.sessionId,
+                companionHost: {
+                    persistence: createFileCompanionHostPersistence(
+                        resolve(
+                            dirname(this.config.authPath),
+                            `companion-host-${state.sessionId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`
+                        )
+                    )
+                },
                 ...(mobileTransport ? { mobileTransport } : {}),
                 connectTimeoutMs: 60_000,
                 deviceBrowser: this.config.deviceBrowser ?? 'Chrome',

@@ -124,6 +124,16 @@ export type {
     WaUnlinkSubGroupsResult
 } from '@client/coordinators/WaGroupCoordinator'
 export type {
+    LinkCompanionResult,
+    WaMobileCoordinator
+} from '@client/coordinators/WaMobileCoordinator'
+export { createFileCompanionHostPersistence } from '@client/persistence/companion-host'
+export type {
+    CompanionHostEpochState,
+    CompanionHostPersistence,
+    CompanionRecord
+} from '@client/persistence/companion-host'
+export type {
     WaNewsletterAdminInfo,
     WaNewsletterAdminInviteInput,
     WaNewsletterAdminInviteResult,
@@ -350,3 +360,4 @@ export type {
     WaStreamErrorCode
 } from '@protocol'
 export { proto } from '@proto'
+export type { Proto } from '@proto'

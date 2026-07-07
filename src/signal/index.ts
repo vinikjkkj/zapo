@@ -54,3 +54,16 @@ export { SenderKeyManager } from '@signal/group/SenderKeyManager'
 export { createAndStoreInitialKeys } from '@signal/registration/utils'
 export { SignalProtocol } from '@signal/session/SignalProtocol'
 export { createSignalSessionResolver, type SignalSessionResolver } from '@signal/session/resolver'
+export {
+    ADV_PREFIX_ACCOUNT_KEY_INDEX,
+    ADV_PREFIX_ACCOUNT_SIGNATURE,
+    ADV_PREFIX_DEVICE_SIGNATURE,
+    ADV_PREFIX_HOSTED_ACCOUNT_SIGNATURE,
+    computeAdvIdentityHmac,
+    generateDeviceIdentityAccountSignature,
+    generateDeviceSignature,
+    signKeyIndexList,
+    verifyDeviceIdentityAccountSignature,
+    verifyDeviceSignature,
+    verifyKeyIndexListSignature
+} from '@signal/attestation/WaAdvSignature'

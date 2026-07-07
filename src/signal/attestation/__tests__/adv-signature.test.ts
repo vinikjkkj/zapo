@@ -6,8 +6,12 @@ import {
     ADV_PREFIX_ACCOUNT_SIGNATURE,
     ADV_PREFIX_DEVICE_SIGNATURE,
     computeAdvIdentityHmac,
+    generateDeviceIdentityAccountSignature,
     generateDeviceSignature,
-    verifyDeviceIdentityAccountSignature
+    signKeyIndexList,
+    verifyDeviceIdentityAccountSignature,
+    verifyDeviceSignature,
+    verifyKeyIndexListSignature
 } from '@signal/attestation/WaAdvSignature'
 import { concatBytes, uint8Equal } from '@util/bytes'
 
@@ -98,4 +102,71 @@ test('adv identity hmac is deterministic for same key and details', async () => 
 
     assert.equal(left.length, right.length)
     assert.equal(uint8Equal(left, right), true)
+})
+
+test('primary account-signature generation verifies with the companion verifier', async () => {
+    const accountKeyPair = await X25519.generateKeyPair()
+    const companionKeyPair = await X25519.generateKeyPair()
+    const details = makeBytes(24, 5)
+    const companionPub = toSerializedPubKey(companionKeyPair.pubKey)
+    const accountPub = toSerializedPubKey(accountKeyPair.pubKey)
+
+    const accountSignature = await generateDeviceIdentityAccountSignature(
+        details,
+        companionPub,
+        accountKeyPair
+    )
+    assert.equal(
+        await verifyDeviceIdentityAccountSignature(
+            details,
+            accountSignature,
+            companionPub,
+            accountPub
+        ),
+        true
+    )
+    // The e2ee signature must not validate under the hosted prefix.
+    assert.equal(
+        await verifyDeviceIdentityAccountSignature(
+            details,
+            accountSignature,
+            companionPub,
+            accountPub,
+            true
+        ),
+        false
+    )
+})
+
+test('primary device-signature verifier accepts the companion device signature', async () => {
+    const companionKeyPair = await X25519.generateKeyPair()
+    const accountKeyPair = await X25519.generateKeyPair()
+    const accountPub = toSerializedPubKey(accountKeyPair.pubKey)
+    const details = makeBytes(24, 7)
+
+    const deviceSignature = await generateDeviceSignature(details, companionKeyPair, accountPub)
+    assert.equal(
+        await verifyDeviceSignature(details, deviceSignature, companionKeyPair.pubKey, accountPub),
+        true
+    )
+
+    const tampered = new Uint8Array(deviceSignature)
+    tampered[0] ^= 0x01
+    assert.equal(
+        await verifyDeviceSignature(details, tampered, companionKeyPair.pubKey, accountPub),
+        false
+    )
+})
+
+test('key-index-list signature signs and verifies with the account key', async () => {
+    const accountKeyPair = await X25519.generateKeyPair()
+    const accountPub = toSerializedPubKey(accountKeyPair.pubKey)
+    const listDetails = makeBytes(40, 13)
+
+    const signature = await signKeyIndexList(listDetails, accountKeyPair)
+    assert.equal(await verifyKeyIndexListSignature(listDetails, signature, accountPub), true)
+
+    const tampered = new Uint8Array(listDetails)
+    tampered[0] ^= 0x01
+    assert.equal(await verifyKeyIndexListSignature(tampered, signature, accountPub), false)
 })

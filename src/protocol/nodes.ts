@@ -80,7 +80,22 @@ export const WA_NODE_TAGS = Object.freeze({
     USERNAME: 'username',
     TEXT_STATUS: 'text_status',
     DISAPPEARING_MODE: 'disappearing_mode',
-    BUSINESS: 'business'
+    BUSINESS: 'business',
+    PUB_KEY: 'pub-key',
+    KEY_INDEX_LIST: 'key-index-list',
+    CLIENT_PROPS: 'client-props',
+    PEM: 'pem',
+    TTL: 'ttl',
+    KEY_ID: 'key_id',
+    REMOVE_COMPANION_DEVICE: 'remove-companion-device',
+    PRIMARY_IDENTITY_PUB: 'primary_identity_pub',
+    COMPANION_IDENTITY_PUBLIC: 'companion_identity_public',
+    COMPANION_SERVER_AUTH_KEY_PUB: 'companion_server_auth_key_pub',
+    LINK_CODE_PAIRING_WRAPPED_PRIMARY_EPHEMERAL_PUB:
+        'link_code_pairing_wrapped_primary_ephemeral_pub',
+    LINK_CODE_PAIRING_WRAPPED_COMPANION_EPHEMERAL_PUB:
+        'link_code_pairing_wrapped_companion_ephemeral_pub',
+    LINK_CODE_PAIRING_WRAPPED_KEY_BUNDLE: 'link_code_pairing_wrapped_key_bundle'
 } as const)
 
 export const WA_IQ_TYPES = Object.freeze({
