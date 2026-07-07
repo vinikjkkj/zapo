@@ -10,6 +10,7 @@ import type { WaEmailCoordinator } from '@client/coordinators/WaEmailCoordinator
 import type { WaGroupCoordinator } from '@client/coordinators/WaGroupCoordinator'
 import type { WaLowLevelCoordinator } from '@client/coordinators/WaLowLevelCoordinator'
 import type { WaMessageCoordinator } from '@client/coordinators/WaMessageCoordinator'
+import type { WaMobileCoordinator } from '@client/coordinators/WaMobileCoordinator'
 import type { WaNewsletterCoordinator } from '@client/coordinators/WaNewsletterCoordinator'
 import type { WaPresenceCoordinator } from '@client/coordinators/WaPresenceCoordinator'
 import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordinator'
@@ -149,6 +150,14 @@ class WaClientImpl extends EventEmitter {
                     'please upgrade zapo so the shipped default catches up.'
             )
             void this.runClientTooOldRecover()
+        })
+        this.on('connection', (event) => {
+            if (event.status !== 'open') return
+            void this.deps.mobileCoordinator.reconcileCompanions().catch((error) => {
+                this.logger.debug('companion reconcile on connect failed', {
+                    message: toError(error).message
+                })
+            })
         })
     }
 
@@ -579,6 +588,14 @@ class WaClientImpl extends EventEmitter {
      */
     public get email(): WaEmailCoordinator {
         return this.deps.emailCoordinator
+    }
+    /**
+     * Mobile coordinator: host and manage companion devices linked to this
+     * mobile-primary account (link via QR or pairing code, list, revoke).
+     * Requires a registered primary session. See {@link WaMobileCoordinator}.
+     */
+    public get mobile(): WaMobileCoordinator {
+        return this.deps.mobileCoordinator
     }
 
     /**

@@ -7,6 +7,16 @@ import { type Proto, proto } from '@proto'
 import { normalizeDeviceJid } from '@protocol/jid'
 import { bytesToHex } from '@util/bytes'
 
+/**
+ * Valid app-state sync key ids are exactly 6 bytes: a 2-byte device id followed
+ * by a 4-byte big-endian epoch (matching the phone primary's `crypto_info`
+ * (device_id, epoch) schema and WhatsApp Web's `handleAppStateSyncKeyShare`,
+ * which fatally rejects any share whose keyId byte length is not 6). A primary
+ * must never emit a malformed key, so legacy/short key ids are dropped from
+ * outgoing shares rather than poisoning the peer's syncd engine.
+ */
+const APP_STATE_SYNC_KEY_ID_LENGTH = 6
+
 export type PublishProtocolMessageToDeviceFn = (
     deviceJid: string,
     protocolMessage: Proto.Message.IProtocolMessage,
@@ -111,7 +121,12 @@ export function createAppStateSyncKeyProtocol(options: {
         const seenKeyIds = new Set<string>()
         const keyShareEntries: Proto.Message.IAppStateSyncKey[] = []
         let sharedKeyCount = 0
+        const droppedKeyIds: string[] = []
         for (const key of keys) {
+            if (key.keyId.byteLength !== APP_STATE_SYNC_KEY_ID_LENGTH) {
+                droppedKeyIds.push(bytesToHex(key.keyId))
+                continue
+            }
             const keyHex = bytesToHex(key.keyId)
             if (seenKeyIds.has(keyHex)) {
                 continue
@@ -128,7 +143,10 @@ export function createAppStateSyncKeyProtocol(options: {
             })
         }
         for (const keyId of missingKeyIds) {
-            if (keyId.byteLength === 0) {
+            if (keyId.byteLength !== APP_STATE_SYNC_KEY_ID_LENGTH) {
+                if (keyId.byteLength > 0) {
+                    droppedKeyIds.push(bytesToHex(keyId))
+                }
                 continue
             }
             const keyHex = bytesToHex(keyId)
@@ -139,6 +157,16 @@ export function createAppStateSyncKeyProtocol(options: {
             keyShareEntries.push({
                 keyId: { keyId }
             })
+        }
+        if (droppedKeyIds.length > 0) {
+            logger.warn(
+                'app-state refusing to share malformed sync keys: keyId byte length must be 6',
+                {
+                    droppedCount: droppedKeyIds.length,
+                    totalExpected: keys.length + missingKeyIds.length,
+                    sample: droppedKeyIds.slice(0, 5)
+                }
+            )
         }
 
         const protocolMessage: proto.Message.IProtocolMessage = {

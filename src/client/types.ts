@@ -9,6 +9,7 @@ import type {
 } from '@auth/types'
 import type { WaCallGroupParticipant, WaCallType } from '@client/events/call'
 import type { IncomingPresenceType, PresenceLastSeen } from '@client/events/presence'
+import type { CompanionHostPersistence } from '@client/persistence/companion-host'
 import type { WaClientPluginDefinition } from '@client/plugins/types'
 import type { WaMediaProcessor } from '@media/processor'
 import type { WaLinkPreviewOptions } from '@message/addons/link-preview/types'
@@ -96,6 +97,16 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      * tests or pinning a specific edge.
      */
     readonly chatSocketUrls?: readonly string[]
+    /**
+     * Companion-hosting config for a mobile-primary session (see
+     * {@link WaClient.mobile}). `persistence` survives the ADV epoch across
+     * restarts (without it, relinking breaks previously linked devices);
+     * `includePem` adds the experimental `<pem>` node to the pair-device upload.
+     */
+    readonly companionHost?: {
+        readonly persistence?: CompanionHostPersistence
+        readonly includePem?: boolean
+    }
     /** Default timeout (ms) for IQ queries. Defaults to `WA_DEFAULTS.IQ_TIMEOUT_MS` (60s). */
     readonly iqTimeoutMs?: number
     /** Default timeout (ms) for raw node `query()` calls when none is passed. */
@@ -1412,6 +1423,16 @@ export interface WaClientEventMap {
      * `mobileTransport`.
      */
     readonly mobile_account_takeover_notice: (event: WaAccountTakeoverNoticeEvent) => void
+
+    /** A companion device was linked from this mobile-primary account. */
+    readonly companion_host_linked: (result: {
+        readonly deviceJid: string
+        readonly keyIndex: number
+    }) => void
+    /** A hosted companion device was revoked / unlinked. */
+    readonly companion_host_revoked: (payload: { readonly deviceJid: string }) => void
+    /** A companion-host link or provisioning operation failed. */
+    readonly companion_host_error: (error: Error) => void
 
     /** **debug** – the success node closing the noise handshake; emitted before `connection: { status: 'open' }`. */
     readonly debug_connection_success: (event: { readonly node: BinaryNode }) => void

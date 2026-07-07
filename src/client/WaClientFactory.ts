@@ -30,6 +30,7 @@ import {
 } from '@client/coordinators/WaLowLevelCoordinator'
 import { WaMessageCoordinator } from '@client/coordinators/WaMessageCoordinator'
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
+import { WaMobileCoordinator } from '@client/coordinators/WaMobileCoordinator'
 import {
     createNewsletterCoordinator,
     type WaNewsletterCoordinator
@@ -223,6 +224,7 @@ export interface WaClientDependencies {
     readonly trustedContactToken: WaTrustedContactTokenCoordinator
     readonly abPropsCoordinator: WaAbPropsCoordinator
     readonly peerDataOperation: PeerDataOperationRequester
+    readonly mobileCoordinator: WaMobileCoordinator
 }
 
 function assertProxyTransport(value: unknown, path: string): void {
@@ -1387,6 +1389,22 @@ export function buildWaClientDependencies(input: {
         defaultIqTimeoutMs: options.iqTimeoutMs
     })
 
+    const mobileCoordinator = new WaMobileCoordinator({
+        logger,
+        authClient,
+        messageDispatch,
+        chatCoordinator: appStateMutations,
+        deviceSync: signalDeviceSync,
+        appStateStore: sessionStore.appState,
+        queryWithContext: runtime.queryWithContext,
+        emitEvent: runtime.emitEvent,
+        registerIncomingHandler: (registration) =>
+            incomingNode.registerIncomingHandler(registration),
+        isMobilePrimary,
+        persistence: options.companionHost?.persistence,
+        includePem: options.companionHost?.includePem
+    })
+
     return {
         nodeTransport,
         nodeOrchestrator,
@@ -1427,6 +1445,7 @@ export function buildWaClientDependencies(input: {
         connectionManager,
         trustedContactToken,
         abPropsCoordinator,
-        peerDataOperation
+        peerDataOperation,
+        mobileCoordinator
     }
 }
