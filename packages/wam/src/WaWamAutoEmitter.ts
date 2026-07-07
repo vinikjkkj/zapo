@@ -13,10 +13,12 @@ import { findNodeChild } from 'zapo-js/transport'
 import {
     ciphertextTypeKey,
     e2eDestinationKey,
+    editTypeKey,
     findFirstEncNode,
     mediaTypeKey,
     type WamCiphertextTypeKey,
     type WamE2eDestinationKey,
+    type WamEditTypeKey,
     type WamMediaTypeKey
 } from './send-parse.js'
 import type { WaWamCoordinator } from './WaWamCoordinator.js'
@@ -28,6 +30,7 @@ interface SentMessageInfo {
     readonly isGroup: boolean
     readonly ciphertextType: WamCiphertextTypeKey | null
     readonly mediaType: WamMediaTypeKey | null
+    readonly editType: WamEditTypeKey | null
 }
 
 /** Cap on tracked in-flight sends; oldest evict first when exceeded. */
@@ -61,6 +64,8 @@ export class WaWamAutoEmitter {
     private readonly sentMessages = new Map<string, SentMessageInfo>()
     private clockSkewReported = false
     private streamMode: 'MAIN' | 'SYNCING' | 'OFFLINE' | null = null
+    private connectedOnce = false
+    private resumeCount = 0
 
     constructor(
         private readonly coordinator: WaWamCoordinator,
@@ -101,6 +106,11 @@ export class WaWamAutoEmitter {
             webcSocketConnectReason: event.isNewLogin ? 'PAGE_LOAD' : 'RECONNECT'
         })
         this.setStreamMode('SYNCING')
+        if (this.connectedOnce) {
+            this.resumeCount += 1
+            this.coordinator.commit('WebcPageResume', { webcResumeCount: this.resumeCount })
+        }
+        this.connectedOnce = true
     }
 
     /** Mirrors WA Web's stream model: emit on each real mode transition, deduped. */
@@ -177,7 +187,8 @@ export class WaWamAutoEmitter {
 
         const id = node.attrs.id
         if (id !== undefined) {
-            this.trackSend(id, { destination, isLid, isGroup, ciphertextType, mediaType: media })
+            const editType = editTypeKey(node.attrs.edit)
+            this.trackSend(id, { destination, isLid, isGroup, ciphertextType, mediaType: media, editType })
         }
     }
 
@@ -185,6 +196,12 @@ export class WaWamAutoEmitter {
         if (node.tag === 'ib') {
             if (findNodeChild(node, 'offline') !== null) this.setStreamMode('MAIN')
             return
+        }
+        if (node.tag === 'notification') {
+            const oldReg = findNodeChild(node, 'wa_old_registration')
+            if (oldReg !== undefined && oldReg.attrs.device_id !== undefined) {
+                this.coordinator.commit('WaOldCode', { deviceId: oldReg.attrs.device_id })
+            }
         }
         if (!this.clockSkewReported && node.attrs.t !== undefined) {
             this.clockSkewReported = true
@@ -222,6 +239,14 @@ export class WaWamAutoEmitter {
                 ...(info.mediaType !== null ? { messageMediaType: info.mediaType } : {}),
                 ...(info.isGroup ? { typeOfGroup: 'GROUP' as const } : {})
             })
+            if (info.editType !== null) {
+                this.coordinator.commit('EditMessageSend', {
+                    editType: info.editType,
+                    messageType: info.destination,
+                    ...(info.mediaType !== null ? { mediaType: info.mediaType } : {}),
+                    ...(info.isGroup ? { typeOfGroup: 'GROUP' as const } : {})
+                })
+            }
         }
     }
 

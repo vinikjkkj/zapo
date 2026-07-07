@@ -9,6 +9,8 @@ export type WamCiphertextTypeKey =
 
 export type WamE2eDestinationKey = 'INDIVIDUAL' | 'GROUP' | 'STATUS' | 'CHANNEL'
 
+export type WamEditTypeKey = 'EDITED' | 'PIN' | 'SENDER_REVOKE' | 'ADMIN_REVOKE'
+
 export type WamMediaTypeKey =
     | 'PHOTO'
     | 'VIDEO'
@@ -72,4 +74,21 @@ const MEDIA_TYPE_BY_ATTR: Readonly<Record<string, WamMediaTypeKey>> = {
 export function mediaTypeKey(mediatype: string | undefined): WamMediaTypeKey | null {
     if (mediatype === undefined) return null
     return MEDIA_TYPE_BY_ATTR[mediatype] ?? null
+}
+
+/** `<message edit>` attr → EDIT_TYPE enum key (null when the message is not an edit/revoke). */
+export function editTypeKey(edit: string | undefined): WamEditTypeKey | null {
+    switch (edit) {
+        case '1':
+        case '3':
+            return 'EDITED'
+        case '2':
+            return 'PIN'
+        case '7':
+            return 'SENDER_REVOKE'
+        case '8':
+            return 'ADMIN_REVOKE'
+        default:
+            return null
+    }
 }

@@ -302,6 +302,85 @@ test('auto-emitter uses RECONNECT when it is not a new login', () => {
     )
 })
 
+test('auto-emitter emits WebcPageResume with an incrementing count on each reconnect', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    const close = { status: 'close', reason: 'lost', isNewLogin: false }
+    h.emit('connection', openEvent(false))
+    assert.equal(h.commits.filter((c) => c.name === 'WebcPageResume').length, 0)
+    h.emit('connection', close)
+    h.emit('connection', openEvent(false))
+    h.emit('connection', close)
+    h.emit('connection', openEvent(false))
+    const resumes = h.commits
+        .filter((c) => c.name === 'WebcPageResume')
+        .map((c) => (c.payload as { webcResumeCount: number }).webcResumeCount)
+    assert.deepEqual(resumes, [1, 2])
+})
+
+test('auto-emitter maps a device-switch notification to WaOldCode', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_in', {
+        node: {
+            tag: 'notification',
+            attrs: { from: 's.whatsapp.net', type: 'w:old' },
+            content: [{ tag: 'wa_old_registration', attrs: { device_id: 'ABC123', code: '000' } }]
+        }
+    })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'WaOldCode'),
+        { name: 'WaOldCode', payload: { deviceId: 'ABC123' } }
+    )
+})
+
+test('auto-emitter fires EditMessageSend (EDITED) when an edited group message is acked', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'message',
+            attrs: { to: '123@g.us', id: 'e1', edit: '1' },
+            content: [{ tag: 'enc', attrs: { v: '2', type: 'skmsg' } }]
+        }
+    })
+    h.commits.length = 0
+    h.emit('debug_transport_node_in', { node: { tag: 'ack', attrs: { class: 'message', id: 'e1' } } })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'EditMessageSend'),
+        { name: 'EditMessageSend', payload: { editType: 'EDITED', messageType: 'GROUP', typeOfGroup: 'GROUP' } }
+    )
+})
+
+test('auto-emitter maps an edit=7 revoke send to a SENDER_REVOKE EditMessageSend', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'message',
+            attrs: { to: '5511999999999@s.whatsapp.net', id: 'r1', edit: '7' },
+            content: [{ tag: 'enc', attrs: { v: '2', type: 'msg' } }]
+        }
+    })
+    h.emit('debug_transport_node_in', { node: { tag: 'ack', attrs: { class: 'message', id: 'r1' } } })
+    const edit = h.commits.find((c) => c.name === 'EditMessageSend')
+    assert.equal((edit?.payload as { editType: string }).editType, 'SENDER_REVOKE')
+})
+
+test('auto-emitter fires no EditMessageSend for a normal (non-edit) send', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'message',
+            attrs: { to: '5511999999999@s.whatsapp.net', id: 'n1' },
+            content: [{ tag: 'enc', attrs: { v: '2', type: 'msg' } }]
+        }
+    })
+    h.emit('debug_transport_node_in', { node: { tag: 'ack', attrs: { class: 'message', id: 'n1' } } })
+    assert.equal(h.commits.filter((c) => c.name === 'EditMessageSend').length, 0)
+})
+
 test('auto-emitter maps an unhandled stanza to UnknownStanza', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
