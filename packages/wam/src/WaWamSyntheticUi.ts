@@ -1,6 +1,6 @@
 import type { WaWamEventArgs } from '@vinikjkkj/wa-wam'
 import type { BinaryNode, WaClientPluginContext, WaIncomingMessageEvent } from 'zapo-js'
-import { isGroupJid, isLidJid } from 'zapo-js/protocol'
+import { isGroupJid, isLidJid, WA_ADDRESSING_MODES, WA_MESSAGE_TAGS } from 'zapo-js/protocol'
 
 import { findFirstEncNode, mediaTypeKey, type WamMediaTypeKey } from './send-parse.js'
 import type { WaWamCoordinator } from './WaWamCoordinator.js'
@@ -214,10 +214,10 @@ export class WaWamSyntheticUi {
     }
 
     private onNodeOut(node: BinaryNode): void {
-        if (this.disposed || node.tag !== 'message') return
+        if (this.disposed || node.tag !== WA_MESSAGE_TAGS.MESSAGE) return
         this.markActivity()
         const to = node.attrs.to ?? ''
-        const isLid = isLidJid(to) || node.attrs.addressing_mode === 'lid'
+        const isLid = isLidJid(to) || node.attrs.addressing_mode === WA_ADDRESSING_MODES.LID
 
         const enc = findFirstEncNode(node)
         const media = enc !== null ? mediaTypeKey(enc.attrs.mediatype) : null
@@ -425,7 +425,6 @@ export class WaWamSyntheticUi {
         this.timers.add(timer)
     }
 
-    /** Cancels all pending timers and detaches subscriptions. */
     dispose(): void {
         this.disposed = true
         for (const timer of this.timers) clearTimeout(timer)

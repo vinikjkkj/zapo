@@ -1,21 +1,40 @@
-import type {
-    BinaryNode,
-    WaAppStateMutationEvent,
-    WaClientPluginContext,
-    WaConnectionEvent,
-    WaGroupEvent,
-    WaHistorySyncChunkEvent,
-    WaIncomingMessageEvent,
-    WaIncomingReceiptEvent,
-    WaIncomingUnhandledStanzaEvent
+import {
+    type BinaryNode,
+    getContextInfo,
+    resolveEncMediaType,
+    unwrapMessage,
+    type WaAppStateMutationEvent,
+    type WaClientPluginContext,
+    type WaConnectionEvent,
+    type WaGroupEvent,
+    type WaHistorySyncChunkEvent,
+    type WaIncomingMessageEvent,
+    type WaIncomingReceiptEvent,
+    type WaIncomingUnhandledStanzaEvent,
+    type WaOutgoingMessageEvent
 } from 'zapo-js'
-import { isGroupJid, isLidJid, isStatusBroadcastJid } from 'zapo-js/protocol'
+import {
+    isGroupJid,
+    isLidJid,
+    isNewsletterJid,
+    isStatusBroadcastJid,
+    WA_ADDRESSING_MODES,
+    WA_GROUP_MEMBERSHIP_ACTION_TAGS,
+    WA_IQ_TYPES,
+    WA_MESSAGE_TAGS,
+    WA_MESSAGE_TYPES,
+    WA_NODE_TAGS,
+    WA_REGISTRATION_NOTIFICATION_TAGS,
+    WA_XMLNS
+} from 'zapo-js/protocol'
 import { findNodeChild } from 'zapo-js/transport'
 
 import {
     ciphertextTypeKey,
+    documentTypeFor,
     e2eDestinationKey,
     editTypeKey,
+    fileExtension,
     findFirstEncNode,
     mediaTypeKey,
     type WamCiphertextTypeKey,
@@ -35,35 +54,46 @@ interface SentMessageInfo {
     readonly editType: WamEditTypeKey | null
 }
 
-/** Cap on tracked in-flight sends; oldest evict first when exceeded. */
+type WamGroupJoinRequestAction = 'MEMBERSHIP_REQUEST_APPROVE' | 'MEMBERSHIP_REQUEST_REJECT'
+
+interface PendingIq {
+    readonly startMs: number
+    readonly groupJid: string
+    readonly joinRequestAction: WamGroupJoinRequestAction
+}
+
 const MAX_TRACKED_SENDS = 256
+const MAX_TRACKED_IQS = 64
 
 /** A retry receipt at or above this count fires MessageHighRetryCount (WA's threshold). */
 const HIGH_RETRY_THRESHOLD = 5
 
 const SECONDS_PER_HOUR = 3600
 
-/** Subset of the plugin context the auto-emitter subscribes through. */
 export type WaWamAutoEmitterContext = Pick<WaClientPluginContext, 'on' | 'off' | 'client'>
 
-/** True when `candidate` addresses this account (either its PN or LID jid). */
 function isSelfJid(candidate: string | undefined, meJid?: string, meLid?: string): boolean {
     return candidate !== undefined && (candidate === meJid || candidate === meLid)
 }
 
-/** MUTE_CHAT_TYPE enum key for a chat jid. */
 function muteChatTypeKey(jid: string): 'ONE_ON_ONE' | 'GROUP' | 'CHANNEL' {
     if (isGroupJid(jid)) return 'GROUP'
-    if (jid.endsWith('@newsletter')) return 'CHANNEL'
+    if (isNewsletterJid(jid)) return 'CHANNEL'
     return 'ONE_ON_ONE'
 }
 
-/** CHAT_ACTION_CHAT_TYPE enum key for a chat jid (business is not derivable here). */
+/** Business chat type is not derivable here, so only GROUP/INDIVIDUAL. */
 function chatActionChatTypeKey(jid: string): 'GROUP' | 'INDIVIDUAL' {
     return isGroupJid(jid) ? 'GROUP' : 'INDIVIDUAL'
 }
 
-/** MESSAGE_TYPE enum key for the chat a received message belongs to. */
+function pollChatTypeKey(jid: string): 'INDIVIDUAL' | 'GROUP' | 'STATUS' | 'CHANNEL' {
+    if (isGroupJid(jid)) return 'GROUP'
+    if (isNewsletterJid(jid)) return 'CHANNEL'
+    if (isStatusBroadcastJid(jid)) return 'STATUS'
+    return 'INDIVIDUAL'
+}
+
 function messageTypeKey(
     key: WaIncomingMessageEvent['key']
 ): 'CHANNEL' | 'STATUS' | 'BROADCAST' | 'GROUP' | 'INDIVIDUAL' {
@@ -81,6 +111,7 @@ function messageTypeKey(
 export class WaWamAutoEmitter {
     private readonly unsubscribes: Array<() => void> = []
     private readonly sentMessages = new Map<string, SentMessageInfo>()
+    private readonly pendingIqs = new Map<string, PendingIq>()
     private clockSkewReported = false
     private streamMode: 'MAIN' | 'SYNCING' | 'OFFLINE' | null = null
     private connectedOnce = false
@@ -96,6 +127,7 @@ export class WaWamAutoEmitter {
         const onConnection = (event: WaConnectionEvent): void => this.onConnection(event)
         const onGroup = (event: WaGroupEvent): void => this.onGroup(event)
         const onMutation = (event: WaAppStateMutationEvent): void => this.onMutation(event)
+        const onMessageSend = (event: WaOutgoingMessageEvent): void => this.onMessageSend(event)
         const onMessage = (event: WaIncomingMessageEvent): void => this.onMessage(event)
         const onReceipt = (event: WaIncomingReceiptEvent): void => this.onReceipt(event)
         const onNodeOut = (event: { readonly node: BinaryNode }): void => this.onNodeOut(event.node)
@@ -106,6 +138,7 @@ export class WaWamAutoEmitter {
         ctx.on('connection', onConnection)
         ctx.on('group', onGroup)
         ctx.on('mutation', onMutation)
+        ctx.on('message_send', onMessageSend)
         ctx.on('message', onMessage)
         ctx.on('receipt', onReceipt)
         ctx.on('debug_transport_node_out', onNodeOut)
@@ -116,6 +149,7 @@ export class WaWamAutoEmitter {
             () => ctx.off('connection', onConnection),
             () => ctx.off('group', onGroup),
             () => ctx.off('mutation', onMutation),
+            () => ctx.off('message_send', onMessageSend),
             () => ctx.off('message', onMessage),
             () => ctx.off('receipt', onReceipt),
             () => ctx.off('debug_transport_node_out', onNodeOut),
@@ -223,6 +257,69 @@ export class WaWamAutoEmitter {
         })
     }
 
+    private onMessageSend(event: WaOutgoingMessageEvent): void {
+        const msg = unwrapMessage(event.message)
+        const destination = e2eDestinationKey(event.to)
+        const isGroup = isGroupJid(event.to)
+
+        const reaction = msg.reactionMessage
+        if (reaction) {
+            this.coordinator.commit('ReactionActions', {
+                reactionAction: (reaction.text ?? '').length > 0 ? 'UPDATE' : 'DELETE',
+                messageType: destination
+            })
+            return
+        }
+
+        const poll = msg.pollCreationMessage
+        if (poll) {
+            this.coordinator.commit('PollsActions', {
+                pollAction: 'CREATE_POLL',
+                chatType: pollChatTypeKey(event.to),
+                isAGroup: isGroup,
+                ...(poll.options ? { pollOptionsCount: poll.options.length } : {}),
+                ...(isGroup ? { typeOfGroup: 'GROUP' as const } : {})
+            })
+            return
+        }
+        if (msg.pollUpdateMessage) {
+            this.coordinator.commit('PollsActions', {
+                pollAction: 'VOTE',
+                chatType: pollChatTypeKey(event.to),
+                isAGroup: isGroup,
+                ...(isGroup ? { typeOfGroup: 'GROUP' as const } : {})
+            })
+            return
+        }
+
+        const doc = msg.documentMessage
+        if (doc) {
+            const ext = fileExtension(doc.fileName)
+            this.coordinator.commit('SendDocument', {
+                documentType: documentTypeFor(doc.mimetype),
+                ...(ext !== undefined ? { documentExt: ext } : {}),
+                ...(typeof doc.pageCount === 'number' ? { documentPageSize: doc.pageCount } : {}),
+                ...(typeof doc.fileLength === 'number'
+                    ? { documentSize: doc.fileLength }
+                    : {})
+            })
+            return
+        }
+
+        const ctx = getContextInfo(msg)
+        if (ctx?.isForwarded) {
+            const media = mediaTypeKey(resolveEncMediaType(msg) ?? undefined)
+            const score = ctx.forwardingScore ?? 0
+            this.coordinator.commit('ForwardSend', {
+                messageType: destination,
+                isFrequentlyForwarded: score >= 4,
+                isForwardedForward: score > 1,
+                ...(media !== null ? { messageMediaType: media } : {}),
+                ...(isGroup ? { typeOfGroup: 'GROUP' as const } : {})
+            })
+        }
+    }
+
     /** Mirrors WA Web's stream model: emit on each real mode transition, deduped. */
     private setStreamMode(mode: 'MAIN' | 'SYNCING' | 'OFFLINE'): void {
         if (this.streamMode === mode) return
@@ -267,12 +364,16 @@ export class WaWamAutoEmitter {
     }
 
     private onNodeOut(node: BinaryNode): void {
-        if (node.tag !== 'message') return
+        if (node.tag === WA_NODE_TAGS.IQ) {
+            this.trackOutgoingIq(node)
+            return
+        }
+        if (node.tag !== WA_MESSAGE_TAGS.MESSAGE) return
         const enc = findFirstEncNode(node)
         if (enc === null) return
         const to = node.attrs.to ?? ''
         const destination = e2eDestinationKey(to)
-        const isLid = isLidJid(to) || node.attrs.addressing_mode === 'lid'
+        const isLid = isLidJid(to) || node.attrs.addressing_mode === WA_ADDRESSING_MODES.LID
         const isGroup = isGroupJid(to)
         const ciphertextType = ciphertextTypeKey(enc.attrs.type)
         const media = mediaTypeKey(enc.attrs.mediatype)
@@ -303,12 +404,12 @@ export class WaWamAutoEmitter {
     }
 
     private onNodeIn(node: BinaryNode): void {
-        if (node.tag === 'ib') {
-            if (findNodeChild(node, 'offline') !== null) this.setStreamMode('MAIN')
+        if (node.tag === WA_NODE_TAGS.INFO_BULLETIN) {
+            if (findNodeChild(node, WA_NODE_TAGS.OFFLINE) !== undefined) this.setStreamMode('MAIN')
             return
         }
-        if (node.tag === 'notification') {
-            const oldReg = findNodeChild(node, 'wa_old_registration')
+        if (node.tag === WA_NODE_TAGS.NOTIFICATION) {
+            const oldReg = findNodeChild(node, WA_REGISTRATION_NOTIFICATION_TAGS.WA_OLD_REGISTRATION)
             if (oldReg !== undefined && oldReg.attrs.device_id !== undefined) {
                 this.coordinator.commit('WaOldCode', { deviceId: oldReg.attrs.device_id })
             }
@@ -323,8 +424,14 @@ export class WaWamAutoEmitter {
                 })
             }
         }
-        if (node.tag === 'receipt' && node.attrs.type === 'retry') {
-            const retry = findNodeChild(node, 'retry')
+        if (node.tag === WA_NODE_TAGS.IQ) {
+            if (node.attrs.type === WA_IQ_TYPES.RESULT || node.attrs.type === WA_IQ_TYPES.ERROR) {
+                this.resolveOutgoingIq(node, node.attrs.type === WA_IQ_TYPES.RESULT)
+            }
+            return
+        }
+        if (node.tag === WA_MESSAGE_TAGS.RECEIPT && node.attrs.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY) {
+            const retry = findNodeChild(node, WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY)
             const count = retry?.attrs.count !== undefined ? Number(retry.attrs.count) : 0
             if (count >= HIGH_RETRY_THRESHOLD) {
                 this.coordinator.commit('MessageHighRetryCount', {
@@ -335,7 +442,7 @@ export class WaWamAutoEmitter {
             }
             return
         }
-        if (node.tag === 'ack' && node.attrs.class === 'message') {
+        if (node.tag === WA_MESSAGE_TAGS.ACK && node.attrs.class === WA_MESSAGE_TYPES.ACK_CLASS_MESSAGE) {
             const id = node.attrs.id
             if (id === undefined) return
             const info = this.sentMessages.get(id)
@@ -357,6 +464,13 @@ export class WaWamAutoEmitter {
                     ...(info.isGroup ? { typeOfGroup: 'GROUP' as const } : {})
                 })
             }
+            if (info.editType === 'SENDER_REVOKE' || info.editType === 'ADMIN_REVOKE') {
+                this.coordinator.commit('RevokeMessageSend', {
+                    revokeType: info.editType === 'ADMIN_REVOKE' ? 'ADMIN' : 'SENDER',
+                    messageType: info.destination,
+                    messageSendResultIsTerminal: true
+                })
+            }
         }
     }
 
@@ -366,6 +480,46 @@ export class WaWamAutoEmitter {
             if (oldest !== undefined) this.sentMessages.delete(oldest)
         }
         this.sentMessages.set(id, info)
+    }
+
+    /** Tracks a membership-request approve/reject IQ so its response can emit round-trip time + result. */
+    private trackOutgoingIq(node: BinaryNode): void {
+        const id = node.attrs.id
+        const groupJid = node.attrs.to
+        if (id === undefined || groupJid === undefined) return
+        if (node.attrs.type !== WA_IQ_TYPES.SET || node.attrs.xmlns !== WA_XMLNS.GROUPS) return
+        const membership = findNodeChild(node, WA_GROUP_MEMBERSHIP_ACTION_TAGS.REQUESTS_ACTION)
+        if (membership === undefined) return
+        const joinRequestAction: WamGroupJoinRequestAction | null =
+            findNodeChild(membership, WA_GROUP_MEMBERSHIP_ACTION_TAGS.APPROVE) !== undefined
+                ? 'MEMBERSHIP_REQUEST_APPROVE'
+                : findNodeChild(membership, WA_GROUP_MEMBERSHIP_ACTION_TAGS.REJECT) !== undefined
+                  ? 'MEMBERSHIP_REQUEST_REJECT'
+                  : null
+        if (joinRequestAction === null) return
+        this.trackIq(id, { startMs: Date.now(), groupJid, joinRequestAction })
+    }
+
+    private resolveOutgoingIq(node: BinaryNode, isSuccessful: boolean): void {
+        const id = node.attrs.id
+        if (id === undefined) return
+        const pending = this.pendingIqs.get(id)
+        if (pending === undefined) return
+        this.pendingIqs.delete(id)
+        this.coordinator.commit('WaFsGroupJoinRequestAction', {
+            groupJid: pending.groupJid,
+            groupJoinRequestAction: pending.joinRequestAction,
+            isSuccessful,
+            serverResponseTime: Math.max(0, Date.now() - pending.startMs)
+        })
+    }
+
+    private trackIq(id: string, pending: PendingIq): void {
+        if (this.pendingIqs.size >= MAX_TRACKED_IQS) {
+            const oldest = this.pendingIqs.keys().next().value
+            if (oldest !== undefined) this.pendingIqs.delete(oldest)
+        }
+        this.pendingIqs.set(id, pending)
     }
 
     private onUnhandledStanza(event: WaIncomingUnhandledStanzaEvent): void {
@@ -384,7 +538,6 @@ export class WaWamAutoEmitter {
         })
     }
 
-    /** Detaches every event subscription. */
     dispose(): void {
         for (let i = this.unsubscribes.length - 1; i >= 0; i -= 1) this.unsubscribes[i]()
         this.unsubscribes.length = 0

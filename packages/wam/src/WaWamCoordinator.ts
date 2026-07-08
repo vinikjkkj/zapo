@@ -111,7 +111,6 @@ export class WaWamCoordinator {
         }
     }
 
-    /** Flushes every open channel batch immediately. */
     async flush(): Promise<void> {
         this.clearTimer()
         const channels = [...this.openBatches.keys()]

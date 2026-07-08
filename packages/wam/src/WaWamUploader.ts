@@ -2,6 +2,10 @@ import type { BinaryNode, Logger, WaClientPluginContext } from 'zapo-js'
 import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS } from 'zapo-js/protocol'
 import { delay, toError } from 'zapo-js/util'
 
+/** WAM-telemetry upload stanza namespace + child tag (`<iq xmlns="w:stats"><add t>`). WAM-specific, not a core concept. */
+const WAM_STATS_XMLNS = 'w:stats'
+const WAM_STATS_ADD_TAG = 'add'
+
 /** Exponential backoff with jitter, matching the WA stats backend shape. */
 function backoffMs(attempt: number): number {
     const base = Math.min(1_000 * 2 ** attempt, 120_000)
@@ -42,11 +46,11 @@ export class WaWamUploader {
             attrs: {
                 to: WA_DEFAULTS.HOST_DOMAIN,
                 type: WA_IQ_TYPES.SET,
-                xmlns: 'w:stats'
+                xmlns: WAM_STATS_XMLNS
             },
             content: [
                 {
-                    tag: 'add',
+                    tag: WAM_STATS_ADD_TAG,
                     attrs: { t: String(Math.floor(Date.now() / 1000)) },
                     content: batch
                 }

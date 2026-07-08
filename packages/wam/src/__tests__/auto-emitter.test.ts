@@ -483,6 +483,101 @@ test('auto-emitter ignores non-local (synced) app-state mutations', () => {
     assert.equal(h.commits.length, 0)
 })
 
+test('auto-emitter maps an outbound reaction to ReactionActions (UPDATE / DELETE)', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message_send', {
+        to: '456@s.whatsapp.net',
+        message: { reactionMessage: { text: '👍' } }
+    })
+    assert.deepEqual(h.commits.find((c) => c.name === 'ReactionActions'), {
+        name: 'ReactionActions',
+        payload: { reactionAction: 'UPDATE', messageType: 'INDIVIDUAL' }
+    })
+    h.commits.length = 0
+    h.emit('message_send', { to: '456@s.whatsapp.net', message: { reactionMessage: { text: '' } } })
+    assert.equal(
+        (h.commits.find((c) => c.name === 'ReactionActions')?.payload as { reactionAction: string })
+            .reactionAction,
+        'DELETE'
+    )
+})
+
+test('auto-emitter maps an outbound poll to PollsActions (CREATE_POLL with option count)', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message_send', {
+        to: '1@g.us',
+        message: {
+            pollCreationMessage: {
+                name: 'q',
+                options: [{ optionName: 'a' }, { optionName: 'b' }, { optionName: 'c' }]
+            }
+        }
+    })
+    assert.deepEqual(h.commits.find((c) => c.name === 'PollsActions'), {
+        name: 'PollsActions',
+        payload: {
+            pollAction: 'CREATE_POLL',
+            chatType: 'GROUP',
+            isAGroup: true,
+            pollOptionsCount: 3,
+            typeOfGroup: 'GROUP'
+        }
+    })
+})
+
+test('auto-emitter maps an outbound document to SendDocument', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message_send', {
+        to: '456@s.whatsapp.net',
+        message: {
+            documentMessage: {
+                fileName: 'report.pdf',
+                mimetype: 'application/pdf',
+                pageCount: 4,
+                fileLength: 12345
+            }
+        }
+    })
+    assert.deepEqual(h.commits.find((c) => c.name === 'SendDocument'), {
+        name: 'SendDocument',
+        payload: {
+            documentType: 'DOCUMENT',
+            documentExt: 'pdf',
+            documentPageSize: 4,
+            documentSize: 12345
+        }
+    })
+})
+
+test('auto-emitter maps a forwarded outbound message to ForwardSend', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message_send', {
+        to: '1@g.us',
+        message: { imageMessage: { contextInfo: { isForwarded: true, forwardingScore: 5 } } }
+    })
+    assert.deepEqual(h.commits.find((c) => c.name === 'ForwardSend'), {
+        name: 'ForwardSend',
+        payload: {
+            messageType: 'GROUP',
+            isFrequentlyForwarded: true,
+            isForwardedForward: true,
+            messageMediaType: 'PHOTO',
+            typeOfGroup: 'GROUP'
+        }
+    })
+})
+
+test('auto-emitter fires no ForwardSend for a normal (non-forwarded) outbound message', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message_send', { to: '456@s.whatsapp.net', message: { conversation: 'oi' } })
+    assert.equal(h.commits.filter((c) => c.name === 'ForwardSend').length, 0)
+})
+
 test('auto-emitter maps a device-switch notification to WaOldCode', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
@@ -532,6 +627,23 @@ test('auto-emitter maps an edit=7 revoke send to a SENDER_REVOKE EditMessageSend
     assert.equal((edit?.payload as { editType: string }).editType, 'SENDER_REVOKE')
 })
 
+test('auto-emitter fires RevokeMessageSend (ADMIN) alongside EditMessageSend for an edit=8 revoke ack', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'message',
+            attrs: { to: '1@g.us', id: 'rv1', edit: '8' },
+            content: [{ tag: 'enc', attrs: { v: '2', type: 'skmsg' } }]
+        }
+    })
+    h.emit('debug_transport_node_in', { node: { tag: 'ack', attrs: { class: 'message', id: 'rv1' } } })
+    assert.deepEqual(h.commits.find((c) => c.name === 'RevokeMessageSend'), {
+        name: 'RevokeMessageSend',
+        payload: { revokeType: 'ADMIN', messageType: 'GROUP', messageSendResultIsTerminal: true }
+    })
+})
+
 test('auto-emitter fires no EditMessageSend for a normal (non-edit) send', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
@@ -576,4 +688,77 @@ test('auto-emitter emits no stream mode for a close before any open, and detache
     assert.equal(h.commits.length, 0)
     emitter.dispose()
     assert.equal(h.handlers.size, 0)
+})
+
+const membershipActionIq = (id: string, action: 'approve' | 'reject') => ({
+    node: {
+        tag: 'iq',
+        attrs: { id, to: '123@g.us', type: 'set', xmlns: 'w:g2' },
+        content: [
+            {
+                tag: 'membership_requests_action',
+                attrs: {},
+                content: [
+                    { tag: action, attrs: {}, content: [{ tag: 'participant', attrs: { jid: '5@s.whatsapp.net' } }] }
+                ]
+            }
+        ]
+    }
+})
+
+test('auto-emitter correlates an approved membership-request IQ to WaFsGroupJoinRequestAction', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_out', membershipActionIq('iq1', 'approve'))
+    assert.equal(h.commits.length, 0)
+    h.emit('debug_transport_node_in', { node: { tag: 'iq', attrs: { id: 'iq1', type: 'result' } } })
+    assert.equal(h.commits.length, 1)
+    const commit = h.commits[0]
+    assert.equal(commit?.name, 'WaFsGroupJoinRequestAction')
+    const payload = commit?.payload as Record<string, unknown>
+    assert.equal(payload.groupJid, '123@g.us')
+    assert.equal(payload.groupJoinRequestAction, 'MEMBERSHIP_REQUEST_APPROVE')
+    assert.equal(payload.isSuccessful, true)
+    assert.equal(typeof payload.serverResponseTime, 'number')
+    assert.ok((payload.serverResponseTime as number) >= 0)
+    assert.equal('groupJoinRequestEntrypoint' in payload, false)
+    assert.equal('groupJoinRequestGroupsInCommon' in payload, false)
+})
+
+test('auto-emitter marks a rejected membership-request IQ error as unsuccessful', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_out', membershipActionIq('iq2', 'reject'))
+    h.emit('debug_transport_node_in', { node: { tag: 'iq', attrs: { id: 'iq2', type: 'error' } } })
+    assert.equal(h.commits.length, 1)
+    assert.deepEqual(
+        {
+            name: h.commits[0]?.name,
+            groupJoinRequestAction: (h.commits[0]?.payload as Record<string, unknown>)
+                .groupJoinRequestAction,
+            isSuccessful: (h.commits[0]?.payload as Record<string, unknown>).isSuccessful
+        },
+        {
+            name: 'WaFsGroupJoinRequestAction',
+            groupJoinRequestAction: 'MEMBERSHIP_REQUEST_REJECT',
+            isSuccessful: false
+        }
+    )
+})
+
+test('auto-emitter ignores unrelated IQs and unmatched IQ responses', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    // A w:g2 set without a membership action is not tracked.
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'iq',
+            attrs: { id: 'x1', to: '123@g.us', type: 'set', xmlns: 'w:g2' },
+            content: [{ tag: 'demote', attrs: {}, content: [] }]
+        }
+    })
+    // A result for an untracked id emits nothing.
+    h.emit('debug_transport_node_in', { node: { tag: 'iq', attrs: { id: 'x1', type: 'result' } } })
+    h.emit('debug_transport_node_in', { node: { tag: 'iq', attrs: { id: 'ghost', type: 'result' } } })
+    assert.equal(h.commits.length, 0)
 })

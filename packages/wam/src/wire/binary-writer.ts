@@ -86,7 +86,6 @@ export class BinaryWriter {
         return this.offset
     }
 
-    /** Returns a copy of the written bytes. */
     toBytes(): Uint8Array {
         return this.buffer.slice(0, this.offset)
     }
