@@ -55,6 +55,9 @@ const WA_APP_STATE_MUTATION_FLUSH_SUCCESS_STATES = new Set<string>([
 
 const WA_APP_STATE_ARCHIVE_RANGE_DEFAULT_LIMIT = 256
 
+/** Placeholder MACs for locally-emitted mutation events (the parser ignores them). */
+const EMPTY_MUTATION_MAC = new Uint8Array(0)
+
 type IndexArgsForSchema<S extends WaAppstateSchema> = {
     readonly [Part in S['indexParts'][number] as Part extends { type: 'literal' }
         ? never
@@ -285,6 +288,7 @@ interface WaAppStateMutationCoordinatorOptions {
     readonly archiveRangeLimit?: number
     readonly emitMutation?: (event: WaAppStateMutationEvent) => void
     readonly emitSnapshotMutations?: boolean
+    readonly emitLocalMutations?: boolean
     readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
     /**
      * Persistence sink for `Contact` collection mutations (the locally-saved
@@ -335,6 +339,7 @@ export class WaAppStateMutationCoordinator {
     private readonly archiveRangeLimit: number
     private readonly emitMutation?: (event: WaAppStateMutationEvent) => void
     private readonly emitSnapshotMutations: boolean
+    private readonly emitLocalMutations: boolean
     private readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
     private readonly contactSink?: (record: WaStoredContactRecord) => void
     private readonly pushNameSink?: (name: string) => void
@@ -355,6 +360,7 @@ export class WaAppStateMutationCoordinator {
         )
         this.emitMutation = options.emitMutation
         this.emitSnapshotMutations = options.emitSnapshotMutations === true
+        this.emitLocalMutations = options.emitLocalMutations === true
         this.nctSaltSink = options.nctSaltSink
         this.contactSink = options.contactSink
         this.pushNameSink = options.pushNameSink
@@ -834,8 +840,40 @@ export class WaAppStateMutationCoordinator {
     private async enqueueAndFlush(mutations: readonly WaAppStateMutationInput[]): Promise<void> {
         for (const mutation of mutations) {
             this.enqueueMutation(mutation)
+            this.emitLocalMutation(mutation)
         }
         await this.flushMutations()
+    }
+
+    /**
+     * Emits a `source: 'local'` mutation event for an action this client is
+     * sending, so consumers can observe their own change at action time. Gated
+     * by `emitLocalMutations`; parse failures are swallowed (best-effort).
+     */
+    private emitLocalMutation(input: WaAppStateMutationInput): void {
+        if (!this.emitLocalMutations || !this.emitMutation) return
+        const value = input.operation === 'set' ? input.value : input.previousValue
+        try {
+            const event = parseAppStateMutationEvent({
+                collection: input.collection,
+                operation: input.operation,
+                source: 'local',
+                index: input.index,
+                value,
+                version: input.version,
+                indexMac: EMPTY_MUTATION_MAC,
+                valueMac: EMPTY_MUTATION_MAC,
+                keyId: EMPTY_MUTATION_MAC,
+                timestamp: input.timestamp
+            })
+            if (event) this.emitMutation(event)
+        } catch (error) {
+            this.logger.debug('failed to emit local app-state mutation event', {
+                collection: input.collection,
+                index: input.index,
+                message: toError(error).message
+            })
+        }
     }
 
     private enqueueMutation(mutation: WaAppStateMutationInput): void {

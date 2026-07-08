@@ -165,9 +165,14 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      * Chat-event emission tuning. `emitSnapshotMutations: true` re-emits
      * `app_state_mutation` events for every mutation seen during a snapshot
      * sync (off by default – those mutations represent historical state).
+     * `emitLocalMutations: true` also emits a `mutation` event (with
+     * `source: 'local'`) for every app-state action this client sends
+     * (mute/pin/archive/…), so consumers can observe their own changes at
+     * action time (off by default).
      */
     readonly chatEvents?: {
         readonly emitSnapshotMutations?: boolean
+        readonly emitLocalMutations?: boolean
     }
     /**
      * Privacy-token (trusted-contact-token) cache tuning. Controls how often
@@ -1225,7 +1230,7 @@ export interface WaHistorySyncChunkEvent {
     readonly progress?: number
 }
 
-export type WaAppStateMutationSource = 'snapshot' | 'patch'
+export type WaAppStateMutationSource = 'snapshot' | 'patch' | 'local'
 
 type MutationEventBase = {
     readonly source: WaAppStateMutationSource
