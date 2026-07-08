@@ -263,6 +263,69 @@ test('synthetic UI flushes UserActivity with a bitmap matching the active slices
     mock.timers.reset()
 })
 
+test('synthetic UI fabricates AboutConsumption for a 1:1 inbound message', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = makeHarness()
+    const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, {
+        chatOpenProbability: 0,
+        aboutConsumptionProbability: 1
+    })
+    h.emit('message', lidMessage())
+    mock.timers.tick(41_000)
+    const about = h.commits.find((c) => c.name === 'AboutConsumption')
+    assert.ok(about)
+    assert.ok(
+        ['ONE_ON_ONE_CHAT', 'PROFILE_INFO'].includes(
+            about?.payload.aboutConsumptionSurface as string
+        )
+    )
+    ui.dispose()
+    mock.timers.reset()
+})
+
+test('synthetic UI fabricates no AboutConsumption for a group message', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = makeHarness()
+    const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, {
+        chatOpenProbability: 0,
+        infoOpenProbability: 0,
+        aboutConsumptionProbability: 1
+    })
+    h.emit('message', {
+        key: { remoteJid: '1@g.us', isGroup: true, isBroadcast: false, isNewsletter: false },
+        rawNode: { tag: 'message', attrs: {} }
+    })
+    mock.timers.tick(41_000)
+    assert.equal(h.commits.filter((c) => c.name === 'AboutConsumption').length, 0)
+    ui.dispose()
+    mock.timers.reset()
+})
+
+test('synthetic UI fabricates ContactSearchExperience in the ambient stream', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const origRandom = Math.random
+    Math.random = () => 0.15
+    try {
+        const h = makeHarness()
+        const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, {
+            ambientIntervalMinMs: 1,
+            ambientIntervalMaxMs: 2,
+            memoryIntervalMinMs: 10 * 60_000,
+            memoryIntervalMaxMs: 10 * 60_000
+        })
+        mock.timers.tick(5)
+        const search = h.commits.find((c) => c.name === 'ContactSearchExperience')
+        assert.ok(search)
+        assert.equal(search?.payload.contactSearchEntrypoint, 'CHATS_LIST_GLOBAL_SEARCH')
+        assert.equal(search?.payload.isUsernameSearch, false)
+        assert.equal(search?.payload.searchActionName, 'SEARCH_START')
+        ui.dispose()
+    } finally {
+        Math.random = origRandom
+        mock.timers.reset()
+    }
+})
+
 test('synthetic UI cancels pending fabrications on dispose', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
     const h = makeHarness()

@@ -11,6 +11,8 @@ type Ctx = Pick<WaClientPluginContext, 'on' | 'off'>
 const MESSAGE_OPEN_MIN_GAP_MS = 20_000
 /** Info-drawer opens (group/channel/msg info) are rare interactions; keep them well spaced. */
 const INFO_OPEN_MIN_GAP_MS = 180_000
+/** Viewing a contact's About is occasional; keep the fabricated views well spaced. */
+const ABOUT_MIN_GAP_MS = 120_000
 /** How many recent chats' addressing to keep for the ambient re-open stream. */
 const RECENT_CHATS = 12
 /** Emoji-picker tabs WA Web reports for WebcEmojiOpen. */
@@ -30,6 +32,8 @@ export interface WaWamSyntheticUiOptions {
     readonly infoOpenProbability?: number
     /** Chance an outbound media message fabricates an AttachmentTrayActions send (default 0.4). */
     readonly attachmentTrayProbability?: number
+    /** Chance a 1:1 inbound message fabricates an AboutConsumption (profile-About view) (default 0.06). */
+    readonly aboutConsumptionProbability?: number
     /** Ambient (idle-checking) re-open interval bounds in ms (default 5-25min). */
     readonly ambientIntervalMinMs?: number
     readonly ambientIntervalMaxMs?: number
@@ -91,6 +95,7 @@ export class WaWamSyntheticUi {
     private readonly imageOpenProbability: number
     private readonly infoOpenProbability: number
     private readonly attachmentTrayProbability: number
+    private readonly aboutConsumptionProbability: number
     private readonly ambientMinMs: number
     private readonly ambientMaxMs: number
     private readonly memoryMinMs: number
@@ -102,6 +107,7 @@ export class WaWamSyntheticUi {
     private readonly activitySessionId = randHex(8)
     private lastOpenMs = 0
     private lastInfoOpenMs = 0
+    private lastAboutMs = 0
     private memCurrentKb = randInt(50_000, 90_000)
     private memPeakKb = 0
     private messagesSeen = 0
@@ -122,6 +128,7 @@ export class WaWamSyntheticUi {
         this.imageOpenProbability = options.imageOpenProbability ?? 0.3
         this.infoOpenProbability = options.infoOpenProbability ?? 0.05
         this.attachmentTrayProbability = options.attachmentTrayProbability ?? 0.4
+        this.aboutConsumptionProbability = options.aboutConsumptionProbability ?? 0.06
         this.ambientMinMs = options.ambientIntervalMinMs ?? 5 * 60_000
         this.ambientMaxMs = options.ambientIntervalMaxMs ?? 25 * 60_000
         this.memoryMinMs = options.memoryIntervalMinMs ?? 2 * 60_000
@@ -179,6 +186,23 @@ export class WaWamSyntheticUi {
         if (event.message?.audioMessage && Math.random() < this.imageOpenProbability) {
             this.schedule(rand(1000, 8000), () => this.emitMediaLoad())
         }
+
+        if (
+            !key.isGroup &&
+            !key.isNewsletter &&
+            Math.random() < this.aboutConsumptionProbability &&
+            now - this.lastAboutMs >= ABOUT_MIN_GAP_MS
+        ) {
+            this.lastAboutMs = now
+            this.schedule(rand(2000, 40_000), () => this.emitAboutConsumption())
+        }
+    }
+
+    private emitAboutConsumption(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('AboutConsumption', {
+            aboutConsumptionSurface: Math.random() < 0.5 ? 'ONE_ON_ONE_CHAT' : 'PROFILE_INFO'
+        })
     }
 
     private emitMediaLoad(): void {
@@ -296,8 +320,11 @@ export class WaWamSyntheticUi {
 
     private scheduleAmbient(): void {
         this.schedule(rand(this.ambientMinMs, this.ambientMaxMs), () => {
-            if (Math.random() < 0.15) {
+            const r = Math.random()
+            if (r < 0.12) {
                 this.emitEmojiOpen()
+            } else if (r < 0.2) {
+                this.emitContactSearch()
             } else {
                 const isLid = this.recentChatIsLid[randInt(0, this.recentChatIsLid.length)]
                 if (isLid !== undefined) this.emitChatOpen(isLid)
@@ -310,6 +337,16 @@ export class WaWamSyntheticUi {
         if (!this.canEmit()) return
         this.coordinator.commit('WebcEmojiOpen', {
             webcEmojiOpenTab: EMOJI_TABS[randInt(0, EMOJI_TABS.length)]
+        })
+    }
+
+    private emitContactSearch(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('ContactSearchExperience', {
+            contactSearchEntrypoint: 'CHATS_LIST_GLOBAL_SEARCH',
+            searchActionName: Math.random() < 0.6 ? 'SEARCH_START' : 'CLICK_ON_CONTACT',
+            isUsernameSearch: false,
+            searchStartsWithAt: false
         })
     }
 
