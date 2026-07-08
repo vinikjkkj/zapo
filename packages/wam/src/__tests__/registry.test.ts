@@ -35,3 +35,12 @@ test('resolveWamEventFields skips absent fields and unresolvable enum keys', () 
     assert.deepEqual(resolveWamEventFields('UiAction', {}), [])
     assert.deepEqual(resolveWamEventFields('UiAction', { uiActionType: 'NOPE' }), [])
 })
+
+test('resolveWamEventFields drops non-integer / non-finite int fields', () => {
+    assert.deepEqual(resolveWamEventFields('UiAction', { uiActionT: 3.14 }), [])
+    assert.deepEqual(resolveWamEventFields('UiAction', { uiActionT: Number.NaN }), [])
+    assert.deepEqual(resolveWamEventFields('UiAction', { uiActionT: Number.POSITIVE_INFINITY }), [])
+    assert.deepEqual(resolveWamEventFields('UiAction', { uiActionT: 142 }), [
+        { id: 3, kind: 'int', value: 142 }
+    ])
+})

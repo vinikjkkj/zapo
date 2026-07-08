@@ -5,9 +5,19 @@ import {
     type WaWamEventName,
     type WaWamField
 } from '@vinikjkkj/wa-wam'
+import { toSafeNumber } from 'zapo-js/util'
 
 import type { WamValueKind } from './wire/encoder.js'
 import type { WamResolvedField } from './wire/WamBatch.js'
+
+/** Coerces a payload value to a finite safe integer via {@link toSafeNumber}, or null if it is not one. */
+function toSafeInt(raw: unknown): number | null {
+    try {
+        return toSafeNumber(raw as number, 'wam field')
+    } catch {
+        return null
+    }
+}
 
 /** Maps a registry field/global `type` to its wire encoding kind. */
 export function wamValueKind(type: WaWamField['type']): WamValueKind | null {
@@ -59,8 +69,14 @@ export function resolveWamEventFields(
             resolved[resolved.length] = { id: meta.id, kind, value: Boolean(raw) }
         } else if (kind === 'string') {
             resolved[resolved.length] = { id: meta.id, kind, value: String(raw) }
+        } else if (kind === 'int') {
+            const numeric = toSafeInt(raw)
+            if (numeric === null) continue
+            resolved[resolved.length] = { id: meta.id, kind, value: numeric }
         } else {
-            resolved[resolved.length] = { id: meta.id, kind, value: Number(raw) }
+            const numeric = Number(raw)
+            if (!Number.isFinite(numeric)) continue
+            resolved[resolved.length] = { id: meta.id, kind, value: numeric }
         }
     }
     return resolved

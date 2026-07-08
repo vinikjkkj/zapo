@@ -104,7 +104,8 @@ export class WaWamSyntheticUi {
     private readonly activeEndHour: number | undefined
     private readonly windowHeightFloat = randInt(680, 1040)
     private readonly sessionStartMs = Date.now()
-    private readonly activitySessionId = randHex(8)
+    private activitySessionId = randHex(8)
+    private activityStartMs = Date.now()
     private lastOpenMs = 0
     private lastInfoOpenMs = 0
     private lastAboutMs = 0
@@ -290,17 +291,31 @@ export class WaWamSyntheticUi {
     }
 
     private recordActivitySlice(): void {
-        if (this.activitySlice < ACTIVITY_MAX_SLICES) {
-            if (this.sliceActive) {
-                const i = this.activitySlice
-                if (i < 32) this.bitmapLow = (this.bitmapLow | (1 << i)) >>> 0
-                else this.bitmapHigh = (this.bitmapHigh | (1 << (i - 32))) >>> 0
-                this.activeSliceCount += 1
-            }
-            this.activitySlice += 1
+        if (this.sliceActive) {
+            const i = this.activitySlice
+            if (i < 32) this.bitmapLow = (this.bitmapLow | (1 << i)) >>> 0
+            else this.bitmapHigh = (this.bitmapHigh | (1 << (i - 32))) >>> 0
+            this.activeSliceCount += 1
         }
+        this.activitySlice += 1
         this.sliceActive = false
-        if (this.activitySlice % ACTIVITY_FLUSH_SLICES === 0) this.emitUserActivity()
+        if (this.activitySlice >= ACTIVITY_MAX_SLICES) {
+            this.emitUserActivity()
+            this.resetActivityWindow()
+        } else if (this.activitySlice % ACTIVITY_FLUSH_SLICES === 0) {
+            this.emitUserActivity()
+        }
+    }
+
+    /** Rolls to a fresh activity session once the bitmap fills, mirroring WA Web's per-session time-spent windows instead of going silent at the cap. */
+    private resetActivityWindow(): void {
+        this.bitmapLow = 0
+        this.bitmapHigh = 0
+        this.activitySlice = 0
+        this.activeSliceCount = 0
+        this.activitySeq = 0
+        this.activitySessionId = randHex(8)
+        this.activityStartMs = Date.now()
     }
 
     private emitUserActivity(): void {
@@ -309,7 +324,7 @@ export class WaWamSyntheticUi {
         const len = Math.min(this.activitySlice, ACTIVITY_MAX_SLICES)
         this.coordinator.commit('UserActivity', {
             userActivitySessionId: this.activitySessionId,
-            userActivityStartTime: Math.floor(this.sessionStartMs / 1000),
+            userActivityStartTime: Math.floor(this.activityStartMs / 1000),
             userActivityBitmapLen: len,
             userActivityBitmapLow: this.bitmapLow,
             userActivitySessionSeq: this.activitySeq,

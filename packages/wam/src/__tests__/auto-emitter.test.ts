@@ -571,6 +571,28 @@ test('auto-emitter maps a forwarded outbound message to ForwardSend', () => {
     })
 })
 
+test('auto-emitter emits both ForwardSend and SendDocument for a forwarded document', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message_send', {
+        to: '1@g.us',
+        message: {
+            documentMessage: {
+                fileName: 'report.pdf',
+                mimetype: 'application/pdf',
+                contextInfo: { isForwarded: true, forwardingScore: 2 }
+            }
+        }
+    })
+    assert.equal(h.commits.filter((c) => c.name === 'ForwardSend').length, 1)
+    assert.equal(h.commits.filter((c) => c.name === 'SendDocument').length, 1)
+    assert.equal(
+        (h.commits.find((c) => c.name === 'ForwardSend')?.payload as Record<string, unknown>)
+            .isForwardedForward,
+        true
+    )
+})
+
 test('auto-emitter fires no ForwardSend for a normal (non-forwarded) outbound message', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
@@ -642,6 +664,11 @@ test('auto-emitter fires RevokeMessageSend (ADMIN) alongside EditMessageSend for
         name: 'RevokeMessageSend',
         payload: { revokeType: 'ADMIN', messageType: 'GROUP', messageSendResultIsTerminal: true }
     })
+    assert.equal(
+        (h.commits.find((c) => c.name === 'EditMessageSend')?.payload as { editType: string })
+            .editType,
+        'ADMIN_REVOKE'
+    )
 })
 
 test('auto-emitter fires no EditMessageSend for a normal (non-edit) send', () => {

@@ -47,8 +47,9 @@ test('WamBatch serialises header + commitTime + event + field byte-for-byte', ()
 
 test('WamBatch delta-encodes globals: unchanged values are not re-emitted', () => {
     const batch = new WamBatch('regular', 1, 1, new Map([[3543, 42]]))
+    const baseline = batch.size()
     batch.setGlobal(3543, 42)
-    const before = batch.size()
+    assert.equal(batch.size(), baseline, 'unchanged global must not be re-emitted')
     batch.setGlobal(3543, 99)
-    assert.ok(batch.size() > before)
+    assert.ok(batch.size() > baseline, 'changed global must be re-emitted')
 })

@@ -262,6 +262,19 @@ export class WaWamAutoEmitter {
         const destination = e2eDestinationKey(event.to)
         const isGroup = isGroupJid(event.to)
 
+        const ctx = getContextInfo(msg)
+        if (ctx?.isForwarded) {
+            const media = mediaTypeKey(resolveEncMediaType(msg) ?? undefined)
+            const score = ctx.forwardingScore ?? 0
+            this.coordinator.commit('ForwardSend', {
+                messageType: destination,
+                isFrequentlyForwarded: score >= 4,
+                isForwardedForward: score > 1,
+                ...(media !== null ? { messageMediaType: media } : {}),
+                ...(isGroup ? { typeOfGroup: 'GROUP' as const } : {})
+            })
+        }
+
         const reaction = msg.reactionMessage
         if (reaction) {
             this.coordinator.commit('ReactionActions', {
@@ -304,19 +317,6 @@ export class WaWamAutoEmitter {
                     : {})
             })
             return
-        }
-
-        const ctx = getContextInfo(msg)
-        if (ctx?.isForwarded) {
-            const media = mediaTypeKey(resolveEncMediaType(msg) ?? undefined)
-            const score = ctx.forwardingScore ?? 0
-            this.coordinator.commit('ForwardSend', {
-                messageType: destination,
-                isFrequentlyForwarded: score >= 4,
-                isForwardedForward: score > 1,
-                ...(media !== null ? { messageMediaType: media } : {}),
-                ...(isGroup ? { typeOfGroup: 'GROUP' as const } : {})
-            })
         }
     }
 
