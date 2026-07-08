@@ -1,7 +1,8 @@
 import type { WaWamEventArgs } from '@vinikjkkj/wa-wam'
 import type { BinaryNode, WaClientPluginContext, WaIncomingMessageEvent } from 'zapo-js'
-import { isLidJid } from 'zapo-js/protocol'
+import { isGroupJid, isLidJid } from 'zapo-js/protocol'
 
+import { findFirstEncNode, mediaTypeKey, type WamMediaTypeKey } from './send-parse.js'
 import type { WaWamCoordinator } from './WaWamCoordinator.js'
 
 type Ctx = Pick<WaClientPluginContext, 'on' | 'off'>
@@ -14,6 +15,11 @@ const INFO_OPEN_MIN_GAP_MS = 180_000
 const RECENT_CHATS = 12
 /** Emoji-picker tabs WA Web reports for WebcEmojiOpen. */
 const EMOJI_TABS = ['EMOJI', 'GIF', 'STICKER'] as const
+/** One time-spent activity slice; a bit is set per slice the session saw traffic. */
+const ACTIVITY_SLICE_MS = 60_000
+/** Slices per UserActivity flush, and the cap WA Web's 2x32-bit bitmap holds. */
+const ACTIVITY_FLUSH_SLICES = 5
+const ACTIVITY_MAX_SLICES = 64
 
 export interface WaWamSyntheticUiOptions {
     /** Chance a given inbound message fabricates a CHAT_OPEN (default 0.25). */
@@ -22,9 +28,14 @@ export interface WaWamSyntheticUiOptions {
     readonly imageOpenProbability?: number
     /** Chance an event fabricates an info-drawer open (group/channel/msg info) (default 0.05). */
     readonly infoOpenProbability?: number
+    /** Chance an outbound media message fabricates an AttachmentTrayActions send (default 0.4). */
+    readonly attachmentTrayProbability?: number
     /** Ambient (idle-checking) re-open interval bounds in ms (default 5-25min). */
     readonly ambientIntervalMinMs?: number
     readonly ambientIntervalMaxMs?: number
+    /** MemoryStat sample interval bounds in ms (default 2-5min). */
+    readonly memoryIntervalMinMs?: number
+    readonly memoryIntervalMaxMs?: number
     /**
      * Local-time hour window [start, end) outside which nothing is fabricated, so
      * the profile does not show 4am activity. Both required to take effect; a
@@ -36,6 +47,30 @@ export interface WaWamSyntheticUiOptions {
 
 const rand = (min: number, max: number): number => min + Math.random() * (max - min)
 const randInt = (min: number, max: number): number => Math.floor(rand(min, max))
+const randHex = (len: number): string =>
+    Array.from({ length: len }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+
+type AttachmentTarget = 'GALLERY' | 'DOCUMENT' | 'AUDIO' | 'CONTACT' | 'LOCATION'
+
+/** ATTACHMENT_TRAY_ACTION_TARGET for an outbound media type; null for sticker/gif (emoji panel, not the tray). */
+function attachmentTargetFor(media: WamMediaTypeKey): AttachmentTarget | null {
+    switch (media) {
+        case 'PHOTO':
+        case 'VIDEO':
+            return 'GALLERY'
+        case 'DOCUMENT':
+            return 'DOCUMENT'
+        case 'AUDIO':
+        case 'PTT':
+            return 'AUDIO'
+        case 'CONTACT':
+            return 'CONTACT'
+        case 'LOCATION':
+            return 'LOCATION'
+        default:
+            return null
+    }
+}
 
 /**
  * Fabricates plausible `UiAction` telemetry so the emitted event profile
@@ -55,13 +90,27 @@ export class WaWamSyntheticUi {
     private readonly chatOpenProbability: number
     private readonly imageOpenProbability: number
     private readonly infoOpenProbability: number
+    private readonly attachmentTrayProbability: number
     private readonly ambientMinMs: number
     private readonly ambientMaxMs: number
+    private readonly memoryMinMs: number
+    private readonly memoryMaxMs: number
     private readonly activeStartHour: number | undefined
     private readonly activeEndHour: number | undefined
     private readonly windowHeightFloat = randInt(680, 1040)
+    private readonly sessionStartMs = Date.now()
+    private readonly activitySessionId = randHex(8)
     private lastOpenMs = 0
     private lastInfoOpenMs = 0
+    private memCurrentKb = randInt(50_000, 90_000)
+    private memPeakKb = 0
+    private messagesSeen = 0
+    private activitySlice = 0
+    private activitySeq = 0
+    private activeSliceCount = 0
+    private bitmapLow = 0
+    private bitmapHigh = 0
+    private sliceActive = false
     private disposed = false
 
     constructor(
@@ -72,8 +121,11 @@ export class WaWamSyntheticUi {
         this.chatOpenProbability = options.chatOpenProbability ?? 0.25
         this.imageOpenProbability = options.imageOpenProbability ?? 0.3
         this.infoOpenProbability = options.infoOpenProbability ?? 0.05
+        this.attachmentTrayProbability = options.attachmentTrayProbability ?? 0.4
         this.ambientMinMs = options.ambientIntervalMinMs ?? 5 * 60_000
         this.ambientMaxMs = options.ambientIntervalMaxMs ?? 25 * 60_000
+        this.memoryMinMs = options.memoryIntervalMinMs ?? 2 * 60_000
+        this.memoryMaxMs = options.memoryIntervalMaxMs ?? 5 * 60_000
         this.activeStartHour = options.activeHoursStartHour
         this.activeEndHour = options.activeHoursEndHour
         const onMessage = (event: WaIncomingMessageEvent): void => this.onMessage(event)
@@ -85,10 +137,13 @@ export class WaWamSyntheticUi {
             () => ctx.off('debug_transport_node_out', onNodeOut)
         )
         this.scheduleAmbient()
+        this.scheduleMemory()
+        this.scheduleActivitySlice()
     }
 
     private onMessage(event: WaIncomingMessageEvent): void {
         if (this.disposed) return
+        this.markActivity()
         const key = event.key
         const isLid = isLidJid(key.remoteJid ?? '')
         this.rememberChat(isLid)
@@ -136,17 +191,107 @@ export class WaWamSyntheticUi {
 
     private onNodeOut(node: BinaryNode): void {
         if (this.disposed || node.tag !== 'message') return
-        if (!this.infoOpenAllowed()) return
+        this.markActivity()
         const to = node.attrs.to ?? ''
         const isLid = isLidJid(to) || node.attrs.addressing_mode === 'lid'
-        this.schedule(rand(3000, 120_000), () =>
-            this.emit({
-                uiActionType: 'MSG_INFO_OPEN',
-                uiActionPreloaded: true,
-                isLid,
-                uiActionT: randInt(40, 400)
-            })
+
+        const enc = findFirstEncNode(node)
+        const media = enc !== null ? mediaTypeKey(enc.attrs.mediatype) : null
+        if (media !== null && Math.random() < this.attachmentTrayProbability) {
+            this.schedule(rand(1000, 12_000), () => this.emitAttachmentTray(media, to))
+        }
+
+        if (this.infoOpenAllowed()) {
+            this.schedule(rand(3000, 120_000), () =>
+                this.emit({
+                    uiActionType: 'MSG_INFO_OPEN',
+                    uiActionPreloaded: true,
+                    isLid,
+                    uiActionT: randInt(40, 400)
+                })
+            )
+        }
+    }
+
+    private emitAttachmentTray(media: WamMediaTypeKey, to: string): void {
+        if (!this.canEmit()) return
+        const target = attachmentTargetFor(media)
+        if (target === null) return
+        const isGroup = isGroupJid(to)
+        this.coordinator.commit('AttachmentTrayActions', {
+            attachmentTrayAction: 'SEND',
+            attachmentTrayActionTarget: target,
+            actionThreadType: isGroup ? 'GROUP_CHAT' : 'P2P_THREAD',
+            isAGroup: isGroup,
+            isSuccessful: true,
+            actionDurationMs: randInt(1500, 20_000),
+            sendTime: randInt(200, 4000),
+            ...(media === 'PHOTO' || media === 'VIDEO' ? { sendMediaType: media } : {})
+        })
+    }
+
+    private markActivity(): void {
+        this.sliceActive = true
+        this.messagesSeen += 1
+    }
+
+    private scheduleMemory(): void {
+        this.schedule(rand(this.memoryMinMs, this.memoryMaxMs), () => {
+            this.emitMemoryStat()
+            this.scheduleMemory()
+        })
+    }
+
+    private emitMemoryStat(): void {
+        if (!this.canEmit()) return
+        this.memCurrentKb = Math.max(
+            40_000,
+            Math.min(180_000, this.memCurrentKb + randInt(-4000, 6000))
         )
+        this.memPeakKb = Math.max(this.memPeakKb, this.memCurrentKb)
+        this.coordinator.commit('MemoryStat', {
+            workingSetSize: this.memCurrentKb,
+            workingSetPeakSize: this.memPeakKb,
+            uptime: Math.round((Date.now() - this.sessionStartMs) / 1000),
+            numMessages: this.messagesSeen,
+            processType: 'main'
+        })
+    }
+
+    private scheduleActivitySlice(): void {
+        this.schedule(ACTIVITY_SLICE_MS, () => {
+            this.recordActivitySlice()
+            this.scheduleActivitySlice()
+        })
+    }
+
+    private recordActivitySlice(): void {
+        if (this.activitySlice < ACTIVITY_MAX_SLICES) {
+            if (this.sliceActive) {
+                const i = this.activitySlice
+                if (i < 32) this.bitmapLow = (this.bitmapLow | (1 << i)) >>> 0
+                else this.bitmapHigh = (this.bitmapHigh | (1 << (i - 32))) >>> 0
+                this.activeSliceCount += 1
+            }
+            this.activitySlice += 1
+        }
+        this.sliceActive = false
+        if (this.activitySlice % ACTIVITY_FLUSH_SLICES === 0) this.emitUserActivity()
+    }
+
+    private emitUserActivity(): void {
+        if (!this.canEmit() || this.activitySlice === 0) return
+        this.activitySeq += 1
+        const len = Math.min(this.activitySlice, ACTIVITY_MAX_SLICES)
+        this.coordinator.commit('UserActivity', {
+            userActivitySessionId: this.activitySessionId,
+            userActivityStartTime: Math.floor(this.sessionStartMs / 1000),
+            userActivityBitmapLen: len,
+            userActivityBitmapLow: this.bitmapLow,
+            userActivitySessionSeq: this.activitySeq,
+            userActivitySessionCum: this.activeSliceCount,
+            ...(len > 32 ? { userActivityBitmapHigh: this.bitmapHigh } : {})
+        })
     }
 
     private scheduleAmbient(): void {

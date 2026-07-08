@@ -183,6 +183,86 @@ test('synthetic UI fabricates WebcEmojiOpen with a real tab in the ambient strea
     }
 })
 
+test('synthetic UI fabricates AttachmentTrayActions (SEND) for an outbound media message', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = makeHarness()
+    const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, { attachmentTrayProbability: 1 })
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'message',
+            attrs: { to: '1@g.us' },
+            content: [{ tag: 'enc', attrs: { mediatype: 'image' } }]
+        }
+    })
+    mock.timers.tick(13_000)
+    const tray = h.commits.find((c) => c.name === 'AttachmentTrayActions')
+    assert.ok(tray)
+    assert.equal(tray?.payload.attachmentTrayAction, 'SEND')
+    assert.equal(tray?.payload.attachmentTrayActionTarget, 'GALLERY')
+    assert.equal(tray?.payload.sendMediaType, 'PHOTO')
+    assert.equal(tray?.payload.actionThreadType, 'GROUP_CHAT')
+    assert.equal(tray?.payload.isAGroup, true)
+    ui.dispose()
+    mock.timers.reset()
+})
+
+test('synthetic UI fabricates no AttachmentTrayActions for a sticker (emoji-panel, not the tray)', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = makeHarness()
+    const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, { attachmentTrayProbability: 1 })
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'message',
+            attrs: { to: '456@s.whatsapp.net' },
+            content: [{ tag: 'enc', attrs: { mediatype: 'sticker' } }]
+        }
+    })
+    mock.timers.tick(13_000)
+    assert.equal(h.commits.filter((c) => c.name === 'AttachmentTrayActions').length, 0)
+    ui.dispose()
+    mock.timers.reset()
+})
+
+test('synthetic UI samples MemoryStat periodically (main process, uptime, numMessages)', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = makeHarness()
+    const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, {
+        chatOpenProbability: 0,
+        memoryIntervalMinMs: 1,
+        memoryIntervalMaxMs: 2
+    })
+    h.emit('message', lidMessage())
+    mock.timers.tick(5)
+    const mem = h.commits.find((c) => c.name === 'MemoryStat')
+    assert.ok(mem)
+    assert.equal(mem?.payload.processType, 'main')
+    assert.equal(typeof mem?.payload.workingSetSize, 'number')
+    assert.equal(typeof mem?.payload.uptime, 'number')
+    assert.ok((mem?.payload.numMessages as number) >= 1)
+    ui.dispose()
+    mock.timers.reset()
+})
+
+test('synthetic UI flushes UserActivity with a bitmap matching the active slices', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = makeHarness()
+    const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, {
+        chatOpenProbability: 0,
+        memoryIntervalMinMs: 10 * 60_000,
+        memoryIntervalMaxMs: 10 * 60_000
+    })
+    h.emit('message', lidMessage())
+    for (let i = 0; i < 5; i += 1) mock.timers.tick(60_000)
+    const ua = h.commits.find((c) => c.name === 'UserActivity')
+    assert.ok(ua)
+    assert.equal(ua?.payload.userActivityBitmapLen, 5)
+    assert.equal(ua?.payload.userActivitySessionCum, 1)
+    assert.equal(ua?.payload.userActivityBitmapLow, 1)
+    assert.equal(ua?.payload.userActivitySessionSeq, 1)
+    ui.dispose()
+    mock.timers.reset()
+})
+
 test('synthetic UI cancels pending fabrications on dispose', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
     const h = makeHarness()
