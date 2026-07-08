@@ -38,7 +38,6 @@ export type WaAppStateMutationInput =
           readonly collection: AppStateCollectionName
           readonly operation: 'remove'
           readonly index: string
-          readonly previousValue: Proto.ISyncActionValue
           readonly version: number
           readonly timestamp: number
       }

@@ -272,7 +272,6 @@ function buildRemoveMutationFromSchema<S extends WaAppstateSchema>(input: {
         collection: input.schema.collection,
         operation: 'remove',
         index: buildMutationIndexFromSchema(input.schema, input.indexArgs),
-        previousValue: { timestamp: input.timestamp },
         version: input.schema.version,
         timestamp: input.timestamp
     }
@@ -852,7 +851,7 @@ export class WaAppStateMutationCoordinator {
      */
     private emitLocalMutation(input: WaAppStateMutationInput): void {
         if (!this.emitLocalMutations || !this.emitMutation) return
-        const value = input.operation === 'set' ? input.value : input.previousValue
+        const value = input.operation === 'set' ? input.value : null
         try {
             const event = parseAppStateMutationEvent({
                 collection: input.collection,
