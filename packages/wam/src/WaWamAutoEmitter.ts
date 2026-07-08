@@ -184,6 +184,9 @@ export class WaWamAutoEmitter {
         }
         if (event.schema === 'Pin' && event.operation === 'set' && event.pinned === true) {
             this.commitChatAction('PIN', event.chatJid)
+            this.coordinator.commit('MdSyncdDogfoodingFeatureUsage', {
+                mdSyncdDogfoodingFeature: 'PIN_MUTATION'
+            })
             return
         }
         if (event.schema === 'Archive' && event.operation === 'set' && event.archived === true) {
@@ -192,6 +195,21 @@ export class WaWamAutoEmitter {
         }
         if (event.schema === 'MarkChatAsRead' && event.operation === 'set') {
             this.commitChatAction(event.read === true ? 'READ' : 'UNREAD', event.chatJid)
+            return
+        }
+        if (event.schema === 'DeleteChat') {
+            this.coordinator.commit('MdSyncdDogfoodingFeatureUsage', {
+                mdSyncdDogfoodingFeature: 'DELETE_MUTATION'
+            })
+            return
+        }
+        if (event.schema === 'ClearChat') {
+            this.coordinator.commit('MdSyncdDogfoodingFeatureUsage', {
+                mdSyncdDogfoodingFeature:
+                    event.deleteStarred === '1'
+                        ? 'CLEAR_CHAT_REMOVE_STARRED_MUTATION'
+                        : 'CLEAR_CHAT_KEEP_STARRED_MUTATION'
+            })
         }
     }
 

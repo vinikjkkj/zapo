@@ -428,6 +428,47 @@ test('auto-emitter maps local Pin/Archive/Read mutations to ChatAction', () => {
     assert.deepEqual(types, ['PIN', 'ARCHIVE', 'UNREAD'])
 })
 
+test('auto-emitter maps local Pin/Delete/Clear mutations to MdSyncdDogfoodingFeatureUsage', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('mutation', {
+        schema: 'Pin',
+        operation: 'set',
+        source: 'local',
+        chatJid: 'a@s.whatsapp.net',
+        pinned: true
+    })
+    h.emit('mutation', {
+        schema: 'DeleteChat',
+        operation: 'set',
+        source: 'local',
+        chatJid: 'a@s.whatsapp.net'
+    })
+    h.emit('mutation', {
+        schema: 'ClearChat',
+        operation: 'set',
+        source: 'local',
+        chatJid: 'a@s.whatsapp.net',
+        deleteStarred: '1'
+    })
+    h.emit('mutation', {
+        schema: 'ClearChat',
+        operation: 'set',
+        source: 'local',
+        chatJid: 'b@s.whatsapp.net',
+        deleteStarred: '0'
+    })
+    const feats = h.commits
+        .filter((c) => c.name === 'MdSyncdDogfoodingFeatureUsage')
+        .map((c) => (c.payload as { mdSyncdDogfoodingFeature: string }).mdSyncdDogfoodingFeature)
+    assert.deepEqual(feats, [
+        'PIN_MUTATION',
+        'DELETE_MUTATION',
+        'CLEAR_CHAT_REMOVE_STARRED_MUTATION',
+        'CLEAR_CHAT_KEEP_STARRED_MUTATION'
+    ])
+})
+
 test('auto-emitter ignores non-local (synced) app-state mutations', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
