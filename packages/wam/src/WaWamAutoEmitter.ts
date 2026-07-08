@@ -1,5 +1,6 @@
 import type {
     BinaryNode,
+    WaAppStateMutationEvent,
     WaClientPluginContext,
     WaConnectionEvent,
     WaGroupEvent,
@@ -50,6 +51,18 @@ function isSelfJid(candidate: string | undefined, meJid?: string, meLid?: string
     return candidate !== undefined && (candidate === meJid || candidate === meLid)
 }
 
+/** MUTE_CHAT_TYPE enum key for a chat jid. */
+function muteChatTypeKey(jid: string): 'ONE_ON_ONE' | 'GROUP' | 'CHANNEL' {
+    if (isGroupJid(jid)) return 'GROUP'
+    if (jid.endsWith('@newsletter')) return 'CHANNEL'
+    return 'ONE_ON_ONE'
+}
+
+/** CHAT_ACTION_CHAT_TYPE enum key for a chat jid (business is not derivable here). */
+function chatActionChatTypeKey(jid: string): 'GROUP' | 'INDIVIDUAL' {
+    return isGroupJid(jid) ? 'GROUP' : 'INDIVIDUAL'
+}
+
 /** MESSAGE_TYPE enum key for the chat a received message belongs to. */
 function messageTypeKey(
     key: WaIncomingMessageEvent['key']
@@ -82,6 +95,7 @@ export class WaWamAutoEmitter {
         this.client = ctx.client
         const onConnection = (event: WaConnectionEvent): void => this.onConnection(event)
         const onGroup = (event: WaGroupEvent): void => this.onGroup(event)
+        const onMutation = (event: WaAppStateMutationEvent): void => this.onMutation(event)
         const onMessage = (event: WaIncomingMessageEvent): void => this.onMessage(event)
         const onReceipt = (event: WaIncomingReceiptEvent): void => this.onReceipt(event)
         const onNodeOut = (event: { readonly node: BinaryNode }): void => this.onNodeOut(event.node)
@@ -91,6 +105,7 @@ export class WaWamAutoEmitter {
         const onHistory = (event: WaHistorySyncChunkEvent): void => this.onHistorySyncChunk(event)
         ctx.on('connection', onConnection)
         ctx.on('group', onGroup)
+        ctx.on('mutation', onMutation)
         ctx.on('message', onMessage)
         ctx.on('receipt', onReceipt)
         ctx.on('debug_transport_node_out', onNodeOut)
@@ -100,6 +115,7 @@ export class WaWamAutoEmitter {
         this.unsubscribes.push(
             () => ctx.off('connection', onConnection),
             () => ctx.off('group', onGroup),
+            () => ctx.off('mutation', onMutation),
             () => ctx.off('message', onMessage),
             () => ctx.off('receipt', onReceipt),
             () => ctx.off('debug_transport_node_out', onNodeOut),
@@ -149,6 +165,44 @@ export class WaWamAutoEmitter {
             if (!meAdded) return
         }
         this.coordinator.commit('GroupJoinC', {})
+    }
+
+    private onMutation(event: WaAppStateMutationEvent): void {
+        if (event.source !== 'local') return
+        if (event.schema === 'Mute') {
+            const muted = event.operation === 'set' && event.muted === true
+            const actionConducted = muted ? 'MUTE' : 'UNMUTE'
+            this.coordinator.commit('ChatMute', {
+                actionConducted,
+                muteChatType: muteChatTypeKey(event.chatJid),
+                ...(event.operation === 'set' && typeof event.muteEndTimestamp === 'number'
+                    ? { muteDuration: Math.max(0, event.muteEndTimestamp - Date.now()) }
+                    : {})
+            })
+            this.commitChatAction(actionConducted, event.chatJid)
+            return
+        }
+        if (event.schema === 'Pin' && event.operation === 'set' && event.pinned === true) {
+            this.commitChatAction('PIN', event.chatJid)
+            return
+        }
+        if (event.schema === 'Archive' && event.operation === 'set' && event.archived === true) {
+            this.commitChatAction('ARCHIVE', event.chatJid)
+            return
+        }
+        if (event.schema === 'MarkChatAsRead' && event.operation === 'set') {
+            this.commitChatAction(event.read === true ? 'READ' : 'UNREAD', event.chatJid)
+        }
+    }
+
+    private commitChatAction(
+        chatActionType: 'MUTE' | 'UNMUTE' | 'PIN' | 'ARCHIVE' | 'READ' | 'UNREAD',
+        chatJid: string
+    ): void {
+        this.coordinator.commit('ChatAction', {
+            chatActionType,
+            chatActionChatType: chatActionChatTypeKey(chatJid)
+        })
     }
 
     /** Mirrors WA Web's stream model: emit on each real mode transition, deduped. */

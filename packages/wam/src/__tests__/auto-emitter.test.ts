@@ -376,6 +376,72 @@ test('auto-emitter does not fire GroupJoinC for self-authored actions or others 
     assert.equal(h.commits.filter((c) => c.name === 'GroupJoinC').length, 0)
 })
 
+test('auto-emitter maps a local Mute mutation to ChatMute and ChatAction', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('mutation', {
+        schema: 'Mute',
+        operation: 'set',
+        source: 'local',
+        chatJid: '1@g.us',
+        muted: true,
+        muteEndTimestamp: Date.now() + 60_000
+    })
+    const mute = h.commits.find((c) => c.name === 'ChatMute')
+    assert.ok(mute)
+    assert.equal((mute?.payload as { actionConducted: string }).actionConducted, 'MUTE')
+    assert.equal((mute?.payload as { muteChatType: string }).muteChatType, 'GROUP')
+    assert.equal(typeof (mute?.payload as { muteDuration: number }).muteDuration, 'number')
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'ChatAction')?.payload,
+        { chatActionType: 'MUTE', chatActionChatType: 'GROUP' }
+    )
+})
+
+test('auto-emitter maps local Pin/Archive/Read mutations to ChatAction', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('mutation', {
+        schema: 'Pin',
+        operation: 'set',
+        source: 'local',
+        chatJid: 'a@s.whatsapp.net',
+        pinned: true
+    })
+    h.emit('mutation', {
+        schema: 'Archive',
+        operation: 'set',
+        source: 'local',
+        chatJid: '1@g.us',
+        archived: true
+    })
+    h.emit('mutation', {
+        schema: 'MarkChatAsRead',
+        operation: 'set',
+        source: 'local',
+        chatJid: 'a@s.whatsapp.net',
+        read: false
+    })
+    const types = h.commits
+        .filter((c) => c.name === 'ChatAction')
+        .map((c) => (c.payload as { chatActionType: string }).chatActionType)
+    assert.deepEqual(types, ['PIN', 'ARCHIVE', 'UNREAD'])
+})
+
+test('auto-emitter ignores non-local (synced) app-state mutations', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('mutation', {
+        schema: 'Mute',
+        operation: 'set',
+        source: 'patch',
+        chatJid: '1@g.us',
+        muted: true,
+        muteEndTimestamp: 0
+    })
+    assert.equal(h.commits.length, 0)
+})
+
 test('auto-emitter maps a device-switch notification to WaOldCode', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
