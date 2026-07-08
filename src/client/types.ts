@@ -598,6 +598,23 @@ export interface WaIncomingMessageEvent extends Omit<WaIncomingBaseEvent, 'chatJ
     readonly message?: Proto.IMessage
 }
 
+/**
+ * An outbound message this client sent, surfaced with its decrypted
+ * {@link Proto.IMessage} – the symmetric counterpart to
+ * {@link WaIncomingMessageEvent}. Fires from {@link WaMessageCoordinator.send}
+ * as the stanza is built, so plugins/loggers can observe outgoing content
+ * (forwards, reactions, polls, media) that the encrypted `<message>` on the
+ * wire does not reveal.
+ */
+export interface WaOutgoingMessageEvent {
+    /** Destination jid (chat / group / status). */
+    readonly to: string
+    /** Outgoing stanza id, when assigned. */
+    readonly id?: string
+    /** The decrypted message proto being sent. */
+    readonly message: Proto.IMessage
+}
+
 export interface WaIncomingProtocolMessageEvent extends WaIncomingMessageEvent {
     readonly protocolMessage: Proto.Message.IProtocolMessage
 }
@@ -1326,6 +1343,13 @@ export interface WaClientEventMap {
      * `options.quote` for threads).
      */
     readonly message: (event: WaIncomingMessageEvent) => void
+    /**
+     * An outbound message this client is sending, with its decrypted
+     * {@link Proto.IMessage} – the symmetric counterpart to `message`. Lets
+     * plugins/loggers observe outgoing content (forwards, reactions, polls,
+     * media) the encrypted wire stanza hides.
+     */
+    readonly message_send: (event: WaOutgoingMessageEvent) => void
     /**
      * A decrypted addon (poll vote, reaction, edit, comment, ...) attached to
      * a previous message. Fires unless `addons.autoDecrypt` is explicitly

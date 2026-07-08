@@ -10,6 +10,7 @@ export const WA_NODE_TAGS = Object.freeze({
     NOTIFICATION: 'notification',
     SUCCESS: 'success',
     INFO_BULLETIN: 'ib',
+    OFFLINE: 'offline',
     DIRTY: 'dirty',
     EDGE_ROUTING: 'edge_routing',
     ROUTING_INFO: 'routing_info',

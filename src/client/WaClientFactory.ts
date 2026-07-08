@@ -744,6 +744,7 @@ export function buildWaClientDependencies(input: {
 
     messageDispatch = new WaMessageDispatchCoordinator({
         logger,
+        emitMessageSend: (event) => runtime.emitEvent('message_send', event),
         messageClient,
         retryTracker,
         sessionResolver,

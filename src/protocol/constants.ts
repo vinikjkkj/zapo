@@ -32,7 +32,9 @@ export {
 } from '@protocol/call'
 export type { WaCallPayloadTag } from '@protocol/call'
 export {
+    WA_ADDRESSING_MODES,
     WA_EDIT_ATTRS,
+    WA_ENC_CIPHERTEXT_TYPES,
     WA_ENC_MEDIA_TYPES,
     WA_EVENT_META_TYPES,
     WA_MESSAGE_TAGS,
@@ -42,7 +44,7 @@ export {
     WA_RETRYABLE_ACK_CODES,
     WA_STANZA_MSG_TYPES
 } from '@protocol/message'
-export type { WaOutboundReceiptType } from '@protocol/message'
+export type { WaAddressingMode, WaEncCiphertextType, WaOutboundReceiptType } from '@protocol/message'
 export {
     WA_APP_STATE_COLLECTIONS,
     WA_APP_STATE_COLLECTION_STATES,
@@ -118,7 +120,11 @@ export {
     WA_ABPROPS_REFRESH_BOUNDS
 } from '@protocol/abprops'
 export type { AbPropConfigEntry, AbPropName, AbPropType, AbPropValue } from '@protocol/abprops'
-export { WA_GROUP_PARTICIPANT_TYPES, type WaGroupSetting } from '@protocol/group'
+export {
+    WA_GROUP_MEMBERSHIP_ACTION_TAGS,
+    WA_GROUP_PARTICIPANT_TYPES,
+    type WaGroupSetting
+} from '@protocol/group'
 export { WA_USYNC_CONTEXTS, WA_USYNC_DEFAULTS, WA_USYNC_MODES } from '@protocol/usync'
 export {
     WA_NEWSLETTER_FETCH_KEY_TYPES,

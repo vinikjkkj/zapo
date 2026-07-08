@@ -3,7 +3,12 @@ import type { WaAuthCredentials } from '@auth/types'
 import type { DeviceFanoutResolver } from '@client/messaging/fanout'
 import type { GroupMetadataCache } from '@client/messaging/group-metadata'
 import type { AppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
-import type { WaGroupEvent, WaSendMessageOptions, WaSignalMessagePublishInput } from '@client/types'
+import type {
+    WaGroupEvent,
+    WaOutgoingMessageEvent,
+    WaSendMessageOptions,
+    WaSignalMessagePublishInput
+} from '@client/types'
 import { randomBytesAsync, sha256 } from '@crypto'
 import { md5Bytes } from '@crypto/core/primitives'
 import type { Logger } from '@infra/log/types'
@@ -46,7 +51,12 @@ import type {
 } from '@message/types'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
-import { WA_DEFAULTS, WA_NACK_REASONS, type WaStatusDistributionSetting } from '@protocol/constants'
+import {
+    WA_ADDRESSING_MODES,
+    WA_DEFAULTS,
+    WA_NACK_REASONS,
+    type WaStatusDistributionSetting
+} from '@protocol/constants'
 import {
     canonicalizeOwnAccountJid,
     isBotJid,
@@ -88,6 +98,8 @@ import { toError } from '@util/primitives'
 
 interface WaMessageDispatchCoordinatorOptions {
     readonly logger: Logger
+    /** Emits the outbound decrypted message (`message_send` event); best-effort. */
+    readonly emitMessageSend?: (event: WaOutgoingMessageEvent) => void
     readonly messageClient: WaMessageClient
     readonly retryTracker: OutboundRetryTracker
     readonly sessionResolver: SignalSessionResolver
@@ -387,6 +399,15 @@ export class WaMessageDispatchCoordinator {
               }
             : withViewOnce
         const upload = built.upload
+        if (this.deps.emitMessageSend) {
+            try {
+                this.deps.emitMessageSend({ to: recipientJid, id: sendOptions.id, message })
+            } catch (error) {
+                this.deps.logger.debug('message_send emit failed', {
+                    message: toError(error).message
+                })
+            }
+        }
         const messageWithOverride = options.messageSecret
             ? {
                   ...message,
@@ -1240,7 +1261,7 @@ export class WaMessageDispatchCoordinator {
     ): GroupAddressingMode {
         for (let index = 0; index < participantUserJids.length; index += 1) {
             if (isLidJid(participantUserJids[index])) {
-                return 'lid'
+                return WA_ADDRESSING_MODES.LID
             }
         }
 
@@ -1248,14 +1269,14 @@ export class WaMessageDispatchCoordinator {
             groupJid,
             participants: participantUserJids.length
         })
-        return 'pn'
+        return WA_ADDRESSING_MODES.PN
     }
 
     private resolveSenderForAddressingMode(
         addressingMode: GroupAddressingMode,
         meJid: string
     ): string {
-        if (addressingMode === 'lid') {
+        if (addressingMode === WA_ADDRESSING_MODES.LID) {
             const meLid = this.deps.getCurrentCredentials()?.meLid
             if (meLid && meLid.includes('@')) {
                 try {

@@ -5,7 +5,7 @@ import { wrapDeviceSentMessage } from '@message/encode/device-sent'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
-import { WA_DEFAULTS, WA_NODE_TAGS } from '@protocol/constants'
+import { WA_ADDRESSING_MODES, WA_DEFAULTS, WA_NODE_TAGS } from '@protocol/constants'
 import {
     isGroupOrBroadcastJid,
     isHostedDeviceJid,
@@ -301,8 +301,8 @@ export class WaRetryReplayService {
             addressingMode: isStatus
                 ? undefined
                 : requesterAddress.server === WA_DEFAULTS.LID_SERVER
-                  ? 'lid'
-                  : 'pn',
+                  ? WA_ADDRESSING_MODES.LID
+                  : WA_ADDRESSING_MODES.PN,
             encType: encrypted.type,
             ciphertext: encrypted.ciphertext,
             retryCount,

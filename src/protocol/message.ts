@@ -6,6 +6,25 @@ export const WA_MESSAGE_TAGS = Object.freeze({
     ERROR: 'error'
 } as const)
 
+/** `<enc type>` ciphertext kinds (Signal `msg`/`pkmsg`, group `skmsg`, message-secret `msmsg`). */
+export const WA_ENC_CIPHERTEXT_TYPES = Object.freeze({
+    MESSAGE: 'msg',
+    PREKEY: 'pkmsg',
+    SENDER_KEY: 'skmsg',
+    MESSAGE_SECRET: 'msmsg'
+} as const)
+
+export type WaEncCiphertextType =
+    (typeof WA_ENC_CIPHERTEXT_TYPES)[keyof typeof WA_ENC_CIPHERTEXT_TYPES]
+
+/** `addressing_mode` stanza attr: phone-number vs LID addressing. */
+export const WA_ADDRESSING_MODES = Object.freeze({
+    PN: 'pn',
+    LID: 'lid'
+} as const)
+
+export type WaAddressingMode = (typeof WA_ADDRESSING_MODES)[keyof typeof WA_ADDRESSING_MODES]
+
 export const WA_MESSAGE_TYPES = Object.freeze({
     ENC_VERSION: '2',
     MEDIA_NOTIFY: 'medianotify',

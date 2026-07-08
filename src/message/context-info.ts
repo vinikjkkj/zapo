@@ -129,6 +129,11 @@ function pickContextInfoTarget(message: Proto.IMessage): ContextInfoCarrier | nu
     return null
 }
 
+/** Reads the `contextInfo` off a message's first content submessage (null when absent). */
+export function getContextInfo(message: Proto.IMessage): Proto.IContextInfo | null {
+    return pickContextInfoTarget(message)?.contextInfo ?? null
+}
+
 /**
  * Anything that identifies a quoted message. Accepts a {@link WaQuoteRef}, a
  * {@link WaMessageKey} (bare proto key), or a full incoming message event (its

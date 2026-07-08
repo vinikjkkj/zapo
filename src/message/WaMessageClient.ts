@@ -12,7 +12,13 @@ import type {
     WaMessagePublishResult,
     WaSendReceiptInput
 } from '@message/types'
-import { WA_DEFAULTS, WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NODE_TAGS } from '@protocol/constants'
+import {
+    WA_ADDRESSING_MODES,
+    WA_DEFAULTS,
+    WA_MESSAGE_TAGS,
+    WA_MESSAGE_TYPES,
+    WA_NODE_TAGS
+} from '@protocol/constants'
 import { buildReceiptNode } from '@transport/node/builders/global'
 import type { BinaryNode } from '@transport/types'
 import { delay } from '@util/async'
@@ -282,7 +288,8 @@ export class WaMessageClient {
     private extractAckMetadata(ackNode: BinaryNode): WaMessageAckMetadata {
         const addressingModeRaw = ackNode.attrs.addressing_mode
         const addressingMode =
-            addressingModeRaw === 'pn' || addressingModeRaw === 'lid'
+            addressingModeRaw === WA_ADDRESSING_MODES.PN ||
+            addressingModeRaw === WA_ADDRESSING_MODES.LID
                 ? addressingModeRaw
                 : undefined
         return {

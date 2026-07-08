@@ -1,4 +1,5 @@
 import { WA_DEFAULTS } from '@protocol/defaults'
+import { WA_GROUP_MEMBERSHIP_ACTION_TAGS } from '@protocol/group'
 import { WA_IQ_TYPES, WA_XMLNS } from '@protocol/nodes'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
@@ -112,20 +113,20 @@ export function buildMembershipRequestsActionIq(input: {
     const children: BinaryNode[] = []
     if (approve.length > 0) {
         children.push({
-            tag: 'approve',
+            tag: WA_GROUP_MEMBERSHIP_ACTION_TAGS.APPROVE,
             attrs: {},
             content: approve.map((jid) => ({ tag: 'participant', attrs: { jid } }))
         })
     }
     if (reject.length > 0) {
         children.push({
-            tag: 'reject',
+            tag: WA_GROUP_MEMBERSHIP_ACTION_TAGS.REJECT,
             attrs: {},
             content: reject.map((jid) => ({ tag: 'participant', attrs: { jid } }))
         })
     }
     return buildIqNode(WA_IQ_TYPES.SET, input.groupJid, WA_XMLNS.GROUPS, [
-        { tag: 'membership_requests_action', attrs: {}, content: children }
+        { tag: WA_GROUP_MEMBERSHIP_ACTION_TAGS.REQUESTS_ACTION, attrs: {}, content: children }
     ])
 }
 

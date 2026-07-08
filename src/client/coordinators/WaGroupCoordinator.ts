@@ -3,6 +3,7 @@ import type { WaMexOperationResponses } from '@mex'
 import { WA_DEFAULTS } from '@protocol/defaults'
 import { WA_GROUP_PARTICIPANT_TYPES, type WaGroupSetting } from '@protocol/group'
 import { parseJidFull } from '@protocol/jid'
+import { WA_ADDRESSING_MODES } from '@protocol/message'
 import { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
 import { WA_GROUP_NOTIFICATION_TAGS } from '@protocol/notification'
 import { buildListParticipatingGroupsIq } from '@transport/node/builders/account-sync'
@@ -554,7 +555,11 @@ function parseGroupCommons(target: BinaryNode): GroupCommons {
 
     const addressingModeRaw = attrs.addressing_mode
     const addressingMode: 'lid' | 'pn' | undefined =
-        addressingModeRaw === 'lid' ? 'lid' : addressingModeRaw === 'pn' ? 'pn' : undefined
+        addressingModeRaw === WA_ADDRESSING_MODES.LID
+            ? WA_ADDRESSING_MODES.LID
+            : addressingModeRaw === WA_ADDRESSING_MODES.PN
+              ? WA_ADDRESSING_MODES.PN
+              : undefined
 
     const rawJid = attrs.id ?? attrs.jid ?? ''
     const jid = rawJid && !rawJid.includes('@') ? `${rawJid}@${WA_DEFAULTS.GROUP_SERVER}` : rawJid
