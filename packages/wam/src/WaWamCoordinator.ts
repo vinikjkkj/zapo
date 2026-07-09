@@ -62,6 +62,7 @@ export class WaWamCoordinator {
     private readonly syntheticUi: WaWamSyntheticUi | null
     private flushTimer: ReturnType<typeof setTimeout> | null = null
     private disposed = false
+    private readonly isConnected: () => boolean
 
     constructor(ctx: WaClientPluginContext, options: WaWamCoordinatorOptions = {}) {
         this.logger = ctx.logger.child({ scope: '@zapo-js/wam' }, { level: options.logLevel })
@@ -89,6 +90,7 @@ export class WaWamCoordinator {
                       ctx,
                       typeof options.syntheticUi === 'object' ? options.syntheticUi : {}
                   )
+        this.isConnected = (): boolean => ctx.deps.connectionManager.isConnected()
     }
 
     /**
@@ -144,6 +146,13 @@ export class WaWamCoordinator {
         if (batch === undefined) return
         this.openBatches.delete(channel)
         if (!batch.hasEvents()) return
+        if (!this.isConnected()) {
+            this.logger.trace('wam batch dropped: not connected', {
+                channel,
+                size: batch.size()
+            })
+            return
+        }
         await this.uploader.upload(batch.toBytes())
     }
 
