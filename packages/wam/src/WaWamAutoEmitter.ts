@@ -126,7 +126,7 @@ export class WaWamAutoEmitter {
         this.client = ctx.client
         const onConnection = (event: WaConnectionEvent): void => this.onConnection(event)
         const onGroup = (event: WaGroupEvent): void => this.onGroup(event)
-        const onMutation = (event: WaAppStateMutationEvent): void => this.onMutation(event)
+        const onMutationSend = (event: WaAppStateMutationEvent): void => this.onMutationSend(event)
         const onMessageSend = (event: WaOutgoingMessageEvent): void => this.onMessageSend(event)
         const onMessage = (event: WaIncomingMessageEvent): void => this.onMessage(event)
         const onReceipt = (event: WaIncomingReceiptEvent): void => this.onReceipt(event)
@@ -137,7 +137,7 @@ export class WaWamAutoEmitter {
         const onHistory = (event: WaHistorySyncChunkEvent): void => this.onHistorySyncChunk(event)
         ctx.on('connection', onConnection)
         ctx.on('group', onGroup)
-        ctx.on('mutation', onMutation)
+        ctx.on('mutation_send', onMutationSend)
         ctx.on('message_send', onMessageSend)
         ctx.on('message', onMessage)
         ctx.on('receipt', onReceipt)
@@ -148,7 +148,7 @@ export class WaWamAutoEmitter {
         this.unsubscribes.push(
             () => ctx.off('connection', onConnection),
             () => ctx.off('group', onGroup),
-            () => ctx.off('mutation', onMutation),
+            () => ctx.off('mutation_send', onMutationSend),
             () => ctx.off('message_send', onMessageSend),
             () => ctx.off('message', onMessage),
             () => ctx.off('receipt', onReceipt),
@@ -201,8 +201,8 @@ export class WaWamAutoEmitter {
         this.coordinator.commit('GroupJoinC', {})
     }
 
-    private onMutation(event: WaAppStateMutationEvent): void {
-        if (event.source !== 'local') return
+    /** `mutation_send` is this client's own outbound app-state action, mirroring where WA Web fires these. */
+    private onMutationSend(event: WaAppStateMutationEvent): void {
         if (event.schema === 'Mute') {
             const muted = event.operation === 'set' && event.muted === true
             const actionConducted = muted ? 'MUTE' : 'UNMUTE'

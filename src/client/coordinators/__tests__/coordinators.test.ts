@@ -942,15 +942,16 @@ test('app-state mutation coordinator emits pin + archive mutations when pinning 
     assert.equal(typeof syncCalls[0][1].value.timestamp, 'number')
 })
 
-test('app-state mutation coordinator emits a local mutation event when emitLocalMutations is set', async () => {
+test('app-state mutation coordinator emits mutation_send for a local action, not the inbound mutation event', async () => {
     const messageStore = new WaMessageMemoryStore()
-    const events: WaAppStateMutationEvent[] = []
+    const sent: WaAppStateMutationEvent[] = []
+    const inbound: WaAppStateMutationEvent[] = []
     const coordinator = new WaAppStateMutationCoordinator({
         serverClock: { nowMs: () => 1_000_000, nowSeconds: () => 1_000 },
         logger: createNoopLogger(),
         messageStore,
-        emitLocalMutations: true,
-        emitMutation: (event) => events.push(event),
+        emitMutation: (event) => inbound.push(event),
+        emitMutationSend: (event) => sent.push(event),
         ...fakeSyncImpl(async (options = {}) =>
             buildAppStateSyncResult(
                 options.pendingMutations ?? [],
@@ -961,33 +962,15 @@ test('app-state mutation coordinator emits a local mutation event when emitLocal
 
     await coordinator.setChatMute('551100000000@s.whatsapp.net', true, 2_000_000)
 
-    const local = events.find((e) => e.schema === 'Mute')
-    assert.ok(local)
-    assert.equal(local?.source, 'local')
-    if (local?.schema === 'Mute' && local.operation === 'set') {
-        assert.equal(local.chatJid, '551100000000@s.whatsapp.net')
-        assert.equal(local.muted, true)
+    const send = sent.find((e) => e.schema === 'Mute')
+    assert.ok(send)
+    assert.equal(send?.source, 'local')
+    if (send?.schema === 'Mute' && send.operation === 'set') {
+        assert.equal(send.chatJid, '551100000000@s.whatsapp.net')
+        assert.equal(send.muted, true)
     }
-})
-
-test('app-state mutation coordinator emits no local mutation event by default', async () => {
-    const messageStore = new WaMessageMemoryStore()
-    const events: WaAppStateMutationEvent[] = []
-    const coordinator = new WaAppStateMutationCoordinator({
-        serverClock: { nowMs: () => 1_000_000, nowSeconds: () => 1_000 },
-        logger: createNoopLogger(),
-        messageStore,
-        emitMutation: (event) => events.push(event),
-        ...fakeSyncImpl(async (options = {}) =>
-            buildAppStateSyncResult(
-                options.pendingMutations ?? [],
-                WA_APP_STATE_COLLECTION_STATES.SUCCESS
-            )
-        )
-    })
-
-    await coordinator.setChatPin('551100000000@s.whatsapp.net', false)
-    assert.equal(events.length, 0)
+    // Local actions surface only on `mutation_send`, never on the inbound `mutation` stream.
+    assert.equal(inbound.length, 0)
 })
 
 test('app-state mutation coordinator flushes only targeted collections for queued mutation batch', async () => {

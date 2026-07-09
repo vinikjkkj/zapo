@@ -376,10 +376,10 @@ test('auto-emitter does not fire GroupJoinC for self-authored actions or others 
     assert.equal(h.commits.filter((c) => c.name === 'GroupJoinC').length, 0)
 })
 
-test('auto-emitter maps a local Mute mutation to ChatMute and ChatAction', () => {
+test('auto-emitter maps an outbound Mute (mutation_send) to ChatMute and ChatAction', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
-    h.emit('mutation', {
+    h.emit('mutation_send', {
         schema: 'Mute',
         operation: 'set',
         source: 'local',
@@ -398,24 +398,24 @@ test('auto-emitter maps a local Mute mutation to ChatMute and ChatAction', () =>
     })
 })
 
-test('auto-emitter maps local Pin/Archive/Read mutations to ChatAction', () => {
+test('auto-emitter maps outbound Pin/Archive/Read (mutation_send) to ChatAction', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
-    h.emit('mutation', {
+    h.emit('mutation_send', {
         schema: 'Pin',
         operation: 'set',
         source: 'local',
         chatJid: 'a@s.whatsapp.net',
         pinned: true
     })
-    h.emit('mutation', {
+    h.emit('mutation_send', {
         schema: 'Archive',
         operation: 'set',
         source: 'local',
         chatJid: '1@g.us',
         archived: true
     })
-    h.emit('mutation', {
+    h.emit('mutation_send', {
         schema: 'MarkChatAsRead',
         operation: 'set',
         source: 'local',
@@ -428,30 +428,30 @@ test('auto-emitter maps local Pin/Archive/Read mutations to ChatAction', () => {
     assert.deepEqual(types, ['PIN', 'ARCHIVE', 'UNREAD'])
 })
 
-test('auto-emitter maps local Pin/Delete/Clear mutations to MdSyncdDogfoodingFeatureUsage', () => {
+test('auto-emitter maps outbound Pin/Delete/Clear (mutation_send) to MdSyncdDogfoodingFeatureUsage', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
-    h.emit('mutation', {
+    h.emit('mutation_send', {
         schema: 'Pin',
         operation: 'set',
         source: 'local',
         chatJid: 'a@s.whatsapp.net',
         pinned: true
     })
-    h.emit('mutation', {
+    h.emit('mutation_send', {
         schema: 'DeleteChat',
         operation: 'set',
         source: 'local',
         chatJid: 'a@s.whatsapp.net'
     })
-    h.emit('mutation', {
+    h.emit('mutation_send', {
         schema: 'ClearChat',
         operation: 'set',
         source: 'local',
         chatJid: 'a@s.whatsapp.net',
         deleteStarred: '1'
     })
-    h.emit('mutation', {
+    h.emit('mutation_send', {
         schema: 'ClearChat',
         operation: 'set',
         source: 'local',
@@ -469,7 +469,7 @@ test('auto-emitter maps local Pin/Delete/Clear mutations to MdSyncdDogfoodingFea
     ])
 })
 
-test('auto-emitter ignores non-local (synced) app-state mutations', () => {
+test('auto-emitter ignores the inbound mutation stream (reacts only to mutation_send)', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
     h.emit('mutation', {

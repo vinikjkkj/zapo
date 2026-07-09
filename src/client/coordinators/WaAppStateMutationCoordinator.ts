@@ -286,8 +286,8 @@ interface WaAppStateMutationCoordinatorOptions {
     readonly serverClock: ServerClock
     readonly archiveRangeLimit?: number
     readonly emitMutation?: (event: WaAppStateMutationEvent) => void
+    readonly emitMutationSend?: (event: WaAppStateMutationEvent) => void
     readonly emitSnapshotMutations?: boolean
-    readonly emitLocalMutations?: boolean
     readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
     /**
      * Persistence sink for `Contact` collection mutations (the locally-saved
@@ -337,8 +337,8 @@ export class WaAppStateMutationCoordinator {
     private readonly serverClock: ServerClock
     private readonly archiveRangeLimit: number
     private readonly emitMutation?: (event: WaAppStateMutationEvent) => void
+    private readonly emitMutationSend?: (event: WaAppStateMutationEvent) => void
     private readonly emitSnapshotMutations: boolean
-    private readonly emitLocalMutations: boolean
     private readonly nctSaltSink?: (salt: Uint8Array | null) => Promise<void>
     private readonly contactSink?: (record: WaStoredContactRecord) => void
     private readonly pushNameSink?: (name: string) => void
@@ -358,8 +358,8 @@ export class WaAppStateMutationCoordinator {
             'WaAppStateMutationCoordinatorOptions.archiveRangeLimit'
         )
         this.emitMutation = options.emitMutation
+        this.emitMutationSend = options.emitMutationSend
         this.emitSnapshotMutations = options.emitSnapshotMutations === true
-        this.emitLocalMutations = options.emitLocalMutations === true
         this.nctSaltSink = options.nctSaltSink
         this.contactSink = options.contactSink
         this.pushNameSink = options.pushNameSink
@@ -845,12 +845,12 @@ export class WaAppStateMutationCoordinator {
     }
 
     /**
-     * Emits a `source: 'local'` mutation event for an action this client is
-     * sending, so consumers can observe their own change at action time. Gated
-     * by `emitLocalMutations`; parse failures are swallowed (best-effort).
+     * Surfaces an action this client is sending via the outbound `mutation_send`
+     * event, so consumers can observe their own change at action time. Parse
+     * failures are swallowed (best-effort).
      */
     private emitLocalMutation(input: WaAppStateMutationInput): void {
-        if (!this.emitLocalMutations || !this.emitMutation) return
+        if (!this.emitMutationSend) return
         const value = input.operation === 'set' ? input.value : null
         try {
             const event = parseAppStateMutationEvent({
@@ -865,7 +865,7 @@ export class WaAppStateMutationCoordinator {
                 keyId: EMPTY_MUTATION_MAC,
                 timestamp: input.timestamp
             })
-            if (event) this.emitMutation(event)
+            if (event) this.emitMutationSend(event)
         } catch (error) {
             this.logger.debug('failed to emit local app-state mutation event', {
                 collection: input.collection,

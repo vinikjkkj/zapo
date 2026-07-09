@@ -165,14 +165,10 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      * Chat-event emission tuning. `emitSnapshotMutations: true` re-emits
      * `app_state_mutation` events for every mutation seen during a snapshot
      * sync (off by default – those mutations represent historical state).
-     * `emitLocalMutations: true` also emits a `mutation` event (with
-     * `source: 'local'`) for every app-state action this client sends
-     * (mute/pin/archive/…), so consumers can observe their own changes at
-     * action time (off by default).
+     * This client's own outbound app-state actions surface on `mutation_send`.
      */
     readonly chatEvents?: {
         readonly emitSnapshotMutations?: boolean
-        readonly emitLocalMutations?: boolean
     }
     /**
      * Privacy-token (trusted-contact-token) cache tuning. Controls how often
@@ -1270,6 +1266,13 @@ export type WaAppStateMutationEvent = {
               WaAppstateIndexArgs<K>)
 }[WaAppstateActionKey]
 
+/**
+ * Listener shared by the inbound `mutation` and outbound `mutation_send`
+ * events. A single named alias so the (large) `WaAppStateMutationEvent` union
+ * is referenced once by the event map rather than expanded per event.
+ */
+type WaAppStateMutationListener = (event: WaAppStateMutationEvent) => void
+
 export type WaConnectionEvent =
     | {
           readonly status: 'open'
@@ -1409,11 +1412,20 @@ export interface WaClientEventMap {
     /** Profile/group/community picture change notification – the new picture must still be fetched explicitly. */
     readonly picture: (event: WaPictureEvent) => void
     /**
-     * A parsed app-state mutation crossed the sync boundary – chat mute/star/
-     * read/pin/archive/contact/label/etc. Use the discriminator
-     * (`event.action`) to branch on the mutation kind.
+     * A parsed app-state mutation arriving from a sync – chat mute/star/read/
+     * pin/archive/contact/label/etc. changed on another device. Inbound only;
+     * this client's own outbound actions surface on `mutation_send`. Use the
+     * discriminator (`event.schema`) to branch on the mutation kind.
      */
-    readonly mutation: (event: WaAppStateMutationEvent) => void
+    readonly mutation: WaAppStateMutationListener
+    /**
+     * An app-state action this client is sending (mute/star/read/pin/archive/
+     * clear/delete/…) surfaced at action time – the outbound counterpart to
+     * `mutation`, symmetric to how `message_send` pairs with `message`.
+     * `event.source` is always `'local'`. Optimistic: emitted as the mutation
+     * is enqueued, before the server flush confirms it.
+     */
+    readonly mutation_send: WaAppStateMutationListener
     /**
      * One chunk of history-sync data, fired both during the initial
      * bootstrap that the primary device pushes after pairing and for any
