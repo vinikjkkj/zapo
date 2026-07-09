@@ -284,7 +284,11 @@ export class WaWamAutoEmitter {
             return
         }
 
-        const poll = msg.pollCreationMessage
+        const poll =
+            msg.pollCreationMessage ??
+            msg.pollCreationMessageV2 ??
+            msg.pollCreationMessageV3 ??
+            msg.pollCreationMessageV5
         if (poll) {
             this.coordinator.commit('PollsActions', {
                 pollAction: 'CREATE_POLL',

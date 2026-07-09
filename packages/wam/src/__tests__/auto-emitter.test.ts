@@ -533,6 +533,32 @@ test('auto-emitter maps an outbound poll to PollsActions (CREATE_POLL with optio
     )
 })
 
+test('auto-emitter maps a V3 poll (the version this client sends) to PollsActions', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message_send', {
+        to: '456@s.whatsapp.net',
+        message: {
+            pollCreationMessageV3: {
+                name: 'q',
+                options: [{ optionName: 'a' }, { optionName: 'b' }]
+            }
+        }
+    })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'PollsActions'),
+        {
+            name: 'PollsActions',
+            payload: {
+                pollAction: 'CREATE_POLL',
+                chatType: 'INDIVIDUAL',
+                isAGroup: false,
+                pollOptionsCount: 2
+            }
+        }
+    )
+})
+
 test('auto-emitter maps an outbound document to SendDocument', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
