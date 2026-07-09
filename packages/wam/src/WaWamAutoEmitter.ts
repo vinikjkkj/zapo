@@ -312,9 +312,7 @@ export class WaWamAutoEmitter {
                 documentType: documentTypeFor(doc.mimetype),
                 ...(ext !== undefined ? { documentExt: ext } : {}),
                 ...(typeof doc.pageCount === 'number' ? { documentPageSize: doc.pageCount } : {}),
-                ...(typeof doc.fileLength === 'number'
-                    ? { documentSize: doc.fileLength }
-                    : {})
+                ...(typeof doc.fileLength === 'number' ? { documentSize: doc.fileLength } : {})
             })
             return
         }
@@ -399,7 +397,14 @@ export class WaWamAutoEmitter {
         const id = node.attrs.id
         if (id !== undefined) {
             const editType = editTypeKey(node.attrs.edit)
-            this.trackSend(id, { destination, isLid, isGroup, ciphertextType, mediaType: media, editType })
+            this.trackSend(id, {
+                destination,
+                isLid,
+                isGroup,
+                ciphertextType,
+                mediaType: media,
+                editType
+            })
         }
     }
 
@@ -409,7 +414,10 @@ export class WaWamAutoEmitter {
             return
         }
         if (node.tag === WA_NODE_TAGS.NOTIFICATION) {
-            const oldReg = findNodeChild(node, WA_REGISTRATION_NOTIFICATION_TAGS.WA_OLD_REGISTRATION)
+            const oldReg = findNodeChild(
+                node,
+                WA_REGISTRATION_NOTIFICATION_TAGS.WA_OLD_REGISTRATION
+            )
             if (oldReg !== undefined && oldReg.attrs.device_id !== undefined) {
                 this.coordinator.commit('WaOldCode', { deviceId: oldReg.attrs.device_id })
             }
@@ -430,7 +438,10 @@ export class WaWamAutoEmitter {
             }
             return
         }
-        if (node.tag === WA_MESSAGE_TAGS.RECEIPT && node.attrs.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY) {
+        if (
+            node.tag === WA_MESSAGE_TAGS.RECEIPT &&
+            node.attrs.type === WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY
+        ) {
             const retry = findNodeChild(node, WA_MESSAGE_TYPES.RECEIPT_TYPE_RETRY)
             const count = retry?.attrs.count !== undefined ? Number(retry.attrs.count) : 0
             if (count >= HIGH_RETRY_THRESHOLD) {
@@ -442,7 +453,10 @@ export class WaWamAutoEmitter {
             }
             return
         }
-        if (node.tag === WA_MESSAGE_TAGS.ACK && node.attrs.class === WA_MESSAGE_TYPES.ACK_CLASS_MESSAGE) {
+        if (
+            node.tag === WA_MESSAGE_TAGS.ACK &&
+            node.attrs.class === WA_MESSAGE_TYPES.ACK_CLASS_MESSAGE
+        ) {
             const id = node.attrs.id
             if (id === undefined) return
             const info = this.sentMessages.get(id)

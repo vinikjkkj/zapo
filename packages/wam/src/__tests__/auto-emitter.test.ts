@@ -392,10 +392,10 @@ test('auto-emitter maps a local Mute mutation to ChatMute and ChatAction', () =>
     assert.equal((mute?.payload as { actionConducted: string }).actionConducted, 'MUTE')
     assert.equal((mute?.payload as { muteChatType: string }).muteChatType, 'GROUP')
     assert.equal(typeof (mute?.payload as { muteDuration: number }).muteDuration, 'number')
-    assert.deepEqual(
-        h.commits.find((c) => c.name === 'ChatAction')?.payload,
-        { chatActionType: 'MUTE', chatActionChatType: 'GROUP' }
-    )
+    assert.deepEqual(h.commits.find((c) => c.name === 'ChatAction')?.payload, {
+        chatActionType: 'MUTE',
+        chatActionChatType: 'GROUP'
+    })
 })
 
 test('auto-emitter maps local Pin/Archive/Read mutations to ChatAction', () => {
@@ -490,10 +490,13 @@ test('auto-emitter maps an outbound reaction to ReactionActions (UPDATE / DELETE
         to: '456@s.whatsapp.net',
         message: { reactionMessage: { text: '👍' } }
     })
-    assert.deepEqual(h.commits.find((c) => c.name === 'ReactionActions'), {
-        name: 'ReactionActions',
-        payload: { reactionAction: 'UPDATE', messageType: 'INDIVIDUAL' }
-    })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'ReactionActions'),
+        {
+            name: 'ReactionActions',
+            payload: { reactionAction: 'UPDATE', messageType: 'INDIVIDUAL' }
+        }
+    )
     h.commits.length = 0
     h.emit('message_send', { to: '456@s.whatsapp.net', message: { reactionMessage: { text: '' } } })
     assert.equal(
@@ -515,16 +518,19 @@ test('auto-emitter maps an outbound poll to PollsActions (CREATE_POLL with optio
             }
         }
     })
-    assert.deepEqual(h.commits.find((c) => c.name === 'PollsActions'), {
-        name: 'PollsActions',
-        payload: {
-            pollAction: 'CREATE_POLL',
-            chatType: 'GROUP',
-            isAGroup: true,
-            pollOptionsCount: 3,
-            typeOfGroup: 'GROUP'
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'PollsActions'),
+        {
+            name: 'PollsActions',
+            payload: {
+                pollAction: 'CREATE_POLL',
+                chatType: 'GROUP',
+                isAGroup: true,
+                pollOptionsCount: 3,
+                typeOfGroup: 'GROUP'
+            }
         }
-    })
+    )
 })
 
 test('auto-emitter maps an outbound document to SendDocument', () => {
@@ -541,15 +547,18 @@ test('auto-emitter maps an outbound document to SendDocument', () => {
             }
         }
     })
-    assert.deepEqual(h.commits.find((c) => c.name === 'SendDocument'), {
-        name: 'SendDocument',
-        payload: {
-            documentType: 'DOCUMENT',
-            documentExt: 'pdf',
-            documentPageSize: 4,
-            documentSize: 12345
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'SendDocument'),
+        {
+            name: 'SendDocument',
+            payload: {
+                documentType: 'DOCUMENT',
+                documentExt: 'pdf',
+                documentPageSize: 4,
+                documentSize: 12345
+            }
         }
-    })
+    )
 })
 
 test('auto-emitter maps a forwarded outbound message to ForwardSend', () => {
@@ -559,16 +568,19 @@ test('auto-emitter maps a forwarded outbound message to ForwardSend', () => {
         to: '1@g.us',
         message: { imageMessage: { contextInfo: { isForwarded: true, forwardingScore: 5 } } }
     })
-    assert.deepEqual(h.commits.find((c) => c.name === 'ForwardSend'), {
-        name: 'ForwardSend',
-        payload: {
-            messageType: 'GROUP',
-            isFrequentlyForwarded: true,
-            isForwardedForward: true,
-            messageMediaType: 'PHOTO',
-            typeOfGroup: 'GROUP'
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'ForwardSend'),
+        {
+            name: 'ForwardSend',
+            payload: {
+                messageType: 'GROUP',
+                isFrequentlyForwarded: true,
+                isForwardedForward: true,
+                messageMediaType: 'PHOTO',
+                typeOfGroup: 'GROUP'
+            }
         }
-    })
+    )
 })
 
 test('auto-emitter emits both ForwardSend and SendDocument for a forwarded document', () => {
@@ -627,10 +639,15 @@ test('auto-emitter fires EditMessageSend (EDITED) when an edited group message i
         }
     })
     h.commits.length = 0
-    h.emit('debug_transport_node_in', { node: { tag: 'ack', attrs: { class: 'message', id: 'e1' } } })
+    h.emit('debug_transport_node_in', {
+        node: { tag: 'ack', attrs: { class: 'message', id: 'e1' } }
+    })
     assert.deepEqual(
         h.commits.find((c) => c.name === 'EditMessageSend'),
-        { name: 'EditMessageSend', payload: { editType: 'EDITED', messageType: 'GROUP', typeOfGroup: 'GROUP' } }
+        {
+            name: 'EditMessageSend',
+            payload: { editType: 'EDITED', messageType: 'GROUP', typeOfGroup: 'GROUP' }
+        }
     )
 })
 
@@ -644,7 +661,9 @@ test('auto-emitter maps an edit=7 revoke send to a SENDER_REVOKE EditMessageSend
             content: [{ tag: 'enc', attrs: { v: '2', type: 'msg' } }]
         }
     })
-    h.emit('debug_transport_node_in', { node: { tag: 'ack', attrs: { class: 'message', id: 'r1' } } })
+    h.emit('debug_transport_node_in', {
+        node: { tag: 'ack', attrs: { class: 'message', id: 'r1' } }
+    })
     const edit = h.commits.find((c) => c.name === 'EditMessageSend')
     assert.equal((edit?.payload as { editType: string }).editType, 'SENDER_REVOKE')
 })
@@ -659,11 +678,20 @@ test('auto-emitter fires RevokeMessageSend (ADMIN) alongside EditMessageSend for
             content: [{ tag: 'enc', attrs: { v: '2', type: 'skmsg' } }]
         }
     })
-    h.emit('debug_transport_node_in', { node: { tag: 'ack', attrs: { class: 'message', id: 'rv1' } } })
-    assert.deepEqual(h.commits.find((c) => c.name === 'RevokeMessageSend'), {
-        name: 'RevokeMessageSend',
-        payload: { revokeType: 'ADMIN', messageType: 'GROUP', messageSendResultIsTerminal: true }
+    h.emit('debug_transport_node_in', {
+        node: { tag: 'ack', attrs: { class: 'message', id: 'rv1' } }
     })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'RevokeMessageSend'),
+        {
+            name: 'RevokeMessageSend',
+            payload: {
+                revokeType: 'ADMIN',
+                messageType: 'GROUP',
+                messageSendResultIsTerminal: true
+            }
+        }
+    )
     assert.equal(
         (h.commits.find((c) => c.name === 'EditMessageSend')?.payload as { editType: string })
             .editType,
@@ -681,7 +709,9 @@ test('auto-emitter fires no EditMessageSend for a normal (non-edit) send', () =>
             content: [{ tag: 'enc', attrs: { v: '2', type: 'msg' } }]
         }
     })
-    h.emit('debug_transport_node_in', { node: { tag: 'ack', attrs: { class: 'message', id: 'n1' } } })
+    h.emit('debug_transport_node_in', {
+        node: { tag: 'ack', attrs: { class: 'message', id: 'n1' } }
+    })
     assert.equal(h.commits.filter((c) => c.name === 'EditMessageSend').length, 0)
 })
 
@@ -726,7 +756,11 @@ const membershipActionIq = (id: string, action: 'approve' | 'reject') => ({
                 tag: 'membership_requests_action',
                 attrs: {},
                 content: [
-                    { tag: action, attrs: {}, content: [{ tag: 'participant', attrs: { jid: '5@s.whatsapp.net' } }] }
+                    {
+                        tag: action,
+                        attrs: {},
+                        content: [{ tag: 'participant', attrs: { jid: '5@s.whatsapp.net' } }]
+                    }
                 ]
             }
         ]
@@ -786,6 +820,8 @@ test('auto-emitter ignores unrelated IQs and unmatched IQ responses', () => {
     })
     // A result for an untracked id emits nothing.
     h.emit('debug_transport_node_in', { node: { tag: 'iq', attrs: { id: 'x1', type: 'result' } } })
-    h.emit('debug_transport_node_in', { node: { tag: 'iq', attrs: { id: 'ghost', type: 'result' } } })
+    h.emit('debug_transport_node_in', {
+        node: { tag: 'iq', attrs: { id: 'ghost', type: 'result' } }
+    })
     assert.equal(h.commits.length, 0)
 })

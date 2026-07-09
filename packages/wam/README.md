@@ -7,7 +7,7 @@ the client-side `w:stats` metrics batches WA Web sends, for **wire parity** and
 WA Web continuously uploads WAM (Falco) telemetry: message send/receive metrics,
 connection lifecycle, sync progress, UI interactions, and more. A headless client
 that uploads **none** of these has a conspicuous gap in its event profile. This
-plugin closes that gap by emitting the events a headless client can *truthfully*
+plugin closes that gap by emitting the events a headless client can _truthfully_
 produce, and (opt-in) by fabricating plausible ambient UI activity.
 
 ## Install
@@ -27,9 +27,9 @@ import { WaClient } from 'zapo-js'
 import { wamPlugin } from '@zapo-js/wam'
 
 const client = new WaClient({
-  store,
-  sessionId: 'main',
-  plugins: [wamPlugin()]
+    store,
+    sessionId: 'main',
+    plugins: [wamPlugin()]
 })
 
 // Protocol events auto-emit as the client runs. You can also commit your own:
@@ -47,11 +47,11 @@ plugins: [wamPlugin({ syntheticUi: true })]
 **35** of the registry's **426** events. They come from two independently toggled
 sources:
 
-| Source | Flag | Default | Count |
-| --- | --- | --- | --- |
-| Protocol lifecycle | `autoEmit` | on | 17 |
-| Integrator actions | `autoEmit` | on | 9 |
-| Synthetic UI | `syntheticUi` | off | 9 |
+| Source             | Flag          | Default | Count |
+| ------------------ | ------------- | ------- | ----- |
+| Protocol lifecycle | `autoEmit`    | on      | 17    |
+| Integrator actions | `autoEmit`    | on      | 9     |
+| Synthetic UI       | `syntheticUi` | off     | 9     |
 
 <details>
 <summary>Full list</summary>
@@ -84,22 +84,22 @@ mobile-app-only flows, UI-render interactions, crypto internals, ads, and
 server-side aggregates).
 
 The plugin only emits an event when **every field it sets is honestly derivable**.
-A partial or fabricated ("skeleton") event is a *worse* fingerprint than silence,
+A partial or fabricated ("skeleton") event is a _worse_ fingerprint than silence,
 so those are deliberately left unimplemented rather than filled with placeholders.
 
 ## Options
 
 `wamPlugin(options)`, all optional:
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `autoEmit` | `true` | Emit protocol + integrator-action events by observing the client |
-| `syntheticUi` | `false` | Fabricate plausible UI telemetry (`true` or an options object) |
-| `serviceImprovementOptOut` | `false` | `service_improvement_opt_out` consent bit |
-| `appVersion` | `WA_VERSION` | Override the advertised app version |
-| `flushIntervalMs` | `5000` | Coalesce window before a non-empty batch flushes |
-| `maxBufferSize` | `50000` | Byte size that forces an immediate flush |
-| `logLevel` | host client's | Minimum log level for the plugin |
+| Option                     | Default       | Description                                                      |
+| -------------------------- | ------------- | ---------------------------------------------------------------- |
+| `autoEmit`                 | `true`        | Emit protocol + integrator-action events by observing the client |
+| `syntheticUi`              | `false`       | Fabricate plausible UI telemetry (`true` or an options object)   |
+| `serviceImprovementOptOut` | `false`       | `service_improvement_opt_out` consent bit                        |
+| `appVersion`               | `WA_VERSION`  | Override the advertised app version                              |
+| `flushIntervalMs`          | `5000`        | Coalesce window before a non-empty batch flushes                 |
+| `maxBufferSize`            | `50000`       | Byte size that forces an immediate flush                         |
+| `logLevel`                 | host client's | Minimum log level for the plugin                                 |
 
 ## How it works
 
