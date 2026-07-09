@@ -55,7 +55,8 @@ test('synthetic UI fabricates CHAT_OPEN with WA Web fields (preloaded + isLid, n
     assert.ok(webc)
     assert.equal(typeof webc?.payload.webcWindowHeightFloat, 'number')
     assert.equal(typeof webc?.payload.webcUnreadCount, 'number')
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI fabricates IMAGE_OPEN for an image message and only uses web-real types', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -70,7 +71,8 @@ test('synthetic UI fabricates IMAGE_OPEN for an image message and only uses web-
     assert.ok(types.includes('CHAT_OPEN'))
     assert.ok(types.includes('IMAGE_OPEN'))
     assert.ok(types.every((t) => t === 'CHAT_OPEN' || t === 'IMAGE_OPEN'))
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI fabricates GROUP_INFO_OPEN (preloaded + isLid) for a group message', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -88,7 +90,8 @@ test('synthetic UI fabricates GROUP_INFO_OPEN (preloaded + isLid) for a group me
     assert.ok(info)
     assert.equal(info?.payload.uiActionPreloaded, true)
     assert.equal(info?.payload.isLid, false)
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI fabricates CHANNEL_INFO_OPEN without isLid for a newsletter message', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -107,7 +110,8 @@ test('synthetic UI fabricates CHANNEL_INFO_OPEN without isLid for a newsletter m
     assert.equal(info?.payload.uiActionPreloaded, true)
     // WA Web's CHANNEL_INFO_OPEN does not set isLid
     assert.equal(info?.payload.isLid, undefined)
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI fabricates MSG_INFO_OPEN after an outbound message', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -121,14 +125,15 @@ test('synthetic UI fabricates MSG_INFO_OPEN after an outbound message', () => {
     assert.ok(info)
     assert.equal(info?.payload.uiActionPreloaded, true)
     assert.equal(info?.payload.isLid, true)
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI fabricates WebcMediaLoad (SUCCESS) for an inbound audio message', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
     const h = makeHarness()
     const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, {
         chatOpenProbability: 0,
-        imageOpenProbability: 1
+        audioLoadProbability: 1
     })
     h.emit('message', lidMessage({ message: { audioMessage: {} } }))
     mock.timers.tick(10_000)
@@ -136,7 +141,8 @@ test('synthetic UI fabricates WebcMediaLoad (SUCCESS) for an inbound audio messa
     assert.ok(media)
     assert.equal(media?.payload.webcMediaLoadResult, 'SUCCESS')
     assert.equal(typeof media?.payload.webcMediaLoadT, 'number')
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI fabricates nothing outside the configured active hours', () => {
     mock.timers.enable({ apis: ['setTimeout', 'Date'] })
@@ -150,7 +156,37 @@ test('synthetic UI fabricates nothing outside the configured active hours', () =
     h.emit('message', lidMessage())
     mock.timers.tick(61_000)
     assert.equal(h.commits.length, 0)
-    ui.dispose()})
+    ui.dispose()
+})
+
+test('synthetic UI falls back to the default interval for a non-positive option (no tight loop)', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = makeHarness()
+    const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, {
+        chatOpenProbability: 0,
+        ambientIntervalMinMs: 10 * 60_000,
+        ambientIntervalMaxMs: 10 * 60_000,
+        memoryIntervalMinMs: 0,
+        memoryIntervalMaxMs: -1
+    })
+    mock.timers.tick(5_000)
+    assert.equal(h.commits.filter((c) => c.name === 'MemoryStat').length, 0)
+    ui.dispose()
+})
+
+test('synthetic UI gates audio WebcMediaLoad on audioLoadProbability, not imageOpenProbability', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const h = makeHarness()
+    const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, {
+        chatOpenProbability: 0,
+        imageOpenProbability: 1,
+        audioLoadProbability: 0
+    })
+    h.emit('message', lidMessage({ message: { audioMessage: {} } }))
+    mock.timers.tick(10_000)
+    assert.equal(h.commits.filter((c) => c.name === 'WebcMediaLoad').length, 0)
+    ui.dispose()
+})
 
 test('synthetic UI fabricates WebcEmojiOpen with a real tab in the ambient stream', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -192,7 +228,8 @@ test('synthetic UI fabricates AttachmentTrayActions (SEND) for an outbound media
     assert.equal(tray?.payload.sendMediaType, 'PHOTO')
     assert.equal(tray?.payload.actionThreadType, 'GROUP_CHAT')
     assert.equal(tray?.payload.isAGroup, true)
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI fabricates no AttachmentTrayActions for a sticker (emoji-panel, not the tray)', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -207,7 +244,8 @@ test('synthetic UI fabricates no AttachmentTrayActions for a sticker (emoji-pane
     })
     mock.timers.tick(13_000)
     assert.equal(h.commits.filter((c) => c.name === 'AttachmentTrayActions').length, 0)
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI samples MemoryStat periodically (main process, uptime, numMessages)', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -225,7 +263,8 @@ test('synthetic UI samples MemoryStat periodically (main process, uptime, numMes
     assert.equal(typeof mem?.payload.workingSetSize, 'number')
     assert.equal(typeof mem?.payload.uptime, 'number')
     assert.ok((mem?.payload.numMessages as number) >= 1)
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI flushes UserActivity with a bitmap matching the active slices', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -243,7 +282,8 @@ test('synthetic UI flushes UserActivity with a bitmap matching the active slices
     assert.equal(ua?.payload.userActivitySessionCum, 1)
     assert.equal(ua?.payload.userActivityBitmapLow, 1)
     assert.equal(ua?.payload.userActivitySessionSeq, 1)
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI keeps emitting UserActivity past the 64-slice cap and rolls the session', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -258,7 +298,8 @@ test('synthetic UI keeps emitting UserActivity past the 64-slice cap and rolls t
     assert.ok(activities.some((c) => c.payload.userActivityBitmapLen === 64))
     assert.equal(activities[activities.length - 1]?.payload.userActivitySessionSeq, 1)
     assert.ok(activities.length > 12)
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI fabricates AboutConsumption for a 1:1 inbound message', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -276,7 +317,8 @@ test('synthetic UI fabricates AboutConsumption for a 1:1 inbound message', () =>
             about?.payload.aboutConsumptionSurface as string
         )
     )
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI fabricates no AboutConsumption for a group message', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -292,7 +334,8 @@ test('synthetic UI fabricates no AboutConsumption for a group message', () => {
     })
     mock.timers.tick(41_000)
     assert.equal(h.commits.filter((c) => c.name === 'AboutConsumption').length, 0)
-    ui.dispose()})
+    ui.dispose()
+})
 
 test('synthetic UI fabricates ContactSearchExperience in the ambient stream', () => {
     mock.timers.enable({ apis: ['setTimeout'] })
@@ -326,4 +369,5 @@ test('synthetic UI cancels pending fabrications on dispose', () => {
     h.emit('message', lidMessage())
     ui.dispose()
     mock.timers.tick(120_000)
-    assert.equal(h.commits.length, 0)})
+    assert.equal(h.commits.length, 0)
+})

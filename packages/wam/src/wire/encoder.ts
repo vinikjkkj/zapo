@@ -10,7 +10,8 @@ const MARK = WA_WAM_WIRE_FORMAT.markers
 const ENC = WA_WAM_WIRE_FORMAT.valueEncodingBits
 
 const INT32_MIN = -2_147_483_648
-const INT32_MAX = 2_147_483_648
+/** Exclusive upper bound (2^31), mirroring WA Web's `r < 2147483648` int32 check in WAWamBuffer. */
+const INT32_UPPER_EXCLUSIVE = 2_147_483_648
 
 /** Writes a TLV tag: marker/encoding byte + id (uint8, or extended-flag + uint16 for id >= 256). */
 function writeTag(writer: BinaryWriter, id: number, markerWithEncoding: number): void {
@@ -35,7 +36,7 @@ function writeInt(writer: BinaryWriter, id: number, marker: number, value: numbe
     } else if (value >= -32_768 && value < 32_768) {
         writeTag(writer, id, ENC.int16 | marker)
         writer.writeInt16(value)
-    } else if (value >= INT32_MIN && value < INT32_MAX) {
+    } else if (value >= INT32_MIN && value < INT32_UPPER_EXCLUSIVE) {
         writeTag(writer, id, ENC.int32 | marker)
         writer.writeInt32(value)
     } else {

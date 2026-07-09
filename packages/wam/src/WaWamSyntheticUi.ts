@@ -28,6 +28,8 @@ export interface WaWamSyntheticUiOptions {
     readonly chatOpenProbability?: number
     /** Chance an inbound image additionally fabricates an IMAGE_OPEN (default 0.3). */
     readonly imageOpenProbability?: number
+    /** Chance an inbound audio fabricates a WebcMediaLoad playback load (default 0.3). */
+    readonly audioLoadProbability?: number
     /** Chance an event fabricates an info-drawer open (group/channel/msg info) (default 0.05). */
     readonly infoOpenProbability?: number
     /** Chance an outbound media message fabricates an AttachmentTrayActions send (default 0.4). */
@@ -53,6 +55,12 @@ const rand = (min: number, max: number): number => min + Math.random() * (max - 
 const randInt = (min: number, max: number): number => Math.floor(rand(min, max))
 const randHex = (len: number): string =>
     Array.from({ length: len }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+
+const clampProbability = (value: number | undefined, fallback: number): number =>
+    typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback
+
+const clampInterval = (value: number | undefined, fallback: number): number =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
 
 type AttachmentTarget = 'GALLERY' | 'DOCUMENT' | 'AUDIO' | 'CONTACT' | 'LOCATION'
 
@@ -93,6 +101,7 @@ export class WaWamSyntheticUi {
     private readonly recentChatIsLid: boolean[] = []
     private readonly chatOpenProbability: number
     private readonly imageOpenProbability: number
+    private readonly audioLoadProbability: number
     private readonly infoOpenProbability: number
     private readonly attachmentTrayProbability: number
     private readonly aboutConsumptionProbability: number
@@ -125,15 +134,19 @@ export class WaWamSyntheticUi {
         ctx: Ctx,
         options: WaWamSyntheticUiOptions = {}
     ) {
-        this.chatOpenProbability = options.chatOpenProbability ?? 0.25
-        this.imageOpenProbability = options.imageOpenProbability ?? 0.3
-        this.infoOpenProbability = options.infoOpenProbability ?? 0.05
-        this.attachmentTrayProbability = options.attachmentTrayProbability ?? 0.4
-        this.aboutConsumptionProbability = options.aboutConsumptionProbability ?? 0.06
-        this.ambientMinMs = options.ambientIntervalMinMs ?? 5 * 60_000
-        this.ambientMaxMs = options.ambientIntervalMaxMs ?? 25 * 60_000
-        this.memoryMinMs = options.memoryIntervalMinMs ?? 2 * 60_000
-        this.memoryMaxMs = options.memoryIntervalMaxMs ?? 5 * 60_000
+        this.chatOpenProbability = clampProbability(options.chatOpenProbability, 0.25)
+        this.imageOpenProbability = clampProbability(options.imageOpenProbability, 0.3)
+        this.audioLoadProbability = clampProbability(options.audioLoadProbability, 0.3)
+        this.infoOpenProbability = clampProbability(options.infoOpenProbability, 0.05)
+        this.attachmentTrayProbability = clampProbability(options.attachmentTrayProbability, 0.4)
+        this.aboutConsumptionProbability = clampProbability(
+            options.aboutConsumptionProbability,
+            0.06
+        )
+        this.ambientMinMs = clampInterval(options.ambientIntervalMinMs, 5 * 60_000)
+        this.ambientMaxMs = clampInterval(options.ambientIntervalMaxMs, 25 * 60_000)
+        this.memoryMinMs = clampInterval(options.memoryIntervalMinMs, 2 * 60_000)
+        this.memoryMaxMs = clampInterval(options.memoryIntervalMaxMs, 5 * 60_000)
         this.activeStartHour = options.activeHoursStartHour
         this.activeEndHour = options.activeHoursEndHour
         const onMessage = (event: WaIncomingMessageEvent): void => this.onMessage(event)
@@ -184,7 +197,7 @@ export class WaWamSyntheticUi {
             this.schedule(rand(3000, 120_000), () => this.emit(payload))
         }
 
-        if (event.message?.audioMessage && Math.random() < this.imageOpenProbability) {
+        if (event.message?.audioMessage && Math.random() < this.audioLoadProbability) {
             this.schedule(rand(1000, 8000), () => this.emitMediaLoad())
         }
 
@@ -256,6 +269,7 @@ export class WaWamSyntheticUi {
     }
 
     private markActivity(): void {
+        if (!this.canEmit()) return
         this.sliceActive = true
         this.messagesSeen += 1
     }
