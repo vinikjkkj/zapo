@@ -28,7 +28,7 @@ function makeCoordinator(connectedInitially: boolean) {
         deps: { connectionManager: { isConnected: () => connected } },
         options: { deviceBrowser: 'Chrome', deviceOsDisplayName: 'Windows' }
     } as unknown as WaClientPluginContext
-    const coordinator = new WaWamCoordinator(ctx, { autoEmit: false })
+    const coordinator = new WaWamCoordinator(ctx, { autoEmit: false, syntheticUi: false })
     return { coordinator, uploads, setConnected: (value: boolean) => (connected = value) }
 }
 

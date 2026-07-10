@@ -1,4 +1,5 @@
 import type { BinaryNode } from 'zapo-js'
+import { proto } from 'zapo-js/proto'
 import {
     isGroupJid,
     isNewsletterJid,
@@ -29,6 +30,15 @@ export type WamMediaTypeKey =
     | 'GIF'
     | 'CONTACT'
     | 'LOCATION'
+
+export type WamPinInChatTypeKey = 'PIN_FOR_ALL' | 'UNPIN_FOR_ALL'
+
+/** Maps a `pinInChatMessage.type` proto enum to its WAM `PIN_IN_CHAT_TYPE` key. */
+export function pinInChatTypeKey(type: number | null | undefined): WamPinInChatTypeKey | null {
+    if (type === proto.Message.PinInChatMessage.Type.PIN_FOR_ALL) return 'PIN_FOR_ALL'
+    if (type === proto.Message.PinInChatMessage.Type.UNPIN_FOR_ALL) return 'UNPIN_FOR_ALL'
+    return null
+}
 
 /** Depth-first search for the first `<enc>` node (direct, group `skmsg`, or nested under `<participants>`). */
 export function findFirstEncNode(node: BinaryNode): BinaryNode | null {

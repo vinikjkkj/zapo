@@ -32,8 +32,9 @@ export interface WaWamCoordinatorOptions {
     readonly autoEmit?: boolean
     /**
      * Fabricate plausible UI (`UiAction`) telemetry so the event profile mimics a
-     * human WA Web session. Opt-in and off by default: it is best-effort
-     * anti-fingerprinting, and badly-timed fabrication is a worse tell than none.
+     * human WA Web session. On by default; pass `false` to disable, or an options
+     * object to tune it. Best-effort anti-fingerprinting: everything is jittered
+     * and rate-limited, since badly-timed fabrication is a worse tell than none.
      */
     readonly syntheticUi?: boolean | WaWamSyntheticUiOptions
 }
@@ -83,7 +84,7 @@ export class WaWamCoordinator {
         }
         this.autoEmitter = options.autoEmit === false ? null : new WaWamAutoEmitter(this, ctx)
         this.syntheticUi =
-            options.syntheticUi === undefined || options.syntheticUi === false
+            options.syntheticUi === false
                 ? null
                 : new WaWamSyntheticUi(
                       this,

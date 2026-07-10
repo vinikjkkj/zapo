@@ -8,7 +8,7 @@ WA Web continuously uploads WAM (Falco) telemetry: message send/receive metrics,
 connection lifecycle, sync progress, UI interactions, and more. A headless client
 that uploads **none** of these has a conspicuous gap in its event profile. This
 plugin closes that gap by emitting the events a headless client can _truthfully_
-produce, and (opt-in) by fabricating plausible ambient UI activity.
+produce, and by fabricating plausible ambient UI activity (on by default).
 
 ## Install
 
@@ -36,22 +36,22 @@ const client = new WaClient({
 client.wam.commit('UiAction', { uiActionType: 'CHAT_OPEN' })
 ```
 
-Opt into synthetic UI telemetry (off by default):
+Synthetic UI telemetry is on by default. Disable it (or tune it) with:
 
 ```ts
-plugins: [wamPlugin({ syntheticUi: true })]
+plugins: [wamPlugin({ syntheticUi: false })]
 ```
 
 ## Events emitted
 
-**35** of the registry's **426** events. They come from two independently toggled
+**39** of the registry's **426** events. They come from two independently toggled
 sources:
 
 | Source             | Flag          | Default | Count |
 | ------------------ | ------------- | ------- | ----- |
 | Protocol lifecycle | `autoEmit`    | on      | 17    |
-| Integrator actions | `autoEmit`    | on      | 9     |
-| Synthetic UI       | `syntheticUi` | off     | 9     |
+| Integrator actions | `autoEmit`    | on      | 13    |
+| Synthetic UI       | `syntheticUi` | on      | 9     |
 
 <details>
 <summary>Full list</summary>
@@ -63,9 +63,10 @@ sources:
 `WebcSocketConnect`, `WebcStreamModeChange`, `WebcPageResume`,
 `WebcRawPlatforms`, `MdBootstrapHistoryDataReceived`, `UnknownStanza`
 
-**Integrator actions (9)** - the client's own sends and app-state mutations:
-`ForwardSend`, `ReactionActions`, `PollsActions`, `SendDocument`,
-`RevokeMessageSend`, `WaFsGroupJoinRequestAction`, `ChatMute`, `ChatAction`,
+**Integrator actions (13)** - the client's own sends and app-state mutations:
+`ForwardSend`, `ReactionActions`, `PollsActions`, `SendDocument`, `StickerSend`,
+`PinInChatMessageSend`, `RevokeMessageSend`, `MessageDeleteActions`,
+`WaFsGroupJoinRequestAction`, `ChatMute`, `ChatAction`, `StatusMute`,
 `MdSyncdDogfoodingFeatureUsage`
 
 **Synthetic UI (9)** - fabricated plausible ambient activity:
@@ -91,15 +92,15 @@ so those are deliberately left unimplemented rather than filled with placeholder
 
 `wamPlugin(options)`, all optional:
 
-| Option                     | Default       | Description                                                      |
-| -------------------------- | ------------- | ---------------------------------------------------------------- |
-| `autoEmit`                 | `true`        | Emit protocol + integrator-action events by observing the client |
-| `syntheticUi`              | `false`       | Fabricate plausible UI telemetry (`true` or an options object)   |
-| `serviceImprovementOptOut` | `false`       | `service_improvement_opt_out` consent bit                        |
-| `appVersion`               | `WA_VERSION`  | Override the advertised app version                              |
-| `flushIntervalMs`          | `5000`        | Coalesce window before a non-empty batch flushes                 |
-| `maxBufferSize`            | `50000`       | Byte size that forces an immediate flush                         |
-| `logLevel`                 | host client's | Minimum log level for the plugin                                 |
+| Option                     | Default       | Description                                                              |
+| -------------------------- | ------------- | ------------------------------------------------------------------------ |
+| `autoEmit`                 | `true`        | Emit protocol + integrator-action events by observing the client         |
+| `syntheticUi`              | `true`        | Fabricate plausible UI telemetry (`false` to disable, or options object) |
+| `serviceImprovementOptOut` | `false`       | `service_improvement_opt_out` consent bit                                |
+| `appVersion`               | `WA_VERSION`  | Override the advertised app version                                      |
+| `flushIntervalMs`          | `5000`        | Coalesce window before a non-empty batch flushes                         |
+| `maxBufferSize`            | `50000`       | Byte size that forces an immediate flush                                 |
+| `logLevel`                 | host client's | Minimum log level for the plugin                                         |
 
 ## How it works
 

@@ -37,6 +37,7 @@ import {
     fileExtension,
     findFirstEncNode,
     mediaTypeKey,
+    pinInChatTypeKey,
     type WamCiphertextTypeKey,
     type WamE2eDestinationKey,
     type WamEditTypeKey,
@@ -245,6 +246,12 @@ export class WaWamAutoEmitter {
                         : 'CLEAR_CHAT_KEEP_STARRED_MUTATION'
             })
         }
+        if (event.schema === 'UserStatusMute') {
+            this.coordinator.commit('StatusMute', {
+                muteAction: event.operation === 'set' && event.muted === true ? 'MUTE' : 'UNMUTE',
+                statusCategory: 'REGULAR_STATUS'
+            })
+        }
     }
 
     private commitChatAction(
@@ -317,6 +324,37 @@ export class WaWamAutoEmitter {
                 ...(ext !== undefined ? { documentExt: ext } : {}),
                 ...(typeof doc.pageCount === 'number' ? { documentPageSize: doc.pageCount } : {}),
                 ...(typeof doc.fileLength === 'number' ? { documentSize: doc.fileLength } : {})
+            })
+            return
+        }
+
+        const sticker = msg.stickerMessage
+        if (sticker) {
+            this.coordinator.commit('StickerSend', {
+                stickerSendMessageType: 'REGULAR',
+                ...(typeof sticker.isAnimated === 'boolean'
+                    ? { stickerIsAnimated: sticker.isAnimated }
+                    : {}),
+                ...(typeof sticker.isAvatar === 'boolean'
+                    ? { stickerIsAvatar: sticker.isAvatar }
+                    : {}),
+                ...(typeof sticker.isAiSticker === 'boolean'
+                    ? { stickerIsAi: sticker.isAiSticker }
+                    : {})
+            })
+            return
+        }
+
+        const pin = msg.pinInChatMessage
+        if (pin) {
+            const pinType = pinInChatTypeKey(pin.type)
+            this.coordinator.commit('PinInChatMessageSend', {
+                ...(pinType !== null ? { pinInChatType: pinType } : {}),
+                isAGroup: isGroup,
+                isSelfPin: true,
+                ...(typeof pin.key?.fromMe === 'boolean'
+                    ? { isSelfParentMessage: pin.key.fromMe }
+                    : {})
             })
             return
         }
@@ -487,6 +525,11 @@ export class WaWamAutoEmitter {
                     revokeType: info.editType === 'ADMIN_REVOKE' ? 'ADMIN' : 'SENDER',
                     messageType: info.destination,
                     messageSendResultIsTerminal: true
+                })
+                this.coordinator.commit('MessageDeleteActions', {
+                    deleteActionType: 'DELETE_FOR_EVERYONE',
+                    isAGroup: info.isGroup,
+                    messagesDeleted: 1
                 })
             }
         }

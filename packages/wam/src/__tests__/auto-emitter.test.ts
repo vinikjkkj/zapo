@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { WaConnectionEvent } from 'zapo-js'
+import { proto } from 'zapo-js/proto'
 
 import { WaWamAutoEmitter, type WaWamAutoEmitterContext } from '../WaWamAutoEmitter.js'
 import type { WaWamCoordinator } from '../WaWamCoordinator.js'
@@ -483,6 +484,24 @@ test('auto-emitter ignores the inbound mutation stream (reacts only to mutation_
     assert.equal(h.commits.length, 0)
 })
 
+test('auto-emitter maps an outbound UserStatusMute to StatusMute', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('mutation_send', {
+        schema: 'UserStatusMute',
+        operation: 'set',
+        source: 'local',
+        muted: true
+    })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'StatusMute'),
+        {
+            name: 'StatusMute',
+            payload: { muteAction: 'MUTE', statusCategory: 'REGULAR_STATUS' }
+        }
+    )
+})
+
 test('auto-emitter maps an outbound reaction to ReactionActions (UPDATE / DELETE)', () => {
     const h = makeHarness()
     new WaWamAutoEmitter(h.coordinator, h.ctx)
@@ -582,6 +601,53 @@ test('auto-emitter maps an outbound document to SendDocument', () => {
                 documentExt: 'pdf',
                 documentPageSize: 4,
                 documentSize: 12345
+            }
+        }
+    )
+})
+
+test('auto-emitter maps an outbound sticker to StickerSend', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message_send', {
+        to: '456@s.whatsapp.net',
+        message: { stickerMessage: { isAnimated: true, isAvatar: false, isAiSticker: false } }
+    })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'StickerSend'),
+        {
+            name: 'StickerSend',
+            payload: {
+                stickerSendMessageType: 'REGULAR',
+                stickerIsAnimated: true,
+                stickerIsAvatar: false,
+                stickerIsAi: false
+            }
+        }
+    )
+})
+
+test('auto-emitter maps an outbound pin-in-chat to PinInChatMessageSend', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message_send', {
+        to: '1@g.us',
+        message: {
+            pinInChatMessage: {
+                type: proto.Message.PinInChatMessage.Type.PIN_FOR_ALL,
+                key: { fromMe: true }
+            }
+        }
+    })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'PinInChatMessageSend'),
+        {
+            name: 'PinInChatMessageSend',
+            payload: {
+                pinInChatType: 'PIN_FOR_ALL',
+                isAGroup: true,
+                isSelfPin: true,
+                isSelfParentMessage: true
             }
         }
     )
@@ -722,6 +788,17 @@ test('auto-emitter fires RevokeMessageSend (ADMIN) alongside EditMessageSend for
         (h.commits.find((c) => c.name === 'EditMessageSend')?.payload as { editType: string })
             .editType,
         'ADMIN_REVOKE'
+    )
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'MessageDeleteActions'),
+        {
+            name: 'MessageDeleteActions',
+            payload: {
+                deleteActionType: 'DELETE_FOR_EVERYONE',
+                isAGroup: true,
+                messagesDeleted: 1
+            }
+        }
     )
 })
 
