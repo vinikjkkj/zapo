@@ -51,3 +51,16 @@ test('WaWamCoordinator uploads the batch as a w:stats iq when connected', async 
     assert.equal(uploads[0]?.attrs.xmlns, 'w:stats')
     await coordinator.dispose()
 })
+
+test('WaWamCoordinator commits WebWamForceFlush on dispose (WA Web force-flush parity)', async () => {
+    const origRandom = Math.random
+    Math.random = () => 0 // ensure the commit sampling gate passes
+    try {
+        const { coordinator, uploads } = makeCoordinator(true)
+        await coordinator.dispose()
+        assert.equal(uploads.length, 1)
+        assert.equal(uploads[0]?.attrs.xmlns, 'w:stats')
+    } finally {
+        Math.random = origRandom
+    }
+})

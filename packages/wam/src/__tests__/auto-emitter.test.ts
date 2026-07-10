@@ -800,6 +800,58 @@ test('auto-emitter fires RevokeMessageSend (ADMIN) alongside EditMessageSend for
             }
         }
     )
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'SendRevokeMessage'),
+        {
+            name: 'SendRevokeMessage',
+            payload: { messageType: 'GROUP' }
+        }
+    )
+})
+
+test('auto-emitter fires OfflineCountTooHigh once a message offline position hits 11', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message', {
+        key: {
+            remoteJid: '1@s.whatsapp.net',
+            isGroup: false,
+            isBroadcast: false,
+            isNewsletter: false
+        },
+        offline: true,
+        rawNode: { tag: 'message', attrs: { offline: '11' } }
+    })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'OfflineCountTooHigh'),
+        {
+            name: 'OfflineCountTooHigh',
+            payload: {
+                offlineCount: 11,
+                stanzaType: 'MESSAGE',
+                messageType: 'INDIVIDUAL',
+                mediaType: 'NONE'
+            }
+        }
+    )
+})
+
+test('auto-emitter does not fire OfflineCountTooHigh below the threshold', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('message', {
+        key: {
+            remoteJid: '1@s.whatsapp.net',
+            isGroup: false,
+            isBroadcast: false,
+            isNewsletter: false
+        },
+        rawNode: { tag: 'message', attrs: { offline: '10' } }
+    })
+    assert.equal(
+        h.commits.find((c) => c.name === 'OfflineCountTooHigh'),
+        undefined
+    )
 })
 
 test('auto-emitter fires no EditMessageSend for a normal (non-edit) send', () => {
@@ -927,4 +979,86 @@ test('auto-emitter ignores unrelated IQs and unmatched IQ responses', () => {
         node: { tag: 'iq', attrs: { id: 'ghost', type: 'result' } }
     })
     assert.equal(h.commits.length, 0)
+})
+
+test('auto-emitter fires GroupCreate + GroupCreateC on a successful create IQ', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'iq',
+            attrs: { id: 'gc1', to: '@g.us', type: 'set', xmlns: 'w:g2' },
+            content: [{ tag: 'create', attrs: { subject: 'My Group' }, content: [] }]
+        }
+    })
+    assert.equal(h.commits.length, 0)
+    h.emit('debug_transport_node_in', { node: { tag: 'iq', attrs: { id: 'gc1', type: 'result' } } })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'GroupCreate'),
+        {
+            name: 'GroupCreate',
+            payload: { hasGroupName: true }
+        }
+    )
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'GroupCreateC'),
+        {
+            name: 'GroupCreateC',
+            payload: {}
+        }
+    )
+})
+
+test('auto-emitter does not fire GroupCreate when the create IQ errors', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'iq',
+            attrs: { id: 'gc2', to: '@g.us', type: 'set', xmlns: 'w:g2' },
+            content: [{ tag: 'create', attrs: { subject: 'X' }, content: [] }]
+        }
+    })
+    h.emit('debug_transport_node_in', { node: { tag: 'iq', attrs: { id: 'gc2', type: 'error' } } })
+    assert.equal(h.commits.length, 0)
+})
+
+test('auto-emitter fires EphemeralSettingChange from a group ephemeral IQ', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'iq',
+            attrs: { id: 'ep1', to: '123@g.us', type: 'set', xmlns: 'w:g2' },
+            content: [{ tag: 'ephemeral', attrs: { expiration: '604800' } }]
+        }
+    })
+    h.emit('debug_transport_node_in', { node: { tag: 'iq', attrs: { id: 'ep1', type: 'result' } } })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'EphemeralSettingChange'),
+        {
+            name: 'EphemeralSettingChange',
+            payload: { chatEphemeralityDuration: 604800, isSuccess: true }
+        }
+    )
+})
+
+test('auto-emitter fires DisappearingModeSettingChange (isSuccess reflects the ack) from a disappearing_mode IQ', () => {
+    const h = makeHarness()
+    new WaWamAutoEmitter(h.coordinator, h.ctx)
+    h.emit('debug_transport_node_out', {
+        node: {
+            tag: 'iq',
+            attrs: { id: 'dm1', to: '@s.whatsapp.net', type: 'set', xmlns: 'disappearing_mode' },
+            content: [{ tag: 'disappearing_mode', attrs: { duration: '86400' } }]
+        }
+    })
+    h.emit('debug_transport_node_in', { node: { tag: 'iq', attrs: { id: 'dm1', type: 'error' } } })
+    assert.deepEqual(
+        h.commits.find((c) => c.name === 'DisappearingModeSettingChange'),
+        {
+            name: 'DisappearingModeSettingChange',
+            payload: { newEphemeralityDuration: 86400, isSuccess: false }
+        }
+    )
 })

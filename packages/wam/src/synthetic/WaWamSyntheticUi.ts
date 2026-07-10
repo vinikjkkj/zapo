@@ -2,8 +2,11 @@ import type { WaWamEventArgs } from '@vinikjkkj/wa-wam'
 import type { BinaryNode, WaClientPluginContext, WaIncomingMessageEvent } from 'zapo-js'
 import { isGroupJid, isLidJid, WA_ADDRESSING_MODES, WA_MESSAGE_TAGS } from 'zapo-js/protocol'
 
-import { findFirstEncNode, mediaTypeKey, type WamMediaTypeKey } from './send-parse.js'
-import type { WaWamCoordinator } from './WaWamCoordinator.js'
+import { findFirstEncNode, mediaTypeKey, type WamMediaTypeKey } from '../send-parse.js'
+import type { WaWamCoordinator } from '../WaWamCoordinator.js'
+
+import { AMBIENT_FABS, type FabSession } from './fabrications.js'
+import { rand, randB64, randHex, randInt, randUuid } from './random.js'
 
 type Ctx = Pick<WaClientPluginContext, 'on' | 'off'>
 
@@ -49,12 +52,15 @@ export interface WaWamSyntheticUiOptions {
      */
     readonly activeHoursStartHour?: number
     readonly activeHoursEndHour?: number
+    /**
+     * Capability gates for context-specific ambient events, all default `false`.
+     * Enable only when the session genuinely has that surface — firing a
+     * channel/community/business event on an account that lacks it is a tell.
+     */
+    readonly channels?: boolean
+    readonly communities?: boolean
+    readonly business?: boolean
 }
-
-const rand = (min: number, max: number): number => min + Math.random() * (max - min)
-const randInt = (min: number, max: number): number => Math.floor(rand(min, max))
-const randHex = (len: number): string =>
-    Array.from({ length: len }, () => Math.floor(Math.random() * 16).toString(16)).join('')
 
 const clampProbability = (value: number | undefined, fallback: number): number =>
     typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback
@@ -105,6 +111,8 @@ export class WaWamSyntheticUi {
     private readonly infoOpenProbability: number
     private readonly attachmentTrayProbability: number
     private readonly aboutConsumptionProbability: number
+    private readonly gates: Record<'channels' | 'communities' | 'business', boolean>
+    private readonly session: FabSession
     private readonly ambientMinMs: number
     private readonly ambientMaxMs: number
     private readonly memoryMinMs: number
@@ -113,7 +121,13 @@ export class WaWamSyntheticUi {
     private readonly activeEndHour: number | undefined
     private readonly windowHeightFloat = randInt(680, 1040)
     private readonly sessionStartMs = Date.now()
+    private readonly unifiedSessionId = randHex(16)
+    private readonly appSessionId = randUuid()
+    private readonly gifProvider: 'TENOR' | 'GIPHY' = Math.random() < 0.75 ? 'TENOR' : 'GIPHY'
+    /** Weighted ambient-fabrication table; one entry is picked per ambient tick. Gated events are only present when their capability flag is on. */
+    private readonly ambientSpecs: Array<{ readonly w: number; readonly emit: () => void }> = []
     private activitySessionId = randHex(8)
+    private tsSessionId = randInt(1, 2_000_000_000)
     private activityStartMs = Date.now()
     private lastOpenMs = 0
     private lastInfoOpenMs = 0
@@ -149,6 +163,17 @@ export class WaWamSyntheticUi {
         this.memoryMaxMs = clampInterval(options.memoryIntervalMaxMs, 5 * 60_000)
         this.activeStartHour = options.activeHoursStartHour
         this.activeEndHour = options.activeHoursEndHour
+        this.gates = {
+            channels: options.channels === true,
+            communities: options.communities === true,
+            business: options.business === true
+        }
+        this.session = {
+            unifiedSessionId: this.unifiedSessionId,
+            appSessionId: this.appSessionId,
+            gifProvider: this.gifProvider
+        }
+        this.registerAmbientSpecs()
         const onMessage = (event: WaIncomingMessageEvent): void => this.onMessage(event)
         const onNodeOut = (event: { readonly node: BinaryNode }): void => this.onNodeOut(event.node)
         ctx.on('message', onMessage)
@@ -210,13 +235,36 @@ export class WaWamSyntheticUi {
             this.lastAboutMs = now
             this.schedule(rand(2000, 40_000), () => this.emitAboutConsumption())
         }
+
+        const msg = event.message
+        if (msg?.videoMessage && Math.random() < 0.3) {
+            this.schedule(rand(1500, 20_000), () => this.emitMediaStreamPlayback())
+        }
+        if (key.isGroup === true && Math.random() < 0.05) {
+            this.schedule(rand(2000, 30_000), () => this.emitGroupCatchUp())
+        }
+        const linkUrl = msg?.extendedTextMessage?.matchedText
+        if (linkUrl && /youtu/i.test(linkUrl) && Math.random() < 0.4) {
+            this.schedule(rand(3000, 60_000), () =>
+                this.emitInlineVideoClosed(key.isGroup === true)
+            )
+        }
+        if (
+            this.gates.business &&
+            (msg?.buttonsMessage ?? msg?.interactiveMessage ?? msg?.templateMessage) &&
+            Math.random() < 0.25
+        ) {
+            this.schedule(rand(2000, 30_000), () => this.emitStructuredMessageBuyerInteraction())
+        }
     }
 
     private emitAboutConsumption(): void {
         if (!this.canEmit()) return
-        this.coordinator.commit('AboutConsumption', {
-            aboutConsumptionSurface: Math.random() < 0.5 ? 'ONE_ON_ONE_CHAT' : 'PROFILE_INFO'
-        })
+        const aboutConsumptionSurface = Math.random() < 0.5 ? 'ONE_ON_ONE_CHAT' : 'PROFILE_INFO'
+        this.coordinator.commit('AboutConsumption', { aboutConsumptionSurface })
+        if (Math.random() < 0.35) {
+            this.coordinator.commit('AboutInteraction', { aboutConsumptionSurface })
+        }
     }
 
     private emitMediaLoad(): void {
@@ -237,6 +285,24 @@ export class WaWamSyntheticUi {
         const media = enc !== null ? mediaTypeKey(enc.attrs.mediatype) : null
         if (media !== null && Math.random() < this.attachmentTrayProbability) {
             this.schedule(rand(1000, 12_000), () => this.emitAttachmentTray(media, to))
+        }
+
+        if (media !== null) {
+            const isPhotoVideo = media === 'PHOTO' || media === 'VIDEO'
+            if (Math.random() < 0.35) {
+                this.schedule(rand(1500, 15_000), () => this.emitMediaPicker(media, to))
+            }
+            if (isPhotoVideo && Math.random() < 0.3) {
+                this.schedule(rand(1000, 12_000), () => this.emitMediaEditorSend())
+            }
+            if (isPhotoVideo && Math.random() < 0.12) {
+                this.schedule(rand(800, 8000), () => this.emitHdMediaAwareness())
+            }
+        } else if (enc !== null && Math.random() < 0.04) {
+            this.schedule(rand(2000, 30_000), () => this.emitTextMessageUserJourney(isGroupJid(to)))
+        }
+        if (isGroupJid(to) && Math.random() < 0.07) {
+            this.schedule(rand(1500, 20_000), () => this.emitMentionPickerAction())
         }
 
         if (this.infoOpenAllowed()) {
@@ -329,6 +395,7 @@ export class WaWamSyntheticUi {
         this.activeSliceCount = 0
         this.activitySeq = 0
         this.activitySessionId = randHex(8)
+        this.tsSessionId = randInt(1, 2_000_000_000)
         this.activityStartMs = Date.now()
     }
 
@@ -345,21 +412,70 @@ export class WaWamSyntheticUi {
             userActivitySessionCum: this.activeSliceCount,
             ...(len > 32 ? { userActivityBitmapHigh: this.bitmapHigh } : {})
         })
+        this.coordinator.commit('TsBitArray', {
+            tsSessionId: this.tsSessionId,
+            bitarrayLength: len,
+            bitarrayLow: this.bitmapLow,
+            cumulativeBits: this.activeSliceCount,
+            sessionSeq: this.activitySeq,
+            relativeTimestampMs: Math.max(0, this.activityStartMs - this.sessionStartMs),
+            tsTimestampMs: Date.now(),
+            unifiedSessionId: this.unifiedSessionId,
+            ...(len > 32 ? { bitarrayHigh: this.bitmapHigh } : {})
+        })
     }
 
     private scheduleAmbient(): void {
         this.schedule(rand(this.ambientMinMs, this.ambientMaxMs), () => {
-            const r = Math.random()
-            if (r < 0.12) {
-                this.emitEmojiOpen()
-            } else if (r < 0.2) {
-                this.emitContactSearch()
-            } else {
-                const isLid = this.recentChatIsLid[randInt(0, this.recentChatIsLid.length)]
-                if (isLid !== undefined) this.emitChatOpen(isLid)
-            }
+            this.pickAmbient()
             this.scheduleAmbient()
         })
+    }
+
+    /** Picks one ambient fabrication from the weighted table and fires it, keeping the aggregate ambient rate constant while adding variety. */
+    private pickAmbient(): void {
+        const specs = this.ambientSpecs
+        if (specs.length === 0) return
+        let total = 0
+        for (const s of specs) total += s.w
+        let r = Math.random() * total
+        for (const s of specs) {
+            r -= s.w
+            if (r < 0) {
+                s.emit()
+                return
+            }
+        }
+    }
+
+    /** Ambient re-open of a recent chat (the high-weight default ambient action). */
+    private emitChatOpenAmbient(): void {
+        const isLid = this.recentChatIsLid[randInt(0, this.recentChatIsLid.length)]
+        if (isLid !== undefined) this.emitChatOpen(isLid)
+    }
+
+    /**
+     * Registers the weighted ambient table: the base UI-open actions plus every
+     * wa-web-grounded synthetic event. Capability-gated events (channel/community/
+     * business) are only added when their flag is on, so they never fire on an
+     * account that lacks the surface. Weights follow cadence (common ≫ occasional ≫ rare).
+     */
+    private registerAmbientSpecs(): void {
+        const add = (w: number, emit: () => void): void => {
+            this.ambientSpecs.push({ w, emit })
+        }
+        add(40, () => this.emitChatOpenAmbient())
+        add(5, () => this.emitEmojiOpen())
+        add(3, () => this.emitStickerPickerOpened())
+        add(4, () => this.emitContactSearch())
+        add(3, () => this.emitTsNavigation())
+        add(1, () => this.emitDisappearingModeSetting())
+        add(3, () => this.emitGifSearchSession())
+        add(8, () => this.emitMessageContextMenu())
+        for (const fab of AMBIENT_FABS) {
+            if (fab.gate !== undefined && !this.gates[fab.gate]) continue
+            add(fab.weight, () => fab.emit(this.coordinator, this.session))
+        }
     }
 
     private emitEmojiOpen(): void {
@@ -367,6 +483,12 @@ export class WaWamSyntheticUi {
         this.coordinator.commit('WebcEmojiOpen', {
             webcEmojiOpenTab: EMOJI_TABS[randInt(0, EMOJI_TABS.length)]
         })
+    }
+
+    /** Sticker-picker open: a fieldless UI-open marker, like the emoji-picker open. */
+    private emitStickerPickerOpened(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('StickerPickerOpened', {})
     }
 
     private emitContactSearch(): void {
@@ -420,6 +542,190 @@ export class WaWamSyntheticUi {
             uiActionPreloaded: true,
             isLid,
             uiActionT: randInt(60, 600)
+        })
+    }
+
+    private emitDisappearingModeSetting(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('DisappearingModeSettingEvents', {
+            disappearingModeSettingEventName: 'DEFAULT_MESSAGE_TIMER_OPEN',
+            disappearingModeEntryPoint: 'ACCOUNT_SETTINGS',
+            isAfterRead: false
+        })
+        this.schedule(rand(2000, 30_000), () => {
+            if (!this.canEmit()) return
+            this.coordinator.commit('DisappearingModeSettingEvents', {
+                disappearingModeSettingEventName: 'DEFAULT_MESSAGE_TIMER_EXIT',
+                disappearingModeEntryPoint: 'ACCOUNT_SETTINGS',
+                isAfterRead: false
+            })
+        })
+    }
+
+    private emitGifSearchSession(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('GifSearchSessionStarted', { gifSearchProvider: this.gifProvider })
+        if (Math.random() < 0.2)
+            this.schedule(rand(1500, 6000), () => this.emitGifSearchNoResults())
+        this.schedule(rand(3000, 20_000), () => this.emitGifSearchCancelled())
+    }
+
+    private emitGifSearchCancelled(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('GifSearchCancelled', { gifSearchProvider: this.gifProvider })
+    }
+
+    private emitGifSearchNoResults(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('GifSearchNoResults', { gifSearchProvider: this.gifProvider })
+    }
+
+    private emitGroupCatchUp(): void {
+        if (!this.canEmit()) return
+        const pct = Math.random() < 0.8 ? 0 : randInt(1, 5) * 10
+        this.coordinator.commit('GroupCatchUp', { mentionsCountPendingPercentage: pct })
+    }
+
+    private emitInlineVideoClosed(isGroup: boolean): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('InlineVideoPlaybackClosed', {
+            inlineVideoType: 'YOUTUBE',
+            inlineVideoPlayed: true,
+            messageType: isGroup ? 'GROUP' : 'INDIVIDUAL',
+            inlineVideoHasRcat: false,
+            inlineVideoPlayStartT: randInt(300, 3000),
+            inlineVideoDurationT: randInt(45, 600)
+        })
+    }
+
+    private emitMediaPicker(media: WamMediaTypeKey, to: string): void {
+        if (!this.canEmit()) return
+        const isDoc = media === 'DOCUMENT'
+        this.coordinator.commit('MediaPicker', {
+            mediaPickerSent: 1,
+            mediaPickerSentUnchanged: 1,
+            mediaPickerT: randInt(1500, 15_000),
+            mediaType: isDoc ? 'DOCUMENT' : media === 'VIDEO' ? 'VIDEO' : 'PHOTO',
+            mediaPickerOrigin: isDoc ? 'DOCUMENT_PICKER' : 'CHAT_PHOTO_LIBRARY',
+            mediaPickerChanged: 0,
+            mediaPickerCroppedRotated: 0,
+            mediaPickerDrawing: 0,
+            mediaPickerStickers: 0,
+            mediaPickerText: 0,
+            mediaPickerLikeDoc: 0,
+            mediaPickerNotLikeDoc: 0,
+            mediaPickerDeleted: 0,
+            chatRecipients: 1,
+            isViewOnce: false
+        })
+    }
+
+    private emitMediaStreamPlayback(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('MediaStreamPlayback', {
+            playbackOrigin: 'CONVERSATION',
+            mediaType: 'VIDEO',
+            didPlay: true,
+            playbackState: Math.random() < 0.5 ? 'READY_PAUSE' : 'ENDED',
+            videoDuration: randInt(5, 180),
+            initialBufferingT: randInt(50, 900)
+        })
+    }
+
+    private emitMentionPickerAction(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('MentionPickerAction', {
+            isAGroup: true,
+            mentionType: 'REGULAR_USER',
+            threadId: randB64(32)
+        })
+    }
+
+    private emitMessageContextMenu(): void {
+        if (!this.canEmit()) return
+        const isAGroup = Math.random() < 0.4
+        const isOriginalSender = Math.random() < 0.35
+        this.coordinator.commit('MessageContextMenuActions', {
+            isAGroup,
+            isMultiAction: false,
+            isOriginalSender,
+            messageContextMenuAction: 'OPEN'
+        })
+        if (Math.random() < 0.5) {
+            const options = ['REACT', 'REPLY', 'COPY', 'FORWARD', 'STAR_OR_UNSTAR'] as const
+            this.schedule(rand(400, 3000), () => {
+                if (!this.canEmit()) return
+                this.coordinator.commit('MessageContextMenuActions', {
+                    isAGroup,
+                    isMultiAction: false,
+                    isOriginalSender,
+                    messageContextMenuAction: 'CLICK',
+                    messageContextMenuOption: options[randInt(0, options.length)]
+                })
+            })
+        }
+    }
+
+    private emitStructuredMessageBuyerInteraction(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('StructuredMessageBuyerInteraction', {
+            bizPlatform: 'SMB',
+            messageClass: 'BUTTON_NFM',
+            messageClassAttributes: '{}',
+            messageInteraction: 'USER_VIEW',
+            messageMediaType: 'NONE'
+        })
+    }
+
+    private emitTextMessageUserJourney(isGroup: boolean): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('TextMessageUserJourney', {
+            appSessionId: this.appSessionId,
+            unifiedSessionId: this.unifiedSessionId,
+            userJourneyFunnelId: randUuid(),
+            uiSurface: isGroup ? 'GROUP_CHAT' : 'CHAT_THREAD',
+            textMessageUserJourneyAction: 'SENT',
+            userJourneyChatType: isGroup ? 'GROUP' : 'INDIVIDUAL',
+            userJourneyEventMs: Date.now(),
+            chatbarInitialState: 'EMPTY'
+        })
+    }
+
+    private emitTsNavigation(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('TsNavigation', {
+            tsSessionId: this.tsSessionId,
+            relativeTimestampMs: Math.max(0, this.activityStartMs - this.sessionStartMs),
+            navigationSource: 'CHAT_LIST',
+            navigationDestination: 'CHAT_THREAD',
+            navigationDestinationViewName: '',
+            isCanonicalEntPresent: true,
+            tsTimestampMs: Date.now(),
+            unifiedSessionId: this.unifiedSessionId
+        })
+    }
+
+    private emitMediaEditorSend(): void {
+        if (!this.canEmit()) return
+        const imageCount = Math.random() < 0.85 ? 1 : 2
+        const editedImageCount = Math.random() < 0.25 ? 1 : 0
+        const textLayerCount = editedImageCount && Math.random() < 0.6 ? 1 : 0
+        const emojiLayerCount = editedImageCount && textLayerCount === 0 ? 1 : 0
+        this.coordinator.commit('WebcMediaEditorSend', {
+            imageCount,
+            editedImageCount,
+            paintedImageCount: 0,
+            blurImageCount: 0,
+            emojiLayerCount,
+            stickerLayerCount: 0,
+            textLayerCount
+        })
+    }
+
+    private emitHdMediaAwareness(): void {
+        if (!this.canEmit()) return
+        this.coordinator.commit('WebHdMediaAwarenessInteraction', {
+            hdMediaSelected: Math.random() < 0.5
         })
     }
 

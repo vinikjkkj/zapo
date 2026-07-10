@@ -10,8 +10,8 @@ import { toError } from 'zapo-js/util'
 
 import { resolveWamGlobals, type WamGlobalsInput } from './globals.js'
 import { resolveWamEventFields } from './registry.js'
+import { WaWamSyntheticUi, type WaWamSyntheticUiOptions } from './synthetic/index.js'
 import { WaWamAutoEmitter } from './WaWamAutoEmitter.js'
-import { WaWamSyntheticUi, type WaWamSyntheticUiOptions } from './WaWamSyntheticUi.js'
 import { WaWamUploader } from './WaWamUploader.js'
 import { WamBatch, type WamGlobalValue } from './wire/WamBatch.js'
 
@@ -122,6 +122,7 @@ export class WaWamCoordinator {
 
     /** Flushes remaining batches and stops accepting new events. */
     async dispose(): Promise<void> {
+        this.commit('WebWamForceFlush', {})
         this.disposed = true
         this.autoEmitter?.dispose()
         this.syntheticUi?.dispose()

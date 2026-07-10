@@ -44,49 +44,67 @@ plugins: [wamPlugin({ syntheticUi: false })]
 
 ## Events emitted
 
-**39** of the registry's **426** events. They come from two independently toggled
+**131** of the registry's **426** events. They come from two independently toggled
 sources:
 
 | Source             | Flag          | Default | Count |
 | ------------------ | ------------- | ------- | ----- |
-| Protocol lifecycle | `autoEmit`    | on      | 17    |
-| Integrator actions | `autoEmit`    | on      | 13    |
-| Synthetic UI       | `syntheticUi` | on      | 9     |
+| Protocol lifecycle | `autoEmit`    | on      | 19    |
+| Integrator actions | `autoEmit`    | on      | 18    |
+| Synthetic UI       | `syntheticUi` | on      | 94    |
 
 <details>
 <summary>Full list</summary>
 
-**Protocol lifecycle (17)** - derived from real inbound/outbound stanzas:
+**Protocol lifecycle (19)** - derived from real inbound/outbound stanzas:
 `E2eMessageSend`, `E2eMessageRecv`, `MessageSend`, `MessageReceive`,
 `WebcMessageSend`, `ReceiptStanzaReceive`, `MessageHighRetryCount`,
 `EditMessageSend`, `ClockSkewDifferenceT`, `GroupJoinC`, `WaOldCode`,
 `WebcSocketConnect`, `WebcStreamModeChange`, `WebcPageResume`,
-`WebcRawPlatforms`, `MdBootstrapHistoryDataReceived`, `UnknownStanza`
+`WebcRawPlatforms`, `MdBootstrapHistoryDataReceived`, `UnknownStanza`,
+`OfflineCountTooHigh`, `WebWamForceFlush`
 
-**Integrator actions (13)** - the client's own sends and app-state mutations:
+**Integrator actions (18)** - the client's own sends and app-state mutations:
 `ForwardSend`, `ReactionActions`, `PollsActions`, `SendDocument`, `StickerSend`,
-`PinInChatMessageSend`, `RevokeMessageSend`, `MessageDeleteActions`,
-`WaFsGroupJoinRequestAction`, `ChatMute`, `ChatAction`, `StatusMute`,
-`MdSyncdDogfoodingFeatureUsage`
+`PinInChatMessageSend`, `RevokeMessageSend`, `SendRevokeMessage`,
+`MessageDeleteActions`, `WaFsGroupJoinRequestAction`, `GroupCreate`,
+`GroupCreateC`, `EphemeralSettingChange`, `DisappearingModeSettingChange`,
+`ChatMute`, `ChatAction`, `StatusMute`, `MdSyncdDogfoodingFeatureUsage`
 
-**Synthetic UI (9)** - fabricated plausible ambient activity:
-`UiAction`, `AboutConsumption`, `AttachmentTrayActions`,
-`ContactSearchExperience`, `MemoryStat`, `UserActivity`, `WebcChatOpen`,
-`WebcEmojiOpen`, `WebcMediaLoad`
+**Synthetic UI (94)** - plausible activity, every event grounded in WA Web's own
+emit (only the field subset WA sets, with plausible values). The base stream —
+`UiAction` (chat/image/info opens), `WebcChatOpen`, `AttachmentTrayActions`,
+`ContactSearchExperience`, `MemoryStat`, `UserActivity`/`TsBitArray`,
+`WebcEmojiOpen`, `StickerPickerOpened`, `AboutConsumption`/`AboutInteraction`,
+`WebcMediaLoad` — plus a weighted ambient table of ~70 more UI events and 9
+message-anchored ones (media playback/compose, mention picker, group catch-up, …).
+The table lives in
+[`src/synthetic/fabrications.ts`](src/synthetic/fabrications.ts).
+
+**9 events are capability-gated** (default **off**) — firing them on an account that
+lacks the surface is itself a tell: `ChannelOpen` needs `channels`; the `Community*`
+events and `GroupJourney` need `communities`; the business/SMB events
+(`WaShopsManagement`, `MdChatAssignmentSecondaryAction`,
+`StructuredMessageBuyerInteraction`) need `business`.
 
 </details>
 
 ## Coverage
 
-**35 / 426** registry events (~8%). The low figure is **by design**: the
-remaining ~390 events are dominated by data a headless client does not have and
-cannot truthfully synthesize (browser/runtime internals, device and OS state,
-mobile-app-only flows, UI-render interactions, crypto internals, ads, and
-server-side aggregates).
+**131 / 426** registry events (~31%). The rest are dominated by data a headless
+client cannot produce or plausibly fake — browser/runtime internals, device and OS
+state, mobile-app-only flows, crypto internals, ads, server-side aggregates — plus
+events carried on the private (non-`w:stats`) channels.
 
-The plugin only emits an event when **every field it sets is honestly derivable**.
-A partial or fabricated ("skeleton") event is a _worse_ fingerprint than silence,
-so those are deliberately left unimplemented rather than filled with placeholders.
+Two disciplines keep the emitted set a faithful fingerprint:
+
+- **Auto-emitted** protocol and integrator events are sent only when **every field
+  is honestly derivable** from real client activity.
+- **Synthetic UI** events are **fabricated**, but each replicates WA Web's actual
+  emit — only the field subset WA sets, with plausible values — verified against the
+  deobfuscated web bundle. They are jittered, rate-limited, and confined to
+  configurable active hours; a badly-timed or skeleton event is a worse tell than
+  none, so events WA Web itself never fires are left out.
 
 ## Options
 
@@ -102,6 +120,11 @@ so those are deliberately left unimplemented rather than filled with placeholder
 | `maxBufferSize`            | `50000`       | Byte size that forces an immediate flush                                 |
 | `logLevel`                 | host client's | Minimum log level for the plugin                                         |
 
+`syntheticUi` also accepts an options object. Besides jitter/interval and
+`activeHoursStartHour`/`activeHoursEndHour` tuning, `channels`, `communities`, and
+`business` (all default `false`) enable the capability-gated ambient events for
+accounts that actually have those surfaces.
+
 ## How it works
 
 1. **Accumulate**: committed events buffer into a per-channel batch whose globals
@@ -114,5 +137,6 @@ so those are deliberately left unimplemented rather than filled with placeholder
    failing batch is dropped, never surfaced.
 
 `autoEmit` observes the client's typed events and raw stanzas and maps each to the
-WAM event WA Web fires at the same point. `syntheticUi` fabricates ambient
-`UiAction`/activity telemetry within configurable active hours.
+WAM event WA Web fires at the same point. `syntheticUi` fabricates UI telemetry — a
+weighted table of wa-web-grounded ambient events plus message-anchored ones —
+jittered and confined to configurable active hours.

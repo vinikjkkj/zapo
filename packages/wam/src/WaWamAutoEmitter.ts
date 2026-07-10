@@ -57,17 +57,25 @@ interface SentMessageInfo {
 
 type WamGroupJoinRequestAction = 'MEMBERSHIP_REQUEST_APPROVE' | 'MEMBERSHIP_REQUEST_REJECT'
 
-interface PendingIq {
-    readonly startMs: number
-    readonly groupJid: string
-    readonly joinRequestAction: WamGroupJoinRequestAction
-}
+type PendingIq =
+    | {
+          readonly kind: 'joinRequest'
+          readonly startMs: number
+          readonly groupJid: string
+          readonly joinRequestAction: WamGroupJoinRequestAction
+      }
+    | { readonly kind: 'groupCreate'; readonly hasGroupName: boolean }
+    | { readonly kind: 'ephemeral'; readonly duration: number }
+    | { readonly kind: 'disappearingMode'; readonly duration: number }
 
 const MAX_TRACKED_SENDS = 256
 const MAX_TRACKED_IQS = 64
 
 /** A retry receipt at or above this count fires MessageHighRetryCount (WA's threshold). */
 const HIGH_RETRY_THRESHOLD = 5
+
+/** A message whose offline-queue position reaches this fires OfflineCountTooHigh (WA's `s=11`). */
+const OFFLINE_COUNT_TOO_HIGH_THRESHOLD = 11
 
 const SECONDS_PER_HOUR = 3600
 
@@ -372,9 +380,9 @@ export class WaWamAutoEmitter {
         const isLid = isLidJid(key.participant ?? key.remoteJid ?? '')
 
         const enc = findFirstEncNode(event.rawNode)
+        const media = enc !== null ? mediaTypeKey(enc.attrs.mediatype) : null
         if (enc !== null) {
             const ciphertextType = ciphertextTypeKey(enc.attrs.type)
-            const media = mediaTypeKey(enc.attrs.mediatype)
             this.coordinator.commit('E2eMessageRecv', {
                 e2eSuccessful: true,
                 e2eDestination: e2eDestinationKey(key.remoteJid ?? ''),
@@ -394,6 +402,16 @@ export class WaWamAutoEmitter {
             messageIsOffline: event.offline ?? false,
             ...(key.isGroup ? { typeOfGroup: 'GROUP' as const } : {})
         })
+
+        const offlineCount = Number(event.rawNode.attrs.offline)
+        if (Number.isFinite(offlineCount) && offlineCount >= OFFLINE_COUNT_TOO_HIGH_THRESHOLD) {
+            this.coordinator.commit('OfflineCountTooHigh', {
+                offlineCount,
+                stanzaType: 'MESSAGE',
+                messageType: messageTypeKey(key),
+                mediaType: media ?? 'NONE'
+            })
+        }
     }
 
     private onReceipt(event: WaIncomingReceiptEvent): void {
@@ -531,6 +549,7 @@ export class WaWamAutoEmitter {
                     isAGroup: info.isGroup,
                     messagesDeleted: 1
                 })
+                this.coordinator.commit('SendRevokeMessage', { messageType: info.destination })
             }
         }
     }
@@ -546,19 +565,51 @@ export class WaWamAutoEmitter {
     /** Tracks a membership-request approve/reject IQ so its response can emit round-trip time + result. */
     private trackOutgoingIq(node: BinaryNode): void {
         const id = node.attrs.id
-        const groupJid = node.attrs.to
-        if (id === undefined || groupJid === undefined) return
-        if (node.attrs.type !== WA_IQ_TYPES.SET || node.attrs.xmlns !== WA_XMLNS.GROUPS) return
-        const membership = findNodeChild(node, WA_GROUP_MEMBERSHIP_ACTION_TAGS.REQUESTS_ACTION)
-        if (membership === undefined) return
-        const joinRequestAction: WamGroupJoinRequestAction | null =
-            findNodeChild(membership, WA_GROUP_MEMBERSHIP_ACTION_TAGS.APPROVE) !== undefined
-                ? 'MEMBERSHIP_REQUEST_APPROVE'
-                : findNodeChild(membership, WA_GROUP_MEMBERSHIP_ACTION_TAGS.REJECT) !== undefined
-                  ? 'MEMBERSHIP_REQUEST_REJECT'
-                  : null
-        if (joinRequestAction === null) return
-        this.trackIq(id, { startMs: Date.now(), groupJid, joinRequestAction })
+        if (id === undefined || node.attrs.type !== WA_IQ_TYPES.SET) return
+        if (node.attrs.xmlns === WA_XMLNS.GROUPS) {
+            const membership = findNodeChild(node, WA_GROUP_MEMBERSHIP_ACTION_TAGS.REQUESTS_ACTION)
+            if (membership !== undefined) {
+                const groupJid = node.attrs.to
+                const joinRequestAction: WamGroupJoinRequestAction | null =
+                    findNodeChild(membership, WA_GROUP_MEMBERSHIP_ACTION_TAGS.APPROVE) !== undefined
+                        ? 'MEMBERSHIP_REQUEST_APPROVE'
+                        : findNodeChild(membership, WA_GROUP_MEMBERSHIP_ACTION_TAGS.REJECT) !==
+                            undefined
+                          ? 'MEMBERSHIP_REQUEST_REJECT'
+                          : null
+                if (groupJid !== undefined && joinRequestAction !== null) {
+                    this.trackIq(id, {
+                        kind: 'joinRequest',
+                        startMs: Date.now(),
+                        groupJid,
+                        joinRequestAction
+                    })
+                }
+                return
+            }
+            const create = findNodeChild(node, 'create')
+            if (create !== undefined) {
+                this.trackIq(id, {
+                    kind: 'groupCreate',
+                    hasGroupName: create.attrs.subject !== undefined
+                })
+                return
+            }
+            const ephemeral = findNodeChild(node, WA_NODE_TAGS.EPHEMERAL)
+            if (ephemeral?.attrs.expiration !== undefined) {
+                this.trackIq(id, {
+                    kind: 'ephemeral',
+                    duration: Number(ephemeral.attrs.expiration)
+                })
+            }
+            return
+        }
+        if (node.attrs.xmlns === WA_XMLNS.DISAPPEARING_MODE) {
+            const dm = findNodeChild(node, WA_NODE_TAGS.DISAPPEARING_MODE)
+            if (dm?.attrs.duration !== undefined) {
+                this.trackIq(id, { kind: 'disappearingMode', duration: Number(dm.attrs.duration) })
+            }
+        }
     }
 
     private resolveOutgoingIq(node: BinaryNode, isSuccessful: boolean): void {
@@ -567,12 +618,32 @@ export class WaWamAutoEmitter {
         const pending = this.pendingIqs.get(id)
         if (pending === undefined) return
         this.pendingIqs.delete(id)
-        this.coordinator.commit('WaFsGroupJoinRequestAction', {
-            groupJid: pending.groupJid,
-            groupJoinRequestAction: pending.joinRequestAction,
-            isSuccessful,
-            serverResponseTime: Math.max(0, Date.now() - pending.startMs)
-        })
+        switch (pending.kind) {
+            case 'joinRequest':
+                this.coordinator.commit('WaFsGroupJoinRequestAction', {
+                    groupJid: pending.groupJid,
+                    groupJoinRequestAction: pending.joinRequestAction,
+                    isSuccessful,
+                    serverResponseTime: Math.max(0, Date.now() - pending.startMs)
+                })
+                return
+            case 'groupCreate':
+                if (!isSuccessful) return
+                this.coordinator.commit('GroupCreate', { hasGroupName: pending.hasGroupName })
+                this.coordinator.commit('GroupCreateC', {})
+                return
+            case 'ephemeral':
+                this.coordinator.commit('EphemeralSettingChange', {
+                    chatEphemeralityDuration: pending.duration,
+                    isSuccess: isSuccessful
+                })
+                return
+            case 'disappearingMode':
+                this.coordinator.commit('DisappearingModeSettingChange', {
+                    newEphemeralityDuration: pending.duration,
+                    isSuccess: isSuccessful
+                })
+        }
     }
 
     private trackIq(id: string, pending: PendingIq): void {
