@@ -140,6 +140,9 @@ test('auto-emitter derives E2eMessageSend from an outbound group media message',
             e2eSuccessful: true,
             e2eDestination: 'GROUP',
             isLid: false,
+            botType: 'UNKNOWN',
+            editType: 'NOT_EDITED',
+            retryCount: 0,
             e2eCiphertextType: 'SENDER_KEY_MESSAGE',
             e2eCiphertextVersion: 2,
             messageMediaType: 'PHOTO',
@@ -166,9 +169,11 @@ test('auto-emitter derives isLid + retryCount for a lid pkmsg retry, and ignores
             e2eSuccessful: true,
             e2eDestination: 'INDIVIDUAL',
             isLid: true,
+            botType: 'UNKNOWN',
+            editType: 'NOT_EDITED',
+            retryCount: 2,
             e2eCiphertextType: 'PREKEY_MESSAGE',
-            e2eCiphertextVersion: 2,
-            retryCount: 2
+            e2eCiphertextVersion: 2
         }
     })
     assert.equal(h.commits[1]?.name, 'WebcMessageSend')
@@ -211,8 +216,13 @@ test('auto-emitter fires MessageSend when an ack matches a tracked outbound mess
         name: 'MessageSend',
         payload: {
             messageSendResult: 'OK',
+            messageSendResultIsTerminal: false,
             messageType: 'INDIVIDUAL',
             isLid: false,
+            botType: 'UNKNOWN',
+            editType: 'NOT_EDITED',
+            messageIsRevoke: false,
+            e2eBackfill: false,
             e2eCiphertextType: 'MESSAGE'
         }
     })
@@ -611,17 +621,15 @@ test('auto-emitter maps an outbound sticker to StickerSend', () => {
     new WaWamAutoEmitter(h.coordinator, h.ctx)
     h.emit('message_send', {
         to: '456@s.whatsapp.net',
-        message: { stickerMessage: { isAnimated: true, isAvatar: false, isAiSticker: false } }
+        message: { stickerMessage: { isAnimated: true, isLottie: false } }
     })
     assert.deepEqual(
         h.commits.find((c) => c.name === 'StickerSend'),
         {
             name: 'StickerSend',
             payload: {
-                stickerSendMessageType: 'REGULAR',
                 stickerIsAnimated: true,
-                stickerIsAvatar: false,
-                stickerIsAi: false
+                stickerIsLottie: false
             }
         }
     )
@@ -738,7 +746,12 @@ test('auto-emitter fires EditMessageSend (EDITED) when an edited group message i
         h.commits.find((c) => c.name === 'EditMessageSend'),
         {
             name: 'EditMessageSend',
-            payload: { editType: 'EDITED', messageType: 'GROUP', typeOfGroup: 'GROUP' }
+            payload: {
+                editType: 'EDITED',
+                messageType: 'GROUP',
+                messageSendResultIsTerminal: false,
+                typeOfGroup: 'GROUP'
+            }
         }
     )
 })
@@ -780,7 +793,7 @@ test('auto-emitter fires RevokeMessageSend (ADMIN) alongside EditMessageSend for
             payload: {
                 revokeType: 'ADMIN',
                 messageType: 'GROUP',
-                messageSendResultIsTerminal: true
+                messageSendResultIsTerminal: false
             }
         }
     )

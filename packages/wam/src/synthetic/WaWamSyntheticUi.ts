@@ -6,7 +6,7 @@ import { findFirstEncNode, mediaTypeKey, type WamMediaTypeKey } from '../send-pa
 import type { WaWamCoordinator } from '../WaWamCoordinator.js'
 
 import { AMBIENT_FABS, type FabSession } from './fabrications.js'
-import { rand, randB64, randHex, randInt, randUuid } from './random.js'
+import { rand, randB64, randBase36, randInt, randUuid } from './random.js'
 
 type Ctx = Pick<WaClientPluginContext, 'on' | 'off'>
 
@@ -121,12 +121,12 @@ export class WaWamSyntheticUi {
     private readonly activeEndHour: number | undefined
     private readonly windowHeightFloat = randInt(680, 1040)
     private readonly sessionStartMs = Date.now()
-    private readonly unifiedSessionId = randHex(16)
+    private readonly unifiedSessionId = String(randInt(1, 2_000_000_000))
     private readonly appSessionId = randUuid()
     private readonly gifProvider: 'TENOR' | 'GIPHY' = Math.random() < 0.75 ? 'TENOR' : 'GIPHY'
     /** Weighted ambient-fabrication table; one entry is picked per ambient tick. Gated events are only present when their capability flag is on. */
     private readonly ambientSpecs: Array<{ readonly w: number; readonly emit: () => void }> = []
-    private activitySessionId = randHex(8)
+    private activitySessionId = randBase36(6)
     private tsSessionId = randInt(1, 2_000_000_000)
     private activityStartMs = Date.now()
     private lastOpenMs = 0
@@ -394,7 +394,7 @@ export class WaWamSyntheticUi {
         this.activitySlice = 0
         this.activeSliceCount = 0
         this.activitySeq = 0
-        this.activitySessionId = randHex(8)
+        this.activitySessionId = randBase36(6)
         this.tsSessionId = randInt(1, 2_000_000_000)
         this.activityStartMs = Date.now()
     }

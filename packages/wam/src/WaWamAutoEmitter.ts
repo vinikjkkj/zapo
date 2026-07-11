@@ -339,16 +339,8 @@ export class WaWamAutoEmitter {
         const sticker = msg.stickerMessage
         if (sticker) {
             this.coordinator.commit('StickerSend', {
-                stickerSendMessageType: 'REGULAR',
-                ...(typeof sticker.isAnimated === 'boolean'
-                    ? { stickerIsAnimated: sticker.isAnimated }
-                    : {}),
-                ...(typeof sticker.isAvatar === 'boolean'
-                    ? { stickerIsAvatar: sticker.isAvatar }
-                    : {}),
-                ...(typeof sticker.isAiSticker === 'boolean'
-                    ? { stickerIsAi: sticker.isAiSticker }
-                    : {})
+                stickerIsAnimated: sticker.isAnimated === true,
+                stickerIsLottie: sticker.isLottie === true
             })
             return
         }
@@ -437,15 +429,18 @@ export class WaWamAutoEmitter {
         const media = mediaTypeKey(enc.attrs.mediatype)
         const version = enc.attrs.v
         const count = enc.attrs.count
+        const editType = editTypeKey(node.attrs.edit)
 
         this.coordinator.commit('E2eMessageSend', {
             e2eSuccessful: true,
             e2eDestination: destination,
             isLid,
+            botType: 'UNKNOWN',
+            editType: editType ?? 'NOT_EDITED',
+            retryCount: count !== undefined ? Number(count) : 0,
             ...(ciphertextType !== null ? { e2eCiphertextType: ciphertextType } : {}),
             ...(version !== undefined ? { e2eCiphertextVersion: Number(version) } : {}),
             ...(media !== null ? { messageMediaType: media } : {}),
-            ...(count !== undefined ? { retryCount: Number(count) } : {}),
             ...(isGroup ? { typeOfGroup: 'GROUP' as const } : {})
         })
 
@@ -456,7 +451,6 @@ export class WaWamAutoEmitter {
 
         const id = node.attrs.id
         if (id !== undefined) {
-            const editType = editTypeKey(node.attrs.edit)
             this.trackSend(id, {
                 destination,
                 isLid,
@@ -524,8 +518,14 @@ export class WaWamAutoEmitter {
             this.sentMessages.delete(id)
             this.coordinator.commit('MessageSend', {
                 messageSendResult: 'OK',
+                messageSendResultIsTerminal: false,
                 messageType: info.destination,
                 isLid: info.isLid,
+                botType: 'UNKNOWN',
+                editType: info.editType ?? 'NOT_EDITED',
+                messageIsRevoke:
+                    info.editType === 'SENDER_REVOKE' || info.editType === 'ADMIN_REVOKE',
+                e2eBackfill: false,
                 ...(info.ciphertextType !== null ? { e2eCiphertextType: info.ciphertextType } : {}),
                 ...(info.mediaType !== null ? { messageMediaType: info.mediaType } : {}),
                 ...(info.isGroup ? { typeOfGroup: 'GROUP' as const } : {})
@@ -534,6 +534,7 @@ export class WaWamAutoEmitter {
                 this.coordinator.commit('EditMessageSend', {
                     editType: info.editType,
                     messageType: info.destination,
+                    messageSendResultIsTerminal: false,
                     ...(info.mediaType !== null ? { mediaType: info.mediaType } : {}),
                     ...(info.isGroup ? { typeOfGroup: 'GROUP' as const } : {})
                 })
@@ -542,7 +543,7 @@ export class WaWamAutoEmitter {
                 this.coordinator.commit('RevokeMessageSend', {
                     revokeType: info.editType === 'ADMIN_REVOKE' ? 'ADMIN' : 'SENDER',
                     messageType: info.destination,
-                    messageSendResultIsTerminal: true
+                    messageSendResultIsTerminal: false
                 })
                 this.coordinator.commit('MessageDeleteActions', {
                     deleteActionType: 'DELETE_FOR_EVERYONE',

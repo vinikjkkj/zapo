@@ -5,6 +5,10 @@ export const randInt = (min: number, max: number): number => Math.floor(rand(min
 export const randHex = (len: number): string =>
     Array.from({ length: len }, () => Math.floor(Math.random() * 16).toString(16)).join('')
 
+/** `len` random base36 chars (0-9a-z) — WA's short session ids (e.g. `userActivitySessionId`) are base36, not hex. */
+export const randBase36 = (len: number): string =>
+    Array.from({ length: len }, () => Math.floor(Math.random() * 36).toString(36)).join('')
+
 /** A v4-shaped UUID (crypto.randomUUID format) for the session/funnel ids WA sets as UUIDs. */
 export const randUuid = (): string => {
     const variant = (8 + Math.floor(Math.random() * 4)).toString(16)
