@@ -18,7 +18,7 @@ import { buildMobileLoginPayload } from '@transport/noise/WaMobileClientPayload'
 import type { WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
 import { toProxyAgent, toProxyDispatcher } from '@transport/proxy'
 import type { WaCommsConfig } from '@transport/types'
-import { toError } from '@util/primitives'
+import { parseOptionalInt, toError } from '@util/primitives'
 
 interface WaAuthCredentialsFlowArgs {
     readonly logger: Logger
@@ -101,13 +101,12 @@ async function resolveVersion(
  * Validates the user-supplied `version` string against the transport it will
  * feed. A mobile session sends the version as the four-part Android app
  * version (`2.YY.WW.RR`) in the login payload, so it must have exactly four
- * numeric parts. A web session only consumes the first three parts of the
- * `versionBase` but tolerates extra trailing segments, so three to five
- * numeric parts are accepted.
+ * numeric parts. A web session advertises up to five parts (`2.3000.x[.y.z]`),
+ * so three to five numeric parts are accepted.
  */
 function assertValidVersion(version: string, mobile: boolean): void {
     const parts = version.split('.')
-    const allNumeric = parts.every((part) => /^\d+$/.test(part))
+    const allNumeric = parts.every((part) => parseOptionalInt(part) !== undefined)
     if (mobile) {
         if (parts.length !== 4 || !allNumeric) {
             throw new Error(
@@ -165,7 +164,10 @@ export async function buildCommsConfig(
               : 'none'
     })
 
-    const resolvedVersion = await resolveVersion(clientOptions.version)
+    const resolvedVersion =
+        effectiveMobileTransport && clientOptions.mobileAppVersionOverride !== undefined
+            ? undefined
+            : await resolveVersion(clientOptions.version)
     if (resolvedVersion !== undefined) {
         assertValidVersion(resolvedVersion, Boolean(effectiveMobileTransport))
     }
@@ -180,6 +182,9 @@ export async function buildCommsConfig(
             throw new Error(
                 'mobileTransport requires registered credentials (meJid) – run the mobile bridge flow first'
             )
+        }
+        if (clientOptions.mobileAppVersionOverride !== undefined) {
+            assertValidVersion(clientOptions.mobileAppVersionOverride, true)
         }
         const appVersionOverride = clientOptions.mobileAppVersionOverride ?? resolvedVersion
         const deviceInfo = appVersionOverride

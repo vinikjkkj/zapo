@@ -159,11 +159,21 @@ test('fetchLatestWaMobileVersion parses the first version and returns versioned 
     assert.deepEqual(result.parts, [2, 26, 27, 70])
 })
 
-test('fetchLatestWaMobileVersion accepts a three-part version', async () => {
-    const fetchStub = makeFetchStub(() => new Response('<h2>2.26.15</h2>', { status: 200 }))
+test('fetchLatestWaMobileVersion ignores a three-part version and matches the 4-part release', async () => {
+    const fetchStub = makeFetchStub(
+        () => new Response('<h2>2.26.15</h2><h2>2.26.27.70</h2>', { status: 200 })
+    )
     const result = await fetchLatestWaMobileVersion({ fetch: fetchStub })
-    assert.equal(result.version, '2.26.15')
-    assert.deepEqual(result.parts, [2, 26, 15])
+    assert.equal(result.version, '2.26.27.70')
+    assert.deepEqual(result.parts, [2, 26, 27, 70])
+})
+
+test('fetchLatestWaMobileVersion throws when only a three-part version is present', async () => {
+    const fetchStub = makeFetchStub(() => new Response('<h2>2.26.15</h2>', { status: 200 }))
+    await assert.rejects(
+        () => fetchLatestWaMobileVersion({ fetch: fetchStub }),
+        /wa-mobile version not found/
+    )
 })
 
 test('fetchLatestWaMobileVersion honors url and versionPattern overrides', async () => {

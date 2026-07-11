@@ -19,11 +19,11 @@ const MOBILE_SOURCE_URL = 'https://whatsapp-messenger.en.uptodown.com/android'
 
 /**
  * Matches a WhatsApp for Android version. These always start with `2.` and
- * carry three or four dotted numeric parts (`2.YY.WW.RR`). The first match
- * on the listing page is the current release; older releases appear further
- * down the document.
+ * carry exactly four dotted numeric parts (`2.YY.WW.RR`) - the shape a mobile
+ * session requires in its login payload. The first match on the listing page
+ * is the current release; older releases appear further down the document.
  */
-const MOBILE_VERSION_PATTERN = /\b(2(?:\.\d{1,4}){2,3})\b/
+const MOBILE_VERSION_PATTERN = /\b(2(?:\.\d{1,4}){3})\b/
 
 /** Options shared by the Web and Mobile version fetchers. */
 export interface WaFetchVersionOptions {
@@ -58,8 +58,8 @@ export interface WaFetchLatestMobileVersionOptions extends WaFetchVersionOptions
     readonly url?: string
     /**
      * Override the version-extraction regex. Must expose the version string
-     * in capture group 1. Defaults to a WhatsApp `2.x.x[.x]` matcher whose
-     * first hit is the current release.
+     * in capture group 1. Defaults to a 4-part WhatsApp `2.x.x.x` matcher
+     * whose first hit is the current release.
      */
     readonly versionPattern?: RegExp
 }
@@ -73,12 +73,12 @@ export interface WaLatestWebVersion {
 
 export interface WaLatestMobileVersion {
     /**
-     * Version string in the `2.26.x.y` form accepted by
+     * Version string in the 4-part `2.26.x.y` form accepted by
      * `WaMobileTransportDeviceInfo.appVersion`.
      */
     readonly version: string
-    /** Parsed numeric parts (three or four elements). */
-    readonly parts: readonly number[]
+    /** Parsed numeric parts (always four elements). */
+    readonly parts: readonly [number, number, number, number]
 }
 
 /**
@@ -217,17 +217,18 @@ export async function fetchLatestWaMobileVersion(
         { accept: 'text/html,application/xhtml+xml', 'accept-language': 'en-US,en;q=0.9' },
         options
     )
+    versionPattern.lastIndex = 0
     const match = versionPattern.exec(body)
     if (!match?.[1]) {
         throw new Error('wa-mobile version not found in page response')
     }
     const version = match[1]
     const parts = version.split('.').map((part) => Number.parseInt(part, 10))
-    if (parts.length < 3 || parts.some((part) => !Number.isSafeInteger(part) || part < 0)) {
+    if (parts.length !== 4 || parts.some((part) => !Number.isSafeInteger(part) || part < 0)) {
         throw new Error(`invalid wa-mobile version parsed from page: ${version}`)
     }
     return {
         version,
-        parts
+        parts: parts as [number, number, number, number]
     }
 }

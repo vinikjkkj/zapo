@@ -310,6 +310,37 @@ test('buildCommsConfig prefers the recovery override over the version option on 
     assert.equal(appVersion?.quaternary, 7)
 })
 
+test('buildCommsConfig rejects a non-4-part mobileAppVersionOverride', async () => {
+    await assert.rejects(
+        () =>
+            buildCommsConfig(
+                createNoopLogger(),
+                mobileCredentials(),
+                { url: 'wss://web.whatsapp.com/ws/chat' },
+                { requireFullSync: false, mobileAppVersionOverride: '2.26.30' }
+            ),
+        /mobile session requires a 4-part numeric version/
+    )
+})
+
+test('buildCommsConfig skips the version resolver when a mobile override is present', async () => {
+    const config = await buildCommsConfig(
+        createNoopLogger(),
+        mobileCredentials(),
+        { url: 'wss://web.whatsapp.com/ws/chat' },
+        {
+            requireFullSync: false,
+            version: () => {
+                throw new Error('resolver should not run')
+            },
+            mobileAppVersionOverride: '2.26.31.7'
+        }
+    )
+    const appVersion = decodeLoginPayload(config.noise?.loginPayload).userAgent?.appVersion
+    assert.equal(appVersion?.tertiary, 31)
+    assert.equal(appVersion?.quaternary, 7)
+})
+
 test('buildCommsConfig rejects a non-4-part version on a mobile session', async () => {
     await assert.rejects(
         () =>

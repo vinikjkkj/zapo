@@ -92,8 +92,8 @@ export interface WaAuthClientOptions {
      * hardcoded default starts hitting `failure_client_too_old`.
      *
      * The accepted shape depends on the transport resolved for the connect:
-     * - **Web** sessions take a 3- to 5-part version (`2.3000.x`); only the
-     *   first three parts are advertised, extra trailing parts are ignored.
+     * - **Web** sessions take a 3- to 5-part version (`2.3000.x[.y.z]`); all
+     *   supplied parts are advertised in the noise payload.
      * - **Mobile** sessions take exactly a 4-part Android app version
      *   (`2.26.27.70`); it overrides `mobileTransport.deviceInfo.appVersion`
      *   in the login payload.
