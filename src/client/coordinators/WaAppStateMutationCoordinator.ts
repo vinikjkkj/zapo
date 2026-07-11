@@ -56,7 +56,7 @@ const WA_APP_STATE_MUTATION_FLUSH_SUCCESS_STATES = new Set<string>([
 const WA_APP_STATE_ARCHIVE_RANGE_DEFAULT_LIMIT = 256
 
 /** Placeholder MACs for locally-emitted mutation events (the parser ignores them). */
-const EMPTY_MUTATION_MAC = new Uint8Array(0)
+const WA_EMPTY_MUTATION_MAC = new Uint8Array(0)
 
 type IndexArgsForSchema<S extends WaAppstateSchema> = {
     readonly [Part in S['indexParts'][number] as Part extends { type: 'literal' }
@@ -860,9 +860,9 @@ export class WaAppStateMutationCoordinator {
                 index: input.index,
                 value,
                 version: input.version,
-                indexMac: EMPTY_MUTATION_MAC,
-                valueMac: EMPTY_MUTATION_MAC,
-                keyId: EMPTY_MUTATION_MAC,
+                indexMac: WA_EMPTY_MUTATION_MAC,
+                valueMac: WA_EMPTY_MUTATION_MAC,
+                keyId: WA_EMPTY_MUTATION_MAC,
                 timestamp: input.timestamp
             })
             if (event) this.emitMutationSend(event)

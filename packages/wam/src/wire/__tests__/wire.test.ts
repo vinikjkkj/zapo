@@ -24,6 +24,12 @@ test('BinaryWriter writes big-endian integers and raw utf-8', () => {
     assert.equal(hex(writer.toBytes()), '05' + '0102' + '0a0b0c0d' + 'ff' + '6869')
 })
 
+test('BinaryWriter clamps a zero initial capacity so ensure() cannot loop forever', () => {
+    const writer = new BinaryWriter(0)
+    writer.writeUint32(0x0a0b0c0d)
+    assert.equal(hex(writer.toBytes()), '0a0b0c0d')
+})
+
 test('global attribute value encodings match the WAM wire classes', () => {
     assert.equal(encodeGlobal(5, 0), '1005')
     assert.equal(encodeGlobal(5, 1), '2005')

@@ -89,7 +89,9 @@ export class WaWamCoordinator {
                 : new WaWamSyntheticUi(
                       this,
                       ctx,
-                      typeof options.syntheticUi === 'object' ? options.syntheticUi : {}
+                      options.syntheticUi !== null && typeof options.syntheticUi === 'object'
+                          ? options.syntheticUi
+                          : {}
                   )
         this.isConnected = (): boolean => ctx.deps.connectionManager.isConnected()
     }

@@ -488,3 +488,28 @@ test('anchored media-composer events ride an outbound photo send', () => {
         Math.random = origRandom
     }
 })
+
+test('anchored MediaPicker is not fabricated for outbound audio (PHOTO/VIDEO/DOCUMENT only)', () => {
+    mock.timers.enable({ apis: ['setTimeout'] })
+    const origRandom = Math.random
+    Math.random = () => 0
+    try {
+        const h = makeHarness()
+        const ui = new WaWamSyntheticUi(h.coordinator, h.ctx, {})
+        h.emit('debug_transport_node_out', {
+            node: {
+                tag: 'message',
+                attrs: { to: '1@s.whatsapp.net' },
+                content: [{ tag: 'enc', attrs: { mediatype: 'audio' } }]
+            }
+        })
+        mock.timers.tick(16_000)
+        assert.equal(
+            h.commits.find((c) => c.name === 'MediaPicker'),
+            undefined
+        )
+        ui.dispose()
+    } finally {
+        Math.random = origRandom
+    }
+})

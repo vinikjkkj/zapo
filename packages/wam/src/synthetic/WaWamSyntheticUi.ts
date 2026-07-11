@@ -289,7 +289,7 @@ export class WaWamSyntheticUi {
 
         if (media !== null) {
             const isPhotoVideo = media === 'PHOTO' || media === 'VIDEO'
-            if (Math.random() < 0.35) {
+            if ((isPhotoVideo || media === 'DOCUMENT') && Math.random() < 0.35) {
                 this.schedule(rand(1500, 15_000), () => this.emitMediaPicker(media, to))
             }
             if (isPhotoVideo && Math.random() < 0.3) {
@@ -418,7 +418,7 @@ export class WaWamSyntheticUi {
             bitarrayLow: this.bitmapLow,
             cumulativeBits: this.activeSliceCount,
             sessionSeq: this.activitySeq,
-            relativeTimestampMs: Math.max(0, this.activityStartMs - this.sessionStartMs),
+            relativeTimestampMs: Math.max(0, Date.now() - this.sessionStartMs),
             tsTimestampMs: Date.now(),
             unifiedSessionId: this.unifiedSessionId,
             ...(len > 32 ? { bitarrayHigh: this.bitmapHigh } : {})
@@ -695,7 +695,7 @@ export class WaWamSyntheticUi {
         if (!this.canEmit()) return
         this.coordinator.commit('TsNavigation', {
             tsSessionId: this.tsSessionId,
-            relativeTimestampMs: Math.max(0, this.activityStartMs - this.sessionStartMs),
+            relativeTimestampMs: Math.max(0, Date.now() - this.sessionStartMs),
             navigationSource: 'CHAT_LIST',
             navigationDestination: 'CHAT_THREAD',
             navigationDestinationViewName: '',

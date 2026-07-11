@@ -15,7 +15,7 @@ export class BinaryWriter {
     private readonly scratch = new DataView(new ArrayBuffer(8))
 
     constructor(initialCapacity = 256) {
-        this.buffer = new Uint8Array(initialCapacity)
+        this.buffer = new Uint8Array(Math.max(1, initialCapacity))
     }
 
     private ensure(extra: number): void {
