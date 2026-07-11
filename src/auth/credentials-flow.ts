@@ -18,7 +18,7 @@ import { buildMobileLoginPayload } from '@transport/noise/WaMobileClientPayload'
 import type { WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
 import { toProxyAgent, toProxyDispatcher } from '@transport/proxy'
 import type { WaCommsConfig } from '@transport/types'
-import { toError } from '@util/primitives'
+import { parseOptionalInt, toError } from '@util/primitives'
 
 interface WaAuthCredentialsFlowArgs {
     readonly logger: Logger
@@ -97,6 +97,31 @@ async function resolveVersion(
     return resolved
 }
 
+/**
+ * Validates the user-supplied `version` string against the transport it will
+ * feed. A mobile session sends the version as the four-part Android app
+ * version (`2.YY.WW.RR`) in the login payload, so it must have exactly four
+ * numeric parts. A web session advertises up to five parts (`2.3000.x[.y.z]`),
+ * so three to five numeric parts are accepted.
+ */
+function assertValidVersion(version: string, mobile: boolean): void {
+    const parts = version.split('.')
+    const allNumeric = parts.every((part) => parseOptionalInt(part) !== undefined)
+    if (mobile) {
+        if (parts.length !== 4 || !allNumeric) {
+            throw new Error(
+                `mobile session requires a 4-part numeric version (e.g. 2.26.27.70), got: ${version}`
+            )
+        }
+        return
+    }
+    if (parts.length < 3 || parts.length > 5 || !allNumeric) {
+        throw new Error(
+            `web session requires a 3- to 5-part numeric version (e.g. 2.3000.1040229458), got: ${version}`
+        )
+    }
+}
+
 export async function buildCommsConfig(
     logger: Logger,
     credentials: WaAuthCredentials,
@@ -107,6 +132,14 @@ export async function buildCommsConfig(
     > & {
         readonly noiseTrustedRootCa?: WaNoiseRootCa
         readonly disableNoiseCertificateChainVerification?: boolean
+        /**
+         * One-shot override for the mobile `deviceInfo.appVersion` on this
+         * connect, applied on top of the resolved mobile transport. Used by
+         * the `recoverFromClientTooOld` auto-retry to inject a fresh Android
+         * app version fetched from the public listing. Ignored for web
+         * sessions.
+         */
+        readonly mobileAppVersionOverride?: string
     }
 ): Promise<WaCommsConfig> {
     const meJid = credentials.meJid
@@ -131,6 +164,14 @@ export async function buildCommsConfig(
               : 'none'
     })
 
+    const resolvedVersion =
+        effectiveMobileTransport && clientOptions.mobileAppVersionOverride !== undefined
+            ? undefined
+            : await resolveVersion(clientOptions.version)
+    if (resolvedVersion !== undefined) {
+        assertValidVersion(resolvedVersion, Boolean(effectiveMobileTransport))
+    }
+
     if (effectiveMobileTransport) {
         if (wsProxy) {
             throw new Error(
@@ -142,11 +183,18 @@ export async function buildCommsConfig(
                 'mobileTransport requires registered credentials (meJid) – run the mobile bridge flow first'
             )
         }
+        if (clientOptions.mobileAppVersionOverride !== undefined) {
+            assertValidVersion(clientOptions.mobileAppVersionOverride, true)
+        }
+        const appVersionOverride = clientOptions.mobileAppVersionOverride ?? resolvedVersion
+        const deviceInfo = appVersionOverride
+            ? { ...effectiveMobileTransport.deviceInfo, appVersion: appVersionOverride }
+            : effectiveMobileTransport.deviceInfo
         const loginPayload = buildMobileLoginPayload({
             username: loginIdentity.username,
             device: loginIdentity.device,
             passive: effectiveMobileTransport.passive ?? false,
-            deviceInfo: effectiveMobileTransport.deviceInfo,
+            deviceInfo,
             pushName: effectiveMobileTransport.pushName,
             yearClass: effectiveMobileTransport.yearClass,
             memClass: effectiveMobileTransport.memClass
@@ -172,7 +220,7 @@ export async function buildCommsConfig(
         }
     }
 
-    const versionBase = await resolveVersion(clientOptions.version)
+    const versionBase = resolvedVersion
 
     return {
         url: socketOptions.url,

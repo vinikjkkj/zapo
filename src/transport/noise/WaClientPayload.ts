@@ -10,23 +10,32 @@ import type {
 import { intToBytes } from '@util/bytes'
 import { WA_VERSION } from '@version-spec'
 
-function parseVersion(versionBase: string): {
+type ParsedVersion = {
     primary: number
     secondary: number
     tertiary: number
-} {
-    const [p = '2', s = '3000', t = '0'] = versionBase.split('.')
+    quaternary?: number
+    quinary?: number
+}
+
+function parseVersion(versionBase: string): ParsedVersion {
+    const parts = versionBase.split('.')
+    const [p = '2', s = '3000', t = '0'] = parts
     const primary = Number.parseInt(p, 10)
     const secondary = Number.parseInt(s, 10)
     const tertiary = Number.parseInt(t, 10)
+    const quaternary = parts.length > 3 ? Number.parseInt(parts[3], 10) : undefined
+    const quinary = parts.length > 4 ? Number.parseInt(parts[4], 10) : undefined
     if (
         !Number.isSafeInteger(primary) ||
         !Number.isSafeInteger(secondary) ||
-        !Number.isSafeInteger(tertiary)
+        !Number.isSafeInteger(tertiary) ||
+        (quaternary !== undefined && !Number.isSafeInteger(quaternary)) ||
+        (quinary !== undefined && !Number.isSafeInteger(quinary))
     ) {
         throw new Error(`invalid versionBase: ${versionBase}`)
     }
-    return { primary, secondary, tertiary }
+    return { primary, secondary, tertiary, quaternary, quinary }
 }
 
 let cachedLocale: { readonly lg: string; readonly lc: string } | null = null
@@ -85,14 +94,13 @@ export function resolveDevicePropsPlatformType(
     }
 }
 
-type ParsedVersion = { primary: number; secondary: number; tertiary: number }
-
 function defaultUserAgent(
     versionBase: string,
     deviceOsDisplayName?: string,
     version?: ParsedVersion
 ): typeof proto.ClientPayload.prototype.userAgent {
-    const { primary, secondary, tertiary } = version ?? parseVersion(versionBase)
+    const { primary, secondary, tertiary, quaternary, quinary } =
+        version ?? parseVersion(versionBase)
     const locale = resolveLocale()
     return {
         platform: proto.ClientPayload.UserAgent.Platform.WEB,
@@ -100,7 +108,9 @@ function defaultUserAgent(
         appVersion: {
             primary,
             secondary,
-            tertiary
+            tertiary,
+            quaternary,
+            quinary
         },
         mcc: '000',
         mnc: '000',
@@ -122,13 +132,16 @@ function defaultDeviceProps(
     >,
     version?: ParsedVersion
 ): Uint8Array {
-    const { primary, secondary, tertiary } = version ?? parseVersion(versionBase)
+    const { primary, secondary, tertiary, quaternary, quinary } =
+        version ?? parseVersion(versionBase)
     return proto.DeviceProps.encode({
         os: config.deviceOsDisplayName ?? process.platform,
         version: {
             primary,
             secondary,
-            tertiary
+            tertiary,
+            quaternary,
+            quinary
         },
         platformType: resolveDevicePropsPlatformType(config.deviceBrowser),
         requireFullSync: config.requireFullSync === true,

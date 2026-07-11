@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { proto } from '@proto'
 import { buildLoginPayload, buildRegistrationPayload } from '@transport/noise/WaClientPayload'
 import { WaFrameCodec } from '@transport/noise/WaFrameCodec'
 import { verifyNoiseCertificateChain } from '@transport/noise/WaNoiseCert'
@@ -50,6 +51,37 @@ test('client payload builders validate required fields', () => {
         deviceOsDisplayName: 'Windows'
     })
     assert.ok(registrationPayload.length > 0)
+})
+
+test('buildLoginPayload advertises the 4th and 5th version parts when supplied', () => {
+    const loginPayload = buildLoginPayload({
+        username: 123,
+        device: 1,
+        versionBase: '2.3000.1040229458.4.5',
+        deviceBrowser: 'Chrome',
+        deviceOsDisplayName: 'Windows'
+    })
+    const appVersion = proto.ClientPayload.decode(loginPayload).userAgent?.appVersion
+    assert.ok(appVersion)
+    assert.equal(appVersion.primary, 2)
+    assert.equal(appVersion.secondary, 3000)
+    assert.equal(appVersion.tertiary, 1040229458)
+    assert.equal(appVersion.quaternary, 4)
+    assert.equal(appVersion.quinary, 5)
+})
+
+test('buildLoginPayload leaves the 4th/5th version parts unset for a 3-part version', () => {
+    const loginPayload = buildLoginPayload({
+        username: 123,
+        device: 1,
+        versionBase: '2.3000.1040229458',
+        deviceBrowser: 'Chrome',
+        deviceOsDisplayName: 'Windows'
+    })
+    const appVersion = proto.ClientPayload.decode(loginPayload).userAgent?.appVersion
+    assert.ok(appVersion)
+    assert.ok(!appVersion.quaternary)
+    assert.ok(!appVersion.quinary)
 })
 
 test('noise frame codec encodes/decodes frames and rejects oversized payloads', () => {

@@ -27,11 +27,14 @@ export {
     toProxyAgent,
     toProxyDispatcher
 } from '@transport/proxy'
-export { fetchLatestWaWebVersion } from '@transport/wa-web-version-fetcher'
+export { fetchLatestWaWebVersion, fetchLatestWaMobileVersion } from '@transport/wa-version-fetcher'
 export type {
+    WaFetchVersionOptions,
     WaFetchLatestWebVersionOptions,
-    WaLatestWebVersion
-} from '@transport/wa-web-version-fetcher'
+    WaFetchLatestMobileVersionOptions,
+    WaLatestWebVersion,
+    WaLatestMobileVersion
+} from '@transport/wa-version-fetcher'
 export { WaComms } from '@transport/WaComms'
 export { verifyNoiseCertificateChain, type WaNoiseRootCa } from '@transport/noise/WaNoiseCert'
 export { WaNoiseHandshake } from '@transport/noise/WaNoiseHandshake'
