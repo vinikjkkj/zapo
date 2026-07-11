@@ -52,10 +52,11 @@ export type WaAuthSocketOptions = Pick<
 }
 
 /**
- * WhatsApp Web version supplied to {@link WaAuthClientOptions.version}. Either
- * a literal `'x.y.z'` string or an async resolver invoked once per connect,
- * letting callers refresh the version (e.g. via `fetchLatestWaWebVersion`)
- * without rebuilding the client.
+ * Version supplied to {@link WaAuthClientOptions.version}. Either a literal
+ * dotted-numeric string or an async resolver invoked once per connect,
+ * letting callers refresh the version (e.g. via `fetchLatestWaWebVersion` or
+ * `fetchLatestWaMobileVersion`) without rebuilding the client. See
+ * {@link WaAuthClientOptions.version} for the per-transport part-count rules.
  */
 export type WaVersionResolver = string | (() => string | Promise<string>)
 
@@ -84,11 +85,21 @@ export interface WaAuthClientOptions {
      */
     readonly requireFullSync?: boolean
     /**
-     * WhatsApp Web version the client advertises. Either a `'x.y.z'` literal
-     * or a (sync/async) resolver invoked once per connect – use the resolver
-     * form together with {@link fetchLatestWaWebVersion} to refresh the
-     * version when the hardcoded default starts hitting `failure_client_too_old`.
-     * Defaults to a tested production version.
+     * Version the client advertises. Either a dotted-numeric literal or a
+     * (sync/async) resolver invoked once per connect – use the resolver form
+     * together with {@link fetchLatestWaWebVersion} /
+     * {@link fetchLatestWaMobileVersion} to refresh the version when the
+     * hardcoded default starts hitting `failure_client_too_old`.
+     *
+     * The accepted shape depends on the transport resolved for the connect:
+     * - **Web** sessions take a 3- to 5-part version (`2.3000.x`); only the
+     *   first three parts are advertised, extra trailing parts are ignored.
+     * - **Mobile** sessions take exactly a 4-part Android app version
+     *   (`2.26.27.70`); it overrides `mobileTransport.deviceInfo.appVersion`
+     *   in the login payload.
+     *
+     * An invalid part count for the resolved transport throws on connect.
+     * Defaults to a tested production version per transport.
      */
     readonly version?: WaVersionResolver
     /**

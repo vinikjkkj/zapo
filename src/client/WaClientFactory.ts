@@ -224,6 +224,7 @@ export interface WaClientDependencies {
     readonly abPropsCoordinator: WaAbPropsCoordinator
     readonly peerDataOperation: PeerDataOperationRequester
     readonly mobileCoordinator: WaMobileCoordinator
+    readonly isMobilePrimary: () => boolean
 }
 
 function assertProxyTransport(value: unknown, path: string): void {
@@ -1447,6 +1448,7 @@ export function buildWaClientDependencies(input: {
         trustedContactToken,
         abPropsCoordinator,
         peerDataOperation,
-        mobileCoordinator
+        mobileCoordinator,
+        isMobilePrimary
     }
 }

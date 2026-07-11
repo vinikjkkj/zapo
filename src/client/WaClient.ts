@@ -49,7 +49,7 @@ import { WA_DISCONNECT_REASONS, WA_LOGOUT_REASONS, type WaLogoutReason } from '@
 import { buildRemoveCompanionDeviceIq } from '@transport/node/builders/device'
 import { assertIqResult, queryWithContext as queryNodeWithContext } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
-import { fetchLatestWaWebVersion } from '@transport/wa-web-version-fetcher'
+import { fetchLatestWaMobileVersion, fetchLatestWaWebVersion } from '@transport/wa-version-fetcher'
 import { toError } from '@util/primitives'
 
 type WaIncomingProtocolType = NonNullable<Proto.Message.IProtocolMessage['type']>
@@ -145,8 +145,8 @@ class WaClientImpl extends EventEmitter {
             if (!this.options.recoverFromClientTooOld) return
             if (event.reason !== WA_DISCONNECT_REASONS.FAILURE_CLIENT_TOO_OLD) return
             this.logger.warn(
-                'wa rejected the connect with client_too_old: the zapo default WA Web version is outdated. ' +
-                    'Auto-recovering by fetching the current version from web.whatsapp.com – ' +
+                'wa rejected the connect with client_too_old: the zapo default WA version is outdated. ' +
+                    'Auto-recovering by fetching the current version from the public source – ' +
                     'please upgrade zapo so the shipped default catches up.'
             )
             void this.runClientTooOldRecover()
@@ -166,11 +166,19 @@ class WaClientImpl extends EventEmitter {
             if (this.connectPromise) {
                 await this.connectPromise.catch(() => undefined)
             }
-            const latest = await fetchLatestWaWebVersion()
+            const mobile = this.deps.isMobilePrimary()
+            const latest = mobile
+                ? await fetchLatestWaMobileVersion()
+                : await fetchLatestWaWebVersion()
             this.logger.info('client_too_old auto-recover: reconnecting', {
+                transport: mobile ? 'mobile' : 'web',
                 version: latest.version
             })
-            this.deps.authClient.setNextConnectVersion(latest.version)
+            if (mobile) {
+                this.deps.authClient.setNextConnectMobileAppVersion(latest.version)
+            } else {
+                this.deps.authClient.setNextConnectVersion(latest.version)
+            }
             await this.connect()
         } catch (error) {
             this.logger.warn('client_too_old auto-recover failed', {

@@ -70,6 +70,7 @@ export class WaAuthClient {
     private readonly shortcakeFlow: WaShortcakeFlow | null
     private credentials: WaAuthCredentials | null
     private versionOverride: string | null = null
+    private mobileAppVersionOverride: string | null = null
 
     public constructor(options: WaAuthClientOptions, deps: WaAuthClientDeps) {
         const device = resolveWaDeviceIdentity(options)
@@ -185,12 +186,15 @@ export class WaAuthClient {
         this.logger.trace('auth client building comms config')
         const override = this.versionOverride
         this.versionOverride = null
+        const mobileAppVersionOverride = this.mobileAppVersionOverride
+        this.mobileAppVersionOverride = null
         return buildCommsConfig(this.logger, this.requireCredentials(), socketOptions, {
             deviceBrowser: this.options.deviceBrowser,
             deviceOsDisplayName: this.options.deviceOsDisplayName,
             requireFullSync: this.options.requireFullSync,
             version: override ?? this.options.version,
             mobileTransport: this.options.mobileTransport,
+            mobileAppVersionOverride: mobileAppVersionOverride ?? undefined,
             noiseTrustedRootCa: overrides.noiseTrustedRootCa,
             disableNoiseCertificateChainVerification:
                 overrides.disableNoiseCertificateChainVerification ??
@@ -207,6 +211,18 @@ export class WaAuthClient {
      */
     public setNextConnectVersion(version: string): void {
         this.versionOverride = version
+    }
+
+    /**
+     * One-shot override for the mobile `deviceInfo.appVersion` on the next
+     * {@link buildCommsConfig} call, then clears. The mobile transport reads
+     * its version from `deviceInfo.appVersion` (the login payload), not the
+     * `version` string, so {@link setNextConnectVersion} has no effect on a
+     * mobile session. Used by the `recoverFromClientTooOld` auto-retry to
+     * inject a fresh Android app version without mutating the user's options.
+     */
+    public setNextConnectMobileAppVersion(appVersion: string): void {
+        this.mobileAppVersionOverride = appVersion
     }
 
     /** Clears the in-memory QR and pairing sessions without touching storage. */

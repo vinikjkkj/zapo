@@ -143,8 +143,11 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      * Automatically reconnect when the server rejects the noise handshake
      * with HTTP 405 / `failure_client_too_old`. On every 405 the client
      * logs a warning asking you to upgrade zapo, fetches the current
-     * version from `web.whatsapp.com` via `fetchLatestWaWebVersion()`,
-     * swaps it in for the next connect, and retries. Off by default.
+     * version, swaps it in for the next connect, and retries. Off by
+     * default. Web sessions fetch the WA Web version via
+     * `fetchLatestWaWebVersion()` (swapped in as the connect `version`);
+     * mobile sessions fetch the Android app version via
+     * `fetchLatestWaMobileVersion()` (swapped in as `deviceInfo.appVersion`).
      */
     readonly recoverFromClientTooOld?: boolean
     /**
