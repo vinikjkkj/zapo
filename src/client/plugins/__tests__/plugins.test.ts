@@ -117,6 +117,46 @@ test('expose plugin defines enumerable getter on client', () => {
     assert.equal(Object.prototype.propertyIsEnumerable.call(client, 'api'), true)
 })
 
+test('expose plugin survives a dispose and reinstall cycle', async () => {
+    let created = 0
+    const plugin = defineWaClientPlugin({
+        id: 'api',
+        exposeAs: 'api',
+        setup: () => ({ n: (created += 1) })
+    })
+    const client = {
+        emit: () => true,
+        on: () => ({}),
+        off: () => ({}),
+        once: () => ({})
+    } as never
+    const input = {
+        options: { store: {} as never, sessionId: 'x' },
+        logger: createNoopLogger(),
+        stores: {} as never,
+        deps: {
+            lowLevelCoordinator: {
+                registerIncomingHandler: () => () => undefined,
+                registerIncomingStanzaFilter: () => () => undefined
+            }
+        } as never,
+        queryWithContext: async () => ({ tag: 'iq', attrs: {} })
+    }
+    const readApi = (): { n: number } | undefined =>
+        (client as unknown as { api?: { n: number } }).api
+
+    const dispose1 = installWaClientPlugins(client, input, [plugin])
+    assert.equal(readApi()?.n, 1)
+
+    await dispose1()
+    assert.equal(readApi(), undefined)
+
+    const dispose2 = installWaClientPlugins(client, input, [plugin])
+    assert.equal(readApi()?.n, 2)
+
+    await dispose2()
+})
+
 test('install rejects duplicate plugin id', () => {
     const plugin = defineWaClientPlugin({
         id: 'dup',

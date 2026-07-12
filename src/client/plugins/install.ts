@@ -18,15 +18,47 @@ export interface WaClientPluginInstallInput {
     readonly queryWithContext: WaClientPluginContext['queryWithContext']
 }
 
+interface PluginRegistry {
+    readonly instances: Map<string, unknown>
+    readonly exposedDefined: Set<string>
+}
+
+const PLUGIN_REGISTRY = Symbol('waClientPluginRegistry')
+
+/**
+ * Per-client store for exposed-plugin state that must survive a
+ * disconnect/connect cycle. Each `exposeAs` property is defined on the client
+ * exactly once (a non-configurable getter reading `instances`); reinstalls
+ * only repopulate the slot, so plugins can be torn down on disconnect and
+ * rebuilt on the next connect without redefining reserved members.
+ */
+function getPluginRegistry(client: WaClient): PluginRegistry {
+    const holder = client as unknown as { [PLUGIN_REGISTRY]?: PluginRegistry }
+    const existing = holder[PLUGIN_REGISTRY]
+    if (existing) {
+        return existing
+    }
+    const registry: PluginRegistry = { instances: new Map(), exposedDefined: new Set() }
+    Object.defineProperty(client, PLUGIN_REGISTRY, {
+        value: registry,
+        enumerable: false,
+        configurable: false,
+        writable: false
+    })
+    return registry
+}
+
 /**
  * Installs {@link WaClientOptions.plugins} on `client`. Returns a dispose
- * function invoked by {@link WaClient.disconnect}.
+ * function invoked by {@link WaClient.disconnect}. Safe to call again after a
+ * dispose to reinstall the same plugins on reconnect.
  */
 export function installWaClientPlugins(
     client: WaClient,
     input: WaClientPluginInstallInput,
     plugins: readonly WaClientPluginDefinition[]
 ): () => Promise<void> {
+    const registry = getPluginRegistry(client)
     const seenIds = new Set<string>()
     const seenExposeAs = new Set<string>()
     const disposeCallbacks: Array<() => void | Promise<void>> = []
@@ -66,28 +98,36 @@ export function installWaClientPlugins(
         }
 
         if (isWaClientExposePluginDefinition(plugin)) {
-            if (seenExposeAs.has(plugin.exposeAs)) {
-                throw new Error(`duplicate wa client plugin exposeAs: ${plugin.exposeAs}`)
+            const exposeAs = plugin.exposeAs
+            if (seenExposeAs.has(exposeAs)) {
+                throw new Error(`duplicate wa client plugin exposeAs: ${exposeAs}`)
             }
-            seenExposeAs.add(plugin.exposeAs)
+            seenExposeAs.add(exposeAs)
 
-            if (plugin.exposeAs in client) {
-                throw new Error(
-                    `wa client plugin exposeAs "${plugin.exposeAs}" collides with a reserved client member`
-                )
+            if (!registry.exposedDefined.has(exposeAs)) {
+                if (exposeAs in client) {
+                    throw new Error(
+                        `wa client plugin exposeAs "${exposeAs}" collides with a reserved client member`
+                    )
+                }
+                registry.exposedDefined.add(exposeAs)
+                Object.defineProperty(client, exposeAs, {
+                    get: () => registry.instances.get(exposeAs),
+                    enumerable: true,
+                    configurable: false
+                })
             }
 
             const instance = plugin.setup(pluginCtx)
-            Object.defineProperty(client, plugin.exposeAs, {
-                get: () => instance,
-                enumerable: true,
-                configurable: false
-            })
+            registry.instances.set(exposeAs, instance)
             if (plugin.dispose) {
                 const dispose = plugin.dispose
                 registerDispose(() => dispose(instance, pluginCtx))
             }
-            pluginCtx.logger.debug('wa client plugin installed', { exposeAs: plugin.exposeAs })
+            registerDispose(() => {
+                registry.instances.delete(exposeAs)
+            })
+            pluginCtx.logger.debug('wa client plugin installed', { exposeAs })
         } else {
             plugin.setup(pluginCtx)
             if (plugin.dispose) {

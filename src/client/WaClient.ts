@@ -20,7 +20,7 @@ import { createIgnoreKeyFilter, validateIgnoreKey } from '@client/messaging/igno
 import { runHistorySyncNotification } from '@client/persistence/history-sync'
 import { persistIncomingMailboxEntities } from '@client/persistence/mailbox'
 import { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
-import { installWaClientPlugins } from '@client/plugins/install'
+import { installWaClientPlugins, type WaClientPluginInstallInput } from '@client/plugins/install'
 import type {
     WaClientExposedFromPlugins,
     WaClientPluginDefinition,
@@ -74,6 +74,7 @@ class WaClientImpl extends EventEmitter {
     private activeIncomingHandlers = 0
     private readonly incomingHandlersDrainedWaiters: Array<() => void> = []
     private disposePlugins: (() => Promise<void>) | null = null
+    private pluginInstallInput!: WaClientPluginInstallInput
 
     /**
      * @param options Client configuration (store, transport, addons, history...).
@@ -127,17 +128,14 @@ class WaClientImpl extends EventEmitter {
         this.appStateSync = dependencies.appStateSync
         this.mediaTransfer = dependencies.mediaTransfer
 
-        this.disposePlugins = installWaClientPlugins(
-            this,
-            {
-                options: this.options,
-                logger: this.logger,
-                stores: this.stores,
-                deps: this.deps,
-                queryWithContext: this.queryWithContext.bind(this)
-            },
-            this.options.plugins ?? []
-        )
+        this.pluginInstallInput = {
+            options: this.options,
+            logger: this.logger,
+            stores: this.stores,
+            deps: this.deps,
+            queryWithContext: this.queryWithContext.bind(this)
+        }
+        this.installPlugins()
 
         this.bindNodeTransportEvents()
         this.on('connection', (event) => {
@@ -159,6 +157,14 @@ class WaClientImpl extends EventEmitter {
                 })
             })
         })
+    }
+
+    private installPlugins(): void {
+        this.disposePlugins = installWaClientPlugins(
+            this,
+            this.pluginInstallInput,
+            this.options.plugins ?? []
+        )
     }
 
     private async runClientTooOldRecover(): Promise<void> {
@@ -444,6 +450,10 @@ class WaClientImpl extends EventEmitter {
             return this.connectPromise
         }
 
+        if (!this.disposePlugins) {
+            this.installPlugins()
+        }
+
         this.writeBehind.restart()
 
         this.acceptingIncomingEvents = true
@@ -469,11 +479,12 @@ class WaClientImpl extends EventEmitter {
 
     /**
      * Closes the transport gracefully: pauses incoming events, flushes the
-     * write-behind persistence queue, and emits a `connection` close event
-     * with reason `client_disconnected`. Does not clear stored credentials -
-     * call {@link connect} again to resume the same session. There is no
-     * built-in auto-reconnect; subscribe to `connection: { status: 'close' }`
-     * and decide your own backoff.
+     * write-behind persistence queue, disposes installed plugins, and emits a
+     * `connection` close event with reason `client_disconnected`. Does not
+     * clear stored credentials - call {@link connect} again to resume the same
+     * session, which reinstalls the plugins. There is no built-in
+     * auto-reconnect; subscribe to `connection: { status: 'close' }` and decide
+     * your own backoff.
      */
     public async disconnect(): Promise<void> {
         await this.pauseIncomingEventsAndWaitDrain()
