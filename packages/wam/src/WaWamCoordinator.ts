@@ -64,6 +64,7 @@ export class WaWamCoordinator {
     private flushTimer: ReturnType<typeof setTimeout> | null = null
     private disposed = false
     private readonly isConnected: () => boolean
+    private readonly isRegistered: () => boolean
 
     constructor(ctx: WaClientPluginContext, options: WaWamCoordinatorOptions = {}) {
         this.logger = ctx.logger.child({ scope: '@zapo-js/wam' }, { level: options.logLevel })
@@ -94,6 +95,10 @@ export class WaWamCoordinator {
                           : {}
                   )
         this.isConnected = (): boolean => ctx.deps.connectionManager.isConnected()
+        this.isRegistered = (): boolean => {
+            const meJid = ctx.deps.authClient.getCurrentCredentials()?.meJid
+            return meJid !== null && meJid !== undefined
+        }
     }
 
     /**
@@ -150,8 +155,8 @@ export class WaWamCoordinator {
         if (batch === undefined) return
         this.openBatches.delete(channel)
         if (!batch.hasEvents()) return
-        if (!this.isConnected()) {
-            this.logger.trace('wam batch dropped: not connected', {
+        if (!this.isConnected() || !this.isRegistered()) {
+            this.logger.trace('wam batch dropped: not connected or unregistered', {
                 channel,
                 size: batch.size()
             })
