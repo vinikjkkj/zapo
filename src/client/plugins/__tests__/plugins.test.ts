@@ -157,6 +157,45 @@ test('expose plugin survives a dispose and reinstall cycle', async () => {
     await dispose2()
 })
 
+test('expose plugin can still read its client getter during dispose', async () => {
+    let seenDuringDispose: unknown = 'unset'
+    const api = { value: 7 }
+    const plugin = defineWaClientPlugin({
+        id: 'api',
+        exposeAs: 'api',
+        setup: () => api,
+        dispose: (_instance: typeof api, ctx: WaClientPluginContext) => {
+            seenDuringDispose = (ctx.client as unknown as { api?: unknown }).api
+        }
+    })
+    const client = {
+        emit: () => true,
+        on: () => ({}),
+        off: () => ({}),
+        once: () => ({})
+    } as never
+    const dispose = installWaClientPlugins(
+        client,
+        {
+            options: { store: {} as never, sessionId: 'x' },
+            logger: createNoopLogger(),
+            stores: {} as never,
+            deps: {
+                lowLevelCoordinator: {
+                    registerIncomingHandler: () => () => undefined,
+                    registerIncomingStanzaFilter: () => () => undefined
+                }
+            } as never,
+            queryWithContext: async () => ({ tag: 'iq', attrs: {} })
+        },
+        [plugin]
+    )
+
+    await dispose()
+    assert.equal(seenDuringDispose, api)
+    assert.equal((client as unknown as { api?: unknown }).api, undefined)
+})
+
 test('install rejects duplicate plugin id', () => {
     const plugin = defineWaClientPlugin({
         id: 'dup',

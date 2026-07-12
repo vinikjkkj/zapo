@@ -74,7 +74,7 @@ class WaClientImpl extends EventEmitter {
     private activeIncomingHandlers = 0
     private readonly incomingHandlersDrainedWaiters: Array<() => void> = []
     private disposePlugins: (() => Promise<void>) | null = null
-    private pluginInstallInput!: WaClientPluginInstallInput
+    private readonly pluginInstallInput!: WaClientPluginInstallInput
 
     /**
      * @param options Client configuration (store, transport, addons, history...).

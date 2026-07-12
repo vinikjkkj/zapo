@@ -120,13 +120,13 @@ export function installWaClientPlugins(
 
             const instance = plugin.setup(pluginCtx)
             registry.instances.set(exposeAs, instance)
+            registerDispose(() => {
+                registry.instances.delete(exposeAs)
+            })
             if (plugin.dispose) {
                 const dispose = plugin.dispose
                 registerDispose(() => dispose(instance, pluginCtx))
             }
-            registerDispose(() => {
-                registry.instances.delete(exposeAs)
-            })
             pluginCtx.logger.debug('wa client plugin installed', { exposeAs })
         } else {
             plugin.setup(pluginCtx)
