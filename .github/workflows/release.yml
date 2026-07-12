@@ -29,7 +29,9 @@ jobs:
             - uses: ./.github/actions/setup-node
 
             - name: upgrade npm for trusted publishing
-              run: npm install -g npm@latest # OIDC publishing needs npm >= 11.5.1 (Node 22 ships npm 10.x)
+              # pin 11.18.0: OIDC needs npm >= 11.5.1, and npm 12 breaks changeset publish's
+              # published-version check (it misreads every package as unpublished and retries it)
+              run: npm install -g npm@11.18.0
 
             - name: build core + packages
               run: |
