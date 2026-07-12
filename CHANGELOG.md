@@ -1,5 +1,18 @@
 # zapo-js
 
+## 1.5.0
+
+### Minor Changes
+
+- Add `client.mobile` (`WaMobileCoordinator`): a mobile-primary session can link, host, and revoke its own companion devices, the inverse of zapo's usual companion role. It signs and uploads the companion's `ADVSignedDeviceIdentity` and key-index list, keeps the companion past its ~180s bootstrap by satisfying the client-props LID migration, `INITIAL_BOOTSTRAP` history-sync, and seeded `setting_pushName` gates, revokes one device or every companion in a single `remove-companion-device` stanza, reconciles the hosted set against the server device list on connect and `account_sync`, and shares the app-state sync keys so the companion decrypts collections. Guarded to mobile-primary sessions; companion sessions get a clear error from `client.mobile`.
+- Unify the web and mobile version fetchers into a single `wa-version-fetcher` and add `fetchLatestWaMobileVersion`, which scrapes the current WhatsApp for Android release (the official page only exposes a stale minimum-requirement version). `recoverFromClientTooOld` now handles mobile sessions by refreshing the Android app version into `deviceInfo.appVersion` for the next connect, the `version` option is honored per transport and validated (mobile requires exactly 4 numeric parts, web accepts 3 to 5), and the web noise payload advertises the 4th and 5th version parts when a longer version is supplied.
+- Add the opt-in `chatEvents.emitLocalMutations` option (default off): when enabled, every app-state action this client sends (mute, pin, archive, read, ...) emits a `mutation` event with `source: 'local'` at action time, so consumers can observe their own changes without waiting for the server to echo them back as a `patch`. Purely additive; default behavior is unchanged.
+- Expose `resolveWaDeviceIdentity`, `getWaBrowserDisplayName`, and `WA_VERSION` from the public barrels (plus `delay` from `zapo-js/util`), so plugins and downstream code can build a client payload that agrees with the pairing device identity. Consumed by `@zapo-js/wam`.
+
+### Patch Changes
+
+- Reinstall client plugins after a disconnect/reconnect cycle: `disconnect()` disposed the plugins and `connect()` never reinstalled them, so a reconnected session silently lost every plugin and each `client.<exposeAs>` accessor. Plugins are now reinstalled when the session reconnects.
+
 ## 1.4.0
 
 ### Minor Changes

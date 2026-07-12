@@ -1,5 +1,11 @@
 # @zapo-js/mcp-server
 
+## 1.0.4
+
+### Patch Changes
+
+- Wire the dev harness to the new core surface: load `wamPlugin()` so the WAM telemetry plugin is exposed as `client.wam`, and configure per-session companion-host persistence (`createFileCompanionHostPersistence`) so a mobile-primary session keeps its hosted companions across restarts.
+
 ## 1.0.3
 
 ### Patch Changes
