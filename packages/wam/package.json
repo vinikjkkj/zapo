@@ -1,6 +1,6 @@
 {
     "name": "@zapo-js/wam",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "WhatsApp Web WAM (analytics/telemetry) plugin for zapo-js — emits the client-side metrics batches WA Web sends, for wire parity and anti-fingerprinting",
     "license": "MIT",
     "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
