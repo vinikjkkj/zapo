@@ -95,7 +95,7 @@ test('appstate mutation parser decodes StatusPrivacy with enum field as string',
         source: 'patch',
         index: JSON.stringify(['status_privacy']),
         value: {
-            statusPrivacy: { mode: 1, modes: [0, 2], userJid: ['a@lid'], shareToFB: true }
+            statusPrivacy: { mode: 1, modes: [0, 2], userJid: ['a@lid'], shareToFb: true }
         },
         version: 7,
         indexMac: new Uint8Array(),
@@ -109,7 +109,7 @@ test('appstate mutation parser decodes StatusPrivacy with enum field as string',
         assert.equal(parsed.mode, 'DENY_LIST')
         assert.deepEqual(parsed.modes, ['ALLOW_LIST', 'CONTACTS'])
         assert.deepEqual(parsed.userJid, ['a@lid'])
-        assert.equal(parsed.shareToFB, true)
+        assert.equal(parsed.shareToFb, true)
     }
 })
 

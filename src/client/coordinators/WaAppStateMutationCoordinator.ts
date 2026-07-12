@@ -993,8 +993,8 @@ export class WaAppStateMutationCoordinator {
             statusPrivacy: {
                 mode: modeValue,
                 userJid,
-                ...(input.shareToFB === undefined ? {} : { shareToFB: input.shareToFB }),
-                ...(input.shareToIG === undefined ? {} : { shareToIG: input.shareToIG })
+                ...(input.shareToFB === undefined ? {} : { shareToFb: input.shareToFB }),
+                ...(input.shareToIG === undefined ? {} : { shareToIg: input.shareToIG })
             }
         }
         const timestamp = this.serverClock.nowMs()

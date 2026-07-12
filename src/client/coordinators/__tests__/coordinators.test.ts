@@ -1368,7 +1368,7 @@ test('app-state mutation coordinator emits status_privacy account mutation', asy
     assert.deepEqual(JSON.parse(mutation.index), ['status_privacy'])
     if (mutation.operation !== 'set') throw new Error('status_privacy must be set')
     assert.equal(typeof mutation.value.statusPrivacy?.mode, 'number')
-    assert.equal(mutation.value.statusPrivacy?.shareToFB, true)
+    assert.equal(mutation.value.statusPrivacy?.shareToFb, true)
     assert.deepEqual(mutation.value.statusPrivacy?.userJid, [])
 })
 

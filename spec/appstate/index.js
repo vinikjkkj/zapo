@@ -1,5 +1,5 @@
 // AUTO-GENERATED — do not edit. Regenerated daily by wa-spec.
-// WhatsApp Version: 2.3000.1040072419
+// WhatsApp Version: 2.3000.1043028647
 'use strict'
 
 const WA_APPSTATE_COLLECTIONS = Object.freeze(['regular', 'regular_low', 'regular_high', 'critical_block', 'critical_unblock_low'])
@@ -103,9 +103,9 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         collection: 'regular',
         version: 7,
         scope: 'account',
-        valueField: 'avatarUpdatedAction',
-        valueProtoType: 'SyncActionValue.AvatarUpdatedAction',
-        valueEnumFields: Object.freeze({ 'eventType': 'AvatarUpdatedAction.AvatarEventType' }),
+        valueField: null,
+        valueProtoType: null,
+        valueEnumFields: null,
         indexParts: Object.freeze([
             Object.freeze({ type: 'literal', value: 'avatar_updated_action' })
         ])
@@ -158,7 +158,7 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         valueEnumFields: null,
         indexParts: Object.freeze([
             Object.freeze({ type: 'literal', value: 'business_broadcast_insights_sync' }),
-            Object.freeze({ type: 'string', name: 'campaign' })
+            Object.freeze({ type: 'string', name: 'campaignId' })
         ])
     }),
     BusinessBroadcastList: Object.freeze({
@@ -520,9 +520,9 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         collection: 'regular_low',
         version: 7,
         scope: 'account',
-        valueField: 'merchantPaymentPartnerAction',
-        valueProtoType: 'SyncActionValue.MerchantPaymentPartnerAction',
-        valueEnumFields: Object.freeze({ 'status': 'MerchantPaymentPartnerAction.Status' }),
+        valueField: null,
+        valueProtoType: null,
+        valueEnumFields: null,
         indexParts: Object.freeze([
             Object.freeze({ type: 'literal', value: 'merchant_payment_partner' })
         ])
@@ -843,6 +843,19 @@ const WA_APPSTATE_SCHEMAS = Object.freeze({
         valueEnumFields: Object.freeze({ 'linkState': 'WaffleAccountLinkStateAction.AccountLinkState' }),
         indexParts: Object.freeze([
             Object.freeze({ type: 'literal', value: 'waffle_account_link_state' })
+        ])
+    }),
+    WasaRootSecret: Object.freeze({
+        name: 'wasa_root_secret',
+        collection: 'regular_high',
+        version: 1,
+        scope: 'chat',
+        valueField: 'wasaRootSecretAction',
+        valueProtoType: 'SyncActionValue.WASARootSecretAction',
+        valueEnumFields: null,
+        indexParts: Object.freeze([
+            Object.freeze({ type: 'literal', value: 'wasa_root_secret' }),
+            Object.freeze({ type: 'jid', name: 'chatJid' })
         ])
     })
 })
