@@ -49,6 +49,185 @@ function iqResult(content: BinaryNode['content']): BinaryNode {
     }
 }
 
+test('signal lid sync skips a malformed user node instead of failing the batch', async () => {
+    // the server answers an invalid contact with `<user jid='undefined'>` +
+    // `<contact type='invalid'>`; the good users in the same batch must survive
+    const debugs: string[] = []
+    const api = new SignalDeviceSyncApi({
+        logger: {
+            ...createNoopLogger(),
+            debug: (message) => {
+                debugs.push(message)
+            }
+        },
+        query: async () =>
+            iqResult([
+                {
+                    tag: WA_NODE_TAGS.USYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.LIST,
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: WA_NODE_TAGS.USER,
+                                    attrs: { jid: 'undefined' },
+                                    content: [
+                                        { tag: WA_NODE_TAGS.CONTACT, attrs: { type: 'invalid' } }
+                                    ]
+                                },
+                                {
+                                    tag: WA_NODE_TAGS.USER,
+                                    attrs: { jid: '5511999999999@s.whatsapp.net' },
+                                    content: [
+                                        { tag: WA_NODE_TAGS.CONTACT, attrs: { type: 'in' } },
+                                        { tag: WA_NODE_TAGS.LID, attrs: { val: '123456789@lid' } }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+    })
+
+    const result = await api.queryLidsByPhoneJids([
+        '000000000000000@s.whatsapp.net',
+        '5511999999999@s.whatsapp.net'
+    ])
+
+    // the good user resolves; the invalid input falls back to exists=false
+    assert.deepEqual(result, [
+        {
+            queriedJid: '000000000000000@s.whatsapp.net',
+            phoneJid: '000000000000000@s.whatsapp.net',
+            lidJid: null,
+            exists: false,
+            invalid: false
+        },
+        {
+            queriedJid: '5511999999999@s.whatsapp.net',
+            phoneJid: '5511999999999@s.whatsapp.net',
+            lidJid: '123456789@lid',
+            exists: true,
+            invalid: false
+        }
+    ])
+    assert.ok(debugs.includes('signal lid sync skipping user node with invalid jid'))
+})
+
+test('signal lid sync flags a server-rejected number as invalid, recovered from the contact echo', async () => {
+    const api = new SignalDeviceSyncApi({
+        logger: createNoopLogger(),
+        query: async () =>
+            iqResult([
+                {
+                    tag: WA_NODE_TAGS.USYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.LIST,
+                            attrs: {},
+                            content: [
+                                {
+                                    // server marks a malformed number: jid='undefined' plus a
+                                    // <contact type='invalid'> echoing the '+<number>' we sent
+                                    tag: WA_NODE_TAGS.USER,
+                                    attrs: { jid: 'undefined' },
+                                    content: [
+                                        {
+                                            tag: WA_NODE_TAGS.CONTACT,
+                                            attrs: { type: 'invalid' },
+                                            content: '+173010275315715'
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+    })
+
+    const result = await api.queryLidsByPhoneJids(['173010275315715@s.whatsapp.net'])
+    assert.deepEqual(result, [
+        {
+            queriedJid: '173010275315715@s.whatsapp.net',
+            phoneJid: '173010275315715@s.whatsapp.net',
+            lidJid: null,
+            exists: false,
+            invalid: true
+        }
+    ])
+})
+
+test('signal lid sync exposes the server-corrected number (BR 9th digit) via the contact echo', async () => {
+    // real captured response: the server collapses the two queried forms into one
+    // <user> with the canonical jid (with the 9) and echoes both queried numbers as
+    // <contact type='in'>. Both inputs must resolve, and phoneJid is the corrected form.
+    const api = new SignalDeviceSyncApi({
+        logger: createNoopLogger(),
+        query: async () =>
+            iqResult([
+                {
+                    tag: WA_NODE_TAGS.USYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.LIST,
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: WA_NODE_TAGS.USER,
+                                    attrs: { jid: '5511982905991@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: WA_NODE_TAGS.LID,
+                                            attrs: { country_code: 'BR', val: '53979165777985@lid' }
+                                        },
+                                        {
+                                            tag: WA_NODE_TAGS.CONTACT,
+                                            attrs: { type: 'in' },
+                                            content: '+5511982905991'
+                                        },
+                                        {
+                                            tag: WA_NODE_TAGS.CONTACT,
+                                            attrs: { type: 'in' },
+                                            content: '+551182905991'
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+    })
+
+    const result = await api.queryLidsByPhoneJids([
+        '551182905991@s.whatsapp.net',
+        '5511982905991@s.whatsapp.net'
+    ])
+    assert.deepEqual(result, [
+        {
+            // queried without the 9 -> corrected to the registered form
+            queriedJid: '551182905991@s.whatsapp.net',
+            phoneJid: '5511982905991@s.whatsapp.net',
+            lidJid: '53979165777985@lid',
+            exists: true,
+            invalid: false
+        },
+        {
+            queriedJid: '5511982905991@s.whatsapp.net',
+            phoneJid: '5511982905991@s.whatsapp.net',
+            lidJid: '53979165777985@lid',
+            exists: true,
+            invalid: false
+        }
+    ])
+})
+
 test('signal api codec decodes exact lengths and unsigned integers', () => {
     const bytes = decodeExactLength(new Uint8Array([0x01, 0x02, 0x03]), 'field', 3)
     assert.deepEqual(bytes, new Uint8Array([0x01, 0x02, 0x03]))
@@ -512,14 +691,18 @@ test('signal device sync api resolves lids by phone jids via usync and returns e
     ])
     assert.deepEqual(result, [
         {
+            queriedJid: '5511999999999@s.whatsapp.net',
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: '123456789@lid',
-            exists: true
+            exists: true,
+            invalid: false
         },
         {
+            queriedJid: '5511888888888@s.whatsapp.net',
             phoneJid: '5511888888888@s.whatsapp.net',
             lidJid: null,
-            exists: false
+            exists: false,
+            invalid: false
         }
     ])
 
@@ -592,9 +775,11 @@ test('signal device sync api marks exists=false when contact type is out', async
     const result = await api.queryLidsByPhoneJids(['5511888888888@s.whatsapp.net'])
     assert.deepEqual(result, [
         {
+            queriedJid: '5511888888888@s.whatsapp.net',
             phoneJid: '5511888888888@s.whatsapp.net',
             lidJid: null,
-            exists: false
+            exists: false,
+            invalid: false
         }
     ])
 })
@@ -653,13 +838,16 @@ test('signal device sync api handles lid node user error and preserves contact e
     const result = await api.queryLidsByPhoneJids(['5511999999999@s.whatsapp.net'])
     assert.deepEqual(result, [
         {
+            queriedJid: '5511999999999@s.whatsapp.net',
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: null,
-            exists: true
+            exists: true,
+            invalid: false
         }
     ])
     assert.equal(warnings.length, 1)
-    assert.equal(warnings[0].message, 'signal lid sync user error')
+    assert.equal(warnings[0].message, 'signal lid sync user errors')
+    assert.equal(warnings[0].context.droppedCount, 1)
 })
 
 test('signal device sync api forces exists=false when contact node has error', async () => {
@@ -716,9 +904,11 @@ test('signal device sync api forces exists=false when contact node has error', a
     const result = await api.queryLidsByPhoneJids(['5511999999999@s.whatsapp.net'])
     assert.deepEqual(result, [
         {
+            queriedJid: '5511999999999@s.whatsapp.net',
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: '123456789@lid',
-            exists: false
+            exists: false,
+            invalid: false
         }
     ])
     assert.equal(warnings.length, 1)
@@ -769,9 +959,11 @@ test('signal device sync api maps user response by pn_jid when jid differs', asy
     const result = await api.queryLidsByPhoneJids(['5511999999999@s.whatsapp.net'])
     assert.deepEqual(result, [
         {
+            queriedJid: '5511999999999@s.whatsapp.net',
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: '123456789@lid',
-            exists: true
+            exists: true,
+            invalid: false
         }
     ])
 })

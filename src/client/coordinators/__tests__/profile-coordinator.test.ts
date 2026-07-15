@@ -1213,9 +1213,11 @@ test('profile coordinator resolves lids by phone numbers', async () => {
             portCalls.push(phoneJids)
             return [
                 {
+                    queriedJid: '5511999999999@s.whatsapp.net',
                     phoneJid: '5511999999999@s.whatsapp.net',
                     lidJid: '1234@lid',
-                    exists: true
+                    exists: true,
+                    invalid: false
                 }
             ]
         }
@@ -1225,9 +1227,11 @@ test('profile coordinator resolves lids by phone numbers', async () => {
 
     assert.deepEqual(result, [
         {
+            queriedJid: '5511999999999@s.whatsapp.net',
             phoneJid: '5511999999999@s.whatsapp.net',
             lidJid: '1234@lid',
-            exists: true
+            exists: true,
+            invalid: false
         }
     ])
     assert.equal(portCalls.length, 1)
