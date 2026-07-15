@@ -1,14 +1,14 @@
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { WA_DEFAULTS, WA_NODE_TAGS, WA_USYNC_CONTEXTS } from '@protocol/constants'
-import { buildDeviceJid, isHostedDeviceId, splitJid, toUserJid } from '@protocol/jid'
+import { buildDeviceJid, isHostedDeviceId, parsePhoneJid, splitJid, toUserJid } from '@protocol/jid'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import {
     buildUsyncIq,
     iterateUsyncUsers,
     parseUsyncResultEnvelope
 } from '@transport/node/builders/usync'
-import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
+import { findNodeChild, getNodeChildrenByTag, getNodeTextContent } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
 import {
     createUsyncSidGenerator,
@@ -27,9 +27,23 @@ interface SignalDeviceSyncApiOptions {
 }
 
 export interface SignalLidSyncResult {
+    /**
+     * The phone jid the caller queried (normalized), so results can be correlated
+     * back to the input by value rather than by array position. Equals `phoneJid`
+     * unless the server corrected the number.
+     */
+    readonly queriedJid: string
+    /** The server's canonical/corrected phone jid (e.g. BR 9th digit added). */
     readonly phoneJid: string
     readonly lidJid: string | null
     readonly exists: boolean
+    /**
+     * `true` when the server rejected the number as malformed (`<user
+     * jid='undefined'>` with `<contact type='invalid'>`) - distinct from a
+     * well-formed number that simply has no WhatsApp account (`exists: false`,
+     * `invalid: false`).
+     */
+    readonly invalid: boolean
 }
 
 /**
@@ -175,25 +189,24 @@ export class SignalDeviceSyncApi {
         })
         const response = await this.query(request, timeoutMs)
         const parsed = this.parseLidSyncResponse(response, normalizedPhoneJids)
-        const parsedByPhoneJid = new Map<string, SignalLidSyncResult>()
+        const parsedByPhoneJid = new Map<string, Omit<SignalLidSyncResult, 'queriedJid'>>()
         for (let index = 0; index < parsed.length; index += 1) {
             const entry = parsed[index]
-            const phoneJid = entry.phoneJid ?? entry.jid
-            parsedByPhoneJid.set(phoneJid, {
-                phoneJid,
+            parsedByPhoneJid.set(entry.jid, {
+                phoneJid: entry.phoneJid ?? entry.jid,
                 lidJid: entry.lidJid,
-                exists: entry.exists
+                exists: entry.exists,
+                invalid: entry.invalid
             })
         }
         const result = new Array<SignalLidSyncResult>(normalizedPhoneJids.length)
         let found = 0
         for (let index = 0; index < normalizedPhoneJids.length; index += 1) {
-            const phoneJid = normalizedPhoneJids[index]
-            const resolved = parsedByPhoneJid.get(phoneJid) ?? {
-                phoneJid,
-                lidJid: null,
-                exists: false
-            }
+            const queriedJid = normalizedPhoneJids[index]
+            const hit = parsedByPhoneJid.get(queriedJid)
+            const resolved: SignalLidSyncResult = hit
+                ? { queriedJid, ...hit }
+                : { queriedJid, phoneJid: queriedJid, lidJid: null, exists: false, invalid: false }
             if (resolved.exists) {
                 found += 1
             }
@@ -362,7 +375,13 @@ export class SignalDeviceSyncApi {
             if (!userJid) {
                 continue
             }
-            const normalizedUserJid = this.normalizeUserJid(userJid)
+            const normalizedUserJid = this.tryNormalizeUserJid(userJid)
+            if (normalizedUserJid === null) {
+                this.logger.debug('signal device sync skipping user node with invalid jid', {
+                    jid: userJid
+                })
+                continue
+            }
             if (!requestedSet.has(normalizedUserJid)) {
                 continue
             }
@@ -384,6 +403,7 @@ export class SignalDeviceSyncApi {
         readonly lidJid: string | null
         readonly phoneJid: string | null
         readonly exists: boolean
+        readonly invalid: boolean
     }[] {
         assertIqResult(node, 'signal lid sync')
         logUsyncProtocolErrors(parseUsyncResultEnvelope(node), this.logger, 'signal.lidSync')
@@ -393,88 +413,109 @@ export class SignalDeviceSyncApi {
         }
 
         const requestedSet = new Set(requestedUsers)
-        const parsed = new Array<{
+        const parsed: {
             readonly jid: string
             readonly lidJid: string | null
             readonly phoneJid: string | null
             readonly exists: boolean
-        }>(userNodes.length)
-        let parsedCount = 0
+            readonly invalid: boolean
+        }[] = []
         for (let index = 0; index < userNodes.length; index += 1) {
             const userNode = userNodes[index]
-            const userJid = userNode.attrs.jid
-            if (!userJid) {
+            const rawUserJid = userNode.attrs.jid
+            if (!rawUserJid) {
                 continue
             }
-
-            const normalizedUserJid = this.normalizeUserJid(userJid)
-            const normalizedPhoneJid = userNode.attrs.pn_jid
-                ? this.normalizeUserJid(userNode.attrs.pn_jid)
+            const resolvedJid = this.tryNormalizeUserJid(rawUserJid)
+            const pnJid = userNode.attrs.pn_jid
+                ? this.tryNormalizeUserJid(userNode.attrs.pn_jid)
                 : null
-            const wasRequested =
-                requestedSet.has(normalizedUserJid) ||
-                (normalizedPhoneJid !== null && requestedSet.has(normalizedPhoneJid))
-            if (!wasRequested) {
-                continue
-            }
+            const phoneJid = pnJid ?? resolvedJid
 
             const lidNode = findNodeChild(userNode, WA_NODE_TAGS.LID)
-            const contactNode = findNodeChild(userNode, WA_NODE_TAGS.CONTACT)
-            if (!lidNode) {
-                parsed[parsedCount] = this.buildLidSyncResult(
-                    normalizedUserJid,
-                    normalizedPhoneJid,
-                    contactNode,
-                    null
-                )
-                parsedCount += 1
-                continue
-            }
-            const errorNode = findNodeChild(lidNode, WA_NODE_TAGS.ERROR)
-            if (errorNode) {
+            const lidErrorNode = lidNode ? findNodeChild(lidNode, WA_NODE_TAGS.ERROR) : null
+            if (lidErrorNode) {
                 this.logger.warn('signal lid sync user error', {
-                    jid: normalizedUserJid,
-                    code: errorNode.attrs.code,
-                    text: errorNode.attrs.text
+                    jid: resolvedJid ?? rawUserJid,
+                    code: lidErrorNode.attrs.code,
+                    text: lidErrorNode.attrs.text
                 })
-                parsed[parsedCount] = this.buildLidSyncResult(
-                    normalizedUserJid,
-                    normalizedPhoneJid,
-                    contactNode,
-                    null
-                )
-                parsedCount += 1
+            }
+            const lidJid =
+                !lidErrorNode && lidNode?.attrs.val
+                    ? this.tryNormalizeUserJid(lidNode.attrs.val)
+                    : null
+
+            const contactNodes = getNodeChildrenByTag(userNode, WA_NODE_TAGS.CONTACT)
+            let matched = false
+            for (let c = 0; c < contactNodes.length; c += 1) {
+                const contactNode = contactNodes[c]
+                const inputJid = this.recoverContactJid(contactNode)
+                if (inputJid === null || !requestedSet.has(inputJid)) {
+                    continue
+                }
+                matched = true
+                const invalid = resolvedJid === null || contactNode.attrs.type === 'invalid'
+                parsed.push({
+                    jid: inputJid,
+                    phoneJid: phoneJid ?? inputJid,
+                    lidJid,
+                    exists:
+                        !invalid &&
+                        this.parseLidSyncContactExists(contactNode, inputJid, lidJid !== null),
+                    invalid
+                })
+            }
+            if (matched) {
                 continue
             }
-            const lidJid = lidNode.attrs.val ? this.normalizeUserJid(lidNode.attrs.val) : null
-            parsed[parsedCount] = this.buildLidSyncResult(
-                normalizedUserJid,
-                normalizedPhoneJid,
-                contactNode,
-                lidJid
-            )
-            parsedCount += 1
+
+            if (resolvedJid === null) {
+                this.logger.debug('signal lid sync skipping user node with invalid jid', {
+                    jid: rawUserJid
+                })
+                continue
+            }
+            const requestedKey = requestedSet.has(resolvedJid)
+                ? resolvedJid
+                : pnJid !== null && requestedSet.has(pnJid)
+                  ? pnJid
+                  : null
+            if (requestedKey === null) {
+                this.logger.debug('signal lid sync unmatched user (no contact echo)', {
+                    jid: resolvedJid,
+                    pnJid
+                })
+                continue
+            }
+            const contactNode = findNodeChild(userNode, WA_NODE_TAGS.CONTACT)
+            parsed.push({
+                jid: requestedKey,
+                phoneJid: phoneJid ?? requestedKey,
+                lidJid,
+                exists: this.parseLidSyncContactExists(contactNode, requestedKey, lidJid !== null),
+                invalid: false
+            })
         }
-        parsed.length = parsedCount
         return parsed
     }
 
-    private buildLidSyncResult(
-        jid: string,
-        phoneJid: string | null,
-        contactNode: BinaryNode | undefined,
-        lidJid: string | null
-    ): {
-        readonly jid: string
-        readonly lidJid: string | null
-        readonly phoneJid: string | null
-        readonly exists: boolean
-    } {
-        return {
-            jid,
-            lidJid,
-            phoneJid,
-            exists: this.parseLidSyncContactExists(contactNode, jid, lidJid !== null)
+    /**
+     * Recovers the queried phone JID from a `<contact>` echo. Each `<contact>` in a
+     * usync response echoes the `+<number>` we sent (base64 text content), so it maps
+     * a response node back to the exact input - even when the server corrected the
+     * `<user jid>` or rejected it as `jid='undefined'`. Returns `null` when there is
+     * no decodable phone echo.
+     */
+    private recoverContactJid(contactNode: BinaryNode): string | null {
+        const echoed = getNodeTextContent(contactNode)
+        if (!echoed) {
+            return null
+        }
+        try {
+            return parsePhoneJid(echoed)
+        } catch {
+            return null
         }
     }
 
@@ -553,7 +594,10 @@ export class SignalDeviceSyncApi {
         let normalizedCount = 0
         const dedup = new Set<string>()
         for (let index = 0; index < userJids.length; index += 1) {
-            const normalizedJid = this.normalizeUserJid(userJids[index])
+            const normalizedJid = toUserJid(userJids[index], {
+                canonicalizeSignalServer: true,
+                hostDomain: this.hostDomain
+            })
             if (dedup.has(normalizedJid)) {
                 continue
             }
@@ -565,10 +609,20 @@ export class SignalDeviceSyncApi {
         return normalized
     }
 
-    private normalizeUserJid(jid: string): string {
-        return toUserJid(jid, {
-            canonicalizeSignalServer: true,
-            hostDomain: this.hostDomain
-        })
+    /**
+     * Canonicalizes a user jid, returning `null` instead of throwing when the input
+     * is not a valid jid (for example the literal `'undefined'` the server returns
+     * for an invalid contact). Lets a single malformed response node be skipped
+     * without discarding the rest of the batch.
+     */
+    private tryNormalizeUserJid(jid: string): string | null {
+        try {
+            return toUserJid(jid, {
+                canonicalizeSignalServer: true,
+                hostDomain: this.hostDomain
+            })
+        } catch {
+            return null
+        }
     }
 }
