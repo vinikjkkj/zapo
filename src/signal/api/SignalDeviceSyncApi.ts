@@ -230,27 +230,26 @@ export class SignalDeviceSyncApi {
     private async propagateAltUserJids(results: readonly SignalLidSyncResult[]): Promise<void> {
         if (!this.deviceListStore || results.length === 0) return
         const nowMs = Date.now()
-        const lidByPhoneJid = new Map<string, string>()
-        const phoneJids: string[] = []
+        const lidByQueriedJid = new Map<string, string>()
+        const queriedJids: string[] = []
         for (const entry of results) {
-            if (entry.lidJid && entry.phoneJid) {
-                lidByPhoneJid.set(entry.phoneJid, entry.lidJid)
-                phoneJids.push(entry.phoneJid)
+            if (entry.lidJid) {
+                lidByQueriedJid.set(entry.queriedJid, entry.lidJid)
+                queriedJids.push(entry.queriedJid)
             }
         }
-        if (phoneJids.length === 0) return
-        const existing = await this.deviceListStore.getUserDevicesBatch(phoneJids, nowMs)
+        if (queriedJids.length === 0) return
+        const existing = await this.deviceListStore.getUserDevicesBatch(queriedJids, nowMs)
         const updates: {
             readonly userJid: string
             readonly altUserJid: string
             readonly deviceJids: readonly string[]
             readonly updatedAtMs: number
         }[] = []
-        for (let index = 0; index < phoneJids.length; index += 1) {
+        for (let index = 0; index < queriedJids.length; index += 1) {
             const snapshot = existing[index]
             if (!snapshot) continue
-            const phoneJid = phoneJids[index]
-            const lidJid = lidByPhoneJid.get(phoneJid)
+            const lidJid = lidByQueriedJid.get(queriedJids[index])
             if (!lidJid || snapshot.altUserJid === lidJid) continue
             updates.push({
                 userJid: snapshot.userJid,
@@ -420,6 +419,11 @@ export class SignalDeviceSyncApi {
             readonly exists: boolean
             readonly invalid: boolean
         }[] = []
+        const lidUserErrors: {
+            readonly jid: string
+            readonly code: string | undefined
+            readonly text: string | undefined
+        }[] = []
         for (let index = 0; index < userNodes.length; index += 1) {
             const userNode = userNodes[index]
             const rawUserJid = userNode.attrs.jid
@@ -435,7 +439,7 @@ export class SignalDeviceSyncApi {
             const lidNode = findNodeChild(userNode, WA_NODE_TAGS.LID)
             const lidErrorNode = lidNode ? findNodeChild(lidNode, WA_NODE_TAGS.ERROR) : null
             if (lidErrorNode) {
-                this.logger.warn('signal lid sync user error', {
+                lidUserErrors.push({
                     jid: resolvedJid ?? rawUserJid,
                     code: lidErrorNode.attrs.code,
                     text: lidErrorNode.attrs.text
@@ -495,6 +499,13 @@ export class SignalDeviceSyncApi {
                 lidJid,
                 exists: this.parseLidSyncContactExists(contactNode, requestedKey, lidJid !== null),
                 invalid: false
+            })
+        }
+        if (lidUserErrors.length > 0) {
+            this.logger.warn('signal lid sync user errors', {
+                droppedCount: lidUserErrors.length,
+                totalExpected: requestedUsers.length,
+                sample: lidUserErrors.slice(0, 3)
             })
         }
         return parsed

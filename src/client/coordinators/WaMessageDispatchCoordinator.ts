@@ -528,7 +528,7 @@ export class WaMessageDispatchCoordinator {
         }
         try {
             const results = await this.deps.signalDeviceSync.queryLidsByPhoneJids([pnUserJid])
-            const match = results.find((entry) => entry.phoneJid === pnUserJid)
+            const match = results.find((entry) => entry.queriedJid === pnUserJid)
             if (match?.lidJid) return match.lidJid
         } catch (error) {
             this.deps.logger.debug('lid resolution failed for direct recipient', {

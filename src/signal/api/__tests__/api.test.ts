@@ -846,7 +846,8 @@ test('signal device sync api handles lid node user error and preserves contact e
         }
     ])
     assert.equal(warnings.length, 1)
-    assert.equal(warnings[0].message, 'signal lid sync user error')
+    assert.equal(warnings[0].message, 'signal lid sync user errors')
+    assert.equal(warnings[0].context.droppedCount, 1)
 })
 
 test('signal device sync api forces exists=false when contact node has error', async () => {
