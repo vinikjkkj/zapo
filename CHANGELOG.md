@@ -1,5 +1,13 @@
 # zapo-js
 
+## 1.5.1
+
+### Patch Changes
+
+- Correlate LID usync responses by the queried value / `<contact>` echo instead of string-matching the returned `<user jid>`. A server number-correction (e.g. BR 9th digit) now resolves as existing and its LID is used on send instead of falling back to PN, and a rejected/invalid number is recovered and flagged instead of throwing away the whole batch. `SignalLidSyncResult` gains `queriedJid` and `invalid`.
+- Fix the StatusPrivacy mutation write against the renamed proto fields (`shareToFB`→`shareToFb`, `shareToIG`→`shareToIg`); the old spread keys were silently wrong, so sharing status to Facebook/Instagram was dropped.
+- Refresh the advertised WA Web version to `2.3000.1043028647` and re-vendor the proto/mex/appstate spec (brings in the PQXDH kyber prekey fields).
+
 ## 1.5.0
 
 ### Minor Changes
