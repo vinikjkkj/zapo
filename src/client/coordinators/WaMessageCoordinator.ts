@@ -1,11 +1,21 @@
-import { createWriteStream } from 'node:fs'
+import { createReadStream, createWriteStream } from 'node:fs'
 import type { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import type { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
 import { aggregateReceiptTargets } from '@client/events/receipt'
-import { downloadMediaMessage } from '@client/media'
+import {
+    assertReadableFile,
+    downloadMediaMessage,
+    isReadableStream,
+    type WaUploadMediaSource
+} from '@client/media'
+import {
+    uploadMedia,
+    type UploadResult,
+    type WaMediaMessageOptions
+} from '@client/messaging/messages'
 import type {
     WaDownloadMediaOptions,
     WaIncomingAddonEvent,
@@ -13,7 +23,9 @@ import type {
     WaSendMessageOptions
 } from '@client/types'
 import type { Logger } from '@infra/log/types'
+import { MEDIA_UPLOAD_PATHS } from '@media/constants'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
+import type { MediaKind } from '@media/types'
 import {
     buildAddonAdditionalData,
     decodeAddonPlaintext,
@@ -45,6 +57,8 @@ import { toError } from '@util/primitives'
 export interface WaMessageCoordinatorDeps {
     readonly messageDispatch: WaMessageDispatchCoordinator
     readonly mediaTransfer: WaMediaTransferClient
+    /** Media upload wiring shared with the send path; backs {@link WaMessageCoordinator.upload}. */
+    readonly mediaUploadOptions: WaMediaMessageOptions
     readonly logger: Logger
     readonly messageStore: WaMessageStore
     readonly messageSecretStore: WaMessageSecretStore
@@ -123,13 +137,71 @@ function parseMessageCappingMexResponse(
 }
 
 /**
+ * Media kinds accepted by {@link WaMessageCoordinator.upload}. `gif` is a
+ * GIF-playback video, `ptt` a voice note, `ptv` a round video note.
+ */
+export type WaUploadMediaType = MediaKind | 'gif' | 'ptt'
+
+/** Options for {@link WaMessageCoordinator.upload}. */
+export interface WaUploadMediaOptions {
+    /** Media type: sets the encryption context and CDN upload path. */
+    readonly type: WaUploadMediaType
+    /** `Content-Type` for the upload and the mimetype for the message proto. */
+    readonly mimetype?: string
+    /** Reuse a 32-byte media key instead of generating one. */
+    readonly mediaKey?: Uint8Array
+    /** Override the streaming sidecar (default on for video/ptv/audio/gif/ptt). */
+    readonly sidecar?: boolean
+    /** Animated-sticker first-frame length for the first-frame sidecar. */
+    readonly firstFrameLength?: number
+    /** Per-upload transfer timeout override (ms). */
+    readonly timeoutMs?: number
+    /** Cancellation signal forwarded to the CDN request. */
+    readonly signal?: AbortSignal
+}
+
+/**
+ * Reusable descriptor returned by {@link WaMessageCoordinator.upload}: the
+ * {@link UploadResult} fields plus the media-key timestamp and echoed mimetype.
+ */
+export interface WaMediaUploadResult extends UploadResult {
+    /** Unix seconds the media key was minted; belongs on the message proto. */
+    readonly mediaKeyTimestamp: number
+    /** Echo of the `mimetype` option when provided. */
+    readonly mimetype?: string
+}
+
+const SIDECAR_UPLOAD_TYPES: ReadonlySet<WaUploadMediaType> = new Set([
+    'video',
+    'ptv',
+    'audio',
+    'gif',
+    'ptt'
+])
+
+async function normalizeUploadSource(source: WaUploadMediaSource): Promise<Uint8Array | Readable> {
+    if (source instanceof Uint8Array) {
+        return source
+    }
+    if (typeof source === 'string') {
+        await assertReadableFile(source)
+        return createReadStream(source)
+    }
+    if (isReadableStream(source)) {
+        return source
+    }
+    throw new Error('media upload received unsupported source type')
+}
+
+/**
  * Coordinates outbound message sending, receipts, addon decryption, media
- * download, and the related MEX account queries. Accessed via
+ * upload/download, and the related MEX account queries. Accessed via
  * {@link WaClient.message}.
  */
 export class WaMessageCoordinator {
     private readonly messageDispatch: WaMessageDispatchCoordinator
     private readonly mediaTransfer: WaMediaTransferClient
+    private readonly mediaUploadOptions: WaMediaMessageOptions
     private readonly logger: Logger
     private readonly messageStore: WaMessageStore
     private readonly messageSecretStore: WaMessageSecretStore
@@ -141,6 +213,7 @@ export class WaMessageCoordinator {
     public constructor(deps: WaMessageCoordinatorDeps) {
         this.messageDispatch = deps.messageDispatch
         this.mediaTransfer = deps.mediaTransfer
+        this.mediaUploadOptions = deps.mediaUploadOptions
         this.logger = deps.logger
         this.messageStore = deps.messageStore
         this.messageSecretStore = deps.messageSecretStore
@@ -366,6 +439,62 @@ export class WaMessageCoordinator {
                 ...options,
                 participant: group.participant
             })
+        }
+    }
+
+    /**
+     * Encrypts and uploads standalone media to the WhatsApp CDN and returns the
+     * reusable descriptor, without sending a message - pre-upload once and
+     * reference it across sends, or build custom protos. Needs a connected
+     * session (the host token comes from a `media_conn` IQ). `source` is bytes,
+     * a file path, or a `Readable`. To send the result, spread its fields onto
+     * the matching proto message and pass that to {@link send}.
+     *
+     * @throws when `source` is unsupported, the file is unreadable, or the upload fails.
+     * @example
+     * ```ts
+     * const media = await client.message.upload(await readFile('photo.jpg'), {
+     *     type: 'image',
+     *     mimetype: 'image/jpeg'
+     * })
+     * await client.message.send(jid, {
+     *     imageMessage: {
+     *         url: media.url,
+     *         directPath: media.directPath,
+     *         mediaKey: media.mediaKey,
+     *         fileSha256: media.fileSha256,
+     *         fileEncSha256: media.fileEncSha256,
+     *         fileLength: media.fileLength,
+     *         mediaKeyTimestamp: media.mediaKeyTimestamp,
+     *         mimetype: media.mimetype
+     *     }
+     * })
+     * ```
+     */
+    public async upload(
+        source: WaUploadMediaSource,
+        options: WaUploadMediaOptions
+    ): Promise<WaMediaUploadResult> {
+        const uploadPath = MEDIA_UPLOAD_PATHS[options.type as keyof typeof MEDIA_UPLOAD_PATHS]
+        if (!uploadPath) {
+            throw new Error(`unknown media upload type: ${String(options.type)}`)
+        }
+        const result = await uploadMedia(this.mediaUploadOptions, {
+            source: await normalizeUploadSource(source),
+            cryptoType: options.type,
+            uploadPath,
+            contentType: options.mimetype,
+            mediaKey: options.mediaKey,
+            sidecar: options.sidecar ?? SIDECAR_UPLOAD_TYPES.has(options.type),
+            firstFrameLength: options.firstFrameLength,
+            timeoutMs: options.timeoutMs,
+            signal: options.signal,
+            logLabel: 'user media upload'
+        })
+        return {
+            ...result,
+            mediaKeyTimestamp: this.mediaUploadOptions.serverClock.nowSeconds(),
+            mimetype: options.mimetype
         }
     }
 

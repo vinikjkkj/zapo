@@ -536,9 +536,15 @@ async function buildMediaMessage(
                 ? (content.firstFrameLength ?? detectedFirstFrameLength)
                 : undefined
 
-        const uploadPromise = isReadableStream(resolved.uploadMedia)
-            ? uploadMediaStream(options, content, resolved.uploadMedia, firstFrameLength, mimetype)
-            : uploadMediaBytes(options, content, resolved.uploadMedia, firstFrameLength, mimetype)
+        const uploadType = resolveUploadType(content)
+        const uploadPromise = uploadMedia(options, {
+            source: resolved.uploadMedia,
+            cryptoType: uploadType,
+            uploadPath: resolveUploadPath(uploadType),
+            contentType: mimetype,
+            sidecar: needsSidecar(content),
+            firstFrameLength
+        })
         const processPromise = runMediaProcessor(
             options.media,
             resolved.processorInput,
@@ -691,16 +697,27 @@ async function buildMediaMessage(
     }
 }
 
-interface UploadResult {
+/** Descriptor produced by {@link uploadMedia}: CDN location, media key, hashes, and optional sidecars. */
+export interface UploadResult {
+    /** Absolute CDN URL of the uploaded ciphertext. */
     readonly url: string
+    /** Host-relative path; pairs with a media host or feeds `downloadMediaMessage`. */
     readonly directPath: string
+    /** 32-byte media key used to encrypt (and later decrypt) the payload. */
     readonly mediaKey: Uint8Array
+    /** SHA-256 of the plaintext. */
     readonly fileSha256: Uint8Array
+    /** SHA-256 of the encrypted `ciphertext||mac`. */
     readonly fileEncSha256: Uint8Array
+    /** Plaintext byte length. */
     readonly fileLength: number
+    /** Server metadata URL, when the CDN returns one (video). */
     readonly metadataUrl?: string
+    /** Streaming sidecar for seekable playback, when computed. */
     readonly streamingSidecar?: Uint8Array
+    /** First-frame sidecar for animated stickers, when computed. */
     readonly firstFrameSidecar?: Uint8Array
+    /** First-frame length echoed back for animated stickers. */
     readonly firstFrameLength?: number
 }
 
@@ -736,41 +753,71 @@ function parseUploadResponse(
     }
 }
 
+/** Fully-resolved input for {@link uploadMedia} (crypto type, path, sidecar already decided). */
+export interface WaMediaUploadInput {
+    readonly source: Uint8Array | Readable
+    readonly cryptoType: MediaCryptoType
+    readonly uploadPath: string
+    readonly contentType?: string
+    readonly mediaKey?: Uint8Array
+    readonly sidecar: boolean
+    readonly firstFrameLength?: number
+    readonly logLabel?: string
+    readonly timeoutMs?: number
+    readonly signal?: AbortSignal
+}
+
+/**
+ * Shared media upload primitive: derives (or reuses) a media key, encrypts,
+ * fetches a media connection, and POSTs the ciphertext. Bytes take a
+ * zero-temp-file fast path; streams stage to a temp file first. Backs both the
+ * send path and `WaMessageCoordinator.upload`.
+ */
+export async function uploadMedia(
+    options: WaMediaMessageOptions,
+    input: WaMediaUploadInput
+): Promise<UploadResult> {
+    const mediaKey = input.mediaKey ?? (await WaMediaCrypto.generateMediaKey())
+    if (input.source instanceof Uint8Array) {
+        return uploadMediaBytes(options, input, mediaKey, input.source)
+    }
+    return uploadMediaStream(options, input, mediaKey, input.source)
+}
+
 async function uploadMediaBytes(
     options: WaMediaMessageOptions,
-    content: Exclude<WaSendMediaMessage, WaSendStickerPackMessage>,
-    mediaBytes: Uint8Array,
-    firstFrameLength: number | undefined,
-    mimetype: string
+    input: WaMediaUploadInput,
+    mediaKey: Uint8Array,
+    mediaBytes: Uint8Array
 ): Promise<UploadResult> {
-    const uploadType = resolveUploadType(content)
-    const mediaKey = await WaMediaCrypto.generateMediaKey()
     const [encrypted, mediaConn] = await Promise.all([
-        WaMediaCrypto.encryptBytes(uploadType, mediaKey, mediaBytes, {
-            sidecar: needsSidecar(content),
-            firstFrameLength
+        WaMediaCrypto.encryptBytes(input.cryptoType, mediaKey, mediaBytes, {
+            sidecar: input.sidecar,
+            firstFrameLength: input.firstFrameLength
         }),
         getMediaConn(options)
     ])
     const selectedHost = selectMediaUploadHost(mediaConn)
     const uploadUrl = buildMediaUploadUrl(
         selectedHost,
-        resolveUploadPath(uploadType),
+        input.uploadPath,
         mediaConn.auth,
         encrypted.fileEncSha256
     )
 
-    options.logger.debug('sending media upload request', {
-        mediaType: content.type,
-        uploadType,
-        host: selectedHost
+    options.logger.debug(input.logLabel ?? 'sending media upload request', {
+        cryptoType: input.cryptoType,
+        host: selectedHost,
+        size: mediaBytes.byteLength
     })
     const uploadResponse = await options.mediaTransfer.uploadStream({
         url: uploadUrl,
         method: 'POST',
         body: encrypted.ciphertextHmac,
         contentLength: encrypted.ciphertextHmac.byteLength,
-        contentType: mimetype
+        contentType: input.contentType,
+        timeoutMs: input.timeoutMs,
+        signal: input.signal
     })
     const responseBody = await options.mediaTransfer.readResponseBytes(uploadResponse)
     const parsed = parseUploadResponse(responseBody, uploadResponse.status)
@@ -782,31 +829,20 @@ async function uploadMediaBytes(
         fileLength: mediaBytes.byteLength,
         streamingSidecar: encrypted.streamingSidecar,
         firstFrameSidecar: encrypted.firstFrameSidecar,
-        firstFrameLength
+        firstFrameLength: input.firstFrameLength
     }
 }
 
-interface EncryptedStreamUploadInput {
-    readonly plaintext: Readable
-    readonly mediaKey: Uint8Array
-    readonly cryptoType: MediaCryptoType
-    readonly uploadPath: string
-    readonly contentType: string
-    readonly logLabel: string
-    readonly sidecar: boolean
-    readonly firstFrameLength?: number
-}
-
-async function uploadEncryptedStream(
+async function uploadMediaStream(
     options: WaMediaMessageOptions,
-    input: EncryptedStreamUploadInput
+    input: WaMediaUploadInput,
+    mediaKey: Uint8Array,
+    plaintext: Readable
 ): Promise<UploadResult> {
-    const encResult = await WaMediaCrypto.encryptToFile(
-        input.cryptoType,
-        input.mediaKey,
-        input.plaintext,
-        { sidecar: input.sidecar, firstFrameLength: input.firstFrameLength }
-    )
+    const encResult = await WaMediaCrypto.encryptToFile(input.cryptoType, mediaKey, plaintext, {
+        sidecar: input.sidecar,
+        firstFrameLength: input.firstFrameLength
+    })
     let readStream: ReturnType<typeof createReadStream> | undefined
     try {
         const mediaConn = await getMediaConn(options)
@@ -818,9 +854,9 @@ async function uploadEncryptedStream(
             encResult.fileEncSha256
         )
 
-        options.logger.debug(input.logLabel, {
+        options.logger.debug(input.logLabel ?? 'sending media stream upload request', {
+            cryptoType: input.cryptoType,
             host: selectedHost,
-            uploadPath: input.uploadPath,
             plaintextLength: encResult.plaintextLength,
             encryptedSize: encResult.fileSize
         })
@@ -830,13 +866,15 @@ async function uploadEncryptedStream(
             method: 'POST',
             body: readStream,
             contentLength: encResult.fileSize,
-            contentType: input.contentType
+            contentType: input.contentType,
+            timeoutMs: input.timeoutMs,
+            signal: input.signal
         })
         const responseBody = await options.mediaTransfer.readResponseBytes(uploadResponse)
         const parsed = parseUploadResponse(responseBody, uploadResponse.status)
         return {
             ...parsed,
-            mediaKey: input.mediaKey,
+            mediaKey,
             fileSha256: encResult.fileSha256,
             fileEncSha256: encResult.fileEncSha256,
             fileLength: encResult.plaintextLength,
@@ -855,26 +893,6 @@ async function uploadEncryptedStream(
     }
 }
 
-async function uploadMediaStream(
-    options: WaMediaMessageOptions,
-    content: Exclude<WaSendMediaMessage, WaSendStickerPackMessage>,
-    stream: Readable,
-    firstFrameLength: number | undefined,
-    mimetype: string
-): Promise<UploadResult> {
-    const cryptoType = resolveUploadType(content)
-    return uploadEncryptedStream(options, {
-        plaintext: stream,
-        mediaKey: await WaMediaCrypto.generateMediaKey(),
-        cryptoType,
-        uploadPath: resolveUploadPath(cryptoType),
-        contentType: mimetype,
-        logLabel: 'sending media stream upload request',
-        sidecar: needsSidecar(content),
-        firstFrameLength
-    })
-}
-
 function openStickerPackInputStream(media: Uint8Array | string): Readable {
     return typeof media === 'string' ? createReadStream(media) : Readable.from([media])
 }
@@ -891,23 +909,23 @@ async function buildStickerPackMediaMessage(
 
     const mediaKey = await WaMediaCrypto.generateMediaKey()
     const [bundle, cover] = await Promise.all([
-        uploadEncryptedStream(options, {
-            plaintext: createStickerPackZipStream(toStickerPackZipEntries(content)),
-            mediaKey,
+        uploadMedia(options, {
+            source: createStickerPackZipStream(toStickerPackZipEntries(content)),
             cryptoType: 'sticker-pack',
             uploadPath: MEDIA_UPLOAD_PATHS['sticker-pack'],
             contentType: 'application/zip',
-            logLabel: 'sending sticker pack bundle upload',
-            sidecar: false
-        }),
-        uploadEncryptedStream(options, {
-            plaintext: openStickerPackInputStream(coverThumbnail),
             mediaKey,
+            sidecar: false,
+            logLabel: 'sending sticker pack bundle upload'
+        }),
+        uploadMedia(options, {
+            source: openStickerPackInputStream(coverThumbnail),
             cryptoType: 'thumbnail-sticker-pack',
             uploadPath: MEDIA_UPLOAD_PATHS['thumbnail-sticker-pack'],
             contentType: 'image/jpeg',
-            logLabel: 'sending sticker pack thumbnail upload',
-            sidecar: false
+            mediaKey,
+            sidecar: false,
+            logLabel: 'sending sticker pack thumbnail upload'
         })
     ])
     if (cover.fileLength === 0) {
