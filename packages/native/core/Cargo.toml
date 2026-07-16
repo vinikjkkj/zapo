@@ -1,0 +1,19 @@
+[package]
+name = "zapo-native-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Shared curve25519 crypto core for zapo-js native accelerators (X25519 + XEdDSA)"
+
+[lib]
+name = "zapo_native_core"
+
+[dependencies]
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "precomputed-tables", "zeroize"] }
+sha2 = { version = "0.10", default-features = false }
+getrandom = "0.2"
+
+[features]
+# Enabled by the wasm crate: routes getrandom to crypto.getRandomValues on
+# wasm32-unknown-unknown. Left off for the NAPI (native) build.
+js = ["getrandom/js"]
