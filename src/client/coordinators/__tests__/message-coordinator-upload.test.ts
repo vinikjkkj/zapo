@@ -179,3 +179,15 @@ test('upload rejects an unsupported source type', async () => {
         /unsupported source type/
     )
 })
+
+test('upload rejects an unknown media type before reaching the CDN', async () => {
+    const captured: CapturedUpload = {}
+    const { options } = fakeMediaUploadOptions(captured)
+    const coordinator = createUploadCoordinator(options)
+
+    await assert.rejects(
+        () => coordinator.upload(TEXT_ENCODER.encode('x'), { type: 'bogus' as never }),
+        /unknown media upload type: bogus/
+    )
+    assert.equal(captured.url, undefined)
+})

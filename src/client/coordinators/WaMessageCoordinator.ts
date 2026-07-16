@@ -495,10 +495,14 @@ export class WaMessageCoordinator {
         source: WaUploadMediaSource,
         options: WaUploadMediaOptions
     ): Promise<WaMediaUploadResult> {
+        const uploadPath = MEDIA_UPLOAD_PATHS[options.type as keyof typeof MEDIA_UPLOAD_PATHS]
+        if (!uploadPath) {
+            throw new Error(`unknown media upload type: ${String(options.type)}`)
+        }
         const result = await uploadMedia(this.mediaUploadOptions, {
             source: await normalizeUploadSource(source),
             cryptoType: options.type,
-            uploadPath: MEDIA_UPLOAD_PATHS[options.type],
+            uploadPath,
             contentType: options.mimetype,
             mediaKey: options.mediaKey,
             sidecar: options.sidecar ?? SIDECAR_UPLOAD_TYPES.has(options.type),
