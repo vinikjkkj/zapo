@@ -697,16 +697,27 @@ async function buildMediaMessage(
     }
 }
 
-interface UploadResult {
+/** Descriptor produced by {@link uploadMedia}: CDN location, media key, hashes, and optional sidecars. */
+export interface UploadResult {
+    /** Absolute CDN URL of the uploaded ciphertext. */
     readonly url: string
+    /** Host-relative path; pairs with a media host or feeds `downloadMediaMessage`. */
     readonly directPath: string
+    /** 32-byte media key used to encrypt (and later decrypt) the payload. */
     readonly mediaKey: Uint8Array
+    /** SHA-256 of the plaintext. */
     readonly fileSha256: Uint8Array
+    /** SHA-256 of the encrypted `ciphertext||mac`. */
     readonly fileEncSha256: Uint8Array
+    /** Plaintext byte length. */
     readonly fileLength: number
+    /** Server metadata URL, when the CDN returns one (video). */
     readonly metadataUrl?: string
+    /** Streaming sidecar for seekable playback, when computed. */
     readonly streamingSidecar?: Uint8Array
+    /** First-frame sidecar for animated stickers, when computed. */
     readonly firstFrameSidecar?: Uint8Array
+    /** First-frame length echoed back for animated stickers. */
     readonly firstFrameLength?: number
 }
 

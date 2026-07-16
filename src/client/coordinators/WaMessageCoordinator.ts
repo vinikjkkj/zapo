@@ -11,7 +11,11 @@ import {
     isReadableStream,
     type WaUploadMediaSource
 } from '@client/media'
-import { uploadMedia, type WaMediaMessageOptions } from '@client/messaging/messages'
+import {
+    uploadMedia,
+    type UploadResult,
+    type WaMediaMessageOptions
+} from '@client/messaging/messages'
 import type {
     WaDownloadMediaOptions,
     WaIncomingAddonEvent,
@@ -21,6 +25,7 @@ import type {
 import type { Logger } from '@infra/log/types'
 import { MEDIA_UPLOAD_PATHS } from '@media/constants'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
+import type { MediaKind } from '@media/types'
 import {
     buildAddonAdditionalData,
     decodeAddonPlaintext,
@@ -135,15 +140,7 @@ function parseMessageCappingMexResponse(
  * Media kinds accepted by {@link WaMessageCoordinator.upload}. `gif` is a
  * GIF-playback video, `ptt` a voice note, `ptv` a round video note.
  */
-export type WaUploadMediaType =
-    | 'image'
-    | 'video'
-    | 'audio'
-    | 'document'
-    | 'sticker'
-    | 'ptv'
-    | 'gif'
-    | 'ptt'
+export type WaUploadMediaType = MediaKind | 'gif' | 'ptt'
 
 /** Options for {@link WaMessageCoordinator.upload}. */
 export interface WaUploadMediaOptions {
@@ -163,32 +160,15 @@ export interface WaUploadMediaOptions {
     readonly signal?: AbortSignal
 }
 
-/** Reusable descriptor returned by {@link WaMessageCoordinator.upload}. */
-export interface WaMediaUploadResult {
-    /** Absolute CDN URL of the uploaded ciphertext. */
-    readonly url: string
-    /** Host-relative path; pairs with a media host or feeds `downloadMediaMessage`. */
-    readonly directPath: string
-    /** 32-byte media key used to encrypt (and later decrypt) the payload. */
-    readonly mediaKey: Uint8Array
-    /** SHA-256 of the plaintext. */
-    readonly fileSha256: Uint8Array
-    /** SHA-256 of the encrypted `ciphertext||mac`. */
-    readonly fileEncSha256: Uint8Array
-    /** Plaintext byte length. */
-    readonly fileLength: number
+/**
+ * Reusable descriptor returned by {@link WaMessageCoordinator.upload}: the
+ * {@link UploadResult} fields plus the media-key timestamp and echoed mimetype.
+ */
+export interface WaMediaUploadResult extends UploadResult {
     /** Unix seconds the media key was minted; belongs on the message proto. */
     readonly mediaKeyTimestamp: number
     /** Echo of the `mimetype` option when provided. */
     readonly mimetype?: string
-    /** Server metadata URL, when the CDN returns one (video). */
-    readonly metadataUrl?: string
-    /** Streaming sidecar for seekable playback, when computed. */
-    readonly streamingSidecar?: Uint8Array
-    /** First-frame sidecar for animated stickers, when computed. */
-    readonly firstFrameSidecar?: Uint8Array
-    /** First-frame length echoed back for animated stickers. */
-    readonly firstFrameLength?: number
 }
 
 const SIDECAR_UPLOAD_TYPES: ReadonlySet<WaUploadMediaType> = new Set([
@@ -512,18 +492,9 @@ export class WaMessageCoordinator {
             logLabel: 'user media upload'
         })
         return {
-            url: result.url,
-            directPath: result.directPath,
-            mediaKey: result.mediaKey,
-            fileSha256: result.fileSha256,
-            fileEncSha256: result.fileEncSha256,
-            fileLength: result.fileLength,
+            ...result,
             mediaKeyTimestamp: this.mediaUploadOptions.serverClock.nowSeconds(),
-            mimetype: options.mimetype,
-            metadataUrl: result.metadataUrl,
-            streamingSidecar: result.streamingSidecar,
-            firstFrameSidecar: result.firstFrameSidecar,
-            firstFrameLength: result.firstFrameLength
+            mimetype: options.mimetype
         }
     }
 
