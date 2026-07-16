@@ -1,6 +1,7 @@
 import { sha512 } from '@crypto/core/primitives'
 import { randomBytesAsync } from '@crypto/core/random'
 import { Ed25519 } from '@crypto/curves/Ed25519'
+import { resolveNativeCryptoBackend } from '@crypto/curves/nativeCryptoBackend'
 import { clampCurvePrivateKeyInPlace, montgomeryToEdwardsPublic } from '@crypto/curves/X25519'
 import { encodeExtendedPoint, scalarMultBase } from '@crypto/math/edwards'
 import { bigIntToBytesLE, bytesToBigIntLE } from '@crypto/math/le'
@@ -23,20 +24,9 @@ interface NativeBinding {
 
 const nativeBinding: NativeBinding | null = (() => {
     if (process.env.ZAPO_XEDDSA_FORCE_JS) return null
-    try {
-        const mod = require('@zapo-js/native') as {
-            xeddsaSign?: NativeBinding['xeddsaSign']
-            xeddsaVerify?: NativeBinding['xeddsaVerify']
-        }
-        if (
-            mod &&
-            typeof mod.xeddsaSign === 'function' &&
-            typeof mod.xeddsaVerify === 'function'
-        ) {
-            return { xeddsaSign: mod.xeddsaSign, xeddsaVerify: mod.xeddsaVerify }
-        }
-    } catch {
-        // optional native binding not installed; fall through to JS implementation
+    const mod = resolveNativeCryptoBackend()
+    if (mod && typeof mod.xeddsaSign === 'function' && typeof mod.xeddsaVerify === 'function') {
+        return { xeddsaSign: mod.xeddsaSign, xeddsaVerify: mod.xeddsaVerify }
     }
     return null
 })()

@@ -12,9 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 napi = { version = "3", default-features = false, features = ["napi9"] }
 napi-derive = "3"
-curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "precomputed-tables", "zeroize"] }
-sha2 = { version = "0.10", default-features = false }
-getrandom = "0.2"
+zapo-native-core = { path = "core" }
 
 [build-dependencies]
 napi-build = "2"
@@ -24,3 +22,11 @@ lto = true
 opt-level = 3
 codegen-units = 1
 strip = "symbols"
+
+[workspace]
+members = ["core", "wasm"]
+# `cargo build` at the root builds only the NAPI crate + core (host target).
+# The wasm crate is built explicitly (`-p zapo-native-wasm --target wasm32-*`)
+# so its getrandom/js feature never unifies into the native build.
+default-members = [".", "core"]
+resolver = "2"
