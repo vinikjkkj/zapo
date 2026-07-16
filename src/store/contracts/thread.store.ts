@@ -7,6 +7,11 @@ export interface WaStoredThreadRecord {
     readonly muteEndMs?: number
     readonly markedAsUnread?: boolean
     readonly ephemeralExpiration?: number
+    /**
+     * Unix seconds when disappearing mode was enabled for this chat, from the
+     * app-state `Conversation` record. Present only while the chat is ephemeral.
+     */
+    readonly ephemeralSettingTimestamp?: number
 }
 
 export interface WaThreadStore {

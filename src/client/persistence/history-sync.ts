@@ -182,7 +182,9 @@ export async function processHistorySyncNotification(
             pinned: conversation.pinned ?? undefined,
             muteEndMs: longToNumber(conversation.muteEndTime) || undefined,
             markedAsUnread: conversation.markedAsUnread ?? undefined,
-            ephemeralExpiration: conversation.ephemeralExpiration ?? undefined
+            ephemeralExpiration: conversation.ephemeralExpiration ?? undefined,
+            ephemeralSettingTimestamp:
+                longToNumber(conversation.ephemeralSettingTimestamp) || undefined
         })
         if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
             await flushPendingWrites(pendingWrites)

@@ -84,6 +84,7 @@ import type { WaIdentityStore } from '@store/contracts/identity.store'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
+import type { WaThreadStore } from '@store/contracts/thread.store'
 import { encodeBinaryNode } from '@transport/binary'
 import {
     buildButtonAddonNode,
@@ -120,6 +121,7 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly sessionStore: WaSessionStore
     readonly identityStore: WaIdentityStore
     readonly deviceListStore: WaDeviceListStore
+    readonly threadStore: WaThreadStore
     readonly signalDeviceSync: SignalDeviceSyncApi
     readonly messageSecretStore: WaMessageSecretStore
     /**
@@ -178,6 +180,42 @@ export class WaMessageDispatchCoordinator {
         this.deps = options
         this.mobileMessageIdFormat = options.mobileMessageIdFormat ?? (() => false)
         this.serverClock = options.serverClock
+    }
+
+    /**
+     * Resolves the disappearing-message (`expiration` + `ephemeralSettingTimestamp`)
+     * pair for an outgoing message to a chat with disappearing-mode on. Covers both
+     * 1:1 and group chats: for groups the TTL comes from the group metadata cache,
+     * for 1:1 it comes from the thread store, and the setting timestamp always comes
+     * from the thread store (the app-state `Conversation` record). Returns an empty
+     * object when nothing resolvable is found or the values are absent.
+     */
+    private async resolveChatEphemeral(
+        recipientJid: string,
+        base: WaSendContextInfo | undefined
+    ): Promise<Partial<WaSendContextInfo>> {
+        let expiration: number | null = null
+        if (isGroupJid(recipientJid)) {
+            const cached = await this.deps.groupMetadataCache.resolveEphemeral(recipientJid)
+            expiration = cached && cached > 0 ? cached : null
+        }
+        const thread = await this.deps.threadStore.getByJid(recipientJid)
+        if (expiration === null && !isGroupJid(recipientJid) && thread?.ephemeralExpiration) {
+            expiration = thread.ephemeralExpiration
+        }
+        if (expiration === null || expiration <= 0) {
+            return {}
+        }
+        const resolvedTimestamp =
+            base?.ephemeralSettingTimestamp ?? thread?.ephemeralSettingTimestamp
+        return {
+            expirationSeconds: expiration,
+            // Only set when defined: an explicit content/options-level
+            // ephemeralSettingTimestamp must not be clobbered by `undefined`.
+            ...(resolvedTimestamp !== undefined
+                ? { ephemeralSettingTimestamp: resolvedTimestamp }
+                : {})
+        }
     }
 
     public async publishMessageNode(
@@ -347,15 +385,19 @@ export class WaMessageDispatchCoordinator {
         if (options.expirationSeconds !== undefined) {
             optionsCtx = { ...optionsCtx, expirationSeconds: options.expirationSeconds }
         }
+        if (options.ephemeralSettingTimestamp !== undefined) {
+            optionsCtx = {
+                ...optionsCtx,
+                ephemeralSettingTimestamp: options.ephemeralSettingTimestamp
+            }
+        }
         if (
-            isGroupJid(recipientJid) &&
             optionsCtx?.expirationSeconds === undefined &&
             !options.disableGroupEphemeralAutoInject
         ) {
-            const cachedEphemeral =
-                await this.deps.groupMetadataCache.resolveEphemeral(recipientJid)
-            if (cachedEphemeral !== null && cachedEphemeral > 0) {
-                optionsCtx = { ...optionsCtx, expirationSeconds: cachedEphemeral }
+            optionsCtx = {
+                ...optionsCtx,
+                ...(await this.resolveChatEphemeral(recipientJid, optionsCtx))
             }
         }
         const ctx = resolveSendContextInfo({

@@ -15,6 +15,7 @@ interface ThreadDoc {
     mute_end_ms: number | null
     marked_as_unread: boolean | null
     ephemeral_expiration: number | null
+    ephemeral_setting_timestamp: number | null
 }
 
 function docToRecord(doc: ThreadDoc): WaStoredThreadRecord {
@@ -26,7 +27,8 @@ function docToRecord(doc: ThreadDoc): WaStoredThreadRecord {
         pinned: doc.pinned ?? undefined,
         muteEndMs: doc.mute_end_ms ?? undefined,
         markedAsUnread: doc.marked_as_unread ?? undefined,
-        ephemeralExpiration: doc.ephemeral_expiration ?? undefined
+        ephemeralExpiration: doc.ephemeral_expiration ?? undefined,
+        ephemeralSettingTimestamp: doc.ephemeral_setting_timestamp ?? undefined
     }
 }
 
@@ -40,6 +42,8 @@ function buildCoalesceSet(record: WaStoredThreadRecord): Partial<ThreadDoc> {
     if (record.markedAsUnread !== undefined) set.marked_as_unread = record.markedAsUnread
     if (record.ephemeralExpiration !== undefined)
         set.ephemeral_expiration = record.ephemeralExpiration
+    if (record.ephemeralSettingTimestamp !== undefined)
+        set.ephemeral_setting_timestamp = record.ephemeralSettingTimestamp
     return set
 }
 

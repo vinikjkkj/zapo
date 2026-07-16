@@ -362,6 +362,14 @@ const MIGRATIONS: readonly Migration[] = [
             ALTER TABLE \`__PREFIX__retry_inbound_counters\`
                 DROP COLUMN updated_at_ms
         `
+    },
+    {
+        name: '0018_mailbox_threads_ephemeral_setting_timestamp',
+        domain: 'mailbox',
+        sql: `
+            ALTER TABLE \`__PREFIX__mailbox_threads\`
+                ADD COLUMN ephemeral_setting_timestamp BIGINT
+        `
     }
 ]
 

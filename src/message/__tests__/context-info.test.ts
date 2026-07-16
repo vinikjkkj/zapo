@@ -235,6 +235,21 @@ test('resolveSendContextInfo populates mentions', () => {
     assert.deepEqual(result?.mentionedJids, ['a@s.whatsapp.net'])
 })
 
+test('buildContextInfoProto maps ephemeralSettingTimestamp to proto field 26', () => {
+    const proto = buildContextInfoProto({
+        expirationSeconds: 86_400,
+        ephemeralSettingTimestamp: 1_751_808_692
+    })
+    assert.equal(proto.expiration, 86_400)
+    assert.equal(proto.ephemeralSettingTimestamp, 1_751_808_692)
+})
+
+test('buildContextInfoProto omits ephemeralSettingTimestamp when absent', () => {
+    const proto = buildContextInfoProto({ expirationSeconds: 86_400 })
+    assert.equal(proto.expiration, 86_400)
+    assert.equal(proto.ephemeralSettingTimestamp, undefined)
+})
+
 test('resolveSendContextInfo merges content-level + options-level + quote + forward + mentions', () => {
     const result = resolveSendContextInfo({
         contentLevel: { isSpoiler: true },
