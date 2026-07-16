@@ -32,7 +32,9 @@ function mergeThread(
         pinned: incoming.pinned ?? previous.pinned,
         muteEndMs: incoming.muteEndMs ?? previous.muteEndMs,
         markedAsUnread: incoming.markedAsUnread ?? previous.markedAsUnread,
-        ephemeralExpiration: incoming.ephemeralExpiration ?? previous.ephemeralExpiration
+        ephemeralExpiration: incoming.ephemeralExpiration ?? previous.ephemeralExpiration,
+        ephemeralSettingTimestamp:
+            incoming.ephemeralSettingTimestamp ?? previous.ephemeralSettingTimestamp
     }
 }
 

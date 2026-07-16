@@ -15,8 +15,8 @@ export class WaThreadMysqlStore extends BaseMysqlStore implements WaThreadStore 
         await this.pool.execute(
             `INSERT INTO ${this.t('mailbox_threads')} (
                 session_id, jid, name, unread_count, archived, pinned,
-                mute_end_ms, marked_as_unread, ephemeral_expiration
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                mute_end_ms, marked_as_unread, ephemeral_expiration, ephemeral_setting_timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 name = COALESCE(VALUES(name), name),
                 unread_count = COALESCE(VALUES(unread_count), unread_count),
@@ -24,7 +24,8 @@ export class WaThreadMysqlStore extends BaseMysqlStore implements WaThreadStore 
                 pinned = COALESCE(VALUES(pinned), pinned),
                 mute_end_ms = COALESCE(VALUES(mute_end_ms), mute_end_ms),
                 marked_as_unread = COALESCE(VALUES(marked_as_unread), marked_as_unread),
-                ephemeral_expiration = COALESCE(VALUES(ephemeral_expiration), ephemeral_expiration)`,
+                ephemeral_expiration = COALESCE(VALUES(ephemeral_expiration), ephemeral_expiration),
+                ephemeral_setting_timestamp = COALESCE(VALUES(ephemeral_setting_timestamp), ephemeral_setting_timestamp)`,
             [
                 this.sessionId,
                 record.jid,
@@ -34,7 +35,8 @@ export class WaThreadMysqlStore extends BaseMysqlStore implements WaThreadStore 
                 record.pinned ?? null,
                 record.muteEndMs ?? null,
                 record.markedAsUnread === undefined ? null : record.markedAsUnread ? 1 : 0,
-                record.ephemeralExpiration ?? null
+                record.ephemeralExpiration ?? null,
+                record.ephemeralSettingTimestamp ?? null
             ]
         )
     }
@@ -45,7 +47,7 @@ export class WaThreadMysqlStore extends BaseMysqlStore implements WaThreadStore 
             executor: { execute: PoolConnection['execute'] },
             chunk: readonly WaStoredThreadRecord[]
         ): Promise<void> => {
-            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
+            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
             const params: MysqlParam[] = []
             for (const record of chunk) {
                 params.push(
@@ -57,13 +59,14 @@ export class WaThreadMysqlStore extends BaseMysqlStore implements WaThreadStore 
                     record.pinned ?? null,
                     record.muteEndMs ?? null,
                     record.markedAsUnread === undefined ? null : record.markedAsUnread ? 1 : 0,
-                    record.ephemeralExpiration ?? null
+                    record.ephemeralExpiration ?? null,
+                    record.ephemeralSettingTimestamp ?? null
                 )
             }
             await executor.execute(
                 `INSERT INTO ${this.t('mailbox_threads')} (
                     session_id, jid, name, unread_count, archived, pinned,
-                    mute_end_ms, marked_as_unread, ephemeral_expiration
+                    mute_end_ms, marked_as_unread, ephemeral_expiration, ephemeral_setting_timestamp
                 ) VALUES ${placeholders}
                 ON DUPLICATE KEY UPDATE
                     name = COALESCE(VALUES(name), name),
@@ -72,7 +75,8 @@ export class WaThreadMysqlStore extends BaseMysqlStore implements WaThreadStore 
                     pinned = COALESCE(VALUES(pinned), pinned),
                     mute_end_ms = COALESCE(VALUES(mute_end_ms), mute_end_ms),
                     marked_as_unread = COALESCE(VALUES(marked_as_unread), marked_as_unread),
-                    ephemeral_expiration = COALESCE(VALUES(ephemeral_expiration), ephemeral_expiration)`,
+                    ephemeral_expiration = COALESCE(VALUES(ephemeral_expiration), ephemeral_expiration),
+                    ephemeral_setting_timestamp = COALESCE(VALUES(ephemeral_setting_timestamp), ephemeral_setting_timestamp)`,
                 params
             )
         }
@@ -96,7 +100,7 @@ export class WaThreadMysqlStore extends BaseMysqlStore implements WaThreadStore 
         const row = queryFirst(
             await this.pool.execute(
                 `SELECT jid, name, unread_count, archived, pinned,
-                    mute_end_ms, marked_as_unread, ephemeral_expiration
+                    mute_end_ms, marked_as_unread, ephemeral_expiration, ephemeral_setting_timestamp
              FROM ${this.t('mailbox_threads')}
              WHERE session_id = ? AND jid = ?`,
                 [this.sessionId, jid]
@@ -112,7 +116,7 @@ export class WaThreadMysqlStore extends BaseMysqlStore implements WaThreadStore 
         return queryRows(
             await this.pool.execute(
                 `SELECT jid, name, unread_count, archived, pinned,
-                    mute_end_ms, marked_as_unread, ephemeral_expiration
+                    mute_end_ms, marked_as_unread, ephemeral_expiration, ephemeral_setting_timestamp
              FROM ${this.t('mailbox_threads')}
              WHERE session_id = ?
              LIMIT ${resolved}`,
@@ -151,6 +155,10 @@ function rowToRecord(row: MysqlRow): WaStoredThreadRecord {
         markedAsUnread:
             row.marked_as_unread === null ? undefined : Number(row.marked_as_unread) === 1,
         ephemeralExpiration:
-            row.ephemeral_expiration !== null ? Number(row.ephemeral_expiration) : undefined
+            row.ephemeral_expiration !== null ? Number(row.ephemeral_expiration) : undefined,
+        ephemeralSettingTimestamp:
+            row.ephemeral_setting_timestamp !== null
+                ? Number(row.ephemeral_setting_timestamp)
+                : undefined
     }
 }

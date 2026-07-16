@@ -369,6 +369,13 @@ const MIGRATIONS: readonly Migration[] = [
             ALTER TABLE "__PREFIX__retry_outbound_messages" DROP COLUMN IF EXISTS created_at_ms;
             ALTER TABLE "__PREFIX__retry_inbound_counters" DROP COLUMN IF EXISTS updated_at_ms
         `
+    },
+    {
+        name: '0018_mailbox_threads_ephemeral_setting_timestamp',
+        domain: 'mailbox',
+        sql: `
+            ALTER TABLE "__PREFIX__mailbox_threads" ADD COLUMN IF NOT EXISTS ephemeral_setting_timestamp BIGINT
+        `
     }
 ]
 

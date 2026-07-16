@@ -769,6 +769,7 @@ export function buildWaClientDependencies(input: {
         sessionStore: sessionStore.session,
         identityStore: sessionStore.identity,
         deviceListStore: sessionStore.deviceList,
+        threadStore: sessionStore.threads,
         signalDeviceSync,
         messageSecretStore: sessionStore.messageSecret,
         persistAllMessageSecrets: options.addons?.persistAllSecrets === true,

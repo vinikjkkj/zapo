@@ -20,6 +20,10 @@ function hashToRecord(data: Record<string, string>): WaStoredThreadRecord {
         ephemeralExpiration:
             toStringOrNull(data.ephemeral_expiration) !== null
                 ? Number(data.ephemeral_expiration)
+                : undefined,
+        ephemeralSettingTimestamp:
+            toStringOrNull(data.ephemeral_setting_timestamp) !== null
+                ? Number(data.ephemeral_setting_timestamp)
                 : undefined
     }
 }
@@ -50,6 +54,9 @@ function recordToHash(record: WaStoredThreadRecord): Record<string, string> {
     if (record.ephemeralExpiration !== undefined) {
         fields.ephemeral_expiration = String(record.ephemeralExpiration)
     }
+    if (record.ephemeralSettingTimestamp !== undefined) {
+        fields.ephemeral_setting_timestamp = String(record.ephemeralSettingTimestamp)
+    }
 
     return fields
 }
@@ -72,6 +79,19 @@ export class WaThreadRedisStore extends BaseRedisStore implements WaThreadStore 
             const merged: Record<string, string> = { ...existing }
             for (const [field, value] of Object.entries(newFields)) {
                 merged[field] = value
+            }
+            // When a field is absent from the incoming record, the merge retains
+            // the previously-persisted value. Explicitly delete the ephemeral keys
+            // so a chat that just disabled disappearing mode does not keep a stale
+            // timestamp (causing the peer to warn "message will not disappear").
+            if (
+                record.ephemeralSettingTimestamp === undefined &&
+                'ephemeral_setting_timestamp' in merged
+            ) {
+                delete merged.ephemeral_setting_timestamp
+            }
+            if (record.ephemeralExpiration === undefined && 'ephemeral_expiration' in merged) {
+                delete merged.ephemeral_expiration
             }
             await this.redis.hset(key, merged)
         } else {

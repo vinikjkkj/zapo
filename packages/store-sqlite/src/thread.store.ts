@@ -12,7 +12,7 @@ import type { WaSqliteConnection } from './connection'
 import type { WaSqliteStorageOptions } from './types'
 
 const THREAD_COLUMNS =
-    'jid, name, unread_count, archived, pinned, mute_end_ms, marked_as_unread, ephemeral_expiration'
+    'jid, name, unread_count, archived, pinned, mute_end_ms, marked_as_unread, ephemeral_expiration, ephemeral_setting_timestamp'
 
 interface ThreadRow extends Record<string, unknown> {
     readonly jid: unknown
@@ -23,6 +23,7 @@ interface ThreadRow extends Record<string, unknown> {
     readonly mute_end_ms: unknown
     readonly marked_as_unread: unknown
     readonly ephemeral_expiration: unknown
+    readonly ephemeral_setting_timestamp: unknown
 }
 
 function decodeThreadRow(row: ThreadRow): WaStoredThreadRecord {
@@ -37,6 +38,10 @@ function decodeThreadRow(row: ThreadRow): WaStoredThreadRecord {
         ephemeralExpiration: asOptionalNumber(
             row.ephemeral_expiration,
             'mailbox_threads.ephemeral_expiration'
+        ),
+        ephemeralSettingTimestamp: asOptionalNumber(
+            row.ephemeral_setting_timestamp,
+            'mailbox_threads.ephemeral_setting_timestamp'
         )
     }
 }
@@ -109,8 +114,8 @@ export class WaThreadSqliteStore extends BaseSqliteStore implements Contract {
         db.run(
             `INSERT INTO mailbox_threads (
                 session_id, jid, name, unread_count, archived, pinned,
-                mute_end_ms, marked_as_unread, ephemeral_expiration
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                mute_end_ms, marked_as_unread, ephemeral_expiration, ephemeral_setting_timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id, jid) DO UPDATE SET
                 name=COALESCE(excluded.name, mailbox_threads.name),
                 unread_count=COALESCE(excluded.unread_count, mailbox_threads.unread_count),
@@ -118,7 +123,8 @@ export class WaThreadSqliteStore extends BaseSqliteStore implements Contract {
                 pinned=COALESCE(excluded.pinned, mailbox_threads.pinned),
                 mute_end_ms=COALESCE(excluded.mute_end_ms, mailbox_threads.mute_end_ms),
                 marked_as_unread=COALESCE(excluded.marked_as_unread, mailbox_threads.marked_as_unread),
-                ephemeral_expiration=COALESCE(excluded.ephemeral_expiration, mailbox_threads.ephemeral_expiration)`,
+                ephemeral_expiration=COALESCE(excluded.ephemeral_expiration, mailbox_threads.ephemeral_expiration),
+                ephemeral_setting_timestamp=COALESCE(excluded.ephemeral_setting_timestamp, mailbox_threads.ephemeral_setting_timestamp)`,
             [
                 this.options.sessionId,
                 record.jid,
@@ -128,7 +134,8 @@ export class WaThreadSqliteStore extends BaseSqliteStore implements Contract {
                 record.pinned ?? null,
                 record.muteEndMs ?? null,
                 record.markedAsUnread === undefined ? null : record.markedAsUnread ? 1 : 0,
-                record.ephemeralExpiration ?? null
+                record.ephemeralExpiration ?? null,
+                record.ephemeralSettingTimestamp ?? null
             ]
         )
     }

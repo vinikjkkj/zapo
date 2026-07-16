@@ -120,6 +120,60 @@ test('write-behind merges partial thread upserts for the same jid', async () => 
     assert.equal(targetWrites[0].archived, true)
 })
 
+test('write-behind merges partial thread ephemeral fields across upserts', async () => {
+    let releaseBlock: () => void = () => undefined
+    const blocked = new Promise<void>((resolve) => {
+        releaseBlock = resolve
+    })
+    const threadWrites: WaStoredThreadRecord[] = []
+
+    const threadUpsert = async (record: WaStoredThreadRecord): Promise<void> => {
+        if (record.jid === 'block-thread@s.whatsapp.net') {
+            await blocked
+        }
+        threadWrites.push(record)
+    }
+    const writeBehind = new WriteBehindPersistence(
+        {
+            messageStore: {
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
+            } as never,
+            threadStore: {
+                upsert: threadUpsert,
+                upsertBatch: async (records: readonly WaStoredThreadRecord[]) => {
+                    for (const record of records) await threadUpsert(record)
+                }
+            } as never,
+            contactStore: {
+                upsert: async () => undefined,
+                upsertBatch: async () => undefined
+            } as never
+        },
+        createNoopLogger()
+    )
+
+    writeBehind.persistThread({
+        jid: 'block-thread@s.whatsapp.net'
+    })
+    writeBehind.persistThread({
+        jid: 'thread@s.whatsapp.net',
+        ephemeralExpiration: 86_400
+    })
+    writeBehind.persistThread({
+        jid: 'thread@s.whatsapp.net',
+        ephemeralSettingTimestamp: 1_751_808_692
+    })
+
+    releaseBlock()
+    await writeBehind.flush(2_000)
+
+    const targetWrites = threadWrites.filter((record) => record.jid === 'thread@s.whatsapp.net')
+    assert.equal(targetWrites.length, 1)
+    assert.equal(targetWrites[0].ephemeralExpiration, 86_400)
+    assert.equal(targetWrites[0].ephemeralSettingTimestamp, 1_751_808_692)
+})
+
 test('write-behind flush and destroy expose remaining pending entries', async () => {
     let releaseBlock: () => void = () => undefined
     const blocked = new Promise<void>((resolve) => {
