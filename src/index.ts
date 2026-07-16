@@ -11,7 +11,12 @@ export type {
     WaWriteBehindOptions
 } from '@client/types'
 export type { WaClientPluginContext, WaClientPluginDefinition } from '@client/plugins'
-export type { WaMessageCoordinator } from '@client/coordinators/WaMessageCoordinator'
+export type {
+    WaMediaUploadResult,
+    WaMessageCoordinator,
+    WaUploadMediaOptions,
+    WaUploadMediaType
+} from '@client/coordinators/WaMessageCoordinator'
 export type {
     WaAccountTakeoverNoticeEvent,
     WaAppStateMutationEvent,
@@ -105,6 +110,21 @@ export type {
 } from '@client/coordinators/WaBusinessCoordinator'
 export { downloadMediaMessage } from '@client/media'
 export type { WaDownloadMediaMessageOptions, WaUploadMediaSource } from '@client/media'
+export { WaMediaCrypto } from '@media/crypto/WaMediaCrypto'
+export { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
+export type {
+    MediaCryptoType,
+    MediaKind,
+    WaMediaConn,
+    WaMediaDecryptReadableOptions,
+    WaMediaDecryptionResult,
+    WaMediaDerivedKeys,
+    WaMediaEncryptionResult,
+    WaMediaFileEncryptionResult,
+    WaMediaReadableDecryptionResult,
+    WaMediaReadableEncryptionResult,
+    WaMediaTransferClientOptions
+} from '@media/types'
 export type { WaEditBusinessProfileInput } from '@transport/node/builders/business'
 export type {
     WaEmailCoordinator,

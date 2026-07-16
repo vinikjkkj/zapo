@@ -35,6 +35,7 @@ function createCoordinator(peerDataOperation: PeerDataOperationRequester): WaMes
     return new WaMessageCoordinator({
         messageDispatch: {} as never,
         mediaTransfer: {} as never,
+        mediaUploadOptions: {} as never,
         logger: createNoopLogger(),
         messageStore: {} as never,
         messageSecretStore: {} as never,

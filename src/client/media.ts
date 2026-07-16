@@ -323,7 +323,7 @@ export interface ResolvedMediaInputs {
     readonly tempFilePath?: string
 }
 
-async function assertReadableFile(filePath: string): Promise<void> {
+export async function assertReadableFile(filePath: string): Promise<void> {
     try {
         const stats = await stat(filePath)
         if (!stats.isFile()) {

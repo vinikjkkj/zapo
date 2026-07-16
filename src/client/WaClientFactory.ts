@@ -803,6 +803,7 @@ export function buildWaClientDependencies(input: {
     const messageCoordinator = new WaMessageCoordinator({
         messageDispatch,
         mediaTransfer,
+        mediaUploadOptions: mediaMessageBuildOptions,
         logger,
         messageStore: sessionStore.messages,
         messageSecretStore: sessionStore.messageSecret,

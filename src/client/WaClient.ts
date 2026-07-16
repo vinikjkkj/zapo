@@ -543,7 +543,7 @@ class WaClientImpl extends EventEmitter {
     public get auth(): WaAuthClient {
         return this.deps.authClient
     }
-    /** Message coordinator: send/receive, receipts, addons, media download. */
+    /** Message coordinator: send/receive, receipts, addons, media upload/download. */
     public get message(): WaMessageCoordinator {
         return this.deps.messageCoordinator
     }
