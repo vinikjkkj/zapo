@@ -1,5 +1,11 @@
 # zapo-js
 
+## 1.6.0
+
+### Minor Changes
+
+- Add a session-bound `client.message.upload(source, options)` that encrypts and uploads standalone media to the WhatsApp CDN and returns the reusable descriptor (`url`, `directPath`, `mediaKey`, file hashes, sidecars, `mediaKeyTimestamp`) without sending a message. Internally a shared `uploadMedia()` primitive backs the media send path, sticker-pack upload, and the new method so they share one encrypt/conn/upload/parse flow; bytes take a zero-temp-file fast path while streams stage to a temp file. Unknown upload types are rejected up front before encrypting. `WaMediaCrypto` and `WaMediaTransferClient` (plus their result and option types) are re-exported from the package root, making media encryption/decryption usable standalone and fixing `WaDownloadMediaMessageOptions.transfer` referencing a previously unexported type.
+
 ## 1.5.1
 
 ### Patch Changes
