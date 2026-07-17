@@ -7,20 +7,23 @@ import type {
     WaAppStateSyncOptions,
     WaAppStateSyncResult
 } from '@appstate/types'
-import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
-import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
-import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
-import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
-import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
-import { createGroupMetadataCache } from '@client/messaging/group-metadata'
 import type {
     WaAppStateMutationEvent,
     WaGroupEvent,
     WaGroupEventAction,
     WaOutgoingMessageEvent
 } from '@client/types'
-import { createNoopLogger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
+import type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/thread.store'
+import type { BinaryNode } from '@transport/types'
+import type { ServerClock } from '@util/clock'
+import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
+import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
+import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
+import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
+import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
+import { createGroupMetadataCache } from '@client/messaging/group-metadata'
+import { createNoopLogger } from '@infra/log/types'
 import { getContextInfo } from '@message/context-info'
 import {
     WA_APP_STATE_COLLECTION_STATES,
@@ -28,11 +31,8 @@ import {
     WA_DISCONNECT_REASONS,
     WA_STREAM_SIGNALING
 } from '@protocol/constants'
-import type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/thread.store'
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
 import { WaMessageMemoryStore } from '@store/memory/message.store'
-import type { BinaryNode } from '@transport/types'
-import type { ServerClock } from '@util/clock'
 
 function createStubThreadStore(
     records: ReadonlyMap<string, WaStoredThreadRecord> = new Map()
@@ -1637,26 +1637,25 @@ test('message dispatch injects ephemeral expiration + timestamp for 1:1 chats', 
     assert.equal(ctx.ephemeralSettingTimestamp, 1_751_808_692)
 })
 
-test('message dispatch injects ephemeral expiration + timestamp for group chats', async () => {
+test('message dispatch injects ephemeral expiration only for group chats', async () => {
     const events: WaOutgoingMessageEvent[] = []
     const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
-    // Group TTL flows from the group metadata cache; the setting timestamp
-    // always comes from the thread store (app-state Conversation record).
-    const threadStore = createStubThreadStore(
-        new Map<string, WaStoredThreadRecord>([
-            [
-                '120@g.us',
-                {
-                    jid: '120@g.us',
-                    ephemeralSettingTimestamp: 1_751_808_692
-                }
-            ]
-        ])
-    )
+    // Groups send expiration from the metadata cache and never carry
+    // ephemeralSettingTimestamp, so the thread store is not consulted.
     const coordinator = createMessageDispatchCoordinator(groupMetadataStore, {
         meJid: '5511000000000@s.whatsapp.net',
         emitMessageSend: (event) => events.push(event),
-        threadStore
+        threadStore: createStubThreadStore(
+            new Map<string, WaStoredThreadRecord>([
+                [
+                    '120@g.us',
+                    {
+                        jid: '120@g.us',
+                        ephemeralSettingTimestamp: 1_751_808_692
+                    }
+                ]
+            ])
+        )
     })
     await groupMetadataStore.upsertGroupMetadata({
         groupJid: '120@g.us',
@@ -1669,8 +1668,38 @@ test('message dispatch injects ephemeral expiration + timestamp for group chats'
     const ctx = getContextInfo(events[0].message)
     assert.ok(ctx)
     assert.equal(ctx.expiration, 60_480)
-    assert.equal(ctx.ephemeralSettingTimestamp, 1_751_808_692)
+    assert.equal(ctx.ephemeralSettingTimestamp, undefined)
     await groupMetadataStore.destroy()
+})
+
+test('message dispatch normalizes legacy millisecond ephemeralSettingTimestamp on 1:1 send', async () => {
+    const events: WaOutgoingMessageEvent[] = []
+    const threadStore = createStubThreadStore(
+        new Map<string, WaStoredThreadRecord>([
+            [
+                '5511999999999@s.whatsapp.net',
+                {
+                    jid: '5511999999999@s.whatsapp.net',
+                    ephemeralExpiration: 86_400,
+                    // Legacy row still stored as Conversation milliseconds.
+                    ephemeralSettingTimestamp: 1_751_808_692_000
+                }
+            ]
+        ])
+    )
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        meJid: '5511000000000@s.whatsapp.net',
+        emitMessageSend: (event) => events.push(event),
+        threadStore
+    })
+    await coordinator
+        .sendMessage('5511999999999@s.whatsapp.net', { text: 'oi' } as never, {})
+        .catch(() => undefined)
+    assert.equal(events.length, 1)
+    const ctx = getContextInfo(events[0].message)
+    assert.ok(ctx)
+    assert.equal(ctx.expiration, 86_400)
+    assert.equal(ctx.ephemeralSettingTimestamp, 1_751_808_692)
 })
 
 test('message dispatch honors explicit options.ephemeralSettingTimestamp override', async () => {

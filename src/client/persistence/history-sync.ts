@@ -183,8 +183,10 @@ export async function processHistorySyncNotification(
             muteEndMs: longToNumber(conversation.muteEndTime) || undefined,
             markedAsUnread: conversation.markedAsUnread ?? undefined,
             ephemeralExpiration: conversation.ephemeralExpiration ?? undefined,
-            ephemeralSettingTimestamp:
-                longToNumber(conversation.ephemeralSettingTimestamp) || undefined
+            // Conversation carries milliseconds; ContextInfo / thread store use Unix seconds.
+            ephemeralSettingTimestamp: ephemeralSettingTimestampMsToUnixSeconds(
+                longToNumber(conversation.ephemeralSettingTimestamp)
+            )
         })
         if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
             await flushPendingWrites(pendingWrites)
@@ -300,6 +302,11 @@ async function flushPendingWrites(pendingWrites: Promise<void>[]): Promise<void>
     const settled = Promise.all(pendingWrites)
     pendingWrites.length = 0
     await settled
+}
+
+/** History-sync `Conversation.ephemeralSettingTimestamp` is milliseconds; store Unix seconds. */
+function ephemeralSettingTimestampMsToUnixSeconds(ms: number): number | undefined {
+    return ms > 0 ? Math.floor(ms / 1000) : undefined
 }
 
 async function downloadHistorySyncBlob(

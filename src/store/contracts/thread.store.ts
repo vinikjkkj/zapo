@@ -8,8 +8,10 @@ export interface WaStoredThreadRecord {
     readonly markedAsUnread?: boolean
     readonly ephemeralExpiration?: number
     /**
-     * Unix seconds when disappearing mode was enabled for this chat, from the
-     * app-state `Conversation` record. Present only while the chat is ephemeral.
+     * Unix seconds when disappearing mode was enabled for this chat.
+     * History-sync `Conversation` delivers milliseconds; ingest converts to
+     * seconds before persistence. Present only while the chat is ephemeral
+     * (1:1). Groups do not use this field on outgoing messages.
      */
     readonly ephemeralSettingTimestamp?: number
 }
