@@ -76,22 +76,11 @@ export class WaThreadRedisStore extends BaseRedisStore implements WaThreadStore 
         const newFields = recordToHash(record)
 
         if (existing && Object.keys(existing).length > 0) {
+            // Partial upserts (archive, pin, mark-read) omit ephemeral fields.
+            // Retain previously persisted values, matching SQL COALESCE behavior.
             const merged: Record<string, string> = { ...existing }
             for (const [field, value] of Object.entries(newFields)) {
                 merged[field] = value
-            }
-            // When a field is absent from the incoming record, the merge retains
-            // the previously-persisted value. Explicitly delete the ephemeral keys
-            // so a chat that just disabled disappearing mode does not keep a stale
-            // timestamp (causing the peer to warn "message will not disappear").
-            if (
-                record.ephemeralSettingTimestamp === undefined &&
-                'ephemeral_setting_timestamp' in merged
-            ) {
-                delete merged.ephemeral_setting_timestamp
-            }
-            if (record.ephemeralExpiration === undefined && 'ephemeral_expiration' in merged) {
-                delete merged.ephemeral_expiration
             }
             await this.redis.hset(key, merged)
         } else {
