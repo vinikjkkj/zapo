@@ -633,6 +633,7 @@ export class WaComms {
             this.resumeHandshakeFailures = 0
         }
         this.noiseSession = null
+        this.lastInboundAtMs = 0
         this.clearPendingFrames()
         this.pendingFramesOverflowClosing = false
         if (options.clearHandlers) {
