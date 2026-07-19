@@ -12,6 +12,7 @@ interface WaKeepAliveOptions {
     readonly logger: Logger
     readonly nodeOrchestrator: {
         hasPending(): boolean
+        clearPending(reason: Error): void
         query(node: BinaryNode, timeoutMs?: number): Promise<BinaryNode>
     }
     readonly getComms: () => WaComms | null
@@ -26,8 +27,13 @@ interface WaKeepAliveOptions {
 
 /**
  * Periodically pings the server with a ping IQ to detect dead sockets and
- * measure clock skew. Skips when the orchestrator has other traffic in
- * flight; recovers a queued/dropped ping via the configured `getComms()`.
+ * measure clock skew. A ping is skipped while another ping is in flight, or
+ * while other queries are pending and the socket shows recent inbound
+ * activity. A socket silent past the dead-socket timeout is pinged even with
+ * queries pending: pending queries on a silent socket are evidence of a dead
+ * connection, so steady outbound traffic must not starve detection. On ping
+ * failure it rejects pending queries and resumes the socket via the
+ * configured `getComms()`.
  */
 export class WaKeepAlive {
     private readonly logger: Logger
@@ -112,13 +118,25 @@ export class WaKeepAlive {
             return
         }
 
-        if (this.inFlight || this.nodeOrchestrator.hasPending()) {
-            this.logger.trace('keepalive skipped: in-flight or pending queries', {
-                inFlight: this.inFlight,
-                pendingQueries: this.nodeOrchestrator.hasPending()
-            })
+        if (this.inFlight) {
+            this.logger.trace('keepalive skipped: ping already in flight')
             this.schedule(generation)
             return
+        }
+
+        if (this.nodeOrchestrator.hasPending()) {
+            const inboundIdleMs = Date.now() - comms.getLastInboundAtMs()
+            if (inboundIdleMs < this.timeoutMs) {
+                this.logger.trace('keepalive skipped: pending queries with recent inbound', {
+                    inboundIdleMs
+                })
+                this.schedule(generation)
+                return
+            }
+            this.logger.debug('keepalive pinging despite pending queries: inbound is silent', {
+                inboundIdleMs,
+                timeoutMs: this.timeoutMs
+            })
         }
 
         this.inFlight = true
@@ -152,6 +170,9 @@ export class WaKeepAlive {
             this.logger.warn('keepalive ping failed, reconnecting socket', {
                 message: toError(error).message
             })
+            this.nodeOrchestrator.clearPending(
+                new Error('socket resume requested by keepalive ping failure')
+            )
             try {
                 await comms.closeSocketAndResume()
             } catch (resumeError) {

@@ -55,6 +55,7 @@ export class WaComms {
     private usedResumeHandshake: boolean
     private noiseSession: WaNoiseSession | null
     private lastServerStaticKey: Uint8Array | null
+    private lastInboundAtMs: number
     private frameProcessingQueue: Promise<void>
     private readonly frameHandlerQueue: BoundedTaskQueue
 
@@ -123,6 +124,7 @@ export class WaComms {
         this.usedResumeHandshake = false
         this.noiseSession = null
         this.lastServerStaticKey = null
+        this.lastInboundAtMs = 0
         this.frameProcessingQueue = Promise.resolve()
         this.frameHandlerQueue = new BoundedTaskQueue(
             WA_FRAME_HANDLER_QUEUE_MAX_SIZE,
@@ -266,6 +268,11 @@ export class WaComms {
         await this.socket.send(wire)
     }
 
+    /** Timestamp (`Date.now()` ms) of the last raw payload received from the socket; `0` before any inbound. */
+    public getLastInboundAtMs(): number {
+        return this.lastInboundAtMs
+    }
+
     public getCommsState(): Readonly<WaCommsState> {
         return {
             started: this.started,
@@ -354,6 +361,7 @@ export class WaComms {
     }
 
     private onSocketMessage(payload: Uint8Array): void {
+        this.lastInboundAtMs = Date.now()
         this.frameProcessingQueue = this.frameProcessingQueue.then(
             () => this.processSocketPayload(payload),
             () => this.processSocketPayload(payload)
