@@ -218,8 +218,7 @@ export class WaMessageDispatchCoordinator {
         if (expiration === undefined || expiration <= 0) {
             return {}
         }
-        const rawTimestamp =
-            base?.ephemeralSettingTimestamp ?? thread?.ephemeralSettingTimestamp
+        const rawTimestamp = base?.ephemeralSettingTimestamp ?? thread?.ephemeralSettingTimestamp
         // Only set when defined: an explicit content/options-level
         // ephemeralSettingTimestamp must not be clobbered by `undefined`.
         // Guard against legacy rows still stored in milliseconds (Conversation wire).
