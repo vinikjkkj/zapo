@@ -24,8 +24,10 @@ import {
     generateRegistrationInfo,
     generateSignedPreKey
 } from '@signal/registration/keygen'
+import { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import { WaDeviceListMemoryStore } from '@store/memory/device-list.store'
 import { WaIdentityMemoryStore } from '@store/memory/identity.store'
+import { WaLidPnMappingMemoryStore } from '@store/memory/lid-pn-mapping.store'
 import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
 import { WaSignalMemoryStore } from '@store/memory/signal.store'
 import type { BinaryNode } from '@transport/types'
@@ -1115,11 +1117,14 @@ test('signal device sync api maps hosted.lid user response to requested lid user
     ])
 })
 
-test('signal identity sync api parses result list and stores remote identities', async () => {
+test('signal identity sync api stores remote identities under the canonical LID address', async () => {
     const identityStore = new WaIdentityMemoryStore()
+    const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
+    await addressResolver.learnMessageJidPair('5511999999999@s.whatsapp.net', '778899@lid')
     const api = new SignalIdentitySyncApi({
         logger: createNoopLogger(),
         identityStore,
+        addressResolver,
         query: async () =>
             iqResult([
                 {
@@ -1166,8 +1171,12 @@ test('signal identity sync api parses result list and stores remote identities',
     assert.equal(result[0].identity.length, 32)
     assert.equal(result[0].type, SIGNAL_KEY_BUNDLE_TYPE_BYTES[0])
 
-    const persisted = await identityStore.getRemoteIdentity(
+    const pnIdentity = await identityStore.getRemoteIdentity(
         parseSignalAddressFromJid('5511999999999:1@s.whatsapp.net')
+    )
+    assert.equal(pnIdentity, null)
+    const persisted = await identityStore.getRemoteIdentity(
+        parseSignalAddressFromJid('778899:1@lid')
     )
     assert.ok(persisted)
     assert.equal(persisted.length, 33)

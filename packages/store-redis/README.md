@@ -2,7 +2,7 @@
 
 Redis-backed persistent store for [`zapo-js`](https://www.npmjs.com/package/zapo-js). Best fit when you already run Redis for caching and want stateless app instances that can share WhatsApp session state through a network database.
 
-Built on [`ioredis`](https://github.com/redis/ioredis). All 11 persistent domains and 4 cache domains live under a single key namespace (`keyPrefix` controls it). Cache TTLs are enforced natively by Redis - no background cleanup job needed.
+Built on [`ioredis`](https://github.com/redis/ioredis). All 12 persistent domains and 4 cache domains live under a single key namespace (`keyPrefix` controls it). Cache TTLs are enforced natively by Redis - no background cleanup job needed.
 
 ## Install
 
@@ -85,6 +85,9 @@ createRedisStore({
   are reclaimed.
 - **`auth` has no TTL knob** on purpose: expiring login credentials would log
   the device out. It always persists.
+- **`lidPnMapping` also has no TTL knob**: expiring the address index while a
+  Signal session remains usable could make the same device resolve to a second
+  ratchet. The client removes it when session state is cleared.
 
 > Set a crypto/session TTL short relative to how often a session connects at
 > your own risk - an idle window longer than the TTL evicts the Signal / app-state

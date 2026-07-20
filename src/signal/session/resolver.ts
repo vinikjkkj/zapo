@@ -4,6 +4,7 @@ import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { normalizeDeviceJid, parseSignalAddressFromJid, signalAddressKey } from '@protocol/jid'
 import type { SignalIdentitySyncApi } from '@signal/api/SignalIdentitySyncApi'
 import type { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
+import type { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress, SignalPreKeyBundle, SignalSessionRecord } from '@signal/types'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
@@ -51,6 +52,7 @@ export function createSignalSessionResolver(options: {
     readonly identityStore: WaIdentityStore
     readonly signalIdentitySync: SignalIdentitySyncApi
     readonly signalSessionSync: SignalSessionSyncApi
+    readonly addressResolver?: SignalAddressResolver
     readonly logger: Logger
 }): SignalSessionResolver {
     const {
@@ -59,6 +61,7 @@ export function createSignalSessionResolver(options: {
         identityStore,
         signalIdentitySync,
         signalSessionSync,
+        addressResolver,
         logger
     } = options
     const dedup = new PromiseDedup()
@@ -162,13 +165,15 @@ export function createSignalSessionResolver(options: {
         )
     }
 
-    const ensureSession = (
+    const ensureSession = async (
         address: SignalAddress,
         jid: string,
         expectedIdentity?: Uint8Array,
         reasonIdentity = false
-    ): Promise<void> =>
-        ensureSessionWithDedup(address, jid, expectedIdentity, reasonIdentity).then(() => {})
+    ): Promise<void> => {
+        const resolvedAddress = addressResolver ? await addressResolver.resolve(address) : address
+        await ensureSessionWithDedup(resolvedAddress, jid, expectedIdentity, reasonIdentity)
+    }
 
     const ensureSessionsBatch = async (
         targetJids: readonly string[],
@@ -194,19 +199,65 @@ export function createSignalSessionResolver(options: {
         normalizedTargetJids.length = normalizedTargetCount
         normalizedTargetAddresses.length = normalizedTargetCount
 
-        const normalizedExpectedIdentityByJid =
+        const serializedExpectedIdentityByJid =
             expectedIdentityByJid && expectedIdentityByJid.size > 0
                 ? new Map<string, Uint8Array>()
                 : undefined
-        if (normalizedExpectedIdentityByJid && expectedIdentityByJid) {
+        if (serializedExpectedIdentityByJid && expectedIdentityByJid) {
             for (const [jid, identity] of expectedIdentityByJid.entries()) {
                 try {
-                    toSerializedPubKey(identity)
-                    normalizedExpectedIdentityByJid.set(normalizeDeviceJid(jid), identity)
+                    serializedExpectedIdentityByJid.set(
+                        normalizeDeviceJid(jid),
+                        toSerializedPubKey(identity)
+                    )
                 } catch (error) {
                     logger.trace(
                         'ignoring malformed expected identity jid during batch normalization',
                         { jid, message: toError(error).message }
+                    )
+                }
+            }
+        }
+        const expectedIdentityByAddressKey = serializedExpectedIdentityByJid
+            ? new Map<string, Uint8Array>()
+            : undefined
+        if (addressResolver) {
+            const resolvedAddresses = await addressResolver.resolveMany(normalizedTargetAddresses)
+            const seenAddresses = new Set<string>()
+            let canonicalCount = 0
+            for (let index = 0; index < normalizedTargetCount; index += 1) {
+                const address = resolvedAddresses[index]
+                const key = signalAddressKey(address)
+                const expectedIdentity = serializedExpectedIdentityByJid?.get(
+                    normalizedTargetJids[index]
+                )
+                const previousExpectedIdentity = expectedIdentityByAddressKey?.get(key)
+                if (
+                    expectedIdentity &&
+                    previousExpectedIdentity &&
+                    !uint8Equal(expectedIdentity, previousExpectedIdentity)
+                ) {
+                    throw new Error('identity mismatch')
+                }
+                if (expectedIdentity) expectedIdentityByAddressKey?.set(key, expectedIdentity)
+                if (seenAddresses.has(key)) continue
+                seenAddresses.add(key)
+                normalizedTargetJids[canonicalCount] = normalizedTargetJids[index]
+                normalizedTargetAddresses[canonicalCount] = address
+                canonicalCount += 1
+            }
+            normalizedTargetJids.length = canonicalCount
+            normalizedTargetAddresses.length = canonicalCount
+            normalizedTargetCount = canonicalCount
+        } else if (expectedIdentityByAddressKey) {
+            for (let index = 0; index < normalizedTargetCount; index += 1) {
+                const expectedIdentity = serializedExpectedIdentityByJid?.get(
+                    normalizedTargetJids[index]
+                )
+                if (expectedIdentity) {
+                    expectedIdentityByAddressKey.set(
+                        signalAddressKey(normalizedTargetAddresses[index]),
+                        expectedIdentity
                     )
                 }
             }
@@ -239,17 +290,16 @@ export function createSignalSessionResolver(options: {
         const missingIndices: number[] = []
         for (let index = 0; index < normalizedTargetJids.length; index += 1) {
             const session = resolvedByIndex[index]
-            const expectedIdentity = normalizedExpectedIdentityByJid?.get(
-                normalizedTargetJids[index]
+            const expectedIdentity = expectedIdentityByAddressKey?.get(
+                signalAddressKey(normalizedTargetAddresses[index])
             )
             if (session && expectedIdentity) {
-                const expectedSerialized = toSerializedPubKey(expectedIdentity)
-                if (!uint8Equal(session.remote.pubKey, expectedSerialized)) {
+                if (!uint8Equal(session.remote.pubKey, expectedIdentity)) {
                     logger.warn('signal identity mismatch on existing session vs expected', {
                         jid: normalizedTargetJids[index],
                         source: 'session_vs_expected',
                         session: bytesToHex(session.remote.pubKey),
-                        expected: bytesToHex(expectedSerialized)
+                        expected: bytesToHex(expectedIdentity)
                     })
                     throw new Error('identity mismatch')
                 }
@@ -301,10 +351,9 @@ export function createSignalSessionResolver(options: {
                 })
                 continue
             }
-            const expectedIdentity = normalizedExpectedIdentityByJid?.get(targetJid)
-            const expectedSerializedIdentity = expectedIdentity
-                ? toSerializedPubKey(expectedIdentity)
-                : null
+            const expectedSerializedIdentity = expectedIdentityByAddressKey?.get(
+                signalAddressKey(normalizedTargetAddresses[targetIndex])
+            )
             const bundleIdentity = toSerializedPubKey(batchResult.bundle.identity)
             if (
                 expectedSerializedIdentity &&

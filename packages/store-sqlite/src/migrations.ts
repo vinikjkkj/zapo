@@ -7,6 +7,7 @@ const UNIQUE_CONSTRAINT_ID_RE = /UNIQUE constraint failed: [A-Za-z_][A-Za-z0-9_]
 export type WaSqliteMigrationDomain =
     | 'auth'
     | 'signal'
+    | 'lidPnMapping'
     | 'senderKey'
     | 'appState'
     | 'retry'
@@ -110,6 +111,21 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
                     device INTEGER NOT NULL,
                     identity_key BLOB NOT NULL,
                     PRIMARY KEY (session_id, user, server, device)
+                );
+            `)
+        }
+    },
+    {
+        id: '0017_signal_lid_pn_mapping',
+        domain: 'lidPnMapping',
+        up: (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS signal_lid_pn_mapping (
+                    session_id TEXT NOT NULL,
+                    pn_user TEXT NOT NULL,
+                    lid_user TEXT NOT NULL,
+                    PRIMARY KEY (session_id, pn_user),
+                    UNIQUE (session_id, lid_user)
                 );
             `)
         }

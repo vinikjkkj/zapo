@@ -6,12 +6,14 @@ import test from 'node:test'
 
 import {
     WaContactMemoryStore,
+    WaLidPnMappingMemoryStore,
     WaMessageMemoryStore,
     WaPrivacyTokenMemoryStore,
     WaThreadMemoryStore
 } from 'zapo-js/store'
 
 import { WaContactSqliteStore } from '../contact.store'
+import { WaLidPnMappingSqliteStore } from '../lid-pn-mapping.store'
 import { WaMessageSqliteStore } from '../message.store'
 import { WaPrivacyTokenSqliteStore } from '../privacy-token.store'
 import { WaThreadSqliteStore } from '../thread.store'
@@ -82,6 +84,55 @@ test('privacy token store contract parity between memory and sqlite providers', 
         await rm(dir, { recursive: true, force: true })
     }
 })
+
+test('LID/PN mapping contract parity between memory and sqlite providers', async () => {
+    await runLidPnMappingStoreContract(async () => new WaLidPnMappingMemoryStore())
+
+    const dir = await mkdtemp(join(tmpdir(), 'zapo-lid-pn-contract-'))
+    try {
+        await runLidPnMappingStoreContract(
+            async () =>
+                new WaLidPnMappingSqliteStore({
+                    path: join(dir, 'state.sqlite'),
+                    sessionId: 'session-mapping',
+                    driver: 'better-sqlite3'
+                })
+        )
+    } finally {
+        await rm(dir, { recursive: true, force: true })
+    }
+})
+
+async function runLidPnMappingStoreContract(
+    factory: () => Promise<
+        {
+            getLidUser: (pnUser: string) => Promise<string | null>
+            getPnUser: (lidUser: string) => Promise<string | null>
+            setLidUser: (pnUser: string, lidUser: string) => Promise<void>
+            clear: () => Promise<void>
+        } & Destroyable
+    >
+): Promise<void> {
+    const store = await factory()
+    try {
+        assert.equal(await store.getLidUser('5511999999999'), null)
+        assert.equal(await store.getPnUser('111222'), null)
+        await store.setLidUser('5511999999999', '111222')
+        assert.equal(await store.getLidUser('5511999999999'), '111222')
+        assert.equal(await store.getPnUser('111222'), '5511999999999')
+        await store.setLidUser('5511999999999', '333444')
+        assert.equal(await store.getLidUser('5511999999999'), '333444')
+        assert.equal(await store.getPnUser('111222'), null)
+        await store.setLidUser('5511888888888', '333444')
+        assert.equal(await store.getLidUser('5511999999999'), null)
+        assert.equal(await store.getPnUser('333444'), '5511888888888')
+        await store.clear()
+        assert.equal(await store.getLidUser('5511888888888'), null)
+        assert.equal(await store.getPnUser('333444'), null)
+    } finally {
+        await store.destroy?.()
+    }
+}
 
 async function runMessageStoreContract(
     factory: () => Promise<

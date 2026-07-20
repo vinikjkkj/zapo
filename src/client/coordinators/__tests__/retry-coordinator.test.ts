@@ -588,6 +588,7 @@ type RetrySessionInternals = {
         request: WaParsedRetryRequest,
         requesterJid: string,
         requesterAddress: ReturnType<typeof parseJidFull>['address'],
+        requesterSignalAddress: ReturnType<typeof parseJidFull>['address'],
         requesterNormalizedDeviceJid: string
     ) => Promise<boolean>
 }
@@ -633,6 +634,7 @@ test('retry session update reuses an existing compatible session instead of re-k
     const ready = await internals.updateLocalSessionFromRetryRequest(
         buildKeyBundleRequest(2, requesterJid),
         requesterJid,
+        parsed.address,
         parsed.address,
         parsed.normalizedJid
     )
@@ -686,6 +688,7 @@ test('retry session update resets the session once the base key repeats at retry
         internals.updateLocalSessionFromRetryRequest(
             buildKeyBundleRequest(retryCount, requesterJid),
             requesterJid,
+            parsed.address,
             parsed.address,
             parsed.normalizedJid
         )

@@ -5,6 +5,7 @@ import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaGroupMetadataStore } from '@store/contracts/group-metadata.store'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
+import type { WaLidPnMappingStore } from '@store/contracts/lid-pn-mapping.store'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
@@ -23,6 +24,8 @@ export interface WaStoreSession {
     readonly preKey: WaPreKeyStore
     readonly session: WaSessionStore
     readonly identity: WaIdentityStore
+    /** Internal companion for canonical Signal addressing. Older custom stores may omit it. */
+    readonly lidPnMapping?: WaLidPnMappingStore
     readonly senderKey: WaSenderKeyStore
     readonly appState: WaAppStateStore
     readonly retry: WaRetryStore
@@ -50,6 +53,11 @@ export interface WaStoreBackend {
         readonly preKey: (sessionId: string) => WaPreKeyStore
         readonly session: (sessionId: string) => WaSessionStore
         readonly identity: (sessionId: string) => WaIdentityStore
+        /**
+         * Optional companion to `session`. First-party backends persist it;
+         * older third-party backends fall back to the in-process provider.
+         */
+        readonly lidPnMapping?: (sessionId: string) => WaLidPnMappingStore
         readonly senderKey: (sessionId: string) => WaSenderKeyStore
         readonly appState: (sessionId: string) => WaAppStateStore
         readonly messages: (sessionId: string) => WaMessageStore
@@ -113,7 +121,9 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * Signal sessions (the per-peer Double Ratchet state). Losing this
          * forces a transparent re-handshake on the next message to/from that
          * peer – your identity key doesn't change, so no "security code
-         * changed" notice fires on the peer. Default: `'memory'`.
+         * changed" notice fires on the peer. Official backends also persist
+         * the internal PN/LID address mapping with this provider so the same
+         * ratchet key survives a restart. Default: `'memory'`.
          */
         readonly session?: B | 'memory'
         /**
@@ -352,6 +362,7 @@ export interface WaStoreMemoryLimitSelection {
     readonly appStateCollectionEntries?: number
     readonly signalPreKeys?: number
     readonly signalSessions?: number
+    readonly signalLidPnMappings?: number
     readonly signalRemoteIdentities?: number
     readonly senderKeys?: number
     readonly senderDistributions?: number

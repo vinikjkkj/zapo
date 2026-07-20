@@ -678,7 +678,12 @@ class WaClientImpl extends EventEmitter {
         if (shouldClear('retry')) await this.stores.retry.clear()
         if (shouldClear('signal')) await this.stores.signal.clear()
         if (shouldClear('preKey')) await this.stores.preKey.clear()
-        if (shouldClear('session')) await this.stores.session.clear()
+        if (shouldClear('session')) {
+            // Keep mappings until every ratchet is gone. If session clearing fails,
+            // retaining the mapping cannot split surviving PN/LID session state.
+            await this.stores.session.clear()
+            await this.deps.signalAddressResolver.clear()
+        }
         if (shouldClear('identity')) await this.stores.identity.clear()
         if (shouldClear('senderKey')) await this.stores.senderKey.clear()
         if (shouldClear('threads')) await this.stores.threads.clear()

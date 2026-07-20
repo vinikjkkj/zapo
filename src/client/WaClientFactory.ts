@@ -118,8 +118,10 @@ import { SignalRotateKeyApi } from '@signal/api/SignalRotateKeyApi'
 import { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
 import { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import { createSignalSessionResolver, type SignalSessionResolver } from '@signal/session/resolver'
+import { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { WaStoredContactRecord } from '@store/contracts/contact.store'
+import { WaLidPnMappingMemoryStore } from '@store/memory/lid-pn-mapping.store'
 import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 import { buildAckNode } from '@transport/node/builders/global'
 import { buildPresenceNode } from '@transport/node/builders/presence'
@@ -191,6 +193,7 @@ export interface WaClientDependencies {
     readonly messageClient: WaMessageClient
     readonly senderKeyManager: SenderKeyManager
     readonly signalProtocol: SignalProtocol
+    readonly signalAddressResolver: SignalAddressResolver
     readonly signalDigestSync: SignalDigestSyncApi
     readonly signalDeviceSync: SignalDeviceSyncApi
     readonly signalIdentitySync: SignalIdentitySyncApi
@@ -539,10 +542,14 @@ export function buildWaClientDependencies(input: {
         defaultMaxAttempts: options.messageMaxAttempts,
         defaultRetryDelayMs: options.messageRetryDelayMs
     })
+    const signalAddressResolver = new SignalAddressResolver(
+        sessionStore.lidPnMapping ?? new WaLidPnMappingMemoryStore()
+    )
     const senderKeyManager = new SenderKeyManager(sessionStore.senderKey, {
         getFutureMessagesMax: () =>
             abPropsCoordinator.getConfigValue('web_signal_future_messages_max'),
-        skipSignatureVerification: options.dangerous?.disableSenderKeySignatureVerification
+        skipSignatureVerification: options.dangerous?.disableSenderKeySignatureVerification,
+        addressResolver: signalAddressResolver
     })
     const signalProtocol = new SignalProtocol(
         {
@@ -551,7 +558,8 @@ export function buildWaClientDependencies(input: {
             session: sessionStore.session,
             identity: sessionStore.identity
         },
-        logger
+        logger,
+        signalAddressResolver
     )
     const signalSystemQuery: WaClientBuildRuntime['query'] = (node, timeoutMs) =>
         runtime.query(node, timeoutMs, { useSystemId: true })
@@ -575,6 +583,7 @@ export function buildWaClientDependencies(input: {
         logger,
         query: signalSystemQuery,
         identityStore: sessionStore.identity,
+        addressResolver: signalAddressResolver,
         defaultTimeoutMs: options.signalFetchKeyBundlesTimeoutMs
     })
     const signalMissingPreKeysSync = new SignalMissingPreKeysSyncApi({
@@ -680,6 +689,7 @@ export function buildWaClientDependencies(input: {
         identityStore: sessionStore.identity,
         signalIdentitySync,
         signalSessionSync,
+        addressResolver: signalAddressResolver,
         logger
     })
     const fanoutResolver = createDeviceFanoutResolver({
@@ -757,6 +767,7 @@ export function buildWaClientDependencies(input: {
             buildMediaMessageContent(mediaMessageBuildOptions, content, ctx),
         senderKeyManager,
         signalProtocol,
+        signalAddressResolver,
         signalStore: sessionStore.signal,
         sessionStore: sessionStore.session,
         identityStore: sessionStore.identity,
@@ -822,6 +833,7 @@ export function buildWaClientDependencies(input: {
         sessionStore: sessionStore.session,
         senderKeyStore: sessionStore.senderKey,
         signalProtocol,
+        signalAddressResolver,
         sessionResolver,
         signalDeviceSync,
         signalMissingPreKeysSync,
@@ -1018,6 +1030,7 @@ export function buildWaClientDependencies(input: {
         getMeJid: () => getCurrentCredentials()?.meJid,
         getMeLid: () => getCurrentCredentials()?.meLid,
         signalProtocol,
+        signalAddressResolver,
         senderKeyManager,
         onDecryptFailure: (context: WaRetryDecryptFailureContext, error: unknown) =>
             retryCoordinator.onDecryptFailure(context, error),
@@ -1186,7 +1199,9 @@ export function buildWaClientDependencies(input: {
                 })
                 await runtime.sendNode(ackNode)
 
-                const address = parseSignalAddressFromJid(parsed.fromJid)
+                const address = await signalAddressResolver.resolve(
+                    parseSignalAddressFromJid(parsed.fromJid)
+                )
 
                 if (address.device !== 0) {
                     logger.debug('identity-change: ignoring companion device', {
@@ -1271,7 +1286,9 @@ export function buildWaClientDependencies(input: {
             const userJid = toUserJid(parsed.fromJid)
 
             if (parsed.action === DEVICE_NOTIFICATION_ACTIONS.REMOVE) {
-                const baseAddress = parseSignalAddressFromJid(parsed.fromJid)
+                const baseAddress = await signalAddressResolver.resolve(
+                    parseSignalAddressFromJid(parsed.fromJid)
+                )
                 for (const device of parsed.devices) {
                     const address = {
                         user: baseAddress.user,
@@ -1418,6 +1435,7 @@ export function buildWaClientDependencies(input: {
         messageClient,
         senderKeyManager,
         signalProtocol,
+        signalAddressResolver,
         signalDigestSync,
         signalDeviceSync,
         signalIdentitySync,

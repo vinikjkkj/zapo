@@ -13,6 +13,7 @@ export type WaSqliteTableName =
     | 'signal_prekey'
     | 'signal_session'
     | 'signal_identity'
+    | 'signal_lid_pn_mapping'
     | 'sender_keys'
     | 'sender_key_distribution'
     | 'appstate_sync_keys'
@@ -65,6 +66,7 @@ export interface WaSqliteStorageOptions {
 export type WaSqliteMigrationDomain =
     | 'auth'
     | 'signal'
+    | 'lidPnMapping'
     | 'senderKey'
     | 'appState'
     | 'retry'

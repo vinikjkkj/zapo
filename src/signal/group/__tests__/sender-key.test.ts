@@ -8,7 +8,9 @@ import { SIGNAL_GROUP_VERSION } from '@signal/constants'
 import { deriveSenderKeyMsgKey, selectMessageKey } from '@signal/group/SenderKeyChain'
 import { parseDistributionPayload, parseSenderKeyMessage } from '@signal/group/SenderKeyCodec'
 import { SenderKeyManager } from '@signal/group/SenderKeyManager'
+import { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import type { SenderKeyRecord, SignalAddress } from '@signal/types'
+import { WaLidPnMappingMemoryStore } from '@store/memory/lid-pn-mapping.store'
 import { SenderKeyMemoryStore } from '@store/memory/sender-key.store'
 import { concatBytes } from '@util/bytes'
 
@@ -217,4 +219,43 @@ test('sender key manager bypasses signature check when skipSignatureVerification
         ciphertext: tamperedCiphertext
     })
     assert.deepEqual(decrypted, plaintext)
+})
+
+test('sender key manager shares one sender-key chain across mapped PN and LID addresses', async () => {
+    const senderManager = new SenderKeyManager(new SenderKeyMemoryStore())
+    const receiverStore = new SenderKeyMemoryStore()
+    const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
+    const receiverManager = new SenderKeyManager(receiverStore, { addressResolver })
+    const groupId = '120363000000000001@g.us'
+    const pn = makeAddress('5511666666666', 3)
+    const lid = { user: '445566', server: 'lid', device: 3 } as const
+
+    await addressResolver.learnMessageJidPair('5511666666666:3@s.whatsapp.net', '445566:3@lid')
+    const first = await senderManager.prepareGroupEncryption(groupId, lid, makeBytes(31, 21))
+    await receiverManager.processSenderKeyDistributionPayload(
+        groupId,
+        pn,
+        first.distributionMessage.axolotlSenderKeyDistributionMessage!
+    )
+
+    assert.equal(await receiverStore.getDeviceSenderKey(groupId, pn), null)
+    assert.ok(await receiverStore.getDeviceSenderKey(groupId, lid))
+    assert.deepEqual(
+        await receiverManager.decryptGroupMessage({
+            groupId,
+            sender: lid,
+            ciphertext: first.ciphertext.ciphertext
+        }),
+        makeBytes(31, 21)
+    )
+
+    const second = await senderManager.prepareGroupEncryption(groupId, lid, makeBytes(33, 44))
+    assert.deepEqual(
+        await receiverManager.decryptGroupMessage({
+            groupId,
+            sender: pn,
+            ciphertext: second.ciphertext.ciphertext
+        }),
+        makeBytes(33, 44)
+    )
 })

@@ -362,6 +362,19 @@ const MIGRATIONS: readonly Migration[] = [
             ALTER TABLE \`__PREFIX__retry_inbound_counters\`
                 DROP COLUMN updated_at_ms
         `
+    },
+    {
+        name: '0018_signal_lid_pn_mapping',
+        domain: 'lidPnMapping',
+        sql: `
+            CREATE TABLE IF NOT EXISTS \`__PREFIX__signal_lid_pn_mapping\` (
+                session_id VARCHAR(128) NOT NULL,
+                pn_user VARCHAR(128) NOT NULL,
+                lid_user VARCHAR(128) NOT NULL,
+                PRIMARY KEY (session_id, pn_user),
+                UNIQUE KEY uq_signal_lid_pn_mapping_lid (session_id, lid_user)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `
     }
 ]
 

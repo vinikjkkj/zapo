@@ -3,7 +3,9 @@ import test from 'node:test'
 
 import { createNoopLogger } from '@infra/log/types'
 import { createSignalSessionResolver } from '@signal/session/resolver'
+import { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import type { SignalPreKeyBundle } from '@signal/types'
+import { WaLidPnMappingMemoryStore } from '@store/memory/lid-pn-mapping.store'
 import { delay } from '@util/async'
 
 async function flushMicrotasks(turns = 3): Promise<void> {
@@ -27,6 +29,108 @@ function buildBundle(seed: number): SignalPreKeyBundle {
         }
     }
 }
+
+test('signal session resolver treats mapped PN and LID targets as one existing session', async () => {
+    const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
+    await addressResolver.learnMessageJidPair('5511999999999@s.whatsapp.net', '778899@lid')
+
+    const existingSession = {} as never
+    const checkedAddresses: { readonly user: string; readonly server?: string }[] = []
+    let singleFetchCalls = 0
+    let batchFetchCalls = 0
+    const sessionResolver = createSignalSessionResolver({
+        signalProtocol: {
+            establishOutgoingSession: async () => {
+                throw new Error('must not establish a replacement session')
+            }
+        } as never,
+        sessionStore: {
+            hasSession: async (address: { readonly user: string; readonly server?: string }) => {
+                checkedAddresses.push(address)
+                return address.user === '778899' && address.server === 'lid'
+            },
+            getSessionsBatch: async (
+                addresses: readonly { readonly user: string; readonly server?: string }[]
+            ) => {
+                checkedAddresses.push(...addresses)
+                return addresses.map((address) =>
+                    address.user === '778899' && address.server === 'lid' ? existingSession : null
+                )
+            }
+        } as never,
+        identityStore: {
+            getRemoteIdentity: async () => null
+        } as never,
+        signalIdentitySync: {
+            syncIdentityKeys: async () => undefined
+        } as never,
+        signalSessionSync: {
+            fetchKeyBundle: async () => {
+                singleFetchCalls += 1
+                throw new Error('must not fetch a replacement key bundle')
+            },
+            fetchKeyBundles: async () => {
+                batchFetchCalls += 1
+                throw new Error('must not fetch replacement key bundles')
+            }
+        } as never,
+        addressResolver,
+        logger: createNoopLogger()
+    })
+
+    await sessionResolver.ensureSession(
+        { user: '5511999999999', server: 's.whatsapp.net', device: 2 },
+        '5511999999999:2@s.whatsapp.net'
+    )
+    const batch = await sessionResolver.ensureSessionsBatch([
+        '5511999999999:2@s.whatsapp.net',
+        '778899:2@lid'
+    ])
+
+    assert.equal(singleFetchCalls, 0)
+    assert.equal(batchFetchCalls, 0)
+    assert.equal(checkedAddresses.length, 2)
+    assert.ok(checkedAddresses.every((address) => address.user === '778899'))
+    assert.deepEqual(batch, [
+        {
+            jid: '5511999999999:2@s.whatsapp.net',
+            address: { user: '778899', server: 'lid', device: 2 },
+            session: existingSession
+        }
+    ])
+})
+
+test('signal session resolver rejects conflicting identities for PN/LID aliases', async () => {
+    const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
+    await addressResolver.learnMessageJidPair('5511999999999@s.whatsapp.net', '778899@lid')
+    let storeReads = 0
+    const sessionResolver = createSignalSessionResolver({
+        signalProtocol: {} as never,
+        sessionStore: {
+            getSessionsBatch: async () => {
+                storeReads += 1
+                return []
+            }
+        } as never,
+        identityStore: {} as never,
+        signalIdentitySync: {} as never,
+        signalSessionSync: {} as never,
+        addressResolver,
+        logger: createNoopLogger()
+    })
+
+    await assert.rejects(
+        sessionResolver.ensureSessionsBatch(
+            ['5511999999999:2@s.whatsapp.net', '778899:2@lid'],
+            new Map([
+                ['5511999999999:2@s.whatsapp.net', new Uint8Array(32).fill(1)],
+                ['778899:2@lid', new Uint8Array(32).fill(2)]
+            ])
+        ),
+        /identity mismatch/
+    )
+    assert.equal(storeReads, 0)
+})
 
 test('signal session resolver rejects identity mismatch on reasonIdentity sync', async () => {
     let syncedIdentityKeys = 0

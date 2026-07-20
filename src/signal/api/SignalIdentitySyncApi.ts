@@ -5,6 +5,7 @@ import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/cons
 import { canonicalizeSignalJid, parseSignalAddressFromJid } from '@protocol/jid'
 import { decodeExactLength, parseUint } from '@signal/api/codec'
 import { SIGNAL_KEY_BUNDLE_TYPE_LENGTH, SIGNAL_KEY_DATA_LENGTH } from '@signal/api/constants'
+import type { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
 import { findNodeChild, getNodeChildrenByTag } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
@@ -20,6 +21,7 @@ interface SignalIdentitySyncApiOptions {
     readonly logger: Logger
     readonly query: (node: BinaryNode, timeoutMs?: number) => Promise<BinaryNode>
     readonly identityStore?: WaIdentityStore
+    readonly addressResolver?: SignalAddressResolver
     readonly defaultTimeoutMs?: number
     readonly hostDomain?: string
 }
@@ -33,6 +35,7 @@ export class SignalIdentitySyncApi {
     private readonly logger: SignalIdentitySyncApiOptions['logger']
     private readonly query: SignalIdentitySyncApiOptions['query']
     private readonly identityStore?: WaIdentityStore
+    private readonly addressResolver?: SignalAddressResolver
     private readonly defaultTimeoutMs: number
     private readonly hostDomain: string
     private readonly syncDedup = new PromiseDedup()
@@ -41,6 +44,7 @@ export class SignalIdentitySyncApi {
         this.logger = options.logger
         this.query = options.query
         this.identityStore = options.identityStore
+        this.addressResolver = options.addressResolver
         this.defaultTimeoutMs =
             options.defaultTimeoutMs ?? WA_DEFAULTS.SIGNAL_FETCH_KEY_BUNDLES_TIMEOUT_MS
         this.hostDomain = options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
@@ -120,6 +124,15 @@ export class SignalIdentitySyncApi {
         const entries = this.parseIdentitySyncResponse(response, normalizedTargets)
         const { identityStore } = this
         if (identityStore && entries.length > 0) {
+            const addresses = new Array<ReturnType<typeof parseSignalAddressFromJid>>(
+                entries.length
+            )
+            for (let index = 0; index < entries.length; index += 1) {
+                addresses[index] = parseSignalAddressFromJid(entries[index].jid)
+            }
+            const resolvedAddresses = this.addressResolver
+                ? await this.addressResolver.resolveMany(addresses)
+                : addresses
             const identities = new Array<{
                 readonly address: ReturnType<typeof parseSignalAddressFromJid>
                 readonly identityKey: Uint8Array
@@ -127,7 +140,7 @@ export class SignalIdentitySyncApi {
             for (let index = 0; index < entries.length; index += 1) {
                 const entry = entries[index]
                 identities[index] = {
-                    address: parseSignalAddressFromJid(entry.jid),
+                    address: resolvedAddresses[index],
                     identityKey: toSerializedPubKey(entry.identity)
                 }
             }

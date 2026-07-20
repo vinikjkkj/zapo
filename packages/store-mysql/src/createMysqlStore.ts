@@ -9,6 +9,7 @@ import { WaContactMysqlStore } from './contact.store'
 import { WaDeviceListMysqlStore } from './device-list.store'
 import { WaGroupMetadataMysqlStore } from './group-metadata.store'
 import { WaIdentityMysqlStore } from './identity.store'
+import { WaLidPnMappingMysqlStore } from './lid-pn-mapping.store'
 import { WaMessageSecretMysqlStore } from './message-secret.store'
 import { WaMessageMysqlStore } from './message.store'
 import { WaPreKeyMysqlStore } from './pre-key.store'
@@ -90,6 +91,7 @@ export interface WaMysqlStoreResult {
         readonly preKey: (sessionId: string) => WaPreKeyMysqlStore
         readonly session: (sessionId: string) => WaSessionMysqlStore
         readonly identity: (sessionId: string) => WaIdentityMysqlStore
+        readonly lidPnMapping: (sessionId: string) => WaLidPnMappingMysqlStore
         readonly signal: (sessionId: string) => WaSignalMysqlStore
         readonly senderKey: (sessionId: string) => WaSenderKeyMysqlStore
         readonly appState: (sessionId: string) => WaAppStateMysqlStore
@@ -172,6 +174,8 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
             preKey: (sessionId) => new WaPreKeyMysqlStore(opts(sessionId, 'preKey')),
             session: (sessionId) => new WaSessionMysqlStore(opts(sessionId, 'session')),
             identity: (sessionId) => new WaIdentityMysqlStore(opts(sessionId, 'identity')),
+            lidPnMapping: (sessionId) =>
+                new WaLidPnMappingMysqlStore(opts(sessionId, 'lidPnMapping')),
             signal: (sessionId) => new WaSignalMysqlStore(opts(sessionId, 'signal')),
             senderKey: (sessionId) => new WaSenderKeyMysqlStore(opts(sessionId, 'senderKey')),
             appState: (sessionId) => new WaAppStateMysqlStore(opts(sessionId, 'appState')),

@@ -1046,6 +1046,29 @@ describe('store-redis integration', { timeout: 60_000 }, () => {
         await senderKey.clear()
     })
 
+    it('signal: PN/LID mappings are replaceable and session-scoped', async (t) => {
+        if (!store) return t.skip('ZAPO_TEST_REDIS_* not set')
+
+        const mappingA = store.stores.lidPnMapping(nextSessionId('lid-pn-a'))
+        const mappingB = store.stores.lidPnMapping(nextSessionId('lid-pn-b'))
+        await Promise.all([mappingA.clear(), mappingB.clear()])
+
+        assert.equal(await mappingA.getLidUser('5511999999999'), null)
+        await mappingA.setLidUser('5511999999999', '111222')
+        assert.equal(await mappingA.getLidUser('5511999999999'), '111222')
+        assert.equal(await mappingA.getPnUser('111222'), '5511999999999')
+        assert.equal(await mappingB.getLidUser('5511999999999'), null)
+        await mappingA.setLidUser('5511999999999', '333444')
+        assert.equal(await mappingA.getLidUser('5511999999999'), '333444')
+        assert.equal(await mappingA.getPnUser('111222'), null)
+        await mappingA.setLidUser('5511888888888', '333444')
+        assert.equal(await mappingA.getLidUser('5511999999999'), null)
+        assert.equal(await mappingA.getPnUser('333444'), '5511888888888')
+        await mappingA.clear()
+        assert.equal(await mappingA.getLidUser('5511888888888'), null)
+        assert.equal(await mappingA.getPnUser('333444'), null)
+    })
+
     it('signal: session lifecycle and batch queries', async (t) => {
         if (!store) return t.skip('ZAPO_TEST_REDIS_* not set')
 
@@ -1395,6 +1418,7 @@ describe('store-redis storeTtlMs', { timeout: 60_000 }, () => {
             redis,
             storeTtlMs: {
                 messagesMs: TTL,
+                sessionMs: TTL,
                 signalMs: TTL,
                 appStateMs: TTL
             }
@@ -1490,6 +1514,20 @@ describe('store-redis storeTtlMs', { timeout: 60_000 }, () => {
         assert.equal(await redis.pttl(`auth:${sessionId}:noise_pub_key`), -1)
 
         await auth.clear()
+    })
+
+    it('PN/LID mappings stay persistent while session keys use a TTL', async (t) => {
+        if (!store || !redis) return t.skip('ZAPO_TEST_REDIS_* not set')
+
+        const sessionId = nextSessionId('ttl-lid-pn')
+        const mapping = store.stores.lidPnMapping(sessionId)
+        await mapping.clear()
+
+        await mapping.setLidUser('5511999999999', '123456789')
+
+        assert.equal(await redis.pttl(`signal:lid-pn:${sessionId}`), -1)
+
+        await mapping.clear()
     })
 
     it('rejects a non-positive ttlMs at store construction', (t) => {

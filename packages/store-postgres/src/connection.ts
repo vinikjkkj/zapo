@@ -105,6 +105,19 @@ const MIGRATIONS: readonly Migration[] = [
         `
     },
     {
+        name: '0017_signal_lid_pn_mapping',
+        domain: 'lidPnMapping',
+        sql: `
+            CREATE TABLE IF NOT EXISTS "__PREFIX__signal_lid_pn_mapping" (
+                session_id TEXT NOT NULL,
+                pn_user TEXT NOT NULL,
+                lid_user TEXT NOT NULL,
+                PRIMARY KEY (session_id, pn_user),
+                UNIQUE (session_id, lid_user)
+            )
+        `
+    },
+    {
         name: '0003_sender_key_schema',
         domain: 'senderKey',
         sql: `

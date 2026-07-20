@@ -8,6 +8,7 @@ import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaGroupMetadataStore } from '@store/contracts/group-metadata.store'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
+import type { WaLidPnMappingStore } from '@store/contracts/lid-pn-mapping.store'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
@@ -23,6 +24,7 @@ import { withContactLock } from '@store/locks/contact.lock'
 import { withDeviceListLock } from '@store/locks/device-list.lock'
 import { withGroupMetadataLock } from '@store/locks/group-metadata.lock'
 import { withIdentityLock } from '@store/locks/identity.lock'
+import { withLidPnMappingLock } from '@store/locks/lid-pn-mapping.lock'
 import { withMessageSecretLock } from '@store/locks/message-secret.lock'
 import { withMessageLock } from '@store/locks/message.lock'
 import { withPreKeyLock } from '@store/locks/pre-key.lock'
@@ -38,6 +40,7 @@ import { WaContactMemoryStore } from '@store/memory/contact.store'
 import { WaDeviceListMemoryStore } from '@store/memory/device-list.store'
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
 import { WaIdentityMemoryStore } from '@store/memory/identity.store'
+import { WaLidPnMappingMemoryStore } from '@store/memory/lid-pn-mapping.store'
 import { WaMessageSecretMemoryStore } from '@store/memory/message-secret.store'
 import { WaMessageMemoryStore } from '@store/memory/message.store'
 import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
@@ -294,6 +297,15 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                         maxRemoteIdentities: ml.signalRemoteIdentities
                     })
             )
+            const sessionProvider = providers.session ?? 'memory'
+            const mappingFactory = usesBackend(sessionProvider)
+                ? backends[sessionProvider]?.stores.lidPnMapping
+                : undefined
+            const rawLidPnMapping: WaLidPnMappingStore = mappingFactory
+                ? mappingFactory(id)
+                : new WaLidPnMappingMemoryStore({
+                      maxMappings: ml.signalLidPnMappings
+                  })
             const rawSenderKey = resolveStore<WaSenderKeyStore>(
                 id,
                 backends,
@@ -436,6 +448,7 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                     ? withIdentityCache(rawIdentity, cacheLayer.limits?.identity)
                     : rawIdentity
             )
+            const lidPnMappingStore = withLidPnMappingLock(rawLidPnMapping)
             const senderKeyStore = withSenderKeyLock(
                 cacheLayer.senderKey && usesBackend(providers.senderKey)
                     ? withSenderKeyCache(rawSenderKey, cacheLayer.limits?.senderKey)
@@ -485,6 +498,7 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                     destroyIfSupported(preKeyStore),
                     destroyIfSupported(sessionStore),
                     destroyIfSupported(identityStore),
+                    destroyIfSupported(lidPnMappingStore),
                     destroyIfSupported(senderKeyStore),
                     destroyIfSupported(appStateStore),
                     destroyIfSupported(messageStore),
@@ -500,6 +514,7 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                 preKey: preKeyStore,
                 session: sessionStore,
                 identity: identityStore,
+                lidPnMapping: lidPnMappingStore,
                 senderKey: senderKeyStore,
                 appState: appStateStore,
                 retry: retryStore,

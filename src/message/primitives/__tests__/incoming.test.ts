@@ -5,6 +5,8 @@ import type { WaIncomingMessageEvent, WaIncomingUnavailableMessageEvent } from '
 import { createNoopLogger } from '@infra/log/types'
 import { buildRecoveredIncomingEvent, handleIncomingMessageAck } from '@message/primitives/incoming'
 import { proto } from '@proto'
+import { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
+import { WaLidPnMappingMemoryStore } from '@store/memory/lid-pn-mapping.store'
 import type { BinaryNode } from '@transport/types'
 
 function createEncryptedMessageNode(): BinaryNode {
@@ -121,6 +123,232 @@ test('1:1 incoming message strips the device from remoteJid and keeps it in send
     assert.equal(key.senderDevice, 12)
     assert.equal(key.isGroup, false)
     assert.equal(key.participant, undefined)
+})
+
+test('direct sender_lid mapping is learned before Signal decrypt', async () => {
+    const calls: string[] = []
+    const encrypted = createEncryptedMessageNode()
+    const node: BinaryNode = {
+        ...encrypted,
+        attrs: { ...encrypted.attrs, sender_lid: '778899@lid' }
+    }
+
+    await handleIncomingMessageAck(node, {
+        logger: createNoopLogger(),
+        sendNode: async () => undefined,
+        signalAddressResolver: {
+            learnMessageJidPair: async (firstJid: string, secondJid: string) => {
+                calls.push(`learn:${firstJid}:${secondJid}`)
+                return true
+            }
+        } as never,
+        signalProtocol: {
+            decryptMessage: async () => {
+                calls.push('decrypt')
+                return paddedPlaintext({ conversation: 'hi' })
+            }
+        } as never
+    })
+
+    assert.deepEqual(calls, ['learn:551100000000@s.whatsapp.net:778899@lid', 'decrypt'])
+})
+
+test('recipient_latest_lid becomes the canonical Signal address after peer metadata', async () => {
+    const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
+    const encrypted = createEncryptedMessageNode()
+
+    await handleIncomingMessageAck(
+        {
+            ...encrypted,
+            attrs: {
+                ...encrypted.attrs,
+                recipient: '5511222222222@s.whatsapp.net',
+                peer_recipient_lid: '101@lid',
+                recipient_latest_lid: '202@lid'
+            }
+        },
+        {
+            logger: createNoopLogger(),
+            sendNode: async () => undefined,
+            getMeJid: () => encrypted.attrs.from,
+            signalAddressResolver: addressResolver,
+            signalProtocol: {
+                decryptMessage: async () => paddedPlaintext({ conversation: 'hi' })
+            } as never
+        }
+    )
+
+    assert.deepEqual(
+        await addressResolver.resolve({
+            user: '5511222222222',
+            server: 's.whatsapp.net',
+            device: 7
+        }),
+        { user: '202', server: 'lid', device: 7 }
+    )
+})
+
+test('direct recipient metadata takes conservative precedence over peer metadata', async () => {
+    const cases = [
+        {
+            from: '5511999999999@s.whatsapp.net',
+            recipient: '5511222222222@s.whatsapp.net',
+            recipientAttr: { recipient_lid: '101@lid', peer_recipient_lid: '202@lid' },
+            getMeJid: () => '5511999999999@s.whatsapp.net',
+            getMeLid: undefined,
+            expected: '5511222222222@s.whatsapp.net:101@lid'
+        },
+        {
+            from: '999@lid',
+            recipient: '101@lid',
+            recipientAttr: {
+                recipient_pn: '5511222222222@s.whatsapp.net',
+                peer_recipient_pn: '5511333333333@s.whatsapp.net'
+            },
+            getMeJid: undefined,
+            getMeLid: () => '999@lid',
+            expected: '101@lid:5511222222222@s.whatsapp.net'
+        }
+    ] as const
+
+    for (const current of cases) {
+        const calls: string[] = []
+        await handleIncomingMessageAck(
+            {
+                tag: 'message',
+                attrs: {
+                    id: `msg-recipient-${calls.length}`,
+                    from: current.from,
+                    recipient: current.recipient,
+                    recipient_latest_lid: '303@lid',
+                    ...current.recipientAttr
+                },
+                content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+            },
+            {
+                logger: createNoopLogger(),
+                sendNode: async () => undefined,
+                getMeJid: current.getMeJid,
+                getMeLid: current.getMeLid,
+                signalAddressResolver: {
+                    learnMessageJidPair: async (firstJid: string, secondJid: string) => {
+                        calls.push(`${firstJid}:${secondJid}`)
+                        return true
+                    },
+                    learnPeerRecipientJidPair: async () => {
+                        calls.push('unexpected-peer-mapping')
+                        return true
+                    }
+                } as never,
+                signalProtocol: {
+                    decryptMessage: async () => paddedPlaintext({ conversation: 'hi' })
+                } as never
+            }
+        )
+        assert.deepEqual(calls, [current.expected])
+    }
+})
+
+test('group participant mapping is learned for another device of this account', async () => {
+    const calls: string[] = []
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-own-group-participant',
+                from: '12345@g.us',
+                participant: '999:2@lid',
+                participant_pn: '5511999999999@s.whatsapp.net'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        {
+            logger: createNoopLogger(),
+            sendNode: async () => undefined,
+            getMeLid: () => '999@lid',
+            signalAddressResolver: {
+                learnMessageJidPair: async (firstJid: string, secondJid: string) => {
+                    calls.push(`learn:${firstJid}:${secondJid}`)
+                    return true
+                }
+            } as never,
+            signalProtocol: {
+                decryptMessage: async () => {
+                    calls.push('decrypt')
+                    return paddedPlaintext({ conversation: 'hi' })
+                }
+            } as never
+        }
+    )
+
+    assert.deepEqual(calls, ['learn:999:2@lid:5511999999999@s.whatsapp.net', 'decrypt'])
+})
+
+test('peer-recipient metadata is ignored when the message author is not this account', async () => {
+    const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
+    const encrypted = createEncryptedMessageNode()
+
+    await handleIncomingMessageAck(
+        {
+            ...encrypted,
+            attrs: {
+                ...encrypted.attrs,
+                recipient: '5511222222222@s.whatsapp.net',
+                peer_recipient_lid: '101@lid'
+            }
+        },
+        {
+            logger: createNoopLogger(),
+            sendNode: async () => undefined,
+            getMeJid: () => '5511999999999@s.whatsapp.net',
+            signalAddressResolver: addressResolver,
+            signalProtocol: {
+                decryptMessage: async () => paddedPlaintext({ conversation: 'hi' })
+            } as never
+        }
+    )
+
+    const recipient = { user: '5511222222222', server: 's.whatsapp.net', device: 7 } as const
+    assert.strictEqual(await addressResolver.resolve(recipient), recipient)
+})
+
+test('self sender_lid metadata takes precedence over peer-recipient metadata', async () => {
+    const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
+    const encrypted = createEncryptedMessageNode()
+
+    await handleIncomingMessageAck(
+        {
+            ...encrypted,
+            attrs: {
+                ...encrypted.attrs,
+                sender_lid: '909@lid',
+                recipient: '5511222222222@s.whatsapp.net',
+                peer_recipient_lid: '101@lid'
+            }
+        },
+        {
+            logger: createNoopLogger(),
+            sendNode: async () => undefined,
+            getMeJid: () => encrypted.attrs.from,
+            signalAddressResolver: addressResolver,
+            signalProtocol: {
+                decryptMessage: async () => paddedPlaintext({ conversation: 'hi' })
+            } as never
+        }
+    )
+
+    assert.equal(
+        (
+            await addressResolver.resolve({
+                user: '551100000000',
+                server: 's.whatsapp.net',
+                device: 0
+            })
+        ).user,
+        '909'
+    )
+    const recipient = { user: '5511222222222', server: 's.whatsapp.net', device: 0 } as const
+    assert.strictEqual(await addressResolver.resolve(recipient), recipient)
 })
 
 test('1:1 message authored by my own other device is fromMe with the recipient as remoteJid', async () => {

@@ -6,6 +6,7 @@ export type MysqlParam = string | number | bigint | Uint8Array | boolean | null
 export type WaMysqlMigrationDomain =
     | 'auth'
     | 'signal'
+    | 'lidPnMapping'
     | 'senderKey'
     | 'appState'
     | 'retry'

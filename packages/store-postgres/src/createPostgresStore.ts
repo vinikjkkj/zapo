@@ -9,6 +9,7 @@ import { WaContactPgStore } from './contact.store'
 import { WaDeviceListPgStore } from './device-list.store'
 import { WaGroupMetadataPgStore } from './group-metadata.store'
 import { WaIdentityPgStore } from './identity.store'
+import { WaLidPnMappingPgStore } from './lid-pn-mapping.store'
 import { WaMessageSecretPgStore } from './message-secret.store'
 import { WaMessagePgStore } from './message.store'
 import { WaPreKeyPgStore } from './pre-key.store'
@@ -85,6 +86,7 @@ export interface WaPgStoreResult {
         readonly preKey: (sessionId: string) => WaPreKeyPgStore
         readonly session: (sessionId: string) => WaSessionPgStore
         readonly identity: (sessionId: string) => WaIdentityPgStore
+        readonly lidPnMapping: (sessionId: string) => WaLidPnMappingPgStore
         readonly signal: (sessionId: string) => WaSignalPgStore
         readonly senderKey: (sessionId: string) => WaSenderKeyPgStore
         readonly appState: (sessionId: string) => WaAppStatePgStore
@@ -169,6 +171,7 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
             preKey: (sessionId) => new WaPreKeyPgStore(opts(sessionId, 'preKey')),
             session: (sessionId) => new WaSessionPgStore(opts(sessionId, 'session')),
             identity: (sessionId) => new WaIdentityPgStore(opts(sessionId, 'identity')),
+            lidPnMapping: (sessionId) => new WaLidPnMappingPgStore(opts(sessionId, 'lidPnMapping')),
             signal: (sessionId) => new WaSignalPgStore(opts(sessionId, 'signal')),
             senderKey: (sessionId) => new WaSenderKeyPgStore(opts(sessionId, 'senderKey')),
             appState: (sessionId) => new WaAppStatePgStore(opts(sessionId, 'appState')),

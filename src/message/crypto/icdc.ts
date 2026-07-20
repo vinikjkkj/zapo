@@ -1,6 +1,7 @@
 import { sha256, toRawPubKey } from '@crypto'
 import type { Proto } from '@proto'
 import { parseSignalAddressFromJid } from '@protocol/jid'
+import type { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import type { SignalAddress } from '@signal/types'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
 
@@ -35,15 +36,23 @@ export async function resolveIcdcMeta(
     identityStore: WaIdentityStore,
     updatedAtMs: number | undefined,
     localIdentity?: { readonly address: SignalAddress; readonly pubKey: Uint8Array },
-    hashLength?: number
+    hashLength?: number,
+    addressResolver?: SignalAddressResolver
 ): Promise<IcdcMeta | null> {
     if (deviceJids.length === 0) {
         return null
     }
-    const addresses: SignalAddress[] = new Array(deviceJids.length)
+    const parsedAddresses: SignalAddress[] = new Array(deviceJids.length)
     for (let i = 0; i < deviceJids.length; i += 1) {
-        addresses[i] = parseSignalAddressFromJid(deviceJids[i])
+        parsedAddresses[i] = parseSignalAddressFromJid(deviceJids[i])
     }
+    const addresses = addressResolver
+        ? await addressResolver.resolveMany(parsedAddresses)
+        : parsedAddresses
+    const localAddress =
+        localIdentity && addressResolver
+            ? await addressResolver.resolve(localIdentity.address)
+            : localIdentity?.address
     const remoteKeys = await identityStore.getRemoteIdentities(addresses)
     const keys: Uint8Array[] = []
     for (let i = 0; i < addresses.length; i += 1) {
@@ -52,8 +61,9 @@ export async function resolveIcdcMeta(
             keys.push(key)
         } else if (
             localIdentity &&
-            addresses[i].user === localIdentity.address.user &&
-            addresses[i].device === localIdentity.address.device
+            addresses[i].user === localAddress?.user &&
+            addresses[i].server === localAddress.server &&
+            addresses[i].device === localAddress.device
         ) {
             keys.push(localIdentity.pubKey)
         }

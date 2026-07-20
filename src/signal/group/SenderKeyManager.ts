@@ -17,6 +17,7 @@ import { SIGNAL_SIGNATURE_LENGTH } from '@signal/api/constants'
 import { SIGNAL_GROUP_VERSION } from '@signal/constants'
 import { deriveSenderKeyMsgKey, selectMessageKey } from '@signal/group/SenderKeyChain'
 import { parseDistributionPayload, parseSenderKeyMessage } from '@signal/group/SenderKeyCodec'
+import type { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import type { SenderKeyRecord, SignalAddress } from '@signal/types'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
 import { concatBytes } from '@util/bytes'
@@ -63,17 +64,20 @@ export class SenderKeyManager {
     private readonly senderLock = new StoreLock()
     private readonly getFutureMessagesMax: (() => number) | undefined
     private readonly skipSignatureVerification: boolean
+    private readonly addressResolver: SignalAddressResolver | undefined
 
     public constructor(
         store: WaSenderKeyStore,
         options?: {
             readonly getFutureMessagesMax?: () => number
             readonly skipSignatureVerification?: boolean
+            readonly addressResolver?: SignalAddressResolver
         }
     ) {
         this.store = store
         this.getFutureMessagesMax = options?.getFutureMessagesMax
         this.skipSignatureVerification = options?.skipSignatureVerification === true
+        this.addressResolver = options?.addressResolver
     }
 
     /**
@@ -89,6 +93,7 @@ export class SenderKeyManager {
         readonly ciphertext: GroupSenderKeyCiphertext
         readonly keyId: number
     }> {
+        sender = await this.resolveAddress(sender)
         return this.runWithSenderLock(groupId, sender, async () => {
             const senderKey = await this.ensureSenderKeyInternal(groupId, sender)
             if (!senderKey.signingPrivateKey) {
@@ -158,13 +163,17 @@ export class SenderKeyManager {
         if (participants.length === 0) {
             return []
         }
-        const distributed = await this.store.getDeviceSenderKeyDistributions(groupId, participants)
+        const resolvedParticipants = await this.resolveAddresses(participants)
+        const distributed = await this.store.getDeviceSenderKeyDistributions(
+            groupId,
+            resolvedParticipants
+        )
         const pendingParticipants = new Array<SignalAddress>(participants.length)
         let pendingCount = 0
         for (let index = 0; index < participants.length; index += 1) {
             const record = distributed[index]
             if (!record || record.keyId !== senderKeyId) {
-                pendingParticipants[pendingCount] = participants[index]
+                pendingParticipants[pendingCount] = resolvedParticipants[index]
                 pendingCount += 1
             }
         }
@@ -181,12 +190,13 @@ export class SenderKeyManager {
         if (participants.length === 0) {
             return
         }
+        const resolvedParticipants = await this.resolveAddresses(participants)
         const timestampMs = Date.now()
-        const distributions = new Array(participants.length)
-        for (let index = 0; index < participants.length; index += 1) {
+        const distributions = new Array(resolvedParticipants.length)
+        for (let index = 0; index < resolvedParticipants.length; index += 1) {
             distributions[index] = {
                 groupId,
-                sender: participants[index],
+                sender: resolvedParticipants[index],
                 keyId: senderKeyId,
                 timestampMs
             }
@@ -204,6 +214,7 @@ export class SenderKeyManager {
         sender: SignalAddress,
         payload: Uint8Array
     ): Promise<SenderKeyRecord> {
+        sender = await this.resolveAddress(sender)
         return this.runWithSenderLock(groupId, sender, async () => {
             if (groupId.length === 0) {
                 throw new Error('sender key distribution missing groupId')
@@ -234,10 +245,11 @@ export class SenderKeyManager {
 
     /** Decrypts an incoming sender-key group ciphertext into plaintext. */
     public async decryptGroupMessage(payload: GroupSenderKeyCiphertext): Promise<Uint8Array> {
-        return this.runWithSenderLock(payload.groupId, payload.sender, async () => {
+        const sender = await this.resolveAddress(payload.sender)
+        return this.runWithSenderLock(payload.groupId, sender, async () => {
             const parsed = parseSenderKeyMessage(payload.ciphertext)
 
-            const senderKey = await this.store.getDeviceSenderKey(payload.groupId, payload.sender)
+            const senderKey = await this.store.getDeviceSenderKey(payload.groupId, sender)
             if (!senderKey) {
                 throw new Error('missing sender key')
             }
@@ -324,5 +336,15 @@ export class SenderKeyManager {
         task: () => Promise<T>
     ): Promise<T> {
         return this.senderLock.run(`senderKey:${groupId}:${signalAddressKey(sender)}`, task)
+    }
+
+    private resolveAddress(address: SignalAddress): SignalAddress | Promise<SignalAddress> {
+        return this.addressResolver ? this.addressResolver.resolve(address) : address
+    }
+
+    private resolveAddresses(
+        addresses: readonly SignalAddress[]
+    ): readonly SignalAddress[] | Promise<readonly SignalAddress[]> {
+        return this.addressResolver ? this.addressResolver.resolveMany(addresses) : addresses
     }
 }

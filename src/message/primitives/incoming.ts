@@ -12,9 +12,10 @@ import { unwrapDeviceSentMessage } from '@message/encode/device-sent'
 import { unpadPkcs7 } from '@message/encode/padding'
 import { processIncomingNewsletterMessage } from '@message/kinds/newsletter'
 import { proto } from '@proto'
-import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES } from '@protocol/constants'
+import { WA_DEFAULTS, WA_MESSAGE_TAGS, WA_MESSAGE_TYPES } from '@protocol/constants'
 import {
     canonicalizeOwnAccountJid,
+    canonicalizeSignalServer,
     isBroadcastJid,
     isGroupJid,
     isNewsletterJid,
@@ -25,6 +26,7 @@ import {
 } from '@protocol/jid'
 import type { WaRetryDecryptFailureContext } from '@retry/types'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
+import type { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress } from '@signal/types'
 import { buildAckNode, buildReceiptNode } from '@transport/node/builders/global'
@@ -38,6 +40,7 @@ interface WaIncomingMessageAckHandlerOptions {
     readonly getMeJid?: () => string | null | undefined
     readonly getMeLid?: () => string | null | undefined
     readonly signalProtocol?: SignalProtocol
+    readonly signalAddressResolver?: SignalAddressResolver
     readonly senderKeyManager?: SenderKeyManager
     readonly onDecryptFailure?: (
         context: WaRetryDecryptFailureContext,
@@ -58,6 +61,14 @@ interface MessageIdentityAttrs {
     readonly pushName: string | undefined
 }
 
+function isSignalLidJid(jid: string): boolean {
+    const address = parseSignalAddressFromJid(jid)
+    return (
+        canonicalizeSignalServer(address.server ?? WA_DEFAULTS.HOST_DOMAIN) ===
+        WA_DEFAULTS.LID_SERVER
+    )
+}
+
 // Addressing fields use conditional includes so they're absent (not own-undefined) when
 // the source attr isn't present — the `...keyIdentity` spread then only injects defined
 // keys into the event's `key`. `pushName` is destructured straight to the event top-level
@@ -65,7 +76,11 @@ interface MessageIdentityAttrs {
 function extractMessageIdentityAttrs(attrs: BinaryNode['attrs']): MessageIdentityAttrs {
     const rawRemoteJidAlt = attrs.sender_pn ?? attrs.sender_lid
     const rawParticipantAlt = attrs.participant_pn ?? attrs.participant_lid
-    const rawRecipientAlt = attrs.peer_recipient_pn ?? attrs.peer_recipient_lid
+    const rawRecipientAlt =
+        attrs.recipient_pn ??
+        attrs.recipient_lid ??
+        attrs.peer_recipient_pn ??
+        attrs.peer_recipient_lid
     const rawRecipient = attrs.recipient
     const senderUsername = attrs.participant_username ?? attrs.username
     return {
@@ -76,6 +91,85 @@ function extractMessageIdentityAttrs(attrs: BinaryNode['attrs']): MessageIdentit
         ...(rawRecipientAlt ? { recipientAlt: toUserJid(rawRecipientAlt) } : {}),
         pushName: attrs.notify
     }
+}
+
+async function learnMessageLidPnMappings(
+    node: BinaryNode,
+    options: WaIncomingMessageAckHandlerOptions
+): Promise<void> {
+    const resolver = options.signalAddressResolver
+    if (!resolver) return
+    const attrs = node.attrs
+    const fromJid = attrs.from
+    if (!fromJid) return
+    const hasParticipantAuthor = isGroupJid(fromJid) || isBroadcastJid(fromJid)
+    const authorJid = hasParticipantAuthor ? attrs.participant : fromJid
+    if (!authorJid) return
+
+    const authorIsLid = isSignalLidJid(authorJid)
+    if (hasParticipantAuthor) {
+        const authorAlt = authorIsLid ? attrs.participant_pn : attrs.participant_lid
+        if (authorAlt) await resolver.learnMessageJidPair(authorJid, authorAlt)
+        return
+    }
+
+    const authorIsMe = isOwnAccountJid(
+        toUserJid(authorJid, { canonicalizeSignalServer: true }),
+        options.getMeJid?.(),
+        options.getMeLid?.()
+    )
+    if (authorIsLid) {
+        if (!authorIsMe) {
+            if (attrs.sender_pn) await resolver.learnMessageJidPair(authorJid, attrs.sender_pn)
+            return
+        }
+        if (!attrs.recipient) return
+        if (attrs.recipient_pn) {
+            await resolver.learnMessageJidPair(attrs.recipient, attrs.recipient_pn)
+            return
+        }
+        if (attrs.peer_recipient_pn) {
+            await learnPeerRecipientMapping(
+                resolver,
+                attrs.recipient,
+                attrs.peer_recipient_pn,
+                attrs.recipient_latest_lid
+            )
+        }
+        return
+    }
+
+    // WhatsApp Web applies sender_lid last for PN authors, so it takes precedence
+    // over every peer-recipient field on a self-authored message.
+    if (attrs.sender_lid) {
+        await resolver.learnMessageJidPair(authorJid, attrs.sender_lid)
+        return
+    }
+    if (!authorIsMe || !attrs.recipient) return
+    if (attrs.recipient_lid) {
+        await resolver.learnMessageJidPair(attrs.recipient, attrs.recipient_lid)
+        return
+    }
+    if (attrs.peer_recipient_lid) {
+        await learnPeerRecipientMapping(
+            resolver,
+            attrs.recipient,
+            attrs.peer_recipient_lid,
+            attrs.recipient_latest_lid
+        )
+    }
+}
+
+async function learnPeerRecipientMapping(
+    resolver: SignalAddressResolver,
+    recipientJid: string,
+    peerRecipientJid: string,
+    latestLid?: string
+): Promise<void> {
+    await resolver.learnPeerRecipientJidPair(recipientJid, peerRecipientJid)
+    if (!latestLid) return
+    const pnJid = isSignalLidJid(recipientJid) ? peerRecipientJid : recipientJid
+    await resolver.learnPeerRecipientJidPair(pnJid, latestLid)
 }
 
 type MessageKeyIdentity = Omit<MessageIdentityAttrs, 'pushName'>
@@ -519,6 +613,8 @@ export async function handleIncomingMessageAck(
     if (from && isNewsletterJid(from)) {
         return handleIncomingNewsletterMessage(node, options)
     }
+
+    await learnMessageLidPnMappings(node, options)
 
     let shouldSendStandardReceipt = true
     const nodeContent = node.content

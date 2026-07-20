@@ -5,6 +5,7 @@ import { StoreLock } from '@infra/perf/StoreLock'
 import { signalAddressKey } from '@protocol/jid'
 import { MAX_PREV_SESSIONS } from '@signal/constants'
 import { encodeSignalSessionSnapshot } from '@signal/session/encoding'
+import type { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import {
     decryptMsg,
     decryptMsgFromSession,
@@ -46,6 +47,23 @@ interface EstablishOutgoingSessionOptions {
     readonly knownAbsent?: boolean
 }
 
+interface SignalEncryptRequest {
+    readonly address: SignalAddress
+    readonly plaintext: Uint8Array
+    readonly expectedIdentity?: Uint8Array
+}
+
+interface SignalPrefetchedSession {
+    readonly address: SignalAddress
+    readonly session: SignalSessionRecord
+}
+
+interface SignalEncryptResult {
+    readonly type: 'msg' | 'pkmsg'
+    readonly ciphertext: Uint8Array
+    readonly baseKey: Uint8Array | null
+}
+
 export interface SignalProtocolStores {
     readonly signal: WaSignalStore
     readonly preKey: WaPreKeyStore
@@ -62,11 +80,17 @@ export class SignalProtocol {
     private readonly stores: SignalProtocolStores
     private readonly logger: Logger
     private readonly sessionMutationLock: StoreLock
+    private readonly addressResolver: SignalAddressResolver | undefined
 
-    public constructor(stores: SignalProtocolStores, logger: Logger = new ConsoleLogger('info')) {
+    public constructor(
+        stores: SignalProtocolStores,
+        logger: Logger = new ConsoleLogger('info'),
+        addressResolver?: SignalAddressResolver
+    ) {
         this.stores = stores
         this.logger = logger
         this.sessionMutationLock = new StoreLock()
+        this.addressResolver = addressResolver
     }
 
     /**
@@ -81,6 +105,7 @@ export class SignalProtocol {
         remoteBundle: SignalPreKeyBundle,
         options: EstablishOutgoingSessionOptions = {}
     ): Promise<SignalSessionRecord> {
+        address = await this.resolveAddress(address)
         return this.runWithAddressLock(address, async () => {
             if (options.reuseExisting && !options.knownAbsent) {
                 const existing = await this.stores.session.getSession(address)
@@ -119,6 +144,7 @@ export class SignalProtocol {
         readonly remoteIdentity: Uint8Array
         readonly reusedExisting: boolean
     }> {
+        address = await this.resolveAddress(address)
         return this.runWithAddressLock(address, async () => {
             if (options.reuseExisting && !options.knownAbsent) {
                 const existing = await this.stores.session.getSession(address)
@@ -171,6 +197,24 @@ export class SignalProtocol {
         }>
     }> {
         if (entries.length === 0) return { resolved: [], skipped: [] }
+        entries = await this.resolveAddressEntries(entries)
+        const entryIndexByAddress = new Map<string, number>()
+        let uniqueEntries: Array<(typeof entries)[number]> | null = null
+        for (let index = 0; index < entries.length; index += 1) {
+            const entry = entries[index]
+            const key = signalAddressKey(entry.address)
+            const previousIndex = entryIndexByAddress.get(key)
+            if (previousIndex !== undefined) {
+                if (!uint8Equal(entries[previousIndex].remoteIdentity, entry.remoteIdentity)) {
+                    throw new Error('identity mismatch')
+                }
+                uniqueEntries ??= entries.slice(0, index)
+                continue
+            }
+            entryIndexByAddress.set(key, index)
+            if (uniqueEntries) uniqueEntries.push(entry)
+        }
+        if (uniqueEntries) entries = uniqueEntries
         const lockKeys = new Array<string>(entries.length)
         for (let i = 0; i < entries.length; i += 1) {
             lockKeys[i] = signalAddressLockKey(entries[i].address)
@@ -219,12 +263,9 @@ export class SignalProtocol {
         address: SignalAddress,
         plaintext: Uint8Array,
         expectedIdentity?: Uint8Array
-    ): Promise<{
-        readonly type: 'msg' | 'pkmsg'
-        readonly ciphertext: Uint8Array
-        readonly baseKey: Uint8Array | null
-    }> {
-        const [encrypted] = await this.encryptMessagesBatch([
+    ): Promise<SignalEncryptResult> {
+        address = await this.resolveAddress(address)
+        const [encrypted] = await this.encryptMessagesBatchResolved([
             { address, plaintext, expectedIdentity }
         ])
         return encrypted
@@ -232,25 +273,23 @@ export class SignalProtocol {
 
     /** Batch variant of {@link encryptMessage} that shares per-address locks. */
     public async encryptMessagesBatch(
-        requests: readonly {
-            readonly address: SignalAddress
-            readonly plaintext: Uint8Array
-            readonly expectedIdentity?: Uint8Array
-        }[],
-        prefetchedSessions?: readonly {
-            readonly address: SignalAddress
-            readonly session: SignalSessionRecord
-        }[]
-    ): Promise<
-        readonly {
-            readonly type: 'msg' | 'pkmsg'
-            readonly ciphertext: Uint8Array
-            readonly baseKey: Uint8Array | null
-        }[]
-    > {
+        requests: readonly SignalEncryptRequest[],
+        prefetchedSessions?: readonly SignalPrefetchedSession[]
+    ): Promise<readonly SignalEncryptResult[]> {
         if (requests.length === 0) {
             return []
         }
+        requests = await this.resolveAddressEntries(requests)
+        if (prefetchedSessions && prefetchedSessions.length > 0) {
+            prefetchedSessions = await this.resolveAddressEntries(prefetchedSessions)
+        }
+        return this.encryptMessagesBatchResolved(requests, prefetchedSessions)
+    }
+
+    private async encryptMessagesBatchResolved(
+        requests: readonly SignalEncryptRequest[],
+        prefetchedSessions?: readonly SignalPrefetchedSession[]
+    ): Promise<readonly SignalEncryptResult[]> {
         const lockKeySet = new Set<string>()
         for (let i = 0; i < requests.length; i += 1)
             lockKeySet.add(signalAddressLockKey(requests[i].address))
@@ -309,11 +348,7 @@ export class SignalProtocol {
                 string,
                 { readonly address: SignalAddress; readonly identityKey: Uint8Array }
             >()
-            const results = new Array<{
-                readonly type: 'msg' | 'pkmsg'
-                readonly ciphertext: Uint8Array
-                readonly baseKey: Uint8Array | null
-            }>(requests.length)
+            const results = new Array<SignalEncryptResult>(requests.length)
 
             for (let index = 0; index < requests.length; index += 1) {
                 const request = requests[index]
@@ -386,6 +421,7 @@ export class SignalProtocol {
             readonly ciphertext: Uint8Array
         }
     ): Promise<Uint8Array> {
+        address = await this.resolveAddress(address)
         return this.runWithAddressLock(address, async () => {
             const currentSession = await this.stores.session.getSession(address)
 
@@ -422,6 +458,36 @@ export class SignalProtocol {
 
     private runWithAddressLock<T>(address: SignalAddress, task: () => Promise<T>): Promise<T> {
         return this.sessionMutationLock.run(signalAddressLockKey(address), task)
+    }
+
+    private resolveAddress(address: SignalAddress): SignalAddress | Promise<SignalAddress> {
+        return this.addressResolver ? this.addressResolver.resolve(address) : address
+    }
+
+    private async resolveAddressEntries<T extends { readonly address: SignalAddress }>(
+        entries: readonly T[]
+    ): Promise<readonly T[]> {
+        if (!this.addressResolver || entries.length === 0) return entries
+        const addresses = new Array<SignalAddress>(entries.length)
+        for (let index = 0; index < entries.length; index += 1) {
+            addresses[index] = entries[index].address
+        }
+        const resolvedAddresses = await this.addressResolver.resolveMany(addresses)
+        if (resolvedAddresses === addresses) return entries
+
+        let resolvedEntries: T[] | null = null
+        for (let index = 0; index < entries.length; index += 1) {
+            if (resolvedAddresses[index] === addresses[index]) {
+                if (resolvedEntries) resolvedEntries.push(entries[index])
+                continue
+            }
+            resolvedEntries ??= entries.slice(0, index)
+            resolvedEntries.push({
+                ...entries[index],
+                address: resolvedAddresses[index]
+            })
+        }
+        return resolvedEntries ?? entries
     }
 
     private async decryptPkMsg(

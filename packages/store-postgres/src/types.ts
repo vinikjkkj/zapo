@@ -6,6 +6,7 @@ export type PgParam = string | number | bigint | Uint8Array | boolean | null
 export type WaPgMigrationDomain =
     | 'auth'
     | 'signal'
+    | 'lidPnMapping'
     | 'senderKey'
     | 'appState'
     | 'retry'

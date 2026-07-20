@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createStore } from '@store/createStore'
+import { WaLidPnMappingMemoryStore } from '@store/memory/lid-pn-mapping.store'
+import { WaSessionMemoryStore } from '@store/memory/session.store'
 
 const mockAuthBackend = {
     stores: {
@@ -180,4 +182,37 @@ test('createStore allows omitting cacheProviders when backends is set (caches de
     assert.ok(session.groupMetadata)
     assert.ok(session.deviceList)
     assert.ok(session.messageSecret)
+})
+
+test('createStore couples the PN/LID mapping provider to the session backend', async () => {
+    const mappings = new WaLidPnMappingMemoryStore()
+    const backend = {
+        ...mockAuthBackend,
+        stores: {
+            ...mockAuthBackend.stores,
+            session: () => new WaSessionMemoryStore(),
+            lidPnMapping: () => mappings
+        }
+    }
+    const store = createStore({
+        backends: { mock: backend },
+        providers: {
+            auth: 'memory',
+            signal: 'memory',
+            preKey: 'memory',
+            session: 'mock',
+            identity: 'memory',
+            senderKey: 'memory',
+            appState: 'memory',
+            privacyToken: 'memory',
+            messages: 'none',
+            threads: 'none',
+            contacts: 'none'
+        }
+    })
+
+    const session = store.session('mapping-session')
+    await session.lidPnMapping!.setLidUser('5511999999999', '778899')
+    assert.equal(await mappings.getLidUser('5511999999999'), '778899')
+    await store.destroy()
 })

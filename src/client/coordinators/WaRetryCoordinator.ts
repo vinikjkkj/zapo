@@ -37,6 +37,7 @@ import type { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
 import type { SignalMissingPreKeysSyncApi } from '@signal/api/SignalMissingPreKeysSyncApi'
 import { generatePreKeyPair } from '@signal/registration/keygen'
 import type { SignalSessionResolver } from '@signal/session/resolver'
+import type { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalPreKeyBundle } from '@signal/types'
 import type { WaPreKeyStore } from '@store/contracts/pre-key.store'
@@ -59,6 +60,7 @@ interface WaRetryCoordinatorOptions {
     readonly sessionStore: WaSessionStore
     readonly senderKeyStore: WaSenderKeyStore
     readonly signalProtocol: SignalProtocol
+    readonly signalAddressResolver?: SignalAddressResolver
     readonly sessionResolver: SignalSessionResolver
     readonly signalDeviceSync: SignalDeviceSyncApi
     readonly signalMissingPreKeysSync: SignalMissingPreKeysSyncApi
@@ -509,6 +511,9 @@ export class WaRetryCoordinator {
             request,
             requesterJid,
             requesterAddress,
+            this.deps.signalAddressResolver
+                ? await this.deps.signalAddressResolver.resolve(requesterAddress)
+                : requesterAddress,
             requesterNormalizedDeviceJid
         )
         if (!sessionReady) {
@@ -660,6 +665,7 @@ export class WaRetryCoordinator {
         request: WaParsedRetryRequest,
         requesterJid: string,
         requesterAddress: ReturnType<typeof parseSignalAddressFromJid>,
+        requesterSignalAddress: ReturnType<typeof parseSignalAddressFromJid>,
         requesterNormalizedDeviceJid: string
     ): Promise<boolean> {
         const requestLogger = this.deps.logger.child({
@@ -668,13 +674,13 @@ export class WaRetryCoordinator {
             requester: requesterJid
         })
         const [, currentSession] = await Promise.all([
-            this.markRetryRequesterSenderKeyAsStale(request, requesterJid, requesterAddress),
-            this.deps.sessionStore.getSession(requesterAddress)
+            this.markRetryRequesterSenderKeyAsStale(request, requesterJid, requesterSignalAddress),
+            this.deps.sessionStore.getSession(requesterSignalAddress)
         ])
         const regIdMismatch =
             !!currentSession && request.regId > 0 && currentSession.remote.regId !== request.regId
         if (regIdMismatch && !request.keyBundle) {
-            await this.deps.sessionStore.deleteSession(requesterAddress)
+            await this.deps.sessionStore.deleteSession(requesterSignalAddress)
         }
         if (request.keyBundle) {
             if (!request.keyBundle.key || !request.keyBundle.skey.signature) {
@@ -689,7 +695,7 @@ export class WaRetryCoordinator {
                             ...getRemoteRetryReasonLogFields(request.retryReason)
                         }
                     )
-                    await this.deps.sessionStore.deleteSession(requesterAddress)
+                    await this.deps.sessionStore.deleteSession(requesterSignalAddress)
                     return false
                 }
                 if (regIdMismatch) {
@@ -700,14 +706,14 @@ export class WaRetryCoordinator {
                             ...getRemoteRetryReasonLogFields(request.retryReason)
                         }
                     )
-                    await this.deps.sessionStore.deleteSession(requesterAddress)
+                    await this.deps.sessionStore.deleteSession(requesterSignalAddress)
                     return false
                 }
             } else if (regIdMismatch) {
-                await this.deps.sessionStore.deleteSession(requesterAddress)
+                await this.deps.sessionStore.deleteSession(requesterSignalAddress)
             }
             await this.deps.signalProtocol.establishOutgoingSession(
-                requesterAddress,
+                requesterSignalAddress,
                 {
                     regId: request.regId,
                     identity: request.keyBundle.identity,
@@ -727,6 +733,7 @@ export class WaRetryCoordinator {
                 request,
                 requesterJid,
                 requesterAddress,
+                requesterSignalAddress,
                 requesterNormalizedDeviceJid
             )
         }
@@ -737,6 +744,7 @@ export class WaRetryCoordinator {
                 request,
                 requesterJid,
                 requesterAddress,
+                requesterSignalAddress,
                 requesterNormalizedDeviceJid
             )
         }
@@ -750,11 +758,12 @@ export class WaRetryCoordinator {
         if (!fetched) {
             return false
         }
-        await this.deps.signalProtocol.establishOutgoingSession(requesterAddress, fetched)
+        await this.deps.signalProtocol.establishOutgoingSession(requesterSignalAddress, fetched)
         return this.applySessionBaseKeyPolicy(
             request,
             requesterJid,
             requesterAddress,
+            requesterSignalAddress,
             requesterNormalizedDeviceJid
         )
     }
@@ -763,12 +772,13 @@ export class WaRetryCoordinator {
         request: WaParsedRetryRequest,
         requesterJid: string,
         requesterAddress: ReturnType<typeof parseSignalAddressFromJid>,
+        requesterSignalAddress: ReturnType<typeof parseSignalAddressFromJid>,
         requesterNormalizedDeviceJid: string
     ): Promise<boolean> {
         if (request.retryCount < 2) {
             return true
         }
-        const currentSession = await this.deps.sessionStore.getSession(requesterAddress)
+        const currentSession = await this.deps.sessionStore.getSession(requesterSignalAddress)
         const sessionBaseKey = currentSession?.aliceBaseKey ?? null
         if (!sessionBaseKey) {
             return true
@@ -792,7 +802,7 @@ export class WaRetryCoordinator {
             return true
         }
 
-        await this.deps.sessionStore.deleteSession(requesterAddress)
+        await this.deps.sessionStore.deleteSession(requesterSignalAddress)
         this.deps.logger.debug('retry request forcing session refresh due to repeated base key', {
             id: request.stanzaId,
             originalMsgId: request.originalMsgId,
@@ -809,7 +819,7 @@ export class WaRetryCoordinator {
         if (!fetched) {
             return false
         }
-        await this.deps.signalProtocol.establishOutgoingSession(requesterAddress, fetched)
+        await this.deps.signalProtocol.establishOutgoingSession(requesterSignalAddress, fetched)
         return true
     }
 

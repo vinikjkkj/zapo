@@ -104,6 +104,10 @@ client.on('message', async (event) => {
 await client.connect()
 ```
 
+The Signal `session` provider also owns the internal PN/LID mapping used to
+keep ratchets canonical when WhatsApp alternates between phone-number and LID
+addressing. Official persistent backends store that mapping automatically.
+
 That's the minimum to pair, listen for messages, and reply. For everything
 else - sending media, reactions, polls, groups, newsletters, app-state
 mutations, business profile, events catalog, store providers, the typed

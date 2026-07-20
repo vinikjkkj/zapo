@@ -870,6 +870,11 @@ function createClearStoredStateHarness(logoutStoreClear?: {
             receiptQueue: {
                 take: () => []
             },
+            signalAddressResolver: {
+                clear: async () => {
+                    cleared.push('lidPnMapping')
+                }
+            },
             authClient: {
                 clearStoredCredentials: async () => {
                     cleared.push('auth')
@@ -966,10 +971,22 @@ test('clearStoredState clears non-mailbox domains by default and preserves mailb
         'signal',
         'preKey',
         'session',
+        'lidPnMapping',
         'identity',
         'senderKey',
         'privacyToken'
     ])
+})
+
+test('clearStoredState retains PN/LID mappings when ratchet clearing fails', async () => {
+    const { fakeClient, cleared } = createClearStoredStateHarness()
+    fakeClient.stores.session.clear = async () => {
+        cleared.push('session')
+        throw new Error('session clear failed')
+    }
+
+    await assert.rejects(getClearStoredStateMethod().call(fakeClient), /session clear failed/)
+    assert.equal(cleared.includes('lidPnMapping'), false)
 })
 
 test('clearStoredState wipes mailbox when explicitly opted in', async () => {
@@ -1018,6 +1035,7 @@ test('clearStoredState respects logoutStoreClear domain toggles', async () => {
         'signal',
         'preKey',
         'session',
+        'lidPnMapping',
         'identity',
         'senderKey'
     ])

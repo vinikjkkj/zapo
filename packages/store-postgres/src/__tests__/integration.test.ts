@@ -89,6 +89,7 @@ describe('store-postgres integration', { timeout: 60_000 }, () => {
         await ensurePgMigrations(pool, [
             'auth',
             'signal',
+            'lidPnMapping',
             'senderKey',
             'appState',
             'retry',
@@ -1064,6 +1065,29 @@ describe('store-postgres integration', { timeout: 60_000 }, () => {
         assert.ok(await senderKey.getDeviceSenderKey(groupA, senderB))
 
         await senderKey.clear()
+    })
+
+    it('signal: PN/LID mappings are replaceable and session-scoped', async (t) => {
+        if (!store) return t.skip('ZAPO_TEST_PG_* not set')
+
+        const mappingA = store.stores.lidPnMapping(nextSessionId('lid-pn-a'))
+        const mappingB = store.stores.lidPnMapping(nextSessionId('lid-pn-b'))
+        await Promise.all([mappingA.clear(), mappingB.clear()])
+
+        assert.equal(await mappingA.getLidUser('5511999999999'), null)
+        await mappingA.setLidUser('5511999999999', '111222')
+        assert.equal(await mappingA.getLidUser('5511999999999'), '111222')
+        assert.equal(await mappingA.getPnUser('111222'), '5511999999999')
+        assert.equal(await mappingB.getLidUser('5511999999999'), null)
+        await mappingA.setLidUser('5511999999999', '333444')
+        assert.equal(await mappingA.getLidUser('5511999999999'), '333444')
+        assert.equal(await mappingA.getPnUser('111222'), null)
+        await mappingA.setLidUser('5511888888888', '333444')
+        assert.equal(await mappingA.getLidUser('5511999999999'), null)
+        assert.equal(await mappingA.getPnUser('333444'), '5511888888888')
+        await mappingA.clear()
+        assert.equal(await mappingA.getLidUser('5511888888888'), null)
+        assert.equal(await mappingA.getPnUser('333444'), null)
     })
 
     it('signal: session lifecycle and batch queries', async (t) => {

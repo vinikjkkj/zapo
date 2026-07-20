@@ -7,6 +7,7 @@ import { WaContactRedisStore } from './contact.store'
 import { WaDeviceListRedisStore } from './device-list.store'
 import { WaGroupMetadataRedisStore } from './group-metadata.store'
 import { WaIdentityRedisStore } from './identity.store'
+import { WaLidPnMappingRedisStore } from './lid-pn-mapping.store'
 import { WaMessageSecretRedisStore } from './message-secret.store'
 import { WaMessageRedisStore } from './message.store'
 import { WaPreKeyRedisStore } from './pre-key.store'
@@ -89,6 +90,7 @@ export interface WaRedisStoreResult {
         readonly preKey: (sessionId: string) => WaPreKeyRedisStore
         readonly session: (sessionId: string) => WaSessionRedisStore
         readonly identity: (sessionId: string) => WaIdentityRedisStore
+        readonly lidPnMapping: (sessionId: string) => WaLidPnMappingRedisStore
         readonly signal: (sessionId: string) => WaSignalRedisStore
         readonly senderKey: (sessionId: string) => WaSenderKeyRedisStore
         readonly appState: (sessionId: string) => WaAppStateRedisStore
@@ -113,7 +115,7 @@ function isRedis(value: Redis | RedisOptions): value is Redis {
 /**
  * Builds a Redis-backed {@link WaStoreBackend} bundle. Best fit when you
  * already run Redis for caching and want stateless app instances that can
- * share session state - all 11 persistent domains and 4 cache domains live
+ * share session state - all 12 persistent domains and 4 cache domains live
  * under a single key namespace (controlled by `keyPrefix`).
  *
  * Cache domains use native Redis TTLs (`EX`/`PEXPIRE` on write); no
@@ -181,6 +183,8 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
                 new WaSessionRedisStore(opts(sessionId, 'session', storeTtl.sessionMs)),
             identity: (sessionId) =>
                 new WaIdentityRedisStore(opts(sessionId, 'identity', storeTtl.identityMs)),
+            lidPnMapping: (sessionId) =>
+                new WaLidPnMappingRedisStore(opts(sessionId, 'lidPnMapping')),
             signal: (sessionId) =>
                 new WaSignalRedisStore(opts(sessionId, 'signal', storeTtl.signalMs)),
             senderKey: (sessionId) =>

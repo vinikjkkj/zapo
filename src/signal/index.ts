@@ -53,6 +53,7 @@ export { SignalSessionSyncApi } from '@signal/api/SignalSessionSyncApi'
 export { SenderKeyManager } from '@signal/group/SenderKeyManager'
 export { createAndStoreInitialKeys } from '@signal/registration/utils'
 export { SignalProtocol } from '@signal/session/SignalProtocol'
+export { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 export { createSignalSessionResolver, type SignalSessionResolver } from '@signal/session/resolver'
 export {
     ADV_PREFIX_ACCOUNT_KEY_INDEX,

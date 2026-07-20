@@ -11,6 +11,7 @@ import {
     generateSignedPreKey
 } from '@signal/registration/keygen'
 import { encodeSignalSessionSnapshot } from '@signal/session/encoding'
+import { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import { SignalProtocol } from '@signal/session/SignalProtocol'
 import { decryptMsg, deriveMsgKey, selectMessageKey } from '@signal/session/SignalRatchet'
 import {
@@ -26,6 +27,7 @@ import type {
     SignalSessionSnapshot
 } from '@signal/types'
 import { WaIdentityMemoryStore } from '@store/memory/identity.store'
+import { WaLidPnMappingMemoryStore } from '@store/memory/lid-pn-mapping.store'
 import { WaPreKeyMemoryStore } from '@store/memory/pre-key.store'
 import { WaSessionMemoryStore } from '@store/memory/session.store'
 import { WaSignalMemoryStore } from '@store/memory/signal.store'
@@ -255,6 +257,167 @@ test('signal protocol establishes outgoing session and decrypts prekey message o
         () => aliceProtocol.encryptMessage(bobAddress, plaintext, makeBytes(32, 99)),
         /identity mismatch/
     )
+})
+
+test('PN sender metadata keeps replies and later PN messages on one LID session', async () => {
+    const logger = createNoopLogger()
+    const aliceSignal = new WaSignalMemoryStore()
+    const alicePreKeys = new WaPreKeyMemoryStore()
+    const aliceSessions = new WaSessionMemoryStore()
+    const aliceIdentities = new WaIdentityMemoryStore()
+    const bobSignal = new WaSignalMemoryStore()
+    const bobPreKeys = new WaPreKeyMemoryStore()
+    const bobSessions = new WaSessionMemoryStore()
+    const bobIdentities = new WaIdentityMemoryStore()
+    const mappings = new WaLidPnMappingMemoryStore()
+
+    const [aliceRegistration, bobRegistration] = await Promise.all([
+        generateRegistrationInfo(),
+        generateRegistrationInfo()
+    ])
+    await Promise.all([
+        aliceSignal.setRegistrationInfo(aliceRegistration),
+        bobSignal.setRegistrationInfo(bobRegistration)
+    ])
+    const bobSignedPreKey = await generateSignedPreKey(1, bobRegistration.identityKeyPair.privKey)
+    const bobOneTimePreKey = await generatePreKeyPair(9)
+    await Promise.all([
+        bobSignal.setSignedPreKey(bobSignedPreKey),
+        bobPreKeys.putPreKey(bobOneTimePreKey)
+    ])
+
+    const aliceProtocol = new SignalProtocol(
+        {
+            signal: aliceSignal,
+            preKey: alicePreKeys,
+            session: aliceSessions,
+            identity: aliceIdentities
+        },
+        logger
+    )
+    const bobStores = {
+        signal: bobSignal,
+        preKey: bobPreKeys,
+        session: bobSessions,
+        identity: bobIdentities
+    }
+    const bobResolver = new SignalAddressResolver(mappings)
+    const bobProtocol = new SignalProtocol(bobStores, logger, bobResolver)
+    const alicePn = makeAddress('5511000000101')
+    const aliceLid: SignalAddress = { user: '99112233', server: 'lid', device: 0 }
+    const bobAddress = makeAddress('5511000000202')
+
+    await aliceProtocol.establishOutgoingSession(bobAddress, {
+        regId: bobRegistration.registrationId,
+        identity: bobRegistration.identityKeyPair.pubKey,
+        signedKey: {
+            id: bobSignedPreKey.keyId,
+            publicKey: bobSignedPreKey.keyPair.pubKey,
+            signature: bobSignedPreKey.signature
+        },
+        oneTimeKey: {
+            id: bobOneTimePreKey.keyId,
+            publicKey: bobOneTimePreKey.keyPair.pubKey
+        }
+    })
+
+    const firstPlaintext = makeBytes(24, 41)
+    const first = await aliceProtocol.encryptMessage(bobAddress, firstPlaintext)
+    assert.equal(first.type, 'pkmsg')
+
+    // The outer direct-message stanza is PN-addressed and carries sender_lid.
+    await bobResolver.learnMessageJidPair(`${alicePn.user}@s.whatsapp.net`, `${aliceLid.user}@lid`)
+    assert.deepEqual(
+        await bobProtocol.decryptMessage(alicePn, {
+            type: first.type,
+            ciphertext: first.ciphertext
+        }),
+        firstPlaintext
+    )
+    assert.equal(await bobSessions.getSession(alicePn), null)
+    assert.ok(await bobSessions.getSession(aliceLid))
+
+    const replyPlaintext = makeBytes(19, 73)
+    const reply = await bobProtocol.encryptMessage(aliceLid, replyPlaintext)
+    assert.deepEqual(
+        await aliceProtocol.decryptMessage(bobAddress, {
+            type: reply.type,
+            ciphertext: reply.ciphertext
+        }),
+        replyPlaintext
+    )
+
+    // A later PN stanza need not repeat sender_lid: a fresh resolver reloads
+    // the persisted mapping and selects the already-advanced LID ratchet.
+    const restartedBobProtocol = new SignalProtocol(
+        bobStores,
+        logger,
+        new SignalAddressResolver(mappings)
+    )
+    const secondPlaintext = makeBytes(21, 109)
+    const second = await aliceProtocol.encryptMessage(bobAddress, secondPlaintext)
+    assert.equal(second.type, 'msg')
+    assert.deepEqual(
+        await restartedBobProtocol.decryptMessage(alicePn, {
+            type: second.type,
+            ciphertext: second.ciphertext
+        }),
+        secondPlaintext
+    )
+})
+
+test('signal protocol persists one session when PN/LID batch entries converge', async () => {
+    const mappings = new WaLidPnMappingMemoryStore()
+    const addressResolver = new SignalAddressResolver(mappings)
+    await addressResolver.learnMessageJidPair('5511444444444@s.whatsapp.net', '445566@lid')
+    const persistedSessions: Array<{ readonly address: SignalAddress }> = []
+    const persistedIdentities: Array<{ readonly address: SignalAddress }> = []
+    const protocol = new SignalProtocol(
+        {
+            signal: {} as never,
+            preKey: {} as never,
+            session: {
+                getSessionsBatch: async (addresses: readonly SignalAddress[]) =>
+                    addresses.map(() => null),
+                setSessionsBatch: async (
+                    entries: readonly { readonly address: SignalAddress }[]
+                ) => {
+                    persistedSessions.push(...entries)
+                }
+            } as never,
+            identity: {
+                setRemoteIdentities: async (
+                    entries: readonly { readonly address: SignalAddress }[]
+                ) => {
+                    persistedIdentities.push(...entries)
+                }
+            } as never
+        },
+        createNoopLogger(),
+        addressResolver
+    )
+    const remoteIdentity = new Uint8Array(33).fill(7)
+    const firstSession = { remote: { pubKey: remoteIdentity } } as SignalSessionRecord
+    const secondSession = { remote: { pubKey: remoteIdentity } } as SignalSessionRecord
+
+    const result = await protocol.persistOutgoingSessionsBatch([
+        {
+            address: { user: '5511444444444', server: 's.whatsapp.net', device: 2 },
+            session: firstSession,
+            remoteIdentity
+        },
+        {
+            address: { user: '445566', server: 'lid', device: 2 },
+            session: secondSession,
+            remoteIdentity
+        }
+    ])
+
+    assert.equal(result.resolved.length, 1)
+    assert.strictEqual(result.resolved[0].session, firstSession)
+    assert.deepEqual(result.resolved[0].address, { user: '445566', server: 'lid', device: 2 })
+    assert.equal(persistedSessions.length, 1)
+    assert.equal(persistedIdentities.length, 1)
 })
 
 test('signal protocol throws when decrypting msg without an existing session', async () => {

@@ -77,6 +77,7 @@ import type { WaRetryReplayPayload } from '@retry/types'
 import type { SignalDeviceSyncApi } from '@signal/api/SignalDeviceSyncApi'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import type { SignalResolvedSessionTarget, SignalSessionResolver } from '@signal/session/resolver'
+import type { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress } from '@signal/types'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
@@ -116,6 +117,7 @@ interface WaMessageDispatchCoordinatorOptions {
     ) => Promise<WaMessageBuildResult>
     readonly senderKeyManager: SenderKeyManager
     readonly signalProtocol: SignalProtocol
+    readonly signalAddressResolver?: SignalAddressResolver
     readonly signalStore: WaSignalStore
     readonly sessionStore: WaSessionStore
     readonly identityStore: WaIdentityStore
@@ -1303,11 +1305,16 @@ export class WaMessageDispatchCoordinator {
                 readonly address: SignalAddress
             }
         >()
-        const fanoutAddresses: SignalAddress[] = new Array(fanoutDeviceJids.length)
+        const parsedFanoutAddresses: SignalAddress[] = new Array(fanoutDeviceJids.length)
+        for (let index = 0; index < fanoutDeviceJids.length; index += 1) {
+            parsedFanoutAddresses[index] = parseSignalAddressFromJid(fanoutDeviceJids[index])
+        }
+        const fanoutAddresses = this.deps.signalAddressResolver
+            ? await this.deps.signalAddressResolver.resolveMany(parsedFanoutAddresses)
+            : parsedFanoutAddresses
         for (let index = 0; index < fanoutDeviceJids.length; index += 1) {
             const jid = fanoutDeviceJids[index]
-            const address = parseSignalAddressFromJid(jid)
-            fanoutAddresses[index] = address
+            const address = fanoutAddresses[index]
             fanoutTargetsByAddressKey.set(signalAddressKey(address), { jid, address })
         }
         const pendingAddresses =
@@ -1375,15 +1382,21 @@ export class WaMessageDispatchCoordinator {
             for (let index = 0; index < pendingTargets.length; index += 1) {
                 pendingTargetAddresses[index] = pendingTargets[index].address
             }
+            const resolvedPendingAddresses = this.deps.signalAddressResolver
+                ? await this.deps.signalAddressResolver.resolveMany(pendingTargetAddresses)
+                : pendingTargetAddresses
             const hasPendingSessions =
-                await this.deps.sessionStore.hasSessions(pendingTargetAddresses)
+                await this.deps.sessionStore.hasSessions(resolvedPendingAddresses)
             const nextAvailableTargets: {
                 readonly jid: string
                 readonly address: SignalAddress
             }[] = []
             for (let index = 0; index < pendingTargets.length; index += 1) {
                 if (hasPendingSessions[index]) {
-                    nextAvailableTargets.push(pendingTargets[index])
+                    nextAvailableTargets.push({
+                        jid: pendingTargets[index].jid,
+                        address: resolvedPendingAddresses[index]
+                    })
                 }
             }
             availableTargets = nextAvailableTargets
@@ -1781,7 +1794,8 @@ export class WaMessageDispatchCoordinator {
                     this.deps.identityStore,
                     snapshot.updatedAtMs,
                     localIdentity,
-                    this.deps.getIcdcHashLength?.()
+                    this.deps.getIcdcHashLength?.(),
+                    this.deps.signalAddressResolver
                 )
             } catch (error) {
                 this.deps.logger.trace('icdc resolution failed', {

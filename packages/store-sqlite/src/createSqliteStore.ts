@@ -7,6 +7,7 @@ import { WaContactSqliteStore } from './contact.store'
 import { WaDeviceListSqliteStore } from './device-list.store'
 import { WaGroupMetadataSqliteStore } from './group-metadata.store'
 import { WaIdentitySqliteStore } from './identity.store'
+import { WaLidPnMappingSqliteStore } from './lid-pn-mapping.store'
 import { WaMessageSecretSqliteStore } from './message-secret.store'
 import { WaMessageSqliteStore } from './message.store'
 import { WaPreKeySqliteStore } from './pre-key.store'
@@ -99,6 +100,7 @@ export interface WaSqliteStoreResult {
         readonly preKey: (sessionId: string) => WaPreKeySqliteStore
         readonly session: (sessionId: string) => WaSessionSqliteStore
         readonly identity: (sessionId: string) => WaIdentitySqliteStore
+        readonly lidPnMapping: (sessionId: string) => WaLidPnMappingSqliteStore
         readonly signal: (sessionId: string) => WaSignalSqliteStore
         readonly senderKey: (sessionId: string) => SenderKeySqliteStore
         readonly appState: (sessionId: string) => WaAppStateSqliteStore
@@ -117,8 +119,8 @@ export interface WaSqliteStoreResult {
 
 /**
  * Builds a SQLite-backed {@link WaStoreBackend} bundle: persistent stores
- * for `auth`, `signal`, `preKey`, `session`, `identity`, `senderKey`,
- * `appState`, `messages`, `threads`, `contacts`, `privacyToken`, plus
+ * for `auth`, `signal`, `preKey`, `session`, `identity`, `lidPnMapping`,
+ * `senderKey`, `appState`, `messages`, `threads`, `contacts`, `privacyToken`, plus
  * TTL-evicted caches for `retry`, `groupMetadata`, `deviceList`,
  * `messageSecret`. Feed the result into `createStore({ backends: { sqlite:
  * createSqliteStore(...) }, providers: { ... } })` from `zapo-js`.
@@ -192,6 +194,8 @@ export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreRes
                     hasSessionBatchSize: batchSizes?.signalHasSession
                 }),
             identity: (sessionId) => new WaIdentitySqliteStore(opts(sessionId, 'identity')),
+            lidPnMapping: (sessionId) =>
+                new WaLidPnMappingSqliteStore(opts(sessionId, 'lidPnMapping')),
             signal: (sessionId) => new WaSignalSqliteStore(opts(sessionId, 'signal')),
             senderKey: (sessionId) => new SenderKeySqliteStore(opts(sessionId, 'senderKey')),
             appState: (sessionId) => new WaAppStateSqliteStore(opts(sessionId, 'appState')),
