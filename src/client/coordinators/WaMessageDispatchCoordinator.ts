@@ -513,30 +513,16 @@ export class WaMessageDispatchCoordinator {
 
     /**
      * For a 1:1 recipient passed in PN form, returns the LID-addressed user JID
-     * (cache-first; falls back to a one-shot `queryLidsByPhoneJids`). Switching
-     * to LID before fanout ensures the envelope, eligible-requester list, and
+     * (via {@link SignalDeviceSyncApi.resolveUserJidPair}). Switching to LID
+     * before fanout ensures the envelope, eligible-requester list, and
      * retry-receipt addressing all agree, which keeps the retry tracker from
      * rejecting receipts that arrive in LID form. Returns the original PN if
      * no LID is known/resolvable. Inputs already in LID form pass through.
      */
     private async resolveDirectRecipientLid(pnUserJid: string): Promise<string> {
         if (isLidJid(pnUserJid)) return pnUserJid
-        const cached = await this.deps.deviceListStore.findByAnyUserJid(pnUserJid)
-        if (cached) {
-            if (isLidJid(cached.userJid)) return cached.userJid
-            if (cached.altUserJid && isLidJid(cached.altUserJid)) return cached.altUserJid
-        }
-        try {
-            const results = await this.deps.signalDeviceSync.queryLidsByPhoneJids([pnUserJid])
-            const match = results.find((entry) => entry.queriedJid === pnUserJid)
-            if (match?.lidJid) return match.lidJid
-        } catch (error) {
-            this.deps.logger.debug('lid resolution failed for direct recipient', {
-                pnUserJid,
-                message: toError(error).message
-            })
-        }
-        return pnUserJid
+        const pair = await this.deps.signalDeviceSync.resolveUserJidPair(pnUserJid)
+        return pair.lidJid ?? pnUserJid
     }
 
     /**
@@ -554,17 +540,8 @@ export class WaMessageDispatchCoordinator {
     ): Promise<string | undefined> {
         if (!isLidJid(directRecipientJid)) return undefined
         if (isUserJid(recipientUserJid)) return recipientUserJid
-        try {
-            const snapshot = await this.deps.deviceListStore.findByAnyUserJid(directRecipientJid)
-            if (snapshot?.userJid && isUserJid(snapshot.userJid)) return snapshot.userJid
-            if (snapshot?.altUserJid && isUserJid(snapshot.altUserJid)) return snapshot.altUserJid
-        } catch (error) {
-            this.deps.logger.trace('peer_recipient_pn store lookup failed', {
-                lid: directRecipientJid,
-                message: toError(error).message
-            })
-        }
-        return undefined
+        const pair = await this.deps.signalDeviceSync.resolveUserJidPair(directRecipientJid)
+        return pair.pnJid ?? undefined
     }
 
     public async syncSignalSession(jid: string, reasonIdentity = false): Promise<void> {

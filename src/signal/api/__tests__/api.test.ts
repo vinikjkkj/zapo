@@ -162,6 +162,105 @@ test('signal lid sync flags a server-rejected number as invalid, recovered from 
     ])
 })
 
+test('resolveUserJidPair resolves both forms from the device-list cache without usync', async () => {
+    const deviceListStore = new WaDeviceListMemoryStore(60_000)
+    try {
+        await deviceListStore.upsertUserDevicesBatch([
+            {
+                userJid: '5511999999999@s.whatsapp.net',
+                altUserJid: '123456789@lid',
+                deviceJids: [],
+                updatedAtMs: Date.now()
+            }
+        ])
+        const api = new SignalDeviceSyncApi({
+            logger: createNoopLogger(),
+            query: async () => {
+                throw new Error('usync must not run on a cache hit')
+            },
+            deviceListStore
+        })
+
+        assert.deepEqual(await api.resolveUserJidPair('5511999999999@s.whatsapp.net'), {
+            lidJid: '123456789@lid',
+            pnJid: '5511999999999@s.whatsapp.net'
+        })
+        assert.deepEqual(await api.resolveUserJidPair('123456789@lid'), {
+            lidJid: '123456789@lid',
+            pnJid: '5511999999999@s.whatsapp.net'
+        })
+    } finally {
+        await deviceListStore.destroy()
+    }
+})
+
+test('resolveUserJidPair falls back to usync on a PN cache miss and keeps the canonical pn', async () => {
+    const api = new SignalDeviceSyncApi({
+        logger: createNoopLogger(),
+        query: async () =>
+            iqResult([
+                {
+                    tag: WA_NODE_TAGS.USYNC,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.LIST,
+                            attrs: {},
+                            content: [
+                                {
+                                    tag: WA_NODE_TAGS.USER,
+                                    attrs: { jid: '5511982905991@s.whatsapp.net' },
+                                    content: [
+                                        {
+                                            tag: WA_NODE_TAGS.LID,
+                                            attrs: { val: '53979165777985@lid' }
+                                        },
+                                        {
+                                            tag: WA_NODE_TAGS.CONTACT,
+                                            attrs: { type: 'in' },
+                                            content: '+551182905991'
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+    })
+
+    // queried without the BR 9th digit -> lid resolves and pn comes back corrected
+    assert.deepEqual(await api.resolveUserJidPair('551182905991@s.whatsapp.net'), {
+        lidJid: '53979165777985@lid',
+        pnJid: '5511982905991@s.whatsapp.net'
+    })
+})
+
+test('resolveUserJidPair degrades to the known form on misses and failures', async () => {
+    const failing = new SignalDeviceSyncApi({
+        logger: createNoopLogger(),
+        query: async () => {
+            throw new Error('usync down')
+        }
+    })
+
+    // usync failure -> pn passthrough, no lid
+    assert.deepEqual(await failing.resolveUserJidPair('5511999999999@s.whatsapp.net'), {
+        lidJid: null,
+        pnJid: '5511999999999@s.whatsapp.net'
+    })
+    // lid input has no reverse lookup; without a cache hit the pn stays null
+    assert.deepEqual(await failing.resolveUserJidPair('123456789@lid'), {
+        lidJid: '123456789@lid',
+        pnJid: null
+    })
+    // neither pn nor lid form
+    assert.deepEqual(await failing.resolveUserJidPair('123-456@g.us'), {
+        lidJid: null,
+        pnJid: null
+    })
+})
+
 test('signal lid sync exposes the server-corrected number (BR 9th digit) via the contact echo', async () => {
     // real captured response: the server collapses the two queried forms into one
     // <user> with the canonical jid (with the 9) and echoes both queried numbers as

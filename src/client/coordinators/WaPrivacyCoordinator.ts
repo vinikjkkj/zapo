@@ -1,4 +1,3 @@
-import type { Logger } from '@infra/log/types'
 import { isLidJid, isUserJid, normalizeRecipientJid } from '@protocol/jid'
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
@@ -12,8 +11,7 @@ import {
     type WaPrivacySettingValueMap,
     type WaPrivacyValue
 } from '@protocol/privacy'
-import type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
-import type { WaDeviceListStore } from '@store/contracts/device-list.store'
+import type { SignalUserJidPair } from '@signal/api/SignalDeviceSyncApi'
 import {
     buildBlocklistBlockIq,
     buildBlocklistUnblockIq,
@@ -26,7 +24,6 @@ import {
 import { findNodeChild, getNodeChildren, getNodeChildrenByTag } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
-import { toError } from '@util/primitives'
 
 export type WaPrivacySettings = {
     readonly [K in WaPrivacySettingName]?: WaPrivacySettingValueMap[K]
@@ -100,11 +97,7 @@ interface WaPrivacyCoordinatorOptions {
         timeoutMs?: number,
         contextData?: Readonly<Record<string, unknown>>
     ) => Promise<BinaryNode>
-    readonly deviceListStore: Pick<WaDeviceListStore, 'findByAnyUserJid'>
-    readonly queryLidsByPhoneJids: (
-        phoneJids: readonly string[]
-    ) => Promise<readonly SignalLidSyncResult[]>
-    readonly logger: Logger
+    readonly resolveUserJidPair: (userJid: string) => Promise<SignalUserJidPair>
 }
 
 const IGNORED_SERVER_CATEGORIES = new Set([
@@ -210,73 +203,24 @@ function parseBlocklist(result: BinaryNode): WaBlocklistResult {
 }
 
 /**
- * Resolves a blocklist input into both addressing forms. Phone-jid inputs get
- * their LID resolved cache-first (device-list store) with a one-shot usync
- * fallback; LID inputs get their phone jid from the cache when known.
- * Resolution failures degrade to the single known form instead of throwing -
- * the server then decides whether that form is acceptable.
+ * Resolves a blocklist input into both addressing forms via
+ * `resolveUserJidPair` (device-list cache first, usync fallback for phone
+ * jids). Resolution failures degrade to the single known form instead of
+ * throwing - the server then decides whether that form is acceptable.
  */
 async function resolveBlocklistTarget(
     options: WaPrivacyCoordinatorOptions,
     jid: string
 ): Promise<WaBlocklistTarget> {
     const normalized = normalizeRecipientJid(jid)
-
-    if (isLidJid(normalized)) {
-        let pnJid: string | null = null
-        try {
-            const snapshot = await options.deviceListStore.findByAnyUserJid(normalized)
-            if (snapshot?.userJid && isUserJid(snapshot.userJid)) {
-                pnJid = snapshot.userJid
-            } else if (snapshot?.altUserJid && isUserJid(snapshot.altUserJid)) {
-                pnJid = snapshot.altUserJid
-            }
-        } catch (error) {
-            options.logger.debug('pn lookup failed for blocklist target', {
-                lidJid: normalized,
-                message: toError(error).message
-            })
-        }
-        return { lidJid: normalized, pnJid }
-    }
-
-    if (!isUserJid(normalized)) {
+    if (!isLidJid(normalized) && !isUserJid(normalized)) {
         throw new Error(`blocklist target must be a user jid: ${jid}`)
     }
-
-    let lidJid: string | null = null
-    try {
-        const snapshot = await options.deviceListStore.findByAnyUserJid(normalized)
-        if (snapshot) {
-            if (isLidJid(snapshot.userJid)) {
-                lidJid = snapshot.userJid
-            } else if (snapshot.altUserJid && isLidJid(snapshot.altUserJid)) {
-                lidJid = snapshot.altUserJid
-            }
-        }
-    } catch (error) {
-        options.logger.debug('lid cache lookup failed for blocklist target', {
-            pnJid: normalized,
-            message: toError(error).message
-        })
+    const pair = await options.resolveUserJidPair(normalized)
+    if (pair.lidJid !== null) {
+        return { lidJid: pair.lidJid, pnJid: pair.pnJid }
     }
-    let pnJid = normalized
-    if (!lidJid) {
-        try {
-            const results = await options.queryLidsByPhoneJids([normalized])
-            const match = results.find((entry) => entry.queriedJid === normalized)
-            if (match?.lidJid) {
-                lidJid = match.lidJid
-                pnJid = match.phoneJid
-            }
-        } catch (error) {
-            options.logger.debug('lid resolution failed for blocklist target', {
-                pnJid: normalized,
-                message: toError(error).message
-            })
-        }
-    }
-    return lidJid !== null ? { lidJid, pnJid } : { lidJid: null, pnJid }
+    return { lidJid: null, pnJid: pair.pnJid ?? normalized }
 }
 
 /** Builds a {@link WaPrivacyCoordinator} backed by the given IQ query function. */

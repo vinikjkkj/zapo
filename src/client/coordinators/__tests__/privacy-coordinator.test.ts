@@ -2,10 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordinator'
-import { createNoopLogger } from '@infra/log/types'
 import { WA_PRIVACY_CATEGORIES, WA_PRIVACY_TAGS } from '@protocol/constants'
-import type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
-import type { WaDeviceListSnapshot } from '@store/contracts/device-list.store'
+import type { SignalUserJidPair } from '@signal/api/SignalDeviceSyncApi'
 import type { BinaryNode } from '@transport/types'
 
 function createIqResult(content?: readonly BinaryNode[]): BinaryNode {
@@ -16,16 +14,14 @@ function createIqResult(content?: readonly BinaryNode[]): BinaryNode {
     }
 }
 
-function createBlocklistDeps(overrides?: {
-    readonly findByAnyUserJid?: (jid: string) => Promise<WaDeviceListSnapshot | null>
-    readonly queryLidsByPhoneJids?: (
-        phoneJids: readonly string[]
-    ) => Promise<readonly SignalLidSyncResult[]>
-}) {
+function createBlocklistDeps(resolveUserJidPair?: (userJid: string) => Promise<SignalUserJidPair>) {
     return {
-        deviceListStore: { findByAnyUserJid: overrides?.findByAnyUserJid ?? (async () => null) },
-        queryLidsByPhoneJids: overrides?.queryLidsByPhoneJids ?? (async () => []),
-        logger: createNoopLogger()
+        resolveUserJidPair:
+            resolveUserJidPair ??
+            (async (userJid: string): Promise<SignalUserJidPair> =>
+                userJid.endsWith('@lid')
+                    ? { lidJid: userJid, pnJid: null }
+                    : { lidJid: null, pnJid: userJid })
     }
 }
 
@@ -250,22 +246,15 @@ test('privacy coordinator resolves lid addressing for block/unblock', async () =
         return content[0].attrs
     }
 
-    const viaUsync = createPrivacyCoordinator({
-        ...createBlocklistDeps({
-            queryLidsByPhoneJids: async (phoneJids) => [
-                {
-                    queriedJid: phoneJids[0],
-                    phoneJid: phoneJids[0],
-                    lidJid: '999@lid',
-                    exists: true,
-                    invalid: false
-                }
-            ]
-        }),
+    const migrated = createPrivacyCoordinator({
+        ...createBlocklistDeps(async () => ({
+            lidJid: '999@lid',
+            pnJid: '123@s.whatsapp.net'
+        })),
         queryWithContext
     })
-    await viaUsync.blockUser('123@s.whatsapp.net')
-    await viaUsync.unblockUser('123')
+    await migrated.blockUser('123@s.whatsapp.net')
+    await migrated.unblockUser('123')
     assert.deepEqual(itemAttrs(0), {
         action: 'block',
         jid: '999@lid',
@@ -273,75 +262,38 @@ test('privacy coordinator resolves lid addressing for block/unblock', async () =
     })
     assert.deepEqual(itemAttrs(1), { jid: '999@lid', action: 'unblock' })
 
-    const viaCache = createPrivacyCoordinator({
-        ...createBlocklistDeps({
-            findByAnyUserJid: async () => ({
-                userJid: '123@s.whatsapp.net',
-                altUserJid: '999@lid',
-                deviceJids: [],
-                updatedAtMs: 0
-            })
-        }),
-        queryWithContext
-    })
-    await viaCache.blockUser('123@s.whatsapp.net')
-    assert.deepEqual(itemAttrs(2), {
-        action: 'block',
-        jid: '999@lid',
-        pn_jid: '123@s.whatsapp.net'
-    })
-
-    const lidInputWithCachedPn = createPrivacyCoordinator({
-        ...createBlocklistDeps({
-            findByAnyUserJid: async () => ({
-                userJid: '999@lid',
-                altUserJid: '123@s.whatsapp.net',
-                deviceJids: [],
-                updatedAtMs: 0
-            })
-        }),
-        queryWithContext
-    })
-    await lidInputWithCachedPn.blockUser('999@lid')
-    assert.deepEqual(itemAttrs(3), {
-        action: 'block',
-        jid: '999@lid',
-        pn_jid: '123@s.whatsapp.net'
-    })
-
     const lidInputUnknownPn = createPrivacyCoordinator({
         ...createBlocklistDeps(),
         queryWithContext
     })
     await lidInputUnknownPn.blockUser('999@lid')
-    assert.deepEqual(itemAttrs(4), {
+    assert.deepEqual(itemAttrs(2), {
         action: 'block',
         jid: '999@lid',
         unknown_identifier: 'true'
     })
 
-    const viaCorrectedUsync = createPrivacyCoordinator({
-        ...createBlocklistDeps({
-            queryLidsByPhoneJids: async (phoneJids) => [
-                {
-                    queriedJid: phoneJids[0],
-                    phoneJid: '5511987654321@s.whatsapp.net',
-                    lidJid: '888@lid',
-                    exists: true,
-                    invalid: false
-                }
-            ]
-        }),
+    const correctedPn = createPrivacyCoordinator({
+        ...createBlocklistDeps(async () => ({
+            lidJid: '888@lid',
+            pnJid: '5511987654321@s.whatsapp.net'
+        })),
         queryWithContext
     })
-    await viaCorrectedUsync.blockUser('551187654321')
-    assert.deepEqual(itemAttrs(5), {
+    await correctedPn.blockUser('551187654321')
+    assert.deepEqual(itemAttrs(3), {
         action: 'block',
         jid: '888@lid',
         pn_jid: '5511987654321@s.whatsapp.net'
     })
 
-    await assert.rejects(() => lidInputUnknownPn.blockUser('123-456@g.us'), {
+    const rejecting = createPrivacyCoordinator({
+        ...createBlocklistDeps(async () => {
+            throw new Error('resolver must not run for non-user jids')
+        }),
+        queryWithContext
+    })
+    await assert.rejects(() => rejecting.blockUser('123-456@g.us'), {
         message: /blocklist target must be a user jid/
     })
 })
