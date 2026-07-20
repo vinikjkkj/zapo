@@ -79,6 +79,7 @@ export class SignalAddressResolver {
     ): Promise<boolean> {
         const mapping = parseLidPnUsers(firstJid, secondJid)
         if (!mapping) return false
+        if (this.cache.get(mapping.pnUser) === mapping.lidUser) return false
         // A replacement can evict both the previous LID for this PN and the
         // previous PN for this LID. Serialize the rare mutations globally so
         // every cache invalidation reflects the same one-to-one store state.
@@ -143,6 +144,14 @@ export class SignalAddressResolver {
         return this.resolveManyUncached(addresses, resolved, missingUsers)
     }
 
+    /** Resolves a LID back to its PN alias for one-time legacy state migration. */
+    public resolvePhoneNumberAlias(
+        address: SignalAddress
+    ): SignalAddress | null | Promise<SignalAddress | null> {
+        if (addressKind(address) !== 'lid') return null
+        return this.resolvePhoneNumberAliasUncached(address)
+    }
+
     /** Clears both the persistent mapping and its in-process lookup cache. */
     public async clear(): Promise<void> {
         await this.mappingGate.runExclusive(async () => {
@@ -164,16 +173,38 @@ export class SignalAddressResolver {
         resolved: SignalAddress[] | null,
         missingUsers: ReadonlySet<string>
     ): Promise<readonly SignalAddress[]> {
-        await Promise.all(Array.from(missingUsers, (pnUser) => this.resolveLidUser(pnUser)))
+        const resolvedLidUsers = new Map<string, string | null>()
+        await Promise.all(
+            Array.from(missingUsers, async (pnUser) => {
+                resolvedLidUsers.set(pnUser, await this.resolveLidUser(pnUser))
+            })
+        )
         for (let index = 0; index < addresses.length; index += 1) {
             const address = addresses[index]
-            if (addressKind(address) !== 'pn') continue
-            const lidUser = this.cache.get(address.user)
+            if (addressKind(address) !== 'pn' || !missingUsers.has(address.user)) continue
+            const lidUser = resolvedLidUsers.get(address.user)
             if (!lidUser) continue
             resolved ??= addresses.slice()
             resolved[index] = this.applyMapping(address, lidUser)
         }
         return resolved ?? addresses
+    }
+
+    private async resolvePhoneNumberAliasUncached(
+        address: SignalAddress
+    ): Promise<SignalAddress | null> {
+        const pnUser = await this.lookupLock.run(`lid:${address.user}`, () =>
+            this.mappingGate.runShared(() => this.store.getPnUser(address.user))
+        )
+        if (!pnUser) return null
+        return {
+            user: pnUser,
+            server:
+                address.server === WA_DEFAULTS.HOSTED_LID_SERVER
+                    ? WA_DEFAULTS.HOSTED_SERVER
+                    : WA_DEFAULTS.HOST_DOMAIN,
+            device: address.device
+        }
     }
 
     private applyMapping(address: SignalAddress, lidUser: string | null): SignalAddress {

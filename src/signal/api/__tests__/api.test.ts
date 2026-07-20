@@ -1182,6 +1182,62 @@ test('signal identity sync api stores remote identities under the canonical LID 
     assert.equal(persisted.length, 33)
 })
 
+test('signal identity sync api deduplicates PN/LID aliases before batch persistence', async () => {
+    const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
+    await addressResolver.learnMessageJidPair('5511999999999@s.whatsapp.net', '778899@lid')
+    let persisted: readonly {
+        readonly address: ReturnType<typeof parseSignalAddressFromJid>
+        readonly identityKey: Uint8Array
+    }[] = []
+    const api = new SignalIdentitySyncApi({
+        logger: createNoopLogger(),
+        identityStore: {
+            setRemoteIdentities: async (entries: typeof persisted) => {
+                persisted = entries
+            }
+        } as never,
+        addressResolver,
+        query: async () =>
+            iqResult([
+                {
+                    tag: WA_NODE_TAGS.LIST,
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_NODE_TAGS.USER,
+                            attrs: { jid: '5511999999999:1@s.whatsapp.net' },
+                            content: [
+                                {
+                                    tag: WA_NODE_TAGS.IDENTITY,
+                                    attrs: {},
+                                    content: makeBytes(SIGNAL_KEY_DATA_LENGTH, 1)
+                                }
+                            ]
+                        },
+                        {
+                            tag: WA_NODE_TAGS.USER,
+                            attrs: { jid: '778899:1@lid' },
+                            content: [
+                                {
+                                    tag: WA_NODE_TAGS.IDENTITY,
+                                    attrs: {},
+                                    content: makeBytes(SIGNAL_KEY_DATA_LENGTH, 2)
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ])
+    })
+
+    const result = await api.syncIdentityKeys(['5511999999999:1@s.whatsapp.net', '778899:1@lid'])
+
+    assert.equal(result.length, 2)
+    assert.equal(persisted.length, 1)
+    assert.deepEqual(persisted[0].address, { user: '778899', server: 'lid', device: 1 })
+    assert.deepEqual(persisted[0].identityKey.subarray(1), makeBytes(SIGNAL_KEY_DATA_LENGTH, 2))
+})
+
 test('signal identity sync api maps hosted.lid response jid to requested lid jid', async () => {
     const api = new SignalIdentitySyncApi({
         logger: createNoopLogger(),

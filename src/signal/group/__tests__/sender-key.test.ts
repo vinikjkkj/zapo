@@ -14,6 +14,17 @@ import { WaLidPnMappingMemoryStore } from '@store/memory/lid-pn-mapping.store'
 import { SenderKeyMemoryStore } from '@store/memory/sender-key.store'
 import { concatBytes } from '@util/bytes'
 
+class CapturingSenderKeyStore extends SenderKeyMemoryStore {
+    public distributionBatchSizes: number[] = []
+
+    public override async upsertSenderKeyDistributions(
+        records: Parameters<SenderKeyMemoryStore['upsertSenderKeyDistributions']>[0]
+    ): Promise<void> {
+        this.distributionBatchSizes.push(records.length)
+        await super.upsertSenderKeyDistributions(records)
+    }
+}
+
 function makeBytes(length: number, seed = 0): Uint8Array {
     const out = new Uint8Array(length)
     for (let index = 0; index < out.length; index += 1) {
@@ -258,4 +269,57 @@ test('sender key manager shares one sender-key chain across mapped PN and LID ad
         }),
         makeBytes(33, 44)
     )
+})
+
+test('sender key manager deduplicates mapped PN/LID distribution recipients', async () => {
+    const store = new CapturingSenderKeyStore()
+    const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
+    const manager = new SenderKeyManager(store, { addressResolver })
+    const groupId = '120363000000000002@g.us'
+    const pn = makeAddress('5511555555555', 2)
+    const lid = { user: '112233', server: 'lid', device: 2 } as const
+    await addressResolver.learnMessageJidPair('5511555555555@s.whatsapp.net', '112233@lid')
+
+    await manager.markSenderKeyDistributed(groupId, 42, [pn, lid])
+
+    assert.deepEqual(store.distributionBatchSizes, [1])
+    const [distribution] = await store.getDeviceSenderKeyDistributions(groupId, [lid])
+    assert.ok(distribution)
+    assert.equal(distribution.groupId, groupId)
+    assert.deepEqual(distribution.sender, lid)
+    assert.equal(distribution.keyId, 42)
+})
+
+test('sender key manager migrates legacy PN state when a sender switches to LID', async () => {
+    const senderStore = new SenderKeyMemoryStore()
+    const receiverStore = new SenderKeyMemoryStore()
+    const senderManager = new SenderKeyManager(senderStore)
+    const legacyReceiverManager = new SenderKeyManager(receiverStore)
+    const groupId = '120363000000000003@g.us'
+    const pn = makeAddress('5511444444444', 3)
+    const lid = { user: '998877', server: 'lid', device: 3 } as const
+    const plaintext = makeBytes(29, 61)
+    const prepared = await senderManager.prepareGroupEncryption(groupId, pn, plaintext)
+    await legacyReceiverManager.processSenderKeyDistributionPayload(
+        groupId,
+        pn,
+        prepared.distributionMessage.axolotlSenderKeyDistributionMessage!
+    )
+
+    const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
+    await addressResolver.learnMessageJidPair('5511444444444@s.whatsapp.net', '998877@lid')
+    const upgradedReceiverManager = new SenderKeyManager(receiverStore, { addressResolver })
+
+    assert.deepEqual(
+        await upgradedReceiverManager.decryptGroupMessage({
+            groupId,
+            sender: lid,
+            ciphertext: prepared.ciphertext.ciphertext
+        }),
+        plaintext
+    )
+    assert.equal(await receiverStore.getDeviceSenderKey(groupId, pn), null)
+    assert.ok(await receiverStore.getDeviceSenderKey(groupId, lid))
+    assert.deepEqual(await receiverStore.getDeviceSenderKeyDistributions(groupId, [pn]), [null])
+    assert.ok((await receiverStore.getDeviceSenderKeyDistributions(groupId, [lid]))[0])
 })

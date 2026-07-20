@@ -2,7 +2,7 @@ import { toSerializedPubKey } from '@crypto/core/keys'
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
-import { canonicalizeSignalJid, parseSignalAddressFromJid } from '@protocol/jid'
+import { canonicalizeSignalJid, parseSignalAddressFromJid, signalAddressKey } from '@protocol/jid'
 import { decodeExactLength, parseUint } from '@signal/api/codec'
 import { SIGNAL_KEY_BUNDLE_TYPE_LENGTH, SIGNAL_KEY_DATA_LENGTH } from '@signal/api/constants'
 import type { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
@@ -133,18 +133,22 @@ export class SignalIdentitySyncApi {
             const resolvedAddresses = this.addressResolver
                 ? await this.addressResolver.resolveMany(addresses)
                 : addresses
-            const identities = new Array<{
-                readonly address: ReturnType<typeof parseSignalAddressFromJid>
-                readonly identityKey: Uint8Array
-            }>(entries.length)
+            const identitiesByAddress = new Map<
+                string,
+                {
+                    readonly address: ReturnType<typeof parseSignalAddressFromJid>
+                    readonly identityKey: Uint8Array
+                }
+            >()
             for (let index = 0; index < entries.length; index += 1) {
                 const entry = entries[index]
-                identities[index] = {
-                    address: resolvedAddresses[index],
+                const address = resolvedAddresses[index]
+                identitiesByAddress.set(signalAddressKey(address), {
+                    address,
                     identityKey: toSerializedPubKey(entry.identity)
-                }
+                })
             }
-            await identityStore.setRemoteIdentities(identities)
+            await identityStore.setRemoteIdentities(Array.from(identitiesByAddress.values()))
         }
         this.logger.debug('signal identity sync success', {
             requested: normalizedTargets.length,

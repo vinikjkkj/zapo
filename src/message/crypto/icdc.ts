@@ -61,7 +61,8 @@ export async function resolveIcdcMeta(
             keys.push(key)
         } else if (
             localIdentity &&
-            addresses[i].user === localAddress?.user &&
+            localAddress &&
+            addresses[i].user === localAddress.user &&
             addresses[i].server === localAddress.server &&
             addresses[i].device === localAddress.device
         ) {

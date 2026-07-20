@@ -614,7 +614,15 @@ export async function handleIncomingMessageAck(
         return handleIncomingNewsletterMessage(node, options)
     }
 
-    await learnMessageLidPnMappings(node, options)
+    try {
+        await learnMessageLidPnMappings(node, options)
+    } catch (error) {
+        options.logger.warn('failed to learn incoming PN/LID mapping', {
+            id: node.attrs.id,
+            from: node.attrs.from,
+            message: toError(error).message
+        })
+    }
 
     let shouldSendStandardReceipt = true
     const nodeContent = node.content

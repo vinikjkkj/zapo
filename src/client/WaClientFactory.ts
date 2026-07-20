@@ -1210,21 +1210,17 @@ export function buildWaClientDependencies(input: {
                     return true
                 }
 
-                const meJid = getCurrentCredentials()?.meJid
-                if (meJid) {
-                    const meUser = toUserJid(meJid)
-                    const fromUser = toUserJid(parsed.fromJid)
-                    if (meUser === fromUser) {
-                        logger.error('self primary identity changed, disconnecting')
-                        void connectionManager?.getComms()?.stopComms()
-                        await disconnectWithClientSideEffects(
-                            WA_DISCONNECT_REASONS.PRIMARY_IDENTITY_KEY_CHANGE,
-                            true,
-                            null
-                        )
-                        await clearStoredCredentialsWithClientSideEffects()
-                        return true
-                    }
+                const credentials = getCurrentCredentials()
+                if (isOwnAccountJid(parsed.fromJid, credentials?.meJid, credentials?.meLid)) {
+                    logger.error('self primary identity changed, disconnecting')
+                    void connectionManager?.getComms()?.stopComms()
+                    await disconnectWithClientSideEffects(
+                        WA_DISCONNECT_REASONS.PRIMARY_IDENTITY_KEY_CHANGE,
+                        true,
+                        null
+                    )
+                    await clearStoredCredentialsWithClientSideEffects()
+                    return true
                 }
 
                 const oldIdentity = await sessionStore.identity.getRemoteIdentity(address)
@@ -1283,7 +1279,9 @@ export function buildWaClientDependencies(input: {
             })
             await runtime.sendNode(ackNode)
 
-            const userJid = toUserJid(parsed.fromJid)
+            const userJid = toUserJid(parsed.fromJid, {
+                canonicalizeSignalServer: true
+            })
 
             if (parsed.action === DEVICE_NOTIFICATION_ACTIONS.REMOVE) {
                 const baseAddress = await signalAddressResolver.resolve(

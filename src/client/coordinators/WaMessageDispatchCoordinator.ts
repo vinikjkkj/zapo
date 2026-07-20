@@ -1382,21 +1382,15 @@ export class WaMessageDispatchCoordinator {
             for (let index = 0; index < pendingTargets.length; index += 1) {
                 pendingTargetAddresses[index] = pendingTargets[index].address
             }
-            const resolvedPendingAddresses = this.deps.signalAddressResolver
-                ? await this.deps.signalAddressResolver.resolveMany(pendingTargetAddresses)
-                : pendingTargetAddresses
             const hasPendingSessions =
-                await this.deps.sessionStore.hasSessions(resolvedPendingAddresses)
+                await this.deps.sessionStore.hasSessions(pendingTargetAddresses)
             const nextAvailableTargets: {
                 readonly jid: string
                 readonly address: SignalAddress
             }[] = []
             for (let index = 0; index < pendingTargets.length; index += 1) {
                 if (hasPendingSessions[index]) {
-                    nextAvailableTargets.push({
-                        jid: pendingTargets[index].jid,
-                        address: resolvedPendingAddresses[index]
-                    })
+                    nextAvailableTargets.push(pendingTargets[index])
                 }
             }
             availableTargets = nextAvailableTargets

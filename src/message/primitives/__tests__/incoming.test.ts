@@ -153,6 +153,55 @@ test('direct sender_lid mapping is learned before Signal decrypt', async () => {
     assert.deepEqual(calls, ['learn:551100000000@s.whatsapp.net:778899@lid', 'decrypt'])
 })
 
+test('mapping-store failures do not interrupt incoming Signal decrypt', async () => {
+    const calls: string[] = []
+    const warnings: Array<{
+        readonly message: string
+        readonly id?: unknown
+        readonly from?: unknown
+        readonly error?: unknown
+    }> = []
+    const logger = createNoopLogger()
+    logger.warn = (message, context) => {
+        warnings.push({ message, id: context?.id, from: context?.from, error: context?.message })
+    }
+    const encrypted = createEncryptedMessageNode()
+
+    const handled = await handleIncomingMessageAck(
+        {
+            ...encrypted,
+            attrs: { ...encrypted.attrs, sender_lid: '778899@lid' }
+        },
+        {
+            logger,
+            sendNode: async () => undefined,
+            signalAddressResolver: {
+                learnMessageJidPair: async () => {
+                    calls.push('learn')
+                    throw new Error('mapping store unavailable')
+                }
+            } as never,
+            signalProtocol: {
+                decryptMessage: async () => {
+                    calls.push('decrypt')
+                    return paddedPlaintext({ conversation: 'hi' })
+                }
+            } as never
+        }
+    )
+
+    assert.equal(handled, true)
+    assert.deepEqual(calls, ['learn', 'decrypt'])
+    assert.deepEqual(warnings, [
+        {
+            message: 'failed to learn incoming PN/LID mapping',
+            id: encrypted.attrs.id,
+            from: encrypted.attrs.from,
+            error: 'mapping store unavailable'
+        }
+    ])
+})
+
 test('recipient_latest_lid becomes the canonical Signal address after peer metadata', async () => {
     const addressResolver = new SignalAddressResolver(new WaLidPnMappingMemoryStore())
     const encrypted = createEncryptedMessageNode()

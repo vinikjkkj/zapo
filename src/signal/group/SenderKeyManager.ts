@@ -18,7 +18,7 @@ import { SIGNAL_GROUP_VERSION } from '@signal/constants'
 import { deriveSenderKeyMsgKey, selectMessageKey } from '@signal/group/SenderKeyChain'
 import { parseDistributionPayload, parseSenderKeyMessage } from '@signal/group/SenderKeyCodec'
 import type { SignalAddressResolver } from '@signal/session/SignalAddressResolver'
-import type { SenderKeyRecord, SignalAddress } from '@signal/types'
+import type { SenderKeyDistributionRecord, SenderKeyRecord, SignalAddress } from '@signal/types'
 import type { WaSenderKeyStore } from '@store/contracts/sender-key.store'
 import { concatBytes } from '@util/bytes'
 
@@ -192,16 +192,17 @@ export class SenderKeyManager {
         }
         const resolvedParticipants = await this.resolveAddresses(participants)
         const timestampMs = Date.now()
-        const distributions = new Array(resolvedParticipants.length)
+        const distributionsBySender = new Map<string, SenderKeyDistributionRecord>()
         for (let index = 0; index < resolvedParticipants.length; index += 1) {
-            distributions[index] = {
+            const sender = resolvedParticipants[index]
+            distributionsBySender.set(signalAddressKey(sender), {
                 groupId,
-                sender: resolvedParticipants[index],
+                sender,
                 keyId: senderKeyId,
                 timestampMs
-            }
+            })
         }
-        await this.store.upsertSenderKeyDistributions(distributions)
+        await this.store.upsertSenderKeyDistributions(Array.from(distributionsBySender.values()))
     }
 
     /**
@@ -245,11 +246,16 @@ export class SenderKeyManager {
 
     /** Decrypts an incoming sender-key group ciphertext into plaintext. */
     public async decryptGroupMessage(payload: GroupSenderKeyCiphertext): Promise<Uint8Array> {
-        const sender = await this.resolveAddress(payload.sender)
+        const originalSender = payload.sender
+        const sender = await this.resolveAddress(originalSender)
         return this.runWithSenderLock(payload.groupId, sender, async () => {
             const parsed = parseSenderKeyMessage(payload.ciphertext)
 
-            const senderKey = await this.store.getDeviceSenderKey(payload.groupId, sender)
+            const senderKey = await this.getSenderKeyWithLegacyFallback(
+                payload.groupId,
+                originalSender,
+                sender
+            )
             if (!senderKey) {
                 throw new Error('missing sender key')
             }
@@ -328,6 +334,39 @@ export class SenderKeyManager {
         }
         await this.store.upsertSenderKey(created)
         return created
+    }
+
+    private async getSenderKeyWithLegacyFallback(
+        groupId: string,
+        originalSender: SignalAddress,
+        sender: SignalAddress
+    ): Promise<SenderKeyRecord | null> {
+        const current = await this.store.getDeviceSenderKey(groupId, sender)
+        if (current || !this.addressResolver) return current
+
+        const senderAddressKey = signalAddressKey(sender)
+        const originalSenderAddressKey = signalAddressKey(originalSender)
+        const legacySender =
+            originalSenderAddressKey === senderAddressKey
+                ? await this.addressResolver.resolvePhoneNumberAlias(sender)
+                : originalSender
+        if (!legacySender || signalAddressKey(legacySender) === senderAddressKey) {
+            return null
+        }
+
+        const legacyKey = await this.store.getDeviceSenderKey(groupId, legacySender)
+        if (!legacyKey) return null
+
+        const migratedKey = { ...legacyKey, sender }
+        const [legacyDistribution] = await this.store.getDeviceSenderKeyDistributions(groupId, [
+            legacySender
+        ])
+        await this.store.upsertSenderKey(migratedKey)
+        if (legacyDistribution) {
+            await this.store.upsertSenderKeyDistribution({ ...legacyDistribution, sender })
+        }
+        await this.store.deleteDeviceSenderKey(legacySender, groupId)
+        return migratedKey
     }
 
     private runWithSenderLock<T>(

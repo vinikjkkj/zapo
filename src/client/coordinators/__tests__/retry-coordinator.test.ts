@@ -645,7 +645,7 @@ test('retry session update reuses an existing compatible session instead of re-k
     assert.deepEqual(establishOptions, [{ reuseExisting: true }])
 })
 
-test('retry session update resets the session once the base key repeats at retry 3', async () => {
+test('retry session update detects a repeated base key across PN/LID aliases', async () => {
     const existingSession = {
         remote: { regId: 555, pubKey: new Uint8Array(33) },
         aliceBaseKey: new Uint8Array([7, 7, 7])
@@ -673,7 +673,7 @@ test('retry session update resets the session once the base key repeats at retry
         signalMissingPreKeysSync: {
             fetchMissingPreKeys: async () => {
                 fetchCount += 1
-                return [{ devices: [{ deviceJid: '551100000000:3@s.whatsapp.net', bundle: {} }] }]
+                return [{ devices: [{ deviceJid: '778899:3@lid', bundle: {} }] }]
             }
         } as never,
         messageClient: {} as never,
@@ -682,25 +682,28 @@ test('retry session update resets the session once the base key repeats at retry
     })
 
     const internals = coordinator as unknown as RetrySessionInternals
-    const requesterJid = '551100000000:3@s.whatsapp.net'
-    const parsed = parseJidFull(requesterJid)
-    const run = (retryCount: number): Promise<boolean> =>
+    const pn = parseJidFull('551100000000:3@s.whatsapp.net')
+    const lid = parseJidFull('778899:3@lid')
+    const run = (
+        retryCount: number,
+        requester: ReturnType<typeof parseJidFull>
+    ): Promise<boolean> =>
         internals.updateLocalSessionFromRetryRequest(
-            buildKeyBundleRequest(retryCount, requesterJid),
-            requesterJid,
-            parsed.address,
-            parsed.address,
-            parsed.normalizedJid
+            buildKeyBundleRequest(retryCount, requester.normalizedJid),
+            requester.normalizedJid,
+            requester.address,
+            lid.address,
+            requester.normalizedJid
         )
 
     // Retry 2 only records the session base key.
-    await run(2)
+    await run(2, pn)
     assert.equal(deleteCount, 0)
     assert.equal(fetchCount, 0)
 
     // Retry 3 sees the same (reused) base key and forces a clean session:
     // delete + fetch fresh prekeys + re-establish.
-    const ready = await run(3)
+    const ready = await run(3, lid)
     assert.equal(ready, true)
     assert.equal(deleteCount, 1)
     assert.equal(fetchCount, 1)

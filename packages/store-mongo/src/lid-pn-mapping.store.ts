@@ -4,14 +4,26 @@ import { BaseMongoStore } from './BaseMongoStore'
 import type { WaMongoStorageOptions } from './types'
 
 const COLLECTION = 'signal_lid_pn_mappings'
+const REPLACE_MAX_ATTEMPTS = 3
 
 interface LidPnMappingDoc {
     _id: { session_id: string; pn_user: string }
     lid_user: string
 }
 
+function isDuplicateKeyError(error: unknown): boolean {
+    return (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { readonly code?: unknown }).code === 11_000
+    )
+}
+
 /** MongoDB-backed PN/LID mapping store scoped by Zapo session id. */
 export class WaLidPnMappingMongoStore extends BaseMongoStore implements WaLidPnMappingStore {
+    private writeTail: Promise<void> = Promise.resolve()
+
     public constructor(options: WaMongoStorageOptions) {
         super(options)
     }
@@ -41,29 +53,50 @@ export class WaLidPnMappingMongoStore extends BaseMongoStore implements WaLidPnM
     }
 
     public async setLidUser(pnUser: string, lidUser: string): Promise<void> {
-        await this.withSession(async (session) => {
-            const collection = this.col<LidPnMappingDoc>(COLLECTION)
-            await collection.deleteMany(
-                {
-                    '_id.session_id': this.sessionId,
-                    $or: [{ '_id.pn_user': pnUser }, { lid_user: lidUser }]
-                },
-                { session }
-            )
-            await collection.insertOne(
-                {
-                    _id: { session_id: this.sessionId, pn_user: pnUser },
-                    lid_user: lidUser
-                },
-                { session }
-            )
+        await this.runWriteSerialized(async () => {
+            for (let attempt = 1; attempt <= REPLACE_MAX_ATTEMPTS; attempt += 1) {
+                try {
+                    await this.withSession(async (session) => {
+                        const collection = this.col<LidPnMappingDoc>(COLLECTION)
+                        await collection.deleteMany(
+                            {
+                                '_id.session_id': this.sessionId,
+                                '_id.pn_user': { $ne: pnUser },
+                                lid_user: lidUser
+                            },
+                            { session }
+                        )
+                        await collection.updateOne(
+                            { _id: { session_id: this.sessionId, pn_user: pnUser } },
+                            { $set: { lid_user: lidUser } },
+                            { upsert: true, session }
+                        )
+                    })
+                    return
+                } catch (error) {
+                    if (attempt === REPLACE_MAX_ATTEMPTS || !isDuplicateKeyError(error)) {
+                        throw error
+                    }
+                }
+            }
         })
     }
 
     public async clear(): Promise<void> {
-        await this.ensureIndexes()
-        await this.col<LidPnMappingDoc>(COLLECTION).deleteMany({
-            '_id.session_id': this.sessionId
+        await this.runWriteSerialized(async () => {
+            await this.ensureIndexes()
+            await this.col<LidPnMappingDoc>(COLLECTION).deleteMany({
+                '_id.session_id': this.sessionId
+            })
         })
+    }
+
+    private runWriteSerialized<T>(task: () => Promise<T>): Promise<T> {
+        const result = this.writeTail.then(task)
+        this.writeTail = result.then(
+            () => undefined,
+            () => undefined
+        )
+        return result
     }
 }

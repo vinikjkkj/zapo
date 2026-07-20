@@ -214,6 +214,44 @@ test('SignalAddressResolver bounds its positive and negative lookup cache', asyn
     assert.equal(store.reads, 3)
 })
 
+test('SignalAddressResolver resolveMany retains results larger than its cache', async () => {
+    const store = new CountingMappingStore()
+    await store.setLidUser('5511000000001', '101')
+    await store.setLidUser('5511000000002', '202')
+    await store.setLidUser('5511000000003', '303')
+    store.reads = 0
+    store.writes = 0
+    const resolver = new SignalAddressResolver(store, { maxCacheEntries: 1 })
+
+    const resolved = await resolver.resolveMany([
+        { user: '5511000000001', server: 's.whatsapp.net', device: 1 },
+        { user: '5511000000002', server: 's.whatsapp.net', device: 2 },
+        { user: '5511000000003', server: 's.whatsapp.net', device: 3 }
+    ])
+
+    assert.deepEqual(resolved, [
+        { user: '101', server: 'lid', device: 1 },
+        { user: '202', server: 'lid', device: 2 },
+        { user: '303', server: 'lid', device: 3 }
+    ])
+    assert.equal(store.reads, 3)
+})
+
+test('SignalAddressResolver resolves hosted and regular LIDs back to their PN alias', async () => {
+    const store = new WaLidPnMappingMemoryStore()
+    const resolver = new SignalAddressResolver(store)
+    await resolver.learnMessageJidPair('5511000000004@s.whatsapp.net', '404@lid')
+
+    assert.deepEqual(
+        await resolver.resolvePhoneNumberAlias({ user: '404', server: 'lid', device: 4 }),
+        { user: '5511000000004', server: 's.whatsapp.net', device: 4 }
+    )
+    assert.deepEqual(
+        await resolver.resolvePhoneNumberAlias({ user: '404', server: 'hosted.lid', device: 99 }),
+        { user: '5511000000004', server: 'hosted', device: 99 }
+    )
+})
+
 test('SignalAddressResolver clears its persistent mapping and hot cache together', async () => {
     const store = new WaLidPnMappingMemoryStore()
     const resolver = new SignalAddressResolver(store)

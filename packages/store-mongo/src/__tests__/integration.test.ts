@@ -1071,6 +1071,34 @@ describe('store-mongo integration', { timeout: 60_000 }, () => {
         assert.equal(await mappingA.getPnUser('333444'), null)
     })
 
+    it('signal: concurrent PN/LID replacements preserve one owner', async (t) => {
+        if (!store) return t.skip('ZAPO_TEST_MONGO_* not set')
+
+        const sessionId = nextSessionId('lid-pn-concurrent')
+        const mappingA = store.stores.lidPnMapping(sessionId)
+        const mappingB = store.stores.lidPnMapping(sessionId)
+        await mappingA.clear()
+
+        for (let index = 0; index < 5; index += 1) {
+            const lidUser = `55566${index}`
+            const pnUsers = [`55117777777${index}`, `55116666666${index}`]
+            await Promise.all([
+                mappingA.setLidUser(pnUsers[0], lidUser),
+                mappingB.setLidUser(pnUsers[1], lidUser)
+            ])
+
+            const owner = await mappingA.getPnUser(lidUser)
+            assert.ok(owner === pnUsers[0] || owner === pnUsers[1])
+            assert.equal(await mappingA.getLidUser(owner), lidUser)
+            assert.equal(
+                await mappingA.getLidUser(owner === pnUsers[0] ? pnUsers[1] : pnUsers[0]),
+                null
+            )
+        }
+
+        await mappingA.clear()
+    })
+
     it('signal: session lifecycle and batch queries', async (t) => {
         if (!store) return t.skip('ZAPO_TEST_MONGO_* not set')
 

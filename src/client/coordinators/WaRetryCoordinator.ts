@@ -15,6 +15,7 @@ import {
     normalizeDeviceJid,
     parseJidFull,
     parseSignalAddressFromJid,
+    signalAddressKey,
     toUserJid
 } from '@protocol/jid'
 import {
@@ -784,20 +785,18 @@ export class WaRetryCoordinator {
             return true
         }
         const expiresAtMs = Date.now() + this.retryTtlMs
+        const requesterSessionKey = signalAddressKey(requesterSignalAddress)
         if (request.retryCount === 2) {
             this.setRetrySessionBaseKey(
                 request.originalMsgId,
-                requesterNormalizedDeviceJid,
+                requesterSessionKey,
                 sessionBaseKey,
                 expiresAtMs
             )
             return true
         }
 
-        const saved = this.getRetrySessionBaseKey(
-            request.originalMsgId,
-            requesterNormalizedDeviceJid
-        )
+        const saved = this.getRetrySessionBaseKey(request.originalMsgId, requesterSessionKey)
         if (!saved || !uint8Equal(saved.baseKey, sessionBaseKey)) {
             return true
         }
@@ -1042,20 +1041,17 @@ export class WaRetryCoordinator {
         }
     }
 
-    private retrySessionBaseKeyMapKey(
-        originalMsgId: string,
-        requesterNormalizedDeviceJid: string
-    ): string {
-        return `${originalMsgId}|${requesterNormalizedDeviceJid}`
+    private retrySessionBaseKeyMapKey(originalMsgId: string, requesterSessionKey: string): string {
+        return `${originalMsgId}|${requesterSessionKey}`
     }
 
     private setRetrySessionBaseKey(
         originalMsgId: string,
-        requesterNormalizedDeviceJid: string,
+        requesterSessionKey: string,
         baseKey: Uint8Array,
         expiresAtMs: number
     ): void {
-        const key = this.retrySessionBaseKeyMapKey(originalMsgId, requesterNormalizedDeviceJid)
+        const key = this.retrySessionBaseKeyMapKey(originalMsgId, requesterSessionKey)
         setBoundedMapEntry(
             this.retrySessionBaseKeys,
             key,
@@ -1069,9 +1065,9 @@ export class WaRetryCoordinator {
 
     private getRetrySessionBaseKey(
         originalMsgId: string,
-        requesterNormalizedDeviceJid: string
+        requesterSessionKey: string
     ): RetrySessionBaseKeySnapshot | null {
-        const key = this.retrySessionBaseKeyMapKey(originalMsgId, requesterNormalizedDeviceJid)
+        const key = this.retrySessionBaseKeyMapKey(originalMsgId, requesterSessionKey)
         const entry = this.retrySessionBaseKeys.get(key)
         if (!entry) {
             return null
