@@ -14,6 +14,8 @@ const KNOWN_SERVERS: Record<string, string> = {
     [WA_DEFAULTS.BOT_SERVER]: WA_DEFAULTS.BOT_SERVER
 }
 
+const CANONICAL_SIGNAL_USER_JID_OPTIONS = { canonicalizeSignalServer: true } as const
+
 /**
  * Returns the canonical reference for known server strings, avoiding
  * thousands of duplicate sliced copies (e.g. "lid", "s.whatsapp.net")
@@ -223,18 +225,18 @@ export function toUserJid(
 
 /**
  * True when `jid` is the account's own user, matching the `meJid` (pn) or
- * `meLid` (lid) identity device-insensitively. Mirrors WhatsApp Web's
- * `isMeAccount`.
+ * `meLid` (lid) identity device-insensitively, including hosted Signal server
+ * aliases. Mirrors WhatsApp Web's `isMeAccount`.
  */
 export function isOwnAccountJid(
     jid: string,
     meJid: string | null | undefined,
     meLid: string | null | undefined
 ): boolean {
-    const candidateUser = toUserJid(jid)
+    const candidateUser = toUserJid(jid, CANONICAL_SIGNAL_USER_JID_OPTIONS)
     return (
-        (!!meJid && toUserJid(meJid) === candidateUser) ||
-        (!!meLid && toUserJid(meLid) === candidateUser)
+        (!!meJid && toUserJid(meJid, CANONICAL_SIGNAL_USER_JID_OPTIONS) === candidateUser) ||
+        (!!meLid && toUserJid(meLid, CANONICAL_SIGNAL_USER_JID_OPTIONS) === candidateUser)
     )
 }
 

@@ -74,6 +74,15 @@ test('canonicalizeOwnAccountJid maps own PN device JIDs to LID', () => {
     )
 })
 
+test('isOwnAccountJid recognizes hosted aliases for the account identities', () => {
+    const meJid = '5511@s.whatsapp.net'
+    const meLid = '1330@lid'
+
+    assert.equal(isOwnAccountJid('5511:99@hosted', meJid, meLid), true)
+    assert.equal(isOwnAccountJid('1330@hosted.lid', meJid, meLid), true)
+    assert.equal(isOwnAccountJid('5599@hosted', meJid, meLid), false)
+})
+
 test('jid split and normalization helpers', () => {
     assert.deepEqual(splitJid('123@s.whatsapp.net'), {
         user: '123',

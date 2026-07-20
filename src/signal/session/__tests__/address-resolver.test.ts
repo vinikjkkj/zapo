@@ -186,6 +186,24 @@ test('SignalAddressResolver replaces stale mappings from authoritative peer meta
     assert.equal(await store.getPnUser('101'), '5511000000002')
 })
 
+test('SignalAddressResolver reasserts an authoritative mapping after its cache becomes stale', async () => {
+    const store = new WaLidPnMappingMemoryStore()
+    const resolver = new SignalAddressResolver(store)
+    await resolver.learnMessageJidPair('5511000000001@s.whatsapp.net', '101@lid')
+
+    // Simulate another resolver replacing the persisted owner while this
+    // resolver still has the original PN -> LID pair cached.
+    await store.setLidUser('5511000000002', '101')
+
+    assert.equal(
+        await resolver.learnPeerRecipientJidPair('5511000000001@s.whatsapp.net', '101@lid'),
+        true
+    )
+    assert.equal(await store.getLidUser('5511000000001'), '101')
+    assert.equal(await store.getLidUser('5511000000002'), null)
+    assert.equal(await store.getPnUser('101'), '5511000000001')
+})
+
 test('SignalAddressResolver ignores pairs that are not PN/LID alternates', async () => {
     const store = new CountingMappingStore()
     const resolver = new SignalAddressResolver(store)

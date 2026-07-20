@@ -79,7 +79,11 @@ export class SignalAddressResolver {
     ): Promise<boolean> {
         const mapping = parseLidPnUsers(firstJid, secondJid)
         if (!mapping) return false
-        if (this.cache.get(mapping.pnUser) === mapping.lidUser) return false
+        // Ordinary message metadata is conservative, so a matching hot-cache
+        // entry cannot authorize a replacement. Authoritative peer metadata
+        // must still verify the reverse owner: another resolver may have
+        // replaced the persisted one-to-one mapping since this entry was cached.
+        if (!replaceExisting && this.cache.get(mapping.pnUser) === mapping.lidUser) return false
         // A replacement can evict both the previous LID for this PN and the
         // previous PN for this LID. Serialize the rare mutations globally so
         // every cache invalidation reflects the same one-to-one store state.
@@ -90,12 +94,8 @@ export class SignalAddressResolver {
             } else {
                 current = await this.store.getLidUser(mapping.pnUser)
             }
-            if (current === mapping.lidUser) {
-                this.cacheMapping(mapping.pnUser, current)
-                return false
-            }
             const currentPn = await this.store.getPnUser(mapping.lidUser)
-            if (currentPn === mapping.pnUser) {
+            if (current === mapping.lidUser && currentPn === mapping.pnUser) {
                 this.cacheMapping(mapping.pnUser, mapping.lidUser)
                 return false
             }
