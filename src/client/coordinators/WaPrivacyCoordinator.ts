@@ -1,3 +1,5 @@
+import type { Logger } from '@infra/log/types'
+import { isLidJid, isUserJid, normalizeRecipientJid } from '@protocol/jid'
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
     WA_PRIVACY_CATEGORY_TO_SETTING,
@@ -10,16 +12,21 @@ import {
     type WaPrivacySettingValueMap,
     type WaPrivacyValue
 } from '@protocol/privacy'
+import type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
+import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import {
-    buildBlocklistChangeIq,
+    buildBlocklistBlockIq,
+    buildBlocklistUnblockIq,
     buildGetBlocklistIq,
     buildGetPrivacyDisallowedListIq,
     buildGetPrivacySettingsIq,
-    buildSetPrivacyCategoryIq
+    buildSetPrivacyCategoryIq,
+    type WaBlocklistTarget
 } from '@transport/node/builders/privacy'
 import { findNodeChild, getNodeChildren, getNodeChildrenByTag } from '@transport/node/helpers'
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
+import { toError } from '@util/primitives'
 
 export type WaPrivacySettings = {
     readonly [K in WaPrivacySettingName]?: WaPrivacySettingValueMap[K]
@@ -65,13 +72,23 @@ export interface WaPrivacyCoordinator {
     /** Returns the current account-wide blocklist. */
     readonly getBlocklist: () => Promise<WaBlocklistResult>
     /**
-     * Blocks `jid` (account-wide blocklist). After this, the peer can no
-     * longer message/call you and cannot see your last seen/online/photo/
-     * status. The block is symmetric only from the peer's read perspective -
-     * they don't get an explicit "you were blocked" notification.
+     * Blocks a user (account-wide blocklist). Accepts a phone-number jid, a
+     * LID jid, or a bare phone number. After this, the peer can no longer
+     * message/call you and cannot see your last seen/online/photo/status. The
+     * block is symmetric only from the peer's read perspective - they don't
+     * get an explicit "you were blocked" notification.
+     *
+     * The server keys blocklist entries by LID for migrated accounts, so a
+     * phone-number input is resolved to its LID first (device-list cache,
+     * then a usync query). Non-migrated accounts fall back to the plain
+     * phone-jid form.
      */
     readonly blockUser: (jid: string) => Promise<void>
-    /** Removes `jid` from the blocklist. */
+    /**
+     * Removes a user from the blocklist. Accepts the same inputs as
+     * {@link blockUser} and performs the same LID resolution - unblocking a
+     * migrated entry by phone jid is rejected by the server.
+     */
     readonly unblockUser: (jid: string) => Promise<void>
 }
 
@@ -82,6 +99,11 @@ interface WaPrivacyCoordinatorOptions {
         timeoutMs?: number,
         contextData?: Readonly<Record<string, unknown>>
     ) => Promise<BinaryNode>
+    readonly deviceListStore: Pick<WaDeviceListStore, 'findByAnyUserJid'>
+    readonly queryLidsByPhoneJids: (
+        phoneJids: readonly string[]
+    ) => Promise<readonly SignalLidSyncResult[]>
+    readonly logger: Logger
 }
 
 const IGNORED_SERVER_CATEGORIES = new Set([
@@ -186,6 +208,74 @@ function parseBlocklist(result: BinaryNode): WaBlocklistResult {
     return { jids, dhash }
 }
 
+/**
+ * Resolves a blocklist input into both addressing forms. Phone-jid inputs get
+ * their LID resolved cache-first (device-list store) with a one-shot usync
+ * fallback; LID inputs get their phone jid from the cache when known.
+ * Resolution failures degrade to the single known form instead of throwing -
+ * the server then decides whether that form is acceptable.
+ */
+async function resolveBlocklistTarget(
+    options: WaPrivacyCoordinatorOptions,
+    jid: string
+): Promise<WaBlocklistTarget> {
+    const normalized = normalizeRecipientJid(jid)
+
+    if (isLidJid(normalized)) {
+        let pnJid: string | null = null
+        try {
+            const snapshot = await options.deviceListStore.findByAnyUserJid(normalized)
+            if (snapshot?.userJid && isUserJid(snapshot.userJid)) {
+                pnJid = snapshot.userJid
+            } else if (snapshot?.altUserJid && isUserJid(snapshot.altUserJid)) {
+                pnJid = snapshot.altUserJid
+            }
+        } catch (error) {
+            options.logger.debug('pn lookup failed for blocklist target', {
+                lidJid: normalized,
+                message: toError(error).message
+            })
+        }
+        return { lidJid: normalized, pnJid }
+    }
+
+    if (!isUserJid(normalized)) {
+        throw new Error(`blocklist target must be a user jid: ${jid}`)
+    }
+
+    let lidJid: string | null = null
+    try {
+        const snapshot = await options.deviceListStore.findByAnyUserJid(normalized)
+        if (snapshot) {
+            if (isLidJid(snapshot.userJid)) {
+                lidJid = snapshot.userJid
+            } else if (snapshot.altUserJid && isLidJid(snapshot.altUserJid)) {
+                lidJid = snapshot.altUserJid
+            }
+        }
+    } catch (error) {
+        options.logger.debug('lid cache lookup failed for blocklist target', {
+            pnJid: normalized,
+            message: toError(error).message
+        })
+    }
+    if (!lidJid) {
+        try {
+            const results = await options.queryLidsByPhoneJids([normalized])
+            const match = results.find((entry) => entry.queriedJid === normalized)
+            if (match?.lidJid) {
+                lidJid = match.lidJid
+            }
+        } catch (error) {
+            options.logger.debug('lid resolution failed for blocklist target', {
+                pnJid: normalized,
+                message: toError(error).message
+            })
+        }
+    }
+    return lidJid !== null ? { lidJid, pnJid: normalized } : { lidJid: null, pnJid: normalized }
+}
+
 /** Builds a {@link WaPrivacyCoordinator} backed by the given IQ query function. */
 export function createPrivacyCoordinator(
     options: WaPrivacyCoordinatorOptions
@@ -228,14 +318,21 @@ export function createPrivacyCoordinator(
         },
 
         blockUser: async (jid) => {
-            const node = buildBlocklistChangeIq(jid, 'block')
-            const result = await queryWithContext('privacy.blockUser', node, undefined, { jid })
+            const target = await resolveBlocklistTarget(options, jid)
+            const node = buildBlocklistBlockIq(target)
+            const result = await queryWithContext('privacy.blockUser', node, undefined, {
+                jid: target.lidJid ?? target.pnJid
+            })
             assertIqResult(result, 'privacy.blockUser')
         },
 
         unblockUser: async (jid) => {
-            const node = buildBlocklistChangeIq(jid, 'unblock')
-            const result = await queryWithContext('privacy.unblockUser', node, undefined, { jid })
+            const target = await resolveBlocklistTarget(options, jid)
+            const unblockJid = target.lidJid ?? target.pnJid
+            const node = buildBlocklistUnblockIq(unblockJid)
+            const result = await queryWithContext('privacy.unblockUser', node, undefined, {
+                jid: unblockJid
+            })
             assertIqResult(result, 'privacy.unblockUser')
         }
     }

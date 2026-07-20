@@ -76,7 +76,8 @@ import {
 } from '@transport/node/builders/prekeys'
 import { buildPresenceNode, buildPresenceSubscribeNode } from '@transport/node/builders/presence'
 import {
-    buildBlocklistChangeIq,
+    buildBlocklistBlockIq,
+    buildBlocklistUnblockIq,
     buildGetBlocklistIq,
     buildGetPrivacyDisallowedListIq,
     buildGetPrivacySettingsIq,
@@ -888,16 +889,55 @@ test('privacy builders generate expected iq payloads', () => {
     assert.equal(blocklist.attrs.xmlns, WA_XMLNS.BLOCKLIST)
     assert.equal(blocklist.content, undefined)
 
-    const block = buildBlocklistChangeIq('5511999999999@s.whatsapp.net', 'block')
-    assert.equal(block.attrs.type, 'set')
-    assert.equal(block.attrs.xmlns, WA_XMLNS.BLOCKLIST)
-    assert.ok(Array.isArray(block.content))
-    if (!Array.isArray(block.content)) {
+    const nonMigratedBlock = buildBlocklistBlockIq({
+        lidJid: null,
+        pnJid: '5511999999999@s.whatsapp.net'
+    })
+    assert.equal(nonMigratedBlock.attrs.type, 'set')
+    assert.equal(nonMigratedBlock.attrs.xmlns, WA_XMLNS.BLOCKLIST)
+    assert.ok(Array.isArray(nonMigratedBlock.content))
+    if (!Array.isArray(nonMigratedBlock.content)) {
         throw new Error('expected blocklist change content array')
     }
-    assert.equal(block.content[0].tag, 'item')
-    assert.equal(block.content[0].attrs.jid, '5511999999999@s.whatsapp.net')
-    assert.equal(block.content[0].attrs.action, 'block')
+    assert.equal(nonMigratedBlock.content[0].tag, 'item')
+    assert.deepEqual(nonMigratedBlock.content[0].attrs, {
+        action: 'block',
+        jid: '5511999999999@s.whatsapp.net'
+    })
+
+    const migratedBlock = buildBlocklistBlockIq({
+        lidJid: '999@lid',
+        pnJid: '5511999999999@s.whatsapp.net'
+    })
+    assert.ok(Array.isArray(migratedBlock.content))
+    if (!Array.isArray(migratedBlock.content)) {
+        throw new Error('expected migrated block content array')
+    }
+    assert.deepEqual(migratedBlock.content[0].attrs, {
+        action: 'block',
+        jid: '999@lid',
+        pn_jid: '5511999999999@s.whatsapp.net'
+    })
+
+    const unknownIdentifierBlock = buildBlocklistBlockIq({ lidJid: '999@lid', pnJid: null })
+    assert.ok(Array.isArray(unknownIdentifierBlock.content))
+    if (!Array.isArray(unknownIdentifierBlock.content)) {
+        throw new Error('expected unknown-identifier block content array')
+    }
+    assert.deepEqual(unknownIdentifierBlock.content[0].attrs, {
+        action: 'block',
+        jid: '999@lid',
+        unknown_identifier: 'true'
+    })
+
+    const unblock = buildBlocklistUnblockIq('999@lid')
+    assert.equal(unblock.attrs.type, 'set')
+    assert.equal(unblock.attrs.xmlns, WA_XMLNS.BLOCKLIST)
+    assert.ok(Array.isArray(unblock.content))
+    if (!Array.isArray(unblock.content)) {
+        throw new Error('expected unblock content array')
+    }
+    assert.deepEqual(unblock.content[0].attrs, { jid: '999@lid', action: 'unblock' })
 })
 
 test('message builders cover group and inbound receipt branches', () => {

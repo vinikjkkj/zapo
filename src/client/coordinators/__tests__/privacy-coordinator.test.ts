@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordinator'
+import { createNoopLogger } from '@infra/log/types'
 import { WA_PRIVACY_CATEGORIES, WA_PRIVACY_TAGS } from '@protocol/constants'
+import type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
+import type { WaDeviceListSnapshot } from '@store/contracts/device-list.store'
 import type { BinaryNode } from '@transport/types'
 
 function createIqResult(content?: readonly BinaryNode[]): BinaryNode {
@@ -10,6 +13,19 @@ function createIqResult(content?: readonly BinaryNode[]): BinaryNode {
         tag: 'iq',
         attrs: { type: 'result' },
         content
+    }
+}
+
+function createBlocklistDeps(overrides?: {
+    readonly findByAnyUserJid?: (jid: string) => Promise<WaDeviceListSnapshot | null>
+    readonly queryLidsByPhoneJids?: (
+        phoneJids: readonly string[]
+    ) => Promise<readonly SignalLidSyncResult[]>
+}) {
+    return {
+        deviceListStore: { findByAnyUserJid: overrides?.findByAnyUserJid ?? (async () => null) },
+        queryLidsByPhoneJids: overrides?.queryLidsByPhoneJids ?? (async () => []),
+        logger: createNoopLogger()
     }
 }
 
@@ -21,6 +37,7 @@ test('privacy coordinator parses settings and ignores error/ignored categories',
     }> = []
 
     const coordinator = createPrivacyCoordinator({
+        ...createBlocklistDeps(),
         queryWithContext: async (context, node, _timeoutMs, contextData) => {
             calls.push({ context, node, contextData })
             return createIqResult([
@@ -83,6 +100,7 @@ test('privacy coordinator maps setting/category for set and disallowed list quer
     }> = []
 
     const coordinator = createPrivacyCoordinator({
+        ...createBlocklistDeps(),
         queryWithContext: async (context, node, _timeoutMs, contextData) => {
             calls.push({ context, node, contextData })
             if (context === 'privacy.getDisallowedList') {
@@ -167,6 +185,7 @@ test('privacy coordinator parses blocklist and sends block/unblock actions', asy
     }> = []
 
     const coordinator = createPrivacyCoordinator({
+        ...createBlocklistDeps(),
         queryWithContext: async (context, node, _timeoutMs, contextData) => {
             calls.push({ context, node, contextData })
             if (context === 'privacy.getBlocklist') {
@@ -202,11 +221,106 @@ test('privacy coordinator parses blocklist and sends block/unblock actions', asy
     if (!Array.isArray(calls[1].node.content)) {
         throw new Error('expected blocklist change content array')
     }
-    assert.equal(calls[1].node.content[0].attrs.action, 'block')
+    assert.deepEqual(calls[1].node.content[0].attrs, {
+        action: 'block',
+        jid: '123@s.whatsapp.net'
+    })
     assert.equal(calls[2].context, 'privacy.unblockUser')
     assert.ok(Array.isArray(calls[2].node.content))
     if (!Array.isArray(calls[2].node.content)) {
         throw new Error('expected unblock content array')
     }
-    assert.equal(calls[2].node.content[0].attrs.action, 'unblock')
+    assert.deepEqual(calls[2].node.content[0].attrs, {
+        jid: '123@s.whatsapp.net',
+        action: 'unblock'
+    })
+})
+
+test('privacy coordinator resolves lid addressing for block/unblock', async () => {
+    const calls: Array<{ readonly context: string; readonly node: BinaryNode }> = []
+    const queryWithContext = async (context: string, node: BinaryNode) => {
+        calls.push({ context, node })
+        return createIqResult()
+    }
+    const itemAttrs = (index: number) => {
+        const content = calls[index].node.content
+        if (!Array.isArray(content)) {
+            throw new Error('expected blocklist change content array')
+        }
+        return content[0].attrs
+    }
+
+    const viaUsync = createPrivacyCoordinator({
+        ...createBlocklistDeps({
+            queryLidsByPhoneJids: async (phoneJids) => [
+                {
+                    queriedJid: phoneJids[0],
+                    phoneJid: phoneJids[0],
+                    lidJid: '999@lid',
+                    exists: true,
+                    invalid: false
+                }
+            ]
+        }),
+        queryWithContext
+    })
+    await viaUsync.blockUser('123@s.whatsapp.net')
+    await viaUsync.unblockUser('123')
+    assert.deepEqual(itemAttrs(0), {
+        action: 'block',
+        jid: '999@lid',
+        pn_jid: '123@s.whatsapp.net'
+    })
+    assert.deepEqual(itemAttrs(1), { jid: '999@lid', action: 'unblock' })
+
+    const viaCache = createPrivacyCoordinator({
+        ...createBlocklistDeps({
+            findByAnyUserJid: async () => ({
+                userJid: '123@s.whatsapp.net',
+                altUserJid: '999@lid',
+                deviceJids: [],
+                updatedAtMs: 0
+            })
+        }),
+        queryWithContext
+    })
+    await viaCache.blockUser('123@s.whatsapp.net')
+    assert.deepEqual(itemAttrs(2), {
+        action: 'block',
+        jid: '999@lid',
+        pn_jid: '123@s.whatsapp.net'
+    })
+
+    const lidInputWithCachedPn = createPrivacyCoordinator({
+        ...createBlocklistDeps({
+            findByAnyUserJid: async () => ({
+                userJid: '999@lid',
+                altUserJid: '123@s.whatsapp.net',
+                deviceJids: [],
+                updatedAtMs: 0
+            })
+        }),
+        queryWithContext
+    })
+    await lidInputWithCachedPn.blockUser('999@lid')
+    assert.deepEqual(itemAttrs(3), {
+        action: 'block',
+        jid: '999@lid',
+        pn_jid: '123@s.whatsapp.net'
+    })
+
+    const lidInputUnknownPn = createPrivacyCoordinator({
+        ...createBlocklistDeps(),
+        queryWithContext
+    })
+    await lidInputUnknownPn.blockUser('999@lid')
+    assert.deepEqual(itemAttrs(4), {
+        action: 'block',
+        jid: '999@lid',
+        unknown_identifier: 'true'
+    })
+
+    await assert.rejects(() => lidInputUnknownPn.blockUser('123-456@g.us'), {
+        message: /blocklist target must be a user jid/
+    })
 })
