@@ -654,7 +654,8 @@ export function buildWaClientDependencies(input: {
     })
 
     const privacyCoordinator = createPrivacyCoordinator({
-        queryWithContext: runtime.queryWithContext
+        queryWithContext: runtime.queryWithContext,
+        resolveUserJidPair: (userJid) => signalDeviceSync.resolveUserJidPair(userJid)
     })
 
     const businessCoordinator = createBusinessCoordinator({

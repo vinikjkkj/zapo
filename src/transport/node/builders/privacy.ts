@@ -47,11 +47,50 @@ export function buildGetBlocklistIq(): BinaryNode {
     return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BLOCKLIST)
 }
 
-export function buildBlocklistChangeIq(jid: string, action: 'block' | 'unblock'): BinaryNode {
+/**
+ * Blocklist target in both addressing forms. At least one side is always
+ * present: LID-migrated accounts carry `lidJid` (plus `pnJid` when known),
+ * non-migrated accounts carry only `pnJid`.
+ */
+export type WaBlocklistTarget =
+    | { readonly lidJid: string; readonly pnJid: string | null }
+    | { readonly lidJid: null; readonly pnJid: string }
+
+/**
+ * Builds the blocklist `set` IQ for a block action. LID-migrated targets are
+ * addressed by the LID jid plus an identifier attribute: `pn_jid` when the
+ * phone jid is known, else `unknown_identifier="true"`. Non-migrated targets
+ * are addressed by the phone jid alone. The server rejects a block that
+ * addresses a migrated account by phone jid or omits the identifier
+ * (`400: bad-request`).
+ */
+export function buildBlocklistBlockIq(target: WaBlocklistTarget): BinaryNode {
+    let attrs: Record<string, string>
+    if (target.lidJid !== null) {
+        attrs =
+            target.pnJid !== null
+                ? { action: 'block', jid: target.lidJid, pn_jid: target.pnJid }
+                : { action: 'block', jid: target.lidJid, unknown_identifier: 'true' }
+    } else {
+        attrs = { action: 'block', jid: target.pnJid }
+    }
     return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BLOCKLIST, [
         {
             tag: 'item',
-            attrs: { jid, action }
+            attrs
+        }
+    ])
+}
+
+/**
+ * Builds the blocklist `set` IQ for an unblock action. The server keys
+ * migrated entries by LID, so `jid` must be the LID jid when one exists.
+ */
+export function buildBlocklistUnblockIq(jid: string): BinaryNode {
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.BLOCKLIST, [
+        {
+            tag: 'item',
+            attrs: { jid, action: 'unblock' }
         }
     ])
 }

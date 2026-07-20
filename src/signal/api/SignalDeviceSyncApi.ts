@@ -1,7 +1,15 @@
 import type { Logger } from '@infra/log/types'
 import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { WA_DEFAULTS, WA_NODE_TAGS, WA_USYNC_CONTEXTS } from '@protocol/constants'
-import { buildDeviceJid, isHostedDeviceId, parsePhoneJid, splitJid, toUserJid } from '@protocol/jid'
+import {
+    buildDeviceJid,
+    isHostedDeviceId,
+    isLidJid,
+    isUserJid,
+    parsePhoneJid,
+    splitJid,
+    toUserJid
+} from '@protocol/jid'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import {
     buildUsyncIq,
@@ -16,6 +24,7 @@ import {
     type WaUsyncSidGenerator
 } from '@transport/node/usync'
 import type { BinaryNode } from '@transport/types'
+import { toError } from '@util/primitives'
 
 interface SignalDeviceSyncApiOptions {
     readonly logger: Logger
@@ -44,6 +53,18 @@ export interface SignalLidSyncResult {
      * `invalid: false`).
      */
     readonly invalid: boolean
+}
+
+/** Both addressing forms of a 1:1 user, as far as they could be resolved. */
+export interface SignalUserJidPair {
+    /** LID user jid, or `null` when no LID mapping is known. */
+    readonly lidJid: string | null
+    /**
+     * Phone-number user jid, or `null` when unknown. When resolved through
+     * the usync fallback this is the server-canonical form, which may differ
+     * from the queried number (e.g. BR 9th digit added).
+     */
+    readonly pnJid: string | null
 }
 
 /**
@@ -218,6 +239,69 @@ export class SignalDeviceSyncApi {
         })
         await this.propagateAltUserJids(result)
         return result
+    }
+
+    /**
+     * Resolves both addressing forms for a 1:1 user jid (PN or LID input),
+     * cache-first via the device-list store (`userJid`/`altUserJid`) with a
+     * one-shot {@link queryLidsByPhoneJids} fallback for PN inputs. LID
+     * inputs have no reverse lookup - their PN side stays `null` on a cache
+     * miss. Store/usync failures are logged at debug and degrade to the
+     * forms already known. Inputs that are neither PN nor LID user jids
+     * resolve to `{ lidJid: null, pnJid: null }`.
+     */
+    public async resolveUserJidPair(
+        userJid: string,
+        timeoutMs = this.defaultTimeoutMs
+    ): Promise<SignalUserJidPair> {
+        if (isLidJid(userJid)) {
+            return { lidJid: userJid, pnJid: await this.findCachedAltForm(userJid, isUserJid) }
+        }
+        if (!isUserJid(userJid)) {
+            return { lidJid: null, pnJid: null }
+        }
+        const cachedLid = await this.findCachedAltForm(userJid, isLidJid)
+        if (cachedLid) {
+            return { lidJid: cachedLid, pnJid: userJid }
+        }
+        try {
+            const results = await this.queryLidsByPhoneJids([userJid], timeoutMs)
+            const match = results.find((entry) => entry.queriedJid === userJid)
+            if (match?.lidJid) {
+                return { lidJid: match.lidJid, pnJid: match.phoneJid }
+            }
+        } catch (error) {
+            this.logger.debug('lid usync resolution failed for jid pair', {
+                jid: userJid,
+                message: toError(error).message
+            })
+        }
+        return { lidJid: null, pnJid: userJid }
+    }
+
+    /**
+     * Returns the device-list snapshot form of `userJid` that satisfies
+     * `matches` (checked against `userJid` then `altUserJid`), or `null` when
+     * the store is absent, misses, or fails.
+     */
+    private async findCachedAltForm(
+        userJid: string,
+        matches: (jid: string) => boolean
+    ): Promise<string | null> {
+        if (!this.deviceListStore) return null
+        try {
+            const snapshot = await this.deviceListStore.findByAnyUserJid(userJid)
+            if (snapshot) {
+                if (matches(snapshot.userJid)) return snapshot.userJid
+                if (snapshot.altUserJid && matches(snapshot.altUserJid)) return snapshot.altUserJid
+            }
+        } catch (error) {
+            this.logger.debug('device-list lookup failed for jid pair', {
+                jid: userJid,
+                message: toError(error).message
+            })
+        }
+        return null
     }
 
     /**
