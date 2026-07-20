@@ -320,6 +320,27 @@ test('privacy coordinator resolves lid addressing for block/unblock', async () =
         unknown_identifier: 'true'
     })
 
+    const viaCorrectedUsync = createPrivacyCoordinator({
+        ...createBlocklistDeps({
+            queryLidsByPhoneJids: async (phoneJids) => [
+                {
+                    queriedJid: phoneJids[0],
+                    phoneJid: '5511987654321@s.whatsapp.net',
+                    lidJid: '888@lid',
+                    exists: true,
+                    invalid: false
+                }
+            ]
+        }),
+        queryWithContext
+    })
+    await viaCorrectedUsync.blockUser('551187654321')
+    assert.deepEqual(itemAttrs(5), {
+        action: 'block',
+        jid: '888@lid',
+        pn_jid: '5511987654321@s.whatsapp.net'
+    })
+
     await assert.rejects(() => lidInputUnknownPn.blockUser('123-456@g.us'), {
         message: /blocklist target must be a user jid/
     })

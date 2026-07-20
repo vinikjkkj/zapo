@@ -73,7 +73,8 @@ export interface WaPrivacyCoordinator {
     readonly getBlocklist: () => Promise<WaBlocklistResult>
     /**
      * Blocks a user (account-wide blocklist). Accepts a phone-number jid, a
-     * LID jid, or a bare phone number. After this, the peer can no longer
+     * LID jid, or a bare phone number (digits only). After this, the peer can
+     * no longer
      * message/call you and cannot see your last seen/online/photo/status. The
      * block is symmetric only from the peer's read perspective - they don't
      * get an explicit "you were blocked" notification.
@@ -259,12 +260,14 @@ async function resolveBlocklistTarget(
             message: toError(error).message
         })
     }
+    let pnJid = normalized
     if (!lidJid) {
         try {
             const results = await options.queryLidsByPhoneJids([normalized])
             const match = results.find((entry) => entry.queriedJid === normalized)
             if (match?.lidJid) {
                 lidJid = match.lidJid
+                pnJid = match.phoneJid
             }
         } catch (error) {
             options.logger.debug('lid resolution failed for blocklist target', {
@@ -273,7 +276,7 @@ async function resolveBlocklistTarget(
             })
         }
     }
-    return lidJid !== null ? { lidJid, pnJid: normalized } : { lidJid: null, pnJid: normalized }
+    return lidJid !== null ? { lidJid, pnJid } : { lidJid: null, pnJid }
 }
 
 /** Builds a {@link WaPrivacyCoordinator} backed by the given IQ query function. */
