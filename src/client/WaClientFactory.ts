@@ -101,6 +101,7 @@ import {
     WA_PRIVACY_TOKEN_NOTIFICATION_TYPE
 } from '@protocol/constants'
 import {
+    canonicalizeSignalJid,
     isNewsletterJid,
     isOwnAccountJid,
     parseSignalAddressFromJid,
@@ -1199,8 +1200,9 @@ export function buildWaClientDependencies(input: {
                 })
                 await runtime.sendNode(ackNode)
 
+                const signalJid = canonicalizeSignalJid(parsed.fromJid)
                 const address = await signalAddressResolver.resolve(
-                    parseSignalAddressFromJid(parsed.fromJid)
+                    parseSignalAddressFromJid(signalJid)
                 )
 
                 if (address.device !== 0) {
@@ -1211,7 +1213,7 @@ export function buildWaClientDependencies(input: {
                 }
 
                 const credentials = getCurrentCredentials()
-                if (isOwnAccountJid(parsed.fromJid, credentials?.meJid, credentials?.meLid)) {
+                if (isOwnAccountJid(signalJid, credentials?.meJid, credentials?.meLid)) {
                     logger.error('self primary identity changed, disconnecting')
                     void connectionManager?.getComms()?.stopComms()
                     await disconnectWithClientSideEffects(
@@ -1231,7 +1233,7 @@ export function buildWaClientDependencies(input: {
                     })
                     await sessionStore.session.deleteSession(address)
 
-                    const userJid = toUserJid(parsed.fromJid)
+                    const userJid = toUserJid(signalJid)
                     await trustedContactToken.reissueOnIdentityChange(userJid).catch((error) => {
                         logger.warn('identity-change: reissue tc token failed', {
                             message: toError(error).message
