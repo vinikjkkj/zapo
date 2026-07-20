@@ -7,23 +7,20 @@ import type {
     WaAppStateSyncOptions,
     WaAppStateSyncResult
 } from '@appstate/types'
-import type {
-    WaAppStateMutationEvent,
-    WaGroupEvent,
-    WaGroupEventAction,
-    WaOutgoingMessageEvent
-} from '@client/types'
-import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
-import type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/thread.store'
-import type { BinaryNode } from '@transport/types'
-import type { ServerClock } from '@util/clock'
 import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
 import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
 import { createGroupMetadataCache } from '@client/messaging/group-metadata'
+import type {
+    WaAppStateMutationEvent,
+    WaGroupEvent,
+    WaGroupEventAction,
+    WaOutgoingMessageEvent
+} from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
+import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { getContextInfo } from '@message/context-info'
 import {
     WA_APP_STATE_COLLECTION_STATES,
@@ -31,8 +28,11 @@ import {
     WA_DISCONNECT_REASONS,
     WA_STREAM_SIGNALING
 } from '@protocol/constants'
+import type { WaStoredThreadRecord, WaThreadStore } from '@store/contracts/thread.store'
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
 import { WaMessageMemoryStore } from '@store/memory/message.store'
+import type { BinaryNode } from '@transport/types'
+import type { ServerClock } from '@util/clock'
 
 function createStubThreadStore(
     records: ReadonlyMap<string, WaStoredThreadRecord> = new Map()
