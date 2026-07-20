@@ -14,7 +14,7 @@ const KNOWN_SERVERS: Record<string, string> = {
     [WA_DEFAULTS.BOT_SERVER]: WA_DEFAULTS.BOT_SERVER
 }
 
-const CANONICAL_SIGNAL_USER_JID_OPTIONS = { canonicalizeSignalServer: true } as const
+const WA_CANONICAL_SIGNAL_USER_JID_OPTIONS = { canonicalizeSignalServer: true } as const
 
 /**
  * Returns the canonical reference for known server strings, avoiding
@@ -233,10 +233,10 @@ export function isOwnAccountJid(
     meJid: string | null | undefined,
     meLid: string | null | undefined
 ): boolean {
-    const candidateUser = toUserJid(jid, CANONICAL_SIGNAL_USER_JID_OPTIONS)
+    const candidateUser = toUserJid(jid, WA_CANONICAL_SIGNAL_USER_JID_OPTIONS)
     return (
-        (!!meJid && toUserJid(meJid, CANONICAL_SIGNAL_USER_JID_OPTIONS) === candidateUser) ||
-        (!!meLid && toUserJid(meLid, CANONICAL_SIGNAL_USER_JID_OPTIONS) === candidateUser)
+        (!!meJid && toUserJid(meJid, WA_CANONICAL_SIGNAL_USER_JID_OPTIONS) === candidateUser) ||
+        (!!meLid && toUserJid(meLid, WA_CANONICAL_SIGNAL_USER_JID_OPTIONS) === candidateUser)
     )
 }
 
