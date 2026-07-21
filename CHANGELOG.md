@@ -1,5 +1,12 @@
 # zapo-js
 
+## 1.6.1
+
+### Patch Changes
+
+- Fix blocklist block/unblock for LID-migrated accounts: the server keys blocklist entries by LID and rejected the legacy single-jid block item with `400: bad-request`. Block now addresses the LID jid plus an identifier attribute (`pn_jid` when known, `unknown_identifier` otherwise), unblock sends the LID when one exists, and non-migrated targets keep the plain phone-jid form. `blockUser`/`unblockUser` accept a phone jid, LID jid, or bare number, resolving the missing addressing form cache-first via the device-list store with a one-shot usync fallback; the canonical usync phone jid is used as `pn_jid`, covering server number corrections like the BR 9th digit.
+- Fix keepalive dead-socket detection being starved by pending queries: on a zombie socket writes succeed but responses never arrive, so a busy session always had pending queries and the dead-socket ping never ran, leaving the connection stuck timing out every query. The keepalive now tracks the last raw inbound payload timestamp and only skips the ping while pending queries are backed by recent inbound activity; a socket silent past `deadSocketTimeoutMs` is pinged even with queries pending, and on ping failure pending queries are rejected before the socket resumes so callers fail fast.
+
 ## 1.6.0
 
 ### Minor Changes
