@@ -20,6 +20,10 @@ function hashToRecord(data: Record<string, string>): WaStoredThreadRecord {
         ephemeralExpiration:
             toStringOrNull(data.ephemeral_expiration) !== null
                 ? Number(data.ephemeral_expiration)
+                : undefined,
+        ephemeralSettingTimestamp:
+            toStringOrNull(data.ephemeral_setting_timestamp) !== null
+                ? Number(data.ephemeral_setting_timestamp)
                 : undefined
     }
 }
@@ -50,6 +54,9 @@ function recordToHash(record: WaStoredThreadRecord): Record<string, string> {
     if (record.ephemeralExpiration !== undefined) {
         fields.ephemeral_expiration = String(record.ephemeralExpiration)
     }
+    if (record.ephemeralSettingTimestamp !== undefined) {
+        fields.ephemeral_setting_timestamp = String(record.ephemeralSettingTimestamp)
+    }
 
     return fields
 }
@@ -69,6 +76,8 @@ export class WaThreadRedisStore extends BaseRedisStore implements WaThreadStore 
         const newFields = recordToHash(record)
 
         if (existing && Object.keys(existing).length > 0) {
+            // Partial upserts (archive, pin, mark-read) omit ephemeral fields.
+            // Retain previously persisted values, matching SQL COALESCE behavior.
             const merged: Record<string, string> = { ...existing }
             for (const [field, value] of Object.entries(newFields)) {
                 merged[field] = value

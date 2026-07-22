@@ -15,7 +15,11 @@ function rowToRecord(row: PgRow): WaStoredThreadRecord {
         muteEndMs: row.mute_end_ms !== null ? Number(row.mute_end_ms) : undefined,
         markedAsUnread: row.marked_as_unread === null ? undefined : Boolean(row.marked_as_unread),
         ephemeralExpiration:
-            row.ephemeral_expiration !== null ? Number(row.ephemeral_expiration) : undefined
+            row.ephemeral_expiration !== null ? Number(row.ephemeral_expiration) : undefined,
+        ephemeralSettingTimestamp:
+            row.ephemeral_setting_timestamp !== null
+                ? Number(row.ephemeral_setting_timestamp)
+                : undefined
     }
 }
 
@@ -27,7 +31,7 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
     private upsertQuery(values: unknown[]) {
         return {
             name: this.stmtName('thread_upsert'),
-            text: `INSERT INTO ${this.t('mailbox_threads')} (session_id, jid, name, unread_count, archived, pinned, mute_end_ms, marked_as_unread, ephemeral_expiration) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (session_id, jid) DO UPDATE SET name = COALESCE(EXCLUDED.name, ${this.t('mailbox_threads')}.name), unread_count = COALESCE(EXCLUDED.unread_count, ${this.t('mailbox_threads')}.unread_count), archived = COALESCE(EXCLUDED.archived, ${this.t('mailbox_threads')}.archived), pinned = COALESCE(EXCLUDED.pinned, ${this.t('mailbox_threads')}.pinned), mute_end_ms = COALESCE(EXCLUDED.mute_end_ms, ${this.t('mailbox_threads')}.mute_end_ms), marked_as_unread = COALESCE(EXCLUDED.marked_as_unread, ${this.t('mailbox_threads')}.marked_as_unread), ephemeral_expiration = COALESCE(EXCLUDED.ephemeral_expiration, ${this.t('mailbox_threads')}.ephemeral_expiration)`,
+            text: `INSERT INTO ${this.t('mailbox_threads')} (session_id, jid, name, unread_count, archived, pinned, mute_end_ms, marked_as_unread, ephemeral_expiration, ephemeral_setting_timestamp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (session_id, jid) DO UPDATE SET name = COALESCE(EXCLUDED.name, ${this.t('mailbox_threads')}.name), unread_count = COALESCE(EXCLUDED.unread_count, ${this.t('mailbox_threads')}.unread_count), archived = COALESCE(EXCLUDED.archived, ${this.t('mailbox_threads')}.archived), pinned = COALESCE(EXCLUDED.pinned, ${this.t('mailbox_threads')}.pinned), mute_end_ms = COALESCE(EXCLUDED.mute_end_ms, ${this.t('mailbox_threads')}.mute_end_ms), marked_as_unread = COALESCE(EXCLUDED.marked_as_unread, ${this.t('mailbox_threads')}.marked_as_unread), ephemeral_expiration = COALESCE(EXCLUDED.ephemeral_expiration, ${this.t('mailbox_threads')}.ephemeral_expiration), ephemeral_setting_timestamp = COALESCE(EXCLUDED.ephemeral_setting_timestamp, ${this.t('mailbox_threads')}.ephemeral_setting_timestamp)`,
             values
         }
     }
@@ -44,7 +48,8 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
                 record.pinned ?? null,
                 record.muteEndMs ?? null,
                 record.markedAsUnread ?? null,
-                record.ephemeralExpiration ?? null
+                record.ephemeralExpiration ?? null,
+                record.ephemeralSettingTimestamp ?? null
             ])
         )
     }
@@ -59,8 +64,8 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
             let paramIdx = 1
             const placeholders = chunk
                 .map(() => {
-                    const p = `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6}, $${paramIdx + 7}, $${paramIdx + 8})`
-                    paramIdx += 9
+                    const p = `($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, $${paramIdx + 4}, $${paramIdx + 5}, $${paramIdx + 6}, $${paramIdx + 7}, $${paramIdx + 8}, $${paramIdx + 9})`
+                    paramIdx += 10
                     return p
                 })
                 .join(', ')
@@ -75,14 +80,15 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
                     record.pinned ?? null,
                     record.muteEndMs ?? null,
                     record.markedAsUnread ?? null,
-                    record.ephemeralExpiration ?? null
+                    record.ephemeralExpiration ?? null,
+                    record.ephemeralSettingTimestamp ?? null
                 )
             }
             await executor.query({
                 name: this.stmtName(`thread_upsert_batch_${chunk.length}`),
                 text: `INSERT INTO ${table} (
                     session_id, jid, name, unread_count, archived, pinned,
-                    mute_end_ms, marked_as_unread, ephemeral_expiration
+                    mute_end_ms, marked_as_unread, ephemeral_expiration, ephemeral_setting_timestamp
                 ) VALUES ${placeholders}
                 ON CONFLICT (session_id, jid) DO UPDATE SET
                     name = COALESCE(EXCLUDED.name, ${table}.name),
@@ -91,7 +97,8 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
                     pinned = COALESCE(EXCLUDED.pinned, ${table}.pinned),
                     mute_end_ms = COALESCE(EXCLUDED.mute_end_ms, ${table}.mute_end_ms),
                     marked_as_unread = COALESCE(EXCLUDED.marked_as_unread, ${table}.marked_as_unread),
-                    ephemeral_expiration = COALESCE(EXCLUDED.ephemeral_expiration, ${table}.ephemeral_expiration)`,
+                    ephemeral_expiration = COALESCE(EXCLUDED.ephemeral_expiration, ${table}.ephemeral_expiration),
+                    ephemeral_setting_timestamp = COALESCE(EXCLUDED.ephemeral_setting_timestamp, ${table}.ephemeral_setting_timestamp)`,
                 values: params
             })
         }
@@ -116,7 +123,7 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
             await this.pool.query({
                 name: this.stmtName('thread_get_by_jid'),
                 text: `SELECT jid, name, unread_count, archived, pinned,
-                    mute_end_ms, marked_as_unread, ephemeral_expiration
+                    mute_end_ms, marked_as_unread, ephemeral_expiration, ephemeral_setting_timestamp
              FROM ${this.t('mailbox_threads')}
              WHERE session_id = $1 AND jid = $2`,
                 values: [this.sessionId, jid]
@@ -133,7 +140,7 @@ export class WaThreadPgStore extends BasePgStore implements WaThreadStore {
             await this.pool.query({
                 name: this.stmtName('thread_list'),
                 text: `SELECT jid, name, unread_count, archived, pinned,
-                    mute_end_ms, marked_as_unread, ephemeral_expiration
+                    mute_end_ms, marked_as_unread, ephemeral_expiration, ephemeral_setting_timestamp
              FROM ${this.t('mailbox_threads')}
              WHERE session_id = $1
              LIMIT $2`,

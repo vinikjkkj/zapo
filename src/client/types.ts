@@ -395,9 +395,26 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
      */
     readonly expirationSeconds?: number
     /**
-     * Skip the automatic `ephemeralSettingTimestamp`/`expiration` injection
-     * applied to messages sent into groups with disappearing-mode on (the cached
-     * group ephemeral is otherwise fetched and applied for you). Off by default.
+     * Unix seconds when disappearing-mode was enabled for this chat, mirrored into
+     * `contextInfo.ephemeralSettingTimestamp`. Applies to **1:1 chats only** – groups
+     * never send this field on the wire. When set it overrides the value resolved
+     * automatically from the thread store (which is already applied for you via the
+     * disappearing-mode auto-inject). Omit to let the runtime resolve it from the
+     * cached `Conversation` record. Leaving it absent while `expirationSeconds` is
+     * set on a 1:1 chat causes the peer to warn that the message will not
+     * disappear, so prefer the auto-resolved value whenever possible.
+     */
+    readonly ephemeralSettingTimestamp?: number
+    /**
+     * Skip the automatic disappearing-message injection applied to messages sent
+     * into chats with disappearing-mode on.
+     *
+     * - Groups: only `contextInfo.expiration` is auto-injected (from the group
+     *   metadata cache). Groups do not carry `ephemeralSettingTimestamp`.
+     * - 1:1: both `expiration` and `ephemeralSettingTimestamp` are auto-injected
+     *   from the thread store (app-state `Conversation` record).
+     *
+     * Off by default.
      *
      * Relationship with {@link expirationSeconds}: a non-undefined
      * `expirationSeconds` already short-circuits the auto-inject, so this flag is
