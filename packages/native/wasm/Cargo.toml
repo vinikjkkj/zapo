@@ -1,0 +1,18 @@
+[package]
+name = "zapo-native-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "WASM build of zapo-js native crypto accelerators (parity with the NAPI crate)"
+
+[lib]
+name = "zapo_native_wasm"
+crate-type = ["cdylib"]
+
+[dependencies]
+wasm-bindgen = "=0.2.100"
+# Shares the crypto core with the NAPI crate; the "js" feature routes core's
+# getrandom to crypto.getRandomValues on wasm32-unknown-unknown.
+zapo-native-core = { path = "../core", features = ["js"] }
+
+# Release profile is inherited from the workspace root (packages/native/Cargo.toml).

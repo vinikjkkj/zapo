@@ -1,0 +1,60 @@
+{
+    "name": "@zapo-js/native",
+    "version": "0.1.0",
+    "description": "Native accelerators for zapo-js (Rust NAPI addon + WASM fallback)",
+    "license": "MIT",
+    "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vinikjkkj/zapo.git",
+        "directory": "packages/native"
+    },
+    "keywords": [
+        "zapo",
+        "napi",
+        "wasm",
+        "x25519",
+        "xeddsa",
+        "curve25519",
+        "crypto"
+    ],
+    "main": "binding.js",
+    "types": "binding.d.ts",
+    "exports": {
+        ".": {
+            "types": "./binding.d.ts",
+            "default": "./binding.js"
+        },
+        "./wasm/*": "./wasm/*"
+    },
+    "files": [
+        "binding.js",
+        "binding.d.ts",
+        "wasm/pkg"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "engines": {
+        "node": ">=20.9.0"
+    },
+    "napi": {
+        "binaryName": "zapo-native",
+        "targets": [
+            "x86_64-pc-windows-msvc",
+            "x86_64-unknown-linux-gnu",
+            "x86_64-unknown-linux-musl",
+            "aarch64-unknown-linux-gnu",
+            "aarch64-apple-darwin",
+            "x86_64-apple-darwin"
+        ]
+    },
+    "scripts": {
+        "build": "napi build --platform --release --js binding.js --dts binding.d.ts",
+        "build:debug": "napi build --platform --js binding.js --dts binding.d.ts",
+        "build:wasm": "cargo build -p zapo-native-wasm --release --target wasm32-unknown-unknown && wasm-bindgen --target nodejs --out-dir wasm/pkg target/wasm32-unknown-unknown/release/zapo_native_wasm.wasm"
+    },
+    "devDependencies": {
+        "@napi-rs/cli": "^3.0.0"
+    }
+}

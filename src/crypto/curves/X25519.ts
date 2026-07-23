@@ -11,10 +11,21 @@ import { promisify } from 'node:util'
 const generateKeyPairAsync = promisify(generateKeyPair)
 
 import { X25519_PKCS8_PREFIX, X25519_SPKI_PREFIX } from '@crypto/curves/constants'
+import { resolveNativeCryptoBackend } from '@crypto/curves/nativeCryptoBackend'
 import { pkcs8FromRawPrivate, type SignalKeyPair } from '@crypto/curves/types'
 import { FE_ONE } from '@crypto/math/constants'
 import { fe, feAdd, feFromBytes, feInv, feMul, fePack, feSub } from '@crypto/math/fe'
 import { assertByteLength, concatBytes, decodeBase64Url, toBytesView } from '@util/bytes'
+
+type NativeX25519ScalarMult = (privateKey: Uint8Array, publicKey: Uint8Array) => Uint8Array
+const nativeX25519ScalarMult: NativeX25519ScalarMult | null = (() => {
+    if (process.env.ZAPO_X25519_FORCE_JS) return null
+    const mod = resolveNativeCryptoBackend()
+    if (mod && typeof mod.x25519ScalarMult === 'function') {
+        return mod.x25519ScalarMult
+    }
+    return null
+})()
 
 type DiffieHellmanCallback = (err: Error | null, secret: Buffer) => void
 
@@ -150,6 +161,9 @@ export class X25519 {
     static async scalarMult(privKey: Uint8Array, pubKey: Uint8Array): Promise<Uint8Array> {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
         assertByteLength(pubKey, 32, 'x25519 public key must be 32 bytes')
+        if (nativeX25519ScalarMult) {
+            return nativeX25519ScalarMult(privKey, pubKey)
+        }
         const opts = {
             privateKey: x25519PrivateKeyObject(privKey),
             publicKey: x25519PublicKeyObject(pubKey)

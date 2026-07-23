@@ -1045,6 +1045,8 @@ async function main(): Promise<void> {
                     avgMsPerMsg: r.avgMsPerMsg,
                     cpuTimeMs: r.cpuTimeMs,
                     cpuPercent: r.cpuPercent,
+                    rssBeforeBytes: r.rssBeforeBytes,
+                    rssAfterBytes: r.rssAfterBytes,
                     rssDeltaBytes: r.rssDeltaBytes,
                     heapDeltaBytes: r.heapDeltaBytes
                 })),

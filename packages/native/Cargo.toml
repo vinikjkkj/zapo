@@ -1,0 +1,32 @@
+[package]
+name = "zapo-native"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Native accelerators for zapo-js"
+
+[lib]
+name = "zapo_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "3", default-features = false, features = ["napi9"] }
+napi-derive = "3"
+zapo-native-core = { path = "core" }
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 1
+strip = "symbols"
+
+[workspace]
+members = ["core", "wasm"]
+# `cargo build` at the root builds only the NAPI crate + core (host target).
+# The wasm crate is built explicitly (`-p zapo-native-wasm --target wasm32-*`)
+# so its getrandom/js feature never unifies into the native build.
+default-members = [".", "core"]
+resolver = "2"
