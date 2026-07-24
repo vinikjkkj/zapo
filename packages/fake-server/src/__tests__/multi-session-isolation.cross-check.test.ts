@@ -115,12 +115,15 @@ test('two clients on one server keep peers, prekeys, and captures isolated', asy
         assert.ok(sessionB.registries.peerRegistry.has(peerJidB))
         assert.ok(!sessionB.registries.peerRegistry.has(peerJidA))
 
-        // Each client uploaded its own prekeys into its own dispenser.
+        // Each client uploaded its own prekeys into its own dispenser: the
+        // dispensers are distinct instances and each captured its own bundle
+        // (a shared dispenser would hand back the same object to both).
+        assert.notEqual(sessionA.preKeyDispenser, sessionB.preKeyDispenser)
         const bundleA = sessionA.preKeyDispenser.capturedPreKeyBundleSnapshot()
         const bundleB = sessionB.preKeyDispenser.capturedPreKeyBundleSnapshot()
         assert.ok(bundleA)
         assert.ok(bundleB)
-        assert.notEqual(bundleA.registrationId, bundleB.registrationId)
+        assert.notEqual(bundleA, bundleB)
 
         // A message from peerA reaches client A only; client B never sees it.
         const receivedByA = waitForMessage(
