@@ -2,6 +2,14 @@
 
 In-process fake WhatsApp Web server that drives the real `zapo-js` `WaClient` end-to-end - full Noise XX/IK handshake, QR pairing, Signal Protocol (X3DH + Double Ratchet), SenderKey for groups, media upload/download over self-signed HTTPS, app-state sync - all without touching WhatsApp servers.
 
+## Install
+
+```bash
+npm i -D @zapo-js/fake-server zapo-js
+```
+
+`zapo-js` is a peer dependency - the fake server reuses the core's binary codec, crypto, and protos. Everything below works from any project; nothing requires this monorepo.
+
 ## Quick start
 
 ```ts
@@ -50,7 +58,7 @@ src/
 │   ├── fake-media-store.ts  # In-memory media blob store
 │   └── fake-app-state-collection.ts  # App-state patch/snapshot provider
 ├── transport/               # Re-exports from zapo-js (codec, crypto, protos)
-└── __tests__/               # Cross-check test suite (147 tests)
+└── __tests__/               # Cross-check test suite
     └── helpers/             # Shared test utilities (zapo-client factory)
 
 bench/
@@ -63,11 +71,27 @@ bench/
 
 ### FakeWaServer
 
-Central facade. Manages the WS listener, noise handshake, IQ router, and all state registries:
+Central facade. Manages the WS listener, noise handshake, IQ router, and all state registries.
+
+Constructor options (`FakeWaServer.start({...})` / `new FakeWaServer({...})`):
+
+```ts
+const server = await FakeWaServer.start({
+    host: '127.0.0.1', // default
+    port: 5222, // default: random free port
+    path: '/ws/chat', // default
+    successNodeAttributes: {
+        // stamped on every post-handshake <success/>
+        lid: '5511999@lid',
+        displayName: 'Fake Display'
+    },
+    defaultIqHandlers: false // start with an empty IQ router (default: true)
+})
+```
 
 - **Peer registry** (`peerRegistry`): maps device JIDs → `FakePeer` instances. The global `usync` + `prekey-fetch` IQ handlers consult this.
 - **Group registry** (`groupRegistry`): maps group JIDs → group metadata + participants. The `w:g2` handler serves it.
-- **IQ router** (`WaFakeIqRouter`): first-match-wins stanza dispatcher with `{ xmlns, type, childTag }` matchers. ~20 global handlers registered in the constructor cover every IQ the lib emits during normal operation.
+- **IQ router** (`WaFakeIqRouter`): first-match-wins stanza dispatcher with `{ xmlns, type, childTag }` matchers. ~27 global handlers registered in the constructor cover every IQ the lib emits during normal operation (disable them with `defaultIqHandlers: false`). `registerIqHandler(matcher, respond)` registers at high priority and shadows the defaults; a responder that returns `null` falls through to the next matching handler, so you can observe an IQ (capture, assert) and still let the default answer it.
 - **Prekey dispenser**: hands out unique one-time prekeys from the lib's upload to FakePeers. Resets on each forced refill (`triggerPreKeyUpload({ force: true })`).
 - **Listener fan-outs**: `onOutboundGroupOp`, `onOutboundPrivacySet`, `onOutboundBlocklistChange`, `onOutboundProfilePictureSet`, `onOutboundStatusSet`, `onLogout`, `onOutboundPrivacyTokenIssue`, `onOutboundDirtyBitsClear`.
 
@@ -101,8 +125,10 @@ Every outbound IQ the lib sends during normal operation is handled:
 | `w:p` / `urn:xmpp:ping` get                                                      | `whatsapp-ping` / `xmpp-ping` | Ack                                     |
 | `encrypt` set                                                                    | `prekey-upload`               | Captures bundle, resets dispenser       |
 | `encrypt` get `<digest>`                                                         | `signal-digest`               | Returns 404 → forces upload             |
+| `encrypt` get `<count>`                                                          | `prekey-count`                | Serves remaining dispenser prekey count |
 | `encrypt` set `<rotate>`                                                         | `signed-prekey-rotate`        | Ack                                     |
 | `encrypt` get `<key>`                                                            | `prekey-fetch`                | Serves peer bundles from registry       |
+| `passive` set                                                                    | `passive-mode`                | Ack                                     |
 | `usync` get                                                                      | `usync`                       | Resolves device IDs from registry       |
 | `w:m` set `<media_conn>`                                                         | `media-conn`                  | Points lib at fake HTTPS server         |
 | `w:sync:app:state` set                                                           | `app-state-sync`              | Serves patches/snapshots from providers |
@@ -118,6 +144,16 @@ Every outbound IQ the lib sends during normal operation is handled:
 | `md` set `<remove-companion-device>`                                             | `remove-companion-device`     | Fires logout listeners                  |
 | `newsletter` get `<my_addons>`                                                   | `newsletter-my-addons`        | Ack                                     |
 | `urn:xmpp:whatsapp:dirty` set                                                    | `dirty-bits-clear`            | Captures cleared bits                   |
+
+## Using with non-zapo-js clients
+
+The fake server speaks the real wire protocol, so other WhatsApp Web libraries (Baileys forks, whatsmeow, ...) can connect to it too. The recipe:
+
+1. **Point the client's WebSocket URL at `server.url`** (the upgrade path is `/ws/chat`, same as production).
+2. **Trust the fake root CA.** The server signs its Noise cert chain with a per-instance random root; clients that verify the cert signature against WhatsApp's pinned production key must be told to trust `server.noiseRootCa.publicKey` instead (exposed via the CLI's `--json` as `noiseRootCa.publicKeyHex`). The chain carries a valid `notBefore`/`notAfter` window, so clients that enforce validity work out of the box.
+3. **Post-connect IQs are answered by default**: the `passive` set IQ and the `encrypt` get `<count>` prekey-count query, which Baileys-family and whatsmeow clients block on before reporting the connection as open.
+4. **Offline drain bulletin**: after every login the server sends `<ib><offline count="0"/></ib>`, which Baileys-family clients require before flushing their buffered events.
+5. **QR pairing**: in-process, use `server.runPairing(...)` with the client's `advSecretKey` + identity public key; from the standalone CLI, use `--pair <device-jid>` and paste the QR payload the client displays when prompted.
 
 ## Benchmarking
 
@@ -161,16 +197,35 @@ node --expose-gc --import tsx packages/fake-server/bench/messaging.bench.ts --cp
 
 ## CLI
 
+The package ships a `fake-wa-server` bin, so the standalone server works from any project (or no project at all):
+
 ```bash
-# Standalone server for manual testing
+# One-off via npx
+npx @zapo-js/fake-server --port 5222 --peer 5511888@s.whatsapp.net --log
+
+# Installed as a dev dependency
+npx fake-wa-server --port 5222 --peer 5511888@s.whatsapp.net --log
+
+# First-time QR pairing: prompts on stdin for the QR payload the client displays
+npx fake-wa-server --port 5222 --pair 5511999:1@s.whatsapp.net
+
+# Print connection info (url + noise root CA hex) as JSON, for scripting
+npx fake-wa-server --json
+```
+
+From inside this monorepo (runs the source, no build needed):
+
+```bash
 npm --workspace=@zapo-js/fake-server run cli -- --port 5222 --peer 5511888@s.whatsapp.net --log
 ```
+
+Run with `--help` for the full flag list.
 
 ## Test suite
 
 ```bash
 npm --workspace=@zapo-js/fake-server test
-# 147 tests, --test-concurrency=1
+# 163 tests, --test-concurrency=1
 ```
 
 Cross-check tests drive a real `WaClient` against the fake server and assert on both sides (lib emits correct events, peer decrypts correctly). Unit tests validate protocol builders/parsers in isolation.

@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /** Standalone CLI for `@zapo-js/fake-server`. */
 
+import { createInterface } from 'node:readline'
+
 import { FakeWaServer } from './api/FakeWaServer'
+import { parsePairingQrString } from './protocol/auth/pair-device'
+import { bytesToHex, toError } from './transport/util'
 
 interface CliArgs {
     readonly host: string
@@ -9,6 +13,7 @@ interface CliArgs {
     readonly path: string
     readonly peerJids: readonly string[]
     readonly groupSpecs: readonly string[]
+    readonly pairJid: string | null
     readonly log: boolean
     readonly quiet: boolean
     readonly json: boolean
@@ -21,6 +26,7 @@ function parseArgs(argv: readonly string[]): CliArgs {
     let path = '/ws/chat'
     const peerJids: string[] = []
     const groupSpecs: string[] = []
+    let pairJid: string | null = null
     let log = false
     let quiet = false
     let json = false
@@ -59,6 +65,9 @@ function parseArgs(argv: readonly string[]): CliArgs {
             case '--group':
                 groupSpecs.push(next())
                 break
+            case '--pair':
+                pairJid = next()
+                break
             case '--log':
                 log = true
                 break
@@ -72,7 +81,7 @@ function parseArgs(argv: readonly string[]): CliArgs {
                 throw new Error(`unknown flag: ${arg}`)
         }
     }
-    return { host, port, path, peerJids, groupSpecs, log, quiet, json, help }
+    return { host, port, path, peerJids, groupSpecs, pairJid, log, quiet, json, help }
 }
 
 function printHelp(): void {
@@ -89,6 +98,12 @@ FLAGS
   --group <spec>      Pre-create a fake group; spec format
                       <group-jid>=<peer-jid>,<peer-jid>,...
                       All peers must already be passed via --peer.
+  --pair <jid>        Drive QR pairing for unregistered clients: the server
+                      sends pair-device refs, then prompts on stdin for the
+                      QR payload the client displays
+                      (ref,noisePubB64,identityPubB64,advSecretB64,platform)
+                      and answers pair-success assigning <jid> as the device
+                      jid. Without this flag the CLI is login-only.
   --log               Print every captured inbound stanza
   --quiet             Suppress the startup info banner
   --json              Print connection info as JSON
@@ -127,7 +142,7 @@ async function main(): Promise<void> {
     try {
         args = parseArgs(process.argv.slice(2))
     } catch (error) {
-        process.stderr.write(`error: ${error instanceof Error ? error.message : String(error)}\n`)
+        process.stderr.write(`error: ${toError(error).message}\n`)
         process.stderr.write('run with --help to see usage.\n')
         process.exit(2)
     }
@@ -155,10 +170,39 @@ async function main(): Promise<void> {
         path: args.path
     })
 
+    if (args.pairJid !== null) {
+        const pairJid = args.pairJid
+        let pairingStarted = false
+        server.onAuthenticatedPipeline(async (pipeline) => {
+            if (pairingStarted) return
+            if (pipeline.clientPayload?.kind !== 'registration') return
+            pairingStarted = true
+            try {
+                await server.runPairing(pipeline, { deviceJid: pairJid }, async () => {
+                    const qr = await readStdinLine(
+                        '[fake-server] paste the QR payload displayed by the client and press Enter:\n'
+                    )
+                    const parsed = parsePairingQrString(qr.trim())
+                    return {
+                        advSecretKey: parsed.advSecretKey,
+                        identityPublicKey: parsed.identityPublicKey
+                    }
+                })
+                process.stdout.write(
+                    `[fake-server] pair-success sent for ${pairJid}; the client will now reconnect and log in\n`
+                )
+            } catch (error) {
+                pairingStarted = false
+                process.stderr.write(`pairing failed: ${toError(error).message}\n`)
+            }
+        })
+    }
+
     let setupComplete = false
     const setupPromise = new Promise<void>((resolve, reject) => {
         server.onAuthenticatedPipeline(async (pipeline) => {
             if (setupComplete) return
+            if (pipeline.clientPayload?.kind !== 'login') return
             setupComplete = true
             try {
                 const peers = new Map<string, Awaited<ReturnType<typeof server.createFakePeer>>>()
@@ -187,7 +231,7 @@ async function main(): Promise<void> {
                 }
                 resolve()
             } catch (error) {
-                reject(error instanceof Error ? error : new Error(String(error)))
+                reject(toError(error))
             }
         })
     })
@@ -197,14 +241,13 @@ async function main(): Promise<void> {
     })
 
     if (args.log) {
-        server.onPipeline((pipeline) => {
-            pipeline.setEvents({
-                onStanza: (node) => {
-                    process.stdout.write(
-                        `[wire] ${node.tag}${node.attrs.id ? ` id=${node.attrs.id}` : ''}${node.attrs.type ? ` type=${node.attrs.type}` : ''}\n`
-                    )
-                }
-            })
+        // onCapturedStanza taps the server's own capture stream; overriding
+        // pipeline.setEvents here would replace the server's handlers and
+        // silently break --peer setup and stanza capture.
+        server.onCapturedStanza((node) => {
+            process.stdout.write(
+                `[wire] ${node.tag}${node.attrs.id ? ` id=${node.attrs.id}` : ''}${node.attrs.type ? ` type=${node.attrs.type}` : ''}\n`
+            )
         })
     }
 
@@ -223,7 +266,8 @@ async function main(): Promise<void> {
                             publicKeyHex: bytesToHex(noiseRoot.publicKey)
                         },
                         peers: args.peerJids,
-                        groups: parsedGroups
+                        groups: parsedGroups,
+                        pair: args.pairJid
                     },
                     null,
                     2
@@ -242,6 +286,7 @@ async function main(): Promise<void> {
                 `│ noise root ca  serial=${noiseRoot.serial} pub=${bytesToHex(noiseRoot.publicKey).slice(0, 32)}…`,
                 `│ peers          ${args.peerJids.length === 0 ? '(none)' : args.peerJids.join(', ')}`,
                 `│ groups         ${parsedGroups.length === 0 ? '(none)' : parsedGroups.map((g) => g.groupJid).join(', ')}`,
+                `│ pair mode      ${args.pairJid ?? '(off – login only)'}`,
                 '├─────────────────────────────────────────────────────────────',
                 '│ Wire your WaClient with:',
                 '│   chatSocketUrls: [server.url]',
@@ -264,9 +309,7 @@ async function main(): Promise<void> {
             process.stdout.write('[fake-server] stopped cleanly\n')
             process.exit(0)
         } catch (error) {
-            process.stderr.write(
-                `error during shutdown: ${error instanceof Error ? error.message : String(error)}\n`
-            )
+            process.stderr.write(`error during shutdown: ${toError(error).message}\n`)
             process.exit(1)
         }
     }
@@ -276,18 +319,22 @@ async function main(): Promise<void> {
     await new Promise<void>(() => undefined)
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-    let out = ''
-    for (let index = 0; index < bytes.byteLength; index += 1) {
-        const value = bytes[index]
-        out += value < 16 ? `0${value.toString(16)}` : value.toString(16)
-    }
-    return out
+function readStdinLine(prompt: string): Promise<string> {
+    process.stdout.write(prompt)
+    return new Promise((resolve, reject) => {
+        const rl = createInterface({ input: process.stdin })
+        // resolve before close(): rl.close() emits 'close' synchronously,
+        // which would otherwise reject the still-pending promise first.
+        rl.once('line', (line) => {
+            resolve(line)
+            rl.close()
+        })
+        rl.once('close', () => reject(new Error('stdin closed before a QR payload was provided')))
+    })
 }
 
 main().catch((error) => {
-    process.stderr.write(
-        `fatal: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`
-    )
+    const normalized = toError(error)
+    process.stderr.write(`fatal: ${normalized.stack ?? normalized.message}\n`)
     process.exit(1)
 })

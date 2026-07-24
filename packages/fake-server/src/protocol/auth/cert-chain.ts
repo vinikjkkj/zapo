@@ -18,7 +18,14 @@ export interface BuildFakeCertChainInput {
     readonly leafKey: Uint8Array
     readonly intermediateSerial?: number
     readonly leafSerial?: number
+    /** Unix seconds. Defaults to 24h before build time. */
+    readonly notBefore?: number
+    /** Unix seconds. Defaults to 10 years after build time. */
+    readonly notAfter?: number
 }
+
+const WA_CERT_NOT_BEFORE_BACKDATE_SECONDS = 86_400
+const WA_CERT_NOT_AFTER_LIFETIME_SECONDS = 315_360_000
 
 export async function generateFakeNoiseRootCa(): Promise<FakeNoiseRootCa> {
     const keyPair = await X25519.generateKeyPair()
@@ -35,19 +42,29 @@ export async function buildFakeCertChain(
     const intermediateSerial = input.intermediateSerial ?? 1
     const leafSerial = input.leafSerial ?? 2
 
+    // Strict clients (e.g. whatsmeow) enforce the validity window; leaving
+    // notBefore/notAfter unset decodes as 0 (1970) and reads as expired.
+    const nowSeconds = Math.floor(Date.now() / 1_000)
+    const notBefore = input.notBefore ?? nowSeconds - WA_CERT_NOT_BEFORE_BACKDATE_SECONDS
+    const notAfter = input.notAfter ?? nowSeconds + WA_CERT_NOT_AFTER_LIFETIME_SECONDS
+
     const intermediateKeyPair = await X25519.generateKeyPair()
 
     const intermediateDetails = proto.CertChain.NoiseCertificate.Details.encode({
         serial: intermediateSerial,
         issuerSerial: input.root.serial,
-        key: intermediateKeyPair.pubKey
+        key: intermediateKeyPair.pubKey,
+        notBefore,
+        notAfter
     }).finish()
     const intermediateSignature = await xeddsaSign(input.root.privateKey, intermediateDetails)
 
     const leafDetails = proto.CertChain.NoiseCertificate.Details.encode({
         serial: leafSerial,
         issuerSerial: intermediateSerial,
-        key: input.leafKey
+        key: input.leafKey,
+        notBefore,
+        notAfter
     }).finish()
     const leafSignature = await xeddsaSign(intermediateKeyPair.privKey, leafDetails)
 

@@ -83,6 +83,7 @@ export interface IqHandlerDeps {
     notifyPrivacySet(change: CapturedPrivacySet): void
     notifyBlocklistChange(change: CapturedBlocklistChange): void
     capturePreKeyBundle(bundle: ClientPreKeyBundle): void
+    countServerPreKeys(): number
     consumeOutboundAppStatePatches(iq: BinaryNode): Promise<void>
     readonly appStateCollectionProviders: ReadonlyMap<
         string,
@@ -162,6 +163,31 @@ export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandle
         label: 'signal-digest',
         matcher: { xmlns: 'encrypt', type: 'get', childTag: 'digest' },
         respond: (iq) => buildIqError(iq, { code: 404, text: 'item-not-found' })
+    })
+
+    // Baileys-family and whatsmeow clients block on this query before
+    // reporting the connection as open; zapo-js uses <digest> instead.
+    router.register({
+        label: 'prekey-count',
+        matcher: { xmlns: 'encrypt', type: 'get', childTag: 'count' },
+        respond: (iq) => {
+            const result = buildIqResult(iq)
+            return {
+                ...result,
+                content: [
+                    {
+                        tag: 'count',
+                        attrs: { value: String(deps.countServerPreKeys()) }
+                    }
+                ]
+            }
+        }
+    })
+
+    router.register({
+        label: 'passive-mode',
+        matcher: { xmlns: 'passive', type: 'set' },
+        respond: (iq) => buildIqResult(iq)
     })
 
     router.register({

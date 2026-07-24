@@ -817,7 +817,13 @@ export class FakePeer {
 
     private nextId(): string {
         this.nextMessageCounter += 1
-        return `${this.jid}-${Date.now()}-${this.nextMessageCounter}`
+        // WA-style uppercase hex, no '@': strict binary decoders tokenize an
+        // id containing '@' as a JID and reject the stanza. The registration
+        // id keeps ids from colliding across peers created in the same ms.
+        const peerPart = this.keyBundle.registrationId.toString(16).padStart(4, '0')
+        const timePart = Date.now().toString(16)
+        const counterPart = this.nextMessageCounter.toString(16).padStart(4, '0')
+        return `3EB0${peerPart}${timePart}${counterPart}`.toUpperCase()
     }
 }
 
