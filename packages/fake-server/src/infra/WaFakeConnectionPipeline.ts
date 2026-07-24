@@ -6,7 +6,6 @@ import {
     type ParsedClientPayload
 } from '../protocol/auth/client-payload-validate'
 import { buildSuccessNode } from '../protocol/auth/success-node'
-import { type WaFakeIqRouter } from '../protocol/iq/router'
 import { type BinaryNode, decodeBinaryNodeStanza, encodeBinaryNodeStanza } from '../transport/codec'
 import { type SignalKeyPair, X25519 } from '../transport/crypto'
 import { proto } from '../transport/protos'
@@ -24,7 +23,12 @@ export interface WaFakeConnectionPipelineConfig {
     readonly connection: WaFakeConnection
     readonly rootCa: FakeNoiseRootCa
     readonly serverStaticKeyPair: SignalKeyPair
-    readonly iqRouter: WaFakeIqRouter
+    /**
+     * Routes an inbound IQ against the session this connection is bound to.
+     * The server resolves the session per connection, so the pipeline stays
+     * unaware of session identity.
+     */
+    readonly routeIq: (iq: BinaryNode) => Promise<BinaryNode | null>
     readonly successNodeAttributes?: Parameters<typeof buildSuccessNode>[0]
 }
 
@@ -300,7 +304,7 @@ export class WaFakeConnectionPipeline {
         this.events.onStanza?.(node)
 
         if (node.tag === 'iq') {
-            const response = await this.config.iqRouter.route(node)
+            const response = await this.config.routeIq(node)
             if (response !== null) {
                 await this.sendStanza(response)
             } else {

@@ -12,11 +12,12 @@ export type {
     ReceivedMessage,
     SendMessageOptions
 } from './api/FakePeer'
-export { FakeWaServer } from './api/FakeWaServer'
+export { FakeServerSession, FakeWaServer } from './api/FakeWaServer'
 export type {
     BinaryNode,
     ExpectIqOptions,
     ExpectStanzaOptions,
+    FakeSessionKeyInfo,
     FakeWaServerNoiseRootCa,
     FakeWaServerOptions,
     FakeWaServerPipelineListener,

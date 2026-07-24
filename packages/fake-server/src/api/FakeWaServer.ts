@@ -9,6 +9,7 @@ import {
 import { WaFakeMediaHttpsServer } from '../infra/WaFakeMediaHttpsServer'
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
+import type { ParsedClientPayload } from '../protocol/auth/client-payload-validate'
 import type { BuildSuccessNodeInput } from '../protocol/auth/success-node'
 import type { BuildAbPropsResultInput } from '../protocol/iq/abprops'
 import {
@@ -19,12 +20,7 @@ import type { FakeBusinessProfile } from '../protocol/iq/business'
 import type { FakePrivacyCategoryName, FakePrivacySettingsState } from '../protocol/iq/privacy'
 import type { FakePrivacyTokenIssue } from '../protocol/iq/privacy-token'
 import type { FakeProfilePictureResult } from '../protocol/iq/profile'
-import {
-    type WaFakeIqHandler,
-    type WaFakeIqMatcher,
-    type WaFakeIqResponder,
-    WaFakeIqRouter
-} from '../protocol/iq/router'
+import type { WaFakeIqMatcher, WaFakeIqResponder } from '../protocol/iq/router'
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
 import {
     FakeMediaStore,
@@ -35,20 +31,25 @@ import {
 import { type BinaryNode } from '../transport/codec'
 import { type SignalKeyPair, X25519 } from '../transport/crypto'
 
-import { AppStateSyncManager, type CapturedAppStateMutation } from './AppStateSyncManager'
+import { type AppStateSyncManager, type CapturedAppStateMutation } from './AppStateSyncManager'
 import { FakePairingDriver, type FakePairingDriverOptions } from './FakePairingDriver'
 import { type CreateFakePeerOptions, FakePeer } from './FakePeer'
-import { type IqHandlerDeps, registerDefaultIqHandlers } from './iq-handlers'
-import { PreKeyDispenser } from './PreKeyDispenser'
-import { type AuthenticatedPipelineListener, Scenario } from './Scenario'
 import {
-    type CapturedBlocklistChange,
-    type CapturedDirtyBitsClear,
-    type CapturedGroupOp,
-    type CapturedPrivacySet,
-    type CapturedProfilePictureSet,
-    type CapturedStatusSet,
-    type FakeGroupMetadata,
+    type ExpectIqOptions,
+    type ExpectStanzaOptions,
+    FakeServerSession,
+    type StanzaMatcher
+} from './FakeServerSession'
+import type { PreKeyDispenser } from './PreKeyDispenser'
+import { type AuthenticatedPipelineListener, Scenario } from './Scenario'
+import type {
+    CapturedBlocklistChange,
+    CapturedDirtyBitsClear,
+    CapturedGroupOp,
+    CapturedPrivacySet,
+    CapturedProfilePictureSet,
+    CapturedStatusSet,
+    FakeGroupMetadata,
     ServerRegistries
 } from './ServerRegistries'
 
@@ -79,6 +80,23 @@ export interface FakeWaServerOptions {
      * with an empty router and wire every response via `registerIqHandler`.
      */
     readonly defaultIqHandlers?: boolean
+    /**
+     * Assigns each authenticated connection to an isolated session, keyed by
+     * the returned id. Two connections that resolve to different ids share no
+     * peers, groups, prekeys, app-state, or captured stanzas. When omitted,
+     * every connection uses one shared default session (single-client mode).
+     *
+     * The resolver runs once per connection, right after authentication, so
+     * `info.clientPayload` is available for keying by login identity, e.g.
+     * `sessionKey: ({ clientPayload }) => clientPayload.kind === 'login' ?
+     * clientPayload.username : 'pending'`.
+     */
+    readonly sessionKey?: (info: FakeSessionKeyInfo) => string
+}
+
+export interface FakeSessionKeyInfo {
+    readonly clientPayload: ParsedClientPayload
+    readonly pipeline: WaFakeConnectionPipeline
 }
 
 export interface FakeWaServerNoiseRootCa {
@@ -88,36 +106,8 @@ export interface FakeWaServerNoiseRootCa {
 
 export type FakeWaServerPipelineListener = (pipeline: WaFakeConnectionPipeline) => void
 
-export interface ExpectIqOptions {
-    readonly timeoutMs?: number
-}
-
-export interface ExpectStanzaOptions {
-    readonly timeoutMs?: number
-}
-
-export interface StanzaMatcher {
-    readonly tag?: string
-    readonly type?: string
-    readonly xmlns?: string
-    readonly from?: string
-    readonly to?: string
-    readonly childTag?: string
-}
-
-interface PendingIqExpectation {
-    readonly matcher: WaFakeIqMatcher
-    readonly resolve: (iq: BinaryNode) => void
-    readonly reject: (error: Error) => void
-    readonly timer: NodeJS.Timeout
-}
-
-interface PendingStanzaExpectation {
-    readonly matcher: StanzaMatcher
-    readonly resolve: (node: BinaryNode) => void
-    readonly reject: (error: Error) => void
-    readonly timer: NodeJS.Timeout
-}
+export { FakeServerSession } from './FakeServerSession'
+export type { ExpectIqOptions, ExpectStanzaOptions, StanzaMatcher } from './FakeServerSession'
 
 export interface CapturedMediaUpload {
     readonly path: string
@@ -129,19 +119,18 @@ export interface CapturedMediaUpload {
 }
 
 export class FakeWaServer {
-    public readonly registries = new ServerRegistries()
-    public readonly preKeyDispenser = new PreKeyDispenser()
-    public readonly appStateSync = new AppStateSyncManager()
-
     private readonly wsServer: WaFakeWsServer
     private readonly pipelines = new Set<WaFakeConnectionPipeline>()
-    private readonly iqRouter = new WaFakeIqRouter()
-    private readonly capturedStanzas: BinaryNode[] = []
-    private readonly pendingIqExpectations = new Set<PendingIqExpectation>()
-    private readonly pendingStanzaExpectations = new Set<PendingStanzaExpectation>()
+    private readonly defaultSession: FakeServerSession
+    private readonly pipelineSessions = new WeakMap<WaFakeConnectionPipeline, FakeServerSession>()
     private readonly authenticatedListeners = new Set<AuthenticatedPipelineListener>()
-    private readonly inboundStanzaListeners = new Set<(node: BinaryNode) => void>()
-    private readonly capturedStanzaListeners = new Set<(node: BinaryNode) => void>()
+    private readonly sessions = new Map<string, FakeServerSession>()
+    private readonly globalIqHandlers = new Set<{
+        readonly matcher: WaFakeIqMatcher
+        readonly respond: WaFakeIqResponder
+        readonly label?: string
+        readonly unregisterBySession: Map<FakeServerSession, () => void>
+    }>()
     private readonly options: FakeWaServerOptions
     private rootCa: FakeNoiseRootCa | null = null
     private serverStaticKeyPair: SignalKeyPair | null = null
@@ -158,83 +147,56 @@ export class FakeWaServer {
         this.options = options
         this.wsServer = new WaFakeWsServer(options)
         this.wsServer.onConnection((connection) => this.handleConnection(connection))
-        if (options.defaultIqHandlers !== false) {
-            registerDefaultIqHandlers(this.iqRouter, this.buildIqHandlerDeps())
-        }
+        this.defaultSession = this.createSession('__default__')
     }
 
-    private buildIqHandlerDeps(): IqHandlerDeps {
-        const reg = this.registries
-        const preKey = this.preKeyDispenser
-        const appState = this.appStateSync
-        return {
-            get peerRegistry() {
-                return reg.peerRegistry
-            },
-            get groupRegistry() {
-                return reg.groupRegistry
-            },
-            get privacySettings() {
-                return reg.privacySettings
-            },
-            get blocklistJids() {
-                return reg.blocklistJids
-            },
-            get profilePicturesByJid() {
-                return reg.profilePicturesByJid
-            },
-            get businessProfilesByJid() {
-                return reg.businessProfilesByJid
-            },
-            get abPropsInput() {
-                return reg.abPropsInput
-            },
-            get issuedPrivacyTokens() {
-                return reg.issuedPrivacyTokens
-            },
-            get latestStatusText() {
-                return reg.latestStatusText
-            },
-            setLatestStatusText: (text: string) => {
-                reg.latestStatusText = text
-            },
-            lookupDeviceIdsForUser: (userJid) => reg.lookupDeviceIdsForUser(userJid),
-            notifyGroupOp: (op) => reg.notifyGroupOp(op),
-            mutatePrivacySettings: (category, value) => reg.mutatePrivacySettings(category, value),
-            mutateBlocklist: (action, jid) => reg.mutateBlocklist(action, jid),
-            notifyProfilePictureSet: (op) => reg.notifyProfilePictureSet(op),
-            handleProfilePictureSet: (targetJid, newId) =>
-                reg.handleProfilePictureSet(targetJid, newId),
-            notifyStatusSet: (text) => reg.notifyStatusSet(text),
-            notifyLogout: () => reg.notifyLogout(),
-            notifyPrivacyTokenIssue: (token) => reg.notifyPrivacyTokenIssue(token),
-            notifyDirtyBitsClear: (op) => reg.notifyDirtyBitsClear(op),
-            notifyPrivacySet: (change) => {
-                for (const listener of reg.privacySetListeners) {
-                    try {
-                        listener(change)
-                    } catch (error) {
-                        void error
-                    }
-                }
-            },
-            notifyBlocklistChange: (change) => {
-                for (const listener of reg.blocklistChangeListeners) {
-                    try {
-                        listener(change)
-                    } catch (error) {
-                        void error
-                    }
-                }
-            },
-            capturePreKeyBundle: (bundle) => preKey.captureBundle(bundle),
-            countServerPreKeys: () => preKey.preKeysAvailable(),
-            consumeOutboundAppStatePatches: (iq) => appState.consumeOutboundAppStatePatches(iq),
-            get appStateCollectionProviders() {
-                return appState.appStateCollectionProviders
-            },
-            requireMediaHttpsInfo: () => this.requireMediaHttpsInfo()
+    /** State of the single default session (the only session for one client). */
+    public get registries(): ServerRegistries {
+        return this.defaultSession.registries
+    }
+
+    public get preKeyDispenser(): PreKeyDispenser {
+        return this.defaultSession.preKeyDispenser
+    }
+
+    public get appStateSync(): AppStateSyncManager {
+        return this.defaultSession.appStateSync
+    }
+
+    /**
+     * Returns the isolated session for `id`, creating it on first use. Every
+     * session gets its own registries, prekey dispenser, app-state, IQ router,
+     * and stanza capture. Use with the `sessionKey` option to run several
+     * `WaClient`s against one server without them sharing any state.
+     */
+    public session(id: string): FakeServerSession {
+        const existing = this.sessions.get(id)
+        if (existing) {
+            return existing
         }
+        return this.createSession(id)
+    }
+
+    /** The session a connection is bound to (default before authentication). */
+    public sessionFor(pipeline: WaFakeConnectionPipeline): FakeServerSession {
+        return this.pipelineSessions.get(pipeline) ?? this.defaultSession
+    }
+
+    private createSession(id: string): FakeServerSession {
+        const session = new FakeServerSession(
+            id,
+            { requireMediaHttpsInfo: () => this.requireMediaHttpsInfo() },
+            { defaultIqHandlers: this.options.defaultIqHandlers !== false }
+        )
+        this.sessions.set(id, session)
+        // Server-level custom handlers apply to every session, present and future.
+        for (const handler of this.globalIqHandlers) {
+            handler.unregisterBySession.set(
+                session,
+                session.registerIqHandler(handler.matcher, handler.respond, handler.label)
+            )
+        }
+        return session
     }
 
     public registerIqHandler(
@@ -242,12 +204,30 @@ export class FakeWaServer {
         respond: WaFakeIqResponder,
         label?: string
     ): () => void {
-        const handler: WaFakeIqHandler = { matcher, respond, label }
-        return this.iqRouter.register(handler, { priority: 'high' })
+        const entry = {
+            matcher,
+            respond,
+            label,
+            unregisterBySession: new Map<FakeServerSession, () => void>()
+        }
+        for (const session of this.sessions.values()) {
+            entry.unregisterBySession.set(
+                session,
+                session.registerIqHandler(matcher, respond, label)
+            )
+        }
+        this.globalIqHandlers.add(entry)
+        return () => {
+            for (const unregister of entry.unregisterBySession.values()) {
+                unregister()
+            }
+            entry.unregisterBySession.clear()
+            this.globalIqHandlers.delete(entry)
+        }
     }
 
     public async routeIqForTest(iq: BinaryNode): Promise<BinaryNode | null> {
-        return this.iqRouter.route(iq)
+        return this.defaultSession.routeIq(iq)
     }
 
     public onOutboundGroupOp(listener: (op: CapturedGroupOp) => void): () => void {
@@ -338,7 +318,7 @@ export class FakeWaServer {
         pipeline: WaFakeConnectionPipeline,
         options: { readonly timeoutMs?: number; readonly force?: boolean } | number = {}
     ): Promise<ClientPreKeyBundle> {
-        return this.preKeyDispenser.triggerPreKeyUpload(pipeline, options)
+        return this.sessionFor(pipeline).preKeyDispenser.triggerPreKeyUpload(pipeline, options)
     }
 
     public awaitPreKeyBundle(timeoutMs = 15_000): Promise<ClientPreKeyBundle> {
@@ -395,7 +375,7 @@ export class FakeWaServer {
         pipeline: WaFakeConnectionPipeline,
         input: BuildServerSyncNotificationInput
     ): Promise<void> {
-        return this.appStateSync.pushServerSyncNotification(pipeline, input)
+        return this.sessionFor(pipeline).appStateSync.pushServerSyncNotification(pipeline, input)
     }
 
     public onAuthenticatedPipeline(listener: AuthenticatedPipelineListener): () => void {
@@ -408,96 +388,30 @@ export class FakeWaServer {
     }
 
     public expectIq(matcher: WaFakeIqMatcher, options: ExpectIqOptions = {}): Promise<BinaryNode> {
-        const timeoutMs = options.timeoutMs ?? 2_000
-
-        for (const captured of this.capturedStanzas) {
-            if (matchesIq(captured, matcher)) {
-                return Promise.resolve(captured)
-            }
-        }
-
-        return new Promise((resolve, reject) => {
-            const expectation: PendingIqExpectation = {
-                matcher,
-                resolve: (iq) => {
-                    this.pendingIqExpectations.delete(expectation)
-                    clearTimeout(expectation.timer)
-                    resolve(iq)
-                },
-                reject: (error) => {
-                    this.pendingIqExpectations.delete(expectation)
-                    clearTimeout(expectation.timer)
-                    reject(error)
-                },
-                timer: setTimeout(() => {
-                    this.pendingIqExpectations.delete(expectation)
-                    reject(
-                        new Error(
-                            `expectIq timed out after ${timeoutMs}ms (${describeMatcher(matcher)})`
-                        )
-                    )
-                }, timeoutMs)
-            }
-            this.pendingIqExpectations.add(expectation)
-        })
+        return this.defaultSession.expectIq(matcher, options)
     }
 
     public capturedStanzaSnapshot(): readonly BinaryNode[] {
-        return this.capturedStanzas.slice()
+        return this.defaultSession.capturedStanzaSnapshot()
     }
 
     /**
-     * Subscribes to every stanza captured from the client side (the lib).
-     * The listener is called synchronously for each new stanza as it
-     * arrives, in addition to `capturedStanzas` being appended. Returns
-     * an unsubscribe function. Useful for benches that need to count or
-     * react to a stream of receipts/messages without paying the O(N²)
-     * cost of polling `capturedStanzaSnapshot()` or queuing one
-     * `expectStanza(...)` per iteration.
+     * Subscribes to every stanza captured from the client side (the lib) of
+     * the default session. The listener is called synchronously for each new
+     * stanza as it arrives. Returns an unsubscribe function. Useful for
+     * benches that need to count or react to a stream of receipts/messages
+     * without paying the O(N²) cost of polling `capturedStanzaSnapshot()` or
+     * queuing one `expectStanza(...)` per iteration.
      */
     public onCapturedStanza(listener: (node: BinaryNode) => void): () => void {
-        this.capturedStanzaListeners.add(listener)
-        return () => {
-            this.capturedStanzaListeners.delete(listener)
-        }
+        return this.defaultSession.onCapturedStanza(listener)
     }
 
     public expectStanza(
         matcher: StanzaMatcher,
         options: ExpectStanzaOptions = {}
     ): Promise<BinaryNode> {
-        const timeoutMs = options.timeoutMs ?? 2_000
-
-        for (const captured of this.capturedStanzas) {
-            if (matchesStanza(captured, matcher)) {
-                return Promise.resolve(captured)
-            }
-        }
-
-        return new Promise((resolve, reject) => {
-            const expectation: PendingStanzaExpectation = {
-                matcher,
-                resolve: (node) => {
-                    this.pendingStanzaExpectations.delete(expectation)
-                    clearTimeout(expectation.timer)
-                    resolve(node)
-                },
-                reject: (error) => {
-                    this.pendingStanzaExpectations.delete(expectation)
-                    clearTimeout(expectation.timer)
-                    reject(error)
-                },
-                timer: setTimeout(() => {
-                    this.pendingStanzaExpectations.delete(expectation)
-                    reject(
-                        new Error(
-                            `expectStanza timed out after ${timeoutMs}ms (${describeStanzaMatcher(matcher)})`
-                        )
-                    )
-                }, timeoutMs)
-            }
-            this.pendingStanzaExpectations.add(expectation)
-        })
+        return this.defaultSession.expectStanza(matcher, options)
     }
 
     public async broadcastStanza(node: BinaryNode): Promise<number> {
@@ -577,8 +491,9 @@ export class FakeWaServer {
         options: CreateFakePeerOptions,
         pipeline: WaFakeConnectionPipeline
     ): Promise<FakePeer> {
-        const peer = await FakePeer.create(options, this.buildFakePeerDeps(pipeline))
-        this.registries.registerPeer(peer)
+        const session = this.sessionFor(pipeline)
+        const peer = await FakePeer.create(options, this.buildFakePeerDeps(pipeline, session))
+        session.registries.registerPeer(peer)
         return peer
     }
 
@@ -600,6 +515,7 @@ export class FakeWaServer {
         }
         const userPart = input.userJid.slice(0, atIdx)
         const server = input.userJid.slice(atIdx + 1)
+        const session = this.sessionFor(pipeline)
         const peers: FakePeer[] = []
         for (const deviceId of input.deviceIds) {
             const deviceJid = deviceId === 0 ? input.userJid : `${userPart}:${deviceId}@${server}`
@@ -609,15 +525,18 @@ export class FakeWaServer {
                     displayName: input.displayName,
                     skipOneTimePreKey: input.skipOneTimePreKey
                 },
-                this.buildFakePeerDeps(pipeline)
+                this.buildFakePeerDeps(pipeline, session)
             )
-            this.registries.registerPeer(peer)
+            session.registries.registerPeer(peer)
             peers.push(peer)
         }
         return peers
     }
 
-    private buildFakePeerDeps(pipeline: WaFakeConnectionPipeline): {
+    private buildFakePeerDeps(
+        pipeline: WaFakeConnectionPipeline,
+        session: FakeServerSession
+    ): {
         readonly bundleResolver: () => Promise<ClientPreKeyBundle>
         readonly reserveOneTimePreKey: () => {
             readonly keyId: number
@@ -627,19 +546,10 @@ export class FakeWaServer {
         readonly subscribeInboundMessages: (listener: (stanza: BinaryNode) => void) => () => void
     } {
         return {
-            bundleResolver: () => this.preKeyDispenser.awaitPreKeyBundle(),
-            reserveOneTimePreKey: () => this.preKeyDispenser.dispenseOneTimePreKey(),
+            bundleResolver: () => session.preKeyDispenser.awaitPreKeyBundle(),
+            reserveOneTimePreKey: () => session.preKeyDispenser.dispenseOneTimePreKey(),
             pushStanza: (stanza) => pipeline.sendStanza(stanza),
-            subscribeInboundMessages: (listener) => {
-                const wrapped = (node: BinaryNode): void => {
-                    if (node.tag !== 'message') return
-                    listener(node)
-                }
-                this.inboundStanzaListeners.add(wrapped)
-                return () => {
-                    this.inboundStanzaListeners.delete(wrapped)
-                }
-            }
+            subscribeInboundMessages: (listener) => session.subscribeInboundMessages(listener)
         }
     }
 
@@ -651,11 +561,12 @@ export class FakeWaServer {
             readonly identityPublicKey: Uint8Array
         }>
     ): Promise<void> {
+        const session = this.sessionFor(pipeline)
         const driver = new FakePairingDriver(options, {
             pipeline,
             companionMaterialResolver,
             waitForPairDeviceAck: async (pairDeviceIqId) => {
-                await this.expectIq(
+                await session.expectIq(
                     {
                         id: pairDeviceIqId
                     },
@@ -750,18 +661,20 @@ export class FakeWaServer {
             connection.close(1011, 'fake server not initialized')
             return
         }
-        const pipeline = new WaFakeConnectionPipeline({
+        const pipeline: WaFakeConnectionPipeline = new WaFakeConnectionPipeline({
             connection,
             rootCa: this.rootCa,
             serverStaticKeyPair: this.serverStaticKeyPair,
-            iqRouter: this.iqRouter,
+            routeIq: (node: BinaryNode) => this.sessionFor(pipeline).routeIq(node),
             ...(this.options.successNodeAttributes !== undefined
                 ? { successNodeAttributes: this.options.successNodeAttributes }
                 : {})
         })
         this.pipelines.add(pipeline)
+        this.pipelineSessions.set(pipeline, this.defaultSession)
         pipeline.setEvents({
             onAuthenticated: () => {
+                this.bindPipelineSession(pipeline)
                 for (const listener of this.authenticatedListeners) {
                     try {
                         void Promise.resolve(listener(pipeline)).catch(() => undefined)
@@ -770,7 +683,7 @@ export class FakeWaServer {
                     }
                 }
             },
-            onStanza: (node) => this.handleCapturedStanza(node),
+            onStanza: (node: BinaryNode) => this.sessionFor(pipeline).handleCapturedStanza(node),
             onClose: () => this.pipelines.delete(pipeline)
         })
         for (const listener of this.pipelineListeners) {
@@ -782,41 +695,20 @@ export class FakeWaServer {
         }
     }
 
-    private handleCapturedStanza(node: BinaryNode): void {
-        this.capturedStanzas.push(node)
-
-        for (const listener of this.capturedStanzaListeners) {
-            try {
-                listener(node)
-            } catch (error) {
-                void error
-            }
-        }
-
-        for (const listener of this.inboundStanzaListeners) {
-            try {
-                listener(node)
-            } catch (error) {
-                void error
-            }
-        }
-
-        for (const expectation of this.pendingStanzaExpectations) {
-            if (matchesStanza(node, expectation.matcher)) {
-                expectation.resolve(node)
-                break
-            }
-        }
-
-        if (node.tag !== 'iq') {
+    /**
+     * Rebinds a connection to its keyed session once authenticated. Runs
+     * before user `onAuthenticated` listeners and before any client stanza, so
+     * captures and IQ routing land in the right session from the first frame.
+     * No-op without a `sessionKey` resolver (single default session).
+     */
+    private bindPipelineSession(pipeline: WaFakeConnectionPipeline): void {
+        const resolveKey = this.options.sessionKey
+        const clientPayload = pipeline.clientPayload
+        if (!resolveKey || !clientPayload) {
             return
         }
-        for (const expectation of this.pendingIqExpectations) {
-            if (matchesIq(node, expectation.matcher)) {
-                expectation.resolve(node)
-                return
-            }
-        }
+        const id = resolveKey({ clientPayload, pipeline })
+        this.pipelineSessions.set(pipeline, this.session(id))
     }
 
     private buildMediaRequestHandler(): (req: IncomingMessage, res: ServerResponse) => void {
@@ -910,53 +802,6 @@ function parseQueryParam(query: string | undefined, name: string): string | unde
         return decodeURIComponent(pair.slice(eq + 1))
     }
     return undefined
-}
-
-function matchesIq(iq: BinaryNode, matcher: WaFakeIqMatcher): boolean {
-    if (iq.tag !== 'iq') return false
-    if (matcher.id !== undefined && iq.attrs.id !== matcher.id) return false
-    if (matcher.type !== undefined && iq.attrs.type !== matcher.type) return false
-    if (matcher.xmlns !== undefined && iq.attrs.xmlns !== matcher.xmlns) return false
-    if (matcher.childTag !== undefined) {
-        const children = Array.isArray(iq.content) ? iq.content : null
-        if (!children || children.length === 0) return false
-        if (children[0].tag !== matcher.childTag) return false
-    }
-    return true
-}
-
-function describeMatcher(matcher: WaFakeIqMatcher): string {
-    const parts: string[] = []
-    if (matcher.id !== undefined) parts.push(`id=${matcher.id}`)
-    if (matcher.type !== undefined) parts.push(`type=${matcher.type}`)
-    if (matcher.xmlns !== undefined) parts.push(`xmlns=${matcher.xmlns}`)
-    if (matcher.childTag !== undefined) parts.push(`childTag=${matcher.childTag}`)
-    return parts.length > 0 ? parts.join(', ') : 'any iq'
-}
-
-function matchesStanza(node: BinaryNode, matcher: StanzaMatcher): boolean {
-    if (matcher.tag !== undefined && node.tag !== matcher.tag) return false
-    if (matcher.type !== undefined && node.attrs.type !== matcher.type) return false
-    if (matcher.xmlns !== undefined && node.attrs.xmlns !== matcher.xmlns) return false
-    if (matcher.from !== undefined && node.attrs.from !== matcher.from) return false
-    if (matcher.to !== undefined && node.attrs.to !== matcher.to) return false
-    if (matcher.childTag !== undefined) {
-        const children = Array.isArray(node.content) ? node.content : null
-        if (!children || children.length === 0) return false
-        if (children[0].tag !== matcher.childTag) return false
-    }
-    return true
-}
-
-function describeStanzaMatcher(matcher: StanzaMatcher): string {
-    const parts: string[] = []
-    if (matcher.tag !== undefined) parts.push(`tag=${matcher.tag}`)
-    if (matcher.type !== undefined) parts.push(`type=${matcher.type}`)
-    if (matcher.xmlns !== undefined) parts.push(`xmlns=${matcher.xmlns}`)
-    if (matcher.from !== undefined) parts.push(`from=${matcher.from}`)
-    if (matcher.to !== undefined) parts.push(`to=${matcher.to}`)
-    if (matcher.childTag !== undefined) parts.push(`childTag=${matcher.childTag}`)
-    return parts.length > 0 ? parts.join(', ') : 'any stanza'
 }
 
 export type { WaFakeAuthenticatedInfo, WaFakeConnectionPipeline }

@@ -90,10 +90,43 @@ const server = await FakeWaServer.start({
 ```
 
 - **Peer registry** (`peerRegistry`): maps device JIDs → `FakePeer` instances. The global `usync` + `prekey-fetch` IQ handlers consult this.
+- **Sessions**: state is grouped per session (see below). A single-client server uses one default session, and the `server.registries` / `server.expectIq(...)` / `server.preKeyDispenser` surface delegates straight to it.
 - **Group registry** (`groupRegistry`): maps group JIDs → group metadata + participants. The `w:g2` handler serves it.
 - **IQ router** (`WaFakeIqRouter`): first-match-wins stanza dispatcher with `{ xmlns, type, childTag }` matchers. ~27 global handlers registered in the constructor cover every IQ the lib emits during normal operation (disable them with `defaultIqHandlers: false`). `registerIqHandler(matcher, respond)` registers at high priority and shadows the defaults; a responder that returns `null` falls through to the next matching handler, so you can observe an IQ (capture, assert) and still let the default answer it.
 - **Prekey dispenser**: hands out unique one-time prekeys from the lib's upload to FakePeers. Resets on each forced refill (`triggerPreKeyUpload({ force: true })`).
 - **Listener fan-outs**: `onOutboundGroupOp`, `onOutboundPrivacySet`, `onOutboundBlocklistChange`, `onOutboundProfilePictureSet`, `onOutboundStatusSet`, `onLogout`, `onOutboundPrivacyTokenIssue`, `onOutboundDirtyBitsClear`.
+
+### Sessions (multiple clients, one server)
+
+By default every connection shares one session, so a single `WaClient` sees the whole `FakeWaServer` surface. To run **several clients against one server without them sharing any state**, pass a `sessionKey` resolver: each authenticated connection is bound to an isolated session keyed by the returned id. Sessions never share peers, groups, prekeys, app-state, or captured stanzas.
+
+```ts
+const server = await FakeWaServer.start({
+    // Key each connection by its login username; pre-login (registration)
+    // connections fall under one transient bucket.
+    sessionKey: ({ clientPayload }) =>
+        clientPayload.kind === 'login' ? String(clientPayload.username) : 'pending'
+})
+
+// After a client authenticates, reach its isolated state through the pipeline:
+const session = server.sessionFor(pipeline) // FakeServerSession
+await session.expectIq({ xmlns: 'passive', type: 'set' })
+session.registries.peerRegistry // this client's peers only
+session.preKeyDispenser.capturedPreKeyBundleSnapshot() // this client's prekeys
+
+// Or address a session by id directly:
+const alice = server.session('5511111111111')
+
+// Peer creation routes to the connection's session automatically:
+const peer = await server.createFakePeer({ jid: peerJid }, pipeline)
+```
+
+Notes:
+
+- The resolver runs once per connection, right after authentication (so `clientPayload` is available). Connections that resolve to the same id reuse one session.
+- `server.registerIqHandler(...)` applies to every session (present and future); `session.registerIqHandler(...)` scopes to one session.
+- The media HTTPS store is process-global and shared across sessions; isolation covers peers/groups/prekeys/app-state/captures, not uploaded media blobs.
+- QR pairing writes to the connection's session too, so pair clients **sequentially** when keying registration connections into a shared bucket.
 
 ### FakePeer
 
@@ -225,7 +258,7 @@ Run with `--help` for the full flag list.
 
 ```bash
 npm --workspace=@zapo-js/fake-server test
-# 163 tests, --test-concurrency=1
+# 164 tests, --test-concurrency=1
 ```
 
 Cross-check tests drive a real `WaClient` against the fake server and assert on both sides (lib emits correct events, peer decrypts correctly). Unit tests validate protocol builders/parsers in isolation.
