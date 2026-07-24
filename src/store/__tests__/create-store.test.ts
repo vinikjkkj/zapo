@@ -120,6 +120,55 @@ test('createStore session lifecycle with backend + memory', async () => {
     assert.throws(() => store.session('x'), /store has been destroyed/)
 })
 
+test('createStore session destroy releases the id for a fresh reacquire', async () => {
+    const store = createStore({})
+    const first = store.session('repair')
+    await first.senderKey.getGroupSenderKeyList('123@g.us')
+
+    await first.destroy()
+    await assert.rejects(
+        first.senderKey.getGroupSenderKeyList('123@g.us'),
+        /shared-exclusive gate is closed/
+    )
+
+    const second = store.session('repair')
+    assert.notStrictEqual(second, first)
+    await second.senderKey.getGroupSenderKeyList('123@g.us')
+    await second.deviceList.getUserDevicesBatch(['555@s.whatsapp.net'])
+    await second.groupMetadata.getGroupMetadata('123@g.us')
+
+    await store.destroy()
+})
+
+test('createStore destroyCaches keeps the session bundle usable', async () => {
+    const store = createStore({})
+    const session = store.session('caches')
+    await session.groupMetadata.upsertGroupMetadata({
+        groupJid: '123@g.us',
+        participants: ['555@s.whatsapp.net'],
+        updatedAtMs: Date.now()
+    })
+    const staleGroupMetadata = session.groupMetadata
+
+    await session.destroyCaches()
+
+    assert.strictEqual(store.session('caches'), session)
+    await assert.rejects(
+        staleGroupMetadata.getGroupMetadata('123@g.us'),
+        /shared-exclusive gate is closed/
+    )
+    assert.equal(await session.groupMetadata.getGroupMetadata('123@g.us'), null)
+    await session.groupMetadata.upsertGroupMetadata({
+        groupJid: '123@g.us',
+        participants: ['555@s.whatsapp.net'],
+        updatedAtMs: Date.now()
+    })
+    assert.ok(await session.groupMetadata.getGroupMetadata('123@g.us'))
+    await session.senderKey.getGroupSenderKeyList('123@g.us')
+
+    await store.destroy()
+})
+
 test('createStore rejects unknown backend name', () => {
     assert.throws(
         () =>

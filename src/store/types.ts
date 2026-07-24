@@ -33,13 +33,35 @@ export interface WaStoreSession {
     readonly threads: WaThreadStore
     readonly contacts: WaContactStore
     readonly privacyToken: WaPrivacyTokenStore
+    /**
+     * Tears down the cache domains (retry/groupMetadata/deviceList/
+     * messageSecret) and swaps fresh, empty ones into this bundle. The
+     * session stays usable; the caches rebuild on demand. References to the
+     * old cache stores captured before the call (e.g. by a live client)
+     * reject afterwards - recreate the client to pick up the fresh stores.
+     */
     destroyCaches(): Promise<void>
+    /**
+     * Final teardown of every domain store in this bundle. The bundle is
+     * single-shot: every operation on it rejects afterwards. The sessionId
+     * is released, so the next `store.session(id)` builds a fresh bundle.
+     */
     destroy(): Promise<void>
 }
 
 export interface WaStore {
+    /**
+     * Returns the lock-wrapped per-domain store bundle for `sessionId`,
+     * building it on first use and caching it until its `destroy()` (or the
+     * store-wide `destroy()`) releases it.
+     */
     session(sessionId: string): WaStoreSession
+    /** Runs {@link WaStoreSession.destroyCaches} on every live session. */
     destroyCaches(): Promise<void>
+    /**
+     * Destroys every live session bundle and the registered backends. The
+     * store is single-shot: `session()` throws afterwards.
+     */
     destroy(): Promise<void>
 }
 

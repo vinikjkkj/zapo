@@ -359,69 +359,88 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                 'stores',
                 () => new WaPrivacyTokenMemoryStore(ml.privacyTokens)
             )
-            const rawRetry = resolveStore<WaRetryStore>(
-                id,
-                backends,
-                cacheProviders.retry ?? 'memory',
-                'retry',
-                'caches',
-                () =>
-                    cacheProviders.retry === 'memory' || !cacheProviders.retry
-                        ? new WaRetryMemoryStore(cacheTtlsMs.retry, {
-                              maxOutboundMessages: ml.retryOutboundMessages,
-                              maxInboundCounters: ml.retryInboundCounters,
-                              logger: memoryLogger?.child({ domain: 'retry', sessionId: id })
-                          })
-                        : NOOP_RETRY_STORE
-            )
-            const rawGroupMetadata = resolveStore<WaGroupMetadataStore>(
-                id,
-                backends,
-                cacheProviders.groupMetadata ?? 'memory',
-                'groupMetadata',
-                'caches',
-                () =>
-                    cacheProviders.groupMetadata === 'memory' || !cacheProviders.groupMetadata
-                        ? new WaGroupMetadataMemoryStore(cacheTtlsMs.groupMetadata, {
-                              maxGroups: ml.groupMetadataGroups,
-                              logger: memoryLogger?.child({
-                                  domain: 'groupMetadata',
-                                  sessionId: id
-                              })
-                          })
-                        : NOOP_GROUP_METADATA_STORE
-            )
-            const rawDeviceList = resolveStore<WaDeviceListStore>(
-                id,
-                backends,
-                cacheProviders.deviceList ?? 'memory',
-                'deviceList',
-                'caches',
-                () =>
-                    cacheProviders.deviceList === 'memory'
-                        ? new WaDeviceListMemoryStore(cacheTtlsMs.deviceList, {
-                              maxUsers: ml.deviceListUsers,
-                              logger: memoryLogger?.child({ domain: 'deviceList', sessionId: id })
-                          })
-                        : NOOP_DEVICE_LIST_STORE
-            )
-            const rawMessageSecret = resolveStore<WaMessageSecretStore>(
-                id,
-                backends,
-                cacheProviders.messageSecret ?? 'memory',
-                'messageSecret',
-                'caches',
-                () =>
-                    cacheProviders.messageSecret === 'memory' || !cacheProviders.messageSecret
-                        ? new WaMessageSecretMemoryStore(cacheTtlsMs.messageSecret, {
-                              maxSecrets: ml.messageSecrets,
-                              logger: memoryLogger?.child({
-                                  domain: 'messageSecret',
-                                  sessionId: id
-                              })
-                          })
-                        : NOOP_MESSAGE_SECRET_STORE
-            )
+            const buildCaches = () => ({
+                retry: withRetryLock(
+                    resolveStore<WaRetryStore>(
+                        id,
+                        backends,
+                        cacheProviders.retry ?? 'memory',
+                        'retry',
+                        'caches',
+                        () =>
+                            cacheProviders.retry === 'memory' || !cacheProviders.retry
+                                ? new WaRetryMemoryStore(cacheTtlsMs.retry, {
+                                      maxOutboundMessages: ml.retryOutboundMessages,
+                                      maxInboundCounters: ml.retryInboundCounters,
+                                      logger: memoryLogger?.child({
+                                          domain: 'retry',
+                                          sessionId: id
+                                      })
+                                  })
+                                : NOOP_RETRY_STORE
+                    )
+                ),
+                groupMetadata: withGroupMetadataLock(
+                    resolveStore<WaGroupMetadataStore>(
+                        id,
+                        backends,
+                        cacheProviders.groupMetadata ?? 'memory',
+                        'groupMetadata',
+                        'caches',
+                        () =>
+                            cacheProviders.groupMetadata === 'memory' ||
+                            !cacheProviders.groupMetadata
+                                ? new WaGroupMetadataMemoryStore(cacheTtlsMs.groupMetadata, {
+                                      maxGroups: ml.groupMetadataGroups,
+                                      logger: memoryLogger?.child({
+                                          domain: 'groupMetadata',
+                                          sessionId: id
+                                      })
+                                  })
+                                : NOOP_GROUP_METADATA_STORE
+                    )
+                ),
+                deviceList: withDeviceListLock(
+                    resolveStore<WaDeviceListStore>(
+                        id,
+                        backends,
+                        cacheProviders.deviceList ?? 'memory',
+                        'deviceList',
+                        'caches',
+                        () =>
+                            cacheProviders.deviceList === 'memory'
+                                ? new WaDeviceListMemoryStore(cacheTtlsMs.deviceList, {
+                                      maxUsers: ml.deviceListUsers,
+                                      logger: memoryLogger?.child({
+                                          domain: 'deviceList',
+                                          sessionId: id
+                                      })
+                                  })
+                                : NOOP_DEVICE_LIST_STORE
+                    )
+                ),
+                messageSecret: withMessageSecretLock(
+                    resolveStore<WaMessageSecretStore>(
+                        id,
+                        backends,
+                        cacheProviders.messageSecret ?? 'memory',
+                        'messageSecret',
+                        'caches',
+                        () =>
+                            cacheProviders.messageSecret === 'memory' ||
+                            !cacheProviders.messageSecret
+                                ? new WaMessageSecretMemoryStore(cacheTtlsMs.messageSecret, {
+                                      maxSecrets: ml.messageSecrets,
+                                      logger: memoryLogger?.child({
+                                          domain: 'messageSecret',
+                                          sessionId: id
+                                      })
+                                  })
+                                : NOOP_MESSAGE_SECRET_STORE
+                    )
+                )
+            })
+            let caches = buildCaches()
 
             const authStore = withAuthLock(rawAuth)
             const signalStore = withSignalLock(rawSignal)
@@ -442,11 +461,7 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                     : rawSenderKey
             )
             const appStateStore = withAppStateLock(rawAppState)
-            const retryStore = withRetryLock(rawRetry)
-            const groupMetadataStore = withGroupMetadataLock(rawGroupMetadata)
-            const deviceListStore = withDeviceListLock(rawDeviceList)
             const messageStore = withMessageLock(rawMessages)
-            const messageSecretStore = withMessageSecretLock(rawMessageSecret)
             const threadStore = withThreadLock(rawThreads)
             const contactStore = withContactLock(rawContacts)
             const privacyTokenStore = withPrivacyTokenLock(
@@ -455,30 +470,39 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                     : rawPrivacyToken
             )
 
-            let cachesDestroyed = false
             let sessionDestroyed = false
 
+            const teardownCaches = async (
+                target: ReturnType<typeof buildCaches>
+            ): Promise<void> => {
+                await Promise.all([
+                    target.retry.clear(),
+                    target.groupMetadata.clear(),
+                    target.deviceList.clear(),
+                    target.messageSecret.clear()
+                ])
+                await Promise.all([
+                    destroyIfSupported(target.retry),
+                    destroyIfSupported(target.groupMetadata),
+                    destroyIfSupported(target.deviceList),
+                    destroyIfSupported(target.messageSecret)
+                ])
+            }
+
             const destroyCaches = async (): Promise<void> => {
-                if (cachesDestroyed) return
-                cachesDestroyed = true
-                await Promise.all([
-                    retryStore.clear(),
-                    groupMetadataStore.clear(),
-                    deviceListStore.clear(),
-                    messageSecretStore.clear()
-                ])
-                await Promise.all([
-                    destroyIfSupported(retryStore),
-                    destroyIfSupported(groupMetadataStore),
-                    destroyIfSupported(deviceListStore),
-                    destroyIfSupported(messageSecretStore)
-                ])
+                if (sessionDestroyed) return
+                const previous = caches
+                caches = buildCaches()
+                await teardownCaches(previous)
             }
 
             const destroy = async (): Promise<void> => {
                 if (sessionDestroyed) return
                 sessionDestroyed = true
-                await destroyCaches()
+                if (sessions.get(id) === storeSession) {
+                    sessions.delete(id)
+                }
+                await teardownCaches(caches)
                 await Promise.all([
                     destroyIfSupported(authStore),
                     destroyIfSupported(signalStore),
@@ -502,11 +526,19 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                 identity: identityStore,
                 senderKey: senderKeyStore,
                 appState: appStateStore,
-                retry: retryStore,
-                groupMetadata: groupMetadataStore,
-                deviceList: deviceListStore,
+                get retry() {
+                    return caches.retry
+                },
+                get groupMetadata() {
+                    return caches.groupMetadata
+                },
+                get deviceList() {
+                    return caches.deviceList
+                },
                 messages: messageStore,
-                messageSecret: messageSecretStore,
+                get messageSecret() {
+                    return caches.messageSecret
+                },
                 threads: threadStore,
                 contacts: contactStore,
                 privacyToken: privacyTokenStore,
