@@ -85,6 +85,14 @@ test('bidirectional 1:1 ping-pong (peer\u2192client\u2192peer\u2192client\u2192p
         // The post-login offline drain bulletin must reach the client.
         await offlineIbPromise
 
+        // The real client sends the passive/active IQ post-login; the default
+        // handler must see it (it answers, so the client never logs a timeout).
+        const passiveIq = await server.expectIq(
+            { xmlns: 'passive', type: 'set' },
+            { timeoutMs: 15_000 }
+        )
+        assert.equal(passiveIq.attrs.xmlns, 'passive')
+
         const peer = await server.createFakePeer({ jid: peerJid }, pipelineAfterPair)
         await server.triggerPreKeyUpload(pipelineAfterPair)
 

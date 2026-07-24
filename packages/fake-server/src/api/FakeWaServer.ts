@@ -763,14 +763,22 @@ export class FakeWaServer {
         pipeline.setEvents({
             onAuthenticated: () => {
                 for (const listener of this.authenticatedListeners) {
-                    void listener(pipeline)
+                    try {
+                        void Promise.resolve(listener(pipeline)).catch(() => undefined)
+                    } catch {
+                        /* ignore */
+                    }
                 }
             },
             onStanza: (node) => this.handleCapturedStanza(node),
             onClose: () => this.pipelines.delete(pipeline)
         })
         for (const listener of this.pipelineListeners) {
-            listener(pipeline)
+            try {
+                listener(pipeline)
+            } catch {
+                /* ignore */
+            }
         }
     }
 

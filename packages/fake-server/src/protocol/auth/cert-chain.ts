@@ -24,8 +24,8 @@ export interface BuildFakeCertChainInput {
     readonly notAfter?: number
 }
 
-const CERT_NOT_BEFORE_BACKDATE_SECONDS = 86_400
-const CERT_NOT_AFTER_LIFETIME_SECONDS = 315_360_000
+const WA_CERT_NOT_BEFORE_BACKDATE_SECONDS = 86_400
+const WA_CERT_NOT_AFTER_LIFETIME_SECONDS = 315_360_000
 
 export async function generateFakeNoiseRootCa(): Promise<FakeNoiseRootCa> {
     const keyPair = await X25519.generateKeyPair()
@@ -45,8 +45,8 @@ export async function buildFakeCertChain(
     // Strict clients (e.g. whatsmeow) enforce the validity window; leaving
     // notBefore/notAfter unset decodes as 0 (1970) and reads as expired.
     const nowSeconds = Math.floor(Date.now() / 1_000)
-    const notBefore = input.notBefore ?? nowSeconds - CERT_NOT_BEFORE_BACKDATE_SECONDS
-    const notAfter = input.notAfter ?? nowSeconds + CERT_NOT_AFTER_LIFETIME_SECONDS
+    const notBefore = input.notBefore ?? nowSeconds - WA_CERT_NOT_BEFORE_BACKDATE_SECONDS
+    const notAfter = input.notAfter ?? nowSeconds + WA_CERT_NOT_AFTER_LIFETIME_SECONDS
 
     const intermediateKeyPair = await X25519.generateKeyPair()
 

@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline'
 
 import { FakeWaServer } from './api/FakeWaServer'
 import { parsePairingQrString } from './protocol/auth/pair-device'
+import { bytesToHex, toError } from './transport/util'
 
 interface CliArgs {
     readonly host: string
@@ -141,7 +142,7 @@ async function main(): Promise<void> {
     try {
         args = parseArgs(process.argv.slice(2))
     } catch (error) {
-        process.stderr.write(`error: ${error instanceof Error ? error.message : String(error)}\n`)
+        process.stderr.write(`error: ${toError(error).message}\n`)
         process.stderr.write('run with --help to see usage.\n')
         process.exit(2)
     }
@@ -192,9 +193,7 @@ async function main(): Promise<void> {
                 )
             } catch (error) {
                 pairingStarted = false
-                process.stderr.write(
-                    `pairing failed: ${error instanceof Error ? error.message : String(error)}\n`
-                )
+                process.stderr.write(`pairing failed: ${toError(error).message}\n`)
             }
         })
     }
@@ -232,7 +231,7 @@ async function main(): Promise<void> {
                 }
                 resolve()
             } catch (error) {
-                reject(error instanceof Error ? error : new Error(String(error)))
+                reject(toError(error))
             }
         })
     })
@@ -310,9 +309,7 @@ async function main(): Promise<void> {
             process.stdout.write('[fake-server] stopped cleanly\n')
             process.exit(0)
         } catch (error) {
-            process.stderr.write(
-                `error during shutdown: ${error instanceof Error ? error.message : String(error)}\n`
-            )
+            process.stderr.write(`error during shutdown: ${toError(error).message}\n`)
             process.exit(1)
         }
     }
@@ -336,18 +333,8 @@ function readStdinLine(prompt: string): Promise<string> {
     })
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-    let out = ''
-    for (let index = 0; index < bytes.byteLength; index += 1) {
-        const value = bytes[index]
-        out += value < 16 ? `0${value.toString(16)}` : value.toString(16)
-    }
-    return out
-}
-
 main().catch((error) => {
-    process.stderr.write(
-        `fatal: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`
-    )
+    const normalized = toError(error)
+    process.stderr.write(`fatal: ${normalized.stack ?? normalized.message}\n`)
     process.exit(1)
 })
