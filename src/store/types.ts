@@ -36,15 +36,20 @@ export interface WaStoreSession {
     /**
      * Tears down the cache domains (retry/groupMetadata/deviceList/
      * messageSecret) and swaps fresh, empty ones into this bundle. The
-     * session stays usable; the caches rebuild on demand. References to the
-     * old cache stores captured before the call (e.g. by a live client)
-     * reject afterwards - recreate the client to pick up the fresh stores.
+     * session stays usable; the caches rebuild on demand. The swap happens
+     * after the old stores finish tearing down (so a persistent cache
+     * backend is never cleared under the fresh stores), which means cache
+     * operations issued while the reset is in flight may reject. References
+     * to the old cache stores captured before the call (e.g. by a live
+     * client) reject afterwards - recreate the client to pick up the fresh
+     * stores.
      */
     destroyCaches(): Promise<void>
     /**
      * Final teardown of every domain store in this bundle. The bundle is
      * single-shot: every operation on it rejects afterwards. The sessionId
-     * is released, so the next `store.session(id)` builds a fresh bundle.
+     * is released once teardown completes, so the next `store.session(id)`
+     * builds a fresh bundle. Repeat calls return the same in-flight promise.
      */
     destroy(): Promise<void>
 }

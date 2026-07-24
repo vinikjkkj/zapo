@@ -125,7 +125,9 @@ test('createStore session destroy releases the id for a fresh reacquire', async 
     const first = store.session('repair')
     await first.senderKey.getGroupSenderKeyList('123@g.us')
 
-    await first.destroy()
+    const firstDestroy = first.destroy()
+    assert.strictEqual(first.destroy(), firstDestroy)
+    await firstDestroy
     await assert.rejects(
         first.senderKey.getGroupSenderKeyList('123@g.us'),
         /shared-exclusive gate is closed/
@@ -150,7 +152,7 @@ test('createStore destroyCaches keeps the session bundle usable', async () => {
     })
     const staleGroupMetadata = session.groupMetadata
 
-    await session.destroyCaches()
+    await Promise.all([session.destroyCaches(), session.destroyCaches()])
 
     assert.strictEqual(store.session('caches'), session)
     await assert.rejects(
@@ -166,6 +168,22 @@ test('createStore destroyCaches keeps the session bundle usable', async () => {
     assert.ok(await session.groupMetadata.getGroupMetadata('123@g.us'))
     await session.senderKey.getGroupSenderKeyList('123@g.us')
 
+    await store.destroy()
+})
+
+test('createStore defaults the deviceList cache to memory when cacheProviders is unset', async () => {
+    const store = createStore({})
+    const session = store.session('devices')
+    await session.deviceList.upsertUserDevicesBatch([
+        {
+            userJid: '555@s.whatsapp.net',
+            deviceJids: ['555:1@s.whatsapp.net'],
+            updatedAtMs: Date.now()
+        }
+    ])
+    const [snapshot] = await session.deviceList.getUserDevicesBatch(['555@s.whatsapp.net'])
+    assert.ok(snapshot)
+    assert.deepEqual(snapshot.deviceJids, ['555:1@s.whatsapp.net'])
     await store.destroy()
 })
 

@@ -65,6 +65,7 @@ import type {
     WaStoreSession
 } from '@store/types'
 import { resolvePositive } from '@util/coercion'
+import { toError } from '@util/primitives'
 
 interface Destroyable {
     destroy: () => void | Promise<void>
@@ -408,7 +409,7 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                         'deviceList',
                         'caches',
                         () =>
-                            cacheProviders.deviceList === 'memory'
+                            cacheProviders.deviceList === 'memory' || !cacheProviders.deviceList
                                 ? new WaDeviceListMemoryStore(cacheTtlsMs.deviceList, {
                                       maxUsers: ml.deviceListUsers,
                                       logger: memoryLogger?.child({
@@ -471,39 +472,70 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
             )
 
             let sessionDestroyed = false
+            let destroyPromise: Promise<void> | null = null
+            let cacheLifecycle: Promise<void> = Promise.resolve()
 
             const teardownCaches = async (
                 target: ReturnType<typeof buildCaches>
             ): Promise<void> => {
-                await Promise.all([
+                const cleared = await Promise.allSettled([
                     target.retry.clear(),
                     target.groupMetadata.clear(),
                     target.deviceList.clear(),
                     target.messageSecret.clear()
                 ])
-                await Promise.all([
+                const destroyed = await Promise.allSettled([
                     destroyIfSupported(target.retry),
                     destroyIfSupported(target.groupMetadata),
                     destroyIfSupported(target.deviceList),
                     destroyIfSupported(target.messageSecret)
                 ])
-            }
-
-            const destroyCaches = async (): Promise<void> => {
-                if (sessionDestroyed) return
-                const previous = caches
-                caches = buildCaches()
-                await teardownCaches(previous)
-            }
-
-            const destroy = async (): Promise<void> => {
-                if (sessionDestroyed) return
-                sessionDestroyed = true
-                if (sessions.get(id) === storeSession) {
-                    sessions.delete(id)
+                const failures = [...cleared, ...destroyed].filter(
+                    (result): result is PromiseRejectedResult => result.status === 'rejected'
+                )
+                if (failures.length > 0) {
+                    storeLogger?.warn('cache teardown had failures', {
+                        sessionId: id,
+                        droppedCount: failures.length,
+                        totalExpected: cleared.length + destroyed.length,
+                        sample: toError(failures[0].reason).message
+                    })
                 }
-                await teardownCaches(caches)
-                await Promise.all([
+            }
+
+            const destroyCaches = (): Promise<void> => {
+                const run = cacheLifecycle.then(async () => {
+                    if (sessionDestroyed) return
+                    await teardownCaches(caches)
+                    caches = buildCaches()
+                })
+                cacheLifecycle = run.then(
+                    () => undefined,
+                    () => undefined
+                )
+                return run
+            }
+
+            const destroy = (): Promise<void> => {
+                destroyPromise ??= destroyInternal()
+                return destroyPromise
+            }
+
+            const destroyInternal = async (): Promise<void> => {
+                sessionDestroyed = true
+                try {
+                    await cacheLifecycle
+                    await teardownCaches(caches)
+                    await destroyPersistentStores()
+                } finally {
+                    if (sessions.get(id) === storeSession) {
+                        sessions.delete(id)
+                    }
+                }
+            }
+
+            const destroyPersistentStores = (): Promise<unknown> =>
+                Promise.all([
                     destroyIfSupported(authStore),
                     destroyIfSupported(signalStore),
                     destroyIfSupported(preKeyStore),
@@ -516,7 +548,6 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                     destroyIfSupported(contactStore),
                     destroyIfSupported(privacyTokenStore)
                 ])
-            }
 
             const storeSession: WaStoreSession = {
                 auth: authStore,
