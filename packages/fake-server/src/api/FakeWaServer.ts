@@ -775,7 +775,7 @@ export class FakeWaServer {
         })
         for (const listener of this.pipelineListeners) {
             try {
-                listener(pipeline)
+                void Promise.resolve(listener(pipeline)).catch(() => undefined)
             } catch {
                 /* ignore */
             }
