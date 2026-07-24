@@ -42,14 +42,18 @@ export interface WaStoreSession {
      * operations issued while the reset is in flight may reject. References
      * to the old cache stores captured before the call (e.g. by a live
      * client) reject afterwards - recreate the client to pick up the fresh
-     * stores.
+     * stores. Rejects when the old generation's teardown had failures - the
+     * fresh caches are still in place, but stale entries may remain in a
+     * persistent cache backend.
      */
     destroyCaches(): Promise<void>
     /**
      * Final teardown of every domain store in this bundle. The bundle is
      * single-shot: every operation on it rejects afterwards. The sessionId
-     * is released once teardown completes, so the next `store.session(id)`
-     * builds a fresh bundle. Repeat calls return the same in-flight promise.
+     * is released as soon as destruction starts, so a concurrent
+     * `store.session(id)` builds a fresh bundle instead of returning this
+     * one. Repeat calls return the same in-flight promise. Teardown
+     * failures are logged (warn), never thrown.
      */
     destroy(): Promise<void>
 }

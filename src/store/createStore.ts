@@ -236,6 +236,7 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
         )
     } as const)
     const sessions = new Map<string, WaStoreSession>()
+    const pendingSessionDestroys = new Set<Promise<void>>()
     let storeDestroyed = false
 
     return {
@@ -477,7 +478,7 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
 
             const teardownCaches = async (
                 target: ReturnType<typeof buildCaches>
-            ): Promise<void> => {
+            ): Promise<number> => {
                 const cleared = await Promise.allSettled([
                     target.retry.clear(),
                     target.groupMetadata.clear(),
@@ -501,13 +502,20 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                         sample: toError(failures[0].reason).message
                     })
                 }
+                return failures.length
             }
 
             const destroyCaches = (): Promise<void> => {
                 const run = cacheLifecycle.then(async () => {
                     if (sessionDestroyed) return
-                    await teardownCaches(caches)
+                    const failureCount = await teardownCaches(caches)
                     caches = buildCaches()
+                    if (failureCount > 0) {
+                        throw new Error(
+                            `cache reset finished with ${failureCount} teardown failure(s); ` +
+                                'fresh caches are in place but old persistent entries may remain'
+                        )
+                    }
                 })
                 cacheLifecycle = run.then(
                     () => undefined,
@@ -517,25 +525,28 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
             }
 
             const destroy = (): Promise<void> => {
-                destroyPromise ??= destroyInternal()
+                if (!destroyPromise) {
+                    const pending: Promise<void> = destroyInternal().finally(() =>
+                        pendingSessionDestroys.delete(pending)
+                    )
+                    destroyPromise = pending
+                    pendingSessionDestroys.add(pending)
+                }
                 return destroyPromise
             }
 
             const destroyInternal = async (): Promise<void> => {
                 sessionDestroyed = true
-                try {
-                    await cacheLifecycle
-                    await teardownCaches(caches)
-                    await destroyPersistentStores()
-                } finally {
-                    if (sessions.get(id) === storeSession) {
-                        sessions.delete(id)
-                    }
+                if (sessions.get(id) === storeSession) {
+                    sessions.delete(id)
                 }
+                await cacheLifecycle
+                await teardownCaches(caches)
+                await destroyPersistentStores()
             }
 
-            const destroyPersistentStores = (): Promise<unknown> =>
-                Promise.all([
+            const destroyPersistentStores = async (): Promise<void> => {
+                const results = await Promise.allSettled([
                     destroyIfSupported(authStore),
                     destroyIfSupported(signalStore),
                     destroyIfSupported(preKeyStore),
@@ -548,6 +559,18 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                     destroyIfSupported(contactStore),
                     destroyIfSupported(privacyTokenStore)
                 ])
+                const failures = results.filter(
+                    (result): result is PromiseRejectedResult => result.status === 'rejected'
+                )
+                if (failures.length > 0) {
+                    storeLogger?.warn('persistent store teardown had failures', {
+                        sessionId: id,
+                        droppedCount: failures.length,
+                        totalExpected: results.length,
+                        sample: toError(failures[0].reason).message
+                    })
+                }
+            }
 
             const storeSession: WaStoreSession = {
                 auth: authStore,
@@ -592,6 +615,7 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
             const list = Array.from(sessions.values())
             sessions.clear()
             await Promise.all(list.map((s) => s.destroy()))
+            await Promise.all(Array.from(pendingSessionDestroys))
             const uniqueBackends = new Set(Object.values(backends))
             await Promise.all(Array.from(uniqueBackends, (backend) => destroyIfSupported(backend)))
         }

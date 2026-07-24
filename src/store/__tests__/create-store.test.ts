@@ -127,14 +127,15 @@ test('createStore session destroy releases the id for a fresh reacquire', async 
 
     const firstDestroy = first.destroy()
     assert.strictEqual(first.destroy(), firstDestroy)
+
+    const second = store.session('repair')
+    assert.notStrictEqual(second, first)
+
     await firstDestroy
     await assert.rejects(
         first.senderKey.getGroupSenderKeyList('123@g.us'),
         /shared-exclusive gate is closed/
     )
-
-    const second = store.session('repair')
-    assert.notStrictEqual(second, first)
     await second.senderKey.getGroupSenderKeyList('123@g.us')
     await second.deviceList.getUserDevicesBatch(['555@s.whatsapp.net'])
     await second.groupMetadata.getGroupMetadata('123@g.us')
@@ -169,6 +170,54 @@ test('createStore destroyCaches keeps the session bundle usable', async () => {
     await session.senderKey.getGroupSenderKeyList('123@g.us')
 
     await store.destroy()
+})
+
+test('createStore destroyCaches rejects on teardown failure but still swaps fresh caches', async () => {
+    let clearCalls = 0
+    const failingBackend = {
+        ...mockAuthBackend,
+        caches: {
+            ...mockAuthBackend.caches,
+            groupMetadata: () => ({
+                upsertGroupMetadata: async () => {},
+                getGroupMetadata: async () => null,
+                deleteGroupMetadata: async () => 0,
+                cleanupExpired: async () => 0,
+                clear: async () => {
+                    clearCalls += 1
+                    throw new Error('clear boom')
+                }
+            })
+        }
+    }
+    const store = createStore({
+        backends: { failing: failingBackend },
+        providers: {
+            auth: 'memory',
+            signal: 'memory',
+            preKey: 'memory',
+            session: 'memory',
+            identity: 'memory',
+            senderKey: 'memory',
+            appState: 'memory',
+            privacyToken: 'memory',
+            messages: 'none',
+            threads: 'none',
+            contacts: 'none'
+        },
+        cacheProviders: { groupMetadata: 'failing' }
+    })
+    const session = store.session('x')
+
+    await assert.rejects(session.destroyCaches(), /teardown failure/)
+    assert.equal(clearCalls, 1)
+
+    assert.strictEqual(store.session('x'), session)
+    assert.equal(await session.groupMetadata.getGroupMetadata('123@g.us'), null)
+    await session.retry.clear()
+
+    await store.destroy()
+    assert.equal(clearCalls, 2)
 })
 
 test('createStore defaults the deviceList cache to memory when cacheProviders is unset', async () => {
