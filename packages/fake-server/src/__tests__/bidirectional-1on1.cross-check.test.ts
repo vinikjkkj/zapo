@@ -55,9 +55,22 @@ test('bidirectional 1:1 ping-pong (peer\u2192client\u2192peer\u2192client\u2192p
 
     const peerJid = '5511777777777@s.whatsapp.net'
 
+    const offlineIbPromise = new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('ib.offline timeout')), 60_000)
+        const listener: WaClientEventMap['debug_notification'] = (event) => {
+            if (event.notificationType === 'ib.offline') {
+                clearTimeout(timer)
+                client.off('debug_notification', listener)
+                resolve()
+            }
+        }
+        client.on('debug_notification', listener)
+    })
+
     try {
         await client.connect()
         const pipeline = await server.waitForAuthenticatedPipeline()
+        assert.equal(pipeline.clientPayload?.kind, 'registration')
         await server.runPairing(
             pipeline,
             { deviceJid: '5511999999999:1@s.whatsapp.net' },
@@ -67,6 +80,10 @@ test('bidirectional 1:1 ping-pong (peer\u2192client\u2192peer\u2192client\u2192p
         const pipelineAfterPairPromise = server.waitForNextAuthenticatedPipeline()
         await pairedPromise
         const pipelineAfterPair = await pipelineAfterPairPromise
+        assert.equal(pipelineAfterPair.clientPayload?.kind, 'login')
+
+        // The post-login offline drain bulletin must reach the client.
+        await offlineIbPromise
 
         const peer = await server.createFakePeer({ jid: peerJid }, pipelineAfterPair)
         await server.triggerPreKeyUpload(pipelineAfterPair)
@@ -78,6 +95,8 @@ test('bidirectional 1:1 ping-pong (peer\u2192client\u2192peer\u2192client\u2192p
         await peer.sendConversation('peer-to-client #1')
         const round1Event = await round1ReceivedByLib
         assert.equal(round1Event.message?.conversation, 'peer-to-client #1')
+        // FakePeer default ids must be WA-style hex: no '@', no separators.
+        assert.match(round1Event.key.id, /^3EB0[0-9A-F]+$/)
 
         const round2ReceivedByPeer = peer.expectMessage({ timeoutMs: 8_000 })
         await client.message.send(peerJid, { conversation: 'client-to-peer #1' })

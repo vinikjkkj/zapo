@@ -9,6 +9,7 @@ import {
 import { WaFakeMediaHttpsServer } from '../infra/WaFakeMediaHttpsServer'
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
+import type { BuildSuccessNodeInput } from '../protocol/auth/success-node'
 import type { BuildAbPropsResultInput } from '../protocol/iq/abprops'
 import {
     type BuildServerSyncNotificationInput,
@@ -67,6 +68,17 @@ export interface FakeWaServerOptions {
     readonly host?: string
     readonly port?: number
     readonly path?: string
+    /**
+     * Attributes stamped on the post-handshake `<success/>` node of every
+     * authenticated connection (lid, display name, props versions, ...).
+     */
+    readonly successNodeAttributes?: BuildSuccessNodeInput
+    /**
+     * Register the built-in IQ auto-handlers that answer everything the lib
+     * emits during normal operation. Default `true`; pass `false` to start
+     * with an empty router and wire every response via `registerIqHandler`.
+     */
+    readonly defaultIqHandlers?: boolean
 }
 
 export interface FakeWaServerNoiseRootCa {
@@ -130,10 +142,11 @@ export class FakeWaServer {
     private readonly authenticatedListeners = new Set<AuthenticatedPipelineListener>()
     private readonly inboundStanzaListeners = new Set<(node: BinaryNode) => void>()
     private readonly capturedStanzaListeners = new Set<(node: BinaryNode) => void>()
+    private readonly options: FakeWaServerOptions
     private rootCa: FakeNoiseRootCa | null = null
     private serverStaticKeyPair: SignalKeyPair | null = null
     private listenInfo: WaFakeWsServerListenInfo | null = null
-    private pipelineListener: FakeWaServerPipelineListener | null = null
+    private readonly pipelineListeners = new Set<FakeWaServerPipelineListener>()
     private rejectMode: { readonly code: number; readonly reason: string } | null = null
     private readonly mediaStore = new FakeMediaStore()
     private readonly mediaHttpsServer = new WaFakeMediaHttpsServer()
@@ -142,9 +155,12 @@ export class FakeWaServer {
     private cachedMediaProxyAgent: HttpsAgent | null = null
 
     public constructor(options: FakeWaServerOptions = {}) {
+        this.options = options
         this.wsServer = new WaFakeWsServer(options)
         this.wsServer.onConnection((connection) => this.handleConnection(connection))
-        registerDefaultIqHandlers(this.iqRouter, this.buildIqHandlerDeps())
+        if (options.defaultIqHandlers !== false) {
+            registerDefaultIqHandlers(this.iqRouter, this.buildIqHandlerDeps())
+        }
     }
 
     private buildIqHandlerDeps(): IqHandlerDeps {
@@ -212,6 +228,7 @@ export class FakeWaServer {
                 }
             },
             capturePreKeyBundle: (bundle) => preKey.captureBundle(bundle),
+            countServerPreKeys: () => preKey.preKeysAvailable(),
             consumeOutboundAppStatePatches: (iq) => appState.consumeOutboundAppStatePatches(iq),
             get appStateCollectionProviders() {
                 return appState.appStateCollectionProviders
@@ -685,8 +702,15 @@ export class FakeWaServer {
         return { publicKey: root.publicKey, serial: root.serial }
     }
 
-    public onPipeline(listener: FakeWaServerPipelineListener): void {
-        this.pipelineListener = listener
+    /**
+     * Subscribes to every new connection pipeline (pre-auth). Listeners
+     * fan out; returns an unsubscribe function.
+     */
+    public onPipeline(listener: FakeWaServerPipelineListener): () => void {
+        this.pipelineListeners.add(listener)
+        return () => {
+            this.pipelineListeners.delete(listener)
+        }
     }
 
     public async listen(): Promise<void> {
@@ -730,7 +754,10 @@ export class FakeWaServer {
             connection,
             rootCa: this.rootCa,
             serverStaticKeyPair: this.serverStaticKeyPair,
-            iqRouter: this.iqRouter
+            iqRouter: this.iqRouter,
+            ...(this.options.successNodeAttributes !== undefined
+                ? { successNodeAttributes: this.options.successNodeAttributes }
+                : {})
         })
         this.pipelines.add(pipeline)
         pipeline.setEvents({
@@ -742,7 +769,9 @@ export class FakeWaServer {
             onStanza: (node) => this.handleCapturedStanza(node),
             onClose: () => this.pipelines.delete(pipeline)
         })
-        this.pipelineListener?.(pipeline)
+        for (const listener of this.pipelineListeners) {
+            listener(pipeline)
+        }
     }
 
     private handleCapturedStanza(node: BinaryNode): void {

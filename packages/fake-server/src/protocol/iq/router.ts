@@ -11,7 +11,13 @@ export interface WaFakeIqMatcher {
     readonly childTag?: string
 }
 
-export type WaFakeIqResponder = (iq: BinaryNode) => BinaryNode | Promise<BinaryNode>
+/**
+ * Returns the response stanza, or `null` to fall through: the router keeps
+ * scanning lower-priority handlers as if this one had not matched. Lets a
+ * high-priority handler observe an IQ (capture, log, assert) while the
+ * default handler still answers it.
+ */
+export type WaFakeIqResponder = (iq: BinaryNode) => BinaryNode | null | Promise<BinaryNode | null>
 
 export interface WaFakeIqHandler {
     readonly matcher: WaFakeIqMatcher
@@ -53,12 +59,18 @@ export class WaFakeIqRouter {
         }
         for (const handler of this.highPriorityHandlers) {
             if (matches(iq, handler.matcher)) {
-                return handler.respond(iq)
+                const response = await handler.respond(iq)
+                if (response !== null) {
+                    return response
+                }
             }
         }
         for (const handler of this.handlers) {
             if (matches(iq, handler.matcher)) {
-                return handler.respond(iq)
+                const response = await handler.respond(iq)
+                if (response !== null) {
+                    return response
+                }
             }
         }
         this.events.onUnhandled?.(iq)

@@ -62,6 +62,7 @@ export class WaFakeConnectionPipeline {
     private events: WaFakeConnectionPipelineEvents = {}
     private state: State = { kind: 'awaiting_prologue' }
     private chain: Promise<void> = Promise.resolve()
+    private authenticatedPayload: ParsedClientPayload | null = null
 
     public constructor(config: WaFakeConnectionPipelineConfig) {
         this.config = config
@@ -83,6 +84,11 @@ export class WaFakeConnectionPipeline {
 
     public isAuthenticated(): boolean {
         return this.state.kind === 'authenticated'
+    }
+
+    /** Parsed ClientPayload of the authenticated connection; null before auth. */
+    public get clientPayload(): ParsedClientPayload | null {
+        return this.authenticatedPayload
     }
 
     public async sendStanza(node: BinaryNode): Promise<void> {
@@ -235,15 +241,7 @@ export class WaFakeConnectionPipeline {
 
         this.frameSocket.sendFrame(serverHello)
 
-        const keys = handshake.finish()
-        const transport = new WaFakeTransport({
-            recvKey: keys.recvKey,
-            sendKey: keys.sendKey
-        })
-        this.state = { kind: 'authenticated', transport }
-
-        await this.sendStanza(buildSuccessNode(this.config.successNodeAttributes))
-        this.events.onAuthenticated?.({ clientPayload, clientStaticKey })
+        await this.completeAuthentication(handshake, clientPayload, clientStaticKey)
     }
 
     private async handleClientFinish(
@@ -263,14 +261,33 @@ export class WaFakeConnectionPipeline {
         const clientPayloadBytes = handshake.decrypt(clientFinish.payload)
         const clientPayload = parseClientPayload(clientPayloadBytes)
 
+        await this.completeAuthentication(handshake, clientPayload, clientStaticKey)
+    }
+
+    private async completeAuthentication(
+        handshake: WaFakeNoiseHandshake,
+        clientPayload: ParsedClientPayload,
+        clientStaticKey: Uint8Array
+    ): Promise<void> {
         const keys = handshake.finish()
         const transport = new WaFakeTransport({
             recvKey: keys.recvKey,
             sendKey: keys.sendKey
         })
         this.state = { kind: 'authenticated', transport }
+        this.authenticatedPayload = clientPayload
 
         await this.sendStanza(buildSuccessNode(this.config.successNodeAttributes))
+        if (clientPayload.kind === 'login') {
+            // Real WA drains offline messages after login and closes the
+            // drain with this bulletin. Baileys-family clients buffer their
+            // events until it arrives, so send it eagerly with count=0.
+            await this.sendStanza({
+                tag: 'ib',
+                attrs: { from: 's.whatsapp.net' },
+                content: [{ tag: 'offline', attrs: { count: '0' } }]
+            })
+        }
         this.events.onAuthenticated?.({ clientPayload, clientStaticKey })
     }
 
