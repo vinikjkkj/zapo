@@ -418,6 +418,14 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
      */
     readonly ephemeralSettingTimestamp?: number
     /**
+     * Forces the `contextInfo.disappearingMode.trigger` value on outgoing
+     * ephemeral messages. The auto-inject sets this to `1` (`CHAT_SETTING`)
+     * automatically when it resolves an ephemeral send, so you only need to set
+     * this when you want a non-default trigger. Leave it undefined to use the
+     * runtime default.
+     */
+    readonly disappearingModeTrigger?: 1 | 2 | 3 | 4 | 5
+    /**
      * Skip the automatic disappearing-message injection applied to messages sent
      * into chats with disappearing-mode on.
      *

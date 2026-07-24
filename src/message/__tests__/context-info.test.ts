@@ -250,6 +250,20 @@ test('buildContextInfoProto omits ephemeralSettingTimestamp when absent', () => 
     assert.equal(proto.ephemeralSettingTimestamp, undefined)
 })
 
+test('buildContextInfoProto maps disappearingModeTrigger to proto field 32', () => {
+    const proto = buildContextInfoProto({
+        expirationSeconds: 86_400,
+        ephemeralSettingTimestamp: 1_751_808_692,
+        disappearingModeTrigger: 1
+    })
+    assert.deepEqual(proto.disappearingMode, { trigger: 1 })
+})
+
+test('buildContextInfoProto omits disappearingMode when trigger absent', () => {
+    const proto = buildContextInfoProto({ expirationSeconds: 86_400 })
+    assert.equal(proto.disappearingMode, undefined)
+})
+
 test('resolveSendContextInfo merges content-level + options-level + quote + forward + mentions', () => {
     const result = resolveSendContextInfo({
         contentLevel: { isSpoiler: true },

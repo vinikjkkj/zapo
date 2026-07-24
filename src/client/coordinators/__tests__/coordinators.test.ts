@@ -1635,6 +1635,7 @@ test('message dispatch injects ephemeral expiration + timestamp for 1:1 chats', 
     assert.ok(ctx)
     assert.equal(ctx.expiration, 86_400)
     assert.equal(ctx.ephemeralSettingTimestamp, 1_751_808_692)
+    assert.deepEqual(ctx.disappearingMode, { trigger: 1 })
 })
 
 test('message dispatch injects ephemeral expiration only for group chats', async () => {
@@ -1669,6 +1670,7 @@ test('message dispatch injects ephemeral expiration only for group chats', async
     assert.ok(ctx)
     assert.equal(ctx.expiration, 60_480)
     assert.equal(ctx.ephemeralSettingTimestamp, undefined)
+    assert.deepEqual(ctx.disappearingMode, { trigger: 1 })
     await groupMetadataStore.destroy()
 })
 

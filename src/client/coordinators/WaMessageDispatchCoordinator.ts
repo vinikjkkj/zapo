@@ -282,7 +282,10 @@ export class WaMessageDispatchCoordinator {
             if (!cached || cached <= 0) {
                 return {}
             }
-            return { expirationSeconds: cached }
+            return {
+                expirationSeconds: cached,
+                disappearingModeTrigger: 1
+            }
         }
 
         const thread = await this.deps.threadStore.getByJid(recipientJid)
@@ -300,6 +303,7 @@ export class WaMessageDispatchCoordinator {
                 : undefined
         return {
             expirationSeconds: expiration,
+            disappearingModeTrigger: 1,
             ...(resolvedTimestamp !== undefined
                 ? { ephemeralSettingTimestamp: resolvedTimestamp }
                 : {})

@@ -17,6 +17,7 @@ import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordin
 import type { WaProfileCoordinator } from '@client/coordinators/WaProfileCoordinator'
 import type { WaStatusCoordinator } from '@client/coordinators/WaStatusCoordinator'
 import { createIgnoreKeyFilter, validateIgnoreKey } from '@client/messaging/ignore-key'
+import { persistIncomingEphemeralSetting } from '@client/persistence/ephemeral-setting'
 import { runGroupHistoryBundle } from '@client/persistence/group-history'
 import { runHistorySyncNotification } from '@client/persistence/history-sync'
 import { persistIncomingMailboxEntities } from '@client/persistence/mailbox'
@@ -375,6 +376,16 @@ class WaClientImpl extends EventEmitter {
                 } else if (sendHistSyncReceipt) {
                     await sendHistSyncReceipt()
                 }
+                return
+            }
+
+            if (protocolType === proto.Message.ProtocolMessage.Type.EPHEMERAL_SETTING) {
+                persistIncomingEphemeralSetting({
+                    logger: this.logger,
+                    writeBehind: this.writeBehind,
+                    event,
+                    protocolMessage
+                })
                 return
             }
 
