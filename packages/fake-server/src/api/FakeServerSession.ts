@@ -3,6 +3,7 @@
 import type { BuildAbPropsResultInput } from '../protocol/iq/abprops'
 import type { ParsedPairDeviceUpload } from '../protocol/iq/companion-host'
 import {
+    type WaFakeIqContext,
     type WaFakeIqHandler,
     type WaFakeIqMatcher,
     type WaFakeIqResponder,
@@ -71,6 +72,14 @@ export interface FakeServerSessionHost {
     completeCompanionPairing(
         input: CompleteCompanionPairingInput
     ): Promise<CompletedCompanionPairing | null>
+    /**
+     * Routes one link-code stage to the other client in the handshake, or
+     * resolves `null` when the stanza is not a stage this server relays.
+     */
+    relayLinkCodeStage(
+        iq: BinaryNode,
+        context: WaFakeIqContext | undefined
+    ): Promise<BinaryNode | null>
 }
 
 export interface CompleteCompanionPairingInput {
@@ -126,8 +135,8 @@ export class FakeServerSession {
         return this.iqRouter.register(handler, { priority: 'high' })
     }
 
-    public routeIq(iq: BinaryNode): Promise<BinaryNode | null> {
-        return this.iqRouter.route(iq)
+    public routeIq(iq: BinaryNode, context?: WaFakeIqContext): Promise<BinaryNode | null> {
+        return this.iqRouter.route(iq, context)
     }
 
     public handleCapturedStanza(node: BinaryNode): void {
@@ -337,6 +346,7 @@ export class FakeServerSession {
             get mobilePrimary() {
                 return companionHost.primary
             },
+            relayLinkCodeStage: (iq, context) => host.relayLinkCodeStage(iq, context),
             linkCompanionDevice: (upload) => this.linkCompanionDevice(host, upload),
             revokeCompanionDevices: (deviceJids) => this.revokeCompanionDevices(deviceJids),
             recordKeyIndexList: (bytes, timestampSeconds) =>

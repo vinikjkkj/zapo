@@ -4,33 +4,12 @@ import test from 'node:test'
 import type { WaClientEventMap } from 'zapo-js'
 
 import { FakeWaServer } from '../api/FakeWaServer'
-import type { WaFakeConnectionPipeline } from '../infra/WaFakeConnectionPipeline'
 
+import { waitForCompanionPipeline } from './helpers/companion-pipeline'
 import { createZapoClient } from './helpers/zapo-client'
 import { createZapoMobileClient } from './helpers/zapo-mobile-client'
 
 const PHONE = '5511970001111'
-
-/** Resolves with the connection of the next client that logs in unregistered. */
-function waitForCompanionPipeline(
-    server: FakeWaServer,
-    timeoutMs = 30_000
-): Promise<WaFakeConnectionPipeline> {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(
-            () => reject(new Error('companion pipeline timed out')),
-            timeoutMs
-        )
-        const unregister = server.onAuthenticatedPipeline((pipeline) => {
-            if (pipeline.clientPayload?.kind !== 'registration') {
-                return
-            }
-            clearTimeout(timer)
-            unregister()
-            resolve(pipeline)
-        })
-    })
-}
 
 test('mobile primary links a real companion client end to end', async () => {
     const server = await FakeWaServer.start({ tcp: true })

@@ -49,7 +49,12 @@ import {
     parseSetProfilePictureIq,
     parseSetStatusIq
 } from '../protocol/iq/profile'
-import { buildIqError, buildIqResult, type WaFakeIqRouter } from '../protocol/iq/router'
+import {
+    buildIqError,
+    buildIqResult,
+    type WaFakeIqContext,
+    type WaFakeIqRouter
+} from '../protocol/iq/router'
 import { buildUsyncDevicesResult } from '../protocol/iq/usync'
 import { type ClientPreKeyBundle, parsePreKeyUploadIq } from '../protocol/signal/prekey-upload'
 import type { FakeMobilePrimaryIdentity } from '../state/fake-companion-host'
@@ -107,6 +112,11 @@ export interface IqHandlerDeps {
     /** Unlinks the given companions, or every one of them when passed `null`. */
     revokeCompanionDevices(deviceJids: readonly string[] | null): readonly string[]
     recordKeyIndexList(bytes: Uint8Array, timestampSeconds: number): void
+    /** Routes a link-code stage to the other client, or `null` to fall through. */
+    relayLinkCodeStage(
+        iq: BinaryNode,
+        context: WaFakeIqContext | undefined
+    ): Promise<BinaryNode | null>
 }
 
 export interface LinkedCompanionResult {
@@ -345,6 +355,12 @@ export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandle
         label: 'signed-prekey-rotate',
         matcher: { xmlns: 'encrypt', type: 'set', childTag: 'rotate' },
         respond: (iq) => buildIqResult(iq)
+    })
+
+    router.register({
+        label: 'link-code-companion-reg',
+        matcher: { xmlns: 'md', type: 'set', childTag: 'link_code_companion_reg' },
+        respond: (iq, context) => deps.relayLinkCodeStage(iq, context)
     })
 
     router.register({

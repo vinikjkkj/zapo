@@ -19,10 +19,21 @@ import {
     type FakeAppStateCollectionPayload
 } from '../protocol/iq/appstate-sync'
 import type { FakeBusinessProfile } from '../protocol/iq/business'
+import {
+    buildCompanionHelloResultContent,
+    buildLinkCodeNotification,
+    parseLinkCodeStanza
+} from '../protocol/iq/link-code'
 import type { FakePrivacyCategoryName, FakePrivacySettingsState } from '../protocol/iq/privacy'
 import type { FakePrivacyTokenIssue } from '../protocol/iq/privacy-token'
 import type { FakeProfilePictureResult } from '../protocol/iq/profile'
-import type { WaFakeIqMatcher, WaFakeIqResponder } from '../protocol/iq/router'
+import {
+    buildIqError,
+    buildIqResult,
+    type WaFakeIqContext,
+    type WaFakeIqMatcher,
+    type WaFakeIqResponder
+} from '../protocol/iq/router'
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
 import type { FakeCompanionHostState } from '../state/fake-companion-host'
 import {
@@ -174,6 +185,14 @@ export class FakeWaServer {
     private readonly tcpServer: WaFakeTcpServer | null
     private tcpListenInfo: WaFakeTcpServerListenInfo | null = null
     private readonly pendingCompanionOffers = new Map<string, WaFakeConnectionPipeline>()
+    private readonly mobilePrimaryPipelines = new Map<string, WaFakeConnectionPipeline>()
+    private readonly linkCodeSessions = new Map<
+        string,
+        {
+            readonly companion: WaFakeConnectionPipeline
+            readonly primary: WaFakeConnectionPipeline
+        }
+    >()
     private readonly pipelineListeners = new Set<FakeWaServerPipelineListener>()
     private rejectMode: { readonly code: number; readonly reason: string } | null = null
     private readonly mediaStore = new FakeMediaStore()
@@ -233,7 +252,8 @@ export class FakeWaServer {
             id,
             {
                 requireMediaHttpsInfo: () => this.requireMediaHttpsInfo(),
-                completeCompanionPairing: (input) => this.completeCompanionPairing(input)
+                completeCompanionPairing: (input) => this.completeCompanionPairing(input),
+                relayLinkCodeStage: (iq, context) => this.handleLinkCodeStage(iq, context)
             },
             { defaultIqHandlers: this.options.defaultIqHandlers !== false }
         )
@@ -734,7 +754,8 @@ export class FakeWaServer {
             connection,
             rootCa: this.rootCa,
             serverStaticKeyPair: this.serverStaticKeyPair,
-            routeIq: (node: BinaryNode) => this.sessionFor(pipeline).routeIq(node),
+            routeIq: (node: BinaryNode) =>
+                this.sessionFor(pipeline).routeIq(node, { connection: pipeline }),
             ...(this.options.successNodeAttributes !== undefined
                 ? { successNodeAttributes: this.options.successNodeAttributes }
                 : {})
@@ -754,7 +775,7 @@ export class FakeWaServer {
                 }
             },
             onStanza: (node: BinaryNode) => this.sessionFor(pipeline).handleCapturedStanza(node),
-            onClose: () => this.pipelines.delete(pipeline)
+            onClose: () => this.forgetPipeline(pipeline)
         })
         for (const listener of this.pipelineListeners) {
             try {
@@ -781,6 +802,26 @@ export class FakeWaServer {
         this.pipelineSessions.set(pipeline, this.session(id))
     }
 
+    /** Drops every reference to a closed connection so a relay never targets it. */
+    private forgetPipeline(pipeline: WaFakeConnectionPipeline): void {
+        this.pipelines.delete(pipeline)
+        for (const [ref, offered] of this.pendingCompanionOffers) {
+            if (offered === pipeline) {
+                this.pendingCompanionOffers.delete(ref)
+            }
+        }
+        for (const [jid, primary] of this.mobilePrimaryPipelines) {
+            if (primary === pipeline) {
+                this.mobilePrimaryPipelines.delete(jid)
+            }
+        }
+        for (const [ref, session] of this.linkCodeSessions) {
+            if (session.companion === pipeline || session.primary === pipeline) {
+                this.linkCodeSessions.delete(ref)
+            }
+        }
+    }
+
     /**
      * Records a phone login as the session's account owner. Everything on the
      * companion-host path keys off it: device jids are minted under its number,
@@ -795,6 +836,7 @@ export class FakeWaServer {
         const jid = `${clientPayload.username}@${HOST_DOMAIN}`
         session.companionHost.bindPrimary({ username: clientPayload.username, jid })
         session.registries.registerDeviceId(jid, 0)
+        this.mobilePrimaryPipelines.set(jid, pipeline)
     }
 
     /**
@@ -822,6 +864,56 @@ export class FakeWaServer {
         }
         await pipeline.sendStanza(buildPairDeviceIq({ refs }))
         return refs
+    }
+
+    /**
+     * Relays one link-code stage between the two clients running the pairing
+     * handshake. `companion_hello` mints the ref that ties the stages together
+     * and registers it as a pairing offer, so the primary's later `pair-device`
+     * upload lands on the same companion connection as the QR flow.
+     */
+    private async handleLinkCodeStage(
+        iq: BinaryNode,
+        context: WaFakeIqContext | undefined
+    ): Promise<BinaryNode | null> {
+        const parsed = parseLinkCodeStanza(iq)
+        if (!parsed || !context) {
+            return null
+        }
+        const sender = context.connection as WaFakeConnectionPipeline
+        if (parsed.stage === 'companion_hello') {
+            const primary = parsed.phoneJid
+                ? this.mobilePrimaryPipelines.get(parsed.phoneJid)
+                : undefined
+            if (!primary) {
+                return buildIqError(iq, { code: 404, text: 'primary-not-connected' })
+            }
+            const ref = bytesToBase64UrlSafe(await randomBytesAsync(PAIR_DEVICE_REF_BYTES))
+            this.linkCodeSessions.set(ref, { companion: sender, primary })
+            this.pendingCompanionOffers.set(ref, sender)
+            await primary.sendStanza(
+                buildLinkCodeNotification({
+                    stage: 'companion_hello',
+                    ref,
+                    children: parsed.children
+                })
+            )
+            return buildIqResult(iq, { content: buildCompanionHelloResultContent(ref) })
+        }
+
+        const session = parsed.ref ? this.linkCodeSessions.get(parsed.ref) : undefined
+        if (!session || !parsed.ref) {
+            return buildIqError(iq, { code: 404, text: 'unknown-pairing-ref' })
+        }
+        const target = parsed.stage === 'primary_hello' ? session.companion : session.primary
+        await target.sendStanza(
+            buildLinkCodeNotification({
+                stage: parsed.stage,
+                ref: parsed.ref,
+                children: parsed.children
+            })
+        )
+        return buildIqResult(iq)
     }
 
     /**

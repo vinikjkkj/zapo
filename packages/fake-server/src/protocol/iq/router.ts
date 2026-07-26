@@ -1,8 +1,23 @@
 /** IQ matcher/dispatcher used by the fake server. */
 
 import type { BinaryNode } from '../../transport/codec'
+import type { ParsedClientPayload } from '../auth/client-payload-validate'
 
 export type WaFakeIqType = 'get' | 'set'
+
+/**
+ * The connection an IQ arrived on. Handlers that relay between two clients
+ * (companion pairing, link-code) need to know who is asking; `WaFakeConnection
+ * Pipeline` satisfies this structurally.
+ */
+export interface WaFakeIqConnection {
+    sendStanza(node: BinaryNode): Promise<void>
+    readonly clientPayload: ParsedClientPayload | null
+}
+
+export interface WaFakeIqContext {
+    readonly connection: WaFakeIqConnection
+}
 
 export interface WaFakeIqMatcher {
     readonly id?: string
@@ -17,7 +32,10 @@ export interface WaFakeIqMatcher {
  * high-priority handler observe an IQ (capture, log, assert) while the
  * default handler still answers it.
  */
-export type WaFakeIqResponder = (iq: BinaryNode) => BinaryNode | null | Promise<BinaryNode | null>
+export type WaFakeIqResponder = (
+    iq: BinaryNode,
+    context?: WaFakeIqContext
+) => BinaryNode | null | Promise<BinaryNode | null>
 
 export interface WaFakeIqHandler {
     readonly matcher: WaFakeIqMatcher
@@ -53,13 +71,13 @@ export class WaFakeIqRouter {
         this.events = events
     }
 
-    public async route(iq: BinaryNode): Promise<BinaryNode | null> {
+    public async route(iq: BinaryNode, context?: WaFakeIqContext): Promise<BinaryNode | null> {
         if (iq.tag !== 'iq') {
             return null
         }
         for (const handler of this.highPriorityHandlers) {
             if (matches(iq, handler.matcher)) {
-                const response = await handler.respond(iq)
+                const response = await handler.respond(iq, context)
                 if (response !== null) {
                     return response
                 }
@@ -67,7 +85,7 @@ export class WaFakeIqRouter {
         }
         for (const handler of this.handlers) {
             if (matches(iq, handler.matcher)) {
-                const response = await handler.respond(iq)
+                const response = await handler.respond(iq, context)
                 if (response !== null) {
                     return response
                 }

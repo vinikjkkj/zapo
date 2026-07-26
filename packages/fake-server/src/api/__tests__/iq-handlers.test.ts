@@ -41,6 +41,7 @@ function createRouterWithDefaults(overrides: Partial<IqHandlerDeps> = {}): WaFak
         linkCompanionDevice: async () => null,
         revokeCompanionDevices: () => [],
         recordKeyIndexList: () => undefined,
+        relayLinkCodeStage: async () => null,
         ...overrides
     }
     registerDefaultIqHandlers(router, deps)
