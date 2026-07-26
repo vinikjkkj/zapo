@@ -34,6 +34,10 @@ import {
     type WaFakeIqMatcher,
     type WaFakeIqResponder
 } from '../protocol/iq/router'
+import {
+    buildAccountSyncDevicesNotification,
+    type FakeAccountDevice
+} from '../protocol/push/mobile-notification'
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
 import type { FakeCompanionHostState } from '../state/fake-companion-host'
 import {
@@ -445,6 +449,31 @@ export class FakeWaServer {
         input: BuildServerSyncNotificationInput
     ): Promise<void> {
         return this.sessionFor(pipeline).appStateSync.pushServerSyncNotification(pipeline, input)
+    }
+
+    /**
+     * Pushes the account's device set to a mobile primary as `account_sync`.
+     * Defaults to what this session tracks - the primary itself plus every
+     * companion it linked - so passing a shorter list is how a test tells the
+     * primary that a device disappeared while it was offline.
+     */
+    public async pushAccountSyncDevices(
+        pipeline: WaFakeConnectionPipeline,
+        options: { readonly devices?: readonly FakeAccountDevice[] } = {}
+    ): Promise<void> {
+        const session = this.sessionFor(pipeline)
+        const primary = session.companionHost.primary
+        if (!primary && !options.devices) {
+            throw new Error('cannot push account_sync: this session has no mobile primary')
+        }
+        const devices = options.devices ?? [
+            { deviceJid: primary!.jid, keyIndex: 0 },
+            ...session.companionHost.linkedCompanions().map((companion) => ({
+                deviceJid: companion.deviceJid,
+                keyIndex: companion.keyIndex
+            }))
+        ]
+        await pipeline.sendStanza(buildAccountSyncDevicesNotification({ devices }))
     }
 
     public onAuthenticatedPipeline(listener: AuthenticatedPipelineListener): () => void {

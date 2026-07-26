@@ -1,3 +1,5 @@
+export { createFakeMobilePrimary, seedFakeMobilePrimary } from './api/FakeMobilePrimary'
+export type { FakeMobilePrimary, SeedFakeMobilePrimaryOptions } from './api/FakeMobilePrimary'
 export { FakePairingDriver } from './api/FakePairingDriver'
 export type {
     CompanionPairingMaterial,
@@ -28,14 +30,72 @@ export type {
 export { IqExpectation, Scenario } from './api/Scenario'
 export type { AuthenticatedPipelineListener, ScenarioServer } from './api/Scenario'
 export { WaFakeConnection } from './infra/WaFakeConnection'
-export type { WaFakeConnectionHandlers, WaFakeConnectionState } from './infra/WaFakeConnection'
 export type {
+    WaFakeConnectionHandlers,
+    WaFakeConnectionState,
+    WaFakeSocketEvents,
+    WaFakeSocketLike
+} from './infra/WaFakeConnection'
+export { WaFakeTcpServer } from './infra/WaFakeTcpServer'
+export type { WaFakeTcpServerListenInfo, WaFakeTcpServerOptions } from './infra/WaFakeTcpServer'
+export { createTcpSocketAdapter, createWebSocketAdapter } from './infra/socket-adapters'
+export {
+    ClientPayloadValidationError,
+    parseClientPayload
+} from './protocol/auth/client-payload-validate'
+export type {
+    ClientPayloadFlavor,
+    LoginPayload,
+    MobileLoginDetails,
+    ParsedClientPayload,
+    RegistrationPayload
+} from './protocol/auth/client-payload-validate'
+export type {
+    WaFakeIqConnection,
+    WaFakeIqContext,
     WaFakeIqHandler,
     WaFakeIqMatcher,
     WaFakeIqResponder,
     WaFakeIqRouterEvents,
     WaFakeIqType
 } from './protocol/iq/router'
+export {
+    parseKeyIndexListPublish,
+    parsePairDeviceUpload,
+    parseRemoveCompanionDevice
+} from './protocol/iq/companion-host'
+export type {
+    ParsedKeyIndexListPublish,
+    ParsedPairDeviceUpload,
+    ParsedRemoveCompanionDevice
+} from './protocol/iq/companion-host'
+export {
+    buildCompanionHelloResultContent,
+    buildLinkCodeNotification,
+    parseLinkCodeStanza
+} from './protocol/iq/link-code'
+export type {
+    BuildLinkCodeNotificationInput,
+    LinkCodeStage,
+    ParsedLinkCodeStanza
+} from './protocol/iq/link-code'
+export {
+    buildAccountSyncDevicesNotification,
+    buildAccountTakeoverNotice,
+    buildRegistrationCodeNotification
+} from './protocol/push/mobile-notification'
+export type {
+    BuildAccountSyncDevicesInput,
+    BuildAccountTakeoverNoticeInput,
+    BuildRegistrationCodeNotificationInput,
+    FakeAccountDevice
+} from './protocol/push/mobile-notification'
+export { FakeCompanionHostState, readCompanionKeyIndex } from './state/fake-companion-host'
+export type {
+    FakeLinkedCompanion,
+    FakeMobilePrimaryIdentity,
+    FakePublishedKeyIndexList
+} from './state/fake-companion-host'
 export {
     buildAppStateSyncFullResult,
     buildAppStateSyncResult,

@@ -1,6 +1,10 @@
 # @zapo-js/fake-server
 
-In-process fake WhatsApp Web server that drives the real `zapo-js` `WaClient` end-to-end - full Noise XX/IK handshake, QR pairing, Signal Protocol (X3DH + Double Ratchet), SenderKey for groups, media upload/download over self-signed HTTPS, app-state sync - all without touching WhatsApp servers.
+In-process fake WhatsApp server that drives the real `zapo-js` `WaClient` end-to-end - full Noise XX/IK handshake, QR pairing, Signal Protocol (X3DH + Double Ratchet), SenderKey for groups, media upload/download over self-signed HTTPS, app-state sync - all without touching WhatsApp servers.
+
+It serves both transports: companions over WebSocket, and phones over the
+mobile TCP transport, including the companion-hosting side of a primary
+(pair-device, key-index list, pairing-code handshake).
 
 ## Install
 
@@ -37,9 +41,10 @@ await server.stop()
 ```text
 src/
 ├── api/                     # Public-facing API
-│   ├── FakeWaServer.ts      # Main facade – WS server, IQ router, registries, lifecycle
+│   ├── FakeWaServer.ts      # Main facade – WS/TCP servers, IQ router, registries, lifecycle
 │   ├── FakePeer.ts          # Simulated WhatsApp peer – Signal crypto, send/recv, groups
-│   ├── FakePairingDriver.ts # QR pairing flow orchestrator
+│   ├── FakePairingDriver.ts # QR pairing flow orchestrator (server plays the primary)
+│   ├── FakeMobilePrimary.ts # Registered mobile-primary credentials for a phone client
 │   └── Scenario.ts          # Declarative test scenario DSL
 ├── protocol/                # Protocol-layer builders, parsers, crypto
 │   ├── auth/                # Pairing, ADV identity, cert chain, client payload
@@ -48,8 +53,10 @@ src/
 │   ├── signal/              # Signal Protocol impl (Double Ratchet, SenderKey, prekeys)
 │   └── stream/              # Stream error builders
 ├── infra/                   # Transport infrastructure
-│   ├── WaFakeWsServer.ts    # Raw WebSocket server (ws)
-│   ├── WaFakeConnection.ts  # Per-connection WS wrapper
+│   ├── WaFakeWsServer.ts    # Raw WebSocket server (ws) – companion transport
+│   ├── WaFakeTcpServer.ts   # Raw TCP server – mobile transport
+│   ├── socket-adapters.ts   # Per-carrier socket adapters (WebSocket, TCP)
+│   ├── WaFakeConnection.ts  # Per-connection, carrier-agnostic wrapper
 │   ├── WaFakeConnectionPipeline.ts  # Noise handshake + authenticated frame transport
 │   ├── WaFakeFrameSocket.ts # Length-prefixed framing layer
 │   ├── WaFakeTransport.ts   # AES-GCM noise transport (post-handshake encrypt/decrypt)
@@ -148,35 +155,86 @@ Simulated WhatsApp peer with real Signal Protocol crypto:
 
 After pairing, the lib reconnects with IK handshake. Use `waitForNextAuthenticatedPipeline()` to capture the post-pair pipeline.
 
+### Mobile transport (phone clients)
+
+Start the server with `{ tcp: true }` to also listen for the WhatsApp Mobile
+transport, which dials `tcp://host:port` instead of upgrading to a WebSocket.
+Both listeners share one server identity, session model, and IQ router.
+
+Registration happens out of band (against WhatsApp's HTTP endpoints), so a
+phone session starts from credentials that already exist – seed them with
+`seedFakeMobilePrimary`:
+
+```ts
+const server = await FakeWaServer.start({ tcp: true })
+const store = createStore({})
+const primary = await seedFakeMobilePrimary(store, 'phone-session', {
+    phoneNumber: '5511999999999'
+})
+
+const client = new WaClient({
+    store,
+    sessionId: 'phone-session',
+    mobileTransport: { deviceInfo: primary.deviceInfo, tcpUrl: server.tcpUrl },
+    testHooks: { noiseRootCa: server.noiseRootCa }
+})
+```
+
+### Companion hosting (a phone links a companion)
+
+The inverse of `runPairing`: a real mobile-primary client signs the link and the
+server only relays. `offerCompanionPairing(pipeline)` pushes the refs a
+companion turns into its QR; when the primary uploads `pair-device` for one of
+them, the server mints the device jid, hands the signed identity to the
+companion as `pair-success`, and tracks the link.
+
+```ts
+await server.offerCompanionPairing(companionPipeline)
+const linked = await primary.mobile.linkCompanion(qrFromCompanion)
+server.companionHost.linkedCompanions() // [{ deviceJid, keyIndex, ... }]
+```
+
+The pairing-code flow works the same way end to end: the server mints the ref on
+`companion_hello` and relays `primary_hello` / `companion_finish` between the two
+clients, so `client.auth.requestPairingCode()` on one side and
+`client.mobile.linkCompanionByCode()` on the other complete a real handshake.
+
+`pushAccountSyncDevices(pipeline)` pushes the account's device set as an
+`account_sync` notification – pass a shorter list to tell a primary that a
+device disappeared while it was offline.
+
 ## IQ coverage
 
 Every outbound IQ the lib sends during normal operation is handled:
 
-| IQ                                                                               | Handler                       | State mutation                          |
-| -------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------- |
-| `abt` get                                                                        | `abprops`                     | Seedable via `setAbProps()`             |
-| `w:p` / `urn:xmpp:ping` get                                                      | `whatsapp-ping` / `xmpp-ping` | Ack                                     |
-| `encrypt` set                                                                    | `prekey-upload`               | Captures bundle, resets dispenser       |
-| `encrypt` get `<digest>`                                                         | `signal-digest`               | Returns 404 → forces upload             |
-| `encrypt` get `<count>`                                                          | `prekey-count`                | Serves remaining dispenser prekey count |
-| `encrypt` set `<rotate>`                                                         | `signed-prekey-rotate`        | Ack                                     |
-| `encrypt` get `<key>`                                                            | `prekey-fetch`                | Serves peer bundles from registry       |
-| `passive` set                                                                    | `passive-mode`                | Ack                                     |
-| `usync` get                                                                      | `usync`                       | Resolves device IDs from registry       |
-| `w:m` set `<media_conn>`                                                         | `media-conn`                  | Points lib at fake HTTPS server         |
-| `w:sync:app:state` set                                                           | `app-state-sync`              | Serves patches/snapshots from providers |
-| `w:g2` get `<query>`                                                             | `group-metadata`              | Serves from group registry              |
-| `w:g2` set `<create\|add\|remove\|promote\|demote\|subject\|description\|leave>` | `group-*`                     | Mutates group registry                  |
-| `privacy` get                                                                    | `privacy-get`                 | Serves settings + disallowed lists      |
-| `privacy` set `<privacy>`                                                        | `privacy-set`                 | Mutates privacy state                   |
-| `privacy` set `<tokens>`                                                         | `privacy-token-issue`         | Captures issued tokens                  |
-| `blocklist` get/set                                                              | `blocklist-*`                 | Mutates blocklist                       |
-| `w:profile:picture` get/set                                                      | `profile-picture-*`           | Mutates profile picture registry        |
-| `status` set                                                                     | `status-set`                  | Captures latest status                  |
-| `w:biz` get/set                                                                  | `business-profile-*`          | Serves/captures business profiles       |
-| `md` set `<remove-companion-device>`                                             | `remove-companion-device`     | Fires logout listeners                  |
-| `newsletter` get `<my_addons>`                                                   | `newsletter-my-addons`        | Ack                                     |
-| `urn:xmpp:whatsapp:dirty` set                                                    | `dirty-bits-clear`            | Captures cleared bits                   |
+| IQ                                                                               | Handler                       | State mutation                            |
+| -------------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------- |
+| `abt` get                                                                        | `abprops`                     | Seedable via `setAbProps()`               |
+| `w:p` / `urn:xmpp:ping` get                                                      | `whatsapp-ping` / `xmpp-ping` | Ack                                       |
+| `encrypt` set                                                                    | `prekey-upload`               | Captures bundle, resets dispenser         |
+| `encrypt` get `<digest>`                                                         | `signal-digest`               | Returns 404 → forces upload               |
+| `encrypt` get `<count>`                                                          | `prekey-count`                | Serves remaining dispenser prekey count   |
+| `encrypt` set `<rotate>`                                                         | `signed-prekey-rotate`        | Ack                                       |
+| `encrypt` get `<key>`                                                            | `prekey-fetch`                | Serves peer bundles from registry         |
+| `passive` set                                                                    | `passive-mode`                | Ack                                       |
+| `usync` get                                                                      | `usync`                       | Resolves device IDs from registry         |
+| `w:m` set `<media_conn>`                                                         | `media-conn`                  | Points lib at fake HTTPS server           |
+| `w:sync:app:state` set                                                           | `app-state-sync`              | Serves patches/snapshots from providers   |
+| `w:g2` get `<query>`                                                             | `group-metadata`              | Serves from group registry                |
+| `w:g2` set `<create\|add\|remove\|promote\|demote\|subject\|description\|leave>` | `group-*`                     | Mutates group registry                    |
+| `privacy` get                                                                    | `privacy-get`                 | Serves settings + disallowed lists        |
+| `privacy` set `<privacy>`                                                        | `privacy-set`                 | Mutates privacy state                     |
+| `privacy` set `<tokens>`                                                         | `privacy-token-issue`         | Captures issued tokens                    |
+| `blocklist` get/set                                                              | `blocklist-*`                 | Mutates blocklist                         |
+| `w:profile:picture` get/set                                                      | `profile-picture-*`           | Mutates profile picture registry          |
+| `status` set                                                                     | `status-set`                  | Captures latest status                    |
+| `w:biz` get/set                                                                  | `business-profile-*`          | Serves/captures business profiles         |
+| `md` set `<remove-companion-device>`                                             | `remove-companion-device`     | Unlinks a hosted device, else logs out    |
+| `md` set `<pair-device>`                                                         | `companion-pair-device`       | Mints the device jid, relays pair-success |
+| `md` set `<key-index-list>`                                                      | `companion-key-index-list`    | Records the published list                |
+| `md` set `<link_code_companion_reg>`                                             | `link-code-companion-reg`     | Relays the pairing-code handshake         |
+| `newsletter` get `<my_addons>`                                                   | `newsletter-my-addons`        | Ack                                       |
+| `urn:xmpp:whatsapp:dirty` set                                                    | `dirty-bits-clear`            | Captures cleared bits                     |
 
 ## Using with non-zapo-js clients
 

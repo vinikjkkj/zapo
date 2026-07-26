@@ -5,7 +5,7 @@ import type { WaClientEventMap } from 'zapo-js'
 
 import { FakeWaServer } from '../api/FakeWaServer'
 
-import { waitForCompanionPipeline } from './helpers/companion-pipeline'
+import { linkCompanionViaQr, waitForCompanionPipeline } from './helpers/companion-pipeline'
 import { createZapoClient } from './helpers/zapo-client'
 import { createZapoMobileClient } from './helpers/zapo-mobile-client'
 
@@ -92,15 +92,6 @@ test('primary revoking a companion is not read as its own logout', async () => {
         sessionId: 'companion-host-revoke-companion'
     })
 
-    const companionPipelinePromise = waitForCompanionPipeline(server)
-    const qrPromise = new Promise<string>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('auth_qr timed out')), 30_000)
-        companion.once('auth_qr', (event: Parameters<WaClientEventMap['auth_qr']>[0]) => {
-            clearTimeout(timer)
-            resolve(event.qr)
-        })
-    })
-
     let logoutFired = 0
     server.onLogout(() => {
         logoutFired += 1
@@ -108,9 +99,7 @@ test('primary revoking a companion is not read as its own logout', async () => {
 
     try {
         await primary.connect()
-        await companion.connect()
-        await server.offerCompanionPairing(await companionPipelinePromise)
-        const linked = await primary.mobile.linkCompanion(await qrPromise)
+        const linked = await linkCompanionViaQr(server, primary, companion)
 
         await primary.mobile.revokeCompanion(linked.deviceJid, 'test_revoke')
 
