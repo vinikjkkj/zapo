@@ -1,52 +1,48 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { WebSocket } from 'ws'
-
-import { WaFakeConnection } from '../WaFakeConnection'
+import {
+    WaFakeConnection,
+    type WaFakeSocketEvents,
+    type WaFakeSocketLike
+} from '../WaFakeConnection'
 import {
     type WaFakeClientPrologue,
     WaFakeFrameSocket,
     type WaFakeFrameSocketHandlers
 } from '../WaFakeFrameSocket'
 
-class StubSocket {
+class StubSocket implements WaFakeSocketLike {
     public readonly sent: Uint8Array[] = []
-    private listeners = new Map<string, Array<(...args: unknown[]) => void>>()
+    private events: WaFakeSocketEvents | null = null
 
-    public on(event: string, listener: (...args: unknown[]) => void): this {
-        const arr = this.listeners.get(event) ?? []
-        arr.push(listener)
-        this.listeners.set(event, arr)
-        return this
-    }
-
-    public send(data: Uint8Array): void {
-        this.sent.push(data)
+    public send(frame: Uint8Array): void {
+        this.sent.push(frame)
     }
 
     public close(): void {
         // no-op for tests
     }
 
-    public emit(event: string, ...args: unknown[]): void {
-        const arr = this.listeners.get(event) ?? []
-        for (const listener of arr) {
-            listener(...args)
-        }
+    public listen(events: WaFakeSocketEvents): void {
+        this.events = events
+    }
+
+    public push(chunk: Uint8Array): void {
+        this.events?.onFrame(chunk)
     }
 }
 
 function buildFrameSocket(): { stub: StubSocket; socket: WaFakeFrameSocket } {
     const stub = new StubSocket()
-    const connection = new WaFakeConnection('c0', stub as unknown as WebSocket)
+    const connection = new WaFakeConnection('c0', stub)
     const socket = new WaFakeFrameSocket(connection)
     return { stub, socket }
 }
 
 function pushBinary(stub: StubSocket, ...chunks: Uint8Array[]): void {
     for (const chunk of chunks) {
-        stub.emit('message', chunk, true)
+        stub.push(chunk)
     }
 }
 

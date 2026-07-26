@@ -17,6 +17,7 @@ export {
     hmacSha512Sign,
     prependVersion,
     randomBytesAsync,
+    randomIntAsync,
     readVersionedContent,
     sha256,
     sha512,

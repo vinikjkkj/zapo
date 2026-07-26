@@ -1,5 +1,3 @@
-import type { WebSocket } from 'ws'
-
 export type WaFakeConnectionState = 'open' | 'closing' | 'closed'
 
 export interface WaFakeConnectionHandlers {
@@ -8,16 +6,42 @@ export interface WaFakeConnectionHandlers {
     readonly onError?: (error: Error) => void
 }
 
+/** Events a carrier adapter pushes into the connection it backs. */
+export interface WaFakeSocketEvents {
+    readonly onFrame: (frame: Uint8Array) => void
+    readonly onClose: (info: { readonly code: number; readonly reason: string }) => void
+    readonly onError: (error: Error) => void
+}
+
+/**
+ * Carrier a connection speaks over. Each transport adapts its own quirks (the
+ * WebSocket fragment array, the absence of close codes on a TCP stream) behind
+ * this interface, so every layer above stays carrier-agnostic: the WebSocket
+ * listener serves companions, the TCP listener serves the mobile transport.
+ */
+export interface WaFakeSocketLike {
+    readonly send: (frame: Uint8Array) => void
+    readonly close: (code: number, reason: string) => void
+    readonly listen: (events: WaFakeSocketEvents) => void
+}
+
 export class WaFakeConnection {
     public readonly id: string
-    private readonly socket: WebSocket
+    private readonly socket: WaFakeSocketLike
     private handlers: WaFakeConnectionHandlers = {}
     private currentState: WaFakeConnectionState = 'open'
 
-    public constructor(id: string, socket: WebSocket) {
+    public constructor(id: string, socket: WaFakeSocketLike) {
         this.id = id
         this.socket = socket
-        this.bindSocketEvents()
+        this.socket.listen({
+            onFrame: (frame) => this.handlers.onFrame?.(frame),
+            onClose: (info) => {
+                this.currentState = 'closed'
+                this.handlers.onClose?.(info)
+            },
+            onError: (error) => this.handlers.onError?.(error)
+        })
     }
 
     public get state(): WaFakeConnectionState {
@@ -41,30 +65,5 @@ export class WaFakeConnection {
         }
         this.currentState = 'closing'
         this.socket.close(code, reason)
-    }
-
-    private bindSocketEvents(): void {
-        this.socket.on('message', (data, isBinary) => {
-            if (!isBinary) {
-                this.handlers.onError?.(new Error('received unexpected text frame'))
-                return
-            }
-            const frame =
-                data instanceof Uint8Array
-                    ? data
-                    : Array.isArray(data)
-                      ? new Uint8Array(Buffer.concat(data))
-                      : new Uint8Array(data)
-            this.handlers.onFrame?.(frame)
-        })
-
-        this.socket.on('close', (code, reasonBuf) => {
-            this.currentState = 'closed'
-            this.handlers.onClose?.({ code, reason: reasonBuf.toString('utf8') })
-        })
-
-        this.socket.on('error', (error) => {
-            this.handlers.onError?.(error)
-        })
     }
 }

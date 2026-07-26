@@ -7,6 +7,7 @@ import {
     WaFakeConnectionPipeline
 } from '../infra/WaFakeConnectionPipeline'
 import { WaFakeMediaHttpsServer } from '../infra/WaFakeMediaHttpsServer'
+import { WaFakeTcpServer, type WaFakeTcpServerListenInfo } from '../infra/WaFakeTcpServer'
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
 import type { ParsedClientPayload } from '../protocol/auth/client-payload-validate'
@@ -92,6 +93,31 @@ export interface FakeWaServerOptions {
      * clientPayload.username : 'pending'`.
      */
     readonly sessionKey?: (info: FakeSessionKeyInfo) => string
+    /**
+     * Also serve the WhatsApp Mobile transport on a raw TCP listener. Mobile
+     * clients dial `tcp://host:port` instead of upgrading to a WebSocket, but
+     * speak the same framing above the carrier, so both listeners share one
+     * server identity, session model, and IQ router. Pass `true` for an
+     * ephemeral port on the WebSocket host, or an object to pin host/port.
+     * Read the address back from {@link FakeWaServer.tcpUrl} and feed it to the
+     * client's `mobileTransport.tcpUrl`.
+     */
+    readonly tcp?: boolean | { readonly host?: string; readonly port?: number }
+}
+
+/**
+ * Builds the mobile TCP listener when the option asks for one. Defaults its
+ * host to the WebSocket host so both listeners answer on the same interface.
+ */
+function createTcpServer(options: FakeWaServerOptions): WaFakeTcpServer | null {
+    if (!options.tcp) {
+        return null
+    }
+    const config = options.tcp === true ? {} : options.tcp
+    return new WaFakeTcpServer({
+        host: config.host ?? options.host,
+        port: config.port
+    })
 }
 
 export interface FakeSessionKeyInfo {
@@ -135,6 +161,8 @@ export class FakeWaServer {
     private rootCa: FakeNoiseRootCa | null = null
     private serverStaticKeyPair: SignalKeyPair | null = null
     private listenInfo: WaFakeWsServerListenInfo | null = null
+    private readonly tcpServer: WaFakeTcpServer | null
+    private tcpListenInfo: WaFakeTcpServerListenInfo | null = null
     private readonly pipelineListeners = new Set<FakeWaServerPipelineListener>()
     private rejectMode: { readonly code: number; readonly reason: string } | null = null
     private readonly mediaStore = new FakeMediaStore()
@@ -147,6 +175,8 @@ export class FakeWaServer {
         this.options = options
         this.wsServer = new WaFakeWsServer(options)
         this.wsServer.onConnection((connection) => this.handleConnection(connection))
+        this.tcpServer = createTcpServer(options)
+        this.tcpServer?.onConnection((connection) => this.handleConnection(connection))
         this.defaultSession = this.createSession('__default__')
     }
 
@@ -608,6 +638,21 @@ export class FakeWaServer {
         return this.requireListening().port
     }
 
+    /**
+     * `tcp://host:port` of the mobile listener, for the client's
+     * `mobileTransport.tcpUrl`.
+     *
+     * @throws when the server was started without the `tcp` option.
+     */
+    public get tcpUrl(): string {
+        if (!this.tcpListenInfo) {
+            throw new Error(
+                'fake server has no mobile listener; start it with { tcp: true } to serve the mobile transport'
+            )
+        }
+        return this.tcpListenInfo.url
+    }
+
     public get noiseRootCa(): FakeWaServerNoiseRootCa {
         const root = this.requireRootCa()
         return { publicKey: root.publicKey, serial: root.serial }
@@ -636,12 +681,17 @@ export class FakeWaServer {
         this.wsServer.setHttpRequestHandler(mediaHandler)
         this.mediaHttpsServer.setRequestHandler(mediaHandler)
         this.listenInfo = await this.wsServer.listen()
+        if (this.tcpServer) {
+            this.tcpListenInfo = await this.tcpServer.listen()
+        }
         await this.mediaHttpsServer.listen('127.0.0.1')
     }
 
     public async stop(): Promise<void> {
         this.pipelines.clear()
         await this.wsServer.close()
+        await this.tcpServer?.close()
+        this.tcpListenInfo = null
         await this.mediaHttpsServer.close()
         if (this.cachedMediaProxyAgent) {
             this.cachedMediaProxyAgent.destroy()

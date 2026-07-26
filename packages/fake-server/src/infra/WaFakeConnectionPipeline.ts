@@ -11,13 +11,15 @@ import { type SignalKeyPair, X25519 } from '../transport/crypto'
 import { proto } from '../transport/protos'
 
 import type { WaFakeConnection } from './WaFakeConnection'
-import { WaFakeFrameSocket } from './WaFakeFrameSocket'
+import { type WaFakeClientPrologue, WaFakeFrameSocket } from './WaFakeFrameSocket'
 import { WaFakeNoiseHandshake } from './WaFakeNoiseHandshake'
 import { WaFakeTransport } from './WaFakeTransport'
 
 const NOISE_XX_NAME = new TextEncoder().encode('Noise_XX_25519_AESGCM_SHA256\0\0\0\0')
 const NOISE_IK_NAME = new TextEncoder().encode('Noise_IK_25519_AESGCM_SHA256\0\0\0\0')
-const PROLOGUE = new Uint8Array([0x57, 0x41, 0x06, 0x03])
+const PROLOGUE_MAGIC_W = 0x57
+const PROLOGUE_MAGIC_A = 0x41
+const DEFAULT_PROLOGUE = new Uint8Array([PROLOGUE_MAGIC_W, PROLOGUE_MAGIC_A, 0x06, 0x03])
 
 export interface WaFakeConnectionPipelineConfig {
     readonly connection: WaFakeConnection
@@ -67,12 +69,13 @@ export class WaFakeConnectionPipeline {
     private state: State = { kind: 'awaiting_prologue' }
     private chain: Promise<void> = Promise.resolve()
     private authenticatedPayload: ParsedClientPayload | null = null
+    private clientPrologue: Uint8Array = DEFAULT_PROLOGUE
 
     public constructor(config: WaFakeConnectionPipelineConfig) {
         this.config = config
         this.frameSocket = new WaFakeFrameSocket(config.connection)
         this.frameSocket.setHandlers({
-            onPrologue: () => this.onPrologue(),
+            onPrologue: (prologue) => this.onPrologue(prologue),
             onFrame: (frame) => this.scheduleFrame(frame),
             onClose: (info) => {
                 this.state = { kind: 'closed' }
@@ -105,11 +108,20 @@ export class WaFakeConnectionPipeline {
         this.frameSocket.sendFrame(ciphertext)
     }
 
-    private onPrologue(): void {
+    private onPrologue(prologue: WaFakeClientPrologue): void {
         if (this.state.kind !== 'awaiting_prologue') {
             this.events.onError?.(new Error('received second prologue from client'))
             return
         }
+        // Mix back the header the client actually sent instead of a fixed one:
+        // it is hashed into the handshake, and a client is free to advertise a
+        // protocol/dict version other than the web client's 6/3.
+        this.clientPrologue = new Uint8Array([
+            PROLOGUE_MAGIC_W,
+            PROLOGUE_MAGIC_A,
+            prologue.protocolVersion,
+            prologue.dictVersion
+        ])
         this.state = { kind: 'awaiting_client_hello' }
     }
 
@@ -160,7 +172,7 @@ export class WaFakeConnectionPipeline {
 
     private async handleXxClientHello(clientEphemeralPub: Uint8Array): Promise<void> {
         const handshake = new WaFakeNoiseHandshake()
-        handshake.start(NOISE_XX_NAME, PROLOGUE)
+        handshake.start(NOISE_XX_NAME, this.clientPrologue)
         handshake.authenticate(clientEphemeralPub)
 
         const serverEphemeral = await X25519.generateKeyPair()
@@ -209,7 +221,7 @@ export class WaFakeConnectionPipeline {
         const encryptedClientPayload = clientHello.payload
 
         const handshake = new WaFakeNoiseHandshake()
-        handshake.start(NOISE_IK_NAME, PROLOGUE)
+        handshake.start(NOISE_IK_NAME, this.clientPrologue)
         handshake.authenticate(this.config.serverStaticKeyPair.pubKey)
         handshake.authenticate(clientEphemeralPub)
         handshake.mixIntoKey(

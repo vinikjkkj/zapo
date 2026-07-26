@@ -14,3 +14,4 @@ export {
 } from 'zapo-js/util'
 
 export const TEXT_ENCODER = new TextEncoder()
+export const TEXT_DECODER = new TextDecoder()

@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net'
 import { WebSocketServer } from 'ws'
 
 import { WaFakeConnection } from './WaFakeConnection'
+import { createWebSocketAdapter } from './socket-adapters'
 
 export type WaFakeHttpRequestHandler = (
     req: IncomingMessage,
@@ -79,7 +80,7 @@ export class WaFakeWsServer {
 
         wsServer.on('connection', (socket) => {
             const id = `c${this.nextConnectionId++}`
-            const connection = new WaFakeConnection(id, socket)
+            const connection = new WaFakeConnection(id, createWebSocketAdapter(socket))
             this.connectionListener?.(connection)
         })
 
