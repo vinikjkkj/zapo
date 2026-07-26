@@ -11,6 +11,7 @@ import { WaFakeTcpServer, type WaFakeTcpServerListenInfo } from '../infra/WaFake
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
 import type { ParsedClientPayload } from '../protocol/auth/client-payload-validate'
+import { buildPairDeviceIq, buildPairSuccessIq } from '../protocol/auth/pair-device'
 import type { BuildSuccessNodeInput } from '../protocol/auth/success-node'
 import type { BuildAbPropsResultInput } from '../protocol/iq/abprops'
 import {
@@ -23,6 +24,7 @@ import type { FakePrivacyTokenIssue } from '../protocol/iq/privacy-token'
 import type { FakeProfilePictureResult } from '../protocol/iq/profile'
 import type { WaFakeIqMatcher, WaFakeIqResponder } from '../protocol/iq/router'
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
+import type { FakeCompanionHostState } from '../state/fake-companion-host'
 import {
     FakeMediaStore,
     type FakeMediaType,
@@ -30,12 +32,15 @@ import {
     type PublishMediaInput
 } from '../state/fake-media-store'
 import { type BinaryNode } from '../transport/codec'
-import { type SignalKeyPair, X25519 } from '../transport/crypto'
+import { randomBytesAsync, type SignalKeyPair, X25519 } from '../transport/crypto'
+import { bytesToBase64UrlSafe } from '../transport/util'
 
 import { type AppStateSyncManager, type CapturedAppStateMutation } from './AppStateSyncManager'
 import { FakePairingDriver, type FakePairingDriverOptions } from './FakePairingDriver'
 import { type CreateFakePeerOptions, FakePeer } from './FakePeer'
 import {
+    type CompleteCompanionPairingInput,
+    type CompletedCompanionPairing,
     type ExpectIqOptions,
     type ExpectStanzaOptions,
     FakeServerSession,
@@ -105,6 +110,11 @@ export interface FakeWaServerOptions {
     readonly tcp?: boolean | { readonly host?: string; readonly port?: number }
 }
 
+const HOST_DOMAIN = 's.whatsapp.net'
+const PAIR_DEVICE_REF_COUNT = 6
+const PAIR_DEVICE_REF_BYTES = 16
+const MOBILE_PRIMARY_PLATFORM = 'android'
+
 /**
  * Builds the mobile TCP listener when the option asks for one. Defaults its
  * host to the WebSocket host so both listeners answer on the same interface.
@@ -163,6 +173,7 @@ export class FakeWaServer {
     private listenInfo: WaFakeWsServerListenInfo | null = null
     private readonly tcpServer: WaFakeTcpServer | null
     private tcpListenInfo: WaFakeTcpServerListenInfo | null = null
+    private readonly pendingCompanionOffers = new Map<string, WaFakeConnectionPipeline>()
     private readonly pipelineListeners = new Set<FakeWaServerPipelineListener>()
     private rejectMode: { readonly code: number; readonly reason: string } | null = null
     private readonly mediaStore = new FakeMediaStore()
@@ -183,6 +194,11 @@ export class FakeWaServer {
     /** State of the single default session (the only session for one client). */
     public get registries(): ServerRegistries {
         return this.defaultSession.registries
+    }
+
+    /** Companion-host account state of the default session (linked devices, key-index list). */
+    public get companionHost(): FakeCompanionHostState {
+        return this.defaultSession.companionHost
     }
 
     public get preKeyDispenser(): PreKeyDispenser {
@@ -215,7 +231,10 @@ export class FakeWaServer {
     private createSession(id: string): FakeServerSession {
         const session = new FakeServerSession(
             id,
-            { requireMediaHttpsInfo: () => this.requireMediaHttpsInfo() },
+            {
+                requireMediaHttpsInfo: () => this.requireMediaHttpsInfo(),
+                completeCompanionPairing: (input) => this.completeCompanionPairing(input)
+            },
             { defaultIqHandlers: this.options.defaultIqHandlers !== false }
         )
         this.sessions.set(id, session)
@@ -725,6 +744,7 @@ export class FakeWaServer {
         pipeline.setEvents({
             onAuthenticated: () => {
                 this.bindPipelineSession(pipeline)
+                this.bindMobilePrimary(pipeline)
                 for (const listener of this.authenticatedListeners) {
                     try {
                         void Promise.resolve(listener(pipeline)).catch(() => undefined)
@@ -759,6 +779,85 @@ export class FakeWaServer {
         }
         const id = resolveKey({ clientPayload, pipeline })
         this.pipelineSessions.set(pipeline, this.session(id))
+    }
+
+    /**
+     * Records a phone login as the session's account owner. Everything on the
+     * companion-host path keys off it: device jids are minted under its number,
+     * and `remove-companion-device` is read as a revoke rather than a logout.
+     */
+    private bindMobilePrimary(pipeline: WaFakeConnectionPipeline): void {
+        const clientPayload = pipeline.clientPayload
+        if (clientPayload?.kind !== 'login' || clientPayload.flavor !== 'mobile') {
+            return
+        }
+        const session = this.sessionFor(pipeline)
+        const jid = `${clientPayload.username}@${HOST_DOMAIN}`
+        session.companionHost.bindPrimary({ username: clientPayload.username, jid })
+        session.registries.registerDeviceId(jid, 0)
+    }
+
+    /**
+     * Offers a companion connection the refs for a primary-driven link: pushes
+     * the `pair-device` IQ it turns into a QR, and remembers each ref so the
+     * primary's upload can be routed back to this connection. Returns the refs.
+     *
+     * This is the counterpart of {@link runPairing}, where the server itself
+     * plays the primary. Here a real mobile-primary client signs the identity
+     * and the server only relays.
+     */
+    public async offerCompanionPairing(
+        pipeline: WaFakeConnectionPipeline,
+        options: { readonly refCount?: number } = {}
+    ): Promise<readonly string[]> {
+        const refCount = options.refCount ?? PAIR_DEVICE_REF_COUNT
+        const raw = await Promise.all(
+            Array.from({ length: refCount }, () => randomBytesAsync(PAIR_DEVICE_REF_BYTES))
+        )
+        // Refs travel as text inside the companion's QR, so they have to be
+        // printable to survive the round trip back in the primary's upload.
+        const refs = raw.map((bytes) => bytesToBase64UrlSafe(bytes))
+        for (const ref of refs) {
+            this.pendingCompanionOffers.set(ref, pipeline)
+        }
+        await pipeline.sendStanza(buildPairDeviceIq({ refs }))
+        return refs
+    }
+
+    /**
+     * Host side of a companion link: hands the primary-signed identity to the
+     * connection that owns `ref` and reports what that companion advertised at
+     * registration. Resolves `null` for an unknown or already-consumed ref.
+     */
+    private async completeCompanionPairing(
+        input: CompleteCompanionPairingInput
+    ): Promise<CompletedCompanionPairing | null> {
+        const pipeline = this.pendingCompanionOffers.get(input.ref)
+        if (!pipeline) {
+            return null
+        }
+        const registration = pipeline.clientPayload
+        const companionPropsBytes =
+            registration?.kind === 'registration'
+                ? (registration.devicePairingData.deviceProps ?? null)
+                : null
+        // `<platform>` describes the primary that signed the link, not the
+        // companion. A zapo mobile session always logs in as ANDROID, so this
+        // is the only value a primary-driven link can carry here.
+        const platform = MOBILE_PRIMARY_PLATFORM
+        await pipeline.sendStanza(
+            buildPairSuccessIq({
+                deviceJid: input.deviceJid,
+                platform,
+                deviceIdentityBytes: input.deviceIdentityBytes
+            })
+        )
+        for (const [ref, offered] of this.pendingCompanionOffers) {
+            if (offered === pipeline) {
+                this.pendingCompanionOffers.delete(ref)
+            }
+        }
+        return { companionPropsBytes, platform }
     }
 
     private buildMediaRequestHandler(): (req: IncomingMessage, res: ServerResponse) => void {

@@ -5,7 +5,12 @@ import { decodeBase64Url } from '../../transport/util'
 
 export interface BuildPairDeviceIqInput {
     readonly id?: string
-    readonly refs: readonly Uint8Array[]
+    /**
+     * The six rotating refs the companion turns into a QR. The client reads
+     * them as text, so a primary-driven link (where the ref has to survive the
+     * round trip back in the primary's upload) issues printable strings.
+     */
+    readonly refs: readonly (Uint8Array | string)[]
 }
 
 export function buildPairDeviceIq(input: BuildPairDeviceIqInput): BinaryNode {

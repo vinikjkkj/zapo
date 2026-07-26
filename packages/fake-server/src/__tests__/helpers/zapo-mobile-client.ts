@@ -1,7 +1,7 @@
 import { createNoopLogger, createStore, type Logger, WaClient } from 'zapo-js'
 
-import type { FakeWaServer } from '../../api/FakeWaServer'
 import { type FakeMobilePrimary, seedFakeMobilePrimary } from '../../api/FakeMobilePrimary'
+import type { FakeWaServer } from '../../api/FakeWaServer'
 
 const NOOP_LOGGER: Logger = createNoopLogger('error')
 

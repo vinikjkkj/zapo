@@ -12,6 +12,12 @@ import {
     type FakeBusinessProfile,
     parseGetBusinessProfileIq
 } from '../protocol/iq/business'
+import {
+    type ParsedPairDeviceUpload,
+    parseKeyIndexListPublish,
+    parsePairDeviceUpload,
+    parseRemoveCompanionDevice
+} from '../protocol/iq/companion-host'
 import { parseClearDirtyBitsIq } from '../protocol/iq/dirty-bits'
 import {
     buildGroupMetadataNode,
@@ -46,6 +52,7 @@ import {
 import { buildIqError, buildIqResult, type WaFakeIqRouter } from '../protocol/iq/router'
 import { buildUsyncDevicesResult } from '../protocol/iq/usync'
 import { type ClientPreKeyBundle, parsePreKeyUploadIq } from '../protocol/signal/prekey-upload'
+import type { FakeMobilePrimaryIdentity } from '../state/fake-companion-host'
 import { type BinaryNode } from '../transport/codec'
 
 import type { FakePeer } from './FakePeer'
@@ -90,6 +97,21 @@ export interface IqHandlerDeps {
         () => Promise<FakeAppStateCollectionPayload | null> | FakeAppStateCollectionPayload | null
     >
     requireMediaHttpsInfo(): { readonly host: string; readonly port: number }
+    /** Mobile primary bound to this session, or `null` for a web session. */
+    readonly mobilePrimary: FakeMobilePrimaryIdentity | null
+    /**
+     * Completes the primary's `pair-device` upload. Resolves `null` when the
+     * session has no primary or the ref belongs to no live connection.
+     */
+    linkCompanionDevice(upload: ParsedPairDeviceUpload): Promise<LinkedCompanionResult | null>
+    /** Unlinks the given companions, or every one of them when passed `null`. */
+    revokeCompanionDevices(deviceJids: readonly string[] | null): readonly string[]
+    recordKeyIndexList(bytes: Uint8Array, timestampSeconds: number): void
+}
+
+export interface LinkedCompanionResult {
+    readonly deviceJid: string
+    readonly companionPropsBytes: Uint8Array | null
 }
 
 export function parseUsyncRequestedUserJids(iq: BinaryNode): readonly string[] {
@@ -326,9 +348,66 @@ export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandle
     })
 
     router.register({
+        label: 'companion-pair-device',
+        matcher: { xmlns: 'md', type: 'set', childTag: 'pair-device' },
+        respond: async (iq) => {
+            const upload = parsePairDeviceUpload(iq)
+            if (!upload) {
+                return buildIqError(iq, { code: 400, text: 'invalid-pair-device' })
+            }
+            const linked = await deps.linkCompanionDevice(upload)
+            if (!linked) {
+                return buildIqError(iq, { code: 404, text: 'unknown-pairing-ref' })
+            }
+            // Shape mirrors the phone's parser: <device jid> is a direct child
+            // of the result, with the companion's own props beside it.
+            const content: BinaryNode[] = [{ tag: 'device', attrs: { jid: linked.deviceJid } }]
+            if (linked.companionPropsBytes) {
+                content.push({
+                    tag: 'companion-props',
+                    attrs: {},
+                    content: linked.companionPropsBytes
+                })
+            }
+            return buildIqResult(iq, { content })
+        }
+    })
+
+    router.register({
+        label: 'companion-key-index-list',
+        matcher: { xmlns: 'md', type: 'set', childTag: 'key-index-list' },
+        respond: (iq) => {
+            const published = parseKeyIndexListPublish(iq)
+            if (!published) {
+                return buildIqError(iq, { code: 400, text: 'invalid-key-index-list' })
+            }
+            deps.recordKeyIndexList(published.keyIndexListBytes, published.timestampSeconds)
+            return buildIqResult(iq)
+        }
+    })
+
+    router.register({
         label: 'remove-companion-device',
         matcher: { xmlns: 'md', type: 'set', childTag: 'remove-companion-device' },
         respond: (iq) => {
+            const removal = parseRemoveCompanionDevice(iq)
+            // The same stanza means "log me out" from a companion and "unlink
+            // that device" from a primary, and the wire alone does not say
+            // which. Treat it as a revoke only when this session hosts the
+            // named device; everything else ends the session, which keeps the
+            // companion logout path intact.
+            if (removal && deps.mobilePrimary) {
+                if (removal.all) {
+                    deps.revokeCompanionDevices(null)
+                    return buildIqResult(iq)
+                }
+                if (removal.deviceJid) {
+                    const removed = deps.revokeCompanionDevices([removal.deviceJid])
+                    if (removed.length > 0) {
+                        return buildIqResult(iq)
+                    }
+                }
+            }
             deps.notifyLogout()
             return buildIqResult(iq)
         }

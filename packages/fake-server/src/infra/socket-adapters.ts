@@ -5,6 +5,7 @@ import type { Socket } from 'node:net'
 import type { WebSocket } from 'ws'
 
 import { TEXT_DECODER } from '../transport/util'
+
 import type { WaFakeSocketLike } from './WaFakeConnection'
 
 /**

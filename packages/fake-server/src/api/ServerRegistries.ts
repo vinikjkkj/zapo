@@ -277,15 +277,33 @@ export class ServerRegistries {
 
     public registerPeer(peer: FakePeer): void {
         this.peerRegistry.set(peer.jid, peer)
-        const userJid = toUserJidPart(peer.jid)
-        const deviceId = toDeviceIdPart(peer.jid)
+        this.registerDeviceId(toUserJidPart(peer.jid), toDeviceIdPart(peer.jid))
+    }
+
+    /**
+     * Makes a device visible to `usync` without minting a full fake peer – used
+     * for the primary's own device set, whose companions are real clients with
+     * their own keys rather than server-side fakes.
+     */
+    public registerDeviceId(userJid: string, deviceId: number): void {
         const ids = this.deviceIdsByUser.get(userJid)
-        if (ids) {
+        if (!ids) {
+            this.deviceIdsByUser.set(userJid, [deviceId])
+            return
+        }
+        if (!ids.includes(deviceId)) {
             ids.push(deviceId)
             ids.sort((a, b) => a - b)
-        } else {
-            this.deviceIdsByUser.set(userJid, [deviceId])
         }
+    }
+
+    public unregisterDeviceId(userJid: string, deviceId: number): void {
+        const ids = this.deviceIdsByUser.get(userJid)
+        if (!ids) {
+            return
+        }
+        const next = ids.filter((id) => id !== deviceId)
+        this.deviceIdsByUser.set(userJid, next)
     }
 
     public lookupDeviceIdsForUser(userJid: string): readonly number[] {

@@ -1,6 +1,7 @@
 /** Per-session isolated server state: registries, prekeys, app-state, IQ routing, capture. */
 
 import type { BuildAbPropsResultInput } from '../protocol/iq/abprops'
+import type { ParsedPairDeviceUpload } from '../protocol/iq/companion-host'
 import {
     type WaFakeIqHandler,
     type WaFakeIqMatcher,
@@ -8,12 +9,19 @@ import {
     WaFakeIqRouter
 } from '../protocol/iq/router'
 import type { ClientPreKeyBundle } from '../protocol/signal/prekey-upload'
+import { FakeCompanionHostState, readCompanionKeyIndex } from '../state/fake-companion-host'
 import { type BinaryNode } from '../transport/codec'
 
 import { AppStateSyncManager } from './AppStateSyncManager'
-import { type IqHandlerDeps, registerDefaultIqHandlers } from './iq-handlers'
+import {
+    type IqHandlerDeps,
+    type LinkedCompanionResult,
+    registerDefaultIqHandlers
+} from './iq-handlers'
 import { PreKeyDispenser } from './PreKeyDispenser'
-import { ServerRegistries } from './ServerRegistries'
+import { ServerRegistries, toDeviceIdPart } from './ServerRegistries'
+
+const HOST_DOMAIN = 's.whatsapp.net'
 
 export interface ExpectIqOptions {
     readonly timeoutMs?: number
@@ -53,6 +61,28 @@ interface PendingStanzaExpectation {
  */
 export interface FakeServerSessionHost {
     requireMediaHttpsInfo(): { readonly host: string; readonly port: number }
+    /**
+     * Completes a pairing offer against the companion connection that owns
+     * `ref`: relays the primary-signed identity as `pair-success` and reports
+     * back what the companion advertised. Resolves `null` when no live
+     * connection holds that ref. Lives on the host because pairing spans two
+     * connections while a session owns neither.
+     */
+    completeCompanionPairing(
+        input: CompleteCompanionPairingInput
+    ): Promise<CompletedCompanionPairing | null>
+}
+
+export interface CompleteCompanionPairingInput {
+    readonly ref: string
+    readonly deviceJid: string
+    readonly deviceIdentityBytes: Uint8Array
+}
+
+export interface CompletedCompanionPairing {
+    /** Companion `DeviceProps` from its registration payload, echoed to the primary. */
+    readonly companionPropsBytes: Uint8Array | null
+    readonly platform: string
 }
 
 /**
@@ -67,6 +97,7 @@ export class FakeServerSession {
     public readonly registries = new ServerRegistries()
     public readonly preKeyDispenser = new PreKeyDispenser()
     public readonly appStateSync = new AppStateSyncManager()
+    public readonly companionHost = new FakeCompanionHostState()
     public readonly iqRouter = new WaFakeIqRouter()
 
     private readonly capturedStanzas: BinaryNode[] = []
@@ -235,6 +266,7 @@ export class FakeServerSession {
         const reg = this.registries
         const preKey = this.preKeyDispenser
         const appState = this.appStateSync
+        const companionHost = this.companionHost
         return {
             get peerRegistry() {
                 return reg.peerRegistry
@@ -301,8 +333,68 @@ export class FakeServerSession {
             get appStateCollectionProviders() {
                 return appState.appStateCollectionProviders
             },
-            requireMediaHttpsInfo: () => host.requireMediaHttpsInfo()
+            requireMediaHttpsInfo: () => host.requireMediaHttpsInfo(),
+            get mobilePrimary() {
+                return companionHost.primary
+            },
+            linkCompanionDevice: (upload) => this.linkCompanionDevice(host, upload),
+            revokeCompanionDevices: (deviceJids) => this.revokeCompanionDevices(deviceJids),
+            recordKeyIndexList: (bytes, timestampSeconds) =>
+                companionHost.recordKeyIndexList(bytes, timestampSeconds)
         }
+    }
+
+    /**
+     * Server side of the primary's `pair-device` upload: allocates the device
+     * slot, hands the signed identity to the companion connection, and records
+     * the link. Resolves `null` when this session has no primary or the ref
+     * belongs to no live connection, which the handler turns into an IQ error.
+     */
+    private async linkCompanionDevice(
+        host: FakeServerSessionHost,
+        upload: ParsedPairDeviceUpload
+    ): Promise<LinkedCompanionResult | null> {
+        const primary = this.companionHost.primary
+        if (!primary) {
+            return null
+        }
+        const deviceId = this.companionHost.allocateDeviceId()
+        const deviceJid = `${primary.username}:${deviceId}@${HOST_DOMAIN}`
+        const completed = await host.completeCompanionPairing({
+            ref: upload.ref,
+            deviceJid,
+            deviceIdentityBytes: upload.deviceIdentityBytes
+        })
+        if (!completed) {
+            return null
+        }
+        this.companionHost.recordCompanion({
+            deviceJid,
+            deviceId,
+            ref: upload.ref,
+            keyIndex: readCompanionKeyIndex(upload.deviceIdentityBytes),
+            deviceIdentityBytes: upload.deviceIdentityBytes,
+            linkedAtSeconds: Math.floor(Date.now() / 1_000)
+        })
+        this.companionHost.recordKeyIndexList(
+            upload.keyIndexListBytes,
+            upload.keyIndexListTimestampSeconds
+        )
+        this.registries.registerDeviceId(primary.jid, deviceId)
+        return { deviceJid, companionPropsBytes: completed.companionPropsBytes }
+    }
+
+    private revokeCompanionDevices(deviceJids: readonly string[] | null): readonly string[] {
+        const removed = deviceJids
+            ? this.companionHost.removeCompanions(deviceJids)
+            : this.companionHost.removeAllCompanions()
+        const primary = this.companionHost.primary
+        if (primary) {
+            for (const deviceJid of removed) {
+                this.registries.unregisterDeviceId(primary.jid, toDeviceIdPart(deviceJid))
+            }
+        }
+        return removed
     }
 }
 

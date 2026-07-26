@@ -3,8 +3,8 @@ import type { AddressInfo } from 'node:net'
 
 import { WebSocketServer } from 'ws'
 
-import { WaFakeConnection } from './WaFakeConnection'
 import { createWebSocketAdapter } from './socket-adapters'
+import { WaFakeConnection } from './WaFakeConnection'
 
 export type WaFakeHttpRequestHandler = (
     req: IncomingMessage,

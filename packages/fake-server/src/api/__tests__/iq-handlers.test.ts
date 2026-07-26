@@ -37,6 +37,10 @@ function createRouterWithDefaults(overrides: Partial<IqHandlerDeps> = {}): WaFak
         consumeOutboundAppStatePatches: async () => undefined,
         appStateCollectionProviders: new Map(),
         requireMediaHttpsInfo: () => ({ host: '127.0.0.1', port: 1 }),
+        mobilePrimary: null,
+        linkCompanionDevice: async () => null,
+        revokeCompanionDevices: () => [],
+        recordKeyIndexList: () => undefined,
         ...overrides
     }
     registerDefaultIqHandlers(router, deps)

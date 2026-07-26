@@ -1,7 +1,7 @@
 import { type AddressInfo, createServer, type Server, type Socket } from 'node:net'
 
-import { WaFakeConnection } from './WaFakeConnection'
 import { createTcpSocketAdapter } from './socket-adapters'
+import { WaFakeConnection } from './WaFakeConnection'
 
 export interface WaFakeTcpServerOptions {
     readonly host?: string
