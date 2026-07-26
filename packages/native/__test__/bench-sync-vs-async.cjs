@@ -4,12 +4,7 @@
 
 const { performance } = require('node:perf_hooks')
 const { randomBytes, createPrivateKey } = require('node:crypto')
-const {
-    xeddsaSign,
-    xeddsaVerify,
-    xeddsaSignAsync,
-    xeddsaVerifyAsync
-} = require('../binding.js')
+const { xeddsaSign, xeddsaVerify, xeddsaSignAsync, xeddsaVerifyAsync } = require('../binding.js')
 
 if (typeof xeddsaSign !== 'function' || typeof xeddsaVerify !== 'function') {
     console.error('native binding NOT loaded')
@@ -106,9 +101,14 @@ async function timeitParallel(label, runs, totalOps, concurrency, makePromise) {
     const signSyncSerial = await timeit('sync (xeddsaSign)', RUNS, SERIAL_ITERS, async () => {
         xeddsaSign(PRIV, MSG)
     })
-    const signAsyncSerial = await timeit('async (xeddsaSignAsync)', RUNS, SERIAL_ITERS, async () => {
-        await xeddsaSignAsync(PRIV, MSG)
-    })
+    const signAsyncSerial = await timeit(
+        'async (xeddsaSignAsync)',
+        RUNS,
+        SERIAL_ITERS,
+        async () => {
+            await xeddsaSignAsync(PRIV, MSG)
+        }
+    )
     console.log(
         `  → async/sync ratio: ${(signAsyncSerial / signSyncSerial).toFixed(2)}x (lower is better; >1 = overhead)\n`
     )
@@ -131,38 +131,22 @@ async function timeitParallel(label, runs, totalOps, concurrency, makePromise) {
     const PAR_TOTAL = 4000
     for (const conc of [1, 4, 8, 16, 32]) {
         console.log(`SIGN — concurrency ${conc} (total ${PAR_TOTAL} ops x ${RUNS} runs):`)
-        const sSync = await timeitParallel(
-            `sync (loop)`,
-            RUNS,
-            PAR_TOTAL,
-            conc,
-            async () => xeddsaSign(PRIV, MSG)
+        const sSync = await timeitParallel(`sync (loop)`, RUNS, PAR_TOTAL, conc, async () =>
+            xeddsaSign(PRIV, MSG)
         )
-        const sAsync = await timeitParallel(
-            `async (libuv pool)`,
-            RUNS,
-            PAR_TOTAL,
-            conc,
-            () => xeddsaSignAsync(PRIV, MSG)
+        const sAsync = await timeitParallel(`async (libuv pool)`, RUNS, PAR_TOTAL, conc, () =>
+            xeddsaSignAsync(PRIV, MSG)
         )
         console.log(`  → speedup async vs sync: ${(sSync / sAsync).toFixed(2)}x\n`)
     }
 
     for (const conc of [1, 4, 8, 16, 32]) {
         console.log(`VERIFY — concurrency ${conc} (total ${PAR_TOTAL} ops x ${RUNS} runs):`)
-        const vSync = await timeitParallel(
-            `sync (loop)`,
-            RUNS,
-            PAR_TOTAL,
-            conc,
-            async () => xeddsaVerify(PUB, MSG, SIG)
+        const vSync = await timeitParallel(`sync (loop)`, RUNS, PAR_TOTAL, conc, async () =>
+            xeddsaVerify(PUB, MSG, SIG)
         )
-        const vAsync = await timeitParallel(
-            `async (libuv pool)`,
-            RUNS,
-            PAR_TOTAL,
-            conc,
-            () => xeddsaVerifyAsync(PUB, MSG, SIG)
+        const vAsync = await timeitParallel(`async (libuv pool)`, RUNS, PAR_TOTAL, conc, () =>
+            xeddsaVerifyAsync(PUB, MSG, SIG)
         )
         console.log(`  → speedup async vs sync: ${(vSync / vAsync).toFixed(2)}x\n`)
     }

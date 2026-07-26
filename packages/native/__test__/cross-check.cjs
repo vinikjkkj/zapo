@@ -10,7 +10,8 @@ if (typeof native.xeddsaSign !== 'function' || typeof native.xeddsaVerify !== 'f
 }
 
 async function main() {
-    const { xeddsaSign: jsSign, xeddsaVerify: jsVerify } = await import('../../../src/crypto/core/xeddsa.ts')
+    const { xeddsaSign: jsSign, xeddsaVerify: jsVerify } =
+        await import('../../../src/crypto/core/xeddsa.ts')
 
     const X25519_PKCS8_PREFIX = Buffer.from('302e020100300506032b656e04220420', 'hex')
 
