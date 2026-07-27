@@ -38,6 +38,14 @@ jobs:
                   npm run build
                   npm run build:packages
 
+            - name: build @zapo-js/native wasm backend
+              # wasm-bindgen-cli must match the wasm-bindgen crate version pinned
+              # in packages/native/wasm/Cargo.toml (=0.2.100)
+              run: |
+                  rustup target add wasm32-unknown-unknown
+                  cargo install wasm-bindgen-cli@0.2.100 --locked
+                  npm run build:wasm -w packages/native
+
             - name: publish core (zapo-js), skip if version already on npm
               run: |
                   VERSION="$(node -p "require('./package.json').version")"
