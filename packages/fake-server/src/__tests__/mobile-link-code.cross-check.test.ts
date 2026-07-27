@@ -126,3 +126,42 @@ test('pairing code request is rejected when the primary is offline', async () =>
         await server.stop()
     }
 })
+
+test('a second account logging into the same session gets no companion-host wiring', async () => {
+    const server = await FakeWaServer.start({ tcp: true })
+    const { client: owner } = await createZapoMobileClient(server, {
+        sessionId: 'link-code-owner',
+        phoneNumber: PHONE
+    })
+    const intruderPhone = '5511970004444'
+    const { client: intruder } = await createZapoMobileClient(server, {
+        sessionId: 'link-code-intruder',
+        phoneNumber: intruderPhone
+    })
+    const { client: companion } = createZapoClient(server, {
+        sessionId: 'link-code-intruder-companion'
+    })
+
+    try {
+        await owner.connect()
+        await intruder.connect()
+        await bringCompanionToPairingScreen(server, companion)
+
+        // The session belongs to the first number, so a code aimed at the
+        // second one must not be relayed to its connection - the link would be
+        // minted under the owner's number.
+        await assert.rejects(
+            () => companion.auth.requestPairingCode(intruderPhone),
+            /404|companion hello/
+        )
+
+        // The owner still works.
+        const code = await companion.auth.requestPairingCode(PHONE)
+        assert.ok(code.length > 0)
+    } finally {
+        await companion.disconnect().catch(() => undefined)
+        await intruder.disconnect().catch(() => undefined)
+        await owner.disconnect().catch(() => undefined)
+        await server.stop()
+    }
+})

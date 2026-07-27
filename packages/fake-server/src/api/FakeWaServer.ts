@@ -883,7 +883,14 @@ export class FakeWaServer {
         const session = this.sessionFor(pipeline)
         const jid = `${clientPayload.username}@${HOST_DOMAIN}`
         session.companionHost.bindPrimary({ username: clientPayload.username, jid })
+        if (session.companionHost.primary?.jid !== jid) {
+            // The session already belongs to another number. Wiring this login
+            // in anyway would let a link be relayed to this connection and then
+            // minted under the account that owns the session.
+            return
+        }
         session.registries.registerDeviceId(jid, 0)
+        // A reconnect of the same account replaces its stale connection here.
         this.mobilePrimaryPipelines.set(jid, pipeline)
     }
 
