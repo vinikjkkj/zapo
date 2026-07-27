@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { bytesToBase64, bytesToBase64UrlSafe } from '../../../transport/util'
-import { parsePairingQrString } from '../pair-device'
+import { mintPairingRefs, parsePairingQrString } from '../pair-device'
 
 test('parsePairingQrString decodes base64url key fields', () => {
     const noise = new Uint8Array(Array.from({ length: 32 }, (_, index) => (index * 7 + 3) & 0xff))
@@ -78,4 +78,21 @@ test('parsePairingQrString supports refs containing commas', () => {
     assert.deepEqual(parsed.identityPublicKey, identity)
     assert.deepEqual(parsed.advSecretKey, advSecret)
     assert.equal(parsed.platform, 'IOS')
+})
+
+test('mintPairingRefs produces refs that survive a line-based round trip', async () => {
+    const refs = await mintPairingRefs()
+
+    assert.equal(refs.length, 6)
+    assert.equal(new Set(refs).size, 6, 'each ref is distinct')
+    for (const ref of refs) {
+        assert.ok(ref.length > 0)
+        // A ref is pasted into a comma-separated QR payload and read back a
+        // line at a time, so any of these would silently truncate it.
+        assert.ok(!/[\r\n,\s]/.test(ref), `ref must stay printable and single-line: ${ref}`)
+    }
+})
+
+test('mintPairingRefs honours a custom count', async () => {
+    assert.equal((await mintPairingRefs(1)).length, 1)
 })

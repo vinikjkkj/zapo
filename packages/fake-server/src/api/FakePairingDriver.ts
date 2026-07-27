@@ -6,8 +6,11 @@ import {
     type FakePrimaryDevice,
     generateFakePrimaryDevice
 } from '../protocol/auth/fake-primary-device'
-import { buildPairDeviceIq, buildPairSuccessIq } from '../protocol/auth/pair-device'
-import { randomBytesAsync } from '../transport/crypto'
+import {
+    buildPairDeviceIq,
+    buildPairSuccessIq,
+    mintPairingRefs
+} from '../protocol/auth/pair-device'
 
 export interface FakePairingDriverOptions {
     readonly deviceJid: string
@@ -41,8 +44,7 @@ export class FakePairingDriver {
     public async run(): Promise<void> {
         this.primary = this.options.primary ?? (await generateFakePrimaryDevice())
 
-        const refs = await Promise.all(Array.from({ length: 6 }, () => randomBytesAsync(16)))
-        const pairDeviceIq = buildPairDeviceIq({ refs })
+        const pairDeviceIq = buildPairDeviceIq({ refs: await mintPairingRefs() })
         await this.deps.pipeline.sendStanza(pairDeviceIq)
         const waitForAck =
             this.deps.waitForPairDeviceAck?.(pairDeviceIq.attrs.id) ?? Promise.resolve()

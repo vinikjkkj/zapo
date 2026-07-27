@@ -1,7 +1,26 @@
 /** Pairing IQ builders/parsers (source: `WAWebHandlePairDevice*`, `/wa-web`). */
 
 import type { BinaryNode } from '../../transport/codec'
-import { decodeBase64Url } from '../../transport/util'
+import { randomBytesAsync } from '../../transport/crypto'
+import { bytesToBase64UrlSafe, decodeBase64Url } from '../../transport/util'
+
+const PAIR_DEVICE_REF_COUNT = 6
+const PAIR_DEVICE_REF_BYTES = 16
+
+/**
+ * Mints the rotating refs a `pair-device` push carries.
+ *
+ * They are printable on purpose. A client reads `<ref>` as text and pastes it
+ * into a comma-separated QR payload, so raw random bytes can decode into a
+ * comma or a newline and quietly corrupt whatever reads that payload back -
+ * including the primary that has to echo the ref in its upload.
+ */
+export async function mintPairingRefs(count = PAIR_DEVICE_REF_COUNT): Promise<string[]> {
+    const raw = await Promise.all(
+        Array.from({ length: count }, () => randomBytesAsync(PAIR_DEVICE_REF_BYTES))
+    )
+    return raw.map((bytes) => bytesToBase64UrlSafe(bytes))
+}
 
 export interface BuildPairDeviceIqInput {
     readonly id?: string

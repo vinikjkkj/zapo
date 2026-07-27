@@ -11,7 +11,11 @@ import { WaFakeTcpServer, type WaFakeTcpServerListenInfo } from '../infra/WaFake
 import { WaFakeWsServer, type WaFakeWsServerListenInfo } from '../infra/WaFakeWsServer'
 import { type FakeNoiseRootCa, generateFakeNoiseRootCa } from '../protocol/auth/cert-chain'
 import type { ParsedClientPayload } from '../protocol/auth/client-payload-validate'
-import { buildPairDeviceIq, buildPairSuccessIq } from '../protocol/auth/pair-device'
+import {
+    buildPairDeviceIq,
+    buildPairSuccessIq,
+    mintPairingRefs
+} from '../protocol/auth/pair-device'
 import type { BuildSuccessNodeInput } from '../protocol/auth/success-node'
 import type { BuildAbPropsResultInput } from '../protocol/iq/abprops'
 import {
@@ -47,8 +51,7 @@ import {
     type PublishMediaInput
 } from '../state/fake-media-store'
 import { type BinaryNode } from '../transport/codec'
-import { randomBytesAsync, type SignalKeyPair, X25519 } from '../transport/crypto'
-import { bytesToBase64UrlSafe } from '../transport/util'
+import { type SignalKeyPair, X25519 } from '../transport/crypto'
 
 import { type AppStateSyncManager, type CapturedAppStateMutation } from './AppStateSyncManager'
 import { FakePairingDriver, type FakePairingDriverOptions } from './FakePairingDriver'
@@ -126,8 +129,6 @@ export interface FakeWaServerOptions {
 }
 
 const HOST_DOMAIN = 's.whatsapp.net'
-const PAIR_DEVICE_REF_COUNT = 6
-const PAIR_DEVICE_REF_BYTES = 16
 const MOBILE_PRIMARY_PLATFORM = 'android'
 
 /**
@@ -907,13 +908,7 @@ export class FakeWaServer {
         pipeline: WaFakeConnectionPipeline,
         options: { readonly refCount?: number } = {}
     ): Promise<readonly string[]> {
-        const refCount = options.refCount ?? PAIR_DEVICE_REF_COUNT
-        const raw = await Promise.all(
-            Array.from({ length: refCount }, () => randomBytesAsync(PAIR_DEVICE_REF_BYTES))
-        )
-        // Refs travel as text inside the companion's QR, so they have to be
-        // printable to survive the round trip back in the primary's upload.
-        const refs = raw.map((bytes) => bytesToBase64UrlSafe(bytes))
+        const refs = await mintPairingRefs(options.refCount)
         // Send before registering: the builder rejects a bad ref count and the
         // send can fail, and either would leave refs in the map that no
         // connection will ever consume.
@@ -946,7 +941,7 @@ export class FakeWaServer {
             if (!primary) {
                 return buildIqError(iq, { code: 404, text: 'primary-not-connected' })
             }
-            const ref = bytesToBase64UrlSafe(await randomBytesAsync(PAIR_DEVICE_REF_BYTES))
+            const [ref] = await mintPairingRefs(1)
             this.linkCodeSessions.set(ref, { companion: sender, primary })
             this.pendingCompanionOffers.set(ref, sender)
             await primary.sendStanza(
