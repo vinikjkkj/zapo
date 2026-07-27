@@ -12,7 +12,7 @@
  *     precise retained-JS-heap figure per backend.
  *
  * NOTE: the CPU profiler adds overhead, so throughput here is NOT
- * comparable to the clean matrix — these runs are for ATTRIBUTION only.
+ * comparable to the clean matrix - these runs are for ATTRIBUTION only.
  *
  * Run: node packages/fake-server/bench/native-backend-profile.cjs
  * Env: PROFILE_BACKENDS (csv, default js,wasm,napi),
@@ -26,7 +26,14 @@ const path = require('node:path')
 
 const BENCH = path.join(__dirname, 'messaging.bench.ts')
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
+const KNOWN_BACKENDS = ['js', 'wasm', 'napi']
 const BACKENDS = (process.env.PROFILE_BACKENDS ?? 'js,wasm,napi').split(',').map((s) => s.trim())
+for (const b of BACKENDS) {
+    if (!KNOWN_BACKENDS.includes(b)) {
+        console.error(`unknown backend '${b}' in PROFILE_BACKENDS (expected: js, wasm, napi)`)
+        process.exit(1)
+    }
+}
 const OUT_ROOT = process.env.PROFILE_OUT ?? path.join(REPO_ROOT, 'native-profile-out')
 
 const WORKLOAD = {
@@ -159,6 +166,8 @@ function newestMatch(dir, prefix, ext) {
 function runProfile(backend, outDir) {
     fs.mkdirSync(outDir, { recursive: true })
     const env = { ...process.env, ...WORKLOAD, ZAPO_NATIVE_BACKEND: backend }
+    delete env.ZAPO_XEDDSA_FORCE_JS
+    delete env.ZAPO_X25519_FORCE_JS
     const res = spawnSync(
         process.execPath,
         [
@@ -210,7 +219,7 @@ function main() {
     // ─── CPU attribution ───
     const bar = '════════════════════════════════════════════════════════════════════════'
     console.log(bar)
-    console.log('CPU self-time attribution (whole run, sampled ms) — profiler overhead included')
+    console.log('CPU self-time attribution (whole run, sampled ms) - profiler overhead included')
     console.log(bar)
     const allBuckets = new Set()
     for (const b of BACKENDS)
@@ -257,7 +266,7 @@ function main() {
         const c = digest[b].cpu
         if (!c) continue
         console.log('')
-        console.log(`── top CPU frames — backend=${b} ──`)
+        console.log(`── top CPU frames - backend=${b} ──`)
         const top = [...c.funcs.entries()].sort((a, b2) => b2[1] - a[1]).slice(0, 12)
         for (const [key, us] of top) {
             const pct = c.totalUs ? (us / c.totalUs) * 100 : 0

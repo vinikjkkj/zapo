@@ -20,7 +20,14 @@ const path = require('node:path')
 const BENCH = path.join(__dirname, 'messaging.bench.ts')
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
 
+const KNOWN_BACKENDS = ['js', 'wasm', 'napi']
 const BACKENDS = (process.env.MATRIX_BACKENDS ?? 'js,wasm,napi').split(',').map((s) => s.trim())
+for (const b of BACKENDS) {
+    if (!KNOWN_BACKENDS.includes(b)) {
+        console.error(`unknown backend '${b}' in MATRIX_BACKENDS (expected: js, wasm, napi)`)
+        process.exit(1)
+    }
+}
 const MEASURED_RUNS = Number.parseInt(process.env.MATRIX_RUNS ?? '3', 10)
 const WARMUP_RUNS = Number.parseInt(process.env.MATRIX_WARMUP ?? '1', 10)
 
@@ -53,6 +60,8 @@ function runOnce(backend) {
         ...WORKLOAD,
         ZAPO_NATIVE_BACKEND: backend
     }
+    delete env.ZAPO_XEDDSA_FORCE_JS
+    delete env.ZAPO_X25519_FORCE_JS
     const res = spawnSync(process.execPath, ['--expose-gc', '--import', 'tsx', BENCH], {
         cwd: REPO_ROOT,
         env,
@@ -103,7 +112,7 @@ function mib(bytes) {
 async function main() {
     const scenarioOrder = ['SEND 1:1', 'RECV 1:1', 'SEND group', 'RECV group']
     const started = Date.now()
-    console.log('native backend matrix — messaging bench (sqlite)')
+    console.log('native backend matrix - messaging bench (sqlite)')
     console.log(
         `workload: 1000 contacts x2 dev, 4 groups x500 members, 1000 msgs/scenario; ` +
             `${WARMUP_RUNS} warmup + ${MEASURED_RUNS} measured runs/backend`
@@ -113,7 +122,7 @@ async function main() {
     // medians[backend][scenario][metric] = median value
     const medians = {}
     for (const backend of BACKENDS) {
-        console.log(`### backend=${backend} — ${LABELS[backend] ?? backend}`)
+        console.log(`### backend=${backend} - ${LABELS[backend] ?? backend}`)
         for (let w = 0; w < WARMUP_RUNS; w += 1) {
             process.stdout.write(`  warmup ${w + 1}/${WARMUP_RUNS} ... `)
             const t = Date.now()
@@ -173,37 +182,37 @@ async function main() {
     }
 
     printMetricTable(
-        'MEDIAN throughput (msg/s) — higher is better',
+        'MEDIAN throughput (msg/s) - higher is better',
         'msgps',
         (v) => v.toFixed(1),
         true
     )
     printMetricTable(
-        'MEDIAN CPU time per scenario (ms of CPU to process the messages) — lower is better',
+        'MEDIAN CPU time per scenario (ms of CPU to process the messages) - lower is better',
         'cpuTimeMs',
         (v) => v.toFixed(0),
         true
     )
     printMetricTable(
-        'MEDIAN CPU per message (CPU-ms / msg) — lower is better',
+        'MEDIAN CPU per message (CPU-ms / msg) - lower is better',
         'cpuMsPerMsg',
         (v) => v.toFixed(2),
         true
     )
     printMetricTable(
-        'MEDIAN CPU utilisation (%, >100 = multi-core) — parallelism, not cost',
+        'MEDIAN CPU utilisation (%, >100 = multi-core) - parallelism, not cost',
         'cpuPercent',
         (v) => v.toFixed(0) + '%',
         false
     )
     printMetricTable(
-        'MEDIAN RSS after scenario (MiB) — process footprint, lower is better',
+        'MEDIAN RSS after scenario (MiB) - process footprint, lower is better',
         'rssAfterBytes',
         (v) => mib(v),
         true
     )
     printMetricTable(
-        'MEDIAN heap delta per scenario (MiB) — allocation churn, lower is better',
+        'MEDIAN heap delta per scenario (MiB) - allocation churn, lower is better',
         'heapDeltaBytes',
         (v) => mib(v),
         true
