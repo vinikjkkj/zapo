@@ -280,3 +280,109 @@ test('revoke-all from a primary spares the hosted set when asked to', async () =
     )
     assert.deepEqual(revoked, [null], 'without the flag every companion goes')
 })
+
+const FOREIGN_MOBILE_LOGIN: ParsedClientPayload = {
+    kind: 'login',
+    raw: {},
+    username: '5511888888888',
+    device: 0,
+    loginCounter: 0,
+    flavor: 'mobile',
+    mobile: null
+}
+
+function buildPairDeviceIq(): BinaryNode {
+    return {
+        tag: 'iq',
+        attrs: { id: 'pair-1', type: 'set', xmlns: 'md', to: 's.whatsapp.net' },
+        content: [
+            {
+                tag: 'pair-device',
+                attrs: {},
+                content: [
+                    { tag: 'ref', attrs: {}, content: 'ref-abc' },
+                    { tag: 'pub-key', attrs: {}, content: new Uint8Array(32) },
+                    { tag: 'device-identity', attrs: {}, content: new Uint8Array([1]) },
+                    { tag: 'key-index-list', attrs: { ts: '1' }, content: new Uint8Array([2]) }
+                ]
+            }
+        ]
+    }
+}
+
+test('only the account phone may upload a pair-device', async () => {
+    let links = 0
+    const deps: Partial<IqHandlerDeps> = {
+        mobilePrimary: MOBILE_PRIMARY_IDENTITY,
+        linkCompanionDevice: async () => {
+            links += 1
+            return { deviceJid: COMPANION_JID, companionPropsBytes: null }
+        }
+    }
+
+    const fromForeignPhone = await createRouterWithDefaults(deps).route(
+        buildPairDeviceIq(),
+        contextFor(FOREIGN_MOBILE_LOGIN)
+    )
+    assert.equal(fromForeignPhone?.attrs.type, 'error')
+    assert.equal(links, 0, 'another number cannot link into this account')
+
+    const fromCompanion = await createRouterWithDefaults(deps).route(
+        buildPairDeviceIq(),
+        contextFor(WEB_LOGIN)
+    )
+    assert.equal(fromCompanion?.attrs.type, 'error')
+
+    const fromOwner = await createRouterWithDefaults(deps).route(
+        buildPairDeviceIq(),
+        contextFor(MOBILE_LOGIN)
+    )
+    assert.equal(fromOwner?.attrs.type, 'result')
+    assert.equal(links, 1)
+})
+
+test('only the account phone may publish a key-index list', async () => {
+    let published = 0
+    const deps: Partial<IqHandlerDeps> = {
+        mobilePrimary: MOBILE_PRIMARY_IDENTITY,
+        recordKeyIndexList: () => {
+            published += 1
+        }
+    }
+    const iq: BinaryNode = {
+        tag: 'iq',
+        attrs: { id: 'kil-1', type: 'set', xmlns: 'md', to: 's.whatsapp.net' },
+        content: [{ tag: 'key-index-list', attrs: { ts: '5' }, content: new Uint8Array([1]) }]
+    }
+
+    const foreign = await createRouterWithDefaults(deps).route(iq, contextFor(FOREIGN_MOBILE_LOGIN))
+    assert.equal(foreign?.attrs.type, 'error')
+    assert.equal(published, 0)
+
+    const owner = await createRouterWithDefaults(deps).route(iq, contextFor(MOBILE_LOGIN))
+    assert.equal(owner?.attrs.type, 'result')
+    assert.equal(published, 1)
+})
+
+test('a foreign phone cannot revoke a device of the account that owns the session', async () => {
+    let logouts = 0
+    const revoked: Array<readonly string[] | null> = []
+    const router = createRouterWithDefaults({
+        mobilePrimary: MOBILE_PRIMARY_IDENTITY,
+        notifyLogout: () => {
+            logouts += 1
+        },
+        revokeCompanionDevices: (jids) => {
+            revoked.push(jids)
+            return []
+        }
+    })
+
+    await router.route(
+        buildRemoveIq({ jid: COMPANION_JID, reason: 'user_initiated' }),
+        contextFor(FOREIGN_MOBILE_LOGIN)
+    )
+
+    assert.deepEqual(revoked, [], 'it may only unlink itself')
+    assert.equal(logouts, 1, 'and its own session ends')
+})

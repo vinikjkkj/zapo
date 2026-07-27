@@ -21,19 +21,19 @@ const PHONE = '5511970002222'
 async function bringCompanionToPairingScreen(
     server: FakeWaServer,
     companion: WaClient
-): Promise<void> {
-    const qrPromise = new Promise<void>((resolve, reject) => {
+): Promise<string> {
+    const qrPromise = new Promise<string>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('auth_qr timed out')), 30_000)
-        companion.once('auth_qr', () => {
+        companion.once('auth_qr', (event: Parameters<WaClientEventMap['auth_qr']>[0]) => {
             clearTimeout(timer)
-            resolve()
+            resolve(event.qr)
         })
     })
     const pipelinePromise = waitForCompanionPipeline(server)
     // connect() only resolves once pairing finishes, so it runs detached.
     void companion.connect().catch(() => undefined)
     await server.offerCompanionPairing(await pipelinePromise)
-    await qrPromise
+    return qrPromise
 }
 
 /**
@@ -145,7 +145,7 @@ test('a second account logging into the same session gets no companion-host wiri
     try {
         await owner.connect()
         await intruder.connect()
-        await bringCompanionToPairingScreen(server, companion)
+        const qr = await bringCompanionToPairingScreen(server, companion)
 
         // The session belongs to the first number, so a code aimed at the
         // second one must not be relayed to its connection - the link would be
@@ -153,6 +153,14 @@ test('a second account logging into the same session gets no companion-host wiri
         await assert.rejects(
             () => companion.auth.requestPairingCode(intruderPhone),
             /404|companion hello/
+        )
+
+        // Nor can it link one directly off the companion's QR.
+        await assert.rejects(() => intruder.mobile.linkCompanion(qr))
+        assert.deepEqual(
+            server.companionHost.linkedCompanions(),
+            [],
+            'no companion may be linked into the account by another number'
         )
 
         // The owner still works.

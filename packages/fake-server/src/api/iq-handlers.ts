@@ -176,10 +176,31 @@ function buildGroupMetadataReply(iq: BinaryNode, metadata: MutableFakeGroup): Bi
     }
 }
 
-/** True when the stanza arrived on a phone login, i.e. the account's primary. */
-function isMobilePrimaryConnection(context: WaFakeIqContext | undefined): boolean {
+/**
+ * True when the stanza arrived on the phone that owns this session's account.
+ * Being a phone login is not enough: a second number connecting to the same
+ * session must not drive the companion set of the account that owns it.
+ */
+function isSessionOwnerConnection(
+    context: WaFakeIqContext | undefined,
+    deps: IqHandlerDeps
+): boolean {
     const payload = context?.connection.clientPayload
-    return payload?.kind === 'login' && payload.flavor === 'mobile'
+    if (payload?.kind !== 'login' || payload.flavor !== 'mobile') {
+        return false
+    }
+    return deps.mobilePrimary?.username === payload.username
+}
+
+/** The device jid a connection speaks for, or `null` before it logs in. */
+function ownDeviceJid(context: WaFakeIqContext | undefined): string | null {
+    const payload = context?.connection.clientPayload
+    if (payload?.kind !== 'login') {
+        return null
+    }
+    return payload.device > 0
+        ? `${payload.username}:${payload.device}@s.whatsapp.net`
+        : `${payload.username}@s.whatsapp.net`
 }
 
 export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandlerDeps): void {
@@ -372,10 +393,15 @@ export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandle
     router.register({
         label: 'companion-pair-device',
         matcher: { xmlns: 'md', type: 'set', childTag: 'pair-device' },
-        respond: async (iq) => {
+        respond: async (iq, context) => {
             const upload = parsePairDeviceUpload(iq)
             if (!upload) {
                 return buildIqError(iq, { code: 400, text: 'invalid-pair-device' })
+            }
+            // The link is minted under the account that owns the session, so
+            // only that account's phone may ask for one.
+            if (!isSessionOwnerConnection(context, deps)) {
+                return buildIqError(iq, { code: 403, text: 'not-authorized' })
             }
             const linked = await deps.linkCompanionDevice(upload)
             if (!linked) {
@@ -398,10 +424,13 @@ export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandle
     router.register({
         label: 'companion-key-index-list',
         matcher: { xmlns: 'md', type: 'set', childTag: 'key-index-list' },
-        respond: (iq) => {
+        respond: (iq, context) => {
             const published = parseKeyIndexListPublish(iq)
             if (!published) {
                 return buildIqError(iq, { code: 400, text: 'invalid-key-index-list' })
+            }
+            if (!isSessionOwnerConnection(context, deps)) {
+                return buildIqError(iq, { code: 403, text: 'not-authorized' })
             }
             deps.recordKeyIndexList(published.keyIndexListBytes, published.timestampSeconds)
             return buildIqResult(iq)
@@ -415,9 +444,9 @@ export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandle
             const removal = parseRemoveCompanionDevice(iq)
             // The same stanza means "log me out" from a companion and "unlink
             // that device" from a primary. The wire does not say which, but the
-            // connection does: a phone login is always revoking someone else's
-            // device, and never ends its own session by sending this.
-            if (removal && isMobilePrimaryConnection(context)) {
+            // connection does: the account's own phone is always revoking
+            // someone else's device, and never ends its own session this way.
+            if (removal && isSessionOwnerConnection(context, deps)) {
                 if (!removal.all) {
                     deps.revokeCompanionDevices(removal.deviceJid ? [removal.deviceJid] : [])
                 } else if (!removal.excludeHostedCompanion) {
@@ -427,9 +456,10 @@ export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandle
                 }
                 return buildIqResult(iq)
             }
-            // A companion unlinks itself: drop it from the account too when the
-            // session happens to host it, then end the session.
-            if (removal?.deviceJid) {
+            // Anyone else may only unlink itself: a connection that is not the
+            // account's phone must never drop someone else's device. Its own
+            // session ends either way.
+            if (removal?.deviceJid && removal.deviceJid === ownDeviceJid(context)) {
                 deps.revokeCompanionDevices([removal.deviceJid])
             }
             deps.notifyLogout()
