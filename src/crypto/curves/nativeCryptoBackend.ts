@@ -52,10 +52,16 @@ function loadWasmBackend(): NativeCryptoModule {
 
 let cached: NativeCryptoModule | null | undefined
 
-function isModuleAbsence(error: unknown): boolean {
-    if (error instanceof ReferenceError) return true
-    const code = (error as { readonly code?: unknown } | null)?.code
-    return code === 'MODULE_NOT_FOUND' || code === 'ERR_MODULE_NOT_FOUND'
+function isModuleAbsence(specifier: string, error: unknown): boolean {
+    if (error instanceof ReferenceError) {
+        return error.message.includes('require is not defined')
+    }
+    const { code, message } = (error ?? {}) as {
+        readonly code?: unknown
+        readonly message?: unknown
+    }
+    if (code !== 'MODULE_NOT_FOUND' && code !== 'ERR_MODULE_NOT_FOUND') return false
+    return typeof message === 'string' && message.includes(`'${specifier}'`)
 }
 
 function warnLoadFailure(backend: string, error: unknown): void {
@@ -74,14 +80,14 @@ export function resolveNativeCryptoBackend(): NativeCryptoModule | null {
         try {
             cached = require('@zapo-js/native') as NativeCryptoModule
         } catch (error) {
-            if (!isModuleAbsence(error)) warnLoadFailure('napi', error)
+            if (!isModuleAbsence('@zapo-js/native', error)) warnLoadFailure('napi', error)
         }
     }
     if (cached === null && (backend === 'wasm' || backend === 'auto')) {
         try {
             cached = loadWasmBackend()
         } catch (error) {
-            if (!isModuleAbsence(error)) warnLoadFailure('wasm', error)
+            if (!isModuleAbsence(WASM_MODULE_SPECIFIER, error)) warnLoadFailure('wasm', error)
         }
     }
     return cached
