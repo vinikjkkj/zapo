@@ -160,7 +160,13 @@ function parseMobileDetails(raw: Proto.IClientPayload): MobileLoginDetails {
 function formatAppVersion(
     version: NonNullable<NonNullable<Proto.IClientPayload['userAgent']>['appVersion']>
 ): string {
-    const parts = [version.primary, version.secondary, version.tertiary, version.quaternary]
+    const parts = [
+        version.primary,
+        version.secondary,
+        version.tertiary,
+        version.quaternary,
+        version.quinary
+    ]
     const present: number[] = []
     for (const part of parts) {
         if (part === undefined || part === null) {

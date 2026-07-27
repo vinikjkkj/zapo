@@ -182,9 +182,10 @@ const client = new WaClient({
 
 ### Companion hosting (a phone links a companion)
 
-The inverse of `runPairing`: a real mobile-primary client signs the link and the
-server only relays. `offerCompanionPairing(pipeline)` pushes the refs a
-companion turns into its QR; when the primary uploads `pair-device` for one of
+The inverse of `runPairing`: the identity is signed by a real mobile-primary
+client rather than by the server, which relays that signed exchange and does the
+account bookkeeping around it. `offerCompanionPairing(pipeline)` pushes the refs
+a companion turns into its QR; when the primary uploads `pair-device` for one of
 them, the server mints the device jid, hands the signed identity to the
 companion as `pair-success`, and tracks the link.
 

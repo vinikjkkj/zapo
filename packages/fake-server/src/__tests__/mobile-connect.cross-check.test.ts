@@ -59,3 +59,26 @@ test('both listeners serve the same server identity', async () => {
         await server.stop()
     }
 })
+
+test('a failed mobile bind rolls back the listeners that already came up', async () => {
+    // Free a known websocket port, then make the mobile bind clash.
+    const probe = await FakeWaServer.start()
+    const wsPort = probe.port
+    await probe.stop()
+
+    const occupied = await FakeWaServer.start({ tcp: true })
+    const tcpPort = Number(occupied.tcpUrl.split(':')[2])
+    const clashing = new FakeWaServer({ port: wsPort, tcp: { port: tcpPort } })
+
+    try {
+        await assert.rejects(() => clashing.listen(), 'the mobile listener cannot bind')
+        assert.throws(() => clashing.url, /not listening/, 'the server reports itself down')
+
+        // Only possible if the websocket listener was actually closed again.
+        const reuse = await FakeWaServer.start({ port: wsPort })
+        assert.equal(reuse.port, wsPort)
+        await reuse.stop()
+    } finally {
+        await occupied.stop()
+    }
+})

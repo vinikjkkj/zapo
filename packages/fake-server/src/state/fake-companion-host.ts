@@ -32,6 +32,7 @@ export interface FakePublishedKeyIndexList {
 export class FakeCompanionHostState {
     private primaryIdentity: FakeMobilePrimaryIdentity | null = null
     private readonly companions = new Map<string, FakeLinkedCompanion>()
+    private readonly reservedDeviceIds = new Set<number>()
     private keyIndexList: FakePublishedKeyIndexList | null = null
     private readonly linkListeners = new Set<(companion: FakeLinkedCompanion) => void>()
     private readonly revokeListeners = new Set<(deviceJids: readonly string[]) => void>()
@@ -41,8 +42,16 @@ export class FakeCompanionHostState {
         return this.primaryIdentity
     }
 
-    /** Records the primary at login; later logins of the same account are a no-op. */
+    /**
+     * Records the primary at login. The first account to bind owns the session
+     * for good: a later login under a different number would otherwise mint
+     * device jids for one account while the companions of another are still
+     * tracked here.
+     */
     public bindPrimary(identity: FakeMobilePrimaryIdentity): void {
+        if (this.primaryIdentity) {
+            return
+        }
         this.primaryIdentity = identity
     }
 
@@ -57,12 +66,14 @@ export class FakeCompanionHostState {
     }
 
     /**
-     * Allocates the next free device slot. The primary owns device 0, so
+     * Reserves the next free device slot. The primary owns device 0, so
      * companions start at 1 and a revoked slot is reused only once no live
-     * companion holds it.
+     * companion holds it. The slot is held from here until the link is either
+     * recorded or released, because a link spans an await and two overlapping
+     * pairings would otherwise be handed the same jid.
      */
     public allocateDeviceId(): number {
-        const taken = new Set<number>([0])
+        const taken = new Set<number>([0, ...this.reservedDeviceIds])
         for (const companion of this.companions.values()) {
             taken.add(companion.deviceId)
         }
@@ -70,10 +81,17 @@ export class FakeCompanionHostState {
         while (taken.has(candidate)) {
             candidate += 1
         }
+        this.reservedDeviceIds.add(candidate)
         return candidate
     }
 
+    /** Frees a slot whose link never completed. */
+    public releaseDeviceId(deviceId: number): void {
+        this.reservedDeviceIds.delete(deviceId)
+    }
+
     public recordCompanion(companion: FakeLinkedCompanion): void {
+        this.reservedDeviceIds.delete(companion.deviceId)
         this.companions.set(companion.deviceJid, companion)
         for (const listener of this.linkListeners) {
             try {

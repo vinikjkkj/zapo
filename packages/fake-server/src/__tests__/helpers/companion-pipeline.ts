@@ -3,14 +3,6 @@ import type { WaClient, WaClientEventMap } from 'zapo-js'
 import type { FakeWaServer } from '../../api/FakeWaServer'
 import type { WaFakeConnectionPipeline } from '../../infra/WaFakeConnectionPipeline'
 
-/**
- * Resolves with the connection of the next client that authenticates
- * unregistered, i.e. a companion waiting to be paired.
- *
- * Filtering by payload matters: `connect()` can resolve a tick before the
- * server fires its own authentication hook, so a plain "next authenticated
- * pipeline" wait races and may hand back the connection that just came up.
- */
 export interface LinkedCompanionFixture {
     readonly deviceJid: string
     readonly keyIndex: number
@@ -43,6 +35,14 @@ export async function linkCompanionViaQr(
     return { deviceJid: linked.deviceJid, keyIndex: linked.keyIndex, qr }
 }
 
+/**
+ * Resolves with the connection of the next client that authenticates
+ * unregistered, i.e. a companion waiting to be paired.
+ *
+ * Filtering by payload matters: `connect()` can resolve a tick before the
+ * server fires its own authentication hook, so a plain "next authenticated
+ * pipeline" wait races and may hand back the connection that just came up.
+ */
 export function waitForCompanionPipeline(
     server: FakeWaServer,
     timeoutMs = 30_000

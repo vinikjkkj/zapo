@@ -176,6 +176,12 @@ function buildGroupMetadataReply(iq: BinaryNode, metadata: MutableFakeGroup): Bi
     }
 }
 
+/** True when the stanza arrived on a phone login, i.e. the account's primary. */
+function isMobilePrimaryConnection(context: WaFakeIqContext | undefined): boolean {
+    const payload = context?.connection.clientPayload
+    return payload?.kind === 'login' && payload.flavor === 'mobile'
+}
+
 export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandlerDeps): void {
     router.register({
         label: 'prekey-upload',
@@ -405,24 +411,26 @@ export function registerDefaultIqHandlers(router: WaFakeIqRouter, deps: IqHandle
     router.register({
         label: 'remove-companion-device',
         matcher: { xmlns: 'md', type: 'set', childTag: 'remove-companion-device' },
-        respond: (iq) => {
+        respond: (iq, context) => {
             const removal = parseRemoveCompanionDevice(iq)
             // The same stanza means "log me out" from a companion and "unlink
-            // that device" from a primary, and the wire alone does not say
-            // which. Treat it as a revoke only when this session hosts the
-            // named device; everything else ends the session, which keeps the
-            // companion logout path intact.
-            if (removal && deps.mobilePrimary) {
-                if (removal.all) {
+            // that device" from a primary. The wire does not say which, but the
+            // connection does: a phone login is always revoking someone else's
+            // device, and never ends its own session by sending this.
+            if (removal && isMobilePrimaryConnection(context)) {
+                if (!removal.all) {
+                    deps.revokeCompanionDevices(removal.deviceJid ? [removal.deviceJid] : [])
+                } else if (!removal.excludeHostedCompanion) {
+                    // The hosted set is exactly what this session tracks, so
+                    // sparing it leaves the registry untouched.
                     deps.revokeCompanionDevices(null)
-                    return buildIqResult(iq)
                 }
-                if (removal.deviceJid) {
-                    const removed = deps.revokeCompanionDevices([removal.deviceJid])
-                    if (removed.length > 0) {
-                        return buildIqResult(iq)
-                    }
-                }
+                return buildIqResult(iq)
+            }
+            // A companion unlinks itself: drop it from the account too when the
+            // session happens to host it, then end the session.
+            if (removal?.deviceJid) {
+                deps.revokeCompanionDevices([removal.deviceJid])
             }
             deps.notifyLogout()
             return buildIqResult(iq)

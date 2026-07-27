@@ -116,3 +116,32 @@ test('readCompanionKeyIndex unwraps the signed identity, or reports 0', () => {
     assert.equal(readCompanionKeyIndex(wrapped), 4)
     assert.equal(readCompanionKeyIndex(new Uint8Array([0xff, 0xff])), 0)
 })
+
+test('allocateDeviceId reserves the slot so an overlapping link cannot reuse it', () => {
+    const state = new FakeCompanionHostState()
+
+    // Two links in flight before either records: the second must not be handed
+    // the slot the first is about to take.
+    assert.equal(state.allocateDeviceId(), 1)
+    assert.equal(state.allocateDeviceId(), 2)
+
+    state.recordCompanion(buildCompanion(1, 1))
+    assert.equal(state.allocateDeviceId(), 3, 'recording clears only its own reservation')
+})
+
+test('releaseDeviceId frees a slot whose link never completed', () => {
+    const state = new FakeCompanionHostState()
+    const reserved = state.allocateDeviceId()
+
+    state.releaseDeviceId(reserved)
+
+    assert.equal(state.allocateDeviceId(), reserved)
+})
+
+test('bindPrimary keeps the account that claimed the session first', () => {
+    const state = new FakeCompanionHostState()
+    state.bindPrimary(PRIMARY)
+    state.bindPrimary({ username: '5511888888888', jid: '5511888888888@s.whatsapp.net' })
+
+    assert.deepEqual(state.primary, PRIMARY, 'a later login must not retarget device jids')
+})

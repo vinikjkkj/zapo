@@ -1,11 +1,56 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import type { ParsedClientPayload } from '../../protocol/auth/client-payload-validate'
 import { FAKE_DEFAULT_PRIVACY_SETTINGS } from '../../protocol/iq/privacy'
-import { WaFakeIqRouter } from '../../protocol/iq/router'
+import { type WaFakeIqContext, WaFakeIqRouter } from '../../protocol/iq/router'
 import type { BinaryNode } from '../../transport/codec'
 import { FakeWaServer } from '../FakeWaServer'
 import { type IqHandlerDeps, registerDefaultIqHandlers } from '../iq-handlers'
+
+const MOBILE_PRIMARY_IDENTITY = {
+    username: '5511999999999',
+    jid: '5511999999999@s.whatsapp.net'
+}
+const COMPANION_JID = '5511999999999:3@s.whatsapp.net'
+
+const MOBILE_LOGIN: ParsedClientPayload = {
+    kind: 'login',
+    raw: {},
+    username: MOBILE_PRIMARY_IDENTITY.username,
+    device: 0,
+    loginCounter: 0,
+    flavor: 'mobile',
+    mobile: null
+}
+
+const WEB_LOGIN: ParsedClientPayload = {
+    kind: 'login',
+    raw: {},
+    username: MOBILE_PRIMARY_IDENTITY.username,
+    device: 3,
+    loginCounter: 0,
+    flavor: 'web',
+    mobile: null
+}
+
+/** Minimal sender context; only the payload is read by these handlers. */
+function contextFor(clientPayload: ParsedClientPayload): WaFakeIqContext {
+    return {
+        connection: {
+            sendStanza: () => Promise.resolve(),
+            clientPayload
+        }
+    }
+}
+
+function buildRemoveIq(attrs: Record<string, string>): BinaryNode {
+    return {
+        tag: 'iq',
+        attrs: { id: 'remove-1', type: 'set', xmlns: 'md', to: 's.whatsapp.net' },
+        content: [{ tag: 'remove-companion-device', attrs }]
+    }
+}
 
 function createRouterWithDefaults(overrides: Partial<IqHandlerDeps> = {}): WaFakeIqRouter {
     const router = new WaFakeIqRouter()
@@ -153,4 +198,85 @@ test('encrypt <count> does not shadow the <digest> 404 handler', async () => {
     const response = await router.route(inbound)
     assert.ok(response)
     assert.equal(response.attrs.type, 'error')
+})
+
+test('a primary revoking an untracked device is not logged out', async () => {
+    let logouts = 0
+    const revoked: Array<readonly string[] | null> = []
+    const router = createRouterWithDefaults({
+        mobilePrimary: MOBILE_PRIMARY_IDENTITY,
+        notifyLogout: () => {
+            logouts += 1
+        },
+        // Nothing is tracked, so the revoke removes nothing.
+        revokeCompanionDevices: (jids) => {
+            revoked.push(jids)
+            return []
+        }
+    })
+
+    const response = await router.route(
+        buildRemoveIq({ jid: COMPANION_JID, reason: 'user_initiated' }),
+        contextFor(MOBILE_LOGIN)
+    )
+
+    assert.equal(response?.attrs.type, 'result')
+    assert.equal(logouts, 0, 'a phone never ends its own session with this stanza')
+    assert.deepEqual(revoked, [[COMPANION_JID]])
+})
+
+test('a companion unlinking itself is logged out even when the session hosts it', async () => {
+    let logouts = 0
+    const router = createRouterWithDefaults({
+        mobilePrimary: MOBILE_PRIMARY_IDENTITY,
+        notifyLogout: () => {
+            logouts += 1
+        },
+        revokeCompanionDevices: () => [COMPANION_JID]
+    })
+
+    const response = await router.route(
+        buildRemoveIq({ jid: COMPANION_JID, reason: 'user_initiated' }),
+        contextFor(WEB_LOGIN)
+    )
+
+    assert.equal(response?.attrs.type, 'result')
+    assert.equal(logouts, 1, 'the companion side still ends the session')
+})
+
+test('a remove-companion-device with no sender context falls back to logout', async () => {
+    let logouts = 0
+    const router = createRouterWithDefaults({
+        mobilePrimary: MOBILE_PRIMARY_IDENTITY,
+        notifyLogout: () => {
+            logouts += 1
+        }
+    })
+
+    await router.route(buildRemoveIq({ jid: COMPANION_JID, reason: 'user_initiated' }))
+
+    assert.equal(logouts, 1)
+})
+
+test('revoke-all from a primary spares the hosted set when asked to', async () => {
+    const revoked: Array<readonly string[] | null> = []
+    const router = createRouterWithDefaults({
+        mobilePrimary: MOBILE_PRIMARY_IDENTITY,
+        revokeCompanionDevices: (jids) => {
+            revoked.push(jids)
+            return []
+        }
+    })
+
+    await router.route(
+        buildRemoveIq({ all: 'true', reason: 'user_initiated', exclude_hosted_companion: 'true' }),
+        contextFor(MOBILE_LOGIN)
+    )
+    assert.deepEqual(revoked, [], 'the hosted set is exactly what this session tracks')
+
+    await router.route(
+        buildRemoveIq({ all: 'true', reason: 'user_initiated' }),
+        contextFor(MOBILE_LOGIN)
+    )
+    assert.deepEqual(revoked, [null], 'without the flag every companion goes')
 })

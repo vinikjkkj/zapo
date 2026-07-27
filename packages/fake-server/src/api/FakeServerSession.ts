@@ -370,12 +370,18 @@ export class FakeServerSession {
         }
         const deviceId = this.companionHost.allocateDeviceId()
         const deviceJid = `${primary.username}:${deviceId}@${HOST_DOMAIN}`
-        const completed = await host.completeCompanionPairing({
-            ref: upload.ref,
-            deviceJid,
-            deviceIdentityBytes: upload.deviceIdentityBytes
-        })
+        const completed = await host
+            .completeCompanionPairing({
+                ref: upload.ref,
+                deviceJid,
+                deviceIdentityBytes: upload.deviceIdentityBytes
+            })
+            .catch((error: unknown) => {
+                this.companionHost.releaseDeviceId(deviceId)
+                throw error
+            })
         if (!completed) {
+            this.companionHost.releaseDeviceId(deviceId)
             return null
         }
         this.companionHost.recordCompanion({

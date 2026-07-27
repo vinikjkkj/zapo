@@ -101,6 +101,14 @@ export async function createFakeMobilePrimary(
             `phoneNumber must be digits only without a leading zero, got: ${options.phoneNumber}`
         )
     }
+    // The login payload carries the number as a numeric username, so anything
+    // past the safe-integer range would seed credentials that only fail later,
+    // on connect.
+    if (!Number.isSafeInteger(Number(options.phoneNumber))) {
+        throw new Error(
+            `phoneNumber is too long to be sent as a numeric username: ${options.phoneNumber}`
+        )
+    }
 
     const [noiseKeyPair, identityKeyPair, signedPreKeyPair, advSecretKey, registrationId] =
         await Promise.all([

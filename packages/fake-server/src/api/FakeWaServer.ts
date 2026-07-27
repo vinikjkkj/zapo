@@ -749,10 +749,29 @@ export class FakeWaServer {
         this.wsServer.setHttpRequestHandler(mediaHandler)
         this.mediaHttpsServer.setRequestHandler(mediaHandler)
         this.listenInfo = await this.wsServer.listen()
-        if (this.tcpServer) {
-            this.tcpListenInfo = await this.tcpServer.listen()
+        try {
+            if (this.tcpServer) {
+                this.tcpListenInfo = await this.tcpServer.listen()
+            }
+            await this.mediaHttpsServer.listen('127.0.0.1')
+        } catch (error) {
+            // A half-open server is worse than none: the listeners that did
+            // come up would stay bound and `listenInfo` would make a retry a
+            // no-op. Roll everything back so the caller can start over.
+            await this.rollbackFailedListen()
+            throw error
         }
-        await this.mediaHttpsServer.listen('127.0.0.1')
+    }
+
+    private async rollbackFailedListen(): Promise<void> {
+        const ignore = (): undefined => undefined
+        await this.wsServer.close().catch(ignore)
+        await this.tcpServer?.close().catch(ignore)
+        await this.mediaHttpsServer.close().catch(ignore)
+        this.listenInfo = null
+        this.tcpListenInfo = null
+        this.rootCa = null
+        this.serverStaticKeyPair = null
     }
 
     public async stop(): Promise<void> {
@@ -888,10 +907,13 @@ export class FakeWaServer {
         // Refs travel as text inside the companion's QR, so they have to be
         // printable to survive the round trip back in the primary's upload.
         const refs = raw.map((bytes) => bytesToBase64UrlSafe(bytes))
+        // Send before registering: the builder rejects a bad ref count and the
+        // send can fail, and either would leave refs in the map that no
+        // connection will ever consume.
+        await pipeline.sendStanza(buildPairDeviceIq({ refs }))
         for (const ref of refs) {
             this.pendingCompanionOffers.set(ref, pipeline)
         }
-        await pipeline.sendStanza(buildPairDeviceIq({ refs }))
         return refs
     }
 
