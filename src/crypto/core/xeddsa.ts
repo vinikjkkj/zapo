@@ -1,11 +1,11 @@
 import { sha512 } from '@crypto/core/primitives'
 import { randomBytesAsync } from '@crypto/core/random'
 import { Ed25519 } from '@crypto/curves/Ed25519'
-import { resolveNativeCryptoBackend } from '@crypto/curves/nativeCryptoBackend'
 import { clampCurvePrivateKeyInPlace, montgomeryToEdwardsPublic } from '@crypto/curves/X25519'
 import { encodeExtendedPoint, scalarMultBase } from '@crypto/math/edwards'
 import { bigIntToBytesLE, bytesToBigIntLE } from '@crypto/math/le'
 import { modGroup } from '@crypto/math/mod'
+import { resolveNativeCryptoBackend } from '@crypto/nativeBackend'
 import { assertByteLength, concatBytes, toBytesView } from '@util/bytes'
 
 const PREFIX_SIGNATURE_RANDOM = new Uint8Array([
@@ -30,10 +30,6 @@ const nativeBinding: NativeBinding | null = (() => {
     }
     return null
 })()
-
-export function isNativeXeddsaEnabled(): boolean {
-    return nativeBinding !== null
-}
 
 /**
  * Verifies an XEdDSA signature over `message` against an X25519 (Montgomery)

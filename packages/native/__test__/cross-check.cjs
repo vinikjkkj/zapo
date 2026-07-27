@@ -15,8 +15,7 @@ const assert = require('node:assert')
 const { randomBytes, createPrivateKey } = require('node:crypto')
 
 async function main() {
-    const { resolveNativeCryptoBackend } =
-        await import('../../../src/crypto/curves/nativeCryptoBackend.ts')
+    const { resolveNativeCryptoBackend } = await import('../../../src/crypto/nativeBackend.ts')
     const native = resolveNativeCryptoBackend()
     if (
         !native ||

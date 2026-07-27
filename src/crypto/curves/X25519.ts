@@ -11,10 +11,10 @@ import { promisify } from 'node:util'
 const generateKeyPairAsync = promisify(generateKeyPair)
 
 import { X25519_PKCS8_PREFIX, X25519_SPKI_PREFIX } from '@crypto/curves/constants'
-import { resolveNativeCryptoBackend } from '@crypto/curves/nativeCryptoBackend'
 import { pkcs8FromRawPrivate, type SignalKeyPair } from '@crypto/curves/types'
 import { FE_ONE } from '@crypto/math/constants'
 import { fe, feAdd, feFromBytes, feInv, feMul, fePack, feSub } from '@crypto/math/fe'
+import { resolveNativeCryptoBackend } from '@crypto/nativeBackend'
 import { assertByteLength, concatBytes, decodeBase64Url, toBytesView } from '@util/bytes'
 
 type NativeX25519ScalarMult = (privateKey: Uint8Array, publicKey: Uint8Array) => Uint8Array

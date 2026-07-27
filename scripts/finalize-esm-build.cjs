@@ -50,6 +50,31 @@ if (protoBridge) {
         ].join('\n'),
         'utf8'
     )
+
+    injectCreateRequireShim()
+}
+
+// The native accelerator resolver loads optional backends with synchronous
+// CJS require(), which does not exist inside an ES module. The same source
+// must stay valid for the CJS emit (import.meta is a syntax error there), so
+// the shim is prepended to the ESM emit only.
+function injectCreateRequireShim() {
+    const shimTargets = [path.join(esmDir, 'crypto', 'nativeBackend.js')]
+    const banner = [
+        "import { createRequire } from 'node:module'",
+        'const require = createRequire(import.meta.url)',
+        ''
+    ].join('\n')
+
+    for (const target of shimTargets) {
+        if (!existsSync(target)) {
+            throw new Error(`missing createRequire shim target ${target}`)
+        }
+        const source = readFileSync(target, 'utf8')
+        if (!source.includes('createRequire')) {
+            writeFileSync(target, banner + source, 'utf8')
+        }
+    }
 }
 
 function listJsFiles(dirPath) {

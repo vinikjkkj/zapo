@@ -52,7 +52,21 @@ function loadWasmBackend(): NativeCryptoModule {
 
 let cached: NativeCryptoModule | null | undefined
 
-function isModuleAbsence(specifier: string, error: unknown): boolean {
+const ABSENCE_TOKENS = {
+    napi: ["'@zapo-js/native'", 'binding.js', 'Cannot find native binding'],
+    wasm: ["'@zapo-js/native'", 'zapo_native_wasm.js']
+} as const
+
+export type NativeBackendKind = keyof typeof ABSENCE_TOKENS
+
+/**
+ * Classifies a backend load failure: `true` means the backend is simply not
+ * available on this install (missing optional package, entry file absent,
+ * no prebuilt binary, ESM build without `require`) and the fallback should
+ * stay silent; `false` means the backend is present but broken and the
+ * degradation deserves a process warning.
+ */
+export function isBackendAbsence(backend: NativeBackendKind, error: unknown): boolean {
     if (error instanceof ReferenceError) {
         return error.message.includes('require is not defined')
     }
@@ -60,8 +74,10 @@ function isModuleAbsence(specifier: string, error: unknown): boolean {
         readonly code?: unknown
         readonly message?: unknown
     }
-    if (code !== 'MODULE_NOT_FOUND' && code !== 'ERR_MODULE_NOT_FOUND') return false
-    return typeof message === 'string' && message.includes(`'${specifier}'`)
+    if (typeof message !== 'string') return false
+    const notFound = code === 'MODULE_NOT_FOUND' || code === 'ERR_MODULE_NOT_FOUND'
+    if (!notFound && !message.includes('Cannot find native binding')) return false
+    return ABSENCE_TOKENS[backend].some((token) => message.includes(token))
 }
 
 function warnLoadFailure(backend: string, error: unknown): void {
@@ -80,14 +96,14 @@ export function resolveNativeCryptoBackend(): NativeCryptoModule | null {
         try {
             cached = require('@zapo-js/native') as NativeCryptoModule
         } catch (error) {
-            if (!isModuleAbsence('@zapo-js/native', error)) warnLoadFailure('napi', error)
+            if (!isBackendAbsence('napi', error)) warnLoadFailure('napi', error)
         }
     }
     if (cached === null && (backend === 'wasm' || backend === 'auto')) {
         try {
             cached = loadWasmBackend()
         } catch (error) {
-            if (!isModuleAbsence(WASM_MODULE_SPECIFIER, error)) warnLoadFailure('wasm', error)
+            if (!isBackendAbsence('wasm', error)) warnLoadFailure('wasm', error)
         }
     }
     return cached

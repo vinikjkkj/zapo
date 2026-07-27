@@ -18,7 +18,6 @@
         "curve25519",
         "crypto"
     ],
-    "main": "binding.js",
     "types": "binding.d.ts",
     "exports": {
         ".": {
