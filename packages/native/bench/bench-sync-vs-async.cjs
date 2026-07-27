@@ -1,5 +1,5 @@
 // XEdDSA sync (inline) vs async (libuv pool) bench.
-// Run with: node __test__/bench-sync-vs-async.cjs
+// Run with: node bench/bench-sync-vs-async.cjs
 // Tune pool: UV_THREADPOOL_SIZE=8 node ...
 
 const { performance } = require('node:perf_hooks')

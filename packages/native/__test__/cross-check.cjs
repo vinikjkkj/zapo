@@ -1,17 +1,37 @@
-// Cross-check: native sign / JS verify  AND  JS sign / native verify.
-// Run from repo root via tsx so @crypto path alias resolves.
-const native = require('@zapo-js/native')
+// Cross-check: accelerator sign / JS verify AND JS sign / accelerator verify,
+// plus X25519 shared-secret parity against node:crypto.
+//
+// The accelerator side goes through the runtime resolver, so
+// ZAPO_NATIVE_BACKEND selects the backend under test (auto / napi / wasm).
+// Run from repo root via tsx so the @crypto path aliases resolve:
+//   node --import tsx packages/native/__test__/cross-check.cjs
+
+// Force the JS implementations on the zapo-js side BEFORE it loads, so the
+// comparison is accelerator vs pure JS instead of accelerator vs itself.
+process.env.ZAPO_XEDDSA_FORCE_JS = '1'
+process.env.ZAPO_X25519_FORCE_JS = '1'
+
 const assert = require('node:assert')
 const { randomBytes, createPrivateKey } = require('node:crypto')
 
-if (typeof native.xeddsaSign !== 'function' || typeof native.xeddsaVerify !== 'function') {
-    console.error('native binding not loaded')
-    process.exit(2)
-}
-
 async function main() {
+    const { resolveNativeCryptoBackend } =
+        await import('../../../src/crypto/curves/nativeCryptoBackend.ts')
+    const native = resolveNativeCryptoBackend()
+    if (
+        !native ||
+        typeof native.xeddsaSign !== 'function' ||
+        typeof native.xeddsaVerify !== 'function' ||
+        typeof native.x25519ScalarMult !== 'function'
+    ) {
+        const backend = process.env.ZAPO_NATIVE_BACKEND ?? 'auto'
+        console.error(`no accelerator backend loaded (ZAPO_NATIVE_BACKEND=${backend})`)
+        process.exit(2)
+    }
+
     const { xeddsaSign: jsSign, xeddsaVerify: jsVerify } =
         await import('../../../src/crypto/core/xeddsa.ts')
+    const { X25519 } = await import('../../../src/crypto/curves/X25519.ts')
 
     const X25519_PKCS8_PREFIX = Buffer.from('302e020100300506032b656e04220420', 'hex')
 
@@ -27,21 +47,36 @@ async function main() {
         const pub = Buffer.from(jwk.x, 'base64url')
         const message = randomBytes(80 + (i % 200))
 
-        // native sign -> JS verify
-        const privClone1 = Buffer.from(priv)
-        const sigNative = native.xeddsaSign(privClone1, message)
+        // accelerator sign -> JS verify
+        const sigNative = native.xeddsaSign(Buffer.from(priv), message)
         const okJsVerifiesNative = await jsVerify(pub, message, Buffer.from(sigNative))
-        assert.equal(okJsVerifiesNative, true, `iter ${i}: js verify failed on native sig`)
+        assert.equal(okJsVerifiesNative, true, `iter ${i}: js verify failed on accelerator sig`)
 
-        // JS sign -> native verify
-        const privClone2 = Buffer.from(priv)
-        const sigJs = await jsSign(privClone2, message)
+        // JS sign -> accelerator verify
+        const sigJs = await jsSign(Buffer.from(priv), message)
         const okNativeVerifiesJs = native.xeddsaVerify(pub, message, sigJs)
-        assert.equal(okNativeVerifiesJs, true, `iter ${i}: native verify failed on JS sig`)
+        assert.equal(okNativeVerifiesJs, true, `iter ${i}: accelerator verify failed on JS sig`)
 
         okPairs += 1
     }
-    console.log(`cross-check OK: ${okPairs} pairs both directions`)
+
+    let okSecrets = 0
+    for (let i = 0; i < 50; i += 1) {
+        const a = await X25519.generateKeyPair()
+        const b = await X25519.generateKeyPair()
+        const jsShared = await X25519.scalarMult(new Uint8Array(a.privKey), b.pubKey)
+        const nativeShared = native.x25519ScalarMult(new Uint8Array(a.privKey), b.pubKey)
+        assert.deepEqual(
+            Buffer.from(nativeShared),
+            Buffer.from(jsShared),
+            `iter ${i}: x25519 shared secret mismatch`
+        )
+        okSecrets += 1
+    }
+
+    console.log(
+        `cross-check OK: ${okPairs} xeddsa pairs both directions + ${okSecrets} x25519 secrets`
+    )
 }
 
 main().catch((e) => {
