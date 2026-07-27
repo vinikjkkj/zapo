@@ -22,18 +22,47 @@ async function bringCompanionToPairingScreen(
     server: FakeWaServer,
     companion: WaClient
 ): Promise<string> {
+    let qrTimer: NodeJS.Timeout | undefined
+    let qrResolve: ((qr: string) => void) | undefined
     const qrPromise = new Promise<string>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('auth_qr timed out')), 30_000)
-        companion.once('auth_qr', (event: Parameters<WaClientEventMap['auth_qr']>[0]) => {
-            clearTimeout(timer)
-            resolve(event.qr)
-        })
+        qrResolve = resolve
+        qrTimer = setTimeout(() => reject(new Error('auth_qr timed out')), 30_000)
+    })
+    const onQr = (event: Parameters<WaClientEventMap['auth_qr']>[0]): void => {
+        qrResolve?.(event.qr)
+    }
+    companion.once('auth_qr', onQr)
+
+    // connect() only resolves once pairing finishes, so it cannot be awaited
+    // here. Racing it surfaces a setup failure right away instead of leaving
+    // the caller to hit a timeout with no explanation.
+    const connectFailure = new Promise<never>((_, reject) => {
+        void companion.connect().catch(reject)
     })
     const pipelinePromise = waitForCompanionPipeline(server)
-    // connect() only resolves once pairing finishes, so it runs detached.
-    void companion.connect().catch(() => undefined)
-    await server.offerCompanionPairing(await pipelinePromise)
-    return qrPromise
+    let offerPromise: Promise<unknown> | undefined
+    try {
+        const pipeline = await Promise.race([pipelinePromise, connectFailure])
+        offerPromise = server.offerCompanionPairing(pipeline)
+        await Promise.race([offerPromise, connectFailure])
+        return await Promise.race([qrPromise, connectFailure])
+    } finally {
+        clearTimeout(qrTimer)
+        companion.off('auth_qr', onQr)
+        // Whichever promise lost a race may still settle later, and the client
+        // rejects its pending connect() at teardown; none of that is a failure
+        // once this helper has returned.
+        quiet(connectFailure)
+        quiet(pipelinePromise)
+        if (offerPromise) {
+            quiet(offerPromise)
+        }
+    }
+}
+
+/** Marks a promise as handled so a late rejection cannot surface unhandled. */
+function quiet(promise: Promise<unknown>): void {
+    void promise.catch(() => undefined)
 }
 
 /**
