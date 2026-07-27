@@ -13,13 +13,18 @@
  *   - `js` / `none`    – no accelerator; callers fall back to the pure-JS
  *                        (and `node:crypto`) implementations.
  *
- * The module is resolved once and memoised. A missing/broken backend
- * resolves to `null` (or, under `auto`, falls through to the next one) so
- * callers transparently fall back to JS. The per-primitive
- * `ZAPO_X25519_FORCE_JS` / `ZAPO_XEDDSA_FORCE_JS` escape hatches are
- * honoured by the callers, not here.
+ * The module is resolved once and memoised. A failed backend resolves to
+ * `null` (or, under `auto`, falls through to the next one) so callers
+ * transparently fall back to JS. An absent backend stays silent - that is
+ * the expected shape of an optional accelerator - but a present-yet-broken
+ * one (corrupt binary, ABI mismatch, unsupported runtime) emits a process
+ * warning with code `ZAPO_NATIVE_LOAD_FAILED` so the degradation is
+ * visible. The per-primitive `ZAPO_X25519_FORCE_JS` / `ZAPO_XEDDSA_FORCE_JS`
+ * escape hatches are honoured by the callers, not here.
  */
 import { readFileSync } from 'node:fs'
+
+import { toError } from '@util/primitives'
 
 export interface NativeCryptoModule {
     readonly x25519ScalarMult?: (privateKey: Uint8Array, publicKey: Uint8Array) => Uint8Array
@@ -47,6 +52,19 @@ function loadWasmBackend(): NativeCryptoModule {
 
 let cached: NativeCryptoModule | null | undefined
 
+function isModuleAbsence(error: unknown): boolean {
+    if (error instanceof ReferenceError) return true
+    const code = (error as { readonly code?: unknown } | null)?.code
+    return code === 'MODULE_NOT_FOUND' || code === 'ERR_MODULE_NOT_FOUND'
+}
+
+function warnLoadFailure(backend: string, error: unknown): void {
+    process.emitWarning('failed to load native crypto accelerator, falling back', {
+        code: 'ZAPO_NATIVE_LOAD_FAILED',
+        detail: `${backend}: ${toError(error).message}`
+    })
+}
+
 export function resolveNativeCryptoBackend(): NativeCryptoModule | null {
     if (cached !== undefined) return cached
     const backend = (process.env.ZAPO_NATIVE_BACKEND ?? 'auto').toLowerCase()
@@ -55,16 +73,15 @@ export function resolveNativeCryptoBackend(): NativeCryptoModule | null {
     if (backend === 'napi' || backend === 'auto') {
         try {
             cached = require('@zapo-js/native') as NativeCryptoModule
-        } catch {
-            // NAPI addon not installed/built for this platform
+        } catch (error) {
+            if (!isModuleAbsence(error)) warnLoadFailure('napi', error)
         }
     }
     if (cached === null && (backend === 'wasm' || backend === 'auto')) {
         try {
             cached = loadWasmBackend()
-        } catch {
-            // wasm build absent, or the runtime lacks require(esm);
-            // callers fall back to JS
+        } catch (error) {
+            if (!isModuleAbsence(error)) warnLoadFailure('wasm', error)
         }
     }
     return cached
