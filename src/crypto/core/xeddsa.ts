@@ -6,7 +6,7 @@ import { clampCurvePrivateKeyInPlace, montgomeryToEdwardsPublic } from '@crypto/
 import { encodeExtendedPoint, scalarMultBase } from '@crypto/math/edwards'
 import { bigIntToBytesLE, bytesToBigIntLE } from '@crypto/math/le'
 import { modGroup } from '@crypto/math/mod'
-import { assertByteLength, concatBytes } from '@util/bytes'
+import { assertByteLength, concatBytes, toBytesView } from '@util/bytes'
 
 const PREFIX_SIGNATURE_RANDOM = new Uint8Array([
     0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
@@ -76,7 +76,7 @@ export async function xeddsaSign(privateKey: Uint8Array, message: Uint8Array): P
     assertByteLength(privateKey, 32, `invalid curve25519 private key length ${privateKey.length}`)
 
     if (nativeBinding) {
-        return nativeBinding.xeddsaSign(privateKey, message)
+        return toBytesView(nativeBinding.xeddsaSign(privateKey, message))
     }
 
     const clampedPrivateKey = clampCurvePrivateKeyInPlace(privateKey)

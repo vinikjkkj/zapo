@@ -80,7 +80,13 @@ pub fn x25519_scalar_mult(private_key: &[u8], public_key: &[u8]) -> Result<[u8; 
 
     // mul_clamped clamps the scalar per RFC 7748 internally; passing an
     // already-clamped key is a no-op since clamping is idempotent.
-    Ok(MontgomeryPoint(pk).mul_clamped(sk).to_bytes())
+    let shared = MontgomeryPoint(pk).mul_clamped(sk).to_bytes();
+    if shared.iter().all(|&b| b == 0) {
+        return Err(CoreError::InvalidArg(
+            "invalid x25519 public key (low order)".to_string(),
+        ));
+    }
+    Ok(shared)
 }
 
 /// XEdDSA signature over `message` with a 32-byte curve25519 private key.

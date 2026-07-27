@@ -162,7 +162,7 @@ export class X25519 {
         assertByteLength(privKey, 32, 'x25519 private key must be 32 bytes')
         assertByteLength(pubKey, 32, 'x25519 public key must be 32 bytes')
         if (nativeX25519ScalarMult) {
-            return nativeX25519ScalarMult(privKey, pubKey)
+            return toBytesView(nativeX25519ScalarMult(privKey, pubKey))
         }
         const opts = {
             privateKey: x25519PrivateKeyObject(privKey),
