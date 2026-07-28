@@ -191,11 +191,16 @@ export type {
     WaPageInfo
 } from '@client/coordinators/WaNewsletterCoordinator'
 export type {
-    WaBlocklistResult,
+    WaPrivacyAccountSyncResult,
     WaPrivacyCoordinator,
+    WaPrivacyDisallowedListInput,
+    WaPrivacyDisallowedListUpdate
+} from '@client/coordinators/WaPrivacyCoordinator'
+export type {
+    WaBlocklistResult,
     WaPrivacyDisallowedListResult,
     WaPrivacySettings
-} from '@client/coordinators/WaPrivacyCoordinator'
+} from '@client/events/privacy'
 export type {
     WaDisappearingModeResult,
     WaOwnUsernameResult,

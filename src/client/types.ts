@@ -7,8 +7,10 @@ import type {
     WaAuthDangerousOptions,
     WaAuthSocketOptions
 } from '@auth/types'
+import type { WaPrivacyAccountSyncResult } from '@client/coordinators/WaPrivacyCoordinator'
 import type { WaCallGroupParticipant, WaCallType } from '@client/events/call'
 import type { IncomingPresenceType, PresenceLastSeen } from '@client/events/presence'
+import type { WaBlocklistResult } from '@client/events/privacy'
 import type { CompanionHostPersistence } from '@client/persistence/companion-host'
 import type { WaClientPluginDefinition } from '@client/plugins/types'
 import type { WaMediaProcessor } from '@media/processor'
@@ -1414,6 +1416,27 @@ export interface WaClientEventMap {
     readonly business: (event: WaBusinessEvent) => void
     /** Profile/group/community picture change notification – the new picture must still be fetched explicitly. */
     readonly picture: (event: WaPictureEvent) => void
+    /**
+     * The account's privacy, refetched after the primary or another companion
+     * changed it: the full category set plus any disallowed list the server
+     * reported. Both halves come from one round-trip, so they always describe
+     * the same moment - the payload is exactly what
+     * {@link WaPrivacyCoordinator.refreshFromAccountSync} returns.
+     *
+     * Two paths trigger it: the live `account_sync` notification (debounced,
+     * so a burst of changes on the phone collapses into one refresh) and the
+     * `account_sync` dirty bit that catches a session up after being offline.
+     * Neither is trusted for its payload - the values always come from a
+     * fresh read. Categories the library does not model are dropped.
+     */
+    readonly privacy: (event: WaPrivacyAccountSyncResult) => void
+    /**
+     * The account blocklist after a block/unblock made on another device -
+     * same refetch path as `privacy`, from its own account-sync protocol. The
+     * payload is the full list ({@link WaPrivacyCoordinator.getBlocklist}'s
+     * shape), never a delta.
+     */
+    readonly blocklist: (event: WaBlocklistResult) => void
     /**
      * A parsed app-state mutation arriving from a sync – chat mute/star/read/
      * pin/archive/contact/label/etc. changed on another device. Inbound only;

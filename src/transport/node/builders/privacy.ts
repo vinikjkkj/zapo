@@ -1,8 +1,25 @@
 import { WA_DEFAULTS } from '@protocol/defaults'
+import { WA_ADDRESSING_MODES } from '@protocol/message'
 import { WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/nodes'
-import { WA_PRIVACY_TAGS, type WaPrivacyCategory, type WaPrivacyValue } from '@protocol/privacy'
+import {
+    WA_PRIVACY_DHASH_NONE,
+    WA_PRIVACY_TAGS,
+    WA_PRIVACY_VALUES,
+    type WaPrivacyCategory,
+    type WaPrivacyListAction,
+    type WaPrivacyValue
+} from '@protocol/privacy'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
+
+/**
+ * `<privacy>` attrs for a disallowed-list stanza. LID-migrated accounts must
+ * carry `addressing_mode="lid"`; the server answers `400: bad-request`
+ * without it, whatever the category's current value is.
+ */
+function buildPrivacyEnvelopeAttrs(lidAddressing: boolean): Record<string, string> {
+    return lidAddressing ? { addressing_mode: WA_ADDRESSING_MODES.LID } : {}
+}
 
 export function buildGetPrivacySettingsIq(): BinaryNode {
     return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.PRIVACY, [
@@ -28,19 +45,94 @@ export function buildSetPrivacyCategoryIq(
     ])
 }
 
-export function buildGetPrivacyDisallowedListIq(category: WaPrivacyCategory): BinaryNode {
+/**
+ * Builds the disallowed-list `get` IQ. Pass `lidAddressing` for LID-migrated
+ * accounts - see {@link buildPrivacyEnvelopeAttrs}.
+ */
+export function buildGetPrivacyDisallowedListIq(
+    category: WaPrivacyCategory,
+    lidAddressing: boolean
+): BinaryNode {
     return buildIqNode(WA_IQ_TYPES.GET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.PRIVACY, [
         {
             tag: WA_NODE_TAGS.PRIVACY,
-            attrs: {},
+            attrs: buildPrivacyEnvelopeAttrs(lidAddressing),
             content: [
                 {
                     tag: WA_PRIVACY_TAGS.LIST,
-                    attrs: { name: category, value: 'contact_blacklist' }
+                    attrs: { name: category, value: WA_PRIVACY_VALUES.CONTACT_BLACKLIST }
                 }
             ]
         }
     ])
+}
+
+/**
+ * One `<user>` entry of a disallowed-list mutation, already resolved into both
+ * addressing forms. Under LID addressing the server keys the entry by
+ * `lidJid` and takes `pnJid` as the identifier hint; otherwise the phone jid
+ * addresses it alone.
+ */
+export interface WaPrivacyDisallowedListEntry {
+    readonly action: WaPrivacyListAction
+    readonly lidJid: string | null
+    readonly pnJid: string | null
+}
+
+/**
+ * Builds the disallowed-list `set` IQ. The category value and the list
+ * entries travel in the same stanza - the deny-list is not a separate
+ * endpoint - and `dhash` is the version stamp the server handed out on the
+ * last write/read (`'none'` when the client holds none). A stale stamp is
+ * rejected with `409`, which the caller resolves by refetching the list and
+ * retrying.
+ */
+export function buildSetPrivacyDisallowedListIq(
+    category: WaPrivacyCategory,
+    entries: readonly WaPrivacyDisallowedListEntry[],
+    dhash: string | null,
+    lidAddressing: boolean
+): BinaryNode {
+    const users = new Array<BinaryNode>(entries.length)
+    for (let i = 0; i < entries.length; i += 1) {
+        users[i] = {
+            tag: WA_PRIVACY_TAGS.USER,
+            attrs: buildDisallowedListUserAttrs(entries[i], lidAddressing)
+        }
+    }
+    return buildIqNode(WA_IQ_TYPES.SET, WA_DEFAULTS.HOST_DOMAIN, WA_XMLNS.PRIVACY, [
+        {
+            tag: WA_NODE_TAGS.PRIVACY,
+            attrs: buildPrivacyEnvelopeAttrs(lidAddressing),
+            content: [
+                {
+                    tag: WA_PRIVACY_TAGS.CATEGORY,
+                    attrs: {
+                        name: category,
+                        value: WA_PRIVACY_VALUES.CONTACT_BLACKLIST,
+                        dhash: dhash ?? WA_PRIVACY_DHASH_NONE
+                    },
+                    content: users
+                }
+            ]
+        }
+    ])
+}
+
+function buildDisallowedListUserAttrs(
+    entry: WaPrivacyDisallowedListEntry,
+    lidAddressing: boolean
+): Record<string, string> {
+    if (lidAddressing && entry.lidJid !== null) {
+        return entry.pnJid !== null
+            ? { action: entry.action, jid: entry.lidJid, pn_jid: entry.pnJid }
+            : { action: entry.action, jid: entry.lidJid }
+    }
+    const jid = entry.pnJid ?? entry.lidJid
+    if (jid === null) {
+        throw new Error('privacy disallowed-list entry has no addressable jid')
+    }
+    return { action: entry.action, jid }
 }
 
 export function buildGetBlocklistIq(): BinaryNode {

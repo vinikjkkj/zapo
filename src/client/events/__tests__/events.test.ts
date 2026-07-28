@@ -5,12 +5,15 @@ import { parseAppStateMutationEvent } from '@client/events/appstate-mutation'
 import { parseBusinessNotificationEvents } from '@client/events/business'
 import { parseCallNode } from '@client/events/call'
 import { parseChatstateNode } from '@client/events/chatstate'
+import { handleDirtyBits } from '@client/events/dirty'
 import { parseGroupNotificationEvents } from '@client/events/group'
 import { parseMexNotification } from '@client/events/mex-notification'
 import { parsePresenceNode } from '@client/events/presence'
+import type { WaBlocklistResult } from '@client/events/privacy'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
 import { aggregateReceiptTargets, extractReceiptIds } from '@client/events/receipt'
 import { parseRegistrationNotification } from '@client/events/registration'
+import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
 import {
     WA_BUSINESS_NOTIFICATION_TAGS,
@@ -1244,4 +1247,46 @@ test('parseCallNode: returns unknown type for unrecognized or empty payload', ()
     assert.equal(empty.payloadTag, undefined)
     assert.equal(empty.callId, undefined)
     assert.equal(empty.isVideo, false)
+})
+
+test('account_sync dirty bit runs the privacy refresh and re-emits the blocklist', async () => {
+    const contexts: string[] = []
+    const blocklists: WaBlocklistResult[] = []
+    let privacyRefreshes = 0
+
+    await handleDirtyBits(
+        {
+            logger: createNoopLogger(),
+            queryWithContext: async (context) => {
+                contexts.push(context)
+                if (context === 'account_sync.blocklist') {
+                    return {
+                        tag: 'iq',
+                        attrs: { type: 'result' },
+                        content: [
+                            {
+                                tag: 'list',
+                                attrs: { dhash: 'block-hash' },
+                                content: [{ tag: 'item', attrs: { jid: 'x@s.whatsapp.net' } }]
+                            }
+                        ]
+                    }
+                }
+                return { tag: 'iq', attrs: { type: 'result' } }
+            },
+            getCurrentCredentials: () => ({ meJid: '5511@s.whatsapp.net' }) as never,
+            syncAppState: async () => {},
+            generateUsyncSid: async () => 'sid',
+            syncAccountPrivacy: async () => {
+                privacyRefreshes += 1
+            },
+            emitBlocklist: (blocklist) => blocklists.push(blocklist)
+        },
+        [{ type: 'account_sync', timestamp: 10, protocols: ['privacy', 'blocklist'] }]
+    )
+
+    assert.equal(privacyRefreshes, 1)
+    assert.deepEqual(blocklists, [{ jids: ['x@s.whatsapp.net'], dhash: 'block-hash' }])
+    assert.ok(contexts.includes('account_sync.blocklist'))
+    assert.ok(contexts.includes('dirty.clear'))
 })

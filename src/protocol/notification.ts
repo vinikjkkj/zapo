@@ -2,6 +2,7 @@ export const WA_NOTIFICATION_TYPES = Object.freeze({
     GROUP: 'w:gp2',
     ENCRYPT: 'encrypt',
     DEVICES: 'devices',
+    ACCOUNT_SYNC: 'account_sync',
     SERVER: 'server',
     REGISTRATION: 'registration',
     NEWSLETTER: 'newsletter',

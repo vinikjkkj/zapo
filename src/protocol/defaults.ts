@@ -18,6 +18,12 @@ export const WA_DEFAULTS = Object.freeze({
     CHAT_SOCKET_URLS: ['wss://web.whatsapp.com/ws/chat', 'wss://web.whatsapp.com:5222/ws/chat'],
     NOISE_RESUME_FAILURES_BEFORE_FULL_HANDSHAKE: 1,
     IQ_TIMEOUT_MS: 15_000,
+    /**
+     * Quiet window before an `account_sync` privacy notification triggers the
+     * refetch, so flipping several settings in a row on the phone collapses
+     * into one refresh instead of one per notification.
+     */
+    PRIVACY_ACCOUNT_SYNC_DEBOUNCE_MS: 1_000,
     NODE_QUERY_TIMEOUT_MS: 15_000,
     CONNECT_TIMEOUT_MS: 10_000,
     SOCKET_TIMEOUT_MS: 10_000,

@@ -10,6 +10,7 @@ import {
     WA_COMPANION_PLATFORM_IDS,
     WA_DEFAULTS,
     WA_MEDIA_HKDF_INFO,
+    WA_PRIVACY_ACCOUNT_SYNC_DISALLOWED_LISTS,
     WA_PRIVACY_CATEGORIES,
     WA_PRIVACY_CATEGORY_TO_SETTING,
     WA_PRIVACY_DISALLOWED_LIST_CATEGORIES,
@@ -199,7 +200,9 @@ test('privacy protocol constants keep mapping invariants', () => {
         about: true,
         groupAdd: true,
         lastSeen: true,
-        profilePicture: true
+        profilePicture: true,
+        linkedProfiles: true,
+        pix: true
     }
     const validGroupAddValue: WaPrivacySettingValueMap['groupAdd'] = 'contact_blacklist'
     void disallowedSettingsTypeCheck
@@ -212,7 +215,20 @@ test('privacy protocol constants keep mapping invariants', () => {
     const disallowedSettings = Object.values(WA_PRIVACY_DISALLOWED_LIST_CATEGORIES).map(
         (category) => WA_PRIVACY_CATEGORY_TO_SETTING[category]
     )
-    assert.deepEqual(disallowedSettings.sort(), ['about', 'groupAdd', 'lastSeen', 'profilePicture'])
+    assert.deepEqual(disallowedSettings.sort(), [
+        'about',
+        'groupAdd',
+        'lastSeen',
+        'linkedProfiles',
+        'pix',
+        'profilePicture'
+    ])
+    assert.deepEqual(WA_PRIVACY_ACCOUNT_SYNC_DISALLOWED_LISTS, [
+        'about',
+        'groupAdd',
+        'lastSeen',
+        'profilePicture'
+    ])
 })
 
 test('ab props keep protocol-specific group and trusted-contact mappings', () => {

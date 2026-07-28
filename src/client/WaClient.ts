@@ -487,6 +487,7 @@ class WaClientImpl extends EventEmitter {
      * your own backoff.
      */
     public async disconnect(): Promise<void> {
+        this.deps.privacyCoordinator.stopAccountSyncRefresh()
         await this.pauseIncomingEventsAndWaitDrain()
         const writeBehindFlush = await this.writeBehind.flush(
             this.options.writeBehind?.flushTimeoutMs

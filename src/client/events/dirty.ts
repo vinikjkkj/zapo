@@ -1,4 +1,5 @@
 import type { WaAuthCredentials } from '@auth/types'
+import { parseBlocklist, type WaBlocklistResult } from '@client/events/privacy'
 import type { Logger } from '@infra/log/types'
 import {
     WA_ACCOUNT_SYNC_PROTOCOLS,
@@ -18,7 +19,6 @@ import {
     buildListParticipatingGroupsIq,
     buildNewsletterMetadataSyncIq
 } from '@transport/node/builders/account-sync'
-import { buildGetPrivacySettingsIq } from '@transport/node/builders/privacy'
 import { parseUsyncResultEnvelope } from '@transport/node/builders/usync'
 import { getNodeChildrenTags } from '@transport/node/helpers'
 import { assertIqResult, parseIqError } from '@transport/node/query'
@@ -44,6 +44,8 @@ interface WaDirtySyncRuntime {
     readonly getCurrentCredentials: () => WaAuthCredentials | null
     readonly syncAppState: () => Promise<void>
     readonly generateUsyncSid: () => Promise<string>
+    readonly syncAccountPrivacy: () => Promise<void>
+    readonly emitBlocklist: (blocklist: WaBlocklistResult) => void
     readonly newsletterListSubscribed?: () => Promise<unknown>
 }
 
@@ -298,20 +300,24 @@ async function syncAccountPictureDirtyBit(runtime: WaDirtySyncRuntime): Promise<
     throw new Error(`account_sync.picture iq failed (${iqError.code}: ${iqError.text})`)
 }
 
+/**
+ * Catch-up path for a session that was offline while another device changed a
+ * setting. Runs the same refresh the live `account_sync` notification
+ * triggers: the whole category set plus the disallowed lists.
+ */
 async function syncAccountPrivacyDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {
-    await runSyncQuery(runtime, {
-        queryContext: 'account_sync.privacy',
-        node: buildGetPrivacySettingsIq(),
-        logMessage: 'account_sync privacy synchronized'
-    })
+    await runtime.syncAccountPrivacy()
+    runtime.logger.debug('account_sync privacy synchronized')
 }
 
+/** The reply carries the full blocklist, not a delta. */
 async function syncAccountBlocklistDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {
-    await runSyncQuery(runtime, {
+    const response = await runSyncQuery(runtime, {
         queryContext: 'account_sync.blocklist',
         node: buildAccountBlocklistSyncIq(),
         logMessage: 'account_sync blocklist synchronized'
     })
+    runtime.emitBlocklist(parseBlocklist(response))
 }
 
 async function syncGroupsDirtyBit(runtime: WaDirtySyncRuntime): Promise<void> {
@@ -363,7 +369,7 @@ async function runSyncQuery(
         readonly assertContext?: string
         readonly contextData?: Readonly<Record<string, unknown>>
     }
-): Promise<void> {
+): Promise<BinaryNode> {
     const response = await runtime.queryWithContext(
         args.queryContext,
         args.node,
@@ -373,6 +379,7 @@ async function runSyncQuery(
     assertIqResult(response, args.assertContext ?? args.queryContext)
     logUsyncProtocolErrors(parseUsyncResultEnvelope(response), runtime.logger, args.queryContext)
     runtime.logger.debug(args.logMessage, args.contextData)
+    return response
 }
 
 async function clearDirtyBits(

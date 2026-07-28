@@ -43,7 +43,7 @@ import {
 } from '@client/coordinators/WaPresenceCoordinator'
 import {
     createPrivacyCoordinator,
-    type WaPrivacyCoordinator
+    type WaPrivacyCoordinatorRuntime
 } from '@client/coordinators/WaPrivacyCoordinator'
 import {
     createProfileCoordinator,
@@ -123,7 +123,7 @@ import type { WaStoredContactRecord } from '@store/contracts/contact.store'
 import { WaKeepAlive } from '@transport/keepalive/WaKeepAlive'
 import { buildAckNode } from '@transport/node/builders/global'
 import { buildPresenceNode } from '@transport/node/builders/presence'
-import { getFirstNodeChild } from '@transport/node/helpers'
+import { findNodeChild, getFirstNodeChild } from '@transport/node/helpers'
 import { createUsyncSidGenerator } from '@transport/node/usync'
 import { WaNodeOrchestrator } from '@transport/node/WaNodeOrchestrator'
 import { WaNodeTransport } from '@transport/node/WaNodeTransport'
@@ -213,7 +213,7 @@ export interface WaClientDependencies {
     readonly statusCoordinator: WaStatusCoordinator
     readonly broadcastListCoordinator: WaBroadcastListCoordinator
     readonly newsletterCoordinator: WaNewsletterCoordinator
-    readonly privacyCoordinator: WaPrivacyCoordinator
+    readonly privacyCoordinator: WaPrivacyCoordinatorRuntime
     readonly profileCoordinator: WaProfileCoordinator
     readonly businessCoordinator: WaBusinessCoordinator
     readonly botCoordinator: WaBotCoordinator
@@ -654,8 +654,11 @@ export function buildWaClientDependencies(input: {
     })
 
     const privacyCoordinator = createPrivacyCoordinator({
+        logger,
         queryWithContext: runtime.queryWithContext,
-        resolveUserJidPair: (userJid) => signalDeviceSync.resolveUserJidPair(userJid)
+        resolveUserJidPair: (userJid) => signalDeviceSync.resolveUserJidPair(userJid),
+        getSelfLid: () => getCurrentCredentials()?.meLid ?? null,
+        emitPrivacy: (event) => runtime.emitEvent('privacy', event)
     })
 
     const businessCoordinator = createBusinessCoordinator({
@@ -1041,6 +1044,10 @@ export function buildWaClientDependencies(input: {
                 getCurrentCredentials,
                 syncAppState: runtime.syncAppState,
                 generateUsyncSid,
+                syncAccountPrivacy: async () => {
+                    await privacyCoordinator.refreshFromAccountSync()
+                },
+                emitBlocklist: (blocklist) => runtime.emitEvent('blocklist', blocklist),
                 newsletterListSubscribed: () => newsletterCoordinator.listSubscribed()
             },
             dirtyBits
@@ -1247,6 +1254,26 @@ export function buildWaClientDependencies(input: {
                 return true
             }
 
+            return false
+        }
+    })
+
+    incomingNode.registerIncomingHandler({
+        tag: WA_NODE_TAGS.NOTIFICATION,
+        subtype: WA_NOTIFICATION_TYPES.ACCOUNT_SYNC,
+        prepend: true,
+        /**
+         * The stanza carries the changed `<category>` inline, but it is a
+         * trigger only: the payload is a partial view, so the whole set is
+         * refetched instead. Observer only - returning false keeps the
+         * generic notification handler responsible for the ack and the
+         * `debug_notification` emit, leaving wire behavior unchanged.
+         */
+        // eslint-disable-next-line @typescript-eslint/require-await
+        handler: async (node) => {
+            if (findNodeChild(node, WA_NODE_TAGS.PRIVACY)) {
+                privacyCoordinator.scheduleAccountSyncRefresh()
+            }
             return false
         }
     })
