@@ -163,10 +163,9 @@ export interface WaPrivacyCoordinatorRuntime extends WaPrivacyCoordinator {
     /**
      * Queues a refresh, restarting the quiet window on every call so a burst
      * of `account_sync` notifications collapses into a single refetch instead
-     * of one per stanza (each costs five queries). Refreshes are deduplicated
-     * against {@link refreshFromAccountSync}: one requested while another is
-     * still in flight joins it rather than racing it, so two snapshots can
-     * never be emitted out of order.
+     * of one per stanza (each costs five queries). A refresh already in
+     * flight is waited out rather than joined: its queries went out before
+     * the change landed, so its snapshot would not carry the new value.
      */
     readonly scheduleAccountSyncRefresh: () => void
     /**
@@ -263,6 +262,7 @@ export function createPrivacyCoordinator(
     const usesLidAddressing = () => options.getSelfLid() !== null
     let refreshTimer: ReturnType<typeof setTimeout> | null = null
     let refreshStopped = false
+    let activeRefresh: Promise<unknown> | null = null
     const refreshDedup = new PromiseDedup()
 
     const queryDisallowedList = async (category: WaPrivacyCategory): Promise<BinaryNode> => {
@@ -306,6 +306,34 @@ export function createPrivacyCoordinator(
         }
         options.emitPrivacy(result)
         return result
+    }
+
+    /**
+     * Joins a refresh already in flight instead of racing it, so concurrent
+     * callers share one round of queries and one emit.
+     */
+    const dedupedRefresh = (): Promise<WaPrivacyAccountSyncResult> => {
+        const running = refreshDedup.run(ACCOUNT_SYNC_REFRESH_KEY, runAccountSyncRefresh)
+        activeRefresh = running
+        return running
+    }
+
+    /**
+     * Refresh for a change the server just announced. It must not join a
+     * refresh already in flight: that one's queries went out before the
+     * change landed, so joining it would emit a snapshot without the new
+     * value and nothing would refetch. Waiting for it first guarantees a read
+     * issued after the notification.
+     */
+    const followUpRefresh = async (): Promise<void> => {
+        if (refreshStopped) {
+            return
+        }
+        await activeRefresh?.catch(() => undefined)
+        if (refreshStopped) {
+            return
+        }
+        await dedupedRefresh()
     }
 
     const writeDisallowedList = async (
@@ -355,8 +383,7 @@ export function createPrivacyCoordinator(
             return parsePrivacyCategoryDhash(result, category)
         },
 
-        refreshFromAccountSync: () =>
-            refreshDedup.run(ACCOUNT_SYNC_REFRESH_KEY, runAccountSyncRefresh),
+        refreshFromAccountSync: () => dedupedRefresh(),
 
         scheduleAccountSyncRefresh: () => {
             refreshStopped = false
@@ -365,16 +392,11 @@ export function createPrivacyCoordinator(
             }
             refreshTimer = setTimeout(() => {
                 refreshTimer = null
-                if (refreshStopped) {
-                    return
-                }
-                void refreshDedup
-                    .run(ACCOUNT_SYNC_REFRESH_KEY, runAccountSyncRefresh)
-                    .catch((error: unknown) => {
-                        options.logger.warn('account_sync privacy refresh failed', {
-                            message: toError(error).message
-                        })
+                void followUpRefresh().catch((error: unknown) => {
+                    options.logger.warn('account_sync privacy refresh failed', {
+                        message: toError(error).message
                     })
+                })
             }, WA_DEFAULTS.PRIVACY_ACCOUNT_SYNC_DEBOUNCE_MS)
             refreshTimer.unref?.()
         },

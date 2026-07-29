@@ -370,6 +370,59 @@ test('privacy coordinator debounces scheduled refreshes and drops them on stop',
     assert.equal(emitted.length, 1)
 })
 
+test('privacy coordinator refetches for a notification landing mid-refresh', async () => {
+    const emitted: string[] = []
+    let releaseFirst: () => void = () => undefined
+    let settingsQueries = 0
+    let currentValue = 'contacts'
+
+    const coordinator = createPrivacyCoordinator({
+        ...createBlocklistDeps(undefined, '1@lid'),
+        emitPrivacy: (event) => emitted.push(String(event.settings.lastSeen)),
+        queryWithContext: async (context) => {
+            if (context !== 'privacy.getSettings') {
+                return createIqResult([{ tag: 'privacy', attrs: {} }])
+            }
+            settingsQueries += 1
+            const value = currentValue
+            if (settingsQueries === 1) {
+                await new Promise<void>((resolve) => {
+                    releaseFirst = resolve
+                })
+            }
+            return createIqResult([
+                {
+                    tag: 'privacy',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: WA_PRIVACY_TAGS.CATEGORY,
+                            attrs: { name: WA_PRIVACY_CATEGORIES.LAST_SEEN, value }
+                        }
+                    ]
+                }
+            ])
+        }
+    })
+
+    const direct = coordinator.refreshFromAccountSync()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    currentValue = 'none'
+    coordinator.scheduleAccountSyncRefresh()
+    await new Promise((resolve) =>
+        setTimeout(resolve, WA_DEFAULTS.PRIVACY_ACCOUNT_SYNC_DEBOUNCE_MS + 150)
+    )
+    assert.equal(settingsQueries, 1)
+
+    releaseFirst()
+    await direct
+    await new Promise((resolve) => setTimeout(resolve, 250))
+
+    assert.equal(settingsQueries, 2)
+    assert.deepEqual(emitted, ['contacts', 'none'])
+})
+
 test('privacy coordinator deduplicates a refresh overlapping an in-flight one', async () => {
     let releaseFirst: () => void = () => undefined
     let settingsQueries = 0
