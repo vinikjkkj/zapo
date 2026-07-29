@@ -1419,8 +1419,9 @@ export interface WaClientEventMap {
     /**
      * The account's privacy, refetched after the primary or another companion
      * changed it: the full category set plus any disallowed list the server
-     * reported. Both halves come from one round-trip, so they always describe
-     * the same moment - the payload is exactly what
+     * reported. The two halves are read by separate queries, so a change
+     * landing mid-refresh can leave them describing slightly different server
+     * states - the payload is exactly what
      * {@link WaPrivacyCoordinator.refreshFromAccountSync} returns.
      *
      * Two paths trigger it: the live `account_sync` notification (debounced,

@@ -80,6 +80,47 @@ export interface WaPrivacySettingValueMap {
     readonly pix: WaPrivacyVisibility
 }
 
+const VISIBILITY_VALUES = Object.freeze([
+    WA_PRIVACY_VALUES.ALL,
+    WA_PRIVACY_VALUES.CONTACTS,
+    WA_PRIVACY_VALUES.CONTACT_BLACKLIST,
+    WA_PRIVACY_VALUES.NONE
+] as const)
+
+/**
+ * Values each setting actually accepts. The server reports categories the
+ * library does not model and can answer `error`, so a value has to be checked
+ * against its own setting - a globally valid value is not necessarily valid
+ * here, and surfacing one would break the type the public API declares.
+ */
+export const WA_PRIVACY_SETTING_VALUES = Object.freeze({
+    readReceipts: Object.freeze([WA_PRIVACY_VALUES.ALL, WA_PRIVACY_VALUES.NONE] as const),
+    lastSeen: VISIBILITY_VALUES,
+    online: Object.freeze([
+        WA_PRIVACY_VALUES.ALL,
+        WA_PRIVACY_VALUES.NONE,
+        WA_PRIVACY_VALUES.MATCH_LAST_SEEN
+    ] as const),
+    profilePicture: VISIBILITY_VALUES,
+    about: VISIBILITY_VALUES,
+    groupAdd: Object.freeze([
+        WA_PRIVACY_VALUES.ALL,
+        WA_PRIVACY_VALUES.CONTACTS,
+        WA_PRIVACY_VALUES.CONTACT_BLACKLIST
+    ] as const),
+    callAdd: Object.freeze([
+        WA_PRIVACY_VALUES.ALL,
+        WA_PRIVACY_VALUES.KNOWN,
+        WA_PRIVACY_VALUES.CONTACTS
+    ] as const),
+    messages: Object.freeze([WA_PRIVACY_VALUES.ALL, WA_PRIVACY_VALUES.CONTACTS] as const),
+    defenseMode: Object.freeze([WA_PRIVACY_VALUES.OFF, WA_PRIVACY_VALUES.ON_STANDARD] as const),
+    linkedProfiles: VISIBILITY_VALUES,
+    pix: VISIBILITY_VALUES
+}) satisfies {
+    readonly [K in WaPrivacySettingName]: readonly WaPrivacySettingValueMap[K][]
+}
+
 export const WA_PRIVACY_DISALLOWED_LIST_CATEGORIES = Object.freeze({
     ABOUT: WA_PRIVACY_CATEGORIES.ABOUT,
     GROUP_ADD: WA_PRIVACY_CATEGORIES.GROUP_ADD,

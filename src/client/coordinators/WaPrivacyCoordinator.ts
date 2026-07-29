@@ -114,6 +114,8 @@ export interface WaPrivacyCoordinator {
      * {@link WA_PRIVACY_ACCOUNT_SYNC_DISALLOWED_LISTS}, queried in parallel.
      * The result is both returned and emitted as the `privacy` event, so the
      * client's view stays consistent no matter who triggered the refresh.
+     * Categories and lists are separate queries, so a change landing
+     * mid-refresh can leave the two halves a version apart.
      *
      * This is what runs on its own when another device changes a setting -
      * the notification carrying the change is a trigger, not a payload to act
@@ -157,12 +159,15 @@ export interface WaPrivacyCoordinatorRuntime extends WaPrivacyCoordinator {
     /**
      * Queues a refresh, restarting the quiet window on every call so a burst
      * of `account_sync` notifications collapses into a single refetch instead
-     * of one per stanza (each costs five queries).
+     * of one per stanza (each costs five queries). Refreshes are serialized:
+     * one queued while another is still in flight waits for it, so two
+     * snapshots can never be emitted out of order.
      */
     readonly scheduleAccountSyncRefresh: () => void
     /**
-     * Drops a queued refresh. Called on disconnect so a pending timer does not
-     * fire against a closed connection.
+     * Drops a queued refresh and stops a serialized one from starting, so a
+     * disconnect does not leave a refetch to fire against a closed
+     * connection. A refresh already in flight still runs to completion.
      */
     readonly stopAccountSyncRefresh: () => void
 }
@@ -250,6 +255,8 @@ export function createPrivacyCoordinator(
     const { queryWithContext } = options
     const usesLidAddressing = () => options.getSelfLid() !== null
     let refreshTimer: ReturnType<typeof setTimeout> | null = null
+    let inFlightRefresh: Promise<unknown> | null = null
+    let refreshStopped = false
     let coordinator: WaPrivacyCoordinatorRuntime
 
     const queryDisallowedList = async (category: WaPrivacyCategory): Promise<BinaryNode> => {
@@ -343,12 +350,21 @@ export function createPrivacyCoordinator(
         },
 
         scheduleAccountSyncRefresh: () => {
+            refreshStopped = false
             if (refreshTimer !== null) {
                 clearTimeout(refreshTimer)
             }
             refreshTimer = setTimeout(() => {
                 refreshTimer = null
-                void coordinator.refreshFromAccountSync().catch((error) => {
+                const previous = inFlightRefresh
+                const run = async () => {
+                    await previous?.catch(() => undefined)
+                    if (refreshStopped) {
+                        return
+                    }
+                    await coordinator.refreshFromAccountSync()
+                }
+                inFlightRefresh = run().catch((error) => {
                     options.logger.warn('account_sync privacy refresh failed', {
                         message: toError(error).message
                     })
@@ -358,6 +374,7 @@ export function createPrivacyCoordinator(
         },
 
         stopAccountSyncRefresh: () => {
+            refreshStopped = true
             if (refreshTimer !== null) {
                 clearTimeout(refreshTimer)
                 refreshTimer = null

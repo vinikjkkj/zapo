@@ -1,8 +1,8 @@
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
     WA_PRIVACY_CATEGORY_TO_SETTING,
+    WA_PRIVACY_SETTING_VALUES,
     WA_PRIVACY_TAGS,
-    WA_PRIVACY_VALUES,
     type WaPrivacyCategory,
     type WaPrivacySettingName,
     type WaPrivacySettingValueMap,
@@ -44,11 +44,9 @@ const IGNORED_SERVER_CATEGORIES = new Set([
     'groupcreation'
 ])
 
-const VALID_PRIVACY_VALUES: ReadonlySet<string> = new Set(Object.values(WA_PRIVACY_VALUES))
-
-function isValidPrivacyValue(value: string): value is WaPrivacyValue {
-    return value !== WA_PRIVACY_VALUES.ERROR && VALID_PRIVACY_VALUES.has(value)
-}
+const SETTING_VALUES = WA_PRIVACY_SETTING_VALUES as Readonly<
+    Record<string, readonly string[] | undefined>
+>
 
 /** Parses the `<privacy>` payload of a privacy `get` IQ result. */
 export function parsePrivacySettings(result: BinaryNode): WaPrivacySettings {
@@ -71,16 +69,17 @@ export function parsePrivacySettings(result: BinaryNode): WaPrivacySettings {
         if (IGNORED_SERVER_CATEGORIES.has(name)) {
             continue
         }
-        if (!isValidPrivacyValue(value)) {
-            continue
-        }
 
         const settingName = (WA_PRIVACY_CATEGORY_TO_SETTING as Record<string, string | undefined>)[
             name
         ]
-        if (settingName) {
-            settings[settingName] = value
+        if (!settingName) {
+            continue
         }
+        if (SETTING_VALUES[settingName]?.includes(value) !== true) {
+            continue
+        }
+        settings[settingName] = value as WaPrivacyValue
     }
 
     return settings

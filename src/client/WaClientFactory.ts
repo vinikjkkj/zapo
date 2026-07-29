@@ -973,6 +973,7 @@ export function buildWaClientDependencies(input: {
     ): Promise<void> => {
         abPropsCoordinator.reset()
         offlineResume.reset()
+        privacyCoordinator.stopAccountSyncRefresh()
         await connectionManager?.disconnect()
         runtime.emitEvent('connection', {
             status: 'close',
