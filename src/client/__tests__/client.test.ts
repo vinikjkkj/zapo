@@ -1140,6 +1140,10 @@ test('buildNewsletterMessageContent applies the resolved link preview to a text 
     assert.equal(decoded.extendedTextMessage?.matchedText, 'https://example.com')
     assert.equal(decoded.extendedTextMessage?.title, 'Example')
     assert.equal(decoded.extendedTextMessage?.thumbnailDirectPath, '/v/newsletter/thumb')
+    assert.deepEqual(
+        Uint8Array.from(decoded.extendedTextMessage?.thumbnailSha256 ?? []),
+        new Uint8Array(32).fill(7)
+    )
     assert.equal(decoded.extendedTextMessage?.mediaKey?.length ?? 0, 0)
     assert.equal(decoded.extendedTextMessage?.thumbnailEncSha256?.length ?? 0, 0)
 })

@@ -66,7 +66,7 @@ import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
 import { createDeviceFanoutResolver } from '@client/messaging/fanout'
 import { createGroupMetadataCache } from '@client/messaging/group-metadata'
 import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
-import { resolveLinkPreview } from '@client/messaging/link-preview'
+import { resolveLinkPreview, type WaLinkPreviewSurface } from '@client/messaging/link-preview'
 import {
     buildMediaMessageContent,
     getMediaConn as getClientMediaConn,
@@ -90,6 +90,7 @@ import {
     createPeerDataOperationRequester,
     type PeerDataOperationRequester
 } from '@message/primitives/peer-data-operation'
+import type { WaSendTextMessage } from '@message/types'
 import { WaMessageClient } from '@message/WaMessageClient'
 import {
     resolveWaDeviceIdentity,
@@ -503,6 +504,17 @@ export function buildWaClientDependencies(input: {
             allowPrivateHosts: linkPreviewOptions.allowPrivateHosts,
             proxy: linkPreviewOptions.proxy ?? options.proxy?.linkPreview
         })
+    const createLinkPreviewResolver =
+        (surface?: WaLinkPreviewSurface) => (content: WaSendTextMessage) =>
+            resolveLinkPreview(content.text, content.linkPreview, {
+                logger,
+                mediaTransfer,
+                getMediaConn: () => getClientMediaConn(mediaMessageBuildOptions),
+                fetcher: linkPreviewFetcher,
+                options: linkPreviewOptions,
+                serverClock,
+                surface
+            })
     const mediaMessageBuildOptions: WaMediaMessageOptions = {
         logger,
         mediaTransfer,
@@ -520,15 +532,7 @@ export function buildWaClientDependencies(input: {
         },
         serverClock,
         media: options.media,
-        linkPreviewResolver: (content) =>
-            resolveLinkPreview(content.text, content.linkPreview, {
-                logger,
-                mediaTransfer,
-                getMediaConn: () => getClientMediaConn(mediaMessageBuildOptions),
-                fetcher: linkPreviewFetcher,
-                options: linkPreviewOptions,
-                serverClock
-            })
+        linkPreviewResolver: createLinkPreviewResolver()
     }
 
     const messageClient = new WaMessageClient({
@@ -649,16 +653,7 @@ export function buildWaClientDependencies(input: {
         generateStanzaId: () => messageDispatch.generateOutgoingMessageId(),
         mediaTransfer,
         getMediaConn: () => getClientMediaConn(mediaMessageBuildOptions),
-        linkPreviewResolver: (content) =>
-            resolveLinkPreview(content.text, content.linkPreview, {
-                logger,
-                mediaTransfer,
-                getMediaConn: () => getClientMediaConn(mediaMessageBuildOptions),
-                fetcher: linkPreviewFetcher,
-                options: linkPreviewOptions,
-                serverClock,
-                surface: 'newsletter'
-            }),
+        linkPreviewResolver: createLinkPreviewResolver('newsletter'),
         getAbPropString: (name) => abPropsCoordinator.getConfigValue<string>(name),
         logger
     })
