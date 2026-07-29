@@ -370,26 +370,22 @@ test('privacy coordinator debounces scheduled refreshes and drops them on stop',
     assert.equal(emitted.length, 1)
 })
 
-test('privacy coordinator serializes overlapping scheduled refreshes', async () => {
-    const order: string[] = []
+test('privacy coordinator deduplicates a refresh overlapping an in-flight one', async () => {
     let releaseFirst: () => void = () => undefined
     let settingsQueries = 0
+    let emits = 0
 
     const coordinator = createPrivacyCoordinator({
         ...createBlocklistDeps(undefined, '1@lid'),
-        emitPrivacy: () => order.push('emit'),
+        emitPrivacy: () => {
+            emits += 1
+        },
         queryWithContext: async (context) => {
             if (context === 'privacy.getSettings') {
                 settingsQueries += 1
-                if (settingsQueries === 1) {
-                    order.push('first-start')
-                    await new Promise<void>((resolve) => {
-                        releaseFirst = resolve
-                    })
-                    order.push('first-end')
-                } else {
-                    order.push('second-start')
-                }
+                await new Promise<void>((resolve) => {
+                    releaseFirst = resolve
+                })
             }
             return createIqResult([{ tag: 'privacy', attrs: {} }])
         }
@@ -399,16 +395,18 @@ test('privacy coordinator serializes overlapping scheduled refreshes', async () 
     await new Promise((resolve) =>
         setTimeout(resolve, WA_DEFAULTS.PRIVACY_ACCOUNT_SYNC_DEBOUNCE_MS + 150)
     )
-    coordinator.scheduleAccountSyncRefresh()
-    await new Promise((resolve) =>
-        setTimeout(resolve, WA_DEFAULTS.PRIVACY_ACCOUNT_SYNC_DEBOUNCE_MS + 150)
-    )
+    assert.equal(settingsQueries, 1)
+
+    const direct = coordinator.refreshFromAccountSync()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    assert.equal(settingsQueries, 1)
+
+    releaseFirst()
+    await direct
+    await new Promise((resolve) => setTimeout(resolve, 100))
 
     assert.equal(settingsQueries, 1)
-    releaseFirst()
-    await new Promise((resolve) => setTimeout(resolve, 250))
-
-    assert.deepEqual(order, ['first-start', 'first-end', 'emit', 'second-start', 'emit'])
+    assert.equal(emits, 1)
 })
 
 test('privacy coordinator retries a disallowed list write once on a stale dhash', async () => {

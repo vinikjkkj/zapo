@@ -9,6 +9,7 @@ import {
     type WaPrivacySettings
 } from '@client/events/privacy'
 import type { Logger } from '@infra/log/types'
+import { PromiseDedup } from '@infra/perf/PromiseDedup'
 import { WA_DEFAULTS } from '@protocol/defaults'
 import { isLidJid, isUserJid, normalizeRecipientJid } from '@protocol/jid'
 import { WA_IQ_TYPES, WA_NODE_TAGS } from '@protocol/nodes'
@@ -117,6 +118,9 @@ export interface WaPrivacyCoordinator {
      * Categories and lists are separate queries, so a change landing
      * mid-refresh can leave the two halves a version apart.
      *
+     * Concurrent calls are deduplicated: one issued while another is still in
+     * flight joins it and resolves with the same snapshot.
+     *
      * This is what runs on its own when another device changes a setting -
      * the notification carrying the change is a trigger, not a payload to act
      * on. Call it directly only to force a refresh.
@@ -159,15 +163,16 @@ export interface WaPrivacyCoordinatorRuntime extends WaPrivacyCoordinator {
     /**
      * Queues a refresh, restarting the quiet window on every call so a burst
      * of `account_sync` notifications collapses into a single refetch instead
-     * of one per stanza (each costs five queries). Refreshes are serialized:
-     * one queued while another is still in flight waits for it, so two
-     * snapshots can never be emitted out of order.
+     * of one per stanza (each costs five queries). Refreshes are deduplicated
+     * against {@link refreshFromAccountSync}: one requested while another is
+     * still in flight joins it rather than racing it, so two snapshots can
+     * never be emitted out of order.
      */
     readonly scheduleAccountSyncRefresh: () => void
     /**
-     * Drops a queued refresh and stops a serialized one from starting, so a
-     * disconnect does not leave a refetch to fire against a closed
-     * connection. A refresh already in flight still runs to completion.
+     * Drops a queued refresh so a disconnect does not leave a refetch to fire
+     * against a closed connection. A refresh already in flight still runs to
+     * completion.
      */
     readonly stopAccountSyncRefresh: () => void
 }
@@ -209,6 +214,8 @@ async function resolveBlocklistTarget(
     }
     return { lidJid: null, pnJid: pair.pnJid ?? normalized }
 }
+
+const ACCOUNT_SYNC_REFRESH_KEY = 'account-sync'
 
 /**
  * A `409` on a disallowed-list write means the `dhash` we sent no longer
@@ -255,9 +262,8 @@ export function createPrivacyCoordinator(
     const { queryWithContext } = options
     const usesLidAddressing = () => options.getSelfLid() !== null
     let refreshTimer: ReturnType<typeof setTimeout> | null = null
-    let inFlightRefresh: Promise<unknown> | null = null
     let refreshStopped = false
-    let coordinator: WaPrivacyCoordinatorRuntime
+    const refreshDedup = new PromiseDedup()
 
     const queryDisallowedList = async (category: WaPrivacyCategory): Promise<BinaryNode> => {
         const node = buildGetPrivacyDisallowedListIq(category, usesLidAddressing())
@@ -273,6 +279,35 @@ export function createPrivacyCoordinator(
     ): Promise<WaPrivacyDisallowedListResult> =>
         parseDisallowedList(await queryDisallowedList(category))
 
+    const runAccountSyncRefresh = async (): Promise<WaPrivacyAccountSyncResult> => {
+        const settingsNode = await queryWithContext(
+            'privacy.getSettings',
+            buildGetPrivacySettingsIq()
+        )
+        assertIqResult(settingsNode, 'privacy.getSettings')
+
+        const listNodes = await Promise.all(
+            WA_PRIVACY_ACCOUNT_SYNC_DISALLOWED_LISTS.map(async (setting) => ({
+                setting,
+                node: await queryDisallowedList(WA_PRIVACY_SETTING_TO_CATEGORY[setting])
+            }))
+        )
+        const disallowedLists: WaPrivacyDisallowedListUpdate[] = []
+        for (const { setting, node } of listNodes) {
+            const update = parseDisallowedListUpdate(node)
+            if (update) {
+                disallowedLists.push({ setting, ...update })
+            }
+        }
+
+        const result: WaPrivacyAccountSyncResult = {
+            settings: parsePrivacySettings(settingsNode),
+            disallowedLists
+        }
+        options.emitPrivacy(result)
+        return result
+    }
+
     const writeDisallowedList = async (
         category: WaPrivacyCategory,
         entries: readonly WaPrivacyDisallowedListEntry[],
@@ -285,7 +320,7 @@ export function createPrivacyCoordinator(
         })
     }
 
-    coordinator = {
+    return {
         getPrivacySettings: async () => {
             const node = buildGetPrivacySettingsIq()
             const result = await queryWithContext('privacy.getSettings', node)
@@ -320,34 +355,8 @@ export function createPrivacyCoordinator(
             return parsePrivacyCategoryDhash(result, category)
         },
 
-        refreshFromAccountSync: async () => {
-            const settingsNode = await queryWithContext(
-                'privacy.getSettings',
-                buildGetPrivacySettingsIq()
-            )
-            assertIqResult(settingsNode, 'privacy.getSettings')
-
-            const listNodes = await Promise.all(
-                WA_PRIVACY_ACCOUNT_SYNC_DISALLOWED_LISTS.map(async (setting) => ({
-                    setting,
-                    node: await queryDisallowedList(WA_PRIVACY_SETTING_TO_CATEGORY[setting])
-                }))
-            )
-            const disallowedLists: WaPrivacyDisallowedListUpdate[] = []
-            for (const { setting, node } of listNodes) {
-                const update = parseDisallowedListUpdate(node)
-                if (update) {
-                    disallowedLists.push({ setting, ...update })
-                }
-            }
-
-            const result: WaPrivacyAccountSyncResult = {
-                settings: parsePrivacySettings(settingsNode),
-                disallowedLists
-            }
-            options.emitPrivacy(result)
-            return result
-        },
+        refreshFromAccountSync: () =>
+            refreshDedup.run(ACCOUNT_SYNC_REFRESH_KEY, runAccountSyncRefresh),
 
         scheduleAccountSyncRefresh: () => {
             refreshStopped = false
@@ -356,19 +365,16 @@ export function createPrivacyCoordinator(
             }
             refreshTimer = setTimeout(() => {
                 refreshTimer = null
-                const previous = inFlightRefresh
-                const run = async () => {
-                    await previous?.catch(() => undefined)
-                    if (refreshStopped) {
-                        return
-                    }
-                    await coordinator.refreshFromAccountSync()
+                if (refreshStopped) {
+                    return
                 }
-                inFlightRefresh = run().catch((error) => {
-                    options.logger.warn('account_sync privacy refresh failed', {
-                        message: toError(error).message
+                void refreshDedup
+                    .run(ACCOUNT_SYNC_REFRESH_KEY, runAccountSyncRefresh)
+                    .catch((error: unknown) => {
+                        options.logger.warn('account_sync privacy refresh failed', {
+                            message: toError(error).message
+                        })
                     })
-                })
             }, WA_DEFAULTS.PRIVACY_ACCOUNT_SYNC_DEBOUNCE_MS)
             refreshTimer.unref?.()
         },
@@ -407,6 +413,4 @@ export function createPrivacyCoordinator(
             assertIqResult(result, 'privacy.unblockUser')
         }
     }
-
-    return coordinator
 }
