@@ -1079,3 +1079,119 @@ test('uploadNewsletterMedia builds plaintext URL and parses response', async () 
     assert.equal(result.fileLength, 4)
     assert.equal(result.fileSha256.byteLength, 32)
 })
+
+test('buildNewsletterMessageContent resolves the plaintext mediatype for raw payloads', async () => {
+    const { buildNewsletterMessageContent } = await import('@client/newsletter/content')
+    const options = { logger: createNoopLogger() }
+
+    const linkPreview = await buildNewsletterMessageContent(options, {
+        extendedTextMessage: {
+            text: 'look at https://example.com',
+            matchedText: 'https://example.com',
+            title: 'Example',
+            previewType: proto.Message.ExtendedTextMessage.PreviewType.NONE
+        }
+    })
+    assert.equal(linkPreview.kind, 'media')
+    assert.equal(linkPreview.mediaType, 'url')
+
+    const vcard = await buildNewsletterMessageContent(options, {
+        contactMessage: { displayName: 'Ada', vcard: 'BEGIN:VCARD\nEND:VCARD' }
+    })
+    assert.equal(vcard.kind, 'media')
+    assert.equal(vcard.mediaType, 'vcard')
+
+    const plain = await buildNewsletterMessageContent(options, {
+        extendedTextMessage: { text: 'no link here' }
+    })
+    assert.equal(plain.kind, 'text')
+    assert.equal(plain.mediaType, null)
+
+    const location = await buildNewsletterMessageContent(options, {
+        locationMessage: { degreesLatitude: 1, degreesLongitude: 2 }
+    })
+    assert.equal(location.kind, 'text')
+    assert.equal(location.mediaType, null)
+})
+
+test('buildNewsletterMessageContent applies the resolved link preview to a text send', async () => {
+    const { buildNewsletterMessageContent } = await import('@client/newsletter/content')
+    const built = await buildNewsletterMessageContent(
+        {
+            logger: createNoopLogger(),
+            linkPreviewResolver: async () => ({
+                resolved: {
+                    matchedText: 'https://example.com',
+                    previewType: proto.Message.ExtendedTextMessage.PreviewType.NONE,
+                    title: 'Example'
+                },
+                thumbnailFields: {
+                    thumbnailDirectPath: '/v/newsletter/thumb',
+                    thumbnailSha256: new Uint8Array(32).fill(7)
+                }
+            })
+        },
+        { type: 'text', text: 'see https://example.com', linkPreview: true }
+    )
+
+    assert.equal(built.kind, 'media')
+    assert.equal(built.mediaType, 'url')
+    const decoded = proto.Message.decode(built.plaintext)
+    assert.equal(decoded.extendedTextMessage?.matchedText, 'https://example.com')
+    assert.equal(decoded.extendedTextMessage?.title, 'Example')
+    assert.equal(decoded.extendedTextMessage?.thumbnailDirectPath, '/v/newsletter/thumb')
+    assert.equal(decoded.extendedTextMessage?.mediaKey?.length ?? 0, 0)
+    assert.equal(decoded.extendedTextMessage?.thumbnailEncSha256?.length ?? 0, 0)
+})
+
+test('buildNewsletterMessageContent falls back to plain text when the resolver throws', async () => {
+    const { buildNewsletterMessageContent } = await import('@client/newsletter/content')
+    const built = await buildNewsletterMessageContent(
+        {
+            logger: createNoopLogger(),
+            linkPreviewResolver: async () => {
+                throw new Error('fetch exploded')
+            }
+        },
+        { type: 'text', text: 'see https://example.com' }
+    )
+
+    assert.equal(built.kind, 'text')
+    assert.equal(built.mediaType, null)
+    const decoded = proto.Message.decode(built.plaintext)
+    assert.equal(decoded.extendedTextMessage?.text, 'see https://example.com')
+    assert.equal(decoded.extendedTextMessage?.matchedText ?? '', '')
+})
+
+test('newsletter send publishes a link preview as type=media with mediatype=url', async () => {
+    const { createMessagingOps } = await import('@client/newsletter/messaging')
+    const published: BinaryNode[] = []
+    const ops = createMessagingOps({
+        logger: createNoopLogger(),
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: {} }) },
+        sendNode: async () => undefined,
+        publishMessageNode: async (node: BinaryNode) => {
+            published.push(node)
+            return { id: node.attrs.id ?? '', ack: 0 }
+        },
+        generateStanzaId: async () => 'STANZA-1'
+    } as unknown as Parameters<typeof createMessagingOps>[0])
+
+    await ops.send('123@newsletter', {
+        extendedTextMessage: {
+            text: 'look at https://example.com',
+            matchedText: 'https://example.com'
+        }
+    })
+
+    const node = published[0]
+    assert.equal(node.tag, 'message')
+    assert.equal(node.attrs.to, '123@newsletter')
+    assert.equal(node.attrs.id, 'STANZA-1')
+    assert.equal(node.attrs.type, 'media')
+    assert.equal(node.attrs.media_id, undefined)
+    const plaintext = (node.content as BinaryNode[])[0]
+    assert.equal(plaintext.tag, 'plaintext')
+    assert.equal(plaintext.attrs.mediatype, 'url')
+    assert.ok(plaintext.content instanceof Uint8Array)
+})

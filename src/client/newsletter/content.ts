@@ -6,11 +6,13 @@ import {
     performPlaintextMediaUpload,
     type WaUploadMediaSource
 } from '@client/media'
+import type { ResolvedLinkPreviewResult } from '@client/messaging/link-preview'
 import type { Logger } from '@infra/log/types'
 import { NEWSLETTER_MEDIA_UPLOAD_PATHS, type NewsletterMediaKind } from '@media/constants'
 import { createStickerPackZipStream } from '@media/sticker/sticker-pack'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { WaMediaConn } from '@media/types'
+import { buildExtendedTextWithPreview } from '@message/addons/link-preview/builder'
 import { applyContextInfo, type WaSendContextInfo } from '@message/context-info'
 import {
     isSendEventMessage,
@@ -23,6 +25,7 @@ import {
     isSendReactionMessage,
     isSendRevokeMessage,
     isSendTextMessage,
+    resolveEncMediaType,
     resolveMessageTypeAttr,
     unwrapMessage
 } from '@message/encode/content'
@@ -34,11 +37,13 @@ import {
 import type {
     WaSendMediaMessage,
     WaSendMessageContent,
-    WaSendStickerPackMessage
+    WaSendStickerPackMessage,
+    WaSendTextMessage
 } from '@message/types'
 import { proto, type Proto } from '@proto'
 import { WA_ENC_MEDIA_TYPES } from '@protocol/message'
 import { base64ToBytes } from '@util/bytes'
+import { toError } from '@util/primitives'
 
 export type WaNewsletterUploadMedia = WaUploadMediaSource
 
@@ -128,6 +133,10 @@ export interface BuildNewsletterContentOptions {
     readonly logger: Logger
     readonly mediaTransfer?: WaMediaTransferClient
     readonly getMediaConn?: () => Promise<WaMediaConn>
+    /** Must be bound to the `newsletter` surface (unencrypted thumbnail upload). */
+    readonly linkPreviewResolver?: (
+        content: WaSendTextMessage
+    ) => Promise<ResolvedLinkPreviewResult | null>
 }
 
 function resolveSendMediaKind(content: WaSendMediaMessage): NewsletterMediaKind {
@@ -136,17 +145,44 @@ function resolveSendMediaKind(content: WaSendMediaMessage): NewsletterMediaKind 
     return content.type
 }
 
+/** Enc media types a channel publish accepts; anything else ships as text. */
+const NEWSLETTER_MEDIA_TYPES: ReadonlySet<string> = new Set([
+    WA_ENC_MEDIA_TYPES.AUDIO,
+    WA_ENC_MEDIA_TYPES.DOCUMENT,
+    WA_ENC_MEDIA_TYPES.GIF,
+    WA_ENC_MEDIA_TYPES.IMAGE,
+    WA_ENC_MEDIA_TYPES.PTT,
+    WA_ENC_MEDIA_TYPES.PTV,
+    WA_ENC_MEDIA_TYPES.STICKER,
+    WA_ENC_MEDIA_TYPES.STICKER_PACK,
+    WA_ENC_MEDIA_TYPES.URL,
+    WA_ENC_MEDIA_TYPES.VCARD,
+    WA_ENC_MEDIA_TYPES.VIDEO
+])
+
+/**
+ * Resolves the `plaintext` node `mediatype`. Shares the encrypted send path's
+ * resolver so media without an upload still gets it - a link preview publishes
+ * as `url`, a contact card as `vcard`; without it the channel drops the card.
+ */
 function pickMediaTypeFromMessage(message: Proto.IMessage): string | null {
-    if (message.imageMessage) return WA_ENC_MEDIA_TYPES.IMAGE
-    if (message.videoMessage)
-        return message.videoMessage.gifPlayback ? WA_ENC_MEDIA_TYPES.GIF : WA_ENC_MEDIA_TYPES.VIDEO
-    if (message.audioMessage)
-        return message.audioMessage.ptt ? WA_ENC_MEDIA_TYPES.PTT : WA_ENC_MEDIA_TYPES.AUDIO
-    if (message.documentMessage) return WA_ENC_MEDIA_TYPES.DOCUMENT
-    if (message.stickerMessage) return WA_ENC_MEDIA_TYPES.STICKER
-    if (message.stickerPackMessage) return WA_ENC_MEDIA_TYPES.STICKER_PACK
-    if (message.ptvMessage) return WA_ENC_MEDIA_TYPES.PTV
-    return null
+    const mediaType = resolveEncMediaType(message)
+    return mediaType !== null && NEWSLETTER_MEDIA_TYPES.has(mediaType) ? mediaType : null
+}
+
+async function resolveTextLinkPreview(
+    options: BuildNewsletterContentOptions,
+    content: WaSendTextMessage
+): Promise<ResolvedLinkPreviewResult | null> {
+    if (!options.linkPreviewResolver) return null
+    try {
+        return await options.linkPreviewResolver(content)
+    } catch (error) {
+        options.logger.warn('link preview resolver failed, sending plain text', {
+            message: toError(error).message
+        })
+        return null
+    }
 }
 
 function buildMediaProtoMessage(
@@ -243,11 +279,22 @@ export async function buildNewsletterMessageContent(
     }
 
     if (isSendTextMessage(content)) {
-        const message = applyContextInfo({ extendedTextMessage: { text: content.text } }, ctx)
+        const preview = await resolveTextLinkPreview(options, content)
+        const message = applyContextInfo(
+            preview !== null
+                ? buildExtendedTextWithPreview(
+                      content.text,
+                      preview.resolved,
+                      preview.thumbnailFields
+                  )
+                : { extendedTextMessage: { text: content.text } },
+            ctx
+        )
+        const mediaType = pickMediaTypeFromMessage(message)
         return {
-            kind: 'text',
+            kind: mediaType !== null ? 'media' : 'text',
             plaintext: proto.Message.encode(message).finish(),
-            mediaType: null,
+            mediaType,
             upload: null
         }
     }

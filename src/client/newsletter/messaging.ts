@@ -1,4 +1,5 @@
 import {
+    type BuildNewsletterContentOptions,
     buildNewsletterMessageContent,
     type WaNewsletterBuiltContent
 } from '@client/newsletter/content'
@@ -42,6 +43,7 @@ export interface WaNewsletterMessagingDeps extends WaNewsletterMexDeps {
     readonly generateStanzaId: () => Promise<string>
     readonly mediaTransfer?: WaMediaTransferClient
     readonly getMediaConn?: () => Promise<WaMediaConn>
+    readonly linkPreviewResolver?: BuildNewsletterContentOptions['linkPreviewResolver']
 }
 
 /** Newsletter messaging operations (send, react, fetch, follow). */
@@ -108,7 +110,8 @@ async function buildContent(
         {
             logger: deps.logger,
             mediaTransfer: deps.mediaTransfer,
-            getMediaConn: deps.getMediaConn
+            getMediaConn: deps.getMediaConn,
+            linkPreviewResolver: deps.linkPreviewResolver
         },
         content,
         ctx
