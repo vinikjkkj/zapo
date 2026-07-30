@@ -1525,6 +1525,11 @@ export interface WaClientEventMap {
      */
     readonly offline_resume: (event: WaOfflineResumeEvent) => void
     /**
+     * Preview manifest of the offline queue, sent just before the flush. Not
+     * guaranteed to arrive - use `offline_resume` for progress, never this.
+     */
+    readonly offline_thread_metadata: (event: WaOfflineThreadMetadataEvent) => void
+    /**
      * Fatal stream-level error from the server (e.g. logged out from another
      * device, stream conflict). The connection will close right after.
      */
@@ -1597,6 +1602,39 @@ export interface WaOfflineResumeEvent {
     readonly remainingStanzas: number
     /** `true` when triggered by an explicit catch-up request rather than auto-resume on reconnect. */
     readonly forced: boolean
+}
+
+export interface WaOfflineThreadPreview {
+    /** User (`@lid`/`@s.whatsapp.net`) or group (`@g.us`) jid. */
+    readonly jid: string
+    /** Unix seconds of the most recent queued stanza for this thread. */
+    readonly timestampSeconds: number
+}
+
+export interface WaOfflineThreadReadWatermark {
+    readonly jid: string
+    /** Unix seconds up to which the peer has already read this thread. */
+    readonly readTimestampSeconds: number
+}
+
+/**
+ * Which threads have queued traffic, announced right before the offline flush.
+ * Informational only - every listed thread still delivers its stanzas
+ * normally. All fields but `threads` depend on server gating and are commonly
+ * absent.
+ */
+export interface WaOfflineThreadMetadataEvent {
+    readonly threads: readonly WaOfflineThreadPreview[]
+    readonly readWatermarks?: readonly WaOfflineThreadReadWatermark[]
+    /** Status-update backlog still queued behind this flush. */
+    readonly pendingStatusMessages?: {
+        readonly count: number
+        readonly jids: readonly string[]
+    }
+    /** Notification backlog still queued behind this flush. */
+    readonly pendingNotifications?: {
+        readonly count: number
+    }
 }
 
 export interface WaPrivacyTokenUpdateEvent {

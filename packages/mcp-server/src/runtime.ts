@@ -323,6 +323,7 @@ const ALL_EVENT_NAMES = [
     'history_sync_chunk',
     'group_history_bundle',
     'offline_resume',
+    'offline_thread_metadata',
     'stream_failure',
     'stanza_error',
 

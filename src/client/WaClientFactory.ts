@@ -373,6 +373,7 @@ function createIncomingNodeRuntime(input: {
         emitIncomingFailure: (event) => emitEvent('stream_failure', event),
         emitIncomingErrorStanza: (event) => emitEvent('stanza_error', event),
         emitIncomingNotification: (event) => emitEvent('debug_notification', event),
+        emitOfflineThreadMetadata: (event) => emitEvent('offline_thread_metadata', event),
         emitMexNotification: (event) => emitEvent('mex_notification', event),
         emitRegistrationCode: (event) => emitEvent('mobile_registration_code', event),
         emitAccountTakeoverNotice: (event) => emitEvent('mobile_account_takeover_notice', event),

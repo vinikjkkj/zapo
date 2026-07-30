@@ -8,6 +8,7 @@ import { parseChatstateNode } from '@client/events/chatstate'
 import { handleDirtyBits } from '@client/events/dirty'
 import { parseGroupNotificationEvents } from '@client/events/group'
 import { parseMexNotification } from '@client/events/mex-notification'
+import { parseOfflineThreadMetadata } from '@client/events/offline'
 import { parsePresenceNode } from '@client/events/presence'
 import type { WaBlocklistResult } from '@client/events/privacy'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
@@ -1289,4 +1290,72 @@ test('account_sync dirty bit runs the privacy refresh and re-emits the blocklist
     assert.deepEqual(blocklists, [{ jids: ['x@s.whatsapp.net'], dhash: 'block-hash' }])
     assert.ok(contexts.includes('account_sync.blocklist'))
     assert.ok(contexts.includes('dirty.clear'))
+})
+
+test('parseOfflineThreadMetadata collects thread previews from nested items', () => {
+    const metadata = parseOfflineThreadMetadata({
+        tag: 'thread_metadata',
+        attrs: {},
+        content: [
+            { tag: 'item', attrs: { from: '104888100999263@lid', t: '1784605462' } },
+            { tag: 'item', attrs: { from: '120363078720039631@g.us', t: '1784595546' } },
+            { tag: 'item', attrs: { from: 'no-timestamp@lid' } },
+            { tag: 'item', attrs: { t: '1784595546' } }
+        ]
+    })
+
+    assert.deepEqual(metadata.threads, [
+        { jid: '104888100999263@lid', timestampSeconds: 1_784_605_462 },
+        { jid: '120363078720039631@g.us', timestampSeconds: 1_784_595_546 }
+    ])
+    assert.equal(metadata.readWatermarks, undefined)
+    assert.equal(metadata.pendingStatusMessages, undefined)
+    assert.equal(metadata.pendingNotifications, undefined)
+})
+
+test('parseOfflineThreadMetadata keeps the highest watermark per jid and drops non-positive ones', () => {
+    const metadata = parseOfflineThreadMetadata({
+        tag: 'thread_metadata',
+        attrs: {},
+        content: [
+            {
+                tag: 'watermark',
+                attrs: {},
+                content: [
+                    { tag: 'item', attrs: { from: 'a@lid', sts: '100' } },
+                    { tag: 'item', attrs: { from: 'a@lid', sts: '300' } },
+                    { tag: 'item', attrs: { from: 'a@lid', sts: '200' } },
+                    { tag: 'item', attrs: { from: 'b@lid', sts: '0' } },
+                    { tag: 'item', attrs: { from: 'c@lid' } }
+                ]
+            }
+        ]
+    })
+
+    assert.deepEqual(metadata.readWatermarks, [{ jid: 'a@lid', readTimestampSeconds: 300 }])
+})
+
+test('parseOfflineThreadMetadata reads the delayed status and notification backlog', () => {
+    const metadata = parseOfflineThreadMetadata({
+        tag: 'thread_metadata',
+        attrs: {},
+        content: [
+            {
+                tag: 'status_msgs',
+                attrs: { count: '4' },
+                content: [{ tag: 'item', attrs: { from: 'a@lid' } }]
+            },
+            { tag: 'notifications', attrs: { count: '7' } }
+        ]
+    })
+
+    assert.deepEqual(metadata.pendingStatusMessages, { count: 4, jids: ['a@lid'] })
+    assert.deepEqual(metadata.pendingNotifications, { count: 7 })
+})
+
+test('parseOfflineThreadMetadata tolerates a bare node', () => {
+    const metadata = parseOfflineThreadMetadata({ tag: 'thread_metadata', attrs: {} })
+
+    assert.deepEqual(metadata.threads, [])
+    assert.equal(metadata.readWatermarks, undefined)
 })

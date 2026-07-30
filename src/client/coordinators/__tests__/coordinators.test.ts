@@ -17,6 +17,7 @@ import type {
     WaAppStateMutationEvent,
     WaGroupEvent,
     WaGroupEventAction,
+    WaOfflineThreadMetadataEvent,
     WaOutgoingMessageEvent
 } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
@@ -83,6 +84,7 @@ function createIncomingRuntime() {
             emitIncomingFailure: () => undefined,
             emitIncomingErrorStanza: () => undefined,
             emitIncomingNotification: () => undefined,
+            emitOfflineThreadMetadata: () => undefined,
             emitMexNotification: () => undefined,
             emitRegistrationCode: () => undefined,
             emitAccountTakeoverNotice: () => undefined,
@@ -1839,4 +1841,54 @@ test('passive tasks coordinator drops non-retryable receipt errors without stopp
     await new Promise<void>((resolve) => setTimeout(resolve, 100))
 
     assert.deepEqual(sent, ['r0', 'r2'])
+})
+
+test('incoming node coordinator emits the offline thread manifest alongside the bulletin mirror', async () => {
+    const notifications: unknown[] = []
+    const manifests: WaOfflineThreadMetadataEvent[] = []
+    const { runtime: baseRuntime } = createIncomingRuntime()
+    const runtime = {
+        ...baseRuntime,
+        emitIncomingNotification: (event: unknown) => {
+            notifications.push(event)
+        },
+        emitOfflineThreadMetadata: (event: WaOfflineThreadMetadataEvent) => {
+            manifests.push(event)
+        }
+    }
+
+    const coordinator = new WaIncomingNodeCoordinator({
+        logger: createNoopLogger(),
+        runtime,
+        offlineResume: {
+            trackOfflineStanza() {},
+            handleOfflinePreview() {},
+            handleOfflineComplete() {},
+            reset() {},
+            isComplete: false,
+            isResuming: false
+        } as never
+    })
+
+    await coordinator.handleIncomingNode({
+        tag: 'ib',
+        attrs: { from: 's.whatsapp.net' },
+        content: [
+            {
+                tag: 'thread_metadata',
+                attrs: {},
+                content: [
+                    { tag: 'item', attrs: { from: '104888100999263@lid', t: '1784605462' } },
+                    { tag: 'item', attrs: { from: '120363078720039631@g.us', t: '1784595546' } }
+                ]
+            }
+        ]
+    })
+
+    assert.equal(manifests.length, 1)
+    assert.deepEqual(manifests[0].threads, [
+        { jid: '104888100999263@lid', timestampSeconds: 1_784_605_462 },
+        { jid: '120363078720039631@g.us', timestampSeconds: 1_784_595_546 }
+    ])
+    assert.equal(notifications.length, 1)
 })

@@ -17,6 +17,7 @@ import {
     createUnhandledIncomingNodeEvent,
     sendSafeAck
 } from '@client/events/incoming'
+import { parseOfflineThreadMetadata } from '@client/events/offline'
 import { parsePresenceNode } from '@client/events/presence'
 import type {
     WaAccountTakeoverNoticeEvent,
@@ -34,6 +35,7 @@ import type {
     WaIncomingStanzaFilter,
     WaIncomingUnhandledStanzaEvent,
     WaMexNotificationEvent,
+    WaOfflineThreadMetadataEvent,
     WaPictureEvent,
     WaRegistrationCodeEvent
 } from '@client/types'
@@ -86,6 +88,7 @@ interface WaIncomingNodeRuntime {
     readonly emitIncomingFailure: (event: WaIncomingFailureEvent) => void
     readonly emitIncomingErrorStanza: (event: WaIncomingErrorStanzaEvent) => void
     readonly emitIncomingNotification: (event: WaIncomingNotificationEvent) => void
+    readonly emitOfflineThreadMetadata: (event: WaOfflineThreadMetadataEvent) => void
     readonly emitMexNotification: (event: WaMexNotificationEvent) => void
     readonly emitRegistrationCode: (event: WaRegistrationCodeEvent) => void
     readonly emitAccountTakeoverNotice: (event: WaAccountTakeoverNoticeEvent) => void
@@ -520,6 +523,9 @@ export class WaIncomingNodeCoordinator {
                     this.offlineResume.handleOfflineComplete(
                         parseOptionalInt(child.attrs.count) ?? 0
                     )
+                }
+                if (child.tag === 'thread_metadata') {
+                    this.runtime.emitOfflineThreadMetadata(parseOfflineThreadMetadata(child))
                 }
                 handled = true
             }
