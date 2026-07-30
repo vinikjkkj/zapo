@@ -450,6 +450,9 @@ export class WaMessageDispatchCoordinator {
                 this.withResolvedMessageId(options)
             ])
         }
+        const directRecipientJid = isGroupJid(recipientJid)
+            ? recipientJid
+            : await this.resolveDirectRecipientLid(toUserJid(recipientJid))
         let optionsCtx = options.contextInfo
         if (options.expirationSeconds !== undefined) {
             optionsCtx = { ...optionsCtx, expirationSeconds: options.expirationSeconds }
@@ -471,7 +474,7 @@ export class WaMessageDispatchCoordinator {
             !options.disableGroupEphemeralAutoInject
         ) {
             optionsCtx = {
-                ...(await this.resolveChatEphemeral(recipientJid)),
+                ...(await this.resolveChatEphemeral(directRecipientJid)),
                 ...optionsCtx
             }
         }
@@ -610,9 +613,6 @@ export class WaMessageDispatchCoordinator {
             sendOptions
         }
 
-        const directRecipientJid = isGroup
-            ? recipientJid
-            : await this.resolveDirectRecipientLid(toUserJid(recipientJid))
         const peerRecipientPn = isGroup
             ? undefined
             : await this.resolvePeerRecipientPn(toUserJid(recipientJid), directRecipientJid)

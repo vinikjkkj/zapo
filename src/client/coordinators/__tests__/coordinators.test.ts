@@ -165,7 +165,9 @@ function createMessageDispatchCoordinator(
         identityStore: {} as never,
         deviceListStore: {} as never,
         threadStore: overrides?.threadStore ?? createStubThreadStore(),
-        signalDeviceSync: (overrides?.signalDeviceSync ?? {}) as never,
+        signalDeviceSync: (overrides?.signalDeviceSync ?? {
+            resolveUserJidPair: async (userJid: string) => ({ lidJid: null, pnJid: userJid })
+        }) as never,
         messageSecretStore: {
             set: async (_id: string, _entry: { secret: Uint8Array; senderJid: string }) => {}
         } as never,
@@ -1636,6 +1638,74 @@ test('message dispatch injects ephemeral expiration + timestamp for 1:1 chats', 
     assert.equal(ctx.expiration, 86_400)
     assert.equal(ctx.ephemeralSettingTimestamp, 1_751_808_692)
     assert.deepEqual(ctx.disappearingMode, { initiator: 0, trigger: 1 })
+})
+
+test('message dispatch resolves a PN recipient to its LID thread row', async () => {
+    const events: WaOutgoingMessageEvent[] = []
+    const threadStore = createStubThreadStore(
+        new Map<string, WaStoredThreadRecord>([
+            [
+                '88880000@lid',
+                {
+                    jid: '88880000@lid',
+                    ephemeralExpiration: 86_400,
+                    ephemeralSettingTimestamp: 1_751_808_692
+                }
+            ]
+        ])
+    )
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        meJid: '5511000000000@s.whatsapp.net',
+        emitMessageSend: (event) => events.push(event),
+        threadStore,
+        signalDeviceSync: {
+            resolveUserJidPair: async () => ({
+                lidJid: '88880000@lid',
+                pnJid: '5511999999999@s.whatsapp.net'
+            })
+        }
+    })
+    await coordinator
+        .sendMessage('5511999999999@s.whatsapp.net', { text: 'oi' } as never, {})
+        .catch(() => undefined)
+    assert.equal(events.length, 1)
+    const ctx = getContextInfo(events[0].message)
+    assert.ok(ctx, 'a PN recipient must reach the LID-keyed thread row')
+    assert.equal(ctx.expiration, 86_400)
+    assert.equal(ctx.ephemeralSettingTimestamp, 1_751_808_692)
+    assert.deepEqual(ctx.disappearingMode, { initiator: 0, trigger: 1 })
+})
+
+test('message dispatch leaves a PN recipient alone when no LID is known', async () => {
+    const events: WaOutgoingMessageEvent[] = []
+    const threadStore = createStubThreadStore(
+        new Map<string, WaStoredThreadRecord>([
+            [
+                '5511999999999@s.whatsapp.net',
+                {
+                    jid: '5511999999999@s.whatsapp.net',
+                    ephemeralExpiration: 86_400,
+                    ephemeralSettingTimestamp: 1_751_808_692
+                }
+            ]
+        ])
+    )
+    const coordinator = createMessageDispatchCoordinator(new WaGroupMetadataMemoryStore(), {
+        meJid: '5511000000000@s.whatsapp.net',
+        emitMessageSend: (event) => events.push(event),
+        threadStore,
+        signalDeviceSync: {
+            resolveUserJidPair: async (userJid: string) => ({ lidJid: null, pnJid: userJid })
+        }
+    })
+    await coordinator
+        .sendMessage('5511999999999@s.whatsapp.net', { text: 'oi' } as never, {})
+        .catch(() => undefined)
+    assert.equal(events.length, 1)
+    const ctx = getContextInfo(events[0].message)
+    assert.ok(ctx, 'an unresolvable PN must fall back to the PN-keyed row')
+    assert.equal(ctx.expiration, 86_400)
+    assert.equal(ctx.ephemeralSettingTimestamp, 1_751_808_692)
 })
 
 test('message dispatch injects ephemeral expiration only for group chats', async () => {
