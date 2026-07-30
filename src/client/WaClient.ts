@@ -401,11 +401,18 @@ class WaClientImpl extends EventEmitter {
      * Kicks off the group-history bundle download when the incoming message
      * carries one. Fire-and-forget: the blob can be large, and the incoming
      * handler must not stall behind a CDN fetch.
+     *
+     * The download outlives the handler that started it, so it takes a slot of
+     * its own in the drain accounting - `disconnect()` and `clearStoredState()`
+     * must not flush or wipe the stores while a bundle is still writing.
      */
     private tryProcessGroupHistoryBundle(event: WaIncomingMessageEvent): void {
         const bundle = unwrapMessage(event.message ?? {}).messageHistoryBundle
         const groupJid = event.key.remoteJid
         if (!bundle || !groupJid) {
+            return
+        }
+        if (!this.tryEnterIncomingHandler()) {
             return
         }
         const credentials = this.deps.authClient.getCurrentCredentials()
@@ -426,7 +433,9 @@ class WaClientImpl extends EventEmitter {
                 bundleMessageId: event.key.id,
                 sentAtSeconds: event.timestampSeconds
             }
-        )
+        ).finally(() => {
+            this.leaveIncomingHandler()
+        })
     }
 
     private async queryWithContext(

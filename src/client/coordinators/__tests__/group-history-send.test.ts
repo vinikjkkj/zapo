@@ -83,6 +83,34 @@ test('restrictGroupHistoryTargets sees through an ephemeral wrapper', () => {
     assert.deepEqual(restrictGroupHistoryTargets(wrapped, [ALICE, BOB, ME], ME), [ALICE, ME])
 })
 
+/**
+ * Just enough of the media-upload wiring to exercise the send path offline: a
+ * pre-warmed media conn skips the IQ, and the fake transfer echoes an upload
+ * response instead of doing HTTP.
+ */
+function createFakeUploadOptions(): never {
+    return {
+        logger: createNoopLogger(),
+        serverClock: { nowSeconds: () => 1_700_000_000 },
+        getMediaConnCache: () => ({
+            auth: 'fake-auth',
+            expiresAtMs: Date.now() + 600_000,
+            hosts: [{ hostname: 'mmg.example', isFallback: false }]
+        }),
+        setMediaConnCache: () => undefined,
+        queryWithContext: async () => {
+            throw new Error('media conn IQ should not be needed')
+        },
+        mediaTransfer: {
+            uploadStream: async () => ({ status: 200 }),
+            readResponseBytes: async () =>
+                new TextEncoder().encode(
+                    JSON.stringify({ url: 'https://mmg.example/x', direct_path: '/mms/x' })
+                )
+        }
+    } as never
+}
+
 interface ShareHarness {
     readonly coordinator: WaMessageCoordinator
     readonly sent: { readonly to: string; readonly content: Proto.IMessage }[]
@@ -98,6 +126,7 @@ function createShareHarness(options: {
     }
     readonly storedMessages?: readonly unknown[]
     readonly groupHistorySendEnabled?: boolean
+    readonly failNoticeSend?: boolean
 }): ShareHarness {
     const sent: { readonly to: string; readonly content: Proto.IMessage }[] = []
     const coordinator = new WaMessageCoordinator({
@@ -114,12 +143,15 @@ function createShareHarness(options: {
                 })
             }),
             sendMessage: async (to: string, content: Proto.IMessage) => {
+                if (options.failNoticeSend && content.messageHistoryNotice) {
+                    throw new Error('notice rejected')
+                }
                 sent.push({ to, content })
                 return { id: `sent-${sent.length}` }
             }
         },
         mediaTransfer: {} as never,
-        mediaUploadOptions: {} as never,
+        mediaUploadOptions: createFakeUploadOptions(),
         logger: createNoopLogger(),
         messageStore: {
             listByThread: async () => options.storedMessages ?? []
@@ -170,6 +202,17 @@ test('shareGroupHistory names the addressing mode when a recipient does not matc
         () => coordinator.shareGroupHistory(GROUP, { toJids: [ALICE] }),
         /addressing mode: lid/
     )
+})
+
+test('shareGroupHistory reports a delivered bundle even when the notice fails', async () => {
+    const { coordinator, sent } = createShareHarness({ failNoticeSend: true })
+    const result = await coordinator.shareGroupHistory(GROUP, {
+        toJids: [ALICE],
+        messages: [{ key: { id: 'M1', remoteJid: GROUP }, message: { conversation: 'x' } }]
+    })
+    assert.equal(result.bundleMessageId, 'sent-1')
+    assert.equal(result.noticeMessageId, undefined)
+    assert.equal(sent.length, 1)
 })
 
 test('shareGroupHistory rejects a non-group jid', async () => {

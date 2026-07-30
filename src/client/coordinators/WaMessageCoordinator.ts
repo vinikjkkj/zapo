@@ -108,16 +108,21 @@ export interface WaShareGroupHistoryInput {
      */
     readonly toJids: readonly string[]
     /**
-     * How many of the most recent messages to include. Defaults to WhatsApp's
-     * `group_history_message_count_limit` (100).
+     * How many of the most recent messages to read from the mailbox store.
+     * Defaults to WhatsApp's `group_history_message_count_limit` (100).
+     * Ignored when {@link messages} is supplied - that list is bundled as-is.
      */
     readonly count?: number
-    /** Only include messages at or after this timestamp (ms). */
+    /**
+     * Only read messages at or after this timestamp (ms) from the mailbox
+     * store. Ignored when {@link messages} is supplied.
+     */
     readonly sinceMs?: number
     /**
-     * Messages to bundle, bypassing the mailbox store. Required when the
-     * `messages` store domain is `'none'` (the default), since there is
-     * nothing to read back in that case.
+     * Messages to bundle, bypassing the mailbox store entirely - {@link count}
+     * and {@link sinceMs} do not apply, so the caller owns the windowing.
+     * Required when the `messages` store domain is `'none'` (the default),
+     * since there is nothing to read back in that case.
      */
     readonly messages?: readonly Proto.IWebMessageInfo[]
     /**
@@ -130,8 +135,12 @@ export interface WaShareGroupHistoryInput {
 export interface WaShareGroupHistoryResult {
     /** Stanza id of the bundle message, fanned out only to `historyReceivers`. */
     readonly bundleMessageId: string
-    /** Stanza id of the notice message, sent to the whole group. */
-    readonly noticeMessageId: string
+    /**
+     * Stanza id of the notice message, sent to the whole group. Absent when the
+     * notice failed to send: the bundle still reached its receivers, so do not
+     * retry the share - it would upload and deliver the history a second time.
+     */
+    readonly noticeMessageId?: string
     readonly messagesCount: number
     readonly historyReceivers: readonly string[]
     readonly nonHistoryReceivers: readonly string[]
@@ -455,9 +464,21 @@ export class WaMessageCoordinator {
             }
         })
 
-        const noticeResult = await this.send(normalizedGroupJid, {
-            messageHistoryNotice: { messageHistoryMetadata: metadata }
-        })
+        let noticeMessageId: string | undefined
+        try {
+            noticeMessageId = (
+                await this.send(normalizedGroupJid, {
+                    messageHistoryNotice: { messageHistoryMetadata: metadata }
+                })
+            ).id
+        } catch (error) {
+            this.logger.warn('group history notice failed after the bundle was delivered', {
+                groupJid: normalizedGroupJid,
+                id: bundleResult.id,
+                receiverCount: audience.historyReceivers.length,
+                message: toError(error).message
+            })
+        }
 
         this.logger.debug('shared group history', {
             groupJid: normalizedGroupJid,
@@ -468,7 +489,7 @@ export class WaMessageCoordinator {
 
         return {
             bundleMessageId: bundleResult.id,
-            noticeMessageId: noticeResult.id,
+            noticeMessageId,
             messagesCount: messages.length,
             historyReceivers: audience.historyReceivers,
             nonHistoryReceivers: audience.nonHistoryReceivers
