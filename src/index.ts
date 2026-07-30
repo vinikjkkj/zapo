@@ -296,6 +296,24 @@ export type { PinoLoggerOptions } from '@infra/log/PinoLogger'
 export { createNoopLogger } from '@infra/log/types'
 export type { Logger, LogLevel } from '@infra/log/types'
 export { WA_VERSION } from '@version-spec'
+export {
+    resolveAbPropNameByCode,
+    WA_ABPROPS,
+    WA_ABPROPS_BY_CODE,
+    WA_ABPROPS_SPECIAL_EARLY,
+    WA_ABPROPS_USED_BEFORE_INIT,
+    WA_GROUP_ABPROPS,
+    WA_GROUP_ABPROPS_BY_CODE
+} from '@abprops-spec'
+export type {
+    WaAbProp,
+    WaAbPropName,
+    WaAbPropType,
+    WaAbPropValue,
+    WaAbPropValueByName,
+    WaGroupAbPropName,
+    WaGroupAbPropValueByName
+} from '@abprops-spec'
 export { createStore, WaAuthMemoryStore } from '@store'
 export type {
     WaAppStateCollectionStoreState,

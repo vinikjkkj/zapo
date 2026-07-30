@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { resolveAbPropNameByCode, WA_ABPROPS } from '@abprops-spec'
 import { WA_APPSTATE_SCHEMAS } from '@appstate-spec'
-import { AB_PROP_CONFIGS, resolveAbPropNameByCode } from '@protocol/abprops'
+import { AB_PROP_CONFIGS } from '@protocol/abprops'
 import { WA_BOT_KNOWN_JIDS, WA_BOT_MSG_EDIT_TYPES, WA_BOT_NODE_ATTRS } from '@protocol/bot'
 import {
     getWaCompanionPlatformId,
@@ -234,29 +235,38 @@ test('privacy protocol constants keep mapping invariants', () => {
     ])
 })
 
-test('ab props keep protocol-specific group and trusted-contact mappings', () => {
+test('ab props expose the group and trusted-contact configs the client reads', () => {
+    assert.equal(WA_ABPROPS.group_size_limit.code, 1304)
+    assert.equal(WA_ABPROPS.group_size_limit.type, 'int')
+    assert.equal(WA_ABPROPS.community_announcement_group_size_limit.code, 2774)
+    assert.equal(WA_ABPROPS.tctoken_duration.code, 865)
+    assert.equal(WA_ABPROPS.tctoken_duration_sender.code, 996)
+
+    assert.equal(resolveAbPropNameByCode(1304), 'group_size_limit')
+    assert.equal(resolveAbPropNameByCode(2774), 'community_announcement_group_size_limit')
+    assert.equal(resolveAbPropNameByCode(865), 'tctoken_duration')
+    assert.equal(resolveAbPropNameByCode(996), 'tctoken_duration_sender')
+})
+
+test('ab props reverse map drops codes this bundle does not know', () => {
+    assert.equal(resolveAbPropNameByCode(0), undefined)
+    assert.equal(resolveAbPropNameByCode(Number.MAX_SAFE_INTEGER), undefined)
+})
+
+test('deprecated AB_PROP_CONFIGS view still exposes configCode over the spec table', () => {
     assert.deepEqual(AB_PROP_CONFIGS.group_size_limit, {
         configCode: 1304,
         type: 'int',
         defaultValue: 257
-    })
-    assert.deepEqual(AB_PROP_CONFIGS.community_announcement_group_size_limit, {
-        configCode: 2774,
-        type: 'int',
-        defaultValue: 5000
     })
     assert.deepEqual(AB_PROP_CONFIGS.tctoken_duration, {
         configCode: 865,
         type: 'int',
         defaultValue: 604800
     })
-    assert.deepEqual(AB_PROP_CONFIGS.tctoken_duration_sender, {
-        configCode: 996,
-        type: 'int',
-        defaultValue: 604800
-    })
-    assert.equal(resolveAbPropNameByCode(1304), 'group_size_limit')
-    assert.equal(resolveAbPropNameByCode(2774), 'community_announcement_group_size_limit')
-    assert.equal(resolveAbPropNameByCode(865), 'tctoken_duration')
-    assert.equal(resolveAbPropNameByCode(996), 'tctoken_duration_sender')
+    assert.equal(
+        Object.keys(AB_PROP_CONFIGS).length,
+        Object.keys(WA_ABPROPS).length,
+        'the compatibility view must cover the whole catalogue'
+    )
 })

@@ -2,6 +2,7 @@ import { createReadStream, createWriteStream } from 'node:fs'
 import type { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
+import type { WaAbPropName } from '@abprops-spec'
 import type { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
 import type { WaTrustedContactTokenCoordinator } from '@client/coordinators/WaTrustedContactTokenCoordinator'
 import { aggregateReceiptTargets } from '@client/events/receipt'
@@ -47,7 +48,6 @@ import type {
 } from '@message/types'
 import type { WaMexOperationResponses } from '@mex'
 import { proto, type Proto } from '@proto'
-import type { AbPropName } from '@protocol/abprops'
 import { applyDeviceToJid, isGroupJid, normalizeRecipientJid } from '@protocol/jid'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
@@ -80,7 +80,7 @@ export interface WaMessageCoordinatorDeps {
      * default. Sole source for the group-history message-count limit, so a
      * server-side change takes effect without a release.
      */
-    readonly getAbPropNumber: (name: AbPropName) => number
+    readonly getAbPropNumber: (name: WaAbPropName) => number
 }
 
 /** MIME type the group-history bundle is uploaded and advertised under. */
@@ -288,7 +288,7 @@ export class WaMessageCoordinator {
     private readonly mexSocket: WaMexQuerySocket
     private readonly peerDataOperation: PeerDataOperationRequester
     private readonly isGroupHistorySendEnabled: () => boolean
-    private readonly getAbPropNumber: (name: AbPropName) => number
+    private readonly getAbPropNumber: (name: WaAbPropName) => number
 
     public constructor(deps: WaMessageCoordinatorDeps) {
         this.messageDispatch = deps.messageDispatch

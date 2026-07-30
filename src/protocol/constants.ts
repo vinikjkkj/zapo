@@ -122,9 +122,9 @@ export {
     WA_EMAIL_XMLNS
 } from '@protocol/email'
 export type { WaEmailContext, WaEmailErrorCode } from '@protocol/email'
+export { resolveAbPropNameByCode } from '@abprops-spec'
 export {
     AB_PROP_CONFIGS,
-    resolveAbPropNameByCode,
     WA_ABPROPS_PROTOCOL_VERSION,
     WA_ABPROPS_REFRESH_BOUNDS
 } from '@protocol/abprops'

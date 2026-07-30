@@ -1,3 +1,4 @@
+import type { WaAbPropName } from '@abprops-spec'
 import { downloadHistoryBlob, flushPendingWrites } from '@client/persistence/history-blob'
 import type { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type { WaClientEventMap, WaGroupHistoryBundleEvent } from '@client/types'
@@ -5,7 +6,6 @@ import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { decodeGroupHistoryBundle } from '@message/kinds/group-history'
 import { proto, type Proto } from '@proto'
-import type { AbPropName } from '@protocol/abprops'
 import { isGroupJid, toUserJid } from '@protocol/jid'
 import { longToNumber, toError } from '@util/primitives'
 
@@ -34,7 +34,7 @@ export interface WaGroupHistoryDeps {
     ) => void
     readonly meJid?: string | null
     readonly meLid?: string | null
-    readonly getAbPropNumber: (name: AbPropName) => number
+    readonly getAbPropNumber: (name: WaAbPropName) => number
 }
 
 export async function runGroupHistoryBundle(

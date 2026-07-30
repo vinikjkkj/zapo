@@ -52,6 +52,7 @@ zapo/
 ├── src/                # Core library source (zapo-js)
 │   ├── index.ts        # public API barrel
 │   ├── proto.ts        # bridge to ../spec/proto (only ../ import allowed)
+│   ├── abprops-spec.ts # bridge to ../spec/abprops (AB prop catalogue + code reverse map)
 │   ├── appstate-spec.ts # bridge to ../spec/appstate (app-state schema descriptors)
 │   ├── mex.ts          # bridge to ../spec/mex (MEX GraphQL operation types)
 │   ├── __tests__/      # structural test coverage checks
@@ -77,6 +78,7 @@ zapo/
 │       ├── tsconfig.build.cjs.json
 │       └── tsconfig.build.esm.json
 ├── spec/               # Vendored protocol spec from vinikjkkj/wa-spec
+│   ├── abprops/        # AB prop catalogue (imported by src/abprops-spec.ts)
 │   ├── proto/          # WAProto.proto + compiled output (imported by src/proto.ts)
 │   ├── appstate/       # app-state schema descriptors (imported by src/appstate-spec.ts)
 │   ├── mex/            # MEX GraphQL operation types (imported by src/mex.ts)
@@ -138,6 +140,7 @@ Use aliases for cross-domain imports:
 - `@appstate`, `@auth`, `@client`, `@crypto`, `@media`, `@message`, `@protocol`, `@retry`, `@signal`, `@store`, `@transport`
 - deep imports are available via `@module/*`
 - `@proto` maps to `src/proto.ts` (re-exports `../spec/proto`)
+- `@abprops-spec` maps to `src/abprops-spec.ts` (re-exports `../spec/abprops` – the full `WA_ABPROPS` / `WA_GROUP_ABPROPS` catalogue plus `resolveAbPropNameByCode`)
 - `@appstate-spec` maps to `src/appstate-spec.ts` (re-exports `../spec/appstate` + adds typed helpers)
 - `@mex` maps to `src/mex.ts` (re-exports `../spec/mex` operation types)
 - `@version-spec` maps to `src/version-spec.ts` (re-exports `../spec/version` – `WA_VERSION` is the WA Web version string used by the noise payload builders)
@@ -166,9 +169,9 @@ Coordinators, types, helpers, and other internal symbols should always be import
 Relative imports are allowed only for explicit local bridging patterns already used in the codebase:
 
 - same-folder internal helpers (example: `src/util/coercion.ts` importing `./bytes`)
-- `src/proto.ts`, `src/appstate-spec.ts`, `src/mex.ts`, and
-  `src/version-spec.ts` bridging to the vendored `../spec/` folder (the
-  only `../` imports allowed in `src/`)
+- `src/proto.ts`, `src/abprops-spec.ts`, `src/appstate-spec.ts`,
+  `src/mex.ts`, and `src/version-spec.ts` bridging to the vendored
+  `../spec/` folder (the only `../` imports allowed in `src/`)
 
 Do not add new cross-module `../` import chains.
 

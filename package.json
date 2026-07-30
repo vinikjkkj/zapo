@@ -105,6 +105,8 @@
     },
     "files": [
         "dist",
+        "spec/abprops/index.js",
+        "spec/abprops/index.d.ts",
         "spec/proto/index.js",
         "spec/proto/index.d.ts",
         "spec/mex/index.js",

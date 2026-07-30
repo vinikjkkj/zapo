@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { gzipSync } from 'node:zlib'
 
+import type { WaAbPropName } from '@abprops-spec'
 import { parseDirtyBits } from '@client/events/dirty'
 import { processHistorySyncNotification } from '@client/persistence/history-sync'
 import type { WaClientOptions } from '@client/types'
@@ -9,7 +10,6 @@ import { WaClient } from '@client/WaClient'
 import { buildWaClientDependencies, resolveWaClientBase } from '@client/WaClientFactory'
 import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
-import type { AbPropName } from '@protocol/abprops'
 import { WaPrivacyTokenMemoryStore } from '@store/memory/privacy-token.store'
 import type { BinaryNode } from '@transport/types'
 
@@ -776,7 +776,7 @@ test('buildWaClientDependencies wires trusted contact token AB prop overrides', 
     const originalGetConfigValue = dependencies.abPropsCoordinator.getConfigValue.bind(
         dependencies.abPropsCoordinator
     )
-    dependencies.abPropsCoordinator.getConfigValue = ((name: AbPropName) => {
+    dependencies.abPropsCoordinator.getConfigValue = ((name: WaAbPropName) => {
         switch (name) {
             case 'tctoken_duration':
                 return 60 as never

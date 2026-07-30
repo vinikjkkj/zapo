@@ -1,6 +1,6 @@
+import type { WaAbPropName } from '@abprops-spec'
 import type { Logger } from '@infra/log/types'
 import type { WaMexOperationResponses, WaMexOperationVariables } from '@mex'
-import type { AbPropName } from '@protocol/abprops'
 import {
     buildTosQueryIq,
     buildTosUpdateIq,
@@ -19,7 +19,7 @@ export interface WaNewsletterMexDeps {
         node: BinaryNode,
         timeoutMs?: number
     ) => Promise<BinaryNode>
-    readonly getAbPropString?: (name: AbPropName) => string
+    readonly getAbPropString?: (name: WaAbPropName) => string
     readonly logger: Logger
 }
 
@@ -33,7 +33,7 @@ export async function runMex<K extends WaMexOpKey>(
 
 function resolveTosId(deps: WaNewsletterMexDeps, kind: WaNewsletterTosKind): string | null {
     if (!deps.getAbPropString) return null
-    const propName: AbPropName =
+    const propName: WaAbPropName =
         kind === 'creation'
             ? 'newsletter_creation_tos_id'
             : kind === 'consumer'

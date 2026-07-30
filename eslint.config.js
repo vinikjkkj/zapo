@@ -18,6 +18,7 @@ module.exports = [
             'spec/proto/*.tmp.*',
             'spec/proto/WAProto.codegen.tmp.proto',
             'spec/proto/WAProto.types.codegen.tmp.js',
+            'spec/abprops/**',
             'spec/mex/**',
             'spec/appstate/**',
             'spec/version/**'
@@ -156,6 +157,7 @@ module.exports = [
         files: [
             'src/proto.ts',
             'src/mex.ts',
+            'src/abprops-spec.ts',
             'src/appstate-spec.ts',
             'src/version-spec.ts',
             'src/__tests__/index.test.ts'

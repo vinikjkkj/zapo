@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import type { WaAbPropName } from '@abprops-spec'
 import {
     processGroupHistoryBundle,
     type WaGroupHistoryDeps
@@ -8,7 +9,6 @@ import {
 import { createNoopLogger } from '@infra/log/types'
 import { encodeGroupHistoryBundle } from '@message/kinds/group-history'
 import type { Proto } from '@proto'
-import type { AbPropName } from '@protocol/abprops'
 
 const GROUP_JID = '120363000000000000@g.us'
 const ME_PN = '5511999999999@s.whatsapp.net'
@@ -68,7 +68,7 @@ function createHarness(overrides: Partial<WaGroupHistoryDeps> = {}): Harness {
         },
         meJid: ME_PN,
         meLid: ME_LID,
-        getAbPropNumber: (_name: AbPropName) => TWO_WEEKS_SECONDS,
+        getAbPropNumber: (_name: WaAbPropName) => TWO_WEEKS_SECONDS,
         ...overrides
     } as unknown as WaGroupHistoryDeps
     return {

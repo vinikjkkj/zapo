@@ -17,6 +17,7 @@
             "zapo-js/media": ["src/media"],
             "zapo-js/util": ["src/util"],
             "zapo-js/transport": ["src/transport"],
+            "@abprops-spec": ["src/abprops-spec"],
             "@appstate": ["src/appstate"],
             "@appstate/*": ["src/appstate/*"],
             "@appstate-spec": ["src/appstate-spec"],

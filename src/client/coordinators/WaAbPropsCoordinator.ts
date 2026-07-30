@@ -1,13 +1,14 @@
+import {
+    resolveAbPropNameByCode,
+    WA_ABPROPS,
+    type WaAbProp,
+    type WaAbPropName,
+    type WaAbPropType,
+    type WaAbPropValue
+} from '@abprops-spec'
 import { parseAbPropsIqResult } from '@client/events/abprops'
 import type { Logger } from '@infra/log/types'
-import {
-    AB_PROP_CONFIGS,
-    type AbPropName,
-    type AbPropType,
-    type AbPropValue,
-    resolveAbPropNameByCode,
-    WA_ABPROPS_REFRESH_BOUNDS
-} from '@protocol/abprops'
+import { WA_ABPROPS_REFRESH_BOUNDS } from '@protocol/abprops'
 import { WA_DEFAULTS } from '@protocol/constants'
 import { buildGetAbPropsIq } from '@transport/node/builders/abprops'
 import type { BinaryNode } from '@transport/types'
@@ -28,10 +29,15 @@ interface AbPropSyncState {
     refreshId: number | null
 }
 
+// The generated table types every entry with literal `code` / `defaultValue`
+// types. Reading through a widened view keeps a lookup by a non-literal name
+// from expanding into a 2000-member union at every call site.
+const AB_PROPS = WA_ABPROPS as Readonly<Record<WaAbPropName, WaAbProp>>
+
 export class WaAbPropsCoordinator {
     private readonly logger: Logger
     private readonly runtime: WaAbPropsRuntime
-    private readonly cache: Map<AbPropName, AbPropValue>
+    private readonly cache: Map<WaAbPropName, WaAbPropValue>
     private readonly syncState: AbPropSyncState
     private syncPromise: Promise<void> | null
     private syncEpoch: number
@@ -47,12 +53,12 @@ export class WaAbPropsCoordinator {
         this.pendingSync = false
     }
 
-    public getConfigValue<T extends AbPropValue>(name: AbPropName): T {
+    public getConfigValue<T extends WaAbPropValue>(name: WaAbPropName): T {
         const cached = this.cache.get(name)
         if (cached !== undefined) {
             return cached as T
         }
-        return AB_PROP_CONFIGS[name].defaultValue as T
+        return AB_PROPS[name].defaultValue as T
     }
 
     public sync(): void {
@@ -152,7 +158,7 @@ export class WaAbPropsCoordinator {
             if (!name) {
                 continue
             }
-            const config = AB_PROP_CONFIGS[name]
+            const config = AB_PROPS[name]
             const parsed = parseConfigValue(entry.configValue, config.type, config.defaultValue)
             this.cache.set(name, parsed)
             applied += 1
@@ -170,9 +176,9 @@ export class WaAbPropsCoordinator {
 
 function parseConfigValue(
     value: string | null,
-    type: AbPropType,
-    defaultValue: AbPropValue
-): AbPropValue {
+    type: WaAbPropType,
+    defaultValue: WaAbPropValue
+): WaAbPropValue {
     if (value === null) {
         return defaultValue
     }
@@ -181,6 +187,10 @@ function parseConfigValue(
     }
     if (type === 'int') {
         return parseOptionalInt(value) ?? defaultValue
+    }
+    if (type === 'float') {
+        const parsed = Number.parseFloat(value)
+        return Number.isNaN(parsed) ? defaultValue : parsed
     }
     return value
 }

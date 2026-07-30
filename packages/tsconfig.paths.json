@@ -14,6 +14,7 @@
             "zapo-js/media": ["src/media/index.ts"],
             "zapo-js/util": ["src/util/index.ts"],
             "zapo-js/transport": ["src/transport/index.ts"],
+            "@abprops-spec": ["src/abprops-spec.ts"],
             "@appstate": ["src/appstate/index.ts"],
             "@appstate/*": ["src/appstate/*"],
             "@appstate-spec": ["src/appstate-spec.ts"],
