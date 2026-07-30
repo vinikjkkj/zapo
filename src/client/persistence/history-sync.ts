@@ -1,6 +1,7 @@
 import { promisify } from 'node:util'
 import { unzip } from 'node:zlib'
 
+import { downloadHistoryBlob, flushPendingWrites } from '@client/persistence/history-blob'
 import type { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type { WaClientEventMap, WaHistorySyncChunkEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
@@ -291,15 +292,6 @@ export async function processHistorySyncNotification(
     }
 }
 
-async function flushPendingWrites(pendingWrites: Promise<void>[]): Promise<void> {
-    if (pendingWrites.length === 0) {
-        return
-    }
-    const settled = Promise.all(pendingWrites)
-    pendingWrites.length = 0
-    await settled
-}
-
 async function downloadHistorySyncBlob(
     deps: WaHistorySyncDeps,
     notification: Proto.Message.IHistorySyncNotification
@@ -310,17 +302,5 @@ async function downloadHistorySyncBlob(
             'initialHistBootstrapInlinePayload'
         )
     }
-    if (!notification.directPath) {
-        throw new Error('history sync notification missing directPath')
-    }
-    const mediaKey = decodeProtoBytes(notification.mediaKey, 'history sync mediaKey')
-    const fileSha256 = decodeProtoBytes(notification.fileSha256, 'history sync fileSha256')
-    const fileEncSha256 = decodeProtoBytes(notification.fileEncSha256, 'history sync fileEncSha256')
-    return deps.mediaTransfer.downloadAndDecrypt({
-        directPath: notification.directPath,
-        mediaType: 'history',
-        mediaKey,
-        fileSha256,
-        fileEncSha256
-    })
+    return downloadHistoryBlob(deps.mediaTransfer, notification, 'history', 'history sync')
 }

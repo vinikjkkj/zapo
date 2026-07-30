@@ -80,6 +80,22 @@ test('resolveMediaPayload distinguishes video/gif and audio/ptt and ptv', () => 
     assert.equal(sticker?.mediaType, 'sticker')
 })
 
+test('resolveMediaPayload maps the group-history bundle', () => {
+    const bundle = resolveMediaPayload({
+        messageHistoryBundle: {
+            directPath: '/gh',
+            mediaKey: key,
+            fileSha256: sha,
+            fileEncSha256: encSha,
+            mimetype: 'application/protobuf'
+        }
+    })
+    assert.equal(bundle?.mediaType, 'group-history')
+    assert.equal(bundle?.directPath, '/gh')
+    assert.equal(bundle?.mimetype, 'application/protobuf')
+    assert.equal(bundle?.fileLength, undefined)
+})
+
 test('resolveMediaPayload unwraps ephemeral/viewOnce/documentWithCaption wrappers', () => {
     const wrapped = resolveMediaPayload({
         ephemeralMessage: {

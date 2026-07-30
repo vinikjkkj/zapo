@@ -819,7 +819,10 @@ export function buildWaClientDependencies(input: {
         trustedContactToken,
         emitAddon: (event) => runtime.emitEvent('message_addon', event),
         mexSocket: { query: runtime.query },
-        peerDataOperation
+        peerDataOperation,
+        isGroupHistorySendEnabled: () =>
+            abPropsCoordinator.getConfigValue<boolean>('group_history_send'),
+        getAbPropNumber: (name) => abPropsCoordinator.getConfigValue<number>(name)
     })
 
     const retryCoordinator = new WaRetryCoordinator({

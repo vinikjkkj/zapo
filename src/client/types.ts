@@ -163,7 +163,9 @@ export interface WaClientOptions extends WaAuthClientOptions, WaAuthSocketOption
      * on-demand backfill triggered by `message.requestHistorySync`) are
      * downloaded and emitted as `history_sync_chunk` events. Set
      * `enabled: false` to drop them; `requireFullSync: true` asks the
-     * primary device for a full history download instead of just recent.
+     * primary device for a full history download instead of just recent;
+     * `groupBundles: true` opts into the group-history bundle a member may
+     * share after somebody joins a group.
      */
     readonly history?: WaHistorySyncOptions
     /**
@@ -337,6 +339,14 @@ export interface WaHistorySyncOptions {
      */
     readonly enabled?: boolean
     readonly requireFullSync?: boolean
+    /**
+     * Whether to download and process the group-history bundle a member may
+     * share after somebody joins a group, emitting `group_history_bundle`.
+     * **Off by default** - a bundle is media a third party pushes at this
+     * account unprompted, so fetching it is opt-in. Bundles addressed to
+     * other members are dropped either way.
+     */
+    readonly groupBundles?: boolean
 }
 
 export interface WaSignalMessagePublishInput {
@@ -1248,6 +1258,33 @@ export interface WaHistorySyncChunkEvent {
     readonly progress?: number
 }
 
+/**
+ * A group-history bundle shared with this account after it joined a group,
+ * already downloaded, filtered and persisted. Emitted once per bundle, only
+ * when `history.groupBundles` is enabled.
+ */
+export interface WaGroupHistoryBundleEvent {
+    readonly groupJid: string
+    /** Member who shared the history. */
+    readonly senderJid?: string
+    /** Stanza id of the message that carried the bundle. */
+    readonly bundleMessageId?: string
+    /** Messages persisted from this bundle, after filtering. */
+    readonly messagesCount: number
+    /** Pinned messages older than the shared window, exempt from the age cutoff. */
+    readonly outOfWindowPinsCount: number
+    /** Entries skipped as stubs, foreign-chat, ephemeral-expired or too old. */
+    readonly droppedCount: number
+    /** Oldest persisted message timestamp, in ms. */
+    readonly oldestTimestampMs?: number
+    /**
+     * Members the sender addressed the bundle to (PN or LID form). Copied out
+     * of the decoded payload, so mutating it cannot corrupt the message proto
+     * the `message` event handed to the same listener.
+     */
+    readonly historyReceivers: readonly string[]
+}
+
 export type WaAppStateMutationSource = 'snapshot' | 'patch' | 'local'
 
 type MutationEventBase = {
@@ -1461,6 +1498,13 @@ export interface WaClientEventMap {
      * Skipped only when `history.enabled` is explicitly `false`.
      */
     readonly history_sync_chunk: (event: WaHistorySyncChunkEvent) => void
+    /**
+     * A group-history bundle another member shared with this account after it
+     * joined a group, already downloaded and persisted. Requires
+     * `history.groupBundles: true` - the download is opt-in because a third
+     * party triggers it.
+     */
+    readonly group_history_bundle: (event: WaGroupHistoryBundleEvent) => void
     /**
      * Offline-message queue progress after a reconnect (`'resuming'` ticks
      * with `remainingStanzas`, then `'complete'`). Useful to defer UI updates

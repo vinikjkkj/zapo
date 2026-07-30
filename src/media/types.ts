@@ -9,6 +9,7 @@ export type MediaCryptoType =
     | 'ptt'
     | 'gif'
     | 'history'
+    | 'group-history'
     | 'md-app-state'
     | 'md-msg-hist'
     | 'xma-image'

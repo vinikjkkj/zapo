@@ -10,7 +10,10 @@ import { longToNumber } from '@util/primitives'
  * strings.
  */
 export interface WaResolvedMediaPayload {
-    /** Crypto/HKDF domain for the kind: image, video, gif, audio, ptt, document, sticker, ptv. */
+    /**
+     * Crypto/HKDF domain for the kind: image, video, gif, audio, ptt, document,
+     * sticker, ptv, group-history.
+     */
     readonly mediaType: MediaCryptoType
     /** Server-relative path (or absolute URL) of the encrypted blob on the media CDN. */
     readonly directPath: string
@@ -68,7 +71,7 @@ function buildPayload(
  * lacks the `directPath` / `mediaKey` needed to fetch and decrypt the blob (a
  * non-`Uint8Array` `mediaKey` also yields `null`). Supported kinds: image,
  * video (gif when `gifPlayback`), audio (ptt when `ptt`), document, sticker,
- * ptv.
+ * ptv, and the group-history bundle shared with a member after they join.
  *
  * @example
  * ```ts
@@ -94,5 +97,6 @@ export function resolveMediaPayload(
     if (msg.documentMessage) return buildPayload('document', msg.documentMessage)
     if (msg.stickerMessage) return buildPayload('sticker', msg.stickerMessage)
     if (msg.ptvMessage) return buildPayload('ptv', msg.ptvMessage)
+    if (msg.messageHistoryBundle) return buildPayload('group-history', msg.messageHistoryBundle)
     return null
 }

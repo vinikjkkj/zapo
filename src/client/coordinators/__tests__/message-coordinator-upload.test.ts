@@ -79,7 +79,9 @@ function createUploadCoordinator(mediaUploadOptions: WaMediaMessageOptions): WaM
         trustedContactToken: {} as never,
         emitAddon: () => undefined,
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
-        peerDataOperation: {} as never
+        peerDataOperation: {} as never,
+        isGroupHistorySendEnabled: () => true,
+        getAbPropNumber: () => 100
     })
 }
 

@@ -872,6 +872,7 @@ After editing source: rebuild → call `restart` with `mode: "process_exit"` →
 | `MCP_EVENT_BUFFER_SIZE`                                                        | `1000`                        | in-memory event ring size                             |
 | `MCP_CAPTURE_TRANSPORT`                                                        | `0`                           | also buffer noisy `transport_*` events                |
 | `MCP_HISTORY_DISABLED`                                                         | `0`                           | disable history sync on connect                       |
+| `MCP_GROUP_BUNDLES`                                                            | `0`                           | download group-history bundles shared by members      |
 | `MCP_TRANSPORT`                                                                | `stdio`                       | `stdio` or `http` (StreamableHTTPServerTransport)     |
 | `MCP_HTTP_HOST` / `MCP_HTTP_PORT` / `MCP_HTTP_PATH`                            | `127.0.0.1` / `3737` / `/mcp` | HTTP listener config                                  |
 | `MCP_FAKE_NOISE_PUBKEY_HEX` + `MCP_FAKE_NOISE_SERIAL` + `MCP_CHAT_SOCKET_URLS` | unset                         | point at `@zapo-js/fake-server` for tests             |

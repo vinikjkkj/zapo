@@ -36,6 +36,7 @@ import {
     resolveEncMediaType,
     resolveMessageTypeAttr,
     resolveMetaAttrs,
+    unwrapMessage,
     wrapAsViewOnce
 } from '@message/encode/content'
 import { wrapDeviceSentMessage } from '@message/encode/device-sent'
@@ -153,6 +154,77 @@ interface GroupSendRetryContext {
     readonly retried?: boolean
     readonly forceRefreshParticipants?: boolean
     readonly forceAddressingMode?: GroupAddressingMode
+}
+
+/** Membership split behind a group-history share, in the group's addressing mode. */
+export interface WaGroupHistoryAudience {
+    /** Members the bundle is addressed to. */
+    readonly historyReceivers: readonly string[]
+    /** Members in the group who are not receiving it. */
+    readonly nonHistoryReceivers: readonly string[]
+    /** Requested JIDs that are not current members of the group. */
+    readonly unknownJids: readonly string[]
+    /** Whether the caller asked to share with this account itself. */
+    readonly requestedSelf: boolean
+    readonly addressingMode: 'pn' | 'lid'
+}
+
+/**
+ * Members a group-history bundle is addressed to. Empty for every other
+ * message, which is what keeps the restricted fanout scoped to bundles.
+ */
+function resolveGroupHistoryReceivers(message: Proto.IMessage): readonly string[] {
+    const metadata = unwrapMessage(message).messageHistoryBundle?.messageHistoryMetadata
+    return metadata?.historyReceivers ?? []
+}
+
+/**
+ * Narrows a group's participant list to the members a group-history bundle is
+ * addressed to, plus the sender so its own devices keep a copy. Receivers are
+ * intersected with the live participant list, so a stale receiver entry cannot
+ * pull a non-member into the fanout. Any other message keeps the full list.
+ *
+ * Receivers must be written in the group's addressing mode - a PN entry for a
+ * LID-addressed group does not match and is reported through `onDropped`.
+ *
+ * @throws when no receiver matches a current member. Sending to the sender's
+ * own devices alone counts as no match: it would look like a delivered share
+ * while nobody received anything.
+ */
+export function restrictGroupHistoryTargets(
+    message: Proto.IMessage,
+    participantUserJids: readonly string[],
+    senderJid: string,
+    onDropped?: (droppedJids: readonly string[], totalExpected: number) => void
+): readonly string[] {
+    const receivers = resolveGroupHistoryReceivers(message)
+    if (receivers.length === 0) {
+        return participantUserJids
+    }
+    const pending = new Set<string>()
+    for (let index = 0; index < receivers.length; index += 1) {
+        pending.add(toUserJid(receivers[index]))
+    }
+    const senderUserJid = toUserJid(senderJid)
+    const targets: string[] = []
+    let matchedReceivers = 0
+    for (let index = 0; index < participantUserJids.length; index += 1) {
+        const participant = participantUserJids[index]
+        const participantUserJid = toUserJid(participant)
+        if (pending.delete(participantUserJid)) {
+            matchedReceivers += 1
+            targets[targets.length] = participant
+        } else if (participantUserJid === senderUserJid) {
+            targets[targets.length] = participant
+        }
+    }
+    if (pending.size > 0 && onDropped) {
+        onDropped([...pending], receivers.length)
+    }
+    if (matchedReceivers === 0) {
+        throw new Error('group history bundle resolved no receivers in the group')
+    }
+    return targets
 }
 
 interface WaOutboundEnvelope {
@@ -845,9 +917,63 @@ export class WaMessageDispatchCoordinator {
         await this.deps.groupMetadataCache.mutateFromGroupEvent(event)
     }
 
-    // noop for now
+    /**
+     * Splits a group's members into the ones a history bundle is being shared
+     * with and the rest, normalizing everything to the group's addressing mode
+     * so the receiver list written into the proto matches what the fanout can
+     * actually resolve. This account is excluded from both lists.
+     *
+     * Requested JIDs that are not current members come back in `unknownJids`
+     * instead of being silently dropped - sharing history with a non-member is
+     * a caller mistake worth surfacing.
+     */
+    public async resolveGroupHistoryAudience(
+        groupJid: string,
+        requestedJids: readonly string[]
+    ): Promise<WaGroupHistoryAudience> {
+        const participants = await this.deps.groupMetadataCache.resolveParticipantUsers(groupJid)
+        const meJid = this.requireCurrentMeJid('shareGroupHistory')
+        const addressingMode = this.resolveGroupAddressingMode(participants, groupJid)
+        const meUserJid = toUserJid(this.resolveSenderForAddressingMode(addressingMode, meJid))
+
+        const pending = new Set<string>()
+        for (let index = 0; index < requestedJids.length; index += 1) {
+            pending.add(toUserJid(normalizeRecipientJid(requestedJids[index])))
+        }
+        const historyReceivers: string[] = []
+        const nonHistoryReceivers: string[] = []
+        for (let index = 0; index < participants.length; index += 1) {
+            const participantUserJid = toUserJid(participants[index])
+            if (participantUserJid === meUserJid) {
+                continue
+            }
+            if (pending.delete(participantUserJid)) {
+                historyReceivers[historyReceivers.length] = participantUserJid
+            } else {
+                nonHistoryReceivers[nonHistoryReceivers.length] = participantUserJid
+            }
+        }
+        const requestedSelf = pending.delete(meUserJid)
+        const unknownJids: string[] = []
+        for (const jid of pending) {
+            unknownJids[unknownJids.length] = jid
+        }
+        return {
+            historyReceivers,
+            nonHistoryReceivers,
+            unknownJids,
+            requestedSelf,
+            addressingMode
+        }
+    }
+
+    /**
+     * A group-history bundle goes to the members named in `historyReceivers`
+     * rather than to the whole group, so it takes the per-device direct fanout
+     * instead of the group sender key.
+     */
     private shouldUseGroupDirectPath(message: Proto.IMessage): boolean {
-        return false
+        return resolveGroupHistoryReceivers(message).length > 0
     }
 
     private async publishGroupDirectMessage(
@@ -863,9 +989,22 @@ export class WaMessageDispatchCoordinator {
         const addressingMode =
             retryContext.forceAddressingMode ??
             this.resolveGroupAddressingMode(participantUserJids, groupJid)
-        const senderForPhash = this.resolveSenderForAddressingMode(addressingMode, meJid)
+        const senderJid = this.resolveSenderForAddressingMode(addressingMode, meJid)
+        const targetUserJids = restrictGroupHistoryTargets(
+            message,
+            participantUserJids,
+            senderJid,
+            (droppedJids, totalExpected) => {
+                this.deps.logger.warn('group history receivers missing from the participant list', {
+                    groupJid,
+                    droppedCount: droppedJids.length,
+                    totalExpected,
+                    sample: droppedJids.slice(0, 3)
+                })
+            }
+        )
         const fanoutDeviceJids =
-            await this.deps.fanoutResolver.resolveGroupParticipantDeviceJids(participantUserJids)
+            await this.deps.fanoutResolver.resolveGroupParticipantDeviceJids(targetUserJids)
         if (fanoutDeviceJids.length === 0) {
             throw new Error('group direct send resolved no target devices')
         }
@@ -931,21 +1070,10 @@ export class WaMessageDispatchCoordinator {
                 break
             }
         }
-        const phashTargets = new Array<string>(resolvedFanoutTargets.length + 1)
-        let phashTargetCount = 0
-        for (let index = 0; index < resolvedFanoutTargets.length; index += 1) {
-            const candidate = resolvedFanoutTargets[index].jid
-            if (isHostedDeviceJid(candidate)) continue
-            phashTargets[phashTargetCount] = candidate
-            phashTargetCount += 1
-        }
-        phashTargets[phashTargetCount] = senderForPhash
-        phashTargets.length = phashTargetCount + 1
-        const localPhash = computePhashV2(phashTargets)
         const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
             message,
             stanzaId: sendOptions.id,
-            senderUserJid: toUserJid(senderForPhash),
+            senderUserJid: toUserJid(senderJid),
             remoteJid: groupJid,
             context: 'group_direct'
         })
@@ -956,7 +1084,6 @@ export class WaMessageDispatchCoordinator {
             type,
             id: sendOptions.id,
             edit,
-            phash: localPhash,
             addressingMode,
             participants,
             deviceIdentity: shouldAttachDeviceIdentity
@@ -985,7 +1112,7 @@ export class WaMessageDispatchCoordinator {
         const ackError = result.ack.error
         const serverPhash = result.ack.phash
         const serverAddressingMode = result.ack.addressingMode
-        const hasPhashMismatch = !!serverPhash && serverPhash !== localPhash
+        const hasPhashMismatch = !!serverPhash
         const hasAddressingMismatch =
             !!serverAddressingMode && serverAddressingMode !== addressingMode
         const hasAddressingError = ackError === WA_NACK_REASONS.STALE_GROUP_ADDRESSING_MODE
@@ -996,7 +1123,6 @@ export class WaMessageDispatchCoordinator {
             this.deps.logger.warn('group direct publish acknowledged with mismatch metadata', {
                 id: result.id,
                 groupJid,
-                localPhash,
                 serverPhash,
                 localAddressingMode: addressingMode,
                 serverAddressingMode,

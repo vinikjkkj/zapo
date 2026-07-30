@@ -6,6 +6,7 @@ export type {
     WaClientOptions,
     WaClientProxyOptions,
     WaDownloadMediaOptions,
+    WaGroupHistoryBundleEvent,
     WaHistorySyncChunkEvent,
     WaHistorySyncOptions,
     WaWriteBehindOptions
@@ -14,6 +15,8 @@ export type { WaClientPluginContext, WaClientPluginDefinition } from '@client/pl
 export type {
     WaMediaUploadResult,
     WaMessageCoordinator,
+    WaShareGroupHistoryInput,
+    WaShareGroupHistoryResult,
     WaUploadMediaOptions,
     WaUploadMediaType
 } from '@client/coordinators/WaMessageCoordinator'
@@ -259,8 +262,10 @@ export {
     unwrapMessage
 } from '@message/encode/content'
 export { getContextInfo } from '@message/context-info'
+export { decodeGroupHistoryBundle, encodeGroupHistoryBundle } from '@message/kinds/group-history'
 export { resolveMediaPayload } from '@message/encode/media-payload'
 export { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
+export type { WaGroupHistoryBundleEncoding } from '@message/kinds/group-history'
 export type { WaResolvedMediaPayload } from '@message/encode/media-payload'
 export type { WaSendContextInfo } from '@message/context-info'
 export type {

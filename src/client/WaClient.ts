@@ -17,6 +17,7 @@ import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordin
 import type { WaProfileCoordinator } from '@client/coordinators/WaProfileCoordinator'
 import type { WaStatusCoordinator } from '@client/coordinators/WaStatusCoordinator'
 import { createIgnoreKeyFilter, validateIgnoreKey } from '@client/messaging/ignore-key'
+import { runGroupHistoryBundle } from '@client/persistence/group-history'
 import { runHistorySyncNotification } from '@client/persistence/history-sync'
 import { persistIncomingMailboxEntities } from '@client/persistence/mailbox'
 import { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
@@ -42,6 +43,7 @@ import {
 import { ConsoleLogger } from '@infra/log/ConsoleLogger'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
+import { unwrapMessage } from '@message/encode/content'
 import { proto, type Proto } from '@proto'
 import { WA_DEFAULTS, WA_MESSAGE_TYPES } from '@protocol/constants'
 import { normalizeDeviceJid } from '@protocol/jid'
@@ -300,6 +302,9 @@ class WaClientImpl extends EventEmitter {
                     })
                 })
             }
+            if (this.options.history?.groupBundles === true && event.message && !event.key.fromMe) {
+                this.tryProcessGroupHistoryBundle(event)
+            }
             const protocolMessage = event.message?.protocolMessage
             if (!protocolMessage) {
                 return
@@ -390,6 +395,38 @@ class WaClientImpl extends EventEmitter {
         } finally {
             this.leaveIncomingHandler()
         }
+    }
+
+    /**
+     * Kicks off the group-history bundle download when the incoming message
+     * carries one. Fire-and-forget: the blob can be large, and the incoming
+     * handler must not stall behind a CDN fetch.
+     */
+    private tryProcessGroupHistoryBundle(event: WaIncomingMessageEvent): void {
+        const bundle = unwrapMessage(event.message ?? {}).messageHistoryBundle
+        const groupJid = event.key.remoteJid
+        if (!bundle || !groupJid) {
+            return
+        }
+        const credentials = this.deps.authClient.getCurrentCredentials()
+        void runGroupHistoryBundle(
+            {
+                logger: this.logger,
+                mediaTransfer: this.mediaTransfer,
+                writeBehind: this.writeBehind,
+                emitEvent: this.emit.bind(this),
+                meJid: credentials?.meJid,
+                meLid: credentials?.meLid,
+                getAbPropNumber: (name) => this.deps.abPropsCoordinator.getConfigValue<number>(name)
+            },
+            {
+                bundle,
+                groupJid,
+                senderJid: event.key.participant ?? undefined,
+                bundleMessageId: event.key.id,
+                sentAtSeconds: event.timestampSeconds
+            }
+        )
     }
 
     private async queryWithContext(

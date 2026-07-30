@@ -321,6 +321,7 @@ const ALL_EVENT_NAMES = [
     'picture',
     'mutation',
     'history_sync_chunk',
+    'group_history_bundle',
     'offline_resume',
     'stream_failure',
     'stanza_error',
@@ -377,6 +378,8 @@ export interface RuntimeConfig {
     readonly deviceBrowser?: string
     readonly deviceOsDisplayName?: string
     readonly historyEnabled: boolean
+    /** Opt into downloading group-history bundles shared by other members. */
+    readonly historyGroupBundles?: boolean
     /** Max log entries kept in memory for the `logs` MCP tool. */
     readonly logBufferSize: number
     /** Optional file path that mirrors every log line as JSONL. */
@@ -419,6 +422,7 @@ export const buildRuntimeConfigFromEnv = (env = process.env): RuntimeConfig => {
     )
     const captureNoisyEvents = env.MCP_CAPTURE_TRANSPORT === '1'
     const historyEnabled = env.MCP_HISTORY_DISABLED !== '1'
+    const historyGroupBundles = env.MCP_GROUP_BUNDLES === '1'
     const chatSocketUrls = parseUrlList(env.MCP_CHAT_SOCKET_URLS)
     const noiseRootCa = parseNoiseRootCa(env.MCP_FAKE_NOISE_PUBKEY_HEX, env.MCP_FAKE_NOISE_SERIAL)
     const logBufferSize = parseEnvPositiveInt(
@@ -441,6 +445,7 @@ export const buildRuntimeConfigFromEnv = (env = process.env): RuntimeConfig => {
         deviceBrowser: env.MCP_DEVICE_BROWSER,
         deviceOsDisplayName: env.MCP_DEVICE_OS_DISPLAY,
         historyEnabled,
+        historyGroupBundles,
         chatSocketUrls,
         noiseRootCa,
         logBufferSize,
@@ -719,7 +724,8 @@ export class McpRuntime {
                 deviceOsDisplayName: this.config.deviceOsDisplayName ?? 'Windows',
                 history: {
                     enabled: this.config.historyEnabled,
-                    requireFullSync: true
+                    requireFullSync: true,
+                    groupBundles: this.config.historyGroupBundles === true
                 },
                 nodeQueryTimeoutMs: 30_000,
                 chatSocketUrls: this.config.chatSocketUrls,

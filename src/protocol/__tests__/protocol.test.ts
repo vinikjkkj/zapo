@@ -45,6 +45,7 @@ import type {
     WaPrivacyDisallowedListSettingName,
     WaPrivacySettingValueMap
 } from '@protocol/privacy'
+import { TEXT_DECODER } from '@util/bytes'
 
 test('canonicalizeOwnAccountJid maps own PN device JIDs to LID', () => {
     const meJid = '5512988950329:15@s.whatsapp.net'
@@ -188,6 +189,8 @@ test('login identity parsing and protocol constants', () => {
     )
 
     assert.equal(getWaMediaHkdfInfo('image'), WA_MEDIA_HKDF_INFO.image)
+    assert.equal(TEXT_DECODER.decode(getWaMediaHkdfInfo('group-history')), 'Group History')
+    assert.equal(TEXT_DECODER.decode(getWaMediaHkdfInfo('history')), 'WhatsApp History Keys')
     assert.equal(typeof WA_DEFAULTS.HOST_DOMAIN, 'string')
     assert.equal(WA_APPSTATE_SCHEMAS.Star.name, 'star')
     assert.equal(WA_APPSTATE_SCHEMAS.Mute.name, 'mute')

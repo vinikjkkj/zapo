@@ -36,6 +36,7 @@ import {
     shouldUseAddonAdditionalData
 } from '@message/crypto/addon-crypto'
 import { unwrapMessage } from '@message/encode/content'
+import { encodeGroupHistoryBundle } from '@message/kinds/group-history'
 import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import type {
     WaMessagePublishResult,
@@ -46,13 +47,14 @@ import type {
 } from '@message/types'
 import type { WaMexOperationResponses } from '@mex'
 import { proto, type Proto } from '@proto'
-import { applyDeviceToJid, normalizeRecipientJid } from '@protocol/jid'
+import type { AbPropName } from '@protocol/abprops'
+import { applyDeviceToJid, isGroupJid, normalizeRecipientJid } from '@protocol/jid'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
 import type { WaMessageStore } from '@store/contracts/message.store'
 import { runMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
 import { readAllBytes } from '@util/bytes'
 import { tryAsNumber, tryAsString } from '@util/coercion'
-import { toError } from '@util/primitives'
+import { longToNumber, toError } from '@util/primitives'
 
 export interface WaMessageCoordinatorDeps {
     readonly messageDispatch: WaMessageDispatchCoordinator
@@ -66,6 +68,73 @@ export interface WaMessageCoordinatorDeps {
     readonly emitAddon: (event: WaIncomingAddonEvent) => void
     readonly mexSocket: WaMexQuerySocket
     readonly peerDataOperation: PeerDataOperationRequester
+    /**
+     * Server-synced `group_history_send` AB-prop. WhatsApp gates the sender
+     * side per account, and rejects the stanza with SMAX_INVALID when it is
+     * off, so {@link WaMessageCoordinator.shareGroupHistory} checks it before
+     * spending an upload.
+     */
+    readonly isGroupHistorySendEnabled: () => boolean
+    /**
+     * Reads a server-synced numeric AB-prop, falling back to its shipped
+     * default. Sole source for the group-history message-count limit, so a
+     * server-side change takes effect without a release.
+     */
+    readonly getAbPropNumber: (name: AbPropName) => number
+}
+
+/** MIME type the group-history bundle is uploaded and advertised under. */
+const GROUP_HISTORY_BUNDLE_MIMETYPE = 'application/protobuf'
+
+/** Oldest `messageTimestamp` across `messages`, in seconds; `undefined` when none carries one. */
+function oldestTimestampSeconds(messages: readonly Proto.IWebMessageInfo[]): number | undefined {
+    let oldest: number | undefined
+    for (let index = 0; index < messages.length; index += 1) {
+        const timestamp = longToNumber(messages[index].messageTimestamp)
+        if (timestamp > 0 && (oldest === undefined || timestamp < oldest)) {
+            oldest = timestamp
+        }
+    }
+    return oldest
+}
+
+export interface WaShareGroupHistoryInput {
+    /**
+     * Members to share the history with. Must be current members of the group,
+     * written in the group's own addressing mode - a LID-addressed group only
+     * matches `@lid` entries, and a PN one only matches `@s.whatsapp.net`.
+     * Anything else throws, naming the mode the group uses. Read the mode off
+     * `client.group.queryGroupMetadata()`, whose participants carry both forms.
+     */
+    readonly toJids: readonly string[]
+    /**
+     * How many of the most recent messages to include. Defaults to WhatsApp's
+     * `group_history_message_count_limit` (100).
+     */
+    readonly count?: number
+    /** Only include messages at or after this timestamp (ms). */
+    readonly sinceMs?: number
+    /**
+     * Messages to bundle, bypassing the mailbox store. Required when the
+     * `messages` store domain is `'none'` (the default), since there is
+     * nothing to read back in that case.
+     */
+    readonly messages?: readonly Proto.IWebMessageInfo[]
+    /**
+     * Pinned messages older than the shared window. The receiver injects these
+     * regardless of the age cutoff it applies to `messages`.
+     */
+    readonly outOfWindowPinnedMessages?: readonly Proto.IWebMessageInfo[]
+}
+
+export interface WaShareGroupHistoryResult {
+    /** Stanza id of the bundle message, fanned out only to `historyReceivers`. */
+    readonly bundleMessageId: string
+    /** Stanza id of the notice message, sent to the whole group. */
+    readonly noticeMessageId: string
+    readonly messagesCount: number
+    readonly historyReceivers: readonly string[]
+    readonly nonHistoryReceivers: readonly string[]
 }
 
 export interface WaRequestHistorySyncInput {
@@ -209,6 +278,8 @@ export class WaMessageCoordinator {
     private readonly emitAddon: (event: WaIncomingAddonEvent) => void
     private readonly mexSocket: WaMexQuerySocket
     private readonly peerDataOperation: PeerDataOperationRequester
+    private readonly isGroupHistorySendEnabled: () => boolean
+    private readonly getAbPropNumber: (name: AbPropName) => number
 
     public constructor(deps: WaMessageCoordinatorDeps) {
         this.messageDispatch = deps.messageDispatch
@@ -221,6 +292,8 @@ export class WaMessageCoordinator {
         this.emitAddon = deps.emitAddon
         this.mexSocket = deps.mexSocket
         this.peerDataOperation = deps.peerDataOperation
+        this.isGroupHistorySendEnabled = deps.isGroupHistorySendEnabled
+        this.getAbPropNumber = deps.getAbPropNumber
     }
 
     /**
@@ -275,6 +348,169 @@ export class WaMessageCoordinator {
             proto.Message.PeerDataOperationRequestType.HISTORY_SYNC_ON_DEMAND,
             { historySyncOnDemandRequest }
         )
+    }
+
+    /**
+     * Shares recent group history with members who joined after the fact - the
+     * counterpart of the `group_history_bundle` event on the receiving side.
+     *
+     * Sends two messages: the bundle itself, encrypted per device and fanned
+     * out **only** to `toJids` (never to the whole group), followed by a hidden
+     * notice addressed to everyone so other clients can render the "history was
+     * shared" marker.
+     *
+     * WhatsApp gates the sender side per account through the `group_history_send`
+     * AB-prop and rejects the stanza with SMAX_INVALID when it is off, so this
+     * throws up front rather than spending an upload. Admin-only groups
+     * (`memberShareGroupHistoryMode: 'admin_share'`) reject a share from a
+     * regular member server-side - read `client.group.queryGroupMetadata()`
+     * first if you want to check that too.
+     *
+     * @throws when the account is not allowed to share group history, when
+     * `groupJid` is not a group, when any of `toJids` is not a current member
+     * (or is this account), or when there is nothing to bundle.
+     * @example
+     * ```ts
+     * await client.message.shareGroupHistory('12036@g.us', {
+     *     toJids: ['5511999999999@s.whatsapp.net'],
+     *     count: 50
+     * })
+     * ```
+     */
+    public async shareGroupHistory(
+        groupJid: string,
+        input: WaShareGroupHistoryInput
+    ): Promise<WaShareGroupHistoryResult> {
+        const normalizedGroupJid = normalizeRecipientJid(groupJid)
+        if (!isGroupJid(normalizedGroupJid)) {
+            throw new Error(`shareGroupHistory requires a group jid: ${normalizedGroupJid}`)
+        }
+        if (input.toJids.length === 0) {
+            throw new Error('shareGroupHistory requires at least one recipient')
+        }
+        if (!this.isGroupHistorySendEnabled()) {
+            throw new Error(
+                'shareGroupHistory is disabled for this account (group_history_send is off)'
+            )
+        }
+
+        const audience = await this.messageDispatch.resolveGroupHistoryAudience(
+            normalizedGroupJid,
+            input.toJids
+        )
+        if (audience.requestedSelf) {
+            throw new Error('shareGroupHistory cannot share history with this account itself')
+        }
+        if (audience.unknownJids.length > 0) {
+            throw new Error(
+                `shareGroupHistory recipients are not members of the group (addressing mode: ${audience.addressingMode}): ${audience.unknownJids.join(', ')}`
+            )
+        }
+        if (audience.historyReceivers.length === 0) {
+            throw new Error('shareGroupHistory resolved no recipients')
+        }
+
+        const messages =
+            input.messages ??
+            (await this.loadGroupHistoryMessages(normalizedGroupJid, input.count, input.sinceMs))
+        if (messages.length === 0) {
+            throw new Error('shareGroupHistory found no messages to share')
+        }
+
+        const { compressed } = await encodeGroupHistoryBundle(
+            messages,
+            input.outOfWindowPinnedMessages
+        )
+        const upload = await uploadMedia(this.mediaUploadOptions, {
+            source: compressed,
+            cryptoType: 'group-history',
+            uploadPath: MEDIA_UPLOAD_PATHS['group-history'],
+            contentType: GROUP_HISTORY_BUNDLE_MIMETYPE,
+            sidecar: false,
+            logLabel: 'group history bundle upload'
+        })
+
+        const oldestInWindow = oldestTimestampSeconds(messages)
+        const oldestPin = oldestTimestampSeconds(input.outOfWindowPinnedMessages ?? [])
+        const oldestInBundle =
+            oldestPin === undefined
+                ? oldestInWindow
+                : oldestInWindow === undefined
+                  ? oldestPin
+                  : Math.min(oldestInWindow, oldestPin)
+        const metadata: Proto.Message.IMessageHistoryMetadata = {
+            historyReceivers: audience.historyReceivers as string[],
+            nonHistoryReceivers: audience.nonHistoryReceivers as string[],
+            messageCount: messages.length,
+            oldestMessageTimestampInWindow: oldestInWindow,
+            oldestMessageTimestampInBundle: oldestInBundle
+        }
+
+        const bundleResult = await this.send(normalizedGroupJid, {
+            messageHistoryBundle: {
+                mimetype: GROUP_HISTORY_BUNDLE_MIMETYPE,
+                fileSha256: upload.fileSha256,
+                fileEncSha256: upload.fileEncSha256,
+                mediaKey: upload.mediaKey,
+                directPath: upload.directPath,
+                mediaKeyTimestamp: this.mediaUploadOptions.serverClock.nowSeconds(),
+                messageHistoryMetadata: metadata
+            }
+        })
+
+        const noticeResult = await this.send(normalizedGroupJid, {
+            messageHistoryNotice: { messageHistoryMetadata: metadata }
+        })
+
+        this.logger.debug('shared group history', {
+            groupJid: normalizedGroupJid,
+            id: bundleResult.id,
+            messagesCount: messages.length,
+            receiverCount: audience.historyReceivers.length
+        })
+
+        return {
+            bundleMessageId: bundleResult.id,
+            noticeMessageId: noticeResult.id,
+            messagesCount: messages.length,
+            historyReceivers: audience.historyReceivers,
+            nonHistoryReceivers: audience.nonHistoryReceivers
+        }
+    }
+
+    /**
+     * Reads the most recent messages of a group back out of the mailbox store
+     * and rebuilds the `WebMessageInfo` shape a bundle carries. Yields nothing
+     * when the `messages` store domain is `'none'`.
+     */
+    private async loadGroupHistoryMessages(
+        groupJid: string,
+        count?: number,
+        sinceMs?: number
+    ): Promise<readonly Proto.IWebMessageInfo[]> {
+        const limit = count ?? this.getAbPropNumber('group_history_message_count_limit')
+        const records = await this.messageStore.listByThread(groupJid, limit)
+        const messages: Proto.IWebMessageInfo[] = []
+        for (let index = 0; index < records.length; index += 1) {
+            const record = records[index]
+            if (!record.messageBytes) {
+                continue
+            }
+            if (sinceMs !== undefined && (record.timestampMs ?? 0) < sinceMs) {
+                continue
+            }
+            messages[messages.length] = {
+                key: {
+                    id: record.id,
+                    remoteJid: groupJid,
+                    fromMe: record.fromMe,
+                    participant: record.participantJid ?? record.senderJid
+                },
+                message: proto.Message.decode(record.messageBytes),
+                messageTimestamp: Math.floor((record.timestampMs ?? 0) / 1_000)
+            }
+        }
+        return messages
     }
 
     /**

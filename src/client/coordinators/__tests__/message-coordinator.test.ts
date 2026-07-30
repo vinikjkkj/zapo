@@ -42,7 +42,9 @@ function createCoordinator(peerDataOperation: PeerDataOperationRequester): WaMes
         trustedContactToken: {} as never,
         emitAddon: () => undefined,
         mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
-        peerDataOperation
+        peerDataOperation,
+        isGroupHistorySendEnabled: () => true,
+        getAbPropNumber: () => 100
     })
 }
 

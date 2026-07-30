@@ -17,6 +17,7 @@ export const WA_MEDIA_HKDF_INFO = Object.freeze({
     'md-app-state': TEXT_ENCODER.encode('WhatsApp App State Keys'),
     'md-msg-hist': HISTORY_KEYS,
     history: HISTORY_KEYS,
+    'group-history': TEXT_ENCODER.encode('Group History'),
     'sticker-pack': TEXT_ENCODER.encode('WhatsApp Sticker Pack Keys'),
     'thumbnail-sticker-pack': TEXT_ENCODER.encode('WhatsApp Sticker Pack Thumbnail Keys'),
     'thumbnail-link': TEXT_ENCODER.encode('WhatsApp Link Thumbnail Keys')
