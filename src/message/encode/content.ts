@@ -37,6 +37,9 @@ const UNSUFFIXED_CONTENT_KEYS = new Set([
  * or `undefined` for an empty message. `senderKeyDistributionMessage` is
  * skipped so group messages report their real payload type rather than the
  * piggy-backed sender-key.
+ *
+ * A key that is present but holds `null`/`undefined` carries no payload and is
+ * skipped, so an explicitly-cleared field cannot mask the real content.
  */
 export function getContentType(
     content: Proto.IMessage | undefined
@@ -44,6 +47,8 @@ export function getContentType(
     if (!content) return undefined
     const key = Object.keys(content).find(
         (k) =>
+            content[k as keyof Proto.IMessage] !== null &&
+            content[k as keyof Proto.IMessage] !== undefined &&
             (UNSUFFIXED_CONTENT_KEYS.has(k) || k.includes('Message')) &&
             k !== 'senderKeyDistributionMessage'
     )

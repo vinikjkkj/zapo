@@ -180,6 +180,16 @@ test('shareGroupHistory rejects a non-group jid', async () => {
     )
 })
 
+test('shareGroupHistory rejects a count that is not a positive whole number', async () => {
+    const { coordinator } = createShareHarness({})
+    for (const count of [0, -1, 1.5, Number.NaN]) {
+        await assert.rejects(
+            () => coordinator.shareGroupHistory(GROUP, { toJids: [ALICE], count }),
+            /count must be a positive safe integer/
+        )
+    }
+})
+
 test('shareGroupHistory rejects an empty recipient list', async () => {
     const { coordinator } = createShareHarness({})
     await assert.rejects(

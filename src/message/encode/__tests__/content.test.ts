@@ -40,6 +40,15 @@ test('getContentType picks the payload key, including the unsuffixed ones', () =
     assert.equal(getContentType({ messageHistoryNotice: {} }), 'messageHistoryNotice')
 })
 
+test('getContentType skips keys that are present but hold no payload', () => {
+    assert.equal(
+        getContentType({ messageHistoryBundle: undefined, imageMessage: {} }),
+        'imageMessage'
+    )
+    assert.equal(getContentType({ imageMessage: null, conversation: 'hi' }), 'conversation')
+    assert.equal(getContentType({ imageMessage: undefined }), undefined)
+})
+
 test('resolveButtonAddonKind classifies list/interactive incl. documentWithCaption wrap', () => {
     assert.equal(resolveButtonAddonKind({ listMessage: {} }), 'list')
     assert.equal(resolveButtonAddonKind({ buttonsMessage: {} }), 'interactive')

@@ -21,6 +21,7 @@ export {
     asOptionalNumber,
     asOptionalString,
     asString,
+    resolveOptionalPositive,
     resolvePositive,
     toBoolOrUndef
 } from '@util/coercion'

@@ -31,6 +31,7 @@ import {
     asOptionalNumber,
     asOptionalString,
     asString,
+    resolveOptionalPositive,
     resolvePositive,
     toBoolOrUndef,
     tryAsNumber,
@@ -125,6 +126,10 @@ test('coercion helpers validate primitive and bytes types', () => {
     assert.equal(resolvePositive(2, 1, 'x'), 2)
     assert.equal(resolvePositive(undefined, 3, 'x'), 3)
     assert.throws(() => resolvePositive(0, 3, 'x'), /positive safe integer/)
+    assert.equal(resolveOptionalPositive(2, 'x'), 2)
+    assert.equal(resolveOptionalPositive(undefined, 'x'), undefined)
+    assert.throws(() => resolveOptionalPositive(0, 'x'), /positive safe integer/)
+    assert.throws(() => resolveOptionalPositive(1.5, 'x'), /positive safe integer/)
 })
 
 test('lenient coercion (tryAs*) handles missing, empty and wrong-typed inputs', () => {

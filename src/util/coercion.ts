@@ -58,13 +58,25 @@ export function toBoolOrUndef(value: unknown): boolean | undefined {
 }
 
 /**
+ * Returns `value` when it is a positive safe-integer, `undefined` when it is
+ * undefined, and throws otherwise. Use when there is no local default and the
+ * field should stay unset so the server applies its own.
+ */
+export function resolveOptionalPositive(
+    value: number | undefined,
+    name: string
+): number | undefined {
+    if (value === undefined) return undefined
+    if (Number.isSafeInteger(value) && value > 0) return value
+    throw new Error(`${name} must be a positive safe integer`)
+}
+
+/**
  * Returns `value` when it is a positive safe-integer, `fallback` when it is
  * undefined, and throws otherwise.
  */
 export function resolvePositive(value: number | undefined, fallback: number, name: string): number {
-    if (value === undefined) return fallback
-    if (Number.isSafeInteger(value) && value > 0) return value
-    throw new Error(`${name} must be a positive safe integer`)
+    return resolveOptionalPositive(value, name) ?? fallback
 }
 
 /**

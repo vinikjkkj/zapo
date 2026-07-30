@@ -53,7 +53,7 @@ import type { WaMessageSecretStore } from '@store/contracts/message-secret.store
 import type { WaMessageStore } from '@store/contracts/message.store'
 import { runMexQuery, type WaMexQuerySocket } from '@transport/node/mex/client'
 import { readAllBytes } from '@util/bytes'
-import { tryAsNumber, tryAsString } from '@util/coercion'
+import { resolveOptionalPositive, resolvePositive, tryAsNumber, tryAsString } from '@util/coercion'
 import { longToNumber, toError } from '@util/primitives'
 
 export interface WaMessageCoordinatorDeps {
@@ -313,15 +313,7 @@ export class WaMessageCoordinator {
         input: WaRequestHistorySyncInput
     ): Promise<{ readonly messageId: string }> {
         const chatJid = normalizeRecipientJid(input.chatJid)
-        if (input.count !== undefined) {
-            if (
-                !Number.isFinite(input.count) ||
-                !Number.isSafeInteger(input.count) ||
-                input.count <= 0
-            ) {
-                throw new Error(`invalid count: ${input.count}`)
-            }
-        }
+        const onDemandMsgCount = resolveOptionalPositive(input.count, 'count')
         if (input.oldestMsgTimestampMs !== undefined) {
             if (
                 !Number.isFinite(input.oldestMsgTimestampMs) ||
@@ -342,7 +334,7 @@ export class WaMessageCoordinator {
                 ...(input.oldestMsgTimestampMs === undefined
                     ? {}
                     : { oldestMsgTimestampMs: input.oldestMsgTimestampMs }),
-                ...(input.count === undefined ? {} : { onDemandMsgCount: input.count })
+                ...(onDemandMsgCount === undefined ? {} : { onDemandMsgCount })
             }
         return this.peerDataOperation.send(
             proto.Message.PeerDataOperationRequestType.HISTORY_SYNC_ON_DEMAND,
@@ -388,6 +380,11 @@ export class WaMessageCoordinator {
         if (input.toJids.length === 0) {
             throw new Error('shareGroupHistory requires at least one recipient')
         }
+        const messageLimit = resolvePositive(
+            input.count,
+            this.getAbPropNumber('group_history_message_count_limit'),
+            'count'
+        )
         if (!this.isGroupHistorySendEnabled()) {
             throw new Error(
                 'shareGroupHistory is disabled for this account (group_history_send is off)'
@@ -412,7 +409,7 @@ export class WaMessageCoordinator {
 
         const messages =
             input.messages ??
-            (await this.loadGroupHistoryMessages(normalizedGroupJid, input.count, input.sinceMs))
+            (await this.loadGroupHistoryMessages(normalizedGroupJid, messageLimit, input.sinceMs))
         if (messages.length === 0) {
             throw new Error('shareGroupHistory found no messages to share')
         }
@@ -485,10 +482,9 @@ export class WaMessageCoordinator {
      */
     private async loadGroupHistoryMessages(
         groupJid: string,
-        count?: number,
+        limit: number,
         sinceMs?: number
     ): Promise<readonly Proto.IWebMessageInfo[]> {
-        const limit = count ?? this.getAbPropNumber('group_history_message_count_limit')
         const records = await this.messageStore.listByThread(groupJid, limit)
         const messages: Proto.IWebMessageInfo[] = []
         for (let index = 0; index < records.length; index += 1) {

@@ -95,11 +95,11 @@ test('requestHistorySync rejects invalid count and timestamp inputs', async () =
 
     await assert.rejects(
         () => coordinator.requestHistorySync({ chatJid: 'a@g.us', count: 0 }),
-        /invalid count/
+        /count must be a positive safe integer/
     )
     await assert.rejects(
         () => coordinator.requestHistorySync({ chatJid: 'a@g.us', count: 1.5 }),
-        /invalid count/
+        /count must be a positive safe integer/
     )
     await assert.rejects(
         () =>
