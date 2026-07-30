@@ -26,18 +26,24 @@ export interface AbPropConfigEntry {
     readonly defaultValue: AbPropValue
 }
 
-/**
- * @deprecated Use `WA_ABPROPS`, which is the vendored WA Web catalogue itself.
- *
- * Kept as a compatibility view over `WA_ABPROPS` for consumers reading
- * `configCode`. Two differences from the hand-maintained table it replaced:
- * it covers every prop WA Web knows about rather than a curated subset, and a
- * handful of config codes are corrected against the current bundle.
- */
-export const AB_PROP_CONFIGS: Readonly<Record<AbPropName, AbPropConfigEntry>> =
-    buildLegacyConfigView()
+/** `WA_ABPROPS` with `code` renamed to `configCode`, literal types preserved. */
+type LegacyAbPropConfigView = {
+    readonly [K in AbPropName]: {
+        readonly configCode: (typeof WA_ABPROPS)[K]['code']
+        readonly type: (typeof WA_ABPROPS)[K]['type']
+        readonly defaultValue: (typeof WA_ABPROPS)[K]['defaultValue']
+    }
+}
 
-function buildLegacyConfigView(): Readonly<Record<AbPropName, AbPropConfigEntry>> {
+/**
+ * @deprecated Use `WA_ABPROPS`.
+ *
+ * Covers every user prop rather than the curated subset it replaced, with a
+ * handful of config codes corrected. Group props stay in `WA_GROUP_ABPROPS`.
+ */
+export const AB_PROP_CONFIGS: LegacyAbPropConfigView = buildLegacyConfigView()
+
+function buildLegacyConfigView(): LegacyAbPropConfigView {
     const view = {} as Record<AbPropName, AbPropConfigEntry>
     for (const [name, entry] of Object.entries(WA_ABPROPS)) {
         view[name as AbPropName] = Object.freeze({
@@ -46,5 +52,5 @@ function buildLegacyConfigView(): Readonly<Record<AbPropName, AbPropConfigEntry>
             defaultValue: entry.defaultValue
         })
     }
-    return Object.freeze(view)
+    return Object.freeze(view) as LegacyAbPropConfigView
 }

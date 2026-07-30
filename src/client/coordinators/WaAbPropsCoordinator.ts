@@ -12,7 +12,7 @@ import { WA_ABPROPS_REFRESH_BOUNDS } from '@protocol/abprops'
 import { WA_DEFAULTS } from '@protocol/constants'
 import { buildGetAbPropsIq } from '@transport/node/builders/abprops'
 import type { BinaryNode } from '@transport/types'
-import { parseOptionalInt, toError } from '@util/primitives'
+import { toError } from '@util/primitives'
 
 type WaAbPropsRuntime = {
     readonly queryWithContext: (
@@ -174,6 +174,8 @@ export class WaAbPropsCoordinator {
     }
 }
 
+// parseInt, not a digits-only parse: negative values are in band, several props
+// ship -1 as their default. Divergence: WA Web caches NaN, we keep the default.
 function parseConfigValue(
     value: string | null,
     type: WaAbPropType,
@@ -186,7 +188,8 @@ function parseConfigValue(
         return value === '1' || value === 'true' || value === 'True'
     }
     if (type === 'int') {
-        return parseOptionalInt(value) ?? defaultValue
+        const parsed = Number.parseInt(value, 10)
+        return Number.isNaN(parsed) ? defaultValue : parsed
     }
     if (type === 'float') {
         const parsed = Number.parseFloat(value)

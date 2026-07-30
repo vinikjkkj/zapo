@@ -262,11 +262,16 @@ test('deprecated AB_PROP_CONFIGS view still exposes configCode over the spec tab
     assert.deepEqual(AB_PROP_CONFIGS.tctoken_duration, {
         configCode: 865,
         type: 'int',
-        defaultValue: 604800
+        defaultValue: 604_800
     })
-    assert.equal(
-        Object.keys(AB_PROP_CONFIGS).length,
-        Object.keys(WA_ABPROPS).length,
+    assert.deepEqual(AB_PROP_CONFIGS.wa_web_contact_and_chat_fuzzy_search_distance_threshold, {
+        configCode: 26731,
+        type: 'float',
+        defaultValue: 0.30000001192092896
+    })
+    assert.deepEqual(
+        Object.keys(AB_PROP_CONFIGS).sort(),
+        Object.keys(WA_ABPROPS).sort(),
         'the compatibility view must cover the whole catalogue'
     )
 })
