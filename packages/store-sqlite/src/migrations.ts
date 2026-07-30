@@ -429,10 +429,6 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
         id: '0017_mailbox_threads_ephemeral_setting_timestamp',
         domain: 'mailbox',
         up: (db) => {
-            // Ephemeral disappear timestamps come from the app-state Conversation
-            // record and must be persisted so outgoing ephemeral messages carry
-            // contextInfo.ephemeralSettingTimestamp (otherwise the peer shows a
-            // "message will not disappear" warning).
             db.exec(`
                 ALTER TABLE mailbox_threads ADD COLUMN ephemeral_setting_timestamp INTEGER;
             `)

@@ -76,8 +76,6 @@ export class WaThreadRedisStore extends BaseRedisStore implements WaThreadStore 
         const newFields = recordToHash(record)
 
         if (existing && Object.keys(existing).length > 0) {
-            // Partial upserts (archive, pin, mark-read) omit ephemeral fields.
-            // Retain previously persisted values, matching SQL COALESCE behavior.
             const merged: Record<string, string> = { ...existing }
             for (const [field, value] of Object.entries(newFields)) {
                 merged[field] = value

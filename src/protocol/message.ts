@@ -135,3 +135,12 @@ export const WA_ENC_MEDIA_TYPES = Object.freeze({
     NATIVE_FLOW_RESPONSE: 'native_flow_response',
     GROUP_HISTORY: 'group_history'
 } as const)
+
+/**
+ * `ephemeralSettingTimestamp` to Unix seconds. `ContextInfo` uses seconds, the
+ * history-sync `Conversation` record milliseconds, and both feed one stored
+ * field. Anything past ~year 2286 in seconds can only be a millisecond stamp.
+ */
+export function normalizeEphemeralSettingSeconds(value: number): number {
+    return value > 10_000_000_000 ? Math.floor(value / 1000) : value
+}

@@ -32,6 +32,7 @@ export {
 } from '@protocol/call'
 export type { WaCallPayloadTag } from '@protocol/call'
 export {
+    normalizeEphemeralSettingSeconds,
     WA_ADDRESSING_MODES,
     WA_EDIT_ATTRS,
     WA_ENC_CIPHERTEXT_TYPES,

@@ -53,6 +53,7 @@ import type {
 import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import {
+    normalizeEphemeralSettingSeconds,
     WA_ADDRESSING_MODES,
     WA_DEFAULTS,
     WA_NACK_REASONS,
@@ -240,13 +241,6 @@ interface WaOutboundEnvelope {
     readonly sendOptions: WaSendMessageOptions
 }
 
-/** Values above ~year 2286 in seconds are treated as legacy millisecond rows. */
-const EPHEMERAL_SETTING_MS_THRESHOLD = 10_000_000_000
-
-function normalizeEphemeralSettingUnixSeconds(value: number): number {
-    return value > EPHEMERAL_SETTING_MS_THRESHOLD ? Math.floor(value / 1000) : value
-}
-
 export class WaMessageDispatchCoordinator {
     private readonly deps: WaMessageDispatchCoordinatorOptions
     private readonly mobileMessageIdFormat: () => boolean
@@ -262,30 +256,17 @@ export class WaMessageDispatchCoordinator {
     }
 
     /**
-     * Resolves disappearing-message fields for an outgoing send into a chat with
-     * disappearing-mode on.
-     *
-     * - Groups: `expiration` only, from the group metadata cache. Groups do not
-     *   carry `ephemeralSettingTimestamp` on the wire (a disappearing group
-     *   reports `0`), so the thread store is not consulted.
-     * - 1:1: `expiration` + `ephemeralSettingTimestamp` from the thread store
-     *   (app-state `Conversation` record, stored as Unix seconds).
-     *
-     * Returns an empty object when nothing resolvable is found.
+     * Disappearing-message fields for a send into a chat with the mode on, or
+     * `{}` when nothing resolves. Groups get `expiration` only – their trigger
+     * lives in the group metadata, which the cached snapshot does not carry.
      */
-    private async resolveChatEphemeral(
-        recipientJid: string,
-        base: WaSendContextInfo | undefined
-    ): Promise<Partial<WaSendContextInfo>> {
+    private async resolveChatEphemeral(recipientJid: string): Promise<Partial<WaSendContextInfo>> {
         if (isGroupJid(recipientJid)) {
             const cached = await this.deps.groupMetadataCache.resolveEphemeral(recipientJid)
             if (!cached || cached <= 0) {
                 return {}
             }
-            return {
-                expirationSeconds: cached,
-                disappearingModeTrigger: 1
-            }
+            return { expirationSeconds: cached }
         }
 
         const thread = await this.deps.threadStore.getByJid(recipientJid)
@@ -293,19 +274,15 @@ export class WaMessageDispatchCoordinator {
         if (expiration === undefined || expiration <= 0) {
             return {}
         }
-        const rawTimestamp = base?.ephemeralSettingTimestamp ?? thread?.ephemeralSettingTimestamp
-        // Only set when defined: an explicit content/options-level
-        // ephemeralSettingTimestamp must not be clobbered by `undefined`.
-        // Guard against legacy rows still stored in milliseconds (Conversation wire).
-        const resolvedTimestamp =
-            rawTimestamp !== undefined
-                ? normalizeEphemeralSettingUnixSeconds(rawTimestamp)
-                : undefined
+        const stored = thread?.ephemeralSettingTimestamp
+        const settingTimestamp =
+            stored !== undefined ? normalizeEphemeralSettingSeconds(stored) : undefined
         return {
             expirationSeconds: expiration,
-            disappearingModeTrigger: 1,
-            ...(resolvedTimestamp !== undefined
-                ? { ephemeralSettingTimestamp: resolvedTimestamp }
+            disappearingModeInitiator: proto.DisappearingMode.Initiator.CHANGED_IN_CHAT,
+            disappearingModeTrigger: proto.DisappearingMode.Trigger.CHAT_SETTING,
+            ...(settingTimestamp !== undefined
+                ? { ephemeralSettingTimestamp: settingTimestamp }
                 : {})
         }
     }
@@ -483,13 +460,19 @@ export class WaMessageDispatchCoordinator {
                 ephemeralSettingTimestamp: options.ephemeralSettingTimestamp
             }
         }
+        if (options.disappearingModeTrigger !== undefined) {
+            optionsCtx = {
+                ...optionsCtx,
+                disappearingModeTrigger: options.disappearingModeTrigger
+            }
+        }
         if (
             optionsCtx?.expirationSeconds === undefined &&
             !options.disableGroupEphemeralAutoInject
         ) {
             optionsCtx = {
-                ...optionsCtx,
-                ...(await this.resolveChatEphemeral(recipientJid, optionsCtx))
+                ...(await this.resolveChatEphemeral(recipientJid)),
+                ...optionsCtx
             }
         }
         const ctx = resolveSendContextInfo({

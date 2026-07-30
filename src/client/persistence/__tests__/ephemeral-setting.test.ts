@@ -102,7 +102,7 @@ test('ephemeral setting persist disables 1:1 thread with expiration 0', () => {
     assert.equal(threads[0].ephemeralSettingTimestamp, 1_784_900_714)
 })
 
-test('ephemeral setting persist normalizes legacy millisecond timestamps', () => {
+test('ephemeral setting persist normalizes a millisecond protocol timestamp', () => {
     const threads: WaStoredThreadRecord[] = []
     const writeBehind = {
         persistThread: (record: WaStoredThreadRecord) => {

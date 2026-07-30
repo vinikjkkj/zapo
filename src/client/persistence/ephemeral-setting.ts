@@ -3,14 +3,8 @@ import type { WaIncomingMessageEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import type { Proto } from '@proto'
 import { isGroupJid } from '@protocol/jid'
+import { normalizeEphemeralSettingSeconds } from '@protocol/message'
 import { longToNumber, toError } from '@util/primitives'
-
-/** Values above ~year 2286 in seconds are treated as legacy millisecond rows. */
-const EPHEMERAL_SETTING_MS_THRESHOLD = 10_000_000_000
-
-function normalizeEphemeralSettingUnixSeconds(value: number): number {
-    return value > EPHEMERAL_SETTING_MS_THRESHOLD ? Math.floor(value / 1000) : value
-}
 
 export interface WaPersistIncomingEphemeralSettingOptions {
     readonly logger: Logger
@@ -20,12 +14,9 @@ export interface WaPersistIncomingEphemeralSettingOptions {
 }
 
 /**
- * Persists a 1:1 {@link proto.Message.ProtocolMessage.Type.EPHEMERAL_SETTING}
- * into the thread store so outgoing sends pick up the peer's disappearing-mode
- * change without waiting for history sync.
- *
- * Groups are skipped – their timer is driven by group notifications and the
- * in-memory group metadata cache, not protocol messages.
+ * Persists a 1:1 `EPHEMERAL_SETTING` protocol message so outgoing sends pick up
+ * the peer's change without waiting for history sync. Groups are skipped –
+ * their timer comes from group notifications, not protocol messages.
  */
 export function persistIncomingEphemeralSetting(
     options: WaPersistIncomingEphemeralSettingOptions
@@ -42,15 +33,15 @@ export function persistIncomingEphemeralSetting(
         protocolMessage.ephemeralSettingTimestamp !== null
             ? longToNumber(protocolMessage.ephemeralSettingTimestamp)
             : event.timestampSeconds
+    const settingTimestamp =
+        rawTimestamp !== undefined ? normalizeEphemeralSettingSeconds(rawTimestamp) : undefined
 
     try {
         writeBehind.persistThread({
             jid: chatJid,
             ephemeralExpiration: expiration,
-            ...(rawTimestamp !== undefined
-                ? {
-                      ephemeralSettingTimestamp: normalizeEphemeralSettingUnixSeconds(rawTimestamp)
-                  }
+            ...(settingTimestamp !== undefined
+                ? { ephemeralSettingTimestamp: settingTimestamp }
                 : {})
         })
     } catch (error) {

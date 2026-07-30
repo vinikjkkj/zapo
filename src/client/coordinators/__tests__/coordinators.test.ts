@@ -1635,14 +1635,12 @@ test('message dispatch injects ephemeral expiration + timestamp for 1:1 chats', 
     assert.ok(ctx)
     assert.equal(ctx.expiration, 86_400)
     assert.equal(ctx.ephemeralSettingTimestamp, 1_751_808_692)
-    assert.deepEqual(ctx.disappearingMode, { trigger: 1 })
+    assert.deepEqual(ctx.disappearingMode, { initiator: 0, trigger: 1 })
 })
 
 test('message dispatch injects ephemeral expiration only for group chats', async () => {
     const events: WaOutgoingMessageEvent[] = []
     const groupMetadataStore = new WaGroupMetadataMemoryStore(60_000)
-    // Groups send expiration from the metadata cache and never carry
-    // ephemeralSettingTimestamp, so the thread store is not consulted.
     const coordinator = createMessageDispatchCoordinator(groupMetadataStore, {
         meJid: '5511000000000@s.whatsapp.net',
         emitMessageSend: (event) => events.push(event),
@@ -1670,11 +1668,11 @@ test('message dispatch injects ephemeral expiration only for group chats', async
     assert.ok(ctx)
     assert.equal(ctx.expiration, 60_480)
     assert.equal(ctx.ephemeralSettingTimestamp, undefined)
-    assert.deepEqual(ctx.disappearingMode, { trigger: 1 })
+    assert.equal(ctx.disappearingMode, undefined)
     await groupMetadataStore.destroy()
 })
 
-test('message dispatch normalizes legacy millisecond ephemeralSettingTimestamp on 1:1 send', async () => {
+test('message dispatch honors explicit options.disappearingModeTrigger override', async () => {
     const events: WaOutgoingMessageEvent[] = []
     const threadStore = createStubThreadStore(
         new Map<string, WaStoredThreadRecord>([
@@ -1683,8 +1681,7 @@ test('message dispatch normalizes legacy millisecond ephemeralSettingTimestamp o
                 {
                     jid: '5511999999999@s.whatsapp.net',
                     ephemeralExpiration: 86_400,
-                    // Legacy row still stored as Conversation milliseconds.
-                    ephemeralSettingTimestamp: 1_751_808_692_000
+                    ephemeralSettingTimestamp: 1_751_808_692
                 }
             ]
         ])
@@ -1695,13 +1692,14 @@ test('message dispatch normalizes legacy millisecond ephemeralSettingTimestamp o
         threadStore
     })
     await coordinator
-        .sendMessage('5511999999999@s.whatsapp.net', { text: 'oi' } as never, {})
+        .sendMessage('5511999999999@s.whatsapp.net', { text: 'oi' } as never, {
+            disappearingModeTrigger: 2
+        })
         .catch(() => undefined)
     assert.equal(events.length, 1)
     const ctx = getContextInfo(events[0].message)
     assert.ok(ctx)
-    assert.equal(ctx.expiration, 86_400)
-    assert.equal(ctx.ephemeralSettingTimestamp, 1_751_808_692)
+    assert.deepEqual(ctx.disappearingMode, { initiator: 0, trigger: 2 })
 })
 
 test('message dispatch honors explicit options.ephemeralSettingTimestamp override', async () => {
