@@ -111,9 +111,9 @@ export type WaCacheDomain = keyof WaCacheDomainContracts
  * A backend bundle: one factory per domain it implements.
  *
  * Both parameters default to *every* domain, so a bare `WaStoreBackend`
- * keeps meaning a full backend – all 11 persistent domains plus all 4
- * cache domains – which is what every in-tree `@zapo-js/store-*` package
- * ships.
+ * keeps meaning a full backend – the whole of {@link WaStoreDomainContracts}
+ * plus the whole of {@link WaCacheDomainContracts} – which is what every
+ * in-tree `@zapo-js/store-*` package ships.
  *
  * A backend covering only part of the matrix names its domains explicitly.
  * `createStore()` then refuses, at compile time, to route a domain it
@@ -166,7 +166,23 @@ export type WaAnyStoreBackend = {
     }
 }
 
-/** Named backend map, as passed to `createStore({ backends })`. */
+/**
+ * Named backend map, as passed to `createStore({ backends })`.
+ *
+ * This is a *constraint*, not an annotation. Declaring the map as this type
+ * erases each backend's coverage the same way {@link WaAnyStoreBackend} does
+ * on a single backend, and every domain then collapses to `'memory'` /
+ * `'none'`:
+ *
+ * ```ts
+ * const backends: WaStoreBackendMap = { vault }
+ * createStore({ backends, providers: { auth: 'vault', ... } })
+ * ```
+ *
+ * where `auth: 'vault'` no longer compiles. Pass the object literal straight
+ * to `createStore()`, or bind it with `satisfies WaStoreBackendMap`, so
+ * inference keeps the per-backend factories.
+ */
 export type WaStoreBackendMap = Readonly<Record<string, WaAnyStoreBackend>>
 
 /**
@@ -228,8 +244,14 @@ export interface WaCreateStoreOptions<
      * Each key here is a backend id you can reference under {@link providers}
      * and {@link cacheProviders}. The literal strings `'memory'` and `'none'`
      * are reserved and don't need a backend entry.
+     *
+     * Full backends only while `TBackends` is left at its default: this shape
+     * knows names, not coverage, so `providers` assumes every name implements
+     * every domain. Partial backends go through the inferred shape
+     * ({@link WaCreateStoreOptionsStrictFor}), which checks coverage per
+     * domain.
      */
-    readonly backends?: Readonly<Record<B, WaAnyStoreBackend>>
+    readonly backends?: Readonly<Record<B, WaStoreBackend>>
     /**
      * Per-domain provider selection for the persistent (non-cache) stores.
      * Every domain falls back to `'memory'` (or `'none'` for the mailbox
@@ -507,17 +529,18 @@ export interface WaCreateStoreOptions<
  * IDE highlights the missing keys. Cache domains stay opt-in (default
  * `'memory'`).
  *
- * Each name is assumed to cover the full domain matrix. `createStore()`
- * itself infers the backend map and uses
- * {@link WaCreateStoreOptionsStrictFor}, which additionally rejects routing
- * a domain to a backend that doesn't implement it; annotate with this one
- * only when the backend values aren't in scope.
+ * Each name is assumed to cover the full domain matrix, so `backends` takes
+ * full {@link WaStoreBackend}s here - nothing in this shape could verify a
+ * partial one against the `providers` it accepts. `createStore()` itself
+ * infers the backend map and uses {@link WaCreateStoreOptionsStrictFor},
+ * which does check coverage per domain; annotate with this one only when the
+ * backend values aren't in scope.
  */
 export interface WaCreateStoreOptionsStrict<B extends string> extends Omit<
     WaCreateStoreOptions<B>,
     'backends' | 'providers'
 > {
-    readonly backends: Readonly<Record<B, WaAnyStoreBackend>>
+    readonly backends: Readonly<Record<B, WaStoreBackend>>
     readonly providers: Required<NonNullable<WaCreateStoreOptions<B>['providers']>>
 }
 

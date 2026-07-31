@@ -18,7 +18,13 @@ import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import type { WaThreadStore } from '@store/contracts/thread.store'
 import { createStore } from '@store/createStore'
-import type { WaCreateStoreOptions, WaStoreBackend } from '@store/types'
+import type {
+    WaCreateStoreOptions,
+    WaCreateStoreOptionsStrict,
+    WaCreateStoreOptionsStrictFor,
+    WaStoreBackend,
+    WaStoreBackendMap
+} from '@store/types'
 
 const authFactory = (): WaAuthStore => ({
     async load() {
@@ -174,4 +180,46 @@ test('name-keyed options still compile without the backend values in scope', () 
     }
 
     assert.equal(options.providers?.auth, 'sqlite')
+})
+
+test('name-keyed options demand full backends, having no way to verify coverage', () => {
+    // Partial backends belong to the inferred shape, which sees the values.
+    // This one only sees names, so its `providers` let any name serve any
+    // domain - taking a partial backend here would compile `signal: 'vault'`
+    // and move the failure back to the first session(). Reach for
+    // `WaCreateStoreOptionsStrictFor<typeof backends>` instead.
+    const options: WaCreateStoreOptionsStrict<'vault'> = {
+        // @ts-expect-error - vault implements only stores.auth
+        backends: { vault: authOnlyBackend },
+        providers: { auth: 'vault', ...MEMORY_REST }
+    }
+
+    assert.equal(options.providers.auth, 'vault')
+})
+
+test('the inferred shape annotates a partial backend just fine', () => {
+    const backends = { vault: authOnlyBackend }
+    const options: WaCreateStoreOptionsStrictFor<typeof backends> = {
+        backends,
+        providers: { auth: 'vault', ...MEMORY_REST }
+    }
+
+    assert.equal(options.providers.auth, 'vault')
+})
+
+test('annotating the backend map erases coverage', () => {
+    // WaStoreBackendMap is a constraint, not an annotation - it optionalises
+    // every factory, so no backend vouches for any domain any more.
+    const backends: WaStoreBackendMap = { vault: authOnlyBackend }
+
+    createStore({
+        backends,
+        providers: {
+            // @ts-expect-error - the annotation collapsed auth to 'memory'
+            auth: 'vault',
+            ...MEMORY_REST
+        }
+    })
+
+    assert.ok(backends)
 })
