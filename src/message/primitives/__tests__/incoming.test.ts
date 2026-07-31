@@ -5,6 +5,7 @@ import type { WaIncomingMessageEvent, WaIncomingUnavailableMessageEvent } from '
 import { createNoopLogger } from '@infra/log/types'
 import { buildRecoveredIncomingEvent, handleIncomingMessageAck } from '@message/primitives/incoming'
 import { proto } from '@proto'
+import type { WaRetryDecryptFailureContext } from '@retry/types'
 import type { BinaryNode } from '@transport/types'
 
 function createEncryptedMessageNode(): BinaryNode {
@@ -353,6 +354,7 @@ test('view-once-unavailable message acks instead of delivery-receipting and emit
     assert.equal(unavailable.length, 1)
     const event = unavailable[0]
     assert.equal(event.kind, 'view_once')
+    assert.equal(event.resendRequested, false)
     assert.equal(event.key.remoteJid, '53979165777985@lid')
     assert.equal(event.key.id, 'msg-vou')
     assert.equal(event.key.fromMe, false)
@@ -364,6 +366,52 @@ test('view-once-unavailable message acks instead of delivery-receipting and emit
     assert.equal(sentNodes[0].attrs.id, 'msg-vou')
     assert.equal(sentNodes[0].attrs.to, '53979165777985@lid')
     assert.equal(sentNodes[0].attrs.type, 'media')
+})
+
+test('unavailable message asks for a placeholder resend and reports it on the event', async () => {
+    const sentNodes: BinaryNode[] = []
+    const unavailable: WaIncomingUnavailableMessageEvent[] = []
+    const resendContexts: WaRetryDecryptFailureContext[] = []
+
+    const handled = await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-fanout',
+                from: '120363000000000000@g.us',
+                participant: '5511777777777:3@s.whatsapp.net',
+                type: 'text',
+                t: '1781885732'
+            },
+            content: [{ tag: 'unavailable', attrs: {} }]
+        },
+        {
+            logger: createNoopLogger(),
+            sendNode: async (node) => {
+                sentNodes.push(node)
+            },
+            getMeJid: () => '5511999999999@s.whatsapp.net',
+            requestPlaceholderResend: (context) => {
+                resendContexts.push(context)
+                return true
+            },
+            emitUnavailableMessage: (event) => {
+                unavailable.push(event)
+            }
+        }
+    )
+
+    assert.equal(handled, true)
+    assert.equal(resendContexts.length, 1)
+    assert.equal(resendContexts[0].stanzaId, 'msg-fanout')
+    assert.equal(resendContexts[0].from, '120363000000000000@g.us')
+    assert.equal(resendContexts[0].participant, '5511777777777:3@s.whatsapp.net')
+    assert.equal(resendContexts[0].t, '1781885732')
+    assert.equal(unavailable.length, 1)
+    assert.equal(unavailable[0].kind, 'other')
+    assert.equal(unavailable[0].resendRequested, true)
+    assert.equal(sentNodes.length, 1)
+    assert.equal(sentNodes[0].tag, 'ack')
 })
 
 test('incoming message ack falls back to retry receipt when decrypt fails', async () => {

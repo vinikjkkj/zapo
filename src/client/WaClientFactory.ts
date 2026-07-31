@@ -851,7 +851,8 @@ export function buildWaClientDependencies(input: {
                 .handleIncomingMessageEvent(event)
                 .catch((err) => runtime.handleError(toError(err)))
         },
-        isMobilePrimary
+        isMobilePrimary,
+        getAbPropNumber: (name) => abPropsCoordinator.getConfigValue<number>(name)
     })
 
     const botCoordinator = createBotCoordinator({
@@ -1035,6 +1036,8 @@ export function buildWaClientDependencies(input: {
         senderKeyManager,
         onDecryptFailure: (context: WaRetryDecryptFailureContext, error: unknown) =>
             retryCoordinator.onDecryptFailure(context, error),
+        requestPlaceholderResend: (context: WaRetryDecryptFailureContext) =>
+            retryCoordinator.onUnavailableMessage(context),
         emitIncomingMessage: (event: WaIncomingMessageEvent) => {
             void runtime
                 .handleIncomingMessageEvent(event)

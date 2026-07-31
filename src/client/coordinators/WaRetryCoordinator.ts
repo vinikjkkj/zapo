@@ -1,3 +1,4 @@
+import type { WaAbPropName } from '@abprops-spec'
 import type { WaAuthCredentials } from '@auth/types'
 import type { WaIncomingMessageEvent } from '@client/types'
 import { toRawPubKey } from '@crypto/core/keys'
@@ -46,8 +47,10 @@ import type { WaSessionStore } from '@store/contracts/session.store'
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { buildAckNode } from '@transport/node/builders/global'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
+import { findNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 import { uint8Equal } from '@util/bytes'
+import { tryAsNumber } from '@util/coercion'
 import { setBoundedMapEntry } from '@util/collections'
 import { toError } from '@util/primitives'
 
@@ -84,6 +87,11 @@ interface WaRetryCoordinatorOptions {
      * or privacy-gated recipients nack them with error 463.
      */
     readonly resolvePrivacyTokenNode?: (recipientJid: string) => Promise<BinaryNode | null>
+    /**
+     * Server-synced AB props. Only `placeholder_message_resend_maximum_days_limit`
+     * is read; falls back to the spec default when unwired.
+     */
+    readonly getAbPropNumber?: (name: WaAbPropName) => number
 }
 
 type RetryAuthorization =
@@ -117,8 +125,9 @@ const DECRYPT_FAILURE_QUEUE_MAX_CONCURRENCY = 8
 const PLACEHOLDER_RESEND_RETRY_THRESHOLD = 3
 const PLACEHOLDER_RESEND_BATCH_SIZE = 32
 const PLACEHOLDER_RESEND_DEBOUNCE_MS = 200
-const PLACEHOLDER_RESEND_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+const PLACEHOLDER_RESEND_FALLBACK_MAX_AGE_DAYS = 14
 const PLACEHOLDER_RESEND_IN_FLIGHT_MAX = 256
+const DAY_SECONDS = 24 * 60 * 60
 const PLACEHOLDER_RESEND_SKIP_SUBTYPES = new Set<string>([
     'bot_unavailable_fanout',
     'hosted_unavailable_fanout',
@@ -157,6 +166,31 @@ function getRemoteRetryReasonLogFields(reason: number | undefined): {
         remoteRetryReason: reason ?? null,
         remoteRetryReasonName: getRetryReasonName(reason) ?? 'missing_in_retry_receipt'
     }
+}
+
+/**
+ * Returns the placeholder subtype the primary never resends (bot fanout, hosted
+ * account, consumed view-once), or `null` when the message is recoverable.
+ */
+function resolvePlaceholderResendSkipSubtype(node: BinaryNode): string | null {
+    const subtype = node.attrs.subtype
+    if (typeof subtype === 'string' && PLACEHOLDER_RESEND_SKIP_SUBTYPES.has(subtype)) {
+        return subtype
+    }
+    const unavailable = findNodeChild(node, 'unavailable')
+    if (!unavailable) {
+        return null
+    }
+    if (findNodeChild(node, 'bot')) {
+        return 'bot_unavailable_fanout'
+    }
+    if (unavailable.attrs.hosted === 'true') {
+        return 'hosted_unavailable_fanout'
+    }
+    if (unavailable.attrs.type === 'view_once') {
+        return 'view_once_unavailable_fanout'
+    }
+    return null
 }
 
 export class WaRetryCoordinator {
@@ -1091,6 +1125,26 @@ export class WaRetryCoordinator {
         return !!meJid && parseSignalAddressFromJid(meJid).user === senderUser
     }
 
+    /**
+     * Queues a `PLACEHOLDER_MESSAGE_RESEND` peer request for a message the server
+     * delivered as `<unavailable/>` (no `<enc>` to decrypt, so no retry receipt).
+     * Returns `false` when the placeholder is unrecoverable, too old, or this
+     * session is the primary. The payload surfaces later as a `message` event.
+     */
+    public onUnavailableMessage(context: WaRetryDecryptFailureContext): boolean {
+        return this.enqueuePlaceholderResend(context)
+    }
+
+    private getPlaceholderResendMaxAgeSeconds(): number {
+        const days = tryAsNumber(
+            this.deps.getAbPropNumber?.('placeholder_message_resend_maximum_days_limit')
+        )
+        return (
+            (days !== null && days > 0 ? days : PLACEHOLDER_RESEND_FALLBACK_MAX_AGE_DAYS) *
+            DAY_SECONDS
+        )
+    }
+
     private enqueuePlaceholderResend(context: WaRetryDecryptFailureContext): boolean {
         if (!this.deps.peerDataOperation || !this.deps.emitIncomingMessage) {
             return false
@@ -1098,14 +1152,18 @@ export class WaRetryCoordinator {
         if (this.deps.isMobilePrimary?.()) {
             return false
         }
-        const subtype = context.messageNode.attrs.subtype
-        if (typeof subtype === 'string' && PLACEHOLDER_RESEND_SKIP_SUBTYPES.has(subtype)) {
+        const skipSubtype = resolvePlaceholderResendSkipSubtype(context.messageNode)
+        if (skipSubtype !== null) {
+            this.deps.logger.trace('placeholder resend skipped: unrecoverable placeholder', {
+                id: context.stanzaId,
+                subtype: skipSubtype
+            })
             return false
         }
         const timestampSeconds = context.t ? Number(context.t) : Date.now() / 1000
         if (Number.isFinite(timestampSeconds)) {
             const ageSeconds = Date.now() / 1000 - timestampSeconds
-            if (ageSeconds > PLACEHOLDER_RESEND_MAX_AGE_SECONDS) {
+            if (ageSeconds > this.getPlaceholderResendMaxAgeSeconds()) {
                 return false
             }
         }
