@@ -127,6 +127,7 @@ const PLACEHOLDER_RESEND_BATCH_SIZE = 32
 const PLACEHOLDER_RESEND_DEBOUNCE_MS = 200
 const PLACEHOLDER_RESEND_FALLBACK_MAX_AGE_DAYS = 14
 const PLACEHOLDER_RESEND_IN_FLIGHT_MAX = 256
+const PLACEHOLDER_RESEND_TIMEOUT_MS = 120_000
 const DAY_SECONDS = 24 * 60 * 60
 const PLACEHOLDER_RESEND_SKIP_SUBTYPES = new Set<string>([
     'bot_unavailable_fanout',
@@ -1236,7 +1237,8 @@ export class WaRetryCoordinator {
                                 participant: item.participant
                             }
                         }))
-                    }
+                    },
+                    { timeoutMs: PLACEHOLDER_RESEND_TIMEOUT_MS }
                 )
                 const meJid = this.deps.getCurrentCredentials()?.meJid
                 for (const result of results) {
