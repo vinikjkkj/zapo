@@ -667,12 +667,13 @@ export async function handleIncomingMessageAck(
 
     const unavailableNode = findNodeChild(node, 'unavailable')
     if (unavailableNode) {
-        const kind: WaUnavailableMessageKind =
-            unavailableNode.attrs.hosted === 'true'
-                ? 'hosted'
-                : unavailableNode.attrs.type === 'view_once'
-                  ? 'view_once'
-                  : 'other'
+        const kind: WaUnavailableMessageKind = findNodeChild(node, 'bot')
+            ? 'bot'
+            : unavailableNode.attrs.hosted === 'true'
+              ? 'hosted'
+              : unavailableNode.attrs.type === 'view_once'
+                ? 'view_once'
+                : 'other'
         const senderJid = node.attrs.participant ?? node.attrs.from
         const sender = senderJid ? parseJidFull(senderJid) : null
         const { key, pushName } = buildIncomingMessageKey(

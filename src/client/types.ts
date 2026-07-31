@@ -945,12 +945,12 @@ export interface WaIncomingUnhandledStanzaEvent extends WaIncomingBaseEvent {
 }
 
 /**
- * Why an incoming message arrived as a content-less placeholder. `view_once`:
- * a view-once already consumed elsewhere. `hosted`: a hosted/bot message that
- * could not be fanned out. `other`: a plain fanout placeholder - the primary
- * device still holds the plaintext, so this one is recoverable.
+ * Why an incoming message arrived as a content-less placeholder. `view_once`: a
+ * view-once already consumed elsewhere. `hosted`: a hosted account whose message
+ * could not be fanned out. `bot`: a bot message whose fanout never ran. `other`:
+ * a plain fanout placeholder – the only kind the primary device resends.
  */
-export type WaUnavailableMessageKind = 'view_once' | 'hosted' | 'other'
+export type WaUnavailableMessageKind = 'view_once' | 'hosted' | 'bot' | 'other'
 
 export interface WaIncomingUnavailableMessageEvent extends Omit<
     WaIncomingBaseEvent,
@@ -959,10 +959,11 @@ export interface WaIncomingUnavailableMessageEvent extends Omit<
     /** Which flavour of content the server signalled as unavailable. */
     readonly kind: WaUnavailableMessageKind
     /**
-     * `true` when a resend was requested from the primary device; the payload
-     * then arrives as a `message` event with the same key. `false` for the
-     * unrecoverable flavours, messages past the server age window, and
-     * mobile-primary sessions.
+     * `true` when a resend was queued for the primary device; the payload then
+     * arrives as a `message` event with the same key. Best-effort, like wa-web:
+     * the request is not persisted, so a failed peer message is not retried.
+     * `false` for the unrecoverable flavours, messages past the server age
+     * window, and mobile-primary sessions.
      */
     readonly resendRequested: boolean
     /**

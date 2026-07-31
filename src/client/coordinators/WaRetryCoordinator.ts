@@ -1145,6 +1145,31 @@ export class WaRetryCoordinator {
         )
     }
 
+    /**
+     * Builds the message key the primary indexes the message under: the chat is
+     * the `from`, or the `recipient` for a self-sent 1:1, and both it and the
+     * participant carry no `:device` segment. Asking with the raw device-addressed
+     * `from` matches nothing and the resend comes back empty.
+     */
+    private buildPlaceholderResendKey(
+        context: WaRetryDecryptFailureContext
+    ): PlaceholderResendQueueItem {
+        const fromMe = this.isSenderFromOwnAccount(context)
+        const isGroupOrBroadcast = isGroupOrBroadcastJid(context.from)
+        const chatJid =
+            fromMe && !isGroupOrBroadcast
+                ? (context.messageNode.attrs.recipient ?? context.from)
+                : context.from
+        return {
+            remoteJid: toUserJid(chatJid),
+            id: context.stanzaId,
+            fromMe,
+            ...(isGroupOrBroadcast && context.participant
+                ? { participant: toUserJid(context.participant) }
+                : {})
+        }
+    }
+
     private enqueuePlaceholderResend(context: WaRetryDecryptFailureContext): boolean {
         if (!this.deps.peerDataOperation || !this.deps.emitIncomingMessage) {
             return false
@@ -1178,12 +1203,7 @@ export class WaRetryCoordinator {
             return false
         }
         this.placeholderInFlight.add(context.stanzaId)
-        this.placeholderQueue.push({
-            remoteJid: context.from,
-            id: context.stanzaId,
-            fromMe: this.isSenderFromOwnAccount(context),
-            participant: context.participant
-        })
+        this.placeholderQueue.push(this.buildPlaceholderResendKey(context))
         if (this.placeholderTimer === null) {
             this.placeholderTimer = setTimeout(() => {
                 this.placeholderTimer = null

@@ -180,7 +180,7 @@ function buildPlaceholderContext(
 }
 
 function createPlaceholderHarness(
-    options: { readonly maxAgeDays?: number } = {}
+    options: { readonly maxAgeDays?: number; readonly meJid?: string } = {}
 ): PlaceholderHarness {
     const captured: PlaceholderHarness['captured'] = []
     const emitted: WaIncomingMessageEvent[] = []
@@ -211,7 +211,8 @@ function createPlaceholderHarness(
         signalMissingPreKeysSync: {} as never,
         messageClient: {} as never,
         sendNode: async () => undefined,
-        getCurrentCredentials: () => null,
+        getCurrentCredentials: () =>
+            options.meJid === undefined ? null : ({ meJid: options.meJid } as never),
         peerDataOperation,
         emitIncomingMessage: (event) => emitted.push(event),
         getAbPropNumber: options.maxAgeDays === undefined ? undefined : () => options.maxAgeDays!
@@ -328,6 +329,43 @@ test('placeholder resend: honours the ab-prop age window', async () => {
         (harness.captured[0][0] as { messageKey?: { id?: string } }).messageKey?.id,
         'within-window'
     )
+})
+
+test('placeholder resend: keys a self-sent 1:1 message by the recipient chat', async () => {
+    const harness = createPlaceholderHarness({ meJid: '5511999999999@s.whatsapp.net' })
+    harness.enqueue(
+        buildPlaceholderContext({
+            stanzaId: 'self-1',
+            from: '5511999999999:12@s.whatsapp.net',
+            messageNode: {
+                tag: 'message',
+                attrs: { recipient: '5511777777777@s.whatsapp.net' }
+            }
+        })
+    )
+    const flushPromise = harness.flush()
+    harness.resolveNext([])
+    await flushPromise
+    const key = (harness.captured[0][0] as { messageKey?: Record<string, unknown> }).messageKey
+    assert.equal(key?.remoteJid, '5511777777777@s.whatsapp.net')
+    assert.equal(key?.fromMe, true)
+})
+
+test('placeholder resend: strips device segments from group keys', async () => {
+    const harness = createPlaceholderHarness()
+    harness.enqueue(
+        buildPlaceholderContext({
+            stanzaId: 'grp-1',
+            from: '120363000000000000@g.us',
+            participant: '5511777777777:5@s.whatsapp.net'
+        })
+    )
+    const flushPromise = harness.flush()
+    harness.resolveNext([])
+    await flushPromise
+    const key = (harness.captured[0][0] as { messageKey?: Record<string, unknown> }).messageKey
+    assert.equal(key?.remoteJid, '120363000000000000@g.us')
+    assert.equal(key?.participant, '5511777777777@s.whatsapp.net')
 })
 
 test('unavailable message: requests a resend for a plain fanout placeholder', async () => {

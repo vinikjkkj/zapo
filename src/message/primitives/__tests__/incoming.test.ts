@@ -414,6 +414,33 @@ test('unavailable message asks for a placeholder resend and reports it on the ev
     assert.equal(sentNodes[0].tag, 'ack')
 })
 
+test('bot fanout placeholder is classified as its own kind', async () => {
+    const unavailable: WaIncomingUnavailableMessageEvent[] = []
+
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: { id: 'msg-bot', from: '5511777777777@s.whatsapp.net', type: 'text' },
+            content: [
+                { tag: 'unavailable', attrs: {} },
+                { tag: 'bot', attrs: { biz_bot: '1' } }
+            ]
+        },
+        {
+            logger: createNoopLogger(),
+            sendNode: async () => undefined,
+            requestPlaceholderResend: () => false,
+            emitUnavailableMessage: (event) => {
+                unavailable.push(event)
+            }
+        }
+    )
+
+    assert.equal(unavailable.length, 1)
+    assert.equal(unavailable[0].kind, 'bot')
+    assert.equal(unavailable[0].resendRequested, false)
+})
+
 test('incoming message ack falls back to retry receipt when decrypt fails', async () => {
     const sentNodes: BinaryNode[] = []
 
