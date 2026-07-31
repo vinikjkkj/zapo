@@ -3,6 +3,7 @@ import type { Logger } from 'zapo-js'
 
 import { WaAppStatePgStore } from './appstate.store'
 import { WaAuthPgStore } from './auth.store'
+import { WaChatMetadataPostgresStore } from './chat-metadata.store'
 import { PgCleanupPoller } from './cleanup'
 import { createPgPool } from './connection'
 import { WaContactPgStore } from './contact.store'
@@ -41,6 +42,7 @@ export interface WaPgStoreConfig {
     readonly cacheTtlMs?: {
         readonly retryMs?: number
         readonly groupMetadataMs?: number
+        readonly chatMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
@@ -96,6 +98,7 @@ export interface WaPgStoreResult {
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetryPgStore
         readonly groupMetadata: (sessionId: string) => WaGroupMetadataPgStore
+        readonly chatMetadata: (sessionId: string) => WaChatMetadataPostgresStore
         readonly deviceList: (sessionId: string) => WaDeviceListPgStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretPgStore
     }
@@ -136,6 +139,7 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
     const tablePrefix = config.tablePrefix ?? ''
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
+    const chatMetadataTtlMs = config.cacheTtlMs?.chatMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsPool = !isPool(config.pool)
@@ -181,6 +185,8 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
             retry: (sessionId) => new WaRetryPgStore(opts(sessionId, 'retry'), retryTtlMs),
             groupMetadata: (sessionId) =>
                 new WaGroupMetadataPgStore(opts(sessionId, 'groupMetadata'), groupMetadataTtlMs),
+            chatMetadata: (sessionId) =>
+                new WaChatMetadataPostgresStore(opts(sessionId, 'chatMetadata'), chatMetadataTtlMs),
             deviceList: (sessionId) =>
                 new WaDeviceListPgStore(opts(sessionId, 'deviceList'), deviceListTtlMs),
             messageSecret: (sessionId) =>

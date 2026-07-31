@@ -426,6 +426,40 @@ describe('store-mongo integration', { timeout: 60_000 }, () => {
         await messages.clear()
     })
 
+    it('cache stores: chat-metadata round-trips disappearing settings', async (t) => {
+        if (!store) return t.skip('ZAPO_TEST_MONGO_* not set')
+
+        const sessionId = nextSessionId('chatmeta')
+        const chatMetadata = store.caches.chatMetadata(sessionId)
+        const now = Date.now()
+
+        await chatMetadata.upsertChatMetadata({
+            chatJid: 'chat-1@lid',
+            ephemeralExpiration: 86_400,
+            ephemeralSettingTimestamp: 1_751_808_692,
+            updatedAtMs: now
+        })
+
+        const snapshot = await chatMetadata.getChatMetadata('chat-1@lid', now)
+        assert.ok(snapshot)
+        assert.equal(snapshot.ephemeralExpiration, 86_400)
+        assert.equal(snapshot.ephemeralSettingTimestamp, 1_751_808_692)
+
+        await chatMetadata.upsertChatMetadata({
+            chatJid: 'chat-1@lid',
+            ephemeralExpiration: 0,
+            updatedAtMs: now + 1
+        })
+        const disabled = await chatMetadata.getChatMetadata('chat-1@lid', now + 1)
+        assert.equal(disabled?.ephemeralExpiration, 0)
+        assert.equal(disabled?.ephemeralSettingTimestamp, undefined)
+
+        assert.ok((await chatMetadata.deleteChatMetadata('chat-1@lid')) >= 0)
+        assert.equal(await chatMetadata.getChatMetadata('chat-1@lid', now), null)
+        assert.ok((await chatMetadata.cleanupExpired(now + 60_000)) >= 0)
+        await chatMetadata.clear()
+    })
+
     it('cache stores: group-metadata and device-list basic lifecycle', async (t) => {
         if (!store) return t.skip('ZAPO_TEST_MONGO_* not set')
 
@@ -438,12 +472,14 @@ describe('store-mongo integration', { timeout: 60_000 }, () => {
             groupJid: 'group-1@g.us',
             participants: ['a@s.whatsapp.net', 'b@s.whatsapp.net'],
             ephemeral: 7_776_000,
+            ephemeralTrigger: 5,
             updatedAtMs: now
         })
         const metadataSnapshot = await groupMetadata.getGroupMetadata('group-1@g.us', now)
         assert.ok(metadataSnapshot)
         assert.deepEqual(metadataSnapshot.participants, ['a@s.whatsapp.net', 'b@s.whatsapp.net'])
         assert.equal(metadataSnapshot.ephemeral, 7_776_000)
+        assert.equal(metadataSnapshot.ephemeralTrigger, 5)
 
         await groupMetadata.upsertGroupMetadata({
             groupJid: 'group-1@g.us',
@@ -452,6 +488,7 @@ describe('store-mongo integration', { timeout: 60_000 }, () => {
         })
         const cleared = await groupMetadata.getGroupMetadata('group-1@g.us', now + 1)
         assert.equal(cleared?.ephemeral, undefined)
+        assert.equal(cleared?.ephemeralTrigger, undefined)
 
         assert.equal(await groupMetadata.deleteGroupMetadata('group-1@g.us'), 1)
         assert.equal(await groupMetadata.getGroupMetadata('group-1@g.us', now), null)

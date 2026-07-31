@@ -21,11 +21,12 @@ export class WaGroupMetadataMysqlStore extends BaseMysqlStore implements WaGroup
         await this.ensureReady()
         await this.pool.execute(
             `INSERT INTO ${this.t('group_participants_cache')} (
-                session_id, group_jid, participants_json, ephemeral, updated_at_ms, expires_at_ms
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                session_id, group_jid, participants_json, ephemeral, ephemeral_trigger, updated_at_ms, expires_at_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 participants_json = VALUES(participants_json),
                 ephemeral = VALUES(ephemeral),
+                ephemeral_trigger = VALUES(ephemeral_trigger),
                 updated_at_ms = VALUES(updated_at_ms),
                 expires_at_ms = VALUES(expires_at_ms)`,
             [
@@ -33,6 +34,7 @@ export class WaGroupMetadataMysqlStore extends BaseMysqlStore implements WaGroup
                 snapshot.groupJid,
                 JSON.stringify(snapshot.participants),
                 snapshot.ephemeral ?? null,
+                snapshot.ephemeralTrigger ?? null,
                 snapshot.updatedAtMs,
                 snapshot.updatedAtMs + this.ttlMs
             ]
@@ -46,7 +48,7 @@ export class WaGroupMetadataMysqlStore extends BaseMysqlStore implements WaGroup
         await this.ensureReady()
         const row = queryFirst(
             await this.pool.execute(
-                `SELECT group_jid, participants_json, ephemeral, updated_at_ms, expires_at_ms
+                `SELECT group_jid, participants_json, ephemeral, ephemeral_trigger, updated_at_ms, expires_at_ms
              FROM ${this.t('group_participants_cache')}
              WHERE session_id = ? AND group_jid = ?`,
                 [this.sessionId, groupJid]
@@ -73,10 +75,15 @@ export class WaGroupMetadataMysqlStore extends BaseMysqlStore implements WaGroup
         }
 
         const ephemeral = row.ephemeral === null ? undefined : Number(row.ephemeral)
+        const ephemeralTrigger =
+            row.ephemeral_trigger === null || row.ephemeral_trigger === undefined
+                ? undefined
+                : Number(row.ephemeral_trigger)
         return {
             groupJid: String(row.group_jid),
             participants: parsed.map((entry: unknown) => String(entry)),
             ephemeral,
+            ephemeralTrigger,
             updatedAtMs: Number(row.updated_at_ms)
         }
     }

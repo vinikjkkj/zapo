@@ -3,6 +3,7 @@ import type { Logger } from 'zapo-js'
 
 import { WaAppStateRedisStore } from './appstate.store'
 import { WaAuthRedisStore } from './auth.store'
+import { WaChatMetadataRedisStore } from './chat-metadata.store'
 import { WaContactRedisStore } from './contact.store'
 import { WaDeviceListRedisStore } from './device-list.store'
 import { WaGroupMetadataRedisStore } from './group-metadata.store'
@@ -40,6 +41,7 @@ export interface WaRedisStoreConfig {
     readonly cacheTtlMs?: {
         readonly retryMs?: number
         readonly groupMetadataMs?: number
+        readonly chatMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
@@ -100,6 +102,7 @@ export interface WaRedisStoreResult {
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetryRedisStore
         readonly groupMetadata: (sessionId: string) => WaGroupMetadataRedisStore
+        readonly chatMetadata: (sessionId: string) => WaChatMetadataRedisStore
         readonly deviceList: (sessionId: string) => WaDeviceListRedisStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretRedisStore
     }
@@ -141,6 +144,7 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
     const keyPrefix = config.keyPrefix ?? ''
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
+    const chatMetadataTtlMs = config.cacheTtlMs?.chatMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const storeTtl = config.storeTtlMs ?? {}
@@ -202,6 +206,8 @@ export function createRedisStore(config: WaRedisStoreConfig): WaRedisStoreResult
             retry: (sessionId) => new WaRetryRedisStore(opts(sessionId, 'retry'), retryTtlMs),
             groupMetadata: (sessionId) =>
                 new WaGroupMetadataRedisStore(opts(sessionId, 'groupMetadata'), groupMetadataTtlMs),
+            chatMetadata: (sessionId) =>
+                new WaChatMetadataRedisStore(opts(sessionId, 'chatMetadata'), chatMetadataTtlMs),
             deviceList: (sessionId) =>
                 new WaDeviceListRedisStore(opts(sessionId, 'deviceList'), deviceListTtlMs),
             messageSecret: (sessionId) =>

@@ -24,6 +24,11 @@ export class WaGroupMetadataRedisStore extends BaseRedisStore implements WaGroup
             participants_json: JSON.stringify(snapshot.participants),
             updated_at_ms: String(snapshot.updatedAtMs)
         }
+        if (snapshot.ephemeralTrigger === undefined) {
+            pipeline.hdel(key, 'ephemeral_trigger')
+        } else {
+            fields.ephemeral_trigger = String(snapshot.ephemeralTrigger)
+        }
         if (snapshot.ephemeral === undefined) {
             pipeline.hdel(key, 'ephemeral')
         } else {
@@ -48,10 +53,13 @@ export class WaGroupMetadataRedisStore extends BaseRedisStore implements WaGroup
         }
 
         const ephemeral = data.ephemeral === undefined ? undefined : Number(data.ephemeral)
+        const ephemeralTrigger =
+            data.ephemeral_trigger === undefined ? undefined : Number(data.ephemeral_trigger)
         return {
             groupJid,
             participants: parsed.map((entry: unknown) => String(entry)),
             ephemeral,
+            ephemeralTrigger,
             updatedAtMs: Number(data.updated_at_ms)
         }
     }

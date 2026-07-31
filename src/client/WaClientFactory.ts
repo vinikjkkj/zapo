@@ -706,7 +706,8 @@ export function buildWaClientDependencies(input: {
             }
             return {
                 participants: participantJids,
-                ephemeral: metadata.ephemeral
+                ephemeral: metadata.ephemeral,
+                ephemeralTrigger: metadata.ephemeralTrigger
             }
         },
         logger
@@ -771,6 +772,7 @@ export function buildWaClientDependencies(input: {
         identityStore: sessionStore.identity,
         deviceListStore: sessionStore.deviceList,
         threadStore: sessionStore.threads,
+        chatMetadataStore: sessionStore.chatMetadata,
         signalDeviceSync,
         messageSecretStore: sessionStore.messageSecret,
         persistAllMessageSecrets: options.addons?.persistAllSecrets === true,

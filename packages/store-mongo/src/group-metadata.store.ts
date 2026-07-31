@@ -7,6 +7,7 @@ interface GroupMetadataDoc {
     _id: { session_id: string; group_jid: string }
     participants: string[]
     ephemeral?: number
+    ephemeralTrigger?: number
     updated_at_ms: number
     expires_at: Date
 }
@@ -38,10 +39,19 @@ export class WaGroupMetadataMongoStore extends BaseMongoStore implements WaGroup
             expires_at: new Date(snapshot.updatedAtMs + this.ttlMs)
         }
         const update: Record<string, unknown> = { $set }
+        const unset: Record<string, ''> = {}
+        if (snapshot.ephemeralTrigger === undefined) {
+            unset.ephemeralTrigger = ''
+        } else {
+            $set.ephemeralTrigger = snapshot.ephemeralTrigger
+        }
         if (snapshot.ephemeral === undefined) {
-            update.$unset = { ephemeral: '' }
+            unset.ephemeral = ''
         } else {
             $set.ephemeral = snapshot.ephemeral
+        }
+        if (Object.keys(unset).length > 0) {
+            update.$unset = unset
         }
         await col.updateOne(
             { _id: { session_id: this.sessionId, group_jid: snapshot.groupJid } },
@@ -65,6 +75,7 @@ export class WaGroupMetadataMongoStore extends BaseMongoStore implements WaGroup
             groupJid,
             participants: doc.participants,
             ephemeral: doc.ephemeral,
+            ephemeralTrigger: doc.ephemeralTrigger,
             updatedAtMs: doc.updated_at_ms
         }
     }

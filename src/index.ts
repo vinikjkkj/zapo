@@ -327,6 +327,8 @@ export type {
     WaCreateStoreOptionsStrict,
     WaDeviceListSnapshot,
     WaDeviceListStore,
+    WaChatMetadataSnapshot,
+    WaChatMetadataStore,
     WaGroupMetadataSnapshot,
     WaGroupMetadataStore,
     WaMessageStore,

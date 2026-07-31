@@ -50,6 +50,9 @@ const mockAuthBackend = {
         groupMetadata: () => {
             throw new Error('not expected')
         },
+        chatMetadata: () => {
+            throw new Error('not expected')
+        },
         deviceList: () => {
             throw new Error('not expected')
         },

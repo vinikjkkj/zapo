@@ -11,6 +11,13 @@ import { toError } from '@util/primitives'
 export type GroupMetadataQueryResult = {
     readonly participants: readonly string[]
     readonly ephemeral?: number
+    readonly ephemeralTrigger?: number
+}
+
+/** Disappearing-message settings a group reports, as sent on outgoing messages. */
+export type GroupEphemeralSettings = {
+    readonly expirationSeconds: number
+    readonly trigger?: number
 }
 
 export type GroupMetadataCache = {
@@ -18,6 +25,12 @@ export type GroupMetadataCache = {
     refreshParticipantUsers(groupJid: string): Promise<readonly string[]>
     getEphemeral(groupJid: string): Promise<number | null>
     resolveEphemeral(groupJid: string): Promise<number | null>
+    /**
+     * Expiration plus the group's `disappearingMode` trigger in one read, or
+     * `null` when the group is not ephemeral. Refreshes a cold cache like
+     * {@link resolveEphemeral} does.
+     */
+    resolveEphemeralSettings(groupJid: string): Promise<GroupEphemeralSettings | null>
     mutateFromGroupEvent(event: WaGroupEvent): Promise<void>
 }
 
@@ -74,6 +87,7 @@ export function createGroupMetadataCache(options: {
             groupJid,
             participants,
             ephemeral: cached?.ephemeral,
+            ephemeralTrigger: cached?.ephemeralTrigger,
             updatedAtMs: Date.now()
         })
     }
@@ -187,6 +201,7 @@ export function createGroupMetadataCache(options: {
                 groupJid,
                 participants,
                 ephemeral: queried.ephemeral,
+                ephemeralTrigger: queried.ephemeralTrigger,
                 updatedAtMs: Date.now()
             })
             return participants
@@ -207,15 +222,26 @@ export function createGroupMetadataCache(options: {
         return cached?.ephemeral ?? null
     }
 
-    const resolveEphemeral = async (groupJid: string): Promise<number | null> => {
-        const cached = await groupMetadataStore.getGroupMetadata(groupJid)
-        if (cached) {
-            return cached.ephemeral ?? null
+    const resolveEphemeralSettings = async (
+        groupJid: string
+    ): Promise<GroupEphemeralSettings | null> => {
+        let cached = await groupMetadataStore.getGroupMetadata(groupJid)
+        if (!cached) {
+            await refreshParticipantUsers(groupJid)
+            cached = await groupMetadataStore.getGroupMetadata(groupJid)
         }
-        await refreshParticipantUsers(groupJid)
-        const refreshed = await groupMetadataStore.getGroupMetadata(groupJid)
-        return refreshed?.ephemeral ?? null
+        const expirationSeconds = cached?.ephemeral
+        if (expirationSeconds === undefined || expirationSeconds <= 0) {
+            return null
+        }
+        return {
+            expirationSeconds,
+            ...(cached?.ephemeralTrigger !== undefined ? { trigger: cached.ephemeralTrigger } : {})
+        }
     }
+
+    const resolveEphemeral = async (groupJid: string): Promise<number | null> =>
+        (await resolveEphemeralSettings(groupJid))?.expirationSeconds ?? null
 
     const applyGroupEvent = async (event: WaGroupEvent): Promise<void> => {
         const groupJid = resolveGroupJidForGroupCacheEvent(event)
@@ -234,13 +260,19 @@ export function createGroupMetadataCache(options: {
                 return
             }
             const nextEphemeral = event.expirationSeconds
-            if (cached.ephemeral === nextEphemeral) {
+            const parsedTrigger = event.mode === undefined ? undefined : Number(event.mode)
+            const nextTrigger =
+                parsedTrigger !== undefined && Number.isFinite(parsedTrigger)
+                    ? parsedTrigger
+                    : cached.ephemeralTrigger
+            if (cached.ephemeral === nextEphemeral && cached.ephemeralTrigger === nextTrigger) {
                 return
             }
             await groupMetadataStore.upsertGroupMetadata({
                 groupJid,
                 participants: cached.participants,
                 ephemeral: nextEphemeral,
+                ephemeralTrigger: nextTrigger,
                 updatedAtMs: Date.now()
             })
             return
@@ -256,6 +288,7 @@ export function createGroupMetadataCache(options: {
                 groupJid,
                 participants: participantUsers,
                 ephemeral: existing?.ephemeral,
+                ephemeralTrigger: existing?.ephemeralTrigger,
                 updatedAtMs: Date.now()
             })
             return
@@ -326,6 +359,7 @@ export function createGroupMetadataCache(options: {
         refreshParticipantUsers,
         getEphemeral,
         resolveEphemeral,
+        resolveEphemeralSettings,
         mutateFromGroupEvent
     }
 }

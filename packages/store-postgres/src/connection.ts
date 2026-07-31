@@ -376,6 +376,30 @@ const MIGRATIONS: readonly Migration[] = [
         sql: `
             ALTER TABLE "__PREFIX__mailbox_threads" ADD COLUMN IF NOT EXISTS ephemeral_setting_timestamp BIGINT
         `
+    },
+    {
+        name: '0019_group_participants_cache_ephemeral_trigger',
+        domain: 'participants',
+        sql: `
+            ALTER TABLE "__PREFIX__group_participants_cache" ADD COLUMN IF NOT EXISTS ephemeral_trigger BIGINT
+        `
+    },
+    {
+        name: '0020_chat_metadata_cache_schema',
+        domain: 'chatMetadata',
+        sql: `
+            CREATE TABLE IF NOT EXISTS "__PREFIX__chat_metadata_cache" (
+                session_id TEXT NOT NULL,
+                chat_jid TEXT NOT NULL,
+                ephemeral_expiration BIGINT,
+                ephemeral_setting_timestamp BIGINT,
+                updated_at_ms BIGINT NOT NULL,
+                expires_at_ms BIGINT NOT NULL,
+                PRIMARY KEY (session_id, chat_jid)
+            );
+            CREATE INDEX IF NOT EXISTS chat_metadata_cache_by_expiry
+                ON "__PREFIX__chat_metadata_cache" (session_id, expires_at_ms);
+        `
     }
 ]
 

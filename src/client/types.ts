@@ -420,9 +420,10 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
      */
     readonly disappearingModeTrigger?: Proto.DisappearingMode.Trigger
     /**
-     * Skip the automatic disappearing-message injection. Despite the name it
-     * covers 1:1 too: groups get `expiration` only, 1:1 also gets
-     * `ephemeralSettingTimestamp` and `disappearingMode`. Off by default.
+     * Skip the automatic disappearing-message injection on **group** sends, which
+     * would otherwise stamp `contextInfo.expiration` and `disappearingMode` from
+     * the group metadata cache. Has no effect on 1:1 – see
+     * {@link disableDirectEphemeralAutoInject}. Off by default.
      *
      * Relationship with {@link expirationSeconds}: a non-undefined
      * `expirationSeconds` already short-circuits the auto-inject, so this flag is
@@ -430,6 +431,17 @@ export interface WaSendMessageOptions extends WaMessagePublishOptions {
      * auto-inject AND not set any expiration yourself.
      */
     readonly disableGroupEphemeralAutoInject?: boolean
+    /**
+     * Skip the automatic disappearing-message injection on **1:1** sends, which
+     * would otherwise stamp `contextInfo.expiration`,
+     * `ephemeralSettingTimestamp` and `disappearingMode` from the chat metadata
+     * cache. Also skips the cache lookup itself. Has no effect on groups – see
+     * {@link disableGroupEphemeralAutoInject}. Off by default.
+     *
+     * Same relationship with {@link expirationSeconds} as the group flag: a
+     * non-undefined `expirationSeconds` already short-circuits the auto-inject.
+     */
+    readonly disableDirectEphemeralAutoInject?: boolean
     /** Raw child nodes appended to the `<message>` stanza. Escape hatch for protocol features the typed API doesn't cover. */
     readonly customNodes?: readonly BinaryNode[]
     /** Wrap the outgoing message as view-once. Only valid for image/video/audio content. */

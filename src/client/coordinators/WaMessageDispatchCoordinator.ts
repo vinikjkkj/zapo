@@ -81,6 +81,10 @@ import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import type { SignalResolvedSessionTarget, SignalSessionResolver } from '@signal/session/resolver'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
 import type { SignalAddress } from '@signal/types'
+import type {
+    WaChatMetadataSnapshot,
+    WaChatMetadataStore
+} from '@store/contracts/chat-metadata.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaIdentityStore } from '@store/contracts/identity.store'
 import type { WaMessageSecretStore } from '@store/contracts/message-secret.store'
@@ -124,6 +128,7 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly identityStore: WaIdentityStore
     readonly deviceListStore: WaDeviceListStore
     readonly threadStore: WaThreadStore
+    readonly chatMetadataStore: WaChatMetadataStore
     readonly signalDeviceSync: SignalDeviceSyncApi
     readonly messageSecretStore: WaMessageSecretStore
     /**
@@ -256,25 +261,74 @@ export class WaMessageDispatchCoordinator {
     }
 
     /**
+     * Per-chat disappearing settings from the cache, falling back to the
+     * durable thread record on a cold miss and warming the cache with it. A
+     * failing archive degrades the send to "no ephemeral fields" instead of
+     * rejecting it - the store is opt-in persistence, not a send dependency.
+     */
+    private async resolveChatMetadata(chatJid: string): Promise<WaChatMetadataSnapshot | null> {
+        try {
+            const cached = await this.deps.chatMetadataStore.getChatMetadata(chatJid)
+            if (cached) {
+                return cached
+            }
+            const thread = await this.deps.threadStore.getByJid(chatJid)
+            if (!thread || thread.ephemeralExpiration === undefined) {
+                return null
+            }
+            const snapshot: WaChatMetadataSnapshot = {
+                chatJid,
+                ephemeralExpiration: thread.ephemeralExpiration,
+                ...(thread.ephemeralSettingTimestamp !== undefined
+                    ? { ephemeralSettingTimestamp: thread.ephemeralSettingTimestamp }
+                    : {}),
+                updatedAtMs: Date.now()
+            }
+            await this.deps.chatMetadataStore.upsertChatMetadata(snapshot)
+            return snapshot
+        } catch (error) {
+            this.deps.logger.debug(
+                'chat metadata lookup failed, sending without ephemeral fields',
+                {
+                    jid: chatJid,
+                    message: toError(error).message
+                }
+            )
+            return null
+        }
+    }
+
+    /**
      * Disappearing-message fields for a send into a chat with the mode on, or
-     * `{}` when nothing resolves. Groups get `expiration` only – their trigger
-     * lives in the group metadata, which the cached snapshot does not carry.
+     * `{}` when nothing resolves. Both chat kinds report initiator
+     * `CHANGED_IN_CHAT` when nothing more specific is stored; the trigger comes
+     * from the group metadata for a group and defaults to `CHAT_SETTING` for
+     * 1:1, and is omitted when a group reports none.
      */
     private async resolveChatEphemeral(recipientJid: string): Promise<Partial<WaSendContextInfo>> {
         if (isGroupJid(recipientJid)) {
-            const cached = await this.deps.groupMetadataCache.resolveEphemeral(recipientJid)
-            if (!cached || cached <= 0) {
+            const settings =
+                await this.deps.groupMetadataCache.resolveEphemeralSettings(recipientJid)
+            if (!settings) {
                 return {}
             }
-            return { expirationSeconds: cached }
+            return {
+                expirationSeconds: settings.expirationSeconds,
+                disappearingModeInitiator: proto.DisappearingMode.Initiator.CHANGED_IN_CHAT,
+                ...(settings.trigger !== undefined
+                    ? {
+                          disappearingModeTrigger: settings.trigger
+                      }
+                    : {})
+            }
         }
 
-        const thread = await this.deps.threadStore.getByJid(recipientJid)
-        const expiration = thread?.ephemeralExpiration
+        const chat = await this.resolveChatMetadata(recipientJid)
+        const expiration = chat?.ephemeralExpiration
         if (expiration === undefined || expiration <= 0) {
             return {}
         }
-        const stored = thread?.ephemeralSettingTimestamp
+        const stored = chat?.ephemeralSettingTimestamp
         const settingTimestamp =
             stored !== undefined ? normalizeEphemeralSettingSeconds(stored) : undefined
         return {
@@ -450,7 +504,8 @@ export class WaMessageDispatchCoordinator {
                 this.withResolvedMessageId(options)
             ])
         }
-        const directRecipientJid = isGroupJid(recipientJid)
+        const isGroupRecipient = isGroupJid(recipientJid)
+        const directRecipientJid = isGroupRecipient
             ? recipientJid
             : await this.resolveDirectRecipientLid(toUserJid(recipientJid))
         let optionsCtx = options.contextInfo
@@ -469,10 +524,10 @@ export class WaMessageDispatchCoordinator {
                 disappearingModeTrigger: options.disappearingModeTrigger
             }
         }
-        if (
-            optionsCtx?.expirationSeconds === undefined &&
-            !options.disableGroupEphemeralAutoInject
-        ) {
+        const autoInjectDisabled = isGroupRecipient
+            ? options.disableGroupEphemeralAutoInject
+            : options.disableDirectEphemeralAutoInject
+        if (optionsCtx?.expirationSeconds === undefined && !autoInjectDisabled) {
             optionsCtx = {
                 ...(await this.resolveChatEphemeral(directRecipientJid)),
                 ...optionsCtx

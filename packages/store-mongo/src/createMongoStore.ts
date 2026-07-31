@@ -3,6 +3,7 @@ import type { Logger } from 'zapo-js'
 
 import { WaAppStateMongoStore } from './appstate.store'
 import { WaAuthMongoStore } from './auth.store'
+import { WaChatMetadataMongoStore } from './chat-metadata.store'
 import { WaContactMongoStore } from './contact.store'
 import { WaDeviceListMongoStore } from './device-list.store'
 import { WaGroupMetadataMongoStore } from './group-metadata.store'
@@ -46,6 +47,7 @@ export interface WaMongoStoreConfig {
     readonly cacheTtlMs?: {
         readonly retryMs?: number
         readonly groupMetadataMs?: number
+        readonly chatMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
@@ -80,6 +82,7 @@ export interface WaMongoStoreResult {
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetryMongoStore
         readonly groupMetadata: (sessionId: string) => WaGroupMetadataMongoStore
+        readonly chatMetadata: (sessionId: string) => WaChatMetadataMongoStore
         readonly deviceList: (sessionId: string) => WaDeviceListMongoStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretMongoStore
     }
@@ -125,6 +128,7 @@ export function createMongoStore(config: WaMongoStoreConfig): WaMongoStoreResult
     const collectionPrefix = config.collectionPrefix ?? ''
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
+    const chatMetadataTtlMs = config.cacheTtlMs?.chatMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const baseLogger = config.logger?.child({ scope: 'store', provider: 'mongo' })
@@ -178,6 +182,8 @@ export function createMongoStore(config: WaMongoStoreConfig): WaMongoStoreResult
             retry: (sessionId) => new WaRetryMongoStore(opts(sessionId, 'retry'), retryTtlMs),
             groupMetadata: (sessionId) =>
                 new WaGroupMetadataMongoStore(opts(sessionId, 'groupMetadata'), groupMetadataTtlMs),
+            chatMetadata: (sessionId) =>
+                new WaChatMetadataMongoStore(opts(sessionId, 'chatMetadata'), chatMetadataTtlMs),
             deviceList: (sessionId) =>
                 new WaDeviceListMongoStore(opts(sessionId, 'deviceList'), deviceListTtlMs),
             messageSecret: (sessionId) =>

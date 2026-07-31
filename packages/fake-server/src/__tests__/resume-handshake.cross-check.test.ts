@@ -34,6 +34,7 @@ function buildClientFor(
                 caches: {
                     retry: noopStore,
                     groupMetadata: noopStore,
+                    chatMetadata: noopStore,
                     deviceList: noopStore,
                     messageSecret: noopStore
                 }

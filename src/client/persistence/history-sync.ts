@@ -9,6 +9,7 @@ import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClien
 import { proto, type Proto } from '@proto'
 import { isUserJid } from '@protocol/jid'
 import { normalizeEphemeralSettingSeconds } from '@protocol/message'
+import type { WaChatMetadataStore } from '@store/contracts/chat-metadata.store'
 import { decodeProtoBytes, toBytesView } from '@util/bytes'
 import { longToNumber, toError } from '@util/primitives'
 
@@ -28,6 +29,7 @@ interface WaHistorySyncDeps {
     readonly logger: Logger
     readonly mediaTransfer: WaMediaTransferClient
     readonly writeBehind: WriteBehindPersistence
+    readonly chatMetadataStore?: WaChatMetadataStore
     readonly emitEvent: <K extends keyof WaClientEventMap>(
         event: K,
         ...args: Parameters<WaClientEventMap[K]>
@@ -176,6 +178,28 @@ export async function processHistorySyncNotification(
             continue
         }
 
+        const ephemeralExpiration = conversation.ephemeralExpiration ?? undefined
+        const ephemeralSettingTimestamp =
+            normalizeEphemeralSettingSeconds(
+                longToNumber(conversation.ephemeralSettingTimestamp)
+            ) || undefined
+        if (deps.chatMetadataStore && ephemeralExpiration !== undefined) {
+            pendingWrites[pendingWrites.length] = deps.chatMetadataStore
+                .upsertChatMetadata({
+                    chatJid: threadJid,
+                    ephemeralExpiration,
+                    ...(ephemeralSettingTimestamp !== undefined
+                        ? { ephemeralSettingTimestamp }
+                        : {}),
+                    updatedAtMs: nowMs
+                })
+                .catch((error: unknown) => {
+                    deps.logger.debug('failed to cache history sync chat metadata', {
+                        jid: threadJid,
+                        message: toError(error).message
+                    })
+                })
+        }
         pendingWrites[pendingWrites.length] = deps.writeBehind.persistThreadAsync({
             jid: threadJid,
             name: conversation.name ?? undefined,
@@ -184,11 +208,8 @@ export async function processHistorySyncNotification(
             pinned: conversation.pinned ?? undefined,
             muteEndMs: longToNumber(conversation.muteEndTime) || undefined,
             markedAsUnread: conversation.markedAsUnread ?? undefined,
-            ephemeralExpiration: conversation.ephemeralExpiration ?? undefined,
-            ephemeralSettingTimestamp:
-                normalizeEphemeralSettingSeconds(
-                    longToNumber(conversation.ephemeralSettingTimestamp)
-                ) || undefined
+            ephemeralExpiration,
+            ephemeralSettingTimestamp
         })
         if (pendingWrites.length >= HISTORY_SYNC_MAX_PENDING_WRITES) {
             await flushPendingWrites(pendingWrites)

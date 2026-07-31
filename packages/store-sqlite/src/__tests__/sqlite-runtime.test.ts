@@ -17,6 +17,7 @@ import {
 } from 'zapo-js/signal'
 
 import { WaAppStateSqliteStore } from '../appstate.store'
+import { WaChatMetadataSqliteStore } from '../chat-metadata.store'
 import { openSqliteConnection, type WaSqliteConnection } from '../connection'
 import { WaDeviceListSqliteStore } from '../device-list.store'
 import { WaGroupMetadataSqliteStore } from '../group-metadata.store'
@@ -278,6 +279,10 @@ test('sqlite device-list and group-metadata stores cover batch, expiry, cleanup 
         makeSqliteOptions(sqlitePath, 'session-a'),
         100
     )
+    const chatMetadataStore = new WaChatMetadataSqliteStore(
+        makeSqliteOptions(sqlitePath, 'session-a'),
+        100
+    )
 
     try {
         await deviceStore.upsertUserDevicesBatch([
@@ -340,6 +345,7 @@ test('sqlite device-list and group-metadata stores cover batch, expiry, cleanup 
             groupJid: '120@g.us',
             participants: ['5511@s.whatsapp.net', '5522@s.whatsapp.net'],
             ephemeral: 86_400,
+            ephemeralTrigger: 5,
             updatedAtMs: 1000
         })
 
@@ -347,6 +353,7 @@ test('sqlite device-list and group-metadata stores cover batch, expiry, cleanup 
         assert.ok(participants)
         assert.equal(participants?.participants.length, 2)
         assert.equal(participants?.ephemeral, 86_400)
+        assert.equal(participants?.ephemeralTrigger, 5)
 
         await groupMetadataStore.upsertGroupMetadata({
             groupJid: '120@g.us',
@@ -355,6 +362,20 @@ test('sqlite device-list and group-metadata stores cover batch, expiry, cleanup 
         })
         const cleared = await groupMetadataStore.getGroupMetadata('120@g.us', 1_020)
         assert.equal(cleared?.ephemeral, undefined)
+        assert.equal(cleared?.ephemeralTrigger, undefined)
+
+        await chatMetadataStore.upsertChatMetadata({
+            chatJid: '5511@lid',
+            ephemeralExpiration: 86_400,
+            ephemeralSettingTimestamp: 1_751_808_692,
+            updatedAtMs: 1000
+        })
+        const chatSnapshot = await chatMetadataStore.getChatMetadata('5511@lid', 1_020)
+        assert.ok(chatSnapshot)
+        assert.equal(chatSnapshot?.ephemeralExpiration, 86_400)
+        assert.equal(chatSnapshot?.ephemeralSettingTimestamp, 1_751_808_692)
+        assert.equal(await chatMetadataStore.getChatMetadata('5511@lid', 2_000), null)
+        await chatMetadataStore.clear()
 
         assert.equal(await groupMetadataStore.deleteGroupMetadata('missing@g.us'), 0)
         assert.equal(await groupMetadataStore.cleanupExpired(1_200), 1)
@@ -377,7 +398,11 @@ test('sqlite device-list and group-metadata stores cover batch, expiry, cleanup 
         )
         await groupMetadataStore.clear()
     } finally {
-        await Promise.all([deviceStore.destroy(), groupMetadataStore.destroy()])
+        await Promise.all([
+            deviceStore.destroy(),
+            groupMetadataStore.destroy(),
+            chatMetadataStore.destroy()
+        ])
         await rm(dir, { recursive: true, force: true })
     }
 })

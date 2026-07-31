@@ -4,6 +4,7 @@ import { withSenderKeyCache } from '@store/cache/sender-key.cache'
 import { withSessionCache } from '@store/cache/session.cache'
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaAuthStore } from '@store/contracts/auth.store'
+import type { WaChatMetadataStore } from '@store/contracts/chat-metadata.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaGroupMetadataStore } from '@store/contracts/group-metadata.store'
@@ -34,6 +35,7 @@ import { withSignalLock } from '@store/locks/signal.lock'
 import { withThreadLock } from '@store/locks/thread.lock'
 import { WaAppStateMemoryStore } from '@store/memory/appstate.store'
 import { WaAuthMemoryStore } from '@store/memory/auth.store'
+import { WaChatMetadataMemoryStore } from '@store/memory/chat-metadata.store'
 import { WaContactMemoryStore } from '@store/memory/contact.store'
 import { WaDeviceListMemoryStore } from '@store/memory/device-list.store'
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
@@ -48,6 +50,7 @@ import { WaSessionMemoryStore } from '@store/memory/session.store'
 import { WaSignalMemoryStore } from '@store/memory/signal.store'
 import { WaThreadMemoryStore } from '@store/memory/thread.store'
 import {
+    NOOP_CHAT_METADATA_STORE,
     NOOP_CONTACT_STORE,
     NOOP_DEVICE_LIST_STORE,
     NOOP_GROUP_METADATA_STORE,
@@ -74,6 +77,7 @@ interface Destroyable {
 const DEFAULT_CACHE_TTLS_MS = Object.freeze({
     retryMs: 60 * 1000,
     groupMetadataMs: 5 * 60 * 1000,
+    chatMetadataMs: 30 * 60 * 1000,
     deviceListMs: 5 * 60 * 1000,
     messageSecretMs: 30 * 60 * 1000
 } as const)
@@ -223,6 +227,11 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
             options.memory?.cacheTtlMs?.groupMetadataMs,
             DEFAULT_CACHE_TTLS_MS.groupMetadataMs,
             'memory.cacheTtlMs.groupMetadataMs'
+        ),
+        chatMetadata: resolvePositive(
+            options.memory?.cacheTtlMs?.chatMetadataMs,
+            DEFAULT_CACHE_TTLS_MS.chatMetadataMs,
+            'memory.cacheTtlMs.chatMetadataMs'
         ),
         deviceList: resolvePositive(
             options.memory?.cacheTtlMs?.deviceListMs,
@@ -401,6 +410,23 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                                   })
                                 : NOOP_GROUP_METADATA_STORE
                     )
+                ),
+                chatMetadata: resolveStore<WaChatMetadataStore>(
+                    id,
+                    backends,
+                    cacheProviders.chatMetadata ?? 'memory',
+                    'chatMetadata',
+                    'caches',
+                    () =>
+                        cacheProviders.chatMetadata === 'memory' || !cacheProviders.chatMetadata
+                            ? new WaChatMetadataMemoryStore(cacheTtlsMs.chatMetadata, {
+                                  maxChats: ml.chatMetadataChats,
+                                  logger: memoryLogger?.child({
+                                      domain: 'chatMetadata',
+                                      sessionId: id
+                                  })
+                              })
+                            : NOOP_CHAT_METADATA_STORE
                 ),
                 deviceList: withDeviceListLock(
                     resolveStore<WaDeviceListStore>(
@@ -585,6 +611,9 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                 },
                 get groupMetadata() {
                     return caches.groupMetadata
+                },
+                get chatMetadata() {
+                    return caches.chatMetadata
                 },
                 get deviceList() {
                     return caches.deviceList

@@ -22,11 +22,12 @@ export class WaGroupMetadataPgStore extends BasePgStore implements WaGroupMetada
         await this.pool.query({
             name: this.stmtName('group_metadata_upsert'),
             text: `INSERT INTO ${this.t('group_participants_cache')} (
-                session_id, group_jid, participants_json, ephemeral, updated_at_ms, expires_at_ms
-            ) VALUES ($1, $2, $3, $4, $5, $6)
+                session_id, group_jid, participants_json, ephemeral, ephemeral_trigger, updated_at_ms, expires_at_ms
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (session_id, group_jid) DO UPDATE SET
                 participants_json = EXCLUDED.participants_json,
                 ephemeral = EXCLUDED.ephemeral,
+                ephemeral_trigger = EXCLUDED.ephemeral_trigger,
                 updated_at_ms = EXCLUDED.updated_at_ms,
                 expires_at_ms = EXCLUDED.expires_at_ms`,
             values: [
@@ -34,6 +35,7 @@ export class WaGroupMetadataPgStore extends BasePgStore implements WaGroupMetada
                 snapshot.groupJid,
                 JSON.stringify(snapshot.participants),
                 snapshot.ephemeral ?? null,
+                snapshot.ephemeralTrigger ?? null,
                 snapshot.updatedAtMs,
                 snapshot.updatedAtMs + this.ttlMs
             ]
@@ -48,7 +50,7 @@ export class WaGroupMetadataPgStore extends BasePgStore implements WaGroupMetada
         const row = queryFirst(
             await this.pool.query({
                 name: this.stmtName('group_metadata_get'),
-                text: `SELECT group_jid, participants_json, ephemeral, updated_at_ms, expires_at_ms
+                text: `SELECT group_jid, participants_json, ephemeral, ephemeral_trigger, updated_at_ms, expires_at_ms
                  FROM ${this.t('group_participants_cache')}
                  WHERE session_id = $1 AND group_jid = $2`,
                 values: [this.sessionId, groupJid]
@@ -72,10 +74,15 @@ export class WaGroupMetadataPgStore extends BasePgStore implements WaGroupMetada
         }
 
         const ephemeral = row.ephemeral === null ? undefined : Number(row.ephemeral)
+        const ephemeralTrigger =
+            row.ephemeral_trigger === null || row.ephemeral_trigger === undefined
+                ? undefined
+                : Number(row.ephemeral_trigger)
         return {
             groupJid: String(row.group_jid),
             participants: parsed.map((entry: unknown) => String(entry)),
             ephemeral,
+            ephemeralTrigger,
             updatedAtMs: Number(row.updated_at_ms)
         }
     }

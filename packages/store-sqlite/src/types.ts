@@ -73,6 +73,7 @@ export type WaSqliteMigrationDomain =
     | 'mailbox'
     | 'privacyToken'
     | 'messageSecret'
+    | 'chatMetadata'
 
 export interface WaSqliteBatchSizeSelection {
     readonly deviceList?: number

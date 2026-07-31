@@ -1,6 +1,7 @@
 import type { Logger } from '@infra/log/types'
 import type { WaAppStateStore } from '@store/contracts/appstate.store'
 import type { WaAuthStore } from '@store/contracts/auth.store'
+import type { WaChatMetadataStore } from '@store/contracts/chat-metadata.store'
 import type { WaContactStore } from '@store/contracts/contact.store'
 import type { WaDeviceListStore } from '@store/contracts/device-list.store'
 import type { WaGroupMetadataStore } from '@store/contracts/group-metadata.store'
@@ -27,6 +28,7 @@ export interface WaStoreSession {
     readonly appState: WaAppStateStore
     readonly retry: WaRetryStore
     readonly groupMetadata: WaGroupMetadataStore
+    readonly chatMetadata: WaChatMetadataStore
     readonly deviceList: WaDeviceListStore
     readonly messages: WaMessageStore
     readonly messageSecret: WaMessageSecretStore
@@ -91,6 +93,7 @@ export interface WaStoreBackend {
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetryStore
         readonly groupMetadata: (sessionId: string) => WaGroupMetadataStore
+        readonly chatMetadata: (sessionId: string) => WaChatMetadataStore
         readonly deviceList: (sessionId: string) => WaDeviceListStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretStore
     }
@@ -227,6 +230,13 @@ export interface WaCreateStoreOptions<B extends string = string> {
          */
         readonly groupMetadata?: B | 'memory' | 'none'
         /**
+         * Protocol-derived per-chat state (disappearing-message settings).
+         * Read on every 1:1 send to stamp `contextInfo`; rebuilt from history
+         * sync, `EPHEMERAL_SETTING` messages and incoming `ContextInfo`, so
+         * losing it costs freshness rather than data. Default: `'memory'`.
+         */
+        readonly chatMetadata?: B | 'memory' | 'none'
+        /**
          * Per-user device list (which `:device` JIDs each contact has online).
          * Populated by usync queries; consumed on every send to pick the
          * fan-out set. Disabling forces a usync round-trip per recipient on
@@ -345,6 +355,13 @@ export interface WaCreateStoreOptions<B extends string = string> {
              */
             readonly groupMetadataMs?: number
             /**
+             * Chat metadata cache TTL – how long cached per-chat disappearing
+             * settings are reused. Default: 1 800 000 (30 min). Changes arrive
+             * as protocol messages regardless, so this only bounds staleness
+             * for chats nothing has touched.
+             */
+            readonly chatMetadataMs?: number
+            /**
              * Device list cache TTL – how long a cached per-user device set
              * is reused before re-running usync. Default: 300 000 (5 min).
              * Devices changing during this window are still picked up via
@@ -387,6 +404,7 @@ export interface WaStoreMemoryLimitSelection {
     readonly senderKeys?: number
     readonly senderDistributions?: number
     readonly groupMetadataGroups?: number
+    readonly chatMetadataChats?: number
     readonly deviceListUsers?: number
     readonly messages?: number
     readonly messageSecrets?: number

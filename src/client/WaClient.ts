@@ -17,7 +17,10 @@ import type { WaPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordin
 import type { WaProfileCoordinator } from '@client/coordinators/WaProfileCoordinator'
 import type { WaStatusCoordinator } from '@client/coordinators/WaStatusCoordinator'
 import { createIgnoreKeyFilter, validateIgnoreKey } from '@client/messaging/ignore-key'
-import { persistIncomingEphemeralSetting } from '@client/persistence/ephemeral-setting'
+import {
+    createEphemeralObserver,
+    persistIncomingEphemeralSetting
+} from '@client/persistence/ephemeral-setting'
 import { runGroupHistoryBundle } from '@client/persistence/group-history'
 import { runHistorySyncNotification } from '@client/persistence/history-sync'
 import { persistIncomingMailboxEntities } from '@client/persistence/mailbox'
@@ -72,6 +75,7 @@ class WaClientImpl extends EventEmitter {
     private readonly appStateSync!: WaAppStateSyncClient
     private readonly mediaTransfer!: WaMediaTransferClient
     private readonly writeBehind!: WriteBehindPersistence
+    private readonly observeEphemeralSetting!: (event: WaIncomingMessageEvent) => void
     private connectPromise: Promise<void> | null = null
     private acceptingIncomingEvents = true
     private activeIncomingHandlers = 0
@@ -99,6 +103,10 @@ class WaClientImpl extends EventEmitter {
             this.logger,
             this.options.writeBehind
         )
+        this.observeEphemeralSetting = createEphemeralObserver({
+            logger: this.logger,
+            chatMetadataStore: this.stores.chatMetadata
+        })
 
         const dependencies = buildWaClientDependencies({
             base,
@@ -278,6 +286,7 @@ class WaClientImpl extends EventEmitter {
         }
         try {
             this.emit('message', event)
+            this.observeEphemeralSetting(event)
             void persistIncomingMailboxEntities({
                 logger: this.logger,
                 writeBehind: this.writeBehind,
@@ -363,6 +372,7 @@ class WaClientImpl extends EventEmitter {
                         {
                             logger: this.logger,
                             mediaTransfer: this.mediaTransfer,
+                            chatMetadataStore: this.stores.chatMetadata,
                             writeBehind: this.writeBehind,
                             emitEvent: this.emit.bind(this),
                             onPrivacyTokens: (conversations) =>
@@ -383,6 +393,7 @@ class WaClientImpl extends EventEmitter {
                 persistIncomingEphemeralSetting({
                     logger: this.logger,
                     writeBehind: this.writeBehind,
+                    chatMetadataStore: this.stores.chatMetadata,
                     event,
                     protocolMessage
                 })

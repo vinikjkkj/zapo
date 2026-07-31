@@ -14,6 +14,7 @@ export type WaMysqlMigrationDomain =
     | 'deviceList'
     | 'privacyToken'
     | 'messageSecret'
+    | 'chatMetadata'
 
 export interface WaMysqlStorageOptions {
     readonly pool: Pool

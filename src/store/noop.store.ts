@@ -1,4 +1,8 @@
 import type { WaRetryOutboundMessageRecord } from '@retry/types'
+import type {
+    WaChatMetadataSnapshot,
+    WaChatMetadataStore
+} from '@store/contracts/chat-metadata.store'
 import type { WaContactStore, WaStoredContactRecord } from '@store/contracts/contact.store'
 import type { WaDeviceListSnapshot, WaDeviceListStore } from '@store/contracts/device-list.store'
 import type {
@@ -73,6 +77,18 @@ export const NOOP_RETRY_STORE: WaRetryStore = Object.freeze({
     updateOutboundMessageState: async (): Promise<void> => {},
     markOutboundRequesterDelivered: async (): Promise<void> => {},
     incrementInboundCounter: async (): Promise<number> => 0,
+    cleanupExpired: async (_nowMs: number): Promise<number> => 0,
+    clear: async (): Promise<void> => {},
+    destroy: async (): Promise<void> => {}
+})
+
+export const NOOP_CHAT_METADATA_STORE: WaChatMetadataStore = Object.freeze({
+    upsertChatMetadata: async (_snapshot: WaChatMetadataSnapshot): Promise<void> => {},
+    getChatMetadata: async (
+        _chatJid: string,
+        _nowMs?: number
+    ): Promise<WaChatMetadataSnapshot | null> => null,
+    deleteChatMetadata: async (_chatJid: string): Promise<number> => 0,
     cleanupExpired: async (_nowMs: number): Promise<number> => 0,
     clear: async (): Promise<void> => {},
     destroy: async (): Promise<void> => {}

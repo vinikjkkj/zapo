@@ -2,6 +2,7 @@ import type { Logger } from 'zapo-js'
 
 import { WaAppStateSqliteStore } from './appstate.store'
 import { WaAuthSqliteStore } from './auth.store'
+import { WaChatMetadataSqliteStore } from './chat-metadata.store'
 import type { WaSqliteConnection } from './connection'
 import { WaContactSqliteStore } from './contact.store'
 import { WaDeviceListSqliteStore } from './device-list.store'
@@ -75,6 +76,7 @@ export interface WaSqliteStoreConfig {
     readonly cacheTtlMs?: {
         readonly retryMs?: number
         readonly groupMetadataMs?: number
+        readonly chatMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
@@ -110,6 +112,7 @@ export interface WaSqliteStoreResult {
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetrySqliteStore
         readonly groupMetadata: (sessionId: string) => WaGroupMetadataSqliteStore
+        readonly chatMetadata: (sessionId: string) => WaChatMetadataSqliteStore
         readonly deviceList: (sessionId: string) => WaDeviceListSqliteStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretSqliteStore
     }
@@ -163,6 +166,7 @@ export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreRes
     }
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
+    const chatMetadataTtlMs = config.cacheTtlMs?.chatMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const batchSizes = config.batchSizes
@@ -208,6 +212,8 @@ export function createSqliteStore(config: WaSqliteStoreConfig): WaSqliteStoreRes
                     opts(sessionId, 'groupMetadata'),
                     groupMetadataTtlMs
                 ),
+            chatMetadata: (sessionId) =>
+                new WaChatMetadataSqliteStore(opts(sessionId, 'chatMetadata'), chatMetadataTtlMs),
             deviceList: (sessionId) =>
                 new WaDeviceListSqliteStore(
                     opts(sessionId, 'deviceList'),

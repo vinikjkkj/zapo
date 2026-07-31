@@ -3,6 +3,7 @@ import type { Logger } from 'zapo-js'
 
 import { WaAppStateMysqlStore } from './appstate.store'
 import { WaAuthMysqlStore } from './auth.store'
+import { WaChatMetadataMysqlStore } from './chat-metadata.store'
 import { MysqlCleanupPoller } from './cleanup'
 import { createMysqlPool } from './connection'
 import { WaContactMysqlStore } from './contact.store'
@@ -41,6 +42,7 @@ export interface WaMysqlStoreConfig {
     readonly cacheTtlMs?: {
         readonly retryMs?: number
         readonly groupMetadataMs?: number
+        readonly chatMetadataMs?: number
         readonly deviceListMs?: number
         readonly messageSecretMs?: number
     }
@@ -101,6 +103,7 @@ export interface WaMysqlStoreResult {
     readonly caches: {
         readonly retry: (sessionId: string) => WaRetryMysqlStore
         readonly groupMetadata: (sessionId: string) => WaGroupMetadataMysqlStore
+        readonly chatMetadata: (sessionId: string) => WaChatMetadataMysqlStore
         readonly deviceList: (sessionId: string) => WaDeviceListMysqlStore
         readonly messageSecret: (sessionId: string) => WaMessageSecretMysqlStore
     }
@@ -141,6 +144,7 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
     const tablePrefix = config.tablePrefix ?? ''
     const retryTtlMs = config.cacheTtlMs?.retryMs
     const groupMetadataTtlMs = config.cacheTtlMs?.groupMetadataMs
+    const chatMetadataTtlMs = config.cacheTtlMs?.chatMetadataMs
     const deviceListTtlMs = config.cacheTtlMs?.deviceListMs
     const messageSecretTtlMs = config.cacheTtlMs?.messageSecretMs
     const ownsPool = !isPool(config.pool)
@@ -185,6 +189,8 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
             retry: (sessionId) => new WaRetryMysqlStore(opts(sessionId, 'retry'), retryTtlMs),
             groupMetadata: (sessionId) =>
                 new WaGroupMetadataMysqlStore(opts(sessionId, 'groupMetadata'), groupMetadataTtlMs),
+            chatMetadata: (sessionId) =>
+                new WaChatMetadataMysqlStore(opts(sessionId, 'chatMetadata'), chatMetadataTtlMs),
             deviceList: (sessionId) =>
                 new WaDeviceListMysqlStore(opts(sessionId, 'deviceList'), deviceListTtlMs),
             messageSecret: (sessionId) =>

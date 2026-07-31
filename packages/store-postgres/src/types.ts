@@ -14,6 +14,7 @@ export type WaPgMigrationDomain =
     | 'deviceList'
     | 'privacyToken'
     | 'messageSecret'
+    | 'chatMetadata'
 
 export interface WaPgStorageOptions {
     readonly pool: Pool

@@ -8,6 +8,7 @@ interface GroupMetadataRow extends Record<string, unknown> {
     readonly group_jid: unknown
     readonly participants_json: unknown
     readonly ephemeral: unknown
+    readonly ephemeral_trigger: unknown
     readonly updated_at_ms: unknown
     readonly expires_at_ms: unknown
 }
@@ -33,12 +34,14 @@ export class WaGroupMetadataSqliteStore extends BaseSqliteStore implements WaGro
                 group_jid,
                 participants_json,
                 ephemeral,
+                ephemeral_trigger,
                 updated_at_ms,
                 expires_at_ms
-            ) VALUES (?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id, group_jid) DO UPDATE SET
                 participants_json=excluded.participants_json,
                 ephemeral=excluded.ephemeral,
+                ephemeral_trigger=excluded.ephemeral_trigger,
                 updated_at_ms=excluded.updated_at_ms,
                 expires_at_ms=excluded.expires_at_ms`,
             [
@@ -46,6 +49,7 @@ export class WaGroupMetadataSqliteStore extends BaseSqliteStore implements WaGro
                 snapshot.groupJid,
                 JSON.stringify(snapshot.participants),
                 snapshot.ephemeral ?? null,
+                snapshot.ephemeralTrigger ?? null,
                 snapshot.updatedAtMs,
                 snapshot.updatedAtMs + this.ttlMs
             ]
@@ -58,7 +62,7 @@ export class WaGroupMetadataSqliteStore extends BaseSqliteStore implements WaGro
     ): Promise<WaGroupMetadataSnapshot | null> {
         const db = await this.getConnection()
         const row = db.get<GroupMetadataRow>(
-            `SELECT group_jid, participants_json, ephemeral, updated_at_ms, expires_at_ms
+            `SELECT group_jid, participants_json, ephemeral, ephemeral_trigger, updated_at_ms, expires_at_ms
             FROM group_participants_cache
             WHERE session_id = ? AND group_jid = ?`,
             [this.options.sessionId, groupJid]
@@ -81,10 +85,15 @@ export class WaGroupMetadataSqliteStore extends BaseSqliteStore implements WaGro
             row.ephemeral === null
                 ? undefined
                 : asNumber(row.ephemeral, 'group_participants_cache.ephemeral')
+        const ephemeralTrigger =
+            row.ephemeral_trigger === null || row.ephemeral_trigger === undefined
+                ? undefined
+                : asNumber(row.ephemeral_trigger, 'group_participants_cache.ephemeral_trigger')
         return {
             groupJid: asString(row.group_jid, 'group_participants_cache.group_jid'),
             participants: decodeParticipants(row.participants_json),
             ephemeral,
+            ephemeralTrigger,
             updatedAtMs: asNumber(row.updated_at_ms, 'group_participants_cache.updated_at_ms')
         }
     }
