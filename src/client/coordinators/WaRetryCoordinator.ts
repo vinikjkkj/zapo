@@ -1147,9 +1147,10 @@ export class WaRetryCoordinator {
 
     /**
      * Builds the message key the primary indexes the message under: the chat is
-     * the `from`, or the `recipient` for a self-sent 1:1, and both it and the
-     * participant carry no `:device` segment. Asking with the raw device-addressed
-     * `from` matches nothing and the resend comes back empty.
+     * the `from`, or the `recipient` for a self-sent 1:1, always without the
+     * `:device` segment. The participant rides along only for an incoming
+     * group/broadcast message. Asking with the raw device-addressed `from`
+     * matches nothing and the resend comes back empty.
      */
     private buildPlaceholderResendKey(
         context: WaRetryDecryptFailureContext
@@ -1164,7 +1165,7 @@ export class WaRetryCoordinator {
             remoteJid: toUserJid(chatJid),
             id: context.stanzaId,
             fromMe,
-            ...(isGroupOrBroadcast && context.participant
+            ...(!fromMe && isGroupOrBroadcast && context.participant
                 ? { participant: toUserJid(context.participant) }
                 : {})
         }

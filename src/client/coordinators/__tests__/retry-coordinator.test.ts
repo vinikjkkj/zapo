@@ -352,7 +352,7 @@ test('placeholder resend: keys a self-sent 1:1 message by the recipient chat', a
 })
 
 test('placeholder resend: strips device segments from group keys', async () => {
-    const harness = createPlaceholderHarness()
+    const harness = createPlaceholderHarness({ meJid: '5511999999999@s.whatsapp.net' })
     harness.enqueue(
         buildPlaceholderContext({
             stanzaId: 'grp-1',
@@ -360,12 +360,24 @@ test('placeholder resend: strips device segments from group keys', async () => {
             participant: '5511777777777:5@s.whatsapp.net'
         })
     )
+    harness.enqueue(
+        buildPlaceholderContext({
+            stanzaId: 'grp-2',
+            from: '120363000000000000@g.us',
+            participant: '5511999999999:5@s.whatsapp.net'
+        })
+    )
     const flushPromise = harness.flush()
     harness.resolveNext([])
     await flushPromise
-    const key = (harness.captured[0][0] as { messageKey?: Record<string, unknown> }).messageKey
-    assert.equal(key?.remoteJid, '120363000000000000@g.us')
-    assert.equal(key?.participant, '5511777777777@s.whatsapp.net')
+    const [incoming, own] = harness.captured[0] as Array<{
+        messageKey?: Record<string, unknown>
+    }>
+    assert.equal(incoming.messageKey?.remoteJid, '120363000000000000@g.us')
+    assert.equal(incoming.messageKey?.participant, '5511777777777@s.whatsapp.net')
+    // wa-web omits the participant once the key is from-me.
+    assert.equal(own.messageKey?.fromMe, true)
+    assert.equal(own.messageKey?.participant, undefined)
 })
 
 test('unavailable message: requests a resend for a plain fanout placeholder', async () => {
