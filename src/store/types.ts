@@ -76,40 +76,160 @@ export interface WaStore {
     destroy(): Promise<void>
 }
 
-export interface WaStoreBackend {
+/**
+ * Domain → contract map for the persistent store domains. Single source of
+ * truth: {@link WaStoreDomain}, {@link WaStoreBackend} and the per-domain
+ * provider selection are all derived from it.
+ */
+export interface WaStoreDomainContracts {
+    readonly auth: WaAuthStore
+    readonly signal: WaSignalStore
+    readonly preKey: WaPreKeyStore
+    readonly session: WaSessionStore
+    readonly identity: WaIdentityStore
+    readonly senderKey: WaSenderKeyStore
+    readonly appState: WaAppStateStore
+    readonly messages: WaMessageStore
+    readonly threads: WaThreadStore
+    readonly contacts: WaContactStore
+    readonly privacyToken: WaPrivacyTokenStore
+}
+
+/** Domain → contract map for the bounded cache domains. */
+export interface WaCacheDomainContracts {
+    readonly retry: WaRetryStore
+    readonly groupMetadata: WaGroupMetadataStore
+    readonly chatMetadata: WaChatMetadataStore
+    readonly deviceList: WaDeviceListStore
+    readonly messageSecret: WaMessageSecretStore
+}
+
+export type WaStoreDomain = keyof WaStoreDomainContracts
+export type WaCacheDomain = keyof WaCacheDomainContracts
+
+/**
+ * A backend bundle: one factory per domain it implements.
+ *
+ * Both parameters default to *every* domain, so a bare `WaStoreBackend`
+ * keeps meaning a full backend – all 11 persistent domains plus all 4
+ * cache domains – which is what every in-tree `@zapo-js/store-*` package
+ * ships.
+ *
+ * A backend covering only part of the matrix names its domains explicitly.
+ * `createStore()` then refuses, at compile time, to route a domain it
+ * doesn't implement to it:
+ *
+ * ```ts
+ * const vault = {
+ *     stores: { auth: (sessionId: string) => new MyAuthStore(sessionId) },
+ *     caches: {}
+ * } satisfies WaStoreBackend<'auth', never>
+ *
+ * createStore({
+ *     backends: { vault },
+ *     providers: { auth: 'vault', signal: 'vault', ... }
+ * })
+ * ```
+ *
+ * where `signal: 'vault'` is rejected because `vault.stores` has no
+ * `signal` factory – the union for that domain is `'memory'` alone.
+ */
+export type WaStoreBackend<
+    S extends WaStoreDomain = WaStoreDomain,
+    C extends WaCacheDomain = WaCacheDomain
+> = {
     readonly stores: {
-        readonly auth: (sessionId: string) => WaAuthStore
-        readonly signal: (sessionId: string) => WaSignalStore
-        readonly preKey: (sessionId: string) => WaPreKeyStore
-        readonly session: (sessionId: string) => WaSessionStore
-        readonly identity: (sessionId: string) => WaIdentityStore
-        readonly senderKey: (sessionId: string) => WaSenderKeyStore
-        readonly appState: (sessionId: string) => WaAppStateStore
-        readonly messages: (sessionId: string) => WaMessageStore
-        readonly threads: (sessionId: string) => WaThreadStore
-        readonly contacts: (sessionId: string) => WaContactStore
-        readonly privacyToken: (sessionId: string) => WaPrivacyTokenStore
+        readonly [K in S]: (sessionId: string) => WaStoreDomainContracts[K]
     }
     readonly caches: {
-        readonly retry: (sessionId: string) => WaRetryStore
-        readonly groupMetadata: (sessionId: string) => WaGroupMetadataStore
-        readonly chatMetadata: (sessionId: string) => WaChatMetadataStore
-        readonly deviceList: (sessionId: string) => WaDeviceListStore
-        readonly messageSecret: (sessionId: string) => WaMessageSecretStore
+        readonly [K in C]: (sessionId: string) => WaCacheDomainContracts[K]
     }
 }
 
-export type WaStoreDomain = keyof WaStoreBackend['stores']
-export type WaCacheDomain = keyof WaStoreBackend['caches']
+/**
+ * Structural upper bound for any backend, full or partial – the constraint
+ * to use when accepting an unknown backend, since `WaStoreBackend` on its
+ * own means *all* domains.
+ *
+ * Every factory is optional here, which is also what makes it useless as
+ * an annotation on a concrete backend: a value declared as this type
+ * vouches for no domain, so no domain can name it in `providers`. Annotate
+ * concrete backends with `WaStoreBackend<S, C>` (or let inference do it)
+ * to keep the per-domain guarantees.
+ */
+export type WaAnyStoreBackend = {
+    readonly stores: {
+        readonly [K in WaStoreDomain]?: (sessionId: string) => WaStoreDomainContracts[K]
+    }
+    readonly caches: {
+        readonly [K in WaCacheDomain]?: (sessionId: string) => WaCacheDomainContracts[K]
+    }
+}
 
-export interface WaCreateStoreOptions<B extends string = string> {
+/** Named backend map, as passed to `createStore({ backends })`. */
+export type WaStoreBackendMap = Readonly<Record<string, WaAnyStoreBackend>>
+
+/**
+ * The backend names in `TBackends` whose `stores`/`caches` bundle actually
+ * declares `D`. Domains a backend doesn't implement never enter the union,
+ * so routing one to it is a compile error instead of the
+ * `backend '<name>' does not provide <kind>.<domain>` throw that would
+ * otherwise surface on the first `store.session(...)`.
+ */
+export type WaBackendsProviding<
+    TBackends extends WaStoreBackendMap,
+    Kind extends 'stores' | 'caches',
+    D extends WaStoreDomain | WaCacheDomain
+> = {
+    [K in keyof TBackends]: D extends keyof TBackends[K][Kind]
+        ? undefined extends TBackends[K][Kind][D]
+            ? never
+            : K & string
+        : never
+}[keyof TBackends]
+
+/**
+ * Backend map implied by a bare name union: every name is assumed to cover
+ * the full matrix, which is the pre-inference behaviour kept for
+ * {@link WaCreateStoreOptions} and {@link WaCreateStoreOptionsStrict}.
+ */
+type WaNamedBackends<B extends string> = Readonly<Record<B, WaStoreBackend>>
+
+/** Provider union for a persistent domain: any backend declaring it, or memory. */
+type WaProviderFor<TBackends extends WaStoreBackendMap, D extends WaStoreDomain> =
+    | WaBackendsProviding<TBackends, 'stores', D>
+    | 'memory'
+
+/** Provider union for a mailbox domain – same, plus the `'none'` opt-out. */
+type WaMailboxProviderFor<TBackends extends WaStoreBackendMap, D extends WaStoreDomain> =
+    | WaProviderFor<TBackends, D>
+    | 'none'
+
+/** Provider union for a cache domain. */
+type WaCacheProviderFor<TBackends extends WaStoreBackendMap, D extends WaCacheDomain> =
+    | WaBackendsProviding<TBackends, 'caches', D>
+    | 'memory'
+    | 'none'
+
+/**
+ * @typeParam B         Registered backend names.
+ * @typeParam TBackends The backend map itself. Defaults to "every name in
+ *                      `B` covers the full domain matrix", which is what a
+ *                      bare `WaCreateStoreOptions<'sqlite'>` still means.
+ *                      `createStore()` infers the real map instead, so each
+ *                      domain only accepts backends that declare it.
+ */
+export interface WaCreateStoreOptions<
+    B extends string = string,
+    TBackends extends WaStoreBackendMap = WaNamedBackends<B>
+> {
     /**
      * Named persistent backends (e.g. `{ sqlite: createSqliteStore(...) }`).
      * Each key here is a backend id you can reference under {@link providers}
      * and {@link cacheProviders}. The literal strings `'memory'` and `'none'`
      * are reserved and don't need a backend entry.
      */
-    readonly backends?: Readonly<Record<B, WaStoreBackend>>
+    readonly backends?: Readonly<Record<B, WaAnyStoreBackend>>
     /**
      * Per-domain provider selection for the persistent (non-cache) stores.
      * Every domain falls back to `'memory'` (or `'none'` for the mailbox
@@ -126,7 +246,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * (e.g. `@zapo-js/store-sqlite`) in production so the device
          * survives a process restart.
          */
-        readonly auth?: B | 'memory'
+        readonly auth?: WaProviderFor<TBackends, 'auth'>
         /**
          * Signal protocol identities and the meta row (`server_has_prekeys`,
          * `next_prekey_id`, signed-prekey rotation timestamp). Splits with
@@ -135,27 +255,27 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * `'memory'` – fine for short-lived sessions; persist it in
          * production so re-keying / digest checks survive restarts.
          */
-        readonly signal?: B | 'memory'
+        readonly signal?: WaProviderFor<TBackends, 'signal'>
         /**
          * Signal one-time prekey pool. The server hands these out to peers
          * starting fresh sessions with you. Losing them forces fallback to
          * the signed-prekey-only flow (slower / less forward-secret per
          * session). Default: `'memory'`.
          */
-        readonly preKey?: B | 'memory'
+        readonly preKey?: WaProviderFor<TBackends, 'preKey'>
         /**
          * Signal sessions (the per-peer Double Ratchet state). Losing this
          * forces a transparent re-handshake on the next message to/from that
          * peer – your identity key doesn't change, so no "security code
          * changed" notice fires on the peer. Default: `'memory'`.
          */
-        readonly session?: B | 'memory'
+        readonly session?: WaProviderFor<TBackends, 'session'>
         /**
          * Remote identity keys per peer device. The library compares the
          * stored key against the server-reported one on every send to detect
          * device-takeover (`identity mismatch`). Default: `'memory'`.
          */
-        readonly identity?: B | 'memory'
+        readonly identity?: WaProviderFor<TBackends, 'identity'>
         /**
          * Sender-key state for group encryption: your own outgoing sender
          * key per group + incoming sender keys from other participants + the
@@ -163,7 +283,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * sender key to every member on the next group send. Default:
          * `'memory'`.
          */
-        readonly senderKey?: B | 'memory'
+        readonly senderKey?: WaProviderFor<TBackends, 'senderKey'>
         /**
          * App-state sync keys + per-collection version/hash/index map
          * (mute, archive, pin, contacts, labels, ...). This is what lets
@@ -171,7 +291,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * Wiping it triggers a full re-sync on next connect (slow, lots of
          * traffic). Default: `'memory'`.
          */
-        readonly appState?: B | 'memory'
+        readonly appState?: WaProviderFor<TBackends, 'appState'>
         /**
          * Optional archive of every message you received/sent. Required if
          * you want to call `client.message.send(..., { quote })` later for
@@ -179,27 +299,27 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * secrets for addon decryption after a restart. Default: `'none'`
          * (no archive – events fire but aren't stored).
          */
-        readonly messages?: B | 'memory' | 'none'
+        readonly messages?: WaMailboxProviderFor<TBackends, 'messages'>
         /**
          * Per-chat thread metadata (last message id/time, unread count,
          * disappearing-mode setting). Used by some UIs to render a chat
          * list; not required for messaging. Default: `'none'`.
          */
-        readonly threads?: B | 'memory' | 'none'
+        readonly threads?: WaMailboxProviderFor<TBackends, 'threads'>
         /**
          * Contact book mirror (push names, phone numbers, business labels).
          * Populated by app-state mutations and history sync. Not required
          * for messaging but useful for display names without an extra
          * profile fetch. Default: `'none'`.
          */
-        readonly contacts?: B | 'memory' | 'none'
+        readonly contacts?: WaMailboxProviderFor<TBackends, 'contacts'>
         /**
          * Trusted-contact-token cache – short-lived tokens the lib issues
          * to peers so they can verify that messages from you are authentic.
          * Persisting avoids re-issuing on every reconnect (saves IQs).
          * Default: `'memory'`.
          */
-        readonly privacyToken?: B | 'memory'
+        readonly privacyToken?: WaProviderFor<TBackends, 'privacyToken'>
     }
     /**
      * Provider selection for the bounded cache domains – TTL-evicted state
@@ -218,7 +338,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * arrive after restart get dropped (peer falls back to a placeholder
          * message). Default: `'memory'`.
          */
-        readonly retry?: B | 'memory' | 'none'
+        readonly retry?: WaCacheProviderFor<TBackends, 'retry'>
         /**
          * Group metadata (subject, participants, settings) keyed by group
          * JID. Populated by `client.group.queryGroupMetadata`/server pushes
@@ -228,21 +348,21 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * will get throttled (or temporarily blocked) without a cache.
          * Default: `'memory'`.
          */
-        readonly groupMetadata?: B | 'memory' | 'none'
+        readonly groupMetadata?: WaCacheProviderFor<TBackends, 'groupMetadata'>
         /**
          * Protocol-derived per-chat state (disappearing-message settings).
          * Read on every 1:1 send to stamp `contextInfo`; rebuilt from history
          * sync, `EPHEMERAL_SETTING` messages and incoming `ContextInfo`, so
          * losing it costs freshness rather than data. Default: `'memory'`.
          */
-        readonly chatMetadata?: B | 'memory' | 'none'
+        readonly chatMetadata?: WaCacheProviderFor<TBackends, 'chatMetadata'>
         /**
          * Per-user device list (which `:device` JIDs each contact has online).
          * Populated by usync queries; consumed on every send to pick the
          * fan-out set. Disabling forces a usync round-trip per recipient on
          * every send. Default: `'memory'`.
          */
-        readonly deviceList?: B | 'memory' | 'none'
+        readonly deviceList?: WaCacheProviderFor<TBackends, 'deviceList'>
         /**
          * Message-secret cache: maps `stanzaId → { senderJid, secret }` so
          * addon decryption (poll votes, reactions, encrypted edits, ...) can
@@ -251,7 +371,7 @@ export interface WaCreateStoreOptions<B extends string = string> {
          * – otherwise addon auto-decrypt loses parents after restart.
          * Default: `'memory'`.
          */
-        readonly messageSecret?: B | 'memory' | 'none'
+        readonly messageSecret?: WaCacheProviderFor<TBackends, 'messageSecret'>
     }
     /**
      * Opt-in in-process read-through cache in front of a *persistent* backend
@@ -382,17 +502,40 @@ export interface WaCreateStoreOptions<B extends string = string> {
 }
 
 /**
- * Strict overload shape for {@link createStore} when at least one backend
- * is registered. Every persistence domain in `providers` is `Required` -
- * the compiler refuses partial coverage and the IDE highlights the missing
- * keys. Cache domains stay opt-in (default `'memory'`).
+ * Strict options keyed by backend *name*. Every persistence domain in
+ * `providers` is `Required` - the compiler refuses partial coverage and the
+ * IDE highlights the missing keys. Cache domains stay opt-in (default
+ * `'memory'`).
+ *
+ * Each name is assumed to cover the full domain matrix. `createStore()`
+ * itself infers the backend map and uses
+ * {@link WaCreateStoreOptionsStrictFor}, which additionally rejects routing
+ * a domain to a backend that doesn't implement it; annotate with this one
+ * only when the backend values aren't in scope.
  */
 export interface WaCreateStoreOptionsStrict<B extends string> extends Omit<
     WaCreateStoreOptions<B>,
     'backends' | 'providers'
 > {
-    readonly backends: Readonly<Record<B, WaStoreBackend>>
+    readonly backends: Readonly<Record<B, WaAnyStoreBackend>>
     readonly providers: Required<NonNullable<WaCreateStoreOptions<B>['providers']>>
+}
+
+/**
+ * Strict options resolved against the backend map itself - the shape
+ * {@link createStore} infers when `backends` is set.
+ *
+ * Same `Required` coverage rule as {@link WaCreateStoreOptionsStrict}, with
+ * one addition: each domain only accepts the backends whose bundle actually
+ * declares it, so a typo or a partial backend fails to compile instead of
+ * throwing on the first `store.session(...)`.
+ */
+export interface WaCreateStoreOptionsStrictFor<TBackends extends WaStoreBackendMap> extends Omit<
+    WaCreateStoreOptions<string, TBackends>,
+    'backends' | 'providers'
+> {
+    readonly backends: TBackends
+    readonly providers: Required<NonNullable<WaCreateStoreOptions<string, TBackends>['providers']>>
 }
 
 export interface WaStoreMemoryLimitSelection {

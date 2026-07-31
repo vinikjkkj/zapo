@@ -1,10 +1,16 @@
 export type {
+    WaAnyStoreBackend,
+    WaBackendsProviding,
     WaCreateStoreOptions,
     WaCreateStoreOptionsStrict,
+    WaCreateStoreOptionsStrictFor,
     WaStore,
     WaStoreBackend,
+    WaStoreBackendMap,
     WaCacheDomain,
+    WaCacheDomainContracts,
     WaStoreDomain,
+    WaStoreDomainContracts,
     WaStoreMemoryLimitSelection,
     WaStoreSession
 } from '@store/types'

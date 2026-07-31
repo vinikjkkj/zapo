@@ -479,6 +479,25 @@ Default providers (when no `providers` entry is set):
 - cache domains (`retry`, `groupMetadata`, `deviceList`, `messageSecret`)
   → `'memory'`
 
+A backend does not have to cover the whole matrix. `WaStoreBackend<S, C>`
+defaults both parameters to "every domain" (what the in-tree `store-*`
+packages ship), and a partial backend names its own:
+
+```ts
+const vault = {
+    stores: { auth: (sessionId: string) => new MyAuthStore(sessionId) },
+    caches: {}
+} satisfies WaStoreBackend<'auth', never>
+```
+
+`createStore()` infers the backend map, so each domain only accepts the
+backends that declare it – naming `vault` on `signal` is a compile error
+instead of the `does not provide stores.signal` throw on first `session()`.
+Coverage of `providers` itself is unchanged: with any backend registered,
+all 11 persistence domains stay mandatory. Use `WaAnyStoreBackend` only as
+a constraint for an unknown backend; as an annotation it vouches for no
+domain, so nothing can name it.
+
 SQLite provider rules (live in [`@zapo-js/store-sqlite`](packages/store-sqlite)):
 
 - subclasses `BaseSqliteStore` (exported from the package)

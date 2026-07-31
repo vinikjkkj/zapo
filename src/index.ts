@@ -319,12 +319,15 @@ export type {
 } from '@abprops-spec'
 export { createStore, WaAuthMemoryStore } from '@store'
 export type {
+    WaAnyStoreBackend,
     WaAppStateCollectionStoreState,
     WaAppStateStore,
     WaAuthStore,
+    WaCacheDomain,
     WaContactStore,
     WaCreateStoreOptions,
     WaCreateStoreOptionsStrict,
+    WaCreateStoreOptionsStrictFor,
     WaDeviceListSnapshot,
     WaDeviceListStore,
     WaChatMetadataSnapshot,
@@ -343,6 +346,8 @@ export type {
     WaStoredThreadRecord,
     WaStore,
     WaStoreBackend,
+    WaStoreBackendMap,
+    WaStoreDomain,
     WaStoreSession,
     WaThreadStore
 } from '@store'

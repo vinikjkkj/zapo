@@ -61,9 +61,9 @@ import {
 } from '@store/noop.store'
 import type {
     WaCreateStoreOptions,
-    WaCreateStoreOptionsStrict,
+    WaCreateStoreOptionsStrictFor,
     WaStore,
-    WaStoreBackend,
+    WaStoreBackendMap,
     WaStoreMemoryLimitSelection,
     WaStoreSession
 } from '@store/types'
@@ -116,7 +116,7 @@ function usesBackend(provider: string | undefined): boolean {
 
 function resolveStore<T>(
     sessionId: string,
-    backends: Readonly<Record<string, WaStoreBackend>>,
+    backends: WaStoreBackendMap,
     provider: string | undefined,
     domain: string,
     kind: 'stores' | 'caches',
@@ -155,6 +155,14 @@ function resolveStore<T>(
  *   messageSecret) stay opt-in and default to memory - they are small,
  *   hot, and cheap to rebuild.
  *
+ * **Domain coverage:** the backend map is inferred, so each domain only
+ * accepts the backends whose bundle actually declares it. A backend that
+ * covers part of the matrix (`WaStoreBackend<'auth', never>`, say) can only
+ * be named on the domains it implements - the rest fall back to `'memory'`
+ * / `'none'`, checked by the compiler rather than by the
+ * `backend '<name>' does not provide <kind>.<domain>` throw on first
+ * `session()`.
+ *
  * @example
  * ```ts
  * // Persistent setup with @zapo-js/store-sqlite (recommended for production)
@@ -190,10 +198,12 @@ export function createStore(
         readonly providers?: undefined
     }
 ): WaStore
-export function createStore<B extends string>(options: WaCreateStoreOptionsStrict<B>): WaStore
-export function createStore<B extends string>(options?: WaCreateStoreOptions<B>): WaStore {
+export function createStore<TBackends extends WaStoreBackendMap>(
+    options: WaCreateStoreOptionsStrictFor<TBackends>
+): WaStore
+export function createStore(options?: WaCreateStoreOptions): WaStore {
     options = options ?? {}
-    const backends = (options.backends ?? {}) as Readonly<Record<string, WaStoreBackend>>
+    const backends: WaStoreBackendMap = options.backends ?? {}
     const providers = options.providers ?? {}
     const cacheProviders = options.cacheProviders ?? {}
     const cacheLayer = options.cacheLayer ?? {}
