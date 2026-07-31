@@ -508,12 +508,14 @@ export function createStore<B extends string>(options?: WaCreateStoreOptions<B>)
                 const cleared = await Promise.allSettled([
                     target.retry.clear(),
                     target.groupMetadata.clear(),
+                    target.chatMetadata.clear(),
                     target.deviceList.clear(),
                     target.messageSecret.clear()
                 ])
                 const destroyed = await Promise.allSettled([
                     destroyIfSupported(target.retry),
                     destroyIfSupported(target.groupMetadata),
+                    destroyIfSupported(target.chatMetadata),
                     destroyIfSupported(target.deviceList),
                     destroyIfSupported(target.messageSecret)
                 ])

@@ -60,11 +60,14 @@ export class WaChatMetadataMongoStore extends BaseMongoStore implements WaChatMe
 
     public async getChatMetadata(
         chatJid: string,
-        _nowMs?: number
+        nowMs = Date.now()
     ): Promise<WaChatMetadataSnapshot | null> {
         await this.ensureIndexes()
         const col = this.col<ChatMetadataDoc>('chat_metadata_cache')
-        const doc = await col.findOne({ _id: { session_id: this.sessionId, chat_jid: chatJid } })
+        const doc = await col.findOne({
+            _id: { session_id: this.sessionId, chat_jid: chatJid },
+            expires_at: { $gt: new Date(nowMs) }
+        })
         if (!doc) return null
         return {
             chatJid,

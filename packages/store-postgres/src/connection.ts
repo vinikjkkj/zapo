@@ -397,7 +397,7 @@ const MIGRATIONS: readonly Migration[] = [
                 expires_at_ms BIGINT NOT NULL,
                 PRIMARY KEY (session_id, chat_jid)
             );
-            CREATE INDEX IF NOT EXISTS chat_metadata_cache_by_expiry
+            CREATE INDEX IF NOT EXISTS "__PREFIX__idx_chat_metadata_cache_expires"
                 ON "__PREFIX__chat_metadata_cache" (session_id, expires_at_ms);
         `
     }

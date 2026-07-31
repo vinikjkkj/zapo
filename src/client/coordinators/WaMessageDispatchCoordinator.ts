@@ -263,7 +263,10 @@ export class WaMessageDispatchCoordinator {
     /**
      * Per-chat disappearing settings from the cache, falling back to the
      * durable thread record on a cold miss and warming the cache with it. A
-     * failing archive degrades the send to "no ephemeral fields" instead of
+     * chat with no disappearing mode is cached as expiration `0` rather than
+     * left absent, so the archive is not re-read on every send to it; the
+     * incoming writers overwrite that entry the moment the chat turns it on.
+     * A failing archive degrades the send to "no ephemeral fields" instead of
      * rejecting it - the store is opt-in persistence, not a send dependency.
      */
     private async resolveChatMetadata(chatJid: string): Promise<WaChatMetadataSnapshot | null> {
@@ -273,14 +276,13 @@ export class WaMessageDispatchCoordinator {
                 return cached
             }
             const thread = await this.deps.threadStore.getByJid(chatJid)
-            if (!thread || thread.ephemeralExpiration === undefined) {
-                return null
-            }
+            const expiration = thread?.ephemeralExpiration ?? 0
+            const settingTimestamp = expiration > 0 ? thread?.ephemeralSettingTimestamp : undefined
             const snapshot: WaChatMetadataSnapshot = {
                 chatJid,
-                ephemeralExpiration: thread.ephemeralExpiration,
-                ...(thread.ephemeralSettingTimestamp !== undefined
-                    ? { ephemeralSettingTimestamp: thread.ephemeralSettingTimestamp }
+                ephemeralExpiration: expiration,
+                ...(settingTimestamp !== undefined
+                    ? { ephemeralSettingTimestamp: settingTimestamp }
                     : {}),
                 updatedAtMs: Date.now()
             }

@@ -84,10 +84,15 @@ export interface WaEphemeralObserverOptions {
  * every message in a disappearing chat, making it the only continuously
  * refreshed source - history sync and `EPHEMERAL_SETTING` are point-in-time.
  *
- * Never blocks and never rejects: the store round-trip is fire-and-forget, and
- * concurrent messages from one chat share a single round-trip - an offline
- * resume delivers a queued batch at once, which would otherwise have every
- * message read the stale value and write the same update.
+ * Never blocks and never rejects: the store round-trip is fire-and-forget.
+ * Messages repeating a value share one round-trip, so the batch an offline
+ * resume delivers costs a single read instead of one per message, while a
+ * message carrying a *different* value still gets its own round-trip rather
+ * than being swallowed by the one in flight.
+ *
+ * The write is monotonic - an older setting never overwrites a newer one, so
+ * two round-trips completing out of order still converge on the latest value.
+ * This mirrors how the peer resolves the setting: highest timestamp wins.
  */
 export function createEphemeralObserver(
     options: WaEphemeralObserverOptions
@@ -111,11 +116,17 @@ export function createEphemeralObserver(
         const settingTimestamp = normalizeEphemeralSettingSeconds(raw)
 
         void dedup
-            .run(`observe:${chatJid}`, async () => {
+            .run(`observe:${chatJid}:${expiration}:${settingTimestamp}`, async () => {
                 const cached = await chatMetadataStore.getChatMetadata(chatJid)
                 if (
                     cached?.ephemeralSettingTimestamp === settingTimestamp &&
                     cached.ephemeralExpiration === expiration
+                ) {
+                    return
+                }
+                if (
+                    cached?.ephemeralSettingTimestamp !== undefined &&
+                    cached.ephemeralSettingTimestamp > settingTimestamp
                 ) {
                     return
                 }

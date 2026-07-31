@@ -1,4 +1,5 @@
 import type {
+    WaChatMetadataStore,
     WaDeviceListStore,
     WaGroupMetadataStore,
     WaMessageSecretStore,
@@ -9,6 +10,7 @@ export interface PgCleanupPollerOptions {
     readonly intervalMs?: number
     readonly retry?: WaRetryStore
     readonly groupMetadata?: WaGroupMetadataStore
+    readonly chatMetadata?: WaChatMetadataStore
     readonly deviceList?: WaDeviceListStore
     readonly messageSecret?: WaMessageSecretStore
     readonly onError?: (error: Error) => void
@@ -20,6 +22,7 @@ export class PgCleanupPoller {
     private readonly intervalMs: number
     private readonly retry: WaRetryStore | undefined
     private readonly groupMetadata: WaGroupMetadataStore | undefined
+    private readonly chatMetadata: WaChatMetadataStore | undefined
     private readonly deviceList: WaDeviceListStore | undefined
     private readonly messageSecret: WaMessageSecretStore | undefined
     private readonly onError: ((error: Error) => void) | undefined
@@ -34,6 +37,7 @@ export class PgCleanupPoller {
         this.intervalMs = intervalMs
         this.retry = options.retry
         this.groupMetadata = options.groupMetadata
+        this.chatMetadata = options.chatMetadata
         this.deviceList = options.deviceList
         this.messageSecret = options.messageSecret
         this.onError = options.onError
@@ -72,6 +76,7 @@ export class PgCleanupPoller {
         const tasks: Promise<number>[] = []
         if (this.retry) tasks.push(this.retry.cleanupExpired(nowMs))
         if (this.groupMetadata) tasks.push(this.groupMetadata.cleanupExpired(nowMs))
+        if (this.chatMetadata) tasks.push(this.chatMetadata.cleanupExpired(nowMs))
         if (this.deviceList) tasks.push(this.deviceList.cleanupExpired(nowMs))
         if (this.messageSecret) tasks.push(this.messageSecret.cleanupExpired(nowMs))
 

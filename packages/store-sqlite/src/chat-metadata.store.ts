@@ -102,7 +102,8 @@ export class WaChatMetadataSqliteStore extends BaseSqliteStore implements WaChat
             this.options.sessionId,
             chatJid
         ])
-        return 1
+        const row = db.get<Record<string, unknown>>('SELECT changes() AS total', [])
+        return row ? Number(row.total) : 0
     }
 
     public async cleanupExpired(nowMs: number): Promise<number> {
@@ -111,7 +112,8 @@ export class WaChatMetadataSqliteStore extends BaseSqliteStore implements WaChat
             this.options.sessionId,
             nowMs
         ])
-        return 0
+        const row = db.get<Record<string, unknown>>('SELECT changes() AS total', [])
+        return row ? Number(row.total) : 0
     }
 
     public async clear(): Promise<void> {

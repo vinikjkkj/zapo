@@ -200,6 +200,10 @@ export function createPostgresStore(config: WaPgStoreConfig): WaPgStoreResult {
                     opts(sessionId, 'groupMetadata'),
                     groupMetadataTtlMs
                 ),
+                chatMetadata: new WaChatMetadataPostgresStore(
+                    opts(sessionId, 'chatMetadata'),
+                    chatMetadataTtlMs
+                ),
                 deviceList: new WaDeviceListPgStore(opts(sessionId, 'deviceList'), deviceListTtlMs),
                 messageSecret: new WaMessageSecretPgStore(
                     opts(sessionId, 'messageSecret'),

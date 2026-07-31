@@ -1,7 +1,7 @@
 import type { WaChatMetadataSnapshot, WaChatMetadataStore } from 'zapo-js/store'
 
 import { BaseMysqlStore } from './BaseMysqlStore'
-import { queryFirst } from './helpers'
+import { affectedRows, queryFirst } from './helpers'
 import type { WaMysqlStorageOptions } from './types'
 
 const DEFAULT_CHAT_METADATA_TTL_MS = 30 * 60 * 1000
@@ -79,21 +79,23 @@ export class WaChatMetadataMysqlStore extends BaseMysqlStore implements WaChatMe
 
     public async deleteChatMetadata(chatJid: string): Promise<number> {
         await this.ensureReady()
-        await this.pool.execute(
-            `DELETE FROM ${this.t('chat_metadata_cache')} WHERE session_id = ? AND chat_jid = ?`,
-            [this.sessionId, chatJid]
+        return affectedRows(
+            await this.pool.execute(
+                `DELETE FROM ${this.t('chat_metadata_cache')} WHERE session_id = ? AND chat_jid = ?`,
+                [this.sessionId, chatJid]
+            )
         )
-        return 1
     }
 
     public async cleanupExpired(nowMs: number): Promise<number> {
         await this.ensureReady()
-        await this.pool.execute(
-            `DELETE FROM ${this.t('chat_metadata_cache')}
-             WHERE session_id = ? AND expires_at_ms <= ?`,
-            [this.sessionId, nowMs]
+        return affectedRows(
+            await this.pool.execute(
+                `DELETE FROM ${this.t('chat_metadata_cache')}
+                 WHERE session_id = ? AND expires_at_ms <= ?`,
+                [this.sessionId, nowMs]
+            )
         )
-        return 0
     }
 
     public async clear(): Promise<void> {

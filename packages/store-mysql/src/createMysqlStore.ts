@@ -204,6 +204,10 @@ export function createMysqlStore(config: WaMysqlStoreConfig): WaMysqlStoreResult
                     opts(sessionId, 'groupMetadata'),
                     groupMetadataTtlMs
                 ),
+                chatMetadata: new WaChatMetadataMysqlStore(
+                    opts(sessionId, 'chatMetadata'),
+                    chatMetadataTtlMs
+                ),
                 deviceList: new WaDeviceListMysqlStore(
                     opts(sessionId, 'deviceList'),
                     deviceListTtlMs
