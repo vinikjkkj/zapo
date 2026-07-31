@@ -90,9 +90,12 @@ export interface WaEphemeralObserverOptions {
  * message carrying a *different* value still gets its own round-trip rather
  * than being swallowed by the one in flight.
  *
- * The write is monotonic - an older setting never overwrites a newer one, so
- * two round-trips completing out of order still converge on the latest value.
- * This mirrors how the peer resolves the setting: highest timestamp wins.
+ * A write skips a setting older than the cached one, mirroring how the peer
+ * resolves it: highest timestamp wins. That check is not atomic with the
+ * write, so two round-trips that both read a cold cache can still land out of
+ * order and leave the older value behind. The next message from the chat
+ * corrects it, and a stale-but-older stamp loses to the peer's own value
+ * anyway, so this is not worth serializing the receive path over.
  */
 export function createEphemeralObserver(
     options: WaEphemeralObserverOptions
