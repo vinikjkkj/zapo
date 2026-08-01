@@ -5,8 +5,8 @@
  * FILE_NOTIFY_CHANGE_LAST_ACCESS, so merely *reading* a file emits a change
  * event once NTFS flushes a new last-access time (module load, test run,
  * editor indexing, grep). Node's watch mode restarts on any event for a file
- * in its module graph without checking whether the contents moved, which
- * makes the server restart on the first lazy import (for the MCP server that
+ * in its module graph without checking whether the file was written at all,
+ * which makes the server restart on the first lazy import (for the MCP that
  * is `better-sqlite3`, loaded on the first `connect()`) and whenever another
  * tool walks the tree. This runner keeps the same event source and verifies
  * mtime + size before restarting, so last-access-only events are dropped.
@@ -119,6 +119,11 @@ let shuttingDown = false
 const pendingChanges = new Set()
 
 const startChild = () => {
+    // A restart in flight when the runner is asked to stop still runs its exit
+    // listener, and listeners fire in registration order: without this guard it
+    // spawns a replacement right before shutdown() exits the runner, orphaning
+    // a child that keeps the port bound.
+    if (shuttingDown) return
     child = spawn(command[0], command.slice(1), { stdio: 'inherit', env: process.env })
     const started = child
     started.on('exit', (code, signal) => {

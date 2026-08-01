@@ -92,8 +92,9 @@ The `dev` script runs the server under `scripts/dev-watch.cjs`, which spawns
 `node --import tsx src/bin.ts` on HTTP (port 3737) and respawns it when a
 watched source actually changes. `tsx` resolves `zapo-js` directly from
 `<root>/src/` via `packages/tsconfig.paths.json`, so iterating on the core lib
-needs no rebuild. Edit any `.ts` under `<root>/src` or `<root>/packages` → the
-runner restarts the process and names the file that triggered it → the next
+needs no rebuild. Edit any `.ts` under `<root>/src`, `<root>/packages` or
+`<root>/spec` → the runner restarts the process and names the file that
+triggered it → the next
 tool call from Claude Code re-establishes the HTTP session automatically. No
 `/mcp` manual reconnect. Generated and non-runtime folders are ignored:
 `node_modules`, `dist`, `target`, `__tests__`, `__test__`, `bench`, `.turbo`
@@ -106,7 +107,8 @@ shares the credential store with `test/example.cjs` (no re-pairing).
 > `fs.watch` to `FILE_NOTIFY_CHANGE_LAST_ACCESS`, so merely **reading** a file
 > emits a change event once NTFS flushes a new last-access time (module load,
 > test run, editor indexing, grep). `node --watch` restarts on any event for a
-> file in its module graph without checking whether the contents moved, which
+> file in its module graph without checking whether the file was written at
+> all, which
 > makes the server restart on the first lazy import - `better-sqlite3`, loaded
 > on the first `connect()` - and whenever another tool walks the tree. The
 > runner keeps the same event source and compares mtime + size before
