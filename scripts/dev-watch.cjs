@@ -133,7 +133,16 @@ const startChild = () => {
 }
 
 const restart = () => {
+    // A restart already in flight spawns its child after the edit landed on
+    // disk, so triggers inside the kill window are already covered. Without
+    // this guard each one stacks another exit listener on the dying child and
+    // spawns a duplicate server when it finally exits.
+    if (restarting) {
+        pendingChanges.clear()
+        return
+    }
     const changed = Array.from(pendingChanges)
+    if (changed.length === 0) return
     pendingChanges.clear()
     const extra = changed.length > 1 ? ` (+${changed.length - 1} more)` : ''
     log(`restarting: ${display(changed[0])}${extra}`)
@@ -183,19 +192,45 @@ const onFsEvent = (dir, name) => {
     }, DEBOUNCE_MS)
 }
 
+let watchedDirs = 0
 for (const dir of watchDirs) {
     try {
-        watch(dir, { recursive: true }, (_eventType, name) => onFsEvent(dir, name))
+        const watcher = watch(dir, { recursive: true }, (_eventType, name) => onFsEvent(dir, name))
+        // An unhandled 'error' (watched root deleted or replaced while running)
+        // is thrown by the EventEmitter and would take the runner down.
+        watcher.on('error', (error) => log(`watch error on ${display(dir)}: ${error.message}`))
+        watchedDirs += 1
     } catch (error) {
-        log(`cannot watch ${dir}: ${error.message}`)
+        log(`cannot watch ${display(dir)}: ${error.message}`)
     }
+}
+if (watchedDirs === 0) {
+    // Starting the child here would look like a working dev loop that silently
+    // never reloads.
+    log('no directory could be watched, aborting')
+    process.exit(1)
 }
 
 const shutdown = () => {
     if (shuttingDown) return
     shuttingDown = true
-    if (child) child.kill('SIGTERM')
-    process.exit(0)
+    if (killTimer) {
+        clearTimeout(killTimer)
+        killTimer = null
+    }
+    const dying = child
+    if (!dying) {
+        process.exit(0)
+    }
+    // Exit only once the child is gone. Orphaning it keeps the HTTP port bound
+    // and the next `npm run dev` fails to bind. The escalation timer is not
+    // unref'd on purpose: it has to hold the runner alive to enforce the kill.
+    dying.once('exit', () => process.exit(0))
+    dying.kill('SIGTERM')
+    setTimeout(() => {
+        dying.kill('SIGKILL')
+        process.exit(0)
+    }, KILL_TIMEOUT_MS)
 }
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)
