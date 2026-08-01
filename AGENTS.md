@@ -859,18 +859,18 @@ The full description, schema, and examples are inlined on each tool – agents s
 
 ### Dev loop
 
-**Recommended (HTTP + `node --watch`, zero manual reconnect):**
+**Recommended (HTTP + watch runner, zero manual reconnect):**
 
 ```bash
 claude mcp add zapo --scope user --transport http http://127.0.0.1:3737/mcp
 npm run dev --workspace @zapo-js/mcp-server
 ```
 
-The `dev` script runs the server under `node --watch --import tsx` on HTTP (port 3737). `tsx` resolves `zapo-js` directly from `<root>/src/` via `packages/tsconfig.paths.json`, so iterating on the core lib needs no rebuild. Edit any `.ts` in `src/` (root or mcp-server) → `node --watch` restarts the process → the next tool call from Claude Code re-establishes the HTTP session automatically. No `/mcp` manual reconnect.
+The `dev` script runs the server under `scripts/dev-watch.cjs`, which spawns `node --import tsx src/bin.ts` on HTTP (port 3737) and respawns it when a watched source actually changes. `tsx` resolves `zapo-js` directly from `<root>/src/` via `packages/tsconfig.paths.json`, so iterating on the core lib needs no rebuild. Edit any `.ts` under the watched trees (`<root>/src` and `<root>/packages`, so the core and every optional package) → the runner restarts the process and names the file that triggered it → the next tool call from Claude Code re-establishes the HTTP session automatically. No `/mcp` manual reconnect. Generated and non-runtime folders are ignored: `node_modules`, `dist`, `target`, `__tests__`, `__test__`, `bench`, `.turbo` and `coverage`.
 
 The script also sets `MCP_AUTH_PATH=../../.auth/state.sqlite`, so the MCP shares the credential store with `test/example.cjs` (no re-pairing).
 
-> Why `node --watch` and not `tsx watch`: `tsx watch` has known issues detecting changes in nested imports on Windows. `node --watch` (Node 20+) tracks the import graph reliably across platforms while `tsx` continues to handle TS transpilation as a loader.
+> Why a custom runner and not `node --watch`: on Windows libuv subscribes `fs.watch` to `FILE_NOTIFY_CHANGE_LAST_ACCESS`, so merely **reading** a file emits a change event once NTFS flushes a new last-access time (module load, test run, editor indexing, grep). `node --watch` restarts on any event for a file in its module graph without checking whether the contents moved, which makes the server restart on the first lazy import - `better-sqlite3`, loaded on the first `connect()` - and whenever another tool walks the tree. `scripts/dev-watch.cjs` keeps the same event source and compares mtime + size before restarting, so last-access-only events are dropped. `tsx watch` is not the answer either: it has known issues detecting changes in nested imports on Windows. `tsx` stays as the transpilation loader in every case.
 
 **Stdio fallback (manual reconnect):**
 
@@ -905,7 +905,7 @@ After editing source: rebuild → call `restart` with `mode: "process_exit"` →
 - One process can run many sessions over one shared store: pass `session` to any tool (default `MCP_SESSION_ID`), bounded by `MCP_MAX_SESSIONS`. All sessions share the one `MCP_AUTH_PATH` backend. Running separate processes is only needed when you want isolated stores/auth files.
 - `WaClient` has no auto-reconnect. On `connection: close`, call `connect` again manually (per session).
 - `restart` (soft) does NOT pick up code changes; `process_exit` + reconnect does.
-- `node --watch` is not a full supervisor: it restarts on file changes only. `process_exit` from the `restart` tool kills the watcher too – under HTTP+watch, just edit a file to reload instead.
+- The watch runner is not a full supervisor: it restarts on file changes only, and waits for the next change if the child exits on its own. `process_exit` from the `restart` tool kills the child, and the runner will not respawn it until something changes – under HTTP+watch, just edit a file to reload instead.
 
 ---
 
