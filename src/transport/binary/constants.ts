@@ -77,3 +77,24 @@ export const DICTIONARY_TOKEN_MAPS: readonly ReadonlyMap<string, number>[] = DIC
         return map
     }
 )
+
+export const MERGED_TOKEN_DICTIONARY_FLAG = 0x1_0000
+
+/**
+ * Single lookup table for the encoder: single-byte tokens map to their code
+ * (< 256), dictionary tokens to `MERGED_TOKEN_DICTIONARY_FLAG | (dict << 8) |
+ * token`. Built dictionary-last-to-first then single-byte so precedence
+ * matches the sequential lookup order (single byte, then dictionary 0..3).
+ */
+export const MERGED_TOKEN_MAP: ReadonlyMap<string, number> = (() => {
+    const map = new Map<string, number>()
+    for (let i = DICTIONARY_TOKEN_MAPS.length - 1; i >= 0; i -= 1) {
+        for (const [value, token] of DICTIONARY_TOKEN_MAPS[i]) {
+            map.set(value, MERGED_TOKEN_DICTIONARY_FLAG | (i << 8) | token)
+        }
+    }
+    for (const [value, token] of SINGLE_BYTE_TOKEN_MAP) {
+        map.set(value, token)
+    }
+    return map
+})()

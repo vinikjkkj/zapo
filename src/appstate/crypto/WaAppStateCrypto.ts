@@ -340,15 +340,13 @@ export class WaAppStateCrypto {
         if (out.byteLength !== left.byteLength) {
             throw new Error('lt hash output length mismatch')
         }
-        const leftView = new DataView(left.buffer, left.byteOffset, left.byteLength)
-        const rightView = new DataView(right.buffer, right.byteOffset, right.byteLength)
-        const outView = new DataView(out.buffer, out.byteOffset, out.byteLength)
         for (let offset = 0; offset < left.byteLength; offset += APP_STATE_POINT_SIZE) {
             const value = combine(
-                leftView.getUint16(offset, true),
-                rightView.getUint16(offset, true)
+                left[offset] | (left[offset + 1] << 8),
+                right[offset] | (right[offset + 1] << 8)
             )
-            outView.setUint16(offset, value & 0xffff, true)
+            out[offset] = value & 0xff
+            out[offset + 1] = (value >>> 8) & 0xff
         }
         return out
     }
@@ -374,10 +372,7 @@ export class WaAppStateCrypto {
     ): Uint8Array {
         const octetLength = new Uint8Array(APP_STATE_MAC_OCTET_LENGTH)
         octetLength[octetLength.length - 1] = associatedData.byteLength & 0xff
-        const full = hmacSha512Sign(
-            valueMacHmacKey,
-            concatBytes([associatedData, iv, cipherText, octetLength])
-        )
+        const full = hmacSha512Sign(valueMacHmacKey, [associatedData, iv, cipherText, octetLength])
         return full.subarray(0, APP_STATE_VALUE_MAC_LENGTH)
     }
 

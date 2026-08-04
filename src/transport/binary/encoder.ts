@@ -4,7 +4,6 @@ import {
     BINARY_32,
     BINARY_8,
     DICTIONARY_0,
-    DICTIONARY_TOKEN_MAPS,
     HEX_8,
     JID_PAIR,
     JID_U,
@@ -15,8 +14,9 @@ import {
     LIST_16,
     LIST_8,
     LIST_EMPTY,
-    NIBBLE_8,
-    SINGLE_BYTE_TOKEN_MAP
+    MERGED_TOKEN_DICTIONARY_FLAG,
+    MERGED_TOKEN_MAP,
+    NIBBLE_8
 } from '@transport/binary/constants'
 import type { BinaryNode } from '@transport/types'
 import { TEXT_ENCODER } from '@util/bytes'
@@ -56,6 +56,24 @@ class ByteWriter {
         this.ensure(value.length)
         this.buffer.set(value, this.offset)
         this.offset += value.length
+    }
+
+    public reserveUint8(): number {
+        this.ensure(1)
+        const at = this.offset
+        this.offset += 1
+        return at
+    }
+
+    public patchUint8(at: number, value: number): void {
+        this.buffer[at] = value & 0xff
+    }
+
+    public writeUtf8(value: string, maxBytes: number): number {
+        this.ensure(maxBytes)
+        const result = TEXT_ENCODER.encodeInto(value, this.buffer.subarray(this.offset))
+        this.offset += result.written
+        return result.written
     }
 
     public toUint8Array(): Uint8Array {
@@ -165,24 +183,29 @@ function writeBinaryLength(length: number, writer: ByteWriter): void {
     writer.writeUint32(length)
 }
 
-function writeString(value: string, writer: ByteWriter): void {
-    const singleToken = SINGLE_BYTE_TOKEN_MAP.get(value)
-    if (singleToken !== undefined) {
-        writer.writeUint8(singleToken)
+function writeUtf8WithLength(value: string, writer: ByteWriter): void {
+    if (value.length < 86) {
+        writer.writeUint8(BINARY_8)
+        const lengthAt = writer.reserveUint8()
+        const written = writer.writeUtf8(value, value.length * 3)
+        writer.patchUint8(lengthAt, written)
         return
     }
+    const encoded = TEXT_ENCODER.encode(value)
+    writeBinaryLength(encoded.length, writer)
+    writer.writeBytes(encoded)
+}
 
-    for (
-        let dictionaryIndex = 0;
-        dictionaryIndex < DICTIONARY_TOKEN_MAPS.length;
-        dictionaryIndex += 1
-    ) {
-        const dictToken = DICTIONARY_TOKEN_MAPS[dictionaryIndex].get(value)
-        if (dictToken !== undefined) {
-            writer.writeUint8(DICTIONARY_0 + dictionaryIndex)
-            writer.writeUint8(dictToken)
-            return
+function writeString(value: string, writer: ByteWriter): void {
+    const token = MERGED_TOKEN_MAP.get(value)
+    if (token !== undefined) {
+        if (token < MERGED_TOKEN_DICTIONARY_FLAG) {
+            writer.writeUint8(token)
+        } else {
+            writer.writeUint8(DICTIONARY_0 + ((token >>> 8) & 0xff))
+            writer.writeUint8(token & 0xff)
         }
+        return
     }
 
     const packed = classifyPackedString(value)
@@ -195,9 +218,31 @@ function writeString(value: string, writer: ByteWriter): void {
         return
     }
 
-    const encoded = TEXT_ENCODER.encode(value)
-    writeBinaryLength(encoded.length, writer)
-    writer.writeBytes(encoded)
+    writeUtf8WithLength(value, writer)
+}
+
+const KNOWN_JID_SERVERS: readonly string[] = [
+    WA_DEFAULTS.HOST_DOMAIN,
+    WA_DEFAULTS.LID_SERVER,
+    WA_DEFAULTS.GROUP_SERVER,
+    WA_DEFAULTS.NEWSLETTER_SERVER,
+    WA_DEFAULTS.BROADCAST_SERVER,
+    WA_DEFAULTS.HOSTED_LID_SERVER,
+    WA_DEFAULTS.HOSTED_SERVER,
+    WA_DEFAULTS.BOT_SERVER,
+    WA_DEFAULTS.MSGR_SERVER,
+    WA_DEFAULTS.INTEROP_SERVER
+]
+
+function matchKnownServer(value: string, from: number): string | null {
+    const length = value.length - from
+    for (let i = 0; i < KNOWN_JID_SERVERS.length; i += 1) {
+        const server = KNOWN_JID_SERVERS[i]
+        if (server.length === length && value.startsWith(server, from)) {
+            return server
+        }
+    }
+    return null
 }
 
 function tryWriteJid(value: string, writer: ByteWriter): boolean {
@@ -229,7 +274,7 @@ function tryWriteJid(value: string, writer: ByteWriter): boolean {
         userEnd = colonIndex
     }
 
-    const server = value.slice(atIndex + 1)
+    const server = matchKnownServer(value, atIndex + 1) ?? value.slice(atIndex + 1)
     let domainType = -1
     if (server === WA_DEFAULTS.LID_SERVER) {
         domainType = JID_U_DOMAIN_TYPE_LID
@@ -299,9 +344,7 @@ function writeNodeInternal(node: BinaryNode, writer: ByteWriter): void {
 
     const content = node.content
     if (typeof content === 'string') {
-        const encoded = TEXT_ENCODER.encode(content)
-        writeBinaryLength(encoded.length, writer)
-        writer.writeBytes(encoded)
+        writeUtf8WithLength(content, writer)
         return
     }
     if (content instanceof Uint8Array) {

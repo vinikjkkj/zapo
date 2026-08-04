@@ -132,3 +132,68 @@ test('appstate crypto bypasses value and index MAC checks when skipMacVerificati
     assert.equal(decrypted.version, 1)
     assert.equal(crypto.isMacVerificationSkipped, true)
 })
+
+test('lt-hash add/subtract matches a DataView reference implementation', async () => {
+    const { hkdf } = await import('@crypto')
+    const { WA_APP_STATE_KDF_INFO } = await import('@protocol/constants')
+    const crypto = new WaAppStateCrypto()
+
+    const expand = (value: Uint8Array): Uint8Array =>
+        hkdf(value, null, WA_APP_STATE_KDF_INFO.PATCH_INTEGRITY, APP_STATE_EMPTY_LT_HASH.byteLength)
+
+    const referenceApply = (
+        base: Uint8Array,
+        values: readonly Uint8Array[],
+        combine: (left: number, right: number) => number
+    ): Uint8Array => {
+        let current = base
+        for (const value of values) {
+            const expanded = expand(value)
+            const out = new Uint8Array(current.byteLength)
+            const leftView = new DataView(current.buffer, current.byteOffset, current.byteLength)
+            const rightView = new DataView(
+                expanded.buffer,
+                expanded.byteOffset,
+                expanded.byteLength
+            )
+            const outView = new DataView(out.buffer, out.byteOffset, out.byteLength)
+            for (let offset = 0; offset < current.byteLength; offset += 2) {
+                const combined = combine(
+                    leftView.getUint16(offset, true),
+                    rightView.getUint16(offset, true)
+                )
+                outView.setUint16(offset, combined & 0xffff, true)
+            }
+            current = out
+        }
+        return current
+    }
+
+    const values: Uint8Array[] = []
+    for (let i = 0; i < 12; i += 1) {
+        const value = new Uint8Array(32)
+        for (let j = 0; j < value.length; j += 1) {
+            value[j] = (i * 37 + j * 251 + 13) & 0xff
+        }
+        values.push(value)
+    }
+    const base = new Uint8Array(APP_STATE_EMPTY_LT_HASH.byteLength)
+    for (let j = 0; j < base.length; j += 1) {
+        base[j] = (j * 199 + 7) & 0xff
+    }
+
+    const added = await crypto.ltHashAdd(base, values)
+    assert.deepEqual(
+        Array.from(added),
+        Array.from(referenceApply(base, values, (left, right) => left + right))
+    )
+
+    const subtracted = await crypto.ltHashSubtract(added, values.slice(0, 5))
+    assert.deepEqual(
+        Array.from(subtracted),
+        Array.from(referenceApply(added, values.slice(0, 5), (left, right) => left - right))
+    )
+
+    const roundTrip = await crypto.ltHashSubtract(added, values)
+    assert.deepEqual(Array.from(roundTrip), Array.from(base))
+})

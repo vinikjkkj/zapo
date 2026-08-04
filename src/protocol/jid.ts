@@ -1,26 +1,28 @@
 import { WA_DEFAULTS } from '@protocol/constants'
 import type { SignalAddress } from '@signal/types'
 
-const KNOWN_SERVERS: Record<string, string> = {
-    [WA_DEFAULTS.HOST_DOMAIN]: WA_DEFAULTS.HOST_DOMAIN,
-    [WA_DEFAULTS.GROUP_SERVER]: WA_DEFAULTS.GROUP_SERVER,
-    [WA_DEFAULTS.BROADCAST_SERVER]: WA_DEFAULTS.BROADCAST_SERVER,
-    [WA_DEFAULTS.LID_SERVER]: WA_DEFAULTS.LID_SERVER,
-    [WA_DEFAULTS.HOSTED_SERVER]: WA_DEFAULTS.HOSTED_SERVER,
-    [WA_DEFAULTS.HOSTED_LID_SERVER]: WA_DEFAULTS.HOSTED_LID_SERVER,
-    [WA_DEFAULTS.MSGR_SERVER]: WA_DEFAULTS.MSGR_SERVER,
-    [WA_DEFAULTS.INTEROP_SERVER]: WA_DEFAULTS.INTEROP_SERVER,
-    [WA_DEFAULTS.NEWSLETTER_SERVER]: WA_DEFAULTS.NEWSLETTER_SERVER,
-    [WA_DEFAULTS.BOT_SERVER]: WA_DEFAULTS.BOT_SERVER
-}
+const KNOWN_SERVERS: ReadonlyMap<string, string> = new Map([
+    [WA_DEFAULTS.HOST_DOMAIN, WA_DEFAULTS.HOST_DOMAIN],
+    [WA_DEFAULTS.GROUP_SERVER, WA_DEFAULTS.GROUP_SERVER],
+    [WA_DEFAULTS.BROADCAST_SERVER, WA_DEFAULTS.BROADCAST_SERVER],
+    [WA_DEFAULTS.LID_SERVER, WA_DEFAULTS.LID_SERVER],
+    [WA_DEFAULTS.HOSTED_SERVER, WA_DEFAULTS.HOSTED_SERVER],
+    [WA_DEFAULTS.HOSTED_LID_SERVER, WA_DEFAULTS.HOSTED_LID_SERVER],
+    [WA_DEFAULTS.MSGR_SERVER, WA_DEFAULTS.MSGR_SERVER],
+    [WA_DEFAULTS.INTEROP_SERVER, WA_DEFAULTS.INTEROP_SERVER],
+    [WA_DEFAULTS.NEWSLETTER_SERVER, WA_DEFAULTS.NEWSLETTER_SERVER],
+    [WA_DEFAULTS.BOT_SERVER, WA_DEFAULTS.BOT_SERVER]
+])
 
 /**
  * Returns the canonical reference for known server strings, avoiding
  * thousands of duplicate sliced copies (e.g. "lid", "s.whatsapp.net")
- * that would otherwise be created by repeated JID parsing.
+ * that would otherwise be created by repeated JID parsing. A `Map` keeps
+ * untrusted server strings like "toString" from resolving through the
+ * object prototype chain.
  */
 function internServer(server: string): string {
-    return KNOWN_SERVERS[server] ?? server
+    return KNOWN_SERVERS.get(server) ?? server
 }
 
 function extractDigits(input: string): string {

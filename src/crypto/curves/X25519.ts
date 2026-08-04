@@ -113,20 +113,35 @@ export function montgomeryToEdwardsPublic(curvePublicKey: Uint8Array, signBit: n
     return encoded
 }
 
-function x25519PrivateKeyObject(privKey: Uint8Array) {
-    return createPrivateKey({
+const privateKeyObjectCache = new WeakMap<Uint8Array, KeyObject>()
+const publicKeyObjectCache = new WeakMap<Uint8Array, KeyObject>()
+
+function x25519PrivateKeyObject(privKey: Uint8Array): KeyObject {
+    const cached = privateKeyObjectCache.get(privKey)
+    if (cached) {
+        return cached
+    }
+    const keyObject = createPrivateKey({
         key: pkcs8FromRawPrivate(X25519_PKCS8_PREFIX, privKey) as Buffer,
         format: 'der',
         type: 'pkcs8'
     })
+    privateKeyObjectCache.set(privKey, keyObject)
+    return keyObject
 }
 
-function x25519PublicKeyObject(pubKey: Uint8Array) {
-    return createPublicKey({
+function x25519PublicKeyObject(pubKey: Uint8Array): KeyObject {
+    const cached = publicKeyObjectCache.get(pubKey)
+    if (cached) {
+        return cached
+    }
+    const keyObject = createPublicKey({
         key: concatBytes([X25519_SPKI_PREFIX, pubKey]) as Buffer,
         format: 'der',
         type: 'spki'
     })
+    publicKeyObjectCache.set(pubKey, keyObject)
+    return keyObject
 }
 
 /**

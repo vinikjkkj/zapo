@@ -63,6 +63,8 @@ interface ExtractedFieldSet {
 
 export interface BuildReportingTokenNodeInput {
     readonly message: Proto.IMessage
+    /** Unpadded `proto.Message.encode(message)` bytes, when the caller already has them. */
+    readonly messageBytes?: Uint8Array
     readonly stanzaId: string
     readonly senderUserJid: string
     readonly remoteJid: string
@@ -95,7 +97,7 @@ export async function buildReportingTokenArtifacts(
     }
 
     const reportingTokenContent = computeReportingTokenContent(
-        proto.Message.encode(input.message).finish(),
+        input.messageBytes ?? proto.Message.encode(input.message).finish(),
         input.version ?? WA_REPORTING_TOKEN_VERSION
     )
     if (reportingTokenContent.byteLength === 0) {

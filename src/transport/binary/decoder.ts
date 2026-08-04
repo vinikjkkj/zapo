@@ -84,12 +84,20 @@ class ByteReader {
     }
 }
 
-// Reusable scratch buffer for nibble/hex unpack. Max output is
-// `(0x7f) * 2 = 254` bytes (length byte holds the packed-byte count in
-// its low 7 bits, each byte unpacks to ≤2 chars). Single-threaded JS +
-// non-reentrant decoder makes module-level reuse safe – `TextDecoder`
-// copies into the returned string before we touch the buffer again.
-const PACKED_SCRATCH = new Uint8Array(256)
+const PACKED_PAIR_TABLES = new WeakMap<readonly string[], readonly string[]>()
+
+function packedPairTable(alphabet: readonly string[]): readonly string[] {
+    let pairs = PACKED_PAIR_TABLES.get(alphabet)
+    if (!pairs) {
+        const built = new Array<string>(256)
+        for (let i = 0; i < 256; i += 1) {
+            built[i] = alphabet[(i >>> 4) & 0x0f] + alphabet[i & 0x0f]
+        }
+        PACKED_PAIR_TABLES.set(alphabet, built)
+        pairs = built
+    }
+    return pairs
+}
 
 function parsePacked(reader: ByteReader, alphabet: readonly string[]): string {
     const lengthByte = reader.readUint8()
@@ -100,23 +108,12 @@ function parsePacked(reader: ByteReader, alphabet: readonly string[]): string {
         throw new Error(`invalid packed length byte 0x${lengthByte.toString(16)}`)
     }
 
-    let outIndex = 0
+    const pairs = packedPairTable(alphabet)
+    let out = ''
     for (let i = 0; i < byteCount; i += 1) {
-        const packed = reader.readUint8()
-        const high = (packed >>> 4) & 0x0f
-        const low = packed & 0x0f
-
-        if (outIndex < outLength) {
-            PACKED_SCRATCH[outIndex] = alphabet[high].charCodeAt(0)
-            outIndex += 1
-        }
-        if (outIndex < outLength) {
-            PACKED_SCRATCH[outIndex] = alphabet[low].charCodeAt(0)
-            outIndex += 1
-        }
+        out += pairs[reader.readUint8()]
     }
-
-    return TEXT_DECODER.decode(PACKED_SCRATCH.subarray(0, outLength))
+    return odd ? out.slice(0, outLength) : out
 }
 
 function readBinary(reader: ByteReader, token: number): Uint8Array {

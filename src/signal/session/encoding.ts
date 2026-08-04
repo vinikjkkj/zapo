@@ -226,15 +226,38 @@ export function decodeSignalSessionSnapshot(
     }
 }
 
+const prevSessionsSuffixCache = new WeakMap<object, Uint8Array>()
+
 /**
  * Serializes a {@link SignalSessionRecord} (current + previous sessions) into
  * the Signal `RecordStructure` protobuf encoding used by the session stores.
+ *
+ * The `previousSessions` segment only depends on the `prevSessions` array,
+ * which every mutation path replaces wholesale (never edits in place), so its
+ * encoded bytes are cached per array instance and only the current session is
+ * re-encoded on the per-message write path.
  */
 export function encodeSignalSessionRecord(record: SignalSessionRecord): Uint8Array {
-    return proto.RecordStructure.encode({
-        currentSession: encodeSignalSessionSnapshot(record),
-        previousSessions: record.prevSessions as Proto.ISessionStructure[]
+    const prevSessions = record.prevSessions
+    if (prevSessions.length === 0) {
+        return proto.RecordStructure.encode({
+            currentSession: encodeSignalSessionSnapshot(record)
+        }).finish()
+    }
+    let suffix = prevSessionsSuffixCache.get(prevSessions)
+    if (!suffix) {
+        suffix = proto.RecordStructure.encode({
+            previousSessions: prevSessions as Proto.ISessionStructure[]
+        }).finish()
+        prevSessionsSuffixCache.set(prevSessions, suffix)
+    }
+    const current = proto.RecordStructure.encode({
+        currentSession: encodeSignalSessionSnapshot(record)
     }).finish()
+    const out = new Uint8Array(current.length + suffix.length)
+    out.set(current, 0)
+    out.set(suffix, current.length)
+    return out
 }
 
 /**

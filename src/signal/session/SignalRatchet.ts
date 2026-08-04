@@ -36,7 +36,7 @@ import type {
     SignalRecvChain,
     SignalSessionRecord
 } from '@signal/types'
-import { concatBytes, removeAt, uint8Equal, uint8TimingSafeEqual } from '@util/bytes'
+import { removeAt, uint8Equal, uint8TimingSafeEqual } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 const MAX_TRACKED_RECV_CHAINS = 4
@@ -178,16 +178,19 @@ export async function encryptMsg(
         previousCounter: session.prevSendChainHighestIndex,
         ciphertext
     }).finish()
-    const versionedSignalPayload = prependVersion(signalPayload, SIGNAL_VERSION)
+    const versionedLength = 1 + signalPayload.length
+    const signalMessage = new Uint8Array(versionedLength + SIGNAL_MAC_SIZE)
+    signalMessage[0] = ((SIGNAL_VERSION << 4) | SIGNAL_VERSION) & 0xff
+    signalMessage.set(signalPayload, 1)
     const mac = hmacSha256Sign(messageKey.macKey, [
         session.local.pubKey,
         session.remote.pubKey,
-        versionedSignalPayload
+        signalMessage.subarray(0, versionedLength)
     ])
-    const signalMessage = concatBytes([versionedSignalPayload, mac.subarray(0, SIGNAL_MAC_SIZE)])
+    signalMessage.set(mac.subarray(0, SIGNAL_MAC_SIZE), versionedLength)
 
     let type: 'msg' | 'pkmsg' = 'msg'
-    let output = signalMessage
+    let output: Uint8Array = signalMessage
     if (session.initialExchangeInfo) {
         const preKeyPayload = proto.PreKeySignalMessage.encode({
             registrationId: session.local.regId,

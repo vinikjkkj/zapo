@@ -40,7 +40,7 @@ import {
     wrapAsViewOnce
 } from '@message/encode/content'
 import { wrapDeviceSentMessage } from '@message/encode/device-sent'
-import { writeRandomPadMax16 } from '@message/encode/padding'
+import { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
 import { buildBotInvokeProtoCopy, extractInvokedBotJid, genBotMsgSecret } from '@message/kinds/bot'
 import type {
     WaEncryptedMessageInput,
@@ -1174,6 +1174,7 @@ export class WaMessageDispatchCoordinator {
         }
         const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
             message,
+            messageBytes: unpadPkcs7(plaintext),
             stanzaId: sendOptions.id,
             senderUserJid: toUserJid(senderJid),
             remoteJid: groupJid,
@@ -1364,6 +1365,7 @@ export class WaMessageDispatchCoordinator {
         const localPhash = computePhashV2(phashTargets)
         const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
             message,
+            messageBytes: unpadPkcs7(plaintext),
             stanzaId: sendOptions.id,
             senderUserJid: toUserJid(senderJid),
             remoteJid: groupJid,
@@ -1842,6 +1844,7 @@ export class WaMessageDispatchCoordinator {
             : undefined
         const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
             message,
+            messageBytes: unpadPkcs7(plaintext),
             stanzaId: sendOptions.id,
             senderUserJid: meUserJid,
             remoteJid: recipientUserJid,
@@ -1958,6 +1961,7 @@ export class WaMessageDispatchCoordinator {
 
     private async tryBuildReportingTokenArtifacts(input: {
         readonly message: Proto.IMessage
+        readonly messageBytes?: Uint8Array
         readonly stanzaId?: string
         readonly senderUserJid: string
         readonly remoteJid: string
@@ -1970,6 +1974,7 @@ export class WaMessageDispatchCoordinator {
         try {
             return await buildReportingTokenArtifacts({
                 message: input.message,
+                messageBytes: input.messageBytes,
                 stanzaId: input.stanzaId,
                 senderUserJid: input.senderUserJid,
                 remoteJid: input.remoteJid

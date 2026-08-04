@@ -11,7 +11,7 @@ import type {
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { concatBytes, uint8Equal } from '@util/bytes'
 
-interface LocalIdentityContext {
+export interface LocalIdentityContext {
     readonly regId: number
     readonly staticKeyPair: SignalSerializedKeyPair
 }

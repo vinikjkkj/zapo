@@ -64,6 +64,31 @@ export async function xeddsaVerify(
     }
 }
 
+interface XeddsaPublicDerivation {
+    readonly privateScalar: bigint
+    readonly encodedPublic: Uint8Array
+    readonly pubKeySignBit: number
+}
+
+const publicDerivationCache = new WeakMap<Uint8Array, XeddsaPublicDerivation>()
+
+function derivePublicForSigning(privateKey: Uint8Array): XeddsaPublicDerivation {
+    const cached = publicDerivationCache.get(privateKey)
+    if (cached) {
+        return cached
+    }
+    const clampedPrivateKey = clampCurvePrivateKeyInPlace(privateKey)
+    const privateScalar = bytesToBigIntLE(clampedPrivateKey)
+    const encodedPublic = encodeExtendedPoint(scalarMultBase(privateScalar))
+    const derivation: XeddsaPublicDerivation = {
+        privateScalar,
+        encodedPublic,
+        pubKeySignBit: encodedPublic[31] & 0x80
+    }
+    publicDerivationCache.set(privateKey, derivation)
+    return derivation
+}
+
 /**
  * Signs `message` with an X25519 (Montgomery) private key using the XEdDSA
  * construction. Returns a 64-byte signature.
@@ -75,10 +100,8 @@ export async function xeddsaSign(privateKey: Uint8Array, message: Uint8Array): P
         return toBytesView(nativeBinding.xeddsaSign(privateKey, message))
     }
 
-    const clampedPrivateKey = clampCurvePrivateKeyInPlace(privateKey)
-    const privateScalar = bytesToBigIntLE(clampedPrivateKey)
-    const encodedPublic = encodeExtendedPoint(scalarMultBase(privateScalar))
-    const pubKeySignBit = encodedPublic[31] & 0x80
+    const { privateScalar, encodedPublic, pubKeySignBit } = derivePublicForSigning(privateKey)
+    const clampedPrivateKey = privateKey
 
     const randomSuffix = await randomBytesAsync(64)
     const r = modGroup(

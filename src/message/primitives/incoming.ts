@@ -440,7 +440,7 @@ async function decryptAndProcessEncNode(
     options: WaIncomingMessageAckHandlerOptions,
     decrypt: (ciphertext: Uint8Array, senderAddress: SignalAddress) => Promise<Uint8Array>
 ): Promise<DecryptEncNodeResult> {
-    const log = options.logger.child({
+    const logContext = (): { id?: string; from?: string; participant?: string } => ({
         id: node.attrs.id,
         from: node.attrs.from,
         participant: node.attrs.participant
@@ -462,11 +462,13 @@ async function decryptAndProcessEncNode(
                     senderAddress,
                     senderKeyDistribution.payload
                 )
-                log.trace('processed incoming sender key distribution', {
+                options.logger.trace('processed incoming sender key distribution', {
+                    ...logContext(),
                     groupId: senderKeyDistribution.groupId
                 })
             } catch (error) {
-                log.warn('failed to process incoming sender key distribution', {
+                options.logger.warn('failed to process incoming sender key distribution', {
+                    ...logContext(),
                     groupId: senderKeyDistribution.groupId,
                     message: toError(error).message
                 })
@@ -496,7 +498,8 @@ async function decryptAndProcessEncNode(
         }
         return { success: true, encType }
     } catch (error) {
-        log.warn('failed to decrypt incoming message', {
+        options.logger.warn('failed to decrypt incoming message', {
+            ...logContext(),
             encType,
             message: toError(error).message
         })

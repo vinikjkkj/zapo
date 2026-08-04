@@ -288,6 +288,7 @@ export function createSignalSessionResolver(options: {
         >(missingIndices.length)
         let prepareCount = 0
         const missingBundleTargets: { jid: string; reason: string }[] = []
+        const localIdentity = await signalProtocol.loadLocalIdentity()
         for (let index = 0; index < missingIndices.length; index += 1) {
             const targetIndex = missingIndices[index]
             const targetJid = normalizedTargetJids[targetIndex]
@@ -324,7 +325,8 @@ export function createSignalSessionResolver(options: {
             preparePromises[prepareCount] = signalProtocol
                 .prepareOutgoingSession(targetAddress, bundle, {
                     reuseExisting: true,
-                    knownAbsent: true
+                    knownAbsent: true,
+                    localIdentity
                 })
                 .then((prep) => ({
                     session: prep.session,
@@ -353,6 +355,7 @@ export function createSignalSessionResolver(options: {
         }[] = []
         const entryToTargetIndex: number[] = []
         const fallbackIndices: number[] = []
+        const fallbackIndexSet = new Set<number>()
         for (let i = 0; i < prepareTargetIndices.length; i += 1) {
             const targetIndex = prepareTargetIndices[i]
             const result = prepareResults[i]
@@ -387,6 +390,7 @@ export function createSignalSessionResolver(options: {
                 message: normalized.message
             })
             for (let i = 0; i < entryToTargetIndex.length; i += 1) {
+                fallbackIndexSet.add(entryToTargetIndex[i])
                 fallbackIndices.push(entryToTargetIndex[i])
             }
             persistResult = { resolved: [], skipped: [] }
@@ -415,7 +419,8 @@ export function createSignalSessionResolver(options: {
             if (skippedByAddressKey.has(addrKey)) {
                 continue
             }
-            if (!fallbackIndices.includes(targetIndex)) {
+            if (!fallbackIndexSet.has(targetIndex)) {
+                fallbackIndexSet.add(targetIndex)
                 fallbackIndices.push(targetIndex)
             }
         }

@@ -95,6 +95,10 @@ test('signal session resolver batch does not fallback to single fetch for partia
                 sessionsByAddress.set(key, session)
                 return session
             },
+            loadLocalIdentity: async () => ({
+                regId: 1,
+                staticKeyPair: { pubKey: new Uint8Array(33), privKey: new Uint8Array(32) }
+            }),
             prepareOutgoingSession: async (address: {
                 readonly user: string
                 readonly device: number
@@ -253,6 +257,10 @@ test('signal session resolver shares dedup between ensureSession and ensureSessi
                 hasSession = true
                 return sessionRecord
             },
+            loadLocalIdentity: async () => ({
+                regId: 1,
+                staticKeyPair: { pubKey: new Uint8Array(33), privKey: new Uint8Array(32) }
+            }),
             prepareOutgoingSession: async () => {
                 prepareCalls += 1
                 return {

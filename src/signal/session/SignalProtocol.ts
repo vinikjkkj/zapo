@@ -22,6 +22,7 @@ import {
     generateSerializedKeyPair,
     initiateSessionIncoming,
     initiateSessionOutgoing,
+    type LocalIdentityContext,
     requireLocalIdentity,
     toSerializedKeyPair
 } from '@signal/session/SignalSession'
@@ -44,6 +45,7 @@ function signalAddressLockKey(address: SignalAddress): string {
 interface EstablishOutgoingSessionOptions {
     readonly reuseExisting?: boolean
     readonly knownAbsent?: boolean
+    readonly localIdentity?: LocalIdentityContext
 }
 
 export interface SignalProtocolStores {
@@ -70,6 +72,15 @@ export class SignalProtocol {
     }
 
     /**
+     * Loads the local registration identity once so batch callers can share
+     * it across many `prepareOutgoingSession` calls via
+     * `options.localIdentity` instead of re-reading the store per address.
+     */
+    public async loadLocalIdentity(): Promise<LocalIdentityContext> {
+        return requireLocalIdentity(this.stores.signal)
+    }
+
+    /**
      * Builds an outgoing Signal session against a remote prekey bundle. Set
      * `options.reuseExisting` to skip the handshake when a session already
      * exists for the same remote identity. Set `options.knownAbsent` only
@@ -93,7 +104,7 @@ export class SignalProtocol {
                 }
             }
             const [local, localOneTimeBase] = await Promise.all([
-                requireLocalIdentity(this.stores.signal),
+                options.localIdentity ?? requireLocalIdentity(this.stores.signal),
                 generateSerializedKeyPair()
             ])
             const session = await initiateSessionOutgoing(local, remoteBundle, localOneTimeBase)
@@ -135,7 +146,7 @@ export class SignalProtocol {
                 }
             }
             const [local, localOneTimeBase] = await Promise.all([
-                requireLocalIdentity(this.stores.signal),
+                options.localIdentity ?? requireLocalIdentity(this.stores.signal),
                 generateSerializedKeyPair()
             ])
             const session = await initiateSessionOutgoing(local, remoteBundle, localOneTimeBase)
@@ -264,32 +275,25 @@ export class SignalProtocol {
                 }
             }
 
-            const uniqueAddressKeys = new Array<string>(requests.length)
-            const uniqueAddresses = new Array<SignalAddress>(requests.length)
-            let uniqueAddressCount = 0
+            const addressKeys = new Array<string>(requests.length)
+            const seenAddressKeys = new Set<string>()
+            const uniqueAddressKeys: string[] = []
+            const uniqueAddresses: SignalAddress[] = []
             for (let index = 0; index < requests.length; index += 1) {
                 const address = requests[index].address
                 const addressKey = signalAddressKey(address)
-                let isDuplicate = false
-                for (let dedupIndex = 0; dedupIndex < uniqueAddressCount; dedupIndex += 1) {
-                    if (uniqueAddressKeys[dedupIndex] === addressKey) {
-                        isDuplicate = true
-                        break
-                    }
-                }
-                if (isDuplicate) {
+                addressKeys[index] = addressKey
+                if (seenAddressKeys.has(addressKey)) {
                     continue
                 }
-                uniqueAddressKeys[uniqueAddressCount] = addressKey
-                uniqueAddresses[uniqueAddressCount] = address
-                uniqueAddressCount += 1
+                seenAddressKeys.add(addressKey)
+                uniqueAddressKeys.push(addressKey)
+                uniqueAddresses.push(address)
             }
-            uniqueAddressKeys.length = uniqueAddressCount
-            uniqueAddresses.length = uniqueAddressCount
 
             const currentSessions = await this.stores.session.getSessionsBatch(uniqueAddresses)
             const latestSessionByAddress = new Map<string, SignalSessionRecord>()
-            for (let index = 0; index < uniqueAddressCount; index += 1) {
+            for (let index = 0; index < uniqueAddresses.length; index += 1) {
                 const addressKey = uniqueAddressKeys[index]
                 const current = currentSessions[index]
                 if (current) {
@@ -318,7 +322,7 @@ export class SignalProtocol {
             for (let index = 0; index < requests.length; index += 1) {
                 const request = requests[index]
                 const address = request.address
-                const addressKey = signalAddressKey(address)
+                const addressKey = addressKeys[index]
                 const session = latestSessionByAddress.get(addressKey)
                 if (!session) {
                     throw new Error('signal session not found')

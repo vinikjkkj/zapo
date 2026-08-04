@@ -8,6 +8,7 @@ function frameLength(header: Uint8Array): number {
 export class WaFrameCodec {
     private readonly introFrame: Uint8Array | null
     private readonly maxFrameLength: number
+    private readonly tailScratch: Uint8Array = new Uint8Array(4096)
     private introSent: boolean
     private buffered: Uint8Array
     private bufferedLength: number
@@ -113,7 +114,7 @@ export class WaFrameCodec {
                     return frames
                 }
                 if (missingPayloadBytes === 0) {
-                    frames.push(this.buffered.subarray(3, 3 + length))
+                    frames.push(this.buffered.slice(3, 3 + length))
                 } else if (bufferedPayloadLength === 0) {
                     frames.push(chunk.subarray(0, missingPayloadBytes))
                 } else {
@@ -141,9 +142,16 @@ export class WaFrameCodec {
             frames.push(remainingChunk.subarray(start, end))
             offset = end
         }
-        this.buffered =
-            offset >= remainingChunk.length ? EMPTY_BYTES : remainingChunk.subarray(offset)
-        this.bufferedLength = this.buffered.length
+        const restLength = remainingChunk.length - offset
+        if (restLength === 0) {
+            this.buffered = EMPTY_BYTES
+        } else if (restLength <= this.tailScratch.length) {
+            this.tailScratch.set(remainingChunk.subarray(offset))
+            this.buffered = this.tailScratch
+        } else {
+            this.buffered = remainingChunk.slice(offset)
+        }
+        this.bufferedLength = restLength
         return frames
     }
 }

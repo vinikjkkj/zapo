@@ -33,7 +33,6 @@ import { getWaMediaHkdfInfo, WA_APP_STATE_KEY_TYPES } from '@protocol/constants'
 import {
     assertByteLength,
     concatBytes,
-    EMPTY_BYTES,
     toBytesView,
     toChunkBytes,
     uint8TimingSafeEqual
@@ -455,7 +454,18 @@ async function pumpDecryption(
     const plainHash = createHash('sha256')
     const encHash = createHash('sha256')
     const hmac = createHmac('sha256', keys.macKey)
-    let trailing: Uint8Array = EMPTY_BYTES
+    const trailingScratch = new Uint8Array(HMAC_TRUNCATED_SIZE)
+    let trailingLength = 0
+
+    const consumeCiphertext = async (part: Uint8Array): Promise<void> => {
+        hmac.update(part)
+        const dec = decipher.update(part)
+        if (dec.byteLength > 0) {
+            const decBytes = toBytesView(dec)
+            plainHash.update(decBytes)
+            await writeChunkToWritable(plaintext, decBytes)
+        }
+    }
 
     hmac.update(keys.iv)
     try {
@@ -465,31 +475,37 @@ async function pumpDecryption(
                 continue
             }
             encHash.update(bytes)
-            const merged = trailing.byteLength === 0 ? bytes : concatBytes([trailing, bytes])
-            if (merged.byteLength <= HMAC_TRUNCATED_SIZE) {
-                trailing = merged
+            const total = trailingLength + bytes.byteLength
+            if (total <= HMAC_TRUNCATED_SIZE) {
+                trailingScratch.set(bytes, trailingLength)
+                trailingLength = total
                 continue
             }
 
-            const ciphertextChunk = merged.subarray(0, merged.byteLength - HMAC_TRUNCATED_SIZE)
-            trailing = toBytesView(merged.subarray(merged.byteLength - HMAC_TRUNCATED_SIZE))
-            hmac.update(ciphertextChunk)
-
-            const dec = decipher.update(ciphertextChunk)
-            if (dec.byteLength > 0) {
-                const decBytes = toBytesView(dec)
-                plainHash.update(decBytes)
-                await writeChunkToWritable(plaintext, decBytes)
+            const cipherLength = total - HMAC_TRUNCATED_SIZE
+            const fromTrailing = Math.min(trailingLength, cipherLength)
+            if (fromTrailing > 0) {
+                await consumeCiphertext(trailingScratch.subarray(0, fromTrailing))
             }
+            const fromBytes = cipherLength - fromTrailing
+            if (fromBytes > 0) {
+                await consumeCiphertext(bytes.subarray(0, fromBytes))
+            }
+            const keepFromTrailing = trailingLength - fromTrailing
+            if (keepFromTrailing > 0) {
+                trailingScratch.copyWithin(0, fromTrailing, trailingLength)
+            }
+            trailingScratch.set(bytes.subarray(fromBytes), keepFromTrailing)
+            trailingLength = HMAC_TRUNCATED_SIZE
         }
 
-        if (trailing.byteLength !== HMAC_TRUNCATED_SIZE) {
-            throw new Error(`ciphertext too short: ${trailing.byteLength}`)
+        if (trailingLength !== HMAC_TRUNCATED_SIZE) {
+            throw new Error(`ciphertext too short: ${trailingLength}`)
         }
 
         if (!options.skipMacVerification) {
             const signature = hmac.digest().subarray(0, HMAC_TRUNCATED_SIZE)
-            if (!uint8TimingSafeEqual(signature, trailing)) {
+            if (!uint8TimingSafeEqual(signature, trailingScratch)) {
                 throw new Error('media MAC mismatch')
             }
         }
