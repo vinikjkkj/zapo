@@ -2,6 +2,7 @@ import { hkdf, hmacSha256Sign } from '@crypto'
 import { proto, type Proto } from '@proto'
 import type { BinaryNode } from '@transport/types'
 import { base64ToBytesChecked, concatBytes, EMPTY_BYTES, TEXT_ENCODER } from '@util/bytes'
+import { PROTO_WIRE_TYPES, scanProtoFields } from '@util/protoscan'
 
 const WA_REPORTING_TOKEN_BYTES = 16
 const WA_REPORTING_TOKEN_KEY_BYTES = 32
@@ -34,21 +35,6 @@ interface ReportingTokenField {
 
 interface ReportingTokenConfig {
     readonly fields: ReadonlyMap<number, ReportingTokenField>
-}
-
-interface ParsedProtobufField {
-    readonly tag: number
-    readonly fieldNumber: number
-    readonly wireType: number
-    readonly start: number
-    readonly next: number
-    readonly valueStart: number
-    readonly valueEnd: number
-}
-
-interface VarintReadResult {
-    readonly value: number
-    readonly next: number
 }
 
 interface ExtractedFieldPart {
@@ -193,34 +179,20 @@ function getReportingTokenConfigSpec(): ReportingTokenConfigSpec {
 }
 
 function parseReportingTokenConfigSpec(bytes: Uint8Array): ReportingTokenConfigSpec {
-    let cursor = 0
     const fields = new Map<number, ReportingTokenFieldSpec>()
 
-    while (cursor < bytes.length) {
-        const tag = readVarint(bytes, cursor, bytes.length)
-        cursor = tag.next
-        const fieldNumber = Math.floor(tag.value / 8)
-        const wireType = tag.value & 0x07
-
-        if (fieldNumber === 1 && wireType === 2) {
-            const lengthInfo = readVarint(bytes, cursor, bytes.length)
-            const entryStart = lengthInfo.next
-            const entryEnd = entryStart + lengthInfo.value
-            if (entryEnd > bytes.length) {
-                throw new Error('invalid reporting token config map entry length')
-            }
-
-            const parsedEntry = parseReportingTokenConfigMapEntry(bytes, entryStart, entryEnd)
+    scanProtoFields(bytes, 0, bytes.length, (field) => {
+        if (field.fieldNumber === 1 && field.wireType === PROTO_WIRE_TYPES.LEN) {
+            const parsedEntry = parseReportingTokenConfigMapEntry(
+                bytes,
+                field.valueStart,
+                field.valueEnd
+            )
             if (parsedEntry) {
                 fields.set(parsedEntry.key, parsedEntry.value)
             }
-
-            cursor = entryEnd
-            continue
         }
-
-        cursor = skipField(bytes, cursor, bytes.length, wireType)
-    }
+    })
 
     return { fields }
 }
@@ -230,37 +202,16 @@ function parseReportingTokenConfigMapEntry(
     start: number,
     end: number
 ): { readonly key: number; readonly value: ReportingTokenFieldSpec } | null {
-    let cursor = start
     let key: number | null = null
     let value: ReportingTokenFieldSpec | null = null
 
-    while (cursor < end) {
-        const tag = readVarint(bytes, cursor, end)
-        cursor = tag.next
-        const fieldNumber = Math.floor(tag.value / 8)
-        const wireType = tag.value & 0x07
-
-        if (fieldNumber === 1 && wireType === 0) {
-            const keyVarint = readVarint(bytes, cursor, end)
-            key = keyVarint.value
-            cursor = keyVarint.next
-            continue
+    scanProtoFields(bytes, start, end, (field) => {
+        if (field.fieldNumber === 1 && field.wireType === PROTO_WIRE_TYPES.VARINT) {
+            key = field.varintValue
+        } else if (field.fieldNumber === 2 && field.wireType === PROTO_WIRE_TYPES.LEN) {
+            value = parseReportingTokenFieldSpec(bytes, field.valueStart, field.valueEnd)
         }
-
-        if (fieldNumber === 2 && wireType === 2) {
-            const valueLength = readVarint(bytes, cursor, end)
-            const valueStart = valueLength.next
-            const valueEnd = valueStart + valueLength.value
-            if (valueEnd > end) {
-                throw new Error('invalid reporting token config field value length')
-            }
-            value = parseReportingTokenFieldSpec(bytes, valueStart, valueEnd)
-            cursor = valueEnd
-            continue
-        }
-
-        cursor = skipField(bytes, cursor, end, wireType)
-    }
+    })
 
     if (key === null || value === null) {
         return null
@@ -273,58 +224,33 @@ function parseReportingTokenFieldSpec(
     start: number,
     end: number
 ): ReportingTokenFieldSpec {
-    let cursor = start
     let minVersion = 1
     let maxVersion: number | null = null
     let isMessage = false
     const subfields = new Map<number, ReportingTokenFieldSpec>()
 
-    while (cursor < end) {
-        const tag = readVarint(bytes, cursor, end)
-        cursor = tag.next
-        const fieldNumber = Math.floor(tag.value / 8)
-        const wireType = tag.value & 0x07
-
-        if (fieldNumber === 1 && wireType === 0) {
-            const value = readVarint(bytes, cursor, end)
-            minVersion = value.value
-            cursor = value.next
-            continue
-        }
-
-        if (fieldNumber === 2 && wireType === 0) {
-            const value = readVarint(bytes, cursor, end)
-            maxVersion = value.value
-            cursor = value.next
-            continue
-        }
-
-        if (fieldNumber === 4 && wireType === 0) {
-            const value = readVarint(bytes, cursor, end)
-            isMessage = value.value !== 0
-            cursor = value.next
-            continue
-        }
-
-        if (fieldNumber === 5 && wireType === 2) {
-            const lengthInfo = readVarint(bytes, cursor, end)
-            const entryStart = lengthInfo.next
-            const entryEnd = entryStart + lengthInfo.value
-            if (entryEnd > end) {
-                throw new Error('invalid reporting token subfield map entry length')
+    scanProtoFields(bytes, start, end, (field) => {
+        if (field.wireType === PROTO_WIRE_TYPES.VARINT) {
+            if (field.fieldNumber === 1) {
+                minVersion = field.varintValue
+            } else if (field.fieldNumber === 2) {
+                maxVersion = field.varintValue
+            } else if (field.fieldNumber === 4) {
+                isMessage = field.varintValue !== 0
             }
-
-            const parsedEntry = parseReportingTokenConfigMapEntry(bytes, entryStart, entryEnd)
+            return
+        }
+        if (field.fieldNumber === 5 && field.wireType === PROTO_WIRE_TYPES.LEN) {
+            const parsedEntry = parseReportingTokenConfigMapEntry(
+                bytes,
+                field.valueStart,
+                field.valueEnd
+            )
             if (parsedEntry) {
                 subfields.set(parsedEntry.key, parsedEntry.value)
             }
-
-            cursor = entryEnd
-            continue
         }
-
-        cursor = skipField(bytes, cursor, end, wireType)
-    }
+    })
 
     return {
         minVersion,
@@ -380,37 +306,33 @@ function extractProtobufFieldParts(
 ): ExtractedFieldSet {
     const parts: ExtractedFieldPart[] = []
     let totalSize = 0
-    let cursor = start
 
-    while (cursor < end) {
-        const parsedField = parseProtobufField(bytes, cursor, end)
-        cursor = parsedField.next
-
+    scanProtoFields(bytes, start, end, (parsedField) => {
         const configuredField = config.fields.get(parsedField.fieldNumber)
         if (!configuredField) {
-            continue
+            return
         }
 
         if (
             !configuredField.isMessage &&
             (!configuredField.subfields || configuredField.subfields.fields.size === 0)
         ) {
-            const fieldBytes = bytes.subarray(parsedField.start, parsedField.next)
+            const fieldBytes = bytes.subarray(parsedField.headerStart, parsedField.valueEnd)
             parts.push({
                 fieldNumber: parsedField.fieldNumber,
                 bytes: fieldBytes
             })
             totalSize += fieldBytes.length
-            continue
+            return
         }
 
-        if (parsedField.wireType !== 2) {
-            continue
+        if (parsedField.wireType !== PROTO_WIRE_TYPES.LEN) {
+            return
         }
 
         const nestedConfig = configuredField.isMessage ? rootConfig : configuredField.subfields
         if (!nestedConfig) {
-            continue
+            return
         }
 
         const nestedFields = extractProtobufFieldParts(
@@ -421,10 +343,10 @@ function extractProtobufFieldParts(
             rootConfig
         )
         if (nestedFields.parts.length === 0 || nestedFields.totalSize === 0) {
-            continue
+            return
         }
 
-        const tagBytes = encodeVarint(parsedField.tag)
+        const tagBytes = encodeVarint(parsedField.fieldNumber * 8 + parsedField.wireType)
         const nestedLengthBytes = encodeVarint(nestedFields.totalSize)
         const fieldBytes = new Uint8Array(
             tagBytes.length + nestedLengthBytes.length + nestedFields.totalSize
@@ -442,146 +364,13 @@ function extractProtobufFieldParts(
             bytes: fieldBytes
         })
         totalSize += fieldBytes.length
-    }
+    })
 
     parts.sort((left, right) => left.fieldNumber - right.fieldNumber)
     return {
         parts,
         totalSize
     }
-}
-
-function parseProtobufField(bytes: Uint8Array, start: number, end: number): ParsedProtobufField {
-    const tag = readVarint(bytes, start, end)
-    const tagValue = tag.value
-    if (tagValue <= 0 || tagValue > 4_294_967_295) {
-        throw new Error(`protobuf field tag out of bounds: ${tagValue}`)
-    }
-
-    const fieldNumber = Math.floor(tagValue / 8)
-    if (fieldNumber < 1) {
-        throw new Error(`invalid protobuf field number: ${fieldNumber}`)
-    }
-
-    const wireType = tagValue & 0x07
-    if (wireType === 0) {
-        const value = readVarint(bytes, tag.next, end)
-        return {
-            tag: tagValue,
-            fieldNumber,
-            wireType,
-            start,
-            next: value.next,
-            valueStart: value.next,
-            valueEnd: value.next
-        }
-    }
-    if (wireType === 1) {
-        const next = tag.next + 8
-        if (next > end) {
-            throw new Error('invalid protobuf fixed64 field length')
-        }
-        return {
-            tag: tagValue,
-            fieldNumber,
-            wireType,
-            start,
-            next,
-            valueStart: next,
-            valueEnd: next
-        }
-    }
-    if (wireType === 2) {
-        const valueLength = readVarint(bytes, tag.next, end)
-        const valueStart = valueLength.next
-        const valueEnd = valueStart + valueLength.value
-        if (valueEnd > end) {
-            throw new Error('invalid protobuf length-delimited field length')
-        }
-        return {
-            tag: tagValue,
-            fieldNumber,
-            wireType,
-            start,
-            next: valueEnd,
-            valueStart,
-            valueEnd
-        }
-    }
-    if (wireType === 5) {
-        const next = tag.next + 4
-        if (next > end) {
-            throw new Error('invalid protobuf fixed32 field length')
-        }
-        return {
-            tag: tagValue,
-            fieldNumber,
-            wireType,
-            start,
-            next,
-            valueStart: next,
-            valueEnd: next
-        }
-    }
-    throw new Error(`unsupported protobuf wire type: ${wireType}`)
-}
-
-function readVarint(bytes: Uint8Array, start: number, end: number): VarintReadResult {
-    let cursor = start
-    let value = 0
-    let factor = 1
-
-    while (cursor < end) {
-        const byte = bytes[cursor]
-        value += (byte & 0x7f) * factor
-        if (!Number.isSafeInteger(value)) {
-            throw new Error('varint exceeds safe integer range')
-        }
-
-        cursor += 1
-        if ((byte & 0x80) === 0) {
-            return {
-                value,
-                next: cursor
-            }
-        }
-
-        factor *= 128
-        if (factor > 2 ** 56) {
-            throw new Error('varint exceeds supported range')
-        }
-    }
-
-    throw new Error('unexpected end of buffer while reading varint')
-}
-
-function skipField(bytes: Uint8Array, start: number, end: number, wireType: number): number {
-    if (wireType === 0) {
-        return readVarint(bytes, start, end).next
-    }
-    if (wireType === 1) {
-        const next = start + 8
-        if (next > end) {
-            throw new Error('invalid fixed64 field size while skipping')
-        }
-        return next
-    }
-    if (wireType === 2) {
-        const lengthInfo = readVarint(bytes, start, end)
-        const next = lengthInfo.next + lengthInfo.value
-        if (next > end) {
-            throw new Error('invalid length-delimited field size while skipping')
-        }
-        return next
-    }
-    if (wireType === 5) {
-        const next = start + 4
-        if (next > end) {
-            throw new Error('invalid fixed32 field size while skipping')
-        }
-        return next
-    }
-    throw new Error(`unsupported wire type while skipping field: ${wireType}`)
 }
 
 function encodeVarint(value: number): Uint8Array {

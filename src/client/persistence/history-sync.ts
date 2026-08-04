@@ -10,8 +10,9 @@ import { proto, type Proto } from '@proto'
 import { isUserJid } from '@protocol/jid'
 import { normalizeEphemeralSettingSeconds } from '@protocol/message'
 import type { WaChatMetadataStore } from '@store/contracts/chat-metadata.store'
-import { decodeProtoBytes, toBytesView } from '@util/bytes'
+import { decodeProtoBytes, TEXT_DECODER, toBytesView } from '@util/bytes'
 import { longToNumber, toError } from '@util/primitives'
+import { PROTO_WIRE_TYPES, scanProtoFields } from '@util/protoscan'
 
 const unzipAsync = promisify(unzip)
 
@@ -24,6 +25,113 @@ const HANDLED_SYNC_TYPES = new Set([
     proto.Message.HistorySyncType.NON_BLOCKING_DATA
 ])
 const HISTORY_SYNC_MAX_PENDING_WRITES = 1_024
+
+const HISTORY_SYNC_FIELDS = Object.freeze({
+    CONVERSATIONS: 2,
+    CHUNK_ORDER: 5,
+    PROGRESS: 6,
+    PUSHNAMES: 7,
+    PHONE_NUMBER_TO_LID_MAPPINGS: 15,
+    NCT_SALT: 19,
+    INLINE_CONTACTS: 20
+} as const)
+
+const CONVERSATION_JID_FIELDS = Object.freeze({
+    PN_JID: 39,
+    LID_JID: 42,
+    ACCOUNT_LID: 49
+} as const)
+
+interface ByteRange {
+    readonly start: number
+    readonly end: number
+}
+
+interface HistorySyncScan {
+    readonly conversationRanges: readonly ByteRange[]
+    readonly pushnames: readonly Proto.IPushname[]
+    readonly inlineContacts: readonly Proto.IInlineContact[]
+    readonly phoneNumberToLidMappings: readonly Proto.IPhoneNumberToLIDMapping[]
+    readonly nctSalt: Uint8Array | null
+    readonly chunkOrder: number | null
+    readonly progress: number | null
+}
+
+export function scanHistorySyncBlob(bytes: Uint8Array): HistorySyncScan {
+    const conversationRanges: ByteRange[] = []
+    const pushnames: Proto.IPushname[] = []
+    const inlineContacts: Proto.IInlineContact[] = []
+    const phoneNumberToLidMappings: Proto.IPhoneNumberToLIDMapping[] = []
+    let nctSalt: Uint8Array | null = null
+    let chunkOrder: number | null = null
+    let progress: number | null = null
+
+    scanProtoFields(bytes, 0, bytes.length, (field) => {
+        if (field.wireType === PROTO_WIRE_TYPES.LEN) {
+            if (field.fieldNumber === HISTORY_SYNC_FIELDS.CONVERSATIONS) {
+                conversationRanges[conversationRanges.length] = {
+                    start: field.valueStart,
+                    end: field.valueEnd
+                }
+            } else if (field.fieldNumber === HISTORY_SYNC_FIELDS.PUSHNAMES) {
+                pushnames[pushnames.length] = proto.Pushname.decode(
+                    bytes.subarray(field.valueStart, field.valueEnd)
+                )
+            } else if (field.fieldNumber === HISTORY_SYNC_FIELDS.PHONE_NUMBER_TO_LID_MAPPINGS) {
+                phoneNumberToLidMappings[phoneNumberToLidMappings.length] =
+                    proto.PhoneNumberToLIDMapping.decode(
+                        bytes.subarray(field.valueStart, field.valueEnd)
+                    )
+            } else if (field.fieldNumber === HISTORY_SYNC_FIELDS.INLINE_CONTACTS) {
+                inlineContacts[inlineContacts.length] = proto.InlineContact.decode(
+                    bytes.subarray(field.valueStart, field.valueEnd)
+                )
+            } else if (field.fieldNumber === HISTORY_SYNC_FIELDS.NCT_SALT) {
+                nctSalt = bytes.slice(field.valueStart, field.valueEnd)
+            }
+            return
+        }
+        if (field.wireType === PROTO_WIRE_TYPES.VARINT) {
+            if (field.fieldNumber === HISTORY_SYNC_FIELDS.CHUNK_ORDER) {
+                chunkOrder = field.varintValue
+            } else if (field.fieldNumber === HISTORY_SYNC_FIELDS.PROGRESS) {
+                progress = field.varintValue
+            }
+        }
+    })
+
+    return {
+        conversationRanges,
+        pushnames,
+        inlineContacts,
+        phoneNumberToLidMappings,
+        nctSalt,
+        chunkOrder,
+        progress
+    }
+}
+
+export function scanConversationJidPair(
+    bytes: Uint8Array,
+    range: ByteRange
+): { readonly pnJid: string | null; readonly lidJid: string | null } {
+    let pnJid: string | null = null
+    let lidJid: string | null = null
+    let accountLid: string | null = null
+    scanProtoFields(bytes, range.start, range.end, (field) => {
+        if (field.wireType !== PROTO_WIRE_TYPES.LEN) {
+            return
+        }
+        if (field.fieldNumber === CONVERSATION_JID_FIELDS.PN_JID) {
+            pnJid = TEXT_DECODER.decode(bytes.subarray(field.valueStart, field.valueEnd))
+        } else if (field.fieldNumber === CONVERSATION_JID_FIELDS.LID_JID) {
+            lidJid = TEXT_DECODER.decode(bytes.subarray(field.valueStart, field.valueEnd))
+        } else if (field.fieldNumber === CONVERSATION_JID_FIELDS.ACCOUNT_LID) {
+            accountLid = TEXT_DECODER.decode(bytes.subarray(field.valueStart, field.valueEnd))
+        }
+    })
+    return { pnJid, lidJid: lidJid ?? accountLid }
+}
 
 interface WaHistorySyncDeps {
     readonly logger: Logger
@@ -89,15 +197,18 @@ export async function processHistorySyncNotification(
 
     const blob = await downloadHistorySyncBlob(deps, notification)
     const decompressed = toBytesView(await unzipAsync(blob))
-    const historySync = proto.HistorySync.decode(decompressed)
+    // Conversations are decoded one record at a time in the loop below so the
+    // full message graph never coexists in memory; the scan only records their
+    // byte ranges and decodes the small metadata fields.
+    const scan = scanHistorySyncBlob(decompressed)
 
     deps.logger.info('decoded history sync chunk', {
         syncType,
-        chunkOrder: historySync.chunkOrder,
-        progress: historySync.progress,
-        conversations: historySync.conversations.length,
-        pushnames: historySync.pushnames.length,
-        inlineContacts: historySync.inlineContacts?.length ?? 0
+        chunkOrder: scan.chunkOrder,
+        progress: scan.progress,
+        conversations: scan.conversationRanges.length,
+        pushnames: scan.pushnames.length,
+        inlineContacts: scan.inlineContacts.length
     })
 
     const nowMs = Date.now()
@@ -108,25 +219,24 @@ export async function processHistorySyncNotification(
     // pushnames and mappings land on a single canonical (LID-form) contact
     // row instead of two mirror rows (one keyed by PN, one keyed by LID).
     const pnToLid = new Map<string, string>()
-    for (const map of historySync.phoneNumberToLidMappings ?? []) {
+    for (const map of scan.phoneNumberToLidMappings) {
         if (map.pnJid && map.lidJid) {
             pnToLid.set(map.pnJid, map.lidJid)
         }
     }
-    for (const c of historySync.inlineContacts ?? []) {
+    for (const c of scan.inlineContacts) {
         if (c.pnJid && c.lidJid) {
             pnToLid.set(c.pnJid, c.lidJid)
         }
     }
-    for (const conversation of historySync.conversations) {
-        const pnJid = conversation.pnJid
-        const lidJid = conversation.lidJid ?? conversation.accountLid
-        if (pnJid && lidJid) {
-            pnToLid.set(pnJid, lidJid)
+    for (const range of scan.conversationRanges) {
+        const pair = scanConversationJidPair(decompressed, range)
+        if (pair.pnJid && pair.lidJid) {
+            pnToLid.set(pair.pnJid, pair.lidJid)
         }
     }
 
-    for (const pn of historySync.pushnames) {
+    for (const pn of scan.pushnames) {
         if (!pn.id) {
             continue
         }
@@ -150,7 +260,7 @@ export async function processHistorySyncNotification(
         }
     }
 
-    for (const c of historySync.inlineContacts ?? []) {
+    for (const c of scan.inlineContacts) {
         const jid = c.lidJid ?? c.pnJid
         if (!jid) {
             continue
@@ -171,11 +281,35 @@ export async function processHistorySyncNotification(
     }
 
     let messagesCount = 0
-    for (const conversation of historySync.conversations) {
+    const tokenConversations: {
+        readonly jid: string
+        readonly tcToken?: Uint8Array | null
+        readonly tcTokenTimestamp?: number | null
+        readonly tcTokenSenderTimestamp?: number | null
+    }[] = []
+    for (const range of scan.conversationRanges) {
+        const conversation = proto.Conversation.decode(
+            decompressed.subarray(range.start, range.end)
+        )
         const threadJid = conversation.id
         if (!threadJid) {
             deps.logger.debug('skipping history sync conversation without thread jid')
             continue
+        }
+
+        if (
+            deps.onPrivacyTokens &&
+            (conversation.tcToken ||
+                conversation.tcTokenTimestamp ||
+                conversation.tcTokenSenderTimestamp)
+        ) {
+            tokenConversations[tokenConversations.length] = {
+                jid: threadJid,
+                tcToken: conversation.tcToken ? new Uint8Array(conversation.tcToken) : undefined,
+                tcTokenTimestamp: longToNumber(conversation.tcTokenTimestamp) || undefined,
+                tcTokenSenderTimestamp:
+                    longToNumber(conversation.tcTokenSenderTimestamp) || undefined
+            }
         }
 
         const ephemeralExpiration = conversation.ephemeralExpiration ?? undefined
@@ -271,45 +405,21 @@ export async function processHistorySyncNotification(
         }
     }
 
-    if (deps.onPrivacyTokens) {
-        const tokenConversations: {
-            readonly jid: string
-            readonly tcToken?: Uint8Array | null
-            readonly tcTokenTimestamp?: number | null
-            readonly tcTokenSenderTimestamp?: number | null
-        }[] = []
-        for (const conversation of historySync.conversations) {
-            if (!conversation.id) continue
-            if (
-                conversation.tcToken ||
-                conversation.tcTokenTimestamp ||
-                conversation.tcTokenSenderTimestamp
-            ) {
-                tokenConversations[tokenConversations.length] = {
-                    jid: conversation.id,
-                    tcToken: conversation.tcToken,
-                    tcTokenTimestamp: longToNumber(conversation.tcTokenTimestamp) || undefined,
-                    tcTokenSenderTimestamp:
-                        longToNumber(conversation.tcTokenSenderTimestamp) || undefined
-                }
-            }
-        }
-        if (tokenConversations.length > 0) {
-            pendingWrites[pendingWrites.length] = deps.onPrivacyTokens(tokenConversations)
-        }
+    if (deps.onPrivacyTokens && tokenConversations.length > 0) {
+        pendingWrites[pendingWrites.length] = deps.onPrivacyTokens(tokenConversations)
     }
-    if (deps.onNctSalt && historySync.nctSalt) {
-        pendingWrites[pendingWrites.length] = deps.onNctSalt(historySync.nctSalt)
+    if (deps.onNctSalt && scan.nctSalt) {
+        pendingWrites[pendingWrites.length] = deps.onNctSalt(scan.nctSalt)
     }
 
     const event: WaHistorySyncChunkEvent = {
         syncType,
         messagesCount,
-        conversationsCount: historySync.conversations.length,
-        pushnamesCount: historySync.pushnames.length,
-        inlineContactsCount: historySync.inlineContacts?.length ?? 0,
-        chunkOrder: historySync.chunkOrder ?? undefined,
-        progress: historySync.progress ?? undefined
+        conversationsCount: scan.conversationRanges.length,
+        pushnamesCount: scan.pushnames.length,
+        inlineContactsCount: scan.inlineContacts.length,
+        chunkOrder: scan.chunkOrder ?? undefined,
+        progress: scan.progress ?? undefined
     }
     await flushPendingWrites(pendingWrites)
     deps.emitEvent('history_sync_chunk', event)
