@@ -30,12 +30,7 @@ import {
     isSendMediaMessage,
     isSendTextMessage,
     needsSecretPersistence,
-    resolveButtonAddonKind,
-    resolveDecryptFailAttr,
-    resolveEditAttr,
-    resolveEncMediaType,
-    resolveMessageTypeAttr,
-    resolveMetaAttrs,
+    resolveOutboundMessageAttrs,
     unwrapMessage,
     wrapAsViewOnce
 } from '@message/encode/content'
@@ -637,17 +632,16 @@ export class WaMessageDispatchCoordinator {
         )
 
         const plaintext = await writeRandomPadMax16(proto.Message.encode(messageWithIcdc).finish())
-        const buttonAddonKind = resolveButtonAddonKind(messageWithIcdc)
+        const outboundAttrs = resolveOutboundMessageAttrs(messageWithIcdc)
+        const buttonAddonKind = outboundAttrs.buttonAddonKind
         const buttonAddonNode = buttonAddonKind ? buildButtonAddonNode(buttonAddonKind) : undefined
         // when a <biz> companion is attached the stanza must advertise type=text and
         // omit enc.mediatype; sending type=media + mediatype=list/button alongside the
         // companion is rejected by the server as SMAX_INVALID (479).
-        const type = buttonAddonKind ? 'text' : resolveMessageTypeAttr(messageWithIcdc)
-        const edit = resolveEditAttr(messageWithIcdc) ?? undefined
-        const mediatype = buttonAddonKind
-            ? undefined
-            : (resolveEncMediaType(messageWithIcdc) ?? undefined)
-        const metaAttrs = resolveMetaAttrs(messageWithIcdc)
+        const type = buttonAddonKind ? 'text' : outboundAttrs.typeAttr
+        const edit = outboundAttrs.edit ?? undefined
+        const mediatype = buttonAddonKind ? undefined : (outboundAttrs.mediatype ?? undefined)
+        const metaAttrs = outboundAttrs.metaAttrs
         const metaNode = metaAttrs ? buildMetaNode(metaAttrs as Record<string, string>) : undefined
         const customNodes: BinaryNode[] = []
         if (metaNode) customNodes.push(metaNode)
@@ -658,7 +652,7 @@ export class WaMessageDispatchCoordinator {
             }
         }
 
-        const decryptFail = resolveDecryptFailAttr(messageWithIcdc)
+        const decryptFail = outboundAttrs.decryptFail
         const envelope: WaOutboundEnvelope = {
             message: messageWithIcdc,
             plaintext,
@@ -798,7 +792,7 @@ export class WaMessageDispatchCoordinator {
             replayStatusSetting: statusSetting,
             // Bare `<to jid=user>` ack hints route the skmsg through primary
             // devices that already hold the sender key.
-            customize: async ({
+            customize: ({
                 fanoutDeviceJids,
                 distributionParticipants,
                 messageWithSecret,
@@ -822,7 +816,7 @@ export class WaMessageDispatchCoordinator {
                     seenAck.add(userJid)
                     ackHints.push({ jid: userJid })
                 }
-                const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
+                const reportingArtifacts = this.tryBuildReportingTokenArtifacts({
                     message: messageWithSecret,
                     stanzaId: sendOptions.id,
                     senderUserJid: toUserJid(senderJid),
@@ -891,11 +885,17 @@ export class WaMessageDispatchCoordinator {
             }[]
             readonly messageWithSecret: Proto.IMessage
             readonly sendOptions: WaSendMessageOptions
-        }) => Promise<{
-            readonly extraParticipants?: readonly { readonly jid: string }[]
-            readonly customNodes?: readonly BinaryNode[]
-            readonly phash?: string
-        }>
+        }) =>
+            | Promise<{
+                  readonly extraParticipants?: readonly { readonly jid: string }[]
+                  readonly customNodes?: readonly BinaryNode[]
+                  readonly phash?: string
+              }>
+            | {
+                  readonly extraParticipants?: readonly { readonly jid: string }[]
+                  readonly customNodes?: readonly BinaryNode[]
+                  readonly phash?: string
+              }
     }): Promise<WaMessagePublishResult> {
         const sendOptions = await this.withResolvedMessageId(input.options)
         const sender = parseSignalAddressFromJid(input.senderJid)
@@ -948,14 +948,15 @@ export class WaMessageDispatchCoordinator {
                 participants.push(entry)
             }
         }
+        const outboundAttrs = resolveOutboundMessageAttrs(messageWithSecret)
         const messageNode = buildGroupSenderKeyMessageNode({
             to: input.groupJid,
-            type: resolveMessageTypeAttr(messageWithSecret),
+            type: outboundAttrs.typeAttr,
             id: sendOptions.id,
             phash: extras.phash,
-            edit: resolveEditAttr(messageWithSecret) ?? undefined,
-            mediatype: resolveEncMediaType(messageWithSecret) ?? undefined,
-            decryptFail: resolveDecryptFailAttr(messageWithSecret),
+            edit: outboundAttrs.edit ?? undefined,
+            mediatype: outboundAttrs.mediatype ?? undefined,
+            decryptFail: outboundAttrs.decryptFail,
             groupCiphertext: groupCiphertext.ciphertext,
             participants,
             deviceIdentity: shouldAttachDeviceIdentity
@@ -1172,7 +1173,7 @@ export class WaMessageDispatchCoordinator {
                 break
             }
         }
-        const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
+        const reportingArtifacts = this.tryBuildReportingTokenArtifacts({
             message,
             messageBytes: unpadPkcs7(plaintext),
             stanzaId: sendOptions.id,
@@ -1363,7 +1364,7 @@ export class WaMessageDispatchCoordinator {
         phashTargets[phashTargetCount] = senderJid
         phashTargets.length = phashTargetCount + 1
         const localPhash = computePhashV2(phashTargets)
-        const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
+        const reportingArtifacts = this.tryBuildReportingTokenArtifacts({
             message,
             messageBytes: unpadPkcs7(plaintext),
             stanzaId: sendOptions.id,
@@ -1842,7 +1843,7 @@ export class WaMessageDispatchCoordinator {
         const deviceIdentity = shouldAttachDeviceIdentity
             ? this.getEncodedSignedDeviceIdentity()
             : undefined
-        const reportingArtifacts = await this.tryBuildReportingTokenArtifacts({
+        const reportingArtifacts = this.tryBuildReportingTokenArtifacts({
             message,
             messageBytes: unpadPkcs7(plaintext),
             stanzaId: sendOptions.id,
@@ -1959,20 +1960,20 @@ export class WaMessageDispatchCoordinator {
         }
     }
 
-    private async tryBuildReportingTokenArtifacts(input: {
+    private tryBuildReportingTokenArtifacts(input: {
         readonly message: Proto.IMessage
         readonly messageBytes?: Uint8Array
         readonly stanzaId?: string
         readonly senderUserJid: string
         readonly remoteJid: string
         readonly context: string
-    }): Promise<BuildReportingTokenArtifactsResult | null> {
+    }): BuildReportingTokenArtifactsResult | null {
         if (!input.stanzaId) {
             return null
         }
 
         try {
-            return await buildReportingTokenArtifacts({
+            return buildReportingTokenArtifacts({
                 message: input.message,
                 messageBytes: input.messageBytes,
                 stanzaId: input.stanzaId,

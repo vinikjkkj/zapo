@@ -278,7 +278,7 @@ export class SenderKeyManager {
                 }
             }
 
-            const selected = await selectMessageKey(
+            const selected = selectMessageKey(
                 senderKey,
                 parsed.iteration,
                 this.getFutureMessagesMax?.()

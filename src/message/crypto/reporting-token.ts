@@ -82,10 +82,9 @@ export interface BuildReportingTokenArtifactsResult {
 let reportingTokenConfigSpec: ReportingTokenConfigSpec | null = null
 const reportingTokenConfigCache = new Map<number, ReportingTokenConfig>()
 
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function buildReportingTokenArtifacts(
+export function buildReportingTokenArtifacts(
     input: BuildReportingTokenNodeInput
-): Promise<BuildReportingTokenArtifactsResult | null> {
+): BuildReportingTokenArtifactsResult | null {
     const stanzaId = input.stanzaId.trim()
     if (!stanzaId || !isMessageReportingTokenCompatible(input.message)) {
         return null

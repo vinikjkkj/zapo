@@ -387,13 +387,13 @@ test('reporting token helpers cover secret injection and deterministic token gen
             messageSecret: new Uint8Array(32).fill(7)
         }
     }
-    const first = await buildReportingTokenArtifacts({
+    const first = buildReportingTokenArtifacts({
         message: baseMessage,
         stanzaId: 'msg-1',
         senderUserJid: '551100000000@s.whatsapp.net',
         remoteJid: '551188888888@s.whatsapp.net'
     })
-    const second = await buildReportingTokenArtifacts({
+    const second = buildReportingTokenArtifacts({
         message: baseMessage,
         stanzaId: 'msg-1',
         senderUserJid: '551100000000@s.whatsapp.net',
@@ -410,7 +410,7 @@ test('reporting token helpers cover secret injection and deterministic token gen
     assert.equal((firstTokenNode?.content as Uint8Array).byteLength, 16)
     assert.deepEqual(firstTokenNode?.content, secondTokenNode?.content)
 
-    const changedResult = await buildReportingTokenArtifacts({
+    const changedResult = buildReportingTokenArtifacts({
         message: baseMessage,
         stanzaId: 'msg-2',
         senderUserJid: '551100000000@s.whatsapp.net',
@@ -421,7 +421,7 @@ test('reporting token helpers cover secret injection and deterministic token gen
         : null
     assert.notDeepEqual(firstTokenNode?.content, changedTokenNode?.content)
 
-    const incompatible = await buildReportingTokenArtifacts({
+    const incompatible = buildReportingTokenArtifacts({
         message: {
             reactionMessage: {},
             messageContextInfo: {

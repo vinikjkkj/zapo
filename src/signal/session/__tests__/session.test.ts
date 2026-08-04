@@ -166,15 +166,15 @@ test('signal ratchet derives keys, selects future message keys and rejects dupli
         chainKey,
         unusedMsgKeys: []
     }
-    const future = await selectMessageKey(chain, 2)
+    const future = selectMessageKey(chain, 2)
     assert.equal(future.messageKey.index, 2)
     assert.equal(future.updatedChain.nextMsgIndex, 3)
     assert.ok(future.updatedChain.unusedMsgKeys.length > 0)
 
-    const stale = await selectMessageKey(future.updatedChain, 1)
+    const stale = selectMessageKey(future.updatedChain, 1)
     assert.equal(stale.messageKey.index, 1)
-    await assert.rejects(() => selectMessageKey(stale.updatedChain, 1), /duplicate message/)
-    await assert.rejects(() => selectMessageKey(chain, 5_000), /message too far in future/)
+    assert.throws(() => selectMessageKey(stale.updatedChain, 1), /duplicate message/)
+    assert.throws(() => selectMessageKey(chain, 5_000), /message too far in future/)
 })
 
 test('signal protocol establishes outgoing session and decrypts prekey message on receiver', async () => {

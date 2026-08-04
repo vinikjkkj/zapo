@@ -70,11 +70,10 @@ export function deriveMsgKey(
     return deriveMsgKeyFromChainKey(index, chainKey)
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function selectMessageKey(
+export function selectMessageKey(
     chain: SignalRecvChain,
     targetCounter: number
-): Promise<{ readonly messageKey: SignalMessageKey; readonly updatedChain: SignalRecvChain }> {
+): { readonly messageKey: SignalMessageKey; readonly updatedChain: SignalRecvChain } {
     const delta = targetCounter - chain.nextMsgIndex
     if (delta > FUTURE_MESSAGES_MAX) {
         throw new Error('message too far in future')
@@ -161,11 +160,10 @@ function deriveMsgKeyFromChainKey(
     }
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function encryptMsg(
+export function encryptMsg(
     session: SignalSessionRecord,
     plaintext: Uint8Array
-): Promise<readonly [SignalSessionRecord, { type: 'msg' | 'pkmsg'; ciphertext: Uint8Array }]> {
+): readonly [SignalSessionRecord, { type: 'msg' | 'pkmsg'; ciphertext: Uint8Array }] {
     const { nextChainKey, messageKey } = deriveMsgKey(
         session.sendChain.nextMsgIndex,
         session.sendChain.chainKey
@@ -292,10 +290,8 @@ export async function decryptMsgFromSession(
             chainKey: recvRatchet.chainKey,
             unusedMsgKeys: []
         }
-        const [selected, newSendRatchet] = await Promise.all([
-            selectMessageKey(freshRecvChain, message.counter),
-            generateSerializedKeyPair()
-        ])
+        const selected = selectMessageKey(freshRecvChain, message.counter)
+        const newSendRatchet = await generateSerializedKeyPair()
         selectedMessageKey = selected.messageKey
 
         const sendRatchet = await calculateRatchet(
@@ -323,7 +319,7 @@ export async function decryptMsgFromSession(
             session.recvChains[recvChainIndex],
             `recvChains[${recvChainIndex}]`
         )
-        const selected = await selectMessageKey(decoded, message.counter)
+        const selected = selectMessageKey(decoded, message.counter)
         selectedMessageKey = selected.messageKey
         const nextRecvChains: RawSignalRecvChain[] = session.recvChains.slice()
         nextRecvChains[recvChainIndex] = encodeSignalRecvChain(selected.updatedChain)

@@ -19,12 +19,11 @@ export interface SenderKeyMessageKeySelection {
     readonly updatedRecord: SenderKeyRecord
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function selectMessageKey(
+export function selectMessageKey(
     senderKey: SenderKeyRecord,
     targetIteration: number,
     futureMessagesMax?: number
-): Promise<SenderKeyMessageKeySelection> {
+): SenderKeyMessageKeySelection {
     const delta = targetIteration - senderKey.iteration
     if (delta > (futureMessagesMax ?? SENDER_KEY_FUTURE_MESSAGES_MAX)) {
         throw new Error('sender key message is too far in future')

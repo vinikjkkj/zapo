@@ -49,12 +49,12 @@ test('sender key chain derives message keys and handles stale/future counters', 
     assert.equal(derived.messageKey.iteration, 0)
     assert.equal(derived.messageKey.seed.length, 50)
 
-    const selectedFuture = await selectMessageKey(senderKey, 3)
+    const selectedFuture = selectMessageKey(senderKey, 3)
     assert.equal(selectedFuture.messageKey.iteration, 3)
     assert.equal(selectedFuture.updatedRecord.iteration, 4)
     assert.ok((selectedFuture.updatedRecord.unusedMessageKeys?.length ?? 0) > 0)
 
-    const selectedStale = await selectMessageKey(selectedFuture.updatedRecord, 1)
+    const selectedStale = selectMessageKey(selectedFuture.updatedRecord, 1)
     assert.equal(selectedStale.messageKey.iteration, 1)
     assert.equal(
         (selectedStale.updatedRecord.unusedMessageKeys?.length ?? 0) <
@@ -62,11 +62,11 @@ test('sender key chain derives message keys and handles stale/future counters', 
         true
     )
 
-    await assert.rejects(
+    assert.throws(
         () => selectMessageKey(selectedStale.updatedRecord, 1),
         /sender key message iteration is stale/
     )
-    await assert.rejects(
+    assert.throws(
         () => selectMessageKey(senderKey, 50_000),
         /sender key message is too far in future/
     )

@@ -339,7 +339,7 @@ export class SignalProtocol {
                     throw new Error('identity mismatch')
                 }
 
-                const [updatedSession, encrypted] = await encryptMsg(session, request.plaintext)
+                const [updatedSession, encrypted] = encryptMsg(session, request.plaintext)
                 latestSessionByAddress.set(addressKey, updatedSession)
                 sessionUpdatesByAddress.set(addressKey, {
                     address,

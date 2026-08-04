@@ -25,12 +25,12 @@ const input = {
     remoteJid: '5511999998888@s.whatsapp.net'
 }
 
-test('reporting token from caller-supplied bytes matches the self-encoded path', async () => {
-    const fromMessage = await buildReportingTokenArtifacts(input)
+test('reporting token from caller-supplied bytes matches the self-encoded path', () => {
+    const fromMessage = buildReportingTokenArtifacts(input)
     assert.ok(fromMessage)
 
     const messageBytes = proto.Message.encode(message).finish()
-    const fromBytes = await buildReportingTokenArtifacts({ ...input, messageBytes })
+    const fromBytes = buildReportingTokenArtifacts({ ...input, messageBytes })
     assert.ok(fromBytes)
 
     assert.equal(bytesToHex(fromBytes.reportingToken), bytesToHex(fromMessage.reportingToken))
@@ -43,11 +43,11 @@ test('reporting token from caller-supplied bytes matches the self-encoded path',
 
 test('unpadded envelope plaintext yields the same reporting token as a fresh encode', async () => {
     const padded = await writeRandomPadMax16(proto.Message.encode(message).finish())
-    const fromEnvelope = await buildReportingTokenArtifacts({
+    const fromEnvelope = buildReportingTokenArtifacts({
         ...input,
         messageBytes: unpadPkcs7(padded)
     })
-    const fromMessage = await buildReportingTokenArtifacts(input)
+    const fromMessage = buildReportingTokenArtifacts(input)
     assert.ok(fromEnvelope)
     assert.ok(fromMessage)
     assert.equal(bytesToHex(fromEnvelope.reportingToken), bytesToHex(fromMessage.reportingToken))

@@ -5,13 +5,16 @@ import {
     getContentType,
     isSendMediaMessage,
     resolveButtonAddonKind,
+    resolveDecryptFailAttr,
     resolveEditAttr,
     resolveEncMediaType,
     resolveMessageTypeAttr,
-    resolveMetaAttrs
+    resolveMetaAttrs,
+    resolveOutboundMessageAttrs
 } from '@message/encode/content'
 import { unwrapDeviceSentMessage, wrapDeviceSentMessage } from '@message/encode/device-sent'
 import { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
+import { proto, type Proto } from '@proto'
 
 test('content helpers detect media payload and resolve message type', () => {
     assert.equal(
@@ -105,4 +108,44 @@ test('padding helpers add random padding and reverse pkcs7', async () => {
     const unpadded = unpadPkcs7(new Uint8Array([10, 11, 2, 2]))
     assert.deepEqual(unpadded, new Uint8Array([10, 11]))
     assert.throws(() => unpadPkcs7(new Uint8Array([])), /empty bytes/)
+})
+
+test('resolveOutboundMessageAttrs matches the individual resolvers', () => {
+    const corpus: Proto.IMessage[] = [
+        { conversation: 'texto simples' },
+        { extendedTextMessage: { text: 'link', matchedText: 'https://x.com' } },
+        { imageMessage: { url: 'x', mimetype: 'image/jpeg' } },
+        { audioMessage: { ptt: true } },
+        { videoMessage: { gifPlayback: true } },
+        { reactionMessage: { text: '' } },
+        { reactionMessage: { text: '👍' } },
+        {
+            protocolMessage: {
+                type: proto.Message.ProtocolMessage.Type.REVOKE,
+                key: { fromMe: true }
+            }
+        },
+        { protocolMessage: { type: proto.Message.ProtocolMessage.Type.MESSAGE_EDIT } },
+        { pollCreationMessageV3: { name: 'enquete' } },
+        { pollUpdateMessage: { vote: { encPayload: new Uint8Array(4) } } },
+        { eventMessage: { name: 'evento' } },
+        { listMessage: { title: 'lista' } },
+        { buttonsMessage: { contentText: 'botoes' } },
+        { interactiveMessage: { nativeFlowMessage: {} } },
+        { pinInChatMessage: { key: { id: '1' } } },
+        { ephemeralMessage: { message: { conversation: 'efemera' } } },
+        { viewOnceMessage: { message: { imageMessage: { url: 'x' } } } },
+        { ephemeralMessage: { message: { viewOnceMessageV2: { message: { videoMessage: {} } } } } },
+        { deviceSentMessage: { message: { extendedTextMessage: { text: 'ds' } } } }
+    ]
+    for (const message of corpus) {
+        const combined = resolveOutboundMessageAttrs(message)
+        const label = JSON.stringify(message).slice(0, 60)
+        assert.equal(combined.buttonAddonKind, resolveButtonAddonKind(message), label)
+        assert.equal(combined.typeAttr, resolveMessageTypeAttr(message), label)
+        assert.equal(combined.edit, resolveEditAttr(message), label)
+        assert.equal(combined.mediatype, resolveEncMediaType(message), label)
+        assert.deepEqual(combined.metaAttrs, resolveMetaAttrs(message), label)
+        assert.equal(combined.decryptFail, resolveDecryptFailAttr(message), label)
+    }
 })
