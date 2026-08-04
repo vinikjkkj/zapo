@@ -45,6 +45,11 @@ function signalAddressLockKey(address: SignalAddress): string {
 interface EstablishOutgoingSessionOptions {
     readonly reuseExisting?: boolean
     readonly knownAbsent?: boolean
+    /**
+     * Preloaded local identity for batch session setup. Must come from
+     * {@link SignalProtocol.loadLocalIdentity} on the same store; when
+     * absent the identity is read from the store per call.
+     */
     readonly localIdentity?: LocalIdentityContext
 }
 

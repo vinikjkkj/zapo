@@ -389,3 +389,41 @@ test('signal session resolver keeps stricter identity checks for concurrent call
     assert.match(String(results[1].reason), /identity mismatch/)
     assert.equal(syncIdentityCalls, 1)
 })
+
+test('signal session resolver degrades per-target when the local identity load fails', async () => {
+    const jid = '5511999999999:2@s.whatsapp.net'
+
+    const resolver = createSignalSessionResolver({
+        signalProtocol: {
+            hasSession: async () => false,
+            establishOutgoingSession: async () => {
+                throw new Error('unexpected establish call')
+            },
+            loadLocalIdentity: async () => {
+                throw new Error('registration info not found')
+            },
+            prepareOutgoingSession: async () => {
+                throw new Error('unexpected prepare call')
+            },
+            persistOutgoingSessionsBatch: async () => ({ resolved: [], skipped: [] })
+        } as never,
+        sessionStore: {
+            hasSession: async () => false,
+            getSessionsBatch: async () => [null]
+        } as never,
+        identityStore: {
+            getRemoteIdentity: async () => null
+        } as never,
+        signalIdentitySync: {
+            syncIdentityKeys: async () => undefined
+        } as never,
+        signalSessionSync: {
+            fetchKeyBundles: async () => [{ jid, bundle: buildBundle(8) }],
+            fetchKeyBundle: async () => ({ jid, bundle: buildBundle(8) })
+        } as never,
+        logger: createNoopLogger()
+    })
+
+    const resolved = await resolver.ensureSessionsBatch([jid])
+    assert.equal(resolved.length, 0)
+})

@@ -288,7 +288,7 @@ export function createSignalSessionResolver(options: {
         >(missingIndices.length)
         let prepareCount = 0
         const missingBundleTargets: { jid: string; reason: string }[] = []
-        const localIdentity = await signalProtocol.loadLocalIdentity()
+        let localIdentityPromise: ReturnType<typeof signalProtocol.loadLocalIdentity> | null = null
         for (let index = 0; index < missingIndices.length; index += 1) {
             const targetIndex = missingIndices[index]
             const targetJid = normalizedTargetJids[targetIndex]
@@ -322,12 +322,15 @@ export function createSignalSessionResolver(options: {
             const targetAddress = normalizedTargetAddresses[targetIndex]
             const bundle = batchResult.bundle
             prepareTargetIndices[prepareCount] = targetIndex
-            preparePromises[prepareCount] = signalProtocol
-                .prepareOutgoingSession(targetAddress, bundle, {
-                    reuseExisting: true,
-                    knownAbsent: true,
-                    localIdentity
-                })
+            localIdentityPromise ??= signalProtocol.loadLocalIdentity()
+            preparePromises[prepareCount] = localIdentityPromise
+                .then((localIdentity) =>
+                    signalProtocol.prepareOutgoingSession(targetAddress, bundle, {
+                        reuseExisting: true,
+                        knownAbsent: true,
+                        localIdentity
+                    })
+                )
                 .then((prep) => ({
                     session: prep.session,
                     remoteIdentity: prep.remoteIdentity

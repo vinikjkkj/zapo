@@ -11,6 +11,13 @@ import type {
 import type { WaSignalStore } from '@store/contracts/signal.store'
 import { concatBytes, uint8Equal } from '@util/bytes'
 
+/**
+ * Local registration identity used to initiate outgoing Signal sessions.
+ *
+ * @sensitive `staticKeyPair.privKey` is the account's Signal identity
+ * private key. Do not `JSON.stringify`, log, or persist instances; the
+ * store layer is responsible for encryption at rest.
+ */
 export interface LocalIdentityContext {
     readonly regId: number
     readonly staticKeyPair: SignalSerializedKeyPair

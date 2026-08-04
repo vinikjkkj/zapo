@@ -149,7 +149,7 @@ export class WaFrameCodec {
             this.tailScratch.set(remainingChunk.subarray(offset))
             this.buffered = this.tailScratch
         } else {
-            this.buffered = remainingChunk.slice(offset)
+            this.buffered = new Uint8Array(remainingChunk.subarray(offset))
         }
         this.bufferedLength = restLength
         return frames
