@@ -140,3 +140,22 @@ test('scanProtoFields rejects varints beyond the 10 byte protobuf limit', () => 
     const overlong = new Uint8Array([0x08, ...new Array(10).fill(0x80), 0x01])
     assert.throws(() => collect(overlong), /10 byte protobuf limit/)
 })
+
+test('scanProtoFields bounds group nesting depth', () => {
+    const shallow = new Uint8Array(24)
+    for (let i = 0; i < 10; i += 1) shallow[i] = 0x2b
+    shallow[10] = 0x08
+    shallow[11] = 0x01
+    for (let i = 12; i < 22; i += 1) shallow[i] = 0x2c
+    shallow[22] = 0x30
+    shallow[23] = 0x2a
+    const fields: number[] = []
+    scanProtoFields(shallow, 0, shallow.length, (f) => fields.push(f.fieldNumber))
+    assert.deepEqual(fields, [6])
+
+    const deep = new Uint8Array(200).fill(0x2b)
+    assert.throws(
+        () => scanProtoFields(deep, 0, deep.length, () => undefined),
+        /group nesting exceeds supported depth/
+    )
+})

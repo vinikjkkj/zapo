@@ -227,6 +227,10 @@ test('history sync abort on a corrupt conversation settles pending writes', asyn
             }
         ]
     }).finish()
+    assert.ok(
+        validConversation.length < 128,
+        'fixture must stay below 128 bytes for the single-byte length framing below'
+    )
     const corruptRecord = new Uint8Array([0x12, 0x01, 0x0d])
     const blob = new Uint8Array(2 + 2 + validConversation.length + 2 + corruptRecord.length)
     blob.set([0x08, 0x02], 0)
@@ -237,16 +241,19 @@ test('history sync abort on a corrupt conversation settles pending writes', asyn
     const gzipped = toBytesView(await promisify(gzip)(blob))
 
     let rejectedWriteSettled = false
+    const threadJids: string[] = []
     const deps = {
         logger: createNoopLogger(),
         mediaTransfer: null as never,
         writeBehind: {
             persistContactAsync: async () => undefined,
-            persistThreadAsync: () =>
-                Promise.reject(new Error('write failed')).catch((error: unknown) => {
+            persistThreadAsync: (input: { readonly jid: string }) => {
+                threadJids.push(input.jid)
+                return Promise.reject(new Error('write failed')).catch((error: unknown) => {
                     rejectedWriteSettled = true
                     throw error
-                }),
+                })
+            },
             persistMessageAsync: async () => undefined
         } as never,
         emitEvent: () => {
@@ -266,4 +273,9 @@ test('history sync abort on a corrupt conversation settles pending writes', asyn
         /invalid|index out of range|protobuf/i
     )
     assert.equal(rejectedWriteSettled, true, 'pending write rejection must be consumed')
+    assert.deepEqual(
+        threadJids,
+        ['5511111111111@s.whatsapp.net'],
+        'the conversation before the corrupt record must have been written'
+    )
 })

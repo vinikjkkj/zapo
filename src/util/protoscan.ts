@@ -8,6 +8,7 @@ export const PROTO_WIRE_TYPES = Object.freeze({
 } as const)
 
 const PROTO_VARINT_MAX_BYTES = 10
+const PROTO_GROUP_MAX_DEPTH = 64
 
 export interface ProtoScanField {
     readonly fieldNumber: number
@@ -79,7 +80,10 @@ function walkVarint(bytes: Uint8Array, start: number, end: number): VarintReadRe
     throw new Error('unexpected end of buffer while reading varint')
 }
 
-function skipGroup(bytes: Uint8Array, start: number, end: number): number {
+function skipGroup(bytes: Uint8Array, start: number, end: number, depth = 0): number {
+    if (depth >= PROTO_GROUP_MAX_DEPTH) {
+        throw new Error('protobuf group nesting exceeds supported depth')
+    }
     let cursor = start
     while (cursor < end) {
         const tag = readProtoVarint(bytes, cursor, end)
@@ -96,7 +100,7 @@ function skipGroup(bytes: Uint8Array, start: number, end: number): number {
             const length = readProtoVarint(bytes, cursor, end)
             cursor = length.next + length.value
         } else if (wireType === PROTO_WIRE_TYPES.START_GROUP) {
-            cursor = skipGroup(bytes, cursor, end)
+            cursor = skipGroup(bytes, cursor, end, depth + 1)
         } else if (wireType === PROTO_WIRE_TYPES.FIXED32) {
             cursor += 4
         } else {
