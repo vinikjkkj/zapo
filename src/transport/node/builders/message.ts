@@ -178,14 +178,9 @@ export function buildButtonAddonNode(kind: WaButtonAddonKind): BinaryNode {
         }
     }
 
-    // PIX / Review & Pay: nested biz > interactive > native_flow(name=...),
-    // matching golinkapi/whatsmeow. CTA / generic native flow keeps name=mixed.
-    const nativeFlowName =
-        kind === 'payment_info' || kind === 'order_details' ? kind : 'mixed'
+    const nativeFlowName = kind === 'payment_info' || kind === 'order_details' ? kind : 'mixed'
     const nativeFlowAttrs: Record<string, string> =
-        nativeFlowName === 'mixed'
-            ? { v: '9', name: 'mixed' }
-            : { name: nativeFlowName }
+        nativeFlowName === 'mixed' ? { v: '9', name: 'mixed' } : { name: nativeFlowName }
 
     return {
         tag: WA_NODE_TAGS.BIZ,

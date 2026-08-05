@@ -430,13 +430,7 @@ function resolveEncMediaTypeFrom(msg: Proto.IMessage): string | null {
     return null
 }
 
-/**
- * Companion `<biz>` kind attached to interactive/list outbound stanzas.
- * `interactive` → `native_flow(name=mixed)` (CTA / generic native flow).
- * `payment_info` / `order_details` → PIX / Review & Pay (golink/whatsmeow parity).
- * Note: Review & Pay uses proto button name `review_and_pay` but biz node name
- * `order_details`.
- */
+/** Companion business node kind for list and native-flow messages. */
 export type WaButtonAddonKind = 'list' | 'interactive' | 'payment_info' | 'order_details'
 
 export function resolveButtonAddonKind(message: Proto.IMessage): WaButtonAddonKind | null {
@@ -448,7 +442,6 @@ function resolveNativeFlowAddonKind(
 ): WaButtonAddonKind {
     const firstButtonName = nativeFlow.buttons?.[0]?.name
     if (firstButtonName === 'payment_info') return 'payment_info'
-    // Proto button is `review_and_pay`; companion biz node must be `order_details`.
     if (firstButtonName === 'review_and_pay') return 'order_details'
     return 'interactive'
 }
