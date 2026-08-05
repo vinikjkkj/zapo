@@ -288,9 +288,13 @@ export async function processHistorySyncNotification(
         readonly tcTokenSenderTimestamp?: number | null
     }[] = []
     for (const range of scan.conversationRanges) {
-        const conversation = proto.Conversation.decode(
-            decompressed.subarray(range.start, range.end)
-        )
+        let conversation: Proto.Conversation
+        try {
+            conversation = proto.Conversation.decode(decompressed.subarray(range.start, range.end))
+        } catch (error) {
+            await Promise.allSettled(pendingWrites)
+            throw toError(error)
+        }
         const threadJid = conversation.id
         if (!threadJid) {
             deps.logger.debug('skipping history sync conversation without thread jid')

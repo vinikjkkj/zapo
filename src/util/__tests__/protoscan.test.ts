@@ -81,7 +81,8 @@ test('scanProtoFields rejects truncated and malformed input', () => {
     assert.throws(() => collect(new Uint8Array([0x08])), /unexpected end/)
     assert.throws(() => collect(new Uint8Array([0x12, 0x05, 0x61])), /length-delimited/)
     assert.throws(() => collect(new Uint8Array([0x19, 1, 2])), /fixed64/)
-    assert.throws(() => collect(new Uint8Array([0x0c])), /wire type/)
+    assert.throws(() => collect(new Uint8Array([0x0c])), /end-group/)
+    assert.throws(() => collect(new Uint8Array([0x0e])), /wire type/)
     assert.throws(() => collect(new Uint8Array([0x00])), /field number/)
 })
 
@@ -91,4 +92,51 @@ test('readProtoVarint decodes multi-byte values and enforces bounds', () => {
     assert.throws(() => readProtoVarint(new Uint8Array([0x80]), 0, 1), /unexpected end/)
     const tooBig = concatBytes([new Uint8Array(9).fill(0xff), new Uint8Array([0x01])])
     assert.throws(() => readProtoVarint(tooBig, 0, tooBig.length), /safe integer|supported range/)
+})
+
+test('scanProtoFields walks 10-byte varints from negative int64 fields', () => {
+    const encoded = proto.Conversation.encode({
+        id: '5511999998888@s.whatsapp.net',
+        muteEndTime: -1,
+        pnJid: '5511999998888@s.whatsapp.net'
+    }).finish()
+    const fields = collect(encoded)
+    const byNumber = new Map(fields.map((f) => [f.fieldNumber, f]))
+    assert.ok(byNumber.has(1))
+    assert.ok(byNumber.has(39), 'field after the 10-byte varint must still be reachable')
+    const synthetic = new Uint8Array([
+        0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x10, 0x07
+    ])
+    const parsed = collect(synthetic)
+    assert.equal(parsed.length, 2)
+    assert.equal(parsed[1].fieldNumber, 2)
+    assert.equal(parsed[1].varintValue, 7)
+})
+
+test('scanProtoFields skips group fields like the generated decoder', () => {
+    const bytes = new Uint8Array([
+        0x2b, // field 5 start-group
+        0x08,
+        0x01, // varint inside the group
+        0x1b,
+        0x1c, // nested empty group
+        0x12,
+        0x02,
+        0x61,
+        0x62, // LEN inside the group
+        0x2c, // field 5 end-group
+        0x30,
+        0x2a // field 6 varint 42
+    ])
+    const fields = collect(bytes)
+    assert.equal(fields.length, 1)
+    assert.equal(fields[0].fieldNumber, 6)
+    assert.equal(fields[0].varintValue, 42)
+    assert.throws(() => collect(new Uint8Array([0x2c])), /unmatched protobuf end-group/)
+    assert.throws(() => collect(new Uint8Array([0x2b, 0x08, 0x01])), /skipping group/)
+})
+
+test('scanProtoFields rejects varints beyond the 10 byte protobuf limit', () => {
+    const overlong = new Uint8Array([0x08, ...new Array(10).fill(0x80), 0x01])
+    assert.throws(() => collect(overlong), /10 byte protobuf limit/)
 })

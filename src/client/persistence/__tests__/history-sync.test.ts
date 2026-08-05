@@ -168,6 +168,7 @@ test('scanHistorySyncBlob is equivalent to the monolithic HistorySync decode', (
                 id: '5533333333333@s.whatsapp.net',
                 pnJid: '5533333333333@s.whatsapp.net',
                 accountLid: '333@lid',
+                muteEndTime: -1,
                 messages: []
             },
             { id: '123@g.us', messages: [] }
@@ -211,4 +212,58 @@ test('scanHistorySyncBlob is equivalent to the monolithic HistorySync decode', (
     assert.equal(scan.chunkOrder, reference.chunkOrder ?? null)
     assert.equal(scan.progress, reference.progress ?? null)
     assert.deepEqual(Array.from(scan.nctSalt ?? []), Array.from(reference.nctSalt ?? []))
+})
+
+test('history sync abort on a corrupt conversation settles pending writes', async () => {
+    const validConversation = proto.Conversation.encode({
+        id: '5511111111111@s.whatsapp.net',
+        messages: [
+            {
+                message: {
+                    key: { remoteJid: '5511111111111@s.whatsapp.net', id: 'M1' },
+                    message: { conversation: 'oi' },
+                    messageTimestamp: 1_722_000_000
+                }
+            }
+        ]
+    }).finish()
+    const corruptRecord = new Uint8Array([0x12, 0x01, 0x0d])
+    const blob = new Uint8Array(2 + 2 + validConversation.length + 2 + corruptRecord.length)
+    blob.set([0x08, 0x02], 0)
+    blob.set([0x12, validConversation.length], 2)
+    blob.set(validConversation, 4)
+    blob.set([0x12, corruptRecord.length], 4 + validConversation.length)
+    blob.set(corruptRecord, 6 + validConversation.length)
+    const gzipped = toBytesView(await promisify(gzip)(blob))
+
+    let rejectedWriteSettled = false
+    const deps = {
+        logger: createNoopLogger(),
+        mediaTransfer: null as never,
+        writeBehind: {
+            persistContactAsync: async () => undefined,
+            persistThreadAsync: () =>
+                Promise.reject(new Error('write failed')).catch((error: unknown) => {
+                    rejectedWriteSettled = true
+                    throw error
+                }),
+            persistMessageAsync: async () => undefined
+        } as never,
+        emitEvent: () => {
+            throw new Error('event must not be emitted on abort')
+        },
+        onProcessed: async () => {
+            throw new Error('chunk must not be acked on abort')
+        }
+    }
+
+    await assert.rejects(
+        () =>
+            processHistorySyncNotification(deps as never, {
+                syncType: proto.Message.HistorySyncType.RECENT,
+                initialHistBootstrapInlinePayload: gzipped
+            }),
+        /invalid|index out of range|protobuf/i
+    )
+    assert.equal(rejectedWriteSettled, true, 'pending write rejection must be consumed')
 })
