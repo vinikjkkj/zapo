@@ -59,8 +59,40 @@ test('resolveButtonAddonKind classifies list/interactive incl. documentWithCapti
         resolveButtonAddonKind({ interactiveMessage: { nativeFlowMessage: {} } }),
         'interactive'
     )
+    assert.equal(
+        resolveButtonAddonKind({
+            interactiveMessage: {
+                nativeFlowMessage: {
+                    buttons: [{ name: 'payment_info', buttonParamsJson: '{}' }]
+                }
+            }
+        }),
+        'payment_info'
+    )
+    assert.equal(
+        resolveButtonAddonKind({
+            interactiveMessage: {
+                nativeFlowMessage: {
+                    buttons: [{ name: 'review_and_pay', buttonParamsJson: '{}' }]
+                }
+            }
+        }),
+        'order_details'
+    )
     assert.equal(resolveButtonAddonKind({ interactiveMessage: {} }), null)
     assert.equal(resolveButtonAddonKind({ conversation: 'hi' }), null)
+    assert.equal(
+        resolveButtonAddonKind({ documentWithCaptionMessage: { message: { listMessage: {} } } }),
+        'list'
+    )
+    assert.equal(
+        resolveButtonAddonKind({
+            documentWithCaptionMessage: {
+                message: { interactiveMessage: { nativeFlowMessage: {} } }
+            }
+        }),
+        'interactive'
+    )
 })
 
 test('resolveEditAttr maps protobuf to correct edit attribute values', () => {

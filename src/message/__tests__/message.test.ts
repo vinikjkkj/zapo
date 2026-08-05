@@ -231,6 +231,36 @@ test('resolveButtonAddonKind classifies list/interactive incl. documentWithCapti
         resolveButtonAddonKind({ interactiveMessage: { nativeFlowMessage: {} } }),
         'interactive'
     )
+    assert.equal(
+        resolveButtonAddonKind({
+            interactiveMessage: {
+                nativeFlowMessage: {
+                    buttons: [{ name: 'payment_info', buttonParamsJson: '{}' }]
+                }
+            }
+        }),
+        'payment_info'
+    )
+    assert.equal(
+        resolveButtonAddonKind({
+            interactiveMessage: {
+                nativeFlowMessage: {
+                    buttons: [{ name: 'review_and_pay', buttonParamsJson: '{}' }]
+                }
+            }
+        }),
+        'order_details'
+    )
+    assert.equal(
+        resolveButtonAddonKind({
+            interactiveMessage: {
+                nativeFlowMessage: {
+                    buttons: [{ name: 'cta_url', buttonParamsJson: '{}' }]
+                }
+            }
+        }),
+        'interactive'
+    )
     assert.equal(resolveButtonAddonKind({ interactiveMessage: {} }), null)
     assert.equal(resolveButtonAddonKind({ conversation: 'hi' }), null)
     assert.equal(
@@ -250,6 +280,20 @@ test('resolveButtonAddonKind classifies list/interactive incl. documentWithCapti
             ephemeralMessage: { message: { listMessage: {} } }
         }),
         'list'
+    )
+    assert.equal(
+        resolveButtonAddonKind({
+            documentWithCaptionMessage: {
+                message: {
+                    interactiveMessage: {
+                        nativeFlowMessage: {
+                            buttons: [{ name: 'payment_info', buttonParamsJson: '{}' }]
+                        }
+                    }
+                }
+            }
+        }),
+        'payment_info'
     )
 })
 

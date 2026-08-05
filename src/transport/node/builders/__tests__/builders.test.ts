@@ -781,6 +781,29 @@ test('message builders create fanout nodes and validate participant requirements
     }
     assert.equal(interactiveChild.content[0].tag, 'native_flow')
     assert.equal(interactiveChild.content[0].attrs.name, 'mixed')
+    assert.equal(interactiveChild.content[0].attrs.v, '9')
+
+    const pixAddon = buildButtonAddonNode('payment_info')
+    assert.equal(pixAddon.tag, 'biz')
+    if (!Array.isArray(pixAddon.content)) throw new Error('expected biz children')
+    const pixInteractive = pixAddon.content[0]
+    assert.equal(pixInteractive.tag, 'interactive')
+    assert.equal(pixInteractive.attrs.type, 'native_flow')
+    if (!Array.isArray(pixInteractive.content)) {
+        throw new Error('expected native_flow child')
+    }
+    assert.equal(pixInteractive.content[0].tag, 'native_flow')
+    assert.equal(pixInteractive.content[0].attrs.name, 'payment_info')
+    assert.equal(pixInteractive.content[0].attrs.v, undefined)
+
+    const reviewAddon = buildButtonAddonNode('order_details')
+    if (!Array.isArray(reviewAddon.content)) throw new Error('expected biz children')
+    const reviewInteractive = reviewAddon.content[0]
+    if (!Array.isArray(reviewInteractive.content)) {
+        throw new Error('expected native_flow child')
+    }
+    assert.equal(reviewInteractive.content[0].attrs.name, 'order_details')
+    assert.equal(reviewInteractive.content[0].attrs.v, undefined)
 
     const fanoutWithAddon = buildDirectMessageFanoutNode({
         to: '5511@s.whatsapp.net',
