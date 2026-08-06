@@ -600,9 +600,16 @@ export class WaMessageDispatchCoordinator {
             sendOptions.id &&
             (this.deps.persistAllMessageSecrets || needsSecretPersistence(messageWithSecret))
         ) {
-            const meJid = this.deps.getCurrentCredentials()?.meJid ?? ''
+            const credentials = this.deps.getCurrentCredentials()
+            // Prefer LID: peers address us by LID in pollCreationMessageKey during
+            // the PN→LID migration, and HKDF binds the parent-author JID.
+            const senderForSecret = credentials?.meLid
+                ? toUserJid(credentials.meLid)
+                : credentials?.meJid
+                  ? toUserJid(credentials.meJid)
+                  : ''
             void this.deps.messageSecretStore
-                .set(sendOptions.id, { secret: rawSecret, senderJid: meJid })
+                .set(sendOptions.id, { secret: rawSecret, senderJid: senderForSecret })
                 .catch((error) => {
                     this.deps.logger.warn('failed to persist outgoing message secret', {
                         id: sendOptions.id,
