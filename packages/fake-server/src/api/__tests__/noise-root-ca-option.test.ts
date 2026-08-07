@@ -30,13 +30,18 @@ test('a pinned root CA survives a stop/start cycle', async () => {
     }
 })
 
-test('an omitted root CA stays random per listen', async () => {
-    const first = await FakeWaServer.start()
-    const firstKey = first.noiseRootCa.publicKey
-    await first.stop()
-    const second = await FakeWaServer.start()
-    const secondKey = second.noiseRootCa.publicKey
-    await second.stop()
+// One instance across two cycles, so a `stop()` that retained the generated CA
+// would fail here; two instances could not tell that apart.
+test('an omitted root CA is regenerated on each listen', async () => {
+    const server = await FakeWaServer.start()
 
-    assert.notDeepEqual(firstKey, secondKey)
+    try {
+        const first = server.noiseRootCa.publicKey
+        await server.stop()
+        await server.listen()
+
+        assert.notDeepEqual(server.noiseRootCa.publicKey, first)
+    } finally {
+        await server.stop()
+    }
 })

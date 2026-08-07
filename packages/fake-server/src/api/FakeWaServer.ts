@@ -134,6 +134,12 @@ export interface FakeWaServerOptions {
      * A client in a separate process cannot read it back: it has to pin the
      * anchor before it dials, while the server is not listening yet. Pass a CA
      * both sides derive from a shared seed to make it knowable ahead of time.
+     *
+     * Carries the signing half, unlike the public-only
+     * {@link FakeWaServerNoiseRootCa} this server exposes. It signs a chain no
+     * real client trusts, so it is test material rather than a secret — but a
+     * seed committed beside the tests is the intended source, not one shared
+     * with anything that matters.
      */
     readonly noiseRootCa?: FakeNoiseRootCa
 }

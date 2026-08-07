@@ -27,7 +27,11 @@ export type {
     WaFakeAuthenticatedInfo,
     WaFakeConnectionPipeline
 } from './api/FakeWaServer'
-// Signing half of the Noise root, needed only to pin `noiseRootCa`.
+/**
+ * Signing half of the Noise root, needed only to pin
+ * {@link FakeWaServerOptions.noiseRootCa}. Readers of `server.noiseRootCa` get
+ * the public-only {@link FakeWaServerNoiseRootCa} instead.
+ */
 export type { FakeNoiseRootCa } from './protocol/auth/cert-chain'
 export { IqExpectation, Scenario } from './api/Scenario'
 export type { AuthenticatedPipelineListener, ScenarioServer } from './api/Scenario'
