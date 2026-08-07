@@ -134,13 +134,6 @@ export class SenderKeyManager {
                 ciphertext: concatBytes([versionedContent, signature])
             }
 
-            await this.store.upsertSenderKeyDistribution({
-                groupId,
-                sender,
-                keyId: senderKey.keyId,
-                timestampMs: Date.now()
-            })
-
             return {
                 distributionMessage,
                 ciphertext,

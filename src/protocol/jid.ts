@@ -1,28 +1,48 @@
 import { WA_DEFAULTS } from '@protocol/constants'
 import type { SignalAddress } from '@signal/types'
 
-const KNOWN_SERVERS: ReadonlyMap<string, string> = new Map([
-    [WA_DEFAULTS.HOST_DOMAIN, WA_DEFAULTS.HOST_DOMAIN],
-    [WA_DEFAULTS.GROUP_SERVER, WA_DEFAULTS.GROUP_SERVER],
-    [WA_DEFAULTS.BROADCAST_SERVER, WA_DEFAULTS.BROADCAST_SERVER],
-    [WA_DEFAULTS.LID_SERVER, WA_DEFAULTS.LID_SERVER],
-    [WA_DEFAULTS.HOSTED_SERVER, WA_DEFAULTS.HOSTED_SERVER],
-    [WA_DEFAULTS.HOSTED_LID_SERVER, WA_DEFAULTS.HOSTED_LID_SERVER],
-    [WA_DEFAULTS.MSGR_SERVER, WA_DEFAULTS.MSGR_SERVER],
-    [WA_DEFAULTS.INTEROP_SERVER, WA_DEFAULTS.INTEROP_SERVER],
-    [WA_DEFAULTS.NEWSLETTER_SERVER, WA_DEFAULTS.NEWSLETTER_SERVER],
-    [WA_DEFAULTS.BOT_SERVER, WA_DEFAULTS.BOT_SERVER]
-])
+/**
+ * Ordered by how often each server actually shows up in traffic, because
+ * {@link internServerAt} scans it in order and stops at the first match:
+ * the cost is the position of the hit, not the length of the list. LID is
+ * the primary addressing mode, so `lid` leads and the phone domain follows
+ * as the fallback; groups and status come next, and the rest are rare.
+ * Keep new entries at the tail unless they are genuinely high-volume.
+ */
+const KNOWN_SERVERS: readonly string[] = [
+    WA_DEFAULTS.LID_SERVER,
+    WA_DEFAULTS.HOST_DOMAIN,
+    WA_DEFAULTS.GROUP_SERVER,
+    WA_DEFAULTS.BROADCAST_SERVER,
+    WA_DEFAULTS.NEWSLETTER_SERVER,
+    WA_DEFAULTS.HOSTED_SERVER,
+    WA_DEFAULTS.HOSTED_LID_SERVER,
+    WA_DEFAULTS.BOT_SERVER,
+    WA_DEFAULTS.MSGR_SERVER,
+    WA_DEFAULTS.INTEROP_SERVER
+]
 
 /**
- * Returns the canonical reference for known server strings, avoiding
- * thousands of duplicate sliced copies (e.g. "lid", "s.whatsapp.net")
- * that would otherwise be created by repeated JID parsing. A `Map` keeps
- * untrusted server strings like "toString" from resolving through the
- * object prototype chain.
+ * Returns the canonical reference for the server segment of `jid` starting
+ * at `from`, avoiding thousands of duplicate sliced copies (e.g. "lid",
+ * "s.whatsapp.net") that would otherwise be created by repeated JID parsing.
+ *
+ * A linear scan beats a `Map` lookup here, and by a wide margin: the length
+ * pre-check rejects nine of the ten candidates in one comparison, while the
+ * `Map` has to hash the whole server string before it can probe. Do not
+ * "optimize" this back into a hash lookup without benchmarking it. Matching
+ * in place is a smaller second win – a known server allocates nothing, and
+ * only an unrecognized one pays the `slice()`. Scanning a list also keeps
+ * untrusted input like "toString" from resolving through the prototype
+ * chain, which is why the original used a `Map` rather than an object.
  */
-function internServer(server: string): string {
-    return KNOWN_SERVERS.get(server) ?? server
+function internServerAt(jid: string, from: number): string {
+    const length = jid.length - from
+    for (let index = 0; index < KNOWN_SERVERS.length; index += 1) {
+        const server = KNOWN_SERVERS[index]
+        if (server.length === length && jid.startsWith(server, from)) return server
+    }
+    return jid.slice(from)
 }
 
 function extractDigits(input: string): string {
@@ -46,7 +66,7 @@ function findAtIndex(jid: string): number {
  */
 export function splitJid(jid: string): { readonly user: string; readonly server: string } {
     const atIndex = findAtIndex(jid)
-    return { user: jid.slice(0, atIndex), server: internServer(jid.slice(atIndex + 1)) }
+    return { user: jid.slice(0, atIndex), server: internServerAt(jid, atIndex + 1) }
 }
 
 /**
@@ -135,7 +155,7 @@ export interface ParsedJid {
 export function parseSignalAddressFromJid(jid: string): SignalAddress {
     const atIndex = findAtIndex(jid)
     const colonIndex = jid.indexOf(':', 0)
-    const server = internServer(jid.slice(atIndex + 1))
+    const server = internServerAt(jid, atIndex + 1)
     if (colonIndex === -1 || colonIndex > atIndex) {
         return { user: jid.slice(0, atIndex), server, device: 0 }
     }
@@ -214,12 +234,13 @@ export function toUserJid(
         }
     }
     const address = parseSignalAddressFromJid(jid)
+    const baseServer = address.server ?? WA_DEFAULTS.HOST_DOMAIN
     const server = canonicalize
-        ? canonicalizeSignalServer(
-              address.server ?? WA_DEFAULTS.HOST_DOMAIN,
-              options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN
-          )
-        : address.server
+        ? canonicalizeSignalServer(baseServer, options.hostDomain ?? WA_DEFAULTS.HOST_DOMAIN)
+        : baseServer
+    if (server === baseServer && jid.length === address.user.length + 1 + server.length) {
+        return jid
+    }
     return `${address.user}@${server}`
 }
 

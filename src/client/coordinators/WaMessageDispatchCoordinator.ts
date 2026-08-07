@@ -1514,11 +1514,6 @@ export class WaMessageDispatchCoordinator {
             readonly ciphertext: Uint8Array
         }[]
     }> {
-        const distributionPayload = await writeRandomPadMax16(
-            proto.Message.encode({
-                senderKeyDistributionMessage
-            }).finish()
-        )
         const fanoutDeviceJids =
             await this.deps.fanoutResolver.resolveGroupParticipantDeviceJids(participantUserJids)
         if (fanoutDeviceJids.length === 0) {
@@ -1527,19 +1522,9 @@ export class WaMessageDispatchCoordinator {
                 distributionParticipants: []
             }
         }
-        const fanoutTargetsByAddressKey = new Map<
-            string,
-            {
-                readonly jid: string
-                readonly address: SignalAddress
-            }
-        >()
         const fanoutAddresses: SignalAddress[] = new Array(fanoutDeviceJids.length)
         for (let index = 0; index < fanoutDeviceJids.length; index += 1) {
-            const jid = fanoutDeviceJids[index]
-            const address = parseSignalAddressFromJid(jid)
-            fanoutAddresses[index] = address
-            fanoutTargetsByAddressKey.set(signalAddressKey(address), { jid, address })
+            fanoutAddresses[index] = parseSignalAddressFromJid(fanoutDeviceJids[index])
         }
         const pendingAddresses =
             await this.deps.senderKeyManager.filterParticipantsNeedingDistribution(
@@ -1552,6 +1537,20 @@ export class WaMessageDispatchCoordinator {
                 fanoutDeviceJids,
                 distributionParticipants: []
             }
+        }
+        const fanoutTargetsByAddressKey = new Map<
+            string,
+            {
+                readonly jid: string
+                readonly address: SignalAddress
+            }
+        >()
+        for (let index = 0; index < fanoutAddresses.length; index += 1) {
+            const address = fanoutAddresses[index]
+            fanoutTargetsByAddressKey.set(signalAddressKey(address), {
+                jid: fanoutDeviceJids[index],
+                address
+            })
         }
         const pendingAddressKeys = new Set<string>()
         const pendingTargets: {
@@ -1625,6 +1624,11 @@ export class WaMessageDispatchCoordinator {
                 distributionParticipants: []
             }
         }
+        const distributionPayload = await writeRandomPadMax16(
+            proto.Message.encode({
+                senderKeyDistributionMessage
+            }).finish()
+        )
 
         const distributionEncryptRequests: {
             readonly address: SignalAddress

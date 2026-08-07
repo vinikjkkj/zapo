@@ -133,6 +133,18 @@ function buildEncryptedToNode(
     }
 }
 
+function buildEncryptedToNodes(
+    participants: readonly EncryptedParticipant[],
+    mediatype?: string,
+    decryptFail?: string
+): BinaryNode[] {
+    const nodes = new Array<BinaryNode>(participants.length)
+    for (let index = 0; index < participants.length; index += 1) {
+        nodes[index] = buildEncryptedToNode(participants[index], mediatype, decryptFail)
+    }
+    return nodes
+}
+
 function pushOptionalNodes(
     content: BinaryNode[],
     input: {
@@ -158,7 +170,7 @@ function pushOptionalNodes(
         content.push({
             tag: WA_NODE_TAGS.BOT,
             attrs: {},
-            content: input.botParticipants.map((p) => buildEncryptedToNode(p, input.mediatype))
+            content: buildEncryptedToNodes(input.botParticipants, input.mediatype)
         })
     }
 }
@@ -211,9 +223,7 @@ export function buildDirectMessageFanoutNode(input: GroupMessageFanoutInput): Bi
         {
             tag: WA_NODE_TAGS.PARTICIPANTS,
             attrs: {},
-            content: input.participants.map((p) =>
-                buildEncryptedToNode(p, input.mediatype, input.decryptFail)
-            )
+            content: buildEncryptedToNodes(input.participants, input.mediatype, input.decryptFail)
         }
     ]
     pushOptionalNodes(content, input)
@@ -233,9 +243,7 @@ export function buildGroupSenderKeyMessageNode(input: GroupSenderKeyMessageInput
         content.push({
             tag: WA_NODE_TAGS.PARTICIPANTS,
             attrs: {},
-            content: input.participants.map((p) =>
-                buildEncryptedToNode(p, input.mediatype, input.decryptFail)
-            )
+            content: buildEncryptedToNodes(input.participants, input.mediatype, input.decryptFail)
         })
     }
     content.push({
