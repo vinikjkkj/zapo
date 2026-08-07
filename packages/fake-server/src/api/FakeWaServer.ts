@@ -126,6 +126,16 @@ export interface FakeWaServerOptions {
      * client's `mobileTransport.tcpUrl`.
      */
     readonly tcp?: boolean | { readonly host?: string; readonly port?: number }
+    /**
+     * Root of the Noise certificate chain the server presents. Defaults to a
+     * fresh random CA per {@link FakeWaServer.listen}, read back from
+     * {@link FakeWaServer.noiseRootCa}.
+     *
+     * A client in a separate process cannot read it back: it has to pin the
+     * anchor before it dials, while the server is not listening yet. Pass a CA
+     * both sides derive from a shared seed to make it knowable ahead of time.
+     */
+    readonly noiseRootCa?: FakeNoiseRootCa
 }
 
 const HOST_DOMAIN = 's.whatsapp.net'
@@ -743,7 +753,7 @@ export class FakeWaServer {
             return
         }
         ;[this.rootCa, this.serverStaticKeyPair] = await Promise.all([
-            generateFakeNoiseRootCa(),
+            this.options.noiseRootCa ?? generateFakeNoiseRootCa(),
             X25519.generateKeyPair()
         ])
         const mediaHandler = this.buildMediaRequestHandler()
