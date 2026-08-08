@@ -11,6 +11,10 @@ import { promisify } from 'node:util'
 import { concatBytes, EMPTY_BYTES, toBytesView } from '@util/bytes'
 
 const AES_GCM_TAG_LENGTH = 16
+const AES_CBC_BLOCK_SIZE = 16
+
+/** Bounds the transient buffer `cipher.update` returns per call. */
+const AES_CBC_CHUNK_SIZE = 262_144
 
 const pbkdf2Async = promisify(pbkdf2)
 
@@ -112,6 +116,57 @@ export function aesCbcEncrypt(key: Uint8Array, iv: Uint8Array, plaintext: Uint8A
         return toBytesView(head)
     }
     return concatBytes([head, tail])
+}
+
+/**
+ * AES-256-CBC encrypt into a buffer that reserves `trailerBytes` of spare room
+ * after the ciphertext, for a caller that has to append a MAC to it.
+ *
+ * Appending to the result of {@link aesCbcEncrypt} means copying the whole
+ * ciphertext a second time, which on a media payload is a copy of the entire
+ * file to make room for ten bytes. Sizing the destination from the PKCS#7
+ * output length up front removes that copy, and feeding the cipher in bounded
+ * chunks keeps the transient buffer Node hands back to a chunk rather than a
+ * second full-size ciphertext, so peak memory stays near one copy of the
+ * payload instead of two.
+ *
+ * The ciphertext occupies `result.length - trailerBytes`; the reserved tail is
+ * left zeroed for the caller to fill.
+ *
+ * @throws when `trailerBytes` is not a non-negative safe integer, or when the
+ * cipher yields a length other than the PKCS#7 size the destination was cut to.
+ */
+export function aesCbcEncryptWithTrailer(
+    key: Uint8Array,
+    iv: Uint8Array,
+    plaintext: Uint8Array,
+    trailerBytes: number
+): Uint8Array {
+    if (!Number.isSafeInteger(trailerBytes) || trailerBytes < 0) {
+        throw new Error(`invalid trailer length ${trailerBytes}`)
+    }
+    const cipherLength =
+        (Math.floor(plaintext.length / AES_CBC_BLOCK_SIZE) + 1) * AES_CBC_BLOCK_SIZE
+    const out = new Uint8Array(cipherLength + trailerBytes)
+    const cipher = createCipheriv('aes-256-cbc', key, iv)
+    let offset = 0
+    for (let start = 0; start < plaintext.length; start += AES_CBC_CHUNK_SIZE) {
+        const end = Math.min(start + AES_CBC_CHUNK_SIZE, plaintext.length)
+        const block = cipher.update(plaintext.subarray(start, end))
+        if (block.length > 0) {
+            out.set(block, offset)
+            offset += block.length
+        }
+    }
+    const tail = cipher.final()
+    if (tail.length > 0) {
+        out.set(tail, offset)
+        offset += tail.length
+    }
+    if (offset !== cipherLength) {
+        throw new Error(`aes-cbc produced ${offset} bytes, expected ${cipherLength}`)
+    }
+    return out
 }
 
 /** AES-256-CBC decrypt with PKCS#7 padding. */

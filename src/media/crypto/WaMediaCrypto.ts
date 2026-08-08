@@ -6,7 +6,12 @@ import { join } from 'node:path'
 import { PassThrough, type Readable, type Writable } from 'node:stream'
 
 import { hkdf } from '@crypto/core/hkdf'
-import { aesCbcDecrypt, aesCbcEncrypt, hmacSha256Sign, sha256 } from '@crypto/core/primitives'
+import {
+    aesCbcDecrypt,
+    aesCbcEncryptWithTrailer,
+    hmacSha256Sign,
+    sha256
+} from '@crypto/core/primitives'
 import { randomBytesAsync } from '@crypto/core/random'
 import {
     ENC_KEY_END,
@@ -30,13 +35,7 @@ import type {
     WaMediaReadableEncryptionResult
 } from '@media/types'
 import { getWaMediaHkdfInfo, WA_APP_STATE_KEY_TYPES } from '@protocol/constants'
-import {
-    assertByteLength,
-    concatBytes,
-    toBytesView,
-    toChunkBytes,
-    uint8TimingSafeEqual
-} from '@util/bytes'
+import { assertByteLength, toBytesView, toChunkBytes, uint8TimingSafeEqual } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 const AES_BLOCK_SIZE = 16
@@ -153,11 +152,18 @@ export class WaMediaCrypto {
         options?: { readonly sidecar?: boolean; readonly firstFrameLength?: number }
     ): Promise<WaMediaEncryptionResult> {
         const keys = WaMediaCrypto.deriveKeys(mediaType, mediaKey)
-        const ciphertext = aesCbcEncrypt(keys.encKey, keys.iv, plaintext)
+        const ciphertextHmac = aesCbcEncryptWithTrailer(
+            keys.encKey,
+            keys.iv,
+            plaintext,
+            HMAC_TRUNCATED_SIZE
+        )
+        const cipherLength = ciphertextHmac.length - HMAC_TRUNCATED_SIZE
+        const ciphertext = ciphertextHmac.subarray(0, cipherLength)
 
         const mac = hmacSha256Sign(keys.macKey, [keys.iv, ciphertext])
         const signature = mac.subarray(0, HMAC_TRUNCATED_SIZE)
-        const ciphertextHmac = concatBytes([ciphertext, signature])
+        ciphertextHmac.set(signature, cipherLength)
 
         let streamingSidecar: Uint8Array | undefined
         if (options?.sidecar !== false) {
