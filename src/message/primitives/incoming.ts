@@ -1,4 +1,5 @@
 import type {
+    WaIncomingDecryptedPayloadEvent,
     WaIncomingMessageEvent,
     WaIncomingMessageKey,
     WaIncomingNewsletterMessageUpdateEvent,
@@ -52,6 +53,7 @@ interface WaIncomingMessageAckHandlerOptions {
     readonly emitNewsletterMessageUpdate?: (event: WaIncomingNewsletterMessageUpdateEvent) => void
     readonly emitUnavailableMessage?: (event: WaIncomingUnavailableMessageEvent) => void
     readonly emitUnhandledStanza?: (event: WaIncomingUnhandledStanzaEvent) => void
+    readonly emitDecryptedPayload?: (event: WaIncomingDecryptedPayloadEvent) => void
 }
 
 interface MessageIdentityAttrs {
@@ -436,6 +438,7 @@ async function decryptAndProcessEncNode(
     node: BinaryNode,
     encNode: BinaryNode,
     encType: string,
+    encIndex: number,
     senderJid: string,
     options: WaIncomingMessageAckHandlerOptions,
     decrypt: (ciphertext: Uint8Array, senderAddress: SignalAddress) => Promise<Uint8Array>
@@ -452,6 +455,20 @@ async function decryptAndProcessEncNode(
             senderAddress
         )
         const unpaddedPlaintext = unpadPkcs7(decryptedPayload)
+        // Before `decode`, which is the whole point: a payload that decrypts
+        // but does not decode throws below and is reported as unhandled, and
+        // the ratchet has already moved on, so nothing can ask for these bytes
+        // again.
+        options.emitDecryptedPayload?.({
+            rawNode: buildIncomingEventRawNode(node),
+            stanzaId: node.attrs.id,
+            chatJid: node.attrs.from,
+            stanzaType: node.attrs.type,
+            offline: node.attrs.offline !== undefined,
+            encIndex,
+            encType,
+            plaintext: unpaddedPlaintext
+        })
         const decodedMessage = proto.Message.decode(unpaddedPlaintext)
         const message = unwrapDeviceSentMessage(decodedMessage) ?? decodedMessage
         const senderKeyDistribution = pickSenderKeyDistributionPayload(message)
@@ -564,6 +581,7 @@ export async function handleIncomingMessageAck(
                         node,
                         child,
                         'skmsg',
+                        encCount - 1,
                         senderJid,
                         options,
                         (ciphertext, senderAddress) =>
@@ -585,6 +603,7 @@ export async function handleIncomingMessageAck(
                         node,
                         child,
                         encType,
+                        encCount - 1,
                         senderJid,
                         options,
                         (ciphertext, senderAddress) => {

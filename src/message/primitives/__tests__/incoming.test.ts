@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { WaIncomingMessageEvent, WaIncomingUnavailableMessageEvent } from '@client/types'
+import type {
+    WaIncomingDecryptedPayloadEvent,
+    WaIncomingMessageEvent,
+    WaIncomingUnavailableMessageEvent
+} from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import { buildRecoveredIncomingEvent, handleIncomingMessageAck } from '@message/primitives/incoming'
 import { proto } from '@proto'
@@ -462,4 +466,84 @@ test('incoming message ack falls back to retry receipt when decrypt fails', asyn
     assert.equal(sentNodes[0].attrs.id, 'msg-1')
     assert.equal(sentNodes[0].attrs.to, '551100000000@s.whatsapp.net')
     assert.equal(sentNodes[0].attrs.type, 'retry')
+})
+
+test('a decrypted payload is handed over before the library decodes it', async () => {
+    const payloads: WaIncomingDecryptedPayloadEvent[] = []
+    const emitted: WaIncomingMessageEvent[] = []
+    const plaintext = paddedPlaintext({ conversation: 'hi' })
+
+    const handled = await handleIncomingMessageAck(createEncryptedMessageNode(), {
+        ...createDecryptingOptions(emitted),
+        emitDecryptedPayload: (event) => {
+            payloads.push(event)
+        }
+    })
+
+    assert.equal(handled, true)
+    assert.equal(payloads.length, 1)
+    // The unpadded bytes, which is what `proto.Message.decode` receives — not
+    // the padded ciphertext output and not a re-encoding of the decoded message.
+    assert.deepEqual(payloads[0].plaintext, plaintext.subarray(0, plaintext.length - 1))
+    assert.equal(payloads[0].encType, 'msg')
+    assert.equal(payloads[0].encIndex, 0)
+    assert.equal(payloads[0].stanzaId, 'msg-1')
+    assert.equal(payloads[0].chatJid, '551100000000@s.whatsapp.net')
+    assert.equal(emitted.length, 1, 'and the message still arrives as usual')
+})
+
+test('a payload that decrypts but does not decode is still handed over', async () => {
+    // The reason the event exists. Decoding throws, the stanza is reported as
+    // unhandled, and the decryption has already advanced the ratchet — so
+    // without this the bytes are gone for good.
+    const payloads: WaIncomingDecryptedPayloadEvent[] = []
+    const emitted: WaIncomingMessageEvent[] = []
+    // Field 1 of Message is `conversation`: tag 0x0A, then a length. Declaring
+    // 127 bytes and supplying none makes `decode` throw — the bytes are perfectly
+    // good, this build just cannot read them. The trailing byte is the PKCS7 pad.
+    const undecodable = new Uint8Array([0x0a, 0x7f, 0x01])
+
+    await handleIncomingMessageAck(createEncryptedMessageNode(), {
+        ...createDecryptingOptions(emitted),
+        signalProtocol: {
+            decryptMessage: async () => undecodable
+        } as never,
+        emitDecryptedPayload: (event) => {
+            payloads.push(event)
+        }
+    })
+
+    assert.equal(payloads.length, 1, 'handed over despite the decode failing')
+    assert.deepEqual(payloads[0].plaintext, undecodable.subarray(0, 2))
+    assert.equal(emitted.length, 0, 'and nothing was emitted as a message')
+})
+
+test('each enc of a multi-device message reports its own index', async () => {
+    // The ciphertexts are unrelated, so attributing a payload to the wrong
+    // `<enc>` attributes it to the wrong sender.
+    const payloads: WaIncomingDecryptedPayloadEvent[] = []
+    const emitted: WaIncomingMessageEvent[] = []
+    const node: BinaryNode = {
+        tag: 'message',
+        attrs: { id: 'msg-multi', from: '551100000000@s.whatsapp.net', t: '123' },
+        content: [
+            { tag: 'enc', attrs: { type: 'pkmsg' }, content: new Uint8Array([1]) },
+            { tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([2]) }
+        ]
+    }
+
+    await handleIncomingMessageAck(node, {
+        ...createDecryptingOptions(emitted),
+        emitDecryptedPayload: (event) => {
+            payloads.push(event)
+        }
+    })
+
+    assert.deepEqual(
+        payloads.map((p) => [p.encIndex, p.encType]),
+        [
+            [0, 'pkmsg'],
+            [1, 'msg']
+        ]
+    )
 })

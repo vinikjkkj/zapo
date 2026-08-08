@@ -957,6 +957,30 @@ export interface WaIncomingUnhandledStanzaEvent extends WaIncomingBaseEvent {
 }
 
 /**
+ * One decrypted `<enc>` payload, surfaced before the library decodes it.
+ *
+ * A payload that decrypts but does not decode is otherwise lost: decoding
+ * throws, the stanza is reported through `debug_unhandled_stanza`, and the
+ * bytes go with it – while the decryption has already advanced the ratchet, so
+ * the same ciphertext will never decrypt again. Fires whether or not decoding
+ * then succeeds, which is what makes the failing case observable at all.
+ */
+export interface WaIncomingDecryptedPayloadEvent extends WaIncomingBaseEvent {
+    /**
+     * Which `<enc>` of the stanza produced these bytes, counting from zero.
+     *
+     * A message addressed to several devices carries several, and their
+     * ciphertexts are unrelated: attributing a payload to the wrong `<enc>`
+     * attributes it to the wrong sender.
+     */
+    readonly encIndex: number
+    /** The `<enc>` node's `type` attribute: `msg`, `pkmsg`, `skmsg`, … */
+    readonly encType: string
+    /** The plaintext, unpadded, exactly as decoding receives it. */
+    readonly plaintext: Uint8Array
+}
+
+/**
  * Why an incoming message arrived as a content-less placeholder. `view_once`: a
  * view-once already consumed elsewhere. `hosted`: a hosted account whose message
  * could not be fanned out. `bot`: a bot message whose fanout never ran. `other`:
@@ -1593,6 +1617,8 @@ export interface WaClientEventMap {
     readonly debug_client_error: (event: { readonly error: Error }) => void
     /** **debug** – incoming stanzas with no registered handler (lets you spot protocol features the lib doesn't model yet). */
     readonly debug_unhandled_stanza: (event: WaIncomingUnhandledStanzaEvent) => void
+    /** **debug** – each decrypted `<enc>` payload, before the library decodes it (fires even when decoding then fails). */
+    readonly debug_decrypted_payload: (event: WaIncomingDecryptedPayloadEvent) => void
     /** **debug** – raw inbound noise frame bytes (before binary-node decode). */
     readonly debug_transport_frame_in: (event: { readonly frame: Uint8Array }) => void
     /** **debug** – raw outbound noise frame bytes (after binary-node encode). */

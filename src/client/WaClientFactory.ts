@@ -75,6 +75,7 @@ import {
 import type {
     WaClientEventMap,
     WaClientOptions,
+    WaIncomingDecryptedPayloadEvent,
     WaIncomingMessageEvent,
     WaIncomingProtocolMessageEvent,
     WaIncomingUnhandledStanzaEvent,
@@ -1049,7 +1050,9 @@ export function buildWaClientDependencies(input: {
             runtime.emitEvent('newsletter_message_update', event),
         emitUnavailableMessage: (event) => runtime.emitEvent('message_unavailable', event),
         emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) =>
-            runtime.emitEvent('debug_unhandled_stanza', event)
+            runtime.emitEvent('debug_unhandled_stanza', event),
+        emitDecryptedPayload: (event: WaIncomingDecryptedPayloadEvent) =>
+            runtime.emitEvent('debug_decrypted_payload', event)
     }
 
     const handleClientDirtyBits = (dirtyBits: Parameters<typeof handleDirtyBits>[1]) =>
