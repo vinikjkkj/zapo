@@ -119,6 +119,7 @@ class WaClientImpl extends EventEmitter {
                 syncAppStateWithOptions: (syncOptions) =>
                     this.deps.chatCoordinator.sync(syncOptions),
                 emitEvent: this.emit.bind(this),
+                hasEventListener: (event) => this.listenerCount(event) > 0,
                 handleIncomingMessageEvent: this.handleIncomingMessageEvent.bind(this),
                 handleError: this.handleError.bind(this),
                 handleIncomingFrame: this.handleIncomingFrame.bind(this),

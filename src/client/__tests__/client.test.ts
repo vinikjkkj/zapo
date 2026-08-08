@@ -725,6 +725,7 @@ test('buildWaClientDependencies wires privacy coordinator', () => {
         clearStoredState: async () => undefined,
         resumeIncomingEvents: () => undefined,
         subscribeProtocolMessage: () => () => undefined,
+        hasEventListener: () => false,
         persistContact: () => undefined
     }
 
@@ -769,6 +770,7 @@ test('buildWaClientDependencies wires trusted contact token AB prop overrides', 
         clearStoredState: async () => undefined,
         resumeIncomingEvents: () => undefined,
         subscribeProtocolMessage: () => () => undefined,
+        hasEventListener: () => false,
         persistContact: () => undefined
     }
 

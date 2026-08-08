@@ -162,6 +162,8 @@ interface WaClientBuildRuntime {
         event: K,
         ...args: Parameters<WaClientEventMap[K]>
     ) => void
+    /** Whether anything is subscribed, for events whose payload costs something to build. */
+    readonly hasEventListener: (event: keyof WaClientEventMap) => boolean
     readonly handleIncomingMessageEvent: (event: WaIncomingMessageEvent) => Promise<void>
     readonly handleError: (error: Error) => void
     readonly handleIncomingFrame: (frame: Uint8Array) => Promise<void>
@@ -1051,8 +1053,14 @@ export function buildWaClientDependencies(input: {
         emitUnavailableMessage: (event) => runtime.emitEvent('message_unavailable', event),
         emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) =>
             runtime.emitEvent('debug_unhandled_stanza', event),
-        emitDecryptedPayload: (event: WaIncomingDecryptedPayloadEvent) =>
-            runtime.emitEvent('debug_decrypted_payload', event)
+        emitDecryptedPayload: (build: () => WaIncomingDecryptedPayloadEvent) => {
+            // Built only if someone is subscribed: the payload carries a copy of
+            // the plaintext and a redacted node, and this runs per `<enc>`.
+            if (!runtime.hasEventListener('debug_decrypted_payload')) {
+                return
+            }
+            runtime.emitEvent('debug_decrypted_payload', build())
+        }
     }
 
     const handleClientDirtyBits = (dirtyBits: Parameters<typeof handleDirtyBits>[1]) =>

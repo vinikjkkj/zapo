@@ -475,8 +475,8 @@ test('a decrypted payload is handed over before the library decodes it', async (
 
     const handled = await handleIncomingMessageAck(createEncryptedMessageNode(), {
         ...createDecryptingOptions(emitted),
-        emitDecryptedPayload: (event) => {
-            payloads.push(event)
+        emitDecryptedPayload: (build) => {
+            payloads.push(build())
         }
     })
 
@@ -508,8 +508,8 @@ test('a payload that decrypts but does not decode is still handed over', async (
         signalProtocol: {
             decryptMessage: async () => undecodable
         } as never,
-        emitDecryptedPayload: (event) => {
-            payloads.push(event)
+        emitDecryptedPayload: (build) => {
+            payloads.push(build())
         }
     })
 
@@ -534,8 +534,8 @@ test('each enc of a multi-device message reports its own index', async () => {
 
     await handleIncomingMessageAck(node, {
         ...createDecryptingOptions(emitted),
-        emitDecryptedPayload: (event) => {
-            payloads.push(event)
+        emitDecryptedPayload: (build) => {
+            payloads.push(build())
         }
     })
 
@@ -576,11 +576,46 @@ test('an observer cannot alter the message the library delivers', async () => {
 
     await handleIncomingMessageAck(createEncryptedMessageNode(), {
         ...createDecryptingOptions(emitted, { message: { conversation: 'hi' } }),
-        emitDecryptedPayload: (event) => {
-            event.plaintext.fill(0)
+        emitDecryptedPayload: (build) => {
+            build().plaintext.fill(0)
         }
     })
 
     assert.equal(emitted.length, 1)
     assert.equal(emitted[0]?.message?.conversation, 'hi')
+})
+
+test('the payload is only built when the hook asks for it', async () => {
+    // The hook is wired unconditionally by the factory, so the optional-call
+    // guard never fires in production. Handing over a builder is what keeps
+    // the plaintext copy and the redacted node off the path when the event has
+    // no listener, which is every session that never subscribes.
+    const emitted: WaIncomingMessageEvent[] = []
+    let handedBuilder = 0
+
+    await handleIncomingMessageAck(createEncryptedMessageNode(), {
+        ...createDecryptingOptions(emitted),
+        // What the factory does when nothing is subscribed: take the builder
+        // and never call it.
+        emitDecryptedPayload: () => {
+            handedBuilder += 1
+        }
+    })
+
+    assert.equal(handedBuilder, 1, 'the hook still runs')
+    assert.equal(emitted.length, 1, 'and the message still arrives')
+
+    // And calling it produces a fresh copy each time, so the copy lives in the
+    // builder rather than on the path to it.
+    const built: WaIncomingDecryptedPayloadEvent[] = []
+    await handleIncomingMessageAck(createEncryptedMessageNode(), {
+        ...createDecryptingOptions(emitted),
+        emitDecryptedPayload: (build) => {
+            built.push(build(), build())
+        }
+    })
+
+    assert.equal(built.length, 2)
+    assert.notEqual(built[0]?.plaintext, built[1]?.plaintext, 'each call copies')
+    assert.deepEqual(built[0]?.plaintext, built[1]?.plaintext, 'to the same bytes')
 })

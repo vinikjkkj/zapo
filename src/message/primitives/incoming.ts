@@ -53,7 +53,7 @@ interface WaIncomingMessageAckHandlerOptions {
     readonly emitNewsletterMessageUpdate?: (event: WaIncomingNewsletterMessageUpdateEvent) => void
     readonly emitUnavailableMessage?: (event: WaIncomingUnavailableMessageEvent) => void
     readonly emitUnhandledStanza?: (event: WaIncomingUnhandledStanzaEvent) => void
-    readonly emitDecryptedPayload?: (event: WaIncomingDecryptedPayloadEvent) => void
+    readonly emitDecryptedPayload?: (build: () => WaIncomingDecryptedPayloadEvent) => void
 }
 
 interface MessageIdentityAttrs {
@@ -437,13 +437,13 @@ function processMsmsgEncNode(
 /**
  * Hand a decrypted payload to the observer, before the library decodes it.
  *
- * Separate from the decrypt path in two ways that both matter. It swallows the
- * observer's failures, because this is an observability hook and a listener
- * that throws would otherwise land in the decrypt `catch` and send a message
- * that decrypted perfectly into retry handling. And it copies the plaintext,
- * because the caller hands the same buffer to `decode` on the next line: an
- * observer that trimmed or normalized it in place would change the message the
- * library goes on to deliver.
+ * Separate from the decrypt path in three ways that all matter. It hands over a
+ * builder rather than an event, so the copy below is only paid where something
+ * is subscribed. It swallows the observer's failures, because a listener that
+ * throws would otherwise land in the decrypt `catch` and send a message that
+ * decrypted perfectly into retry handling. And it copies the plaintext, because
+ * the caller hands the same buffer to `decode` on the next line: an observer
+ * that trimmed it in place would change the message the library delivers.
  */
 function emitDecryptedPayload(
     node: BinaryNode,
@@ -456,7 +456,7 @@ function emitDecryptedPayload(
         return
     }
     try {
-        options.emitDecryptedPayload({
+        options.emitDecryptedPayload(() => ({
             rawNode: buildIncomingEventRawNode(node),
             stanzaId: node.attrs.id,
             chatJid: node.attrs.from,
@@ -465,7 +465,7 @@ function emitDecryptedPayload(
             encIndex,
             encType,
             plaintext: plaintext.slice()
-        })
+        }))
     } catch (error) {
         options.logger.warn('decrypted payload observer threw', {
             id: node.attrs.id,

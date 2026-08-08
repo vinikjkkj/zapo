@@ -53,6 +53,7 @@ function createMinimalPluginClient(plugins: NonNullable<WaClientOptions['plugins
         clearStoredState: async () => undefined,
         resumeIncomingEvents: () => undefined,
         subscribeProtocolMessage: () => () => undefined,
+        hasEventListener: () => false,
         persistContact: async () => undefined
     }
     const deps = buildWaClientDependencies({ base, runtime })
