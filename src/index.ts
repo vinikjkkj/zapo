@@ -45,6 +45,7 @@ export type {
     WaIncomingChatstateEvent,
     WaIncomingErrorStanzaEvent,
     WaIncomingFailureEvent,
+    WaIncomingDecryptedPayloadEvent,
     WaIncomingMessageEvent,
     WaIncomingMessageKey,
     WaIncomingNewsletterEvent,

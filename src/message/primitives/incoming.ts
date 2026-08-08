@@ -434,6 +434,47 @@ function processMsmsgEncNode(
     }
 }
 
+/**
+ * Hand a decrypted payload to the observer, before the library decodes it.
+ *
+ * Separate from the decrypt path in two ways that both matter. It swallows the
+ * observer's failures, because this is an observability hook and a listener
+ * that throws would otherwise land in the decrypt `catch` and send a message
+ * that decrypted perfectly into retry handling. And it copies the plaintext,
+ * because the caller hands the same buffer to `decode` on the next line: an
+ * observer that trimmed or normalized it in place would change the message the
+ * library goes on to deliver.
+ */
+function emitDecryptedPayload(
+    node: BinaryNode,
+    options: WaIncomingMessageAckHandlerOptions,
+    encIndex: number,
+    encType: string,
+    plaintext: Uint8Array
+): void {
+    if (options.emitDecryptedPayload === undefined) {
+        return
+    }
+    try {
+        options.emitDecryptedPayload({
+            rawNode: buildIncomingEventRawNode(node),
+            stanzaId: node.attrs.id,
+            chatJid: node.attrs.from,
+            stanzaType: node.attrs.type,
+            offline: node.attrs.offline !== undefined,
+            encIndex,
+            encType,
+            plaintext: plaintext.slice()
+        })
+    } catch (error) {
+        options.logger.warn('decrypted payload observer threw', {
+            id: node.attrs.id,
+            encType,
+            message: toError(error).message
+        })
+    }
+}
+
 async function decryptAndProcessEncNode(
     node: BinaryNode,
     encNode: BinaryNode,
@@ -455,20 +496,7 @@ async function decryptAndProcessEncNode(
             senderAddress
         )
         const unpaddedPlaintext = unpadPkcs7(decryptedPayload)
-        // Before `decode`, which is the whole point: a payload that decrypts
-        // but does not decode throws below and is reported as unhandled, and
-        // the ratchet has already moved on, so nothing can ask for these bytes
-        // again.
-        options.emitDecryptedPayload?.({
-            rawNode: buildIncomingEventRawNode(node),
-            stanzaId: node.attrs.id,
-            chatJid: node.attrs.from,
-            stanzaType: node.attrs.type,
-            offline: node.attrs.offline !== undefined,
-            encIndex,
-            encType,
-            plaintext: unpaddedPlaintext
-        })
+        emitDecryptedPayload(node, options, encIndex, encType, unpaddedPlaintext)
         const decodedMessage = proto.Message.decode(unpaddedPlaintext)
         const message = unwrapDeviceSentMessage(decodedMessage) ?? decodedMessage
         const senderKeyDistribution = pickSenderKeyDistributionPayload(message)

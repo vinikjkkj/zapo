@@ -547,3 +547,40 @@ test('each enc of a multi-device message reports its own index', async () => {
         ]
     )
 })
+
+test('an observer that throws does not turn a good message into a decrypt failure', async () => {
+    // The hook is observability. A listener that blows up must not send a
+    // message that decrypted perfectly into retry handling.
+    const emitted: WaIncomingMessageEvent[] = []
+    const unhandled: unknown[] = []
+
+    const handled = await handleIncomingMessageAck(createEncryptedMessageNode(), {
+        ...createDecryptingOptions(emitted),
+        emitDecryptedPayload: () => {
+            throw new Error('observer blew up')
+        },
+        emitUnhandledStanza: (event) => {
+            unhandled.push(event)
+        }
+    })
+
+    assert.equal(handled, true)
+    assert.equal(emitted.length, 1, 'the message still arrives')
+    assert.equal(unhandled.length, 0, 'and nothing was reported as undecryptable')
+})
+
+test('an observer cannot alter the message the library delivers', async () => {
+    // The buffer the observer sees is handed to decode on the next line, so a
+    // listener that trims or normalizes in place would change the payload.
+    const emitted: WaIncomingMessageEvent[] = []
+
+    await handleIncomingMessageAck(createEncryptedMessageNode(), {
+        ...createDecryptingOptions(emitted, { message: { conversation: 'hi' } }),
+        emitDecryptedPayload: (event) => {
+            event.plaintext.fill(0)
+        }
+    })
+
+    assert.equal(emitted.length, 1)
+    assert.equal(emitted[0]?.message?.conversation, 'hi')
+})

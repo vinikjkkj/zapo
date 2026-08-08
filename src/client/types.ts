@@ -976,7 +976,7 @@ export interface WaIncomingDecryptedPayloadEvent extends WaIncomingBaseEvent {
     readonly encIndex: number
     /** The `<enc>` node's `type` attribute: `msg`, `pkmsg`, `skmsg`, … */
     readonly encType: string
-    /** The plaintext, unpadded, exactly as decoding receives it. */
+    /** The plaintext, unpadded. A copy, so mutating it cannot alter the message the library delivers. */
     readonly plaintext: Uint8Array
 }
 
