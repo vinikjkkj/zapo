@@ -226,16 +226,18 @@ function buildPollCreationMessage(content: WaSendPollMessage): Proto.IMessage {
         optionName: typeof opt === 'string' ? opt : opt.name
     }))
     const selectableOptionsCount = content.selectableCount ?? 1
+    const allowAddOption = content.allowAddOption === true
+    const hideParticipantName = content.hideParticipantName === true
     const pollBody: Proto.Message.IPollCreationMessage = {
         name: content.name,
         options,
         selectableOptionsCount,
-        ...(content.allowAddOption !== undefined ? { allowAddOption: content.allowAddOption } : {}),
-        ...(content.hideParticipantName !== undefined
-            ? { hideParticipantName: content.hideParticipantName }
-            : {})
+        ...(allowAddOption ? { allowAddOption: true } : {}),
+        ...(hideParticipantName ? { hideParticipantName: true } : {})
     }
-    // V3 for single-select (WA mobile), V1 for multi-select (WA Web).
+    if (allowAddOption || hideParticipantName) {
+        return { pollCreationMessageV6: pollBody }
+    }
     if (selectableOptionsCount === 1) {
         return { pollCreationMessageV3: pollBody }
     }
