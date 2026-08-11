@@ -162,6 +162,7 @@ function defaultDeviceProps(
         platformType: resolveDevicePropsPlatformType(config.deviceBrowser),
         requireFullSync: config.requireFullSync === true,
         historySyncConfig: {
+            storageQuotaMb: 114_149,
             inlineInitialPayloadInE2EeMsg: true,
             supportCallLogHistory: true,
             supportBotUserAgentChatHistory: true,
