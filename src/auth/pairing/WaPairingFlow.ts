@@ -17,7 +17,7 @@ import {
     generateDeviceSignature,
     verifyDeviceIdentityAccountSignature
 } from '@signal/attestation/WaAdvSignature'
-import { buildAckNode, buildIqResultNode } from '@transport/node/builders/global'
+import { buildAckNode, buildIqErrorNode, buildIqResultNode } from '@transport/node/builders/global'
 import {
     buildCompanionFinishRequestNode,
     buildCompanionHelloRequestNode,
@@ -461,20 +461,9 @@ export class WaPairingFlow {
     /** Mirrors the `not-authorized` IQ error WhatsApp Web returns on a failed pair-success. */
     private async sendPairSuccessValidationError(iqNode: BinaryNode): Promise<void> {
         try {
-            await this.opts.socket.sendNode({
-                tag: WA_NODE_TAGS.IQ,
-                attrs: {
-                    ...(iqNode.attrs.id ? { id: iqNode.attrs.id } : {}),
-                    to: iqNode.attrs.from ?? WA_DEFAULTS.HOST_DOMAIN,
-                    type: WA_IQ_TYPES.ERROR
-                },
-                content: [
-                    {
-                        tag: 'error',
-                        attrs: { code: '401', text: 'not-authorized' }
-                    }
-                ]
-            })
+            await this.opts.socket.sendNode(
+                buildIqErrorNode(iqNode, { code: 401, text: 'not-authorized' })
+            )
         } catch (error) {
             this.opts.logger.warn('failed to send pair-success error response', {
                 message: toError(error).message
