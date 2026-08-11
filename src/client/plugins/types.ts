@@ -82,11 +82,19 @@ export type WaClientExposedFromPlugins<P extends readonly unknown[]> = UnionToIn
     ExposedOf<P[number]>
 >
 
-/** Event map a plugin contributes, carried as a phantom marker on its definition. */
+/**
+ * Event map a plugin contributes, carried as a phantom marker on its definition.
+ *
+ * The marker is optional (it never exists at runtime), so under
+ * `exactOptionalPropertyTypes` the inferred `E` keeps the `| undefined` the
+ * declaration emits. `Exclude` drops it before the union reaches
+ * {@link UnionToIntersection}, which would otherwise collapse
+ * `Events | undefined` to `never` and type every client listener as `never`.
+ */
 type EventsOf<P> = P extends { readonly __pluginEvents?: infer E }
     ? unknown extends E
         ? {}
-        : E
+        : Exclude<E, undefined>
     : {}
 
 /**
