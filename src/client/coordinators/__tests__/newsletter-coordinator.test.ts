@@ -153,6 +153,46 @@ test('parseNewsletterMetadata maps wa-web envelope into metadata', () => {
     assert.equal(meta.preview?.id, 'pv-id')
 })
 
+test('coordinator fetch sends every condition variable the query declares', async () => {
+    const env = createTestCoordinator({
+        resultData: { xwa2_newsletter: { id: '111111111111111111@newsletter' } }
+    })
+
+    await env.coordinator.fetch('111111111111111111@newsletter')
+    const queryNode = env.mexCalls[0].node.content?.[0] as BinaryNode | undefined
+    assert.ok(queryNode)
+    assert.equal(queryNode.attrs.query_id, '27456920720571478')
+    const body = JSON.parse(queryNode.content as string)
+    assert.deepEqual(Object.keys(body.variables).sort(), [
+        'fetch_creation_time',
+        'fetch_full_image',
+        'fetch_pinned_messages',
+        'fetch_status_metadata',
+        'fetch_viewer_metadata',
+        'fetch_wamo_sub',
+        'input'
+    ])
+    assert.equal(body.variables.fetch_pinned_messages, true)
+})
+
+test('coordinator fetchDehydrated sends every condition variable the query declares', async () => {
+    const env = createTestCoordinator({
+        resultData: { xwa2_newsletter: { id: '111111111111111111@newsletter' } }
+    })
+
+    await env.coordinator.fetchDehydrated('111111111111111111@newsletter')
+    const queryNode = env.mexCalls[0].node.content?.[0] as BinaryNode | undefined
+    assert.ok(queryNode)
+    assert.equal(queryNode.attrs.query_id, '26944199458535748')
+    const body = JSON.parse(queryNode.content as string)
+    assert.deepEqual(Object.keys(body.variables).sort(), [
+        'fetch_pinned_messages',
+        'fetch_wamo_sub',
+        'input'
+    ])
+    assert.equal(body.variables.fetch_pinned_messages, true)
+})
+
 test('coordinator follow/unfollow sends mex with newsletter_id', async () => {
     const env = createTestCoordinator({
         resultData: { xwa2_newsletter_join_v2: { id: '1', state: { type: 'ACTIVE' } } }
