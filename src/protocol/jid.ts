@@ -212,6 +212,23 @@ export function canonicalizeSignalJid(
 }
 
 /**
+ * Returns `true` when the server segment of `jid` starting at `from` is one of
+ * the hosted variants. Compares in place, so the common miss costs one length
+ * check and allocates nothing. Callers that already located the `@` pass its
+ * index rather than paying {@link isJidType}'s tail-anchored rescan.
+ */
+function isHostedServerAt(jid: string, from: number): boolean {
+    const length = jid.length - from
+    if (length === WA_DEFAULTS.HOSTED_SERVER.length) {
+        return jid.startsWith(WA_DEFAULTS.HOSTED_SERVER, from)
+    }
+    if (length === WA_DEFAULTS.HOSTED_LID_SERVER.length) {
+        return jid.startsWith(WA_DEFAULTS.HOSTED_LID_SERVER, from)
+    }
+    return false
+}
+
+/**
  * Strips the `:device` segment from a JID, returning the bare `user@server`
  * form. Set `options.canonicalizeSignalServer` to also rewrite hosted servers
  * via {@link canonicalizeSignalServer}.
@@ -224,13 +241,17 @@ export function toUserJid(
     } = {}
 ): string {
     const canonicalize = options.canonicalizeSignalServer === true
-    if (!canonicalize) {
-        const atIndex = jid.indexOf('@')
-        if (atIndex >= 1 && atIndex < jid.length - 1) {
-            const colonIndex = jid.indexOf(':', 0)
-            if (colonIndex === -1 || colonIndex > atIndex) {
-                return jid
-            }
+    const atIndex = jid.indexOf('@')
+    if (atIndex >= 1 && atIndex < jid.length - 1) {
+        const colonIndex = jid.indexOf(':', 0)
+        // Canonicalization only rewrites the hosted servers, so a deviceless JID
+        // on any other server already is its own target form and can skip the
+        // parse (which would slice the user out and allocate an address).
+        if (
+            (colonIndex === -1 || colonIndex > atIndex) &&
+            (!canonicalize || !isHostedServerAt(jid, atIndex + 1))
+        ) {
+            return jid
         }
     }
     const address = parseSignalAddressFromJid(jid)
@@ -244,20 +265,25 @@ export function toUserJid(
     return `${address.user}@${server}`
 }
 
+const CANONICAL_USER_JID_OPTIONS = Object.freeze({ canonicalizeSignalServer: true } as const)
+
 /**
  * True when `jid` is the account's own user, matching the `meJid` (pn) or
  * `meLid` (lid) identity device-insensitively. Mirrors WhatsApp Web's
- * `isMeAccount`.
+ * `isMeAccount`, including its addressing-mode equivalence: a hosted device of
+ * the account (`<user>@hosted` / `<user>@hosted.lid`) is the same account as
+ * `<user>@s.whatsapp.net` / `<user>@lid`, so both sides are canonicalized
+ * before comparison.
  */
 export function isOwnAccountJid(
     jid: string,
     meJid: string | null | undefined,
     meLid: string | null | undefined
 ): boolean {
-    const candidateUser = toUserJid(jid)
+    const candidateUser = toUserJid(jid, CANONICAL_USER_JID_OPTIONS)
     return (
-        (!!meJid && toUserJid(meJid) === candidateUser) ||
-        (!!meLid && toUserJid(meLid) === candidateUser)
+        (!!meJid && toUserJid(meJid, CANONICAL_USER_JID_OPTIONS) === candidateUser) ||
+        (!!meLid && toUserJid(meLid, CANONICAL_USER_JID_OPTIONS) === candidateUser)
     )
 }
 
@@ -328,14 +354,9 @@ export function isHostedServer(server: string): boolean {
  * (`@hosted` / `@hosted.lid`) or by a `:HOSTED_DEVICE_ID@…` device segment.
  */
 export function isHostedDeviceJid(jid: string): boolean {
-    if (
-        isJidType(jid, WA_DEFAULTS.HOSTED_SERVER) ||
-        isJidType(jid, WA_DEFAULTS.HOSTED_LID_SERVER)
-    ) {
-        return true
-    }
     const atIndex = jid.indexOf('@')
     if (atIndex < 1 || atIndex >= jid.length - 1) return false
+    if (isHostedServerAt(jid, atIndex + 1)) return true
     const colonIndex = jid.indexOf(':')
     if (colonIndex < 0 || colonIndex >= atIndex - 1) return false
     let deviceId = 0

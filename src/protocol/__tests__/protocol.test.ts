@@ -155,6 +155,13 @@ test('jid type detection and device handling', () => {
     assert.equal(isOwnAccountJid('5599@s.whatsapp.net', '5511@s.whatsapp.net', '1330@lid'), false)
     assert.equal(isOwnAccountJid('5511@s.whatsapp.net', null, null), false)
 
+    // A hosted device of the account is the account (wa-web isSameAccountAndAddressingMode).
+    assert.equal(isOwnAccountJid('1330:99@hosted.lid', '5511@s.whatsapp.net', '1330@lid'), true)
+    assert.equal(isOwnAccountJid('5511:99@hosted', '5511@s.whatsapp.net', '1330@lid'), true)
+    assert.equal(isOwnAccountJid('1330:99@hosted.lid', '5511@s.whatsapp.net', null), false)
+    assert.equal(isOwnAccountJid('9999:99@hosted.lid', '5511@s.whatsapp.net', '1330@lid'), false)
+    assert.equal(isOwnAccountJid('1330@lid', '5511:99@hosted', '1330:99@hosted.lid'), true)
+
     assert.equal(normalizeDeviceJid('5511:0@s.whatsapp.net'), '5511@s.whatsapp.net')
     assert.equal(normalizeDeviceJid('5511:5@s.whatsapp.net'), '5511:5@s.whatsapp.net')
 
@@ -187,6 +194,13 @@ test('jid type detection and device handling', () => {
     assert.equal(isHostedDeviceJid('5511:99@hosted.lid'), true)
     assert.equal(isHostedDeviceJid('5511:99@lid'), true)
     assert.equal(isHostedDeviceJid('5511:1@lid'), false)
+    // Detected by server alone, and malformed shapes still rejected.
+    assert.equal(isHostedDeviceJid('5511@hosted'), true)
+    assert.equal(isHostedDeviceJid('5511@hosted.lid'), true)
+    assert.equal(isHostedDeviceJid('a@b@hosted'), false)
+    assert.equal(isHostedDeviceJid('@hosted'), false)
+    assert.equal(isHostedDeviceJid('5511@hostedd'), false)
+    assert.equal(isHostedDeviceJid('5511@hosted.li'), false)
 
     assert.equal(
         buildDeviceJid('6116570308623', 'lid', 99, {

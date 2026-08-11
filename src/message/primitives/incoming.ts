@@ -88,7 +88,10 @@ type MessageKeyIdentity = Omit<MessageIdentityAttrs, 'pushName'>
 /**
  * Self-authored 1:1 chat is the recipient, so its alternate addressing is the
  * `recipient*` attrs (the `sender*` attrs describe me). Promotes `recipientAlt`
- * to `remoteJidAlt` and drops the stale sender/recipient fields.
+ * to `remoteJidAlt` and drops the stale sender/recipient fields. Applied
+ * whenever the stanza is self-authored 1:1, even when the chat itself did not
+ * resolve: the sender attrs always describe the own account there, so letting
+ * them through would address the message to the connection's own number.
  */
 function promoteRecipientAddressing(identity: MessageKeyIdentity): MessageKeyIdentity {
     return {
@@ -116,13 +119,13 @@ function buildIncomingMessageKey(
     const fromMe = sender
         ? isOwnAccountJid(sender.userJid, options.getMeJid?.(), options.getMeLid?.())
         : false
-    const selfSentChat =
-        fromMe && !isGroup && !isBroadcast
-            ? (node.attrs.recipient ?? destinationJid ?? undefined)
-            : undefined
+    const isSelfSentDirect = fromMe && !isGroup && !isBroadcast
+    const selfSentChat = isSelfSentDirect
+        ? (node.attrs.recipient ?? destinationJid ?? undefined)
+        : undefined
     const chatJid = selfSentChat ? toUserJid(selfSentChat) : fromUserJid
     const { pushName, ...identity } = extractMessageIdentityAttrs(node.attrs)
-    const keyIdentity = selfSentChat ? promoteRecipientAddressing(identity) : identity
+    const keyIdentity = isSelfSentDirect ? promoteRecipientAddressing(identity) : identity
     return {
         pushName,
         key: {
