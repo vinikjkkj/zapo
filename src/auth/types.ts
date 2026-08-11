@@ -26,6 +26,11 @@ export interface WaAuthCredentials {
     readonly serverHasPreKeys?: boolean
     readonly routingInfo?: Uint8Array
     readonly lastSuccessTs?: number
+    /**
+     * Successful logins since this device was paired, advertised as `lc` in the
+     * noise login payload. Reset to `0` when a new pairing completes.
+     */
+    readonly loginCounter?: number
     readonly propsVersion?: number
     readonly abPropsVersion?: number
     readonly connectionLocation?: string
@@ -79,6 +84,14 @@ export interface WaAuthClientOptions {
      * `'Mac OS'`, `'Linux'`). Defaults to the current runtime's OS.
      */
     readonly deviceOsDisplayName?: string
+    /**
+     * OS version advertised in `DeviceProps.version` (`'10'`, `'14.6'`, ...).
+     * Defaults to the detected runtime OS version. Set this alongside
+     * {@link deviceOsDisplayName} when advertising an OS the process is not
+     * running on, so the advertised name and version agree. Values that are
+     * not dotted-numeric leave the field unset.
+     */
+    readonly deviceOsVersion?: string
     /**
      * When `true`, request a full history download from the primary device on
      * pairing instead of just recent messages. Off by default.

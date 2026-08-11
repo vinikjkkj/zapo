@@ -378,6 +378,8 @@ export interface RuntimeConfig {
     readonly captureNoisyEvents: boolean
     readonly deviceBrowser?: string
     readonly deviceOsDisplayName?: string
+    /** Set alongside `deviceOsDisplayName` so the advertised OS name and version agree. */
+    readonly deviceOsVersion?: string
     readonly historyEnabled: boolean
     /** Opt into downloading group-history bundles shared by other members. */
     readonly historyGroupBundles?: boolean
@@ -445,6 +447,7 @@ export const buildRuntimeConfigFromEnv = (env = process.env): RuntimeConfig => {
         captureNoisyEvents,
         deviceBrowser: env.MCP_DEVICE_BROWSER,
         deviceOsDisplayName: env.MCP_DEVICE_OS_DISPLAY,
+        deviceOsVersion: env.MCP_DEVICE_OS_VERSION,
         historyEnabled,
         historyGroupBundles,
         chatSocketUrls,
@@ -723,6 +726,9 @@ export class McpRuntime {
                 connectTimeoutMs: 60_000,
                 deviceBrowser: this.config.deviceBrowser ?? 'Chrome',
                 deviceOsDisplayName: this.config.deviceOsDisplayName ?? 'Windows',
+                ...(this.config.deviceOsVersion
+                    ? { deviceOsVersion: this.config.deviceOsVersion }
+                    : {}),
                 history: {
                     enabled: this.config.historyEnabled,
                     requireFullSync: true,

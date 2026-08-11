@@ -272,6 +272,7 @@ export function resolveWaClientBase(options: WaClientOptions, logger: Logger): W
         sessionId,
         deviceBrowser: device.browser,
         deviceOsDisplayName: device.osDisplayName,
+        deviceOsVersion: device.osVersion ?? undefined,
         devicePlatform: device.platform,
         urls: options.urls ?? options.chatSocketUrls ?? WA_DEFAULTS.CHAT_SOCKET_URLS,
         iqTimeoutMs: options.iqTimeoutMs ?? WA_DEFAULTS.IQ_TIMEOUT_MS,

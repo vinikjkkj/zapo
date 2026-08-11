@@ -128,7 +128,12 @@ export async function buildCommsConfig(
     socketOptions: WaAuthSocketOptions,
     clientOptions: Pick<
         WaAuthClientOptions,
-        'deviceBrowser' | 'deviceOsDisplayName' | 'requireFullSync' | 'version' | 'mobileTransport'
+        | 'deviceBrowser'
+        | 'deviceOsDisplayName'
+        | 'deviceOsVersion'
+        | 'requireFullSync'
+        | 'version'
+        | 'mobileTransport'
     > & {
         readonly noiseTrustedRootCa?: WaNoiseRootCa
         readonly disableNoiseCertificateChainVerification?: boolean
@@ -140,6 +145,8 @@ export async function buildCommsConfig(
          * sessions.
          */
         readonly mobileAppVersionOverride?: string
+        /** Successful logins made by the calling client instance so far. */
+        readonly connectAttemptCount?: number
     }
 ): Promise<WaCommsConfig> {
     const meJid = credentials.meJid
@@ -245,6 +252,8 @@ export async function buildCommsConfig(
                 ? {
                       username: loginIdentity.username,
                       device: loginIdentity.device,
+                      loginCounter: credentials.loginCounter ?? 0,
+                      connectAttemptCount: clientOptions.connectAttemptCount ?? 0,
                       deviceBrowser: clientOptions.deviceBrowser,
                       deviceOsDisplayName: clientOptions.deviceOsDisplayName,
                       versionBase
@@ -256,6 +265,7 @@ export async function buildCommsConfig(
                       signedPreKey: credentials.signedPreKey,
                       deviceBrowser: clientOptions.deviceBrowser,
                       deviceOsDisplayName: clientOptions.deviceOsDisplayName,
+                      deviceOsVersion: clientOptions.deviceOsVersion,
                       requireFullSync: clientOptions.requireFullSync,
                       versionBase
                   }
