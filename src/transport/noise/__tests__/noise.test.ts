@@ -170,12 +170,14 @@ test('device props carry the OS version, not the app version', () => {
     assert.equal(macOs.version?.primary, 14)
     assert.equal(macOs.version?.secondary, 6)
 
-    const unparsable = proto.DeviceProps.decode(
-        proto.ClientPayload.decode(
-            buildRegistrationPayload({ ...REGISTRATION_FIXTURE, deviceOsVersion: 'Sonoma' })
-        ).devicePairingData!.deviceProps!
-    )
-    assert.ok(!unparsable.version)
+    for (const deviceOsVersion of ['Sonoma', 'x86_64', '']) {
+        const rejected = proto.DeviceProps.decode(
+            proto.ClientPayload.decode(
+                buildRegistrationPayload({ ...REGISTRATION_FIXTURE, deviceOsVersion })
+            ).devicePairingData!.deviceProps!
+        )
+        assert.ok(!rejected.version, `expected no version for ${JSON.stringify(deviceOsVersion)}`)
+    }
 })
 
 test('history sync config matches the web client capability set', () => {

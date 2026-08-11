@@ -110,12 +110,12 @@ export class WaPairingFlow {
             customCode !== undefined ? normalizeCustomPairingCode(customCode) : undefined
         const credentials = this.requireCredentials()
         const phoneJid = parsePhoneJid(phoneNumber)
+        const createdAtSeconds = Math.floor(Date.now() / 1000)
         const [companionHello, refreshedCredentials] = await Promise.all([
             createCompanionHello({ customCode: normalizedCustomCode }),
             this.rotateAdvSecret(credentials)
         ])
         const browserDisplayName = getWaBrowserDisplayName(this.opts.device.browser)
-        const createdAtSeconds = Math.floor(Date.now() / 1000)
 
         const response = await this.opts.socket.query(
             buildCompanionHelloRequestNode({

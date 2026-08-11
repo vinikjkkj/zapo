@@ -331,9 +331,19 @@ export class WaAuthClient {
      * Persists the per-connection success attributes from the server (LID,
      * display name, companion key, last-success ts, props versions, ...). Only
      * persists when at least one attribute actually changed.
+     *
+     * Pass `countsAsLogin` only for the server `success` node: it advances the
+     * login counters advertised as `lc` / `connectAttemptCount`. Callers that
+     * merely reuse this to persist a single attribute (a push-name change, for
+     * instance) must leave it unset.
      */
-    public async persistSuccessAttributes(attributes: WaSuccessPersistAttributes): Promise<void> {
-        this.connectAttemptCount += 1
+    public async persistSuccessAttributes(
+        attributes: WaSuccessPersistAttributes,
+        { countsAsLogin = false }: { readonly countsAsLogin?: boolean } = {}
+    ): Promise<void> {
+        if (countsAsLogin) {
+            this.connectAttemptCount += 1
+        }
         let persistDiff: Record<string, boolean> | undefined
         const computeDiff = (current: WaAuthCredentials, next: WaAuthCredentials) => ({
             loginCounterChanged: next.loginCounter !== current.loginCounter,
@@ -358,7 +368,9 @@ export class WaAuthClient {
                 meDisplayName: attributes.meDisplayName ?? credentials.meDisplayName,
                 companionEncStatic: attributes.companionEncStatic ?? credentials.companionEncStatic,
                 lastSuccessTs: attributes.lastSuccessTs ?? credentials.lastSuccessTs,
-                loginCounter: (credentials.loginCounter ?? 0) + 1,
+                loginCounter: countsAsLogin
+                    ? (credentials.loginCounter ?? 0) + 1
+                    : credentials.loginCounter,
                 propsVersion: attributes.propsVersion ?? credentials.propsVersion,
                 abPropsVersion: attributes.abPropsVersion ?? credentials.abPropsVersion,
                 connectionLocation: attributes.connectionLocation ?? credentials.connectionLocation,

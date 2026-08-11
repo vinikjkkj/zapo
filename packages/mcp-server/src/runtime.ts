@@ -725,7 +725,9 @@ export class McpRuntime {
                 ...(mobileTransport ? { mobileTransport } : {}),
                 connectTimeoutMs: 60_000,
                 deviceBrowser: this.config.deviceBrowser ?? 'Chrome',
-                deviceOsDisplayName: this.config.deviceOsDisplayName ?? 'Windows',
+                ...(this.config.deviceOsDisplayName
+                    ? { deviceOsDisplayName: this.config.deviceOsDisplayName }
+                    : {}),
                 ...(this.config.deviceOsVersion
                     ? { deviceOsVersion: this.config.deviceOsVersion }
                     : {}),

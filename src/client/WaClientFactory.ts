@@ -345,7 +345,8 @@ function createIncomingNodeRuntime(input: {
 
     return {
         handleStreamControlResult: streamControl.handleStreamControlResult,
-        persistSuccessAttributes: (attributes) => authClient.persistSuccessAttributes(attributes),
+        persistSuccessAttributes: (attributes) =>
+            authClient.persistSuccessAttributes(attributes, { countsAsLogin: true }),
         emitSuccessNode: (node) => emitEvent('debug_connection_success', { node }),
         updateClockSkewFromSuccess: (serverUnixSeconds) =>
             connectionManager.updateClockSkewFromSuccess(serverUnixSeconds),
@@ -604,6 +605,7 @@ export function buildWaClientDependencies(input: {
         {
             deviceBrowser: options.deviceBrowser,
             deviceOsDisplayName: options.deviceOsDisplayName,
+            deviceOsVersion: options.deviceOsVersion,
             devicePlatform: options.devicePlatform,
             requireFullSync: options.requireFullSync,
             version: options.version,
