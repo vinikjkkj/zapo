@@ -28,6 +28,7 @@ import { MEDIA_UPLOAD_PATHS } from '@media/constants'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { MediaKind } from '@media/types'
 import {
+    buildAddonSenderPairs,
     collectUniqueUserJids,
     decodeAddonPlaintext,
     decryptAddonPayloadWithSenderFallback,
@@ -858,7 +859,7 @@ export class WaMessageCoordinator {
             event.rawNode.attrs.participant_pn,
             event.rawNode.attrs.sender_pn,
             event.rawNode.attrs.participant,
-            event.rawNode.attrs.from
+            event.key.isGroup ? undefined : event.rawNode.attrs.from
         )
 
         const keyParentSender = resolveAddonParentSenderFromKey(
@@ -870,12 +871,15 @@ export class WaMessageCoordinator {
             keyParentSender,
             parentEntry.senderJid
         )
+        const senderPairs = buildAddonSenderPairs({
+            parentCandidates: parentMsgOriginalSenderCandidates,
+            modificationCandidates: modificationSenderCandidates
+        })
 
         const plaintext = await decryptAddonPayloadWithSenderFallback({
             messageSecret: parentEntry.secret,
             stanzaId: targetMessageId,
-            parentMsgOriginalSenderCandidates,
-            modificationSenderCandidates,
+            senderPairs,
             modificationType: addon.modificationType,
             ciphertext: addon.encPayload,
             iv: addon.encIv

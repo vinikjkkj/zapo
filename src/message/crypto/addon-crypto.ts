@@ -8,7 +8,7 @@ import {
 } from '@message/crypto/use-case-secret'
 import { unwrapMessage } from '@message/encode/content'
 import { proto, type Proto } from '@proto'
-import { toUserJid } from '@protocol/jid'
+import { isLidJid, isUserJid, toUserJid } from '@protocol/jid'
 import type {
     WaMessageSecretEntry,
     WaMessageSecretStore
@@ -51,7 +51,7 @@ export function buildAddonAdditionalData(stanzaId: string, addOnSenderJid: strin
  */
 export function collectUniqueUserJids(
     ...candidates: ReadonlyArray<string | null | undefined>
-): string[] {
+): readonly string[] {
     const out: string[] = []
     const seen = new Set<string>()
     for (const candidate of candidates) {
@@ -81,19 +81,53 @@ export function resolveAddonParentSenderFromKey(
     chatIsGroup: boolean,
     modificationSender: string
 ): string | null {
-    if (targetMessageKey.fromMe) {
-        return modificationSender.trim() ? toUserJid(modificationSender) : null
-    }
-    if (chatIsGroup) {
-        const participant = targetMessageKey.participant
-        return participant?.trim() ? toUserJid(participant) : null
-    }
-    const remoteJid = targetMessageKey.remoteJid
-    return remoteJid?.trim() ? toUserJid(remoteJid) : null
+    const raw = targetMessageKey.fromMe
+        ? modificationSender
+        : chatIsGroup
+          ? targetMessageKey.participant
+          : targetMessageKey.remoteJid
+    return collectUniqueUserJids(raw)[0] ?? null
 }
 
 function isAddonAuthFailure(error: unknown): boolean {
     return ADDON_AUTH_FAILURE_RE.test(toError(error).message)
+}
+
+export interface WaAddonSenderPair {
+    readonly parentMsgOriginalSender: string
+    readonly modificationSender: string
+}
+
+/** Builds the bounded LID, PN, and as-received sender rungs used by addon decryption. */
+export function buildAddonSenderPairs(input: {
+    readonly parentCandidates: readonly string[]
+    readonly modificationCandidates: readonly string[]
+}): readonly WaAddonSenderPair[] {
+    const parents = input.parentCandidates.filter((jid) => isLidJid(jid) || isUserJid(jid))
+    const modifiers = input.modificationCandidates.filter((jid) => isLidJid(jid) || isUserJid(jid))
+    const pairs: WaAddonSenderPair[] = []
+    const seen = new Set<string>()
+    const addPair = (
+        parentMsgOriginalSender: string | undefined,
+        modificationSender: string | undefined
+    ) => {
+        if (!parentMsgOriginalSender || !modificationSender) return
+        const key = `${parentMsgOriginalSender}\u0000${modificationSender}`
+        if (seen.has(key)) return
+        seen.add(key)
+        pairs.push({ parentMsgOriginalSender, modificationSender })
+    }
+
+    addPair(
+        parents.find((jid) => isLidJid(jid)),
+        modifiers.find((jid) => isLidJid(jid))
+    )
+    addPair(
+        parents.find((jid) => isUserJid(jid)),
+        modifiers.find((jid) => isUserJid(jid))
+    )
+    addPair(parents[0], modifiers[0])
+    return pairs
 }
 
 /**
@@ -106,41 +140,33 @@ function isAddonAuthFailure(error: unknown): boolean {
 export async function decryptAddonPayloadWithSenderFallback(input: {
     readonly messageSecret: WaAddonBytes
     readonly stanzaId: string
-    readonly parentMsgOriginalSenderCandidates: readonly string[]
-    readonly modificationSenderCandidates: readonly string[]
+    readonly senderPairs: readonly WaAddonSenderPair[]
     readonly modificationType: ModificationType
     readonly ciphertext: WaAddonBytes
     readonly iv: WaAddonBytes
 }): Promise<Uint8Array> {
-    const parents = input.parentMsgOriginalSenderCandidates
-    const modifiers = input.modificationSenderCandidates
-    if (parents.length === 0) {
-        throw new Error('parent message original sender must be a non-empty string')
-    }
-    if (modifiers.length === 0) {
-        throw new Error('modification sender must be a non-empty string')
+    if (input.senderPairs.length === 0) {
+        throw new Error('addon sender pairs must not be empty')
     }
 
     let lastError: unknown
-    for (const parentMsgOriginalSender of parents) {
-        for (const modificationSender of modifiers) {
-            try {
-                return await decryptAddonPayload({
-                    messageSecret: input.messageSecret,
-                    stanzaId: input.stanzaId,
-                    parentMsgOriginalSender,
-                    modificationSender,
-                    modificationType: input.modificationType,
-                    ciphertext: input.ciphertext,
-                    iv: input.iv,
-                    additionalData: shouldUseAddonAdditionalData(input.modificationType)
-                        ? buildAddonAdditionalData(input.stanzaId, modificationSender)
-                        : undefined
-                })
-            } catch (error) {
-                lastError = error
-                if (!isAddonAuthFailure(error)) throw error
-            }
+    for (const { parentMsgOriginalSender, modificationSender } of input.senderPairs) {
+        try {
+            return await decryptAddonPayload({
+                messageSecret: input.messageSecret,
+                stanzaId: input.stanzaId,
+                parentMsgOriginalSender,
+                modificationSender,
+                modificationType: input.modificationType,
+                ciphertext: input.ciphertext,
+                iv: input.iv,
+                additionalData: shouldUseAddonAdditionalData(input.modificationType)
+                    ? buildAddonAdditionalData(input.stanzaId, modificationSender)
+                    : undefined
+            })
+        } catch (error) {
+            lastError = error
+            if (!isAddonAuthFailure(error)) throw error
         }
     }
     throw lastError instanceof Error ? lastError : new Error(toError(lastError).message)

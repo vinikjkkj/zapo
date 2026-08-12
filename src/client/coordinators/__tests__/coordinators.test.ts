@@ -134,6 +134,7 @@ function createMessageDispatchCoordinator(
     groupMetadataStore: WaGroupMetadataMemoryStore,
     overrides?: {
         readonly meJid?: string
+        readonly meLid?: string
         readonly mobileMessageIdFormat?: () => boolean
         readonly serverClock?: ServerClock
         readonly signalDeviceSync?: {
@@ -177,7 +178,9 @@ function createMessageDispatchCoordinator(
             set: async (_id: string, _entry: { secret: Uint8Array; senderJid: string }) => {}
         } as never,
         getCurrentCredentials: () =>
-            overrides?.meJid ? ({ meJid: overrides.meJid } as never) : null,
+            overrides?.meJid || overrides?.meLid
+                ? ({ meJid: overrides.meJid, meLid: overrides.meLid } as never)
+                : null,
         resolvePrivacyTokenNode: async () => null,
         onDirectMessageSent: () => undefined,
         mobileMessageIdFormat: overrides?.mobileMessageIdFormat,
@@ -199,6 +202,14 @@ function buildAppStateSyncResult(
         })
     )
     return { collections }
+}
+
+function callResolveOutgoingSecretSenderJid(coordinator: WaMessageDispatchCoordinator): string {
+    return (
+        coordinator as unknown as {
+            resolveOutgoingSecretSenderJid(): string
+        }
+    ).resolveOutgoingSecretSenderJid()
 }
 
 function callResolvePeerRecipientPn(
@@ -227,6 +238,36 @@ test('message dispatch emits message_send with the outbound proto and destinatio
     assert.equal(events.length, 1)
     assert.equal(events[0]?.to, '5511999999999@s.whatsapp.net')
     assert.ok(events[0]?.message)
+})
+
+test('outgoing secret sender prefers meLid and recedes to meJid when lid is malformed', () => {
+    const store = new WaGroupMetadataMemoryStore()
+    const withLid = createMessageDispatchCoordinator(store, {
+        meJid: '5511000000000:12@s.whatsapp.net',
+        meLid: '123456789:3@lid'
+    })
+    assert.equal(callResolveOutgoingSecretSenderJid(withLid), '123456789@lid')
+
+    const malformedLid = createMessageDispatchCoordinator(store, {
+        meJid: '5511000000000:12@s.whatsapp.net',
+        meLid: 'not-a-jid'
+    })
+    assert.equal(callResolveOutgoingSecretSenderJid(malformedLid), '5511000000000@s.whatsapp.net')
+
+    const malformedLidWithAt = createMessageDispatchCoordinator(store, {
+        meJid: '5511000000000@s.whatsapp.net',
+        meLid: '@lid'
+    })
+    assert.equal(
+        callResolveOutgoingSecretSenderJid(malformedLidWithAt),
+        '5511000000000@s.whatsapp.net'
+    )
+
+    const bothMalformed = createMessageDispatchCoordinator(store, {
+        meJid: 'not-a-jid',
+        meLid: 'also-bad'
+    })
+    assert.equal(callResolveOutgoingSecretSenderJid(bothMalformed), '')
 })
 
 test('resolvePeerRecipientPn: a PN-addressed caller on a LID envelope stamps that PN', async () => {

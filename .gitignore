@@ -16,3 +16,4 @@ bench-profiles-*/
 .claude
 *.log
 ___*
+/docs/

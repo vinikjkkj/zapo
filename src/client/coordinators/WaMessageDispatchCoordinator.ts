@@ -600,16 +600,11 @@ export class WaMessageDispatchCoordinator {
             sendOptions.id &&
             (this.deps.persistAllMessageSecrets || needsSecretPersistence(messageWithSecret))
         ) {
-            const credentials = this.deps.getCurrentCredentials()
-            // Prefer LID: peers address us by LID in pollCreationMessageKey during
-            // the PN→LID migration, and HKDF binds the parent-author JID.
-            const senderForSecret = credentials?.meLid
-                ? toUserJid(credentials.meLid)
-                : credentials?.meJid
-                  ? toUserJid(credentials.meJid)
-                  : ''
             void this.deps.messageSecretStore
-                .set(sendOptions.id, { secret: rawSecret, senderJid: senderForSecret })
+                .set(sendOptions.id, {
+                    secret: rawSecret,
+                    senderJid: this.resolveOutgoingSecretSenderJid()
+                })
                 .catch((error) => {
                     this.deps.logger.warn('failed to persist outgoing message secret', {
                         id: sendOptions.id,
@@ -1485,6 +1480,40 @@ export class WaMessageDispatchCoordinator {
             participants: participantUserJids.length
         })
         return WA_ADDRESSING_MODES.PN
+    }
+
+    /**
+     * Parent-author JID stored with the outgoing message secret. Peers address
+     * us by LID in `pollCreationMessageKey` during the PN→LID migration, so a
+     * valid `meLid` wins. A malformed LID must not abort the send: fall back to
+     * a normalized `meJid`, then to the empty sender (same recoverable path as
+     * {@link resolveSenderForAddressingMode}).
+     */
+    private resolveOutgoingSecretSenderJid(): string {
+        const credentials = this.deps.getCurrentCredentials()
+        const meLid = credentials?.meLid
+        if (meLid && meLid.includes('@')) {
+            try {
+                return toUserJid(meLid)
+            } catch (error) {
+                this.deps.logger.trace('ignoring malformed me lid jid', {
+                    meLid,
+                    message: toError(error).message
+                })
+            }
+        }
+        const meJid = credentials?.meJid
+        if (meJid && meJid.includes('@')) {
+            try {
+                return toUserJid(meJid)
+            } catch (error) {
+                this.deps.logger.trace('ignoring malformed me jid', {
+                    meJid,
+                    message: toError(error).message
+                })
+            }
+        }
+        return ''
     }
 
     private resolveSenderForAddressingMode(
