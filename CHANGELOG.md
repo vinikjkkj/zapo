@@ -1,5 +1,17 @@
 # zapo-js
 
+## 1.7.1
+
+### Patch Changes
+
+- Align the noise `ClientPayload` and the pairing flow with WhatsApp Web, field by field against the deobfuscated bundle and a live session. `UserAgent.osVersion` carries the literal `0.1` the web device-info bridge sends instead of the OS display name, `UserAgent.phoneId` is dropped (the web client never sends it, and a per-connect UUID is a fingerprint that changes on every connection), and `DeviceProps.version` carries the OS version rather than the app version already advertised in `UserAgent.appVersion` - non dotted-numeric versions leave it unset. `historySyncConfig` matches the web field set (`supportCallLogHistory`, `supportGroupHistory`, `thumbnailSyncDaysLimit`, `supportManusHistory`, `supportHatchHistory`, `supportedBotChannelFbids`; `supportInlineContacts` dropped), `pull` defaults to false on a registration handshake and true on a login, and `lc` / `connectAttemptCount` ride on login backed by a persisted `loginCounter` reset on pairing. The pairing-code flow re-runs when the primary replays `primary_hello` after a completed `companion_finish` (capped at 3 attempts, restarted from a fresh adv secret) instead of stalling, persists the derived adv secret before sending `companion_finish` so a lost response cannot leave the pair-success HMAC unverifiable, and anchors the 180s code lifetime at generation. `pair-success` answers `iq type=error` with `not-authorized` when the HMAC or the account signature fails instead of leaving the server without a response, ignores replays once a pairing is in flight or the session is registered, and enforces the 1-500 byte bound on the device-identity payload. Adds the `deviceOsVersion` client option for callers advertising an OS the process is not running on, so the advertised name and version stay a matching pair.
+- Match the own account's hosted devices in `isOwnAccountJid`, so a stanza from one of them is no longer treated as coming from another account.
+- Send `fetch_pinned_messages` on newsletter metadata queries, so pinned messages come back with the metadata instead of being missing.
+- Keep the plugin event maps well-typed under `exactOptionalPropertyTypes`.
+- Split poll creation between V1 and V3 by `selectableCount`, matching how WhatsApp Web picks the message version.
+- Set the `native_flow` biz name for PIX and review-and-pay sends.
+- Cut hot-path CPU and allocations across signal, codec, media and appstate: outbound attrs are built in a single pass, history sync chunks are decoded incrementally instead of materializing the whole graph, media encryption writes into a buffer that already reserves room for the mac, and the group send and jid paths drop redundant work.
+
 ## 1.7.0
 
 ### Minor Changes

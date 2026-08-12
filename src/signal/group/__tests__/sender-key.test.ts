@@ -8,7 +8,7 @@ import { SIGNAL_GROUP_VERSION } from '@signal/constants'
 import { deriveSenderKeyMsgKey, selectMessageKey } from '@signal/group/SenderKeyChain'
 import { parseDistributionPayload, parseSenderKeyMessage } from '@signal/group/SenderKeyCodec'
 import { SenderKeyManager } from '@signal/group/SenderKeyManager'
-import type { SenderKeyRecord, SignalAddress } from '@signal/types'
+import type { SenderKeyDistributionRecord, SenderKeyRecord, SignalAddress } from '@signal/types'
 import { SenderKeyMemoryStore } from '@store/memory/sender-key.store'
 import { concatBytes } from '@util/bytes'
 
@@ -38,6 +38,17 @@ function makeSenderKeyRecord(seed = 0): SenderKeyRecord {
         signingPublicKey: prependVersion(makeBytes(32, seed + 1), 0).subarray(0, 33),
         signingPrivateKey: makeBytes(32, seed + 2),
         unusedMessageKeys: []
+    }
+}
+
+class CountingSenderKeyMemoryStore extends SenderKeyMemoryStore {
+    public distributionWrites = 0
+
+    public override async upsertSenderKeyDistribution(
+        record: SenderKeyDistributionRecord
+    ): Promise<void> {
+        this.distributionWrites += 1
+        await super.upsertSenderKeyDistribution(record)
     }
 }
 
@@ -177,6 +188,18 @@ test('sender key manager handles distribution, encryption/decryption and validat
             }),
         /invalid sender key signature/
     )
+})
+
+test('sender key manager does not record a distribution for the sender itself', async () => {
+    const store = new CountingSenderKeyMemoryStore()
+    const manager = new SenderKeyManager(store)
+    const groupId = '120363000000000001@g.us'
+    const sender = makeAddress('5511888888888', 1)
+    const plaintext = makeBytes(24, 12)
+
+    const prepared = await manager.prepareGroupEncryption(groupId, sender, plaintext)
+    assert.ok(prepared.distributionMessage.axolotlSenderKeyDistributionMessage)
+    assert.strictEqual(store.distributionWrites, 0)
 })
 
 test('sender key manager bypasses signature check when skipSignatureVerification is set', async () => {

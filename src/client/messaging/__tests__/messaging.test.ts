@@ -562,26 +562,57 @@ test('buildMediaMessageContent builds keep/unkeep with KeepType enum', async () 
     assert.equal(unkeep.message.keepInChatMessage?.keepType, proto.KeepType.UNDO_KEEP_FOR_ALL)
 })
 
-test('buildMediaMessageContent builds poll creation V3 with hashed-ready options', async () => {
-    const built = await buildMediaMessageContent(
+test('buildMediaMessageContent builds poll creation V3 for single-select and V1 for multi', async () => {
+    const single = await buildMediaMessageContent(
+        BUILD_OPTIONS,
+        {
+            type: 'poll',
+            name: 'Sim ou nao?',
+            options: ['sim', 'nao'],
+            selectableCount: 1
+        },
+        { to: '551122222222@s.whatsapp.net' }
+    )
+    assert.equal(single.message.pollCreationMessageV3?.name, 'Sim ou nao?')
+    assert.equal(single.message.pollCreationMessageV3?.selectableOptionsCount, 1)
+    assert.equal(single.message.pollCreationMessage, undefined)
+    assert.equal(single.message.pollCreationMessageV6, undefined)
+    assert.deepEqual(single.message.pollCreationMessageV3?.options, [
+        { optionName: 'sim' },
+        { optionName: 'nao' }
+    ])
+
+    const multi = await buildMediaMessageContent(
         BUILD_OPTIONS,
         {
             type: 'poll',
             name: 'Qual cor?',
             options: ['azul', { name: 'verde' }, 'vermelho'],
-            selectableCount: 2,
-            allowAddOption: true
+            selectableCount: 2
         },
         { to: '551122222222@s.whatsapp.net' }
     )
-    assert.equal(built.message.pollCreationMessageV3?.name, 'Qual cor?')
-    assert.equal(built.message.pollCreationMessageV3?.selectableOptionsCount, 2)
-    assert.equal(built.message.pollCreationMessageV3?.allowAddOption, true)
-    assert.deepEqual(built.message.pollCreationMessageV3?.options, [
+    assert.equal(multi.message.pollCreationMessage?.name, 'Qual cor?')
+    assert.equal(multi.message.pollCreationMessage?.selectableOptionsCount, 2)
+    assert.equal(multi.message.pollCreationMessageV3, undefined)
+    assert.equal(multi.message.pollCreationMessageV6, undefined)
+    assert.deepEqual(multi.message.pollCreationMessage?.options, [
         { optionName: 'azul' },
         { optionName: 'verde' },
         { optionName: 'vermelho' }
     ])
+
+    const defaultSelectable = await buildMediaMessageContent(
+        BUILD_OPTIONS,
+        {
+            type: 'poll',
+            name: 'default',
+            options: ['a', 'b']
+        },
+        { to: '551122222222@s.whatsapp.net' }
+    )
+    assert.equal(defaultSelectable.message.pollCreationMessageV3?.selectableOptionsCount, 1)
+    assert.equal(defaultSelectable.message.pollCreationMessage, undefined)
 
     await assert.rejects(
         () =>
@@ -592,6 +623,54 @@ test('buildMediaMessageContent builds poll creation V3 with hashed-ready options
             ),
         /at least one option/
     )
+})
+
+test('buildMediaMessageContent routes poll flags to V6 and drops false flags', async () => {
+    const addOption = await buildMediaMessageContent(
+        BUILD_OPTIONS,
+        {
+            type: 'poll',
+            name: 'Sugestoes?',
+            options: ['a', 'b'],
+            allowAddOption: true
+        },
+        { to: '551122222222@s.whatsapp.net' }
+    )
+    assert.equal(addOption.message.pollCreationMessageV6?.name, 'Sugestoes?')
+    assert.equal(addOption.message.pollCreationMessageV6?.selectableOptionsCount, 1)
+    assert.equal(addOption.message.pollCreationMessageV6?.allowAddOption, true)
+    assert.equal(addOption.message.pollCreationMessageV6?.hideParticipantName, undefined)
+    assert.equal(addOption.message.pollCreationMessageV3, undefined)
+
+    const hidden = await buildMediaMessageContent(
+        BUILD_OPTIONS,
+        {
+            type: 'poll',
+            name: 'Anonima',
+            options: ['a', 'b', 'c'],
+            selectableCount: 2,
+            hideParticipantName: true
+        },
+        { to: '551122222222@s.whatsapp.net' }
+    )
+    assert.equal(hidden.message.pollCreationMessageV6?.selectableOptionsCount, 2)
+    assert.equal(hidden.message.pollCreationMessageV6?.hideParticipantName, true)
+    assert.equal(hidden.message.pollCreationMessage, undefined)
+
+    const explicitFalse = await buildMediaMessageContent(
+        BUILD_OPTIONS,
+        {
+            type: 'poll',
+            name: 'Simples',
+            options: ['a', 'b'],
+            allowAddOption: false,
+            hideParticipantName: false
+        },
+        { to: '551122222222@s.whatsapp.net' }
+    )
+    assert.equal(explicitFalse.message.pollCreationMessageV6, undefined)
+    assert.equal(explicitFalse.message.pollCreationMessageV3?.allowAddOption, undefined)
+    assert.equal(explicitFalse.message.pollCreationMessageV3?.hideParticipantName, undefined)
 })
 
 test('buildMediaMessageContent builds event with optional location and fields', async () => {

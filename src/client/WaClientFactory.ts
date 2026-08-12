@@ -272,6 +272,7 @@ export function resolveWaClientBase(options: WaClientOptions, logger: Logger): W
         sessionId,
         deviceBrowser: device.browser,
         deviceOsDisplayName: device.osDisplayName,
+        deviceOsVersion: device.osVersion ?? undefined,
         devicePlatform: device.platform,
         urls: options.urls ?? options.chatSocketUrls ?? WA_DEFAULTS.CHAT_SOCKET_URLS,
         iqTimeoutMs: options.iqTimeoutMs ?? WA_DEFAULTS.IQ_TIMEOUT_MS,
@@ -344,7 +345,8 @@ function createIncomingNodeRuntime(input: {
 
     return {
         handleStreamControlResult: streamControl.handleStreamControlResult,
-        persistSuccessAttributes: (attributes) => authClient.persistSuccessAttributes(attributes),
+        persistSuccessAttributes: (attributes) =>
+            authClient.persistSuccessAttributes(attributes, { countsAsLogin: true }),
         emitSuccessNode: (node) => emitEvent('debug_connection_success', { node }),
         updateClockSkewFromSuccess: (serverUnixSeconds) =>
             connectionManager.updateClockSkewFromSuccess(serverUnixSeconds),
@@ -603,6 +605,7 @@ export function buildWaClientDependencies(input: {
         {
             deviceBrowser: options.deviceBrowser,
             deviceOsDisplayName: options.deviceOsDisplayName,
+            deviceOsVersion: options.deviceOsVersion,
             devicePlatform: options.devicePlatform,
             requireFullSync: options.requireFullSync,
             version: options.version,

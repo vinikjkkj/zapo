@@ -17,7 +17,7 @@ import {
     generateDeviceSignature,
     verifyDeviceIdentityAccountSignature
 } from '@signal/attestation/WaAdvSignature'
-import { buildAckNode, buildIqResultNode } from '@transport/node/builders/global'
+import { buildAckNode, buildIqErrorNode, buildIqResultNode } from '@transport/node/builders/global'
 import {
     buildCompanionFinishRequestNode,
     buildCompanionHelloRequestNode,
@@ -34,6 +34,7 @@ import {
 import { assertIqResult } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 import { concatBytes, decodeProtoBytes, uint8Equal, uint8TimingSafeEqual } from '@util/bytes'
+import { toError } from '@util/primitives'
 
 interface ActivePairingSession {
     readonly ref?: Uint8Array
@@ -73,9 +74,14 @@ interface WaPairingFlowOptions {
     readonly dangerous?: WaAuthDangerousOptions
 }
 
+/** Server-enforced bounds on the `pair-success` `device-identity` payload. */
+const PAIR_SUCCESS_DEVICE_IDENTITY_MIN_BYTES = 1
+const PAIR_SUCCESS_DEVICE_IDENTITY_MAX_BYTES = 500
+
 export class WaPairingFlow {
     private readonly opts: WaPairingFlowOptions
     private pairingSession: ActivePairingSession | null
+    private pairSuccessInFlight = false
 
     public constructor(options: WaPairingFlowOptions) {
         this.opts = options
@@ -104,6 +110,7 @@ export class WaPairingFlow {
             customCode !== undefined ? normalizeCustomPairingCode(customCode) : undefined
         const credentials = this.requireCredentials()
         const phoneJid = parsePhoneJid(phoneNumber)
+        const createdAtSeconds = Math.floor(Date.now() / 1000)
         const [companionHello, refreshedCredentials] = await Promise.all([
             createCompanionHello({ customCode: normalizedCustomCode }),
             this.rotateAdvSecret(credentials)
@@ -141,7 +148,7 @@ export class WaPairingFlow {
             pairingCode: companionHello.pairingCode,
             phoneJid,
             ref,
-            createdAtSeconds: Math.floor(Date.now() / 1000),
+            createdAtSeconds,
             companionEphemeralKeyPair: companionHello.companionEphemeralKeyPair,
             attempts: 0,
             finished: false
@@ -272,6 +279,26 @@ export class WaPairingFlow {
         iqNode: BinaryNode,
         pairSuccessNode: BinaryNode
     ): Promise<void> {
+        if (this.pairSuccessInFlight) {
+            this.opts.logger.debug('pair-success ignored: already processing')
+            return
+        }
+        if (this.opts.auth.getCredentials()?.meJid) {
+            this.opts.logger.debug('pair-success ignored: session already registered')
+            return
+        }
+        this.pairSuccessInFlight = true
+        try {
+            await this.completePairSuccess(iqNode, pairSuccessNode)
+        } finally {
+            this.pairSuccessInFlight = false
+        }
+    }
+
+    private async completePairSuccess(
+        iqNode: BinaryNode,
+        pairSuccessNode: BinaryNode
+    ): Promise<void> {
         this.opts.logger.debug('processing pair-success node')
         const credentials = this.requireCredentials()
         const [deviceIdentityNode, deviceNode, platformNode] = findNodeChildrenByTags(
@@ -286,9 +313,19 @@ export class WaPairingFlow {
             })
             throw new Error('pair-success stanza is missing required nodes')
         }
-        const wrappedIdentity = proto.ADVSignedDeviceIdentityHMAC.decode(
-            decodeNodeContentUtf8OrBytes(deviceIdentityNode.content, 'pair-success.device-identity')
+        const deviceIdentityBytes = decodeNodeContentUtf8OrBytes(
+            deviceIdentityNode.content,
+            'pair-success.device-identity'
         )
+        if (
+            deviceIdentityBytes.length < PAIR_SUCCESS_DEVICE_IDENTITY_MIN_BYTES ||
+            deviceIdentityBytes.length > PAIR_SUCCESS_DEVICE_IDENTITY_MAX_BYTES
+        ) {
+            throw new Error(
+                `pair-success device-identity must be ${PAIR_SUCCESS_DEVICE_IDENTITY_MIN_BYTES}-${PAIR_SUCCESS_DEVICE_IDENTITY_MAX_BYTES} bytes, got ${deviceIdentityBytes.length}`
+            )
+        }
+        const wrappedIdentity = proto.ADVSignedDeviceIdentityHMAC.decode(deviceIdentityBytes)
         const wrappedDetails = decodeProtoBytes(
             wrappedIdentity.details,
             'ADVSignedDeviceIdentityHMAC.details'
@@ -311,18 +348,24 @@ export class WaPairingFlow {
                     platform: platformNode.attrs.name,
                     isHosted
                 })
+                await this.sendPairSuccessValidationError(iqNode)
                 throw new Error('pair-success HMAC validation failed')
             }
         }
 
-        const { signedIdentity, keyIndex, responseIdentityBytes } =
-            await this.buildPairSuccessResponseIdentity(credentials, wrappedDetails)
+        const built = await this.buildPairSuccessResponseIdentity(credentials, wrappedDetails)
+        if (!built) {
+            await this.sendPairSuccessValidationError(iqNode)
+            throw new Error('pair-success account signature validation failed')
+        }
+        const { signedIdentity, keyIndex, responseIdentityBytes } = built
         const nextCredentials: WaAuthCredentials = {
             ...credentials,
             signedIdentity,
             meJid: deviceNode.attrs.jid,
             meLid: deviceNode.attrs.lid,
-            platform: platformNode.attrs.name
+            platform: platformNode.attrs.name,
+            loginCounter: 0
         }
         await this.opts.auth.updateCredentials(nextCredentials)
         this.opts.logger.info('pair-success credentials updated', {
@@ -358,6 +401,7 @@ export class WaPairingFlow {
         this.opts.logger.debug('pair-success completed and paired event emitted')
     }
 
+    /** Returns `null` when the primary's account signature does not verify. */
     private async buildPairSuccessResponseIdentity(
         credentials: WaAuthCredentials,
         wrappedDetails: Uint8Array
@@ -365,7 +409,7 @@ export class WaPairingFlow {
         readonly signedIdentity: ReturnType<typeof proto.ADVSignedDeviceIdentity.decode>
         readonly keyIndex: number
         readonly responseIdentityBytes: Uint8Array
-    }> {
+    } | null> {
         const signedIdentity = proto.ADVSignedDeviceIdentity.decode(wrappedDetails)
         const details = decodeProtoBytes(signedIdentity.details, 'ADVSignedDeviceIdentity.details')
         const accountSignature = decodeProtoBytes(
@@ -392,7 +436,7 @@ export class WaPairingFlow {
                     keyIndex: advDeviceIdentity.keyIndex ?? 0,
                     isDeviceHosted
                 })
-                throw new Error('pair-success account signature validation failed')
+                return null
             }
         }
 
@@ -414,20 +458,38 @@ export class WaPairingFlow {
         }
     }
 
+    /** Mirrors the `not-authorized` IQ error WhatsApp Web returns on a failed pair-success. */
+    private async sendPairSuccessValidationError(iqNode: BinaryNode): Promise<void> {
+        try {
+            await this.opts.socket.sendNode(
+                buildIqErrorNode(iqNode, { code: 401, text: 'not-authorized' })
+            )
+        } catch (error) {
+            this.opts.logger.warn('failed to send pair-success error response', {
+                message: toError(error).message
+            })
+        }
+    }
+
     private async handlePrimaryHello(linkCodeNode: BinaryNode): Promise<void> {
-        const credentials = this.requireCredentials()
+        let credentials = this.requireCredentials()
         const pairingSession = this.pairingSession
-        if (!pairingSession || pairingSession.finished) {
+        if (!pairingSession) {
             this.opts.logger.trace('primary_hello ignored: no active session')
             return
         }
 
         pairingSession.attempts += 1
         this.opts.logger.debug('processing primary_hello', {
-            attempts: pairingSession.attempts
+            attempts: pairingSession.attempts,
+            finished: pairingSession.finished
         })
-        if (pairingSession.attempts > 3) {
-            throw new Error('pairing code exceeded maximum primary hello attempts')
+        if (pairingSession.finished) {
+            if (pairingSession.attempts > WA_DEFAULTS.PAIRING_CODE_MAX_PRIMARY_HELLOS) {
+                throw new Error('pairing code exceeded maximum primary hello attempts')
+            }
+            credentials = await this.rotateAdvSecret(credentials)
+            pairingSession.finished = false
         }
 
         const [refNode, wrappedPrimaryNode, primaryIdentityNode] = findNodeChildrenByTags(
@@ -475,6 +537,11 @@ export class WaPairingFlow {
             registrationIdentityKeyPair: credentials.registrationInfo.identityKeyPair
         })
 
+        await this.opts.auth.updateCredentials({
+            ...credentials,
+            advSecretKey: finish.advSecret
+        })
+
         const result = await this.opts.socket.query(
             buildCompanionFinishRequestNode({
                 phoneJid: pairingSession.phoneJid,
@@ -487,10 +554,6 @@ export class WaPairingFlow {
         if (result.attrs.type === WA_IQ_TYPES.ERROR) {
             throw new Error('companion_finish returned error')
         }
-        await this.opts.auth.updateCredentials({
-            ...credentials,
-            advSecretKey: finish.advSecret
-        })
         pairingSession.finished = true
         this.opts.logger.debug('primary_hello completed with companion_finish success')
     }

@@ -1,5 +1,13 @@
 # @zapo-js/mcp-server
 
+## 1.2.0
+
+### Minor Changes
+
+- 7f7f560: Add `MCP_DEVICE_OS_VERSION` to override the OS version advertised in
+  `DeviceProps.version`. Set it alongside `MCP_DEVICE_OS_DISPLAY` when advertising
+  an OS the process is not running on, so the advertised name and version agree.
+
 ## 1.1.0
 
 ### Minor Changes

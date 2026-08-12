@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto'
-
 import { md5Bytes } from '@crypto/core/primitives'
 import { proto } from '@proto'
 import type {
@@ -8,6 +6,7 @@ import type {
     WaRegistrationPayloadConfig
 } from '@transport/noise/types'
 import { intToBytes } from '@util/bytes'
+import { getRuntimeOsVersion } from '@util/runtime'
 import { WA_VERSION } from '@version-spec'
 
 type ParsedVersion = {
@@ -96,7 +95,6 @@ export function resolveDevicePropsPlatformType(
 
 function defaultUserAgent(
     versionBase: string,
-    deviceOsDisplayName?: string,
     version?: ParsedVersion
 ): typeof proto.ClientPayload.prototype.userAgent {
     const { primary, secondary, tertiary, quaternary, quinary } =
@@ -114,53 +112,78 @@ function defaultUserAgent(
         },
         mcc: '000',
         mnc: '000',
-        osVersion: deviceOsDisplayName ?? process.platform,
+        osVersion: '0.1',
         manufacturer: '',
         device: 'Desktop',
         osBuildNumber: '0.1',
-        phoneId: randomUUID(),
         localeLanguageIso6391: locale.lg,
         localeCountryIso31661Alpha2: locale.lc
     }
 }
 
+type OsVersion = {
+    readonly primary: number
+    readonly secondary?: number
+    readonly tertiary?: number
+}
+
+/**
+ * Parses an OS version string into the `DeviceProps.version` tuple. Mirrors
+ * WhatsApp Web, which only fills the field when the parsed OS version is a
+ * plain dotted-numeric string and otherwise leaves it unset.
+ */
+function parseOsVersion(osVersion: string | null | undefined): OsVersion | undefined {
+    if (osVersion === null || osVersion === undefined || !/^[0-9.]+$/.test(osVersion)) {
+        return undefined
+    }
+    const parts = osVersion.split('.')
+    const primary = Number.parseInt(parts[0], 10)
+    if (!Number.isSafeInteger(primary)) {
+        return undefined
+    }
+    const secondary = parts.length > 1 ? Number.parseInt(parts[1], 10) : Number.NaN
+    const tertiary = parts.length > 2 ? Number.parseInt(parts[2], 10) : Number.NaN
+    return {
+        primary,
+        secondary: Number.isSafeInteger(secondary) ? secondary : undefined,
+        tertiary: Number.isSafeInteger(tertiary) ? tertiary : undefined
+    }
+}
+
 function defaultDeviceProps(
-    versionBase: string,
     config: Pick<
         WaRegistrationPayloadConfig,
-        'deviceBrowser' | 'deviceOsDisplayName' | 'requireFullSync'
-    >,
-    version?: ParsedVersion
+        'deviceBrowser' | 'deviceOsDisplayName' | 'deviceOsVersion' | 'requireFullSync'
+    >
 ): Uint8Array {
-    const { primary, secondary, tertiary, quaternary, quinary } =
-        version ?? parseVersion(versionBase)
     return proto.DeviceProps.encode({
         os: config.deviceOsDisplayName ?? process.platform,
-        version: {
-            primary,
-            secondary,
-            tertiary,
-            quaternary,
-            quinary
-        },
+        version: parseOsVersion(config.deviceOsVersion ?? getRuntimeOsVersion()),
         platformType: resolveDevicePropsPlatformType(config.deviceBrowser),
         requireFullSync: config.requireFullSync === true,
         historySyncConfig: {
+            storageQuotaMb: 114_149,
             inlineInitialPayloadInE2EeMsg: true,
+            supportCallLogHistory: true,
             supportBotUserAgentChatHistory: true,
             supportCagReactionsAndPolls: true,
+            supportBizHostedMsg: true,
             supportRecentSyncChunkMessageCountTuning: true,
             supportHostedGroupMsg: true,
-            supportBizHostedMsg: true,
             supportFbidBotChatHistory: true,
             supportMessageAssociation: true,
-            supportInlineContacts: true
+            supportGroupHistory: true,
+            thumbnailSyncDaysLimit: 60,
+            supportManusHistory: true,
+            supportHatchHistory: true,
+            supportedBotChannelFbids: []
         }
     }).finish()
 }
 
 function buildCommonPayload(
     config: WaPayloadCommonConfig,
+    defaultPull: boolean,
     version?: ParsedVersion
 ): {
     readonly passive: boolean
@@ -171,14 +194,12 @@ function buildCommonPayload(
     readonly webInfo: typeof proto.ClientPayload.prototype.webInfo
 } {
     const versionBase = config.versionBase ?? WA_VERSION
-    const pull = config.pull ?? true
     return {
         passive: config.passive === true,
-        pull,
+        pull: config.pull ?? defaultPull,
         connectType: proto.ClientPayload.ConnectType.WIFI_UNKNOWN,
         connectReason: proto.ClientPayload.ConnectReason.USER_ACTIVATED,
-        userAgent:
-            config.userAgent ?? defaultUserAgent(versionBase, config.deviceOsDisplayName, version),
+        userAgent: config.userAgent ?? defaultUserAgent(versionBase, version),
         webInfo: config.webInfo ?? {
             webSubPlatform: defaultWebSubPlatform()
         }
@@ -189,11 +210,13 @@ export function buildLoginPayload(config: WaLoginPayloadConfig): Uint8Array {
     if (!Number.isSafeInteger(config.username) || config.username <= 0) {
         throw new Error('login payload requires a valid numeric username')
     }
-    const common = buildCommonPayload(config)
+    const common = buildCommonPayload(config, true)
     return proto.ClientPayload.encode({
         ...common,
         username: config.username,
         device: config.device ?? 0,
+        lc: config.loginCounter ?? 0,
+        connectAttemptCount: config.connectAttemptCount ?? 0,
         lidDbMigrated: config.lidDbMigrated === true
     }).finish()
 }
@@ -210,10 +233,10 @@ export function buildRegistrationPayload(config: WaRegistrationPayloadConfig): U
 
     const versionBase = config.versionBase ?? WA_VERSION
     const version = parseVersion(versionBase)
-    const common = buildCommonPayload(config, version)
+    const common = buildCommonPayload(config, false, version)
     const devicePairingData = {
         buildHash: config.buildHash ?? md5Bytes(versionBase),
-        deviceProps: config.deviceProps ?? defaultDeviceProps(versionBase, config, version),
+        deviceProps: config.deviceProps ?? defaultDeviceProps(config),
         eRegid: intToBytes(4, registrationId),
         eKeytype: intToBytes(1, 5),
         eIdent: config.registrationInfo.identityKeyPair.pubKey,

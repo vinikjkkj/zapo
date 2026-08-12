@@ -71,6 +71,12 @@ export class WaAuthClient {
     private credentials: WaAuthCredentials | null
     private versionOverride: string | null = null
     private mobileAppVersionOverride: string | null = null
+    /**
+     * Successful logins made by this instance, advertised as
+     * `connectAttemptCount`. Process-local by design – the persisted
+     * counterpart is `credentials.loginCounter`.
+     */
+    private connectAttemptCount = 0
 
     public constructor(options: WaAuthClientOptions, deps: WaAuthClientDeps) {
         const device = resolveWaDeviceIdentity(options)
@@ -78,6 +84,7 @@ export class WaAuthClient {
             ...options,
             deviceBrowser: device.browser,
             deviceOsDisplayName: device.osDisplayName,
+            deviceOsVersion: device.osVersion ?? undefined,
             devicePlatform: device.platform,
             requireFullSync: options.requireFullSync
         })
@@ -189,8 +196,10 @@ export class WaAuthClient {
         const mobileAppVersionOverride = this.mobileAppVersionOverride
         this.mobileAppVersionOverride = null
         return buildCommsConfig(this.logger, this.requireCredentials(), socketOptions, {
+            connectAttemptCount: this.connectAttemptCount,
             deviceBrowser: this.options.deviceBrowser,
             deviceOsDisplayName: this.options.deviceOsDisplayName,
+            deviceOsVersion: this.options.deviceOsVersion,
             requireFullSync: this.options.requireFullSync,
             version: override ?? this.options.version,
             mobileTransport: this.options.mobileTransport,
@@ -322,10 +331,22 @@ export class WaAuthClient {
      * Persists the per-connection success attributes from the server (LID,
      * display name, companion key, last-success ts, props versions, ...). Only
      * persists when at least one attribute actually changed.
+     *
+     * Pass `countsAsLogin` only for the server `success` node: it advances the
+     * login counters advertised as `lc` / `connectAttemptCount`. Callers that
+     * merely reuse this to persist a single attribute (a push-name change, for
+     * instance) must leave it unset.
      */
-    public async persistSuccessAttributes(attributes: WaSuccessPersistAttributes): Promise<void> {
+    public async persistSuccessAttributes(
+        attributes: WaSuccessPersistAttributes,
+        { countsAsLogin = false }: { readonly countsAsLogin?: boolean } = {}
+    ): Promise<void> {
+        if (countsAsLogin) {
+            this.connectAttemptCount += 1
+        }
         let persistDiff: Record<string, boolean> | undefined
         const computeDiff = (current: WaAuthCredentials, next: WaAuthCredentials) => ({
+            loginCounterChanged: next.loginCounter !== current.loginCounter,
             lidChanged: next.meLid !== current.meLid,
             displayNameChanged: next.meDisplayName !== current.meDisplayName,
             companionChanged:
@@ -347,6 +368,9 @@ export class WaAuthClient {
                 meDisplayName: attributes.meDisplayName ?? credentials.meDisplayName,
                 companionEncStatic: attributes.companionEncStatic ?? credentials.companionEncStatic,
                 lastSuccessTs: attributes.lastSuccessTs ?? credentials.lastSuccessTs,
+                loginCounter: countsAsLogin
+                    ? (credentials.loginCounter ?? 0) + 1
+                    : credentials.loginCounter,
                 propsVersion: attributes.propsVersion ?? credentials.propsVersion,
                 abPropsVersion: attributes.abPropsVersion ?? credentials.abPropsVersion,
                 connectionLocation: attributes.connectionLocation ?? credentials.connectionLocation,

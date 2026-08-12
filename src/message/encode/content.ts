@@ -241,6 +241,7 @@ function resolveMessageTypeAttrFrom(msg: Proto.IMessage): string {
         msg.pollCreationMessageV2 ||
         msg.pollCreationMessageV3 ||
         msg.pollCreationMessageV5 ||
+        msg.pollCreationMessageV6 ||
         msg.pollUpdateMessage ||
         msg.secretEncryptedMessage?.secretEncType ===
             proto.Message.SecretEncryptedMessage.SecretEncType.POLL_EDIT ||
@@ -499,7 +500,13 @@ function resolveMetaAttrsFrom(
     let eventType: string | undefined
     let viewOnce: string | undefined
 
-    if (msg.pollCreationMessage || msg.pollCreationMessageV2 || msg.pollCreationMessageV3) {
+    if (
+        msg.pollCreationMessage ||
+        msg.pollCreationMessageV2 ||
+        msg.pollCreationMessageV3 ||
+        msg.pollCreationMessageV5 ||
+        msg.pollCreationMessageV6
+    ) {
         polltype = WA_POLL_META_TYPES.CREATION
     } else if (msg.pollUpdateMessage) {
         polltype = WA_POLL_META_TYPES.VOTE

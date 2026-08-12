@@ -207,6 +207,58 @@ test('1:1 message from my lid identity is detected as fromMe', async () => {
     assert.equal(key.remoteJid, '144400000000000@lid')
 })
 
+test('1:1 message from my hosted device is detected as fromMe', async () => {
+    const emitted: WaIncomingMessageEvent[] = []
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-self-hosted',
+                from: '133300000000000:99@hosted.lid',
+                recipient: '144400000000000@lid',
+                sender_pn: '5511999999999@s.whatsapp.net',
+                t: '123'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        createDecryptingOptions(emitted, {
+            getMeJid: () => '5511999999999@s.whatsapp.net',
+            getMeLid: () => '133300000000000@lid'
+        })
+    )
+
+    assert.equal(emitted.length, 1)
+    const { key } = emitted[0]
+    assert.equal(key.fromMe, true)
+    assert.equal(key.remoteJid, '144400000000000@lid')
+    assert.equal(key.remoteJidAlt, undefined)
+})
+
+test('self-sent 1:1 message with an unresolved chat keeps the own number out of remoteJidAlt', async () => {
+    const emitted: WaIncomingMessageEvent[] = []
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-self-no-chat',
+                from: '133300000000000:99@hosted.lid',
+                sender_pn: '5511999999999@s.whatsapp.net',
+                t: '123'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        createDecryptingOptions(emitted, {
+            getMeJid: () => '5511999999999@s.whatsapp.net',
+            getMeLid: () => '133300000000000@lid'
+        })
+    )
+
+    assert.equal(emitted.length, 1)
+    const { key } = emitted[0]
+    assert.equal(key.fromMe, true)
+    assert.equal(key.remoteJidAlt, undefined)
+})
+
 test('1:1 incoming message from a peer stays fromMe false with the peer as remoteJid', async () => {
     const emitted: WaIncomingMessageEvent[] = []
     await handleIncomingMessageAck(

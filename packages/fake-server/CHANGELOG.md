@@ -1,5 +1,13 @@
 # @zapo-js/fake-server
 
+## 1.3.0
+
+### Minor Changes
+
+- Accept a `noiseRootCa` derived from a shared seed in `listen()`, so a client in
+  another process can pin the trust anchor before the server is listening. Omitting
+  the option keeps the previous behavior: a fresh random CA per listen.
+
 ## 1.2.0
 
 ### Minor Changes

@@ -21,6 +21,7 @@ export {
     aesGcmEncrypt,
     aesGcmDecrypt,
     aesCbcEncrypt,
+    aesCbcEncryptWithTrailer,
     aesCbcDecrypt,
     aesCtrEncrypt,
     aesCtrDecrypt,

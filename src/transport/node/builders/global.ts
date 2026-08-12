@@ -507,3 +507,27 @@ export function buildIqResultNode(iqNode: BinaryNode): BinaryNode {
         }
     }
 }
+
+/**
+ * Error counterpart of {@link buildIqResultNode}: answers a server IQ with
+ * `<iq type="error"><error code text/></iq>`, echoing the request id.
+ */
+export function buildIqErrorNode(
+    iqNode: BinaryNode,
+    error: { readonly code: number; readonly text: string }
+): BinaryNode {
+    return {
+        tag: WA_NODE_TAGS.IQ,
+        attrs: {
+            ...(iqNode.attrs.id ? { id: iqNode.attrs.id } : {}),
+            to: iqNode.attrs.from ?? WA_DEFAULTS.HOST_DOMAIN,
+            type: WA_IQ_TYPES.ERROR
+        },
+        content: [
+            {
+                tag: WA_NODE_TAGS.ERROR,
+                attrs: { code: String(error.code), text: error.text }
+            }
+        ]
+    }
+}

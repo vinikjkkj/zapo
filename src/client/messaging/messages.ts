@@ -225,19 +225,23 @@ function buildPollCreationMessage(content: WaSendPollMessage): Proto.IMessage {
     const options: Proto.Message.PollCreationMessage.IOption[] = content.options.map((opt) => ({
         optionName: typeof opt === 'string' ? opt : opt.name
     }))
-    return {
-        pollCreationMessageV3: {
-            name: content.name,
-            options,
-            selectableOptionsCount: content.selectableCount ?? 1,
-            ...(content.allowAddOption !== undefined
-                ? { allowAddOption: content.allowAddOption }
-                : {}),
-            ...(content.hideParticipantName !== undefined
-                ? { hideParticipantName: content.hideParticipantName }
-                : {})
-        }
+    const selectableOptionsCount = content.selectableCount ?? 1
+    const allowAddOption = content.allowAddOption === true
+    const hideParticipantName = content.hideParticipantName === true
+    const pollBody: Proto.Message.IPollCreationMessage = {
+        name: content.name,
+        options,
+        selectableOptionsCount,
+        ...(allowAddOption ? { allowAddOption: true } : {}),
+        ...(hideParticipantName ? { hideParticipantName: true } : {})
     }
+    if (allowAddOption || hideParticipantName) {
+        return { pollCreationMessageV6: pollBody }
+    }
+    if (selectableOptionsCount === 1) {
+        return { pollCreationMessageV3: pollBody }
+    }
+    return { pollCreationMessage: pollBody }
 }
 
 function buildEventMessage(content: WaSendEventMessage): Proto.IMessage {

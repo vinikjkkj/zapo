@@ -168,6 +168,14 @@ export interface WaSendPollOptionInput {
     readonly name: string
 }
 
+/**
+ * The proto field the poll lands on is derived from these options, matching
+ * what WhatsApp itself puts on the wire: `allowAddOption` or
+ * `hideParticipantName` send a `pollCreationMessageV6`, a single-select poll
+ * sends a `pollCreationMessageV3`, and a multi-select poll sends a
+ * `pollCreationMessage`. Both flags are only serialized when `true`; sending
+ * them as `false` makes receivers render the poll as an unsupported message.
+ */
 export interface WaSendPollMessage {
     readonly type: 'poll'
     readonly name: string
@@ -175,7 +183,9 @@ export interface WaSendPollMessage {
     readonly options: readonly (string | WaSendPollOptionInput)[]
     /** How many options a voter may pick. Defaults to 1. */
     readonly selectableCount?: number
+    /** Lets voters append their own options. Only honored by recent clients. */
     readonly allowAddOption?: boolean
+    /** Hides who voted for what. Only honored by recent clients. */
     readonly hideParticipantName?: boolean
     readonly contextInfo?: WaSendContextInfo
 }

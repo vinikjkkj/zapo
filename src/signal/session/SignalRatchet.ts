@@ -271,10 +271,14 @@ export async function decryptMsgFromSession(
     message: ParsedSignalMessage | ParsedPreKeySignalMessage
 ): Promise<readonly [SignalSessionRecord, Uint8Array]> {
     const ratchetPubKey = toSerializedPubKey(message.ratchetPubKey)
-    const recvChainIndex = session.recvChains.findIndex((raw) => {
-        const key = raw.senderRatchetKey
-        return key !== null && key !== undefined && uint8Equal(key, ratchetPubKey)
-    })
+    let recvChainIndex = -1
+    for (let index = 0; index < session.recvChains.length; index += 1) {
+        const key = session.recvChains[index].senderRatchetKey
+        if (key !== null && key !== undefined && uint8Equal(key, ratchetPubKey)) {
+            recvChainIndex = index
+            break
+        }
+    }
     let selectedMessageKey: SignalMessageKey
     let updatedSession: SignalSessionRecord
 
