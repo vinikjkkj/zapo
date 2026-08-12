@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { Readable } from 'node:stream'
 import test from 'node:test'
 
 import type { WaAbPropName } from '@abprops-spec'
@@ -52,10 +53,13 @@ function createHarness(overrides: Partial<WaGroupHistoryDeps> = {}): Harness {
     const deps = {
         logger: createNoopLogger(),
         mediaTransfer: {
-            downloadAndDecrypt: async (request: { readonly mediaType: string }) => {
+            downloadAndDecryptStream: async (request: { readonly mediaType: string }) => {
                 downloads.count += 1
                 assert.equal(request.mediaType, 'group-history')
-                return blob
+                return {
+                    plaintext: Readable.from([Buffer.from(blob)]),
+                    metadata: Promise.resolve(null)
+                }
             }
         },
         writeBehind: {

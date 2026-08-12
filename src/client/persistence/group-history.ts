@@ -1,15 +1,16 @@
 import type { WaAbPropName } from '@abprops-spec'
-import { downloadHistoryBlob, flushPendingWrites } from '@client/persistence/history-blob'
+import { flushPendingWrites, openHistoryBlobStream } from '@client/persistence/history-blob'
 import type { WriteBehindPersistence } from '@client/persistence/WriteBehindPersistence'
 import type { WaClientEventMap, WaGroupHistoryBundleEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
-import { decodeGroupHistoryBundle } from '@message/kinds/group-history'
+import { streamGroupHistoryBundle } from '@message/kinds/group-history'
 import { proto, type Proto } from '@proto'
 import { isGroupJid, toUserJid } from '@protocol/jid'
 import { longToNumber, toError } from '@util/primitives'
 
 const GROUP_HISTORY_MAX_PENDING_WRITES = 1_024
+const GROUP_HISTORY_MAX_RECORD_BYTES = 16 * 1024 * 1024
 
 export interface WaGroupHistoryBundleInput {
     /** The `messageHistoryBundle` payload carried by the incoming message. */
@@ -85,13 +86,12 @@ export async function processGroupHistoryBundle(
         return
     }
 
-    const blob = await downloadHistoryBlob(
+    const blob = await openHistoryBlobStream(
         deps.mediaTransfer,
         input.bundle,
         'group-history',
         'group history bundle'
     )
-    const history = await decodeGroupHistoryBundle(blob)
 
     const messageTtlSeconds = deps.getAbPropNumber(
         'group_history_messages_time_limit_receiver_enforcement_secs'
@@ -100,63 +100,79 @@ export async function processGroupHistoryBundle(
     const dropped = { foreignChat: 0, ephemeralExpired: 0, tooOld: 0, stub: 0 }
 
     let messagesCount = 0
+    let outOfWindowPinsCount = 0
     let oldestTimestampMs: number | undefined
-    for (const source of [
-        { messages: history.messages, skipAgeCheck: false },
-        { messages: history.outOfWindowPinnedMessages, skipAgeCheck: true }
-    ]) {
-        for (const webMsg of source.messages) {
-            if (!webMsg.key?.id || !webMsg.message) {
-                dropped.stub += 1
-                continue
-            }
-            if (webMsg.key.remoteJid && webMsg.key.remoteJid !== input.groupJid) {
-                dropped.foreignChat += 1
-                continue
-            }
-            const timestampSeconds = longToNumber(webMsg.messageTimestamp)
-            if (isEphemeralExpired(webMsg, timestampSeconds, nowMs)) {
-                dropped.ephemeralExpired += 1
-                continue
-            }
-            if (
-                !source.skipAgeCheck &&
-                timestampSeconds > 0 &&
-                (timestampSeconds + 2 * messageTtlSeconds) * 1_000 < nowMs
-            ) {
-                dropped.tooOld += 1
-                continue
-            }
 
-            const timestampMs = timestampSeconds * 1_000
-            if (
-                timestampMs > 0 &&
-                (oldestTimestampMs === undefined || timestampMs < oldestTimestampMs)
-            ) {
-                oldestTimestampMs = timestampMs
-            }
-            pendingWrites[pendingWrites.length] = deps.writeBehind.persistMessageAsync({
-                id: webMsg.key.id,
-                threadJid: input.groupJid,
-                senderJid: webMsg.key.participant ?? undefined,
-                fromMe: webMsg.key.fromMe === true,
-                timestampMs: timestampMs || undefined,
-                messageBytes: proto.Message.encode(webMsg.message).finish()
-            })
-            if (pendingWrites.length >= GROUP_HISTORY_MAX_PENDING_WRITES) {
-                await flushPendingWrites(pendingWrites)
-            }
-            messagesCount += 1
+    const onMessage = (
+        webMsg: Proto.WebMessageInfo,
+        outOfWindow: boolean
+    ): Promise<void> | undefined => {
+        if (outOfWindow) {
+            outOfWindowPinsCount += 1
         }
+        if (!webMsg.key?.id || !webMsg.message) {
+            dropped.stub += 1
+            return undefined
+        }
+        if (webMsg.key.remoteJid && webMsg.key.remoteJid !== input.groupJid) {
+            dropped.foreignChat += 1
+            return undefined
+        }
+        const timestampSeconds = longToNumber(webMsg.messageTimestamp)
+        if (isEphemeralExpired(webMsg, timestampSeconds, nowMs)) {
+            dropped.ephemeralExpired += 1
+            return undefined
+        }
+        if (
+            !outOfWindow &&
+            timestampSeconds > 0 &&
+            (timestampSeconds + 2 * messageTtlSeconds) * 1_000 < nowMs
+        ) {
+            dropped.tooOld += 1
+            return undefined
+        }
+
+        const timestampMs = timestampSeconds * 1_000
+        if (
+            timestampMs > 0 &&
+            (oldestTimestampMs === undefined || timestampMs < oldestTimestampMs)
+        ) {
+            oldestTimestampMs = timestampMs
+        }
+        const write = deps.writeBehind.persistMessageAsync({
+            id: webMsg.key.id,
+            threadJid: input.groupJid,
+            senderJid: webMsg.key.participant ?? undefined,
+            fromMe: webMsg.key.fromMe === true,
+            timestampMs: timestampMs || undefined,
+            messageBytes: proto.Message.encode(webMsg.message).finish()
+        })
+        write.catch(() => undefined)
+        pendingWrites[pendingWrites.length] = write
+        messagesCount += 1
+        if (pendingWrites.length >= GROUP_HISTORY_MAX_PENDING_WRITES) {
+            return flushPendingWrites(pendingWrites)
+        }
+        return undefined
     }
 
+    try {
+        await streamGroupHistoryBundle(blob.inflated, onMessage, GROUP_HISTORY_MAX_RECORD_BYTES)
+    } catch (error) {
+        blob.inflated.destroy(toError(error))
+        await Promise.allSettled(pendingWrites)
+        await blob.verified.catch(() => undefined)
+        throw toError(error)
+    }
+
+    await blob.verified
     await flushPendingWrites(pendingWrites)
 
     const droppedCount =
         dropped.foreignChat + dropped.ephemeralExpired + dropped.tooOld + dropped.stub
     logger.debug('processed group history bundle', {
         messagesCount,
-        outOfWindowPinsCount: history.outOfWindowPinnedMessages.length,
+        outOfWindowPinsCount,
         droppedCount,
         dropped
     })
@@ -166,7 +182,7 @@ export async function processGroupHistoryBundle(
         senderJid: input.senderJid,
         bundleMessageId: input.bundleMessageId,
         messagesCount,
-        outOfWindowPinsCount: history.outOfWindowPinnedMessages.length,
+        outOfWindowPinsCount,
         droppedCount,
         oldestTimestampMs,
         historyReceivers: [...(input.bundle.messageHistoryMetadata?.historyReceivers ?? [])]

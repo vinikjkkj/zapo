@@ -1,6 +1,10 @@
+import { Readable } from 'node:stream'
+import { createUnzip } from 'node:zlib'
+
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { MediaCryptoType } from '@media/types'
 import { decodeProtoBytes } from '@util/bytes'
+import { toError } from '@util/primitives'
 
 /**
  * Encrypted-blob fields shared by the history-sync notification and the
@@ -39,6 +43,64 @@ export async function downloadHistoryBlob(
         fileSha256,
         fileEncSha256
     })
+}
+
+export interface WaHistoryBlobStream {
+    /** Decrypted and decompressed bytes. Consume fully, then await `verified`. */
+    readonly inflated: Readable
+    /**
+     * Settles once the transfer ended and its MAC checked out. Verification can
+     * only finish with the last byte, so anything read from `inflated` is
+     * unauthenticated until this resolves - await it before treating the chunk
+     * as applied.
+     */
+    readonly verified: Promise<unknown>
+}
+
+/**
+ * Streaming counterpart of {@link downloadHistoryBlob}, so a multi-megabyte chunk
+ * is never held whole. Uses `inlinePayload` when the notification carried the
+ * blob inline instead of pointing at a CDN object.
+ *
+ * @throws when neither an inline payload nor a `directPath` is present, or when
+ * a key/hash field is missing.
+ */
+export async function openHistoryBlobStream(
+    mediaTransfer: WaMediaTransferClient,
+    source: WaHistoryBlobSource,
+    mediaType: MediaCryptoType,
+    label: string,
+    inlinePayload?: Uint8Array | string | null
+): Promise<WaHistoryBlobStream> {
+    if (inlinePayload) {
+        const bytes = decodeProtoBytes(inlinePayload, `${label} inline payload`)
+        return inflateHistoryStream(Readable.from([bytes]), Promise.resolve(null))
+    }
+    if (!source.directPath) {
+        throw new Error(`${label} missing directPath`)
+    }
+    const decrypted = await mediaTransfer.downloadAndDecryptStream({
+        directPath: source.directPath,
+        mediaType,
+        mediaKey: decodeProtoBytes(source.mediaKey, `${label} mediaKey`),
+        fileSha256: decodeProtoBytes(source.fileSha256, `${label} fileSha256`),
+        fileEncSha256: decodeProtoBytes(source.fileEncSha256, `${label} fileEncSha256`)
+    })
+    return inflateHistoryStream(decrypted.plaintext, decrypted.metadata)
+}
+
+/**
+ * `createUnzip` detects the framing. Forwards upstream errors, which `pipe` drops,
+ * and parks a handler on `verified` so an early rejection is never unobserved.
+ */
+function inflateHistoryStream(
+    plaintext: Readable,
+    verified: Promise<unknown>
+): WaHistoryBlobStream {
+    const unzip = createUnzip()
+    plaintext.on('error', (error: unknown) => unzip.destroy(toError(error)))
+    verified.catch(() => undefined)
+    return { inflated: plaintext.pipe(unzip), verified }
 }
 
 /**

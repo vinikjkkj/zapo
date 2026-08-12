@@ -79,7 +79,7 @@ test('history sync processor persists conversations and emits chunk event', asyn
         {
             logger: createNoopLogger(),
             mediaTransfer: {
-                downloadAndDecrypt: async () => {
+                downloadAndDecryptStream: async () => {
                     throw new Error('should not be called for inline payload')
                 }
             } as never,
@@ -143,7 +143,7 @@ test('history sync processor handles ON_DEMAND chunks (peer-data-operation respo
         {
             logger: createNoopLogger(),
             mediaTransfer: {
-                downloadAndDecrypt: async () => {
+                downloadAndDecryptStream: async () => {
                     throw new Error('should not be called for inline payload')
                 }
             } as never,
@@ -206,7 +206,7 @@ test('history sync processor does not emit chunk event when chunk persistence fa
                 {
                     logger: createNoopLogger(),
                     mediaTransfer: {
-                        downloadAndDecrypt: async () => {
+                        downloadAndDecryptStream: async () => {
                             throw new Error('should not be called for inline payload')
                         }
                     } as never,
@@ -258,7 +258,7 @@ test('history sync processor forwards privacy token payloads and nct salt hooks'
         {
             logger: createNoopLogger(),
             mediaTransfer: {
-                downloadAndDecrypt: async () => {
+                downloadAndDecryptStream: async () => {
                     throw new Error('should not be called for inline payload')
                 }
             } as never,
@@ -333,7 +333,7 @@ test('history sync processor skips stub messages (system events)', async () => {
         {
             logger: createNoopLogger(),
             mediaTransfer: {
-                downloadAndDecrypt: async () => {
+                downloadAndDecryptStream: async () => {
                     throw new Error('should not be called for inline payload')
                 }
             } as never,
@@ -376,7 +376,7 @@ test('history sync processor persists phoneNumberToLidMappings as a single LID-c
         {
             logger: createNoopLogger(),
             mediaTransfer: {
-                downloadAndDecrypt: async () => {
+                downloadAndDecryptStream: async () => {
                     throw new Error('should not be called for inline payload')
                 }
             } as never,
@@ -433,7 +433,7 @@ test('history sync processor coalesces pushname onto the LID-canonical row when 
         {
             logger: createNoopLogger(),
             mediaTransfer: {
-                downloadAndDecrypt: async () => {
+                downloadAndDecryptStream: async () => {
                     throw new Error('should not be called for inline payload')
                 }
             } as never,
@@ -485,7 +485,7 @@ test('history sync processor invokes onProcessed after handled chunk (for hist_s
         {
             logger: createNoopLogger(),
             mediaTransfer: {
-                downloadAndDecrypt: async () => {
+                downloadAndDecryptStream: async () => {
                     throw new Error('should not be called for inline payload')
                 }
             } as never,
@@ -514,7 +514,7 @@ test('history sync processor invokes onProcessed for INITIAL_STATUS_V3 (recogniz
         {
             logger: createNoopLogger(),
             mediaTransfer: {
-                downloadAndDecrypt: async () => {
+                downloadAndDecryptStream: async () => {
                     throw new Error('should not be called - status_v3 is skipped before download')
                 }
             } as never,
@@ -541,7 +541,7 @@ test('history sync processor does NOT invoke onProcessed when syncType is null',
     await processHistorySyncNotification(
         {
             logger: createNoopLogger(),
-            mediaTransfer: { downloadAndDecrypt: async () => new Uint8Array() } as never,
+            mediaTransfer: { downloadAndDecryptStream: async () => new Uint8Array() } as never,
             writeBehind: {
                 persistMessageAsync: async () => undefined,
                 persistThreadAsync: async () => undefined,
@@ -578,7 +578,7 @@ test('history sync processor handles NON_BLOCKING_DATA syncType (previously skip
         {
             logger: createNoopLogger(),
             mediaTransfer: {
-                downloadAndDecrypt: async () => {
+                downloadAndDecryptStream: async () => {
                     throw new Error('should not be called for inline payload')
                 }
             } as never,

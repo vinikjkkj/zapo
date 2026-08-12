@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict'
+import { Readable } from 'node:stream'
 import test from 'node:test'
+import { unzipSync } from 'node:zlib'
 
-import { decodeGroupHistoryBundle, encodeGroupHistoryBundle } from '@message/kinds/group-history'
-import type { Proto } from '@proto'
+import {
+    decodeGroupHistoryBundle,
+    encodeGroupHistoryBundle,
+    GROUP_HISTORY_FIELDS,
+    streamGroupHistoryBundle
+} from '@message/kinds/group-history'
+import { proto, type Proto } from '@proto'
+import { readProtoVarint } from '@util/protoscan'
 
 const groupJid = '120363000000000000@g.us'
 
@@ -53,4 +61,95 @@ test('encodeGroupHistoryBundle omits out-of-window pins when the list is empty',
 
 test('decodeGroupHistoryBundle rejects a blob that is not zlib', async () => {
     await assert.rejects(() => decodeGroupHistoryBundle(new Uint8Array([1, 2, 3, 4])))
+})
+
+async function collectStreamed(
+    inflated: Uint8Array,
+    maxRecordBytes?: number
+): Promise<{ id: string | null | undefined; outOfWindow: boolean }[]> {
+    const seen: { id: string | null | undefined; outOfWindow: boolean }[] = []
+    await streamGroupHistoryBundle(
+        Readable.from([Buffer.from(inflated)]),
+        (message, outOfWindow) => {
+            seen.push({ id: message.key?.id, outOfWindow })
+        },
+        maxRecordBytes
+    )
+    return seen
+}
+
+test('streamGroupHistoryBundle is equivalent to the buffered decode', async () => {
+    const inflated = proto.GroupHistory.encode({
+        messages: [buildMessage('A', 'first', 100), buildMessage('B', 'second', 200)],
+        commentMessages: [buildMessage('C', 'comment', 150)],
+        uncountedAssociatedMessageLists: [
+            {
+                parentMessage: { id: 'A', remoteJid: groupJid },
+                messages: [buildMessage('U', 'associated', 160)]
+            }
+        ],
+        outOfWindowPinnedMessages: [buildMessage('P', 'old pin', 1)]
+    }).finish()
+
+    const reference = proto.GroupHistory.decode(inflated)
+    const streamed = await collectStreamed(inflated)
+
+    assert.deepEqual(streamed, [
+        { id: 'A', outOfWindow: false },
+        { id: 'B', outOfWindow: false },
+        { id: 'P', outOfWindow: true }
+    ])
+    assert.deepEqual(
+        streamed.filter((entry) => !entry.outOfWindow).map((entry) => entry.id),
+        reference.messages.map((message) => message.key?.id),
+        'plain messages must match the buffered decode, in wire order'
+    )
+    assert.deepEqual(
+        streamed.filter((entry) => entry.outOfWindow).map((entry) => entry.id),
+        reference.outOfWindowPinnedMessages.map((message) => message.key?.id)
+    )
+})
+
+test('streamGroupHistoryBundle walks a real compressed bundle', async () => {
+    const { compressed } = await encodeGroupHistoryBundle(
+        [buildMessage('A', 'recent', 300)],
+        [buildMessage('P', 'old pin', 1)]
+    )
+    const streamed = await collectStreamed(new Uint8Array(unzipSync(Buffer.from(compressed))))
+    assert.deepEqual(streamed, [
+        { id: 'A', outOfWindow: false },
+        { id: 'P', outOfWindow: true }
+    ])
+})
+
+test('streamGroupHistoryBundle rejects a record above maxRecordBytes', async () => {
+    const inflated = proto.GroupHistory.encode({
+        messages: [buildMessage('A', 'a fairly long message body to push past the cap', 100)]
+    }).finish()
+    await assert.rejects(() => collectStreamed(inflated, 8), /exceeds the 8 byte limit/)
+})
+
+test('group history field numbers match the generated encoder', () => {
+    const fieldNumberOf = (value: Proto.IGroupHistory): number => {
+        const bytes = proto.GroupHistory.encode(value).finish()
+        assert.ok(bytes.length > 0, 'the probe field must actually be encoded')
+        return Math.floor(readProtoVarint(bytes, 0, bytes.length).value / 8)
+    }
+    assert.deepEqual(
+        {
+            MESSAGES: fieldNumberOf({ messages: [{}] }),
+            OUT_OF_WINDOW_PINNED_MESSAGES: fieldNumberOf({ outOfWindowPinnedMessages: [{}] })
+        },
+        { ...GROUP_HISTORY_FIELDS }
+    )
+})
+
+test('streamGroupHistoryBundle rejects a truncated stream', async () => {
+    const inflated = proto.GroupHistory.encode({
+        messages: [buildMessage('A', 'first', 100)]
+    }).finish()
+    await assert.rejects(
+        () => collectStreamed(inflated.subarray(0, inflated.length - 3)),
+        /unexpected end of protobuf stream/
+    )
 })
