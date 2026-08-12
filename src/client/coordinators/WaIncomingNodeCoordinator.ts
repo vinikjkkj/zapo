@@ -79,6 +79,7 @@ interface WaIncomingNodeRuntime {
     readonly handleIncomingMessageNode: (node: BinaryNode) => Promise<boolean>
     readonly sendNode: (node: BinaryNode) => Promise<void>
     readonly handleIncomingRetryReceipt: (node: BinaryNode) => Promise<void>
+    readonly handleMediaRetryNotification: (node: BinaryNode) => void
     readonly trackOutboundReceipt: (node: BinaryNode) => Promise<void>
     readonly emitIncomingReceipt: (event: WaIncomingReceiptEvent) => void
     readonly emitIncomingPresence: (event: WaIncomingPresenceEvent) => void
@@ -371,7 +372,8 @@ export class WaIncomingNodeCoordinator {
                 emitIncomingNotification: runtime.emitIncomingNotification,
                 emitMexNotification: runtime.emitMexNotification,
                 emitUnhandledStanza: runtime.emitUnhandledIncomingNode,
-                syncAppState: runtime.syncAppState
+                syncAppState: runtime.syncAppState,
+                handleMediaRetryNotification: runtime.handleMediaRetryNotification
             })
         })
         this.registerIncomingHandler({

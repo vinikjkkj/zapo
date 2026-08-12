@@ -55,6 +55,7 @@ export type { BuildAckNodeInput, BuildReceiptNodeInput } from '@transport/node/b
 export {
     findNodeChild,
     getFirstNodeChild,
+    getNodeBytesContent,
     getNodeChildren,
     getNodeChildrenByTag,
     getNodeTextContent,

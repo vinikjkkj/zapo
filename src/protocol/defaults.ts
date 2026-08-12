@@ -31,6 +31,14 @@ export const WA_DEFAULTS = Object.freeze({
     HEALTH_CHECK_INTERVAL_MS: 15_000,
     DEAD_SOCKET_TIMEOUT_MS: 20_000,
     MEDIA_TIMEOUT_MS: 30_000,
+    /**
+     * How long a media-reupload request waits for the `mediaretry`
+     * notification. The sender's primary device has to be reachable and
+     * re-upload the file, so this is deliberately longer than an IQ timeout.
+     */
+    MEDIA_RETRY_TIMEOUT_MS: 60_000,
+    /** In-flight media-reupload requests kept in memory; the oldest is rejected past it. */
+    MAX_PENDING_MEDIA_RETRIES: 64,
     APP_STATE_SYNC_TIMEOUT_MS: 30_000,
     SIGNAL_FETCH_KEY_BUNDLES_TIMEOUT_MS: 20_000,
     MESSAGE_ACK_TIMEOUT_MS: 10_000,

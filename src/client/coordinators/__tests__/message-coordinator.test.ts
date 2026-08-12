@@ -31,10 +31,14 @@ function createFakePdo(): {
     return { requester, sendCalls, requestCalls }
 }
 
-function createCoordinator(peerDataOperation: PeerDataOperationRequester): WaMessageCoordinator {
+function createCoordinator(
+    peerDataOperation: PeerDataOperationRequester,
+    mediaRetry: unknown = {}
+): WaMessageCoordinator {
     return new WaMessageCoordinator({
         messageDispatch: {} as never,
         mediaTransfer: {} as never,
+        mediaRetry: mediaRetry as never,
         mediaUploadOptions: {} as never,
         logger: createNoopLogger(),
         messageStore: {} as never,

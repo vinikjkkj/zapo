@@ -18,6 +18,7 @@ import { WA_BUSINESS_NOTIFICATION_TAGS, WA_NOTIFICATION_TYPES } from '@protocol/
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import {
     findNodeChild,
+    getNodeBytesContent,
     getNodeChildren,
     getNodeChildrenByTag,
     getNodeTextContent
@@ -60,7 +61,7 @@ export function parseVerifiedNameNode(node: BinaryNode): WaVerifiedNameResult | 
     const level = node.attrs.verified_level as string | undefined
     const attrSerial = node.attrs.serial as string | undefined
 
-    const contentBytes = node.content instanceof Uint8Array ? node.content : undefined
+    const contentBytes = getNodeBytesContent(node)
     const certData = contentBytes !== undefined ? parseCertificateContent(contentBytes) : null
 
     const entry: {

@@ -27,6 +27,7 @@ import {
     type BinaryNode,
     findNodeChild,
     getFirstNodeChild,
+    getNodeBytesContent,
     getNodeChildren,
     getNodeTextContent
 } from '@transport'
@@ -773,8 +774,7 @@ export class WaMobileCoordinator {
     }
 
     private nodeBytes(parent: BinaryNode, tag: string): Uint8Array | null {
-        const content = findNodeChild(parent, tag)?.content
-        return content instanceof Uint8Array ? content : null
+        return getNodeBytesContent(findNodeChild(parent, tag)) ?? null
     }
 
     private requirePrimaryIdentityKeyPair() {

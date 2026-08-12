@@ -8,6 +8,7 @@ export const WA_NOTIFICATION_TYPES = Object.freeze({
     NEWSLETTER: 'newsletter',
     BUSINESS: 'business',
     PICTURE: 'picture',
+    MEDIA_RETRY: 'mediaretry',
     PASSKEY_PROLOGUE_REQUEST: 'passkey_prologue_request',
     CRSC_CONTINUATION: 'crsc_continuation'
 } as const)

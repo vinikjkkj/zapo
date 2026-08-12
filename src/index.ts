@@ -270,6 +270,11 @@ export { resolveMediaPayload } from '@message/encode/media-payload'
 export { unpadPkcs7, writeRandomPadMax16 } from '@message/encode/padding'
 export type { WaGroupHistoryBundleEncoding } from '@message/kinds/group-history'
 export type { WaResolvedMediaPayload } from '@message/encode/media-payload'
+export type {
+    WaMediaRetryRequest,
+    WaMediaRetryResult,
+    WaMediaRetryResultType
+} from '@message/primitives/media-retry'
 export type { WaSendContextInfo } from '@message/context-info'
 export type {
     WaLinkPreviewFetcher,

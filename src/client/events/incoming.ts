@@ -66,6 +66,8 @@ type IncomingNotificationHandlerOptions = IncomingAckRuntime & {
     readonly emitMexNotification: (event: WaMexNotificationEvent) => void
     readonly emitUnhandledStanza: (event: WaIncomingUnhandledStanzaEvent) => void
     readonly syncAppState?: () => Promise<void>
+    /** Resolves a pending media reupload request; never throws. */
+    readonly handleMediaRetryNotification?: (node: BinaryNode) => void
 }
 
 type IncomingGroupNotificationHandlerOptions = IncomingAckRuntime & {
@@ -401,6 +403,10 @@ export function createIncomingNotificationHandler(
                     reason: 'notification.mex.parse_failed'
                 })
             }
+        }
+
+        if (notificationType === WA_NOTIFICATION_TYPES.MEDIA_RETRY) {
+            options.handleMediaRetryNotification?.(node)
         }
 
         if (classification === 'out_of_scope') {

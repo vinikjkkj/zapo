@@ -76,6 +76,7 @@ function createIncomingRuntime() {
             handleIncomingMessageNode: async () => false,
             sendNode: async () => undefined,
             handleIncomingRetryReceipt: async () => undefined,
+            handleMediaRetryNotification: () => undefined,
             trackOutboundReceipt: async () => undefined,
             emitIncomingReceipt: () => undefined,
             emitIncomingPresence: () => undefined,

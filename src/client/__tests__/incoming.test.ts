@@ -25,6 +25,36 @@ import {
 } from '@protocol/constants'
 import type { BinaryNode } from '@transport/types'
 
+test('mediaretry notifications reach the media retry runtime and are still acked', async () => {
+    const sent: BinaryNode[] = []
+    const handled: BinaryNode[] = []
+    const handler = createIncomingNotificationHandler({
+        logger: createNoopLogger(),
+        sendNode: async (node) => {
+            sent.push(node)
+        },
+        emitIncomingNotification: () => undefined,
+        emitMexNotification: () => undefined,
+        emitUnhandledStanza: () => undefined,
+        handleMediaRetryNotification: (node) => {
+            handled.push(node)
+        }
+    })
+
+    const node: BinaryNode = {
+        tag: 'notification',
+        attrs: { id: 'mediaretry-2', from: 's.whatsapp.net', type: 'mediaretry' },
+        content: [{ tag: 'error', attrs: { code: '2' } }]
+    }
+    await handler(node)
+
+    assert.equal(handled.length, 1)
+    assert.equal(handled[0], node)
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].tag, 'ack')
+    assert.equal(sent[0].attrs.type, 'mediaretry')
+})
+
 test('notification ack includes participant only for mediaretry and psa types', async () => {
     const sent: BinaryNode[] = []
     const handler = createIncomingNotificationHandler({

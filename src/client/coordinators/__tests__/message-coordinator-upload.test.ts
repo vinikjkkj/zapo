@@ -72,6 +72,7 @@ function createUploadCoordinator(mediaUploadOptions: WaMediaMessageOptions): WaM
     return new WaMessageCoordinator({
         messageDispatch: {} as never,
         mediaTransfer: {} as never,
+        mediaRetry: {} as never,
         mediaUploadOptions,
         logger: createNoopLogger(),
         messageStore: {} as never,
