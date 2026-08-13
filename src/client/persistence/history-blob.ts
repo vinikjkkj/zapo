@@ -1,10 +1,9 @@
-import { Readable } from 'node:stream'
+import { pipeline, Readable } from 'node:stream'
 import { createUnzip } from 'node:zlib'
 
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import type { MediaCryptoType } from '@media/types'
 import { decodeProtoBytes } from '@util/bytes'
-import { toError } from '@util/primitives'
 
 /**
  * Encrypted-blob fields shared by the history-sync notification and the
@@ -90,17 +89,20 @@ export async function openHistoryBlobStream(
 }
 
 /**
- * `createUnzip` detects the framing. Forwards upstream errors, which `pipe` drops,
- * and parks a handler on `verified` so an early rejection is never unobserved.
+ * `createUnzip` detects the framing. `pipeline` rather than `pipe` so failure
+ * closes both directions: a consumer that destroys `inflated` mid-chunk also
+ * tears down the decryption pump and its socket, which `pipe` would leave
+ * draining. Also parks a handler on `verified` so an early rejection is never
+ * unobserved.
  */
 function inflateHistoryStream(
     plaintext: Readable,
     verified: Promise<unknown>
 ): WaHistoryBlobStream {
     const unzip = createUnzip()
-    plaintext.on('error', (error: unknown) => unzip.destroy(toError(error)))
+    pipeline(plaintext, unzip, () => undefined)
     verified.catch(() => undefined)
-    return { inflated: plaintext.pipe(unzip), verified }
+    return { inflated: unzip, verified }
 }
 
 /**

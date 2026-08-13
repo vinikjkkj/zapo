@@ -64,7 +64,9 @@ export async function decodeGroupHistoryBundle(blob: Uint8Array): Promise<Proto.
 
 /**
  * `outOfWindow` marks a pinned message from outside the shared window, which the
- * receiver keeps regardless of the age cutoff.
+ * receiver keeps regardless of the age cutoff. The message is decoded from a
+ * private copy, so it stays valid after the handler returns; protobuf decoding
+ * aliases the source buffer for `bytes` fields, and the reader reuses its own.
  */
 export type WaGroupHistoryMessageHandler = (
     message: Proto.WebMessageInfo,
@@ -97,10 +99,10 @@ export async function streamGroupHistoryBundle(
                 return undefined
             }
             if (event.fieldNumber === GROUP_HISTORY_FIELDS.MESSAGES) {
-                return onMessage(proto.WebMessageInfo.decode(event.value), false)
+                return onMessage(proto.WebMessageInfo.decode(event.value.slice()), false)
             }
             if (event.fieldNumber === GROUP_HISTORY_FIELDS.OUT_OF_WINDOW_PINNED_MESSAGES) {
-                return onMessage(proto.WebMessageInfo.decode(event.value), true)
+                return onMessage(proto.WebMessageInfo.decode(event.value.slice()), true)
             }
             return undefined
         },

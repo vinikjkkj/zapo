@@ -26,6 +26,12 @@ const HANDLED_SYNC_TYPES = new Set([
 ])
 const HISTORY_SYNC_MAX_PENDING_WRITES = 1_024
 const HISTORY_SYNC_MAX_RECORD_BYTES = 16 * 1024 * 1024
+/**
+ * Ceiling on messages held while waiting for their `Conversation.id`. Field order
+ * puts the id first, so this only fills if a serializer reverses it, and letting
+ * it grow would rebuild the very peak the streaming pass removes.
+ */
+const HISTORY_SYNC_MAX_PARKED_MESSAGES = 1_024
 
 export const HISTORY_SYNC_FIELDS = Object.freeze({
     CONVERSATIONS: 2,
@@ -194,6 +200,7 @@ async function consumeHistorySyncStream(
     let headerParts: Uint8Array[] | null = null
     let threadJid: string | null = null
     let parked: ParkedHistoryMessage[] | null = null
+    let droppedParked = 0
 
     const onEvent = (event: ProtoStreamEvent): void | Promise<void> => {
         if (event.kind === PROTO_STREAM_EVENT_KINDS.ENTER) {
@@ -226,6 +233,10 @@ async function consumeHistorySyncStream(
                 state.messagesCount += 1
                 if (!threadJid) {
                     parked ??= []
+                    if (parked.length >= HISTORY_SYNC_MAX_PARKED_MESSAGES) {
+                        droppedParked += 1
+                        return undefined
+                    }
                     parked[parked.length] = message
                     return undefined
                 }
@@ -296,6 +307,13 @@ async function consumeHistorySyncStream(
             depth === 0 && fieldNumber === HISTORY_SYNC_FIELDS.CONVERSATIONS,
         maxFieldBytes: HISTORY_SYNC_MAX_RECORD_BYTES
     })
+
+    if (droppedParked > 0) {
+        deps.logger.warn('dropped history sync messages that arrived before their thread jid', {
+            droppedParked,
+            limit: HISTORY_SYNC_MAX_PARKED_MESSAGES
+        })
+    }
 }
 
 async function closeConversation(

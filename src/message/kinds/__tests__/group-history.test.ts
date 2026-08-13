@@ -153,3 +153,39 @@ test('streamGroupHistoryBundle rejects a truncated stream', async () => {
         /unexpected end of protobuf stream/
     )
 })
+
+test('streamGroupHistoryBundle hands out messages that survive the walk', async () => {
+    // The payload has to outgrow the reader's buffer, otherwise it never
+    // compacts and a retained alias is never overwritten.
+    const secret = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])
+    const messages: Proto.IWebMessageInfo[] = []
+    for (let index = 0; index < 2_000; index += 1) {
+        messages.push({
+            key: { id: `S${index}`, remoteJid: groupJid, fromMe: false },
+            message: { conversation: `body ${index} ${'x'.repeat(80)}` },
+            messageTimestamp: 100 + index,
+            messageSecret: secret
+        })
+    }
+    const inflated = proto.GroupHistory.encode({ messages }).finish()
+    assert.ok(inflated.length > 64 * 1024, 'fixture must exceed the reader buffer')
+
+    const chunks: Buffer[] = []
+    for (let offset = 0; offset < inflated.length; offset += 64) {
+        chunks.push(Buffer.from(inflated.subarray(offset, Math.min(offset + 64, inflated.length))))
+    }
+
+    const retained: Proto.WebMessageInfo[] = []
+    await streamGroupHistoryBundle(Readable.from(chunks), (message) => {
+        retained.push(message)
+    })
+
+    assert.equal(retained.length, 2_000)
+    for (const message of retained) {
+        assert.deepEqual(
+            Array.from(message.messageSecret ?? []),
+            Array.from(secret),
+            'a retained message must not alias the reader buffer'
+        )
+    }
+})

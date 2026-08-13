@@ -4,6 +4,7 @@ import test from 'node:test'
 import { promisify } from 'node:util'
 import { gzip } from 'node:zlib'
 
+import { openHistoryBlobStream } from '@client/persistence/history-blob'
 import {
     CONVERSATION_FIELDS,
     HISTORY_SYNC_FIELDS,
@@ -501,5 +502,84 @@ test('history sync field numbers match the generated encoder', () => {
             MESSAGES: encodedFieldNumber(proto.Conversation, { messages: [{}] })
         },
         { ...CONVERSATION_FIELDS }
+    )
+})
+
+test('destroying the inflated stream tears down the decryption source', async () => {
+    const plaintext = new Readable({ read: () => undefined })
+    const blob = await openHistoryBlobStream(
+        {
+            downloadAndDecryptStream: async () => ({
+                plaintext,
+                metadata: Promise.resolve(null)
+            })
+        } as never,
+        {
+            directPath: '/history',
+            mediaKey: new Uint8Array(32),
+            fileSha256: new Uint8Array(32),
+            fileEncSha256: new Uint8Array(32)
+        },
+        'history',
+        'history sync'
+    )
+
+    assert.equal(plaintext.destroyed, false)
+    blob.inflated.destroy(new Error('consumer gave up'))
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(plaintext.destroyed, true, 'the source must not keep draining after an abort')
+})
+
+test('history sync bounds the messages parked before their thread jid', async () => {
+    const encodeVarint = (value: number): number[] => {
+        const out: number[] = []
+        let rest = value
+        while (rest > 0x7f) {
+            out.push((rest & 0x7f) | 0x80)
+            rest = Math.floor(rest / 128)
+        }
+        out.push(rest)
+        return out
+    }
+
+    const messages: Proto.IHistorySyncMsg[] = []
+    for (let index = 0; index < 1_200; index += 1) {
+        messages.push({
+            message: {
+                key: { remoteJid: '5511444444444@s.whatsapp.net', id: `P${index}` },
+                message: { conversation: 'parked' },
+                messageTimestamp: 1_722_000_000 + index
+            }
+        })
+    }
+    const messagesPart = proto.Conversation.encode({ messages }).finish()
+    const idPart = proto.Conversation.encode({ id: '5511444444444@s.whatsapp.net' }).finish()
+    const conversation = new Uint8Array(messagesPart.length + idPart.length)
+    conversation.set(messagesPart, 0)
+    conversation.set(idPart, messagesPart.length)
+    const blob = new Uint8Array([0x12, ...encodeVarint(conversation.length), ...conversation])
+
+    const warnings: { message: string; context?: Record<string, unknown> }[] = []
+    const logger = {
+        ...createNoopLogger(),
+        warn: (message: string, context?: Record<string, unknown>) => {
+            warnings.push({ message, context })
+        }
+    }
+    const { capture, deps } = createCapture()
+    await processHistorySyncNotification(
+        { ...(deps as Record<string, unknown>), logger } as never,
+        {
+            syncType: proto.Message.HistorySyncType.RECENT,
+            initialHistBootstrapInlinePayload: toBytesView(await gzipAsync(blob))
+        }
+    )
+
+    assert.equal(capture.messages.length, 1_024, 'the park must stop at its cap')
+    assert.equal(warnings.length, 1, 'the drop must be visible to the operator')
+    assert.equal(warnings[0].context?.droppedParked, 176)
+    assert.equal(
+        capture.messages.every((record) => record.threadJid === '5511444444444@s.whatsapp.net'),
+        true
     )
 })

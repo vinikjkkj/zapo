@@ -247,6 +247,47 @@ test('streamProtoFields skips a deprecated group', async () => {
     }
 })
 
+test('streamProtoFields rejects a varint that overruns its parent field', async () => {
+    const seen: number[] = []
+    const conversation = new Uint8Array([0x08, 0xff])
+    const blob = new Uint8Array([0x12, conversation.length, ...conversation, 0x28, 0x01])
+    await assert.rejects(
+        () =>
+            streamProtoFields(
+                chunked(blob, 3),
+                (event) => {
+                    seen.push(event.fieldNumber)
+                },
+                { shouldDescend: (fieldNumber, depth) => fieldNumber === 2 && depth === 0 }
+            ),
+        /overran its parent field/
+    )
+    assert.deepEqual(seen, [2], 'only the enter must have been delivered, never the bad field')
+})
+
+test('streamProtoFields rejects a fixed-width field that overruns its parent field', async () => {
+    const conversation = new Uint8Array([0x0d, 0x01, 0x02])
+    const blob = new Uint8Array([0x12, conversation.length, ...conversation, 0x28, 0x01])
+    await assert.rejects(
+        () =>
+            collect(blob, {
+                shouldDescend: (fieldNumber, depth) => fieldNumber === 2 && depth === 0
+            }),
+        /overran its parent field/
+    )
+})
+
+test('streamProtoFields caps descent depth', async () => {
+    let payload = new Uint8Array([0x08, 0x01])
+    for (let level = 0; level < 40; level += 1) {
+        payload = new Uint8Array([0x12, payload.length, ...payload])
+    }
+    await assert.rejects(
+        () => collect(payload, { shouldDescend: (fieldNumber) => fieldNumber === 2 }),
+        /descent exceeds the 32 level limit/
+    )
+})
+
 test('streamProtoFields handles an empty stream', async () => {
     assert.deepEqual(await collect(new Uint8Array(0)), [])
 })

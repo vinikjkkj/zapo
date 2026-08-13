@@ -7,6 +7,7 @@ const PROTO_STREAM_INITIAL_BUFFER_BYTES = 64 * 1024
 const PROTO_STREAM_VARINT_MAX_BYTES = 10
 const PROTO_STREAM_DEFAULT_MAX_FIELD_BYTES = 32 * 1024 * 1024
 const PROTO_STREAM_GROUP_MAX_DEPTH = 64
+const PROTO_STREAM_MAX_DESCENT_DEPTH = 32
 
 export const PROTO_STREAM_EVENT_KINDS = Object.freeze({
     FIELD: 'field',
@@ -274,6 +275,7 @@ export async function streamProtoFields(
         const parentEnd = stack.length > 0 ? stack[stack.length - 1].endOffset : null
         reader.mark()
         const tag = reader.tryReadVarint() ?? (await reader.readVarint())
+        assertWithinFrame(reader.consumed, parentEnd)
         const fieldNumber = Math.floor(tag / 8)
         const wireType = tag & 0x07
         if (fieldNumber < 1) {
@@ -282,6 +284,7 @@ export async function streamProtoFields(
 
         if (wireType === PROTO_WIRE_TYPES.LEN) {
             const byteLength = reader.tryReadVarint() ?? (await reader.readVarint())
+            assertWithinFrame(reader.consumed, parentEnd)
             if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
                 throw new Error(`invalid protobuf length-delimited field length ${byteLength}`)
             }
@@ -289,6 +292,11 @@ export async function streamProtoFields(
                 throw new Error('protobuf field length exceeds its parent field')
             }
             if (shouldDescend?.(fieldNumber, depth, byteLength) === true) {
+                if (stack.length >= PROTO_STREAM_MAX_DESCENT_DEPTH) {
+                    throw new Error(
+                        `protobuf descent exceeds the ${PROTO_STREAM_MAX_DESCENT_DEPTH} level limit`
+                    )
+                }
                 reader.takeMarked()
                 stack[stack.length] = { fieldNumber, endOffset: reader.consumed + byteLength }
                 const pending = onEvent({
@@ -312,8 +320,10 @@ export async function streamProtoFields(
         } else if (wireType === PROTO_WIRE_TYPES.VARINT) {
             value = EMPTY_BYTES
             varintValue = reader.tryReadVarint() ?? (await reader.readVarint())
+            assertWithinFrame(reader.consumed, parentEnd)
         } else if (wireType === PROTO_WIRE_TYPES.FIXED64 || wireType === PROTO_WIRE_TYPES.FIXED32) {
             const width = wireType === PROTO_WIRE_TYPES.FIXED64 ? 8 : 4
+            assertWithinFrame(reader.consumed + width, parentEnd)
             if (!reader.trySkip(width)) {
                 await reader.skip(width)
             }
@@ -341,6 +351,17 @@ export async function streamProtoFields(
         if (pending) {
             await pending
         }
+    }
+}
+
+/**
+ * A field must not read past the record that contains it. Checked before the
+ * handler runs, so a truncated varint or fixed-width field is rejected instead
+ * of being delivered with bytes borrowed from the parent.
+ */
+function assertWithinFrame(consumed: number, parentEnd: number | null): void {
+    if (parentEnd !== null && consumed > parentEnd) {
+        throw new Error('protobuf field overran its parent field')
     }
 }
 
