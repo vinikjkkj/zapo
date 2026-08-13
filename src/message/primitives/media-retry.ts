@@ -77,7 +77,7 @@ export function parseMediaRetryNotification(node: BinaryNode): ParsedMediaRetryN
     }
     const ciphertext = getNodeBytesContent(findNodeChild(encryptNode, 'enc_p'))
     const iv = getNodeBytesContent(findNodeChild(encryptNode, 'enc_iv'))
-    if (!ciphertext || !iv || iv.byteLength !== MEDIA_RETRY_IV_SIZE) {
+    if (!ciphertext?.byteLength || !iv || iv.byteLength !== MEDIA_RETRY_IV_SIZE) {
         return null
     }
     return { messageId, from, ciphertext, iv }
@@ -199,11 +199,12 @@ export function createMediaRetryRequester(
                 return inFlight.promise
             }
 
-            const node = await buildRequestNode(input)
             const entry = trackPending(input)
-            sendNode(node).catch((error: unknown) => {
-                rejectPending(input.messageId, toError(error))
-            })
+            buildRequestNode(input)
+                .then((node) => sendNode(node))
+                .catch((error: unknown) => {
+                    rejectPending(input.messageId, toError(error))
+                })
             return entry.promise
         },
 

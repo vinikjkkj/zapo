@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { WaMessageCoordinator } from '@client/coordinators/WaMessageCoordinator'
 import { createNoopLogger } from '@infra/log/types'
+import type { WaMediaRetryRequest, WaMediaRetryRequester } from '@message/primitives/media-retry'
 import type { PeerDataOperationRequester } from '@message/primitives/peer-data-operation'
 import { proto, type Proto } from '@proto'
 
@@ -33,12 +34,12 @@ function createFakePdo(): {
 
 function createCoordinator(
     peerDataOperation: PeerDataOperationRequester,
-    mediaRetry: unknown = {}
+    mediaRetry: Partial<WaMediaRetryRequester> = {}
 ): WaMessageCoordinator {
     return new WaMessageCoordinator({
         messageDispatch: {} as never,
         mediaTransfer: {} as never,
-        mediaRetry: mediaRetry as never,
+        mediaRetry: mediaRetry as WaMediaRetryRequester,
         mediaUploadOptions: {} as never,
         logger: createNoopLogger(),
         messageStore: {} as never,
@@ -114,4 +115,80 @@ test('requestHistorySync rejects invalid count and timestamp inputs', async () =
         /invalid oldestMsgTimestampMs/
     )
     assert.equal(pdo.sendCalls.length, 0)
+})
+
+test('requestMediaReupload derives the request from an incoming message event', async () => {
+    const calls: WaMediaRetryRequest[] = []
+    const coordinator = createCoordinator(createFakePdo().requester, {
+        request: async (input) => {
+            calls.push(input)
+            return {
+                messageId: input.messageId,
+                result: 'success',
+                resultCode: 1,
+                directPath: '/v/x'
+            }
+        }
+    })
+    const mediaKey = new Uint8Array(32).fill(3)
+
+    const result = await coordinator.requestMediaReupload({
+        rawNode: { tag: 'message', attrs: {} },
+        key: {
+            remoteJid: '120363@g.us',
+            id: 'MSG1',
+            fromMe: false,
+            isGroup: true,
+            isBroadcast: false,
+            isNewsletter: false,
+            senderDevice: 0,
+            participant: '5511@s.whatsapp.net'
+        },
+        offline: false,
+        message: { imageMessage: { directPath: '/v/old', mediaKey } }
+    } as never)
+
+    assert.equal(result.directPath, '/v/x')
+    assert.equal(calls.length, 1)
+    assert.deepEqual(
+        { ...calls[0], mediaKey: undefined },
+        {
+            messageId: 'MSG1',
+            chatJid: '120363@g.us',
+            fromMe: false,
+            participant: '5511@s.whatsapp.net',
+            mediaKey: undefined,
+            timeoutMs: undefined
+        }
+    )
+    assert.deepEqual(calls[0].mediaKey, mediaKey)
+})
+
+test('requestMediaReupload rejects newsletters and messages without media', () => {
+    const coordinator = createCoordinator(createFakePdo().requester)
+    const base = {
+        rawNode: { tag: 'message', attrs: {} },
+        offline: false,
+        message: { imageMessage: { directPath: '/v/x', mediaKey: new Uint8Array(32) } }
+    }
+    const key = {
+        remoteJid: '123@newsletter',
+        id: 'MSG1',
+        fromMe: false,
+        isGroup: false,
+        isBroadcast: false,
+        isNewsletter: true,
+        senderDevice: 0
+    }
+
+    assert.throws(() => coordinator.requestMediaReupload({ ...base, key } as never), /newsletter/)
+    assert.throws(
+        () =>
+            coordinator.requestMediaReupload({
+                ...base,
+                key: { ...key, isNewsletter: false },
+                message: { conversation: 'hi' }
+            } as never),
+        /no downloadable media/
+    )
 })

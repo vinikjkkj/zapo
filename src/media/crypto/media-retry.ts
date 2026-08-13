@@ -21,6 +21,7 @@ export interface WaMediaRetryEncryptedPayload {
 
 /** Input for {@link decryptMediaRetryNotification}. */
 export interface WaMediaRetryDecryptInput {
+    /** Media key of the original message. Sensitive key material - do not log. */
     readonly mediaKey: Uint8Array
     readonly ciphertext: Uint8Array
     readonly iv: Uint8Array

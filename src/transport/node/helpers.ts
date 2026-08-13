@@ -163,7 +163,9 @@ export function getNodeTextContent(node: BinaryNode | null | undefined): string 
 
 /**
  * Binary counterpart of {@link getNodeTextContent}: the node's raw bytes, or
- * `undefined` when it is missing, empty, or carries children/text instead.
+ * `undefined` when it is missing or carries children/text instead. Empty
+ * content comes back as a zero-length view, mirroring the empty string
+ * {@link getNodeTextContent} returns - check `byteLength` when that matters.
  */
 export function getNodeBytesContent(node: BinaryNode | null | undefined): Uint8Array | undefined {
     return node?.content instanceof Uint8Array ? node.content : undefined

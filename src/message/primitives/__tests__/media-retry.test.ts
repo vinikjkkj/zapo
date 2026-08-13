@@ -428,3 +428,48 @@ test('rejects a mediaretry notification with no id, payload, or error code', () 
         null
     )
 })
+
+test('two concurrent requests for the same message share one receipt', async () => {
+    const { requester, sent } = createRequester({ defaultTimeoutMs: 200 })
+    const input = {
+        messageId: MESSAGE_ID,
+        chatJid: CHAT_JID,
+        mediaKey: mediaKey(),
+        fromMe: false
+    }
+
+    const first = requester.request(input)
+    const second = requester.request(input)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    assert.equal(sent.length, 1)
+    requester.handleNotification(
+        notificationNode({
+            stanzaId: MESSAGE_ID,
+            result: proto.MediaRetryNotification.ResultType.SUCCESS,
+            directPath: '/v/x'
+        })
+    )
+    assert.equal((await first).result, 'success')
+    assert.equal((await second).result, 'success')
+})
+
+test('rejects a mediaretry notification whose sealed payload is empty', () => {
+    assert.equal(
+        parseMediaRetryNotification({
+            tag: 'notification',
+            attrs: { id: MESSAGE_ID, type: 'mediaretry' },
+            content: [
+                {
+                    tag: 'encrypt',
+                    attrs: {},
+                    content: [
+                        { tag: 'enc_p', attrs: {}, content: new Uint8Array() },
+                        { tag: 'enc_iv', attrs: {}, content: new Uint8Array(MEDIA_RETRY_IV_SIZE) }
+                    ]
+                }
+            ]
+        }),
+        null
+    )
+})
