@@ -377,6 +377,12 @@ test('streaming history sync tolerates a Conversation whose id follows its messa
         capture.messages.map((record) => [record.id, record.threadJid]),
         [['REVERSED', '5511444444444@s.whatsapp.net']]
     )
+    const emitted = capture.events[0] as Record<string, number>
+    assert.equal(
+        emitted.messagesCount,
+        capture.messages.length,
+        'a parked message must be counted exactly once, when it is written'
+    )
 })
 
 test('streaming history sync rejects a chunk whose MAC fails, without acking it', async () => {
@@ -559,27 +565,65 @@ test('history sync bounds the messages parked before their thread jid', async ()
     conversation.set(idPart, messagesPart.length)
     const blob = new Uint8Array([0x12, ...encodeVarint(conversation.length), ...conversation])
 
-    const warnings: { message: string; context?: Record<string, unknown> }[] = []
-    const logger = {
-        ...createNoopLogger(),
-        warn: (message: string, context?: Record<string, unknown>) => {
-            warnings.push({ message, context })
-        }
-    }
+    const payload = toBytesView(await gzipAsync(blob))
     const { capture, deps } = createCapture()
-    await processHistorySyncNotification(
-        { ...(deps as Record<string, unknown>), logger } as never,
-        {
-            syncType: proto.Message.HistorySyncType.RECENT,
-            initialHistBootstrapInlinePayload: toBytesView(await gzipAsync(blob))
-        }
+    await assert.rejects(
+        () =>
+            processHistorySyncNotification(deps as never, {
+                syncType: proto.Message.HistorySyncType.RECENT,
+                initialHistBootstrapInlinePayload: payload
+            }),
+        /parked 1024 messages with no thread jid/
     )
 
-    assert.equal(capture.messages.length, 1_024, 'the park must stop at its cap')
-    assert.equal(warnings.length, 1, 'the drop must be visible to the operator')
-    assert.equal(warnings[0].context?.droppedParked, 176)
+    assert.deepEqual(capture.acked, [], 'an aborted chunk must stay unacked so it is resent')
+    assert.deepEqual(capture.events, [], 'no chunk event may report a partial apply')
+})
+
+test('history sync counts only the messages it persisted', async () => {
+    const { capture, deps } = createCapture()
+    await processHistorySyncNotification(deps as never, {
+        syncType: proto.Message.HistorySyncType.RECENT,
+        initialHistBootstrapInlinePayload: toBytesView(
+            await gzipAsync(
+                proto.HistorySync.encode({
+                    conversations: [
+                        {
+                            id: '5511222222222@s.whatsapp.net',
+                            messages: [
+                                {
+                                    message: {
+                                        key: {
+                                            remoteJid: '5511222222222@s.whatsapp.net',
+                                            id: 'KEPT'
+                                        },
+                                        message: { conversation: 'kept' },
+                                        messageTimestamp: 1_722_000_000
+                                    }
+                                },
+                                {
+                                    message: {
+                                        key: {
+                                            remoteJid: '5511222222222@s.whatsapp.net',
+                                            id: 'STUB'
+                                        },
+                                        messageStubType:
+                                            proto.WebMessageInfo.StubType.GROUP_PARTICIPANT_ADD
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }).finish()
+            )
+        )
+    })
+
+    const emitted = capture.events[0] as Record<string, number>
+    assert.equal(capture.messages.length, 1)
     assert.equal(
-        capture.messages.every((record) => record.threadJid === '5511444444444@s.whatsapp.net'),
-        true
+        emitted.messagesCount,
+        capture.messages.length,
+        'the reported count must match what was written'
     )
 })

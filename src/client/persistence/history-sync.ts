@@ -29,7 +29,9 @@ const HISTORY_SYNC_MAX_RECORD_BYTES = 16 * 1024 * 1024
 /**
  * Ceiling on messages held while waiting for their `Conversation.id`. Field order
  * puts the id first, so this only fills if a serializer reverses it, and letting
- * it grow would rebuild the very peak the streaming pass removes.
+ * it grow would rebuild the very peak the streaming pass removes. Exceeding it
+ * fails the chunk rather than dropping records: an aborted chunk stays unacked
+ * and gets resent, while a dropped one would be acked and lost for good.
  */
 const HISTORY_SYNC_MAX_PARKED_MESSAGES = 1_024
 
@@ -200,7 +202,6 @@ async function consumeHistorySyncStream(
     let headerParts: Uint8Array[] | null = null
     let threadJid: string | null = null
     let parked: ParkedHistoryMessage[] | null = null
-    let droppedParked = 0
 
     const onEvent = (event: ProtoStreamEvent): void | Promise<void> => {
         if (event.kind === PROTO_STREAM_EVENT_KINDS.ENTER) {
@@ -230,16 +231,17 @@ async function consumeHistorySyncStream(
                 if (!message) {
                     return undefined
                 }
-                state.messagesCount += 1
                 if (!threadJid) {
                     parked ??= []
                     if (parked.length >= HISTORY_SYNC_MAX_PARKED_MESSAGES) {
-                        droppedParked += 1
-                        return undefined
+                        throw new Error(
+                            `history sync parked ${parked.length} messages with no thread jid, exceeding the ${HISTORY_SYNC_MAX_PARKED_MESSAGES} limit`
+                        )
                     }
                     parked[parked.length] = message
                     return undefined
                 }
+                state.messagesCount += 1
                 pushWrite(
                     state,
                     deps.writeBehind.persistMessageAsync({
@@ -307,13 +309,6 @@ async function consumeHistorySyncStream(
             depth === 0 && fieldNumber === HISTORY_SYNC_FIELDS.CONVERSATIONS,
         maxFieldBytes: HISTORY_SYNC_MAX_RECORD_BYTES
     })
-
-    if (droppedParked > 0) {
-        deps.logger.warn('dropped history sync messages that arrived before their thread jid', {
-            droppedParked,
-            limit: HISTORY_SYNC_MAX_PARKED_MESSAGES
-        })
-    }
 }
 
 async function closeConversation(
@@ -408,6 +403,7 @@ async function closeConversation(
     }
 
     for (const message of parked ?? []) {
+        state.messagesCount += 1
         pushWrite(
             state,
             deps.writeBehind.persistMessageAsync({
