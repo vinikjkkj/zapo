@@ -8,7 +8,13 @@ import {
 } from '@message/crypto/use-case-secret'
 import { unwrapMessage } from '@message/encode/content'
 import { proto, type Proto } from '@proto'
-import { isLidJid, isUserJid, toUserJid } from '@protocol/jid'
+import {
+    isGroupOrBroadcastJid,
+    isLidJid,
+    isNewsletterJid,
+    isUserJid,
+    toUserJid
+} from '@protocol/jid'
 import type {
     WaMessageSecretEntry,
     WaMessageSecretStore
@@ -18,8 +24,6 @@ import { bytesToHex, EMPTY_BYTES, TEXT_ENCODER, toBytesView } from '@util/bytes'
 import { toError } from '@util/primitives'
 
 const WA_ADDON_ENCRYPTION_NONCE_BYTES = 12
-
-const ADDON_AUTH_FAILURE_RE = /authenticate|operation failed|decrypt/i
 
 type WaAddonBytes = Uint8Array | ArrayBuffer | ArrayBufferView
 
@@ -71,26 +75,27 @@ export function collectUniqueUserJids(
 
 /**
  * Resolves the parent-message author JID the peer used when encrypting an
- * addon (poll vote / event response / ...). Mirrors whatsmeow
- * `getOrigSenderFromKey`: for 1:1 `!fromMe` the key's `remoteJid` is the
- * parent author (often our LID); for groups it is `participant`; when
- * `fromMe` the parent author is the addon sender themselves.
+ * addon (poll vote / event response / ...), or `null` when the key carries no
+ * usable one. In a group the author is the key's `participant`; in 1:1 it is
+ * `remoteJid`, which is how the sender addressed us (often our LID).
+ *
+ * A `fromMe` key is ours, so its author is this account and the stored parent
+ * entry already holds that JID. `remoteJid` on such a key is the *chat*, i.e.
+ * the other side, so reading it would seed the candidate list with the one
+ * party that certainly did not write the parent.
+ *
+ * WhatsApp Web reads the author off its own stored parent message instead,
+ * then normalizes the addressing mode. Taking it from the key the peer sent
+ * is a shortcut to the same JID, in the exact form they encrypted with, so it
+ * pairs with the stored author rather than replacing it.
  */
 export function resolveAddonParentSenderFromKey(
     targetMessageKey: Proto.IMessageKey,
-    chatIsGroup: boolean,
-    modificationSender: string
+    chatIsGroup: boolean
 ): string | null {
-    const raw = targetMessageKey.fromMe
-        ? modificationSender
-        : chatIsGroup
-          ? targetMessageKey.participant
-          : targetMessageKey.remoteJid
+    if (targetMessageKey.fromMe) return null
+    const raw = chatIsGroup ? targetMessageKey.participant : targetMessageKey.remoteJid
     return collectUniqueUserJids(raw)[0] ?? null
-}
-
-function isAddonAuthFailure(error: unknown): boolean {
-    return ADDON_AUTH_FAILURE_RE.test(toError(error).message)
 }
 
 export interface WaAddonSenderPair {
@@ -98,13 +103,24 @@ export interface WaAddonSenderPair {
     readonly modificationSender: string
 }
 
+/**
+ * Chat JIDs reach the candidate lists through stanza attributes (`from` and
+ * the `*Alt` fields point at the group in a group chat) and can never be the
+ * author of anything, so they are dropped. Everything else stays: the
+ * as-received rung has to work for senders outside `@lid` / `@s.whatsapp.net`,
+ * such as a hosted device.
+ */
+function isPossibleAddonSenderJid(jid: string): boolean {
+    return !isGroupOrBroadcastJid(jid) && !isNewsletterJid(jid)
+}
+
 /** Builds the bounded LID, PN, and as-received sender rungs used by addon decryption. */
 export function buildAddonSenderPairs(input: {
     readonly parentCandidates: readonly string[]
     readonly modificationCandidates: readonly string[]
 }): readonly WaAddonSenderPair[] {
-    const parents = input.parentCandidates.filter((jid) => isLidJid(jid) || isUserJid(jid))
-    const modifiers = input.modificationCandidates.filter((jid) => isLidJid(jid) || isUserJid(jid))
+    const parents = input.parentCandidates.filter(isPossibleAddonSenderJid)
+    const modifiers = input.modificationCandidates.filter(isPossibleAddonSenderJid)
     const pairs: WaAddonSenderPair[] = []
     const seen = new Set<string>()
     const addPair = (
@@ -131,11 +147,14 @@ export function buildAddonSenderPairs(input: {
 }
 
 /**
- * Decrypts an addon payload, retrying across parent-author and modification-
- * sender JID candidates. Needed during the PN→LID migration: the voter
- * encrypts with the poll creator's LID from `pollCreationMessageKey`, while
- * we may have persisted the secret under our PN `meJid`. whatsmeow does the
- * same dual-sender retry on GCM auth failure.
+ * Decrypts an addon payload, walking the sender rungs until one authenticates.
+ * Needed during the PN→LID migration: the voter encrypts with the poll
+ * creator's LID from `pollCreationMessageKey`, while we may have persisted the
+ * secret under our PN `meJid`.
+ *
+ * Every attempt is local crypto over the same ciphertext, so a failed rung
+ * says nothing beyond "wrong sender pair" and never aborts the walk. Only an
+ * exhausted list throws, carrying the last error.
  */
 export async function decryptAddonPayloadWithSenderFallback(input: {
     readonly messageSecret: WaAddonBytes
@@ -166,7 +185,6 @@ export async function decryptAddonPayloadWithSenderFallback(input: {
             })
         } catch (error) {
             lastError = error
-            if (!isAddonAuthFailure(error)) throw error
         }
     }
     throw lastError instanceof Error ? lastError : new Error(toError(lastError).message)

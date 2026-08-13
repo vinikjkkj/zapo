@@ -853,6 +853,7 @@ export class WaMessageCoordinator {
         if (!modificationSenderRaw) return
 
         const modificationSenderCandidates = collectUniqueUserJids(
+            event.key.fromMe ? event.rawNode.attrs.from : undefined,
             modificationSenderRaw,
             event.key.participantAlt,
             event.key.remoteJidAlt,
@@ -864,8 +865,7 @@ export class WaMessageCoordinator {
 
         const keyParentSender = resolveAddonParentSenderFromKey(
             addon.targetMessageKey,
-            event.key.isGroup,
-            modificationSenderRaw
+            event.key.isGroup
         )
         const parentMsgOriginalSenderCandidates = collectUniqueUserJids(
             keyParentSender,
