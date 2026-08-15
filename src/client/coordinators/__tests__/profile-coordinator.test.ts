@@ -1380,3 +1380,23 @@ test('profile coordinator rejects invalid usernames and keys before querying', a
     await assert.rejects(() => coordinator.setUsernameKey('12'), /invalid username key/)
     assert.equal(queried, false)
 })
+
+test('profile coordinator does not read a contact error as key-required', async () => {
+    const result = await createResolveUsernameCoordinator(
+        createUsyncListResult([
+            {
+                tag: 'user',
+                attrs: {},
+                content: [
+                    {
+                        tag: 'contact',
+                        attrs: {},
+                        content: [{ tag: 'error', attrs: { code: '429', text: 'rate-limited' } }]
+                    }
+                ]
+            }
+        ])
+    ).resolveUsername({ username: 'joao' })
+
+    assert.deepEqual(result, { status: 'not-found' })
+})

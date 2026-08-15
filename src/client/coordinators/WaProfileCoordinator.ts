@@ -433,8 +433,8 @@ function assertValidUsernameKey(key: string | undefined): void {
 }
 
 /**
- * `type="out"` means the handle is not reachable from this account, a missing
- * `jid` means the lookup key is required, anything else resolves.
+ * An `<error>` child or `type="out"` means the handle did not resolve, a
+ * missing `jid` means the lookup key is required, anything else resolves.
  */
 function parseUsernameLookup(result: BinaryNode): WaUsernameLookupResult {
     const userNodes = iterateUsyncUsers(result) ?? []
@@ -442,6 +442,9 @@ function parseUsernameLookup(result: BinaryNode): WaUsernameLookupResult {
 
     const userNode = userNodes[0]
     const contactNode = findNodeChild(userNode, WA_NODE_TAGS.CONTACT)
+    if (contactNode && findNodeChild(contactNode, WA_NODE_TAGS.ERROR)) {
+        return { status: 'not-found' }
+    }
     const rawUsername = contactNode?.attrs.username
     const username = rawUsername !== undefined ? normalizeUsername(rawUsername) : null
     if (contactNode?.attrs.type === 'out') return { status: 'not-found' }
