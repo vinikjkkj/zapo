@@ -15,6 +15,7 @@ export interface WaMobileTransportDeviceInfo {
     readonly phoneId?: string
     readonly deviceBoard?: string
     readonly deviceModelType?: string
+    readonly business?: boolean
 }
 
 export interface WaMobileLoginPayloadConfig {
@@ -65,7 +66,9 @@ export function buildMobileLoginPayload(config: WaMobileLoginPayloadConfig): Uin
     const version = parseAppVersion(info.appVersion)
 
     const userAgent = {
-        platform: proto.ClientPayload.UserAgent.Platform.ANDROID,
+        platform: info.business
+            ? proto.ClientPayload.UserAgent.Platform.SMB_ANDROID
+            : proto.ClientPayload.UserAgent.Platform.ANDROID,
         releaseChannel: proto.ClientPayload.UserAgent.ReleaseChannel.RELEASE,
         appVersion: version,
         mcc: info.mcc ?? '000',

@@ -49,6 +49,42 @@ test('buildMobileLoginPayload emits an ANDROID userAgent with primary flags', ()
     assert.equal(ua.appVersion.tertiary, 15)
 })
 
+test('buildMobileLoginPayload emits SMB_ANDROID platform for business accounts', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5511987654321,
+        deviceInfo: { ...BASE_DEVICE, business: true }
+    })
+    const payload = proto.ClientPayload.decode(bytes)
+    assert.equal(payload.userAgent?.platform, proto.ClientPayload.UserAgent.Platform.SMB_ANDROID)
+})
+
+test('buildMobileLoginPayload keeps ANDROID platform when business is false', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5511987654321,
+        deviceInfo: { ...BASE_DEVICE, business: false }
+    })
+    const payload = proto.ClientPayload.decode(bytes)
+    assert.equal(payload.userAgent?.platform, proto.ClientPayload.UserAgent.Platform.ANDROID)
+})
+
+test('buildMobileLoginPayload is unchanged when business is omitted', () => {
+    const omitted = buildMobileLoginPayload({
+        username: 5511987654321,
+        deviceInfo: BASE_DEVICE
+    })
+    const explicitUndefined = buildMobileLoginPayload({
+        username: 5511987654321,
+        deviceInfo: { ...BASE_DEVICE, business: undefined }
+    })
+    // Omitting the flag must produce the exact same bytes as an explicit
+    // undefined, and the platform stays consumer ANDROID.
+    assert.deepEqual(omitted, explicitUndefined)
+    assert.equal(
+        proto.ClientPayload.decode(omitted).userAgent?.platform,
+        proto.ClientPayload.UserAgent.Platform.ANDROID
+    )
+})
+
 test('buildMobileLoginPayload sets passive=true when requested', () => {
     const bytes = buildMobileLoginPayload({
         username: 5511987654321,
