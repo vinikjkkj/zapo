@@ -1,4 +1,10 @@
-import { WA_DEFAULTS, WA_IQ_TYPES, WA_NODE_TAGS, WA_XMLNS } from '@protocol/constants'
+import {
+    WA_ADDRESSING_MODES,
+    WA_DEFAULTS,
+    WA_IQ_TYPES,
+    WA_NODE_TAGS,
+    WA_XMLNS
+} from '@protocol/constants'
 import { buildIqNode } from '@transport/node/query'
 import type { BinaryNode } from '@transport/types'
 
@@ -105,6 +111,48 @@ export function buildGetUsernameUsyncQueryNode(): BinaryNode {
     return {
         tag: WA_NODE_TAGS.USERNAME,
         attrs: {}
+    }
+}
+
+/**
+ * `contact` answers with the resolved user plus its reachability `type`,
+ * `business` with the verified name. WhatsApp Web pins `contact` to LID
+ * addressing here, so the lookup resolves to a LID.
+ */
+export function buildUsernameLookupUsyncQueryNodes(): readonly BinaryNode[] {
+    return [
+        {
+            tag: WA_NODE_TAGS.CONTACT,
+            attrs: { addressing_mode: WA_ADDRESSING_MODES.LID }
+        },
+        {
+            tag: WA_NODE_TAGS.BUSINESS,
+            attrs: {},
+            content: [{ tag: 'verified_name', attrs: {} }]
+        }
+    ]
+}
+
+export interface BuildUsernameLookupContactNodeInput {
+    readonly username: string
+    readonly usernameKey?: string
+}
+
+/**
+ * The `<contact>` child identifying the account in a username lookup. It goes
+ * inside a `<user>` carrying no `jid` - the handle is the identifier - with
+ * the optional lookup key in `pin`.
+ */
+export function buildUsernameLookupContactNode(
+    input: BuildUsernameLookupContactNodeInput
+): BinaryNode {
+    const attrs: Record<string, string> = { username: input.username }
+    if (input.usernameKey) {
+        attrs.pin = input.usernameKey
+    }
+    return {
+        tag: WA_NODE_TAGS.CONTACT,
+        attrs
     }
 }
 

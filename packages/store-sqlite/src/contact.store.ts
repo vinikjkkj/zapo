@@ -12,6 +12,7 @@ interface ContactRow extends Record<string, unknown> {
     readonly push_name: unknown
     readonly lid: unknown
     readonly phone_number: unknown
+    readonly username: unknown
     readonly last_updated_ms: unknown
 }
 
@@ -22,6 +23,7 @@ function decodeContactRow(row: ContactRow): WaStoredContactRecord {
         pushName: asOptionalString(row.push_name, 'mailbox_contacts.push_name'),
         lid: asOptionalString(row.lid, 'mailbox_contacts.lid'),
         phoneNumber: asOptionalString(row.phone_number, 'mailbox_contacts.phone_number'),
+        username: asOptionalString(row.username, 'mailbox_contacts.username'),
         lastUpdatedMs: asNumber(row.last_updated_ms, 'mailbox_contacts.last_updated_ms')
     }
 }
@@ -50,7 +52,7 @@ export class WaContactSqliteStore extends BaseSqliteStore implements Contract {
     public async getByJid(jid: string): Promise<WaStoredContactRecord | null> {
         const db = await this.getConnection()
         const row = db.get<ContactRow>(
-            `SELECT jid, display_name, push_name, lid, phone_number, last_updated_ms
+            `SELECT jid, display_name, push_name, lid, phone_number, username, last_updated_ms
              FROM mailbox_contacts
              WHERE session_id = ? AND jid = ?`,
             [this.options.sessionId, jid]
@@ -65,7 +67,7 @@ export class WaContactSqliteStore extends BaseSqliteStore implements Contract {
     public async getByPhoneNumber(pn: string): Promise<WaStoredContactRecord | null> {
         const db = await this.getConnection()
         const row = db.get<ContactRow>(
-            `SELECT jid, display_name, push_name, lid, phone_number, last_updated_ms
+            `SELECT jid, display_name, push_name, lid, phone_number, username, last_updated_ms
              FROM mailbox_contacts
              WHERE session_id = ? AND phone_number = ?
              LIMIT 1`,
@@ -99,13 +101,15 @@ export class WaContactSqliteStore extends BaseSqliteStore implements Contract {
                 push_name,
                 lid,
                 phone_number,
+                username,
                 last_updated_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id, jid) DO UPDATE SET
                 display_name=COALESCE(excluded.display_name, mailbox_contacts.display_name),
                 push_name=COALESCE(excluded.push_name, mailbox_contacts.push_name),
                 lid=COALESCE(excluded.lid, mailbox_contacts.lid),
                 phone_number=COALESCE(excluded.phone_number, mailbox_contacts.phone_number),
+                username=COALESCE(excluded.username, mailbox_contacts.username),
                 last_updated_ms=excluded.last_updated_ms`,
             [
                 this.options.sessionId,
@@ -114,6 +118,7 @@ export class WaContactSqliteStore extends BaseSqliteStore implements Contract {
                 record.pushName ?? null,
                 record.lid ?? null,
                 record.phoneNumber ?? null,
+                record.username ?? null,
                 record.lastUpdatedMs
             ]
         )

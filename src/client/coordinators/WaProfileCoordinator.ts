@@ -3,6 +3,13 @@ import type { Logger } from '@infra/log/types'
 import type { WaMexOperationResponses } from '@mex'
 import { parseJidFull, parsePhoneJid } from '@protocol/jid'
 import { WA_NODE_TAGS } from '@protocol/nodes'
+import {
+    isUsernameKey,
+    normalizeUsername,
+    splitUsernameHandle,
+    validateUsernameLocally,
+    WA_USERNAME_LIMITS
+} from '@protocol/username'
 import type { SignalLidSyncResult } from '@signal/api/SignalDeviceSyncApi'
 import {
     buildDeleteProfilePictureIq,
@@ -14,6 +21,8 @@ import {
     buildSetDisappearingModeIq,
     buildSetProfilePictureIq,
     buildSetStatusIq,
+    buildUsernameLookupContactNode,
+    buildUsernameLookupUsyncQueryNodes,
     type WaProfilePictureType
 } from '@transport/node/builders/profile'
 import {
@@ -89,6 +98,24 @@ export interface WaUsernameAvailabilityResult {
     readonly suggestions: readonly string[]
 }
 
+export type WaUsernameLookupResult =
+    | {
+          readonly status: 'found'
+          readonly jid: string
+          readonly username: string | null
+          readonly isBusiness: boolean
+          readonly pnJid: string | null
+      }
+    | { readonly status: 'key-required'; readonly username: string | null }
+    | { readonly status: 'not-found' }
+
+export interface WaResolveUsernameInput {
+    /** A leading `@` and a `:1234` key suffix are accepted. */
+    readonly username: string
+    /** Overrides a key parsed out of {@link username}. */
+    readonly usernameKey?: string
+}
+
 /**
  * Coordinates own/peer profile queries and mutations: picture, status, text
  * status, username, disappearing mode, and LID lookup. Accessed via
@@ -153,13 +180,23 @@ export interface WaProfileCoordinator {
     readonly setTextStatus: (input: WaSetTextStatusInput) => Promise<void>
     /** Batched fetch of username per JID. */
     readonly getUsernames: (jids: readonly string[]) => Promise<readonly WaUsernameResult[]>
+    /**
+     * Resolves a username handle to the account's LID, so a message can be
+     * addressed to `@handle`. `'key-required'` means the server withheld the
+     * JID - repeat the call with `usernameKey`.
+     *
+     * @throws when the handle fails local validation, before any round-trip.
+     */
+    readonly resolveUsername: (input: WaResolveUsernameInput) => Promise<WaUsernameLookupResult>
     /** Fetches the current account's username record (value, state, recovery pin). */
     readonly getOwnUsername: () => Promise<WaOwnUsernameResult>
     /**
      * Reserves/sets a username on the current account. Returns `true` only
-     * when the server reports `'SUCCESS'`; on any other outcome (taken,
-     * invalid, rate-limited) it returns `false` without throwing - check the
-     * value and consult {@link checkUsernameAvailability} for suggestions.
+     * when the server reports `'SUCCESS'`; on any other server outcome (taken,
+     * rate-limited) it returns `false` without throwing - check the value and
+     * consult {@link checkUsernameAvailability} for suggestions.
+     *
+     * @throws when the handle fails local validation, before any round-trip.
      */
     readonly setUsername: (input: WaSetUsernameInput) => Promise<boolean>
     /** Deletes the current account's username. Returns `true` on success. */
@@ -168,7 +205,11 @@ export interface WaProfileCoordinator {
     readonly getAboutStatus: (jid: string) => Promise<string | null>
     /** Checks whether a username is available and returns server suggestions. */
     readonly checkUsernameAvailability: (username: string) => Promise<WaUsernameAvailabilityResult>
-    /** Sets the username recovery PIN. Returns `true` on success. */
+    /**
+     * Sets the username recovery PIN. Returns `true` on success.
+     *
+     * @throws when `pin` is not exactly 4 digits, before any round-trip.
+     */
     readonly setUsernameKey: (pin: string) => Promise<boolean>
     /** Resolves LIDs for a list of phone numbers (handles normalization). */
     readonly getLidsByPhoneNumbers: (
@@ -362,14 +403,60 @@ function parseUsyncUsernames(result: BinaryNode): readonly WaUsernameResult[] {
         const usernameNode = findNodeChild(userNode, WA_NODE_TAGS.USERNAME)
         const hasUsernameError =
             usernameNode && findNodeChild(usernameNode, WA_NODE_TAGS.ERROR) !== undefined
-        const username =
+        const rawUsername =
             usernameNode && !hasUsernameError ? getNodeTextContent(usernameNode) || null : null
+        const username = rawUsername !== null ? normalizeUsername(rawUsername) : null
 
         results[count] = { jid, username }
         count += 1
     }
     results.length = count
     return results
+}
+
+/** Reports the failing rule, never the rejected handle. */
+function assertValidUsername(username: string): void {
+    const validation = validateUsernameLocally(username)
+    if (!validation.isValid) {
+        throw new Error(`invalid username: ${validation.errorType}`)
+    }
+}
+
+/**
+ * The key is a recovery secret, so a rejection describes the expected shape and
+ * never echoes the value - callers routinely log the errors they catch.
+ */
+function assertValidUsernameKey(key: string | undefined): void {
+    if (key !== undefined && !isUsernameKey(key)) {
+        throw new Error(`invalid username key: expected ${WA_USERNAME_LIMITS.KEY_LENGTH} digits`)
+    }
+}
+
+/**
+ * `type="out"` means the handle is not reachable from this account, a missing
+ * `jid` means the lookup key is required, anything else resolves.
+ */
+function parseUsernameLookup(result: BinaryNode): WaUsernameLookupResult {
+    const userNodes = iterateUsyncUsers(result) ?? []
+    if (userNodes.length !== 1) return { status: 'not-found' }
+
+    const userNode = userNodes[0]
+    const contactNode = findNodeChild(userNode, WA_NODE_TAGS.CONTACT)
+    const rawUsername = contactNode?.attrs.username
+    const username = rawUsername !== undefined ? normalizeUsername(rawUsername) : null
+    if (contactNode?.attrs.type === 'out') return { status: 'not-found' }
+
+    const jid = userNode.attrs.jid as string | undefined
+    if (!jid) return { status: 'key-required', username }
+
+    const businessNode = findNodeChild(userNode, WA_NODE_TAGS.BUSINESS)
+    return {
+        status: 'found',
+        jid,
+        username,
+        isBusiness: businessNode !== undefined && !findNodeChild(businessNode, WA_NODE_TAGS.ERROR),
+        pnJid: businessNode?.attrs.pn_jid ?? null
+    }
 }
 
 function parseOwnUsernameMexResponse(
@@ -621,6 +708,39 @@ export function createProfileCoordinator(
             return parseUsyncUsernames(result)
         },
 
+        resolveUsername: async (input) => {
+            const parsed = splitUsernameHandle(input.username)
+            assertValidUsername(parsed.username)
+            const usernameKey = input.usernameKey ?? parsed.usernameKey ?? undefined
+            assertValidUsernameKey(usernameKey)
+            const sid = await generateSid()
+            const usyncNode = buildUsyncIq({
+                sid,
+                queryProtocolNodes: buildUsernameLookupUsyncQueryNodes(),
+                users: [
+                    {
+                        content: [
+                            buildUsernameLookupContactNode({
+                                username: parsed.username,
+                                ...(usernameKey !== undefined ? { usernameKey } : {})
+                            })
+                        ]
+                    }
+                ]
+            })
+            const result = await queryWithContext('profile.resolveUsername', usyncNode, undefined, {
+                username: parsed.username,
+                withKey: usernameKey !== undefined
+            })
+            assertIqResult(result, 'profile.resolveUsername')
+            logUsyncProtocolErrors(
+                parseUsyncResultEnvelope(result),
+                logger,
+                'profile.resolveUsername'
+            )
+            return parseUsernameLookup(result)
+        },
+
         getOwnUsername: async () => {
             try {
                 const data = await runMexQuery(mexSocket, 'GetUsername', {})
@@ -634,8 +754,10 @@ export function createProfileCoordinator(
         },
 
         setUsername: async (input) => {
+            const username = normalizeUsername(input.username.trim())
+            assertValidUsername(username)
             const data = await runMexQuery(mexSocket, 'SetUsername', {
-                input: input.username,
+                input: username,
                 reserved: input.reserved ?? false,
                 session_id: input.sessionId ?? '',
                 source: input.source ?? 'USER_INPUT'
@@ -663,6 +785,7 @@ export function createProfileCoordinator(
         },
 
         setUsernameKey: async (pin) => {
+            assertValidUsernameKey(pin)
             const data = await runMexQuery(mexSocket, 'SetUsernameKey', { pin })
             return isMexUsernameKeySetSuccess(data)
         },

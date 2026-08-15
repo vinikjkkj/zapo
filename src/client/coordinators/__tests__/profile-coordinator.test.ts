@@ -1129,7 +1129,7 @@ test('profile coordinator setUsername returns false on non-SUCCESS result', asyn
             })
         }
     })
-    assert.equal(await coordinator.setUsername({ username: 'x' }), false)
+    assert.equal(await coordinator.setUsername({ username: 'taken.handle' }), false)
 })
 
 test('profile coordinator deleteUsername sends empty variables', async () => {
@@ -1257,4 +1257,126 @@ test('profile coordinator returns empty lid result without calling port', async 
     const result = await coordinator.getLidsByPhoneNumbers([])
     assert.equal(result.length, 0)
     assert.equal(called, false)
+})
+
+function createUsyncListResult(users: readonly BinaryNode[]): BinaryNode {
+    return createIqResult([
+        {
+            tag: 'usync',
+            attrs: {},
+            content: [{ tag: 'list', attrs: {}, content: users }]
+        }
+    ])
+}
+
+function createResolveUsernameCoordinator(
+    result: BinaryNode,
+    calls: Array<{ readonly node: BinaryNode; readonly contextData?: unknown }> = []
+) {
+    return createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
+        logger: createNoopLogger(),
+        mutations: { set: async () => undefined } as never,
+        queryLidsByPhoneJids: async () => [],
+        mexSocket: { query: async () => ({ tag: 'iq', attrs: { type: 'result' } }) },
+        queryWithContext: async (_context, node, _timeoutMs, contextData) => {
+            calls.push({ node, contextData })
+            return result
+        }
+    })
+}
+
+test('profile coordinator resolves a username handle to its lid', async () => {
+    const calls: Array<{ readonly node: BinaryNode; readonly contextData?: unknown }> = []
+    const coordinator = createResolveUsernameCoordinator(
+        createUsyncListResult([
+            {
+                tag: 'user',
+                attrs: { jid: '88880000@lid' },
+                content: [
+                    { tag: 'contact', attrs: { type: 'in', username: '@joao' } },
+                    { tag: 'business', attrs: { pn_jid: '5511999999999@s.whatsapp.net' } }
+                ]
+            }
+        ]),
+        calls
+    )
+
+    const result = await coordinator.resolveUsername({ username: '@joao:1234' })
+
+    assert.deepEqual(result, {
+        status: 'found',
+        jid: '88880000@lid',
+        username: 'joao',
+        isBusiness: true,
+        pnJid: '5511999999999@s.whatsapp.net'
+    })
+    assert.deepEqual(calls[0].contextData, { username: 'joao', withKey: true })
+})
+
+test('profile coordinator reports key-required and unreachable username lookups', async () => {
+    const keyRequired = await createResolveUsernameCoordinator(
+        createUsyncListResult([
+            {
+                tag: 'user',
+                attrs: {},
+                content: [{ tag: 'contact', attrs: { type: 'in', username: 'joao' } }]
+            }
+        ])
+    ).resolveUsername({ username: 'joao' })
+    assert.deepEqual(keyRequired, { status: 'key-required', username: 'joao' })
+
+    const unreachable = await createResolveUsernameCoordinator(
+        createUsyncListResult([
+            {
+                tag: 'user',
+                attrs: { jid: '88880000@lid' },
+                content: [{ tag: 'contact', attrs: { type: 'out' } }]
+            }
+        ])
+    ).resolveUsername({ username: 'joao' })
+    assert.deepEqual(unreachable, { status: 'not-found' })
+
+    const empty = await createResolveUsernameCoordinator(createUsyncListResult([])).resolveUsername(
+        {
+            username: 'joao'
+        }
+    )
+    assert.deepEqual(empty, { status: 'not-found' })
+})
+
+test('profile coordinator rejects invalid usernames and keys before querying', async () => {
+    let queried = false
+    const coordinator = createProfileCoordinator({
+        generateSid: async () => 'test-sid',
+        applyOwnPushName: async () => undefined,
+        resolvePrivacyTokenNode: async () => null,
+        logger: createNoopLogger(),
+        mutations: { set: async () => undefined } as never,
+        queryLidsByPhoneJids: async () => [],
+        mexSocket: {
+            query: async () => {
+                queried = true
+                return { tag: 'iq', attrs: { type: 'result' } }
+            }
+        },
+        queryWithContext: async () => {
+            queried = true
+            return createIqResult()
+        }
+    })
+
+    await assert.rejects(() => coordinator.resolveUsername({ username: 'ab' }), /invalid username/)
+    await assert.rejects(
+        () => coordinator.resolveUsername({ username: 'joao', usernameKey: '12' }),
+        /invalid username key/
+    )
+    await assert.rejects(
+        () => coordinator.setUsername({ username: 'www.joao' }),
+        /invalid username/
+    )
+    await assert.rejects(() => coordinator.setUsernameKey('12'), /invalid username key/)
+    assert.equal(queried, false)
 })

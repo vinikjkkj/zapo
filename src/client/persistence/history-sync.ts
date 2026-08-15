@@ -6,6 +6,7 @@ import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClien
 import { proto, type Proto } from '@proto'
 import { isUserJid } from '@protocol/jid'
 import { normalizeEphemeralSettingSeconds } from '@protocol/message'
+import { normalizeUsername } from '@protocol/username'
 import type { WaChatMetadataStore } from '@store/contracts/chat-metadata.store'
 import { concatBytes, TEXT_DECODER } from '@util/bytes'
 import { longToNumber, toError } from '@util/primitives'
@@ -386,15 +387,19 @@ async function closeConversation(
     )
 
     if (isUserJid(resolvedJid) || (conversation.lidJid ?? conversation.accountLid)) {
-        const contactDisplay = conversation.displayName || conversation.username || undefined
+        const contactDisplay = conversation.displayName || undefined
+        const contactUsername = conversation.username
+            ? normalizeUsername(conversation.username)
+            : undefined
         const contactPn = conversation.pnJid ?? undefined
         const contactLid = conversation.lidJid ?? conversation.accountLid ?? undefined
-        if (contactDisplay || contactPn || contactLid) {
+        if (contactDisplay || contactUsername || contactPn || contactLid) {
             pushWrite(
                 state,
                 deps.writeBehind.persistContactAsync({
                     jid: contactLid ?? resolvedJid,
                     displayName: contactDisplay,
+                    username: contactUsername,
                     phoneNumber: contactPn,
                     lastUpdatedMs: state.nowMs
                 })

@@ -25,6 +25,7 @@ function mergeContactRecords(
         pushName: incoming.pushName ?? previous.pushName,
         lid: incoming.lid ?? previous.lid,
         phoneNumber: incoming.phoneNumber ?? previous.phoneNumber,
+        username: incoming.username ?? previous.username,
         lastUpdatedMs: Math.max(previous.lastUpdatedMs, incoming.lastUpdatedMs)
     }
 }

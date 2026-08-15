@@ -463,6 +463,15 @@ const SQLITE_MIGRATIONS: readonly WaSqliteMigration[] = [
                     ON chat_metadata_cache (session_id, expires_at_ms);
             `)
         }
+    },
+    {
+        id: '0020_mailbox_contacts_username',
+        domain: 'mailbox',
+        up: (db) => {
+            db.exec(`
+                ALTER TABLE mailbox_contacts ADD COLUMN username TEXT;
+            `)
+        }
     }
 ]
 

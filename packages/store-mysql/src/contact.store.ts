@@ -16,13 +16,14 @@ export class WaContactMysqlStore extends BaseMysqlStore implements WaContactStor
         await this.pool.execute(
             `INSERT INTO ${this.t('mailbox_contacts')} (
                 session_id, jid, display_name, push_name, lid,
-                phone_number, last_updated_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                phone_number, username, last_updated_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 display_name = COALESCE(VALUES(display_name), display_name),
                 push_name = COALESCE(VALUES(push_name), push_name),
                 lid = COALESCE(VALUES(lid), lid),
                 phone_number = COALESCE(VALUES(phone_number), phone_number),
+                username = COALESCE(VALUES(username), username),
                 last_updated_ms = VALUES(last_updated_ms)`,
             [
                 this.sessionId,
@@ -31,6 +32,7 @@ export class WaContactMysqlStore extends BaseMysqlStore implements WaContactStor
                 record.pushName ?? null,
                 record.lid ?? null,
                 record.phoneNumber ?? null,
+                record.username ?? null,
                 record.lastUpdatedMs
             ]
         )
@@ -42,7 +44,7 @@ export class WaContactMysqlStore extends BaseMysqlStore implements WaContactStor
             executor: { execute: PoolConnection['execute'] },
             chunk: readonly WaStoredContactRecord[]
         ): Promise<void> => {
-            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')
+            const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ')
             const params: MysqlParam[] = []
             for (const record of chunk) {
                 params.push(
@@ -52,19 +54,21 @@ export class WaContactMysqlStore extends BaseMysqlStore implements WaContactStor
                     record.pushName ?? null,
                     record.lid ?? null,
                     record.phoneNumber ?? null,
+                    record.username ?? null,
                     record.lastUpdatedMs
                 )
             }
             await executor.execute(
                 `INSERT INTO ${this.t('mailbox_contacts')} (
                     session_id, jid, display_name, push_name, lid,
-                    phone_number, last_updated_ms
+                    phone_number, username, last_updated_ms
                 ) VALUES ${placeholders}
                 ON DUPLICATE KEY UPDATE
                     display_name = COALESCE(VALUES(display_name), display_name),
                     push_name = COALESCE(VALUES(push_name), push_name),
                     lid = COALESCE(VALUES(lid), lid),
                     phone_number = COALESCE(VALUES(phone_number), phone_number),
+                    username = COALESCE(VALUES(username), username),
                     last_updated_ms = VALUES(last_updated_ms)`,
                 params
             )
@@ -89,7 +93,7 @@ export class WaContactMysqlStore extends BaseMysqlStore implements WaContactStor
         const row = queryFirst(
             await this.pool.execute(
                 `SELECT jid, display_name, push_name, lid,
-                    phone_number, last_updated_ms
+                    phone_number, username, last_updated_ms
              FROM ${this.t('mailbox_contacts')}
              WHERE session_id = ? AND jid = ?`,
                 [this.sessionId, jid]
@@ -107,7 +111,7 @@ export class WaContactMysqlStore extends BaseMysqlStore implements WaContactStor
         const row = queryFirst(
             await this.pool.execute(
                 `SELECT jid, display_name, push_name, lid,
-                    phone_number, last_updated_ms
+                    phone_number, username, last_updated_ms
              FROM ${this.t('mailbox_contacts')}
              WHERE session_id = ? AND phone_number = ?
              LIMIT 1`,
@@ -124,6 +128,7 @@ export class WaContactMysqlStore extends BaseMysqlStore implements WaContactStor
             pushName: (row.push_name as string | null) ?? undefined,
             lid: (row.lid as string | null) ?? undefined,
             phoneNumber: (row.phone_number as string | null) ?? undefined,
+            username: (row.username as string | null) ?? undefined,
             lastUpdatedMs: Number(row.last_updated_ms)
         }
     }

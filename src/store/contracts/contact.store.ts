@@ -4,6 +4,8 @@ export interface WaStoredContactRecord {
     readonly pushName?: string
     readonly lid?: string
     readonly phoneNumber?: string
+    /** Username handle, without the display-only `@`. */
+    readonly username?: string
     readonly lastUpdatedMs: number
 }
 

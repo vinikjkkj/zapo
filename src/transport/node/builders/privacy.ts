@@ -77,6 +77,8 @@ export interface WaPrivacyDisallowedListEntry {
     readonly action: WaPrivacyListAction
     readonly lidJid: string | null
     readonly pnJid: string | null
+    /** Accepted in place of `pn_jid` for a migrated contact. */
+    readonly username?: string | null
 }
 
 /**
@@ -124,6 +126,9 @@ function buildDisallowedListUserAttrs(
     lidAddressing: boolean
 ): Record<string, string> {
     if (lidAddressing && entry.lidJid !== null) {
+        if (entry.username) {
+            return { action: entry.action, jid: entry.lidJid, username: entry.username }
+        }
         return entry.pnJid !== null
             ? { action: entry.action, jid: entry.lidJid, pn_jid: entry.pnJid }
             : { action: entry.action, jid: entry.lidJid }
@@ -142,27 +147,50 @@ export function buildGetBlocklistIq(): BinaryNode {
 /**
  * Blocklist target in both addressing forms. At least one side is always
  * present: LID-migrated accounts carry `lidJid` (plus `pnJid` when known),
- * non-migrated accounts carry only `pnJid`.
+ * non-migrated accounts carry only `pnJid`. `username` / `displayName` come
+ * from the stored contact record.
  */
-export type WaBlocklistTarget =
+export type WaBlocklistTarget = (
     | { readonly lidJid: string; readonly pnJid: string | null }
     | { readonly lidJid: null; readonly pnJid: string }
+) & {
+    readonly username?: string | null
+    readonly displayName?: string | null
+}
+
+/**
+ * The one identifier attribute a migrated block carries next to `jid`, in
+ * wa-web's precedence. It splits the display name in two - a saved-contact
+ * name decides the username/pn flip, a separate LID display name is the
+ * fallback identifier - while the record here has a single `displayName`
+ * filling both roles.
+ */
+function resolveBlocklistIdentifierAttrs(target: WaBlocklistTarget): Record<string, string> {
+    const { pnJid, username, displayName } = target
+    if (pnJid && username) {
+        return displayName ? { pn_jid: pnJid } : { username }
+    }
+    if (username) return { username }
+    if (pnJid) return { pn_jid: pnJid }
+    if (displayName) return { display_name: displayName }
+    return { unknown_identifier: 'true' }
+}
 
 /**
  * Builds the blocklist `set` IQ for a block action. LID-migrated targets are
- * addressed by the LID jid plus an identifier attribute: `pn_jid` when the
- * phone jid is known, else `unknown_identifier="true"`. Non-migrated targets
- * are addressed by the phone jid alone. The server rejects a block that
- * addresses a migrated account by phone jid or omits the identifier
- * (`400: bad-request`).
+ * addressed by the LID jid plus one identifier attribute (see
+ * {@link resolveBlocklistIdentifierAttrs}). Non-migrated targets are addressed
+ * by the phone jid alone. The server rejects a block that addresses a migrated
+ * account by phone jid or omits the identifier (`400: bad-request`).
  */
 export function buildBlocklistBlockIq(target: WaBlocklistTarget): BinaryNode {
     let attrs: Record<string, string>
     if (target.lidJid !== null) {
-        attrs =
-            target.pnJid !== null
-                ? { action: 'block', jid: target.lidJid, pn_jid: target.pnJid }
-                : { action: 'block', jid: target.lidJid, unknown_identifier: 'true' }
+        attrs = {
+            action: 'block',
+            jid: target.lidJid,
+            ...resolveBlocklistIdentifierAttrs(target)
+        }
     } else {
         attrs = { action: 'block', jid: target.pnJid }
     }

@@ -5,6 +5,8 @@ import { createPrivacyCoordinator } from '@client/coordinators/WaPrivacyCoordina
 import { createNoopLogger } from '@infra/log/types'
 import { WA_DEFAULTS, WA_PRIVACY_CATEGORIES, WA_PRIVACY_TAGS } from '@protocol/constants'
 import type { SignalUserJidPair } from '@signal/api/SignalDeviceSyncApi'
+import type { WaContactStore } from '@store/contracts/contact.store'
+import { WaContactMemoryStore } from '@store/memory/contact.store'
 import type { BinaryNode } from '@transport/types'
 
 function createIqResult(content?: readonly BinaryNode[]): BinaryNode {
@@ -17,10 +19,13 @@ function createIqResult(content?: readonly BinaryNode[]): BinaryNode {
 
 function createBlocklistDeps(
     resolveUserJidPair?: (userJid: string) => Promise<SignalUserJidPair>,
-    selfLid: string | null = null
+    selfLid: string | null = null,
+    contactStore: WaContactStore = new WaContactMemoryStore()
 ) {
     return {
         logger: createNoopLogger(),
+        contactStore,
+        isUsernamePrivacyListIdentifierEnabled: () => true,
         resolveUserJidPair:
             resolveUserJidPair ??
             (async (userJid: string): Promise<SignalUserJidPair> =>
@@ -144,6 +149,7 @@ test('privacy coordinator maps setting/category for set and disallowed list quer
 
     assert.deepEqual(disallowed, {
         jids: ['a@s.whatsapp.net', 'b@s.whatsapp.net'],
+        entries: [{ jid: 'a@s.whatsapp.net' }, { jid: 'b@s.whatsapp.net' }],
         dhash: 'dhash-1'
     })
 
@@ -218,6 +224,7 @@ test('privacy coordinator parses blocklist and sends block/unblock actions', asy
 
     assert.deepEqual(blocklist, {
         jids: ['x@s.whatsapp.net', 'y@s.whatsapp.net'],
+        entries: [{ jid: 'x@s.whatsapp.net' }, { jid: 'y@s.whatsapp.net' }],
         dhash: 'block-hash'
     })
     assert.equal(calls.length, 3)
@@ -318,7 +325,12 @@ test('privacy coordinator refresh returns the settings plus only the reported li
 
     assert.deepEqual(result.settings, { pix: 'contacts' })
     assert.deepEqual(result.disallowedLists, [
-        { setting: 'lastSeen', jids: ['a@s.whatsapp.net'], dhash: 'list-hash' }
+        {
+            setting: 'lastSeen',
+            jids: ['a@s.whatsapp.net'],
+            entries: [{ jid: 'a@s.whatsapp.net' }],
+            dhash: 'list-hash'
+        }
     ])
     assert.deepEqual(
         categories.sort(),
@@ -623,4 +635,38 @@ test('privacy coordinator resolves lid addressing for block/unblock', async () =
     await assert.rejects(() => rejecting.blockUser('123-456@g.us'), {
         message: /blocklist target must be a user jid/
     })
+})
+
+test('disallowed-list username identifier is gated by its ab prop', async () => {
+    const contactStore = new WaContactMemoryStore()
+    await contactStore.upsert({
+        jid: '88880000@lid',
+        username: 'joao',
+        lastUpdatedMs: Date.now()
+    })
+    const resolveUserJidPair = async (): Promise<SignalUserJidPair> => ({
+        lidJid: '88880000@lid',
+        pnJid: null
+    })
+
+    const runWithGate = async (enabled: boolean): Promise<BinaryNode> => {
+        const nodes: BinaryNode[] = []
+        const coordinator = createPrivacyCoordinator({
+            ...createBlocklistDeps(resolveUserJidPair, '99990000@lid', contactStore),
+            isUsernamePrivacyListIdentifierEnabled: () => enabled,
+            queryWithContext: async (_context, node) => {
+                nodes.push(node)
+                return createIqResult()
+            }
+        })
+        await coordinator.setDisallowedList('lastSeen', { add: ['88880000@lid'] })
+        const privacyNode = nodes[1].content as readonly BinaryNode[]
+        const categoryNode = privacyNode[0].content as readonly BinaryNode[]
+        return (categoryNode[0].content as readonly BinaryNode[])[0]
+    }
+
+    assert.equal((await runWithGate(true)).attrs.username, 'joao')
+    const gated = await runWithGate(false)
+    assert.equal(gated.attrs.username, undefined)
+    assert.equal(gated.attrs.jid, '88880000@lid')
 })

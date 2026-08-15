@@ -671,3 +671,98 @@ test('the payload is only built when the hook asks for it', async () => {
     assert.notEqual(built[0]?.plaintext, built[1]?.plaintext, 'each call copies')
     assert.deepEqual(built[0]?.plaintext, built[1]?.plaintext, 'to the same bytes')
 })
+
+test('incoming 1:1 message exposes the sender username handle', async () => {
+    const emitted: WaIncomingMessageEvent[] = []
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-un',
+                from: '5511999999999:12@s.whatsapp.net',
+                username: '@joao',
+                t: '123'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        createDecryptingOptions(emitted)
+    )
+
+    assert.equal(emitted.length, 1)
+    assert.equal(emitted[0].key.senderUsername, 'joao')
+    assert.equal(emitted[0].key.recipientUsername, undefined)
+})
+
+test('group message prefers participant_username as the sender handle', async () => {
+    const emitted: WaIncomingMessageEvent[] = []
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-grp-un',
+                from: '123456@g.us',
+                participant: '5511999999999:3@s.whatsapp.net',
+                username: 'ignored',
+                participant_username: 'joao',
+                t: '123'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        createDecryptingOptions(emitted)
+    )
+
+    assert.equal(emitted.length, 1)
+    assert.equal(emitted[0].key.senderUsername, 'joao')
+})
+
+test('self-sent 1:1 message carries the peer handle, not the own one', async () => {
+    const emitted: WaIncomingMessageEvent[] = []
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-self-un',
+                from: '5511999999999:12@s.whatsapp.net',
+                recipient: '5511888888888@s.whatsapp.net',
+                username: 'me.handle',
+                peer_recipient_username: 'joao',
+                t: '123'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        createDecryptingOptions(emitted, {
+            getMeJid: () => '5511999999999:2@s.whatsapp.net'
+        })
+    )
+
+    assert.equal(emitted.length, 1)
+    const { key } = emitted[0]
+    assert.equal(key.fromMe, true)
+    assert.equal(key.remoteJid, '5511888888888@s.whatsapp.net')
+    assert.equal(key.recipientUsername, 'joao')
+    assert.equal(
+        key.senderUsername,
+        undefined,
+        'the own handle must not be promoted onto the peer-addressed key'
+    )
+})
+
+test('recipient_username wins over peer_recipient_username when both are present', async () => {
+    const emitted: WaIncomingMessageEvent[] = []
+    await handleIncomingMessageAck(
+        {
+            tag: 'message',
+            attrs: {
+                id: 'msg-rec-un',
+                from: '5511999999999:12@s.whatsapp.net',
+                recipient_username: 'primary',
+                peer_recipient_username: 'fallback',
+                t: '123'
+            },
+            content: [{ tag: 'enc', attrs: { type: 'msg' }, content: new Uint8Array([1]) }]
+        },
+        createDecryptingOptions(emitted)
+    )
+
+    assert.equal(emitted[0].key.recipientUsername, 'primary')
+})

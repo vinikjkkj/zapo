@@ -394,6 +394,14 @@ const MIGRATIONS: readonly Migration[] = [
                 KEY chat_metadata_cache_by_expiry (session_id, expires_at_ms)
             )
         `
+    },
+    {
+        name: '0021_mailbox_contacts_username',
+        domain: 'mailbox',
+        sql: `
+            ALTER TABLE \`__PREFIX__mailbox_contacts\`
+                ADD COLUMN username VARCHAR(255)
+        `
     }
 ]
 

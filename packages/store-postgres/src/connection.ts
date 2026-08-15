@@ -400,6 +400,13 @@ const MIGRATIONS: readonly Migration[] = [
             CREATE INDEX IF NOT EXISTS "__PREFIX__idx_chat_metadata_cache_expires"
                 ON "__PREFIX__chat_metadata_cache" (session_id, expires_at_ms);
         `
+    },
+    {
+        name: '0021_mailbox_contacts_username',
+        domain: 'mailbox',
+        sql: `
+            ALTER TABLE "__PREFIX__mailbox_contacts" ADD COLUMN IF NOT EXISTS username TEXT
+        `
     }
 ]
 

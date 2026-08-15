@@ -77,6 +77,7 @@ export type {
     WaOfflineThreadPreview,
     WaOfflineThreadReadWatermark,
     WaOutgoingMessageEvent,
+    WaOwnUsernameNotificationEvent,
     WaPictureEvent,
     WaPictureEventAction,
     WaPrivacyTokenUpdateEvent,
@@ -206,6 +207,7 @@ export type {
 export type {
     WaBlocklistResult,
     WaPrivacyDisallowedListResult,
+    WaPrivacyListEntry,
     WaPrivacySettings
 } from '@client/events/privacy'
 export type {
@@ -215,9 +217,11 @@ export type {
     WaProfileInfo,
     WaProfilePictureResult,
     WaProfileStatusResult,
+    WaResolveUsernameInput,
     WaSetTextStatusInput,
     WaSetUsernameInput,
     WaTextStatusResult,
+    WaUsernameLookupResult,
     WaUsernameResult
 } from '@client/coordinators/WaProfileCoordinator'
 export type { WaProfilePictureType } from '@transport/node/builders/profile'

@@ -8,6 +8,7 @@ import {
     type WaPrivacySettingValueMap,
     type WaPrivacyValue
 } from '@protocol/privacy'
+import { normalizeUsername } from '@protocol/username'
 import { findNodeChild, getNodeChildren, getNodeChildrenByTag } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 
@@ -20,16 +21,50 @@ export type WaPrivacySettings = {
     readonly [K in WaPrivacySettingName]?: WaPrivacySettingValueMap[K]
 }
 
+/** `username` is set only when the server identified the entry that way. */
+export interface WaPrivacyListEntry {
+    readonly jid: string
+    readonly username?: string
+}
+
 /** Per-category deny-list (the JIDs excluded from a `contact_blacklist` setting). */
 export interface WaPrivacyDisallowedListResult {
     readonly jids: readonly string[]
+    /** Same membership as {@link jids}, with the per-entry handles. */
+    readonly entries: readonly WaPrivacyListEntry[]
     readonly dhash?: string
 }
 
 /** Account-wide blocklist. The server always sends the full list, never a delta. */
 export interface WaBlocklistResult {
     readonly jids: readonly string[]
+    /** Same membership as {@link jids}, with the per-entry handles. */
+    readonly entries: readonly WaPrivacyListEntry[]
     readonly dhash?: string
+}
+
+function parsePrivacyListEntries(nodes: readonly BinaryNode[]): readonly WaPrivacyListEntry[] {
+    const entries = new Array<WaPrivacyListEntry>(nodes.length)
+    let count = 0
+    for (let i = 0; i < nodes.length; i += 1) {
+        const attrs = nodes[i].attrs
+        const jid = attrs.jid as string | undefined
+        if (!jid) continue
+        const username = attrs.username as string | undefined
+        entries[count] =
+            username !== undefined ? { jid, username: normalizeUsername(username) } : { jid }
+        count += 1
+    }
+    entries.length = count
+    return entries
+}
+
+function toJids(entries: readonly WaPrivacyListEntry[]): readonly string[] {
+    const jids = new Array<string>(entries.length)
+    for (let i = 0; i < entries.length; i += 1) {
+        jids[i] = entries[i].jid
+    }
+    return jids
 }
 
 /**
@@ -131,20 +166,8 @@ export function parseDisallowedListUpdate(
     }
 
     const dhash = listNode.attrs.dhash as string | undefined
-    const userNodes = getNodeChildrenByTag(listNode, WA_PRIVACY_TAGS.USER)
-    const jids = new Array<string>(userNodes.length)
-    let jidsCount = 0
-
-    for (let i = 0; i < userNodes.length; i += 1) {
-        const jid = userNodes[i].attrs.jid as string | undefined
-        if (jid) {
-            jids[jidsCount] = jid
-            jidsCount += 1
-        }
-    }
-    jids.length = jidsCount
-
-    return { jids, dhash }
+    const entries = parsePrivacyListEntries(getNodeChildrenByTag(listNode, WA_PRIVACY_TAGS.USER))
+    return { jids: toJids(entries), entries, dhash }
 }
 
 /**
@@ -153,29 +176,17 @@ export function parseDisallowedListUpdate(
  * membership.
  */
 export function parseDisallowedList(result: BinaryNode): WaPrivacyDisallowedListResult {
-    return parseDisallowedListUpdate(result) ?? { jids: [] }
+    return parseDisallowedListUpdate(result) ?? { jids: [], entries: [] }
 }
 
 /** Parses the `<list>` payload of a blocklist `get` IQ result. */
 export function parseBlocklist(result: BinaryNode): WaBlocklistResult {
     const listNode = findNodeChild(result, WA_NODE_TAGS.LIST)
     if (!listNode) {
-        return { jids: [] }
+        return { jids: [], entries: [] }
     }
 
     const dhash = listNode.attrs.dhash as string | undefined
-    const itemNodes = getNodeChildren(listNode)
-    const jids = new Array<string>(itemNodes.length)
-    let jidsCount = 0
-
-    for (let i = 0; i < itemNodes.length; i += 1) {
-        const jid = itemNodes[i].attrs.jid as string | undefined
-        if (jid) {
-            jids[jidsCount] = jid
-            jidsCount += 1
-        }
-    }
-    jids.length = jidsCount
-
-    return { jids, dhash }
+    const entries = parsePrivacyListEntries(getNodeChildren(listNode))
+    return { jids: toJids(entries), entries, dhash }
 }

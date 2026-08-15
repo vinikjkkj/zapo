@@ -63,6 +63,7 @@ import { DEVICE_NOTIFICATION_ACTIONS, parseDeviceNotification } from '@client/ev
 import { handleDirtyBits, parseDirtyBits } from '@client/events/dirty'
 import { parseIdentityChangeNotification } from '@client/events/identity'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
+import { parseOwnUsernameNotification } from '@client/events/username'
 import { createDeviceFanoutResolver } from '@client/messaging/fanout'
 import { createGroupMetadataCache } from '@client/messaging/group-metadata'
 import { createAppStateSyncKeyProtocol } from '@client/messaging/key-protocol'
@@ -674,6 +675,11 @@ export function buildWaClientDependencies(input: {
 
     const privacyCoordinator = createPrivacyCoordinator({
         logger,
+        contactStore: sessionStore.contacts,
+        isUsernamePrivacyListIdentifierEnabled: () =>
+            abPropsCoordinator.getConfigValue<boolean>(
+                'username_contact_privacy_setting_allow_uncontact_set_enable'
+            ),
         queryWithContext: runtime.queryWithContext,
         resolveUserJidPair: (userJid) => signalDeviceSync.resolveUserJidPair(userJid),
         getSelfLid: () => getCurrentCredentials()?.meLid ?? null,
@@ -1318,6 +1324,10 @@ export function buildWaClientDependencies(input: {
         handler: async (node) => {
             if (findNodeChild(node, WA_NODE_TAGS.PRIVACY)) {
                 privacyCoordinator.scheduleAccountSyncRefresh()
+            }
+            const usernameEvent = parseOwnUsernameNotification(node)
+            if (usernameEvent) {
+                runtime.emitEvent('own_username', usernameEvent)
             }
             return false
         }

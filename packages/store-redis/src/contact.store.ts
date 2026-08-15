@@ -12,6 +12,7 @@ function hashToRecord(data: Record<string, string>): WaStoredContactRecord {
         pushName: toStringOrNull(data.push_name) ?? undefined,
         lid: toStringOrNull(data.lid) ?? undefined,
         phoneNumber: toStringOrNull(data.phone_number) ?? undefined,
+        username: toStringOrNull(data.username) ?? undefined,
         lastUpdatedMs: Number(data.last_updated_ms)
     }
 }
@@ -33,6 +34,9 @@ function recordToHash(record: WaStoredContactRecord): Record<string, string> {
     }
     if (record.phoneNumber !== undefined) {
         fields.phone_number = record.phoneNumber
+    }
+    if (record.username !== undefined) {
+        fields.username = record.username
     }
 
     return fields

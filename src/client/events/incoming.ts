@@ -33,6 +33,7 @@ import {
 } from '@protocol/constants'
 import { isLidJid, normalizeDeviceJid, toUserJid } from '@protocol/jid'
 import type { WaConnectionCode, WaDisconnectReason } from '@protocol/stream'
+import { normalizeUsername } from '@protocol/username'
 import { buildAckNode, buildReceiptNode } from '@transport/node/builders/global'
 import { getFirstNodeChild, getNodeChildrenNonEmptyAttrValuesByTag } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
@@ -289,6 +290,9 @@ export function createIncomingReceiptHandler(
                 status: mapped.status,
                 fromSelfDevice: mapped.fromSelfDevice,
                 participantJid: node.attrs.participant,
+                ...(node.attrs.participant_username !== undefined
+                    ? { participantUsername: normalizeUsername(node.attrs.participant_username) }
+                    : {}),
                 recipientJid: node.attrs.recipient,
                 messageIds: extractReceiptIds(node)
             })

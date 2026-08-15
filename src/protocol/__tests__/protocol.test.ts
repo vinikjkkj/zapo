@@ -46,6 +46,16 @@ import type {
     WaPrivacyDisallowedListSettingName,
     WaPrivacySettingValueMap
 } from '@protocol/privacy'
+import {
+    displayUsername,
+    isUsernameKey,
+    normalizeUsername,
+    parseUsernameHandle,
+    splitUsernameHandle,
+    validateUsernameLocally,
+    WA_USERNAME_LIMITS,
+    WA_USERNAME_VALIDATION_ERRORS
+} from '@protocol/username'
 import { TEXT_DECODER } from '@util/bytes'
 
 test('canonicalizeOwnAccountJid maps own PN device JIDs to LID', () => {
@@ -320,4 +330,70 @@ test('deprecated AB_PROP_CONFIGS view still exposes configCode over the spec tab
         Object.keys(WA_ABPROPS).sort(),
         'the compatibility view must cover the whole catalogue'
     )
+})
+
+test('username validation applies the wa-web rule order', () => {
+    assert.deepEqual(validateUsernameLocally('joao.silva_1'), { isValid: true })
+    assert.deepEqual(validateUsernameLocally('jo ao'), {
+        isValid: false,
+        errorType: WA_USERNAME_VALIDATION_ERRORS.INVALID_CHARACTER
+    })
+    assert.deepEqual(validateUsernameLocally('ab'), {
+        isValid: false,
+        errorType: WA_USERNAME_VALIDATION_ERRORS.INVALID_LENGTH
+    })
+    assert.deepEqual(validateUsernameLocally('a'.repeat(WA_USERNAME_LIMITS.MAX_LENGTH + 1)), {
+        isValid: false,
+        errorType: WA_USERNAME_VALIDATION_ERRORS.INVALID_LENGTH
+    })
+    assert.deepEqual(validateUsernameLocally('1234'), {
+        isValid: false,
+        errorType: WA_USERNAME_VALIDATION_ERRORS.INVALID_NO_LETTERS
+    })
+    assert.deepEqual(validateUsernameLocally('.joao'), {
+        isValid: false,
+        errorType: WA_USERNAME_VALIDATION_ERRORS.INVALID_PERIODS
+    })
+    assert.deepEqual(validateUsernameLocally('joao.'), {
+        isValid: false,
+        errorType: WA_USERNAME_VALIDATION_ERRORS.INVALID_PERIODS
+    })
+    assert.deepEqual(validateUsernameLocally('jo..ao'), {
+        isValid: false,
+        errorType: WA_USERNAME_VALIDATION_ERRORS.INVALID_PERIODS
+    })
+    assert.deepEqual(validateUsernameLocally('www.joao'), {
+        isValid: false,
+        errorType: WA_USERNAME_VALIDATION_ERRORS.INVALID_WWW_PREFIX
+    })
+    assert.deepEqual(validateUsernameLocally('joao.com'), {
+        isValid: false,
+        errorType: WA_USERNAME_VALIDATION_ERRORS.INVALID_DOMAIN_SUFFIX
+    })
+    assert.deepEqual(validateUsernameLocally('myWhatsAppName'), {
+        isValid: false,
+        errorType: WA_USERNAME_VALIDATION_ERRORS.INVALID_WORD
+    })
+})
+
+test('username key and handle parsing', () => {
+    assert.equal(isUsernameKey('1234'), true)
+    assert.equal(isUsernameKey('123'), false)
+    assert.equal(isUsernameKey('12a4'), false)
+    assert.equal(normalizeUsername('@joao'), 'joao')
+    assert.equal(normalizeUsername('joao'), 'joao')
+    assert.equal(displayUsername('joao'), '@joao')
+
+    assert.deepEqual(parseUsernameHandle('@joao'), { username: 'joao', usernameKey: null })
+    assert.deepEqual(parseUsernameHandle('  joao  '), { username: 'joao', usernameKey: null })
+    assert.deepEqual(parseUsernameHandle('@joao:1234'), { username: 'joao', usernameKey: '1234' })
+    assert.equal(parseUsernameHandle('@joao:12'), null)
+    assert.equal(parseUsernameHandle('@ab'), null)
+    assert.equal(parseUsernameHandle('   '), null)
+})
+
+test('splitUsernameHandle separates the parts without validating them', () => {
+    assert.deepEqual(splitUsernameHandle('@joao:1234'), { username: 'joao', usernameKey: '1234' })
+    assert.deepEqual(splitUsernameHandle('  @ab:x  '), { username: 'ab', usernameKey: 'x' })
+    assert.deepEqual(splitUsernameHandle('joao'), { username: 'joao', usernameKey: null })
 })

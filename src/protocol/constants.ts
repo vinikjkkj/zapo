@@ -136,6 +136,22 @@ export {
 } from '@protocol/group'
 export { WA_USYNC_CONTEXTS, WA_USYNC_DEFAULTS, WA_USYNC_MODES } from '@protocol/usync'
 export {
+    displayUsername,
+    isUsernameKey,
+    isValidUsername,
+    normalizeUsername,
+    parseUsernameHandle,
+    splitUsernameHandle,
+    validateUsernameLocally,
+    WA_USERNAME_LIMITS,
+    WA_USERNAME_VALIDATION_ERRORS
+} from '@protocol/username'
+export type {
+    ParsedUsernameHandle,
+    WaUsernameValidation,
+    WaUsernameValidationError
+} from '@protocol/username'
+export {
     WA_NEWSLETTER_FETCH_KEY_TYPES,
     WA_NEWSLETTER_MUTE_TYPES,
     WA_NEWSLETTER_MUTE_VALUES,

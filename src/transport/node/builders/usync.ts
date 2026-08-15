@@ -16,7 +16,8 @@ export type WaUsyncMode = (typeof WA_USYNC_MODES)[keyof typeof WA_USYNC_MODES]
 export type WaUsyncContext = (typeof WA_USYNC_CONTEXTS)[keyof typeof WA_USYNC_CONTEXTS]
 
 export interface BuildUsyncUserNodeInput {
-    readonly jid: string
+    /** Omitted only by username lookups, which identify by handle instead. */
+    readonly jid?: string
     readonly attrs?: Readonly<Record<string, string>>
     readonly content?: BinaryNode['content']
 }
@@ -37,7 +38,7 @@ export function buildUsyncUserNode(input: BuildUsyncUserNodeInput): BinaryNode {
         tag: WA_NODE_TAGS.USER,
         attrs: {
             ...input.attrs,
-            jid: input.jid
+            ...(input.jid !== undefined ? { jid: input.jid } : {})
         },
         ...(input.content !== undefined ? { content: input.content } : {})
     }

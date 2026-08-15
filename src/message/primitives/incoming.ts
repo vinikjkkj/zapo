@@ -24,6 +24,7 @@ import {
     parseSignalAddressFromJid,
     toUserJid
 } from '@protocol/jid'
+import { normalizeUsername } from '@protocol/username'
 import type { WaRetryDecryptFailureContext } from '@retry/types'
 import type { SenderKeyManager } from '@signal/group/SenderKeyManager'
 import type { SignalProtocol } from '@signal/session/SignalProtocol'
@@ -62,6 +63,7 @@ interface MessageIdentityAttrs {
     readonly senderUsername?: string
     readonly recipientJid?: string
     readonly recipientAlt?: string
+    readonly recipientUsername?: string
     readonly pushName: string | undefined
 }
 
@@ -74,13 +76,19 @@ function extractMessageIdentityAttrs(attrs: BinaryNode['attrs']): MessageIdentit
     const rawParticipantAlt = attrs.participant_pn ?? attrs.participant_lid
     const rawRecipientAlt = attrs.peer_recipient_pn ?? attrs.peer_recipient_lid
     const rawRecipient = attrs.recipient
-    const senderUsername = attrs.participant_username ?? attrs.username
+    const rawSenderUsername = attrs.participant_username ?? attrs.username
+    const rawRecipientUsername = attrs.recipient_username ?? attrs.peer_recipient_username
+    const senderUsername =
+        rawSenderUsername !== undefined ? normalizeUsername(rawSenderUsername) : undefined
+    const recipientUsername =
+        rawRecipientUsername !== undefined ? normalizeUsername(rawRecipientUsername) : undefined
     return {
         ...(rawRemoteJidAlt ? { remoteJidAlt: toUserJid(rawRemoteJidAlt) } : {}),
         ...(rawParticipantAlt ? { participantAlt: toUserJid(rawParticipantAlt) } : {}),
         ...(senderUsername !== undefined ? { senderUsername } : {}),
         ...(rawRecipient ? { recipientJid: toUserJid(rawRecipient) } : {}),
         ...(rawRecipientAlt ? { recipientAlt: toUserJid(rawRecipientAlt) } : {}),
+        ...(recipientUsername !== undefined ? { recipientUsername } : {}),
         pushName: attrs.notify
     }
 }
@@ -94,12 +102,13 @@ type MessageKeyIdentity = Omit<MessageIdentityAttrs, 'pushName'>
  * whenever the stanza is self-authored 1:1, even when the chat itself did not
  * resolve: the sender attrs always describe the own account there, so letting
  * them through would address the message to the connection's own number.
+ * `senderUsername` goes with them; the peer's is in `recipientUsername`.
  */
 function promoteRecipientAddressing(identity: MessageKeyIdentity): MessageKeyIdentity {
     return {
         ...(identity.recipientAlt ? { remoteJidAlt: identity.recipientAlt } : {}),
-        ...(identity.senderUsername !== undefined
-            ? { senderUsername: identity.senderUsername }
+        ...(identity.recipientUsername !== undefined
+            ? { recipientUsername: identity.recipientUsername }
             : {})
     }
 }

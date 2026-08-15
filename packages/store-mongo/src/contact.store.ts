@@ -12,6 +12,7 @@ interface ContactDoc {
     push_name: string | null
     lid: string | null
     phone_number: string | null
+    username: string | null
     last_updated_ms: number
 }
 
@@ -22,6 +23,7 @@ function docToRecord(doc: ContactDoc): WaStoredContactRecord {
         pushName: doc.push_name ?? undefined,
         lid: doc.lid ?? undefined,
         phoneNumber: doc.phone_number ?? undefined,
+        username: doc.username ?? undefined,
         lastUpdatedMs: doc.last_updated_ms
     }
 }
@@ -34,6 +36,7 @@ function buildCoalesceSet(record: WaStoredContactRecord): Partial<ContactDoc> {
     if (record.pushName !== undefined) set.push_name = record.pushName
     if (record.lid !== undefined) set.lid = record.lid
     if (record.phoneNumber !== undefined) set.phone_number = record.phoneNumber
+    if (record.username !== undefined) set.username = record.username
     return set
 }
 

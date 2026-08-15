@@ -89,13 +89,18 @@ import {
     buildPrivacyTokenIqNode,
     buildTcTokenMessageNode
 } from '@transport/node/builders/privacy-token'
-import { buildSetDisappearingModeIq } from '@transport/node/builders/profile'
+import {
+    buildSetDisappearingModeIq,
+    buildUsernameLookupContactNode,
+    buildUsernameLookupUsyncQueryNodes
+} from '@transport/node/builders/profile'
 import { buildRetryReceiptNode } from '@transport/node/builders/retry'
 import {
     buildUsyncIq,
     buildUsyncUserNode,
     parseUsyncResultEnvelope
 } from '@transport/node/builders/usync'
+import { findNodeChild } from '@transport/node/helpers'
 import type { BinaryNode } from '@transport/types'
 
 test('presence and offline builders generate expected lightweight nodes', () => {
@@ -2034,4 +2039,130 @@ test('buildEditBusinessProfileIq encodes business hours and rejects unknown mode
             }),
         /invalid business hours mode/
     )
+})
+
+test('username lookup usync builds a jid-less user with the contact identifier', () => {
+    const queryNodes = buildUsernameLookupUsyncQueryNodes()
+    assert.deepEqual(
+        queryNodes.map((node) => node.tag),
+        ['contact', 'business']
+    )
+    assert.equal(queryNodes[0].attrs.addressing_mode, 'lid')
+
+    const iq = buildUsyncIq({
+        sid: 'sid-1',
+        queryProtocolNodes: queryNodes,
+        users: [
+            {
+                content: [
+                    buildUsernameLookupContactNode({
+                        username: 'joao',
+                        usernameKey: '1234'
+                    })
+                ]
+            }
+        ]
+    })
+    const usyncNode = findNodeChild(iq, 'usync')
+    const listNode = usyncNode ? findNodeChild(usyncNode, 'list') : undefined
+    assert.ok(listNode && Array.isArray(listNode.content))
+    if (!listNode || !Array.isArray(listNode.content)) {
+        throw new Error('expected usync list content array')
+    }
+    const userNode = listNode.content[0]
+    assert.equal(userNode.attrs.jid, undefined)
+    if (!Array.isArray(userNode.content)) {
+        throw new Error('expected user content array')
+    }
+    assert.deepEqual(userNode.content[0], {
+        tag: 'contact',
+        attrs: { username: 'joao', pin: '1234' }
+    })
+
+    const withoutKey = buildUsernameLookupContactNode({ username: 'joao' })
+    assert.deepEqual(withoutKey.attrs, { username: 'joao' })
+})
+
+test('blocklist block picks one identifier per wa-web precedence', () => {
+    const readItemAttrs = (node: { content?: unknown }): Record<string, string> => {
+        if (!Array.isArray(node.content)) {
+            throw new Error('expected blocklist item content array')
+        }
+        return node.content[0].attrs
+    }
+
+    assert.deepEqual(
+        readItemAttrs(
+            buildBlocklistBlockIq({
+                lidJid: '88880000@lid',
+                pnJid: '5511999999999@s.whatsapp.net',
+                username: 'joao',
+                displayName: null
+            })
+        ),
+        { action: 'block', jid: '88880000@lid', username: 'joao' }
+    )
+    assert.deepEqual(
+        readItemAttrs(
+            buildBlocklistBlockIq({
+                lidJid: '88880000@lid',
+                pnJid: '5511999999999@s.whatsapp.net',
+                username: 'joao',
+                displayName: 'Joao'
+            })
+        ),
+        { action: 'block', jid: '88880000@lid', pn_jid: '5511999999999@s.whatsapp.net' }
+    )
+    assert.deepEqual(
+        readItemAttrs(
+            buildBlocklistBlockIq({ lidJid: '88880000@lid', pnJid: null, username: 'joao' })
+        ),
+        { action: 'block', jid: '88880000@lid', username: 'joao' }
+    )
+    assert.deepEqual(
+        readItemAttrs(
+            buildBlocklistBlockIq({
+                lidJid: '88880000@lid',
+                pnJid: null,
+                username: null,
+                displayName: 'Joao'
+            })
+        ),
+        { action: 'block', jid: '88880000@lid', display_name: 'Joao' }
+    )
+    assert.deepEqual(
+        readItemAttrs(buildBlocklistBlockIq({ lidJid: '88880000@lid', pnJid: null })),
+        { action: 'block', jid: '88880000@lid', unknown_identifier: 'true' }
+    )
+})
+
+test('disallowed-list entries prefer the username identifier under lid addressing', () => {
+    const iq = buildSetPrivacyDisallowedListIq(
+        WA_PRIVACY_CATEGORIES.LAST_SEEN,
+        [
+            {
+                action: 'add',
+                lidJid: '88880000@lid',
+                pnJid: '5511999999999@s.whatsapp.net',
+                username: 'joao'
+            },
+            { action: 'remove', lidJid: '88881111@lid', pnJid: null, username: null }
+        ],
+        'dhash-1',
+        true
+    )
+    const privacyNode = findNodeChild(iq, 'privacy')
+    const categoryNode = privacyNode ? findNodeChild(privacyNode, 'category') : undefined
+    if (!categoryNode || !Array.isArray(categoryNode.content)) {
+        throw new Error('expected category content array')
+    }
+    assert.deepEqual(categoryNode.content[0].attrs, {
+        action: 'add',
+        jid: '88880000@lid',
+        username: 'joao'
+    })
+    assert.deepEqual(categoryNode.content[1].attrs, {
+        action: 'remove',
+        jid: '88881111@lid'
+    })
 })

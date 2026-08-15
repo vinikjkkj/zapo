@@ -14,6 +14,7 @@ import type { WaBlocklistResult } from '@client/events/privacy'
 import { parsePrivacyTokenNotification } from '@client/events/privacy-token'
 import { aggregateReceiptTargets, extractReceiptIds } from '@client/events/receipt'
 import { parseRegistrationNotification } from '@client/events/registration'
+import { parseOwnUsernameNotification } from '@client/events/username'
 import { createNoopLogger } from '@infra/log/types'
 import { proto } from '@proto'
 import {
@@ -1287,7 +1288,13 @@ test('account_sync dirty bit runs the privacy refresh and re-emits the blocklist
     )
 
     assert.equal(privacyRefreshes, 1)
-    assert.deepEqual(blocklists, [{ jids: ['x@s.whatsapp.net'], dhash: 'block-hash' }])
+    assert.deepEqual(blocklists, [
+        {
+            jids: ['x@s.whatsapp.net'],
+            entries: [{ jid: 'x@s.whatsapp.net' }],
+            dhash: 'block-hash'
+        }
+    ])
     assert.ok(contexts.includes('account_sync.blocklist'))
     assert.ok(contexts.includes('dirty.clear'))
 })
@@ -1358,4 +1365,38 @@ test('parseOfflineThreadMetadata tolerates a bare node', () => {
 
     assert.deepEqual(metadata.threads, [])
     assert.equal(metadata.readWatermarks, undefined)
+})
+
+test('account_sync username notification maps modify, set, and delete shapes', () => {
+    const build = (child: BinaryNode): BinaryNode => ({
+        tag: 'notification',
+        attrs: { id: 'n1', from: '5511999999999@s.whatsapp.net', type: 'account_sync' },
+        content: [child]
+    })
+
+    const set = parseOwnUsernameNotification(
+        build({ tag: 'username', attrs: { username: '@joao' } })
+    )
+    assert.equal(set?.kind, 'set')
+    assert.equal(set?.username, 'joao')
+
+    const modify = parseOwnUsernameNotification(
+        build({ tag: 'username', attrs: { action: 'modify' } })
+    )
+    assert.equal(modify?.kind, 'modify')
+    assert.equal(modify?.username, null)
+
+    const both = parseOwnUsernameNotification(
+        build({ tag: 'username', attrs: { action: 'modify', username: 'joao' } })
+    )
+    assert.equal(both?.kind, 'modify')
+
+    const deleted = parseOwnUsernameNotification(build({ tag: 'username', attrs: {} }))
+    assert.equal(deleted?.kind, 'delete')
+
+    assert.equal(
+        parseOwnUsernameNotification(build({ tag: 'privacy', attrs: {} })),
+        null,
+        'a notification without a username child is not a username change'
+    )
 })

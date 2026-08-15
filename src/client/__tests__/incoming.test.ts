@@ -13,6 +13,7 @@ import type {
     WaAccountTakeoverNoticeEvent,
     WaBusinessEvent,
     WaIncomingCallEvent,
+    WaIncomingReceiptEvent,
     WaIncomingUnhandledStanzaEvent,
     WaRegistrationCodeEvent
 } from '@client/types'
@@ -654,4 +655,34 @@ test('call handler emits event but sends nothing when call stanza lacks id or fr
     })
     assert.equal(emitted.length, 1)
     assert.equal(sent.length, 0)
+})
+
+test('receipt exposes the participant username handle without the @ prefix', async () => {
+    const events: WaIncomingReceiptEvent[] = []
+    const handler = createIncomingReceiptHandler({
+        logger: createNoopLogger(),
+        sendNode: async () => undefined,
+        emitIncomingReceipt: (event) => {
+            events.push(event)
+        }
+    })
+
+    await handler({
+        tag: 'receipt',
+        attrs: {
+            id: 'r1',
+            from: '123@g.us',
+            type: 'read',
+            participant: '88880000:2@lid',
+            participant_username: '@joao'
+        }
+    })
+    await handler({
+        tag: 'receipt',
+        attrs: { id: 'r2', from: '88880000@lid', type: 'read' }
+    })
+
+    assert.equal(events.length, 2)
+    assert.equal(events[0].participantUsername, 'joao')
+    assert.equal(events[1].participantUsername, undefined)
 })

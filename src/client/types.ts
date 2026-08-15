@@ -604,9 +604,15 @@ export interface WaIncomingMessageKey extends WaMessageKey {
     readonly participantAlt?: string
     /** Sender's device id — `0` when the source JID has no `:device` segment. */
     readonly senderDevice: number
+    /**
+     * Author's handle, without the `@`. Absent on self-authored 1:1 stanzas,
+     * where the counterpart's is {@link recipientUsername} instead.
+     */
     readonly senderUsername?: string
     readonly recipientJid?: string
     readonly recipientAlt?: string
+    /** Recipient's handle, without the `@`. */
+    readonly recipientUsername?: string
     /** Server-assigned message id (newsletters / channel messages). */
     readonly serverId?: number
 }
@@ -662,6 +668,8 @@ export interface WaIncomingReceiptEvent extends WaIncomingBaseEvent {
     /** True when the receipt came from another device of the current user (multi-device sync). */
     readonly fromSelfDevice: boolean
     readonly participantJid?: string
+    /** The participant's handle, without the `@`. */
+    readonly participantUsername?: string
     readonly recipientJid?: string
     /**
      * All message ids this receipt acknowledges. For batch read/delivery
@@ -670,6 +678,12 @@ export interface WaIncomingReceiptEvent extends WaIncomingBaseEvent {
      * `externalIds`.
      */
     readonly messageIds: readonly string[]
+}
+
+/** `username` is populated only for `kind: 'set'`. */
+export interface WaOwnUsernameNotificationEvent extends WaIncomingBaseEvent {
+    readonly kind: 'set' | 'delete' | 'modify'
+    readonly username: string | null
 }
 
 export interface WaIncomingPresenceEvent extends WaIncomingBaseEvent {
@@ -1531,6 +1545,13 @@ export interface WaClientEventMap {
      * shape), never a delta.
      */
     readonly blocklist: (event: WaBlocklistResult) => void
+    /**
+     * The account's own username changed on another device. `'modify'` is a
+     * payload-less hint - refetch with
+     * {@link WaProfileCoordinator.getOwnUsername}. Accounts on the MEX
+     * account-sync path get a `mex_notification` instead, not both.
+     */
+    readonly own_username: (event: WaOwnUsernameNotificationEvent) => void
     /**
      * A parsed app-state mutation arriving from a sync – chat mute/star/read/
      * pin/archive/contact/label/etc. changed on another device. Inbound only;

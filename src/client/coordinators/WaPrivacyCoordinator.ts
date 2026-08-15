@@ -23,6 +23,7 @@ import {
     type WaPrivacySettingValueMap
 } from '@protocol/privacy'
 import type { SignalUserJidPair } from '@signal/api/SignalDeviceSyncApi'
+import type { WaContactStore } from '@store/contracts/contact.store'
 import {
     buildBlocklistBlockIq,
     buildBlocklistUnblockIq,
@@ -88,7 +89,9 @@ export interface WaPrivacyCoordinator {
     /**
      * Fetches the per-category disallowed list (the JIDs explicitly excluded
      * while the category sits on `'contact_blacklist'`). Returns an empty
-     * list when the category is on any other value.
+     * list when the category is on any other value. `entries` carries the same
+     * membership as `jids` plus each entry's handle, when the server
+     * identified it that way.
      */
     readonly getDisallowedList: (
         category: WaPrivacyDisallowedListSettingName
@@ -129,7 +132,9 @@ export interface WaPrivacyCoordinator {
     /**
      * Returns the current account-wide blocklist. Blocks/unblocks performed
      * on another device are refetched through the same dirty-bit path as
-     * {@link getPrivacySettings} and re-emitted as `blocklist`.
+     * {@link getPrivacySettings} and re-emitted as `blocklist`. `entries`
+     * carries the same membership as `jids` plus each entry's handle, when the
+     * server identified it that way.
      */
     readonly getBlocklist: () => Promise<WaBlocklistResult>
     /**
@@ -144,6 +149,10 @@ export interface WaPrivacyCoordinator {
      * phone-number input is resolved to its LID first (device-list cache,
      * then a usync query). Non-migrated accounts fall back to the plain
      * phone-jid form.
+     *
+     * A migrated entry also carries one identifier attribute, read from the
+     * stored contact: the phone jid, the username handle, or the display name.
+     * Entries with none of them are sent as `unknown_identifier`.
      */
     readonly blockUser: (jid: string) => Promise<void>
     /**
@@ -191,6 +200,39 @@ interface WaPrivacyCoordinatorOptions {
      */
     readonly getSelfLid: () => string | null
     readonly emitPrivacy: (event: WaPrivacyAccountSyncResult) => void
+    /** Source of the username / display-name identifiers a migrated write carries. */
+    readonly contactStore: WaContactStore
+    /**
+     * Server-synced `username_contact_privacy_setting_allow_uncontact_set_enable`
+     * AB-prop, off by default - entries then fall back to `pn_jid`.
+     */
+    readonly isUsernamePrivacyListIdentifierEnabled: () => boolean
+}
+
+/**
+ * Adds the identifier fields a migrated write may carry. Only the writes that
+ * consume them call it - an unblock addresses by jid alone, and a
+ * disallowed-list write with the AB gate closed falls back to `pn_jid`.
+ */
+async function withContactIdentifiers(
+    options: WaPrivacyCoordinatorOptions,
+    target: WaBlocklistTarget
+): Promise<WaBlocklistTarget> {
+    if (target.lidJid === null) return target
+    try {
+        const contact = await options.contactStore.getByJid(target.lidJid)
+        return {
+            ...target,
+            username: contact?.username ?? null,
+            displayName: contact?.displayName ?? null
+        }
+    } catch (error) {
+        options.logger.debug('contact identifier lookup failed', {
+            jid: target.lidJid,
+            message: toError(error).message
+        })
+        return target
+    }
 }
 
 /**
@@ -242,10 +284,19 @@ async function resolveDisallowedListEntries(
         { action: WA_PRIVACY_LIST_ACTIONS.ADD, jids: input.add ?? [] },
         { action: WA_PRIVACY_LIST_ACTIONS.REMOVE, jids: input.remove ?? [] }
     ] as const
+    const usernameIdentifierAllowed = options.isUsernamePrivacyListIdentifierEnabled()
     for (const { action, jids } of actions) {
         for (const jid of jids) {
-            const target = await resolveBlocklistTarget(options, jid)
-            entries.push({ action, lidJid: target.lidJid, pnJid: target.pnJid })
+            const resolved = await resolveBlocklistTarget(options, jid)
+            const target = usernameIdentifierAllowed
+                ? await withContactIdentifiers(options, resolved)
+                : resolved
+            entries.push({
+                action,
+                lidJid: target.lidJid,
+                pnJid: target.pnJid,
+                username: target.username ?? null
+            })
         }
     }
     if (entries.length === 0) {
@@ -417,7 +468,10 @@ export function createPrivacyCoordinator(
         },
 
         blockUser: async (jid) => {
-            const target = await resolveBlocklistTarget(options, jid)
+            const target = await withContactIdentifiers(
+                options,
+                await resolveBlocklistTarget(options, jid)
+            )
             const node = buildBlocklistBlockIq(target)
             const result = await queryWithContext('privacy.blockUser', node, undefined, {
                 jid: target.lidJid ?? target.pnJid
