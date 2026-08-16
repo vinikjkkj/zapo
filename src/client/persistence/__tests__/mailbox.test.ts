@@ -5,9 +5,10 @@ import { persistIncomingMailboxEntities } from '@client/persistence/mailbox'
 import type { WaIncomingMessageEvent } from '@client/types'
 import { createNoopLogger } from '@infra/log/types'
 import type { WaStoredContactRecord } from '@store/contracts/contact.store'
+import type { WaStoredMessageRecord } from '@store/contracts/message.store'
 
 interface Captured {
-    readonly messages: { readonly id: string; readonly threadJid: string }[]
+    readonly messages: WaStoredMessageRecord[]
     readonly contacts: WaStoredContactRecord[]
 }
 
@@ -17,8 +18,8 @@ function captureWriteBehind(): {
 } {
     const captured: Captured = { messages: [], contacts: [] }
     const writeBehind = {
-        persistMessage: (record: { id: string; threadJid: string }) => {
-            captured.messages.push({ id: record.id, threadJid: record.threadJid })
+        persistMessage: (record: WaStoredMessageRecord) => {
+            captured.messages.push(record)
         },
         persistContact: (record: WaStoredContactRecord) => {
             captured.contacts.push(record)
@@ -147,6 +148,68 @@ test('mailbox persist does NOT treat remoteJid pair as user pair for groups', ()
     const crossRefRows = captured.contacts.filter((c) => c.phoneNumber || c.lid)
     assert.equal(crossRefRows.length, 1)
     assert.equal(crossRefRows[0].jid, '111111111111111@lid')
+})
+
+test('mailbox persist keeps fromMe=true for a message authored by the own account', () => {
+    const { captured, writeBehind } = captureWriteBehind()
+    persistIncomingMailboxEntities({
+        logger: createNoopLogger(),
+        writeBehind: writeBehind as never,
+        messageSecretStore: { set: async () => undefined } as never,
+        event: baseEvent({
+            keyOverrides: {
+                id: 'own-1',
+                remoteJid: '5511999999999@s.whatsapp.net',
+                isGroup: false,
+                fromMe: true
+            }
+        })
+    })
+
+    assert.equal(captured.messages.length, 1)
+    assert.equal(captured.messages[0].id, 'own-1')
+    assert.equal(captured.messages[0].fromMe, true)
+})
+
+test('mailbox persist keeps fromMe=false for a message authored by the peer', () => {
+    const { captured, writeBehind } = captureWriteBehind()
+    persistIncomingMailboxEntities({
+        logger: createNoopLogger(),
+        writeBehind: writeBehind as never,
+        messageSecretStore: { set: async () => undefined } as never,
+        event: baseEvent({
+            keyOverrides: {
+                id: 'peer-1',
+                remoteJid: '5511999999999@s.whatsapp.net',
+                isGroup: false,
+                fromMe: false
+            }
+        })
+    })
+
+    assert.equal(captured.messages.length, 1)
+    assert.equal(captured.messages[0].id, 'peer-1')
+    assert.equal(captured.messages[0].fromMe, false)
+})
+
+test('mailbox persist keeps fromMe=true for an own group message', () => {
+    const { captured, writeBehind } = captureWriteBehind()
+    persistIncomingMailboxEntities({
+        logger: createNoopLogger(),
+        writeBehind: writeBehind as never,
+        messageSecretStore: { set: async () => undefined } as never,
+        event: baseEvent({
+            keyOverrides: {
+                id: 'own-group-1',
+                participant: '111111111111111@lid',
+                fromMe: true
+            }
+        })
+    })
+
+    assert.equal(captured.messages.length, 1)
+    assert.equal(captured.messages[0].fromMe, true)
+    assert.equal(captured.messages[0].senderJid, '111111111111111@lid')
 })
 
 const PLAIN_SECRET = new Uint8Array(32).fill(7)

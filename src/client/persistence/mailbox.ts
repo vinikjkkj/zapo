@@ -98,7 +98,7 @@ export function persistIncomingMailboxEntities(options: WaPersistIncomingMailbox
             senderJid:
                 event.key.participant ?? event.rawNode.attrs.participant ?? event.key.remoteJid,
             participantJid: event.rawNode.attrs.participant,
-            fromMe: false,
+            fromMe: event.key.fromMe,
             timestampMs:
                 event.timestampSeconds === undefined ? undefined : event.timestampSeconds * 1_000,
             messageBytes
