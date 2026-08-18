@@ -18,6 +18,18 @@ export interface WaVoipCoordinatorOptions {
      * host, e.g. `'warn'` to keep them out of a `trace` host logger.
      */
     readonly logLevel?: LogLevel
+    /**
+     * Dial each relay on the port its `<te2>` endpoint advertises instead of on
+     * {@link TRUE_WEB_CLIENT_RELAY_PORT}. Defaults to `false`, which is what
+     * WhatsApp Web does unless its own `shouldUseOriginalRelayPort` gate is set.
+     *
+     * Against WhatsApp's own relays this is the wrong choice and the call goes
+     * silently one way: the endpoints advertise a mix of ports, and one reached
+     * on 3478 completes the handshake and carries the uplink without ever
+     * forwarding the peer's stream back. It exists for a relay deployment that
+     * answers on the port it advertises.
+     */
+    readonly useOriginalRelayPort?: boolean
 }
 
 /**
@@ -39,7 +51,8 @@ export class WaVoipCoordinator {
             deps: ctx.deps,
             stores: ctx.stores,
             logger: this.logger,
-            maxConcurrentCalls: options.maxConcurrentCalls
+            maxConcurrentCalls: options.maxConcurrentCalls,
+            useOriginalRelayPort: options.useOriginalRelayPort
         })
         this.registerIncomingHandlers(ctx)
         this.wireClientEvents(ctx)

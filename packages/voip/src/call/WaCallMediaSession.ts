@@ -12,7 +12,7 @@ import { RtpSession } from '../media/rtp.js'
 import { WaAudioEngine } from '../media/WaAudioEngine.js'
 import { parseRelayFromAck } from '../relay/relay-ack.js'
 import { isRtpPacket, isStunPacket } from '../relay/stun.js'
-import { WaSctpRelay } from '../relay/WaSctpRelay.js'
+import { TRUE_WEB_CLIENT_RELAY_PORT, WaSctpRelay } from '../relay/WaSctpRelay.js'
 import {
     buildAcceptReceiptStanza,
     buildAcceptStanza,
@@ -56,6 +56,8 @@ export interface WaCallMediaSessionOptions {
     readonly logger: Logger
     readonly info: CallInfo
     readonly delegate: WaCallMediaSessionDelegate
+    /** See `WaVoipCoordinatorOptions.useOriginalRelayPort`. */
+    readonly useOriginalRelayPort?: boolean
 }
 
 export class WaCallMediaSession implements AudioSender {
@@ -64,6 +66,7 @@ export class WaCallMediaSession implements AudioSender {
     private readonly deps: WaVoipDeps
     private readonly logger: Logger
     private readonly delegate: WaCallMediaSessionDelegate
+    private readonly useOriginalRelayPort: boolean
 
     private rtpSession: RtpSession | null = null
     private srtpSession: SrtpSession | null = null
@@ -109,6 +112,7 @@ export class WaCallMediaSession implements AudioSender {
         this.logger = options.logger
         this.info = options.info
         this.delegate = options.delegate
+        this.useOriginalRelayPort = options.useOriginalRelayPort ?? false
 
         this.sctpRelay = new WaSctpRelay({
             logger: this.logger.child({ component: 'sctp' })
@@ -1158,19 +1162,24 @@ export class WaCallMediaSession implements AudioSender {
             }
         }
 
-        const WA_RELAY_PORT = 3478
+        // A relay answers only on the port it advertises, and the endpoints
+        // carry a mix. WhatsApp Web dials them all on the web client port and
+        // keeps the advertised one as `originalPort`, gating the alternative
+        // behind `shouldUseOriginalRelayPort`; this mirrors both sides of that.
+        const dialPort = (ep: RelayEndpoint) =>
+            this.useOriginalRelayPort ? ep.port : TRUE_WEB_CLIENT_RELAY_PORT
         const relays = uniqueEndpoints
             .filter((ep) => ep.key && ep.rawToken)
             .map((ep) => ({
                 ip: ep.ip,
-                port: WA_RELAY_PORT,
+                port: dialPort(ep),
                 token: ep.token,
                 authToken: ep.authToken,
                 rawAuthToken: ep.rawAuthToken,
                 rawToken: ep.rawToken,
                 key: ep.key,
                 relayId: ep.relayId,
-                name: ep.relayName || `${ep.ip}:${WA_RELAY_PORT}`,
+                name: ep.relayName || `${ep.ip}:${dialPort(ep)}`,
                 authTokenId: ep.authTokenId,
                 isFna: ep.isFna
             }))
