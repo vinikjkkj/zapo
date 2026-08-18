@@ -212,7 +212,9 @@ export function unwrapMessage(message: Proto.IMessage): Proto.IMessage {
             msg.deviceSentMessage?.message ??
             msg.viewOnceMessage?.message ??
             msg.viewOnceMessageV2?.message ??
-            msg.documentWithCaptionMessage?.message
+            msg.documentWithCaptionMessage?.message ??
+            msg.groupStatusMessage?.message ??
+            msg.groupStatusMessageV2?.message
         if (!inner) return msg
         msg = inner
     }

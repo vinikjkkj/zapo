@@ -29,6 +29,37 @@ test('content helpers detect media payload and resolve message type', () => {
     assert.equal(resolveMessageTypeAttr({ pollCreationMessage: {} }), 'poll')
 })
 
+test('group status wrappers resolve the stanza attrs of the message they carry', () => {
+    // An opaque wrapper resolves to `media` with no `mediatype`, a pairing no
+    // client sends: the type has to come from the message inside the wrapper.
+    assert.equal(
+        resolveMessageTypeAttr({ groupStatusMessageV2: { message: { imageMessage: {} } } }),
+        'media'
+    )
+    assert.equal(
+        resolveEncMediaType({ groupStatusMessageV2: { message: { imageMessage: {} } } }),
+        'image'
+    )
+
+    assert.equal(
+        resolveMessageTypeAttr({ groupStatusMessageV2: { message: { conversation: 'hi' } } }),
+        'text'
+    )
+    assert.equal(
+        resolveEncMediaType({ groupStatusMessageV2: { message: { conversation: 'hi' } } }),
+        null
+    )
+
+    assert.equal(
+        resolveMessageTypeAttr({ groupStatusMessage: { message: { videoMessage: {} } } }),
+        'media'
+    )
+    assert.equal(
+        resolveEncMediaType({ groupStatusMessage: { message: { videoMessage: {} } } }),
+        'video'
+    )
+})
+
 test('getContentType picks the payload key, including the unsuffixed ones', () => {
     assert.equal(getContentType(undefined), undefined)
     assert.equal(getContentType({}), undefined)
@@ -168,7 +199,8 @@ test('resolveOutboundMessageAttrs matches the individual resolvers', () => {
         { ephemeralMessage: { message: { conversation: 'efemera' } } },
         { viewOnceMessage: { message: { imageMessage: { url: 'x' } } } },
         { ephemeralMessage: { message: { viewOnceMessageV2: { message: { videoMessage: {} } } } } },
-        { deviceSentMessage: { message: { extendedTextMessage: { text: 'ds' } } } }
+        { deviceSentMessage: { message: { extendedTextMessage: { text: 'ds' } } } },
+        { groupStatusMessageV2: { message: { imageMessage: { url: 'x' } } } }
     ]
     for (const message of corpus) {
         const combined = resolveOutboundMessageAttrs(message)
