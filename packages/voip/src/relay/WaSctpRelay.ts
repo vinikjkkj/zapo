@@ -30,8 +30,20 @@ function closeQuietly(closeable: { close(): void } | null | undefined, logger: L
 type PeerConnectionClass = RTCPeerConnection
 type DataChannelClass = RTCDataChannel
 
+/**
+ * The port a web client's relay media rides on.
+ *
+ * A relay answers only on the port it advertises, and the `<te2>` blocks carry
+ * a mix. WhatsApp Web calls this one `TRUE_WEB_CLIENT_RELAY_PORT` and 3478
+ * `FAUX_WEB_CLIENT_RELAY_PORT`, and dials its candidates here rather than on
+ * the advertised port: a relay reached on 3478 completes the handshake and
+ * accepts the uplink, but never forwards the peer's stream back, so the call is
+ * silently one way.
+ */
+export const TRUE_WEB_CLIENT_RELAY_PORT = 3480
+
 const CONFIG = {
-    TRUE_WEB_CLIENT_RELAY_PORT: 3480,
+    TRUE_WEB_CLIENT_RELAY_PORT,
     CONNECTION_TIMEOUT: 20000,
     MAX_BUFFER_SIZE: 10 * 1024,
     KEEPALIVE_INTERVAL_MS: 1100,

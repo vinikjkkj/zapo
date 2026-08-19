@@ -159,7 +159,17 @@ You can also use `client.voip.on('call_state', ...)` etc. for the manager-level 
 | `getCalls()`                                                 | All tracked calls                                         |
 | `on` / `off` / `once`                                        | Manager-level events                                      |
 
-Plugin options: `maxConcurrentCalls?: number` (default `1`), `logLevel?: LogLevel` (caps VOIP diagnostics; defaults to the host client's level).
+Plugin options: `maxConcurrentCalls?: number` (default `1`), `logLevel?: LogLevel` (caps VOIP diagnostics; defaults to the host client's level), `useOriginalRelayPort?: boolean` (default `false`, see below).
+
+## Relay port
+
+Relay endpoints advertise a port each, and the connection is made on the web client port (3480) rather than on the advertised one, which is what WhatsApp Web does. A relay reached on 3478 completes the handshake and carries the uplink but never forwards the peer's stream back, so the call is silently one way.
+
+`useOriginalRelayPort: true` dials the advertised port instead. Against WhatsApp's own relays that is the wrong choice, for the reason above; it exists for a relay deployment that answers on the port it advertises.
+
+```ts
+plugins: [voipPlugin({ useOriginalRelayPort: true })]
+```
 
 ## Codec
 
