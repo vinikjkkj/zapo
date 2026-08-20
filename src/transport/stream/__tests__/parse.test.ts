@@ -39,6 +39,20 @@ test('parseStreamControlNode handles stream error variants', () => {
     assert.deepEqual(parseStreamControlNode(conflictWithoutType), {
         kind: 'stream_error_device_removed'
     })
+    const deviceRemovedWithReason: BinaryNode = {
+        tag: WA_STREAM_SIGNALING.STREAM_ERROR_TAG,
+        attrs: {},
+        content: [
+            {
+                tag: WA_STREAM_SIGNALING.CONFLICT_TAG,
+                attrs: { type: 'device_removed', reason: 'invalid_adv_status' }
+            }
+        ]
+    }
+    assert.deepEqual(parseStreamControlNode(deviceRemovedWithReason), {
+        kind: 'stream_error_device_removed',
+        reason: 'invalid_adv_status'
+    })
 
     const codeError: BinaryNode = {
         tag: WA_STREAM_SIGNALING.STREAM_ERROR_TAG,

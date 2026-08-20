@@ -8,8 +8,8 @@ import { parseOptionalInt } from '@util/primitives'
 export type WaStreamControlNodeResult =
     | { readonly kind: 'xmlstreamend' }
     | { readonly kind: 'stream_error_code'; readonly code: number }
-    | { readonly kind: 'stream_error_replaced' }
-    | { readonly kind: 'stream_error_device_removed' }
+    | { readonly kind: 'stream_error_replaced'; readonly reason?: string }
+    | { readonly kind: 'stream_error_device_removed'; readonly reason?: string }
     | { readonly kind: 'stream_error_ack'; readonly id?: string }
     | { readonly kind: 'stream_error_xml_not_well_formed' }
     | { readonly kind: 'stream_error_other' }
@@ -24,9 +24,10 @@ export function parseStreamControlNode(node: BinaryNode): WaStreamControlNodeRes
 
     const conflictNode = findNodeChild(node, WA_STREAM_SIGNALING.CONFLICT_TAG)
     if (conflictNode) {
+        const reason = conflictNode.attrs.reason
         return conflictNode.attrs.type === WA_STREAM_SIGNALING.REPLACED_TYPE
-            ? { kind: 'stream_error_replaced' }
-            : { kind: 'stream_error_device_removed' }
+            ? { kind: 'stream_error_replaced', ...(reason !== undefined ? { reason } : {}) }
+            : { kind: 'stream_error_device_removed', ...(reason !== undefined ? { reason } : {}) }
     }
 
     const code = parseOptionalInt(node.attrs.code)
