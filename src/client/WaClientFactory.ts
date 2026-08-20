@@ -1008,7 +1008,8 @@ export function buildWaClientDependencies(input: {
     const disconnectWithClientSideEffects = async (
         reason: WaDisconnectReason,
         isLogout: boolean,
-        code: WaConnectionCode | null
+        code: WaConnectionCode | null,
+        streamErrorReason?: string
     ): Promise<void> => {
         abPropsCoordinator.reset()
         offlineResume.reset()
@@ -1019,7 +1020,8 @@ export function buildWaClientDependencies(input: {
             reason,
             code,
             isLogout,
-            isNewLogin: false
+            isNewLogin: false,
+            ...(streamErrorReason !== undefined ? { streamErrorReason } : {})
         })
     }
 

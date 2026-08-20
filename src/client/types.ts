@@ -1402,6 +1402,13 @@ export type WaConnectionEvent =
           /** `true` means the device was unlinked – do not reconnect, re-pair. */
           readonly isLogout: boolean
           readonly isNewLogin: false
+          /**
+           * Primary-supplied reason relayed in `<conflict reason="…">` on a
+           * device-removed / replaced close (e.g. `invalid_adv_status`,
+           * `unknown_companion`, `lid_migration_*`). Absent on other closes and
+           * when the server omits the attribute.
+           */
+          readonly streamErrorReason?: string
       }
 
 /**

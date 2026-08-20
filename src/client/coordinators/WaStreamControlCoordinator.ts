@@ -17,7 +17,8 @@ interface WaStreamControlCoordinatorOptions {
     readonly disconnect: (
         reason: WaDisconnectReason,
         isLogout: boolean,
-        code: WaConnectionCode | null
+        code: WaConnectionCode | null,
+        streamErrorReason?: string
     ) => Promise<void>
     readonly clearStoredCredentials: () => Promise<void>
     readonly connect: (reason: WaConnectionOpenReason) => Promise<void>
@@ -104,27 +105,30 @@ export function createStreamControlHandler(
 
     const disconnectDueToStreamError = async (
         reason: WaDisconnectReason,
-        code: WaConnectionCode | null
+        code: WaConnectionCode | null,
+        streamErrorReason?: string
     ): Promise<void> => {
         stopCommsImmediately()
         await runStreamControlLifecycle(reason, async () => {
-            logger.warn('disconnecting due to stream control node', { reason })
-            await disconnect(reason, false, code)
+            logger.warn('disconnecting due to stream control node', { reason, streamErrorReason })
+            await disconnect(reason, false, code, streamErrorReason)
         })
     }
 
     const logoutDueToStreamError = async (
         reason: WaDisconnectReason,
         code: WaConnectionCode | null,
-        shouldRestartBackend: boolean
+        shouldRestartBackend: boolean,
+        streamErrorReason?: string
     ): Promise<void> => {
         stopCommsImmediately()
         await runStreamControlLifecycle(reason, async () => {
             logger.warn('logging out due to stream control node', {
                 reason,
-                shouldRestartBackend
+                shouldRestartBackend,
+                streamErrorReason
             })
-            await disconnect(reason, true, code)
+            await disconnect(reason, true, code, streamErrorReason)
             await clearStoredCredentials()
             if (shouldRestartBackend) {
                 await restartBackendAfterStreamControl(reason)
@@ -157,18 +161,24 @@ export function createStreamControlHandler(
                     await resumeSocketDueToStreamError(`stream_error_code_${result.code}`)
                     return
                 case WA_DISCONNECT_REASONS.STREAM_ERROR_REPLACED:
-                    logger.warn('received stream:error replaced, stopping client')
+                    logger.warn('received stream:error replaced, stopping client', {
+                        streamErrorReason: result.reason
+                    })
                     await disconnectDueToStreamError(
                         WA_DISCONNECT_REASONS.STREAM_ERROR_REPLACED,
-                        null
+                        null,
+                        result.reason
                     )
                     return
                 case WA_DISCONNECT_REASONS.STREAM_ERROR_DEVICE_REMOVED:
-                    logger.warn('received stream:error device removed, logging out')
+                    logger.warn('received stream:error device removed, logging out', {
+                        streamErrorReason: result.reason
+                    })
                     await logoutDueToStreamError(
                         WA_DISCONNECT_REASONS.STREAM_ERROR_DEVICE_REMOVED,
                         null,
-                        false
+                        false,
+                        result.reason
                     )
                     return
                 case WA_DISCONNECT_REASONS.STREAM_ERROR_ACK:
