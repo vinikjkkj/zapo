@@ -98,7 +98,7 @@ function parseAppVersion(version: string): ParsedAppVersion {
 
 function resolveMobilePlatformKey(platform: string | undefined): WaMobilePlatform {
     const normalized = (platform ?? WA_MOBILE_PLATFORMS.ANDROID).trim().toLowerCase()
-    if (!Object.hasOwn(MOBILE_PLATFORM_TO_PROTO, normalized)) {
+    if (!Object.prototype.hasOwnProperty.call(MOBILE_PLATFORM_TO_PROTO, normalized)) {
         throw new Error(
             `mobile login payload requires platform 'android' or 'ios', got ${JSON.stringify(platform)}`
         )

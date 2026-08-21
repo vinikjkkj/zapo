@@ -219,7 +219,7 @@ test('buildMobileLoginPayload defaults platform to ANDROID and omits distributio
     const ua = proto.ClientPayload.decode(bytes).userAgent
     assert.ok(ua)
     assert.equal(ua.platform, proto.ClientPayload.UserAgent.Platform.ANDROID)
-    assert.equal(Object.hasOwn(ua, 'distributionChannel'), false)
+    assert.equal(Object.prototype.hasOwnProperty.call(ua, 'distributionChannel'), false)
 })
 
 test('buildMobileLoginPayload emits an IOS userAgent with App Store distribution', () => {
@@ -281,7 +281,7 @@ test('buildMobileLoginPayload honours an explicit android platform', () => {
     const ua = proto.ClientPayload.decode(bytes).userAgent
     assert.ok(ua)
     assert.equal(ua.platform, proto.ClientPayload.UserAgent.Platform.ANDROID)
-    assert.equal(Object.hasOwn(ua, 'distributionChannel'), false)
+    assert.equal(Object.prototype.hasOwnProperty.call(ua, 'distributionChannel'), false)
 })
 
 test('buildMobileLoginPayload forwards an explicit iOS distributionChannel override', () => {
