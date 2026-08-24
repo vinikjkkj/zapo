@@ -13,6 +13,12 @@ export const MAC_KEY_END = 80
 export const HMAC_TRUNCATED_SIZE = 10
 export const SIDECAR_CHUNK_SIZE = 65_536
 export const SIDECAR_HMAC_SIZE = 10
+/**
+ * Leading bytes buffered when deciding whether a payload supports progressive
+ * playback. The top-level boxes that settle it sit at the very front of the
+ * file, so this only has to survive a few small boxes before `moov`/`mdat`.
+ */
+export const CONTAINER_SCAN_MAX_BYTES = 1_024
 
 export type MediaUploadKind =
     | 'image'

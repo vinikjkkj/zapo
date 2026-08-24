@@ -24,6 +24,7 @@ import {
     SIDECAR_CHUNK_SIZE,
     SIDECAR_HMAC_SIZE
 } from '@media/constants'
+import { scanStreamable, WaStreamableScanner } from '@media/container'
 import type {
     MediaCryptoType,
     WaMediaDecryptionResult,
@@ -166,7 +167,7 @@ export class WaMediaCrypto {
         ciphertextHmac.set(signature, cipherLength)
 
         let streamingSidecar: Uint8Array | undefined
-        if (options?.sidecar !== false) {
+        if (options?.sidecar !== false && scanStreamable(plaintext) !== false) {
             const acc = new SidecarAccumulator(keys.macKey, plaintext.byteLength)
             acc.push(keys.iv)
             acc.push(ciphertext)
@@ -360,7 +361,8 @@ async function pumpEncryption(
     const plainHash = createHash('sha256')
     const encHash = createHash('sha256')
     const hmac = createHmac('sha256', keys.macKey)
-    const sidecar = computeSidecar ? new SidecarAccumulator(keys.macKey, expectedFileSize) : null
+    let sidecar = computeSidecar ? new SidecarAccumulator(keys.macKey, expectedFileSize) : null
+    const scanner = computeSidecar ? new WaStreamableScanner() : null
     const ffTarget =
         firstFrameLength !== undefined
             ? IV_SIZE + Math.ceil(firstFrameLength / AES_BLOCK_SIZE) * AES_BLOCK_SIZE
@@ -392,6 +394,10 @@ async function pumpEncryption(
             if (plainChunk.byteLength === 0) continue
             plaintextLength += plainChunk.byteLength
             plainHash.update(plainChunk)
+            if (scanner !== null && scanner.verdict === null) {
+                scanner.push(plainChunk)
+                if (scanner.verdict === false) sidecar = null
+            }
             await consumeCiphertext(cipher.update(plainChunk))
         }
         await consumeCiphertext(cipher.final())
