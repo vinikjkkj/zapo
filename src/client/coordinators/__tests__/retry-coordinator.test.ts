@@ -514,7 +514,7 @@ test('mobile primary does not delegate to placeholder resend and keeps sending r
         logger: createNoopLogger(),
         retryStore: {
             getTtlMs: () => 60_000,
-            incrementInboundCounter: async () => 3,
+            incrementInboundCounter: async () => 4,
             cleanupExpired: async () => 0
         } as unknown as WaRetryStore,
         signalStore: {
@@ -589,6 +589,77 @@ test('mobile primary does not delegate to placeholder resend and keeps sending r
     assert.equal(sentNodes[2].tag, 'ack')
     assert.equal(sentNodes[2].attrs.class, 'message')
     assert.equal(placeholderRequests.length, 1)
+})
+
+test('decrypt-failure retry still sends count 3 with keys before delegating', async () => {
+    const sentNodes: BinaryNode[] = []
+    const placeholderRequests: number[] = []
+    const peerDataOperation: PeerDataOperationRequester = {
+        request: async () => {
+            placeholderRequests.push(1)
+            return []
+        },
+        send: async () => ({ messageId: 'unused' })
+    }
+
+    const coordinator = new WaRetryCoordinator({
+        logger: createNoopLogger(),
+        retryStore: {
+            getTtlMs: () => 60_000,
+            incrementInboundCounter: async () => 3,
+            cleanupExpired: async () => 0
+        } as unknown as WaRetryStore,
+        signalStore: {
+            getRegistrationInfo: async () => ({
+                registrationId: 42,
+                identityKeyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) }
+            }),
+            getSignedPreKey: async () => ({
+                keyId: 7,
+                keyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) },
+                signature: new Uint8Array(64)
+            })
+        } as never,
+        preKeyStore: {
+            getOrGenSinglePreKey: async () => ({
+                keyId: 11,
+                keyPair: { pubKey: new Uint8Array(32), privKey: new Uint8Array(32) }
+            }),
+            markKeyAsUploaded: async () => undefined
+        } as never,
+        sessionStore: {} as never,
+        senderKeyStore: {} as never,
+        signalProtocol: {} as never,
+        sessionResolver: {} as never,
+        signalDeviceSync: {} as never,
+        signalMissingPreKeysSync: {} as never,
+        messageClient: {} as never,
+        sendNode: async (node: BinaryNode) => {
+            sentNodes.push(node)
+        },
+        getCurrentCredentials: () => null,
+        peerDataOperation,
+        emitIncomingMessage: () => undefined
+    })
+
+    const context = buildPlaceholderContext({
+        stanzaId: 'ladder-3',
+        t: String(Math.trunc(Date.now() / 1000))
+    })
+    assert.equal(await coordinator.onDecryptFailure(context, new Error('boom')), true)
+    await flushMicrotasks()
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    assert.equal(placeholderRequests.length, 0)
+    assert.equal(sentNodes.length, 2)
+    const receipt = sentNodes[0]
+    assert.equal(receipt.tag, 'receipt')
+    assert.equal(receipt.attrs.type, 'retry')
+    const children = receipt.content as BinaryNode[]
+    const retryChild = children.find((child) => child.tag === 'retry')
+    assert.equal(retryChild?.attrs.count, '3')
+    assert.ok(children.some((child) => child.tag === 'keys'))
+    assert.equal(sentNodes[1].tag, 'ack')
 })
 
 test('decrypt-failure retry gives up past the retry ceiling (acks stanza, no receipt/placeholder)', async () => {
