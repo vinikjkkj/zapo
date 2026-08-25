@@ -80,7 +80,11 @@ interface WaHistorySyncDeps {
 
 interface ParkedHistoryMessage {
     readonly id: string
-    readonly authorJid: string | undefined
+    /**
+     * The author-bearing fields of the record, trimmed off the decoded
+     * `WebMessageInfo` so parking a message never retains the whole envelope.
+     */
+    readonly authorInfo: Proto.IWebMessageInfo
     readonly fromMe: boolean
     readonly timestampMs: number | undefined
     readonly messageBytes: Uint8Array
@@ -231,7 +235,7 @@ async function consumeHistorySyncStream(
                 event.fieldNumber === CONVERSATION_FIELDS.MESSAGES &&
                 event.wireType === PROTO_WIRE_TYPES.LEN
             ) {
-                const message = readHistoryMessage(event.value, deps.meJid, threadJid ?? undefined)
+                const message = readHistoryMessage(event.value)
                 if (!message) {
                     return undefined
                 }
@@ -407,9 +411,15 @@ async function closeConversation(
 }
 
 /**
+ * Resolves the author here rather than at decode time because a message may be
+ * read before its `Conversation.id`, and the thread type decides both the
+ * self-sent fallback and the shape of the record.
+ *
  * `participantJid` carries the group/broadcast author and stays absent in 1:1
  * threads, where `senderJid` falls back to the thread JID - the same shape the
- * live message path persists.
+ * live message path persists. A group author that stays unresolved leaves both
+ * fields empty: writing the group JID there would read downstream as if the
+ * group itself had sent the message.
  */
 function persistHistoryMessage(
     deps: WaHistorySyncDeps,
@@ -418,14 +428,15 @@ function persistHistoryMessage(
     threadJid: string
 ): void {
     state.messagesCount += 1
+    const authorJid = resolveWebMessageInfoAuthor(message.authorInfo, deps.meJid, threadJid)
     const isGroupOrBroadcast = isGroupJid(threadJid) || isBroadcastJid(threadJid)
     pushWrite(
         state,
         deps.writeBehind.persistMessageAsync({
             id: message.id,
             threadJid,
-            senderJid: message.authorJid ?? threadJid,
-            participantJid: isGroupOrBroadcast ? message.authorJid : undefined,
+            senderJid: isGroupOrBroadcast ? authorJid : (authorJid ?? threadJid),
+            participantJid: isGroupOrBroadcast ? authorJid : undefined,
             fromMe: message.fromMe,
             timestampMs: message.timestampMs,
             messageBytes: message.messageBytes
@@ -504,11 +515,7 @@ async function settleHistorySyncChunk(
 }
 
 /** `null` for content-less stubs, which duplicate live notification stanzas. */
-function readHistoryMessage(
-    record: Uint8Array,
-    meJid?: string | null,
-    threadJid?: string
-): ParkedHistoryMessage | null {
+function readHistoryMessage(record: Uint8Array): ParkedHistoryMessage | null {
     const webMsg = proto.HistorySyncMsg.decode(record).message
     if (!webMsg?.key?.id || !webMsg.message) {
         return null
@@ -516,7 +523,11 @@ function readHistoryMessage(
     const timestampMs = longToNumber(webMsg.messageTimestamp) * 1000
     return {
         id: webMsg.key.id,
-        authorJid: resolveWebMessageInfoAuthor(webMsg, meJid, threadJid),
+        authorInfo: {
+            key: { fromMe: webMsg.key.fromMe, participant: webMsg.key.participant },
+            participant: webMsg.participant,
+            originalSelfAuthorUserJidString: webMsg.originalSelfAuthorUserJidString
+        },
         fromMe: webMsg.key.fromMe === true,
         timestampMs: timestampMs || undefined,
         messageBytes: proto.Message.encode(webMsg.message).finish()

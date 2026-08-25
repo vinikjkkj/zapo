@@ -799,3 +799,52 @@ test('history sync keeps the sender on messages parked before their thread jid',
     assert.equal(capture.messages[0].senderJid, '5511111111111@s.whatsapp.net')
     assert.equal(capture.messages[0].participantJid, '5511111111111@s.whatsapp.net')
 })
+
+test('history sync resolves a parked self-sent group message once the thread jid lands', async () => {
+    const messagesPart = proto.Conversation.encode({
+        messages: [
+            {
+                message: {
+                    key: { id: 'PSELF', fromMe: true },
+                    message: { conversation: 'parked and mine' },
+                    messageTimestamp: 1_722_000_000
+                }
+            }
+        ]
+    }).finish()
+    const idPart = proto.Conversation.encode({ id: '120363000000000000@g.us' }).finish()
+    const conversation = new Uint8Array(messagesPart.length + idPart.length)
+    conversation.set(messagesPart, 0)
+    conversation.set(idPart, messagesPart.length)
+    assert.ok(conversation.length < 128, 'the probe conversation must fit a one-byte length')
+    const blob = new Uint8Array([0x12, conversation.length, ...conversation])
+
+    const { capture, deps } = createCapture('5599999999999:7@s.whatsapp.net')
+    await processHistorySyncNotification(deps as never, {
+        syncType: proto.Message.HistorySyncType.RECENT,
+        initialHistBootstrapInlinePayload: toBytesView(await gzipAsync(blob))
+    })
+
+    assert.equal(capture.messages.length, 1)
+    assert.equal(capture.messages[0].senderJid, '5599999999999@s.whatsapp.net')
+    assert.equal(capture.messages[0].participantJid, '5599999999999@s.whatsapp.net')
+})
+
+test('history sync leaves an unresolved group author empty instead of naming the group', async () => {
+    const capture = await runConversation({
+        id: '120363000000000000@g.us',
+        messages: [
+            {
+                message: {
+                    key: { remoteJid: '120363000000000000@g.us', id: 'GHOST' },
+                    message: { conversation: 'no author anywhere' },
+                    messageTimestamp: 1_722_000_000
+                }
+            }
+        ]
+    })
+
+    assert.equal(capture.messages.length, 1)
+    assert.equal(capture.messages[0].senderJid, undefined)
+    assert.equal(capture.messages[0].participantJid, undefined)
+})

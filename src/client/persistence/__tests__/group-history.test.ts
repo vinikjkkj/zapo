@@ -260,3 +260,25 @@ test('group history bundle records the sender of every message it persists', asy
         ]
     )
 })
+
+test('group history bundle leaves an unresolved author empty instead of naming the group', async () => {
+    const harness = createHarness()
+    const { compressed } = await encodeGroupHistoryBundle([
+        buildMessage('GHOST', 'no author anywhere', {
+            key: { id: 'GHOST', remoteJid: GROUP_JID, fromMe: false }
+        })
+    ])
+    harness.setBlob(compressed)
+
+    await processGroupHistoryBundle(harness.deps, {
+        bundle: buildBundle([ME_LID]),
+        groupJid: GROUP_JID,
+        senderJid: OTHER,
+        bundleMessageId: 'bundle-ghost',
+        sentAtSeconds: nowSeconds()
+    })
+
+    assert.equal(harness.persisted.length, 1)
+    assert.equal(harness.persisted[0].senderJid, undefined)
+    assert.equal(harness.persisted[0].participantJid, undefined)
+})

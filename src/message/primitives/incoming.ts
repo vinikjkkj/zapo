@@ -207,10 +207,13 @@ function buildIncomingEventRawNode(node: BinaryNode): BinaryNode {
  * preferring `originalSelfAuthorUserJidString` over `meJid` (the current account
  * user JID) so a message authored under a previous identity keeps its author.
  *
- * Returns `undefined` for 1:1 threads, where the author is implied by the thread
- * JID and the `fromMe` flag rather than carried on the record. `threadJid`
- * overrides `key.remoteJid` for carriers that know the thread out of band, such
- * as a group history bundle whose records may omit it.
+ * The participant fields are read whatever the thread type is, matching how
+ * WhatsApp Web builds the author: only the self-sent fallback is gated on
+ * group/broadcast. A 1:1 record normally carries neither, so this returns
+ * `undefined` there and the caller supplies the thread JID instead.
+ *
+ * `threadJid` overrides `key.remoteJid` for carriers that know the thread out
+ * of band, such as a group history bundle whose records may omit it.
  */
 export function resolveWebMessageInfoAuthor(
     webMessageInfo: proto.IWebMessageInfo,

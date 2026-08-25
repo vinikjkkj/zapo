@@ -144,7 +144,7 @@ export async function processGroupHistoryBundle(
         const write = deps.writeBehind.persistMessageAsync({
             id: webMsg.key.id,
             threadJid: input.groupJid,
-            senderJid: authorJid ?? input.groupJid,
+            senderJid: authorJid,
             participantJid: authorJid,
             fromMe: webMsg.key.fromMe === true,
             timestampMs: timestampMs || undefined,
