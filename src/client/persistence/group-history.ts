@@ -5,6 +5,7 @@ import type { WaClientEventMap, WaGroupHistoryBundleEvent } from '@client/types'
 import type { Logger } from '@infra/log/types'
 import type { WaMediaTransferClient } from '@media/transfer/WaMediaTransferClient'
 import { streamGroupHistoryBundle } from '@message/kinds/group-history'
+import { resolveWebMessageInfoAuthor } from '@message/primitives/incoming'
 import { proto, type Proto } from '@proto'
 import { isGroupJid, toUserJid } from '@protocol/jid'
 import { longToNumber, toError } from '@util/primitives'
@@ -139,10 +140,12 @@ export async function processGroupHistoryBundle(
         ) {
             oldestTimestampMs = timestampMs
         }
+        const authorJid = resolveWebMessageInfoAuthor(webMsg, deps.meJid, input.groupJid)
         const write = deps.writeBehind.persistMessageAsync({
             id: webMsg.key.id,
             threadJid: input.groupJid,
-            senderJid: webMsg.key.participant ?? undefined,
+            senderJid: authorJid ?? input.groupJid,
+            participantJid: authorJid,
             fromMe: webMsg.key.fromMe === true,
             timestampMs: timestampMs || undefined,
             messageBytes: proto.Message.encode(webMsg.message).finish()

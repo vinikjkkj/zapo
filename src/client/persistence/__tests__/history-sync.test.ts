@@ -82,7 +82,7 @@ interface Capture {
     readonly tokens: TokenConversation[]
 }
 
-function createCapture(): { readonly capture: Capture; readonly deps: unknown } {
+function createCapture(meJid?: string): { readonly capture: Capture; readonly deps: unknown } {
     const capture: Capture = {
         order: [],
         messages: [],
@@ -120,7 +120,8 @@ function createCapture(): { readonly capture: Capture; readonly deps: unknown } 
         },
         onProcessed: async (syncType: number) => {
             capture.acked.push(syncType)
-        }
+        },
+        meJid
     }
     return { capture, deps }
 }
@@ -626,4 +627,175 @@ test('history sync counts only the messages it persisted', async () => {
         capture.messages.length,
         'the reported count must match what was written'
     )
+})
+
+async function runConversation(
+    conversation: proto.IConversation,
+    meJid?: string
+): Promise<Capture> {
+    const { capture, deps } = createCapture(meJid)
+    await processHistorySyncNotification(deps as never, {
+        syncType: proto.Message.HistorySyncType.RECENT,
+        initialHistBootstrapInlinePayload: toBytesView(
+            await gzipAsync(proto.HistorySync.encode({ conversations: [conversation] }).finish())
+        )
+    })
+    return capture
+}
+
+test('history sync reads a group sender from the top-level WebMessageInfo participant', async () => {
+    const capture = await runConversation({
+        id: '120363000000000000@g.us',
+        messages: [
+            {
+                message: {
+                    key: { remoteJid: '120363000000000000@g.us', id: 'G1' },
+                    participant: '5511111111111@s.whatsapp.net',
+                    message: { conversation: 'Good copy' },
+                    messageTimestamp: 1_722_000_000
+                }
+            }
+        ]
+    })
+
+    assert.equal(capture.messages.length, 1)
+    assert.equal(capture.messages[0].senderJid, '5511111111111@s.whatsapp.net')
+    assert.equal(capture.messages[0].participantJid, '5511111111111@s.whatsapp.net')
+})
+
+test('history sync prefers the top-level participant over key.participant', async () => {
+    const capture = await runConversation({
+        id: '120363000000000000@g.us',
+        messages: [
+            {
+                message: {
+                    key: {
+                        remoteJid: '120363000000000000@g.us',
+                        id: 'G2',
+                        participant: '5522222222222@s.whatsapp.net'
+                    },
+                    participant: '222@lid',
+                    message: { conversation: 'oi' },
+                    messageTimestamp: 1_722_000_000
+                }
+            }
+        ]
+    })
+
+    assert.equal(capture.messages[0].senderJid, '222@lid')
+    assert.equal(capture.messages[0].participantJid, '222@lid')
+})
+
+test('history sync still reads a group sender carried only on key.participant', async () => {
+    const capture = await runConversation({
+        id: '120363000000000000@g.us',
+        messages: [
+            {
+                message: {
+                    key: {
+                        remoteJid: '120363000000000000@g.us',
+                        id: 'G3',
+                        participant: '5533333333333@s.whatsapp.net'
+                    },
+                    message: { conversation: 'oi' },
+                    messageTimestamp: 1_722_000_000
+                }
+            }
+        ]
+    })
+
+    assert.equal(capture.messages[0].senderJid, '5533333333333@s.whatsapp.net')
+    assert.equal(capture.messages[0].participantJid, '5533333333333@s.whatsapp.net')
+})
+
+test('history sync attributes a self-sent group message with no participant to this account', async () => {
+    const capture = await runConversation(
+        {
+            id: '120363000000000000@g.us',
+            messages: [
+                {
+                    message: {
+                        key: { remoteJid: '120363000000000000@g.us', id: 'G4', fromMe: true },
+                        message: { conversation: 'mine' },
+                        messageTimestamp: 1_722_000_000
+                    }
+                }
+            ]
+        },
+        '5599999999999:7@s.whatsapp.net'
+    )
+
+    assert.equal(capture.messages[0].senderJid, '5599999999999@s.whatsapp.net')
+    assert.equal(capture.messages[0].participantJid, '5599999999999@s.whatsapp.net')
+})
+
+test('history sync prefers originalSelfAuthorUserJidString over the current account jid', async () => {
+    const capture = await runConversation(
+        {
+            id: '120363000000000000@g.us',
+            messages: [
+                {
+                    message: {
+                        key: { remoteJid: '120363000000000000@g.us', id: 'G5', fromMe: true },
+                        originalSelfAuthorUserJidString: '5588888888888@s.whatsapp.net',
+                        message: { conversation: 'mine' },
+                        messageTimestamp: 1_722_000_000
+                    }
+                }
+            ]
+        },
+        '5599999999999@s.whatsapp.net'
+    )
+
+    assert.equal(capture.messages[0].senderJid, '5588888888888@s.whatsapp.net')
+})
+
+test('history sync falls back to the thread jid for a 1:1 sender and leaves participantJid unset', async () => {
+    const capture = await runConversation({
+        id: '5511444444444@s.whatsapp.net',
+        messages: [
+            {
+                message: {
+                    key: { remoteJid: '5511444444444@s.whatsapp.net', id: 'D1' },
+                    message: { conversation: 'oi' },
+                    messageTimestamp: 1_722_000_000
+                }
+            }
+        ]
+    })
+
+    assert.equal(capture.messages[0].senderJid, '5511444444444@s.whatsapp.net')
+    assert.equal(capture.messages[0].participantJid, undefined)
+})
+
+test('history sync keeps the sender on messages parked before their thread jid', async () => {
+    const messagesPart = proto.Conversation.encode({
+        messages: [
+            {
+                message: {
+                    key: { remoteJid: '120363000000000000@g.us', id: 'P1' },
+                    participant: '5511111111111@s.whatsapp.net',
+                    message: { conversation: 'parked' },
+                    messageTimestamp: 1_722_000_000
+                }
+            }
+        ]
+    }).finish()
+    const idPart = proto.Conversation.encode({ id: '120363000000000000@g.us' }).finish()
+    const conversation = new Uint8Array(messagesPart.length + idPart.length)
+    conversation.set(messagesPart, 0)
+    conversation.set(idPart, messagesPart.length)
+    const blob = new Uint8Array([0x12, conversation.length & 0x7f, ...conversation])
+    assert.ok(conversation.length < 128, 'the probe conversation must fit a one-byte length')
+
+    const { capture, deps } = createCapture()
+    await processHistorySyncNotification(deps as never, {
+        syncType: proto.Message.HistorySyncType.RECENT,
+        initialHistBootstrapInlinePayload: toBytesView(await gzipAsync(blob))
+    })
+
+    assert.equal(capture.messages.length, 1)
+    assert.equal(capture.messages[0].threadJid, '120363000000000000@g.us')
+    assert.equal(capture.messages[0].senderJid, '5511111111111@s.whatsapp.net')
+    assert.equal(capture.messages[0].participantJid, '5511111111111@s.whatsapp.net')
 })

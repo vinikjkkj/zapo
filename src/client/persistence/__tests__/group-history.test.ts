@@ -10,6 +10,7 @@ import {
 import { createNoopLogger } from '@infra/log/types'
 import { encodeGroupHistoryBundle } from '@message/kinds/group-history'
 import type { Proto } from '@proto'
+import type { WaStoredMessageRecord } from '@store/contracts/message.store'
 
 const GROUP_JID = '120363000000000000@g.us'
 const ME_PN = '5511999999999@s.whatsapp.net'
@@ -37,7 +38,7 @@ function buildMessage(
 
 interface Harness {
     readonly deps: WaGroupHistoryDeps
-    readonly persisted: { readonly id?: string | null }[]
+    readonly persisted: Partial<WaStoredMessageRecord>[]
     readonly emitted: unknown[]
     /** Number of CDN fetches the processor actually issued. */
     readonly downloads: { count: number }
@@ -46,7 +47,7 @@ interface Harness {
 }
 
 function createHarness(overrides: Partial<WaGroupHistoryDeps> = {}): Harness {
-    const persisted: { readonly id?: string | null }[] = []
+    const persisted: Partial<WaStoredMessageRecord>[] = []
     const emitted: unknown[] = []
     const downloads = { count: 0 }
     let blob: Uint8Array = new Uint8Array()
@@ -63,7 +64,7 @@ function createHarness(overrides: Partial<WaGroupHistoryDeps> = {}): Harness {
             }
         },
         writeBehind: {
-            persistMessageAsync: async (record: { readonly id?: string | null }) => {
+            persistMessageAsync: async (record: Partial<WaStoredMessageRecord>) => {
                 persisted.push(record)
             }
         },
@@ -226,4 +227,36 @@ test('group history bundle filters stubs, foreign chats, expired and too-old ent
     const event = harness.emitted[0] as { messagesCount: number; droppedCount: number }
     assert.equal(event.messagesCount, 1)
     assert.equal(event.droppedCount, 4)
+})
+
+test('group history bundle records the sender of every message it persists', async () => {
+    const harness = createHarness()
+    const { compressed } = await encodeGroupHistoryBundle([
+        buildMessage('KEY', 'sender on the key'),
+        buildMessage('TOP', 'sender on the top-level field', {
+            key: { id: 'TOP', remoteJid: GROUP_JID, fromMe: false },
+            participant: OTHER
+        }),
+        buildMessage('MINE', 'sent by this account', {
+            key: { id: 'MINE', remoteJid: GROUP_JID, fromMe: true }
+        })
+    ])
+    harness.setBlob(compressed)
+
+    await processGroupHistoryBundle(harness.deps, {
+        bundle: buildBundle([ME_LID]),
+        groupJid: GROUP_JID,
+        senderJid: OTHER,
+        bundleMessageId: 'bundle-sender',
+        sentAtSeconds: nowSeconds()
+    })
+
+    assert.deepEqual(
+        harness.persisted.map((record) => [record.id, record.senderJid, record.participantJid]),
+        [
+            ['KEY', OTHER, OTHER],
+            ['TOP', OTHER, OTHER],
+            ['MINE', ME_PN, ME_PN]
+        ]
+    )
 })

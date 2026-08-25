@@ -200,6 +200,35 @@ function buildIncomingEventRawNode(node: BinaryNode): BinaryNode {
 }
 
 /**
+ * Resolves who authored a {@link proto.IWebMessageInfo}. The top-level
+ * `participant` wins over `key.participant` - history sync carries the group
+ * sender in the former and leaves the latter empty on a large share of records.
+ * A self-sent group/broadcast message with neither falls back to this account,
+ * preferring `originalSelfAuthorUserJidString` over `meJid` (the current account
+ * user JID) so a message authored under a previous identity keeps its author.
+ *
+ * Returns `undefined` for 1:1 threads, where the author is implied by the thread
+ * JID and the `fromMe` flag rather than carried on the record. `threadJid`
+ * overrides `key.remoteJid` for carriers that know the thread out of band, such
+ * as a group history bundle whose records may omit it.
+ */
+export function resolveWebMessageInfoAuthor(
+    webMessageInfo: proto.IWebMessageInfo,
+    meJid?: string | null,
+    threadJid?: string
+): string | undefined {
+    const key = webMessageInfo.key ?? {}
+    const chatJid = threadJid ?? key.remoteJid ?? undefined
+    const isGroupOrBroadcast = chatJid ? isGroupJid(chatJid) || isBroadcastJid(chatJid) : false
+    const rawSelfAuthor = webMessageInfo.originalSelfAuthorUserJidString ?? meJid ?? undefined
+    const selfAuthor =
+        key.fromMe === true && isGroupOrBroadcast && rawSelfAuthor
+            ? toUserJid(rawSelfAuthor)
+            : undefined
+    return webMessageInfo.participant ?? key.participant ?? selfAuthor ?? undefined
+}
+
+/**
  * Rebuilds a `message` event from a recovered {@link proto.IWebMessageInfo}
  * (placeholder resend). `meJid` is the current account user JID, used as the
  * author fallback for self-sent group messages when the proto carries no
@@ -214,10 +243,7 @@ export function buildRecoveredIncomingEvent(
     const fromMe = key.fromMe === true
     const isGroup = chatJid ? isGroupJid(chatJid) : false
     const isBroadcast = chatJid ? isBroadcastJid(chatJid) : false
-    const rawSelfAuthor = webMessageInfo.originalSelfAuthorUserJidString ?? meJid ?? undefined
-    const selfAuthor =
-        fromMe && (isGroup || isBroadcast) && rawSelfAuthor ? toUserJid(rawSelfAuthor) : undefined
-    const participant = webMessageInfo.participant ?? key.participant ?? selfAuthor
+    const participant = resolveWebMessageInfoAuthor(webMessageInfo, meJid)
     const pushName = webMessageInfo.pushName ?? undefined
     const rawSender = fromMe ? undefined : isGroup || isBroadcast ? participant : chatJid
     const sender = rawSender ? parseJidFull(rawSender) : null

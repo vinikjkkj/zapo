@@ -380,7 +380,8 @@ class WaClientImpl extends EventEmitter {
                                 this.deps.trustedContactToken.hydrateFromHistorySync(conversations),
                             onNctSalt: (salt) =>
                                 this.deps.trustedContactToken.hydrateNctSaltFromHistorySync(salt),
-                            onProcessed: sendHistSyncReceipt
+                            onProcessed: sendHistSyncReceipt,
+                            meJid: this.deps.authClient.getCurrentCredentials()?.meJid
                         },
                         protocolMessage.historySyncNotification
                     )
