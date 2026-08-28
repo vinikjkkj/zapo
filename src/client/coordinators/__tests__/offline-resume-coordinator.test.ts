@@ -177,3 +177,102 @@ test('offline resume coordinator stops requesting batches once the resume comple
     assert.equal(coordinator.isComplete, true)
     assert.equal(sentNodes.length, 1, 'the pending debounce timer is cancelled on complete')
 })
+
+test('offline resume coordinator retries a rejected batch request', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+
+    let attempts = 0
+    const coordinator = new WaOfflineResumeCoordinator({
+        logger: createNoopLogger(),
+        runtime: {
+            sendNode: async () => {
+                attempts += 1
+                if (attempts === 1) {
+                    throw new Error('socket write failed')
+                }
+            },
+            emitOfflineResume: () => undefined
+        }
+    })
+
+    coordinator.handleOfflinePreview(500)
+    await flushMicrotasks()
+    assert.equal(attempts, 1)
+
+    t.mock.timers.tick(100)
+    await flushMicrotasks()
+
+    assert.equal(attempts, 2, 'the failed request is retried after the debounce')
+    assert.equal(coordinator.isResuming, true)
+
+    coordinator.reset()
+})
+
+test('offline resume coordinator gives up after the retry budget is spent', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+
+    let attempts = 0
+    const coordinator = new WaOfflineResumeCoordinator({
+        logger: createNoopLogger(),
+        runtime: {
+            sendNode: async () => {
+                attempts += 1
+                throw new Error('socket write failed')
+            },
+            emitOfflineResume: () => undefined
+        }
+    })
+
+    coordinator.handleOfflinePreview(500)
+    await flushMicrotasks()
+
+    for (let index = 0; index < 10; index += 1) {
+        t.mock.timers.tick(100)
+        await flushMicrotasks()
+    }
+
+    assert.equal(attempts, 1 + 3, 'the initial request plus MAX_BATCH_RETRIES')
+
+    coordinator.reset()
+})
+
+test('offline resume coordinator ignores a rejection from a torn-down resume', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+
+    const pending: { reject?: () => void } = {}
+    let attempts = 0
+    const coordinator = new WaOfflineResumeCoordinator({
+        logger: createNoopLogger(),
+        runtime: {
+            sendNode: async () => {
+                attempts += 1
+                if (attempts === 1) {
+                    await new Promise<void>((_resolve, reject) => {
+                        pending.reject = () => reject(new Error('stale socket'))
+                    })
+                }
+            },
+            emitOfflineResume: () => undefined
+        }
+    })
+
+    coordinator.handleOfflinePreview(500)
+    await flushMicrotasks()
+    assert.equal(attempts, 1)
+
+    coordinator.reset()
+    coordinator.handleOfflinePreview(500)
+    await flushMicrotasks()
+    assert.equal(attempts, 2)
+
+    assert.notEqual(pending.reject, undefined)
+    pending.reject?.()
+    await flushMicrotasks()
+
+    t.mock.timers.tick(1_000)
+    await flushMicrotasks()
+
+    assert.equal(attempts, 2, 'the stale rejection neither retries nor clears the new request')
+
+    coordinator.reset()
+})

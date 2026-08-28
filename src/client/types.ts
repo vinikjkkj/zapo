@@ -1665,10 +1665,11 @@ export interface WaOfflineResumeEvent {
     readonly status: 'resuming' | 'complete'
     readonly totalStanzas: number
     /**
-     * Stanzas still outstanding against `totalStanzas`. Normally `0` on the
-     * terminal `'complete'` event; a non-zero value there means the flush was
-     * cut short (`forced: true`) and the rest stays queued for the next
-     * connection.
+     * Stanzas still outstanding against `totalStanzas`, counted down from the
+     * server's preview figure. That figure is an estimate, so a clean finish
+     * can still report a small non-zero remainder. Read it together with
+     * `forced`: a remainder alongside `forced: true` is the case where the
+     * flush was cut short and the rest stays queued for the next connection.
      */
     readonly remainingStanzas: number
     /**

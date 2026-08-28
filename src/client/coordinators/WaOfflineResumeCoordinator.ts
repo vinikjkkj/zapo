@@ -7,6 +7,7 @@ import { toError } from '@util/primitives'
 const WA_OFFLINE_RESUME = Object.freeze({
     BATCH_SIZE: 200,
     REQUEST_DEBOUNCE_MS: 100,
+    MAX_BATCH_RETRIES: 3,
     STANZA_TIMEOUT_MS: 60_000
 } as const)
 
@@ -35,6 +36,8 @@ export class WaOfflineResumeCoordinator {
     private totalStanzas: number
     private pendingStanzas: number
     private batchInFlight: boolean
+    private batchRetries: number
+    private resumeGeneration: number
     private lastBatchRequestMs: number
     private batchTimeout: ReturnType<typeof setTimeout> | null
     private stanzaTimeout: ReturnType<typeof setTimeout> | null
@@ -46,6 +49,8 @@ export class WaOfflineResumeCoordinator {
         this.totalStanzas = 0
         this.pendingStanzas = 0
         this.batchInFlight = false
+        this.batchRetries = 0
+        this.resumeGeneration = 0
         this.lastBatchRequestMs = 0
         this.batchTimeout = null
         this.stanzaTimeout = null
@@ -65,6 +70,8 @@ export class WaOfflineResumeCoordinator {
         this.totalStanzas = stanzaCount
         this.pendingStanzas = stanzaCount
         this.batchInFlight = false
+        this.batchRetries = 0
+        this.resumeGeneration += 1
         this.lastBatchRequestMs = 0
         this.logger.info('offline resume started', {
             totalStanzas: stanzaCount
@@ -102,6 +109,8 @@ export class WaOfflineResumeCoordinator {
         this.totalStanzas = 0
         this.pendingStanzas = 0
         this.batchInFlight = false
+        this.batchRetries = 0
+        this.resumeGeneration += 1
         this.lastBatchRequestMs = 0
     }
 
@@ -155,17 +164,44 @@ export class WaOfflineResumeCoordinator {
             batchSize: WA_OFFLINE_RESUME.BATCH_SIZE,
             remainingStanzas: this.pendingStanzas
         })
-        void this.sendOfflineBatch()
+        void this.sendOfflineBatch(this.resumeGeneration)
     }
 
-    private async sendOfflineBatch(): Promise<void> {
+    /**
+     * A rejected request delivers no stanza, and only a delivered stanza
+     * schedules the next one, so without a retry here a single transport blip
+     * strands the whole queue until the stanza timeout. `generation` pins the
+     * outcome to the resume that issued it: a rejection from a torn-down resume
+     * must not clear the current one's in-flight flag or retry on its behalf.
+     */
+    private async sendOfflineBatch(generation: number): Promise<void> {
         try {
             await this.runtime.sendNode(buildOfflineBatchNode(WA_OFFLINE_RESUME.BATCH_SIZE))
+            if (generation === this.resumeGeneration) {
+                this.batchRetries = 0
+            }
         } catch (err: unknown) {
+            if (
+                generation !== this.resumeGeneration ||
+                this.state !== WA_OFFLINE_RESUME_STATE.RESUMING
+            ) {
+                return
+            }
             this.batchInFlight = false
-            this.logger.warn('offline batch request failed', {
+            this.batchRetries += 1
+            if (this.batchRetries > WA_OFFLINE_RESUME.MAX_BATCH_RETRIES) {
+                this.logger.warn('offline batch request failed, giving up', {
+                    attempts: this.batchRetries,
+                    remainingStanzas: this.pendingStanzas,
+                    message: toError(err).message
+                })
+                return
+            }
+            this.logger.debug('offline batch request failed, retrying', {
+                attempt: this.batchRetries,
                 message: toError(err).message
             })
+            this.scheduleNextBatch()
         }
     }
 
