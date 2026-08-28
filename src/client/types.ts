@@ -1664,9 +1664,18 @@ export interface WaClientEventMap {
 export interface WaOfflineResumeEvent {
     readonly status: 'resuming' | 'complete'
     readonly totalStanzas: number
-    /** `0` on the terminal `'complete'` event. */
+    /**
+     * Stanzas still outstanding against `totalStanzas`. Normally `0` on the
+     * terminal `'complete'` event; a non-zero value there means the flush was
+     * cut short (`forced: true`) and the rest stays queued for the next
+     * connection.
+     */
     readonly remainingStanzas: number
-    /** `true` when triggered by an explicit catch-up request rather than auto-resume on reconnect. */
+    /**
+     * `true` when the resume was closed by the client because the server went
+     * quiet for 60s instead of by the server's terminal `offline` bulletin.
+     * Pair with `remainingStanzas` to tell a clean finish from a cut-short one.
+     */
     readonly forced: boolean
 }
 

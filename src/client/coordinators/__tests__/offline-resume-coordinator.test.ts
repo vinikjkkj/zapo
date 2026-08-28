@@ -12,7 +12,7 @@ async function flushMicrotasks(): Promise<void> {
     await Promise.resolve()
 }
 
-test('offline resume coordinator emits preview event and requests a single offline batch', async () => {
+test('offline resume coordinator emits preview event and requests the first offline batch', async () => {
     const sentNodes: BinaryNode[] = []
     const emittedEvents: WaOfflineResumeEvent[] = []
     const coordinator = new WaOfflineResumeCoordinator({
@@ -45,7 +45,7 @@ test('offline resume coordinator emits preview event and requests a single offli
 })
 
 test('offline resume coordinator decrements pending stanzas and force completes on timeout', async (t) => {
-    t.mock.timers.enable({ apis: ['setTimeout'] })
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
 
     const emittedEvents: WaOfflineResumeEvent[] = []
     const coordinator = new WaOfflineResumeCoordinator({
@@ -95,4 +95,85 @@ test('offline resume coordinator completes when offline completion bulletin arri
         remainingStanzas: 0,
         forced: false
     })
+})
+
+test('offline resume coordinator keeps requesting batches until the queue drains', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+
+    const sentNodes: BinaryNode[] = []
+    const coordinator = new WaOfflineResumeCoordinator({
+        logger: createNoopLogger(),
+        runtime: {
+            sendNode: async (node) => {
+                sentNodes.push(node)
+            },
+            emitOfflineResume: () => undefined
+        }
+    })
+
+    coordinator.handleOfflinePreview(500)
+    await flushMicrotasks()
+    assert.equal(sentNodes.length, 1)
+
+    for (let index = 0; index < 200; index += 1) {
+        coordinator.trackOfflineStanza()
+    }
+    await flushMicrotasks()
+    assert.equal(sentNodes.length, 1, 'no second request before the debounce elapses')
+
+    t.mock.timers.tick(100)
+    await flushMicrotasks()
+    assert.equal(sentNodes.length, 2)
+
+    for (let index = 0; index < 200; index += 1) {
+        coordinator.trackOfflineStanza()
+    }
+    t.mock.timers.tick(100)
+    await flushMicrotasks()
+    assert.equal(sentNodes.length, 3)
+
+    assert.deepEqual(sentNodes, [
+        buildOfflineBatchNode(200),
+        buildOfflineBatchNode(200),
+        buildOfflineBatchNode(200)
+    ])
+
+    for (let index = 0; index < 100; index += 1) {
+        coordinator.trackOfflineStanza()
+    }
+    t.mock.timers.tick(1_000)
+    await flushMicrotasks()
+    assert.equal(sentNodes.length, 4, 'one trailing request, then the loop winds down')
+
+    t.mock.timers.tick(10_000)
+    await flushMicrotasks()
+    assert.equal(sentNodes.length, 4, 'no stanza arrives, so nothing else is scheduled')
+
+    coordinator.reset()
+})
+
+test('offline resume coordinator stops requesting batches once the resume completes', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+
+    const sentNodes: BinaryNode[] = []
+    const coordinator = new WaOfflineResumeCoordinator({
+        logger: createNoopLogger(),
+        runtime: {
+            sendNode: async (node) => {
+                sentNodes.push(node)
+            },
+            emitOfflineResume: () => undefined
+        }
+    })
+
+    coordinator.handleOfflinePreview(500)
+    await flushMicrotasks()
+    coordinator.trackOfflineStanza()
+    coordinator.handleOfflineComplete(1)
+
+    t.mock.timers.tick(60_000)
+    await flushMicrotasks()
+
+    assert.equal(coordinator.isComplete, true)
+    assert.equal(sentNodes.length, 1, 'the pending debounce timer is cancelled on complete')
 })
