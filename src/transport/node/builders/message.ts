@@ -2,6 +2,7 @@ import type { WaButtonAddonKind } from '@message/encode/content'
 import type { BinaryNode } from '@transport/types'
 import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NODE_TAGS } from '@protocol/constants'
 import { WA_DEFAULTS } from '@protocol/defaults'
+import { proto, type Proto } from '@proto'
 
 interface EncryptedParticipant {
     readonly jid: string
