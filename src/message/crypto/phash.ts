@@ -12,43 +12,97 @@ const CHAR_C = 0x63
 const CHAR_U = 0x75
 const CHAR_S = 0x73
 
-const MAX_PARTICIPANTS = 2048
-const PER_WID_BYTES = 96
+/**
+ * Upper bound on the bytes the canonical rewrite can add to a single jid: the
+ * `.0:` agent marker plus a device digit when the input carries neither, plus
+ * the `c.us` server substitution.
+ */
+const CANONICAL_GROWTH_BYTES = 4 + WA_DEFAULTS.HOST_DOMAIN.length
 
-const SCRATCH = new Uint8Array(MAX_PARTICIPANTS * PER_WID_BYTES)
-const OFFSETS = new Uint32Array(MAX_PARTICIPANTS + 1)
-const ORDER = new Uint32Array(MAX_PARTICIPANTS)
+/**
+ * Largest canonical buffer kept alive between calls (the index arrays scale
+ * with it). Lists above this bound are rare enough that a throwaway allocation
+ * beats holding the memory for the life of the process.
+ */
+const RETAINED_SCRATCH_BYTES = 1024 * 1024
 
+interface PhashBuffers {
+    scratch: Uint8Array
+    offsets: Uint32Array
+    order: Uint32Array
+}
+
+const RETAINED: PhashBuffers = {
+    scratch: new Uint8Array(0),
+    offsets: new Uint32Array(0),
+    order: new Uint32Array(0)
+}
+
+/**
+ * Computes the v2 participant hash (`2:<base64>`) attached to group and
+ * broadcast-list fanouts.
+ *
+ * Every participant is canonicalized to `<user>.0:<device>@<server>`, the set
+ * is sorted bytewise and hashed as a single SHA-256 stream. There is no
+ * participant ceiling: the canonical buffer grows to fit the list, so a group
+ * whose members resolve to tens of thousands of devices still hashes.
+ *
+ * @param participants device jids, in any order
+ * @returns the `2:`-prefixed phash, or `'2:'` when the list is empty
+ */
 export function computePhashV2(participants: readonly string[]): string {
-    if (participants.length === 0) return '2:'
     const n = participants.length
-    if (n > MAX_PARTICIPANTS) {
-        throw new Error(`phash participant count ${n} exceeds MAX_PARTICIPANTS ${MAX_PARTICIPANTS}`)
+    if (n === 0) return '2:'
+
+    let requiredBytes = 0
+    for (let i = 0; i < n; i += 1) {
+        requiredBytes += participants[i].length + CANONICAL_GROWTH_BYTES
     }
+    const { scratch, offsets, order } = acquireBuffers(n, requiredBytes)
 
     let off = 0
     for (let i = 0; i < n; i += 1) {
-        OFFSETS[i] = off
-        const nextOff = writeCanonicalUtf8(SCRATCH, off, participants[i])
-        if (nextOff > SCRATCH.length) {
-            throw new Error(
-                `phash canonical buffer overflow at participant ${i}: needs ${nextOff} bytes, scratch is ${SCRATCH.length}`
-            )
-        }
-        off = nextOff
+        offsets[i] = off
+        off = writeCanonicalUtf8(scratch, off, participants[i])
     }
-    OFFSETS[n] = off
+    offsets[n] = off
+    if (off > scratch.length) {
+        throw new Error(
+            `phash canonical buffer overflow: needs ${off} bytes, scratch is ${scratch.length}`
+        )
+    }
 
-    for (let i = 0; i < n; i += 1) ORDER[i] = i
-    ORDER.subarray(0, n).sort((a, b) => compareScratchSlice(SCRATCH, OFFSETS, a, b))
+    for (let i = 0; i < n; i += 1) order[i] = i
+    const ranked = order.subarray(0, n)
+    ranked.sort((a, b) => compareScratchSlice(scratch, offsets, a, b))
 
     const parts = new Array<Uint8Array>(n)
     for (let i = 0; i < n; i += 1) {
-        const idx = ORDER[i]
-        parts[i] = SCRATCH.subarray(OFFSETS[idx], OFFSETS[idx + 1])
+        const idx = ranked[i]
+        parts[i] = scratch.subarray(offsets[idx], offsets[idx + 1])
     }
     const digest = sha256(parts)
     return `2:${bytesToBase64(digest.subarray(0, PHASH_DIGEST_PREFIX))}`
+}
+
+function acquireBuffers(participantCount: number, requiredBytes: number): PhashBuffers {
+    if (requiredBytes > RETAINED_SCRATCH_BYTES) {
+        return {
+            scratch: new Uint8Array(requiredBytes),
+            offsets: new Uint32Array(participantCount + 1),
+            order: new Uint32Array(participantCount)
+        }
+    }
+    if (RETAINED.scratch.length < requiredBytes) {
+        const nextBytes = Math.max(requiredBytes, RETAINED.scratch.length * 2)
+        RETAINED.scratch = new Uint8Array(Math.min(RETAINED_SCRATCH_BYTES, nextBytes))
+    }
+    if (RETAINED.order.length < participantCount) {
+        const capacity = Math.max(participantCount, RETAINED.order.length * 2)
+        RETAINED.offsets = new Uint32Array(capacity + 1)
+        RETAINED.order = new Uint32Array(capacity)
+    }
+    return RETAINED
 }
 
 function writeCanonicalUtf8(out: Uint8Array, start: number, jid: string): number {
