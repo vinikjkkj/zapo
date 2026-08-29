@@ -850,13 +850,14 @@ export class WaMessageDispatchCoordinator {
         })
         if (mentionedGroups.length > 0) {
             if (result.id) {
-                await this.notifyGroupStatusMentions(result.id, mentionedGroups, )
+                await this.notifyGroupStatusMentions(result.id, mentionedGroups, input.message.type || 'text')
             } else {
                 this.deps.logger.warn('invalid id, skipping mention notifications', {
                     groups: mentionedGroups.length
                 })
             }
         }
+        return result
     }
 
     private async notifyGroupStatusMentions(
