@@ -850,7 +850,7 @@ export class WaMessageDispatchCoordinator {
         })
         if (mentionedGroups.length > 0) {
             if (result.id) {
-                await this.notifyGroupStatusMentions(result.id, mentionedGroups, input.message.type || 'text')
+                await this.notifyGroupStatusMentions(result.id, mentionedGroups)
             } else {
                 this.deps.logger.warn('invalid id, skipping mention notifications', {
                     groups: mentionedGroups.length
@@ -862,15 +862,14 @@ export class WaMessageDispatchCoordinator {
 
     private async notifyGroupStatusMentions(
         statusId: string,
-        groupJids: readonly string[],
-        mediaType: string
+        groupJids: readonly string[]
     ): Promise<void> {
         const message = buildGroupStatusMentionMessage(statusId)
         for (let index = 0; index < groupJids.length; index += 1) {
-            await delay(STATUS_MENTION_DELAY)
+            await new Promise((r) => setTimeout(r, STATUS_MENTION_DELAY))
             try {
                 await this.sendMessage(groupJids[index], message, {
-                    additionalAttributes: { type: mediaType },
+                    additionalAttributes: { type: 'text' },
                     disableGroupEphemeralAutoInject: true
                 })
             } catch (error) {
