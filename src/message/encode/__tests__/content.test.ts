@@ -60,6 +60,31 @@ test('group status wrappers resolve the stanza attrs of the message they carry',
     )
 })
 
+test('AI rich-response family resolves to text so the stanza is not dropped', () => {
+    // A `media` stanza with no `mediatype` is discarded by the server, so the
+    // rich-response and bot-forwarded-wrapper family has to go out as `text`.
+    assert.equal(resolveMessageTypeAttr({ richResponseMessage: {} }), 'text')
+    assert.equal(
+        resolveMessageTypeAttr({ botForwardedMessage: { message: { richResponseMessage: {} } } }),
+        'text'
+    )
+    assert.equal(
+        resolveEncMediaType({ botForwardedMessage: { message: { richResponseMessage: {} } } }),
+        null
+    )
+
+    // The wrapper is unwrapped, so a bot-forwarded media message keeps `media`
+    // and its `mediatype`: the inner message decides.
+    assert.equal(
+        resolveMessageTypeAttr({ botForwardedMessage: { message: { imageMessage: {} } } }),
+        'media'
+    )
+    assert.equal(
+        resolveEncMediaType({ botForwardedMessage: { message: { imageMessage: {} } } }),
+        'image'
+    )
+})
+
 test('getContentType picks the payload key, including the unsuffixed ones', () => {
     assert.equal(getContentType(undefined), undefined)
     assert.equal(getContentType({}), undefined)

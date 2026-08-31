@@ -214,7 +214,8 @@ export function unwrapMessage(message: Proto.IMessage): Proto.IMessage {
             msg.viewOnceMessageV2?.message ??
             msg.documentWithCaptionMessage?.message ??
             msg.groupStatusMessage?.message ??
-            msg.groupStatusMessageV2?.message
+            msg.groupStatusMessageV2?.message ??
+            msg.botForwardedMessage?.message
         if (!inner) return msg
         msg = inner
     }
@@ -272,6 +273,8 @@ function resolveMessageTypeAttrFrom(msg: Proto.IMessage): string {
         msg.pollResultSnapshotMessageV3 ||
         msg.templateButtonReplyMessage ||
         msg.messageHistoryNotice ||
+        msg.richResponseMessage ||
+        msg.botForwardedMessage ||
         msg.secretEncryptedMessage?.secretEncType ===
             proto.Message.SecretEncryptedMessage.SecretEncType.MESSAGE_EDIT ||
         msg.secretEncryptedMessage?.secretEncType ===
