@@ -103,13 +103,16 @@ export function packetizeWhatsAppH264AccessUnit(data: Uint8Array, maxPayload = 8
 
 /** RFC 6184 depacketizer for single NAL, STAP-A and FU-A payloads. */
 export class H264Depacketizer {
+    private static readonly MAX_BUFFERED_BYTES = 8 * 1024 * 1024
     private timestamp: number | null = null
     private parts: Uint8Array[] = []
     private keyFrame = false
     private fuParts: Uint8Array[] = []
+    private bufferedBytes = 0
 
-    push(payload: Uint8Array, timestamp: number, marker: boolean): H264AccessUnit | null {
-        if (!payload.length) return null
+    push(payload: Uint8Array, timestamp: number, marker: boolean): H264AccessUnit[] {
+        if (!payload.length) return []
+        const completed: H264AccessUnit[] = []
         let previous: H264AccessUnit | null = null
         if (this.timestamp !== null && this.timestamp !== timestamp) {
             // Some WhatsApp senders omit the RTP marker on a complete access unit.
@@ -117,16 +120,28 @@ export class H264Depacketizer {
             if (this.parts.length && !this.fuParts.length) previous = this.flush()
             this.resetFrame(timestamp)
         }
+        if (previous) completed.push(previous)
         if (this.timestamp === null) this.timestamp = timestamp
+
+        if (
+            this.bufferedBytes + payload.length + START_CODE.length >
+            H264Depacketizer.MAX_BUFFERED_BYTES
+        ) {
+            this.resetFrame(timestamp)
+            return completed
+        }
 
         const type = payload[0] & 0x1f
         if (type >= 1 && type <= 23) this.appendNal(payload)
         else if (type === 24) this.appendStapA(payload)
         else if (type === 28) this.appendFuA(payload)
-        else return null
+        else return completed
 
-        if (marker && !this.fuParts.length) return this.flush()
-        return previous
+        if (marker && !this.fuParts.length) {
+            const current = this.flush()
+            if (current) completed.push(current)
+        }
+        return completed
     }
 
     reset(): void {
@@ -134,6 +149,7 @@ export class H264Depacketizer {
         this.parts = []
         this.fuParts = []
         this.keyFrame = false
+        this.bufferedBytes = 0
     }
 
     private resetFrame(timestamp: number): void {
@@ -141,11 +157,20 @@ export class H264Depacketizer {
         this.fuParts = []
         this.keyFrame = false
         this.timestamp = timestamp
+        this.bufferedBytes = 0
     }
 
     private appendNal(nal: Uint8Array): void {
+        if (
+            this.bufferedBytes + START_CODE.length + nal.length >
+            H264Depacketizer.MAX_BUFFERED_BYTES
+        ) {
+            this.resetFrame(this.timestamp ?? 0)
+            return
+        }
         this.keyFrame ||= (nal[0] & 0x1f) === 5
         this.parts.push(START_CODE, nal.slice())
+        this.bufferedBytes += START_CODE.length + nal.length
     }
 
     private appendStapA(payload: Uint8Array): void {
@@ -167,10 +192,13 @@ export class H264Depacketizer {
         const end = (header & 0x40) !== 0
         const nalType = header & 0x1f
         if (start) {
+            for (const part of this.fuParts) this.bufferedBytes -= part.length
             this.fuParts = [new Uint8Array([(indicator & 0xe0) | nalType]), payload.slice(2)]
+            this.bufferedBytes += payload.length - 1
             this.keyFrame ||= nalType === 5
         } else if (this.fuParts.length) {
             this.fuParts.push(payload.slice(2))
+            this.bufferedBytes += payload.length - 2
         }
         if (end && this.fuParts.length) {
             this.parts.push(START_CODE, ...this.fuParts)

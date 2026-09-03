@@ -37,7 +37,7 @@ export const TRUE_WEB_CLIENT_RELAY_PORT = 3478
 type DataChannelClass = RTCDataChannel
 
 const CONFIG = {
-    TRUE_WEB_CLIENT_RELAY_PORT: 3480,
+    TRUE_WEB_CLIENT_RELAY_PORT,
     CONNECTION_TIMEOUT: 20000,
     MAX_BUFFER_SIZE: 10 * 1024,
     KEEPALIVE_INTERVAL_MS: 1100,
@@ -142,12 +142,18 @@ export class WaSctpRelay extends EventEmitter {
     }
 
     setParticipantIds(selfPid?: number, peerPid?: number): void {
-        this.selfPid = selfPid ?? 0
-        this.peerPid = peerPid ?? 0
+        const nextSelfPid = selfPid ?? 0
+        const nextPeerPid = peerPid ?? 0
+        const changed = nextSelfPid !== this.selfPid || nextPeerPid !== this.peerPid
+        this.selfPid = nextSelfPid
+        this.peerPid = nextPeerPid
         this.logger.debug('sctp participant ids set', {
             selfPid: this.selfPid,
             peerPid: this.peerPid
         })
+        if (changed && this.selfPid && this.peerPid && this.hasConnection()) {
+            this.resendSubscriptions()
+        }
     }
 
     resendSubscriptions(): void {
@@ -1058,6 +1064,8 @@ export class WaSctpRelay extends EventEmitter {
         this.subscriptionSsrc = 0
         this.selfStreamSsrcs = []
         this.peerStreamSsrcs = []
+        this.selfPid = 0
+        this.peerPid = 0
         this.pongCount = 0
         this.rtpRecvCount = 0
         this.unknownRecvCount = 0

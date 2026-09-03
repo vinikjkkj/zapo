@@ -10,7 +10,11 @@ import { SrtcpContext, SrtpSession } from '../crypto/srtp.js'
 import { generateSecureSsrc } from '../crypto/ssrc.js'
 import { H264Depacketizer, packetizeWhatsAppH264AccessUnit } from '../media/h264.js'
 import { MLowCodec } from '../media/mlow-codec.js'
-import { buildPictureLossIndication, buildSenderReportWithSdes } from '../media/rtcp.js'
+import {
+    buildFullIntraRequest,
+    buildPictureLossIndication,
+    buildSenderReportWithSdes
+} from '../media/rtcp.js'
 import { RtpSession } from '../media/rtp.js'
 import { WaAudioEngine } from '../media/WaAudioEngine.js'
 import { parseRelayFromAck } from '../relay/relay-ack.js'
@@ -114,6 +118,9 @@ export class WaCallMediaSession implements AudioSender {
     private videoOctetCount = 0
     private videoFrameNumber = 0
     private videoTransportSequence = 0
+    private lastVideoRtpTimestamp: number | null = null
+    private lastVideoSentAt = 0
+    private videoFirSequence = 0
     private receivedVideoKeyFrame = false
     private lastVideoPliAt = 0
     private srtpErrorCount = 0
@@ -371,11 +378,14 @@ export class WaCallMediaSession implements AudioSender {
             this.info.mediaType !== CallMediaType.Video ||
             !this.videoRtpSession ||
             !this.srtpSession ||
+            !this.sctpRelay.hasConnection() ||
             !data.length
         )
             return 0
         const payloads = packetizeWhatsAppH264AccessUnit(data)
         const timestamp = Math.floor((Math.max(0, timestampUs) * 90) / 1000) >>> 0
+        this.lastVideoRtpTimestamp = timestamp
+        this.lastVideoSentAt = Date.now()
         const keyFrame = this.isH264KeyFrame(data)
         for (let index = 0; index < payloads.length; index++) {
             const packet = this.videoRtpSession.createPacketAtTimestamp(
@@ -869,6 +879,28 @@ export class WaCallMediaSession implements AudioSender {
                     this.rtpSession = RtpSession.whatsappOpus(newSelfSsrc)
                 }
 
+                if (this.info.mediaType === CallMediaType.Video) {
+                    const relaySlots = [0, 1, 4, 2, 3, 5, 7, 8, 6]
+                    this.selfStreamSsrcs = relaySlots.map((slot) =>
+                        generateSecureSsrc(this.info.callId, ourDeviceJid, slot)
+                    )
+                    this.selfSsrc = this.selfStreamSsrcs[0]
+                    this.rtpSession = RtpSession.whatsappOpus(this.selfSsrc)
+                    this.videoRtpSession = new RtpSession(
+                        generateSecureSsrc(this.info.callId, ourDeviceJid, 2),
+                        97,
+                        90000,
+                        3000
+                    )
+                    if (peerDeviceJid) {
+                        this.peerStreamSsrcs = relaySlots.map((slot) =>
+                            generateSecureSsrc(this.info.callId, peerDeviceJid, slot)
+                        )
+                    }
+                    this.sctpRelay.setSsrc(this.selfSsrc)
+                    this.sctpRelay.setStreamSsrcs(this.selfStreamSsrcs, this.peerStreamSsrcs)
+                }
+
                 if (peerDeviceJid) {
                     const peerDeviceSsrc = generateSecureSsrc(this.info.callId, peerDeviceJid)
                     this.peerSsrcs = [peerDeviceSsrc]
@@ -1102,6 +1134,10 @@ export class WaCallMediaSession implements AudioSender {
         this.videoRtpSession = null
         this.srtpSession = null
         this.srtcpContext = null
+        for (const depacketizer of this.h264Depacketizers.values()) depacketizer.reset()
+        this.h264Depacketizers.clear()
+        this.lastVideoRtpTimestamp = null
+        this.lastVideoSentAt = 0
 
         this.audioSendCount = 0
         this.audioDropCount = 0
@@ -1284,7 +1320,7 @@ export class WaCallMediaSession implements AudioSender {
 
         if (data.length >= 12) {
             const ssrc = ((data[8] << 24) | (data[9] << 16) | (data[10] << 8) | data[11]) >>> 0
-            if (ssrc === this.selfSsrc) {
+            if (ssrc === this.selfSsrc || this.selfStreamSsrcs.includes(ssrc)) {
                 this.selfEchoCount++
                 return
             }
@@ -1332,26 +1368,40 @@ export class WaCallMediaSession implements AudioSender {
                             bytes: rtpPacket.payload.length
                         })
                     }
+                    const videoPayload =
+                        pt === 103 ? rtpPacket.payload.subarray(2) : rtpPacket.payload
+                    const sequenceNumber =
+                        pt === 103 && rtpPacket.payload.length >= 2
+                            ? (rtpPacket.payload[0] << 8) | rtpPacket.payload[1]
+                            : rtpPacket.header.sequenceNumber
+                    if (!videoPayload.length) return
                     this.delegate.emitInboundVideoRtp(this.info, {
                         payloadType: pt,
-                        sequenceNumber: rtpPacket.header.sequenceNumber,
+                        sequenceNumber,
                         timestamp: rtpPacket.header.timestamp,
                         ssrc: rtpPacket.header.ssrc,
                         marker: rtpPacket.header.marker,
-                        payload: rtpPacket.payload
+                        payload: videoPayload
                     })
-                    if (pt === 97) {
+                    if (pt === 97 || pt === 103) {
                         let depacketizer = this.h264Depacketizers.get(rtpPacket.header.ssrc)
                         if (!depacketizer) {
                             depacketizer = new H264Depacketizer()
+                            if (this.h264Depacketizers.size >= 8) {
+                                const oldest = this.h264Depacketizers.keys().next().value
+                                if (oldest !== undefined) {
+                                    this.h264Depacketizers.get(oldest)?.reset()
+                                    this.h264Depacketizers.delete(oldest)
+                                }
+                            }
                             this.h264Depacketizers.set(rtpPacket.header.ssrc, depacketizer)
                         }
-                        const frame = depacketizer.push(
-                            rtpPacket.payload,
+                        const frames = depacketizer.push(
+                            videoPayload,
                             rtpPacket.header.timestamp,
                             rtpPacket.header.marker
                         )
-                        if (frame) {
+                        for (const frame of frames) {
                             if (frame.keyFrame) this.receivedVideoKeyFrame = true
                             if (
                                 !this.receivedVideoKeyFrame &&
@@ -1366,6 +1416,14 @@ export class WaCallMediaSession implements AudioSender {
                                     )
                                     this.sctpRelay.broadcast(
                                         toArrayBuffer(this.srtcpContext.protect(pli, senderSsrc))
+                                    )
+                                    const fir = buildFullIntraRequest(
+                                        senderSsrc,
+                                        rtpPacket.header.ssrc,
+                                        this.videoFirSequence++
+                                    )
+                                    this.sctpRelay.broadcast(
+                                        toArrayBuffer(this.srtcpContext.protect(fir, senderSsrc))
                                     )
                                     this.logger.debug('video key frame requested', {
                                         callId: this.info.callId,
@@ -1517,7 +1575,9 @@ export class WaCallMediaSession implements AudioSender {
             const cname = randomBytes(18)
             this.rtcpInterval = setInterval(() => {
                 if (!this.srtcpContext || !this.videoRtpSession) return
-                const timestamp = Math.floor(Date.now() * 90) >>> 0
+                if (this.lastVideoRtpTimestamp === null) return
+                const elapsed = Math.max(0, Date.now() - this.lastVideoSentAt)
+                const timestamp = (this.lastVideoRtpTimestamp + Math.floor(elapsed * 90)) >>> 0
                 const report = buildSenderReportWithSdes(
                     this.videoRtpSession.getSsrc(),
                     this.videoPacketCount,

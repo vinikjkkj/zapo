@@ -446,7 +446,7 @@ export class WaCallManager extends EventEmitter {
 
         const active: WaCallMediaSession[] = []
         for (const session of this.calls.values()) {
-            if (!session.info.isEnded) {
+            if (!session.info.isEnded && session.info.stateData.connectedAt === undefined) {
                 active.push(session)
             }
         }

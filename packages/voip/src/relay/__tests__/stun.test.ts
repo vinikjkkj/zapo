@@ -8,6 +8,7 @@ import {
     buildBindingRequestWithSubs,
     buildSenderSubscriptions,
     buildWhatsAppPing,
+    isRtcpPacket,
     isRtpPacket,
     isStunPacket,
     parseStunResponse
@@ -19,6 +20,22 @@ test('buildWhatsAppPing emits a 20-byte STUN-like packet', () => {
     assert.equal(isStunPacket(ping), true)
     const info = parseStunResponse(ping)
     assert.equal(info?.method, 'wa-ping')
+})
+
+test('isRtcpPacket distinguishes RTCP from RTP and malformed packets', () => {
+    const rtcp = new Uint8Array(8)
+    rtcp[0] = 0x80
+    rtcp[1] = 206
+    const rtp = new Uint8Array(12)
+    rtp[0] = 0x80
+    rtp[1] = 97
+    const wrongVersion = new Uint8Array(8)
+    wrongVersion[0] = 0x40
+    wrongVersion[1] = 200
+    assert.equal(isRtcpPacket(rtcp), true)
+    assert.equal(isRtcpPacket(rtp), false)
+    assert.equal(isRtcpPacket(new Uint8Array(7)), false)
+    assert.equal(isRtcpPacket(wrongVersion), false)
 })
 
 test('buildSenderSubscriptions encodes protobuf wrapper for SSRC', () => {

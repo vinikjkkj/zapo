@@ -195,6 +195,7 @@ export class SrtpContext {
 }
 
 export class SrtpSession {
+    private static readonly MAX_RECV_CONTEXTS = 32
     private readonly sendKey: SrtpKeyingMaterial
     private readonly recvKey: SrtpKeyingMaterial
     private readonly sendAuthLen?: number
@@ -226,11 +227,20 @@ export class SrtpSession {
     }
 
     unprotect(data: Uint8Array): RtpPacket {
+        if (data.length < 12) {
+            throw new SrtpError('packet_too_short', `Packet too short: ${data.length} bytes`)
+        }
         const header = RtpHeader.decode(data)
         let ctx = this.recvContexts.get(header.ssrc)
         if (!ctx) {
             ctx = new SrtpContext(this.recvKey, this.recvAuthLen)
+            const packet = ctx.unprotect(data)
+            if (this.recvContexts.size >= SrtpSession.MAX_RECV_CONTEXTS) {
+                const oldest = this.recvContexts.keys().next().value
+                if (oldest !== undefined) this.recvContexts.delete(oldest)
+            }
             this.recvContexts.set(header.ssrc, ctx)
+            return packet
         }
         return ctx.unprotect(data)
     }

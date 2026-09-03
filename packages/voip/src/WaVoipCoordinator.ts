@@ -118,7 +118,11 @@ export class WaVoipCoordinator {
         return this.manager.feedLiveAudio(callId, data)
     }
 
-    /** Feed one H.264 Annex-B encoded access unit into an active video call. */
+    /**
+     * Feed one H.264 Annex-B encoded access unit into an active video call.
+     * `timestampUs` is the capture timestamp in microseconds. Returns the number
+     * of RTP packets sent, or `0` when video media is not active.
+     */
     feedLiveVideo(callId: string, data: Uint8Array, timestampUs: number): number {
         return this.manager.feedLiveVideo(callId, data, timestampUs)
     }
