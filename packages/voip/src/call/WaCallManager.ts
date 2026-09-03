@@ -18,7 +18,6 @@ import {
     CallDirection,
     CallMediaType,
     type CallOfferOptions,
-    CallState,
     EndCallReason,
     type WaVoipDeps,
     type WaVoipStores
@@ -153,6 +152,10 @@ export class WaCallManager extends EventEmitter {
         return session?.feedLiveAudio(data) ?? 0
     }
 
+    feedLiveVideo(callId: string, data: Uint8Array, timestampUs: number): number {
+        return this.calls.get(callId)?.feedLiveVideo(data, timestampUs) ?? 0
+    }
+
     getLiveBufferMs(callId: string): number {
         const session = this.calls.get(callId)
         return session?.getLiveBufferMs() ?? 0
@@ -228,7 +231,19 @@ export class WaCallManager extends EventEmitter {
             try {
                 const creds = this.deps.authClient.getCurrentCredentials()
                 const selfLid = creds?.meLid || creds?.meJid || ''
-                await session.initMedia(selfLid, peerJid)
+                const peerDeviceJids = await this.resolvePeerDeviceJids(peerJid)
+                if (info.relayData) {
+                    info.relayData.participantJids = [
+                        ...peerDeviceJids,
+                        ...(info.relayData.participantJids || []).filter(
+                            (jid) => !peerDeviceJids.includes(jid)
+                        )
+                    ]
+                }
+                const mediaPeerJid = isVideo
+                    ? peerDeviceJids.find((jid) => /:[1-9]\d*@/.test(jid)) || peerJid
+                    : peerJid
+                await session.initMedia(selfLid, mediaPeerJid)
                 await session.sendIncomingPreaccept(peerJid)
                 await session.sendIncomingRelayLatency()
             } catch (err) {
@@ -313,9 +328,27 @@ export class WaCallManager extends EventEmitter {
         await session.handleCallMuteV2(node, peerJid)
     }
 
-    async handleCallTerminate(node: BinaryNode): Promise<void> {
+    async handleCallTerminate(node: BinaryNode, peerJid?: string): Promise<void> {
         const session = this.resolveSessionFromNode(node)
         if (!session) return
+        const action = Array.isArray(node.content)
+            ? node.content.find(
+                  (child) => child && typeof child === 'object' && child.tag === 'terminate'
+              )
+            : undefined
+        this.logger.warn('remote terminated call', {
+            callId: session.callId,
+            stanzaId: node.attrs?.id,
+            from: node.attrs?.from,
+            terminateAttrs: action?.attrs ?? {}
+        })
+        if (session.shouldIgnoreTerminate(peerJid, action?.attrs?.reason)) {
+            this.logger.debug('ignoring accepted_elsewhere from non-selected companion', {
+                callId: session.callId,
+                from: peerJid
+            })
+            return
+        }
         session.handleCallTerminate()
         this.calls.delete(session.callId)
         await this.maybeUnblockWaitingCalls()
@@ -369,6 +402,9 @@ export class WaCallManager extends EventEmitter {
                 emitIncoming: (call) => this.emit('call_incoming', call),
                 emitEnded: (call) => this.emit('call_ended', call),
                 emitInboundAudio: (call, pcm) => this.emit('call_inbound_audio', call, pcm),
+                emitInboundVideoRtp: (call, packet) =>
+                    this.emit('call_inbound_video_rtp', call, packet),
+                emitInboundVideo: (call, frame) => this.emit('call_inbound_video', call, frame),
                 emitOutboundAudioFinished: (call) => this.emit('call_outbound_audio_finished', call)
             }
         })
@@ -408,21 +444,21 @@ export class WaCallManager extends EventEmitter {
             if (session) return session
         }
 
-        const outgoing: WaCallMediaSession[] = []
+        const active: WaCallMediaSession[] = []
         for (const session of this.calls.values()) {
-            if (session.info.isInitiator && !session.info.isEnded) {
-                const state = session.info.stateData.state
-                if (state === CallState.Initiating || state === CallState.Ringing) {
-                    outgoing.push(session)
-                }
+            if (!session.info.isEnded) {
+                active.push(session)
             }
         }
 
-        if (outgoing.length === 1) return outgoing[0]
+        // WhatsApp omits call-id from some offer ACKs sent after accepting an
+        // incoming call. When there is only one live call, it is unambiguous
+        // and the ACK contains the final relay participant/device metadata.
+        if (active.length === 1) return active[0]
 
         this.logger.debug('offer ack could not be routed', {
             callId: callId ?? null,
-            candidateCount: outgoing.length
+            candidateCount: active.length
         })
         return null
     }
@@ -444,6 +480,32 @@ export class WaCallManager extends EventEmitter {
         return peerJid
     }
 
+    private async resolvePeerDeviceJids(peerJid: string): Promise<string[]> {
+        const primaryJid = /:\d+@/.test(peerJid) ? peerJid : peerJid.replace('@', ':0@')
+        if (/:[1-9]\d*@/.test(peerJid)) return [peerJid]
+
+        try {
+            const synced = await this.deps.signalDeviceSync.syncDeviceList([peerJid])
+            const devices = synced.flatMap((entry) => entry.deviceJids)
+            const resolved = Array.from(new Set([primaryJid, ...devices]))
+            if (resolved.length > 0) {
+                this.logger.debug('incoming peer device resolved', {
+                    peerJid,
+                    peerDeviceJids: resolved,
+                    deviceCount: resolved.length
+                })
+                return resolved
+            }
+        } catch (err) {
+            this.logger.trace('incoming peer device resolution failed', {
+                peerJid,
+                message: toError(err).message
+            })
+        }
+
+        return [primaryJid]
+    }
+
     private async maybeUnblockWaitingCalls(): Promise<void> {
         while (this.activeCallCount < this.maxConcurrentCalls) {
             const waiting = [...this.calls.values()].find(
@@ -463,7 +525,20 @@ export class WaCallManager extends EventEmitter {
         const creds = this.deps.authClient.getCurrentCredentials()
         const selfLid = creds?.meLid || creds?.meJid || ''
 
-        await session.initMedia(selfLid, session.info.peerJid)
+        const peerDeviceJids = await this.resolvePeerDeviceJids(session.info.peerJid)
+        if (session.info.relayData) {
+            session.info.relayData.participantJids = [
+                ...peerDeviceJids,
+                ...(session.info.relayData.participantJids || []).filter(
+                    (jid) => !peerDeviceJids.includes(jid)
+                )
+            ]
+        }
+        const mediaPeerJid =
+            session.info.mediaType === CallMediaType.Video
+                ? peerDeviceJids.find((jid) => /:[1-9]\d*@/.test(jid)) || session.info.peerJid
+                : session.info.peerJid
+        await session.initMedia(selfLid, mediaPeerJid)
         await session.sendIncomingPreaccept(session.info.peerJid)
         await session.sendIncomingRelayLatency()
 

@@ -180,6 +180,10 @@ export class RtpSession {
         this.samplesPerPacket = samplesPerPacket
     }
 
+    getSsrc(): number {
+        return this.ssrc
+    }
+
     static whatsappOpus(ssrc: number): RtpSession {
         return new RtpSession(ssrc, PayloadType.WhatsAppOpus, 16000, 960)
     }
@@ -196,6 +200,18 @@ export class RtpSession {
         this.sequenceNumber = (this.sequenceNumber + 1) & 0xffff
         this.timestamp = (this.timestamp + this.samplesPerPacket) >>> 0
 
+        return new RtpPacket(header, payload)
+    }
+
+    createPacketAtTimestamp(payload: Uint8Array, timestamp: number, marker = false): RtpPacket {
+        const header = new RtpHeader(
+            this.payloadType,
+            this.sequenceNumber,
+            timestamp >>> 0,
+            this.ssrc
+        )
+        header.marker = marker
+        this.sequenceNumber = (this.sequenceNumber + 1) & 0xffff
         return new RtpPacket(header, payload)
     }
 

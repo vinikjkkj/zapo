@@ -28,6 +28,12 @@ function closeQuietly(closeable: { close(): void } | null | undefined, logger: L
 }
 
 type PeerConnectionClass = RTCPeerConnection
+
+// This deployment's relay path accepts media on the advertised TURN/STUN port.
+// Keep this explicit because 3480 is not reachable from the production host.
+// This deployment reaches WhatsApp relays on the advertised/faux port.
+// Peer device/SSRC resolution is handled separately by WaCallManager.
+export const TRUE_WEB_CLIENT_RELAY_PORT = 3478
 type DataChannelClass = RTCDataChannel
 
 const CONFIG = {
@@ -104,6 +110,10 @@ export class WaSctpRelay extends EventEmitter {
     private keepaliveTimers = new Map<string, NodeJS.Timeout>()
     private audioSsrc = 0
     private subscriptionSsrc = 0
+    private selfStreamSsrcs: number[] = []
+    private peerStreamSsrcs: number[] = []
+    private selfPid = 0
+    private peerPid = 0
 
     constructor(options: WaSctpRelayOptions = {}) {
         super()
@@ -119,6 +129,24 @@ export class WaSctpRelay extends EventEmitter {
         this.subscriptionSsrc = ssrc
         this.logger.debug('sctp subscription ssrc set', {
             ssrc: `0x${ssrc.toString(16).padStart(8, '0')}`
+        })
+    }
+
+    setStreamSsrcs(selfSsrcs: number[], peerSsrcs: number[]): void {
+        this.selfStreamSsrcs = selfSsrcs.filter(Boolean)
+        this.peerStreamSsrcs = peerSsrcs.filter(Boolean)
+        this.logger.debug('sctp relay stream ssrcs set', {
+            selfCount: this.selfStreamSsrcs.length,
+            peerCount: this.peerStreamSsrcs.length
+        })
+    }
+
+    setParticipantIds(selfPid?: number, peerPid?: number): void {
+        this.selfPid = selfPid ?? 0
+        this.peerPid = peerPid ?? 0
+        this.logger.debug('sctp participant ids set', {
+            selfPid: this.selfPid,
+            peerPid: this.peerPid
         })
     }
 
@@ -508,8 +536,11 @@ export class WaSctpRelay extends EventEmitter {
                 return
             }
 
+            // The legacy subscription requests carry only the primary inbound
+            // stream. Multi-stream audio/video subscriptions belong to the v4
+            // allocation below; repeating v1-v3 for every slot causes some
+            // relays to accept the uplink without forwarding the peer stream.
             const subs = buildSenderSubscriptions(ssrc)
-
             if (localUfrag) {
                 const username = TEXT_ENCODER.encode(`${remoteUfrag}:${localUfrag}`)
                 const v1 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
@@ -538,8 +569,18 @@ export class WaSctpRelay extends EventEmitter {
             this.logger.trace('stun v3 no-mi sent', { connectionId, label, size: v3.length })
 
             if (relayInfo.rawToken && relayInfo.rawToken.length > 0) {
-                const peerSsrcs = peerSsrc ? [peerSsrc] : []
-                const ssrcList = buildSSRCSubscriptionList([selfSsrc], peerSsrcs, 0, 0)
+                const selfSsrcs = this.selfStreamSsrcs.length ? this.selfStreamSsrcs : [selfSsrc]
+                const peerSsrcs = this.peerStreamSsrcs.length
+                    ? this.peerStreamSsrcs
+                    : peerSsrc
+                      ? [peerSsrc]
+                      : []
+                const ssrcList = buildSSRCSubscriptionList(
+                    selfSsrcs,
+                    peerSsrcs,
+                    this.selfPid,
+                    this.peerPid
+                )
                 const v4 = buildAllocateForRelay(
                     relayInfo.rawToken,
                     ssrcList,
@@ -1015,6 +1056,8 @@ export class WaSctpRelay extends EventEmitter {
         this.stats.connected = 0
         this.audioSsrc = 0
         this.subscriptionSsrc = 0
+        this.selfStreamSsrcs = []
+        this.peerStreamSsrcs = []
         this.pongCount = 0
         this.rtpRecvCount = 0
         this.unknownRecvCount = 0

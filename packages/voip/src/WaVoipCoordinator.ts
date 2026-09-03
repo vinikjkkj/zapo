@@ -118,6 +118,11 @@ export class WaVoipCoordinator {
         return this.manager.feedLiveAudio(callId, data)
     }
 
+    /** Feed one H.264 Annex-B encoded access unit into an active video call. */
+    feedLiveVideo(callId: string, data: Uint8Array, timestampUs: number): number {
+        return this.manager.feedLiveVideo(callId, data, timestampUs)
+    }
+
     /**
      * Milliseconds of live audio currently buffered ahead of the sender for
      * `callId` (`0` when no session exists or external mode is off). Poll it to
@@ -223,6 +228,12 @@ export class WaVoipCoordinator {
         })
         this.manager.on('call_inbound_audio', (call, pcm) => {
             ctx.emit('voip_call_inbound_audio', { call, pcm })
+        })
+        this.manager.on('call_inbound_video_rtp', (call, packet) => {
+            ctx.emit('voip_call_inbound_video_rtp', { call, packet })
+        })
+        this.manager.on('call_inbound_video', (call, frame) => {
+            ctx.emit('voip_call_inbound_video', { call, frame })
         })
         this.manager.on('call_outbound_audio_finished', (call) => {
             ctx.emit('voip_call_outbound_audio_finished', call)

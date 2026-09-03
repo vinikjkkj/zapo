@@ -58,7 +58,27 @@ export interface SrtpKeyingMaterial {
 }
 
 export enum PayloadType {
-    WhatsAppOpus = 120
+    WhatsAppOpus = 120,
+    WhatsAppH264 = 97,
+    WhatsAppH264Rtx = 103
+}
+
+export interface InboundVideoRtpPacket {
+    readonly payloadType: number
+    readonly sequenceNumber: number
+    readonly timestamp: number
+    readonly ssrc: number
+    readonly marker: boolean
+    /** Decrypted RTP payload. PT 97 is H.264; PT 103 is its repair/RTX stream. */
+    readonly payload: Uint8Array
+}
+
+export interface InboundVideoFrame {
+    readonly codec: 'h264'
+    readonly timestamp: number
+    readonly keyFrame: boolean
+    /** Complete Annex-B access unit. */
+    readonly data: Uint8Array
 }
 
 export interface RtpConfig {
@@ -162,6 +182,8 @@ export interface CallManagerEvents {
     call_ended: (call: CallInfo) => void
     /** Decoded peer audio received on this call (16 kHz mono PCM). */
     call_inbound_audio: (call: CallInfo, pcm: Float32Array) => void
+    call_inbound_video_rtp: (call: CallInfo, packet: InboundVideoRtpPacket) => void
+    call_inbound_video: (call: CallInfo, frame: InboundVideoFrame) => void
     /** Preloaded outbound audio finished sending on this call. */
     call_outbound_audio_finished: (call: CallInfo) => void
     call_error: (error: Error) => void
