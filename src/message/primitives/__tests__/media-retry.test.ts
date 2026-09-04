@@ -430,7 +430,10 @@ test('rejects a mediaretry notification with no id, payload, or error code', () 
 })
 
 test('two concurrent requests for the same message share one receipt', async () => {
-    const { requester, sent } = createRequester({ defaultTimeoutMs: 200 })
+    // Default timeout on purpose: a short one races the assertions, and a
+    // pending entry that times out rejects both promises instead of sharing a
+    // receipt. The notification below clears the timer, so nothing dangles.
+    const { requester, sent, waitForSends } = createRequester({})
     const input = {
         messageId: MESSAGE_ID,
         chatJid: CHAT_JID,
@@ -440,7 +443,7 @@ test('two concurrent requests for the same message share one receipt', async () 
 
     const first = requester.request(input)
     const second = requester.request(input)
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await waitForSends(1)
 
     assert.equal(sent.length, 1)
     requester.handleNotification(
@@ -452,6 +455,9 @@ test('two concurrent requests for the same message share one receipt', async () 
     )
     assert.equal((await first).result, 'success')
     assert.equal((await second).result, 'success')
+    // Re-checked after both settle: `waitForSends(1)` returns on the first send,
+    // so a second one could still have been in flight at the earlier assert.
+    assert.equal(sent.length, 1, 'the joined request must not send its own receipt')
 })
 
 test('rejects a mediaretry notification whose sealed payload is empty', () => {

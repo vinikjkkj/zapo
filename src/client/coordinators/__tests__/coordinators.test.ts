@@ -34,6 +34,7 @@ import { WaChatMetadataMemoryStore } from '@store/memory/chat-metadata.store'
 import { WaGroupMetadataMemoryStore } from '@store/memory/group-metadata.store'
 import { WaMessageMemoryStore } from '@store/memory/message.store'
 import type { BinaryNode } from '@transport/types'
+import { delay } from '@util/async'
 import type { ServerClock } from '@util/clock'
 
 function createStubThreadStore(
@@ -1548,14 +1549,26 @@ test('app-state mutation coordinator routes applied SettingPushName to pushNameS
     assert.deepEqual(names, ['Maria'])
 })
 
+interface WaPassiveTasksHarness {
+    readonly coordinator: WaPassiveTasksCoordinator
+    /**
+     * True once the coordinator has sent its closing `passive.active` IQ – the
+     * last step of the post-connect run, so the receipt flush is finished.
+     * Waiting on the pipeline's own end marker keeps assertions off a fixed
+     * sleep a loaded machine can outrun.
+     */
+    isSettled(): boolean
+}
+
 function createPassiveTasksCoordinator(overrides: {
     readonly takeDanglingReceipts: () => BinaryNode[]
     readonly sendNodeDirect: (node: BinaryNode) => Promise<void>
     readonly shouldQueueDanglingReceipt?: (node: BinaryNode, error: Error) => boolean
     readonly requeueDanglingReceipt?: (node: BinaryNode) => void
-}): WaPassiveTasksCoordinator {
+}): WaPassiveTasksHarness {
     const requeued: BinaryNode[] = []
-    return new WaPassiveTasksCoordinator({
+    let settled = false
+    const coordinator = new WaPassiveTasksCoordinator({
         logger: createNoopLogger(),
         signalStore: {
             getSignedPreKeyRotationTs: async () => Date.now(),
@@ -1586,7 +1599,12 @@ function createPassiveTasksCoordinator(overrides: {
             rotateSignedPreKey: async () => undefined
         } as never,
         runtime: {
-            queryWithContext: async () => ({ tag: 'iq', attrs: {} }),
+            queryWithContext: async (context: string) => {
+                if (context === 'passive.active') {
+                    settled = true
+                }
+                return { tag: 'iq', attrs: {} }
+            },
             getCurrentCredentials: () => ({ meJid: '551100000000@s.whatsapp.net' }) as never,
             persistServerHasPreKeys: async () => undefined,
             sendNodeDirect: overrides.sendNodeDirect,
@@ -1598,6 +1616,26 @@ function createPassiveTasksCoordinator(overrides: {
             sendInitialPresence: async () => undefined
         }
     })
+    return { coordinator, isSettled: () => settled }
+}
+
+/**
+ * Waits for a fire-and-forget pipeline to reach a checkpoint. Polling beats a
+ * fixed sleep: the sleep either flakes when a loaded machine misses the window
+ * or pads every run to cover the worst case.
+ */
+async function waitFor(
+    predicate: () => boolean,
+    message: string,
+    timeoutMs = 5_000
+): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    while (!predicate()) {
+        if (Date.now() > deadline) {
+            throw new Error(message)
+        }
+        await delay(1)
+    }
 }
 
 function makeReceiptNode(id: string): BinaryNode {
@@ -1611,7 +1649,7 @@ test('passive tasks coordinator flushes dangling receipts concurrently in batche
 
     const nodes = Array.from({ length: 6 }, (_, i) => makeReceiptNode(`r${i}`))
 
-    const coordinator = createPassiveTasksCoordinator({
+    const passiveTasks = createPassiveTasksCoordinator({
         takeDanglingReceipts: () => nodes,
         sendNodeDirect: async (node) => {
             concurrency += 1
@@ -1622,8 +1660,8 @@ test('passive tasks coordinator flushes dangling receipts concurrently in batche
         }
     })
 
-    coordinator.startPassiveTasksAfterConnect()
-    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+    passiveTasks.coordinator.startPassiveTasksAfterConnect()
+    await waitFor(() => passiveTasks.isSettled(), 'passive tasks never finished')
 
     assert.equal(sent.length, 6)
     assert.ok(
@@ -1637,7 +1675,7 @@ test('passive tasks coordinator requeues remaining receipts on transient error',
     const requeued: BinaryNode[] = []
     const nodes = Array.from({ length: 6 }, (_, i) => makeReceiptNode(`r${i}`))
 
-    const coordinator = createPassiveTasksCoordinator({
+    const passiveTasks = createPassiveTasksCoordinator({
         takeDanglingReceipts: () => nodes,
         sendNodeDirect: async (node) => {
             if (node.attrs.id === 'r1') {
@@ -1648,8 +1686,8 @@ test('passive tasks coordinator requeues remaining receipts on transient error',
         requeueDanglingReceipt: (node) => requeued.push(node)
     })
 
-    coordinator.startPassiveTasksAfterConnect()
-    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+    passiveTasks.coordinator.startPassiveTasksAfterConnect()
+    await waitFor(() => passiveTasks.isSettled(), 'passive tasks never finished')
 
     const requeuedIds = requeued.map((node) => node.attrs.id)
     assert.ok(requeuedIds.includes('r1'), 'transient-failed receipt should be requeued')
@@ -2072,7 +2110,7 @@ test('passive tasks coordinator drops non-retryable receipt errors without stopp
     const sent: string[] = []
     const nodes = Array.from({ length: 3 }, (_, i) => makeReceiptNode(`r${i}`))
 
-    const coordinator = createPassiveTasksCoordinator({
+    const passiveTasks = createPassiveTasksCoordinator({
         takeDanglingReceipts: () => nodes,
         sendNodeDirect: async (node) => {
             if (node.attrs.id === 'r1') {
@@ -2083,8 +2121,8 @@ test('passive tasks coordinator drops non-retryable receipt errors without stopp
         shouldQueueDanglingReceipt: () => false
     })
 
-    coordinator.startPassiveTasksAfterConnect()
-    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+    passiveTasks.coordinator.startPassiveTasksAfterConnect()
+    await waitFor(() => passiveTasks.isSettled(), 'passive tasks never finished')
 
     assert.deepEqual(sent, ['r0', 'r2'])
 })
