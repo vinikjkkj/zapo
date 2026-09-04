@@ -1,4 +1,5 @@
 import type { CallInfo } from './call/call-state.js'
+import type { InboundVideoFrame, InboundVideoRtpPacket } from './types.js'
 
 /**
  * Client events emitted by the voip plugin. Passed as the event-map type
@@ -12,6 +13,14 @@ export interface VoipEvents {
     readonly voip_call_inbound_audio: (payload: {
         readonly call: CallInfo
         readonly pcm: Float32Array
+    }) => void
+    readonly voip_call_inbound_video_rtp: (payload: {
+        readonly call: CallInfo
+        readonly packet: InboundVideoRtpPacket
+    }) => void
+    readonly voip_call_inbound_video: (payload: {
+        readonly call: CallInfo
+        readonly frame: InboundVideoFrame
     }) => void
     readonly voip_call_outbound_audio_finished: (call: CallInfo) => void
     readonly voip_call_error: (error: Error) => void

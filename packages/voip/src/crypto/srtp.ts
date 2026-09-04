@@ -1,6 +1,6 @@
 import { uint8TimingSafeEqual } from 'zapo-js/util'
 
-import { writeBigUInt64BE, writeUInt32BE } from '../bytes.js'
+import { concatBytes, writeBigUInt64BE, writeUInt32BE } from '../bytes.js'
 import { RtpHeader, RtpPacket } from '../media/rtp.js'
 import { SRTP_AUTH_TAG_LEN, SRTP_LABEL, type SrtpKeyingMaterial } from '../types.js'
 
@@ -195,8 +195,14 @@ export class SrtpContext {
 }
 
 export class SrtpSession {
-    private sendCtx: SrtpContext
-    private recvCtx: SrtpContext
+    private static readonly MAX_RECV_CONTEXTS = 32
+    private readonly sendKey: SrtpKeyingMaterial
+    private readonly recvKey: SrtpKeyingMaterial
+    private readonly sendAuthLen?: number
+    private readonly recvAuthLen?: number
+    private readonly sendContexts = new Map<number, SrtpContext>()
+    private readonly recvContexts = new Map<number, SrtpContext>()
+    private sendAuthKeying: SrtpKeyingMaterial | null = null
 
     constructor(
         sendKey: SrtpKeyingMaterial,
@@ -204,20 +210,81 @@ export class SrtpSession {
         sendAuthLen?: number,
         recvAuthLen?: number
     ) {
-        this.sendCtx = new SrtpContext(sendKey, sendAuthLen)
-        this.recvCtx = new SrtpContext(recvKey, recvAuthLen)
+        this.sendKey = sendKey
+        this.recvKey = recvKey
+        this.sendAuthLen = sendAuthLen
+        this.recvAuthLen = recvAuthLen
     }
 
     protect(packet: RtpPacket): Uint8Array {
-        return this.sendCtx.protect(packet)
+        let ctx = this.sendContexts.get(packet.header.ssrc)
+        if (!ctx) {
+            ctx = new SrtpContext(this.sendKey, this.sendAuthLen)
+            if (this.sendAuthKeying) ctx.setAuthKeying(this.sendAuthKeying)
+            this.sendContexts.set(packet.header.ssrc, ctx)
+        }
+        return ctx.protect(packet)
     }
 
     unprotect(data: Uint8Array): RtpPacket {
-        return this.recvCtx.unprotect(data)
+        if (data.length < 12) {
+            throw new SrtpError('packet_too_short', `Packet too short: ${data.length} bytes`)
+        }
+        const header = RtpHeader.decode(data)
+        let ctx = this.recvContexts.get(header.ssrc)
+        if (!ctx) {
+            ctx = new SrtpContext(this.recvKey, this.recvAuthLen)
+            const packet = ctx.unprotect(data)
+            if (this.recvContexts.size >= SrtpSession.MAX_RECV_CONTEXTS) {
+                const oldest = this.recvContexts.keys().next().value
+                if (oldest !== undefined) this.recvContexts.delete(oldest)
+            }
+            this.recvContexts.set(header.ssrc, ctx)
+            return packet
+        }
+        return ctx.unprotect(data)
     }
 
     setSendAuthKeying(keying: SrtpKeyingMaterial): void {
-        this.sendCtx.setAuthKeying(keying)
+        this.sendAuthKeying = keying
+        for (const ctx of this.sendContexts.values()) ctx.setAuthKeying(keying)
+    }
+}
+
+export class SrtcpContext {
+    private readonly cipherKey: Uint8Array
+    private readonly authKey: Uint8Array
+    private readonly salt: Uint8Array
+    private readonly authTagLen: number
+    private index = 0
+
+    constructor(keying: SrtpKeyingMaterial, authTagLen = SRTP_AUTH_TAG_LEN) {
+        this.cipherKey = deriveKey(keying.masterKey, keying.masterSalt, 0x03, 16)
+        this.authKey = deriveKey(keying.masterKey, keying.masterSalt, 0x04, 20)
+        this.salt = deriveKey(keying.masterKey, keying.masterSalt, 0x05, 14)
+        this.authTagLen = authTagLen
+    }
+
+    protect(rtcp: Uint8Array, senderSsrc: number): Uint8Array {
+        const current = this.index++ & 0x7fffffff
+        const clear = rtcp.subarray(0, Math.min(8, rtcp.length))
+        const iv = new Uint8Array(16)
+        iv.set(this.salt, 0)
+        const ssrc = new Uint8Array(4)
+        writeUInt32BE(ssrc, senderSsrc, 0)
+        for (let i = 0; i < 4; i++) iv[4 + i] ^= ssrc[i]
+        const packetIndex = BigInt(current)
+        const indexBytes = new Uint8Array(8)
+        writeBigUInt64BE(indexBytes, packetIndex, 0)
+        for (let i = 0; i < 6; i++) iv[8 + i] ^= indexBytes[2 + i]
+        const encrypted = aesCtr128(this.cipherKey, iv, rtcp.subarray(clear.length))
+        const indexWord = new Uint8Array(4)
+        writeUInt32BE(indexWord, (0x80000000 | current) >>> 0, 0)
+        const authenticated = concatBytes([clear, encrypted, indexWord])
+        return concatBytes([
+            authenticated,
+            hmacSha1(this.authKey, authenticated).subarray(0, this.authTagLen)
+        ])
     }
 }
 

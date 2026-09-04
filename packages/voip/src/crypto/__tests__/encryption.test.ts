@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { derivePerJidSrtpKey, generateCallKey } from '../encryption.js'
-import { SrtpSession } from '../srtp.js'
+import { SrtpError, SrtpSession } from '../srtp.js'
 
 test('generateCallKey returns 32 bytes', () => {
     const key = generateCallKey()
@@ -54,6 +54,32 @@ test('SrtpSession unprotect rejects a tampered packet', async () => {
     tampered[12] ^= 0x80
 
     assert.throws(() => session.unprotect(tampered), /auth tag verification failed/)
+})
+
+test('SrtpSession rejects short packets with a stable SRTP error', () => {
+    const keying = derivePerJidSrtpKey(new Uint8Array(32), 'self:0@lid')
+    const session = new SrtpSession(keying, keying, 4, 4)
+    assert.throws(
+        () => session.unprotect(new Uint8Array(11)),
+        (error: unknown) => error instanceof SrtpError && error.type === 'packet_too_short'
+    )
+})
+
+test('SrtpSession does not retain unauthenticated SSRC contexts', () => {
+    const callKey = new Uint8Array(32)
+    callKey.fill(0x23)
+    const keying = derivePerJidSrtpKey(callKey, 'self:0@lid')
+    const session = new SrtpSession(keying, keying, 4, 4)
+    const protectedPacket = session.protect(
+        new RtpPacket(new RtpHeader(120, 10, 1920, 0x01020304), new Uint8Array([1, 2, 3]))
+    )
+    for (let index = 0; index < 40; index++) {
+        const forged = protectedPacket.slice()
+        forged[8] = 0x40 + index
+        assert.throws(() => session.unprotect(forged))
+    }
+    const contexts = (session as unknown as { recvContexts: Map<number, unknown> }).recvContexts
+    assert.equal(contexts.size, 0)
 })
 
 test('SrtpSession round-trips across the sequence-number rollover', () => {

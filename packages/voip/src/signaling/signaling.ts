@@ -133,6 +133,7 @@ export async function decryptCallKey(
 }
 
 const CAPABILITY_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07])
+const CAPABILITY_VIDEO_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe0, 0xfa, 0x13])
 const CAPABILITY_PREACCEPT = new Uint8Array([0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07])
 
 export interface CallParticipantNodes {
@@ -223,9 +224,8 @@ export async function buildOfferStanza(
         offerContent.push({
             tag: 'video',
             attrs: {
-                enc: 'vp8',
-                dec: 'vp8',
-                orientation: '0',
+                enc: 'h.264',
+                dec: 'H264',
                 screen_width: '1920',
                 screen_height: '1080',
                 device_orientation: '0'
@@ -239,7 +239,7 @@ export async function buildOfferStanza(
     offerContent.push({
         tag: 'capability',
         attrs: { ver: '1' },
-        content: CAPABILITY_OFFER
+        content: isVideo ? CAPABILITY_VIDEO_OFFER : CAPABILITY_OFFER
     })
 
     offerContent.push({ tag: 'destination', attrs: {}, content: destinations })
@@ -322,7 +322,10 @@ export async function buildAcceptStanza(
     }
 
     if (isVideo) {
-        acceptContent.push({ tag: 'video', attrs: { enc: 'vp8' } })
+        // Current WhatsApp mobile clients advertise an H.264 uplink. Replying
+        // with VP8 leaves signalling active but causes the peer to send no
+        // video RTP at all.
+        acceptContent.push({ tag: 'video', attrs: { enc: 'h.264' } })
     }
 
     const toJidClean = toUserJid(peerJid)

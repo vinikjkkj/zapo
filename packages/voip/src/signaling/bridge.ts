@@ -64,7 +64,7 @@ export async function routeCallStanza(
             await manager.handleCallTransport(node, normalizedPeerJid)
             break
         case 'terminate':
-            await manager.handleCallTerminate(node)
+            await manager.handleCallTerminate(node, normalizedPeerJid)
             break
         case 'relaylatency':
             await manager.handleCallRelaylatency(node, normalizedPeerJid)

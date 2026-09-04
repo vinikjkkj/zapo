@@ -369,6 +369,12 @@ export function isRtpPacket(data: Uint8Array): boolean {
     return (data[0] & 0xc0) === 0x80
 }
 
+/** RTCP/SRTCP keeps the RTCP header clear, so it can be demultiplexed before SRTP. */
+export function isRtcpPacket(data: Uint8Array): boolean {
+    if (data.length < 8 || (data[0] & 0xc0) !== 0x80) return false
+    return data[1] >= 192 && data[1] <= 223
+}
+
 export interface StunResponseInfo {
     rawType: number
     method: string
