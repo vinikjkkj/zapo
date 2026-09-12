@@ -63,8 +63,8 @@ test('feedExternalAudio caps the live buffer and drops oldest on overflow', () =
     for (let i = 0; i < 10; i++) {
         level = engine.feedExternalAudio(new Float32Array(2000))
     }
-    assert.equal(level, 500)
-    assert.equal(engine.getLiveBufferMs(), 500)
+    assert.equal(level, 750)
+    assert.equal(engine.getLiveBufferMs(), 750)
 })
 
 test('feedExternalAudio keeps only the tail of an oversized chunk', () => {
@@ -72,8 +72,8 @@ test('feedExternalAudio keeps only the tail of an oversized chunk', () => {
     engine.setExternalMode(true)
 
     const level = engine.feedExternalAudio(new Float32Array(10_000))
-    assert.equal(level, 500)
-    assert.equal(engine.getLiveBufferMs(), 500)
+    assert.equal(level, 625)
+    assert.equal(engine.getLiveBufferMs(), 625)
 })
 
 test('feedExternalAudio is a no-op before external mode is enabled', () => {

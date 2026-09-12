@@ -91,8 +91,8 @@ export class WaAudioEngine {
 
         this.extPreBufferSize = Math.floor(this.sampleRate * EXT_FEED_RESUME_FRACTION)
         this.extTargetBuffer = Math.floor(this.sampleRate * 0.06)
-        this.extHighWater = Math.floor(this.sampleRate * 0.2)
-        this.extMaxBuffer = Math.floor(this.sampleRate * 0.5)
+        this.extHighWater = Math.floor(this.sampleRate * 0.45)
+        this.extMaxBuffer = Math.floor(this.sampleRate * 0.75)
     }
 
     setAudioSender(sender: AudioSender): void {
