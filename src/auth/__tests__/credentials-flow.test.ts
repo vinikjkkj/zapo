@@ -192,6 +192,35 @@ test('buildCommsConfig maps ws proxy agent when provided', async () => {
     wsAgent.destroy()
 })
 
+test('buildCommsConfig forwards the ws proxy agent to a mobile TCP session', async () => {
+    const wsAgent = Object.assign(new http.Agent({ keepAlive: true }), {
+        proxy: new URL('http://127.0.0.1:3128')
+    })
+    const config = await buildCommsConfig(
+        createNoopLogger(),
+        {
+            ...createCredentials(),
+            deviceInfo: {
+                manufacturer: 'Google',
+                device: 'panther',
+                osVersion: '14',
+                osBuildNumber: 'AP3A',
+                appVersion: '2.26.15.11'
+            }
+        },
+        {
+            proxy: {
+                ws: wsAgent
+            }
+        },
+        { requireFullSync: false }
+    )
+
+    assert.equal(config.agent, wsAgent)
+    assert.ok(config.rawWebSocketConstructor)
+    wsAgent.destroy()
+})
+
 test('buildCommsConfig falls back to credentials.deviceInfo when mobileTransport option is absent', async () => {
     const credentials: WaAuthCredentials = {
         ...createCredentials(),

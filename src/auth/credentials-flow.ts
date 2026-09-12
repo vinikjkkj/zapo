@@ -180,11 +180,6 @@ export async function buildCommsConfig(
     }
 
     if (effectiveMobileTransport) {
-        if (wsProxy) {
-            throw new Error(
-                'mobileTransport does not support socketOptions.proxy.ws – remove the proxy option or open an issue to add TCP proxy support'
-            )
-        }
         if (!loginIdentity) {
             throw new Error(
                 'mobileTransport requires registered credentials (meJid) – run the mobile bridge flow first'
@@ -209,6 +204,7 @@ export async function buildCommsConfig(
         return {
             url: effectiveMobileTransport.tcpUrl ?? 'tcp://g.whatsapp.net:443',
             rawWebSocketConstructor: WaMobileTcpSocketCtor,
+            agent: toProxyAgent(wsProxy),
             connectTimeoutMs: socketOptions.connectTimeoutMs,
             reconnectIntervalMs: socketOptions.reconnectIntervalMs,
             timeoutIntervalMs: socketOptions.timeoutIntervalMs,
