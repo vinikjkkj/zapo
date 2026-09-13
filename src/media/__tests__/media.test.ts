@@ -973,6 +973,59 @@ test('media transfer client applies separate upload/download agents', async () =
     }
 })
 
+test('media transfer client uses fetch when no proxy agent is configured', async () => {
+    const server = http.createServer((request, response) => {
+        request.resume()
+        request.on('end', () => {
+            response.writeHead(request.method === 'POST' ? 201 : 200, {
+                'content-type': 'text/plain'
+            })
+            response.end(request.method === 'POST' ? 'upload-fetch-ok' : 'download-fetch-ok')
+        })
+    })
+    await new Promise<void>((resolve, reject) => {
+        server.once('error', reject)
+        server.listen(0, '127.0.0.1', () => {
+            server.off('error', reject)
+            resolve()
+        })
+    })
+    const address = server.address()
+    if (!address || typeof address === 'string') {
+        throw new Error('failed to resolve media fetch test server address')
+    }
+
+    const originalFetch = globalThis.fetch
+    let fetchCalls = 0
+    globalThis.fetch = async (...args) => {
+        fetchCalls++
+        return originalFetch(...args)
+    }
+
+    try {
+        const mediaTransfer = new WaMediaTransferClient()
+        const base = `http://127.0.0.1:${address.port}`
+        const download = await mediaTransfer.downloadBytes({ url: `${base}/download` })
+        const uploadResponse = await mediaTransfer.uploadStream({
+            url: `${base}/upload`,
+            method: 'POST',
+            contentType: 'application/octet-stream',
+            body: new Uint8Array([1, 2, 3])
+        })
+        const upload = await mediaTransfer.readResponseBytes(uploadResponse)
+
+        assert.equal(fetchCalls, 2)
+        assert.equal(new TextDecoder().decode(download), 'download-fetch-ok')
+        assert.equal(uploadResponse.status, 201)
+        assert.equal(new TextDecoder().decode(upload), 'upload-fetch-ok')
+    } finally {
+        globalThis.fetch = originalFetch
+        await new Promise<void>((resolve) => {
+            server.close(() => resolve())
+        })
+    }
+})
+
 test('media transfer client routes through optional got when proxy agent is set', async () => {
     const server = http.createServer((_request, response) => {
         response.writeHead(200, { 'content-type': 'text/plain' })

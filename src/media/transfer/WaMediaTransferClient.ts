@@ -1,6 +1,6 @@
 import http from 'node:http'
 import https from 'node:https'
-import type { Readable } from 'node:stream'
+import { Readable } from 'node:stream'
 
 import type { Logger } from '@infra/log/types'
 import { DEFAULT_MEDIA_HOSTS } from '@media/constants'
@@ -311,6 +311,35 @@ export class WaMediaTransferClient {
         init: TransferRequestInit,
         agent: WaProxyAgent | undefined
     ): Promise<InternalTransferResponse> {
+        if (!agent && typeof fetch === 'function') {
+            const fetchInit = {
+                method: init.method ?? 'GET',
+                headers: init.headers,
+                body: init.body,
+                signal: init.signal ?? undefined
+            } as Parameters<typeof fetch>[1] & { duplex?: 'half' }
+            if (init.body && !(init.body instanceof Uint8Array)) {
+                fetchInit.duplex = 'half'
+            }
+
+            const response = await fetch(url, fetchInit)
+            const headers: Record<string, string> = {}
+            response.headers.forEach((value, key) => {
+                headers[key] = value
+            })
+            const body = response.body ? Readable.fromWeb(response.body) : null
+            return {
+                status: response.status,
+                ok: response.ok,
+                headers,
+                body,
+                // eslint-disable-next-line @typescript-eslint/require-await
+                cancel: async () => {
+                    body?.destroy()
+                }
+            }
+        }
+
         const parsed = new URL(url)
         const transport = parsed.protocol === 'https:' ? https : http
         return new Promise<InternalTransferResponse>((resolve, reject) => {
