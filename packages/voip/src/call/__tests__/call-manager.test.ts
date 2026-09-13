@@ -47,7 +47,7 @@ function createMockDeps(): { deps: WaVoipDeps; stores: WaVoipStores; sent: Binar
     return { deps, stores, sent }
 }
 
-function buildOfferNode(callId: string, from = '2222222222:0@lid'): BinaryNode {
+function buildOfferNode(callId: string, from = '2222222222:0@lid', callerPn?: string): BinaryNode {
     return {
         tag: 'call',
         attrs: { from, id: 'OFFERMSGID' },
@@ -56,7 +56,8 @@ function buildOfferNode(callId: string, from = '2222222222:0@lid'): BinaryNode {
                 tag: 'offer',
                 attrs: {
                     'call-id': callId,
-                    'call-creator': from
+                    'call-creator': from,
+                    ...(callerPn ? { caller_pn: callerPn } : {})
                 },
                 content: [
                     { tag: 'audio', attrs: { enc: 'opus', rate: '16000' }, content: undefined }
@@ -181,6 +182,20 @@ test('incoming offer with capacity creates a second session', async () => {
     )
 
     assert.equal(manager.getCalls().length, 2)
+})
+
+test('incoming offer preserves the caller phone device jid', async () => {
+    const { deps, stores } = createMockDeps()
+    const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
+    const callerPn = '5511999999999:3@s.whatsapp.net'
+    const callId = 'INCOMINGCALLWITHCALLERPN00001'
+
+    await manager.handleCallOffer(
+        buildOfferNode(callId, '2222222222:0@lid', callerPn),
+        '2222222222:0@lid'
+    )
+
+    assert.equal(manager.getCall(callId)?.callerPn, callerPn)
 })
 
 test('handleCallTerminate only ends the matching call', async () => {
