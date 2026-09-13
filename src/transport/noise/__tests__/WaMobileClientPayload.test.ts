@@ -4,6 +4,7 @@ import test from 'node:test'
 import { proto } from '@proto'
 import {
     buildMobileLoginPayload,
+    WA_MOBILE_PLATFORMS,
     type WaMobileTransportDeviceInfo
 } from '@transport/noise/WaMobileClientPayload'
 
@@ -208,4 +209,122 @@ test('buildMobileLoginPayload omits pushName/yearClass/memClass when absent', ()
     assert.ok(!payload.pushName)
     assert.ok(!payload.yearClass)
     assert.ok(!payload.memClass)
+})
+
+test('buildMobileLoginPayload defaults platform to ANDROID and omits distributionChannel', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5511987654321,
+        deviceInfo: BASE_DEVICE
+    })
+    const ua = proto.ClientPayload.decode(bytes).userAgent
+    assert.ok(ua)
+    assert.equal(ua.platform, proto.ClientPayload.UserAgent.Platform.ANDROID)
+    assert.equal(Object.prototype.hasOwnProperty.call(ua, 'distributionChannel'), false)
+})
+
+test('buildMobileLoginPayload emits an IOS userAgent with App Store distribution', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5511987654321,
+        deviceInfo: {
+            platform: WA_MOBILE_PLATFORMS.IOS,
+            manufacturer: 'Apple',
+            device: 'iPhone',
+            osVersion: '18.4',
+            osBuildNumber: '22E240',
+            appVersion: '25.11.74',
+            mcc: '724',
+            mnc: '06',
+            localeLanguageIso6391: 'pt',
+            localeCountryIso31661Alpha2: 'BR',
+            phoneId: '11111111-1111-1111-1111-111111111111',
+            deviceModelType: 'iPhone 16 Pro'
+        }
+    })
+    const ua = proto.ClientPayload.decode(bytes).userAgent
+    assert.ok(ua)
+    assert.equal(ua.platform, proto.ClientPayload.UserAgent.Platform.IOS)
+    assert.equal(ua.manufacturer, 'Apple')
+    assert.equal(ua.device, 'iPhone')
+    assert.equal(ua.osVersion, '18.4')
+    assert.equal(ua.osBuildNumber, '22E240')
+    assert.equal(ua.deviceModelType, 'iPhone 16 Pro')
+    assert.equal(ua.deviceType, proto.ClientPayload.UserAgent.DeviceType.PHONE)
+    assert.equal(ua.distributionChannel, proto.ClientPayload.UserAgent.DistributionChannel.APPSTORE)
+    assert.ok(ua.appVersion)
+    assert.equal(ua.appVersion.primary, 25)
+    assert.equal(ua.appVersion.secondary, 11)
+    assert.equal(ua.appVersion.tertiary, 74)
+})
+
+test('buildMobileLoginPayload emits SMB_IOS when business is set on an iOS device', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5511987654321,
+        deviceInfo: {
+            platform: WA_MOBILE_PLATFORMS.IOS,
+            business: true,
+            manufacturer: 'Apple',
+            device: 'iPhone',
+            osVersion: '18.4',
+            osBuildNumber: '22E240',
+            appVersion: '25.11.74'
+        }
+    })
+    const ua = proto.ClientPayload.decode(bytes).userAgent
+    assert.equal(ua?.platform, proto.ClientPayload.UserAgent.Platform.SMB_IOS)
+})
+
+test('buildMobileLoginPayload honours an explicit android platform', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5511987654321,
+        deviceInfo: { ...BASE_DEVICE, platform: WA_MOBILE_PLATFORMS.ANDROID }
+    })
+    const ua = proto.ClientPayload.decode(bytes).userAgent
+    assert.ok(ua)
+    assert.equal(ua.platform, proto.ClientPayload.UserAgent.Platform.ANDROID)
+    assert.equal(Object.prototype.hasOwnProperty.call(ua, 'distributionChannel'), false)
+})
+
+test('buildMobileLoginPayload forwards an explicit iOS distributionChannel override', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5511987654321,
+        deviceInfo: {
+            platform: 'ios',
+            manufacturer: 'Apple',
+            device: 'iPhone',
+            osVersion: '18.4',
+            osBuildNumber: '18.4',
+            appVersion: '25.11.74',
+            distributionChannel: proto.ClientPayload.UserAgent.DistributionChannel.TESTFLIGHT
+        }
+    })
+    const ua = proto.ClientPayload.decode(bytes).userAgent
+    assert.equal(
+        ua?.distributionChannel,
+        proto.ClientPayload.UserAgent.DistributionChannel.TESTFLIGHT
+    )
+})
+
+test('buildMobileLoginPayload rejects unknown platforms', () => {
+    assert.throws(
+        () =>
+            buildMobileLoginPayload({
+                username: 5511987654321,
+                deviceInfo: {
+                    ...BASE_DEVICE,
+                    platform: 'windows' as WaMobileTransportDeviceInfo['platform']
+                }
+            }),
+        /platform 'android' or 'ios'/
+    )
+    assert.throws(
+        () =>
+            buildMobileLoginPayload({
+                username: 5511987654321,
+                deviceInfo: {
+                    ...BASE_DEVICE,
+                    platform: '__proto__' as WaMobileTransportDeviceInfo['platform']
+                }
+            }),
+        /platform 'android' or 'ios'/
+    )
 })

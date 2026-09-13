@@ -4,7 +4,10 @@ import type { RegistrationInfo, SignedPreKeyRecord } from '@signal/types'
 import type { WaMobileTransportDeviceInfo } from '@transport/noise/WaMobileClientPayload'
 import type { WaCommsConfig, WaProxyTransport } from '@transport/types'
 
-export type { WaMobileTransportDeviceInfo } from '@transport/noise/WaMobileClientPayload'
+export type {
+    WaMobilePlatform,
+    WaMobileTransportDeviceInfo
+} from '@transport/noise/WaMobileClientPayload'
 
 /**
  * @sensitive Contains private key material (`noiseKeyPair`, `signedPreKey`,
@@ -129,6 +132,11 @@ export interface WaAuthClientOptions {
 }
 
 export interface WaMobileTransportOptions {
+    /**
+     * Device/user-agent info encoded into the mobile noise login
+     * `ClientPayload`. Set `deviceInfo.platform` to `'ios'` for an iPhone
+     * user-agent; omit or use `'android'` for Android (the historical default).
+     */
     readonly deviceInfo: WaMobileTransportDeviceInfo
     readonly tcpUrl?: string
     readonly passive?: boolean
