@@ -190,13 +190,21 @@ export function buildButtonAddonNode(kind: WaButtonAddonKind): BinaryNode {
         }
     }
 
-    const nativeFlowName = kind === 'payment_info' || kind === 'order_details' ? kind : 'mixed'
-    const nativeFlowAttrs: Record<string, string> =
-        nativeFlowName === 'mixed' ? { v: '9', name: 'mixed' } : { name: nativeFlowName }
+    if (kind === 'payment_info' || kind === 'order_details') {
+        return {
+            tag: WA_NODE_TAGS.BIZ,
+            attrs: { native_flow_name: kind },
+            content: undefined
+        }
+    }
 
     return {
         tag: WA_NODE_TAGS.BIZ,
-        attrs: {},
+        attrs: {
+            actual_actors: '2',
+            host_storage: '2',
+            privacy_mode_ts: Math.floor(Date.now() / 1000).toString()
+        },
         content: [
             {
                 tag: WA_NODE_TAGS.INTERACTIVE,
@@ -204,7 +212,7 @@ export function buildButtonAddonNode(kind: WaButtonAddonKind): BinaryNode {
                 content: [
                     {
                         tag: WA_NODE_TAGS.NATIVE_FLOW,
-                        attrs: nativeFlowAttrs,
+                        attrs: { v: '9', name: 'mixed' },
                         content: undefined
                     }
                 ]

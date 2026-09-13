@@ -637,6 +637,7 @@ export class WaMessageDispatchCoordinator {
         const outboundAttrs = resolveOutboundMessageAttrs(messageWithIcdc)
         const buttonAddonKind = outboundAttrs.buttonAddonKind
         const buttonAddonNode = buttonAddonKind ? buildButtonAddonNode(buttonAddonKind) : undefined
+        const isInteractiveNativeFlow = !!unwrapMessage(messageWithIcdc).interactiveMessage
         // when a <biz> companion is attached the stanza must advertise type=text and
         // omit enc.mediatype; sending type=media + mediatype=list/button alongside the
         // companion is rejected by the server as SMAX_INVALID (479).
@@ -663,7 +664,15 @@ export class WaMessageDispatchCoordinator {
             mediatype,
             decryptFail,
             customNodes: customNodes.length > 0 ? customNodes : undefined,
-            sendOptions
+            sendOptions: isInteractiveNativeFlow
+                ? {
+                      ...sendOptions,
+                      additionalAttributes: {
+                          ...sendOptions.additionalAttributes,
+                          device_fanout: 'false'
+                      }
+                  }
+                : sendOptions
         }
 
         const peerRecipientPn = isGroup
