@@ -35,6 +35,11 @@
         "zapo-js": "^1.7.0",
         "better-sqlite3": ">=11.0.0"
     },
+    "peerDependenciesMeta": {
+        "better-sqlite3": {
+            "optional": true
+        }
+    },
     "devDependencies": {
         "better-sqlite3": "^12.6.2",
         "zapo-js": "file:../.."

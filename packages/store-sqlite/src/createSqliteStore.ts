@@ -42,10 +42,11 @@ export interface WaSqliteStoreConfig {
      */
     readonly connection?: WaSqliteConnection
     /**
-     * SQLite driver selection. Defaults to `'auto'` which prefers
-     * `better-sqlite3` on Node and falls back to `bun:sqlite` on Bun.
-     * Override only when you need to pin the driver for testing. Ignored
-     * when {@link connection} is set.
+     * SQLite driver selection. Defaults to `'auto'`: `bun:sqlite` under Bun,
+     * otherwise `better-sqlite3`, falling back to the built-in `node:sqlite`
+     * when the addon is not installed. Pin `'node'` to skip the native
+     * dependency entirely on platforms that cannot build it. Ignored when
+     * {@link connection} is set.
      */
     readonly driver?: WaSqliteDriver
     /**

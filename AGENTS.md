@@ -221,7 +221,7 @@ import { toError } from '@util/primitives'
 Dynamic imports are reserved for optional runtime dependencies already implemented in the project:
 
 - `src/infra/log/PinoLogger.ts` (`pino`, `pino-pretty`)
-- `src/store/providers/sqlite/connection.ts` (`better-sqlite3`, `bun:sqlite`)
+- `packages/store-sqlite/src/connection.ts` (`better-sqlite3`, `bun:sqlite`, `node:sqlite`)
 - `src/transport/node/mex/argo-decoder.ts` (`argo-codec`)
 
 Avoid introducing dynamic imports outside this pattern.

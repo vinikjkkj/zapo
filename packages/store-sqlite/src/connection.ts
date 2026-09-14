@@ -44,6 +44,7 @@ export interface WaSqliteConnection {
 
 const BETTER_SQLITE3_MODULE = 'better-sqlite3'
 const BUN_SQLITE_MODULE = 'bun:sqlite'
+const NODE_SQLITE_MODULE = 'node:sqlite'
 const SQLITE_PRAGMA_TOKEN_PATTERN = /^[A-Za-z0-9_+-]+$/
 const DEFAULT_SQLITE_PRAGMAS: Readonly<Record<string, string | number>> = Object.freeze({
     journal_mode: 'WAL',
@@ -80,6 +81,22 @@ function asConstructor(loaded: unknown): new (path: string) => SqliteDatabaseLik
         }
     }
     throw new Error('invalid sqlite driver export')
+}
+
+/** Reads a named constructor export (`bun:sqlite` / `node:sqlite` shape). */
+function namedConstructor(
+    loaded: unknown,
+    exportName: string,
+    label: string
+): new (path: string) => SqliteDatabaseLike {
+    if (!loaded || typeof loaded !== 'object') {
+        throw new Error(`invalid ${label} module export`)
+    }
+    const ctor = (loaded as Record<string, unknown>)[exportName]
+    if (typeof ctor !== 'function') {
+        throw new Error(`invalid ${label} module export`)
+    }
+    return ctor as new (path: string) => SqliteDatabaseLike
 }
 
 function statementFor(db: SqliteDatabaseLike, sql: string): SqliteStatementLike {
@@ -303,7 +320,7 @@ async function openBetterSqlite(
         loaded = await import(BETTER_SQLITE3_MODULE)
     } catch {
         throw new Error(
-            'optional dependency "better-sqlite3" is not installed. Install with: npm i better-sqlite3'
+            'optional dependency "better-sqlite3" is not installed. Install with: npm i better-sqlite3, or set driver to "node" to use the built-in node:sqlite module (Node 22.5+ / Bun 1.2+).'
         )
     }
 
@@ -329,19 +346,12 @@ async function openBunSqlite(
         loaded = await import(BUN_SQLITE_MODULE)
     } catch {
         throw new Error(
-            'bun runtime sqlite module "bun:sqlite" is unavailable. Run this in Bun or set storage.sqlite.driver to "better-sqlite3".'
+            'bun runtime sqlite module "bun:sqlite" is unavailable. Run this in Bun or set storage.sqlite.driver to "better-sqlite3" or "node".'
         )
     }
 
-    if (!loaded || typeof loaded !== 'object') {
-        throw new Error('invalid bun sqlite module export')
-    }
-    const ctor = (loaded as { Database?: unknown }).Database
-    if (typeof ctor !== 'function') {
-        throw new Error('invalid bun sqlite module export')
-    }
-
-    const db = new (ctor as new (path: string) => SqliteDatabaseLike)(path)
+    const Database = namedConstructor(loaded, 'Database', 'bun sqlite')
+    const db = new Database(path)
     try {
         applyPragmas(db, pragmas)
     } catch (error) {
@@ -352,11 +362,80 @@ async function openBunSqlite(
     return wrapConnection(db, 'bun', resolveSql)
 }
 
-function resolveDriver(requested: WaSqliteDriver | undefined): WaSqliteDriver {
+/**
+ * Opens the database through the runtime's built-in `node:sqlite` module.
+ * No install step and no native build: the module ships with Node 22.5+ and
+ * with Bun 1.2+, so this is the driver that works where the `better-sqlite3`
+ * addon cannot be compiled or loaded.
+ */
+async function openNodeSqlite(
+    path: string,
+    resolveSql: (sql: string) => string,
+    pragmas: NormalizedSqlitePragmas
+): Promise<WaSqliteConnection> {
+    let loaded: unknown
+    try {
+        loaded = await import(NODE_SQLITE_MODULE)
+    } catch {
+        throw new Error(
+            'built-in sqlite module "node:sqlite" is unavailable. It requires Node 22.5+ or Bun 1.2+. On older runtimes install better-sqlite3 instead: npm i better-sqlite3'
+        )
+    }
+
+    const DatabaseSync = namedConstructor(loaded, 'DatabaseSync', 'node sqlite')
+    const db = new DatabaseSync(path)
+    try {
+        applyPragmas(db, pragmas)
+    } catch (error) {
+        closeDatabaseSafely(db)
+        throw error
+    }
+
+    return wrapConnection(db, 'node', resolveSql)
+}
+
+function openDriver(
+    driver: Exclude<WaSqliteDriver, 'auto'>,
+    path: string,
+    resolveSql: (sql: string) => string,
+    pragmas: NormalizedSqlitePragmas
+): Promise<WaSqliteConnection> {
+    if (driver === 'bun') {
+        return openBunSqlite(path, resolveSql, pragmas)
+    }
+    if (driver === 'node') {
+        return openNodeSqlite(path, resolveSql, pragmas)
+    }
+    return openBetterSqlite(path, resolveSql, pragmas)
+}
+
+async function canLoadModule(specifier: string): Promise<boolean> {
+    try {
+        await import(specifier)
+        return true
+    } catch {
+        return false
+    }
+}
+
+async function resolveDriver(
+    requested: WaSqliteDriver | undefined
+): Promise<Exclude<WaSqliteDriver, 'auto'>> {
     if (requested && requested !== 'auto') {
         return requested
     }
-    return isBunRuntime() ? 'bun' : 'better-sqlite3'
+    if (isBunRuntime()) {
+        return 'bun'
+    }
+    // better-sqlite3 first: its row materialization is measurably faster on
+    // wide or multi-row reads. Fall back to the built-in module so a missing
+    // addon degrades in performance instead of failing to open at all - that
+    // is the whole point of the node driver. When neither loads, keep
+    // better-sqlite3 so the caller gets its familiar install hint.
+    if (await canLoadModule(BETTER_SQLITE3_MODULE)) {
+        return 'better-sqlite3'
+    }
+    return (await canLoadModule(NODE_SQLITE_MODULE)) ? 'node' : 'better-sqlite3'
 }
 
 function requireConnection(entry: SqliteConnectionCacheEntry): WaSqliteConnection {
@@ -432,7 +511,7 @@ export async function openSqliteConnection(
     if (!path) {
         throw new Error('openSqliteConnection requires options.path')
     }
-    const driver = resolveDriver(options.driver)
+    const driver = await resolveDriver(options.driver)
     const resolvedTableNames = resolveSqliteTableNames(options.tableNames)
     const resolveSql = createSqliteTableNameSqlResolver(resolvedTableNames)
     const normalizedPragmas = normalizePragmas(options.pragmas)
@@ -443,10 +522,7 @@ export async function openSqliteConnection(
     let entry = SQLITE_CONNECTION_CACHE.get(cacheKey)
     if (!entry) {
         const startedAt = Date.now()
-        const createdConnection =
-            driver === 'bun'
-                ? openBunSqlite(path, resolveSql, normalizedPragmas)
-                : openBetterSqlite(path, resolveSql, normalizedPragmas)
+        const createdConnection = openDriver(driver, path, resolveSql, normalizedPragmas)
         const createdEntry: SqliteConnectionCacheEntry = {
             connection: null,
             connectionPromise: Promise.resolve(null as never),

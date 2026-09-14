@@ -16,6 +16,8 @@ import { WaMessageSqliteStore } from '../message.store'
 import { WaPrivacyTokenSqliteStore } from '../privacy-token.store'
 import { WaThreadSqliteStore } from '../thread.store'
 
+import { TEST_SQLITE_DRIVER } from './_helpers'
+
 interface Destroyable {
     destroy?: () => Promise<void>
 }
@@ -30,7 +32,7 @@ test('message store contract parity between memory and sqlite providers', async 
                 new WaMessageSqliteStore({
                     path: join(dir, 'state.sqlite'),
                     sessionId: 'session-a',
-                    driver: 'better-sqlite3'
+                    driver: TEST_SQLITE_DRIVER
                 })
         )
     } finally {
@@ -49,7 +51,7 @@ test('thread/contact contract parity between memory and sqlite providers', async
                 new WaThreadSqliteStore({
                     path: join(dir, 'state.sqlite'),
                     sessionId: 'session-b',
-                    driver: 'better-sqlite3'
+                    driver: TEST_SQLITE_DRIVER
                 })
         )
         await runContactStoreContract(
@@ -57,7 +59,7 @@ test('thread/contact contract parity between memory and sqlite providers', async
                 new WaContactSqliteStore({
                     path: join(dir, 'state.sqlite'),
                     sessionId: 'session-b',
-                    driver: 'better-sqlite3'
+                    driver: TEST_SQLITE_DRIVER
                 })
         )
     } finally {
@@ -75,7 +77,7 @@ test('privacy token store contract parity between memory and sqlite providers', 
                 new WaPrivacyTokenSqliteStore({
                     path: join(dir, 'state.sqlite'),
                     sessionId: 'session-c',
-                    driver: 'better-sqlite3'
+                    driver: TEST_SQLITE_DRIVER
                 })
         )
     } finally {

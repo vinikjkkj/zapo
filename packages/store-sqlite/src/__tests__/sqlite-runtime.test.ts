@@ -30,6 +30,8 @@ import { WaSessionSqliteStore } from '../session.store'
 import { WaSignalSqliteStore } from '../signal.store'
 import type { WaSqliteStorageOptions } from '../types'
 
+import { TEST_SQLITE_DRIVER } from './_helpers'
+
 function makeBytes(length: number, seed = 0): Uint8Array {
     const out = new Uint8Array(length)
     for (let index = 0; index < out.length; index += 1) {
@@ -42,7 +44,7 @@ function makeSqliteOptions(path: string, sessionId: string): WaSqliteStorageOpti
     return {
         path,
         sessionId,
-        driver: 'better-sqlite3'
+        driver: TEST_SQLITE_DRIVER
     }
 }
 
@@ -197,7 +199,7 @@ test('sqlite appstate setCollectionStates writes only the index/value delta', as
     const connection = await openSqliteConnection({
         path: join(dir, 'state.sqlite'),
         sessionId: 'session-diff',
-        driver: 'better-sqlite3'
+        driver: TEST_SQLITE_DRIVER
     })
 
     // Count write statements so the test asserts the delta is written, not a

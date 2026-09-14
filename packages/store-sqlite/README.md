@@ -2,7 +2,7 @@
 
 SQLite-backed persistent store for [`zapo-js`](https://www.npmjs.com/package/zapo-js). Suitable for single-process bots, dev sessions, and small-to-medium production deployments that don't need a network database.
 
-Backed by `better-sqlite3` on Node and `bun:sqlite` on Bun (auto-detected). Lazy migrations run on first touch per domain; all writes go through `withTransaction` so partial failures roll back cleanly.
+Backed by `better-sqlite3` on Node, `bun:sqlite` on Bun, or the runtime's built-in `node:sqlite` when no native addon is available (auto-detected). Lazy migrations run on first touch per domain; all writes go through `withTransaction` so partial failures roll back cleanly.
 
 ## Install
 
@@ -10,9 +10,25 @@ Backed by `better-sqlite3` on Node and `bun:sqlite` on Bun (auto-detected). Lazy
 npm install @zapo-js/store-sqlite better-sqlite3
 # or on Bun
 bun add @zapo-js/store-sqlite
+# or with no native dependency at all (Node 22.5+)
+npm install @zapo-js/store-sqlite
 ```
 
-`better-sqlite3` is a peer dependency on Node. Bun ships SQLite natively, so it's not required there.
+`better-sqlite3` is an optional peer dependency. Skip it and the store falls back to `node:sqlite`, which ships with the runtime, so nothing has to be compiled.
+
+### Choosing a driver
+
+`'auto'` (the default) picks `bun:sqlite` under Bun, otherwise `better-sqlite3`, falling back to `node:sqlite` when the addon is not installed. Pin `driver` explicitly only when you need a specific backend.
+
+| Driver           | Requires                      | Notes                                                                                      |
+| ---------------- | ----------------------------- | ------------------------------------------------------------------------------------------ |
+| `better-sqlite3` | native addon (build/prebuild) | Fastest row materialization on Node. Does not load under Bun.                              |
+| `bun`            | Bun                           | `bun:sqlite`, ships with the runtime.                                                      |
+| `node`           | Node 22.5+ or Bun 1.2+        | `node:sqlite`, ships with the runtime. Node prints an experimental warning before Node 24. |
+
+The database file is identical across drivers - the same schema and migrations - so you can switch drivers on an existing store without migrating anything.
+
+Write throughput is effectively the same on all three (SQLite itself dominates). `node:sqlite` is slower only when materializing wide or multi-row result sets, since it builds a fresh object per row: roughly 1.3x on a single wide row and 2.5x on a 50-row page with blobs, measured against `better-sqlite3` on Node 22. That cost lands on history/mailbox queries, not on the per-message session writes.
 
 ## Quick start
 
@@ -48,7 +64,7 @@ const client = new WaClient({ store, sessionId: 'default' })
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `path`       | Database file path. Use `':memory:'` for an ephemeral DB. Mutually exclusive with `connection`.                                             |
 | `connection` | Pre-opened `WaSqliteConnection` to reuse instead of opening a new one. Caller owns the lifecycle (per-store `destroy()` does not close it). |
-| `driver`     | `'auto'` (default) / `'better-sqlite3'` / `'bun'`. Ignored when `connection` is set.                                                        |
+| `driver`     | `'auto'` (default) / `'better-sqlite3'` / `'bun'` / `'node'`. Ignored when `connection` is set.                                             |
 | `pragmas`    | Extra `PRAGMA` statements merged on top of defaults. Ignored when `connection` is set.                                                      |
 | `tableNames` | Per-domain table name overrides. Ignored when `connection` is set.                                                                          |
 | `batchSizes` | Per-domain bulk-read batch sizes.                                                                                                           |

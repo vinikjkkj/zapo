@@ -2,7 +2,21 @@ import type { Logger } from 'zapo-js'
 
 import type { WaSqliteConnection } from './connection'
 
-export type WaSqliteDriver = 'auto' | 'better-sqlite3' | 'bun'
+/**
+ * SQLite backend to open the database with.
+ *
+ * - `better-sqlite3` – native addon, fastest row materialization on Node.
+ *   Requires a prebuilt binary or a working toolchain, and does not load
+ *   under Bun.
+ * - `bun` – `bun:sqlite`, Bun only.
+ * - `node` – `node:sqlite`, no install step. Available on Node 22.5+ (the
+ *   runtime prints an experimental warning before Node 24) and on Bun 1.2+.
+ *   Writes match `better-sqlite3`; wide or multi-row reads are slower
+ *   because every row is materialized into a fresh object.
+ * - `auto` – `bun` under Bun, otherwise `better-sqlite3` with a fallback to
+ *   `node` when the addon is not installed.
+ */
+export type WaSqliteDriver = 'auto' | 'better-sqlite3' | 'bun' | 'node'
 
 export type WaSqliteTableName =
     | 'wa_migrations'

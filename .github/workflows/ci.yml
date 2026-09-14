@@ -136,6 +136,11 @@ jobs:
                   path: dist/
             - run: npx turbo run build --filter=@zapo-js/store-sqlite
             - run: npm test -w packages/store-sqlite
+            # better-sqlite3 is an optional peer: prove the whole store surface
+            # also works on the built-in node:sqlite backend.
+            - run: npm test -w packages/store-sqlite
+              env:
+                  ZAPO_SQLITE_TEST_DRIVER: node
 
     test-mcp-server:
         runs-on: ubuntu-latest
