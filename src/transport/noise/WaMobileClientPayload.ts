@@ -2,7 +2,28 @@ import { randomUUID } from 'node:crypto'
 
 import { type Proto, proto } from '@proto'
 
+/**
+ * Distribution channel advertised by an iOS login (`UserAgent.distributionChannel`).
+ * iOS-only – Android leaves the field unset. `appstore` is the normal
+ * production install; `testflight`/`internal` mark beta builds.
+ */
+export type WaMobileDistributionChannel = 'appstore' | 'website' | 'testflight' | 'internal'
+
 export interface WaMobileTransportDeviceInfo {
+    /**
+     * Operating system the login payload impersonates. `android` (the default,
+     * for backwards compatibility) advertises the `ANDROID`/`SMB_ANDROID`
+     * platform and fills the Android-only `mcc`/`mnc`/`deviceBoard` fields.
+     * `ios` advertises `IOS`/`SMB_IOS`, omits those Android-only fields (the
+     * real iPhone client never sends them) and carries `distributionChannel`
+     * instead.
+     *
+     * Field mapping differs by OS and must match the real client:
+     * - **Android** `device` = a device codename (e.g. `moto_g52`).
+     * - **iOS** `device` = the marketing name (e.g. `iPhone 15 Pro`) while
+     *   {@link deviceModelType} carries the raw machine id (`iPhone16,1`).
+     */
+    readonly os?: 'android' | 'ios'
     readonly manufacturer: string
     readonly device: string
     readonly osVersion: string
@@ -15,6 +36,8 @@ export interface WaMobileTransportDeviceInfo {
     readonly phoneId?: string
     readonly deviceBoard?: string
     readonly deviceModelType?: string
+    /** iOS distribution channel; ignored for Android. Defaults to `appstore`. */
+    readonly distributionChannel?: WaMobileDistributionChannel
     readonly business?: boolean
 }
 
@@ -53,6 +76,23 @@ function parseAppVersion(version: string): ParsedAppVersion {
     }
 }
 
+function distributionChannelId(
+    channel: WaMobileDistributionChannel | undefined
+): Proto.ClientPayload.UserAgent.DistributionChannel {
+    const { DistributionChannel } = proto.ClientPayload.UserAgent
+    switch (channel) {
+        case 'website':
+            return DistributionChannel.WEBSITE
+        case 'testflight':
+            return DistributionChannel.TESTFLIGHT
+        case 'internal':
+            return DistributionChannel.INTERNAL
+        case 'appstore':
+        case undefined:
+            return DistributionChannel.APPSTORE
+    }
+}
+
 /**
  * Builds the encoded {@link Proto.ClientPayload} bytes the WhatsApp Mobile
  * transport sends after the noise login handshake. Throws when
@@ -64,15 +104,20 @@ export function buildMobileLoginPayload(config: WaMobileLoginPayloadConfig): Uin
     }
     const info = config.deviceInfo
     const version = parseAppVersion(info.appVersion)
+    const isIos = info.os === 'ios'
+
+    const platform = isIos
+        ? info.business
+            ? proto.ClientPayload.UserAgent.Platform.SMB_IOS
+            : proto.ClientPayload.UserAgent.Platform.IOS
+        : info.business
+          ? proto.ClientPayload.UserAgent.Platform.SMB_ANDROID
+          : proto.ClientPayload.UserAgent.Platform.ANDROID
 
     const userAgent = {
-        platform: info.business
-            ? proto.ClientPayload.UserAgent.Platform.SMB_ANDROID
-            : proto.ClientPayload.UserAgent.Platform.ANDROID,
+        platform,
         releaseChannel: proto.ClientPayload.UserAgent.ReleaseChannel.RELEASE,
         appVersion: version,
-        mcc: info.mcc ?? '000',
-        mnc: info.mnc ?? '000',
         osVersion: info.osVersion,
         manufacturer: info.manufacturer,
         device: info.device,
@@ -81,8 +126,10 @@ export function buildMobileLoginPayload(config: WaMobileLoginPayloadConfig): Uin
         localeLanguageIso6391: info.localeLanguageIso6391 ?? 'en',
         localeCountryIso31661Alpha2: info.localeCountryIso31661Alpha2 ?? 'US',
         deviceType: proto.ClientPayload.UserAgent.DeviceType.PHONE,
-        deviceBoard: info.deviceBoard,
-        deviceModelType: info.deviceModelType
+        deviceModelType: info.deviceModelType,
+        ...(isIos
+            ? { distributionChannel: distributionChannelId(info.distributionChannel) }
+            : { mcc: info.mcc ?? '000', mnc: info.mnc ?? '000', deviceBoard: info.deviceBoard })
     } as typeof proto.ClientPayload.prototype.userAgent
 
     return proto.ClientPayload.encode({

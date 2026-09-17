@@ -20,6 +20,19 @@ const BASE_DEVICE: WaMobileTransportDeviceInfo = {
     phoneId: '00000000-0000-0000-0000-000000000001'
 }
 
+const IOS_DEVICE: WaMobileTransportDeviceInfo = {
+    os: 'ios',
+    manufacturer: 'Apple',
+    device: 'iPhone 15 Pro',
+    deviceModelType: 'iPhone16,1',
+    osVersion: '17.4.1',
+    osBuildNumber: '21E236',
+    appVersion: '2.26.36.74',
+    localeLanguageIso6391: 'pt',
+    localeCountryIso31661Alpha2: 'BR',
+    phoneId: '4317d911-60f9-464d-b930-014d73fa3bc4'
+}
+
 test('buildMobileLoginPayload emits an ANDROID userAgent with primary flags', () => {
     const bytes = buildMobileLoginPayload({
         username: 5511987654321,
@@ -208,4 +221,55 @@ test('buildMobileLoginPayload omits pushName/yearClass/memClass when absent', ()
     assert.ok(!payload.pushName)
     assert.ok(!payload.yearClass)
     assert.ok(!payload.memClass)
+})
+
+test('buildMobileLoginPayload emits an IOS userAgent for os=ios', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5521959369369,
+        deviceInfo: IOS_DEVICE
+    })
+    const ua = proto.ClientPayload.decode(bytes).userAgent
+    assert.ok(ua)
+    assert.equal(ua.platform, proto.ClientPayload.UserAgent.Platform.IOS)
+    assert.equal(ua.manufacturer, 'Apple')
+    assert.equal(ua.device, 'iPhone 15 Pro')
+    assert.equal(ua.deviceModelType, 'iPhone16,1')
+    assert.equal(ua.osVersion, '17.4.1')
+    assert.equal(ua.osBuildNumber, '21E236')
+    assert.equal(ua.phoneId, '4317d911-60f9-464d-b930-014d73fa3bc4')
+    assert.equal(ua.deviceType, proto.ClientPayload.UserAgent.DeviceType.PHONE)
+    assert.equal(ua.distributionChannel, proto.ClientPayload.UserAgent.DistributionChannel.APPSTORE)
+})
+
+test('buildMobileLoginPayload omits Android-only fields for iOS', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5521959369369,
+        deviceInfo: { ...IOS_DEVICE, mcc: '724', mnc: '03', deviceBoard: 'ignored' }
+    })
+    const ua = proto.ClientPayload.decode(bytes).userAgent
+    assert.ok(ua)
+    assert.ok(!ua.mcc)
+    assert.ok(!ua.mnc)
+    assert.ok(!ua.deviceBoard)
+})
+
+test('buildMobileLoginPayload emits SMB_IOS platform for business iOS accounts', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5521959369369,
+        deviceInfo: { ...IOS_DEVICE, business: true }
+    })
+    const payload = proto.ClientPayload.decode(bytes)
+    assert.equal(payload.userAgent?.platform, proto.ClientPayload.UserAgent.Platform.SMB_IOS)
+})
+
+test('buildMobileLoginPayload maps the iOS distributionChannel', () => {
+    const bytes = buildMobileLoginPayload({
+        username: 5521959369369,
+        deviceInfo: { ...IOS_DEVICE, distributionChannel: 'testflight' }
+    })
+    const ua = proto.ClientPayload.decode(bytes).userAgent
+    assert.equal(
+        ua?.distributionChannel,
+        proto.ClientPayload.UserAgent.DistributionChannel.TESTFLIGHT
+    )
 })
