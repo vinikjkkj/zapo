@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 import type { SignalAddress } from 'zapo-js/signal'
+import { isBunRuntime } from 'zapo-js/util'
 
 import { openSqliteConnection } from '../connection'
 import { WaIdentitySqliteStore } from '../identity.store'
@@ -15,26 +16,35 @@ import type { WaSqliteDriver } from '../types'
  * Both backends are optional here, so every case guards the ones it pins.
  *
  * `better-sqlite3` is an optional peer dependency. `node:sqlite` only exists
- * from Node 22.13 (22.5 behind `--experimental-sqlite`) and Bun 1.2, while the
+ * from Node 22.13 (22.5 behind `--experimental-sqlite`) and Bun 1.4, while the
  * package supports Node 20.9+ - so on an older runtime the module is simply
  * absent and the node-driver cases have nothing to exercise.
+ *
+ * The probe opens a real database rather than importing the module, because
+ * importing is not enough to tell the two apart: under Bun the
+ * `better-sqlite3` entry point resolves fine and only blows up later, when the
+ * addon is dlopened. Answering "can this driver open a database here?" is the
+ * question the tests actually need.
  */
-const BETTER_SQLITE3_MODULE = 'better-sqlite3'
-const NODE_SQLITE_MODULE = 'node:sqlite'
+const driverProbes = new Map<WaSqliteDriver, Promise<boolean>>()
 
-function hasBetterSqlite3(): Promise<boolean> {
-    return import(BETTER_SQLITE3_MODULE).then(
-        () => true,
-        () => false
-    )
+function canOpenWith(driver: Exclude<WaSqliteDriver, 'auto'>): Promise<boolean> {
+    let probe = driverProbes.get(driver)
+    if (!probe) {
+        probe = openSqliteConnection({ path: ':memory:', sessionId: 'driver-probe', driver }).then(
+            (connection) => {
+                connection.close()
+                return true
+            },
+            () => false
+        )
+        driverProbes.set(driver, probe)
+    }
+    return probe
 }
 
-function hasNodeSqlite(): Promise<boolean> {
-    return import(NODE_SQLITE_MODULE).then(
-        () => true,
-        () => false
-    )
-}
+const hasBetterSqlite3 = (): Promise<boolean> => canOpenWith('better-sqlite3')
+const hasNodeSqlite = (): Promise<boolean> => canOpenWith('node')
 
 function makeBytes(length: number, seed = 0): Uint8Array {
     const out = new Uint8Array(length)
@@ -184,6 +194,10 @@ test('databases are interchangeable between the better-sqlite3 and node drivers'
 })
 
 test('auto driver prefers better-sqlite3 when the addon is installed', async (t) => {
+    if (isBunRuntime()) {
+        t.skip('auto resolves to bun:sqlite under Bun, before any addon lookup')
+        return
+    }
     if (!(await hasBetterSqlite3())) {
         t.skip('better-sqlite3 is not installed')
         return
@@ -208,6 +222,10 @@ test('auto driver prefers better-sqlite3 when the addon is installed', async (t)
  * reason the node driver exists - is actually executed somewhere.
  */
 test('auto driver falls back to node:sqlite when the addon is absent', async (t) => {
+    if (isBunRuntime()) {
+        t.skip('auto resolves to bun:sqlite under Bun, before any addon lookup')
+        return
+    }
     if (await hasBetterSqlite3()) {
         t.skip('better-sqlite3 is installed, so the fallback cannot be observed')
         return

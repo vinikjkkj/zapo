@@ -24,7 +24,7 @@ npm install @zapo-js/store-sqlite
 | ---------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `better-sqlite3` | native addon (build/prebuild) | Fastest row materialization on Node. Does not load under Bun.                                                                                          |
 | `bun`            | Bun                           | `bun:sqlite`, ships with the runtime.                                                                                                                  |
-| `node`           | Node 22.13+ or Bun 1.2+       | `node:sqlite`, ships with the runtime. Node 22.5 to 22.12 keeps it behind `--experimental-sqlite`; Node warns while the module is marked experimental. |
+| `node`           | Node 22.13+ or Bun 1.4+       | `node:sqlite`, ships with the runtime. Node 22.5 to 22.12 keeps it behind `--experimental-sqlite`; Node warns while the module is marked experimental. |
 
 On Node 20, 21, or 22.5 to 22.12 without the flag, `node:sqlite` does not exist, so `'auto'` cannot fall back to it - you get the `better-sqlite3` install error, which is the only real fix there. Installing the addon keeps working on every version: `'auto'` prefers it and never touches `node:sqlite`.
 

@@ -10,7 +10,7 @@ import type { WaSqliteConnection } from './connection'
  *   under Bun.
  * - `bun` – `bun:sqlite`, Bun only.
  * - `node` – `node:sqlite`, no install step. Available on Node 22.13+ and on
- *   Bun 1.2+. Node 22.5 to 22.12 keeps the module behind
+ *   Bun 1.4+. Node 22.5 to 22.12 keeps the module behind
  *   `--experimental-sqlite`, and Node prints an experimental warning for as
  *   long as the module is marked experimental. Writes match `better-sqlite3`;
  *   wide or multi-row reads are slower because every row is materialized into
