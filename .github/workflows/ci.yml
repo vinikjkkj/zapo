@@ -141,6 +141,15 @@ jobs:
             - run: npm test -w packages/store-sqlite
               env:
                   ZAPO_SQLITE_TEST_DRIVER: node
+            # Both runs above resolve with the addon present, so neither takes
+            # the auto -> node fallback this package exists for. Delete the
+            # addon and run once more: the suite then asserts auto picked the
+            # built-in driver. Last step in the job - nothing after it needs
+            # better-sqlite3.
+            - name: auto fallback with no native addon
+              run: |
+                  rm -rf node_modules/better-sqlite3 packages/store-sqlite/node_modules/better-sqlite3
+                  npm test -w packages/store-sqlite
 
     test-mcp-server:
         runs-on: ubuntu-latest

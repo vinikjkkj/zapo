@@ -12,13 +12,25 @@ import { WaPreKeySqliteStore } from '../pre-key.store'
 import type { WaSqliteDriver } from '../types'
 
 /**
- * `better-sqlite3` is an optional peer dependency, so the cases that pin it
- * are skipped where it is absent - that is now a supported install.
+ * Both backends are optional here, so every case guards the ones it pins.
+ *
+ * `better-sqlite3` is an optional peer dependency. `node:sqlite` only exists
+ * from Node 22.13 (22.5 behind `--experimental-sqlite`) and Bun 1.2, while the
+ * package supports Node 20.9+ - so on an older runtime the module is simply
+ * absent and the node-driver cases have nothing to exercise.
  */
 const BETTER_SQLITE3_MODULE = 'better-sqlite3'
+const NODE_SQLITE_MODULE = 'node:sqlite'
 
 function hasBetterSqlite3(): Promise<boolean> {
     return import(BETTER_SQLITE3_MODULE).then(
+        () => true,
+        () => false
+    )
+}
+
+function hasNodeSqlite(): Promise<boolean> {
+    return import(NODE_SQLITE_MODULE).then(
         () => true,
         () => false
     )
@@ -45,7 +57,11 @@ async function withTempDir<T>(prefix: string, run: (dir: string) => Promise<T>):
     }
 }
 
-test('node:sqlite driver opens and reports itself', async () => {
+test('node:sqlite driver opens and reports itself', async (t) => {
+    if (!(await hasNodeSqlite())) {
+        t.skip('node:sqlite is unavailable on this runtime')
+        return
+    }
     await withTempDir('zapo-sqlite-node-driver-', async (dir) => {
         const connection = await openSqliteConnection({
             path: join(dir, 'state.sqlite'),
@@ -67,7 +83,11 @@ test('node:sqlite driver opens and reports itself', async () => {
     })
 })
 
-test('node:sqlite driver runs migrations and round-trips store records', async () => {
+test('node:sqlite driver runs migrations and round-trips store records', async (t) => {
+    if (!(await hasNodeSqlite())) {
+        t.skip('node:sqlite is unavailable on this runtime')
+        return
+    }
     await withTempDir('zapo-sqlite-node-store-', async (dir) => {
         const options = {
             path: join(dir, 'state.sqlite'),
@@ -116,8 +136,8 @@ test('node:sqlite driver runs migrations and round-trips store records', async (
 })
 
 test('databases are interchangeable between the better-sqlite3 and node drivers', async (t) => {
-    if (!(await hasBetterSqlite3())) {
-        t.skip('better-sqlite3 is not installed')
+    if (!(await hasBetterSqlite3()) || !(await hasNodeSqlite())) {
+        t.skip('the swap needs both better-sqlite3 and node:sqlite')
         return
     }
     await withTempDir('zapo-sqlite-driver-swap-', async (dir) => {
@@ -176,6 +196,34 @@ test('auto driver prefers better-sqlite3 when the addon is installed', async (t)
         })
         try {
             assert.equal(connection.driver, 'better-sqlite3')
+        } finally {
+            connection.close()
+        }
+    })
+})
+
+/**
+ * Complement of the case above: exactly one of the two runs in any given
+ * environment. CI drops the addon for one job so this branch - the whole
+ * reason the node driver exists - is actually executed somewhere.
+ */
+test('auto driver falls back to node:sqlite when the addon is absent', async (t) => {
+    if (await hasBetterSqlite3()) {
+        t.skip('better-sqlite3 is installed, so the fallback cannot be observed')
+        return
+    }
+    if (!(await hasNodeSqlite())) {
+        t.skip('node:sqlite is unavailable on this runtime')
+        return
+    }
+    await withTempDir('zapo-sqlite-auto-fallback-', async (dir) => {
+        const connection = await openSqliteConnection({
+            path: join(dir, 'state.sqlite'),
+            sessionId: 'session-auto-fallback',
+            driver: 'auto'
+        })
+        try {
+            assert.equal(connection.driver, 'node')
         } finally {
             connection.close()
         }

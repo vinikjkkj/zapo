@@ -10,7 +10,7 @@ Backed by `better-sqlite3` on Node, `bun:sqlite` on Bun, or the runtime's built-
 npm install @zapo-js/store-sqlite better-sqlite3
 # or on Bun
 bun add @zapo-js/store-sqlite
-# or with no native dependency at all (Node 22.5+)
+# or with no native dependency at all (Node 22.13+)
 npm install @zapo-js/store-sqlite
 ```
 
@@ -20,11 +20,13 @@ npm install @zapo-js/store-sqlite
 
 `'auto'` (the default) picks `bun:sqlite` under Bun, otherwise `better-sqlite3`, falling back to `node:sqlite` when the addon is not installed. Pin `driver` explicitly only when you need a specific backend.
 
-| Driver           | Requires                      | Notes                                                                                      |
-| ---------------- | ----------------------------- | ------------------------------------------------------------------------------------------ |
-| `better-sqlite3` | native addon (build/prebuild) | Fastest row materialization on Node. Does not load under Bun.                              |
-| `bun`            | Bun                           | `bun:sqlite`, ships with the runtime.                                                      |
-| `node`           | Node 22.5+ or Bun 1.2+        | `node:sqlite`, ships with the runtime. Node prints an experimental warning before Node 24. |
+| Driver           | Requires                      | Notes                                                                                                                                                  |
+| ---------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `better-sqlite3` | native addon (build/prebuild) | Fastest row materialization on Node. Does not load under Bun.                                                                                          |
+| `bun`            | Bun                           | `bun:sqlite`, ships with the runtime.                                                                                                                  |
+| `node`           | Node 22.13+ or Bun 1.2+       | `node:sqlite`, ships with the runtime. Node 22.5 to 22.12 keeps it behind `--experimental-sqlite`; Node warns while the module is marked experimental. |
+
+On Node 20, 21, or 22.5 to 22.12 without the flag, `node:sqlite` does not exist, so `'auto'` cannot fall back to it - you get the `better-sqlite3` install error, which is the only real fix there. Installing the addon keeps working on every version: `'auto'` prefers it and never touches `node:sqlite`.
 
 The database file is identical across drivers - the same schema and migrations - so you can switch drivers on an existing store without migrating anything.
 

@@ -364,9 +364,11 @@ async function openBunSqlite(
 
 /**
  * Opens the database through the runtime's built-in `node:sqlite` module.
- * No install step and no native build: the module ships with Node 22.5+ and
+ * No install step and no native build: the module ships with Node 22.13+ and
  * with Bun 1.2+, so this is the driver that works where the `better-sqlite3`
- * addon cannot be compiled or loaded.
+ * addon cannot be compiled or loaded. Node 22.5 through 22.12 keeps it behind
+ * `--experimental-sqlite`, so without that flag the import fails and the
+ * module counts as unavailable.
  */
 async function openNodeSqlite(
     path: string,
@@ -378,7 +380,7 @@ async function openNodeSqlite(
         loaded = await import(NODE_SQLITE_MODULE)
     } catch {
         throw new Error(
-            'built-in sqlite module "node:sqlite" is unavailable. It requires Node 22.5+ or Bun 1.2+. On older runtimes install better-sqlite3 instead: npm i better-sqlite3'
+            'built-in sqlite module "node:sqlite" is unavailable. It requires Node 22.13+ (or Node 22.5+ started with --experimental-sqlite) or Bun 1.2+. On older runtimes install better-sqlite3 instead: npm i better-sqlite3'
         )
     }
 
