@@ -776,9 +776,7 @@ test('message builders create fanout nodes and validate participant requirements
 
     const interactiveAddon = buildButtonAddonNode('interactive')
     assert.equal(interactiveAddon.tag, 'biz')
-    assert.equal(interactiveAddon.attrs.actual_actors, '2')
-    assert.equal(interactiveAddon.attrs.host_storage, '2')
-    assert.match(interactiveAddon.attrs.privacy_mode_ts ?? '', /^\d+$/)
+    assert.deepEqual(interactiveAddon.attrs, {})
     if (!Array.isArray(interactiveAddon.content)) throw new Error('expected biz children')
     const interactiveChild = interactiveAddon.content[0]
     assert.equal(interactiveChild.tag, 'interactive')

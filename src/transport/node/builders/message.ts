@@ -200,11 +200,7 @@ export function buildButtonAddonNode(kind: WaButtonAddonKind): BinaryNode {
 
     return {
         tag: WA_NODE_TAGS.BIZ,
-        attrs: {
-            actual_actors: '2',
-            host_storage: '2',
-            privacy_mode_ts: Math.floor(Date.now() / 1000).toString()
-        },
+        attrs: {},
         content: [
             {
                 tag: WA_NODE_TAGS.INTERACTIVE,

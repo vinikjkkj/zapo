@@ -151,6 +151,22 @@ interface WaMessageDispatchCoordinatorOptions {
     readonly serverClock: ServerClock
 }
 
+/** @internal */
+export function withNativeFlowDeviceFanout(
+    message: Proto.IMessage,
+    sendOptions: WaSendMessageOptions
+): WaSendMessageOptions {
+    if (!unwrapMessage(message).interactiveMessage?.nativeFlowMessage) return sendOptions
+
+    return {
+        ...sendOptions,
+        additionalAttributes: {
+            ...sendOptions.additionalAttributes,
+            device_fanout: 'false'
+        }
+    }
+}
+
 type GroupAddressingMode = 'pn' | 'lid'
 
 interface GroupSendRetryContext {
@@ -637,7 +653,6 @@ export class WaMessageDispatchCoordinator {
         const outboundAttrs = resolveOutboundMessageAttrs(messageWithIcdc)
         const buttonAddonKind = outboundAttrs.buttonAddonKind
         const buttonAddonNode = buttonAddonKind ? buildButtonAddonNode(buttonAddonKind) : undefined
-        const isInteractiveNativeFlow = !!unwrapMessage(messageWithIcdc).interactiveMessage
         // when a <biz> companion is attached the stanza must advertise type=text and
         // omit enc.mediatype; sending type=media + mediatype=list/button alongside the
         // companion is rejected by the server as SMAX_INVALID (479).
@@ -664,15 +679,7 @@ export class WaMessageDispatchCoordinator {
             mediatype,
             decryptFail,
             customNodes: customNodes.length > 0 ? customNodes : undefined,
-            sendOptions: isInteractiveNativeFlow
-                ? {
-                      ...sendOptions,
-                      additionalAttributes: {
-                          ...sendOptions.additionalAttributes,
-                          device_fanout: 'false'
-                      }
-                  }
-                : sendOptions
+            sendOptions: withNativeFlowDeviceFanout(messageWithIcdc, sendOptions)
         }
 
         const peerRecipientPn = isGroup

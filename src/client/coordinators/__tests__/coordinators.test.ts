@@ -9,7 +9,10 @@ import type {
 } from '@appstate/types'
 import { WaAppStateMutationCoordinator } from '@client/coordinators/WaAppStateMutationCoordinator'
 import { WaIncomingNodeCoordinator } from '@client/coordinators/WaIncomingNodeCoordinator'
-import { WaMessageDispatchCoordinator } from '@client/coordinators/WaMessageDispatchCoordinator'
+import {
+    WaMessageDispatchCoordinator,
+    withNativeFlowDeviceFanout
+} from '@client/coordinators/WaMessageDispatchCoordinator'
 import { WaPassiveTasksCoordinator } from '@client/coordinators/WaPassiveTasksCoordinator'
 import { createStreamControlHandler } from '@client/coordinators/WaStreamControlCoordinator'
 import { createGroupMetadataCache } from '@client/messaging/group-metadata'
@@ -225,6 +228,30 @@ function callResolvePeerRecipientPn(
         }
     ).resolvePeerRecipientPn(recipientUserJid, directRecipientJid)
 }
+
+test('native flow disables device fanout without dropping caller attributes', () => {
+    const options = withNativeFlowDeviceFanout(
+        {
+            interactiveMessage: {
+                nativeFlowMessage: {}
+            }
+        },
+        { additionalAttributes: { custom: 'value' } }
+    )
+
+    assert.deepEqual(options.additionalAttributes, {
+        custom: 'value',
+        device_fanout: 'false'
+    })
+})
+
+test('non-native interactive messages preserve send options unchanged', () => {
+    const options = { additionalAttributes: { custom: 'value' } }
+    const resolved = withNativeFlowDeviceFanout({ interactiveMessage: {} }, options)
+
+    assert.strictEqual(resolved, options)
+    assert.deepEqual(resolved.additionalAttributes, { custom: 'value' })
+})
 
 test('message dispatch emits message_send with the outbound proto and destination', async () => {
     const events: WaOutgoingMessageEvent[] = []
