@@ -60,7 +60,13 @@ export interface SrtpKeyingMaterial {
 export enum PayloadType {
     WhatsAppOpus = 120,
     WhatsAppH264 = 97,
-    WhatsAppH264Rtx = 103
+    /**
+     * Lowest payload type of WhatsApp's proprietary Reed-Solomon video FEC
+     * family, which the client emits as `103 + 3k`. Not an RTX stream: the
+     * payload is opaque parity, with no prefix and no original sequence number,
+     * and it travels on the FEC stream's own SSRC.
+     */
+    WhatsAppVideoFec = 103
 }
 
 export interface InboundVideoRtpPacket {
@@ -69,7 +75,7 @@ export interface InboundVideoRtpPacket {
     readonly timestamp: number
     readonly ssrc: number
     readonly marker: boolean
-    /** Decrypted RTP payload. PT 97 is H.264; PT 103 is its repair/RTX stream. */
+    /** Decrypted RTP payload of the inbound H.264 stream, payload type 97. */
     readonly payload: Uint8Array
 }
 
@@ -114,6 +120,10 @@ export interface RelayEndpoint {
     addressBytes?: Uint8Array
     authTokenId?: string
     isFna?: boolean
+    /** `domain_name` of the `<relay>` descriptor this endpoint came from. */
+    domainName?: string
+    /** `enable_edgeray_dtls_active_mode` flag of the same descriptor. */
+    enableEdgerayDtlsActiveMode?: boolean
 }
 
 export interface RelayData {
@@ -182,7 +192,13 @@ export interface CallManagerEvents {
     call_state: (call: CallInfo) => void
     call_incoming: (call: CallInfo) => void
     call_ended: (call: CallInfo) => void
-    /** Decoded peer audio received on this call (16 kHz mono PCM). */
+    /**
+     * Decoded peer audio for this call (16 kHz mono PCM), paced by the jitter
+     * buffer: one tick of `playbackOutputSize` samples every `intervalMs`, so
+     * the stream keeps the call's timebase and a gap the decoder could not
+     * conceal arrives as silence instead of vanishing. A tick with nothing
+     * queued at all is skipped rather than emitted as silence.
+     */
     call_inbound_audio: (call: CallInfo, pcm: Float32Array) => void
     call_inbound_video_rtp: (call: CallInfo, packet: InboundVideoRtpPacket) => void
     call_inbound_video: (call: CallInfo, frame: InboundVideoFrame) => void
@@ -197,8 +213,18 @@ export interface AudioSender {
 
 export interface WaAudioEngineConfig {
     sampleRate: number
+    /** Samples read from the outbound source on every capture tick. */
     captureChunkSize: number
+    /**
+     * Samples drained from the jitter buffer on every playback tick. Keep it at
+     * `sampleRate / 1000 * intervalMs` so playout advances at wall-clock speed:
+     * the engine raises it to one tick's worth when it is set lower.
+     */
     playbackOutputSize: number
+    /**
+     * Jitter buffer capacity in samples. Never smaller than one inbound packet,
+     * which is 120 ms carrying two aggregated MLow frames.
+     */
     maxBufferSize: number
     intervalMs: number
 }
@@ -206,8 +232,8 @@ export interface WaAudioEngineConfig {
 export const DEFAULT_AUDIO_CONFIG: WaAudioEngineConfig = {
     sampleRate: 16000,
     captureChunkSize: 960,
-    playbackOutputSize: 256,
-    maxBufferSize: 1600,
+    playbackOutputSize: 960,
+    maxBufferSize: 11520,
     intervalMs: 60
 }
 

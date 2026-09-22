@@ -4,6 +4,24 @@ import { PayloadType } from '../types.js'
 
 const RTP_VERSION = 2
 
+/**
+ * Profile that opens the RTP header extension this session emits, on both the
+ * audio and the video stream.
+ *
+ * It is the one-byte form of RFC 8285, whose profile the RFC writes as
+ * `0xBE 0xDE` on the wire. What goes out from here is `0xDE 0xBE`, and that is
+ * capture observation, not an oversight: the official client was read emitting
+ * the two bytes in this order, and what stood here before this constant was the
+ * same literal repeated on both send paths. The elements behind it follow the
+ * RFC: `(id << 4) | (len - 1)` per element, zero padding up to the 32-bit word.
+ *
+ * Switching to the RFC order is a protocol change, not a style one: it is worth
+ * trying if some extension turns out to be ignored by the peer, but only with a
+ * capture from the other side to confirm it, because today the audio and the
+ * video of this session are accepted with this order.
+ */
+export const WA_RTP_EXTENSION_PROFILE = 0xdebe
+
 const MIN_HEADER_SIZE = 12
 
 export class RtpHeader {

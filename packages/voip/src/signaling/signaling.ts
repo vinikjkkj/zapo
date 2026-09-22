@@ -271,6 +271,35 @@ export async function buildOfferStanza(
     }
 }
 
+/**
+ * Builds the `<call><accept>` answer to an incoming offer.
+ *
+ * The accept carries no `<enc>` and no `<device-identity>`. Under the offer's
+ * `encopt keygen='2'` the call key travels in the offer's `<enc>`, which the
+ * callee decrypts, so the accept only confirms and has no key left to ship.
+ * The server runs the encrypt-and-attach path for `offer` and `enc_rekey`
+ * only and silently drops an accept that carries an `<enc>` child: no ack
+ * comes back, the caller never learns the call was answered and keeps ringing
+ * until its 90s timeout. Nothing is missing here, do not add crypto back.
+ *
+ * The accept carries no `<encopt>` either. A live call acked an accept whose
+ * only children were `<audio>` and `<net>`, while the literal `encopt` is
+ * absent from the WhatsApp Web bundle, which assembles this stanza inside its
+ * WASM, so an accept-side `<encopt>` was never confirmed. Dropping it matches
+ * that acked format. There is no evidence that an `<encopt>` child makes the
+ * server discard the stanza, only that the server acks without it.
+ *
+ * `<audio>` and `<net>` are part of the real accept and stay.
+ *
+ * `peerJid` is addressed verbatim so a companion caller keeps its `:device`
+ * suffix, matching the target `preaccept`, `transport` and `mute_v2` use.
+ *
+ * The video reply advertises H.264 because current mobile clients uplink
+ * H.264: answering VP8 keeps signalling alive but yields no video RTP.
+ *
+ * @param callKey decrypted offer key. Not serialized into the stanza, it
+ * already reached both sides through the offer.
+ */
 export async function buildAcceptStanza(
     deps: WaVoipDeps,
     callId: string,
@@ -281,57 +310,18 @@ export async function buildAcceptStanza(
 ): Promise<BinaryNode> {
     await deps.messageDispatch.syncSignalSession(callCreator)
 
-    const bytes = await encodeWAMessage({ call: { callKey } })
-
-    let encNode: BinaryNode
-    let shouldIncludeDeviceIdentity = false
-
-    try {
-        const { type, ciphertext } = await deps.signalProtocol.encryptMessage(
-            parseSignalAddressFromJid(callCreator),
-            bytes
-        )
-
-        if (type === 'pkmsg') {
-            shouldIncludeDeviceIdentity = true
-        }
-
-        encNode = {
-            tag: 'enc',
-            attrs: { v: '2', type, count: '0' },
-            content: ciphertext
-        }
-    } catch (err: any) {
-        throw new Error(`Failed to encrypt accept for ${callCreator}: ${err.message}`)
-    }
-
     const acceptContent: BinaryNode[] = [
         { tag: 'audio', attrs: { enc: 'opus', rate: '16000' } },
-        { tag: 'net', attrs: { medium: '3' } },
-        encNode,
-        { tag: 'encopt', attrs: { keygen: '2' } }
+        { tag: 'net', attrs: { medium: '3' } }
     ]
 
-    const acceptSignedIdentity = deps.authClient.getCurrentCredentials()?.signedIdentity
-    if (shouldIncludeDeviceIdentity && acceptSignedIdentity) {
-        acceptContent.push({
-            tag: 'device-identity',
-            attrs: {},
-            content: encodeSignedDeviceIdentity(acceptSignedIdentity)
-        })
-    }
-
     if (isVideo) {
-        // Current WhatsApp mobile clients advertise an H.264 uplink. Replying
-        // with VP8 leaves signalling active but causes the peer to send no
-        // video RTP at all.
         acceptContent.push({ tag: 'video', attrs: { enc: 'h.264' } })
     }
 
-    const toJidClean = toUserJid(peerJid)
     return {
         tag: 'call',
-        attrs: { to: toJidClean, id: generateCallStanzaId() },
+        attrs: { to: peerJid, id: generateCallStanzaId() },
         content: [
             {
                 tag: 'accept',

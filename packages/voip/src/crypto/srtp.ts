@@ -1,6 +1,6 @@
 import { uint8TimingSafeEqual } from 'zapo-js/util'
 
-import { concatBytes, writeBigUInt64BE, writeUInt32BE } from '../bytes.js'
+import { readUInt32BE, writeBigUInt64BE, writeUInt32BE } from '../bytes.js'
 import { RtpHeader, RtpPacket } from '../media/rtp.js'
 import { SRTP_AUTH_TAG_LEN, SRTP_LABEL, type SrtpKeyingMaterial } from '../types.js'
 
@@ -8,6 +8,24 @@ import { aesCtr128, hmacSha1 } from './primitives.js'
 
 const SRTP_REPLAY_WINDOW = 64n
 const SRTP_INDEX_MASK = (1n << 64n) - 1n
+
+/**
+ * SRTCP authentication tag length in bytes. WhatsApp truncates the RTP tag to 4
+ * bytes but keeps the full HMAC-SHA1_80 tag on RTCP: a 4-byte tag here makes the
+ * peer drop every control packet we emit, key-frame requests included.
+ */
+export const SRTCP_AUTH_TAG_LEN = 10
+
+const SRTCP_HEADER_LEN = 8
+const SRTCP_INDEX_LEN = 4
+const SRTCP_ENCRYPTED_FLAG = 0x80000000
+const SRTCP_INDEX_MASK = 0x7fffffff
+
+const SRTCP_LABEL = {
+    ENCRYPTION: 0x03,
+    AUTH: 0x04,
+    SALT: 0x05
+} as const
 
 export class SrtpContext {
     private sessionKey: Uint8Array
@@ -183,11 +201,7 @@ export class SrtpContext {
         return this.ivBuffer
     }
 
-    private computeAuthTag(
-        data: Uint8Array,
-        roc: number,
-        tagLen: number = SRTP_AUTH_TAG_LEN
-    ): Uint8Array {
+    private computeAuthTag(data: Uint8Array, roc: number, tagLen: number): Uint8Array {
         writeUInt32BE(this.rocBuffer, roc, 0)
         const result = hmacSha1(this.authKey, data, this.rocBuffer)
         return result.subarray(0, tagLen)
@@ -258,33 +272,99 @@ export class SrtcpContext {
     private readonly authTagLen: number
     private index = 0
 
-    constructor(keying: SrtpKeyingMaterial, authTagLen = SRTP_AUTH_TAG_LEN) {
-        this.cipherKey = deriveKey(keying.masterKey, keying.masterSalt, 0x03, 16)
-        this.authKey = deriveKey(keying.masterKey, keying.masterSalt, 0x04, 20)
-        this.salt = deriveKey(keying.masterKey, keying.masterSalt, 0x05, 14)
+    private readonly ivBuffer: Uint8Array = new Uint8Array(16)
+    private readonly ssrcBuffer: Uint8Array = new Uint8Array(4)
+    private readonly indexBuffer: Uint8Array = new Uint8Array(4)
+
+    constructor(keying: SrtpKeyingMaterial, authTagLen = SRTCP_AUTH_TAG_LEN) {
+        this.cipherKey = deriveKey(keying.masterKey, keying.masterSalt, SRTCP_LABEL.ENCRYPTION, 16)
+        this.authKey = deriveKey(keying.masterKey, keying.masterSalt, SRTCP_LABEL.AUTH, 20)
+        this.salt = deriveKey(keying.masterKey, keying.masterSalt, SRTCP_LABEL.SALT, 14)
         this.authTagLen = authTagLen
     }
 
     protect(rtcp: Uint8Array, senderSsrc: number): Uint8Array {
-        const current = this.index++ & 0x7fffffff
-        const clear = rtcp.subarray(0, Math.min(8, rtcp.length))
-        const iv = new Uint8Array(16)
-        iv.set(this.salt, 0)
-        const ssrc = new Uint8Array(4)
-        writeUInt32BE(ssrc, senderSsrc, 0)
-        for (let i = 0; i < 4; i++) iv[4 + i] ^= ssrc[i]
-        const packetIndex = BigInt(current)
-        const indexBytes = new Uint8Array(8)
-        writeBigUInt64BE(indexBytes, packetIndex, 0)
-        for (let i = 0; i < 6; i++) iv[8 + i] ^= indexBytes[2 + i]
-        const encrypted = aesCtr128(this.cipherKey, iv, rtcp.subarray(clear.length))
-        const indexWord = new Uint8Array(4)
-        writeUInt32BE(indexWord, (0x80000000 | current) >>> 0, 0)
-        const authenticated = concatBytes([clear, encrypted, indexWord])
-        return concatBytes([
-            authenticated,
-            hmacSha1(this.authKey, authenticated).subarray(0, this.authTagLen)
-        ])
+        const current = this.index++ & SRTCP_INDEX_MASK
+        const clearLen = Math.min(SRTCP_HEADER_LEN, rtcp.length)
+        const payload = rtcp.subarray(clearLen)
+
+        const iv = this.generateIv(senderSsrc, current)
+        const encrypted = aesCtr128(this.cipherKey, iv, payload)
+
+        const indexOffset = clearLen + encrypted.length
+        const output = new Uint8Array(indexOffset + SRTCP_INDEX_LEN + this.authTagLen)
+        output.set(rtcp.subarray(0, clearLen), 0)
+        output.set(encrypted, clearLen)
+        writeUInt32BE(output, (SRTCP_ENCRYPTED_FLAG | current) >>> 0, indexOffset)
+
+        if (this.authTagLen > 0) {
+            const authenticated = output.subarray(0, indexOffset + SRTCP_INDEX_LEN)
+            const tag = hmacSha1(this.authKey, authenticated).subarray(0, this.authTagLen)
+            output.set(tag, authenticated.length)
+        }
+
+        return output
+    }
+
+    /**
+     * Verifies the auth tag and returns the RTCP packet in the clear. The sender
+     * SSRC comes from the header the tag covers, so there is no SSRC argument.
+     *
+     * @throws {SrtpError} `packet_too_short` or `auth_failed`
+     */
+    unprotect(data: Uint8Array): Uint8Array {
+        const minLength = SRTCP_HEADER_LEN + SRTCP_INDEX_LEN + this.authTagLen
+        if (data.length < minLength) {
+            throw new SrtpError(
+                'packet_too_short',
+                `SRTCP packet too short: ${data.length}B total, ${minLength}B minimum`
+            )
+        }
+
+        const authEnd = data.length - this.authTagLen
+        if (this.authTagLen > 0) {
+            const authenticated = data.subarray(0, authEnd)
+            const expected = hmacSha1(this.authKey, authenticated).subarray(0, this.authTagLen)
+            if (!uint8TimingSafeEqual(expected, data.subarray(authEnd))) {
+                throw new SrtpError('auth_failed', 'SRTCP auth tag verification failed')
+            }
+        }
+
+        const indexOffset = authEnd - SRTCP_INDEX_LEN
+        const indexWord = readUInt32BE(data, indexOffset)
+
+        if ((indexWord & SRTCP_ENCRYPTED_FLAG) === 0) {
+            return data.subarray(0, indexOffset)
+        }
+
+        const iv = this.generateIv(readUInt32BE(data, 4), indexWord & SRTCP_INDEX_MASK)
+        const decrypted = aesCtr128(
+            this.cipherKey,
+            iv,
+            data.subarray(SRTCP_HEADER_LEN, indexOffset)
+        )
+
+        const output = new Uint8Array(SRTCP_HEADER_LEN + decrypted.length)
+        output.set(data.subarray(0, SRTCP_HEADER_LEN), 0)
+        output.set(decrypted, SRTCP_HEADER_LEN)
+        return output
+    }
+
+    private generateIv(ssrc: number, index: number): Uint8Array {
+        this.ivBuffer.fill(0)
+        this.ivBuffer.set(this.salt, 0)
+
+        writeUInt32BE(this.ssrcBuffer, ssrc, 0)
+        for (let i = 0; i < 4; i++) {
+            this.ivBuffer[4 + i] ^= this.ssrcBuffer[i]
+        }
+
+        writeUInt32BE(this.indexBuffer, index, 0)
+        for (let i = 0; i < 4; i++) {
+            this.ivBuffer[10 + i] ^= this.indexBuffer[i]
+        }
+
+        return this.ivBuffer
     }
 }
 

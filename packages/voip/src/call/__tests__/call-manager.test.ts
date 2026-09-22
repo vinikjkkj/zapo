@@ -121,7 +121,7 @@ test('incoming offer at capacity is tracked with canAccept false', async () => {
     await manager.startCall({ peerJid: '2222222222@lid' })
     const before = sent.length
 
-    const incomingCallId = 'INCOMINGCALL0000000000000001'
+    const incomingCallId = 'CA11CA11000000000000000000000001'
     await manager.handleCallOffer(buildOfferNode(incomingCallId), '2222222222:0@lid')
 
     assert.equal(manager.getCalls().length, 2)
@@ -150,7 +150,7 @@ test('waiting incoming call unblocks when a slot frees', async () => {
     const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
 
     const activeCallId = await manager.startCall({ peerJid: '2222222222@lid' })
-    const incomingCallId = 'INCOMINGCALL0000000000000003'
+    const incomingCallId = 'CA11CA11000000000000000000000003'
 
     await manager.handleCallOffer(buildOfferNode(incomingCallId), '3333333333:0@lid')
     assert.equal(manager.getCall(incomingCallId)!.canAccept, false)
@@ -177,7 +177,7 @@ test('incoming offer with capacity creates a second session', async () => {
     await manager.startCall({ peerJid: '2222222222@lid' })
 
     await manager.handleCallOffer(
-        buildOfferNode('INCOMINGCALL0000000000000002'),
+        buildOfferNode('CA11CA11000000000000000000000002'),
         '3333333333:0@lid'
     )
 
@@ -188,7 +188,7 @@ test('incoming offer preserves the caller phone device jid', async () => {
     const { deps, stores } = createMockDeps()
     const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
     const callerPn = '5511999999999:3@s.whatsapp.net'
-    const callId = 'INCOMINGCALLWITHCALLERPN00001'
+    const callId = 'CA11CA110000000000000000000000FE'
 
     await manager.handleCallOffer(
         buildOfferNode(callId, '2222222222:0@lid', callerPn),

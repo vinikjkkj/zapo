@@ -3,8 +3,9 @@ import { test } from 'node:test'
 
 import type { BinaryNode } from 'zapo-js/transport'
 
-import { CallState, EndCallReason } from '../../types.js'
+import { CallState, EndCallReason, type WaVoipDeps } from '../../types.js'
 import {
+    buildAcceptStanza,
     buildRejectStanza,
     buildRelaylatencyForwardStanza,
     buildTerminateStanza,
@@ -36,6 +37,81 @@ test('buildRejectStanza emits a reject payload', () => {
     const node = buildRejectStanza('12345@lid', 'CALLID', '12345@lid')
     const inner = (node.content as unknown as Array<{ tag: string }>)[0]
     assert.equal(inner.tag, 'reject')
+})
+
+const CALLER_DEVICE_JID = '50062877036657:76@lid'
+
+function createAcceptDeps(): WaVoipDeps {
+    return {
+        authClient: {
+            getCurrentCredentials: () => ({
+                meJid: '1111111111@lid',
+                meLid: '1111111111@lid',
+                signedIdentity: { details: new Uint8Array([1, 2, 3]) }
+            })
+        },
+        signalProtocol: {
+            encryptMessage: async () => ({
+                type: 'pkmsg',
+                ciphertext: new Uint8Array([1, 2, 3])
+            })
+        },
+        messageDispatch: {
+            syncSignalSession: async () => undefined
+        }
+    } as unknown as WaVoipDeps
+}
+
+async function buildAccept(isVideo = false): Promise<BinaryNode> {
+    return buildAcceptStanza(
+        createAcceptDeps(),
+        'CALLID',
+        new Uint8Array(32),
+        CALLER_DEVICE_JID,
+        CALLER_DEVICE_JID,
+        isVideo
+    )
+}
+
+test('buildAcceptStanza ships no enc and no device-identity', async () => {
+    const accept = ((await buildAccept()).content as BinaryNode[])[0]
+    assert.equal(accept.tag, 'accept')
+
+    const tags = (accept.content as BinaryNode[]).map((child) => child.tag)
+    assert.equal(tags.includes('enc'), false)
+    assert.equal(tags.includes('device-identity'), false)
+})
+
+test('buildAcceptStanza matches the acked accept: audio and net only', async () => {
+    const accept = ((await buildAccept()).content as BinaryNode[])[0]
+    const children = accept.content as BinaryNode[]
+
+    const audio = children.find((child) => child.tag === 'audio')
+    assert.deepEqual(audio?.attrs, { enc: 'opus', rate: '16000' })
+
+    const net = children.find((child) => child.tag === 'net')
+    assert.equal(net?.attrs.medium, '3')
+
+    const tags = children.map((child) => child.tag)
+    assert.equal(tags.includes('encopt'), false)
+    assert.equal(tags.includes('enc'), false)
+    assert.equal(tags.includes('device-identity'), false)
+    assert.deepEqual(tags, ['audio', 'net'])
+})
+
+test('buildAcceptStanza addresses the caller device jid with its suffix', async () => {
+    const node = await buildAccept()
+    assert.equal(node.attrs.to, CALLER_DEVICE_JID)
+
+    const accept = (node.content as BinaryNode[])[0]
+    assert.equal(accept.attrs['call-id'], 'CALLID')
+    assert.equal(accept.attrs['call-creator'], CALLER_DEVICE_JID)
+})
+
+test('buildAcceptStanza advertises h.264 on a video accept', async () => {
+    const accept = ((await buildAccept(true)).content as BinaryNode[])[0]
+    const video = (accept.content as BinaryNode[]).find((child) => child.tag === 'video')
+    assert.equal(video?.attrs.enc, 'h.264')
 })
 
 test('needsDecryption only flags encrypted payload tags', () => {

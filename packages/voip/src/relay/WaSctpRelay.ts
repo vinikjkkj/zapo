@@ -15,6 +15,7 @@ import {
     buildSSRCSubscriptionList,
     buildWhatsAppPing,
     classifyPacket,
+    createStunTransactionId,
     formatStunResponse,
     parseStunResponse
 } from './stun.js'
@@ -34,11 +35,9 @@ type DataChannelClass = RTCDataChannel
 /**
  * The port a web client's relay media rides on.
  *
- * A relay answers only on the port it advertises, and the `<te2>` blocks carry
- * a mix. WhatsApp Web calls this one `TRUE_WEB_CLIENT_RELAY_PORT` and 3478
- * `FAUX_WEB_CLIENT_RELAY_PORT`, and dials its candidates here rather than on
- * the advertised port: a relay reached on 3478 completes the handshake and
- * accepts the uplink, but never forwards the peer's stream back, so the call is
+ * Candidates are dialled here rather than on the port the relay advertises,
+ * which is often 3478: a relay reached on 3478 completes the handshake and
+ * accepts the uplink but never forwards the peer's stream back, so the call is
  * silently one way.
  */
 export const TRUE_WEB_CLIENT_RELAY_PORT = 3480
@@ -46,7 +45,6 @@ export const TRUE_WEB_CLIENT_RELAY_PORT = 3480
 const CONFIG = {
     TRUE_WEB_CLIENT_RELAY_PORT,
     CONNECTION_TIMEOUT: 20000,
-    MAX_BUFFER_SIZE: 10 * 1024,
     KEEPALIVE_INTERVAL_MS: 1100,
     ICE_DISCONNECT_GRACE_MS: 4000,
     FIXED_FINGERPRINT:
@@ -90,6 +88,8 @@ interface Connection {
     hasReceivedFirstPacket: boolean
     localUfrag: string
     stableRoutingConnId: bigint
+    /** Born with the connection, and used by every STUN message it emits. */
+    stunTransactionId: Uint8Array
     stats: {
         sentPackets: number
         receivedPackets: number
@@ -111,9 +111,6 @@ export class WaSctpRelay extends EventEmitter {
         received: 0,
         connected: 0
     }
-    private configuring = false
-    private globalBuffer: Array<{ ip: string; port: number; data: ArrayBuffer }> = []
-    private globalBufferedBytes = 0
     private keepaliveTimers = new Map<string, NodeJS.Timeout>()
     private audioSsrc = 0
     private subscriptionSsrc = 0
@@ -244,6 +241,7 @@ export class WaSctpRelay extends EventEmitter {
             hasReceivedFirstPacket: false,
             localUfrag: '',
             stableRoutingConnId: 0n,
+            stunTransactionId: createStunTransactionId(),
             stats: { sentPackets: 0, receivedPackets: 0, sentBytes: 0, receivedBytes: 0 }
         }
 
@@ -515,15 +513,6 @@ export class WaSctpRelay extends EventEmitter {
         }
     }
 
-    private findConnectionByIpPort(ip: string, port: number): Connection | undefined {
-        for (const conn of this.connections.values()) {
-            if (conn.relayInfo.ip === ip && conn.relayInfo.port === port) {
-                return conn
-            }
-        }
-        return undefined
-    }
-
     private sendStunAllocateOnOpen(conn: Connection, relayInfo: RelayInfo): void {
         const connectionId = `${relayInfo.ip}:${relayInfo.port}`
 
@@ -535,6 +524,7 @@ export class WaSctpRelay extends EventEmitter {
 
         const localUfrag = conn.localUfrag
         const hmacKey = TEXT_ENCODER.encode(relayInfo.key)
+        const transactionId = conn.stunTransactionId
 
         const sendRegistration = (label: string) => {
             if (!this.isConnOpen(conn)) {
@@ -549,14 +539,22 @@ export class WaSctpRelay extends EventEmitter {
                 return
             }
 
-            // The legacy subscription requests carry only the primary inbound
-            // stream. Multi-stream audio/video subscriptions belong to the v4
-            // allocation below; repeating v1-v3 for every slot causes some
-            // relays to accept the uplink without forwarding the peer stream.
+            /**
+             * v1-v3 carry only the primary inbound stream: multi-stream
+             * subscriptions belong to the v4 allocation below. Repeating v1-v3
+             * per slot makes some relays accept the uplink and forward nothing.
+             */
             const subs = buildSenderSubscriptions(ssrc)
             if (localUfrag) {
                 const username = TEXT_ENCODER.encode(`${remoteUfrag}:${localUfrag}`)
-                const v1 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
+                const v1 = buildBindingRequestWithSubs(
+                    username,
+                    hmacKey,
+                    subs,
+                    true,
+                    true,
+                    transactionId
+                )
                 this.sendToChannel(conn, toArrayBuffer(v1))
                 this.logger.trace('stun v1 auth token ufrag sent', {
                     connectionId,
@@ -568,7 +566,14 @@ export class WaSctpRelay extends EventEmitter {
 
             if (relayInfo.token && relayInfo.token !== remoteUfrag && localUfrag) {
                 const username = TEXT_ENCODER.encode(`${relayInfo.token}:${localUfrag}`)
-                const v2 = buildBindingRequestWithSubs(username, hmacKey, subs, true, true)
+                const v2 = buildBindingRequestWithSubs(
+                    username,
+                    hmacKey,
+                    subs,
+                    true,
+                    true,
+                    transactionId
+                )
                 this.sendToChannel(conn, toArrayBuffer(v2))
                 this.logger.trace('stun v2 token ufrag sent', {
                     connectionId,
@@ -577,10 +582,23 @@ export class WaSctpRelay extends EventEmitter {
                 })
             }
 
-            const v3 = buildBindingRequestWithSubs(undefined, undefined, subs, false, false)
+            const v3 = buildBindingRequestWithSubs(
+                undefined,
+                undefined,
+                subs,
+                false,
+                false,
+                transactionId
+            )
             this.sendToChannel(conn, toArrayBuffer(v3))
             this.logger.trace('stun v3 no-mi sent', { connectionId, label, size: v3.length })
 
+            /**
+             * The allocate is the media handshake, and it authenticates with
+             * the raw `<relay>` token, not with the ICE ufrag pair the binding
+             * requests above use. Without the raw token there is no credential
+             * to send, so the allocate is skipped rather than faked.
+             */
             if (relayInfo.rawToken && relayInfo.rawToken.length > 0) {
                 const selfSsrcs = this.selfStreamSsrcs.length ? this.selfStreamSsrcs : [selfSsrc]
                 const peerSsrcs = this.peerStreamSsrcs.length
@@ -599,7 +617,8 @@ export class WaSctpRelay extends EventEmitter {
                     ssrcList,
                     hmacKey,
                     relayInfo.ip,
-                    relayInfo.port
+                    relayInfo.port,
+                    transactionId
                 )
                 this.sendToChannel(conn, toArrayBuffer(v4))
                 this.logger.trace('stun v4 allocate sent', { connectionId, label, size: v4.length })
@@ -616,7 +635,7 @@ export class WaSctpRelay extends EventEmitter {
     private startKeepalive(connectionId: string, conn: Connection): void {
         this.stopKeepalive(connectionId)
 
-        const firstPing = buildWhatsAppPing()
+        const firstPing = buildWhatsAppPing(conn.stunTransactionId)
         this.sendToChannel(conn, toArrayBuffer(firstPing))
         this.logger.debug('keepalive first ping sent', { connectionId })
 
@@ -626,7 +645,7 @@ export class WaSctpRelay extends EventEmitter {
                 this.stopKeepalive(connectionId)
                 return
             }
-            const ping = buildWhatsAppPing()
+            const ping = buildWhatsAppPing(conn.stunTransactionId)
             this.sendToChannel(conn, toArrayBuffer(ping))
             keepaliveCount++
 
@@ -925,8 +944,6 @@ export class WaSctpRelay extends EventEmitter {
     ): Promise<void> {
         this.logger.debug('sctp configuring relays', { count: relays.length })
 
-        this.configuring = true
-
         for (const relay of relays) {
             const port = relay.port || CONFIG.TRUE_WEB_CLIENT_RELAY_PORT
             const connectionId = this.makeConnectionId(relay.ip, port, relay.authTokenId)
@@ -966,65 +983,6 @@ export class WaSctpRelay extends EventEmitter {
         await Promise.all(connectionPromises)
 
         this.logger.debug('sctp relay configuration done', { connected: this.stats.connected })
-
-        this.configuring = false
-
-        if (this.globalBuffer.length > 0) {
-            for (const item of this.globalBuffer) {
-                this.sendToRelay(item.ip, item.port, item.data)
-            }
-            this.globalBuffer = []
-            this.globalBufferedBytes = 0
-        }
-    }
-
-    sendToRelay(ip: string, port: number, data: ArrayBuffer): boolean {
-        if (this.configuring) {
-            while (
-                this.globalBufferedBytes + data.byteLength > CONFIG.MAX_BUFFER_SIZE &&
-                this.globalBuffer.length > 0
-            ) {
-                const oldest = this.globalBuffer.shift()
-                if (oldest) this.globalBufferedBytes -= oldest.data.byteLength
-            }
-            this.globalBuffer.push({ ip, port, data })
-            this.globalBufferedBytes += data.byteLength
-            return true
-        }
-
-        const conn = this.findConnectionByIpPort(ip, port)
-
-        if (!conn) {
-            return false
-        }
-
-        if (this.isConnOpen(conn)) {
-            if (conn.buffer.length > 0) {
-                this.bufferData(conn, data)
-                this.drainBuffer(conn.id)
-            } else {
-                return this.sendToChannel(conn, data)
-            }
-            return true
-        } else if (conn.state === ConnectionState.Connecting) {
-            this.bufferData(conn, data)
-            return true
-        }
-
-        return false
-    }
-
-    private bufferData(conn: Connection, data: ArrayBuffer): void {
-        while (
-            conn.bufferedBytes + data.byteLength > CONFIG.MAX_BUFFER_SIZE &&
-            conn.buffer.length > 0
-        ) {
-            const oldest = conn.buffer.shift()
-            if (oldest) conn.bufferedBytes -= oldest.byteLength
-        }
-
-        conn.buffer.push(data)
-        conn.bufferedBytes += data.byteLength
     }
 
     broadcast(data: ArrayBuffer): void {
@@ -1063,9 +1021,6 @@ export class WaSctpRelay extends EventEmitter {
 
         this.connections.clear()
         this.relayMap.clear()
-        this.globalBuffer = []
-        this.globalBufferedBytes = 0
-        this.configuring = false
         this.stats.connected = 0
         this.audioSsrc = 0
         this.subscriptionSsrc = 0

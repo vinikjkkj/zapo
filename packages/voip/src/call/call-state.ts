@@ -1,3 +1,4 @@
+import type { WaVoipSettings } from '../signaling/voip-settings.js'
 import {
     CallDirection,
     CallMediaType,
@@ -35,6 +36,13 @@ export class CallInfo {
     encryptionKey?: Uint8Array
     relayData?: RelayData
     electedRelayIdx?: number
+    /**
+     * Configuration the server sent alongside the offer of this call, in the
+     * `<voip_settings>` node, parsed once on arrival. Absent when the node did
+     * not come or could not be read, and in that case every consumer stays on
+     * the compiled defaults.
+     */
+    voipSettings?: WaVoipSettings
 
     private constructor(
         init: Partial<CallInfo> & {
@@ -59,6 +67,7 @@ export class CallInfo {
         this.encryptionKey = init.encryptionKey
         this.relayData = init.relayData
         this.electedRelayIdx = init.electedRelayIdx
+        this.voipSettings = init.voipSettings
     }
 
     static newOutgoing(

@@ -4,6 +4,8 @@ export type { VoipPluginOptions } from './plugin.js'
 export { CallInfo } from './call/call-state.js'
 export type { CallStateData } from './call/call-state.js'
 
+export { WaVoipSettings } from './signaling/voip-settings.js'
+
 export { CallState, CallDirection, CallMediaType, EndCallReason } from './types.js'
 
 export type {

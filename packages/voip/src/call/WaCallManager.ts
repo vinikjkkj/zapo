@@ -14,6 +14,7 @@ import {
     extractNodeInfo,
     generateCallId
 } from '../signaling/signaling.js'
+import { parseVoipSettings } from '../signaling/voip-settings.js'
 import {
     CallDirection,
     CallMediaType,
@@ -199,12 +200,16 @@ export class WaCallManager extends EventEmitter {
         const callerPn = nodeInfo.innerNode.attrs?.['caller_pn']
         const isVideo = hasNodeChild(nodeInfo.innerNode, 'video')
 
+        const signalingLogger = this.logger.child({ component: 'signaling' })
+
         const callKey = await decryptCallKey(
             this.deps,
             nodeInfo.innerNode,
             peerJid,
-            this.logger.child({ component: 'signaling' })
+            signalingLogger
         )
+
+        const voipSettings = parseVoipSettings(node, signalingLogger)
 
         const { relays, participantJids, uuid, selfPid, peerPid, hbhKey } = parseRelayFromAck(
             nodeInfo.innerNode
@@ -230,6 +235,7 @@ export class WaCallManager extends EventEmitter {
 
         const atCapacity = this.activeCallCount >= this.maxConcurrentCalls
         const session = this.createSession(info, { acceptBlocked: atCapacity })
+        session.applyVoipSettings(voipSettings)
 
         if (!atCapacity) {
             try {

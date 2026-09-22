@@ -10,6 +10,12 @@ export interface VoipEvents {
     readonly voip_call_state: (call: CallInfo) => void
     readonly voip_call_incoming: (call: CallInfo) => void
     readonly voip_call_ended: (call: CallInfo) => void
+    /**
+     * Decoded peer audio (16 kHz mono PCM), paced by the jitter buffer at one
+     * 60 ms tick of 960 samples. Concealed loss and buffer underrun arrive as
+     * audio and silence respectively, so the stream keeps the call's timebase;
+     * a tick with nothing queued at all is skipped instead.
+     */
     readonly voip_call_inbound_audio: (payload: {
         readonly call: CallInfo
         readonly pcm: Float32Array
