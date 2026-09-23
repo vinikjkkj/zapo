@@ -131,14 +131,14 @@ await client.voip.endCall(callId)
 
 Emitted on `WaClient`:
 
-| Event                               | Payload                                 | When                                                   |
-| ----------------------------------- | --------------------------------------- | ------------------------------------------------------ |
-| `voip_call_incoming`                | `CallInfo`                              | Remote offer received                                  |
-| `voip_call_state`                   | `CallInfo`                              | State transition                                       |
-| `voip_call_ended`                   | `CallInfo`                              | Call finished                                          |
+| Event                               | Payload                                 | When                                                                                          |
+| ----------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `voip_call_incoming`                | `CallInfo`                              | Remote offer received                                                                         |
+| `voip_call_state`                   | `CallInfo`                              | State transition                                                                              |
+| `voip_call_ended`                   | `CallInfo`                              | Call finished                                                                                 |
 | `voip_call_inbound_audio`           | `{ call: CallInfo; pcm: Float32Array }` | Decoded peer audio, paced 960 samples / 60 ms (16 kHz); a tick with nothing queued is skipped |
-| `voip_call_outbound_audio_finished` | `CallInfo`                              | Preloaded outbound audio finished sending              |
-| `voip_call_error`                   | `Error`                                 | Engine error                                           |
+| `voip_call_outbound_audio_finished` | `CallInfo`                              | Preloaded outbound audio finished sending                                                     |
+| `voip_call_error`                   | `Error`                                 | Engine error                                                                                  |
 
 You can also use `client.voip.on('call_state', ...)` etc. for the manager-level events (`CallManagerEvents`).
 
