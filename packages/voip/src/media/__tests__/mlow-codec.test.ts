@@ -190,6 +190,34 @@ test('MLowCodec drops duplicate and late packets', async () => {
     }
 })
 
+test('MLowCodec does not re-emit frames when a rejected packet is followed by another', async () => {
+    const codec = await MLowCodec.create()
+    try {
+        const first = codec.encode(voicedFrame())
+        const rejected = new Uint8Array([0xff, 0xff, 0xff, 0xff, 0xff])
+        const fourth = codec.encode(voicedFrame(3 * 960))
+
+        let frames = 0
+        const collect = (): void => {
+            frames++
+        }
+
+        codec.decodeSequenced(1, first, collect)
+        codec.decodeSequenced(2, rejected, collect)
+        codec.decodeSequenced(3, rejected, collect)
+        codec.decodeSequenced(4, fourth, collect)
+
+        assert.equal(codec.getStats().errors, 2, 'both malformed packets must reach the decoder')
+        assert.equal(
+            frames,
+            4,
+            'each sequence slot must produce exactly one frame, with none emitted twice'
+        )
+    } finally {
+        codec.destroy()
+    }
+})
+
 test('MLowCodec does not conceal across a sequence number wrap', async () => {
     const codec = await MLowCodec.create()
     try {

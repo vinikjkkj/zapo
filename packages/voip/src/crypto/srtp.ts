@@ -442,6 +442,15 @@ export class SrtcpSession {
      * Verifies and decrypts an incoming SRTCP packet, using (and lazily
      * creating) the {@link SrtcpContext} for its sender SSRC.
      *
+     * A context for an unseen SSRC is authenticated through
+     * {@link SrtcpContext.unprotect} before it is cached or allowed to evict
+     * an existing entry. `MAX_RECV_CONTEXTS` bounds the cache, so a packet
+     * with a forged SSRC that got inserted first could otherwise evict the
+     * oldest tracked stream and wipe its replay window, letting a captured
+     * packet from that stream be replayed. Caching only after a successful
+     * authentication keeps a forged SSRC from ever reaching the eviction
+     * check.
+     *
      * @throws {SrtpError} `packet_too_short`, `auth_failed` or `replay`
      */
     unprotect(data: Uint8Array): Uint8Array {
@@ -456,11 +465,13 @@ export class SrtcpSession {
         let ctx = this.contexts.get(ssrc)
         if (!ctx) {
             ctx = new SrtcpContext(this.keying, this.authTagLen)
+            const packet = ctx.unprotect(data)
             if (this.contexts.size >= SrtcpSession.MAX_RECV_CONTEXTS) {
                 const oldest = this.contexts.keys().next().value
                 if (oldest !== undefined) this.contexts.delete(oldest)
             }
             this.contexts.set(ssrc, ctx)
+            return packet
         }
         return ctx.unprotect(data)
     }

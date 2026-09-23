@@ -272,10 +272,12 @@ export class MLowCodec {
      * duplicate or late packet is dropped rather than emitted out of order.
      *
      * A packet the decoder rejects is treated the same as one that never
-     * arrived: `lastSeq` is left behind it, so the next packet's gap
-     * concealment covers it and gets a chance at recovering it through that
-     * packet's in-band FEC copy, instead of it being emitted as permanent
-     * silence right here.
+     * arrived, but only for its own slot: `lastSeq` still advances to just
+     * behind it, so only the rejected packet itself - not the packets
+     * already covered by this call's own gap concealment - is left for the
+     * next packet's FEC copy to recover. Leaving `lastSeq` further back would
+     * hand that already-covered ground to the next gap too, emitting the same
+     * frames twice.
      */
     decodeSequenced(seq: number, packet: Uint8Array, onFrame: (pcm: Float32Array) => void): void {
         if (!this.decoder) {
@@ -303,6 +305,7 @@ export class MLowCodec {
 
         const decoded = this.tryDecode(packet)
         if (decoded === null) {
+            this.lastSeq = (current - 1 + SEQ_SPACE) % SEQ_SPACE
             return
         }
         this.lastSeq = current

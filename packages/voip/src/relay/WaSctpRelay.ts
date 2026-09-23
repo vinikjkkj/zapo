@@ -74,7 +74,7 @@ interface RelayInfo {
     isFna?: boolean
 }
 
-interface Connection {
+export interface Connection {
     state: ConnectionState
     peerConnection: PeerConnectionClass | null
     channel: DataChannelClass | null

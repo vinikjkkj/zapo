@@ -614,24 +614,75 @@ test('keeps a packet reordered across the wrap in the cycle it belongs to', () =
 test('resumes loss tracking after a sustained forward jump instead of freezing on it', () => {
     const reception = new RtpStreamReception(AUDIO_CLOCK_RATE)
     observeRun(reception, 0xfffe, 4)
-    // A single packet this far ahead reads the same as the pre-wrap straggler
-    // above, so it is held back rather than trusted on its own.
-    reception.observe(PEER_SSRC, 0x5000, 5000, 100)
-    // A second packet landing right next to it, instead of back near the old
-    // position, is what confirms the stream actually resumed up here.
-    reception.observe(PEER_SSRC, 0x5001, 5320, 120)
-    // A real gap right after the resync must still be counted, not swallowed
-    // by a tracker still stuck on the old position.
-    reception.observe(PEER_SSRC, 0x5003, 5960, 160)
+    /**
+     * `0x9000` is 0x8fff (36863) past the post-wrap `lastSequence` of 1, which
+     * clears `SEQUENCE_WRAP_THRESHOLD` (0x8000): it is held back rather than
+     * trusted on its own. `0x9001` is the very next sequence number after it,
+     * which is what confirms the stream actually resumed up here. `0x9003`
+     * then leaves a real two-packet gap right after the resync, which must
+     * still be counted rather than swallowed by a tracker still stuck on the
+     * old position.
+     */
+    reception.observe(PEER_SSRC, 0x9000, 5000, 100)
+    reception.observe(PEER_SSRC, 0x9001, 5320, 120)
+    reception.observe(PEER_SSRC, 0x9003, 5960, 160)
     const report = reception.report(0)
     assert.equal(
         report.highestSequence,
-        0x5003,
+        0x9003,
         'a sustained forward jump was frozen instead of being recognized as a resync'
     )
+    assert.equal(report.cycles, 0, 'the resync must re-anchor the cycle count at the new position')
     assert.ok(
         reception.lossPercent > 0,
         'loss right after the resync stayed hidden instead of being counted'
+    )
+})
+
+test('does not resync on an isolated straggler followed by an in-order packet', () => {
+    const reception = new RtpStreamReception(AUDIO_CLOCK_RATE)
+    observeRun(reception, 0xfffe, 4)
+    /**
+     * `0x9000` clears the jump threshold the same way as above, so it is held
+     * back as an unconfirmed candidate. The next packet is `2`, the ordinary
+     * continuation of the pre-jump stream rather than the sequence number
+     * that would confirm `0x9000` - this is the other half of the guard: a
+     * lone straggler that far ahead must not re-anchor the tracker onto it.
+     */
+    reception.observe(PEER_SSRC, 0x9000, 5000, 100)
+    reception.observe(PEER_SSRC, 2, 5020, 120)
+    const report = reception.report(0)
+    assert.equal(
+        report.highestSequence,
+        2,
+        'the in-order packet must keep advancing the pre-jump stream'
+    )
+    assert.equal(
+        report.packetsLost,
+        -1,
+        'the isolated straggler must not re-anchor the tracker at the jump target'
+    )
+})
+
+test('preserves the sender report state across a resync of the same source', () => {
+    const reception = new RtpStreamReception(AUDIO_CLOCK_RATE)
+    observeRun(reception, 0xfffe, 4)
+    const incoming = buildSenderReportWithSdes(PEER_SSRC, 25, 2400, 24_000, new Uint8Array(18))
+    reception.observeSenderReport(incoming, 1_000)
+    reception.observe(PEER_SSRC, 0x9000, 5000, 1_100)
+    reception.observe(PEER_SSRC, 0x9001, 5320, 1_120)
+    const report = reception.report(1_500)
+    const expectedLsr =
+        (((readUInt32BE(incoming, 8) & 0xffff) << 16) | (readUInt32BE(incoming, 12) >>> 16)) >>> 0
+    assert.equal(
+        report.lastSenderReport,
+        expectedLsr,
+        'a resync of the same source must not drop the round-trip probe'
+    )
+    assert.equal(
+        report.delaySinceLastSenderReport,
+        32_768,
+        'the DLSR clock must keep running from before the resync, half a second in 1/65536 units'
     )
 })
 

@@ -282,8 +282,9 @@ export class RtpStreamReception {
              * (`previous` is stale and this packet is the true one). A single
              * straggler is a one-off - traffic resumes right after `previous` -
              * while a real resumption keeps arriving up here, so the next packet
-             * tells them apart: only re-anchor once a second packet confirms this
-             * one by landing close to it rather than close to `previous`.
+             * tells them apart: only re-anchor once the very next sequence number
+             * after this one confirms it, rather than trusting anything that
+             * merely lands in the same half of the space.
              *
              * Without that confirmation, treating every such packet as a
              * straggler is what froze this tracker on a real gap: `received` kept
@@ -293,7 +294,7 @@ export class RtpStreamReception {
              */
             const pending = this.pendingJumpSequence
             this.pendingJumpSequence = sequenceNumber
-            if (pending >= 0 && Math.abs(sequenceNumber - pending) <= SEQUENCE_WRAP_THRESHOLD) {
+            if (pending >= 0 && sequenceNumber === (pending + 1) % SEQUENCE_CYCLE) {
                 this.restart(ssrc, sequenceNumber, rtpTimestamp, arrivalTicks)
             }
             return
@@ -411,13 +412,28 @@ export class RtpStreamReception {
         this.jitter += (magnitude - this.jitter) / JITTER_GAIN
     }
 
-    /** Starts tracking `ssrc` from this packet, dropping any earlier source. */
+    /**
+     * Starts tracking `ssrc` from this packet.
+     *
+     * A resync of the sequence numbering is not a change of sender: when
+     * `ssrc` is the source already being tracked, this is the confirmed
+     * far-side jump above re-anchoring the same stream, not a new one
+     * appearing, so the sender report state survives the restart. Losing it
+     * would zero the round-trip probe - LSR and DLSR - on every resync during
+     * a call, which is the report block going all-zero for a reason this
+     * tracker itself introduced rather than the peer withholding a sender
+     * report. Only an actual source change drops it, in `reset()` below.
+     */
     private restart(
         ssrc: number,
         sequenceNumber: number,
         rtpTimestamp: number,
         arrivalTicks: number
     ): void {
+        const sameSource = ssrc === this.stats.ssrc
+        const lastSenderReport = this.stats.lastSenderReport
+        const delaySinceLastSenderReport = this.stats.delaySinceLastSenderReport
+        const senderReportArrivalMs = this.senderReportArrivalMs
         this.reset()
         this.stats.ssrc = ssrc
         this.stats.highestSequence = sequenceNumber
@@ -427,6 +443,11 @@ export class RtpStreamReception {
         this.received = 1
         this.lastRtpTimestamp = rtpTimestamp
         this.lastArrivalTicks = arrivalTicks
+        if (sameSource) {
+            this.stats.lastSenderReport = lastSenderReport
+            this.stats.delaySinceLastSenderReport = delaySinceLastSenderReport
+            this.senderReportArrivalMs = senderReportArrivalMs
+        }
     }
 }
 

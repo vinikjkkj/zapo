@@ -12,7 +12,7 @@ import {
     parseStunResponse,
     type StunResponseInfo
 } from '../stun.js'
-import { WaSctpRelay } from '../WaSctpRelay.js'
+import { type Connection, WaSctpRelay } from '../WaSctpRelay.js'
 
 const ATTR_USERNAME = 0x0006
 const ATTR_XOR_RELAYED_ADDRESS = 0x0016
@@ -131,18 +131,15 @@ test('a relay connection stamps one transaction id on every STUN message it emit
     relay.setSsrc(0x11223344)
     relay.setSubscriptionSsrc(0x55667788)
     /**
-     * `connectToRelay` sets up the UDP socket and calls `socket.connect(...)`
-     * synchronously before its promise ever settles, and the registration
-     * ladder reads `localUfrag` from the connection the instant that socket
-     * callback fires. That callback is scheduled through `process.nextTick`,
-     * which Node drains ahead of promise microtasks, so it can win the race
-     * against an `await` on the same call and start the ladder with an empty
-     * ufrag. Reaching into the connection synchronously, before the `await`,
-     * seeds it ahead of anything the socket callback can schedule.
+     * `connectToRelay` registers the connection in `connections`
+     * synchronously, before its returned promise ever settles: the FNA/UDP
+     * branch `relayInfoFor`'s `isFna: true` selects calls `setupUdpRelay`
+     * and returns before any `await`. Reaching in here only checks that
+     * registration invariant, typed against the real `Connection` shape so
+     * a field rename breaks this test at compile time instead of silently
+     * matching a stale structural type.
      */
-    const internals = relay as unknown as {
-        connections: Map<string, { localUfrag: string }>
-    }
+    const internals = relay as unknown as { connections: Map<string, Connection> }
 
     try {
         for (let i = 0; i < listeners.length; i++) {
@@ -150,9 +147,10 @@ test('a relay connection stamps one transaction id on every STUN message it emit
             const pending = relay.connectToRelay(relayInfoFor(listeners[i].port, i + 1))
             const addedKey = [...internals.connections.keys()].find((key) => !before.has(key))
             assert.ok(addedKey, 'connectToRelay must register the connection before it returns')
-            const seeded = internals.connections.get(addedKey)
-            assert.ok(seeded, 'the registered connection must still be present')
-            seeded.localUfrag = `local-ufrag-${i + 1}`
+            assert.ok(
+                internals.connections.get(addedKey),
+                'the registered connection must still be present'
+            )
 
             const conn = await pending
             assert.ok(conn)
@@ -176,10 +174,9 @@ test('a relay connection stamps one transaction id on every STUN message it emit
         assert.equal(ids.size, 1, `expected one transaction id, saw ${[...ids].join(', ')}`)
 
         const allocates = infos.filter((info) => info.method === 'allocate')
-        const credentialled = infos.filter(
-            (info) =>
-                info.method === 'binding' &&
-                info.attributes.some((attr) => attr.type === ATTR_USERNAME)
+        const bindings = infos.filter((info) => info.method === 'binding')
+        const credentialled = bindings.filter((info) =>
+            info.attributes.some((attr) => attr.type === ATTR_USERNAME)
         )
         const pings = infos.filter((info) => info.method === 'wa-ping')
 
@@ -188,8 +185,22 @@ test('a relay connection stamps one transaction id on every STUN message it emit
             `expected every ladder position to allocate, saw ${allocates.length}`
         )
         assert.ok(
-            credentialled.length >= (LADDER_POSITIONS - 1) * 2,
-            `expected the ufrag binding checks of every ladder position, saw ${credentialled.length}`
+            bindings.length >= LADDER_POSITIONS,
+            `expected the no-MI binding check of every ladder position, saw ${bindings.length}`
+        )
+        /**
+         * `sendStunAllocateOnOpen` only stamps a binding with the ufrag pair
+         * (`v1`/`v2`) when `conn.localUfrag` is set. `setupUdpRelay`, the
+         * branch this FNA connection takes, never assigns `localUfrag`:
+         * that only happens in the WebRTC branch's SDP offer, which an FNA
+         * connection never reaches. A credentialled binding here would mean
+         * the FNA registration ladder started depending on a ufrag it
+         * cannot have.
+         */
+        assert.equal(
+            credentialled.length,
+            0,
+            `expected no ufrag-credentialled binding on an FNA connection, saw ${credentialled.length}`
         )
         assert.ok(pings.length >= 1, 'expected at least the first keepalive ping')
 

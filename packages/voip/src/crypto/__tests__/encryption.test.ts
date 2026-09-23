@@ -279,6 +279,76 @@ test('SrtcpSession still rejects a replayed packet within a single stream', () =
     )
 })
 
+/**
+ * The cache is bounded to `MAX_RECV_CONTEXTS` (32) entries, evicting the
+ * oldest on overflow. A forged packet from a brand-new SSRC with an invalid
+ * tag must fail authentication before it can occupy a slot and evict an
+ * existing stream's context, which would also erase that stream's replay
+ * window. Proven the same way a real attacker's outcome would be observed:
+ * establish a legitimate stream, fill the cache so that stream is the
+ * eviction candidate, send the forgery, then confirm a replay of the
+ * legitimate stream is still rejected. If the forgery had evicted the
+ * legitimate context, the replay would decrypt successfully instead.
+ */
+test('SrtcpSession does not let a forged SSRC evict a legitimate context and erase its replay state', () => {
+    const callKey = new Uint8Array(32)
+    callKey.fill(0xcc)
+    const keying = derivePerJidSrtpKey(callKey, 'self:0@lid')
+
+    const receiver = new SrtcpSession(keying)
+
+    const legitSsrc = 0x01010101
+    const legitSender = new SrtcpContext(keying)
+    const legitPacket = buildPictureLossIndication(legitSsrc, 0x0a0b0c0d)
+    const legitProtected = legitSender.protect(legitPacket, legitSsrc)
+    assert.deepEqual(receiver.unprotect(legitProtected), legitPacket)
+
+    const contexts = (receiver as unknown as { contexts: Map<number, unknown> }).contexts
+    const maxRecvContexts = 32
+
+    for (let i = 1; i < maxRecvContexts; i++) {
+        const ssrc = 0x02000000 + i
+        const sender = new SrtcpContext(keying)
+        const packet = buildPictureLossIndication(ssrc, 0x0b0c0d0e)
+        assert.deepEqual(receiver.unprotect(sender.protect(packet, ssrc)), packet)
+    }
+
+    assert.equal(contexts.size, maxRecvContexts)
+    assert.ok(
+        contexts.has(legitSsrc),
+        'the legitimate context must still be the eviction candidate'
+    )
+
+    const forgedSsrc = 0x09090909
+    const forgedSender = new SrtcpContext(keying)
+    const forged = forgedSender.protect(
+        buildPictureLossIndication(forgedSsrc, 0x0d0e0f10),
+        forgedSsrc
+    )
+    const tamperedForged = forged.slice()
+    tamperedForged[tamperedForged.length - 1] ^= 0xff
+
+    assert.throws(
+        () => receiver.unprotect(tamperedForged),
+        (error: unknown) => error instanceof SrtpError && error.type === 'auth_failed'
+    )
+
+    assert.equal(
+        contexts.size,
+        maxRecvContexts,
+        'an unauthenticated forgery must not grow the cache'
+    )
+    assert.ok(
+        contexts.has(legitSsrc),
+        'an unauthenticated forgery must not evict the legitimate context'
+    )
+
+    assert.throws(
+        () => receiver.unprotect(legitProtected),
+        (error: unknown) => error instanceof SrtpError && error.type === 'replay'
+    )
+})
+
 test('SrtcpContext unprotect passes through a payload the sender left in the clear', () => {
     const context = new SrtcpContext(derivePerJidSrtpKey(new Uint8Array(32), 'self:0@lid'), 0)
     const pli = buildPictureLossIndication(0x0a0b0c0d, 0x01020304)
