@@ -271,6 +271,9 @@ export class SrtcpContext {
     private readonly salt: Uint8Array
     private readonly authTagLen: number
     private index = 0
+    private replayInitialized = false
+    private highestIndex = 0n
+    private replayMask = 0n
 
     private readonly ivBuffer: Uint8Array = new Uint8Array(16)
     private readonly ssrcBuffer: Uint8Array = new Uint8Array(4)
@@ -310,7 +313,13 @@ export class SrtcpContext {
      * Verifies the auth tag and returns the RTCP packet in the clear. The sender
      * SSRC comes from the header the tag covers, so there is no SSRC argument.
      *
-     * @throws {SrtpError} `packet_too_short` or `auth_failed`
+     * Replay is checked against the 31-bit SRTCP index the same way
+     * {@link SrtpContext} checks it against its 48-bit RTP index: a sliding
+     * window keyed on the highest index seen, so a relay that captured and
+     * replays an earlier control packet (PLI, FIR, REMB, sender report) is
+     * rejected instead of being decrypted and acted on again.
+     *
+     * @throws {SrtpError} `packet_too_short`, `auth_failed` or `replay`
      */
     unprotect(data: Uint8Array): Uint8Array {
         const minLength = SRTCP_HEADER_LEN + SRTCP_INDEX_LEN + this.authTagLen
@@ -332,8 +341,14 @@ export class SrtcpContext {
 
         const indexOffset = authEnd - SRTCP_INDEX_LEN
         const indexWord = readUInt32BE(data, indexOffset)
+        const index = BigInt(indexWord & SRTCP_INDEX_MASK)
+
+        if (this.isReplayed(index)) {
+            throw new SrtpError('replay', `SRTCP replay detected: index ${index}`)
+        }
 
         if ((indexWord & SRTCP_ENCRYPTED_FLAG) === 0) {
+            this.advanceReplay(index)
             return data.subarray(0, indexOffset)
         }
 
@@ -344,10 +359,41 @@ export class SrtcpContext {
             data.subarray(SRTCP_HEADER_LEN, indexOffset)
         )
 
+        this.advanceReplay(index)
+
         const output = new Uint8Array(SRTCP_HEADER_LEN + decrypted.length)
         output.set(data.subarray(0, SRTCP_HEADER_LEN), 0)
         output.set(decrypted, SRTCP_HEADER_LEN)
         return output
+    }
+
+    private isReplayed(index: bigint): boolean {
+        if (!this.replayInitialized) {
+            return false
+        }
+        if (index > this.highestIndex) {
+            return false
+        }
+        const offset = this.highestIndex - index
+        if (offset >= SRTP_REPLAY_WINDOW) {
+            return true
+        }
+        return (this.replayMask & (1n << offset)) !== 0n
+    }
+
+    private advanceReplay(index: bigint): void {
+        if (this.replayInitialized && index <= this.highestIndex) {
+            const offset = this.highestIndex - index
+            if (offset < SRTP_REPLAY_WINDOW) {
+                this.replayMask |= 1n << offset
+            }
+            return
+        }
+        const shift = this.replayInitialized ? index - this.highestIndex : SRTP_REPLAY_WINDOW
+        this.replayMask =
+            shift >= SRTP_REPLAY_WINDOW ? 1n : ((this.replayMask << shift) | 1n) & SRTP_INDEX_MASK
+        this.highestIndex = index
+        this.replayInitialized = true
     }
 
     private generateIv(ssrc: number, index: number): Uint8Array {
@@ -365,6 +411,58 @@ export class SrtcpContext {
         }
 
         return this.ivBuffer
+    }
+}
+
+/**
+ * Dispatches incoming SRTCP to one {@link SrtcpContext} per sender SSRC.
+ *
+ * A call's peer emits more than one SRTCP stream on the same relay connection
+ * (audio, main video, video FEC, ...), each with its own 31-bit SRTCP index
+ * counter. A single shared {@link SrtcpContext} interleaves those independent
+ * counters into one replay window, so a packet from stream B looks like an
+ * out-of-window replay relative to stream A's index and gets dropped even
+ * though nothing was actually replayed. Keying the context by the sender SSRC
+ * at bytes 4-7 of the packet — the same field {@link SrtcpContext} already
+ * reads to build the decryption IV — gives each stream its own window, the
+ * way {@link SrtpSession} already does per-SSRC for RTP.
+ */
+export class SrtcpSession {
+    private static readonly MAX_RECV_CONTEXTS = 32
+    private readonly keying: SrtpKeyingMaterial
+    private readonly authTagLen: number
+    private readonly contexts = new Map<number, SrtcpContext>()
+
+    constructor(keying: SrtpKeyingMaterial, authTagLen = SRTCP_AUTH_TAG_LEN) {
+        this.keying = keying
+        this.authTagLen = authTagLen
+    }
+
+    /**
+     * Verifies and decrypts an incoming SRTCP packet, using (and lazily
+     * creating) the {@link SrtcpContext} for its sender SSRC.
+     *
+     * @throws {SrtpError} `packet_too_short`, `auth_failed` or `replay`
+     */
+    unprotect(data: Uint8Array): Uint8Array {
+        if (data.length < SRTCP_HEADER_LEN) {
+            throw new SrtpError(
+                'packet_too_short',
+                `SRTCP packet too short: ${data.length}B total, ${SRTCP_HEADER_LEN}B minimum`
+            )
+        }
+
+        const ssrc = readUInt32BE(data, 4)
+        let ctx = this.contexts.get(ssrc)
+        if (!ctx) {
+            ctx = new SrtcpContext(this.keying, this.authTagLen)
+            if (this.contexts.size >= SrtcpSession.MAX_RECV_CONTEXTS) {
+                const oldest = this.contexts.keys().next().value
+                if (oldest !== undefined) this.contexts.delete(oldest)
+            }
+            this.contexts.set(ssrc, ctx)
+        }
+        return ctx.unprotect(data)
     }
 }
 

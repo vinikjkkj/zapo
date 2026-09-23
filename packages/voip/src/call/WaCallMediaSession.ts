@@ -6,7 +6,7 @@ import { toError, uint8TimingSafeEqual } from 'zapo-js/util'
 import { concatBytes, EMPTY_BYTES, readUInt32BE, toArrayBuffer } from '../bytes.js'
 import { derivePerJidSrtpKey } from '../crypto/encryption.js'
 import { randomBytes } from '../crypto/primitives.js'
-import { SrtcpContext, SrtpSession } from '../crypto/srtp.js'
+import { SrtcpContext, SrtcpSession, SrtpSession } from '../crypto/srtp.js'
 import {
     generateSecureSsrc,
     WA_AUDIO_CALL_SSRC_SLOTS,
@@ -228,7 +228,7 @@ export class WaCallMediaSession implements AudioSender {
     private videoRtpSession: RtpSession | null = null
     private srtpSession: SrtpSession | null = null
     private srtcpContext: SrtcpContext | null = null
-    private srtcpRecvContext: SrtcpContext | null = null
+    private srtcpRecvSession: SrtcpSession | null = null
     private opusCodec: MLowCodec | null = null
     private readonly sctpRelay: WaSctpRelay
     private readonly audioEngine: WaAudioEngine
@@ -587,7 +587,6 @@ export class WaCallMediaSession implements AudioSender {
             const acceptStanza = await buildAcceptStanza(
                 this.deps,
                 this.info.callId,
-                this.info.encryptionKey,
                 this.info.peerJid,
                 this.info.callCreator,
                 isVideo
@@ -905,7 +904,7 @@ export class WaCallMediaSession implements AudioSender {
                                     SRTP_RECV_AUTH_TAG_LEN
                                 )
                                 this.srtcpContext = new SrtcpContext(sendKeying)
-                                this.srtcpRecvContext = new SrtcpContext(recvKeying)
+                                this.srtcpRecvSession = new SrtcpSession(recvKeying)
                                 srtpFromPeerKey = true
                                 this.logger.debug('srtp re-initialized with peer call_key', {
                                     callId: this.info.callId
@@ -1165,7 +1164,17 @@ export class WaCallMediaSession implements AudioSender {
             return
         }
 
-        this.applyVoipSettings(parseVoipSettings(node, this.logger))
+        /**
+         * `<voip_settings>` is per-call and does not change between the offer
+         * acks of one call, so a repeat delivery of this ack (the transport
+         * retries an unacked stanza, or the server redelivers) parses the same
+         * ~34 KB base64+JSON payload again for no observable effect: applying
+         * it twice is harmless, but re-decoding and re-parsing it is not free.
+         * Skip once this call already has settings applied.
+         */
+        if (!this.info.voipSettings) {
+            this.applyVoipSettings(parseVoipSettings(node, this.logger))
+        }
 
         const { relays, participantJids, uuid, selfPid, peerPid, hbhKey } = parseRelayFromAck(node)
 
@@ -1468,7 +1477,7 @@ export class WaCallMediaSession implements AudioSender {
         this.videoRtpSession = null
         this.srtpSession = null
         this.srtcpContext = null
-        this.srtcpRecvContext = null
+        this.srtcpRecvSession = null
         for (const depacketizer of this.h264Depacketizers.values()) depacketizer.reset()
         this.h264Depacketizers.clear()
 
@@ -1616,7 +1625,7 @@ export class WaCallMediaSession implements AudioSender {
                 SRTP_RECV_AUTH_TAG_LEN
             )
             this.srtcpContext = new SrtcpContext(sendKeying)
-            this.srtcpRecvContext = new SrtcpContext(recvKeying)
+            this.srtcpRecvSession = new SrtcpSession(recvKeying)
             this.logger.debug('srtp per-jid keys initialized', {
                 callId: this.info.callId,
                 sendJid: ourDeviceJid,
@@ -1660,9 +1669,9 @@ export class WaCallMediaSession implements AudioSender {
         }
 
         if (isRtcpPacket(data)) {
-            if (!this.srtcpRecvContext) return
+            if (!this.srtcpRecvSession) return
             try {
-                const rtcp = this.srtcpRecvContext.unprotect(data)
+                const rtcp = this.srtcpRecvSession.unprotect(data)
                 const arrivedAt = Date.now()
                 this.audioReception.observeSenderReport(rtcp, arrivedAt)
                 this.videoReception.observeSenderReport(rtcp, arrivedAt)
@@ -1768,7 +1777,8 @@ export class WaCallMediaSession implements AudioSender {
                     const frames = depacketizer.push(
                         rtpPacket.payload,
                         rtpPacket.header.timestamp,
-                        rtpPacket.header.marker
+                        rtpPacket.header.marker,
+                        rtpPacket.header.sequenceNumber
                     )
                     for (const frame of frames) {
                         if (frame.keyFrame) this.receivedVideoKeyFrame = true

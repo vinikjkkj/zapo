@@ -287,7 +287,7 @@ test('MLowCodec reports a rejected encoder tunable instead of throwing', async (
     const codec = await MLowCodec.create({ logger })
     try {
         codec.applyEncoderTunables({ subframeImportance: Number.MAX_SAFE_INTEGER })
-        assert.ok(warnings.length === 0 || warnings[0] === 'mlow encoder ctl rejected')
+        assert.deepEqual(warnings, ['mlow encoder ctl rejected'])
         assert.ok(codec.encode(voicedFrame()).length > 0)
     } finally {
         codec.destroy()

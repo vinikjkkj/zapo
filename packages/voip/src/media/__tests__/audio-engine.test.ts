@@ -238,7 +238,7 @@ test('playback drain keeps up with the wall clock', async () => {
         engine.onPlaybackData(new Float32Array(160))
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 120))
+    await waitUntil(() => drained >= 960)
     engine.stopPlayback()
 
     assert.ok(drained >= 960, `expected the queue to drain, got ${drained} samples`)

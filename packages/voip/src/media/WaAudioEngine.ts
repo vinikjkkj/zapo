@@ -667,7 +667,12 @@ export class WaAudioEngine {
 
     private writeToBuffer(data: Float32Array): void {
         const capacity = this.maxBuffer
-        const source = data.length > capacity ? data.subarray(data.length - capacity) : data
+        let source = data
+        if (source.length > capacity) {
+            const truncated = source.length - capacity
+            this.droppedSamples += truncated
+            source = source.subarray(truncated)
+        }
         if (source.length === 0) {
             return
         }

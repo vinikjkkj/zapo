@@ -130,12 +130,32 @@ test('a relay connection stamps one transaction id on every STUN message it emit
     const relay = new WaSctpRelay()
     relay.setSsrc(0x11223344)
     relay.setSubscriptionSsrc(0x55667788)
+    /**
+     * `connectToRelay` sets up the UDP socket and calls `socket.connect(...)`
+     * synchronously before its promise ever settles, and the registration
+     * ladder reads `localUfrag` from the connection the instant that socket
+     * callback fires. That callback is scheduled through `process.nextTick`,
+     * which Node drains ahead of promise microtasks, so it can win the race
+     * against an `await` on the same call and start the ladder with an empty
+     * ufrag. Reaching into the connection synchronously, before the `await`,
+     * seeds it ahead of anything the socket callback can schedule.
+     */
+    const internals = relay as unknown as {
+        connections: Map<string, { localUfrag: string }>
+    }
 
     try {
         for (let i = 0; i < listeners.length; i++) {
-            const conn = await relay.connectToRelay(relayInfoFor(listeners[i].port, i + 1))
+            const before = new Set(internals.connections.keys())
+            const pending = relay.connectToRelay(relayInfoFor(listeners[i].port, i + 1))
+            const addedKey = [...internals.connections.keys()].find((key) => !before.has(key))
+            assert.ok(addedKey, 'connectToRelay must register the connection before it returns')
+            const seeded = internals.connections.get(addedKey)
+            assert.ok(seeded, 'the registered connection must still be present')
+            seeded.localUfrag = `local-ufrag-${i + 1}`
+
+            const conn = await pending
             assert.ok(conn)
-            conn.localUfrag = `local-ufrag-${i + 1}`
         }
 
         await waitUntil(

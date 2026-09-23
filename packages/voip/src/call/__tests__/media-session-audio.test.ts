@@ -72,8 +72,9 @@ async function waitForFrames(emitted: Float32Array[], count: number): Promise<vo
     assert.ok(emitted.length >= count, `expected ${count} playout ticks, got ${emitted.length}`)
 }
 
-test('decoded audio reaches the delegate only once, on the playout tick', async () => {
+test('decoded audio reaches the delegate only once, on the playout tick', async (t) => {
     const { session, emitted, engine, decode } = createSession()
+    t.after(() => session.cleanup())
 
     engine.startPlayback()
     decode(frame(0.5))
@@ -88,8 +89,9 @@ test('decoded audio reaches the delegate only once, on the playout tick', async 
     assert.equal(emitted[0][0], 0.5)
 })
 
-test('each playout tick hands over its own buffer', async () => {
+test('each playout tick hands over its own buffer', async (t) => {
     const { session, emitted, engine, decode } = createSession()
+    t.after(() => session.cleanup())
 
     engine.startPlayback()
     decode(frame(0.25))
@@ -104,14 +106,19 @@ test('each playout tick hands over its own buffer', async () => {
     assert.equal(emitted[1][0], 0.75)
 })
 
-test('cleanup stops the playout stream', async () => {
+test('cleanup stops the playout stream', async (t) => {
     const { session, emitted, engine, decode } = createSession()
+    t.after(() => session.cleanup())
 
     engine.startPlayback()
-    session.cleanup()
     decode(frame(0.5))
+    await waitForFrames(emitted, 1)
+
+    session.cleanup()
+    const emittedAtCleanup = emitted.length
+    decode(frame(0.9))
 
     await delay(TICK_MS * 3)
 
-    assert.equal(emitted.length, 0)
+    assert.equal(emitted.length, emittedAtCleanup, 'no frame lands after cleanup')
 })

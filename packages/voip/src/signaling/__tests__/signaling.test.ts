@@ -66,7 +66,6 @@ async function buildAccept(isVideo = false): Promise<BinaryNode> {
     return buildAcceptStanza(
         createAcceptDeps(),
         'CALLID',
-        new Uint8Array(32),
         CALLER_DEVICE_JID,
         CALLER_DEVICE_JID,
         isVideo

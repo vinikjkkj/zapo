@@ -297,13 +297,12 @@ export async function buildOfferStanza(
  * The video reply advertises H.264 because current mobile clients uplink
  * H.264: answering VP8 keeps signalling alive but yields no video RTP.
  *
- * @param callKey decrypted offer key. Not serialized into the stanza, it
- * already reached both sides through the offer.
+ * There is no call-key parameter: the decrypted offer key is not serialized
+ * into this stanza, since it already reached both sides through the offer.
  */
 export async function buildAcceptStanza(
     deps: WaVoipDeps,
     callId: string,
-    callKey: Uint8Array,
     peerJid: string,
     callCreator: string,
     isVideo: boolean

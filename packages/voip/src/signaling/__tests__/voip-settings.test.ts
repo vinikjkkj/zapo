@@ -150,7 +150,7 @@ test('a missing key, section or node falls back to the default instead of throwi
     assert.equal(parseVoipSettings(noNode), null, 'no node is the same as no settings')
 })
 
-test('the string forms a gate arrives in normalize to booleans', () => {
+test('getFlag normalizes every string form a gate arrives in to a boolean', () => {
     const settings = parseVoipSettings(
         offerWith(
             toBase64Json({

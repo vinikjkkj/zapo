@@ -5,7 +5,7 @@ import { writeUInt32BE } from '../../bytes.js'
 import { buildPictureLossIndication } from '../../media/rtcp.js'
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { derivePerJidSrtpKey, generateCallKey } from '../encryption.js'
-import { SRTCP_AUTH_TAG_LEN, SrtcpContext, SrtpError, SrtpSession } from '../srtp.js'
+import { SRTCP_AUTH_TAG_LEN, SrtcpContext, SrtcpSession, SrtpError, SrtpSession } from '../srtp.js'
 
 test('generateCallKey returns 32 bytes', () => {
     const key = generateCallKey()
@@ -163,6 +163,22 @@ test('SrtcpContext protect/unprotect round-trips an RTCP packet', () => {
     }
 })
 
+test('SrtcpContext unprotect rejects a replayed packet', () => {
+    const callKey = new Uint8Array(32)
+    callKey.fill(0x77)
+    const keying = derivePerJidSrtpKey(callKey, 'self:0@lid')
+    const sender = new SrtcpContext(keying)
+    const receiver = new SrtcpContext(keying)
+    const pli = buildPictureLossIndication(0x0a0b0c0d, 0x01020304)
+    const protectedPacket = sender.protect(pli, 0x0a0b0c0d)
+
+    assert.deepEqual(receiver.unprotect(protectedPacket), pli)
+    assert.throws(
+        () => receiver.unprotect(protectedPacket),
+        (error: unknown) => error instanceof SrtpError && error.type === 'replay'
+    )
+})
+
 test('SrtcpContext unprotect rejects a tampered packet', () => {
     const callKey = new Uint8Array(32)
     callKey.fill(0x88)
@@ -201,6 +217,65 @@ test('SrtcpContext unprotect rejects a truncated packet', () => {
     assert.throws(
         () => context.unprotect(new Uint8Array(8 + 4 + SRTCP_AUTH_TAG_LEN - 1)),
         (error: unknown) => error instanceof SrtpError && error.type === 'packet_too_short'
+    )
+})
+
+test('SrtcpSession accepts interleaved packets from independent SSRC streams', () => {
+    const callKey = new Uint8Array(32)
+    callKey.fill(0xaa)
+    const keying = derivePerJidSrtpKey(callKey, 'self:0@lid')
+
+    const audioSsrc = 0x0a0b0c0d
+    const videoSsrc = 0x11223344
+    const fecSsrc = 0x55667788
+
+    const audioSender = new SrtcpContext(keying)
+    const videoSender = new SrtcpContext(keying)
+    const fecSender = new SrtcpContext(keying)
+    const receiver = new SrtcpSession(keying)
+
+    const audioReport = (n: number): Uint8Array =>
+        buildPictureLossIndication(audioSsrc, 0x01010101 + n)
+    const videoReport = (n: number): Uint8Array =>
+        buildPictureLossIndication(videoSsrc, 0x02020202 + n)
+    const fecReport = (n: number): Uint8Array => buildPictureLossIndication(fecSsrc, 0x03030303 + n)
+
+    const timeline = [
+        [audioSender, audioReport, audioSsrc],
+        [videoSender, videoReport, videoSsrc],
+        [audioSender, audioReport, audioSsrc],
+        [fecSender, fecReport, fecSsrc],
+        [videoSender, videoReport, videoSsrc],
+        [videoSender, videoReport, videoSsrc],
+        [audioSender, audioReport, audioSsrc],
+        [fecSender, fecReport, fecSsrc]
+    ] as const
+
+    const counters = new Map<number, number>()
+    for (const [sender, buildReport, ssrc] of timeline) {
+        const n = counters.get(ssrc) ?? 0
+        counters.set(ssrc, n + 1)
+        const plaintext = buildReport(n)
+        const protectedPacket = sender.protect(plaintext, ssrc)
+        const unprotected = receiver.unprotect(protectedPacket)
+        assert.deepEqual(unprotected, plaintext)
+    }
+})
+
+test('SrtcpSession still rejects a replayed packet within a single stream', () => {
+    const callKey = new Uint8Array(32)
+    callKey.fill(0xbb)
+    const keying = derivePerJidSrtpKey(callKey, 'self:0@lid')
+
+    const sender = new SrtcpContext(keying)
+    const receiver = new SrtcpSession(keying)
+    const pli = buildPictureLossIndication(0x0a0b0c0d, 0x01020304)
+    const protectedPacket = sender.protect(pli, 0x0a0b0c0d)
+
+    assert.deepEqual(receiver.unprotect(protectedPacket), pli)
+    assert.throws(
+        () => receiver.unprotect(protectedPacket),
+        (error: unknown) => error instanceof SrtpError && error.type === 'replay'
     )
 })
 

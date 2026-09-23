@@ -611,6 +611,30 @@ test('keeps a packet reordered across the wrap in the cycle it belongs to', () =
     assert.equal(report.packetsLost, -1, 'more arrived than the sequence range expected')
 })
 
+test('resumes loss tracking after a sustained forward jump instead of freezing on it', () => {
+    const reception = new RtpStreamReception(AUDIO_CLOCK_RATE)
+    observeRun(reception, 0xfffe, 4)
+    // A single packet this far ahead reads the same as the pre-wrap straggler
+    // above, so it is held back rather than trusted on its own.
+    reception.observe(PEER_SSRC, 0x5000, 5000, 100)
+    // A second packet landing right next to it, instead of back near the old
+    // position, is what confirms the stream actually resumed up here.
+    reception.observe(PEER_SSRC, 0x5001, 5320, 120)
+    // A real gap right after the resync must still be counted, not swallowed
+    // by a tracker still stuck on the old position.
+    reception.observe(PEER_SSRC, 0x5003, 5960, 160)
+    const report = reception.report(0)
+    assert.equal(
+        report.highestSequence,
+        0x5003,
+        'a sustained forward jump was frozen instead of being recognized as a resync'
+    )
+    assert.ok(
+        reception.lossPercent > 0,
+        'loss right after the resync stayed hidden instead of being counted'
+    )
+})
+
 test('counts the packets the sequence range says never arrived', () => {
     const reception = new RtpStreamReception(AUDIO_CLOCK_RATE)
     observeRun(reception, 100, 10, [105])

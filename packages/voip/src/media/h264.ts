@@ -90,6 +90,9 @@ export function isH264KeyFrame(data: Uint8Array): boolean {
  * therefore cannot mark or unmark the frame it never joined, which keeps the
  * flag correct no matter in what order the packets arrive.
  */
+/** RTP sequence numbers wrap at this modulus; used to test fragment contiguity. */
+const SEQUENCE_MODULUS = 0x10000
+
 export class H264Depacketizer {
     private static readonly MAX_BUFFERED_BYTES = 8 * 1024 * 1024
     private static readonly NO_FU_RUN = -1
@@ -98,9 +101,22 @@ export class H264Depacketizer {
     private readonly nalHeaders: number[] = []
     private fuParts: Uint8Array[] = []
     private fuNalType = H264Depacketizer.NO_FU_RUN
+    private fuLastSequence = H264Depacketizer.NO_FU_RUN
     private bufferedBytes = 0
 
-    push(payload: Uint8Array, timestamp: number, marker: boolean): H264AccessUnit[] {
+    /**
+     * @param sequenceNumber RTP sequence number of `payload`. Required to tell a
+     * genuine FU-A continuation apart from an orphaned fragment that happens to
+     * share the NAL type of whatever run is already open: {@link appendFuA}
+     * only accepts a continuation whose sequence number immediately follows the
+     * last fragment it appended.
+     */
+    push(
+        payload: Uint8Array,
+        timestamp: number,
+        marker: boolean,
+        sequenceNumber: number
+    ): H264AccessUnit[] {
         if (!payload.length) return []
         const completed: H264AccessUnit[] = []
         let previous: H264AccessUnit | null = null
@@ -129,7 +145,7 @@ export class H264Depacketizer {
         const type = payload[0] & 0x1f
         if (type >= 1 && type <= 23) this.appendNal(payload)
         else if (type === 24) this.appendStapA(payload)
-        else if (type === 28) this.appendFuA(payload)
+        else if (type === 28) this.appendFuA(payload, sequenceNumber)
         else return completed
 
         if (marker && !this.fuParts.length) {
@@ -145,6 +161,7 @@ export class H264Depacketizer {
         this.nalHeaders.length = 0
         this.fuParts = []
         this.fuNalType = H264Depacketizer.NO_FU_RUN
+        this.fuLastSequence = H264Depacketizer.NO_FU_RUN
         this.bufferedBytes = 0
     }
 
@@ -153,6 +170,7 @@ export class H264Depacketizer {
         this.nalHeaders.length = 0
         this.fuParts = []
         this.fuNalType = H264Depacketizer.NO_FU_RUN
+        this.fuLastSequence = H264Depacketizer.NO_FU_RUN
         this.timestamp = timestamp
         this.bufferedBytes = 0
     }
@@ -181,7 +199,7 @@ export class H264Depacketizer {
         }
     }
 
-    private appendFuA(payload: Uint8Array): void {
+    private appendFuA(payload: Uint8Array, sequenceNumber: number): void {
         if (payload.length < 2) return
         const indicator = payload[0]
         const header = payload[1]
@@ -192,16 +210,38 @@ export class H264Depacketizer {
             for (const part of this.fuParts) this.bufferedBytes -= part.length
             this.fuParts = [new Uint8Array([(indicator & 0xe0) | nalType]), payload.slice(2)]
             this.fuNalType = nalType
+            this.fuLastSequence = sequenceNumber
             this.bufferedBytes += payload.length - 1
         } else if (this.fuNalType === nalType) {
-            this.fuParts.push(payload.slice(2))
-            this.bufferedBytes += payload.length - 2
+            if (sequenceNumber === (this.fuLastSequence + 1) % SEQUENCE_MODULUS) {
+                this.fuParts.push(payload.slice(2))
+                this.fuLastSequence = sequenceNumber
+                this.bufferedBytes += payload.length - 2
+            } else {
+                /**
+                 * Same NAL type as the run in flight, but not the next sequence
+                 * number after the last fragment it appended: a fragment between
+                 * the two was lost or reordered away. Matching on type alone is
+                 * not enough here, because consecutive NALs commonly share a
+                 * type (slices are all type 1), so the very next run can look
+                 * like a continuation of this one. Abandon the run instead of
+                 * splicing this fragment onto it, or the decoder gets a corrupt
+                 * NAL under the wrong header.
+                 */
+                for (const part of this.fuParts) this.bufferedBytes -= part.length
+                this.fuParts = []
+                this.fuNalType = H264Depacketizer.NO_FU_RUN
+                this.fuLastSequence = H264Depacketizer.NO_FU_RUN
+                return
+            }
         } else {
             /**
-             * A continuation fragment with no matching run in flight: its start
-             * fragment was lost or reordered away. Appending it to whatever run
-             * happens to be open would splice one NAL into another and hand the
-             * decoder a corrupt unit under the wrong header.
+             * A continuation fragment whose type does not match the run in
+             * flight: its start fragment was lost or reordered away. Appending
+             * it to whatever run happens to be open would splice one NAL into
+             * another and hand the decoder a corrupt unit under the wrong
+             * header. The run already in flight is left untouched, since this
+             * fragment does not prove anything about it.
              */
             return
         }
@@ -210,6 +250,7 @@ export class H264Depacketizer {
             this.nalHeaders.push(this.fuParts[0][0])
             this.fuParts = []
             this.fuNalType = H264Depacketizer.NO_FU_RUN
+            this.fuLastSequence = H264Depacketizer.NO_FU_RUN
         }
     }
 

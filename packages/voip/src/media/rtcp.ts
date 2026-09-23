@@ -229,6 +229,7 @@ export class RtpStreamReception {
     private lastArrivalTicks = 0
     private jitter = 0
     private senderReportArrivalMs = 0
+    private pendingJumpSequence = -1
 
     constructor(clockRate: number) {
         this.clockRate = clockRate
@@ -272,8 +273,32 @@ export class RtpStreamReception {
 
         const previous = this.lastSequence
         if (this.cycles > 0 && sequenceNumber - previous > SEQUENCE_WRAP_THRESHOLD) {
+            /**
+             * A forward jump this large after the stream has already wrapped once
+             * is ambiguous from this one packet alone: it is either a straggler
+             * reordered in from before the wrap (`previous` is the true position
+             * and this packet is stale), or the first packet of a burst-loss gap
+             * so large the stream effectively resumed at a new position
+             * (`previous` is stale and this packet is the true one). A single
+             * straggler is a one-off - traffic resumes right after `previous` -
+             * while a real resumption keeps arriving up here, so the next packet
+             * tells them apart: only re-anchor once a second packet confirms this
+             * one by landing close to it rather than close to `previous`.
+             *
+             * Without that confirmation, treating every such packet as a
+             * straggler is what froze this tracker on a real gap: `received` kept
+             * climbing while `extendedHighest` stood still, driving
+             * `expected - received` deeply negative and pinning `lossPercent` at
+             * zero for the rest of the stream instead of surfacing the loss.
+             */
+            const pending = this.pendingJumpSequence
+            this.pendingJumpSequence = sequenceNumber
+            if (pending >= 0 && Math.abs(sequenceNumber - pending) <= SEQUENCE_WRAP_THRESHOLD) {
+                this.restart(ssrc, sequenceNumber, rtpTimestamp, arrivalTicks)
+            }
             return
         }
+        this.pendingJumpSequence = -1
         if (previous - sequenceNumber > SEQUENCE_WRAP_THRESHOLD) {
             this.cycles++
         }
@@ -369,6 +394,7 @@ export class RtpStreamReception {
         this.lastArrivalTicks = 0
         this.jitter = 0
         this.senderReportArrivalMs = 0
+        this.pendingJumpSequence = -1
     }
 
     /**

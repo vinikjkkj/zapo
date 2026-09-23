@@ -183,9 +183,14 @@ export class MLowCodec {
         this.opts = opts
         this.logger = opts.logger ?? createNoopLogger()
         this.packetLossPercent = clampPercent(opts.packetLossPercent ?? 0)
+        const requestedConcealFrames = opts.maxConcealFrames
         this.maxConcealFrames = Math.max(
             0,
-            Math.trunc(opts.maxConcealFrames ?? DEFAULT_MAX_CONCEAL_FRAMES)
+            Math.trunc(
+                Number.isFinite(requestedConcealFrames)
+                    ? (requestedConcealFrames as number)
+                    : DEFAULT_MAX_CONCEAL_FRAMES
+            )
         )
 
         const lib = await loadMlowModule()
@@ -253,18 +258,8 @@ export class MLowCodec {
             return this.conceal(this.concealFrameSize())
         }
 
-        try {
-            const audio = this.decoder.decodeFloat(mlowFrame)
-            this.decodeSuccess++
-            if (audio.length > 0) {
-                this.lastDecodedSamples = audio.length
-            }
-            return audio
-        } catch (err) {
-            this.decodeErrors++
-            this.logger.trace('mlow decode failed', { message: toError(err).message })
-            return this.silence(this.concealFrameSize())
-        }
+        const decoded = this.tryDecode(mlowFrame)
+        return decoded ?? this.silence(this.concealFrameSize())
     }
 
     /**
@@ -275,6 +270,12 @@ export class MLowCodec {
      * before the arriving packet from the in-band FEC copy that packet carries,
      * anything older by concealment, and nothing past `maxConcealFrames`. A
      * duplicate or late packet is dropped rather than emitted out of order.
+     *
+     * A packet the decoder rejects is treated the same as one that never
+     * arrived: `lastSeq` is left behind it, so the next packet's gap
+     * concealment covers it and gets a chance at recovering it through that
+     * packet's in-band FEC copy, instead of it being emitted as permanent
+     * silence right here.
      */
     decodeSequenced(seq: number, packet: Uint8Array, onFrame: (pcm: Float32Array) => void): void {
         if (!this.decoder) {
@@ -300,8 +301,12 @@ export class MLowCodec {
             }
         }
 
+        const decoded = this.tryDecode(packet)
+        if (decoded === null) {
+            return
+        }
         this.lastSeq = current
-        onFrame(this.decode(packet))
+        onFrame(decoded)
     }
 
     /** Forget the inbound sequence position, for example after an SSRC change. */
@@ -421,6 +426,25 @@ export class MLowCodec {
             onFrame(this.conceal(frameSize))
         }
         onFrame(this.recoverPrevious(nextPacket, frameSize))
+    }
+
+    /** Decode one packet against the live decoder, or `null` if it was rejected. */
+    private tryDecode(mlowFrame: Uint8Array): Float32Array | null {
+        if (!this.decoder) {
+            return null
+        }
+        try {
+            const audio = this.decoder.decodeFloat(mlowFrame)
+            this.decodeSuccess++
+            if (audio.length > 0) {
+                this.lastDecodedSamples = audio.length
+            }
+            return audio
+        } catch (err) {
+            this.decodeErrors++
+            this.logger.trace('mlow decode failed', { message: toError(err).message })
+            return null
+        }
     }
 
     private recoverPrevious(nextPacket: Uint8Array, frameSize: number): Float32Array {

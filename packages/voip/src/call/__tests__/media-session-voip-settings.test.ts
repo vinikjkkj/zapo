@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { createNoopLogger } from 'zapo-js'
 import type { BinaryNode } from 'zapo-js/transport'
 
-import { bytesToBase64, TEXT_ENCODER } from '../../bytes.js'
+import { bytesToBase64, readUInt32BE, TEXT_ENCODER } from '../../bytes.js'
 import { SenderReportSchedule } from '../../media/rtcp.js'
 import { RtpHeader, RtpPacket, RtpSession } from '../../media/rtp.js'
 import { parseVoipSettings } from '../../signaling/voip-settings.js'
@@ -29,6 +29,15 @@ const SERVER_INTERVAL_MS = 120
 const REPORT_INTERVAL_JITTER = 0.1
 /** Samples of one opus packet, the size the send path assumes. */
 const AUDIO_SAMPLES_PER_PACKET = 960
+/** Where the count-plus-bandwidth word sits in a REMB. */
+const REMB_BAND_OFFSET = 16
+/**
+ * Upper bound no receiver estimate in this file should ever cross: a
+ * regression that emits the collapsed floor or a runaway value both stay far
+ * outside it, while every legitimate estimate this suite produces sits well
+ * under it.
+ */
+const REMB_SANE_UPPER_BOUND = 10_000_000
 
 const OPUS_FRAME = new Uint8Array(60).fill(0x42)
 
@@ -157,6 +166,12 @@ function senderReports(sent: readonly Uint8Array[]): Uint8Array[] {
     return sent.filter((packet) => packet[1] === 200)
 }
 
+/** The bandwidth a REMB announces, which is `mantissa << exponent`. */
+function rembBitrate(packet: Uint8Array): number {
+    const band = readUInt32BE(packet, REMB_BAND_OFFSET) & 0xffffff
+    return (band & 0x3ffff) * 2 ** (band >>> 18)
+}
+
 /** Audio packets sent until the first sender report goes out. */
 function audioPacketsUntilReport(harness: Harness): number {
     for (let packets = 1; packets <= 200; packets++) {
@@ -206,7 +221,15 @@ test('the receiver estimate still goes out when the gate is absent or off', () =
         for (let sequence = 1; sequence <= 3; sequence++) {
             harness.internals.onRelayData(inboundVideoPacket(sequence))
         }
-        assert.equal(receiverEstimates(harness.sent).length, 2)
+        const estimates = receiverEstimates(harness.sent)
+        assert.equal(estimates.length, 2)
+        for (const estimate of estimates) {
+            const bitrate = rembBitrate(estimate)
+            assert.ok(
+                bitrate > 0 && bitrate < REMB_SANE_UPPER_BOUND,
+                `expected a non-zero bounded estimate, got ${bitrate}`
+            )
+        }
         harness.session.cleanup()
     }
 })
