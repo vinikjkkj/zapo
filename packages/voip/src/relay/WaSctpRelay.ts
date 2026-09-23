@@ -82,15 +82,17 @@ export interface Connection {
     incomingChannels: DataChannelClass[]
     buffer: ArrayBuffer[]
     bufferedBytes: number
-    id: string
-    relayInfo: RelayInfo
+    /** Identifies the connection's slot in `connections` and its keepalive timer; never reassigned after registration. */
+    readonly id: string
+    /** Carries the STUN/allocate credentials `resendSubscriptions` replays; never reassigned after construction. */
+    readonly relayInfo: RelayInfo
     connectionTimeout: NodeJS.Timeout | null
     hasReceivedFirstPacket: boolean
     localUfrag: string
     stableRoutingConnId: bigint
     /** Born with the connection, and used by every STUN message it emits. */
-    stunTransactionId: Uint8Array
-    stats: {
+    readonly stunTransactionId: Uint8Array
+    readonly stats: {
         sentPackets: number
         receivedPackets: number
         sentBytes: number

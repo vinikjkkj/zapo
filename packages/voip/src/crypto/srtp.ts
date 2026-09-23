@@ -10,6 +10,13 @@ const SRTP_REPLAY_WINDOW = 64n
 const SRTP_INDEX_MASK = (1n << 64n) - 1n
 
 /**
+ * Upper bound on the number of per-SSRC receive contexts an {@link SrtpSession}
+ * or {@link SrtcpSession} keeps at once. Past this bound, the oldest tracked
+ * SSRC is evicted to admit a new one.
+ */
+export const SRTP_MAX_RECV_CONTEXTS = 32
+
+/**
  * SRTCP authentication tag length in bytes. WhatsApp truncates the RTP tag to 4
  * bytes but keeps the full HMAC-SHA1_80 tag on RTCP: a 4-byte tag here makes the
  * peer drop every control packet we emit, key-frame requests included.
@@ -209,7 +216,7 @@ export class SrtpContext {
 }
 
 export class SrtpSession {
-    private static readonly MAX_RECV_CONTEXTS = 32
+    private static readonly MAX_RECV_CONTEXTS = SRTP_MAX_RECV_CONTEXTS
     private readonly sendKey: SrtpKeyingMaterial
     private readonly recvKey: SrtpKeyingMaterial
     private readonly sendAuthLen?: number
@@ -428,7 +435,7 @@ export class SrtcpContext {
  * way {@link SrtpSession} already does per-SSRC for RTP.
  */
 export class SrtcpSession {
-    private static readonly MAX_RECV_CONTEXTS = 32
+    private static readonly MAX_RECV_CONTEXTS = SRTP_MAX_RECV_CONTEXTS
     private readonly keying: SrtpKeyingMaterial
     private readonly authTagLen: number
     private readonly contexts = new Map<number, SrtcpContext>()

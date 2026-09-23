@@ -5,7 +5,14 @@ import { writeUInt32BE } from '../../bytes.js'
 import { buildPictureLossIndication } from '../../media/rtcp.js'
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { derivePerJidSrtpKey, generateCallKey } from '../encryption.js'
-import { SRTCP_AUTH_TAG_LEN, SrtcpContext, SrtcpSession, SrtpError, SrtpSession } from '../srtp.js'
+import {
+    SRTCP_AUTH_TAG_LEN,
+    SrtcpContext,
+    SrtcpSession,
+    SRTP_MAX_RECV_CONTEXTS,
+    SrtpError,
+    SrtpSession
+} from '../srtp.js'
 
 test('generateCallKey returns 32 bytes', () => {
     const key = generateCallKey()
@@ -304,7 +311,7 @@ test('SrtcpSession does not let a forged SSRC evict a legitimate context and era
     assert.deepEqual(receiver.unprotect(legitProtected), legitPacket)
 
     const contexts = (receiver as unknown as { contexts: Map<number, unknown> }).contexts
-    const maxRecvContexts = 32
+    const maxRecvContexts = SRTP_MAX_RECV_CONTEXTS
 
     for (let i = 1; i < maxRecvContexts; i++) {
         const ssrc = 0x02000000 + i
