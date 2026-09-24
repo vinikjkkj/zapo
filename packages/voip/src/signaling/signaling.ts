@@ -136,6 +136,19 @@ const CAPABILITY_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x0
 const CAPABILITY_VIDEO_OFFER = new Uint8Array([0x01, 0x05, 0xf7, 0x09, 0xe0, 0xfa, 0x13])
 const CAPABILITY_PREACCEPT = new Uint8Array([0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07])
 
+/**
+ * Codec identifiers for the `<video enc dec>` attrs shared by the offer and
+ * the accept. `VIDEO_ENC_H264` is the codec we encode for uplink; current
+ * mobile clients uplink H.264, so answering with anything else keeps
+ * signalling alive but yields no video RTP.
+ *
+ * `VIDEO_DEC_H264` is the codec we decode for downlink. The `dec` attribute
+ * is how a peer picks what to encode for us, so both sides that emit a
+ * `<video>` node must advertise it consistently.
+ */
+const VIDEO_ENC_H264 = 'h.264'
+const VIDEO_DEC_H264 = 'H264'
+
 export interface CallParticipantNodes {
     nodes: BinaryNode[]
     shouldIncludeDeviceIdentity: boolean
@@ -224,8 +237,8 @@ export async function buildOfferStanza(
         offerContent.push({
             tag: 'video',
             attrs: {
-                enc: 'h.264',
-                dec: 'H264',
+                enc: VIDEO_ENC_H264,
+                dec: VIDEO_DEC_H264,
                 screen_width: '1920',
                 screen_height: '1080',
                 device_orientation: '0'
@@ -297,6 +310,24 @@ export async function buildOfferStanza(
  * The video reply advertises H.264 because current mobile clients uplink
  * H.264: answering VP8 keeps signalling alive but yields no video RTP.
  *
+ * The video node also carries `dec`, matching the offer's value. `dec`
+ * announces which codec *we* decode, and the peer uses it to pick its own
+ * encoder. A wire capture of our own traffic showed the offer emitting
+ * `dec='H264'` while the accept omitted it entirely — a confirmed asymmetry,
+ * not a deliberate omission. Since we are almost always the callee, the
+ * accept is the dominant path: most calls advertised no decoder at all
+ * before this was added.
+ *
+ * Two related gaps were observed on the wire but are deliberately left
+ * untouched, because no reference capture exists to copy from (our captures
+ * never show the official client as callee, so it never sends a preaccept or
+ * accept for us to sample):
+ *  - our preaccept carries no `<video>` node at all, even for a video call;
+ *  - the official client re-announces `dec` on a mid-call video state change
+ *    (`<video state='1' dec='H264' .../>`), which we do not emit.
+ * Both are observed-only, unmeasured against any reference, and intentionally
+ * not implemented here.
+ *
  * There is no call-key parameter: the decrypted offer key is not serialized
  * into this stanza, since it already reached both sides through the offer.
  */
@@ -315,7 +346,7 @@ export async function buildAcceptStanza(
     ]
 
     if (isVideo) {
-        acceptContent.push({ tag: 'video', attrs: { enc: 'h.264' } })
+        acceptContent.push({ tag: 'video', attrs: { enc: VIDEO_ENC_H264, dec: VIDEO_DEC_H264 } })
     }
 
     return {
