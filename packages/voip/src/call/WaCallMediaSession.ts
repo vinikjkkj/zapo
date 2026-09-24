@@ -197,6 +197,27 @@ function isReedSolomonFecPayloadType(pt: number): boolean {
     )
 }
 
+/**
+ * The endpoints this client actually dials: plain relays (protocol 0), the
+ * first one per `ip:port`, carrying the key and raw token the allocate needs.
+ * `connectRelays` dials exactly these and `handleCallRelaylatency` only ever
+ * answers for them, so a relay is never advertised to the peer unless this
+ * client is on it.
+ */
+function dialableEndpoints(endpoints: readonly RelayEndpoint[]): RelayEndpoint[] {
+    const seen = new Set<string>()
+    const unique: RelayEndpoint[] = []
+    for (const ep of endpoints) {
+        if ((ep.protocol ?? 0) !== 0) continue
+        const key = `${ep.ip}:${ep.port}`
+        if (!seen.has(key)) {
+            seen.add(key)
+            unique.push(ep)
+        }
+    }
+    return unique.filter((ep) => ep.key && ep.rawToken)
+}
+
 export interface WaCallMediaSessionDelegate {
     emitState(call: CallInfo): void
     emitIncoming(call: CallInfo): void
@@ -532,6 +553,11 @@ export class WaCallMediaSession implements AudioSender {
         this.outgoingPreacceptSent = false
     }
 
+    /**
+     * Accept a ringing incoming call: subscribe to the calling device's
+     * stream, key SRTP for it, send mute_v2 / transport / accept and dial the
+     * offer's relays. Throws if the call is not in an acceptable state.
+     */
     async acceptCall(): Promise<void> {
         if (!this.info.canAccept) {
             throw new Error(
@@ -548,14 +574,11 @@ export class WaCallMediaSession implements AudioSender {
         const peerJid = this.info.peerJid
         const isVideo = this.info.mediaType === CallMediaType.Video
 
-        const peerBase = toUserJid(peerJid)
-        const participantPeers =
-            this.info.relayData?.participantJids?.filter(
-                (jid) => toUserJid(jid) === peerBase && /:\d+@/.test(jid)
-            ) || []
-        const participantPeerJid =
-            participantPeers.find((jid) => !/:0@/.test(jid)) || participantPeers[0]
-        this.acceptedByJid = participantPeerJid || peerJid
+        // The offer's `from` names the calling device (a bare jid is device 0,
+        // the same address `decryptCallKey` used to recover the call key), so
+        // its SSRC and SRTP keys are the ones on the wire. Picking any other
+        // device of the peer subscribes to a silent stream and fails auth.
+        this.acceptedByJid = this.ensureDeviceJid(peerJid)
         const resolvedPeerSsrc = generateSecureSsrc(
             callId,
             this.ensureDeviceJid(this.acceptedByJid)
@@ -1289,6 +1312,11 @@ export class WaCallMediaSession implements AudioSender {
         }
     }
 
+    /**
+     * Answer the peer's `<relaylatency>` with this client's own latency for
+     * each relay they have in common, so the relay the caller elects is one
+     * both sides are on. Relays only the peer holds get no answer.
+     */
     async handleCallRelaylatency(node: BinaryNode, peerJid: string): Promise<void> {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
@@ -1297,7 +1325,29 @@ export class WaCallMediaSession implements AudioSender {
         const callId = inner.attrs?.['call-id'] || this.info.callId
         const callCreator = inner.attrs?.['call-creator'] || this.info.callCreator
 
-        const teNodes = getNodeChildrenByTag(inner, 'te')
+        // Answer only for relays this client dials, with its own latency and
+        // its own address for them. Echoing the peer's `<te>` verbatim reports
+        // the peer's latency as ours, including for relays we were never
+        // given (an ISP hosted edge near the caller, say); the caller then
+        // elects that relay as the best common one and its media never
+        // reaches us. The peer's address bytes are never reused either: one
+        // relay name resolves to different addresses on each side.
+        const ownByName = new Map<string, { latency: number; address: Uint8Array }>()
+        for (const ep of dialableEndpoints(this.info.relayData?.endpoints ?? [])) {
+            if (!ep.relayName || !ep.addressBytes || ownByName.has(ep.relayName)) continue
+            ownByName.set(ep.relayName, { latency: ep.c2rRtt || 0, address: ep.addressBytes })
+        }
+        const teNodes: BinaryNode[] = []
+        for (const te of getNodeChildrenByTag(inner, 'te')) {
+            const name = te.attrs?.relay_name
+            const own = name ? ownByName.get(name) : undefined
+            if (!name || !own) continue
+            teNodes.push({
+                tag: 'te',
+                attrs: { relay_name: name, latency: String(0x2000000 + own.latency) },
+                content: own.address
+            })
+        }
 
         if (teNodes.length === 0) return
 
@@ -1892,38 +1942,25 @@ export class WaCallMediaSession implements AudioSender {
             endpointCount: endpoints.length
         })
 
-        const seen = new Set<string>()
-        const uniqueEndpoints: RelayEndpoint[] = []
-        for (const ep of endpoints) {
-            if ((ep.protocol ?? 0) !== 0) continue
-            const key = `${ep.ip}:${ep.port}`
-            if (!seen.has(key)) {
-                seen.add(key)
-                uniqueEndpoints.push(ep)
-            }
-        }
-
         // A relay answers only on the port it advertises, and the endpoints
         // carry a mix. WhatsApp Web dials them all on the web client port and
         // keeps the advertised one as `originalPort`, gating the alternative
         // behind `shouldUseOriginalRelayPort`; this mirrors both sides of that.
         const dialPort = (ep: RelayEndpoint) =>
             this.useOriginalRelayPort ? ep.port : TRUE_WEB_CLIENT_RELAY_PORT
-        const relays = uniqueEndpoints
-            .filter((ep) => ep.key && ep.rawToken)
-            .map((ep) => ({
-                ip: ep.ip,
-                port: dialPort(ep),
-                token: ep.token,
-                authToken: ep.authToken,
-                rawAuthToken: ep.rawAuthToken,
-                rawToken: ep.rawToken,
-                key: ep.key,
-                relayId: ep.relayId,
-                name: ep.relayName || `${ep.ip}:${dialPort(ep)}`,
-                authTokenId: ep.authTokenId,
-                isFna: ep.isFna
-            }))
+        const relays = dialableEndpoints(endpoints).map((ep) => ({
+            ip: ep.ip,
+            port: dialPort(ep),
+            token: ep.token,
+            authToken: ep.authToken,
+            rawAuthToken: ep.rawAuthToken,
+            rawToken: ep.rawToken,
+            key: ep.key,
+            relayId: ep.relayId,
+            name: ep.relayName || `${ep.ip}:${dialPort(ep)}`,
+            authTokenId: ep.authTokenId,
+            isFna: ep.isFna
+        }))
 
         if (relays.length === 0) {
             this.logger.error('no relay configs', { callId: this.info.callId })
