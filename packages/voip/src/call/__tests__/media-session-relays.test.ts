@@ -13,6 +13,7 @@ const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 interface ConfiguredRelay {
     readonly ip: string
     readonly port: number
+    readonly originalPort?: number
     readonly name?: string
 }
 
@@ -131,4 +132,28 @@ test('endpoints of one host on different ports stay distinct under the escape ha
         configured.map((relay) => relay.port),
         [3478, 3480]
     )
+})
+
+/**
+ * The dialled port and the advertised one travel together. The WebRTC legs
+ * need the rewrite to the web client port, and a raw UDP leg needs the port
+ * the relay actually advertised, so dropping either here leaves one of the two
+ * transports dialling an address nothing answers on.
+ */
+test('the advertised port travels alongside the dialled one', async () => {
+    const { session, configured } = createSession()
+
+    await connectRelays(session, [endpoint({ ip: '10.0.0.1', port: 3478 })])
+
+    assert.equal(configured[0].port, TRUE_WEB_CLIENT_RELAY_PORT)
+    assert.equal(configured[0].originalPort, 3478)
+})
+
+test('the advertised port is reported as itself when it is already dialled', async () => {
+    const { session, configured } = createSession(true)
+
+    await connectRelays(session, [endpoint({ ip: '10.0.0.1', port: 47001 })])
+
+    assert.equal(configured[0].port, 47001)
+    assert.equal(configured[0].originalPort, 47001)
 })

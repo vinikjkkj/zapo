@@ -30,6 +30,26 @@ export interface WaVoipCoordinatorOptions {
      * answers on the port it advertises.
      */
     readonly useOriginalRelayPort?: boolean
+    /**
+     * Carry media over a raw UDP socket to each relay instead of over the
+     * WebRTC data channel, and dial every relay on the port its `<te2>`
+     * endpoint advertises. Defaults to `false`.
+     *
+     * Off by default because it buys nothing where it works and is not proven
+     * where it would: a cold-started relay accepts the allocate, answers the
+     * keepalive and forwards the peer's stream to whatever address last sent
+     * to it, so the raw path carries a real call - but only on relays the
+     * WebRTC path already reaches. On one measured relay that WebRTC cannot
+     * reach at all, the same sequence took 1761 uplink packets and returned
+     * nothing, and sending into it appeared to pull the peer's stream off the
+     * leg that had been carrying it.
+     *
+     * Each leg polices itself against that: a leg that sends media and sees no
+     * media come back within a few seconds closes itself, so the previous path
+     * can take the stream back. Turning this on is still an experiment, not a
+     * tuning knob.
+     */
+    readonly useRawUdpTransport?: boolean
 }
 
 /**
@@ -52,7 +72,8 @@ export class WaVoipCoordinator {
             stores: ctx.stores,
             logger: this.logger,
             maxConcurrentCalls: options.maxConcurrentCalls,
-            useOriginalRelayPort: options.useOriginalRelayPort
+            useOriginalRelayPort: options.useOriginalRelayPort,
+            useRawUdpTransport: options.useRawUdpTransport
         })
         this.registerIncomingHandlers(ctx)
         this.wireClientEvents(ctx)

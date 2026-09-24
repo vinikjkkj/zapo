@@ -103,7 +103,7 @@ test('parseRelayFromAck returns an empty result for a childless ack', () => {
     assert.equal(result.hbhKey, undefined)
 })
 
-test('parseRelayFromAck deprioritizes FNA relays after non-FNA regardless of rtt', () => {
+test('parseRelayFromAck sorts an FNA relay by rtt exactly like any other', () => {
     const fnaAddr = new Uint8Array([10, 0, 0, 1, 0x0d, 0x96])
     const edgeAddr = new Uint8Array([192, 168, 1, 1, 0x0d, 0x96])
 
@@ -140,10 +140,15 @@ test('parseRelayFromAck deprioritizes FNA relays after non-FNA regardless of rtt
 
     const { relays } = parseRelayFromAck(ack)
     assert.equal(relays.length, 2)
-    assert.equal(relays[0].relayName, 'zulu')
-    assert.equal(relays[0].isFna, false)
-    assert.equal(relays[1].relayName, 'alpha')
-    assert.equal(relays[1].isFna, true)
+    /**
+     * The FNA relay has the lower rtt (18ms vs 40ms). A stale "FNA last"
+     * ordering would still push it behind the non-FNA one; it must sort
+     * first, exactly as a non-FNA relay with the same rtt would.
+     */
+    assert.equal(relays[0].relayName, 'alpha')
+    assert.equal(relays[0].isFna, true)
+    assert.equal(relays[1].relayName, 'zulu')
+    assert.equal(relays[1].isFna, false)
 })
 
 test('parseRelayFromAck reads the relay descriptor attributes onto every endpoint', () => {

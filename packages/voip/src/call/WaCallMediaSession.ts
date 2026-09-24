@@ -214,6 +214,8 @@ export interface WaCallMediaSessionOptions {
     readonly delegate: WaCallMediaSessionDelegate
     /** See `WaVoipCoordinatorOptions.useOriginalRelayPort`. */
     readonly useOriginalRelayPort?: boolean
+    /** See `WaVoipCoordinatorOptions.useRawUdpTransport`. */
+    readonly useRawUdpTransport?: boolean
 }
 
 export class WaCallMediaSession implements AudioSender {
@@ -402,7 +404,8 @@ export class WaCallMediaSession implements AudioSender {
         this.useOriginalRelayPort = options.useOriginalRelayPort ?? false
 
         this.sctpRelay = new WaSctpRelay({
-            logger: this.logger.child({ component: 'sctp' })
+            logger: this.logger.child({ component: 'sctp' }),
+            useRawUdpTransport: options.useRawUdpTransport
         })
 
         this.audioEngine = new WaAudioEngine({
@@ -1922,7 +1925,10 @@ export class WaCallMediaSession implements AudioSender {
                 relayId: ep.relayId,
                 name: ep.relayName || `${ep.ip}:${dialPort(ep)}`,
                 authTokenId: ep.authTokenId,
-                isFna: ep.isFna
+                // The port the relay advertised for itself, kept alongside the
+                // dialled one so a raw UDP leg can reach the relay where it
+                // says it listens instead of on the web client's rewrite.
+                originalPort: ep.port
             }))
 
         if (relays.length === 0) {

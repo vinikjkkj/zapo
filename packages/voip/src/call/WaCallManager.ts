@@ -35,6 +35,7 @@ export interface WaCallManagerConfig {
     logger?: Logger
     maxConcurrentCalls?: number
     useOriginalRelayPort?: boolean
+    useRawUdpTransport?: boolean
 }
 
 export class WaCallManager extends EventEmitter {
@@ -43,6 +44,7 @@ export class WaCallManager extends EventEmitter {
     private readonly logger: Logger
     private readonly maxConcurrentCalls: number
     private readonly useOriginalRelayPort: boolean
+    private readonly useRawUdpTransport: boolean
 
     private readonly calls = new Map<string, WaCallMediaSession>()
 
@@ -57,6 +59,7 @@ export class WaCallManager extends EventEmitter {
             'maxConcurrentCalls'
         )
         this.useOriginalRelayPort = config.useOriginalRelayPort ?? false
+        this.useRawUdpTransport = config.useRawUdpTransport ?? false
     }
 
     async startCall(options: CallOfferOptions): Promise<string> {
@@ -408,6 +411,7 @@ export class WaCallManager extends EventEmitter {
             logger: sessionLogger,
             info,
             useOriginalRelayPort: this.useOriginalRelayPort,
+            useRawUdpTransport: this.useRawUdpTransport,
             delegate: {
                 emitState: (call) => this.emitState(call),
                 emitIncoming: (call) => this.emit('call_incoming', call),

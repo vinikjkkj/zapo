@@ -243,9 +243,6 @@ export function parseRelayFromAck(ackNode: BinaryNode): {
         }
     }
 
-    relays.sort((a, b) => {
-        if (!!a.isFna !== !!b.isFna) return a.isFna ? 1 : -1
-        return (a.c2rRtt ?? Infinity) - (b.c2rRtt ?? Infinity)
-    })
+    relays.sort((a, b) => (a.c2rRtt ?? Infinity) - (b.c2rRtt ?? Infinity))
     return { relays, participantJids, uuid, selfPid, peerPid, hbhKey }
 }
