@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { createNoopLogger } from 'zapo-js'
+import type { BinaryNode } from 'zapo-js/transport'
 
 import { TRUE_WEB_CLIENT_RELAY_PORT } from '../../relay/WaSctpRelay.js'
 import { CallMediaType, type RelayEndpoint, type WaVoipDeps } from '../../types.js'
@@ -83,6 +84,45 @@ function endpoint(overrides: Partial<RelayEndpoint> = {}): RelayEndpoint {
         ...overrides
     }
 }
+
+test('incoming relaylatency stops once the call ends between relays', async () => {
+    const call = CallInfo.newIncoming(ID, 'peer@lid', 'peer@lid', undefined, CallMediaType.Audio)
+    call.relayData = {
+        endpoints: [
+            endpoint({ ip: '10.0.0.1', relayName: 'gru1c01' }),
+            endpoint({ ip: '10.0.0.2', relayName: 'bsb1c01' })
+        ],
+        participantJids: ['peer:0@lid']
+    }
+    const sent: BinaryNode[] = []
+    const session: WaCallMediaSession = new WaCallMediaSession({
+        deps: {
+            authClient: { getCurrentCredentials: () => ({ meJid: 'me@s.whatsapp.net' }) },
+            lowLevelCoordinator: {
+                sendNode: async (node: BinaryNode) => {
+                    sent.push(node)
+                    // The peer hangs up while the first relaylatency is in flight.
+                    session.handleCallTerminate()
+                }
+            }
+        } as unknown as WaVoipDeps,
+        logger: createNoopLogger(),
+        info: call,
+        delegate: {
+            emitState: () => {},
+            emitIncoming: () => {},
+            emitEnded: () => {},
+            emitInboundAudio: () => {},
+            emitInboundVideoRtp: () => {},
+            emitInboundVideo: () => {},
+            emitOutboundAudioFinished: () => {}
+        } satisfies WaCallMediaSessionDelegate
+    })
+
+    await session.sendIncomingRelayLatency()
+
+    assert.equal(sent.length, 1)
+})
 
 test('every relay is dialled on the web client port', async () => {
     const { session, configured } = createSession()

@@ -35,7 +35,11 @@ export enum EndCallReason {
     Cancelled = 'cancelled',
     Failed = 'failed',
     DoNotDisturb = 'do_not_disturb',
-    Unknown = 'unknown'
+    Unknown = 'unknown',
+    /** Another device of this account answered the incoming call. */
+    AcceptedElsewhere = 'accepted_elsewhere',
+    /** Another device of this account declined the incoming call. */
+    RejectedElsewhere = 'rejected_elsewhere'
 }
 
 export type CallTransition =

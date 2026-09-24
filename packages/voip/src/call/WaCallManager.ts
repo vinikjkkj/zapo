@@ -242,6 +242,7 @@ export class WaCallManager extends EventEmitter {
                 const creds = this.deps.authClient.getCurrentCredentials()
                 const selfLid = creds?.meLid || creds?.meJid || ''
                 const peerDeviceJids = await this.resolvePeerDeviceJids(peerJid)
+                if (this.endedDuringSetup(session)) return
                 if (info.relayData) {
                     info.relayData.participantJids = [
                         ...peerDeviceJids,
@@ -254,9 +255,12 @@ export class WaCallManager extends EventEmitter {
                     ? peerDeviceJids.find((jid) => /:[1-9]\d*@/.test(jid)) || peerJid
                     : peerJid
                 await session.initMedia(selfLid, mediaPeerJid)
+                if (this.endedDuringSetup(session)) return
                 await session.sendIncomingPreaccept(peerJid)
+                if (this.endedDuringSetup(session)) return
                 await session.sendIncomingRelayLatency()
             } catch (err) {
+                if (this.endedDuringSetup(session)) return
                 this.logger.error('incoming call activation failed', {
                     callId,
                     message: toError(err).message
@@ -282,6 +286,7 @@ export class WaCallManager extends EventEmitter {
                 maxConcurrentCalls: this.maxConcurrentCalls
             })
         }
+        if (this.endedDuringSetup(session)) return
 
         this.emit('call_incoming', info)
         this.emitState(info)
@@ -300,6 +305,12 @@ export class WaCallManager extends EventEmitter {
         const session = this.resolveSessionFromNode(node)
         if (!session) return
         await session.handleCallAccept(node, peerJid)
+        // An incoming call picked up on another device of this account ends
+        // here (see `WaCallMediaSession.handleCallAccept`).
+        if (session.info.isEnded) {
+            this.calls.delete(session.callId)
+            await this.maybeUnblockWaitingCalls()
+        }
     }
 
     async handleCallPreaccept(node: BinaryNode, peerJid: string): Promise<void> {
@@ -359,7 +370,7 @@ export class WaCallManager extends EventEmitter {
             })
             return
         }
-        session.handleCallTerminate()
+        session.handleCallTerminate(action?.attrs?.reason)
         this.calls.delete(session.callId)
         await this.maybeUnblockWaitingCalls()
     }
@@ -537,6 +548,7 @@ export class WaCallManager extends EventEmitter {
         const selfLid = creds?.meLid || creds?.meJid || ''
 
         const peerDeviceJids = await this.resolvePeerDeviceJids(session.info.peerJid)
+        if (this.endedDuringSetup(session)) return
         if (session.info.relayData) {
             session.info.relayData.participantJids = [
                 ...peerDeviceJids,
@@ -550,11 +562,27 @@ export class WaCallManager extends EventEmitter {
                 ? peerDeviceJids.find((jid) => /:[1-9]\d*@/.test(jid)) || session.info.peerJid
                 : session.info.peerJid
         await session.initMedia(selfLid, mediaPeerJid)
+        if (this.endedDuringSetup(session)) return
         await session.sendIncomingPreaccept(session.info.peerJid)
+        if (this.endedDuringSetup(session)) return
         await session.sendIncomingRelayLatency()
+        if (this.endedDuringSetup(session)) return
 
         this.emitState(session.info)
 
         this.logger.debug('waiting incoming call unblocked', { callId: session.callId })
+    }
+
+    /**
+     * Incoming stanzas are handled concurrently, so a `<terminate>`, or an
+     * `<accept>` from another device of this account, can end an incoming
+     * call while it is still being set up. That path already reported the end
+     * and cleaned up; setup must stop there. Cleaning up again releases what
+     * setup allocated after that cleanup ran (the codec `initMedia` awaits).
+     */
+    private endedDuringSetup(session: WaCallMediaSession): boolean {
+        if (!session.info.isEnded) return false
+        session.cleanup()
+        return true
     }
 }

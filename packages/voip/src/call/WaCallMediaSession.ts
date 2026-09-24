@@ -826,6 +826,8 @@ export class WaCallMediaSession implements AudioSender {
         const seenRelayNames = new Set<string>()
 
         for (const ep of this.info.relayData.endpoints) {
+            // One send per relay: the call can end while an earlier one is in flight.
+            if (this.info.isEnded) return
             const name = ep.relayName || ''
             if (!name || seenRelayNames.has(name)) continue
             seenRelayNames.add(name)
@@ -857,6 +859,17 @@ export class WaCallMediaSession implements AudioSender {
     }
 
     async handleCallAccept(node: BinaryNode, peerJid: string): Promise<void> {
+        // On a call this device is receiving, an <accept> never means the peer
+        // took our offer: another device of this account picked it up. Stop
+        // ringing here and send nothing. The outgoing-call flow below would
+        // re-key SRTP, latch `acceptedByJid` (so the `accepted_elsewhere`
+        // terminate that follows gets ignored and this device keeps ringing)
+        // and signal the caller's devices about a call this one is not on.
+        if (this.info.direction === CallDirection.Incoming) {
+            if (this.info.isRinging) this.handleCallTerminate('accepted_elsewhere')
+            return
+        }
+
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
 
@@ -1365,11 +1378,25 @@ export class WaCallMediaSession implements AudioSender {
         }
     }
 
-    handleCallTerminate(): void {
+    /**
+     * The peer (or the server) ended the call. `reason` is the `<terminate>`
+     * reason attribute. On a call this device is receiving, another device
+     * of this account answering or declining is kept apart from an ordinary
+     * hang-up, since for this device the call neither went unanswered nor was
+     * ended by anyone on it. On a call this device placed, `accepted_elsewhere`
+     * comes from the peer's companions (see `shouldIgnoreTerminate`), so it
+     * stays a hang-up.
+     */
+    handleCallTerminate(reason?: string): void {
+        let endReason = EndCallReason.UserEnded
+        if (this.info.direction === CallDirection.Incoming) {
+            if (reason === 'accepted_elsewhere') endReason = EndCallReason.AcceptedElsewhere
+            else if (reason === 'rejected_elsewhere') endReason = EndCallReason.RejectedElsewhere
+        }
         try {
             this.info.applyTransition({
                 type: 'terminated',
-                reason: EndCallReason.UserEnded
+                reason: endReason
             })
         } catch (err) {
             this.logger.trace('call transition skipped', { message: toError(err).message })
