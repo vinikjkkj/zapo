@@ -816,10 +816,17 @@ export class WaMessageCoordinator {
      * the sealed request and resolves once the server answers with a
      * `mediaretry` notification, usually within a couple of seconds.
      *
-     * On `result: 'success'` only the `directPath` changes - the media key,
-     * hashes, and length of the original message stay valid, so patch the path
-     * into the message and download again. A second call for a message already
-     * in flight joins the first request instead of sending another receipt.
+     * On `result: 'success'` the media key, hashes, and length of the original
+     * message normally stay valid, so patch the fresh `directPath` into the
+     * message and download again. A second call for a message already in
+     * flight joins the first request instead of sending another receipt.
+     *
+     * A `success` is not a guarantee that the original key still opens the
+     * blob. Some primaries re-encrypt the file on every re-upload, and the
+     * re-served bytes then fail `fileEncSha256` and make `downloadBytes()`
+     * throw a MAC mismatch. Nothing in the round-trip carries key material for
+     * the new ciphertext, so the message cannot be recovered through this API
+     * and requesting another reupload will not help.
      *
      * The other three `result` values are answers too, not thrown errors:
      * `not_found` means the sender no longer holds the file and nothing can

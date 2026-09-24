@@ -16,6 +16,17 @@ import { parseOptionalInt, toError } from '@util/primitives'
 
 export type WaMediaRetryResultType = 'success' | 'not_found' | 'decryption_error' | 'general_error'
 
+/**
+ * Answer to a media reupload request.
+ *
+ * On `result: 'success'` the fresh `directPath` usually points at the same
+ * ciphertext the original message described, so its media key, hashes and
+ * length stay valid. Some primaries re-encrypt the file on every re-upload
+ * instead: the answer is still `success`, but the re-served blob no longer
+ * matches `fileEncSha256` and decryption fails with a MAC mismatch. Nothing in
+ * the round-trip carries key material for the new ciphertext, so treat that
+ * message as unrecoverable rather than retrying.
+ */
 export interface WaMediaRetryResult {
     readonly messageId: string
     readonly result: WaMediaRetryResultType

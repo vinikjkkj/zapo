@@ -175,6 +175,35 @@ test('media reupload resolves with the fresh direct path', async () => {
     assert.equal(result.directPath, '/v/t62.7118-24/reuploaded')
 })
 
+test('the error form of the notification settles with only the result code', async () => {
+    const { requester, waitForSends } = createRequester({})
+
+    const pending = requester.request({
+        messageId: MESSAGE_ID,
+        chatJid: CHAT_JID,
+        mediaKey: mediaKey(),
+        fromMe: false
+    })
+    await waitForSends(1)
+
+    requester.handleNotification({
+        tag: 'notification',
+        attrs: { id: MESSAGE_ID, from: ME_LID, type: 'mediaretry' },
+        content: [
+            {
+                tag: 'error',
+                attrs: { code: String(proto.MediaRetryNotification.ResultType.NOT_FOUND) }
+            }
+        ]
+    })
+
+    assert.deepEqual(await pending, {
+        messageId: MESSAGE_ID,
+        result: 'not_found',
+        resultCode: proto.MediaRetryNotification.ResultType.NOT_FOUND
+    })
+})
+
 test('media reupload maps a not-found answer without rejecting', async () => {
     const { requester, waitForSends } = createRequester({})
 
