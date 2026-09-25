@@ -12,7 +12,8 @@ import {
     buildOfferStanza,
     decryptCallKey,
     extractNodeInfo,
-    generateCallId
+    generateCallId,
+    type WaVideoUpgradeResult
 } from '../signaling/signaling.js'
 import { parseVoipSettings } from '../signaling/voip-settings.js'
 import {
@@ -140,8 +141,43 @@ export class WaCallManager extends EventEmitter {
     }
 
     setMute(callId: string, muted: boolean): void {
-        const session = this.calls.get(callId)
-        session?.setMute(muted)
+        this.calls.get(callId)?.setMute(muted)
+    }
+
+    async setHandRaised(callId: string, raised: boolean): Promise<void> {
+        const session = this.getSessionOrThrow(callId)
+        await session.setHandRaised(raised)
+    }
+
+    async setScreenShare(callId: string, sharing: boolean): Promise<void> {
+        const session = this.getSessionOrThrow(callId)
+        await session.setScreenShare(sharing)
+    }
+
+    /** Sends an emoji reaction. `false` when nothing went on the wire. */
+    sendReaction(callId: string, reaction: string): boolean {
+        const session = this.getSessionOrThrow(callId)
+        return session.sendReaction(reaction)
+    }
+
+    requestVideoUpgrade(callId: string): Promise<WaVideoUpgradeResult> {
+        const session = this.getSessionOrThrow(callId)
+        return session.requestVideoUpgrade()
+    }
+
+    async acceptVideoUpgrade(callId: string): Promise<void> {
+        const session = this.getSessionOrThrow(callId)
+        await session.acceptVideoUpgrade()
+    }
+
+    async rejectVideoUpgrade(callId: string): Promise<void> {
+        const session = this.getSessionOrThrow(callId)
+        await session.rejectVideoUpgrade()
+    }
+
+    async cancelVideoUpgrade(callId: string): Promise<void> {
+        const session = this.getSessionOrThrow(callId)
+        await session.cancelVideoUpgrade()
     }
 
     async loadAudio(callId: string, audioPath: string): Promise<void> {
@@ -335,10 +371,38 @@ export class WaCallManager extends EventEmitter {
         session.handleRelayElection(node)
     }
 
-    async handleCallMuteV2(node: BinaryNode, peerJid: string): Promise<void> {
+    handleCallMuteV2(node: BinaryNode, peerJid: string): void {
         const session = this.resolveSessionFromNode(node)
         if (!session) return
-        await session.handleCallMuteV2(node, peerJid)
+        session.handleCallMuteV2(node, peerJid)
+    }
+
+    handleCallUserAction(node: BinaryNode, peerJid: string): void {
+        const session = this.resolveSessionFromNode(node)
+        if (!session) return
+        session.handleCallUserAction(node, peerJid)
+    }
+
+    /**
+     * A top-level `<raise_hand>`: a message type of its own rather than a variant of
+     * `<user_action>`, and both are live on the wire, so both have to route.
+     */
+    handleCallRaiseHand(node: BinaryNode, peerJid: string): void {
+        const session = this.resolveSessionFromNode(node)
+        if (!session) return
+        session.handleCallRaiseHand(node, peerJid)
+    }
+
+    handleCallScreenShare(node: BinaryNode): void {
+        const session = this.resolveSessionFromNode(node)
+        if (!session) return
+        session.handleCallScreenShare(node)
+    }
+
+    handleCallVideoState(node: BinaryNode): void {
+        const session = this.resolveSessionFromNode(node)
+        if (!session) return
+        session.handleCallVideoState(node)
     }
 
     async handleCallTerminate(node: BinaryNode, peerJid?: string): Promise<void> {
@@ -416,12 +480,19 @@ export class WaCallManager extends EventEmitter {
                 emitState: (call) => this.emitState(call),
                 emitIncoming: (call) => this.emit('call_incoming', call),
                 emitEnded: (call) => this.emit('call_ended', call),
+                emitPeerMute: (call, muted) => this.emit('call_peer_mute', call, muted),
                 emitInboundAudio: (call, pcm) => this.emit('call_inbound_audio', call, pcm),
                 emitInboundVideoRtp: (call, packet) =>
                     this.emit('call_inbound_video_rtp', call, packet),
                 emitInboundVideo: (call, frame) => this.emit('call_inbound_video', call, frame),
                 emitOutboundAudioFinished: (call) =>
                     this.emit('call_outbound_audio_finished', call),
+                emitHandRaise: (call, participantJid, raised) =>
+                    this.emit('call_hand_raise', call, participantJid, raised),
+                emitCallReaction: (call, reaction) => this.emit('call_reaction', call, reaction),
+                emitScreenShare: (call, share) => this.emit('call_screen_share', call, share),
+                emitPeerVideoState: (call, change) =>
+                    this.emit('call_peer_video_state', call, change),
                 endCall: (call, reason) => {
                     this.endCall(call.callId, reason).catch((err: unknown) => {
                         this.logger.warn('ending a call with no media path failed', {

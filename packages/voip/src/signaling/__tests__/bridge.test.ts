@@ -25,7 +25,11 @@ function mocks() {
         handleCallTerminate: async () => void dispatched.push('terminate'),
         handleCallRelaylatency: async () => void dispatched.push('relaylatency'),
         handleCallMuteV2: async () => void dispatched.push('mute_v2'),
-        handleRelayElection: () => void dispatched.push('relay_election')
+        handleCallUserAction: () => void dispatched.push('user_action'),
+        handleCallRaiseHand: () => void dispatched.push('raise_hand'),
+        handleRelayElection: () => void dispatched.push('relay_election'),
+        handleCallScreenShare: () => void dispatched.push('screen_share'),
+        handleCallVideoState: () => void dispatched.push('video')
     } as unknown as WaCallManager
     return { sent, dispatched, deps, manager }
 }
@@ -60,12 +64,85 @@ test('routeCallStanza routes each call tag to its handler', async () => {
         'terminate',
         'relaylatency',
         'mute_v2',
+        'user_action',
+        'raise_hand',
+        'video',
         'relay_election'
     ]) {
         const { dispatched, deps, manager } = mocks()
         await routeCallStanza(manager, deps, callNode(tag))
         assert.deepEqual(dispatched, [tag])
     }
+})
+
+/**
+ * A raised hand arrives as one of two distinct message types, so each has to be
+ * acked under its own type: a peer with its sender gate off sends the older
+ * `raise_hand` and waits for `<ack class='call' type='raise_hand'>`. The nodes are
+ * written out rather than built, so the check is that the router keys off the tag.
+ */
+test('routeCallStanza acks each raise-hand message type under its own type', async () => {
+    const userAction: BinaryNode = {
+        tag: 'call',
+        attrs: { from: '5511:0@lid', id: 'STANZA3' },
+        content: [
+            {
+                tag: 'user_action',
+                attrs: { 'call-id': 'CID', 'call-creator': 'c@lid', action: 'raise_hand' },
+                content: [{ tag: 'raise_hand', attrs: { 'raise-hand-state': '1' } }]
+            }
+        ]
+    }
+    const legacy: BinaryNode = {
+        tag: 'call',
+        attrs: { from: '5511:0@lid', id: 'STANZA4' },
+        content: [
+            {
+                tag: 'raise_hand',
+                attrs: { 'call-id': 'CID', 'call-creator': 'c@lid', 'raise-hand-state': '1' },
+                content: undefined
+            }
+        ]
+    }
+
+    const modern = mocks()
+    assert.equal(await routeCallStanza(modern.manager, modern.deps, userAction), 'user_action')
+    assert.deepEqual(modern.dispatched, ['user_action'])
+    assert.equal(modern.sent[0].attrs.class, 'call')
+    assert.equal(modern.sent[0].attrs.type, 'user_action')
+    assert.equal(modern.sent[0].attrs.id, 'STANZA3')
+
+    const old = mocks()
+    assert.equal(await routeCallStanza(old.manager, old.deps, legacy), 'raise_hand')
+    assert.deepEqual(old.dispatched, ['raise_hand'])
+    assert.equal(old.sent[0].attrs.class, 'call')
+    assert.equal(old.sent[0].attrs.type, 'raise_hand')
+    assert.equal(old.sent[0].attrs.id, 'STANZA4')
+})
+
+test('routeCallStanza routes both screen-share payloads to the same handler', async () => {
+    for (const tag of ['screen_share', 'screen']) {
+        const { dispatched, sent, deps, manager } = mocks()
+        const routed = await routeCallStanza(manager, deps, callNode(tag))
+
+        assert.equal(routed, tag)
+        assert.deepEqual(dispatched, ['screen_share'])
+        assert.equal(sent.length, 1)
+        assert.equal(sent[0].attrs.class, 'call')
+        assert.equal(sent[0].attrs.type, tag)
+    }
+})
+
+test('routeCallStanza acks a video state stanza with type=video', async () => {
+    const { sent, dispatched, deps, manager } = mocks()
+    const tag = await routeCallStanza(manager, deps, callNode('video'))
+
+    assert.equal(tag, 'video')
+    assert.deepEqual(dispatched, ['video'])
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].tag, 'ack')
+    assert.equal(sent[0].attrs.class, 'call')
+    assert.equal(sent[0].attrs.type, 'video')
 })
 
 test('routeCallStanza ignores a call node with no inner child', async () => {

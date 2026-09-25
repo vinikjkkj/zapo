@@ -5,38 +5,42 @@ import { readUInt32LE, TEXT_ENCODER, writeUInt32LE } from '../bytes.js'
 const VIDEO_SLOTS = { MAIN: 2, FEC: 3, OOB_NACK: 5 } as const
 
 /**
- * Stream slot indices WhatsApp feeds into the SSRC derivation.
+ * Stream slot indices WhatsApp feeds into the SSRC derivation. Only the slot changes
+ * between the streams of one device, so both sides compute each other's SSRCs without ever
+ * signalling them. `AUDIO.MAIN` (0) and `VIDEO.MAIN` (2) are measured; the FEC and NACK
+ * labels are derived from the order of the client's calls. `SCREEN_SHARE` aliases the
+ * video slots on purpose - a share derives from the same slots as the camera.
  *
- * Only the slot changes between the streams of one device, so both sides
- * compute each other's SSRCs without ever signalling them.
- *
- * `AUDIO.MAIN` (0) and `VIDEO.MAIN` (2) are confirmed by captured SSRCs from
- * the official client. The labels of audio slots 1 and 4 are **uncertain**:
- * one reading of the client maps 1 to FEC and 4 to OOB NACK, another maps them
- * the other way round. The SSRC only depends on the number, so the ambiguity
- * is harmless here, but do not treat these two names as ground truth.
+ * **These are not the protobuf stream layer identifiers**, which disagree on every value
+ * (`AppDataStream0 = 5` against slot 6 for app data). Crossing the two yields an SSRC no
+ * peer expects.
  */
 export const WA_SSRC_SLOT = {
     AUDIO: { MAIN: 0, FEC: 1, OOB_NACK: 4 },
     VIDEO: VIDEO_SLOTS,
     SCREEN_SHARE: VIDEO_SLOTS,
+    /** One slot, not three: the client derives a single `app_data_ssrc`. */
     APP_DATA: { MAIN: 6 }
 } as const
 
-/** Slots an audio-only call negotiates: FEC and NACK exist even with no video. */
+/**
+ * Slots an audio-only call negotiates. App data is in the list because the audio profile
+ * of `<voip_settings>` carries `enable_app_data_stream=1` too: leaving its SSRC out costs
+ * the relay forwarding the peer's reactions.
+ */
 export const WA_AUDIO_CALL_SSRC_SLOTS = [
     WA_SSRC_SLOT.AUDIO.MAIN,
     WA_SSRC_SLOT.AUDIO.FEC,
-    WA_SSRC_SLOT.AUDIO.OOB_NACK
+    WA_SSRC_SLOT.AUDIO.OOB_NACK,
+    WA_SSRC_SLOT.APP_DATA.MAIN
 ] as const
 
-/** Slots a video call negotiates: the audio stack plus video and app data. */
+/** Slots a video call negotiates: the audio stack plus the video streams. */
 export const WA_VIDEO_CALL_SSRC_SLOTS = [
     ...WA_AUDIO_CALL_SSRC_SLOTS,
     WA_SSRC_SLOT.VIDEO.MAIN,
     WA_SSRC_SLOT.VIDEO.FEC,
-    WA_SSRC_SLOT.VIDEO.OOB_NACK,
-    WA_SSRC_SLOT.APP_DATA.MAIN
+    WA_SSRC_SLOT.VIDEO.OOB_NACK
 ] as const
 
 /**
@@ -73,6 +77,11 @@ export const WA_VIDEO_CALL_SSRC_SLOTS = [
  * stream is not audio. Audio always uses the bare jid, and the main media
  * stream of any kind never carries the suffix. Anyone who finds that shape in
  * the client should not generalize it to this function.
+ *
+ * A **screen share** derives exactly as the camera does, so its stream of index 0 is the
+ * camera SSRC bit for bit. The protobuf stream layers `ScreenShareVideoStream0 = 8` and
+ * `Stream1 = 9` name the stream in the relay descriptor and must never reach this
+ * derivation.
  *
  * Beware the asymmetry that hid the regression: our receive path does not
  * filter inbound RTP by SSRC, so a wrong derivation is invisible on the

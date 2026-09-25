@@ -4,7 +4,12 @@ import { test } from 'node:test'
 import { hkdf } from 'zapo-js/crypto'
 
 import { readUInt32LE, TEXT_ENCODER, writeUInt32BE } from '../../bytes.js'
-import { generateSecureSsrc, WA_SSRC_SLOT, WA_VIDEO_CALL_SSRC_SLOTS } from '../ssrc.js'
+import {
+    generateSecureSsrc,
+    WA_AUDIO_CALL_SSRC_SLOTS,
+    WA_SSRC_SLOT,
+    WA_VIDEO_CALL_SSRC_SLOTS
+} from '../ssrc.js'
 
 const CALL_ID = '00CEAC2144738E0FAADE17F16BCDBA04'
 const DEVICE_JID = '50062877036657:76@lid'
@@ -110,5 +115,69 @@ test('WA_SSRC_SLOT reuses the video slots for screen share', () => {
     assert.deepEqual(WA_SSRC_SLOT.AUDIO, { MAIN: 0, FEC: 1, OOB_NACK: 4 })
     assert.deepEqual(WA_SSRC_SLOT.VIDEO, { MAIN: 2, FEC: 3, OOB_NACK: 5 })
     assert.deepEqual(WA_SSRC_SLOT.APP_DATA, { MAIN: 6 })
-    assert.deepEqual(WA_VIDEO_CALL_SSRC_SLOTS, [0, 1, 4, 2, 3, 5, 6])
+    assert.deepEqual(WA_VIDEO_CALL_SSRC_SLOTS, [0, 1, 4, 6, 2, 3, 5])
+})
+
+test('an audio call declares the app-data slot too', () => {
+    assert.deepEqual(WA_AUDIO_CALL_SSRC_SLOTS, [0, 1, 4, 6])
+    assert.ok(WA_AUDIO_CALL_SSRC_SLOTS.includes(WA_SSRC_SLOT.APP_DATA.MAIN))
+})
+
+/**
+ * The stream layers of the protobuf descriptor that names a screen-share stream on
+ * the wire. Written out because the assertions below are about what happens when
+ * they are mistaken for stream indices and fed to the derivation.
+ */
+const SCREEN_SHARE_STREAM_LAYER = { STREAM_0: 8, STREAM_1: 9 } as const
+
+/**
+ * A screen share sends on the SSRCs of the camera. The expected value is not
+ * recomputed: it is the video SSRC captured from the official client.
+ */
+test('a screen share of stream 0 sends on the captured camera ssrc', () => {
+    const camera = CAPTURED_VECTORS[3]
+
+    assert.equal(
+        generateSecureSsrc(camera.callId, DEVICE_JID, WA_SSRC_SLOT.SCREEN_SHARE.MAIN),
+        camera.ssrc
+    )
+    assert.equal(WA_SSRC_SLOT.SCREEN_SHARE.MAIN, camera.slot)
+})
+
+/**
+ * The trap, pinned: the stream layer of the descriptor is not a stream index, and
+ * deriving from it produces an SSRC no peer resolves back to this device. The peer
+ * drops such a packet as unknown, so nothing but this test reports the mistake.
+ */
+test('deriving a screen share from its stream layer misses the camera ssrc', () => {
+    const camera = CAPTURED_VECTORS[3]
+
+    assert.notEqual(
+        generateSecureSsrc(camera.callId, DEVICE_JID, SCREEN_SHARE_STREAM_LAYER.STREAM_0),
+        camera.ssrc
+    )
+    assert.notEqual(
+        generateSecureSsrc(camera.callId, DEVICE_JID, SCREEN_SHARE_STREAM_LAYER.STREAM_1),
+        camera.ssrc
+    )
+})
+
+/**
+ * The same trap on the other input: a stream index of its own goes into the
+ * identifier as a `_<n>` suffix on the device jid, which the secondary video stream
+ * uses and a screen share of stream 0 must not.
+ */
+test('suffixing the jid with a screen-share stream layer misses the camera ssrc', () => {
+    const camera = CAPTURED_VECTORS[3]
+    const suffixed = readUInt32LE(
+        hkdf(
+            TEXT_ENCODER.encode(camera.callId),
+            new Uint8Array([camera.slot, 0, 0, 0]),
+            TEXT_ENCODER.encode(`${DEVICE_JID}_${SCREEN_SHARE_STREAM_LAYER.STREAM_0}`),
+            4
+        ),
+        0
+    )
+
+    assert.notEqual(suffixed, camera.ssrc)
 })
