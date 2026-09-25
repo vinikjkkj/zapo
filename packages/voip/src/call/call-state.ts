@@ -1,3 +1,4 @@
+import type { PeerScreenShare } from '../signaling/screen-share.js'
 import type { WaVoipSettings } from '../signaling/voip-settings.js'
 import {
     CallDirection,
@@ -5,6 +6,7 @@ import {
     CallState,
     type CallTransition,
     type EndCallReason,
+    type PeerVideoStateChange,
     type RelayData
 } from '../types.js'
 
@@ -14,7 +16,20 @@ export interface CallStateData {
     acceptedAt?: Date
     endedAt?: Date
     audioMuted: boolean
+    /**
+     * Microphone state the peer last announced for itself, `undefined` until it does. An
+     * observation, not a local state, so it is recorded directly and not as a transition.
+     */
+    peerAudioMuted?: boolean
     videoOff: boolean
+    /** Local raise-hand state; the remote hands are {@link CallInfo.raisedHands}. */
+    handRaised: boolean
+    /**
+     * Whether this side is sharing right now (the peer's is
+     * {@link CallInfo.peerScreenShare}). While set, the call's one video stream carries
+     * the screen and not a camera.
+     */
+    screenSharing: boolean
     silenced?: boolean
     /** Incoming call waiting for a free slot; cannot accept until unblocked. */
     acceptBlocked?: boolean
@@ -37,12 +52,27 @@ export class CallInfo {
     relayData?: RelayData
     electedRelayIdx?: number
     /**
+     * Remote participants whose hand is raised, keyed by the device JID the stanza arrived
+     * from. An entry survives until that participant lowers the hand.
+     */
+    readonly raisedHands = new Set<string>()
+    /**
      * Configuration the server sent alongside the offer of this call, in the
      * `<voip_settings>` node, parsed once on arrival. Absent when the node did
      * not come or could not be read, and in that case every consumer stays on
      * the compiled defaults.
      */
     voipSettings?: WaVoipSettings
+    /**
+     * Last screen-share state the peer reported. Updated in place, so a `voip_call_state`
+     * listener reads the current value without subscribing to `voip_call_screen_share`.
+     */
+    peerScreenShare?: PeerScreenShare
+    /**
+     * Last video state the peer announced, from its `<video>`. Absent until it sends one,
+     * which only happens on a mid-call change - a call negotiated as video never does.
+     */
+    peerVideoState?: PeerVideoStateChange
 
     private constructor(
         init: Partial<CallInfo> & {
@@ -68,6 +98,7 @@ export class CallInfo {
         this.relayData = init.relayData
         this.electedRelayIdx = init.electedRelayIdx
         this.voipSettings = init.voipSettings
+        this.peerScreenShare = init.peerScreenShare
     }
 
     static newOutgoing(
@@ -85,7 +116,9 @@ export class CallInfo {
             stateData: {
                 state: CallState.Initiating,
                 audioMuted: false,
-                videoOff: mediaType !== CallMediaType.Video
+                videoOff: mediaType !== CallMediaType.Video,
+                handRaised: false,
+                screenSharing: false
             }
         })
     }
@@ -107,7 +140,9 @@ export class CallInfo {
             stateData: {
                 state: CallState.IncomingRinging,
                 audioMuted: false,
-                videoOff: mediaType !== CallMediaType.Video
+                videoOff: mediaType !== CallMediaType.Video,
+                handRaised: false,
+                screenSharing: false
             }
         })
     }
@@ -229,6 +264,11 @@ export class CallInfo {
                 s.state = CallState.Ended
                 s.endedAt = new Date()
                 s.endReason = transition.reason
+                // In-call affordances do not outlive the call: a hand still up or a share
+                // still on would be read as live on a call that has none.
+                s.handRaised = false
+                s.screenSharing = false
+                this.raisedHands.clear()
                 break
 
             case 'hold':
@@ -261,6 +301,23 @@ export class CallInfo {
                 }
 
                 s.videoOff = transition.off
+                break
+
+            case 'hand_raise_changed':
+                if (s.state !== CallState.Active) {
+                    throw new InvalidTransition(s.state, transition.type)
+                }
+
+                s.handRaised = transition.raised
+                break
+
+            // The video stream is the session's condition to check, not this machine's.
+            case 'screen_share_changed':
+                if (s.state !== CallState.Active) {
+                    throw new InvalidTransition(s.state, transition.type)
+                }
+
+                s.screenSharing = transition.sharing
                 break
 
             default:

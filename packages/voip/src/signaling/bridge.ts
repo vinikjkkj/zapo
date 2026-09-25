@@ -70,7 +70,23 @@ export async function routeCallStanza(
             await manager.handleCallRelaylatency(node, normalizedPeerJid)
             break
         case 'mute_v2':
-            await manager.handleCallMuteV2(node, normalizedPeerJid)
+            manager.handleCallMuteV2(node, normalizedPeerJid)
+            break
+        case 'user_action':
+            manager.handleCallUserAction(node, normalizedPeerJid)
+            break
+        // A distinct message type, not a variant of `user_action` above, and still sent by
+        // current clients: without this case the hand is lost in `default`.
+        case 'raise_hand':
+            manager.handleCallRaiseHand(node, normalizedPeerJid)
+            break
+        // `screen_share` negotiates the share; `screen` adds the surface geometry.
+        case 'screen_share':
+        case 'screen':
+            manager.handleCallScreenShare(node)
+            break
+        case 'video':
+            manager.handleCallVideoState(node)
             break
         case 'relay_election':
             manager.handleRelayElection(node)

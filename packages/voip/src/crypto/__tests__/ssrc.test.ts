@@ -4,7 +4,12 @@ import { test } from 'node:test'
 import { hkdf } from 'zapo-js/crypto'
 
 import { readUInt32LE, TEXT_ENCODER, writeUInt32BE } from '../../bytes.js'
-import { generateSecureSsrc, WA_SSRC_SLOT, WA_VIDEO_CALL_SSRC_SLOTS } from '../ssrc.js'
+import {
+    generateSecureSsrc,
+    WA_AUDIO_CALL_SSRC_SLOTS,
+    WA_SSRC_SLOT,
+    WA_VIDEO_CALL_SSRC_SLOTS
+} from '../ssrc.js'
 
 const CALL_ID = '00CEAC2144738E0FAADE17F16BCDBA04'
 const DEVICE_JID = '50062877036657:76@lid'
@@ -110,5 +115,52 @@ test('WA_SSRC_SLOT reuses the video slots for screen share', () => {
     assert.deepEqual(WA_SSRC_SLOT.AUDIO, { MAIN: 0, FEC: 1, OOB_NACK: 4 })
     assert.deepEqual(WA_SSRC_SLOT.VIDEO, { MAIN: 2, FEC: 3, OOB_NACK: 5 })
     assert.deepEqual(WA_SSRC_SLOT.APP_DATA, { MAIN: 6 })
-    assert.deepEqual(WA_VIDEO_CALL_SSRC_SLOTS, [0, 1, 4, 2, 3, 5, 6])
+    assert.deepEqual(WA_VIDEO_CALL_SSRC_SLOTS, [0, 1, 4, 6, 2, 3, 5])
+})
+
+test('an audio call declares the app-data slot too', () => {
+    assert.deepEqual(WA_AUDIO_CALL_SSRC_SLOTS, [0, 1, 4, 6])
+    assert.ok(WA_AUDIO_CALL_SSRC_SLOTS.includes(WA_SSRC_SLOT.APP_DATA.MAIN))
+})
+
+/**
+ * The stream layers of the protobuf descriptor that names a screen-share stream on
+ * the wire. Written out because the assertions below are about what happens when
+ * they are mistaken for stream indices and fed to the derivation.
+ */
+const SCREEN_SHARE_STREAM_LAYER = { STREAM_0: 8, STREAM_1: 9 } as const
+
+/**
+ * A screen share sends on the SSRCs of the camera. The expected value is not
+ * recomputed: it is the video SSRC captured from the official client.
+ */
+test('a screen share of stream 0 sends on the captured camera ssrc', () => {
+    const camera = CAPTURED_VECTORS[3]
+
+    assert.equal(
+        generateSecureSsrc(camera.callId, DEVICE_JID, WA_SSRC_SLOT.SCREEN_SHARE.MAIN),
+        camera.ssrc
+    )
+    assert.equal(WA_SSRC_SLOT.SCREEN_SHARE.MAIN, camera.slot)
+})
+
+/**
+ * The trap, pinned where it can be caught. Deriving from a stream layer does miss the
+ * camera SSRC, but asserting that proves nothing: HKDF over a different salt always
+ * differs, so the assertion would hold whatever the implementation did. What can go
+ * wrong is a layer being written into the slot table, so that is what is checked.
+ */
+test('no ssrc slot is a screen-share stream layer', () => {
+    const layers: readonly number[] = Object.values(SCREEN_SHARE_STREAM_LAYER)
+    const slots = [
+        ...Object.values(WA_SSRC_SLOT.AUDIO),
+        ...Object.values(WA_SSRC_SLOT.VIDEO),
+        ...Object.values(WA_SSRC_SLOT.SCREEN_SHARE),
+        ...Object.values(WA_SSRC_SLOT.APP_DATA),
+        ...WA_VIDEO_CALL_SSRC_SLOTS
+    ]
+
+    for (const slot of slots) {
+        assert.ok(!layers.includes(slot), `slot ${slot} is a wire stream layer, not a slot`)
+    }
 })

@@ -1227,12 +1227,15 @@ export class WaSctpRelay extends EventEmitter {
         this.logger.debug('sctp relay configuration done', { connected: this.stats.connected })
     }
 
-    broadcast(data: ArrayBuffer): void {
+    /** Sends to every open connection and reports whether any of them took it. */
+    broadcast(data: ArrayBuffer): boolean {
+        let sent = false
         for (const conn of this.connections.values()) {
-            if (this.isConnOpen(conn)) {
-                this.sendToChannel(conn, data)
+            if (this.isConnOpen(conn) && this.sendToChannel(conn, data)) {
+                sent = true
             }
         }
+        return sent
     }
 
     hasConnection(): boolean {

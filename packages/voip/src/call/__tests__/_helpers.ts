@@ -17,6 +17,10 @@ export function createSessionDelegate(
         emitInboundVideoRtp: () => {},
         emitInboundVideo: () => {},
         emitOutboundAudioFinished: () => {},
+        emitPeerMute: () => {},
+        emitHandRaise: () => {},
+        emitScreenShare: () => {},
+        emitPeerVideoState: () => {},
         endCall: () => {},
         ...watched
     }

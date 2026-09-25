@@ -1,8 +1,10 @@
 import type { Logger } from 'zapo-js'
 import { toUserJid } from 'zapo-js/protocol'
 import { type BinaryNode, getFirstNodeChild, getNodeChildrenByTag } from 'zapo-js/transport'
-import { toError, uint8TimingSafeEqual } from 'zapo-js/util'
+import { setBoundedMapEntry, toError, uint8TimingSafeEqual } from 'zapo-js/util'
 
+import type { WaCallReaction } from '../app-data/protocol.js'
+import { WaAppDataStream } from '../app-data/WaAppDataStream.js'
 import { concatBytes, EMPTY_BYTES, readUInt32BE, toArrayBuffer } from '../bytes.js'
 import { derivePerJidSrtpKey } from '../crypto/encryption.js'
 import { randomBytes } from '../crypto/primitives.js'
@@ -32,19 +34,34 @@ import { parseRelayFromAck } from '../relay/relay-ack.js'
 import { isRtcpPacket, isRtpPacket, isStunPacket } from '../relay/stun.js'
 import { TRUE_WEB_CLIENT_RELAY_PORT, WaSctpRelay } from '../relay/WaSctpRelay.js'
 import {
+    buildScreenShareStanza,
+    parseScreenShareNode,
+    type PeerScreenShare,
+    WA_SCREEN_SHARE_STATE
+} from '../signaling/screen-share.js'
+import {
     buildAcceptReceiptStanza,
     buildAcceptStanza,
     buildMuteV2Stanza,
     buildPreacceptStanza,
+    buildRaiseHandStanza,
     buildRejectStanza,
     buildRelaylatencyForwardStanza,
     buildRelayLatencyStanza,
     buildTerminateStanza,
     buildTransportStanza,
+    buildVideoStateStanza,
     decryptCallKey,
     extractNodeInfo,
     extractRelayEndpoints,
-    needsDecryption
+    needsDecryption,
+    parseMuteV2,
+    parseRaiseHandState,
+    parseVideoStateNode,
+    WA_VIDEO_STATE,
+    WA_VIDEO_UPGRADE_RESULT,
+    WA_VIDEO_UPGRADE_TIMEOUT_MS,
+    type WaVideoUpgradeResult
 } from '../signaling/signaling.js'
 import { parseVoipSettings, type WaVoipSettings } from '../signaling/voip-settings.js'
 import {
@@ -55,6 +72,8 @@ import {
     EndCallReason,
     type InboundVideoFrame,
     type InboundVideoRtpPacket,
+    PayloadType,
+    type PeerVideoStateChange,
     type RelayEndpoint,
     SRTP_AUTH_TAG_LEN,
     SRTP_RECV_AUTH_TAG_LEN,
@@ -98,10 +117,21 @@ import { type CallInfo } from './call-state.js'
  */
 const SENDER_REPORT_INTERVAL_MS = 1_500
 
+/**
+ * Stream slots a video call registers with the relay and an audio call does not: what
+ * an accepted upgrade has to add. Derived from the two lists, so a slot added to the
+ * video set later reaches the upgrade path on its own.
+ */
+const VIDEO_ONLY_SSRC_SLOTS: readonly number[] = WA_VIDEO_CALL_SSRC_SLOTS.filter(
+    (slot) => !WA_AUDIO_CALL_SSRC_SLOTS.includes(slot as never)
+)
+
 /** Clock rate of the WhatsApp opus stream, the unit of its RTP timestamps. */
 const AUDIO_CLOCK_RATE = 16_000
 /** Clock rate of the H.264 stream, the unit of its RTP timestamps. */
 const VIDEO_CLOCK_RATE = 90_000
+/** Step used when a frame carries no capture timestamp: one frame at 30 fps, 90 kHz. */
+const VIDEO_TICKS_PER_FRAME = 3_000
 
 /**
  * Ceiling announced before the first reception interval closes. It comes from
@@ -118,6 +148,38 @@ const INITIAL_RECEIVER_ESTIMATE = nextReceiverMaxBitrate(0, 0, 0, 0)
  * estimate, so it is the one that sizes the buffer.
  */
 const VIDEO_EXTENSION_FIRST_PACKET_LENGTH = 13
+
+/** Memory guard on a set fed straight from remote stanzas, not a protocol limit. */
+const MAX_TRACKED_RAISED_HANDS = 32
+
+/** Same kind of guard as {@link MAX_TRACKED_RAISED_HANDS}, one per peer device. */
+const MAX_TRACKED_PEER_APP_DATA_SSRCS = 32
+
+/** Reassembly buffers kept per inbound video SSRC; the oldest is dropped on overflow. */
+const MAX_H264_DEPACKETIZERS = 8
+
+/** Sections and keys of `<voip_settings>` that describe the app-data stream. */
+const VOIP_SETTINGS_OPTIONS_SECTION = 'options'
+const VOIP_SETTINGS_SFRAME_SECTION = 'sframe'
+const ENABLE_APP_DATA_STREAM_KEY = 'enable_app_data_stream'
+const APP_DATA_STREAM_VERSION_KEY = 'app_data_stream_version'
+const ENABLE_SFRAME_KEY = 'enable_sframe'
+const ENABLE_SFRAME_RX_KEY = 'enable_sframe_rx'
+
+/** Whether the profile asked for inbound `<video>` transaction ids to be enforced. */
+const VIDEO_STATE_TXN_RECV_ENFORCE_KEY = 'video_state_txn_id_recv_enforce'
+
+/**
+ * Whether the server announced SFrame for this call's app data. It takes both gates:
+ * with either off the peer expects no trailer and reads the message straight out of the
+ * SRTP payload. Absent keys resolve to off.
+ */
+function resolveAppDataSframe(settings: WaVoipSettings): boolean {
+    return (
+        settings.getFlag(VOIP_SETTINGS_SFRAME_SECTION, ENABLE_SFRAME_KEY, false) &&
+        settings.getFlag(VOIP_SETTINGS_SFRAME_SECTION, ENABLE_SFRAME_RX_KEY, false)
+    )
+}
 
 /** `length` rounded up until it closes the 32-bit word. */
 function padTo32Bits(length: number): number {
@@ -197,14 +259,31 @@ function isReedSolomonFecPayloadType(pt: number): boolean {
     )
 }
 
+/**
+ * An upgrade request sent from this side and not yet answered. `settle` resolves the
+ * promise `requestVideoUpgrade` handed back; dropping the attempt is what keeps the
+ * peer's answer, the guard timer and a local cancel from settling it twice.
+ */
+interface PendingVideoUpgrade {
+    readonly timer: ReturnType<typeof setTimeout>
+    readonly settle: (result: WaVideoUpgradeResult) => void
+    readonly promise: Promise<WaVideoUpgradeResult>
+}
+
 export interface WaCallMediaSessionDelegate {
     emitState(call: CallInfo): void
     emitIncoming(call: CallInfo): void
     emitEnded(call: CallInfo): void
+    emitPeerMute(call: CallInfo, muted: boolean): void
     emitInboundAudio(call: CallInfo, data: Float32Array): void
     emitInboundVideoRtp(call: CallInfo, packet: InboundVideoRtpPacket): void
     emitInboundVideo(call: CallInfo, frame: InboundVideoFrame): void
+    emitScreenShare(call: CallInfo, share: PeerScreenShare): void
+    emitPeerVideoState(call: CallInfo, change: PeerVideoStateChange): void
     emitOutboundAudioFinished(call: CallInfo): void
+    emitHandRaise(call: CallInfo, participantJid: string, raised: boolean): void
+    /** One in-band emoji reaction, deduplicated: the sender repeats it, this fires once. */
+    emitCallReaction?(call: CallInfo, reaction: WaCallReaction): void
     /** Ends the call through its owner, for a session that has to end itself. */
     endCall(call: CallInfo, reason: EndCallReason): void
 }
@@ -243,6 +322,49 @@ export class WaCallMediaSession implements AudioSender {
     private peerSsrcs: number[] = []
     private selfStreamSsrcs: number[] = []
     private peerStreamSsrcs: number[] = []
+
+    /** The in-band app-data stream of this call; see {@link WaAppDataStream}. */
+    private appDataStream: WaAppDataStream | null = null
+
+    /**
+     * App-data SSRCs of the peer's devices: inbound app data is recognized by SSRC,
+     * never by payload type, which nothing negotiates.
+     */
+    private readonly peerAppDataSsrcs = new Set<number>()
+
+    /**
+     * Whether the server announced SFrame for this call's app data. Recorded, never
+     * gated on - see {@link WaAppDataStream.setSframe} for why gating the send on it
+     * loses every reaction.
+     */
+    private appDataSframeRequired = false
+    /**
+     * Our own device jid, as the SSRC derivation takes it: an upgraded call derives a
+     * video SSRC long after the jid was resolved.
+     */
+    private selfDeviceJid = ''
+    /** Whether {@link ensureVideoReceivePath} ran; a call negotiated as video never sets it. */
+    private videoReceivePathOpened = false
+    /**
+     * Whether an accepted upgrade opened the local video sender on a call negotiated as
+     * audio. Until it does {@link feedLiveVideo} drops every frame: no video RTP leaves
+     * before the peer has accepted.
+     */
+    private videoSendPathOpened = false
+    /** Whether the one post-active `<mute_v2>` declaration has gone out. */
+    private initialMuteAnnounced = false
+    /**
+     * Our counter behind `transaction-id` on the `<video>` messages we send. Starts at 0
+     * so the first one sent is 1, the way the peer numbers its own.
+     */
+    private videoStateTransactionId = 0
+    /** The upgrade request this side sent and is still waiting on, or `null`. */
+    private pendingVideoUpgrade: PendingVideoUpgrade | null = null
+    /**
+     * Whether the peer has an upgrade request outstanding against us, cleared by
+     * anything that ends it, ours or its own.
+     */
+    private peerVideoUpgradeRequested = false
 
     private firstPacketSent = false
     private acceptedByJid: string | null = null
@@ -338,6 +460,12 @@ export class WaCallMediaSession implements AudioSender {
      * the boolean and not the whole configuration.
      */
     private rtcpRembDisabled = false
+    /**
+     * Off unless the call's profile turns it on, which is how the reference client reads
+     * the same key: with it off a repeated transaction id is counted and logged, and the
+     * message is then handled like any other.
+     */
+    private videoStateTxnEnforced = false
 
     /**
      * Video payload bytes received in the open REMB window, and when it opened.
@@ -449,6 +577,7 @@ export class WaCallMediaSession implements AudioSender {
     async initMedia(selfLid: string, peerJid: string): Promise<void> {
         const selfDeviceJid = this.ensureDeviceJid(selfLid)
         const peerDeviceJid = this.ensureDeviceJid(peerJid)
+        this.selfDeviceJid = selfDeviceJid
         const relaySlots =
             this.info.mediaType === CallMediaType.Video
                 ? WA_VIDEO_CALL_SSRC_SLOTS
@@ -466,12 +595,17 @@ export class WaCallMediaSession implements AudioSender {
                 .map((jid) => this.ensureDeviceJid(jid))
             this.peerStreamSsrcs = Array.from(
                 new Set(
-                    [peerDeviceJid, ...peerDevices].map((jid) =>
-                        generateSecureSsrc(this.info.callId, jid, WA_SSRC_SLOT.AUDIO.MAIN)
-                    )
+                    [peerDeviceJid, ...peerDevices].flatMap((jid) => [
+                        generateSecureSsrc(this.info.callId, jid, WA_SSRC_SLOT.AUDIO.MAIN),
+                        generateSecureSsrc(this.info.callId, jid, WA_SSRC_SLOT.APP_DATA.MAIN)
+                    ])
                 )
             )
+            this.trackPeerAppDataSsrcs([peerDeviceJid, ...peerDevices])
+        } else {
+            this.trackPeerAppDataSsrcs([peerDeviceJid])
         }
+        this.openAppDataStream(selfDeviceJid)
         const ssrc = this.selfStreamSsrcs[0]
         this.rtpSession = RtpSession.whatsappOpus(ssrc)
         if (this.info.mediaType === CallMediaType.Video) {
@@ -483,7 +617,12 @@ export class WaCallMediaSession implements AudioSender {
                 selfDeviceJid,
                 WA_SSRC_SLOT.VIDEO.MAIN
             )
-            this.videoRtpSession = new RtpSession(videoSsrc, 97, VIDEO_CLOCK_RATE, 3000)
+            this.videoRtpSession = new RtpSession(
+                videoSsrc,
+                PayloadType.WhatsAppH264,
+                VIDEO_CLOCK_RATE,
+                VIDEO_TICKS_PER_FRAME
+            )
         }
         this.selfSsrc = ssrc
 
@@ -503,8 +642,9 @@ export class WaCallMediaSession implements AudioSender {
 
     /**
      * Stores the configuration that came in the offer and resolves from it what
-     * this session applies: the REMB gate and the RTCP interval. Called once per
-     * call, before any media flows.
+     * this session applies: the REMB gate and the RTCP interval. Called again
+     * mid-call for the larger profile that rides an upgrade request, so the
+     * schedules are rebuilt in place rather than at a point where no media flows.
      *
      * `null` is not an error, it is the common case of an absent or unreadable
      * node, and it leaves the session exactly as it was: same defaults, same
@@ -515,6 +655,11 @@ export class WaCallMediaSession implements AudioSender {
 
         this.info.voipSettings = settings
         this.rtcpRembDisabled = settings.disableRtcpRemb
+        this.videoStateTxnEnforced = settings.getFlag(
+            VOIP_SETTINGS_OPTIONS_SECTION,
+            VIDEO_STATE_TXN_RECV_ENFORCE_KEY,
+            false
+        )
 
         const intervalMs = settings.rtcpIntervalMs
         if (intervalMs !== null && intervalMs !== this.rtcpIntervalMs) {
@@ -527,11 +672,26 @@ export class WaCallMediaSession implements AudioSender {
             this.receiverEstimateSchedule = SenderReportSchedule.onWallClock(intervalMs)
         }
 
+        this.appDataSframeRequired = resolveAppDataSframe(settings)
+        this.appDataStream?.setSframe(this.appDataSframeRequired, null)
+
         this.logger.debug('voip settings applied', {
             callId: this.info.callId,
             sectionCount: settings.sectionCount,
             disableRtcpRemb: this.rtcpRembDisabled,
-            rtcpIntervalMs: this.rtcpIntervalMs
+            rtcpIntervalMs: this.rtcpIntervalMs,
+            appDataStream: settings.getFlag(
+                VOIP_SETTINGS_OPTIONS_SECTION,
+                ENABLE_APP_DATA_STREAM_KEY,
+                false
+            ),
+            appDataStreamVersion: settings.getNumber(
+                VOIP_SETTINGS_OPTIONS_SECTION,
+                APP_DATA_STREAM_VERSION_KEY,
+                0
+            ),
+            sframe: settings.getFlag(VOIP_SETTINGS_SFRAME_SECTION, ENABLE_SFRAME_KEY, false),
+            sframeRx: settings.getFlag(VOIP_SETTINGS_SFRAME_SECTION, ENABLE_SFRAME_RX_KEY, false)
         })
     }
 
@@ -572,15 +732,6 @@ export class WaCallMediaSession implements AudioSender {
         this.sctpRelay.setSubscriptionSsrc(resolvedPeerSsrc)
         this.sctpRelay.setStreamSsrcs(this.selfStreamSsrcs, this.peerStreamSsrcs)
         this.initSrtpKeys()
-
-        try {
-            const muteNode = buildMuteV2Stanza(peerJid, callId, callCreator, 0, meId)
-            await this.deps.lowLevelCoordinator.sendNode(muteNode)
-        } catch (err: unknown) {
-            this.logger.error('error sending mute_v2', {
-                message: toError(err).message
-            })
-        }
 
         try {
             const transportNode = buildTransportStanza(peerJid, callId, callCreator, meId, '1', '1')
@@ -654,13 +805,142 @@ export class WaCallMediaSession implements AudioSender {
         this.cleanup()
     }
 
+    /**
+     * Mutes or unmutes our own capture and announces it to the peer.
+     *
+     * Muting stays local: capture keeps ticking and feeds silence, so the stream and its
+     * SSRC stay alive. A no-op toggle sends nothing; the once-per-call declaration a
+     * starting call needs is {@link announceInitialMuteState}.
+     */
     setMute(muted: boolean): void {
         if (!this.info.isActive) return
+        if (this.info.stateData.audioMuted === muted) return
 
         this.info.applyTransition({ type: 'audio_mute_changed', muted })
         this.delegate.emitState(this.info)
 
         this.audioEngine.setMuted(muted)
+
+        // Fire-and-forget: the microphone is already off and a failed send is only logged.
+        const node = buildMuteV2Stanza(
+            this.acceptedByJid ?? this.info.peerJid,
+            this.info.callId,
+            this.info.callCreator,
+            muted
+        )
+        void this.deps.lowLevelCoordinator.sendNode(node).catch((err) => {
+            this.logger.warn('mute_v2 announcement failed', {
+                muted,
+                message: toError(err).message
+            })
+        })
+    }
+
+    /**
+     * Announces this side's microphone state once, just after the call goes active.
+     * Measured on the wire: both ends of a reference call send it. Without it the peer
+     * has nothing to show for this side until the first toggle, which on a call that is
+     * never muted never comes. Fire-and-forget, sent once.
+     */
+    private announceInitialMuteState(): void {
+        if (this.initialMuteAnnounced) return
+        this.initialMuteAnnounced = true
+
+        const node = buildMuteV2Stanza(
+            this.acceptedByJid ?? this.info.peerJid,
+            this.info.callId,
+            this.info.callCreator,
+            this.info.stateData.audioMuted
+        )
+        void this.deps.lowLevelCoordinator.sendNode(node).catch((err) => {
+            this.logger.warn('initial mute_v2 announcement failed', {
+                callId: this.info.callId,
+                message: toError(err).message
+            })
+        })
+    }
+
+    /**
+     * Raises or lowers the local hand and announces it to the peer. Idempotent.
+     *
+     * The local state moves only after the stanza leaves, so a failed send cannot leave
+     * this side believing the peer saw a hand that never arrived; the error is rethrown.
+     */
+    async setHandRaised(raised: boolean): Promise<void> {
+        if (!this.info.isActive) return
+        if (this.info.stateData.handRaised === raised) return
+
+        const node = buildRaiseHandStanza(
+            this.acceptedByJid ?? this.info.peerJid,
+            this.info.callId,
+            this.info.callCreator,
+            raised
+        )
+
+        try {
+            await this.deps.lowLevelCoordinator.sendNode(node)
+        } catch (err) {
+            this.logger.warn('raise hand send failed', {
+                raised,
+                message: toError(err).message
+            })
+            throw err
+        }
+
+        this.info.applyTransition({ type: 'hand_raise_changed', raised })
+        this.delegate.emitState(this.info)
+    }
+
+    /**
+     * Starts or stops sharing the screen on this call, and tells the peer. The share is not
+     * a stream of its own: the screen rides the video stream the call already has, so this
+     * only changes what the peer is told the picture *is*, and switching the content is the
+     * caller's job. Idempotent, and a no-op on an inactive call.
+     *
+     * @throws when the send fails, leaving the state untouched, and - starting a share
+     * only - on a group call or on a call carrying no video yet
+     * ({@link requestVideoUpgrade} first).
+     */
+    async setScreenShare(sharing: boolean): Promise<void> {
+        if (!this.info.isActive) return
+        if (this.info.stateData.screenSharing === sharing) return
+
+        if (sharing) {
+            if (this.info.groupJid) {
+                throw new Error(`Call ${this.info.callId} is a group call, which cannot be shared`)
+            }
+            if (!this.videoSendActive) {
+                throw new Error(`Call ${this.info.callId} carries no video to share the screen on`)
+            }
+        }
+
+        const peerDeviceJid = this.acceptedByJid ?? this.info.peerJid
+        const state = sharing ? WA_SCREEN_SHARE_STATE.Started : WA_SCREEN_SHARE_STATE.Stopped
+
+        try {
+            await this.deps.lowLevelCoordinator.sendNode(
+                buildScreenShareStanza(
+                    peerDeviceJid,
+                    this.info.callId,
+                    this.info.callCreator,
+                    state
+                )
+            )
+        } catch (err) {
+            this.logger.warn('screen share request failed', {
+                sharing,
+                message: toError(err).message
+            })
+            throw err
+        }
+
+        this.info.applyTransition({ type: 'screen_share_changed', sharing })
+        this.delegate.emitState(this.info)
+
+        this.logger.debug('screen share state announced', {
+            callId: this.info.callId,
+            sharing
+        })
     }
 
     async loadAudio(audioPath: string): Promise<void> {
@@ -683,7 +963,7 @@ export class WaCallMediaSession implements AudioSender {
 
     feedLiveVideo(data: Uint8Array, timestampUs: number): number {
         if (
-            this.info.mediaType !== CallMediaType.Video ||
+            !this.videoSendActive ||
             !this.videoRtpSession ||
             !this.srtpSession ||
             !this.sctpRelay.hasConnection() ||
@@ -989,11 +1269,18 @@ export class WaCallMediaSession implements AudioSender {
                 .map((jid) => this.ensureDeviceJid(jid))
             this.peerStreamSsrcs = Array.from(
                 new Set(
-                    [acceptedPeerDeviceJid, ...peerDevices].map((jid) =>
-                        generateSecureSsrc(callId, jid, WA_SSRC_SLOT.AUDIO.MAIN)
-                    )
+                    [acceptedPeerDeviceJid, ...peerDevices].flatMap((jid) => [
+                        generateSecureSsrc(callId, jid, WA_SSRC_SLOT.AUDIO.MAIN),
+                        generateSecureSsrc(callId, jid, WA_SSRC_SLOT.APP_DATA.MAIN)
+                    ])
                 )
             )
+            this.trackPeerAppDataSsrcs([acceptedPeerDeviceJid, ...peerDevices])
+        } else {
+            this.trackPeerAppDataSsrcs([acceptedPeerDeviceJid])
+        }
+        if (this.videoReceivePathOpened) {
+            this.mergePeerVideoSlots(acceptedPeerDeviceJid)
         }
         this.sctpRelay.setSubscriptionSsrc(this.peerSsrcs[0] ?? 0)
         this.sctpRelay.setStreamSsrcs(this.selfStreamSsrcs, this.peerStreamSsrcs)
@@ -1046,15 +1333,6 @@ export class WaCallMediaSession implements AudioSender {
             })
         }
 
-        try {
-            const muteNode = buildMuteV2Stanza(acceptingDeviceJid, callId, callCreator, 0, meId)
-            await this.deps.lowLevelCoordinator.sendNode(muteNode)
-        } catch (err: unknown) {
-            this.logger.error('error sending mute_v2', {
-                message: toError(err).message
-            })
-        }
-
         const acceptMsgId = node.attrs?.id
         if (acceptMsgId) {
             try {
@@ -1078,6 +1356,7 @@ export class WaCallMediaSession implements AudioSender {
                 this.info.applyTransition({ type: 'media_connected' })
                 this.delegate.emitState(this.info)
                 this.startMediaFlow()
+                this.announceInitialMuteState()
             } catch (err) {
                 this.logger.trace('call transition skipped', { message: toError(err).message })
             }
@@ -1173,12 +1452,11 @@ export class WaCallMediaSession implements AudioSender {
         }
 
         /**
-         * `<voip_settings>` is per-call and does not change between the offer
-         * acks of one call, so a repeat delivery of this ack (the transport
-         * retries an unacked stanza, or the server redelivers) parses the same
-         * ~34 KB base64+JSON payload again for no observable effect: applying
-         * it twice is harmless, but re-decoding and re-parsing it is not free.
-         * Skip once this call already has settings applied.
+         * A repeat delivery of this ack carries the same ~34 KB base64+JSON payload:
+         * applying it twice is harmless, decoding it twice is not free. The skip is for
+         * that repeat alone. The other profile the server ships, the larger video one,
+         * does reach a call mid-flight - it rides the upgrade request and is applied
+         * where that is read, not here.
          */
         if (!this.info.voipSettings) {
             this.applyVoipSettings(parseVoipSettings(node, this.logger))
@@ -1215,6 +1493,8 @@ export class WaCallMediaSession implements AudioSender {
                         return jidBase === ourBase && /:\d+@/.test(jid)
                     }) || ourCredJid
                 )
+                this.selfDeviceJid = ourDeviceJid
+                this.openAppDataStream(ourDeviceJid)
 
                 const peerJids = participantJids.filter((jid) => {
                     const jidBase = toUserJid(jid)
@@ -1241,9 +1521,9 @@ export class WaCallMediaSession implements AudioSender {
                     this.rtpSession = RtpSession.whatsappOpus(this.selfSsrc)
                     this.videoRtpSession = new RtpSession(
                         generateSecureSsrc(this.info.callId, ourDeviceJid, WA_SSRC_SLOT.VIDEO.MAIN),
-                        97,
+                        PayloadType.WhatsAppH264,
                         VIDEO_CLOCK_RATE,
-                        3000
+                        VIDEO_TICKS_PER_FRAME
                     )
                     if (peerDeviceJid) {
                         this.peerStreamSsrcs = relaySlots.map((slot) =>
@@ -1257,6 +1537,7 @@ export class WaCallMediaSession implements AudioSender {
                 if (peerDeviceJid) {
                     const peerDeviceSsrc = generateSecureSsrc(this.info.callId, peerDeviceJid)
                     this.peerSsrcs = [peerDeviceSsrc]
+                    this.trackPeerAppDataSsrcs([peerDeviceJid])
                 }
 
                 if (callKey) {
@@ -1355,21 +1636,578 @@ export class WaCallMediaSession implements AudioSender {
         }
     }
 
-    async handleCallMuteV2(node: BinaryNode, peerJid: string): Promise<void> {
+    /**
+     * Records the microphone state an inbound `<mute_v2>` announces, once per change.
+     * Nothing goes back: it is an announcement, not a request.
+     *
+     * Two are dropped on purpose: one from another device of our own account, whose mute
+     * state is not the peer's, and one carrying `request-state`, a group-call mechanism
+     * WhatsApp's own clients drop on a 1:1 call.
+     */
+    handleCallMuteV2(node: BinaryNode, peerJid: string): void {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
 
-        const meId = this.deps.authClient.getCurrentCredentials()?.meJid ?? ''
-        const callId = this.info.callId
-        const callCreator = this.info.callCreator
+        if (this.isOwnAccountJid(peerJid)) {
+            this.logger.debug('ignoring mute_v2 from another device of this account', { peerJid })
+            return
+        }
+
+        const payload = parseMuteV2(nodeInfo.innerNode)
+        if (payload.isRequest) {
+            this.logger.debug('ignoring mute request on a 1:1 call', { peerJid })
+            return
+        }
+
+        if (payload.muted === null) {
+            this.logger.debug('mute_v2 carries no readable mute-state', { peerJid })
+            return
+        }
+
+        if (this.info.stateData.peerAudioMuted === payload.muted) return
+
+        this.info.stateData.peerAudioMuted = payload.muted
+        this.delegate.emitPeerMute(this.info, payload.muted)
+        this.delegate.emitState(this.info)
+    }
+
+    private isOwnAccountJid(jid: string): boolean {
+        const creds = this.deps.authClient.getCurrentCredentials()
+        const user = toUserJid(jid)
+        return (
+            (!!creds?.meLid && user === toUserJid(creds.meLid)) ||
+            (!!creds?.meJid && user === toUserJid(creds.meJid))
+        )
+    }
+
+    /** The `<user_action>` envelope carries several actions; only raise hand is read. */
+    handleCallUserAction(node: BinaryNode, peerJid: string): void {
+        this.applyPeerRaiseHand(node, peerJid)
+    }
+
+    /**
+     * Handles a top-level `<raise_hand>`: a message type of its own, not a variant of
+     * `<user_action>`, and still sent by current clients. Dropping this handler routes
+     * those stanzas to the router's default branch and loses the hand silently.
+     */
+    handleCallRaiseHand(node: BinaryNode, peerJid: string): void {
+        this.applyPeerRaiseHand(node, peerJid)
+    }
+
+    /**
+     * Records the state a stanza of either shape carried. Idempotent, as the sender is.
+     *
+     * A hand from another device of our own account is dropped, as `<mute_v2>` drops one:
+     * the local hand is `stateData.handRaised`, and letting the echo in lists
+     * this account among the remote participants holding one up.
+     */
+    private applyPeerRaiseHand(node: BinaryNode, peerJid: string): void {
+        const nodeInfo = extractNodeInfo(node)
+        if (!nodeInfo) return
+
+        if (this.isOwnAccountJid(peerJid)) {
+            this.logger.debug('ignoring raise hand from another device of this account', {
+                peerJid
+            })
+            return
+        }
+
+        const raised = parseRaiseHandState(nodeInfo.innerNode)
+        if (raised === null) {
+            this.logger.trace('call stanza without raise-hand state, ignored', {
+                tag: nodeInfo.tag,
+                action: nodeInfo.innerNode.attrs?.action
+            })
+            return
+        }
+
+        const raisedHands = this.info.raisedHands
+        if (raisedHands.has(peerJid) === raised) return
+
+        if (raised) {
+            if (raisedHands.size >= MAX_TRACKED_RAISED_HANDS) {
+                this.logger.debug('raised-hand tracking full, state dropped', {
+                    participantJid: peerJid,
+                    tracked: raisedHands.size
+                })
+                return
+            }
+            raisedHands.add(peerJid)
+        } else {
+            raisedHands.delete(peerJid)
+        }
+
+        this.logger.debug('peer raise hand state changed', {
+            participantJid: peerJid,
+            raised
+        })
+        this.delegate.emitHandRaise(this.info, peerJid, raised)
+    }
+
+    /**
+     * Records the screen-share state a `screen_share` or `screen` stanza carried.
+     *
+     * Nothing extra goes back: the router already acked it and no screen-share tag
+     * appears among the message types - by analogy with the video-state ack, not
+     * confirmed. The picture itself arrives as ordinary H.264 on the sender's video
+     * stream, which the receive path already handles.
+     */
+    handleCallScreenShare(node: BinaryNode): void {
+        const nodeInfo = extractNodeInfo(node)
+        if (!nodeInfo) return
+
+        const share = parseScreenShareNode(nodeInfo.innerNode)
+        if (!share) {
+            this.logger.debug('screen share stanza carried no state', {
+                callId: this.info.callId,
+                tag: nodeInfo.tag
+            })
+            return
+        }
+
+        this.info.peerScreenShare = share
+        this.logger.debug('peer screen share state', {
+            callId: this.info.callId,
+            tag: nodeInfo.tag,
+            state: share.state,
+            requestState: share.requestState,
+            version: share.version
+        })
+
+        this.delegate.emitScreenShare(this.info, share)
+        this.delegate.emitState(this.info)
+    }
+
+    /**
+     * Applies a `<video>` from the peer: a mid-call video state change, and with it the
+     * audio-to-video upgrade, which has no stanza of its own.
+     *
+     * A message whose `transaction-id` does not advance past the last one from this peer is
+     * a replay, and is dropped only on a call whose profile asks for that - otherwise it is
+     * noted and handled like any other. The bridge's ack is transport only, not an
+     * acceptance - that is a `<video state='4'>` coming the other way.
+     */
+    handleCallVideoState(node: BinaryNode): void {
+        const nodeInfo = extractNodeInfo(node)
+        if (!nodeInfo) return
+
+        const change = parseVideoStateNode(nodeInfo.innerNode)
+        if (!change) {
+            this.logger.debug('video state stanza without a readable state, ignored', {
+                callId: this.info.callId
+            })
+            return
+        }
+
+        if (this.isStaleVideoState(change.transactionId)) {
+            this.logger.debug('stale video state', {
+                callId: this.info.callId,
+                transactionId: change.transactionId,
+                lastTransactionId: this.info.peerVideoState?.transactionId ?? null,
+                enforced: this.videoStateTxnEnforced
+            })
+            if (this.videoStateTxnEnforced) return
+        }
+
+        // The server attaches a second, larger `<voip_settings>` to an upgrade request,
+        // carrying the video sections the audio profile lacks. Only the receiver gets one.
+        this.applyVoipSettings(parseVoipSettings(node, this.logger))
+
+        this.info.peerVideoState = change
+        this.ensureVideoReceivePath()
+        this.applyPeerUpgradeState(change.state)
+
+        this.logger.debug('peer video state changed', {
+            callId: this.info.callId,
+            state: change.state,
+            transactionId: change.transactionId,
+            decoderCodec: change.decoderCodec,
+            encoderCodec: change.encoderCodec
+        })
+
+        this.delegate.emitPeerVideoState(this.info, change)
+    }
+
+    /**
+     * Whether an inbound `<video>` repeats a transaction already seen.
+     *
+     * `transaction-id` is the sender's own counter and only ever advances, so every
+     * message the peer sends - answers to our own included - carries a number above the
+     * last one it sent. One that does not advance is a replay. The counter this side
+     * stamps on what it sends is a separate one and is never compared against this.
+     *
+     * Saying so is not the same as acting on it: whether a replay is dropped is a key of
+     * the negotiated profile, and the calls measured so far do not carry it. Answering
+     * the question apart from enforcing the answer keeps the log honest on a call that
+     * handles the message anyway.
+     */
+    private isStaleVideoState(transactionId: number | null): boolean {
+        if (transactionId === null) return false
+
+        const last = this.info.peerVideoState?.transactionId ?? null
+        return last !== null && transactionId <= last
+    }
+
+    /**
+     * Moves the upgrade handshake on the state the peer just announced.
+     *
+     * The codes split by who they are about: a request is the peer opening a handshake
+     * against us and is only recorded, because answering is the caller's decision, while
+     * a terminal code settles a request *we* sent - the same code with nothing pending is
+     * the peer closing its own, not an answer to us. Either way it clears the peer's
+     * outstanding request: left set, a later {@link requestVideoUpgrade} takes the
+     * crossing branch and opens our sender against a peer still on audio.
+     */
+    private applyPeerUpgradeState(state: number): void {
+        switch (state) {
+            case WA_VIDEO_STATE.UpgradeRequest:
+            case WA_VIDEO_STATE.UpgradeRequestV2:
+                this.peerVideoUpgradeRequested = true
+                return
+
+            case WA_VIDEO_STATE.UpgradeAccept:
+                this.peerVideoUpgradeRequested = false
+                if (this.pendingVideoUpgrade) {
+                    this.openVideoSendPath()
+                    this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.Accepted)
+                    // Announced once the sender exists, under our own counter: the id of
+                    // an inbound message belongs to the peer's numbering and reusing it
+                    // would emit a number below one we already sent.
+                    // Swallowed: the send logs its own failure, and an unhandled
+                    // rejection ends the process, taking every live call with it.
+                    void this.sendVideoState(WA_VIDEO_STATE.Enabled).catch(() => {})
+                }
+                return
+
+            case WA_VIDEO_STATE.UpgradeReject:
+                this.peerVideoUpgradeRequested = false
+                this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.Rejected)
+                return
+
+            case WA_VIDEO_STATE.UpgradeRejectByTimeout:
+                this.peerVideoUpgradeRequested = false
+                this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.RejectedByTimeout)
+                return
+
+            case WA_VIDEO_STATE.Error:
+                this.peerVideoUpgradeRequested = false
+                this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.Failed)
+                return
+
+            case WA_VIDEO_STATE.UpgradeCancel:
+            case WA_VIDEO_STATE.UpgradeCancelByTimeout:
+                this.peerVideoUpgradeRequested = false
+                return
+
+            /**
+             * A camera going off, and also how a peer takes back a request nobody
+             * answered in time - measured, and it is what this side sends for that too.
+             * Left outstanding, the next {@link acceptVideoUpgrade} would announce video
+             * against a peer that has gone back to audio and stopped listening.
+             */
+            case WA_VIDEO_STATE.Disabled:
+                this.peerVideoUpgradeRequested = false
+                return
+
+            default:
+                return
+        }
+    }
+
+    /**
+     * Asks the peer to turn this audio call into a video call, and resolves with how that
+     * ended. **No video RTP leaves until the peer accepts**: the accept is what opens the
+     * local sender. The request goes out as `UpgradeRequestV2`, the 1:1 code -
+     * `UpgradeRequest` is the group one. A crossing request answers the peer's instead of
+     * sending a second, and a second call while one is in flight joins it. Throws when the
+     * call is not active or already carries video.
+     *
+     * Nothing has to be added to `<capability>`: the peer gates the upgrade on indices 4
+     * and 11, which an audio offer already carries. Order derived, not captured.
+     */
+    async requestVideoUpgrade(): Promise<WaVideoUpgradeResult> {
+        if (!this.info.isActive) {
+            throw new Error(`Call ${this.info.callId} is not active`)
+        }
+        if (this.videoSendActive) {
+            throw new Error(`Call ${this.info.callId} already carries video`)
+        }
+        if (this.pendingVideoUpgrade) {
+            return this.pendingVideoUpgrade.promise
+        }
+        if (this.peerVideoUpgradeRequested) {
+            await this.acceptVideoUpgrade()
+            return WA_VIDEO_UPGRADE_RESULT.Accepted
+        }
+
+        let settle!: (result: WaVideoUpgradeResult) => void
+        const promise = new Promise<WaVideoUpgradeResult>((resolve) => {
+            settle = resolve
+        })
+        const timer = setTimeout(() => {
+            this.onVideoUpgradeTimeout()
+        }, WA_VIDEO_UPGRADE_TIMEOUT_MS)
+        // A guard timer must not keep an otherwise idle program alive.
+        timer.unref?.()
+
+        // Armed before the request leaves: the peer can answer while the send is still
+        // unwinding, and an answer with no attempt recorded is dropped as stray.
+        this.pendingVideoUpgrade = { timer, settle, promise }
 
         try {
-            const muteNode = buildMuteV2Stanza(peerJid, callId, callCreator, 0, meId)
-            await this.deps.lowLevelCoordinator.sendNode(muteNode)
-        } catch (err: unknown) {
-            this.logger.error('error sending mute_v2 response', {
+            await this.sendVideoState(WA_VIDEO_STATE.UpgradeRequestV2)
+        } catch (err) {
+            // Settled only for a second caller that joined this attempt; the first throws.
+            this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.Failed)
+            throw err
+        }
+
+        this.logger.debug('video upgrade requested', {
+            callId: this.info.callId,
+            timeoutMs: WA_VIDEO_UPGRADE_TIMEOUT_MS
+        })
+
+        return promise
+    }
+
+    /**
+     * Accepts an upgrade the peer asked for, concluding the handshake and opening the
+     * local video sender. No-op when the peer has nothing outstanding: accepting a
+     * request never made would announce video on a call the peer thinks is audio.
+     *
+     * The camera is announced after the accept and after the sender is open, the order the
+     * requesting side follows too: `Enabled` claims video is on the wire, so it may not
+     * leave before there is a sender, and the sender may not open before the peer knows
+     * the upgrade was accepted.
+     */
+    async acceptVideoUpgrade(): Promise<void> {
+        if (!this.peerVideoUpgradeRequested) return
+
+        this.peerVideoUpgradeRequested = false
+        try {
+            await this.sendVideoState(WA_VIDEO_STATE.UpgradeAccept)
+        } catch (err) {
+            // The request is still outstanding if the accept never left, and the caller is
+            // told so: cleared here, a retry would no-op and the peer would wait forever.
+            this.peerVideoUpgradeRequested = true
+            throw err
+        }
+
+        this.openVideoSendPath()
+        // Best effort, unlike the accept: by this point the peer has accepted and the
+        // sender is open, so rejecting here would report an upgrade that did happen as
+        // having failed. The send logs its own failure.
+        await this.sendVideoState(WA_VIDEO_STATE.Enabled).catch(() => {})
+
+        this.logger.debug('video upgrade accepted', { callId: this.info.callId })
+    }
+
+    /** Declines an upgrade the peer asked for. No-op when it asked for none. */
+    async rejectVideoUpgrade(): Promise<void> {
+        if (!this.peerVideoUpgradeRequested) return
+
+        this.peerVideoUpgradeRequested = false
+        await this.sendVideoState(WA_VIDEO_STATE.UpgradeReject)
+
+        this.logger.debug('video upgrade rejected', { callId: this.info.callId })
+    }
+
+    /** Withdraws the request this side sent. No-op when nothing is in flight. */
+    async cancelVideoUpgrade(): Promise<void> {
+        if (!this.pendingVideoUpgrade) return
+
+        this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.Cancelled)
+        await this.sendVideoState(WA_VIDEO_STATE.UpgradeCancel)
+
+        this.logger.debug('video upgrade cancelled', { callId: this.info.callId })
+    }
+
+    /**
+     * Ends a request the peer never answered: this side stops waiting and the call stays
+     * audio.
+     *
+     * The withdrawal travels as `Disabled`, **not** as `UpgradeCancelByTimeout`, whose
+     * name invites exactly that swap: the peer's own timer runs a downgrade too, and the
+     * cancel codes belong to a deliberate withdrawal ({@link cancelVideoUpgrade}).
+     * Nothing is sent once the request is no longer outstanding.
+     */
+    private onVideoUpgradeTimeout(): void {
+        if (!this.pendingVideoUpgrade) return
+
+        this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.TimedOut)
+        // The `Disabled` closes a request of the peer that crossed ours, too.
+        this.peerVideoUpgradeRequested = false
+        this.logger.debug('video upgrade timed out, staying on audio', {
+            callId: this.info.callId,
+            timeoutMs: WA_VIDEO_UPGRADE_TIMEOUT_MS
+        })
+
+        // Swallowed: logged inside, and an unhandled rejection ends the process.
+        void this.sendVideoState(WA_VIDEO_STATE.Disabled).catch(() => {})
+    }
+
+    /**
+     * Settles the request in flight, if any, and drops it. Every path that ends a
+     * handshake goes through here, which is what keeps the resolver single-use.
+     */
+    private settleVideoUpgrade(result: WaVideoUpgradeResult): void {
+        const pending = this.pendingVideoUpgrade
+        if (!pending) return
+
+        this.pendingVideoUpgrade = null
+        clearTimeout(pending.timer)
+        pending.settle(result)
+    }
+
+    /**
+     * Sends one `<video>` of our own, numbered with the next id of our own counter.
+     *
+     * The counter belongs to this side alone and only advances; an id read off an inbound
+     * `<video>` is never reused, since the peer numbers its messages on its own counter and
+     * drops anything of ours that does not move past the last id we sent.
+     */
+    private async sendVideoState(state: number): Promise<void> {
+        this.videoStateTransactionId++
+        const id = this.videoStateTransactionId
+        const node = buildVideoStateStanza(
+            this.acceptedByJid ?? this.info.peerJid,
+            this.info.callId,
+            this.info.callCreator,
+            { state, transactionId: id }
+        )
+
+        try {
+            await this.deps.lowLevelCoordinator.sendNode(node)
+        } catch (err) {
+            this.logger.warn('video state send failed', {
+                callId: this.info.callId,
+                state,
                 message: toError(err).message
             })
+            throw err
+        }
+    }
+
+    /**
+     * Opens the local video sender on a call negotiated as audio, once both sides have
+     * agreed the upgrade. Until it runs {@link feedLiveVideo} drops every frame.
+     *
+     * Deliberately **not** merged into {@link ensureVideoReceivePath}: the receive path
+     * costs nothing and may open on the first sign of peer video, while this one puts our
+     * video on the wire and may only open on an agreement. It also registers our video
+     * SSRCs with the relay, which an audio call never did, or the relay drops what it
+     * does not know. Idempotent, and a no-op on a video call.
+     */
+    private openVideoSendPath(): void {
+        this.ensureVideoReceivePath()
+
+        if (this.videoSendPathOpened || this.info.mediaType === CallMediaType.Video) {
+            this.announceVideoLive()
+            return
+        }
+        this.videoSendPathOpened = true
+
+        if (this.selfDeviceJid) {
+            for (const slot of VIDEO_ONLY_SSRC_SLOTS) {
+                const ssrc = generateSecureSsrc(this.info.callId, this.selfDeviceJid, slot)
+                if (!this.selfStreamSsrcs.includes(ssrc)) {
+                    this.selfStreamSsrcs.push(ssrc)
+                }
+            }
+
+            if (!this.videoRtpSession) {
+                this.videoRtpSession = new RtpSession(
+                    generateSecureSsrc(
+                        this.info.callId,
+                        this.selfDeviceJid,
+                        WA_SSRC_SLOT.VIDEO.MAIN
+                    ),
+                    PayloadType.WhatsAppH264,
+                    VIDEO_CLOCK_RATE,
+                    VIDEO_TICKS_PER_FRAME
+                )
+            }
+        }
+
+        this.sctpRelay.setStreamSsrcs(this.selfStreamSsrcs, this.peerStreamSsrcs)
+        this.sctpRelay.resendSubscriptions()
+        this.announceVideoLive()
+
+        this.logger.debug('video send path opened mid-call', {
+            callId: this.info.callId,
+            hasVideoRtpSession: this.videoRtpSession !== null
+        })
+    }
+
+    /**
+     * Records that video is now live on this side, separately from the transport work
+     * around it: this is the only part a call negotiated as video also needs.
+     */
+    private announceVideoLive(): void {
+        if (!this.info.stateData.videoOff) return
+
+        try {
+            this.info.applyTransition({ type: 'video_state_changed', off: false })
+        } catch (err) {
+            this.logger.trace('video state transition skipped', {
+                message: toError(err).message
+            })
+            return
+        }
+        this.delegate.emitState(this.info)
+    }
+
+    private get videoSendActive(): boolean {
+        return this.info.mediaType === CallMediaType.Video || this.videoSendPathOpened
+    }
+
+    /**
+     * Opens the video receive path on a call negotiated as audio, so video the peer starts
+     * halfway through has somewhere to land: the relay subscription, and the video RTP
+     * session whose SSRC the key frame request and the bandwidth estimate ride on.
+     * Without them an inbound stream stays a trickle with no decodable start.
+     *
+     * The local sender stays off - that needs an agreement, {@link openVideoSendPath}.
+     * Idempotent, and a no-op on a video call.
+     */
+    private ensureVideoReceivePath(): void {
+        if (this.videoReceivePathOpened || this.info.mediaType === CallMediaType.Video) return
+        this.videoReceivePathOpened = true
+
+        const peerDeviceJid = this.ensureDeviceJid(this.acceptedByJid ?? this.info.peerJid)
+        this.mergePeerVideoSlots(peerDeviceJid)
+
+        if (!this.videoRtpSession && this.selfDeviceJid) {
+            this.videoRtpSession = new RtpSession(
+                generateSecureSsrc(this.info.callId, this.selfDeviceJid, WA_SSRC_SLOT.VIDEO.MAIN),
+                PayloadType.WhatsAppH264,
+                VIDEO_CLOCK_RATE,
+                VIDEO_TICKS_PER_FRAME
+            )
+        }
+
+        this.sctpRelay.setStreamSsrcs(this.selfStreamSsrcs, this.peerStreamSsrcs)
+        this.sctpRelay.resendSubscriptions()
+
+        this.logger.debug('video receive path opened mid-call', {
+            callId: this.info.callId,
+            peerDeviceJid,
+            hasVideoRtpSession: this.videoRtpSession !== null
+        })
+    }
+
+    /**
+     * Adds the peer's three video SSRCs to the subscription set, keeping what is there.
+     * Called again after anything recomputes that set from the negotiated media type,
+     * which on an upgraded call would otherwise drop the video slots back out.
+     */
+    private mergePeerVideoSlots(peerDeviceJid: string): void {
+        const slots = [WA_SSRC_SLOT.VIDEO.MAIN, WA_SSRC_SLOT.VIDEO.FEC, WA_SSRC_SLOT.VIDEO.OOB_NACK]
+        for (const slot of slots) {
+            const ssrc = generateSecureSsrc(this.info.callId, peerDeviceJid, slot)
+            if (!this.peerStreamSsrcs.includes(ssrc)) {
+                this.peerStreamSsrcs.push(ssrc)
+            }
         }
     }
 
@@ -1508,6 +2346,9 @@ export class WaCallMediaSession implements AudioSender {
         this.srtpSession = null
         this.srtcpContext = null
         this.srtcpRecvSession = null
+        this.appDataStream?.close()
+        this.appDataStream = null
+        this.peerAppDataSsrcs.clear()
         for (const depacketizer of this.h264Depacketizers.values()) depacketizer.reset()
         this.h264Depacketizers.clear()
 
@@ -1535,6 +2376,12 @@ export class WaCallMediaSession implements AudioSender {
         this.recvDtxCount = 0
         this.initialTransportSent = false
         this.outgoingPreacceptSent = false
+        this.videoReceivePathOpened = false
+        // Anything still waiting on a handshake is settled, not left pending forever.
+        this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.Cancelled)
+        this.peerVideoUpgradeRequested = false
+        this.videoSendPathOpened = false
+        this.videoStateTransactionId = 0
         this.firstPacketSent = false
         this.realAudioSendCount = 0
         this.encodeBuffer = null
@@ -1604,6 +2451,80 @@ export class WaCallMediaSession implements AudioSender {
         } catch (err: unknown) {
             this.logger.error('error sending audio', {
                 callId: this.info.callId,
+                message: toError(err).message
+            })
+        }
+    }
+
+    /**
+     * Sends one emoji reaction in-band on the media socket. Returns whether the first
+     * packet left; a `false` does not lose it, the retransmission carries it.
+     */
+    sendReaction(reaction: string): boolean {
+        if (!this.appDataStream) {
+            this.logger.debug('reaction dropped, app data stream not open', {
+                callId: this.info.callId
+            })
+            return false
+        }
+        if (!this.info.isActive) {
+            this.logger.debug('reaction dropped, call not active', { callId: this.info.callId })
+            return false
+        }
+        return this.appDataStream.sendReaction(reaction)
+    }
+
+    /**
+     * Opens this device's app-data stream on the SSRC of its own slot, reusing the
+     * session's SRTP and relay. Reopening on the same device jid is a no-op, so the
+     * stream survives the relay ack confirming a jid already guessed right.
+     */
+    private openAppDataStream(selfDeviceJid: string): void {
+        const ssrc = generateSecureSsrc(this.info.callId, selfDeviceJid, WA_SSRC_SLOT.APP_DATA.MAIN)
+        if (this.appDataStream?.ssrc === ssrc) return
+
+        this.appDataStream?.close()
+        this.appDataStream = new WaAppDataStream({
+            logger: this.logger.child({ component: 'app-data' }),
+            ssrc,
+            // Reports whether a relay connection took it: with none open nothing left,
+            // and the stream keeps the reaction buffered for the next attempt.
+            sendPacket: (packet) => {
+                if (!this.srtpSession) return false
+                return this.sctpRelay.broadcast(toArrayBuffer(this.srtpSession.protect(packet)))
+            }
+        })
+        this.appDataStream.setSframe(this.appDataSframeRequired, null)
+    }
+
+    private trackPeerAppDataSsrcs(deviceJids: readonly string[]): void {
+        for (const jid of deviceJids) {
+            if (!jid) continue
+            if (this.peerAppDataSsrcs.size >= MAX_TRACKED_PEER_APP_DATA_SSRCS) break
+            this.peerAppDataSsrcs.add(
+                generateSecureSsrc(this.info.callId, jid, WA_SSRC_SLOT.APP_DATA.MAIN)
+            )
+        }
+    }
+
+    /**
+     * Reads one inbound app-data packet and hands the reactions in it over; it was
+     * recognized by SSRC, so its payload type is whatever the peer chose.
+     */
+    private onAppDataPacket(data: Uint8Array, payloadType: number, ssrc: number): void {
+        const stream = this.appDataStream
+        if (!stream || !this.srtpSession) return
+
+        try {
+            const packet = this.srtpSession.unprotect(data)
+            stream.observeInboundPayloadType(payloadType)
+            for (const reaction of stream.receive(packet.payload, ssrc)) {
+                this.delegate.emitCallReaction?.(this.info, reaction)
+            }
+        } catch (err: unknown) {
+            this.logger.debug('app data packet dropped', {
+                callId: this.info.callId,
+                payloadType,
                 message: toError(err).message
             })
         }
@@ -1683,6 +2604,7 @@ export class WaCallMediaSession implements AudioSender {
                 this.info.applyTransition({ type: 'media_connected' })
                 this.delegate.emitState(this.info)
                 this.startMediaFlow()
+                this.announceInitialMuteState()
                 this.logger.debug('relay connected, call active', { callId: this.info.callId })
             } catch (err) {
                 this.logger.trace('call transition skipped', { message: toError(err).message })
@@ -1726,9 +2648,16 @@ export class WaCallMediaSession implements AudioSender {
         if (!this.srtpSession) return
 
         if (data.length >= 12) {
-            const ssrc = ((data[8] << 24) | (data[9] << 16) | (data[10] << 8) | data[11]) >>> 0
+            const ssrc = readUInt32BE(data, 8)
             if (ssrc === this.selfSsrc || this.selfStreamSsrcs.includes(ssrc)) {
                 this.selfEchoCount++
+                return
+            }
+
+            // Demultiplexed before the peer's media SSRC is latched: latching this one
+            // would resubscribe the call to a stream of the same peer carrying no audio.
+            if (this.peerAppDataSsrcs.has(ssrc)) {
+                this.onAppDataPacket(data, pt, ssrc)
                 return
             }
 
@@ -1748,6 +2677,9 @@ export class WaCallMediaSession implements AudioSender {
             const rtpPacket = this.srtpSession.unprotect(data)
             if (pt !== 120) {
                 if (pt === 97) {
+                    // Video on a call negotiated as audio: the stanza announcing the
+                    // upgrade may never have been routed here, so media opens the path.
+                    this.ensureVideoReceivePath()
                     this.videoRecvPackets++
                     this.videoReception.observe(
                         rtpPacket.header.ssrc,
@@ -1795,14 +2727,13 @@ export class WaCallMediaSession implements AudioSender {
                     let depacketizer = this.h264Depacketizers.get(rtpPacket.header.ssrc)
                     if (!depacketizer) {
                         depacketizer = new H264Depacketizer()
-                        if (this.h264Depacketizers.size >= 8) {
-                            const oldest = this.h264Depacketizers.keys().next().value
-                            if (oldest !== undefined) {
-                                this.h264Depacketizers.get(oldest)?.reset()
-                                this.h264Depacketizers.delete(oldest)
-                            }
-                        }
-                        this.h264Depacketizers.set(rtpPacket.header.ssrc, depacketizer)
+                        setBoundedMapEntry(
+                            this.h264Depacketizers,
+                            rtpPacket.header.ssrc,
+                            depacketizer,
+                            MAX_H264_DEPACKETIZERS,
+                            (_ssrc, evicted) => evicted.reset()
+                        )
                     }
                     const frames = depacketizer.push(
                         rtpPacket.payload,
@@ -1849,6 +2780,7 @@ export class WaCallMediaSession implements AudioSender {
                         })
                         this.delegate.emitInboundVideo(this.info, {
                             codec: 'h264',
+                            ssrc: rtpPacket.header.ssrc,
                             timestamp: frame.timestamp,
                             keyFrame: frame.keyFrame,
                             data: frame.data

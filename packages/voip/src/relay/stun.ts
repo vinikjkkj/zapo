@@ -10,6 +10,7 @@ import {
     writeUInt32BE
 } from '../bytes.js'
 import { hmacSha1, randomBytes } from '../crypto/primitives.js'
+import { encodeProtoLengthDelimited, encodeProtoVarintField } from '../protobuf.js'
 
 const STUN_MAGIC_COOKIE = 0x2112a442
 const STUN_FINGERPRINT_XOR = 0x5354554e
@@ -151,37 +152,19 @@ function buildStunMessage(
     return concatBytes([header, attrsData])
 }
 
-function encodeVarint(value: number): Uint8Array {
-    const bytes: number[] = []
-    let v = value >>> 0
-    while (v > 0x7f) {
-        bytes.push((v & 0x7f) | 0x80)
-        v >>>= 7
-    }
-    bytes.push(v & 0x7f)
-    return new Uint8Array(bytes)
-}
-
-function encodeProtobufVarintField(fieldNumber: number, value: number): Uint8Array {
-    const tag = encodeVarint((fieldNumber << 3) | 0)
-    const val = encodeVarint(value)
-    return concatBytes([tag, val])
-}
-
-function encodeProtobufLengthDelimited(fieldNumber: number, data: Uint8Array): Uint8Array {
-    const tag = encodeVarint((fieldNumber << 3) | 2)
-    const len = encodeVarint(data.length)
-    return concatBytes([tag, len, data])
+/** Every subscription field is a `uint32`; `>>> 0` keeps the coercion this file always did. */
+function encodeProtoUint32Field(fieldNumber: number, value: number): Uint8Array {
+    return encodeProtoVarintField(fieldNumber, BigInt(value >>> 0))
 }
 
 export function buildSenderSubscriptions(ssrc: number): Uint8Array {
     const inner = concatBytes([
-        encodeProtobufVarintField(3, ssrc),
-        encodeProtobufVarintField(5, 0),
-        encodeProtobufVarintField(6, 0)
+        encodeProtoUint32Field(3, ssrc),
+        encodeProtoUint32Field(5, 0),
+        encodeProtoUint32Field(6, 0)
     ])
 
-    return encodeProtobufLengthDelimited(1, inner)
+    return encodeProtoLengthDelimited(1, inner)
 }
 
 export function buildSSRCSubscriptionList(
@@ -195,21 +178,21 @@ export function buildSSRCSubscriptionList(
     for (const ssrc of selfSsrcs) {
         if (ssrc === 0) continue
         const inner = concatBytes([
-            encodeProtobufVarintField(1, selfPid),
-            encodeProtobufVarintField(2, 1),
-            encodeProtobufVarintField(3, ssrc)
+            encodeProtoUint32Field(1, selfPid),
+            encodeProtoUint32Field(2, 1),
+            encodeProtoUint32Field(3, ssrc)
         ])
-        entries.push(encodeProtobufLengthDelimited(1, inner))
+        entries.push(encodeProtoLengthDelimited(1, inner))
     }
 
     for (const peerSsrc of peerSsrcs) {
         if (peerSsrc === 0) continue
         const inner = concatBytes([
-            encodeProtobufVarintField(1, peerPid),
-            encodeProtobufVarintField(2, 1),
-            encodeProtobufVarintField(3, peerSsrc)
+            encodeProtoUint32Field(1, peerPid),
+            encodeProtoUint32Field(2, 1),
+            encodeProtoUint32Field(3, peerSsrc)
         ])
-        entries.push(encodeProtobufLengthDelimited(1, inner))
+        entries.push(encodeProtoLengthDelimited(1, inner))
     }
 
     return concatBytes(entries)

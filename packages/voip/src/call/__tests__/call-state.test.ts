@@ -76,6 +76,47 @@ test('mute and video toggles apply only in the active state', () => {
     assert.equal(call.stateData.videoOff, true)
 })
 
+test('the hand starts down and only moves while the call is active', () => {
+    const call = CallInfo.newOutgoing(ID, 'peer@lid', 'me@lid', CallMediaType.Audio)
+    assert.equal(call.stateData.handRaised, false)
+    assert.equal(call.raisedHands.size, 0)
+
+    call.applyTransition({ type: 'offer_sent' })
+    assert.throws(
+        () => call.applyTransition({ type: 'hand_raise_changed', raised: true }),
+        InvalidTransition
+    )
+
+    call.applyTransition({ type: 'remote_accepted' })
+    call.applyTransition({ type: 'media_connected' })
+
+    call.applyTransition({ type: 'hand_raise_changed', raised: true })
+    assert.equal(call.stateData.handRaised, true)
+
+    call.applyTransition({ type: 'hand_raise_changed', raised: false })
+    assert.equal(call.stateData.handRaised, false)
+})
+
+test('the screen share starts off and only moves while the call is active', () => {
+    const call = CallInfo.newOutgoing(ID, 'peer@lid', 'me@lid', CallMediaType.Video)
+    assert.equal(call.stateData.screenSharing, false)
+
+    call.applyTransition({ type: 'offer_sent' })
+    assert.throws(
+        () => call.applyTransition({ type: 'screen_share_changed', sharing: true }),
+        InvalidTransition
+    )
+
+    call.applyTransition({ type: 'remote_accepted' })
+    call.applyTransition({ type: 'media_connected' })
+
+    call.applyTransition({ type: 'screen_share_changed', sharing: true })
+    assert.equal(call.stateData.screenSharing, true)
+
+    call.applyTransition({ type: 'screen_share_changed', sharing: false })
+    assert.equal(call.stateData.screenSharing, false)
+})
+
 test('hold and resume cycle through on-hold', () => {
     const call = CallInfo.newOutgoing(ID, 'peer@lid', 'me@lid', CallMediaType.Audio)
     call.applyTransition({ type: 'offer_sent' })
@@ -97,6 +138,26 @@ test('illegal transitions throw InvalidTransition', () => {
         () => call.applyTransition({ type: 'audio_mute_changed', muted: true }),
         InvalidTransition
     )
+})
+
+/**
+ * The in-call affordances are live state, not a record of the call: a hand still up or a
+ * share still on after the call ended reads as somebody currently holding one.
+ */
+test('terminated puts every hand down and stops the share', () => {
+    const call = CallInfo.newOutgoing(ID, 'peer@lid', 'me@lid', CallMediaType.Video)
+    call.applyTransition({ type: 'offer_sent' })
+    call.applyTransition({ type: 'remote_accepted' })
+    call.applyTransition({ type: 'media_connected' })
+    call.applyTransition({ type: 'hand_raise_changed', raised: true })
+    call.applyTransition({ type: 'screen_share_changed', sharing: true })
+    call.raisedHands.add('peer:1@lid')
+
+    call.applyTransition({ type: 'terminated', reason: EndCallReason.UserEnded })
+
+    assert.equal(call.stateData.handRaised, false)
+    assert.equal(call.stateData.screenSharing, false)
+    assert.equal(call.raisedHands.size, 0)
 })
 
 test('terminated cannot fire twice', () => {

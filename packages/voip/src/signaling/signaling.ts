@@ -9,10 +9,16 @@ import {
     getNodeChildren,
     getNodeChildrenByTag
 } from 'zapo-js/transport'
-import { bytesToHex, toError } from 'zapo-js/util'
+import { bytesToHex, toError, tryAsNumber } from 'zapo-js/util'
 
 import { randomBytes } from '../crypto/primitives.js'
-import type { NodeInfo, RelayEndpoint, WaVoipDeps, WaVoipStores } from '../types.js'
+import type {
+    NodeInfo,
+    PeerVideoStateChange,
+    RelayEndpoint,
+    WaVoipDeps,
+    WaVoipStores
+} from '../types.js'
 
 export async function encodeWAMessage(
     message: Parameters<typeof proto.Message.encode>[0]
@@ -54,6 +60,152 @@ export function extractNodeInfo(node: BinaryNode): NodeInfo | null {
         epochId: innerNode.attrs?.e,
         timestamp: innerNode.attrs?.t,
         innerNode
+    }
+}
+
+/**
+ * `state` of a `<video>` message. The number on the wire **is** this ordinal - no
+ * separate wire enum, no translation table.
+ *
+ * Two disjoint families share the tag, because two senders emit it: one announces the
+ * video of a call that already has it, the other negotiates the upgrade. That is why a
+ * capture of a camera turning on emits `6` then `4` without contradicting itself - `6` is
+ * `Stopped`, never "enabled".
+ */
+export const WA_VIDEO_STATE = Object.freeze({
+    Disabled: 0,
+    Enabled: 1,
+    Paused: 2,
+    /** Upgrade request of a **group** call; 1:1 uses {@link UpgradeRequestV2}. */
+    UpgradeRequest: 3,
+    /** The upgrade is on: the sender is about to put video on the wire. */
+    UpgradeAccept: 4,
+    /** The peer refused the upgrade; distinct from either side timing out. */
+    UpgradeReject: 5,
+    Stopped: 6,
+    /** The *receiver* of a request never answered it and gave up waiting. */
+    UpgradeRejectByTimeout: 7,
+    /** The *requester* withdrew its request before it was answered. */
+    UpgradeCancel: 8,
+    /** The *requester* withdrew its request because its own timer expired. */
+    UpgradeCancelByTimeout: 9,
+    UnknownPeer: 10,
+    /** Upgrade request of a 1:1 call, which is the only kind this package places. */
+    UpgradeRequestV2: 11,
+    Xr2dCodecAvatarEnabled: 12,
+    Error: 20
+} as const)
+
+/**
+ * How long a sent upgrade request waits before the requester gives up. Same value as the
+ * peer's own guard timer, so neither side believes in an upgrade the other dropped.
+ */
+export const WA_VIDEO_UPGRADE_TIMEOUT_MS = 5_000
+
+/**
+ * How an upgrade request this side sent ended. `TimedOut` is the odd one out: this side
+ * gave up with nothing coming back, so unlike the others it says nothing about whether
+ * the peer ever saw the request.
+ */
+export const WA_VIDEO_UPGRADE_RESULT = Object.freeze({
+    /** The peer answered `UpgradeAccept`; video may now be sent. */
+    Accepted: 'accepted',
+    /** The peer answered `UpgradeReject`: it declined. */
+    Rejected: 'rejected',
+    /** The peer answered `UpgradeRejectByTimeout`: nobody there answered it. */
+    RejectedByTimeout: 'rejected_by_timeout',
+    /** The peer answered `Error`: it agreed to upgrade and could not. */
+    Failed: 'error',
+    /** Nothing came back before the guard timer expired. */
+    TimedOut: 'timeout',
+    /** This side withdrew the request before it was answered. */
+    Cancelled: 'cancelled'
+} as const)
+
+/** One of the values of {@link WA_VIDEO_UPGRADE_RESULT}. */
+export type WaVideoUpgradeResult =
+    (typeof WA_VIDEO_UPGRADE_RESULT)[keyof typeof WA_VIDEO_UPGRADE_RESULT]
+
+/**
+ * The `dec` this package announces: H.264 only, which is what every current client
+ * decodes. The `enc_supported` bitmask carries the same fact as an integer and is
+ * deliberately not sent - the string is what a capture of the official client shows.
+ */
+export const WA_VIDEO_DECODE_CAPABILITY = 'H264'
+
+/** Attributes of a `<video>` this side sends. */
+export interface VideoStateStanzaOptions {
+    /** One of {@link WA_VIDEO_STATE}, written to the wire as it is. */
+    readonly state: number
+    /** Our own counter over the video states we have sent, starting at 1. */
+    readonly transactionId: number
+    /** `dec`; defaults to {@link WA_VIDEO_DECODE_CAPABILITY}. */
+    readonly decoderCodec?: string
+    /** `device_orientation`, 0 to 3; defaults to 0, upright. */
+    readonly deviceOrientation?: number
+}
+
+/**
+ * The `voip_settings` profile a request to upgrade to video names. It rides the two
+ * request states and nothing else. Not cosmetic: the server reads it and attaches the
+ * matching profile, and a real peer answers an upgrade without parameters with `Error`.
+ */
+const WA_VIDEO_UPGRADE_SETTINGS_PROFILE = 'video'
+
+/**
+ * Builds the `<call><video>` that announces a video state of our own, covering both
+ * halves of the audio-to-video upgrade. `dec` rides on every message, not only the one
+ * that concludes it: the peer's parser rejects a `<video>` carrying neither `enc` nor
+ * `dec`.
+ */
+export function buildVideoStateStanza(
+    peerDeviceJid: string,
+    callId: string,
+    callCreator: string,
+    options: VideoStateStanzaOptions
+): BinaryNode {
+    return {
+        tag: 'call',
+        attrs: { to: peerDeviceJid, id: generateCallStanzaId() },
+        content: [
+            {
+                tag: 'video',
+                attrs: {
+                    'call-id': callId,
+                    'call-creator': callCreator,
+                    state: String(options.state),
+                    device_orientation: String(options.deviceOrientation ?? 0),
+                    dec: options.decoderCodec ?? WA_VIDEO_DECODE_CAPABILITY,
+                    'transaction-id': String(options.transactionId),
+                    ...(options.state === WA_VIDEO_STATE.UpgradeRequestV2 ||
+                    options.state === WA_VIDEO_STATE.UpgradeRequest
+                        ? { voip_settings: WA_VIDEO_UPGRADE_SETTINGS_PROFILE }
+                        : {})
+                }
+            }
+        ]
+    }
+}
+
+/**
+ * Reads the `<video>` the peer sends when its video state changes mid-call, which is also
+ * how an audio call is upgraded: there is no separate upgrade stanza. Numbers are passed
+ * through raw, see {@link PeerVideoStateChange}. Returns `null` when `state` is missing
+ * or unreadable - without it there is no transition to report.
+ */
+export function parseVideoStateNode(innerNode: BinaryNode): PeerVideoStateChange | null {
+    const state = tryAsNumber(innerNode.attrs?.state)
+    if (state === null) {
+        return null
+    }
+
+    return {
+        state,
+        transactionId: tryAsNumber(innerNode.attrs?.['transaction-id']),
+        deviceOrientation: tryAsNumber(innerNode.attrs?.device_orientation),
+        decoderCodec: innerNode.attrs?.dec || null,
+        encoderCodec: innerNode.attrs?.enc || null,
+        supportedCodecs: tryAsNumber(innerNode.attrs?.enc_supported)
     }
 }
 
@@ -310,23 +462,11 @@ export async function buildOfferStanza(
  * The video reply advertises H.264 because current mobile clients uplink
  * H.264: answering VP8 keeps signalling alive but yields no video RTP.
  *
- * The video node also carries `dec`, matching the offer's value. `dec`
- * announces which codec *we* decode, and the peer uses it to pick its own
- * encoder. A wire capture of our own traffic showed the offer emitting
- * `dec='H264'` while the accept omitted it entirely — a confirmed asymmetry,
- * not a deliberate omission. Since we are almost always the callee, the
- * accept is the dominant path: most calls advertised no decoder at all
- * before this was added.
- *
- * Two related gaps were observed on the wire but are deliberately left
- * untouched, because no reference capture exists to copy from (our captures
- * never show the official client as callee, so it never sends a preaccept or
- * accept for us to sample):
- *  - our preaccept carries no `<video>` node at all, even for a video call;
- *  - the official client re-announces `dec` on a mid-call video state change
- *    (`<video state='1' dec='H264' .../>`), which we do not emit.
- * Both are observed-only, unmeasured against any reference, and intentionally
- * not implemented here.
+ * The video node carries `dec` beside `enc`, each with the asymmetric spelling the peer
+ * uses: `enc='h.264'`, `dec='H264'`. `dec` is how a peer picks what to encode for us and
+ * this side is almost always the callee, so an accept without it leaves most calls
+ * advertising no decoder. Our preaccept still carries no `<video>` node at all, for want
+ * of a capture to copy.
  *
  * There is no call-key parameter: the decrypted offer key is not serialized
  * into this stanza, since it already reached both sides through the offer.
@@ -553,12 +693,17 @@ export function buildTransportStanza(
     }
 }
 
+/**
+ * Builds the `<call><mute_v2>` that announces our own microphone state: `mute-state` on
+ * `mute_v2` itself, no child node. A statement, not a request - nothing comes back. Its
+ * mutually exclusive `request-state` is deliberately not built: a group-call mechanism
+ * WhatsApp's own clients drop on a 1:1 call, and never observed on the wire.
+ */
 export function buildMuteV2Stanza(
     peerDeviceJid: string,
     callId: string,
     callCreator: string,
-    muteState: number,
-    meId: string
+    muted: boolean
 ): BinaryNode {
     return {
         tag: 'call',
@@ -569,11 +714,112 @@ export function buildMuteV2Stanza(
                 attrs: {
                     'call-id': callId,
                     'call-creator': callCreator,
-                    'mute-state': String(muteState)
+                    'mute-state': muted ? '1' : '0'
                 }
             }
         ]
     }
+}
+
+export interface MuteV2Payload {
+    /**
+     * Microphone state the sender announced through `mute-state`. `null` when absent or
+     * unrecognized, so an unknown state is never guessed into a boolean.
+     */
+    readonly muted: boolean | null
+    /** `true` when the stanza carries `request-state`: a request, not an announcement. */
+    readonly isRequest: boolean
+}
+
+/** Reads the state carried by an inbound `<mute_v2>` node. */
+export function parseMuteV2(inner: BinaryNode): MuteV2Payload {
+    const rawMuteState = inner.attrs?.['mute-state']
+
+    let muted: boolean | null = null
+    if (rawMuteState === '1') {
+        muted = true
+    } else if (rawMuteState === '0') {
+        muted = false
+    }
+
+    return { muted, isRequest: inner.attrs?.['request-state'] !== undefined }
+}
+
+/**
+ * Wire name of the raise-hand action, in three places at once: the envelope's `action`
+ * attribute, the tag of the state element inside it, and the tag of the stanza that
+ * carries the same state on its own. The integer action code never reaches the wire.
+ */
+const RAISE_HAND_ACTION = 'raise_hand'
+
+/**
+ * Attribute carrying the state in both wire shapes, always hyphenated. The underscore
+ * spelling `raise_hand_state` names log lines and events only, never an attribute.
+ */
+const RAISE_HAND_STATE_ATTR = 'raise-hand-state'
+
+/**
+ * Builds the `<call><user_action>` that announces the local raise-hand state: durable
+ * per-participant state, which is why it travels over signalling rather than the media
+ * path the reactions take.
+ *
+ * Every part is measured - the envelope rather than the bare stanza, `action` as the
+ * string `raise_hand`, the hyphen in `raise-hand-state`, and `'0'` spelled out on
+ * lowering rather than the attribute going away. `broadcast` is off by default: captures
+ * of a live 1:1 raise hand carry it nowhere and the predicate that sets it is unknown.
+ */
+export function buildRaiseHandStanza(
+    peerDeviceJid: string,
+    callId: string,
+    callCreator: string,
+    raised: boolean,
+    broadcast = false
+): BinaryNode {
+    const attrs: Record<string, string> = {
+        'call-id': callId,
+        'call-creator': callCreator,
+        action: RAISE_HAND_ACTION
+    }
+    if (broadcast) {
+        attrs.broadcast = '1'
+    }
+
+    return {
+        tag: 'call',
+        attrs: { to: peerDeviceJid, id: generateCallStanzaId() },
+        content: [
+            {
+                tag: 'user_action',
+                attrs,
+                content: [
+                    {
+                        tag: RAISE_HAND_ACTION,
+                        attrs: { [RAISE_HAND_STATE_ATTR]: raised ? '1' : '0' }
+                    }
+                ]
+            }
+        ]
+    }
+}
+
+/**
+ * Reads the raise-hand state an incoming stanza carries, or `null` when there is none.
+ *
+ * Both wire shapes are accepted, because the sender chooses between them with a gate this
+ * side cannot see and both are live traffic: the `<user_action>` envelope, and a
+ * top-level `<raise_hand>` that is a message type of its own, acked under its own tag.
+ *
+ * A `<user_action>` naming another action has no `<raise_hand>` child and so reads as
+ * absent; anything other than `0` and `1` counts as absent too, never as a guess.
+ */
+export function parseRaiseHandState(node: BinaryNode): boolean | null {
+    const stateNode = node.tag === RAISE_HAND_ACTION ? node : findNodeChild(node, RAISE_HAND_ACTION)
+    const raw = stateNode?.attrs?.[RAISE_HAND_STATE_ATTR]
+
+    if (raw === '1') return true
+    if (raw === '0') return false
+
+    return null
 }
 
 export function buildAcceptReceiptStanza(

@@ -23,8 +23,9 @@ export {
     asString,
     resolveOptionalPositive,
     resolvePositive,
-    toBoolOrUndef
+    toBoolOrUndef,
+    tryAsNumber
 } from '@util/coercion'
-export { normalizeQueryLimit } from '@util/collections'
+export { normalizeQueryLimit, setBoundedMapEntry } from '@util/collections'
 export { toError, toSafeNumber } from '@util/primitives'
 export { isBunRuntime } from '@util/runtime'
