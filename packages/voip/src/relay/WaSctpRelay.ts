@@ -269,6 +269,26 @@ export class WaSctpRelay extends EventEmitter {
     }
 
     async connectToRelay(relayInfo: RelayInfo): Promise<Connection | null> {
+        const existing = this.connections.get(
+            this.makeConnectionId(relayInfo.ip, relayInfo.port, relayInfo.authTokenId)
+        )
+        if (existing && existing.state === ConnectionState.Open) {
+            return existing
+        }
+
+        return this.startConnection(this.registerConnection(relayInfo))
+    }
+
+    /**
+     * Puts a leg in `connections` as `Connecting`, before anything is dialled.
+     *
+     * Registering is split from dialling because the map is the only record of
+     * what the call still has to try: `announceLastLegLost` reads it and
+     * nothing else. Dialling a batch leg by leg would let the first one fail
+     * while the rest of the batch is still invisible, and the call would be
+     * declared dead with relays nobody had touched yet.
+     */
+    private registerConnection(relayInfo: RelayInfo): Connection {
         const connectionId = this.makeConnectionId(
             relayInfo.ip,
             relayInfo.port,
@@ -280,12 +300,7 @@ export class WaSctpRelay extends EventEmitter {
             relayName: relayInfo.name
         })
 
-        let conn = this.connections.get(connectionId)
-        if (conn && conn.state === ConnectionState.Open) {
-            return conn
-        }
-
-        conn = {
+        const conn: Connection = {
             state: ConnectionState.Connecting,
             peerConnection: null,
             channel: null,
@@ -304,9 +319,16 @@ export class WaSctpRelay extends EventEmitter {
         }
 
         this.connections.set(connectionId, conn)
+        return conn
+    }
+
+    /** Dials a leg that is already registered, over the configured transport. */
+    private async startConnection(conn: Connection): Promise<Connection | null> {
+        const connectionId = conn.id
+        const relayInfo = conn.relayInfo
 
         /**
-         * The transport is chosen here, once, when the leg is born, and it is
+         * The transport is chosen here, once, when the leg is dialled, and it is
          * chosen by configuration rather than by inspecting the relay.
          *
          * A heuristic was written and then withdrawn: the relays a credential
@@ -527,7 +549,7 @@ export class WaSctpRelay extends EventEmitter {
         if (!conn || conn.state === ConnectionState.Failed) return
 
         this.logger.warn('sctp connection failed', { connectionId: conn.id, reason })
-        const wasConnected = this.releaseConnected(conn)
+        this.releaseConnected(conn)
         conn.state = ConnectionState.Failed
 
         this.stopKeepalive(conn.id)
@@ -538,32 +560,56 @@ export class WaSctpRelay extends EventEmitter {
         closeQuietly(conn.rawLeg, this.logger)
 
         this.connections.delete(conn.id)
-        if (wasConnected) this.announceLastLegLost(reason)
+        this.announceLastLegLost(reason)
     }
 
     /**
-     * Gives back the connected count a leg took when it opened, and reports
-     * whether it had one to give. Both the WebRTC and the raw path count one
-     * on open, so every way out of `Open` has to pass through here or
-     * `getConnectedCount` drifts upwards.
+     * Gives back the connected count a leg took when it opened. Both the
+     * WebRTC and the raw path count one on open, so every way out of `Open`
+     * has to pass through here or `getConnectedCount` drifts upwards.
      */
-    private releaseConnected(conn: Connection): boolean {
-        if (conn.state !== ConnectionState.Open) return false
+    private releaseConnected(conn: Connection): void {
+        if (conn.state !== ConnectionState.Open) return
         this.stats.connected = Math.max(0, this.stats.connected - 1)
-        return true
     }
 
     /**
-     * Tells the owner the call has no media path left at all.
+     * Whether any leg could still be carrying media shortly: one that is open,
+     * or one that is still dialling.
+     *
+     * A leg that is dialling counts because legs open at wildly different
+     * speeds - ICE on one relay finishes while another is still gathering - and
+     * nothing waits for them to agree. It can only count for so long: every
+     * leg is armed with `CONNECTION_TIMEOUT` when it is dialled, so a leg stuck
+     * in `Connecting` fails on its own and gets back here.
+     */
+    private hasLiveLeg(): boolean {
+        for (const conn of this.connections.values()) {
+            if (conn.state === ConnectionState.Open || conn.state === ConnectionState.Connecting) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Tells the owner the call has no media path left and none on the way.
      *
      * Legs die on their own and a call runs several, so losing one of four is
-     * not losing the call: this fires only when the leg that went down was the
-     * last one open. `cleanup` never comes through here, so tearing a call down
-     * stays silent.
+     * not losing the call, and the last one to go is not necessarily the last
+     * one open: a leg that opens first and then fails while its siblings are
+     * still dialling loses nothing, and a batch where every leg dies before it
+     * ever opens loses everything without any of them having been open. Both
+     * are the same question - is there a leg left that is open or dialling -
+     * and the answer is read off `connections`, which is why a leg is put there
+     * before it is dialled.
+     *
+     * `cleanup` empties that map before it closes anything, so tearing a call
+     * down cannot come through here.
      */
     private announceLastLegLost(reason: string): void {
-        if (this.hasConnection()) return
-        this.logger.warn('relay lost its last connected leg', { reason })
+        if (this.hasLiveLeg()) return
+        this.logger.warn('relay has no leg left, open or dialling', { reason })
         this.emit('relay_lost', { reason })
     }
 
@@ -886,7 +932,7 @@ export class WaSctpRelay extends EventEmitter {
         const conn = this.connections.get(connectionId)
         if (!conn) return
 
-        const wasConnected = this.releaseConnected(conn)
+        this.releaseConnected(conn)
         conn.state = ConnectionState.Closed
 
         this.stopKeepalive(connectionId)
@@ -896,7 +942,7 @@ export class WaSctpRelay extends EventEmitter {
         closeQuietly(conn.rawLeg, this.logger)
 
         this.connections.delete(connectionId)
-        if (wasConnected) this.announceLastLegLost('closed')
+        this.announceLastLegLost('closed')
     }
 
     private drainBuffer(connectionId: string): void {
@@ -1175,7 +1221,7 @@ export class WaSctpRelay extends EventEmitter {
 
         this.logger.debug('sctp relays registered', { count: this.relayMap.size })
 
-        const connectionPromises: Array<Promise<Connection | null>> = []
+        const legs: Connection[] = []
         for (const [, relayInfo] of this.relayMap) {
             const connId = this.makeConnectionId(
                 relayInfo.ip,
@@ -1183,11 +1229,11 @@ export class WaSctpRelay extends EventEmitter {
                 relayInfo.authTokenId
             )
             if (!this.connections.has(connId)) {
-                connectionPromises.push(this.connectToRelay(relayInfo))
+                legs.push(this.registerConnection(relayInfo))
             }
         }
 
-        await Promise.all(connectionPromises)
+        await Promise.all(legs.map((conn) => this.startConnection(conn)))
 
         this.logger.debug('sctp relay configuration done', { connected: this.stats.connected })
     }
@@ -1218,7 +1264,16 @@ export class WaSctpRelay extends EventEmitter {
             this.stopKeepalive(id)
         }
 
-        for (const [, conn] of this.connections) {
+        /**
+         * Emptied before anything is closed, not after: a data channel that
+         * reports its close synchronously lands in `closeConnection`, which
+         * would find the last leg of a call being torn down and announce it as
+         * lost. With the map already empty that path finds nothing to report.
+         */
+        const closing = [...this.connections.values()]
+        this.connections.clear()
+
+        for (const conn of closing) {
             if (conn.connectionTimeout) clearTimeout(conn.connectionTimeout)
             closeQuietly(conn.channel, this.logger)
             for (const ch of conn.incomingChannels) closeQuietly(ch, this.logger)
@@ -1226,7 +1281,6 @@ export class WaSctpRelay extends EventEmitter {
             closeQuietly(conn.rawLeg, this.logger)
         }
 
-        this.connections.clear()
         this.relayMap.clear()
         this.stats.connected = 0
         this.audioSsrc = 0

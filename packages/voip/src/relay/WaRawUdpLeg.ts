@@ -1,5 +1,6 @@
 import dgram from 'node:dgram'
 import { isIPv6 } from 'node:net'
+import { performance } from 'node:perf_hooks'
 
 import type { Logger } from 'zapo-js'
 import { toBytesView, toError } from 'zapo-js/util'
@@ -102,6 +103,11 @@ export class WaRawUdpLeg {
     private closed = false
     private returnPathTimer: NodeJS.Timeout | null = null
     private returnPathSeen = false
+    /**
+     * Monotonic, not wall clock: this is only ever read as an elapsed time, and
+     * a clock the system can step would either roll a healthy leg back or hold
+     * a stalled one open by however far it moved.
+     */
     private lastInboundAt = 0
 
     constructor(options: WaRawUdpLegOptions) {
@@ -137,7 +143,7 @@ export class WaRawUdpLeg {
                 if (this.closed) return
                 const data = toBytesView(msg)
                 if (!isStunPacket(data)) {
-                    this.lastInboundAt = Date.now()
+                    this.lastInboundAt = performance.now()
                     if (!this.returnPathSeen) {
                         this.returnPathSeen = true
                         this.logger.debug('raw udp leg return path confirmed', {
@@ -232,7 +238,7 @@ export class WaRawUdpLeg {
             this.returnPathTimer = null
             if (this.closed) return
 
-            const idleMs = Date.now() - this.lastInboundAt
+            const idleMs = performance.now() - this.lastInboundAt
             if (this.returnPathSeen && idleMs < this.stallTimeoutMs) {
                 this.armReturnPathTimer(this.stallTimeoutMs - idleMs)
                 return

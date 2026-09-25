@@ -391,3 +391,46 @@ test('media that keeps arriving keeps sliding the window', async () => {
         await relay.close()
     }
 })
+
+/**
+ * The window measures an elapsed time, and a system clock can be stepped in
+ * either direction under a running call - by NTP, by a suspend, by hand. A
+ * backward step is the half that hides: it makes the last datagram look like it
+ * arrived in the future, so a window read off the wall clock re-arms itself for
+ * however far the clock moved and a relay that stopped forwarding is never
+ * caught. The leg is fed once and then left silent here, so the only thing that
+ * moves is the clock.
+ */
+test('a wall-clock step back does not hold a stalled leg open', async (t) => {
+    const relay = await startFakeRelay()
+    const harness = createLeg(relay.port, SHORT_RETURN_PATH_TIMEOUT_MS, SHORT_STALL_MS)
+
+    try {
+        harness.leg.open()
+        assert.ok(await waitFor(harness.opened, 2_000), 'leg never opened')
+
+        harness.leg.send(RTP_PACKET)
+        await waitFor(() => relay.received.length >= 1, 2_000)
+        relay.reply(RTP_PACKET)
+        assert.ok(await waitFor(() => harness.leg.hasReturnPath, 2_000), 'return path not seen')
+
+        const steppedBack = Date.now() - 86_400_000
+        t.mock.method(Date, 'now', () => steppedBack)
+
+        /**
+         * Slept rather than polled: `waitFor` reads the wall clock too, so on a
+         * leg that wrongly survives it would never reach its own deadline.
+         */
+        await new Promise<void>((resolve) => setTimeout(resolve, SHORT_STALL_MS * 3))
+
+        assert.deepEqual(
+            harness.failures,
+            [RAW_UDP_NO_RETURN_PATH],
+            'a clock step kept a stalled leg alive'
+        )
+        assert.equal(harness.leg.isOpen, false)
+    } finally {
+        harness.leg.close()
+        await relay.close()
+    }
+})

@@ -94,6 +94,58 @@ test('losing the last open leg is announced', () => {
     assert.deepEqual(lost, ['raw_udp_no_return_path'])
 })
 
+/**
+ * Legs open at wildly different speeds, and on the WebRTC path - the default -
+ * one that wins the race and then dies is routine. It is not the call losing
+ * its media path: the legs still dialling are what the call is waiting for, and
+ * hanging up on them would kill a healthy call every time the first relay to
+ * answer is also the first to drop.
+ */
+test('losing an open leg while another is still dialling is not announced', () => {
+    const relay = new WaSctpRelay()
+    const internals = relay as unknown as RelayInternals
+    const lost: string[] = []
+    relay.on('relay_lost', (event: { reason: string }) => lost.push(event.reason))
+
+    const open = countedConnection('relay-open', 'Open')
+    const dialling = countedConnection('relay-dialling', 'Connecting')
+    internals.connections.set(open.id, open)
+    internals.connections.set(dialling.id, dialling)
+    internals.stats.connected = 1
+
+    internals.failConnection(open, 'data_channel_error')
+
+    assert.deepEqual(lost, [], 'a leg still dialling is a media path the call may yet get')
+    assert.equal(relay.getConnectedCount(), 0)
+    assert.equal(relay.hasConnection(), false)
+})
+
+/**
+ * The other end of the same rule, and a different state: nothing here was ever
+ * `Open`, so nothing gives back a connected count and a check written around
+ * losing the last open leg never fires. The call is left exactly as mute as one
+ * whose legs opened and died - live, with no media and nobody redialling.
+ */
+test('a batch where every leg dies before it opens is announced', () => {
+    const relay = new WaSctpRelay()
+    const internals = relay as unknown as RelayInternals
+    const lost: string[] = []
+    relay.on('relay_lost', (event: { reason: string }) => lost.push(event.reason))
+
+    const first = countedConnection('relay-1', 'Connecting')
+    const second = countedConnection('relay-2', 'Connecting')
+    internals.connections.set(first.id, first)
+    internals.connections.set(second.id, second)
+
+    internals.failConnection(first, 'connection_error')
+    assert.deepEqual(lost, [], 'the second leg was still dialling')
+
+    internals.failConnection(second, 'connection_timeout')
+
+    assert.deepEqual(lost, ['connection_timeout'])
+    assert.equal(relay.getConnectedCount(), 0)
+})
+
 /** A call runs several legs and loses one routinely; only the last one counts. */
 test('losing one leg of several is not announced', () => {
     const relay = new WaSctpRelay()
@@ -133,4 +185,28 @@ test('tearing the relay down is not announced', () => {
 
     assert.deepEqual(lost, [])
     assert.equal(relay.getConnectedCount(), 0)
+})
+
+/**
+ * Closing a data channel is what makes it report a close, and the handler for
+ * that report is `closeConnection` - which does announce. A teardown that
+ * closed its legs while they were still listed would therefore announce the
+ * last one as lost, so the listing goes first.
+ */
+test('a leg that reports its close synchronously during teardown is not announced', () => {
+    const relay = new WaSctpRelay()
+    const internals = relay as unknown as RelayInternals
+    const lost: string[] = []
+    relay.on('relay_lost', (event: { reason: string }) => lost.push(event.reason))
+
+    const conn = countedConnection('relay-1', 'Open')
+    ;(conn as { channel: unknown }).channel = {
+        close: () => internals.closeConnection(conn.id)
+    }
+    internals.connections.set(conn.id, conn)
+    internals.stats.connected = 1
+
+    relay.cleanup()
+
+    assert.deepEqual(lost, [])
 })
