@@ -13,7 +13,9 @@ import {
     type WaVoipDeps
 } from '../../types.js'
 import { CallInfo } from '../call-state.js'
-import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
+import { WaCallMediaSession } from '../WaCallMediaSession.js'
+
+import { createSessionDelegate } from './_helpers.js'
 
 const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
@@ -83,19 +85,14 @@ function createSession(): FecHarness {
         deps: {} as unknown as WaVoipDeps,
         logger: createNoopLogger(),
         info: call,
-        delegate: {
-            emitState: () => {},
-            emitIncoming: () => {},
-            emitEnded: () => {},
-            emitInboundAudio: () => {},
+        delegate: createSessionDelegate({
             emitInboundVideoRtp: (_call, packet) => {
                 packets.push(packet)
             },
             emitInboundVideo: (_call, frame) => {
                 frames.push(frame)
-            },
-            emitOutboundAudioFinished: () => {}
-        } satisfies WaCallMediaSessionDelegate
+            }
+        })
     })
 
     const internals = session as unknown as SessionInternals

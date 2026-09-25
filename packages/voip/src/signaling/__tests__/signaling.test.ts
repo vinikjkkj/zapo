@@ -3,9 +3,10 @@ import { test } from 'node:test'
 
 import type { BinaryNode } from 'zapo-js/transport'
 
-import { CallState, EndCallReason, type WaVoipDeps } from '../../types.js'
+import { CallState, EndCallReason, type WaVoipDeps, type WaVoipStores } from '../../types.js'
 import {
     buildAcceptStanza,
+    buildOfferStanza,
     buildRejectStanza,
     buildRelaylatencyForwardStanza,
     buildTerminateStanza,
@@ -111,6 +112,64 @@ test('buildAcceptStanza advertises h.264 on a video accept', async () => {
     const accept = ((await buildAccept(true)).content as BinaryNode[])[0]
     const video = (accept.content as BinaryNode[]).find((child) => child.tag === 'video')
     assert.equal(video?.attrs.enc, 'h.264')
+})
+
+function createOfferDeps(): WaVoipDeps {
+    return {
+        authClient: {
+            getCurrentCredentials: () => ({
+                meJid: '1111111111@lid',
+                meLid: '1111111111@lid',
+                signedIdentity: { details: new Uint8Array([1, 2, 3]) }
+            })
+        },
+        signalDeviceSync: {
+            syncDeviceList: async () => [{ deviceJids: [CALLER_DEVICE_JID] }]
+        },
+        sessionResolver: {
+            ensureSessionsBatch: async (devices: string[]) =>
+                devices.map((jid) => ({ address: jid, session: {} }))
+        },
+        signalProtocol: {
+            encryptMessagesBatch: async (entries: unknown[]) =>
+                entries.map(() => ({
+                    type: 'pkmsg',
+                    ciphertext: new Uint8Array([1, 2, 3])
+                }))
+        }
+    } as unknown as WaVoipDeps
+}
+
+function createOfferStores(): WaVoipStores {
+    return {
+        privacyToken: {
+            getByJid: async () => undefined
+        }
+    } as unknown as WaVoipStores
+}
+
+async function buildOffer(isVideo: boolean): Promise<BinaryNode> {
+    return buildOfferStanza(
+        createOfferDeps(),
+        createOfferStores(),
+        'CALLID',
+        new Uint8Array([9, 9, 9]),
+        CALLER_DEVICE_JID,
+        isVideo
+    )
+}
+
+test('buildAcceptStanza advertises the same dec as buildOfferStanza on a video call', async () => {
+    const offer = ((await buildOffer(true)).content as BinaryNode[])[0]
+    const offerVideo = (offer.content as BinaryNode[]).find((child) => child.tag === 'video')
+
+    const accept = ((await buildAccept(true)).content as BinaryNode[])[0]
+    const acceptVideo = (accept.content as BinaryNode[]).find((child) => child.tag === 'video')
+
+    assert.ok(offerVideo?.attrs.dec, 'offer video node is missing dec')
+    assert.ok(acceptVideo?.attrs.dec, 'accept video node is missing dec')
+    assert.equal(acceptVideo?.attrs.dec, offerVideo?.attrs.dec)
+    assert.equal(acceptVideo?.attrs.enc, offerVideo?.attrs.enc)
 })
 
 test('needsDecryption only flags encrypted payload tags', () => {

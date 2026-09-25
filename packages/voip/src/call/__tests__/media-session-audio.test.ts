@@ -6,7 +6,9 @@ import { createNoopLogger } from 'zapo-js'
 import type { WaAudioEngine } from '../../media/WaAudioEngine.js'
 import { CallMediaType, DEFAULT_AUDIO_CONFIG, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
-import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
+import { WaCallMediaSession } from '../WaCallMediaSession.js'
+
+import { createSessionDelegate } from './_helpers.js'
 
 const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
@@ -25,17 +27,11 @@ function createSession(): AudioSessionHarness {
         deps: {} as unknown as WaVoipDeps,
         logger: createNoopLogger(),
         info: call,
-        delegate: {
-            emitState: () => {},
-            emitIncoming: () => {},
-            emitEnded: () => {},
+        delegate: createSessionDelegate({
             emitInboundAudio: (_call, pcm) => {
                 emitted.push(pcm)
-            },
-            emitInboundVideoRtp: () => {},
-            emitInboundVideo: () => {},
-            emitOutboundAudioFinished: () => {}
-        } satisfies WaCallMediaSessionDelegate
+            }
+        })
     })
 
     const internals = session as unknown as {

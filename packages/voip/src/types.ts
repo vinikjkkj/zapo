@@ -34,6 +34,8 @@ export enum EndCallReason {
     Busy = 'busy',
     Cancelled = 'cancelled',
     Failed = 'failed',
+    /** The call had a media path and lost it, with no leg left to carry it. */
+    RelayLost = 'relay_lost',
     DoNotDisturb = 'do_not_disturb',
     Unknown = 'unknown'
 }
@@ -119,6 +121,12 @@ export interface RelayEndpoint {
     relayName?: string
     addressBytes?: Uint8Array
     authTokenId?: string
+    /**
+     * `is_fna` of the endpoint. Informational: nothing in this package routes
+     * on it, and the server often omits it. One FNA relay was measured
+     * accepting an allocate and answering every keepalive while forwarding no
+     * media at all.
+     */
     isFna?: boolean
     /** `domain_name` of the `<relay>` descriptor this endpoint came from. */
     domainName?: string
@@ -132,6 +140,18 @@ export interface RelayData {
     uuid?: string
     selfPid?: number
     peerPid?: number
+    /**
+     * `<hbh_key>` of the relay descriptor, 30 bytes. Parsed and kept, with no
+     * consumer: on the WebRTC path DTLS protects the hop, so no hop-by-hop
+     * SRTP is derived from this anywhere.
+     *
+     * The raw UDP transport has no DTLS under it and puts the end-to-end SRTP
+     * on the wire unchanged. That was measured to be enough: over a call
+     * carried entirely by raw legs, all 3185 inbound RTP packets authenticated
+     * and decoded to audio, both through the live session and through a twin
+     * built from the same keys, with no `auth_failed`. So the relay adds no
+     * hop-by-hop layer of its own, and none is owed here.
+     */
     hbhKey?: Uint8Array
 }
 

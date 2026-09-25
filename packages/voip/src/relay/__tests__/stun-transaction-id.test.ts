@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import dgram from 'node:dgram'
 import { test } from 'node:test'
 
 import { bytesToHex, hexToBytes } from 'zapo-js/util'
@@ -45,42 +44,61 @@ function relayKeyByteOrder(transactionId: Uint8Array): Uint8Array {
     return key
 }
 
-interface Listener {
-    readonly port: number
-    readonly packets: Uint8Array[]
-    close(): void
-}
-
-async function bindListener(): Promise<Listener> {
-    const socket = dgram.createSocket('udp4')
-    const packets: Uint8Array[] = []
-
-    socket.on('message', (message) => {
-        packets.push(Uint8Array.from(message))
-    })
-
-    await new Promise<void>((resolve) => socket.bind(0, '127.0.0.1', resolve))
-
-    return {
-        port: socket.address().port,
-        packets,
-        close: () => socket.close()
-    }
-}
-
-function relayInfoFor(port: number, index: number) {
+function relayInfoFor(index: number) {
     return {
         id: `relay-${index}`,
         ip: '127.0.0.1',
-        port,
+        port: 3480,
         token: `token-${index}`,
         authToken: `auth-token-${index}`,
         rawToken: new Uint8Array([0xa0, index, 0x5c, 0x11]),
         key: `relay-key-${index}`,
         relayId: index,
-        name: `probe-${index}`,
-        isFna: true
+        name: `probe-${index}`
     }
+}
+
+/**
+ * A `channel` stand-in that records every frame `sendToChannel` writes to it
+ * without any real transport underneath. This covers the data channel legs
+ * only: the connections built here carry no `rawLeg`, and a raw UDP leg takes
+ * the other branch of `isConnOpen`/`sendToChannel` and registers with a bare
+ * allocate instead of this binding ladder. That its allocate and its ping
+ * share one transaction id is asserted in `raw-udp-relay.test.ts`.
+ */
+function fakeChannel(sent: Uint8Array[]): Connection['channel'] {
+    return {
+        readyState: 'open',
+        send: (data: ArrayBuffer) => {
+            sent.push(new Uint8Array(data))
+        }
+    } as unknown as Connection['channel']
+}
+
+function makeOpenConnection(
+    relayInfo: ReturnType<typeof relayInfoFor>,
+    sent: Uint8Array[]
+): Connection {
+    return {
+        state: 'Open',
+        peerConnection: null,
+        channel: fakeChannel(sent),
+        incomingChannels: [],
+        buffer: [],
+        bufferedBytes: 0,
+        id: relayInfo.id,
+        relayInfo,
+        connectionTimeout: null,
+        hasReceivedFirstPacket: false,
+        /**
+         * The surviving (only) connection path always carries a local ufrag,
+         * taken from the WebRTC SDP offer before the relay is dialled.
+         */
+        localUfrag: `local-ufrag-${relayInfo.relayId}`,
+        stableRoutingConnId: 0n,
+        stunTransactionId: createStunTransactionId(),
+        stats: { sentPackets: 0, receivedPackets: 0, sentBytes: 0, receivedBytes: 0 }
+    } as unknown as Connection
 }
 
 async function waitUntil(done: () => boolean, timeoutMs: number): Promise<void> {
@@ -126,49 +144,48 @@ function buildIpv6Allocate(ip: string, transactionId?: Uint8Array): Uint8Array {
 }
 
 test('a relay connection stamps one transaction id on every STUN message it emits', async () => {
-    const listeners = [await bindListener(), await bindListener()]
     const relay = new WaSctpRelay()
     relay.setSsrc(0x11223344)
     relay.setSubscriptionSsrc(0x55667788)
+
     /**
-     * `connectToRelay` registers the connection in `connections`
-     * synchronously, before its returned promise ever settles: the FNA/UDP
-     * branch `relayInfoFor`'s `isFna: true` selects calls `setupUdpRelay`
-     * and returns before any `await`. Reaching in here only checks that
-     * registration invariant, typed against the real `Connection` shape so
-     * a field rename breaks this test at compile time instead of silently
-     * matching a stale structural type.
+     * `sendStunAllocateOnOpen`/`startKeepalive` are exercised directly
+     * against a fake channel instead of going through `startConnection`: the
+     * real path needs a live WebRTC/ICE negotiation to open `conn.channel`,
+     * which this unit test has no interest in driving. Typed against the
+     * real `Connection` shape so a field rename breaks this test at compile
+     * time instead of silently matching a stale structural type.
      */
-    const internals = relay as unknown as { connections: Map<string, Connection> }
+    const internals = relay as unknown as {
+        sendStunAllocateOnOpen: (conn: Connection, relayInfo: unknown) => void
+        startKeepalive: (connectionId: string, conn: Connection) => void
+    }
+
+    const perConnectionSent: Uint8Array[][] = []
 
     try {
-        for (let i = 0; i < listeners.length; i++) {
-            const before = new Set(internals.connections.keys())
-            const pending = relay.connectToRelay(relayInfoFor(listeners[i].port, i + 1))
-            const addedKey = [...internals.connections.keys()].find((key) => !before.has(key))
-            assert.ok(addedKey, 'connectToRelay must register the connection before it returns')
-            assert.ok(
-                internals.connections.get(addedKey),
-                'the registered connection must still be present'
-            )
+        for (let i = 1; i <= 2; i++) {
+            const relayInfo = relayInfoFor(i)
+            const sent: Uint8Array[] = []
+            perConnectionSent.push(sent)
 
-            const conn = await pending
-            assert.ok(conn)
+            const conn = makeOpenConnection(relayInfo, sent)
+            internals.sendStunAllocateOnOpen(conn, relayInfo)
+            internals.startKeepalive(conn.id, conn)
         }
 
         await waitUntil(
-            () => listeners.every((l) => countAllocates(l.packets) >= LADDER_POSITIONS),
+            () => perConnectionSent.every((sent) => countAllocates(sent) >= LADDER_POSITIONS),
             8_000
         )
     } finally {
         relay.cleanup()
-        for (const listener of listeners) listener.close()
     }
 
     const perConnectionIds: string[] = []
 
-    for (const listener of listeners) {
-        const infos = parseAll(listener.packets)
+    for (const sent of perConnectionSent) {
+        const infos = parseAll(sent)
         const ids = new Set(infos.map((info) => info.transactionId))
 
         assert.equal(ids.size, 1, `expected one transaction id, saw ${[...ids].join(', ')}`)
@@ -189,18 +206,13 @@ test('a relay connection stamps one transaction id on every STUN message it emit
             `expected the no-MI binding check of every ladder position, saw ${bindings.length}`
         )
         /**
-         * `sendStunAllocateOnOpen` only stamps a binding with the ufrag pair
-         * (`v1`/`v2`) when `conn.localUfrag` is set. `setupUdpRelay`, the
-         * branch this FNA connection takes, never assigns `localUfrag`:
-         * that only happens in the WebRTC branch's SDP offer, which an FNA
-         * connection never reaches. A credentialled binding here would mean
-         * the FNA registration ladder started depending on a ufrag it
-         * cannot have.
+         * With a local ufrag set (as the surviving WebRTC path always has,
+         * taken from its own SDP offer), every ladder position also sends
+         * the ufrag-credentialled bindings alongside the no-MI one.
          */
-        assert.equal(
-            credentialled.length,
-            0,
-            `expected no ufrag-credentialled binding on an FNA connection, saw ${credentialled.length}`
+        assert.ok(
+            credentialled.length >= LADDER_POSITIONS,
+            `expected a ufrag-credentialled binding on every ladder position, saw ${credentialled.length}`
         )
         assert.ok(pings.length >= 1, 'expected at least the first keepalive ping')
 

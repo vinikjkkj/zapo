@@ -35,6 +35,7 @@ export interface WaCallManagerConfig {
     logger?: Logger
     maxConcurrentCalls?: number
     useOriginalRelayPort?: boolean
+    useRawUdpTransport?: boolean
 }
 
 export class WaCallManager extends EventEmitter {
@@ -43,6 +44,7 @@ export class WaCallManager extends EventEmitter {
     private readonly logger: Logger
     private readonly maxConcurrentCalls: number
     private readonly useOriginalRelayPort: boolean
+    private readonly useRawUdpTransport: boolean
 
     private readonly calls = new Map<string, WaCallMediaSession>()
 
@@ -57,6 +59,7 @@ export class WaCallManager extends EventEmitter {
             'maxConcurrentCalls'
         )
         this.useOriginalRelayPort = config.useOriginalRelayPort ?? false
+        this.useRawUdpTransport = config.useRawUdpTransport ?? false
     }
 
     async startCall(options: CallOfferOptions): Promise<string> {
@@ -408,6 +411,7 @@ export class WaCallManager extends EventEmitter {
             logger: sessionLogger,
             info,
             useOriginalRelayPort: this.useOriginalRelayPort,
+            useRawUdpTransport: this.useRawUdpTransport,
             delegate: {
                 emitState: (call) => this.emitState(call),
                 emitIncoming: (call) => this.emit('call_incoming', call),
@@ -416,7 +420,16 @@ export class WaCallManager extends EventEmitter {
                 emitInboundVideoRtp: (call, packet) =>
                     this.emit('call_inbound_video_rtp', call, packet),
                 emitInboundVideo: (call, frame) => this.emit('call_inbound_video', call, frame),
-                emitOutboundAudioFinished: (call) => this.emit('call_outbound_audio_finished', call)
+                emitOutboundAudioFinished: (call) =>
+                    this.emit('call_outbound_audio_finished', call),
+                endCall: (call, reason) => {
+                    this.endCall(call.callId, reason).catch((err: unknown) => {
+                        this.logger.warn('ending a call with no media path failed', {
+                            callId: call.callId,
+                            message: toError(err).message
+                        })
+                    })
+                }
             }
         })
 
