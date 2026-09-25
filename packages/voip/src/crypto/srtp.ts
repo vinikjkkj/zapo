@@ -1,4 +1,4 @@
-import { uint8TimingSafeEqual } from 'zapo-js/util'
+import { setBoundedMapEntry, uint8TimingSafeEqual } from 'zapo-js/util'
 
 import { readUInt32BE, writeBigUInt64BE, writeUInt32BE } from '../bytes.js'
 import { RtpHeader, RtpPacket } from '../media/rtp.js'
@@ -256,11 +256,7 @@ export class SrtpSession {
         if (!ctx) {
             ctx = new SrtpContext(this.recvKey, this.recvAuthLen)
             const packet = ctx.unprotect(data)
-            if (this.recvContexts.size >= SrtpSession.MAX_RECV_CONTEXTS) {
-                const oldest = this.recvContexts.keys().next().value
-                if (oldest !== undefined) this.recvContexts.delete(oldest)
-            }
-            this.recvContexts.set(header.ssrc, ctx)
+            setBoundedMapEntry(this.recvContexts, header.ssrc, ctx, SrtpSession.MAX_RECV_CONTEXTS)
             return packet
         }
         return ctx.unprotect(data)
@@ -473,11 +469,7 @@ export class SrtcpSession {
         if (!ctx) {
             ctx = new SrtcpContext(this.keying, this.authTagLen)
             const packet = ctx.unprotect(data)
-            if (this.contexts.size >= SrtcpSession.MAX_RECV_CONTEXTS) {
-                const oldest = this.contexts.keys().next().value
-                if (oldest !== undefined) this.contexts.delete(oldest)
-            }
-            this.contexts.set(ssrc, ctx)
+            setBoundedMapEntry(this.contexts, ssrc, ctx, SrtcpSession.MAX_RECV_CONTEXTS)
             return packet
         }
         return ctx.unprotect(data)
