@@ -9,6 +9,7 @@ import {
     WA_VIDEO_UPGRADE_RESULT,
     WA_VIDEO_UPGRADE_TIMEOUT_MS
 } from '../../signaling/signaling.js'
+import { WaVoipSettings } from '../../signaling/voip-settings.js'
 import { CallMediaType, type PeerVideoStateChange, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
 import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
@@ -237,6 +238,7 @@ test('the peer video state is stored on the call and handed to the delegate', ()
 
 test('a video state that does not advance the transaction id is dropped', () => {
     const harness = createSession()
+    enforceTransactionIds(harness)
 
     harness.session.handleCallVideoState(videoStateStanza({ state: '6', 'transaction-id': '7' }))
     harness.session.handleCallVideoState(videoStateStanza({ state: '1', 'transaction-id': '7' }))
@@ -321,6 +323,16 @@ test('a call negotiated as video keeps the subscription it already has', () => {
 /** The `state` of each `<video>` this side sent, in order, as numbers. */
 function sentStates(harness: Harness): number[] {
     return harness.sentVideoStates.map((node) => Number(node.attrs.state))
+}
+
+/**
+ * Turns on the profile key that makes a repeated transaction id a reason to drop. It is
+ * absent from every call measured so far, so a test that wants the drop has to ask.
+ */
+function enforceTransactionIds(harness: Harness): void {
+    harness.session.applyVoipSettings(
+        WaVoipSettings.fromJson('{"options":{"video_state_txn_id_recv_enforce":"true"}}')
+    )
 }
 
 /** A `<video>` the peer sends, with the transaction ids advancing on their own. */
@@ -667,6 +679,10 @@ test('the peer announcement after our accept clears the replay rule on its own',
     )
     assert.equal(harness.changes.length, before + 1)
 
+    // Everything above holds on the profile the measured calls carry. Dropping a replay
+    // is the part that has to be negotiated, so the rest of this asks for it.
+    enforceTransactionIds(harness)
+
     harness.session.handleCallVideoState(
         videoStateStanza({ state: String(WA_VIDEO_STATE.Enabled), 'transaction-id': '2' })
     )
@@ -763,6 +779,30 @@ test('a request the peer takes back cannot be accepted afterwards', async () => 
 
     assert.deepEqual(sentStates(harness), [], 'nothing was announced to a peer back on audio')
     assert.equal(harness.internals.videoSendPathOpened, false)
+
+    harness.session.cleanup()
+})
+
+/**
+ * The profile key that turns a repeated transaction id into a reason to drop is absent
+ * from every call measured so far, and the reference client handles the message anyway
+ * when it is. Dropping unconditionally would make this side stricter than the client it
+ * is talking to, and a peer that merely retransmits would lose a state change.
+ */
+test('a replay is handled, not dropped, until the profile asks for it', () => {
+    const harness = createSession()
+
+    harness.session.handleCallVideoState(videoStateStanza({ state: '6', 'transaction-id': '4' }))
+    harness.session.handleCallVideoState(videoStateStanza({ state: '1', 'transaction-id': '4' }))
+
+    assert.equal(harness.changes.length, 2, 'the repeat was handled like any other message')
+    assert.equal(harness.call.peerVideoState?.state, WA_VIDEO_STATE.Enabled)
+
+    enforceTransactionIds(harness)
+    harness.session.handleCallVideoState(videoStateStanza({ state: '6', 'transaction-id': '4' }))
+
+    assert.equal(harness.changes.length, 2, 'asked for, the same repeat is dropped')
+    assert.equal(harness.call.peerVideoState?.state, WA_VIDEO_STATE.Enabled)
 
     harness.session.cleanup()
 })

@@ -166,6 +166,9 @@ const APP_DATA_STREAM_VERSION_KEY = 'app_data_stream_version'
 const ENABLE_SFRAME_KEY = 'enable_sframe'
 const ENABLE_SFRAME_RX_KEY = 'enable_sframe_rx'
 
+/** Whether the profile asked for inbound `<video>` transaction ids to be enforced. */
+const VIDEO_STATE_TXN_RECV_ENFORCE_KEY = 'video_state_txn_id_recv_enforce'
+
 /**
  * Whether the server announced SFrame for this call's app data. It takes both gates:
  * with either off the peer expects no trailer and reads the message straight out of the
@@ -457,6 +460,12 @@ export class WaCallMediaSession implements AudioSender {
      * the boolean and not the whole configuration.
      */
     private rtcpRembDisabled = false
+    /**
+     * Off unless the call's profile turns it on, which is how the reference client reads
+     * the same key: with it off a repeated transaction id is counted and logged, and the
+     * message is then handled like any other.
+     */
+    private videoStateTxnEnforced = false
 
     /**
      * Video payload bytes received in the open REMB window, and when it opened.
@@ -646,6 +655,11 @@ export class WaCallMediaSession implements AudioSender {
 
         this.info.voipSettings = settings
         this.rtcpRembDisabled = settings.disableRtcpRemb
+        this.videoStateTxnEnforced = settings.getFlag(
+            VOIP_SETTINGS_OPTIONS_SECTION,
+            VIDEO_STATE_TXN_RECV_ENFORCE_KEY,
+            false
+        )
 
         const intervalMs = settings.rtcpIntervalMs
         if (intervalMs !== null && intervalMs !== this.rtcpIntervalMs) {
@@ -1785,12 +1799,13 @@ export class WaCallMediaSession implements AudioSender {
         }
 
         if (this.isStaleVideoState(change.transactionId)) {
-            this.logger.debug('stale video state dropped', {
+            this.logger.debug('stale video state', {
                 callId: this.info.callId,
                 transactionId: change.transactionId,
-                lastTransactionId: this.info.peerVideoState?.transactionId ?? null
+                lastTransactionId: this.info.peerVideoState?.transactionId ?? null,
+                enforced: this.videoStateTxnEnforced
             })
-            return
+            if (this.videoStateTxnEnforced) return
         }
 
         // The server attaches a second, larger `<voip_settings>` to an upgrade request,
@@ -1819,6 +1834,11 @@ export class WaCallMediaSession implements AudioSender {
      * message the peer sends - answers to our own included - carries a number above the
      * last one it sent. One that does not advance is a replay. The counter this side
      * stamps on what it sends is a separate one and is never compared against this.
+     *
+     * Saying so is not the same as acting on it: whether a replay is dropped is a key of
+     * the negotiated profile, and the calls measured so far do not carry it. Answering
+     * the question apart from enforcing the answer keeps the log honest on a call that
+     * handles the message anyway.
      */
     private isStaleVideoState(transactionId: number | null): boolean {
         if (transactionId === null) return false
