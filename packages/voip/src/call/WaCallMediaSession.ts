@@ -633,8 +633,9 @@ export class WaCallMediaSession implements AudioSender {
 
     /**
      * Stores the configuration that came in the offer and resolves from it what
-     * this session applies: the REMB gate and the RTCP interval. Called once per
-     * call, before any media flows.
+     * this session applies: the REMB gate and the RTCP interval. Called again
+     * mid-call for the larger profile that rides an upgrade request, so the
+     * schedules are rebuilt in place rather than at a point where no media flows.
      *
      * `null` is not an error, it is the common case of an absent or unreadable
      * node, and it leaves the session exactly as it was: same defaults, same
