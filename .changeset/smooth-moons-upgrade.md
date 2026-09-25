@@ -16,7 +16,9 @@ and `cancelVideoUpgrade` cover the other three moves.
 
 Accepting opens the local video sender on a call negotiated as audio: the RTP
 session and the video stream SSRCs the relay has to know about, neither of
-which an audio call has.
+which an audio call has. It then announces that camera to the peer, which is
+its own `<video>` and not part of the accept - without it the peer is told the
+upgrade was accepted and never told the video went live.
 
 The `state` of a `<video>` is now named rather than raw. `WA_VIDEO_STATE` is
 exported and its values are the wire numbers themselves - the wire carries the

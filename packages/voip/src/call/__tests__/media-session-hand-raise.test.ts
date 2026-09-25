@@ -87,10 +87,10 @@ function activate(session: WaCallMediaSession): void {
 }
 
 /** Incoming `<call>` carrying one raise-hand `<user_action>`. */
-function incomingRaiseHand(state: string): BinaryNode {
+function incomingRaiseHand(state: string, from: string = PEER_JID): BinaryNode {
     return {
         tag: 'call',
-        attrs: { from: PEER_JID, id: 'STANZA1' },
+        attrs: { from, id: 'STANZA1' },
         content: [
             {
                 tag: 'user_action',
@@ -106,10 +106,10 @@ function incomingRaiseHand(state: string): BinaryNode {
  * sends with its sender gate off. Written out rather than derived from the one above,
  * since the point is that they differ.
  */
-function incomingLegacyRaiseHand(state: string): BinaryNode {
+function incomingLegacyRaiseHand(state: string, from: string = PEER_JID): BinaryNode {
     return {
         tag: 'call',
-        attrs: { from: PEER_JID, id: 'STANZA9' },
+        attrs: { from, id: 'STANZA9' },
         content: [
             {
                 tag: 'raise_hand',
@@ -276,8 +276,14 @@ test('a hand announced by another device of this account is not a participant ha
     const { session, handRaises } = createSession()
     activate(session)
 
-    session.handleCallUserAction(incomingRaiseHand('1'), SELF_OTHER_DEVICE_JID)
-    session.handleCallRaiseHand(incomingLegacyRaiseHand('1'), SELF_OTHER_DEVICE_JID)
+    session.handleCallUserAction(
+        incomingRaiseHand('1', SELF_OTHER_DEVICE_JID),
+        SELF_OTHER_DEVICE_JID
+    )
+    session.handleCallRaiseHand(
+        incomingLegacyRaiseHand('1', SELF_OTHER_DEVICE_JID),
+        SELF_OTHER_DEVICE_JID
+    )
 
     assert.equal(session.info.raisedHands.size, 0)
     assert.equal(handRaises.length, 0)

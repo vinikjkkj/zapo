@@ -362,12 +362,6 @@ export class WaCallMediaSession implements AudioSender {
      * anything that ends it, ours or its own.
      */
     private peerVideoUpgradeRequested = false
-    /**
-     * Transaction id of the `UpgradeAccept` this side sent, until the reply under it
-     * arrives. That reply is numbered inside *our* transaction rather than by the peer's
-     * counter, so the staleness rule below does not hold for it.
-     */
-    private acceptedUpgradeTransactionId: number | null = null
 
     private firstPacketSent = false
     private acceptedByJid: string | null = null
@@ -1773,9 +1767,9 @@ export class WaCallMediaSession implements AudioSender {
      * Applies a `<video>` from the peer: a mid-call video state change, and with it the
      * audio-to-video upgrade, which has no stanza of its own.
      *
-     * A message whose `transaction-id` does not advance past the last one is dropped, with
-     * the exception {@link isStaleVideoState} carves out. The bridge's ack is transport
-     * only, not an acceptance - that is a `<video state='4'>` coming the other way.
+     * A message whose `transaction-id` does not advance past the last one from this peer is
+     * dropped as a replay. The bridge's ack is transport only, not an acceptance - that is
+     * a `<video state='4'>` coming the other way.
      */
     handleCallVideoState(node: BinaryNode): void {
         const nodeInfo = extractNodeInfo(node)
@@ -1797,9 +1791,6 @@ export class WaCallMediaSession implements AudioSender {
             })
             return
         }
-        if (change.transactionId === this.acceptedUpgradeTransactionId) {
-            this.acceptedUpgradeTransactionId = null
-        }
 
         // The server attaches a second, larger `<voip_settings>` to an upgrade request,
         // carrying the video sections the audio profile lacks. Only the receiver gets one.
@@ -1807,7 +1798,7 @@ export class WaCallMediaSession implements AudioSender {
 
         this.info.peerVideoState = change
         this.ensureVideoReceivePath()
-        this.applyPeerUpgradeState(change.state, change.transactionId)
+        this.applyPeerUpgradeState(change.state)
 
         this.logger.debug('peer video state changed', {
             callId: this.info.callId,
@@ -1821,18 +1812,15 @@ export class WaCallMediaSession implements AudioSender {
     }
 
     /**
-     * Whether an inbound `<video>` repeats a transaction already settled.
+     * Whether an inbound `<video>` repeats a transaction already seen.
      *
-     * `transaction-id` is the sender's own counter, so one that does not advance is a
-     * replay - except for the reply to an accept. That one is numbered under the
-     * *accept's* id, ours and not the peer's, and the two counters run independently from
-     * 1, so it lands on or below the peer's last id whenever this side accepted without
-     * sending anything else first. Dropping it costs the upgrade its only announcement
-     * that the peer's video went live.
+     * `transaction-id` is the sender's own counter and only ever advances, so every
+     * message the peer sends - answers to our own included - carries a number above the
+     * last one it sent. One that does not advance is a replay. The counter this side
+     * stamps on what it sends is a separate one and is never compared against this.
      */
     private isStaleVideoState(transactionId: number | null): boolean {
         if (transactionId === null) return false
-        if (transactionId === this.acceptedUpgradeTransactionId) return false
 
         const last = this.info.peerVideoState?.transactionId ?? null
         return last !== null && transactionId <= last
@@ -1848,7 +1836,7 @@ export class WaCallMediaSession implements AudioSender {
      * outstanding request: left set, a later {@link requestVideoUpgrade} takes the
      * crossing branch and opens our sender against a peer still on audio.
      */
-    private applyPeerUpgradeState(state: number, transactionId: number | null): void {
+    private applyPeerUpgradeState(state: number): void {
         switch (state) {
             case WA_VIDEO_STATE.UpgradeRequest:
             case WA_VIDEO_STATE.UpgradeRequestV2:
@@ -1860,14 +1848,12 @@ export class WaCallMediaSession implements AudioSender {
                 if (this.pendingVideoUpgrade) {
                     this.openVideoSendPath()
                     this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.Accepted)
-                    // `Enabled` goes under the accept's *own* transaction id, not the
-                    // next of our sequence, and only from the side that was accepted.
+                    // Announced once the sender exists, under our own counter: the id of
+                    // an inbound message belongs to the peer's numbering and reusing it
+                    // would emit a number below one we already sent.
                     // Swallowed: the send logs its own failure, and an unhandled
                     // rejection ends the process, taking every live call with it.
-                    void this.sendVideoState(
-                        WA_VIDEO_STATE.Enabled,
-                        transactionId ?? undefined
-                    ).catch(() => {})
+                    void this.sendVideoState(WA_VIDEO_STATE.Enabled).catch(() => {})
                 }
                 return
 
@@ -1888,6 +1874,16 @@ export class WaCallMediaSession implements AudioSender {
 
             case WA_VIDEO_STATE.UpgradeCancel:
             case WA_VIDEO_STATE.UpgradeCancelByTimeout:
+                this.peerVideoUpgradeRequested = false
+                return
+
+            /**
+             * A camera going off, and also how a peer takes back a request nobody
+             * answered in time - measured, and it is what this side sends for that too.
+             * Left outstanding, the next {@link acceptVideoUpgrade} would announce video
+             * against a peer that has gone back to audio and stopped listening.
+             */
+            case WA_VIDEO_STATE.Disabled:
                 this.peerVideoUpgradeRequested = false
                 return
 
@@ -1956,17 +1952,30 @@ export class WaCallMediaSession implements AudioSender {
      * Accepts an upgrade the peer asked for, concluding the handshake and opening the
      * local video sender. No-op when the peer has nothing outstanding: accepting a
      * request never made would announce video on a call the peer thinks is audio.
+     *
+     * The camera is announced after the accept and after the sender is open, the order the
+     * requesting side follows too: `Enabled` claims video is on the wire, so it may not
+     * leave before there is a sender, and the sender may not open before the peer knows
+     * the upgrade was accepted.
      */
     async acceptVideoUpgrade(): Promise<void> {
         if (!this.peerVideoUpgradeRequested) return
 
         this.peerVideoUpgradeRequested = false
-        // Recorded before the send: the peer answers under this id and can answer while
-        // the send is still unwinding.
-        this.videoStateTransactionId++
-        this.acceptedUpgradeTransactionId = this.videoStateTransactionId
-        await this.sendVideoState(WA_VIDEO_STATE.UpgradeAccept, this.acceptedUpgradeTransactionId)
+        try {
+            await this.sendVideoState(WA_VIDEO_STATE.UpgradeAccept)
+        } catch (err) {
+            // The request is still outstanding if the accept never left, and the caller is
+            // told so: cleared here, a retry would no-op and the peer would wait forever.
+            this.peerVideoUpgradeRequested = true
+            throw err
+        }
+
         this.openVideoSendPath()
+        // Best effort, unlike the accept: by this point the peer has accepted and the
+        // sender is open, so rejecting here would report an upgrade that did happen as
+        // having failed. The send logs its own failure.
+        await this.sendVideoState(WA_VIDEO_STATE.Enabled).catch(() => {})
 
         this.logger.debug('video upgrade accepted', { callId: this.info.callId })
     }
@@ -2029,17 +2038,15 @@ export class WaCallMediaSession implements AudioSender {
     }
 
     /**
-     * Sends one `<video>` of our own, numbered with the next transaction id.
+     * Sends one `<video>` of our own, numbered with the next id of our own counter.
      *
-     * `transactionId` overrides the counter for a message in a transaction the peer
-     * opened: measured on the wire, an accept is answered under the accept's own id.
+     * The counter belongs to this side alone and only advances; an id read off an inbound
+     * `<video>` is never reused, since the peer numbers its messages on its own counter and
+     * drops anything of ours that does not move past the last id we sent.
      */
-    private async sendVideoState(state: number, transactionId?: number): Promise<void> {
-        let id = transactionId
-        if (id === undefined) {
-            this.videoStateTransactionId++
-            id = this.videoStateTransactionId
-        }
+    private async sendVideoState(state: number): Promise<void> {
+        this.videoStateTransactionId++
+        const id = this.videoStateTransactionId
         const node = buildVideoStateStanza(
             this.acceptedByJid ?? this.info.peerJid,
             this.info.callId,
@@ -2351,7 +2358,6 @@ export class WaCallMediaSession implements AudioSender {
         // Anything still waiting on a handshake is settled, not left pending forever.
         this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.Cancelled)
         this.peerVideoUpgradeRequested = false
-        this.acceptedUpgradeTransactionId = null
         this.videoSendPathOpened = false
         this.videoStateTransactionId = 0
         this.firstPacketSent = false

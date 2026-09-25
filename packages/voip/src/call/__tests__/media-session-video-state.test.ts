@@ -53,6 +53,11 @@ interface Harness {
     readonly internals: SessionInternals
     /** Every `<video>` child this side put on the wire, in order. */
     readonly sentVideoStates: BinaryNode[]
+    /**
+     * Makes sends reject with this reason, or stops when given `null`. `afterSends` is how
+     * many more succeed first, so a failure can be aimed at one send of a sequence.
+     */
+    readonly failSends: (reason: string | null, afterSends?: number) => void
 }
 
 /**
@@ -64,6 +69,8 @@ function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness 
     const subscriptions: SubscriptionUpdate[] = []
     const sentVideoStates: BinaryNode[] = []
     let resends = 0
+    let sendFailure: string | null = null
+    let sendsBeforeFailure = 0
 
     const call = CallInfo.newIncoming(
         CALL_ID,
@@ -75,6 +82,11 @@ function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness 
     const deps = {
         lowLevelCoordinator: {
             sendNode: async (node: BinaryNode) => {
+                // Thrown before recording: a send that failed never reached the wire.
+                if (sendFailure) {
+                    if (sendsBeforeFailure > 0) sendsBeforeFailure--
+                    else throw new Error(sendFailure)
+                }
                 const inner = (node.content as BinaryNode[] | undefined)?.[0]
                 if (inner?.tag === 'video') sentVideoStates.push(inner)
             }
@@ -121,7 +133,11 @@ function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness 
         subscriptions,
         resendCount: () => resends,
         internals,
-        sentVideoStates
+        sentVideoStates,
+        failSends: (reason, afterSends = 0) => {
+            sendFailure = reason
+            sendsBeforeFailure = afterSends
+        }
     }
 }
 
@@ -365,9 +381,8 @@ test('the peer accept concludes the handshake and opens the local sender', async
     )
     assert.equal(harness.call.stateData.videoOff, false)
 
-    // Captured from two clients of the reference implementation: the side whose
-    // request is accepted answers `Enabled`, and carries the accept's own
-    // transaction id rather than the next of its own sequence.
+    // The accepted side announces its video live, numbered on its own counter: the
+    // accept's id belongs to the peer's numbering and is never reused.
     await Promise.resolve()
     assert.deepEqual(
         sentStates(harness),
@@ -377,8 +392,8 @@ test('the peer accept concludes the handshake and opens the local sender', async
     const announced = harness.sentVideoStates[1]
     assert.equal(
         announced?.attrs['transaction-id'],
-        '1',
-        'the announcement replies under the transaction the accept opened'
+        '2',
+        'the announcement carries the next id of our own counter, not the accept id'
     )
 
     harness.session.cleanup()
@@ -439,19 +454,25 @@ test('a request that crosses one from the peer answers it instead of asking agai
     peerState(harness, WA_VIDEO_STATE.UpgradeRequestV2)
 
     assert.equal(await harness.session.requestVideoUpgrade(), WA_VIDEO_UPGRADE_RESULT.Accepted)
-    assert.deepEqual(sentStates(harness), [4])
+    assert.deepEqual(sentStates(harness), [4, 1])
     assert.equal(harness.internals.videoSendPathOpened, true)
 
     harness.session.cleanup()
 })
 
-test('accepting an upgrade the peer asked for opens the sender', async () => {
+test('accepting an upgrade the peer asked for opens the sender and announces the camera', async () => {
     const harness = createActiveSession()
     peerState(harness, WA_VIDEO_STATE.UpgradeRequest)
 
     await harness.session.acceptVideoUpgrade()
 
-    assert.deepEqual(sentStates(harness), [4])
+    // The camera is announced after the accept, once the sender behind the claim exists,
+    // and each `<video>` carries the next id of this side's own counter.
+    assert.deepEqual(sentStates(harness), [4, 1])
+    assert.deepEqual(
+        harness.sentVideoStates.map((node) => node.attrs['transaction-id']),
+        ['1', '2']
+    )
     assert.equal(harness.internals.videoSendPathOpened, true)
     assert.equal(harness.call.stateData.videoOff, false)
 
@@ -624,37 +645,124 @@ test('a request that times out closes one the peer crossed it with', async (t) =
 })
 
 /**
- * Measured between two official clients: the side whose request was accepted answers with
- * `Enabled` under the **accept's** transaction id. That id is the accepter's, not the
- * sender's, and the two counters run independently from 1 - so when this side accepts
- * without having sent a `<video>` first, the answer arrives on the same number as the
- * peer's request and the plain staleness rule eats it, with the peer's video announced
- * nowhere.
+ * The peer numbers what it sends on its own counter, answers included, so the announcement
+ * that follows our accept already sits above the request it sent and the replay rule passes
+ * it with no exemption of any kind. A genuine repeat of that same announcement advances
+ * nothing and is still dropped.
  */
-test('the answer to our accept is not dropped for repeating the peer transaction id', async () => {
+test('the peer announcement after our accept clears the replay rule on its own', async () => {
     const harness = createActiveSession()
     peerState(harness, WA_VIDEO_STATE.UpgradeRequestV2)
 
     await harness.session.acceptVideoUpgrade()
-
-    assert.equal(harness.sentVideoStates[0]?.attrs['transaction-id'], '1')
-    assert.equal(harness.call.peerVideoState?.transactionId, 1, 'the peer request carried 1 too')
     const before = harness.changes.length
 
-    harness.session.handleCallVideoState(
-        videoStateStanza({ state: String(WA_VIDEO_STATE.Enabled), 'transaction-id': '1' })
-    )
+    peerState(harness, WA_VIDEO_STATE.Enabled)
 
     assert.equal(harness.call.peerVideoState?.state, WA_VIDEO_STATE.Enabled)
+    assert.equal(
+        harness.call.peerVideoState?.transactionId,
+        2,
+        'the peer counter moved past its own request'
+    )
     assert.equal(harness.changes.length, before + 1)
 
-    // One-shot: the exemption is for the answer, not for anything else under that id.
+    harness.session.handleCallVideoState(
+        videoStateStanza({ state: String(WA_VIDEO_STATE.Enabled), 'transaction-id': '2' })
+    )
+
+    assert.equal(harness.changes.length, before + 1, 'the repeat was dropped')
+
+    // Nothing about the id this side stamped on its own accept makes an inbound message
+    // fresh: the two counters are separate spaces and only the peer's is compared here.
     harness.session.handleCallVideoState(
         videoStateStanza({ state: String(WA_VIDEO_STATE.Stopped), 'transaction-id': '1' })
     )
 
     assert.equal(harness.call.peerVideoState?.state, WA_VIDEO_STATE.Enabled)
     assert.equal(harness.changes.length, before + 1)
+
+    harness.session.cleanup()
+})
+
+/**
+ * Second upgrade in the same call: our counter has already passed the id the peer stamps on
+ * its accept, so numbering the announcement under that id would emit a number below one we
+ * sent and the peer would drop it - leaving it unaware our video went live.
+ */
+test('a second upgrade cycle announces video above every id this side has sent', async () => {
+    const harness = createActiveSession()
+
+    const refused = harness.session.requestVideoUpgrade()
+    await Promise.resolve()
+    peerState(harness, WA_VIDEO_STATE.UpgradeReject)
+    assert.equal(await refused, WA_VIDEO_UPGRADE_RESULT.Rejected)
+
+    const accepted = harness.session.requestVideoUpgrade()
+    await Promise.resolve()
+    peerState(harness, WA_VIDEO_STATE.UpgradeAccept)
+    assert.equal(await accepted, WA_VIDEO_UPGRADE_RESULT.Accepted)
+
+    assert.deepEqual(sentStates(harness), [11, 11, 1])
+    assert.deepEqual(
+        harness.sentVideoStates.map((node) => node.attrs['transaction-id']),
+        ['1', '2', '3'],
+        'the announcement advances our counter instead of repeating the accept id 2'
+    )
+
+    harness.session.cleanup()
+})
+
+/**
+ * The two sends an accept makes answer to the caller differently, because by the time the
+ * second goes out the upgrade has already happened.
+ */
+test('an accept that never left is retryable; a lost announcement does not undo one that did', async () => {
+    const failing = createActiveSession()
+    peerState(failing, WA_VIDEO_STATE.UpgradeRequestV2)
+
+    failing.failSends('offline')
+    await assert.rejects(() => failing.session.acceptVideoUpgrade(), /offline/)
+    assert.deepEqual(sentStates(failing), [], 'nothing reached the wire')
+    assert.equal(failing.internals.videoSendPathOpened, false, 'no sender on a lost accept')
+
+    /**
+     * The request has to still be outstanding: had accepting cleared it, this retry would
+     * no-op and the peer would wait forever on a request nobody ever answers.
+     */
+    failing.failSends(null)
+    await failing.session.acceptVideoUpgrade()
+    assert.deepEqual(sentStates(failing), [WA_VIDEO_STATE.UpgradeAccept, WA_VIDEO_STATE.Enabled])
+    assert.equal(failing.internals.videoSendPathOpened, true)
+    failing.session.cleanup()
+
+    const announcing = createActiveSession()
+    peerState(announcing, WA_VIDEO_STATE.UpgradeRequestV2)
+
+    // Only the announcement fails, so the accept is out and the sender is open.
+    announcing.failSends('offline', 1)
+    await announcing.session.acceptVideoUpgrade()
+
+    assert.deepEqual(sentStates(announcing), [WA_VIDEO_STATE.UpgradeAccept])
+    assert.equal(announcing.internals.videoSendPathOpened, true)
+    announcing.session.cleanup()
+})
+
+/**
+ * Measured against the reference client: a request nobody answered in time is taken back
+ * with `Disabled`, not with either cancel code - which is also what this side sends when
+ * its own guard timer fires.
+ */
+test('a request the peer takes back cannot be accepted afterwards', async () => {
+    const harness = createActiveSession()
+
+    peerState(harness, WA_VIDEO_STATE.UpgradeRequestV2)
+    peerState(harness, WA_VIDEO_STATE.Disabled)
+
+    await harness.session.acceptVideoUpgrade()
+
+    assert.deepEqual(sentStates(harness), [], 'nothing was announced to a peer back on audio')
+    assert.equal(harness.internals.videoSendPathOpened, false)
 
     harness.session.cleanup()
 })
