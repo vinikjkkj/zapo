@@ -1453,10 +1453,10 @@ export class WaCallMediaSession implements AudioSender {
 
         /**
          * A repeat delivery of this ack carries the same ~34 KB base64+JSON payload:
-         * applying it twice is harmless, decoding it twice is not free. The skip assumes
-         * the node never changes within a call - the server ships an audio and a video
-         * profile, so a second, different node arriving mid-call is dropped here and the
-         * call keeps the parameters it started on. Not observed either way.
+         * applying it twice is harmless, decoding it twice is not free. The skip is for
+         * that repeat alone. The other profile the server ships, the larger video one,
+         * does reach a call mid-flight - it rides the upgrade request and is applied
+         * where that is read, not here.
          */
         if (!this.info.voipSettings) {
             this.applyVoipSettings(parseVoipSettings(node, this.logger))
@@ -1783,8 +1783,9 @@ export class WaCallMediaSession implements AudioSender {
      * audio-to-video upgrade, which has no stanza of its own.
      *
      * A message whose `transaction-id` does not advance past the last one from this peer is
-     * dropped as a replay. The bridge's ack is transport only, not an acceptance - that is
-     * a `<video state='4'>` coming the other way.
+     * a replay, and is dropped only on a call whose profile asks for that - otherwise it is
+     * noted and handled like any other. The bridge's ack is transport only, not an
+     * acceptance - that is a `<video state='4'>` coming the other way.
      */
     handleCallVideoState(node: BinaryNode): void {
         const nodeInfo = extractNodeInfo(node)
