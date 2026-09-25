@@ -268,17 +268,6 @@ export class WaSctpRelay extends EventEmitter {
         return authTokenId ? `${base}#${authTokenId}` : base
     }
 
-    async connectToRelay(relayInfo: RelayInfo): Promise<Connection | null> {
-        const existing = this.connections.get(
-            this.makeConnectionId(relayInfo.ip, relayInfo.port, relayInfo.authTokenId)
-        )
-        if (existing && existing.state === ConnectionState.Open) {
-            return existing
-        }
-
-        return this.startConnection(this.registerConnection(relayInfo))
-    }
-
     /**
      * Puts a leg in `connections` as `Connecting`, before anything is dialled.
      *

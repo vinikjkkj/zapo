@@ -150,7 +150,7 @@ test('a relay connection stamps one transaction id on every STUN message it emit
 
     /**
      * `sendStunAllocateOnOpen`/`startKeepalive` are exercised directly
-     * against a fake channel instead of going through `connectToRelay`: the
+     * against a fake channel instead of going through `startConnection`: the
      * real path needs a live WebRTC/ICE negotiation to open `conn.channel`,
      * which this unit test has no interest in driving. Typed against the
      * real `Connection` shape so a field rename breaks this test at compile
