@@ -145,39 +145,22 @@ test('a screen share of stream 0 sends on the captured camera ssrc', () => {
 })
 
 /**
- * The trap, pinned: the stream layer of the descriptor is not a stream index, and
- * deriving from it produces an SSRC no peer resolves back to this device. The peer
- * drops such a packet as unknown, so nothing but this test reports the mistake.
+ * The trap, pinned where it can be caught. Deriving from a stream layer does miss the
+ * camera SSRC, but asserting that proves nothing: HKDF over a different salt always
+ * differs, so the assertion would hold whatever the implementation did. What can go
+ * wrong is a layer being written into the slot table, so that is what is checked.
  */
-test('deriving a screen share from its stream layer misses the camera ssrc', () => {
-    const camera = CAPTURED_VECTORS[3]
+test('no ssrc slot is a screen-share stream layer', () => {
+    const layers: readonly number[] = Object.values(SCREEN_SHARE_STREAM_LAYER)
+    const slots = [
+        ...Object.values(WA_SSRC_SLOT.AUDIO),
+        ...Object.values(WA_SSRC_SLOT.VIDEO),
+        ...Object.values(WA_SSRC_SLOT.SCREEN_SHARE),
+        ...Object.values(WA_SSRC_SLOT.APP_DATA),
+        ...WA_VIDEO_CALL_SSRC_SLOTS
+    ]
 
-    assert.notEqual(
-        generateSecureSsrc(camera.callId, DEVICE_JID, SCREEN_SHARE_STREAM_LAYER.STREAM_0),
-        camera.ssrc
-    )
-    assert.notEqual(
-        generateSecureSsrc(camera.callId, DEVICE_JID, SCREEN_SHARE_STREAM_LAYER.STREAM_1),
-        camera.ssrc
-    )
-})
-
-/**
- * The same trap on the other input: a stream index of its own goes into the
- * identifier as a `_<n>` suffix on the device jid, which the secondary video stream
- * uses and a screen share of stream 0 must not.
- */
-test('suffixing the jid with a screen-share stream layer misses the camera ssrc', () => {
-    const camera = CAPTURED_VECTORS[3]
-    const suffixed = readUInt32LE(
-        hkdf(
-            TEXT_ENCODER.encode(camera.callId),
-            new Uint8Array([camera.slot, 0, 0, 0]),
-            TEXT_ENCODER.encode(`${DEVICE_JID}_${SCREEN_SHARE_STREAM_LAYER.STREAM_0}`),
-            4
-        ),
-        0
-    )
-
-    assert.notEqual(suffixed, camera.ssrc)
+    for (const slot of slots) {
+        assert.ok(!layers.includes(slot), `slot ${slot} is a wire stream layer, not a slot`)
+    }
 })

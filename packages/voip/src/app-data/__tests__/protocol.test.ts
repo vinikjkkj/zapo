@@ -89,6 +89,33 @@ test('decodeAppDataPayload rejects truncated bytes instead of throwing', () => {
     assert.equal(decodeAppDataPayload(new Uint8Array([0xff])), null)
 })
 
+/**
+ * The ceiling on messages per payload is a local guard, not a protocol constant, so what
+ * it leaves unread is reported instead of vanishing.
+ */
+test('decodeAppDataPayload reports a list cut short by the local ceiling', () => {
+    const parts: Uint8Array[] = []
+    for (let id = 1; id <= 33; id++) {
+        parts.push(encodeReactionPayload({ transactionId: BigInt(id), reaction: THUMBS_UP }))
+    }
+    const merged = new Uint8Array(parts.reduce((total, part) => total + part.length, 0))
+    let offset = 0
+    for (const part of parts) {
+        merged.set(part, offset)
+        offset += part.length
+    }
+
+    const decoded = decodeAppDataPayload(merged)
+
+    assert.equal(decoded?.items.length, 32)
+    assert.equal(decoded?.truncated, true)
+    assert.equal(
+        decodeAppDataPayload(encodeReactionPayload({ transactionId: 1n, reaction: THUMBS_UP }))
+            ?.truncated,
+        false
+    )
+})
+
 test('decodeAppDataPayload reads several reactions out of one payload', () => {
     const first = encodeReactionPayload({ transactionId: 1n, reaction: THUMBS_UP })
     const second = encodeReactionPayload({ transactionId: 2n, reaction: THUMBS_UP })

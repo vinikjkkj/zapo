@@ -2,7 +2,7 @@
 '@zapo-js/voip': minor
 ---
 
-Add outgoing screen share: `client.voip.setScreenShare(callId, sharing, surface?)` announces the share over the `<screen_share>` request and the `<screen>` state, keeps the local state on `CallInfo.stateData.screenSharing`, and refuses a call that carries no video or a group call, which WhatsApp's own clients refuse to share in.
+Add outgoing screen share: `client.voip.setScreenShare(callId, sharing)` announces the share on a `<screen_share>` request, keeps the local state on `CallInfo.stateData.screenSharing`, and refuses a group call or a call that carries no video, which WhatsApp's own clients refuse to share in. That request is the whole of what goes out - four attributes wide, no geometry and no second state node.
 
 The share travels on the video stream the call already has, on the same SSRCs and the same payload type, so what changes is only what the peer is told the picture is: the screen replaces the camera for as long as the share lasts, which is the mechanism of the announced version (`WA_SCREEN_SHARE_SEND_VERSION`, `V2`). No media path and no relay registration changes when a share starts, and whatever is fed to `feedLiveVideo` during one is what the peer renders as the screen.
 

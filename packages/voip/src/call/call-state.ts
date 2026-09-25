@@ -264,6 +264,11 @@ export class CallInfo {
                 s.state = CallState.Ended
                 s.endedAt = new Date()
                 s.endReason = transition.reason
+                // In-call affordances do not outlive the call: a hand still up or a share
+                // still on would be read as live on a call that has none.
+                s.handRaised = false
+                s.screenSharing = false
+                this.raisedHands.clear()
                 break
 
             case 'hold':

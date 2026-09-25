@@ -25,7 +25,9 @@ function encodeVarint(value: bigint): Uint8Array {
 }
 
 function encodeTag(fieldNumber: number, wireType: number): Uint8Array {
-    return encodeVarint(BigInt((fieldNumber << 3) | wireType))
+    // Widened before the shift: `<<` on a `number` is a 32-bit operation and truncates a
+    // field number large enough to reach the sign bit.
+    return encodeVarint((BigInt(fieldNumber) << 3n) | BigInt(wireType))
 }
 
 export function encodeProtoVarintField(fieldNumber: number, value: bigint): Uint8Array {

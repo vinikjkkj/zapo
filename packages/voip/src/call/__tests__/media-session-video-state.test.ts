@@ -569,3 +569,92 @@ test('tearing the call down settles a handshake still waiting on the peer', asyn
 
     assert.equal(await pending, WA_VIDEO_UPGRADE_RESULT.Cancelled)
 })
+
+/**
+ * Every code that ends the handshake ends the peer's request with it. Left set, the next
+ * `requestVideoUpgrade` takes the crossing branch and accepts a request nobody holds -
+ * opening this side's video sender against a peer that thinks the call is audio.
+ */
+test('a terminal code leaves the peer with no request to accept', async () => {
+    const terminal = [
+        WA_VIDEO_STATE.UpgradeReject,
+        WA_VIDEO_STATE.UpgradeRejectByTimeout,
+        WA_VIDEO_STATE.Error
+    ]
+
+    for (const state of terminal) {
+        const harness = createActiveSession()
+        peerState(harness, WA_VIDEO_STATE.UpgradeRequestV2)
+        peerState(harness, state)
+
+        await harness.session.acceptVideoUpgrade()
+
+        assert.deepEqual(sentStates(harness), [], `state ${state} left a request outstanding`)
+        assert.equal(harness.internals.videoSendPathOpened, false)
+
+        // And the next request opens a handshake instead of answering the dead one.
+        const next = harness.session.requestVideoUpgrade()
+        await Promise.resolve()
+        assert.deepEqual(sentStates(harness), [11])
+        await harness.session.cancelVideoUpgrade()
+        assert.equal(await next, WA_VIDEO_UPGRADE_RESULT.Cancelled)
+
+        harness.session.cleanup()
+    }
+})
+
+test('a request that times out closes one the peer crossed it with', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+    const harness = createActiveSession()
+
+    const pending = harness.session.requestVideoUpgrade()
+    await Promise.resolve()
+    peerState(harness, WA_VIDEO_STATE.UpgradeRequestV2)
+
+    t.mock.timers.tick(WA_VIDEO_UPGRADE_TIMEOUT_MS)
+    assert.equal(await pending, WA_VIDEO_UPGRADE_RESULT.TimedOut)
+    await Promise.resolve()
+
+    await harness.session.acceptVideoUpgrade()
+
+    assert.deepEqual(sentStates(harness), [11, 0], 'the downgrade was not followed by an accept')
+    assert.equal(harness.internals.videoSendPathOpened, false)
+
+    harness.session.cleanup()
+})
+
+/**
+ * Measured between two official clients: the side whose request was accepted answers with
+ * `Enabled` under the **accept's** transaction id. That id is the accepter's, not the
+ * sender's, and the two counters run independently from 1 - so when this side accepts
+ * without having sent a `<video>` first, the answer arrives on the same number as the
+ * peer's request and the plain staleness rule eats it, with the peer's video announced
+ * nowhere.
+ */
+test('the answer to our accept is not dropped for repeating the peer transaction id', async () => {
+    const harness = createActiveSession()
+    peerState(harness, WA_VIDEO_STATE.UpgradeRequestV2)
+
+    await harness.session.acceptVideoUpgrade()
+
+    assert.equal(harness.sentVideoStates[0]?.attrs['transaction-id'], '1')
+    assert.equal(harness.call.peerVideoState?.transactionId, 1, 'the peer request carried 1 too')
+    const before = harness.changes.length
+
+    harness.session.handleCallVideoState(
+        videoStateStanza({ state: String(WA_VIDEO_STATE.Enabled), 'transaction-id': '1' })
+    )
+
+    assert.equal(harness.call.peerVideoState?.state, WA_VIDEO_STATE.Enabled)
+    assert.equal(harness.changes.length, before + 1)
+
+    // One-shot: the exemption is for the answer, not for anything else under that id.
+    harness.session.handleCallVideoState(
+        videoStateStanza({ state: String(WA_VIDEO_STATE.Stopped), 'transaction-id': '1' })
+    )
+
+    assert.equal(harness.call.peerVideoState?.state, WA_VIDEO_STATE.Enabled)
+    assert.equal(harness.changes.length, before + 1)
+
+    harness.session.cleanup()
+})

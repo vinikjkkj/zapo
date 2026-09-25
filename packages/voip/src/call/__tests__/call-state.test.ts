@@ -140,6 +140,26 @@ test('illegal transitions throw InvalidTransition', () => {
     )
 })
 
+/**
+ * The in-call affordances are live state, not a record of the call: a hand still up or a
+ * share still on after the call ended reads as somebody currently holding one.
+ */
+test('terminated puts every hand down and stops the share', () => {
+    const call = CallInfo.newOutgoing(ID, 'peer@lid', 'me@lid', CallMediaType.Video)
+    call.applyTransition({ type: 'offer_sent' })
+    call.applyTransition({ type: 'remote_accepted' })
+    call.applyTransition({ type: 'media_connected' })
+    call.applyTransition({ type: 'hand_raise_changed', raised: true })
+    call.applyTransition({ type: 'screen_share_changed', sharing: true })
+    call.raisedHands.add('peer:1@lid')
+
+    call.applyTransition({ type: 'terminated', reason: EndCallReason.UserEnded })
+
+    assert.equal(call.stateData.handRaised, false)
+    assert.equal(call.stateData.screenSharing, false)
+    assert.equal(call.raisedHands.size, 0)
+})
+
 test('terminated cannot fire twice', () => {
     const call = CallInfo.newOutgoing(ID, 'peer@lid', 'me@lid', CallMediaType.Audio)
     call.applyTransition({ type: 'terminated', reason: EndCallReason.Failed })

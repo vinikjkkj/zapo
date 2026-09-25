@@ -79,6 +79,12 @@ export class WaAppDataStream {
     private outgoing: OutgoingReaction | null = null
     private retransmitTimer: ReturnType<typeof setInterval> | null = null
 
+    /**
+     * Dedup keys of the reactions already surfaced, each one an inbound SSRC paired with a
+     * transaction id. The SSRC is part of the key because the id only counts within one
+     * sender: every device numbers its own reactions from 1, so two devices of the peer
+     * open a call with the same id and a shared set would swallow the second reaction.
+     */
     private readonly seenTransactions = new Set<string>()
 
     /**
@@ -182,10 +188,11 @@ export class WaAppDataStream {
     }
 
     /**
-     * Reads one decrypted app-data RTP payload and returns the reactions in it not seen
-     * before, so a caller surfaces each of the peer's reactions once per burst.
+     * Reads one decrypted app-data RTP payload, arrived on `ssrc`, and returns the
+     * reactions in it not seen before, so a caller surfaces each of the peer's reactions
+     * once per burst.
      */
-    receive(payload: Uint8Array): readonly WaCallReaction[] {
+    receive(payload: Uint8Array, ssrc: number): readonly WaCallReaction[] {
         if (payload.length === 0) return EMPTY_REACTIONS
 
         const decoded = decodeAppDataPayload(payload)
@@ -201,11 +208,18 @@ export class WaAppDataStream {
             return EMPTY_REACTIONS
         }
 
+        if (decoded.truncated) {
+            this.logger.debug('app data payload carried more messages than are read', {
+                ssrc: `0x${ssrc.toString(16)}`,
+                read: decoded.items.length
+            })
+        }
+
         const fresh: WaCallReaction[] = []
         for (const item of decoded.items) {
             const reaction = item.reaction
             if (!reaction) continue
-            const key = reaction.transactionId.toString()
+            const key = `${ssrc}:${reaction.transactionId}`
             if (this.seenTransactions.has(key)) continue
             this.rememberTransaction(key)
             this.rxReactionCount++
@@ -242,6 +256,8 @@ export class WaAppDataStream {
         this.retransmitTimer = setInterval(() => {
             this.onRetransmissionTick()
         }, this.retransmissionIntervalMs)
+        // A best-effort retransmission must not keep an otherwise idle program alive.
+        this.retransmitTimer.unref?.()
     }
 
     private onRetransmissionTick(): void {
@@ -292,6 +308,7 @@ export class WaAppDataStream {
             this.txReactionErrorCount++
             this.logger.debug('failed to send app data rtp packet', {
                 ssrc: `0x${this.ssrc.toString(16)}`,
+                errors: this.txReactionErrorCount,
                 message: toError(err).message
             })
             return false

@@ -11,6 +11,8 @@ import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMe
 const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 const PEER_JID = '50062877036657:76@lid'
 const SELF_JID = '184478207058035:1@lid'
+/** Another device of this same account, whose hand is not a participant's. */
+const SELF_OTHER_DEVICE_JID = '184478207058035:2@lid'
 
 /**
  * Local memory bound on tracked raised hands, written out rather than imported so
@@ -39,6 +41,9 @@ function createSession(sendNode?: (node: BinaryNode) => Promise<void>): HandRais
     const call = CallInfo.newOutgoing(ID, PEER_JID, SELF_JID, CallMediaType.Audio)
     const session = new WaCallMediaSession({
         deps: {
+            authClient: {
+                getCurrentCredentials: () => ({ meJid: SELF_JID, meLid: SELF_JID })
+            },
             lowLevelCoordinator: {
                 sendNode:
                     sendNode ??
@@ -260,4 +265,25 @@ test('raised-hand tracking stops growing at its bound', () => {
     session.handleCallUserAction(incomingRaiseHand('1'), 'overflow:1@lid')
     assert.equal(session.info.raisedHands.size, MAX_TRACKED_RAISED_HANDS)
     assert.equal(handRaises.length, MAX_TRACKED_RAISED_HANDS)
+})
+
+/**
+ * The announcement reaches every device of the account, so this side sees its own hand come
+ * back. Taken as a participant's it lists this account among the remote hands; `<mute_v2>`
+ * drops the same echo, and the local hand is `stateData.handRaised`.
+ */
+test('a hand announced by another device of this account is not a participant hand', () => {
+    const { session, handRaises } = createSession()
+    activate(session)
+
+    session.handleCallUserAction(incomingRaiseHand('1'), SELF_OTHER_DEVICE_JID)
+    session.handleCallRaiseHand(incomingLegacyRaiseHand('1'), SELF_OTHER_DEVICE_JID)
+
+    assert.equal(session.info.raisedHands.size, 0)
+    assert.equal(handRaises.length, 0)
+    assert.equal(session.info.stateData.handRaised, false)
+
+    session.handleCallUserAction(incomingRaiseHand('1'), PEER_JID)
+
+    assert.deepEqual([...session.info.raisedHands], [PEER_JID])
 })

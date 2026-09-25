@@ -60,6 +60,8 @@ export interface WaAppDataItem {
 export interface WaAppDataPayload {
     readonly shape: 'payloads' | 'message'
     readonly items: readonly WaAppDataItem[]
+    /** Whether the local {@link MAX_MESSAGES_PER_PAYLOAD} guard cut the list short. */
+    readonly truncated: boolean
 }
 
 interface VarintRead {
@@ -208,16 +210,20 @@ function decodeAppDataMessage(data: Uint8Array, strict: boolean): WaAppDataItem 
     return arEffect ? { arEffect } : null
 }
 
-function decodeAsPayloads(data: Uint8Array): WaAppDataItem[] {
+function decodeAsPayloads(data: Uint8Array): { items: WaAppDataItem[]; truncated: boolean } {
     const items: WaAppDataItem[] = []
+    let truncated = false
     for (const field of readFields(data)) {
         if (field.fieldNumber !== APP_DATA_PAYLOADS_MESSAGES) continue
         if (field.wireType !== WIRE_TYPE_LENGTH_DELIMITED) continue
-        if (items.length >= MAX_MESSAGES_PER_PAYLOAD) break
+        if (items.length >= MAX_MESSAGES_PER_PAYLOAD) {
+            truncated = true
+            break
+        }
         const item = decodeAppDataMessage(field.bytes, false)
         if (item) items.push(item)
     }
-    return items
+    return { items, truncated }
 }
 
 /**
@@ -229,14 +235,16 @@ function decodeAsPayloads(data: Uint8Array): WaAppDataItem[] {
 export function decodeAppDataPayload(data: Uint8Array): WaAppDataPayload | null {
     try {
         const nested = decodeAsPayloads(data)
-        if (nested.length > 0) return { shape: 'payloads', items: nested }
+        if (nested.items.length > 0) {
+            return { shape: 'payloads', items: nested.items, truncated: nested.truncated }
+        }
     } catch {
         // A payload that is not a valid list is not thereby an invalid message.
     }
 
     try {
         const flat = decodeAppDataMessage(data, true)
-        if (flat) return { shape: 'message', items: [flat] }
+        if (flat) return { shape: 'message', items: [flat], truncated: false }
     } catch {
         return null
     }

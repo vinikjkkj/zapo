@@ -148,8 +148,8 @@ export class WaVoipCoordinator {
      * Start or stop sharing the screen on `callId`, announcing it to the peer. Not a second
      * stream: the screen replaces the camera on the call's existing video stream, so
      * whatever reaches {@link feedLiveVideo} from here on is what the peer renders as the
-     * share. Throws on an unknown `callId`, a group call, a call with no video yet
-     * ({@link requestVideoUpgrade} first) or a failed send.
+     * share. Throws on an unknown `callId` or a failed send, and - starting a share only -
+     * on a group call or one with no video yet ({@link requestVideoUpgrade} first).
      */
     async setScreenShare(callId: string, sharing: boolean): Promise<void> {
         return this.manager.setScreenShare(callId, sharing)
