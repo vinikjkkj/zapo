@@ -6,7 +6,9 @@ import { createNoopLogger } from 'zapo-js'
 import { TRUE_WEB_CLIENT_RELAY_PORT } from '../../relay/WaSctpRelay.js'
 import { CallMediaType, type RelayEndpoint, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
-import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
+import { WaCallMediaSession } from '../WaCallMediaSession.js'
+
+import { createSessionDelegate } from './_helpers.js'
 
 const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
@@ -28,15 +30,7 @@ function createSession(useOriginalRelayPort = false): {
         logger: createNoopLogger(),
         info: call,
         useOriginalRelayPort,
-        delegate: {
-            emitState: () => {},
-            emitIncoming: () => {},
-            emitEnded: () => {},
-            emitInboundAudio: () => {},
-            emitInboundVideoRtp: () => {},
-            emitInboundVideo: () => {},
-            emitOutboundAudioFinished: () => {}
-        } satisfies WaCallMediaSessionDelegate
+        delegate: createSessionDelegate()
     })
 
     const configured: ConfiguredRelay[] = []

@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { WaSctpRelay } from '../WaSctpRelay.js'
+import { type RelayInfo, WaSctpRelay } from '../WaSctpRelay.js'
 
-function relayInfoWithCredentials(token: string, authToken: string | undefined, key: string) {
+function relayInfoWithCredentials(
+    token: string,
+    authToken: string | undefined,
+    key: string
+): RelayInfo {
     return {
         id: 'relay-credential-probe',
         ip: '127.0.0.1',
@@ -35,10 +39,10 @@ function baseOfferSdp(): string {
     )
 }
 
-function callModifySdpForRelay(sdp: string, relayInfo: unknown): string {
+function callModifySdpForRelay(sdp: string, relayInfo: RelayInfo): string {
     const relay = new WaSctpRelay()
     const internals = relay as unknown as {
-        modifySdpForRelay: (sdp: string, relayInfo: unknown) => string
+        modifySdpForRelay: (sdp: string, relayInfo: RelayInfo) => string
     }
     return internals.modifySdpForRelay(sdp, relayInfo)
 }

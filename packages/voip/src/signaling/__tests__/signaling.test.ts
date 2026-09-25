@@ -148,7 +148,7 @@ function createOfferStores(): WaVoipStores {
     } as unknown as WaVoipStores
 }
 
-async function buildOffer(isVideo = true): Promise<BinaryNode> {
+async function buildOffer(isVideo: boolean): Promise<BinaryNode> {
     return buildOfferStanza(
         createOfferDeps(),
         createOfferStores(),

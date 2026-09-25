@@ -420,7 +420,16 @@ export class WaCallManager extends EventEmitter {
                 emitInboundVideoRtp: (call, packet) =>
                     this.emit('call_inbound_video_rtp', call, packet),
                 emitInboundVideo: (call, frame) => this.emit('call_inbound_video', call, frame),
-                emitOutboundAudioFinished: (call) => this.emit('call_outbound_audio_finished', call)
+                emitOutboundAudioFinished: (call) =>
+                    this.emit('call_outbound_audio_finished', call),
+                endCall: (call, reason) => {
+                    this.endCall(call.callId, reason).catch((err: unknown) => {
+                        this.logger.warn('ending a call with no media path failed', {
+                            callId: call.callId,
+                            message: toError(err).message
+                        })
+                    })
+                }
             }
         })
 

@@ -60,10 +60,11 @@ function relayInfoFor(index: number) {
 
 /**
  * A `channel` stand-in that records every frame `sendToChannel` writes to it
- * without any real transport underneath. Every relay connection, FNA or not,
- * now goes through this exact same `conn.channel` path (there is no separate
- * transport to special-case), so exercising `sendStunAllocateOnOpen` and
- * `startKeepalive` against a fake channel is representative of all of them.
+ * without any real transport underneath. This covers the data channel legs
+ * only: the connections built here carry no `rawLeg`, and a raw UDP leg takes
+ * the other branch of `isConnOpen`/`sendToChannel` and registers with a bare
+ * allocate instead of this binding ladder. That its allocate and its ping
+ * share one transaction id is asserted in `raw-udp-relay.test.ts`.
  */
 function fakeChannel(sent: Uint8Array[]): Connection['channel'] {
     return {

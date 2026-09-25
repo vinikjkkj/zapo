@@ -252,17 +252,32 @@ test('what the relay sends back reaches the media pipeline unchanged', async () 
  * heuristic would have picked - the ones WebRTC cannot reach - are the ones
  * measured to accept the allocate, answer every ping and forward none of the
  * peer's media, so the transport stays off until it is asked for by name.
+ *
+ * The enabled relay beside it is the clock: its registration is what proves the
+ * default one had long enough to open a socket and opened none. A fixed sleep
+ * would assume that instead, and would keep passing if the raw path only got
+ * slower to register.
  */
 test('the raw transport stays off unless it is asked for', async () => {
-    const fake = await startFakeRelay()
-    const relay = new WaSctpRelay()
+    const offFake = await startFakeRelay()
+    const onFake = await startFakeRelay()
+    const off = new WaSctpRelay()
+    const on = new WaSctpRelay({ useRawUdpTransport: true })
 
     try {
-        await configureRawRelay(relay, fake.port)
-        await new Promise<void>((resolve) => setTimeout(resolve, 300))
-        assert.deepEqual(fake.received, [], 'a default relay must not open a raw socket')
+        await Promise.all([
+            configureRawRelay(off, offFake.port),
+            configureRawRelay(on, onFake.port)
+        ])
+        assert.ok(
+            await waitFor(() => onFake.received.length >= 1, 3_000),
+            'the enabled transport never registered, so the comparison proves nothing'
+        )
+        assert.deepEqual(offFake.received, [], 'a default relay must not open a raw socket')
     } finally {
-        relay.cleanup()
-        await fake.close()
+        off.cleanup()
+        on.cleanup()
+        await offFake.close()
+        await onFake.close()
     }
 })

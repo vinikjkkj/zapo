@@ -15,7 +15,9 @@ import { RtpHeader, RtpPacket, RtpSession, WA_RTP_EXTENSION_PROFILE } from '../.
 import { parseVoipSettings } from '../../signaling/voip-settings.js'
 import { CallMediaType, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
-import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
+import { WaCallMediaSession } from '../WaCallMediaSession.js'
+
+import { createSessionDelegate } from './_helpers.js'
 
 const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
@@ -127,15 +129,7 @@ function createSession(settings?: unknown): Harness {
         deps: {} as unknown as WaVoipDeps,
         logger: createNoopLogger(),
         info: CallInfo.newOutgoing(ID, 'peer@lid', 'me@lid', CallMediaType.Video),
-        delegate: {
-            emitState: () => {},
-            emitIncoming: () => {},
-            emitEnded: () => {},
-            emitInboundAudio: () => {},
-            emitInboundVideoRtp: () => {},
-            emitInboundVideo: () => {},
-            emitOutboundAudioFinished: () => {}
-        } satisfies WaCallMediaSessionDelegate
+        delegate: createSessionDelegate()
     })
 
     if (settings !== undefined) {

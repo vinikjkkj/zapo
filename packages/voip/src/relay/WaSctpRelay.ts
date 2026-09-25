@@ -69,7 +69,7 @@ enum ConnectionState {
     Failed = 'Failed'
 }
 
-interface RelayInfo {
+export interface RelayInfo {
     id: string
     ip: string
     port: number
@@ -527,6 +527,7 @@ export class WaSctpRelay extends EventEmitter {
         if (!conn || conn.state === ConnectionState.Failed) return
 
         this.logger.warn('sctp connection failed', { connectionId: conn.id, reason })
+        const wasConnected = this.releaseConnected(conn)
         conn.state = ConnectionState.Failed
 
         this.stopKeepalive(conn.id)
@@ -537,6 +538,33 @@ export class WaSctpRelay extends EventEmitter {
         closeQuietly(conn.rawLeg, this.logger)
 
         this.connections.delete(conn.id)
+        if (wasConnected) this.announceLastLegLost(reason)
+    }
+
+    /**
+     * Gives back the connected count a leg took when it opened, and reports
+     * whether it had one to give. Both the WebRTC and the raw path count one
+     * on open, so every way out of `Open` has to pass through here or
+     * `getConnectedCount` drifts upwards.
+     */
+    private releaseConnected(conn: Connection): boolean {
+        if (conn.state !== ConnectionState.Open) return false
+        this.stats.connected = Math.max(0, this.stats.connected - 1)
+        return true
+    }
+
+    /**
+     * Tells the owner the call has no media path left at all.
+     *
+     * Legs die on their own and a call runs several, so losing one of four is
+     * not losing the call: this fires only when the leg that went down was the
+     * last one open. `cleanup` never comes through here, so tearing a call down
+     * stays silent.
+     */
+    private announceLastLegLost(reason: string): void {
+        if (this.hasConnection()) return
+        this.logger.warn('relay lost its last connected leg', { reason })
+        this.emit('relay_lost', { reason })
     }
 
     private isConnOpen(conn: Connection): boolean {
@@ -858,6 +886,7 @@ export class WaSctpRelay extends EventEmitter {
         const conn = this.connections.get(connectionId)
         if (!conn) return
 
+        const wasConnected = this.releaseConnected(conn)
         conn.state = ConnectionState.Closed
 
         this.stopKeepalive(connectionId)
@@ -866,8 +895,8 @@ export class WaSctpRelay extends EventEmitter {
         closeQuietly(conn.peerConnection, this.logger)
         closeQuietly(conn.rawLeg, this.logger)
 
-        this.stats.connected = Math.max(0, this.stats.connected - 1)
         this.connections.delete(connectionId)
+        if (wasConnected) this.announceLastLegLost('closed')
     }
 
     private drainBuffer(connectionId: string): void {

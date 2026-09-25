@@ -30,9 +30,14 @@ const RTP_PACKET = new Uint8Array([
 /** Long enough to prove a window did not close, short enough to prove one did. */
 const SHORT_RETURN_PATH_TIMEOUT_MS = 150
 
+/** The same, for the window a confirmed leg slides along. */
+const SHORT_STALL_MS = 200
+
 interface FakeRelay {
     readonly port: number
     readonly received: Uint8Array[]
+    /** Port the leg's datagrams came from, or 0 before any arrived. */
+    senderPort(): number
     reply(data: Uint8Array): void
     close(): Promise<void>
 }
@@ -55,6 +60,7 @@ async function startFakeRelay(): Promise<FakeRelay> {
     return {
         port: socket.address().port,
         received,
+        senderPort: () => lastPort,
         reply: (data) => {
             if (lastPort) socket.send(data, lastPort, lastAddress)
         },
@@ -77,7 +83,11 @@ interface LegHarness {
     readonly opened: () => boolean
 }
 
-function createLeg(port: number, returnPathTimeoutMs?: number): LegHarness {
+function createLeg(
+    port: number,
+    returnPathTimeoutMs?: number,
+    stallTimeoutMs?: number
+): LegHarness {
     const inbound: Uint8Array[] = []
     const failures: string[] = []
     let open = false
@@ -87,6 +97,7 @@ function createLeg(port: number, returnPathTimeoutMs?: number): LegHarness {
         port,
         logger: createNoopLogger(),
         returnPathTimeoutMs,
+        stallTimeoutMs,
         onOpen: () => {
             open = true
         },
@@ -245,6 +256,137 @@ test('a STUN-only uplink does not arm the return-path window', async () => {
         assert.deepEqual(harness.failures, [])
         assert.equal(harness.leg.isOpen, true)
     } finally {
+        harness.leg.close()
+        await relay.close()
+    }
+})
+
+/**
+ * The connected socket is the identity of the leg: the relay pairs the peer's
+ * stream against the 5-tuple it last saw, so a datagram from any other source
+ * is not this leg's media and must neither be delivered nor confirm the return
+ * path. The relay's own answer is the clock here - it proves the stranger's
+ * datagram had time to arrive and was dropped, rather than that the assertion
+ * ran early.
+ */
+test('a datagram from anywhere but the relay never reaches the leg', async () => {
+    const relay = await startFakeRelay()
+    const stranger = dgram.createSocket('udp4')
+    const harness = createLeg(relay.port, SHORT_RETURN_PATH_TIMEOUT_MS)
+
+    try {
+        harness.leg.open()
+        assert.ok(await waitFor(harness.opened, 2_000), 'leg never opened')
+
+        /** STUN reveals the ephemeral port without arming the window. */
+        harness.leg.send(STUN_PONG)
+        assert.ok(await waitFor(() => relay.senderPort() !== 0, 2_000), 'relay saw no datagram')
+
+        await new Promise<void>((resolve, reject) => {
+            stranger.send(RTP_PACKET, relay.senderPort(), '127.0.0.1', (err) =>
+                err ? reject(err) : resolve()
+            )
+        })
+        relay.reply(STUN_PONG)
+
+        assert.ok(await waitFor(() => harness.inbound.length >= 1, 2_000), 'nothing arrived at all')
+        assert.equal(harness.inbound.length, 1)
+        assert.deepEqual([...harness.inbound[0]], [...STUN_PONG], 'the stranger got through')
+        assert.equal(harness.leg.hasReturnPath, false)
+        assert.deepEqual(harness.failures, [])
+    } finally {
+        harness.leg.close()
+        stranger.close()
+        await relay.close()
+    }
+})
+
+/**
+ * `dgram.Socket.connect` hands its failure to the callback and emits no
+ * `error` event, so a leg that ignored the argument would announce a socket
+ * that never connected. The failure is injected rather than provoked with an
+ * unreachable address: connecting a UDP socket asks the far end for nothing and
+ * succeeds against addresses no packet ever reaches.
+ */
+test('a connect that fails in its callback never opens the leg', async (t) => {
+    const closes: number[] = []
+    const socket = {
+        on: () => undefined,
+        connect: (_port: number, _address: string, callback: (err?: Error) => void) => {
+            setImmediate(() => callback(new Error('EADDRNOTAVAIL')))
+        },
+        send: () => undefined,
+        close: () => closes.push(1)
+    }
+    t.mock.method(dgram, 'createSocket', () => socket as unknown as dgram.Socket)
+
+    const harness = createLeg(9999)
+    harness.leg.open()
+
+    assert.ok(await waitFor(() => harness.failures.length >= 1, 2_000), 'the error was swallowed')
+    assert.deepEqual(harness.failures, ['raw_udp_connect_failed'])
+    assert.equal(harness.opened(), false, 'a leg that never connected must not open')
+    assert.equal(harness.leg.isOpen, false)
+    assert.deepEqual(closes, [1], 'the socket is closed on the way out')
+})
+
+/**
+ * A relay that forwards for a while and then stops leaves the call mute with
+ * every socket still healthy, so the window has to keep watching after it is
+ * first satisfied. The pings answered throughout are the point: a relay that
+ * forwards nothing still pongs, so only media may slide the window.
+ */
+test('a leg the relay stops forwarding to is rolled back mid-call', async () => {
+    const relay = await startFakeRelay()
+    const harness = createLeg(relay.port, SHORT_RETURN_PATH_TIMEOUT_MS, SHORT_STALL_MS)
+    const pongs = setInterval(() => relay.reply(STUN_PONG), 40)
+
+    try {
+        harness.leg.open()
+        assert.ok(await waitFor(harness.opened, 2_000), 'leg never opened')
+
+        harness.leg.send(RTP_PACKET)
+        await waitFor(() => relay.received.length >= 1, 2_000)
+        relay.reply(RTP_PACKET)
+        assert.ok(await waitFor(() => harness.leg.hasReturnPath, 2_000), 'return path not seen')
+
+        assert.ok(
+            await waitFor(() => harness.failures.length >= 1, 2_000),
+            'the window never closed on a leg that stopped receiving'
+        )
+        assert.deepEqual(harness.failures, [RAW_UDP_NO_RETURN_PATH])
+        assert.equal(harness.leg.isOpen, false)
+        assert.ok(harness.inbound.length > 2, 'the relay answered pings throughout')
+    } finally {
+        clearInterval(pongs)
+        harness.leg.close()
+        await relay.close()
+    }
+})
+
+/**
+ * The other half of the same window: a leg still being fed must survive it.
+ * Inbound RTCP is what carries this on a quiet call - measured arriving every
+ * 1.0 to 1.1 s for a whole call, silent source included - and the leg counts it
+ * for what it is, one more non-STUN datagram.
+ */
+test('media that keeps arriving keeps sliding the window', async () => {
+    const relay = await startFakeRelay()
+    const harness = createLeg(relay.port, SHORT_RETURN_PATH_TIMEOUT_MS, SHORT_STALL_MS)
+    const feed = setInterval(() => relay.reply(RTP_PACKET), 40)
+
+    try {
+        harness.leg.open()
+        assert.ok(await waitFor(harness.opened, 2_000), 'leg never opened')
+        harness.leg.send(RTP_PACKET)
+
+        await new Promise<void>((resolve) => setTimeout(resolve, SHORT_STALL_MS * 4))
+
+        assert.deepEqual(harness.failures, [], 'a leg still receiving media was rolled back')
+        assert.equal(harness.leg.isOpen, true)
+        assert.equal(harness.leg.hasReturnPath, true)
+    } finally {
+        clearInterval(feed)
         harness.leg.close()
         await relay.close()
     }

@@ -205,6 +205,8 @@ export interface WaCallMediaSessionDelegate {
     emitInboundVideoRtp(call: CallInfo, packet: InboundVideoRtpPacket): void
     emitInboundVideo(call: CallInfo, frame: InboundVideoFrame): void
     emitOutboundAudioFinished(call: CallInfo): void
+    /** Ends the call through its owner, for a session that has to end itself. */
+    endCall(call: CallInfo, reason: EndCallReason): void
 }
 
 export interface WaCallMediaSessionOptions {
@@ -419,6 +421,9 @@ export class WaCallMediaSession implements AudioSender {
 
         this.sctpRelay.on('relay_connected', () => {
             this.onRelayConnected()
+        })
+        this.sctpRelay.on('relay_lost', (event: { reason: string }) => {
+            this.onRelayLost(event.reason)
         })
         this.sctpRelay.on(
             'relay_receive',
@@ -1366,6 +1371,28 @@ export class WaCallMediaSession implements AudioSender {
                 message: toError(err).message
             })
         }
+    }
+
+    /**
+     * The relay has no leg left, and nothing reopens one: the endpoints are
+     * dialled once, at accept. What is left is a call that is live to the
+     * manager and mute on the wire, with every send dropped by the
+     * `hasConnection()` gates and the keepalives running on for nobody.
+     *
+     * The terminate that follows is the ordinary one, the same a hangup sends,
+     * because leaving the peer on a call we cannot carry is that same call
+     * seen from their side. Whether the official client terminates here, and
+     * with which `reason` attribute, is not captured; if it carries one, that
+     * is where it belongs.
+     */
+    private onRelayLost(reason: string): void {
+        if (this.info.isEnded) return
+
+        this.logger.warn('call lost its last relay leg', {
+            callId: this.info.callId,
+            reason
+        })
+        this.delegate.endCall(this.info, EndCallReason.RelayLost)
     }
 
     handleCallTerminate(): void {

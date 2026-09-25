@@ -34,6 +34,8 @@ export enum EndCallReason {
     Busy = 'busy',
     Cancelled = 'cancelled',
     Failed = 'failed',
+    /** The call had a media path and lost it, with no leg left to carry it. */
+    RelayLost = 'relay_lost',
     DoNotDisturb = 'do_not_disturb',
     Unknown = 'unknown'
 }

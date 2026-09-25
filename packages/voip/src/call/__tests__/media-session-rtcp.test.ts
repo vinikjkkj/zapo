@@ -9,7 +9,9 @@ import { type RtpStreamReception, SenderReportSchedule } from '../../media/rtcp.
 import { RtpHeader, RtpPacket, RtpSession } from '../../media/rtp.js'
 import { CallMediaType, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
-import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
+import { WaCallMediaSession } from '../WaCallMediaSession.js'
+
+import { createSessionDelegate } from './_helpers.js'
 
 const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
@@ -117,15 +119,7 @@ function createSession(mediaType: CallMediaType, videoReportIntervalMs = 0): Rtc
         deps: {} as unknown as WaVoipDeps,
         logger: createNoopLogger(),
         info: call,
-        delegate: {
-            emitState: () => {},
-            emitIncoming: () => {},
-            emitEnded: () => {},
-            emitInboundAudio: () => {},
-            emitInboundVideoRtp: () => {},
-            emitInboundVideo: () => {},
-            emitOutboundAudioFinished: () => {}
-        } satisfies WaCallMediaSessionDelegate
+        delegate: createSessionDelegate()
     })
 
     const internals = session as unknown as SessionInternals
