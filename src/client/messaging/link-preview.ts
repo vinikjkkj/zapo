@@ -254,7 +254,7 @@ async function uploadPlaintextHq(
     return {
         thumbnailDirectPath: parsed.direct_path,
         thumbnailSha256: upload.fileSha256,
-        jpegThumbnail: source,
+        jpegThumbnail: source as Uint8Array,
         ...(dimensions.width !== undefined ? { thumbnailWidth: dimensions.width } : {}),
         ...(dimensions.height !== undefined ? { thumbnailHeight: dimensions.height } : {})
     }
