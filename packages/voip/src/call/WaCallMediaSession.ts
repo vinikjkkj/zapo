@@ -2007,7 +2007,14 @@ export class WaCallMediaSession implements AudioSender {
         if (!this.peerVideoUpgradeRequested) return
 
         this.peerVideoUpgradeRequested = false
-        await this.sendVideoState(WA_VIDEO_STATE.UpgradeReject)
+        try {
+            await this.sendVideoState(WA_VIDEO_STATE.UpgradeReject)
+        } catch (err) {
+            // As in acceptVideoUpgrade: a refusal that never left leaves the peer's
+            // request outstanding, and clearing it would make the retry a no-op.
+            this.peerVideoUpgradeRequested = true
+            throw err
+        }
 
         this.logger.debug('video upgrade rejected', { callId: this.info.callId })
     }
@@ -2016,6 +2023,12 @@ export class WaCallMediaSession implements AudioSender {
     async cancelVideoUpgrade(): Promise<void> {
         if (!this.pendingVideoUpgrade) return
 
+        /**
+         * No rollback here, unlike accepting and rejecting: those clear a flag, which can
+         * be put back, while this settles the caller's promise, which cannot be unsettled.
+         * A cancel that fails to leave costs the peer nothing - its own guard timer expires
+         * and it withdraws the request itself.
+         */
         this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.Cancelled)
         await this.sendVideoState(WA_VIDEO_STATE.UpgradeCancel)
 

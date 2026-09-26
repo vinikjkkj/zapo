@@ -6,7 +6,9 @@ import type { BinaryNode } from 'zapo-js/transport'
 
 import { CallMediaType, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
-import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
+import { WaCallMediaSession } from '../WaCallMediaSession.js'
+
+import { createSessionDelegate } from './_helpers.js'
 
 const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 const PEER_JID = '50062877036657:76@lid'
@@ -54,23 +56,14 @@ function createSession(sendNode?: (node: BinaryNode) => Promise<void>): HandRais
         } as unknown as WaVoipDeps,
         logger: createNoopLogger(),
         info: call,
-        delegate: {
+        delegate: createSessionDelegate({
             emitState: (info) => {
                 states.push(info)
             },
-            emitIncoming: () => {},
-            emitEnded: () => {},
-            emitInboundAudio: () => {},
-            emitInboundVideoRtp: () => {},
-            emitInboundVideo: () => {},
-            emitOutboundAudioFinished: () => {},
-            emitPeerMute: () => {},
-            emitScreenShare: () => {},
-            emitPeerVideoState: () => {},
             emitHandRaise: (_info, participantJid, raised) => {
                 handRaises.push({ participantJid, raised })
             }
-        } satisfies WaCallMediaSessionDelegate
+        })
     })
 
     ;(session as unknown as { sctpRelay: { cleanup: () => void } }).sctpRelay = {

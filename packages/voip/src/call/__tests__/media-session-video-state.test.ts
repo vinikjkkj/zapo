@@ -12,7 +12,9 @@ import {
 import { WaVoipSettings } from '../../signaling/voip-settings.js'
 import { CallMediaType, type PeerVideoStateChange, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
-import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
+import { WaCallMediaSession } from '../WaCallMediaSession.js'
+
+import { createSessionDelegate } from './_helpers.js'
 
 /**
  * Call id and peer device jid of a capture whose SSRCs were read out of the official
@@ -97,21 +99,11 @@ function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness 
         deps,
         logger: createNoopLogger(),
         info: call,
-        delegate: {
-            emitState: () => {},
-            emitIncoming: () => {},
-            emitEnded: () => {},
-            emitInboundAudio: () => {},
-            emitInboundVideoRtp: () => {},
-            emitInboundVideo: () => {},
-            emitPeerMute: () => {},
-            emitScreenShare: () => {},
-            emitHandRaise: () => {},
+        delegate: createSessionDelegate({
             emitPeerVideoState: (_call, change) => {
                 changes.push(change)
-            },
-            emitOutboundAudioFinished: () => {}
-        } satisfies WaCallMediaSessionDelegate
+            }
+        })
     })
 
     const internals = session as unknown as SessionInternals
@@ -803,6 +795,24 @@ test('a replay is handled, not dropped, until the profile asks for it', () => {
 
     assert.equal(harness.changes.length, 2, 'asked for, the same repeat is dropped')
     assert.equal(harness.call.peerVideoState?.state, WA_VIDEO_STATE.Enabled)
+
+    harness.session.cleanup()
+})
+
+/** The refusal answers the same way the accept does when it never reaches the wire. */
+test('a refusal that never left stays retryable', async () => {
+    const harness = createActiveSession()
+    peerState(harness, WA_VIDEO_STATE.UpgradeRequestV2)
+
+    harness.failSends('offline')
+    await assert.rejects(() => harness.session.rejectVideoUpgrade(), /offline/)
+    assert.deepEqual(sentStates(harness), [])
+
+    harness.failSends(null)
+    await harness.session.rejectVideoUpgrade()
+
+    assert.deepEqual(sentStates(harness), [WA_VIDEO_STATE.UpgradeReject])
+    assert.equal(harness.internals.videoSendPathOpened, false, 'refusing opens no sender')
 
     harness.session.cleanup()
 })

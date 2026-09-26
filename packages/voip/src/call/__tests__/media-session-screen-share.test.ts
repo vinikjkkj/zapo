@@ -7,7 +7,9 @@ import type { BinaryNode } from 'zapo-js/transport'
 import { type PeerScreenShare, WA_SCREEN_SHARE_STATE } from '../../signaling/screen-share.js'
 import { CallMediaType, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
-import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
+import { WaCallMediaSession } from '../WaCallMediaSession.js'
+
+import { createSessionDelegate } from './_helpers.js'
 
 const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 const PEER_JID = 'peer:0@lid'
@@ -47,23 +49,14 @@ function createHarness(
         } as unknown as WaVoipDeps,
         logger: createNoopLogger(),
         info: call,
-        delegate: {
+        delegate: createSessionDelegate({
             emitState: () => {
                 counters.states++
             },
-            emitIncoming: () => {},
-            emitEnded: () => {},
-            emitInboundAudio: () => {},
-            emitInboundVideoRtp: () => {},
-            emitInboundVideo: () => {},
-            emitPeerMute: () => {},
-            emitHandRaise: () => {},
-            emitPeerVideoState: () => {},
             emitScreenShare: (_call, share) => {
                 shares.push(share)
-            },
-            emitOutboundAudioFinished: () => {}
-        } satisfies WaCallMediaSessionDelegate
+            }
+        })
     })
 
     return {

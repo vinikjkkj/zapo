@@ -17,7 +17,9 @@ import {
     type WaVoipDeps
 } from '../../types.js'
 import { CallInfo } from '../call-state.js'
-import { WaCallMediaSession, type WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
+import { WaCallMediaSession } from '../WaCallMediaSession.js'
+
+import { createSessionDelegate } from './_helpers.js'
 
 const CALL_ID = '00CEAC2144738E0FAADE17F16BCDBA04'
 const SELF_JID = '112984198234339:0@lid'
@@ -63,22 +65,11 @@ async function createSession(options: { relayAccepts?: boolean } = {}): Promise<
         deps: {} as unknown as WaVoipDeps,
         logger: createNoopLogger(),
         info: call,
-        delegate: {
-            emitState: () => {},
-            emitIncoming: () => {},
-            emitEnded: () => {},
-            emitPeerMute: () => {},
-            emitInboundAudio: () => {},
-            emitInboundVideoRtp: () => {},
-            emitInboundVideo: () => {},
-            emitOutboundAudioFinished: () => {},
-            emitHandRaise: () => {},
-            emitScreenShare: () => {},
-            emitPeerVideoState: () => {},
+        delegate: createSessionDelegate({
             emitCallReaction: (_call, reaction) => {
                 reactions.push(reaction)
             }
-        } satisfies WaCallMediaSessionDelegate
+        })
     })
 
     const internals = session as unknown as Harness['internals'] & {
