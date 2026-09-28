@@ -1,3 +1,4 @@
+import type { WaAuthCredentials } from '@auth/types'
 import type {
     WaIgnoreKey,
     WaIgnoreKeyContext,
@@ -5,7 +6,7 @@ import type {
     WaIgnoreStanzaKind,
     WaIncomingStanzaFilter
 } from '@client/types'
-import { parseJidFull } from '@protocol/jid'
+import { isOwnAccountJid, parseJidFull } from '@protocol/jid'
 import { WA_MESSAGE_TAGS } from '@protocol/message'
 import { WA_NODE_TAGS } from '@protocol/nodes'
 import type { BinaryNode } from '@transport/types'
@@ -135,15 +136,39 @@ export function matchesIgnoreKey(
     return true
 }
 
+/**
+ * A `category='peer'` message from our own account is traffic between our own
+ * devices (app-state key share, history sync, PDO responses), not a chat
+ * message, so it has no key to ignore by. Dropping it starves the protocol:
+ * app-state collections stay blocked on a key whose share never gets through.
+ * The own-account check keeps a foreign sender from dodging a filter by
+ * stamping the attribute.
+ */
+function isOwnPeerMessage(
+    node: BinaryNode,
+    me: Pick<WaAuthCredentials, 'meJid' | 'meLid'> | null | undefined
+): boolean {
+    if (node.tag !== WA_MESSAGE_TAGS.MESSAGE || node.attrs.category !== 'peer' || !me) {
+        return false
+    }
+    const from = node.attrs.from
+    return !!from && tryParseJid(from) !== null && isOwnAccountJid(from, me.meJid, me.meLid)
+}
+
 export function createIgnoreKeyFilter(
     input: WaIgnoreKey | WaIgnoreKeyPredicate,
-    getMeJid: () => string | null | undefined
+    getMe: () => Pick<WaAuthCredentials, 'meJid' | 'meLid'> | null | undefined
 ): WaIncomingStanzaFilter {
     if (typeof input === 'function') {
         return (node) => {
-            const ctx = extractIgnoreKeyContext(node, getMeJid())
+            const me = getMe()
+            if (isOwnPeerMessage(node, me)) return false
+            const ctx = extractIgnoreKeyContext(node, me?.meJid)
             return ctx !== null && input(ctx)
         }
     }
-    return (node) => matchesIgnoreKey(node, input, getMeJid())
+    return (node) => {
+        const me = getMe()
+        return !isOwnPeerMessage(node, me) && matchesIgnoreKey(node, input, me?.meJid)
+    }
 }

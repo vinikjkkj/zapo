@@ -192,7 +192,7 @@ test('extractIgnoreKeyContext strips the device segment from remoteJid and parti
 test('predicate sees device-stripped remoteJid so a bare-JID compare catches device stanzas', () => {
     const filter = createIgnoreKeyFilter(
         (m) => m.remoteJid === PN,
-        () => ME_JID
+        () => ({ meJid: ME_JID })
     )
     assert.equal(filter(message({ from: '5511999990000:12@s.whatsapp.net', id: 'X' })), true)
     assert.equal(filter(message({ from: PN, id: 'X' })), true)
@@ -208,7 +208,7 @@ test('userless server JID (from=s.whatsapp.net) passes through without throwing'
 test('createIgnoreKeyFilter with predicate routes the parsed context, drops non-addressable', () => {
     const filter = createIgnoreKeyFilter(
         (m) => m.kind === 'message' && m.id === 'DROP',
-        () => ME_JID
+        () => ({ meJid: ME_JID })
     )
     assert.equal(filter(message({ from: PN, id: 'DROP' })), true)
     assert.equal(filter(message({ from: PN, id: 'KEEP' })), false)
@@ -219,7 +219,7 @@ test('createIgnoreKeyFilter with predicate routes the parsed context, drops non-
 test('createIgnoreKeyFilter forwards non-message addressable kinds to the predicate', () => {
     const filter = createIgnoreKeyFilter(
         (m) => m.kind === 'receipt' && m.id === 'DROP',
-        () => ME_JID
+        () => ({ meJid: ME_JID })
     )
     assert.equal(filter(receipt({ from: PN, id: 'DROP' })), true)
     assert.equal(filter(receipt({ from: PN, id: 'KEEP' })), false)
@@ -227,7 +227,45 @@ test('createIgnoreKeyFilter forwards non-message addressable kinds to the predic
 })
 
 test('createIgnoreKeyFilter with descriptor delegates to matchesIgnoreKey', () => {
-    const filter = createIgnoreKeyFilter({ remoteJid: PN, only: ['message'] }, () => ME_JID)
+    const filter = createIgnoreKeyFilter({ remoteJid: PN, only: ['message'] }, () => ({
+        meJid: ME_JID
+    }))
     assert.equal(filter(message({ from: PN, id: 'X' })), true)
     assert.equal(filter(receipt({ from: PN, id: 'X' })), false)
+})
+
+test('createIgnoreKeyFilter never drops a peer message from our own account', () => {
+    const me = { meJid: ME_JID, meLid: '248614316187824:26@lid' }
+    const catchAll = createIgnoreKeyFilter(
+        () => true,
+        () => me
+    )
+    const byJid = createIgnoreKeyFilter({ remoteJid: '248614316187824@lid' }, () => me)
+    const fromMe = createIgnoreKeyFilter({ fromMe: true }, () => me)
+
+    const lidPeer = message({ from: '248614316187824@lid', category: 'peer', id: 'X' })
+    const pnPeer = message({ from: '5511777770000@s.whatsapp.net', category: 'peer', id: 'X' })
+    for (const filter of [catchAll, byJid, fromMe]) {
+        assert.equal(filter(lidPeer), false)
+    }
+    assert.equal(catchAll(pnPeer), false)
+    assert.equal(fromMe(pnPeer), false)
+
+    // our own non-peer stanzas (a self-sent chat message) still go through the filter
+    const selfSent = message({ from: '248614316187824@lid', recipient: LID, id: 'X' })
+    assert.equal(catchAll(selfSent), true)
+    assert.equal(byJid(selfSent), true)
+})
+
+test('createIgnoreKeyFilter still drops a peer-stamped message from another account', () => {
+    const me = { meJid: ME_JID, meLid: '248614316187824:26@lid' }
+    const filter = createIgnoreKeyFilter({ remoteJid: LID }, () => me)
+    assert.equal(filter(message({ from: LID, category: 'peer', id: 'X' })), true)
+    assert.equal(
+        createIgnoreKeyFilter(
+            () => true,
+            () => null
+        )(message({ from: LID, category: 'peer' })),
+        true
+    )
 })

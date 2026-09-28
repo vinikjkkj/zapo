@@ -592,6 +592,10 @@ class WaClientImpl extends EventEmitter {
      * arrays are empty. The predicate receives a parsed
      * {@link WaIgnoreKeyContext} and returns `true` to drop the stanza.
      *
+     * `category='peer'` messages from our own account (app-state key share,
+     * history sync, PDO responses) are never dropped: they are protocol
+     * traffic between our own devices, not chat messages.
+     *
      * @example
      * ```ts
      * client.ignoreKey({ remoteJid: spammerJid })
@@ -603,9 +607,8 @@ class WaClientImpl extends EventEmitter {
         if (typeof input !== 'function') {
             validateIgnoreKey(input)
         }
-        const filter = createIgnoreKeyFilter(
-            input,
-            () => this.deps.authClient.getCurrentCredentials()?.meJid
+        const filter = createIgnoreKeyFilter(input, () =>
+            this.deps.authClient.getCurrentCredentials()
         )
         return this.deps.incomingNode.registerIncomingStanzaFilter(filter)
     }
