@@ -365,6 +365,13 @@ export class WaCallMediaSession implements AudioSender {
      * anything that ends it, ours or its own.
      */
     private peerVideoUpgradeRequested = false
+    /**
+     * Counts the `<video>` messages from the peer this session has acted on, so an answer
+     * that fails to send can tell whether the request it was answering is still the peer's
+     * latest word. Sending yields, and a withdrawal arriving in that gap must not be undone
+     * by the rollback of the send it raced.
+     */
+    private peerVideoStateSeen = 0
 
     private firstPacketSent = false
     private acceptedByJid: string | null = null
@@ -1814,6 +1821,7 @@ export class WaCallMediaSession implements AudioSender {
         this.applyVoipSettings(parseVoipSettings(node, this.logger))
 
         this.info.peerVideoState = change
+        this.peerVideoStateSeen++
         this.ensureVideoReceivePath()
         this.applyPeerUpgradeState(change.state)
 
@@ -1983,13 +1991,14 @@ export class WaCallMediaSession implements AudioSender {
     async acceptVideoUpgrade(): Promise<void> {
         if (!this.peerVideoUpgradeRequested) return
 
+        const seen = this.peerVideoStateSeen
         this.peerVideoUpgradeRequested = false
         try {
             await this.sendVideoState(WA_VIDEO_STATE.UpgradeAccept)
         } catch (err) {
             // The request is still outstanding if the accept never left, and the caller is
             // told so: cleared here, a retry would no-op and the peer would wait forever.
-            this.peerVideoUpgradeRequested = true
+            this.restorePeerRequest(seen)
             throw err
         }
 
@@ -2006,17 +2015,31 @@ export class WaCallMediaSession implements AudioSender {
     async rejectVideoUpgrade(): Promise<void> {
         if (!this.peerVideoUpgradeRequested) return
 
+        const seen = this.peerVideoStateSeen
         this.peerVideoUpgradeRequested = false
         try {
             await this.sendVideoState(WA_VIDEO_STATE.UpgradeReject)
         } catch (err) {
             // As in acceptVideoUpgrade: a refusal that never left leaves the peer's
             // request outstanding, and clearing it would make the retry a no-op.
-            this.peerVideoUpgradeRequested = true
+            this.restorePeerRequest(seen)
             throw err
         }
 
         this.logger.debug('video upgrade rejected', { callId: this.info.callId })
+    }
+
+    /**
+     * Puts back the peer request an answer cleared, when that answer never left.
+     *
+     * Only when the peer has said nothing since: sending yields, and a withdrawal that
+     * lands in that gap already cleared the request for good. Restoring it then would let
+     * a later accept open the video sender against a peer back on audio - the same state
+     * an unhandled `Disabled` used to leave behind.
+     */
+    private restorePeerRequest(seen: number): void {
+        if (this.peerVideoStateSeen !== seen) return
+        this.peerVideoUpgradeRequested = true
     }
 
     /** Withdraws the request this side sent. No-op when nothing is in flight. */
@@ -2393,6 +2416,7 @@ export class WaCallMediaSession implements AudioSender {
         // Anything still waiting on a handshake is settled, not left pending forever.
         this.settleVideoUpgrade(WA_VIDEO_UPGRADE_RESULT.Cancelled)
         this.peerVideoUpgradeRequested = false
+        this.peerVideoStateSeen = 0
         this.videoSendPathOpened = false
         this.videoStateTransactionId = 0
         this.firstPacketSent = false

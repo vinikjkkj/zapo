@@ -61,6 +61,8 @@ interface Harness {
      * many more succeed first, so a failure can be aimed at one send of a sequence.
      */
     readonly failSends: (reason: string | null, afterSends?: number) => void
+    /** Runs inside the next sends, before they succeed or fail. */
+    readonly onSend: (fn: (() => void) | null) => void
 }
 
 /**
@@ -74,6 +76,7 @@ function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness 
     let resends = 0
     let sendFailure: string | null = null
     let sendsBeforeFailure = 0
+    let duringSend: (() => void) | null = null
 
     const call = CallInfo.newIncoming(
         CALL_ID,
@@ -85,6 +88,9 @@ function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness 
     const deps = {
         lowLevelCoordinator: {
             sendNode: async (node: BinaryNode) => {
+                // Runs while the send is still unwinding, which is where a stanza from the
+                // peer lands if it arrives mid-send.
+                duringSend?.()
                 // Thrown before recording: a send that failed never reached the wire.
                 if (sendFailure) {
                     if (sendsBeforeFailure > 0) sendsBeforeFailure--
@@ -130,6 +136,9 @@ function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness 
         failSends: (reason, afterSends = 0) => {
             sendFailure = reason
             sendsBeforeFailure = afterSends
+        },
+        onSend: (fn) => {
+            duringSend = fn
         }
     }
 }
@@ -815,4 +824,32 @@ test('a refusal that never left stays retryable', async () => {
     assert.equal(harness.internals.videoSendPathOpened, false, 'refusing opens no sender')
 
     harness.session.cleanup()
+})
+
+/**
+ * The rollback of a failed answer must not resurrect a request the peer gave up on while
+ * that answer was still unwinding. Restoring it there would let the next accept open the
+ * video sender against a peer already back on audio.
+ */
+test('a request withdrawn mid-send is not put back by the failed answer', async () => {
+    for (const withdrawal of [WA_VIDEO_STATE.UpgradeCancel, WA_VIDEO_STATE.Disabled]) {
+        const harness = createActiveSession()
+        peerState(harness, WA_VIDEO_STATE.UpgradeRequestV2)
+
+        harness.onSend(() => {
+            harness.onSend(null)
+            peerState(harness, withdrawal)
+        })
+        harness.failSends('offline')
+
+        await assert.rejects(() => harness.session.acceptVideoUpgrade(), /offline/)
+
+        harness.failSends(null)
+        await harness.session.acceptVideoUpgrade()
+
+        assert.deepEqual(sentStates(harness), [], `state ${withdrawal} was answered anyway`)
+        assert.equal(harness.internals.videoSendPathOpened, false)
+
+        harness.session.cleanup()
+    }
 })
