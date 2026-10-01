@@ -401,7 +401,8 @@ export interface WaCreateStoreOptions<
      * with a bounded-LRU L1 (the in-tree memory provider) so repeated reads of
      * the same peer on the send/recv path skip the backend round-trip; writes
      * stay write-through (or invalidate-on-write for `privacyToken`) so the
-     * backend remains authoritative.
+     * backend remains authoritative. Entries leave the L1 through the
+     * `limits` cap and, when set, the `ttlMs` idle TTL.
      *
      * A domain flag is a no-op unless that domain resolves to a real backend
      * in {@link providers} - caching a `'memory'`/`'none'` provider in front of
@@ -459,6 +460,36 @@ export interface WaCreateStoreOptions<
             readonly identity?: number
             readonly senderKey?: number
             readonly privacyToken?: number
+        }
+        /**
+         * Per-domain L1 idle TTLs in milliseconds. An entry neither read nor
+         * written for this long is dropped from the L1 by a periodic sweep
+         * (at most every 60 s), so a long-lived process keeps the peers it is
+         * actively talking to instead of every peer seen since boot. Unset
+         * (the default) keeps entries until `limits` evicts them; when both
+         * are set, whichever evicts first wins.
+         *
+         * The TTL bounds residency, not freshness. The L1 stays coherent with
+         * the backend (write-through, or invalidate-on-write), so expiry never
+         * changes what a read returns: an expired entry is re-read from the
+         * backend on its next use, and the backend rows are never touched.
+         * Size it against that miss cost - each expiry turns the next lookup
+         * of that peer into one backend read.
+         *
+         * @example
+         * ```ts
+         * cacheLayer: {
+         *     session: true,
+         *     identity: true,
+         *     ttlMs: { sessionMs: 30 * 60_000, identityMs: 30 * 60_000 }
+         * }
+         * ```
+         */
+        readonly ttlMs?: {
+            readonly sessionMs?: number
+            readonly identityMs?: number
+            readonly senderKeyMs?: number
+            readonly privacyTokenMs?: number
         }
     }
     /**

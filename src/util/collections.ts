@@ -31,6 +31,51 @@ export function normalizeQueryLimit(limit: number | undefined, defaultLimit: num
     return limit
 }
 
+/**
+ * Last-access index for entries that expire once idle (neither read nor
+ * written) for `ttlMs`. Every `touch` re-inserts the key at the young end,
+ * so iteration order is access order and `sweep` can stop at the first live
+ * key: a sweep costs O(expired), not O(size).
+ *
+ * Timestamps come from the caller. A wall clock that steps backwards only
+ * delays eviction: the sweep stops at the out-of-order key until it ages out.
+ */
+export interface IdleExpiryIndex<K> {
+    readonly touch: (key: K, nowMs: number) => void
+    readonly delete: (key: K) => void
+    readonly clear: () => void
+    /**
+     * Drops every key idle for at least `ttlMs` as of `nowMs`, oldest first,
+     * calling `onExpire` for each, and returns how many expired.
+     */
+    readonly sweep: (nowMs: number, onExpire: (key: K) => void) => number
+}
+
+export function createIdleExpiryIndex<K>(ttlMs: number): IdleExpiryIndex<K> {
+    const lastAccessMs = new Map<K, number>()
+    return {
+        touch: (key, nowMs) => {
+            lastAccessMs.delete(key)
+            lastAccessMs.set(key, nowMs)
+        },
+        delete: (key) => {
+            lastAccessMs.delete(key)
+        },
+        clear: () => lastAccessMs.clear(),
+        sweep: (nowMs, onExpire) => {
+            const cutoffMs = nowMs - ttlMs
+            let expired = 0
+            for (const [key, accessedAtMs] of lastAccessMs) {
+                if (accessedAtMs > cutoffMs) break
+                lastAccessMs.delete(key)
+                onExpire(key)
+                expired += 1
+            }
+            return expired
+        }
+    }
+}
+
 export function setBoundedMapEntry<K, V>(
     map: Map<K, V>,
     key: K,

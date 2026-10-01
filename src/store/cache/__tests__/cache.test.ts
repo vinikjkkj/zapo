@@ -182,3 +182,65 @@ test('privacy-token cache: upsert invalidates so the merged backend record is re
     assert.ok(merged?.tcToken)
     assert.ok(merged?.nctSalt)
 })
+
+// With ttlMs <= 1s the L1 sweep runs every ttlMs.
+const TTL_MS = 1_000
+
+test('session cache: ttlMs drops idle L1 entries, which are re-read from the backend', async (t) => {
+    t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 0 })
+    const { store: backend, counts } = spy(new WaSessionMemoryStore(), 'getSession')
+    await backend.setSession(addr('idle'), sess(1))
+    const cache = withSessionCache(backend, undefined, TTL_MS)
+
+    await cache.setSession(addr('hot'), sess(2))
+    await cache.getSession(addr('idle')) // populate L1
+    assert.equal(counts.get('getSession'), 1)
+
+    t.mock.timers.tick(600)
+    await cache.getSession(addr('hot')) // L1 hit refreshes the entry
+    t.mock.timers.tick(400) // sweep at t=1_000 drops 'idle' only
+
+    assert.deepEqual(await cache.getSession(addr('hot')), sess(2))
+    assert.equal(counts.get('getSession'), 1)
+    assert.deepEqual(await cache.getSession(addr('idle')), sess(1))
+    assert.equal(counts.get('getSession'), 2) // backend still has it: expiry never touches rows
+    await cache.destroy?.()
+})
+
+test('identity, sender-key and privacy-token caches forward ttlMs to their L1', async (t) => {
+    t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 0 })
+    const identity = spy(new WaIdentityMemoryStore(), 'getRemoteIdentity')
+    const senderKey = spy(new SenderKeyMemoryStore(), 'getDeviceSenderKey')
+    const privacyToken = spy(new WaPrivacyTokenMemoryStore(), 'getByJid')
+    await identity.store.setRemoteIdentity(addr('a'), new Uint8Array([7]))
+    await senderKey.store.upsertSenderKey(skRecord('g', 'a'))
+    await privacyToken.store.upsert(tok('j', { tcToken: new Uint8Array([1]) }))
+    const identityCache = withIdentityCache(identity.store, undefined, TTL_MS)
+    const senderKeyCache = withSenderKeyCache(senderKey.store, undefined, TTL_MS)
+    const privacyTokenCache = withPrivacyTokenCache(privacyToken.store, undefined, TTL_MS)
+
+    const readAll = async (): Promise<void> => {
+        assert.ok(await identityCache.getRemoteIdentity(addr('a')))
+        assert.ok(await senderKeyCache.getDeviceSenderKey('g', addr('a')))
+        assert.ok(await privacyTokenCache.getByJid('j'))
+    }
+    const backendReads = (): number[] => [
+        identity.counts.get('getRemoteIdentity') ?? 0,
+        senderKey.counts.get('getDeviceSenderKey') ?? 0,
+        privacyToken.counts.get('getByJid') ?? 0
+    ]
+
+    await readAll()
+    await readAll()
+    assert.deepEqual(backendReads(), [1, 1, 1])
+
+    t.mock.timers.tick(TTL_MS)
+    await readAll()
+    assert.deepEqual(backendReads(), [2, 2, 2])
+
+    await Promise.all([
+        identityCache.destroy?.(),
+        senderKeyCache.destroy?.(),
+        privacyTokenCache.destroy?.()
+    ])
+})

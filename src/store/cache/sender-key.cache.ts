@@ -14,16 +14,19 @@ import type { WithDestroyLifecycle } from '@store/types'
  * merge), so they are write-through; the sweep deletes
  * (`deleteDeviceSenderKey`/`markForgetSenderKey`) run on the backend for the
  * authoritative count and then invalidate the matching L1 entries via the
- * memory store's own sweep. See {@link withSessionCache} for the shared
- * coherence model and the single-writer-per-session assumption.
+ * memory store's own sweep. `ttlMs` drops idle point entries from the L1.
+ * See {@link withSessionCache} for the shared coherence model and the
+ * single-writer-per-session assumption.
  */
 export function withSenderKeyCache(
     backend: WaSenderKeyStore,
-    maxEntries?: number
+    maxEntries?: number,
+    ttlMs?: number
 ): WithDestroyLifecycle<WaSenderKeyStore> {
     const l1 = new SenderKeyMemoryStore({
         maxSenderKeys: maxEntries,
-        maxSenderDistributions: maxEntries
+        maxSenderDistributions: maxEntries,
+        ttlMs
     })
     let generation = 0
 
@@ -102,7 +105,7 @@ export function withSenderKeyCache(
             await l1.clear()
         },
         destroy: async () => {
-            await l1.clear()
+            await l1.destroy()
             await (backend as WithDestroyLifecycle<WaSenderKeyStore>).destroy?.()
         }
     }

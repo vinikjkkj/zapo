@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import type { SignalAddress, SignalSessionRecord } from '@signal/types'
 import { createStore } from '@store/createStore'
+import { WaSessionMemoryStore } from '@store/memory/session.store'
+import type { WaStoreBackend } from '@store/types'
 
 const mockAuthBackend = {
     stores: {
@@ -299,4 +302,64 @@ test('createStore allows omitting cacheProviders when backends is set (caches de
     assert.ok(session.groupMetadata)
     assert.ok(session.deviceList)
     assert.ok(session.messageSecret)
+})
+
+test('createStore rejects a cacheLayer ttlMs that is not a positive safe integer', () => {
+    assert.throws(
+        () => createStore({ cacheLayer: { session: true, ttlMs: { sessionMs: 0 } } }),
+        /cacheLayer\.ttlMs\.sessionMs must be a positive safe integer/
+    )
+    assert.throws(
+        () => createStore({ cacheLayer: { ttlMs: { privacyTokenMs: 1.5 } } }),
+        /cacheLayer\.ttlMs\.privacyTokenMs must be a positive safe integer/
+    )
+})
+
+test('createStore applies cacheLayer ttlMs to the L1 in front of a backend', async (t) => {
+    t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 0 })
+    class CountingSessionStore extends WaSessionMemoryStore {
+        public reads = 0
+
+        public override async getSession(
+            address: SignalAddress
+        ): Promise<SignalSessionRecord | null> {
+            this.reads += 1
+            return super.getSession(address)
+        }
+    }
+    const backendSessions = new CountingSessionStore()
+    const counting = {
+        stores: { session: () => backendSessions },
+        caches: {}
+    } satisfies WaStoreBackend<'session', never>
+    const store = createStore({
+        backends: { counting },
+        providers: {
+            auth: 'memory',
+            signal: 'memory',
+            preKey: 'memory',
+            session: 'counting',
+            identity: 'memory',
+            senderKey: 'memory',
+            appState: 'memory',
+            privacyToken: 'memory',
+            messages: 'none',
+            threads: 'none',
+            contacts: 'none'
+        },
+        cacheLayer: { session: true, ttlMs: { sessionMs: 1_000 } }
+    })
+    const session = store.session('s')
+    const address: SignalAddress = { user: 'peer', device: 0 }
+    const record = { marker: 1 } as unknown as SignalSessionRecord
+
+    await session.session.setSession(address, record) // write-through fills the L1
+    assert.deepEqual(await session.session.getSession(address), record)
+    assert.equal(backendSessions.reads, 0)
+
+    t.mock.timers.tick(1_000) // L1 sweep drops the idle entry, the backend row stays
+    assert.deepEqual(await session.session.getSession(address), record)
+    assert.equal(backendSessions.reads, 1)
+
+    await store.destroy()
 })

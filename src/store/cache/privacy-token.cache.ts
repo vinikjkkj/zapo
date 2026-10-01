@@ -10,15 +10,16 @@ import type { WithDestroyLifecycle } from '@store/types'
  * write-through**: `upsert` merges partial fields into the existing row on
  * the backend, so caching the partial incoming record would diverge from the
  * backend's merged result. Instead each upsert drops the L1 entry and the
- * next read re-populates from the merged backend truth. See
- * {@link withSessionCache} for the shared coherence model and the
- * single-writer-per-session assumption.
+ * next read re-populates from the merged backend truth. `ttlMs` drops idle
+ * entries from the L1. See {@link withSessionCache} for the shared coherence
+ * model and the single-writer-per-session assumption.
  */
 export function withPrivacyTokenCache(
     backend: WaPrivacyTokenStore,
-    maxEntries?: number
+    maxEntries?: number,
+    ttlMs?: number
 ): WithDestroyLifecycle<WaPrivacyTokenStore> {
-    const l1 = new WaPrivacyTokenMemoryStore(maxEntries)
+    const l1 = new WaPrivacyTokenMemoryStore(maxEntries, { ttlMs })
     let generation = 0
 
     return {
@@ -56,7 +57,7 @@ export function withPrivacyTokenCache(
             await l1.clear()
         },
         destroy: async () => {
-            await l1.clear()
+            await l1.destroy()
             await backend.destroy?.()
         }
     }
