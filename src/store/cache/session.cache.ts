@@ -6,7 +6,8 @@ import type { WithDestroyLifecycle } from '@store/types'
  * Read-through / write-through in-process cache for a persistent session
  * backend. Reuses {@link WaSessionMemoryStore} as the bounded-LRU L1 so that
  * repeated reads of the same peer on the send/recv path skip the backend
- * round-trip.
+ * round-trip. With `ttlMs`, an entry neither read nor written for that long
+ * is dropped from the L1 (never from the backend) and re-read on next use.
  *
  * Coherence model (single process):
  * - every mutation (set/delete/clear) writes the backend then the L1 in
@@ -24,9 +25,10 @@ import type { WithDestroyLifecycle } from '@store/types'
  */
 export function withSessionCache(
     backend: WaSessionStore,
-    maxEntries?: number
+    maxEntries?: number,
+    ttlMs?: number
 ): WithDestroyLifecycle<WaSessionStore> {
-    const l1 = new WaSessionMemoryStore({ maxSessions: maxEntries })
+    const l1 = new WaSessionMemoryStore({ maxSessions: maxEntries, ttlMs })
     let generation = 0
 
     return {
@@ -90,7 +92,7 @@ export function withSessionCache(
             await l1.clear()
         },
         destroy: async () => {
-            await l1.clear()
+            await l1.destroy()
             await (backend as WithDestroyLifecycle<WaSessionStore>).destroy?.()
         }
     }

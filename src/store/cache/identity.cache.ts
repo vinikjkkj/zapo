@@ -7,7 +7,8 @@ import type { WithDestroyLifecycle } from '@store/types'
  * identity backend. Reuses {@link WaIdentityMemoryStore} as the bounded-LRU
  * L1. Remote identities are read alongside sessions on the send path (the
  * identity-mismatch guard), so caching them complements
- * {@link withSessionCache}.
+ * {@link withSessionCache}. `ttlMs` drops idle entries from the L1 the same
+ * way.
  *
  * The identity store has no per-key delete: identities are overwritten on
  * re-establishment, so a peer's key change propagates through the
@@ -16,9 +17,10 @@ import type { WithDestroyLifecycle } from '@store/types'
  */
 export function withIdentityCache(
     backend: WaIdentityStore,
-    maxEntries?: number
+    maxEntries?: number,
+    ttlMs?: number
 ): WithDestroyLifecycle<WaIdentityStore> {
-    const l1 = new WaIdentityMemoryStore({ maxRemoteIdentities: maxEntries })
+    const l1 = new WaIdentityMemoryStore({ maxRemoteIdentities: maxEntries, ttlMs })
     let generation = 0
 
     return {
@@ -76,7 +78,7 @@ export function withIdentityCache(
             await l1.clear()
         },
         destroy: async () => {
-            await l1.clear()
+            await l1.destroy()
             await (backend as WithDestroyLifecycle<WaIdentityStore>).destroy?.()
         }
     }

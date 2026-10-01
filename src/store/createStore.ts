@@ -67,7 +67,7 @@ import type {
     WaStoreMemoryLimitSelection,
     WaStoreSession
 } from '@store/types'
-import { resolvePositive } from '@util/coercion'
+import { resolveOptionalPositive, resolvePositive } from '@util/coercion'
 import { toError } from '@util/primitives'
 
 interface Destroyable {
@@ -252,6 +252,21 @@ export function createStore(options?: WaCreateStoreOptions): WaStore {
             options.memory?.cacheTtlMs?.messageSecretMs,
             DEFAULT_CACHE_TTLS_MS.messageSecretMs,
             'memory.cacheTtlMs.messageSecretMs'
+        )
+    } as const)
+    const cacheLayerTtlsMs = Object.freeze({
+        session: resolveOptionalPositive(cacheLayer.ttlMs?.sessionMs, 'cacheLayer.ttlMs.sessionMs'),
+        identity: resolveOptionalPositive(
+            cacheLayer.ttlMs?.identityMs,
+            'cacheLayer.ttlMs.identityMs'
+        ),
+        senderKey: resolveOptionalPositive(
+            cacheLayer.ttlMs?.senderKeyMs,
+            'cacheLayer.ttlMs.senderKeyMs'
+        ),
+        privacyToken: resolveOptionalPositive(
+            cacheLayer.ttlMs?.privacyTokenMs,
+            'cacheLayer.ttlMs.privacyTokenMs'
         )
     } as const)
     const sessions = new Map<string, WaStoreSession>()
@@ -485,17 +500,29 @@ export function createStore(options?: WaCreateStoreOptions): WaStore {
             const preKeyStore = withPreKeyLock(rawPreKey)
             const sessionStore = withSessionLock(
                 cacheLayer.session && usesBackend(providers.session)
-                    ? withSessionCache(rawSession, cacheLayer.limits?.session)
+                    ? withSessionCache(
+                          rawSession,
+                          cacheLayer.limits?.session,
+                          cacheLayerTtlsMs.session
+                      )
                     : rawSession
             )
             const identityStore = withIdentityLock(
                 cacheLayer.identity && usesBackend(providers.identity)
-                    ? withIdentityCache(rawIdentity, cacheLayer.limits?.identity)
+                    ? withIdentityCache(
+                          rawIdentity,
+                          cacheLayer.limits?.identity,
+                          cacheLayerTtlsMs.identity
+                      )
                     : rawIdentity
             )
             const senderKeyStore = withSenderKeyLock(
                 cacheLayer.senderKey && usesBackend(providers.senderKey)
-                    ? withSenderKeyCache(rawSenderKey, cacheLayer.limits?.senderKey)
+                    ? withSenderKeyCache(
+                          rawSenderKey,
+                          cacheLayer.limits?.senderKey,
+                          cacheLayerTtlsMs.senderKey
+                      )
                     : rawSenderKey
             )
             const appStateStore = withAppStateLock(rawAppState)
@@ -504,7 +531,11 @@ export function createStore(options?: WaCreateStoreOptions): WaStore {
             const contactStore = withContactLock(rawContacts)
             const privacyTokenStore = withPrivacyTokenLock(
                 cacheLayer.privacyToken && usesBackend(providers.privacyToken)
-                    ? withPrivacyTokenCache(rawPrivacyToken, cacheLayer.limits?.privacyToken)
+                    ? withPrivacyTokenCache(
+                          rawPrivacyToken,
+                          cacheLayer.limits?.privacyToken,
+                          cacheLayerTtlsMs.privacyToken
+                      )
                     : rawPrivacyToken
             )
 

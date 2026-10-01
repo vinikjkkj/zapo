@@ -39,6 +39,7 @@ import {
     tryAsString
 } from '@util/coercion'
 import {
+    createIdleExpiryIndex,
     normalizeQueryLimit,
     resolveCleanupIntervalMs,
     setBoundedMapEntry
@@ -176,6 +177,60 @@ test('collections helpers enforce bounds and limits', () => {
 
     assert.deepEqual([...map.keys()], ['b', 'c'])
     assert.deepEqual(evicted, ['a'])
+})
+
+test('idle expiry index sweeps keys idle for the full ttl, oldest first', () => {
+    const index = createIdleExpiryIndex<string>(100)
+    const expired: string[] = []
+    const collect = (key: string): void => {
+        expired.push(key)
+    }
+
+    index.touch('a', 0)
+    index.touch('b', 10)
+    index.touch('c', 20)
+    index.touch('a', 50) // re-touch moves 'a' behind 'c'
+
+    assert.equal(index.sweep(109, collect), 0)
+    assert.equal(index.sweep(110, collect), 1) // idle exactly ttl counts as expired
+    assert.deepEqual(expired, ['b'])
+    assert.equal(index.sweep(149, collect), 1)
+    assert.deepEqual(expired, ['b', 'c'])
+    assert.equal(index.sweep(150, collect), 1)
+    assert.deepEqual(expired, ['b', 'c', 'a'])
+})
+
+test('idle expiry index forgets deleted and cleared keys', () => {
+    const index = createIdleExpiryIndex<string>(10)
+    const expired: string[] = []
+    const collect = (key: string): void => {
+        expired.push(key)
+    }
+
+    index.touch('a', 0)
+    index.touch('b', 0)
+    index.delete('a')
+    assert.equal(index.sweep(100, collect), 1)
+    assert.deepEqual(expired, ['b'])
+
+    index.touch('c', 0)
+    index.clear()
+    assert.equal(index.sweep(100, collect), 0)
+})
+
+test('idle expiry index stops at an out-of-order key until it ages out', () => {
+    const index = createIdleExpiryIndex<string>(100)
+    const expired: string[] = []
+    const collect = (key: string): void => {
+        expired.push(key)
+    }
+
+    index.touch('late', 500) // clock stepped back after this touch
+    index.touch('early', 0)
+
+    assert.equal(index.sweep(200, collect), 0)
+    assert.equal(index.sweep(600, collect), 2)
+    assert.deepEqual(expired, ['late', 'early'])
 })
 
 test('base64 wrappers enforce required field semantics', () => {
