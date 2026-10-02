@@ -7,3 +7,5 @@ export const WA_STATUS_DISTRIBUTION_SETTINGS = Object.freeze({
 
 export type WaStatusDistributionSetting =
     (typeof WA_STATUS_DISTRIBUTION_SETTINGS)[keyof typeof WA_STATUS_DISTRIBUTION_SETTINGS]
+
+export const STATUS_MENTION_DELAY = 500

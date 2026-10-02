@@ -50,6 +50,7 @@ import type { WaMessageClient } from '@message/WaMessageClient'
 import { proto, type Proto } from '@proto'
 import {
     normalizeEphemeralSettingSeconds,
+    STATUS_MENTION_DELAY,
     WA_ADDRESSING_MODES,
     WA_DEFAULTS,
     WA_NACK_REASONS,
@@ -92,6 +93,8 @@ import {
     buildButtonAddonNode,
     buildDirectMessageFanoutNode,
     buildGroupSenderKeyMessageNode,
+    buildGroupStatusMentionMessage,
+    buildStatusMentionMetaNode,
     buildMetaNode
 } from '@transport/node/builders/message'
 import type { BinaryNode } from '@transport/types'
@@ -775,6 +778,7 @@ export class WaMessageDispatchCoordinator {
     public async publishStatusMessage(input: {
         readonly message: Proto.IMessage
         readonly recipients: readonly string[]
+        readonly mentionedGroupJids?: readonly string[]
         readonly statusSetting?: WaStatusDistributionSetting
         readonly options?: WaSendMessageOptions
     }): Promise<WaMessagePublishResult> {
@@ -798,8 +802,15 @@ export class WaMessageDispatchCoordinator {
         if (!seen.has(meUserLid)) {
             recipientsWithSelf.push(meUserLid)
         }
+        const mentionedGroups: string[] = []
+        const seenGroups = new Set<string>()
+        for (const jid of input.mentionedGroupJids ?? []) {
+            if (!isGroupJid(jid) || seenGroups.has(jid)) continue
+            seenGroups.add(jid)
+            mentionedGroups.push(jid)
+        }
         const statusSetting = input.statusSetting ?? 'contacts'
-        return this.publishSenderKeyFanout({
+        const result = await this.publishSenderKeyFanout({
             groupJid: WA_DEFAULTS.STATUS_BROADCAST_JID,
             senderJid,
             recipients: recipientsWithSelf,
@@ -840,7 +851,11 @@ export class WaMessageDispatchCoordinator {
                     remoteJid: WA_DEFAULTS.STATUS_BROADCAST_JID,
                     context: 'status'
                 })
-                const customNodes: BinaryNode[] = [buildMetaNode({ status_setting: statusSetting })]
+                const customNodes: BinaryNode[] = [
+                    mentionedGroups.length > 0
+                    ? buildStatusMentionMetaNode(mentionedGroups, statusSetting)
+                    : buildMetaNode({ status_setting: statusSetting })
+                ]
                 if (reportingArtifacts?.node) customNodes.push(reportingArtifacts.node)
                 return {
                     extraParticipants: ackHints,
@@ -848,6 +863,38 @@ export class WaMessageDispatchCoordinator {
                 }
             }
         })
+        if (mentionedGroups.length > 0) {
+            if (result.id) {
+                await this.notifyGroupStatusMentions(result.id, mentionedGroups)
+            } else {
+                this.deps.logger.warn('invalid id, skipping mention notifications', {
+                    groups: mentionedGroups.length
+                })
+            }
+        }
+        return result
+    }
+
+    private async notifyGroupStatusMentions(
+        statusId: string,
+        groupJids: readonly string[]
+    ): Promise<void> {
+        const message = buildGroupStatusMentionMessage(statusId)
+        for (let index = 0; index < groupJids.length; index += 1) {
+            await new Promise((r) => setTimeout(r, STATUS_MENTION_DELAY))
+            try {
+                await this.sendMessage(groupJids[index], message, {
+                    additionalAttributes: { type: 'text' },
+                    disableGroupEphemeralAutoInject: true
+                })
+            } catch (error) {
+                this.deps.logger.warn('failed to notify group of status mention', {
+                    groupJid: groupJids[index],
+                    statusId,
+                    message: toError(error).message
+                })
+            }
+        }
     }
 
     public async publishBroadcastListMessage(input: {

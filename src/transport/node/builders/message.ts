@@ -1,6 +1,8 @@
 import type { WaButtonAddonKind } from '@message/encode/content'
-import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NODE_TAGS } from '@protocol/constants'
 import type { BinaryNode } from '@transport/types'
+import { WA_MESSAGE_TAGS, WA_MESSAGE_TYPES, WA_NODE_TAGS } from '@protocol/constants'
+import { WA_DEFAULTS } from '@protocol/defaults'
+import { proto, type Proto } from '@proto'
 
 interface EncryptedParticipant {
     readonly jid: string
@@ -299,5 +301,45 @@ export function buildMetaNode(attrs: Record<string, string>): BinaryNode {
         tag: 'meta',
         attrs,
         content: undefined
+    }
+}
+
+export function buildStatusMentionMetaNode(
+    groupJids: readonly string[],
+    statusSetting: string
+): BinaryNode {
+    return {
+        tag: 'meta',
+        attrs: {
+            status_setting: statusSetting
+        },
+        content: [
+            {
+                tag: 'mentioned_users',
+                attrs: {},
+                content: groupJids.map((jid) => ({
+                    tag: 'to',
+                    attrs: { jid }
+                }))
+            }
+        ]
+    }
+}
+
+export function buildGroupStatusMentionMessage(statusId: string): Proto.IMessage {
+    return {
+        groupStatusMentionMessage: {
+            message: {
+                protocolMessage: {
+                    key: {
+                        remoteJid: WA_DEFAULTS.STATUS_BROADCAST_JID,
+                        fromMe: true,
+                        id: statusId,
+                        participant: 'status_me'
+                    },
+                    type: proto.Message.ProtocolMessage.Type.STATUS_MENTION_MESSAGE
+                }
+            }
+        }
     }
 }

@@ -18,6 +18,7 @@ export interface WaStatusCoordinatorOptions {
     readonly publishStatusMessage: (input: {
         readonly message: Proto.IMessage
         readonly recipients: readonly string[]
+        readonly mentionedGroupJids?: readonly string[]
         readonly statusSetting?: WaStatusDistributionSetting
         readonly options?: WaSendMessageOptions
     }) => Promise<WaMessagePublishResult>
@@ -26,6 +27,7 @@ export interface WaStatusCoordinatorOptions {
 export interface WaSendStatusInput {
     readonly content: WaSendMessageContent
     readonly recipients: readonly string[]
+    readonly mentionedGroupJids: readonly string[]
     readonly statusSetting?: WaStatusDistributionSetting
     readonly options?: WaSendMessageOptions
 }
@@ -71,6 +73,7 @@ export function createStatusCoordinator(options: WaStatusCoordinatorOptions): Wa
                 message,
                 recipients: input.recipients,
                 statusSetting: input.statusSetting,
+                mentionedGroupJids: input.mentionedGroupJids,
                 options: input.options
             })
             return built.upload ? { ...published, upload: built.upload } : published
