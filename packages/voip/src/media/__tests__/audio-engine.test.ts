@@ -99,33 +99,17 @@ test('feedWatermarksMs exposes a backpressure band below the consumer drop', () 
     assert.ok(pauseMs < 200)
 })
 
-test('jitter buffer holds a full 120 ms packet with two aggregated frames', () => {
+test('default config pulls one tick of audio from the playout source per tick', async () => {
     const engine = new WaAudioEngine()
-
-    assert.equal(engine.getMaxPacketSamples(), 3840)
-
-    engine.onPlaybackData(new Float32Array(3840))
-
-    const stats = engine.getPlaybackStats()
-    assert.equal(stats.buffered, 3840)
-    assert.equal(stats.dropped, 0)
-    assert.ok(stats.capacity >= 3840)
-})
-
-test('default config states the capacity and drain size the engine really uses', async () => {
-    const engine = new WaAudioEngine()
-
-    assert.equal(engine.getPlaybackStats().capacity, DEFAULT_AUDIO_CONFIG.maxBufferSize)
-    assert.equal(DEFAULT_AUDIO_CONFIG.maxBufferSize, engine.getMaxPacketSamples() * 3)
 
     let drainSize = 0
+    engine.setPlayoutSource((out) => out.length)
     engine.setPlaybackSink((pcm) => {
         drainSize = pcm.length
     })
     engine.startPlayback()
-    engine.onPlaybackData(new Float32Array(DEFAULT_AUDIO_CONFIG.playbackOutputSize))
 
-    await new Promise((resolve) => setTimeout(resolve, DEFAULT_AUDIO_CONFIG.intervalMs * 2))
+    await waitUntil(() => drainSize > 0)
     engine.stopPlayback()
 
     assert.equal(drainSize, DEFAULT_AUDIO_CONFIG.playbackOutputSize)
@@ -136,169 +120,47 @@ test('default config states the capacity and drain size the engine really uses',
     )
 })
 
-test('jitter buffer capacity scales with the configured headroom', () => {
-    const tight = new WaAudioEngine({ jitterHeadroomPackets: 1 })
-    assert.equal(tight.getPlaybackStats().capacity, 3840)
+/** A tick with nothing queued at all is skipped, so the consumer sees no empty frames. */
+test('a tick the source fills with no audio reaches no sink', async () => {
+    const engine = new WaAudioEngine({ intervalMs: 5 })
 
-    const roomy = new WaAudioEngine({ jitterHeadroomPackets: 4 })
-    assert.equal(roomy.getPlaybackStats().capacity, 3840 * 4)
-})
-
-test('jitter buffer drops the oldest audio once it is full', () => {
-    const engine = new WaAudioEngine({ jitterHeadroomPackets: 1 })
-
-    const first = new Float32Array(3840).fill(0.25)
-    const second = new Float32Array(960).fill(0.5)
-    engine.onPlaybackData(first)
-    engine.onPlaybackData(second)
-
-    const stats = engine.getPlaybackStats()
-    assert.equal(stats.buffered, 3840)
-    assert.equal(stats.dropped, 960)
-})
-
-test('jitter buffer reorders packets that arrive within the window', async () => {
-    const engine = new WaAudioEngine({ playbackOutputSize: 960, intervalMs: 5 })
-
-    const played: number[] = []
-    engine.setPlaybackSink((pcm) => {
-        played.push(pcm[0])
+    let pulls = 0
+    let delivered = 0
+    engine.setPlayoutSource((out) => {
+        pulls++
+        out.fill(0)
+        return 0
     })
-
+    engine.setPlaybackSink(() => {
+        delivered++
+    })
     engine.startPlayback()
-    engine.onPlaybackPacket(1, new Float32Array(960).fill(0.1))
-    engine.onPlaybackPacket(3, new Float32Array(960).fill(0.3))
-    engine.onPlaybackPacket(2, new Float32Array(960).fill(0.2))
 
-    await new Promise((resolve) => setTimeout(resolve, 80))
+    await waitUntil(() => pulls >= 4)
     engine.stopPlayback()
 
-    assert.deepEqual(
-        played.map((value) => Math.round(value * 10)),
-        [1, 2, 3]
-    )
-    assert.equal(engine.getPlaybackStats().reordered, 1)
-    assert.equal(engine.getPlaybackStats().late, 0)
-})
-
-test('jitter buffer gives up on a hole once a packet arrives past the window', () => {
-    const engine = new WaAudioEngine({ reorderWindowPackets: 4 })
-
-    engine.onPlaybackPacket(1, new Float32Array(960))
-    engine.onPlaybackPacket(3, new Float32Array(960))
-    assert.equal(engine.getPlaybackStats().buffered, 960, 'packet 3 waits on packet 2')
-
-    engine.onPlaybackPacket(40, new Float32Array(960))
-    assert.equal(
-        engine.getPlaybackStats().buffered,
-        960 * 3,
-        'the parked packet is released once the hole is abandoned'
-    )
-})
-
-test('jitter buffer bounds how many packets the reorder window parks', () => {
-    const engine = new WaAudioEngine({ reorderWindowPackets: 4 })
-
-    engine.onPlaybackPacket(1, new Float32Array(960))
-    for (let seq = 3; seq <= 5; seq++) {
-        engine.onPlaybackPacket(seq, new Float32Array(960))
-    }
-    assert.equal(engine.getPlaybackStats().buffered, 960, 'a full window parks and nothing else')
-
-    engine.onPlaybackPacket(6, new Float32Array(960))
-
-    const stats = engine.getPlaybackStats()
-    assert.equal(stats.buffered, 960 * 5)
-    assert.equal(stats.reordered, 3)
-    assert.equal(stats.dropped, 0)
-})
-
-test('jitter buffer discards a packet playback already moved past', () => {
-    const engine = new WaAudioEngine()
-
-    engine.onPlaybackPacket(10, new Float32Array(960))
-    engine.onPlaybackPacket(11, new Float32Array(960))
-    engine.onPlaybackPacket(9, new Float32Array(960))
-
-    const stats = engine.getPlaybackStats()
-    assert.equal(stats.buffered, 960 * 2)
-    assert.equal(stats.late, 1)
+    assert.ok(pulls >= 4, `expected the playback tick to keep pulling, got ${pulls}`)
+    assert.equal(delivered, 0)
 })
 
 test('playback drain keeps up with the wall clock', async () => {
     const engine = new WaAudioEngine({ intervalMs: 10 })
 
+    let queued = 960
     let drained = 0
+    engine.setPlayoutSource((out) => {
+        const real = Math.min(queued, out.length)
+        queued -= real
+        return real
+    })
     engine.setPlaybackSink((pcm) => {
         drained += pcm.length
     })
 
     engine.startPlayback()
-    for (let i = 0; i < 6; i++) {
-        engine.onPlaybackData(new Float32Array(160))
-    }
-
-    await waitUntil(() => drained >= 960)
+    await waitUntil(() => queued === 0)
     engine.stopPlayback()
 
+    assert.equal(queued, 0, 'the queue has to drain')
     assert.ok(drained >= 960, `expected the queue to drain, got ${drained} samples`)
-    assert.equal(engine.getPlaybackStats().buffered, 0)
-})
-
-test('mute keeps the capture stream alive and sends silence', async () => {
-    const engine = new WaAudioEngine({ captureChunkSize: 960, intervalMs: 5 })
-
-    let chunks = 0
-    let voiced = 0
-    engine.setAudioSender({
-        sendCapturedAudio: (data) => {
-            chunks++
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] !== 0) {
-                    voiced++
-                    break
-                }
-            }
-        }
-    })
-
-    engine.generateTestTone(440, 1)
-    engine.setMuted(true)
-    engine.startCapture()
-
-    await waitUntil(() => chunks >= 4)
-    engine.stop()
-
-    assert.equal(engine.isMuted(), true)
-    assert.ok(chunks >= 4, `expected the capture interval to keep ticking, got ${chunks} chunks`)
-    assert.equal(voiced, 0)
-})
-
-test('unmuting resumes real audio on the same capture interval', async () => {
-    const engine = new WaAudioEngine({ captureChunkSize: 960, intervalMs: 5 })
-
-    let voiced = 0
-    engine.setAudioSender({
-        sendCapturedAudio: (data) => {
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] !== 0) {
-                    voiced++
-                    break
-                }
-            }
-        }
-    })
-
-    engine.generateTestTone(440, 1)
-    engine.setMuted(true)
-    engine.startCapture()
-
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    assert.equal(voiced, 0)
-
-    engine.setMuted(false)
-    await waitUntil(() => voiced > 0)
-    engine.stop()
-
-    assert.ok(voiced > 0, 'capture has to deliver real audio again after unmute')
 })

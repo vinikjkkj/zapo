@@ -1,4 +1,5 @@
-import type { WaCallReaction } from './app-data/protocol.js'
+import type { WaCallMediaMessage, WaCallReaction } from '@zapo-js/voip-media'
+
 import type { CallInfo } from './call/call-state.js'
 import type { PeerScreenShare } from './signaling/screen-share.js'
 import type { InboundVideoFrame, InboundVideoRtpPacket, PeerVideoStateChange } from './types.js'
@@ -77,6 +78,14 @@ export interface VoipEvents {
         readonly call: CallInfo
         readonly participantJid: string
         readonly raised: boolean
+    }) => void
+    /**
+     * A media plan change for the remote host (`media: { mode: 'remote' }`), to send in order
+     * via `encodeCallMediaMessage`. Carries SRTP keys and relay credentials: keep it private.
+     */
+    readonly voip_call_media: (payload: {
+        readonly call: CallInfo
+        readonly message: WaCallMediaMessage
     }) => void
     readonly voip_call_error: (error: Error) => void
 }

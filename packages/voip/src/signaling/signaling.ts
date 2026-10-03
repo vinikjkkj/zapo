@@ -11,7 +11,8 @@ import {
 } from 'zapo-js/transport'
 import { bytesToHex, toError, tryAsNumber } from 'zapo-js/util'
 
-import { randomBytes } from '../crypto/primitives.js'
+import { randomBytes } from '@zapo-js/voip-media'
+
 import type {
     NodeInfo,
     PeerVideoStateChange,

@@ -1,3 +1,10 @@
+import type {
+    WaCallMediaEvent,
+    WaCallMediaMessage,
+    WaCallMediaPlanUpdate
+} from '@zapo-js/voip-media'
+
+import type { WaCallMediaLink, WaCallMediaLinkEvents } from '../media-link.js'
 import type { WaCallMediaSessionDelegate } from '../WaCallMediaSession.js'
 
 /**
@@ -23,5 +30,80 @@ export function createSessionDelegate(
         emitPeerVideoState: () => {},
         endCall: () => {},
         ...watched
+    }
+}
+
+/** A media link that records every plan change in order and replays media events on demand. */
+export class RecordingMediaLink implements WaCallMediaLink {
+    readonly updates: WaCallMediaPlanUpdate[] = []
+    events!: WaCallMediaLinkEvents
+    started = false
+    stopped = false
+
+    /** The plan as every update so far leaves it, later sections replacing earlier ones. */
+    get plan(): WaCallMediaPlanUpdate {
+        return Object.assign({}, ...this.updates) as WaCallMediaPlanUpdate
+    }
+
+    /** The updates that carried `section`, in the order they were published. */
+    sections<K extends keyof WaCallMediaPlanUpdate>(section: K): WaCallMediaPlanUpdate[K][] {
+        return this.updates.filter((update) => section in update).map((update) => update[section])
+    }
+
+    start(): Promise<void> {
+        this.started = true
+        return Promise.resolve()
+    }
+
+    apply(update: WaCallMediaPlanUpdate): Promise<void> {
+        this.updates.push(update)
+        return Promise.resolve()
+    }
+
+    stop(): void {
+        this.stopped = true
+    }
+
+    sendReaction(): boolean {
+        return false
+    }
+
+    sendVideoFrame(): number {
+        return 0
+    }
+
+    loadAudio(): Promise<void> {
+        return Promise.resolve()
+    }
+
+    setExternalAudioMode(): void {}
+
+    feedLiveAudio(): number {
+        return 0
+    }
+
+    getLiveBufferMs(): number {
+        return 0
+    }
+
+    handleEvent(_event: WaCallMediaEvent): void {}
+
+    snapshot(): WaCallMediaMessage | null {
+        return null
+    }
+}
+
+/** A recording link and the factory a session takes it through. */
+export function recordMediaLink(): {
+    readonly link: RecordingMediaLink
+    readonly createMediaLink: (events: WaCallMediaLinkEvents) => WaCallMediaLink
+} {
+    const link = new RecordingMediaLink()
+    return {
+        link,
+        createMediaLink: (events) => {
+            link.events = events
+            return link
+        }
     }
 }

@@ -5,6 +5,8 @@ import { isLidJid } from 'zapo-js/protocol'
 import { type BinaryNode, hasNodeChild } from 'zapo-js/transport'
 import { resolvePositive, toError } from 'zapo-js/util'
 
+import type { WaCallMediaEvent, WaCallMediaMessage } from '@zapo-js/voip-media'
+
 import { generateCallKey } from '../crypto/encryption.js'
 import { WaAudioEngine } from '../media/WaAudioEngine.js'
 import { parseRelayFromAck } from '../relay/relay-ack.js'
@@ -26,6 +28,7 @@ import {
 } from '../types.js'
 
 import { CallInfo } from './call-state.js'
+import { type WaCallMediaLinkEvents, WaLocalCallMedia, WaRemoteCallMedia } from './media-link.js'
 import { WaCallMediaSession } from './WaCallMediaSession.js'
 
 const DEFAULT_MAX_CONCURRENT_CALLS = 1
@@ -37,7 +40,12 @@ export interface WaCallManagerConfig {
     maxConcurrentCalls?: number
     useOriginalRelayPort?: boolean
     useRawUdpTransport?: boolean
+    /** Where call media runs; see `WaVoipCoordinatorOptions.media`. */
+    mediaMode?: WaCallMediaMode
 }
+
+/** `local` carries the media in this process; `remote` hands its plan to a host elsewhere. */
+export type WaCallMediaMode = 'local' | 'remote'
 
 export class WaCallManager extends EventEmitter {
     private readonly deps: WaVoipDeps
@@ -46,6 +54,7 @@ export class WaCallManager extends EventEmitter {
     private readonly maxConcurrentCalls: number
     private readonly useOriginalRelayPort: boolean
     private readonly useRawUdpTransport: boolean
+    private readonly mediaMode: WaCallMediaMode
 
     private readonly calls = new Map<string, WaCallMediaSession>()
 
@@ -61,6 +70,7 @@ export class WaCallManager extends EventEmitter {
         )
         this.useOriginalRelayPort = config.useOriginalRelayPort ?? false
         this.useRawUdpTransport = config.useRawUdpTransport ?? false
+        this.mediaMode = config.mediaMode ?? 'local'
     }
 
     async startCall(options: CallOfferOptions): Promise<string> {
@@ -474,8 +484,7 @@ export class WaCallManager extends EventEmitter {
             deps: this.deps,
             logger: sessionLogger,
             info,
-            useOriginalRelayPort: this.useOriginalRelayPort,
-            useRawUdpTransport: this.useRawUdpTransport,
+            createMediaLink: (events) => this.createMediaLink(info.callId, sessionLogger, events),
             delegate: {
                 emitState: (call) => this.emitState(call),
                 emitIncoming: (call) => this.emit('call_incoming', call),
@@ -490,6 +499,7 @@ export class WaCallManager extends EventEmitter {
                 emitHandRaise: (call, participantJid, raised) =>
                     this.emit('call_hand_raise', call, participantJid, raised),
                 emitCallReaction: (call, reaction) => this.emit('call_reaction', call, reaction),
+                emitMediaPlan: (call, message) => this.emit('call_media', call, message),
                 emitScreenShare: (call, share) => this.emit('call_screen_share', call, share),
                 emitPeerVideoState: (call, change) =>
                     this.emit('call_peer_video_state', call, change),
@@ -506,6 +516,46 @@ export class WaCallManager extends EventEmitter {
 
         this.calls.set(info.callId, session)
         return session
+    }
+
+    /**
+     * Hands an event from a remote media host to its call. Events for a call that no longer
+     * exists are dropped: the host may still be winding down.
+     */
+    handleMediaEvent(callId: string, event: WaCallMediaEvent): void {
+        const session = this.calls.get(callId)
+        if (!session) {
+            this.logger.debug('media event for an unknown call, ignored', {
+                callId,
+                type: event.type
+            })
+            return
+        }
+        session.handleMediaEvent(event)
+    }
+
+    /**
+     * The whole media plan of a call, for a host that joins late or lost track of
+     * the messages. `null` for an unknown call, or when the media runs locally.
+     */
+    getMediaSnapshot(callId: string): WaCallMediaMessage | null {
+        return this.calls.get(callId)?.getMediaSnapshot() ?? null
+    }
+
+    private createMediaLink(
+        callId: string,
+        logger: Logger,
+        events: WaCallMediaLinkEvents
+    ): WaLocalCallMedia | WaRemoteCallMedia {
+        if (this.mediaMode === 'remote') {
+            return new WaRemoteCallMedia(callId, events)
+        }
+        return new WaLocalCallMedia({
+            logger,
+            events,
+            useOriginalRelayPort: this.useOriginalRelayPort,
+            useRawUdpTransport: this.useRawUdpTransport
+        })
     }
 
     private getSessionOrThrow(callId: string): WaCallMediaSession {

@@ -223,6 +223,8 @@ Dynamic imports are reserved for optional runtime dependencies already implement
 - `src/infra/log/PinoLogger.ts` (`pino`, `pino-pretty`)
 - `packages/store-sqlite/src/connection.ts` (`better-sqlite3`, `bun:sqlite`, `node:sqlite`)
 - `src/transport/node/mex/argo-decoder.ts` (`argo-codec`)
+- `packages/voip-media/src/media/mlow-codec.ts` (`libmlow-wasm-fork`)
+- `packages/voip-media/src/node/peer-connection.ts` (`@roamhq/wrtc`, loaded on the first relay leg so a process that never dials does not load the native addon)
 
 Avoid introducing dynamic imports outside this pattern.
 
