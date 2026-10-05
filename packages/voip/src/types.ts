@@ -256,19 +256,26 @@ export interface CallManagerEvents {
 }
 
 export interface AudioSender {
-    sendCapturedAudio(data: Float32Array): void
+    /**
+     * Takes one captured chunk, its first sample captured at `capturedAtMs` (`performance.now()`).
+     * `data` is the engine's reused buffer: consume or copy it before returning.
+     */
+    sendCapturedAudio(data: Float32Array, capturedAtMs?: number): void
 }
 
 export interface WaAudioEngineConfig {
     sampleRate: number
-    /** Samples read from the outbound source on every capture tick. */
+    /** Samples per chunk read from the outbound source; a tick moves as many as time owes. */
     captureChunkSize: number
     /**
-     * Samples pulled from the playout source on every playback tick. Keep it at
-     * `sampleRate / 1000 * intervalMs` so playout advances at wall-clock speed:
-     * the engine raises it to one tick's worth when it is set lower.
+     * Samples per block pulled from the playout source, as many blocks per tick as time owes.
+     * Raised to one tick's worth (`sampleRate / 1000 * intervalMs`) when set lower.
      */
     playbackOutputSize: number
+    /**
+     * How often both clocks check what they owe. The audio is paced by
+     * elapsed time, not by how many ticks fired.
+     */
     intervalMs: number
 }
 

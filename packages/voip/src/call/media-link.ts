@@ -58,7 +58,7 @@ export interface WaLocalCallMediaOptions {
 
 /**
  * Media carried in this process: a plane on the Node host, clocked and fed by the audio
- * engine. Before media flows the engine only ticks the caller's warmup silence.
+ * engine, whose one capture clock runs from the warmup silence into the real source.
  */
 export class WaLocalCallMedia implements WaCallMediaLink {
     private readonly plane: WaCallMediaPlane
@@ -85,7 +85,9 @@ export class WaLocalCallMedia implements WaCallMediaLink {
             onInboundVideo: (frame) => events.onInboundVideo(frame)
         })
 
-        this.audio.setAudioSender({ sendCapturedAudio: (pcm) => this.plane.pushCapture(pcm) })
+        this.audio.setAudioSender({
+            sendCapturedAudio: (pcm, capturedAtMs) => this.plane.pushCapture(pcm, capturedAtMs)
+        })
         this.audio.setPlayoutSource((out) => this.plane.pullPlayout(out))
         // The engine reuses its buffer on the next tick, so copy before handing it out.
         this.audio.setPlaybackSink((pcm) => events.onInboundAudio(pcm.slice()))
@@ -98,7 +100,7 @@ export class WaLocalCallMedia implements WaCallMediaLink {
 
     async apply(update: WaCallMediaPlanUpdate): Promise<void> {
         await this.plane.apply(update)
-        // Before the flow, only the caller's warmup runs the clock; the real source starts with it.
+        // The warmup clock runs before the flow; the flow keeps it and swaps in the real source.
         if (this.plane.isWarmingUp && !this.plane.isFlowing) {
             this.audio.startSilenceCapture()
         }

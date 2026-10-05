@@ -60,9 +60,17 @@ settings the server tuned, whether the call is accepted or muted, and whether vi
 holds no jid and no call key. Every section is replaced whole when it changes, and updates apply
 in the order they are handed in.
 
-The audio clock belongs to the host. Capture is pushed in at any length and framed internally;
+The audio pace belongs to the host. Capture is pushed in at any length and framed internally;
 playout is pulled out of a jitter buffer that pads with silence when it runs short. In Node that
-clock is a timer; in a browser, the audio device.
+pace is a timer; in a browser, the audio device.
+
+The timestamps belong to the plane: audio and video are stamped on one media clock per call, the
+way the receiver needs them to pace the video against the audio. `pushCapture(samples, capturedAtMs)`
+takes the `performance.now()` instant the first sample was captured, and without it the block is
+taken as captured as it arrives. Consecutive frames keep consecutive timestamps whatever jitter
+those instants carry, a pause in the capture goes out as a marked jump, and capture delivered ahead
+of the clock is shed. `sendVideoFrame` takes the host's own capture timestamp in any epoch and maps
+it onto the same clock.
 
 ## Audio in a browser
 

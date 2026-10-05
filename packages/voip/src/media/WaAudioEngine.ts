@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import { access } from 'node:fs/promises'
+import { performance } from 'node:perf_hooks'
 
 import { createNoopLogger, type Logger } from 'zapo-js'
 import { toBytesView, toError } from 'zapo-js/util'
@@ -11,6 +12,12 @@ const FFMPEG_BIN = 'ffmpeg'
 
 const EXT_FEED_PAUSE_FRACTION = 0.12
 const EXT_FEED_RESUME_FRACTION = 0.06
+
+/**
+ * Chunks one tick may move to catch up with its clock, since timers fire late and coarse; a
+ * longer stall is forgiven rather than replayed, capping a burst at 240 ms.
+ */
+const MAX_CATCH_UP_CHUNKS = 4
 
 const MAX_DECODE_BYTES = 128 * 1024 * 1024
 const MAX_STDERR_CHARS = 16 * 1024
@@ -36,14 +43,17 @@ async function hasFfmpeg(bin: string): Promise<boolean> {
 
 export interface WaAudioEngineOptions extends Partial<WaAudioEngineConfig> {
     readonly logger?: Logger
+    /** Clock the pacers run on and stamp capture with, in ms; `performance.now` by default. */
+    readonly now?: () => number
 }
 
 /**
- * The audio clock of a call carried in Node and its outbound source; the jitter buffer,
- * codec and muting live in the media plane.
+ * The audio clock of a call carried in Node and its outbound source. Both pacers move every
+ * chunk the elapsed time owes, so a late or coarse timer costs no audio.
  */
 export class WaAudioEngine {
     private readonly logger: Logger
+    private readonly now: () => number
     private audioSender: AudioSender | null = null
     private audioBuffer: Float32Array | null = null
     private audioPosition = 0
@@ -51,7 +61,17 @@ export class WaAudioEngine {
     private onAudioFinished: (() => void) | null = null
 
     private playbackInterval: ReturnType<typeof setInterval> | null = null
+    private playbackStartMs = 0
+    /** Playback time the clock has accounted for since it started: pulled or forgiven. */
+    private playbackSamples = 0
+    private playbackStalls = 0
+
     private captureInterval: ReturnType<typeof setInterval> | null = null
+    private captureStartMs = 0
+    /** Capture time the clock has accounted for since it started: handed over or forgiven. */
+    private captureSamples = 0
+    private captureChunks = 0
+    private captureStalls = 0
 
     private readonly sampleRate: number
     private readonly captureChunkSize: number
@@ -68,6 +88,7 @@ export class WaAudioEngine {
     private extStarted = false
     private readonly extPreBufferSize: number
     private readonly extTargetBuffer: number
+    private readonly extTargetMs: number
     private readonly extHighWater: number
     private readonly extMaxBuffer: number
     private extSkipCount = 0
@@ -80,6 +101,7 @@ export class WaAudioEngine {
     constructor(config: WaAudioEngineOptions = {}) {
         const c = { ...DEFAULT_AUDIO_CONFIG, ...config }
         this.logger = config.logger ?? createNoopLogger()
+        this.now = config.now ?? (() => performance.now())
         this.sampleRate = c.sampleRate
         this.captureChunkSize = c.captureChunkSize
         this.intervalMs = c.intervalMs
@@ -94,6 +116,7 @@ export class WaAudioEngine {
 
         this.extPreBufferSize = Math.floor(this.sampleRate * EXT_FEED_RESUME_FRACTION)
         this.extTargetBuffer = Math.floor(this.sampleRate * 0.06)
+        this.extTargetMs = (this.extTargetBuffer * 1000) / this.sampleRate
         this.extHighWater = Math.floor(this.sampleRate * 0.45)
         this.extMaxBuffer = Math.floor(this.sampleRate * 0.75)
     }
@@ -302,8 +325,8 @@ export class WaAudioEngine {
     }
 
     /**
-     * Where the playback tick pulls decoded audio from: it fills the buffer it
-     * is handed and returns how many samples were real audio.
+     * Where the playback clock pulls decoded audio from: it fills the buffer
+     * it is handed and returns how many samples were real audio.
      */
     setPlayoutSource(source: ((out: Float32Array) => number) | null): void {
         this.playoutSource = source
@@ -316,18 +339,40 @@ export class WaAudioEngine {
 
         this.logger.debug('starting playback', { drainSamples: this.outputSize })
 
-        this.playbackInterval = setInterval(() => {
-            const source = this.playoutSource
-            const sink = this.playbackSink
-            if (!source || !sink) return
-            const drained = source(this.playbackOutputBuffer)
-            if (drained === 0) return
+        this.playbackStartMs = this.now()
+        this.playbackSamples = 0
+        this.playbackInterval = setInterval(() => this.tickPlayback(), this.intervalMs)
+    }
+
+    /** Pulls every block of playback time owed since the clock started, however late the timer. */
+    private tickPlayback(): void {
+        let owed = this.chunksOwed(this.playbackStartMs, this.playbackSamples, this.outputSize)
+        if (owed <= 0) return
+        if (owed > MAX_CATCH_UP_CHUNKS) {
+            const forgiven = owed - MAX_CATCH_UP_CHUNKS
+            owed = MAX_CATCH_UP_CHUNKS
+            this.playbackSamples += forgiven * this.outputSize
+            this.playbackStalls++
+            if (this.playbackStalls <= 5 || this.playbackStalls % 100 === 0) {
+                this.logger.debug('playback clock stalled, backlog forgiven', {
+                    forgivenBlocks: forgiven,
+                    stalls: this.playbackStalls
+                })
+            }
+        }
+        this.playbackSamples += owed * this.outputSize
+
+        const source = this.playoutSource
+        const sink = this.playbackSink
+        if (!source || !sink) return
+        for (; owed > 0; owed--) {
+            if (source(this.playbackOutputBuffer) === 0) continue
             try {
                 sink(this.playbackOutputBuffer)
             } catch (err) {
                 this.logger.trace('playback sink failed', { message: toError(err).message })
             }
-        }, this.intervalMs)
+        }
     }
 
     stopPlayback(): void {
@@ -339,13 +384,15 @@ export class WaAudioEngine {
 
     /**
      * Receive the paced playback audio. The callback is handed the engine's own
-     * output buffer, which is overwritten on the next tick, so a consumer that
-     * keeps the samples has to copy them.
+     * output buffer, which the next pull overwrites - within the same tick when
+     * the clock catches up - so a consumer that keeps the samples has to copy
+     * them.
      */
     setPlaybackSink(sink: ((pcm: Float32Array) => void) | null): void {
         this.playbackSink = sink
     }
 
+    /** Starts the capture clock on warmup silence; {@link startCapture} later keeps this clock. */
     startSilenceCapture(): void {
         if (this.captureInterval) {
             return
@@ -355,28 +402,20 @@ export class WaAudioEngine {
 
         this.logger.debug('starting silence capture for pre-accept warmup')
 
-        this.captureInterval = setInterval(() => {
-            if (this.audioSender) {
-                try {
-                    this.audioSender.sendCapturedAudio(this.silenceChunkBuffer)
-                } catch (err) {
-                    this.logger.trace('silence send failed', { message: toError(err).message })
-                }
-            }
-        }, this.intervalMs)
+        this.startCaptureClock()
     }
 
+    /**
+     * Switches capture to the real source (live feed, file from its start, or silence), keeping
+     * a warmup clock so the stamps stay one timeline. A no-op once the real source runs.
+     */
     startCapture(): void {
-        if (this.captureInterval && this.silenceMode) {
-            clearInterval(this.captureInterval)
-            this.captureInterval = null
-        }
-
-        if (this.captureInterval) {
+        if (this.captureInterval && !this.silenceMode) {
             return
         }
 
         this.silenceMode = false
+        this.captureChunks = 0
 
         if (this.externalMode) {
             this.audioPosition = Math.max(0, this.liveWritePos - this.extPreBufferSize)
@@ -398,31 +437,76 @@ export class WaAudioEngine {
             }
         }
 
-        let frameCount = 0
+        if (!this.captureInterval) {
+            this.startCaptureClock()
+        }
+    }
 
-        this.captureInterval = setInterval(() => {
-            frameCount++
-            const chunk = this.getNextChunk()
+    private startCaptureClock(): void {
+        this.captureStartMs = this.now()
+        this.captureSamples = 0
+        this.captureInterval = setInterval(() => this.tickCapture(), this.intervalMs)
+    }
 
-            if (this.audioSender) {
-                try {
-                    this.audioSender.sendCapturedAudio(chunk)
-                } catch (err) {
-                    this.logger.trace('captured audio send failed', {
-                        message: toError(err).message
-                    })
-                }
+    /** Hands over every capture chunk owed since the clock started, stamped on that clock. */
+    private tickCapture(): void {
+        let owed = this.chunksOwed(this.captureStartMs, this.captureSamples, this.captureChunkSize)
+        if (owed > MAX_CATCH_UP_CHUNKS) {
+            const forgiven = owed - MAX_CATCH_UP_CHUNKS
+            owed = MAX_CATCH_UP_CHUNKS
+            // Skip the time, not the source: the stamp jump tells the plane of the pause.
+            this.captureSamples += forgiven * this.captureChunkSize
+            this.captureStalls++
+            if (this.captureStalls <= 5 || this.captureStalls % 100 === 0) {
+                this.logger.debug('capture clock stalled, backlog forgiven', {
+                    forgivenChunks: forgiven,
+                    stalls: this.captureStalls
+                })
+            }
+        }
+
+        // Live audio sits in the feed buffer about its target before it is read.
+        const queuedMs = this.externalMode && !this.silenceMode ? this.extTargetMs : 0
+        for (; owed > 0; owed--) {
+            const capturedAtMs =
+                this.captureStartMs + (this.captureSamples * 1000) / this.sampleRate - queuedMs
+            this.captureSamples += this.captureChunkSize
+            if (this.silenceMode) {
+                this.sendCaptured(this.silenceChunkBuffer, capturedAtMs)
+                continue
             }
 
-            if (frameCount % 500 === 0) {
+            this.sendCaptured(this.getNextChunk(), capturedAtMs)
+            if (++this.captureChunks % 500 === 0) {
                 if (this.audioBuffer) {
                     const positionSec = this.audioPosition / this.sampleRate
-                    this.logger.trace('capture frame', { frameCount, positionSec })
+                    this.logger.trace('capture chunk', { chunks: this.captureChunks, positionSec })
                 } else {
-                    this.logger.trace('capture frame with silence', { frameCount })
+                    this.logger.trace('capture chunk with silence', { chunks: this.captureChunks })
                 }
             }
-        }, this.intervalMs)
+        }
+    }
+
+    private sendCaptured(chunk: Float32Array, capturedAtMs: number): void {
+        if (!this.audioSender) return
+        try {
+            this.audioSender.sendCapturedAudio(chunk, capturedAtMs)
+        } catch (err) {
+            this.logger.trace('captured audio send failed', {
+                silence: this.silenceMode,
+                message: toError(err).message
+            })
+        }
+    }
+
+    /**
+     * Whole chunks of `chunkSize` a clock started at `startMs` owes: the time
+     * elapsed since then, in samples, that `doneSamples` does not cover yet.
+     */
+    private chunksOwed(startMs: number, doneSamples: number, chunkSize: number): number {
+        const elapsedSamples = ((this.now() - startMs) * this.sampleRate) / 1000
+        return Math.floor((elapsedSamples - doneSamples) / chunkSize)
     }
 
     stopCapture(): void {

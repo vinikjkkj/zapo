@@ -46,6 +46,8 @@ const LONG_SAMPLES_PER_PACKET = AUDIO_SAMPLES_PER_PACKET * 2
 const VIDEO_FRAME_INTERVAL_US = 40_000
 /** The same interval on the 90 kHz video clock. */
 const VIDEO_TICKS_PER_FRAME = 3600
+/** Where the plane's time source starts; the call's media clock counts from here. */
+const CLOCK_START_MS = 1_000_000
 
 const SR_SSRC_OFFSET = 4
 const SR_RTP_TIMESTAMP_OFFSET = 16
@@ -68,7 +70,7 @@ interface PlaneInternals {
     videoStreamOpen: boolean
     rtpSession: RtpSession
     videoRtpSession: RtpSession
-    codec: MLowCodec | null
+    codec: MLowCodec
     srtpSession: {
         protect: (packet: RtpPacket) => Uint8Array
         unprotect: (data: Uint8Array) => RtpPacket
@@ -85,7 +87,6 @@ interface PlaneInternals {
     videoReception: RtpStreamReception
     videoReportSchedule: SenderReportSchedule
     receiverEstimateSchedule: SenderReportSchedule
-    sendOpusFrame: (frame: Uint8Array) => void
     wallSendTimeExtension: boolean
     onRelayData: (data: Uint8Array) => void
 }
@@ -94,15 +95,18 @@ interface RtcpHarness {
     readonly plane: WaCallMediaPlane
     readonly sent: Uint8Array[]
     readonly internals: PlaneInternals
+    /** The plane's time source, which the senders below move as they feed media. */
+    readonly time: { ms: number }
     /** Frames fed so far, so each one carries its own capture timestamp. */
     videoFrames: number
 }
 
 /**
  * A plane whose relay collects what it would broadcast and whose SRTP layers
- * are pass-through, so the RTP and RTCP packets can be read as built.
+ * are pass-through, so the RTP and RTCP packets can be read as built. Its time
+ * source is moved by hand.
  *
- * Video reports are paced by the wall clock, so the harness installs a schedule
+ * Video reports are paced by elapsed time, so the harness installs a schedule
  * of `videoReportIntervalMs`, zero by default: every frame past the one that
  * opened the interval then reports, which makes the video path drivable without
  * waiting out a real interval. Pass the real interval to exercise the pacing.
@@ -114,12 +118,14 @@ async function createPlane(
     videoReportIntervalMs = 0
 ): Promise<RtcpHarness> {
     const sent: Uint8Array[] = []
+    const time = { ms: CLOCK_START_MS }
     const plane = new WaCallMediaPlane({
         logger: createNoopLogger(),
         crypto: nodeCrypto,
         createPeerConnection: peerConnectionNotDialled,
         onInboundVideoRtp: () => {},
-        onInboundVideo: () => {}
+        onInboundVideo: () => {},
+        now: () => time.ms
     })
     await plane.apply({ mediaType })
     if (mediaType === 'audio') {
@@ -149,8 +155,9 @@ async function createPlane(
     }
     internals.srtcpContext = { protect: (rtcp) => rtcp }
     internals.rtpSession = RtpSession.whatsappOpus(SELF_AUDIO_SSRC)
+    internals.codec = fixedFrameCodec(AUDIO_SAMPLES_PER_PACKET)
     if (mediaType === 'video') {
-        internals.videoRtpSession = new RtpSession(SELF_VIDEO_SSRC, 97, 90_000, 3000)
+        internals.videoRtpSession = new RtpSession(SELF_VIDEO_SSRC, 97)
         internals.videoReportSchedule = SenderReportSchedule.onWallClock(videoReportIntervalMs)
         internals.receiverEstimateSchedule = SenderReportSchedule.onWallClock(videoReportIntervalMs)
     }
@@ -159,16 +166,26 @@ async function createPlane(
     // A stream already running: video is open.
     internals.videoStreamOpen = true
 
-    return { plane, sent, internals, videoFrames: 0 }
+    return { plane, sent, internals, time, videoFrames: 0 }
 }
 
-/** A codec that only answers the frame length the send path asks it for. */
-function frameSizeCodec(samplesPerPacket: number): MLowCodec {
+/** A codec that frames at `samplesPerPacket` and encodes every frame as `OPUS_FRAME`. */
+function fixedFrameCodec(samplesPerPacket: number): MLowCodec {
     return {
         getFrameSize: () => samplesPerPacket,
+        encode: () => OPUS_FRAME,
+        resetSequence: () => {},
         getStats: () => ({ success: 0, errors: 0 }),
         destroy: () => {}
     } as unknown as MLowCodec
+}
+
+/** Pushes one codec frame right after the last, moving the time source by its length. */
+function sendAudioFrame(harness: RtcpHarness): void {
+    const samples = harness.internals.codec.getFrameSize()
+    const capturedAt = harness.time.ms
+    harness.time.ms += (samples * 1000) / AUDIO_CLOCK_RATE
+    harness.plane.pushCapture(new Float32Array(samples), capturedAt)
 }
 
 /** An Annex-B access unit long enough to need several RTP packets. */
@@ -209,20 +226,32 @@ function reportsFrom(sent: readonly Uint8Array[], ssrc: number): Uint8Array[] {
 function sendAudioUntilReport(harness: RtcpHarness): number {
     const before = reportsFrom(harness.sent, SELF_AUDIO_SSRC).length
     for (let packets = 1; packets <= 200; packets++) {
-        harness.internals.sendOpusFrame(OPUS_FRAME)
+        sendAudioFrame(harness)
         if (reportsFrom(harness.sent, SELF_AUDIO_SSRC).length > before) return packets
     }
     return assert.fail('no audio sender report after 200 packets')
 }
 
-/** Feeds one video frame, and answers the packets it went out as. */
+/** Feeds one video frame captured now, returns its packet count and moves time to the next. */
 function sendVideoFrame(harness: RtcpHarness, frame: Uint8Array = VIDEO_FRAME): number {
     const packets = harness.plane.sendVideoFrame(
         frame,
         harness.videoFrames * VIDEO_FRAME_INTERVAL_US
     )
     harness.videoFrames++
+    harness.time.ms += VIDEO_FRAME_INTERVAL_US / 1000
     return packets
+}
+
+/** The timestamp of the last RTP packet of `ssrc` the relay took before `packet`. */
+function rtpTimestampBefore(sent: readonly Uint8Array[], packet: Uint8Array, ssrc: number): number {
+    for (let index = sent.indexOf(packet) - 1; index >= 0; index--) {
+        const data = sent[index]
+        if ((data[1] < 200 || data[1] > 207) && readUInt32BE(data, 8) === ssrc) {
+            return readUInt32BE(data, 4)
+        }
+    }
+    return assert.fail('no rtp packet went out before the report')
 }
 
 /** Feeds video frames until the next report of that stream goes out. */
@@ -297,7 +326,7 @@ test('an audio sender report follows the advance of the stream timestamp', async
 
 test('a longer audio frame closes the same interval in fewer packets', async () => {
     const harness = await createPlane('audio')
-    harness.internals.codec = frameSizeCodec(LONG_SAMPLES_PER_PACKET)
+    harness.internals.codec = fixedFrameCodec(LONG_SAMPLES_PER_PACKET)
     const band = packetBand(LONG_SAMPLES_PER_PACKET)
 
     sendAudioUntilReport(harness)
@@ -340,6 +369,13 @@ test('the audio sender report carries the timestamp of the audio stream itself',
         packets * AUDIO_SAMPLES_PER_PACKET,
         'the report advances on the audio clock, not on elapsed wall time'
     )
+    assert.equal(
+        (readUInt32BE(second, SR_RTP_TIMESTAMP_OFFSET) -
+            rtpTimestampBefore(harness.sent, second, SELF_AUDIO_SSRC)) >>>
+            0,
+        AUDIO_SAMPLES_PER_PACKET,
+        'carried forward to the instant it was assembled, a frame after that frame was captured'
+    )
     harness.plane.stop()
 })
 
@@ -377,8 +413,8 @@ test('each stream reports on its own clock', async () => {
     assert.equal(timestampDelta(video[1], video[0]), videoFrames * VIDEO_TICKS_PER_FRAME)
     assert.equal(
         readUInt32BE(video[0], SR_RTP_TIMESTAMP_OFFSET),
-        (harness.videoFrames - 1 - videoFrames) * VIDEO_TICKS_PER_FRAME,
-        'the video report carries the timestamp of the frame that closed the interval'
+        rtpTimestampBefore(harness.sent, video[0], SELF_VIDEO_SSRC),
+        'assembled the instant its frame was captured, the report carries that frame timestamp'
     )
     harness.plane.stop()
 })
@@ -634,7 +670,7 @@ test('with the send-time extension, audio and video carry id 9 as the wall clock
     audio.internals.wallSendTimeExtension = true
 
     sendVideoFrame(video)
-    audio.internals.sendOpusFrame(OPUS_FRAME)
+    sendAudioFrame(audio)
 
     const expected = wallSendTime16(Date.now())
     const [videoPacket] = rtpPacketsFrom(video.sent, SELF_VIDEO_SSRC)
@@ -663,7 +699,7 @@ test('without it, the video id 9 is the transport sequence and the audio carries
 
     sendVideoFrame(video)
     sendVideoFrame(video)
-    audio.internals.sendOpusFrame(OPUS_FRAME)
+    sendAudioFrame(audio)
 
     const [first, second] = rtpPacketsFrom(video.sent, SELF_VIDEO_SSRC).map((packet) => {
         const id9 = extensionElement(packet.header.extensionData, 9)!

@@ -181,21 +181,19 @@ export class RtpPacket {
     }
 }
 
+/**
+ * The numbering of one outbound RTP stream: SSRC, payload type and a sequence starting at
+ * a random point. Timestamps come from the caller's `WaMediaClock`, shared by both streams.
+ */
 export class RtpSession {
-    private ssrc: number
-    private payloadType: number
+    private readonly ssrc: number
+    private readonly payloadType: number
     private sequenceNumber: number
-    private sampleRate: number
-    private timestamp: number
-    private samplesPerPacket: number
 
-    constructor(ssrc: number, payloadType: number, sampleRate: number, samplesPerPacket: number) {
+    constructor(ssrc: number, payloadType: number) {
         this.ssrc = ssrc
         this.payloadType = payloadType
         this.sequenceNumber = randomInt(0, 65536)
-        this.sampleRate = sampleRate
-        this.timestamp = randomInt(0, 0xffffffff)
-        this.samplesPerPacket = samplesPerPacket
     }
 
     getSsrc(): number {
@@ -203,24 +201,10 @@ export class RtpSession {
     }
 
     static whatsappOpus(ssrc: number): RtpSession {
-        return new RtpSession(ssrc, PayloadType.WhatsAppOpus, 16000, 960)
+        return new RtpSession(ssrc, PayloadType.WhatsAppOpus)
     }
 
-    createPacket(payload: Uint8Array, marker = false): RtpPacket {
-        const header = new RtpHeader(
-            this.payloadType,
-            this.sequenceNumber,
-            this.timestamp,
-            this.ssrc
-        )
-        header.marker = marker
-
-        this.sequenceNumber = (this.sequenceNumber + 1) & 0xffff
-        this.timestamp = (this.timestamp + this.samplesPerPacket) >>> 0
-
-        return new RtpPacket(header, payload)
-    }
-
+    /** The next packet of the stream, stamped `timestamp`, which is taken modulo 2^32. */
     createPacketAtTimestamp(payload: Uint8Array, timestamp: number, marker = false): RtpPacket {
         const header = new RtpHeader(
             this.payloadType,
@@ -230,25 +214,6 @@ export class RtpSession {
         )
         header.marker = marker
         this.sequenceNumber = (this.sequenceNumber + 1) & 0xffff
-        return new RtpPacket(header, payload)
-    }
-
-    createPacketWithDuration(
-        payload: Uint8Array,
-        durationSamples: number,
-        marker = false
-    ): RtpPacket {
-        const header = new RtpHeader(
-            this.payloadType,
-            this.sequenceNumber,
-            this.timestamp,
-            this.ssrc
-        )
-        header.marker = marker
-
-        this.sequenceNumber = (this.sequenceNumber + 1) & 0xffff
-        this.timestamp = (this.timestamp + durationSamples) >>> 0
-
         return new RtpPacket(header, payload)
     }
 }

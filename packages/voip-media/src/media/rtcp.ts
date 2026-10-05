@@ -475,8 +475,7 @@ function randomizeInterval(interval: number): number {
  * clock it counts in and the interval to the next report are all per stream.
  *
  * Differences are taken modulo 2^32, so an audio schedule survives the RTP
- * timestamp wrapping mid-call: the timestamp starts at a random point of the
- * 32-bit space and a long call runs through zero.
+ * timestamp wrapping on a long call.
  */
 export class SenderReportSchedule {
     private readonly interval: number
@@ -510,8 +509,7 @@ export class SenderReportSchedule {
      * comparison per call, and a new threshold only on the reports themselves.
      *
      * The first call opens the interval rather than closing it, so a stream
-     * whose counter starts anywhere in the 32-bit space does not report on its
-     * very first packet.
+     * does not report on its very first packet, wherever its counter starts.
      */
     shouldReport(current: number): boolean {
         if (!this.started) {

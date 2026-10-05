@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
 import { readUInt32BE } from '../../bytes.js'
 import { createNoopLogger } from '../../logger.js'
+import { type MLowCodec } from '../../media/mlow-codec.js'
 import { SenderReportSchedule } from '../../media/rtcp.js'
 import { RtpHeader, RtpPacket, RtpSession } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
@@ -36,6 +37,9 @@ const REMB_BAND_OFFSET = 16
 const REMB_SANE_UPPER_BOUND = 10_000_000
 
 const OPUS_FRAME = new Uint8Array(60).fill(0x42)
+/** One codec frame of capture, 60 ms at 16 kHz. */
+const CAPTURE_FRAME = new Float32Array(AUDIO_SAMPLES_PER_PACKET)
+const FRAME_MS = (AUDIO_SAMPLES_PER_PACKET * 1000) / AUDIO_CLOCK_RATE
 
 /**
  * What signaling resolves from a `<voip_settings>` that carries none of the keys
@@ -50,6 +54,7 @@ const NO_MEDIA_KEYS: WaCallMediaSettings = {
 interface PlaneInternals {
     rtpSession: RtpSession
     videoRtpSession: RtpSession
+    codec: MLowCodec
     srtpSession: {
         protect: (packet: RtpPacket) => Uint8Array
         unprotect: (data: Uint8Array) => RtpPacket
@@ -63,7 +68,6 @@ interface PlaneInternals {
         resendSubscriptions: () => void
     }
     receiverEstimateSchedule: SenderReportSchedule
-    sendOpusFrame: (frame: Uint8Array) => void
     onRelayData: (data: Uint8Array) => void
 }
 
@@ -71,11 +75,14 @@ interface Harness {
     readonly plane: WaCallMediaPlane
     readonly sent: Uint8Array[]
     readonly internals: PlaneInternals
+    /** The plane's time source, moved by hand as audio is fed. */
+    readonly time: { ms: number }
 }
 
 /**
  * A plane whose relay collects what would be transmitted and whose SRTP
- * layers are pass-through, so the packets can be read as they were built.
+ * layers are pass-through, so the packets can be read as they were built. It
+ * runs accepted, on a time source moved by hand.
  *
  * `settings` is applied before the REMB schedule is swapped in, so the gate
  * tests get a deterministic zero-millisecond cadence: every packet past the
@@ -89,10 +96,12 @@ async function createPlane(
     overrideEstimateSchedule = true
 ): Promise<Harness> {
     const sent: Uint8Array[] = []
+    const time = { ms: 1_000_000 }
     const plane = new WaCallMediaPlane({
         logger: createNoopLogger(),
         crypto: nodeCrypto,
-        createPeerConnection: peerConnectionNotDialled
+        createPeerConnection: peerConnectionNotDialled,
+        now: () => time.ms
     })
 
     await plane.apply(settings === undefined ? { mediaType } : { mediaType, settings })
@@ -113,14 +122,29 @@ async function createPlane(
     }
     internals.srtcpContext = { protect: (rtcp) => rtcp }
     internals.rtpSession = RtpSession.whatsappOpus(SELF_AUDIO_SSRC)
+    internals.codec = {
+        getFrameSize: () => AUDIO_SAMPLES_PER_PACKET,
+        encode: () => OPUS_FRAME,
+        resetSequence: () => {},
+        getStats: () => ({ success: 0, errors: 0 }),
+        destroy: () => {}
+    } as unknown as MLowCodec
     if (mediaType === 'video') {
-        internals.videoRtpSession = new RtpSession(SELF_VIDEO_SSRC, 97, VIDEO_CLOCK_RATE, 3000)
+        internals.videoRtpSession = new RtpSession(SELF_VIDEO_SSRC, 97)
         if (overrideEstimateSchedule) {
             internals.receiverEstimateSchedule = SenderReportSchedule.onWallClock(0)
         }
     }
+    await plane.apply({ accepted: true })
 
-    return { plane, sent, internals }
+    return { plane, sent, internals, time }
+}
+
+/** Pushes one codec frame of capture, back to back with the one before. */
+function sendAudioFrame(harness: Harness): void {
+    const capturedAt = harness.time.ms
+    harness.time.ms += FRAME_MS
+    harness.plane.pushCapture(CAPTURE_FRAME, capturedAt)
 }
 
 /** A video packet from the peer, as it would arrive from the relay. */
@@ -149,7 +173,7 @@ function rembBitrate(packet: Uint8Array): number {
 /** Audio packets sent until the first sender report goes out. */
 function audioPacketsUntilReport(harness: Harness): number {
     for (let packets = 1; packets <= 200; packets++) {
-        harness.internals.sendOpusFrame(OPUS_FRAME)
+        sendAudioFrame(harness)
         if (senderReports(harness.sent).length > 0) return packets
     }
     return assert.fail('no audio sender report after 200 packets')
@@ -246,7 +270,7 @@ test('the rtcp interval the server hands down replaces the compiled one', async 
     )
 
     for (let packets = 0; packets < servedPackets; packets++) {
-        compiled.internals.sendOpusFrame(OPUS_FRAME)
+        sendAudioFrame(compiled)
     }
     assert.equal(
         senderReports(compiled.sent).length,

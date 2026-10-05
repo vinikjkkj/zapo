@@ -17,7 +17,6 @@ import { WaCallMediaPlane } from '../WaCallMediaPlane.js'
 const SELF_VIDEO_SSRC = 0x22222222
 const PEER_VIDEO_SSRC = 0x33333333
 
-const VIDEO_CLOCK_RATE = 90_000
 const H264_PAYLOAD_TYPE = 97
 /** Largest video payload per packet, the cut the plane uses when slicing. */
 const VIDEO_MAX_PAYLOAD = 800
@@ -127,12 +126,7 @@ async function createPlane(
         unprotect: (data) => RtpPacket.decode(data)
     }
     internals.srtcpContext = { protect: (rtcp) => rtcp }
-    internals.videoRtpSession = new RtpSession(
-        SELF_VIDEO_SSRC,
-        H264_PAYLOAD_TYPE,
-        VIDEO_CLOCK_RATE,
-        3000
-    )
+    internals.videoRtpSession = new RtpSession(SELF_VIDEO_SSRC, H264_PAYLOAD_TYPE)
     internals.receiverEstimateSchedule = SenderReportSchedule.onWallClock(0)
     // Video goes out only once media flows: the call accepted, with a leg up.
     if (accepted) {

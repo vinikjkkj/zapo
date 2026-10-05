@@ -73,6 +73,11 @@ export {
 export { RtpHeader, RtpPacket, RtpSession, WA_RTP_EXTENSION_PROFILE } from './media/rtp.js'
 export { WaJitterBuffer } from './media/WaJitterBuffer.js'
 export type { WaJitterBufferStats } from './media/WaJitterBuffer.js'
+export {
+    HostCaptureTimeMapper,
+    MEDIA_CLOCK_ORIGIN_LEAD_MS,
+    WaMediaClock
+} from './media/WaMediaClock.js'
 
 export { isRtcpPacket, isRtpPacket, isStunPacket } from './relay/stun.js'
 export { TRUE_WEB_CLIENT_RELAY_PORT, WaSctpRelay } from './relay/WaSctpRelay.js'

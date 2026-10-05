@@ -23,6 +23,7 @@ import {
 } from '../media/rtcp.js'
 import { RtpSession, WA_RTP_EXTENSION_PROFILE } from '../media/rtp.js'
 import { WaJitterBuffer, type WaJitterBufferStats } from '../media/WaJitterBuffer.js'
+import { HostCaptureTimeMapper, WaMediaClock } from '../media/WaMediaClock.js'
 import { isRtcpPacket, isRtpPacket, isStunPacket } from '../relay/stun.js'
 import {
     type RawUdpLeg,
@@ -76,15 +77,22 @@ import type {
  */
 const SENDER_REPORT_INTERVAL_MS = 1_000
 
-/** Clock rate of the WhatsApp opus stream, the unit of its RTP timestamps. */
+/**
+ * Clock rate of the WhatsApp opus stream, the unit of its RTP timestamps. The
+ * capture runs at the same rate, so one captured sample is one tick.
+ */
 const AUDIO_CLOCK_RATE = 16_000
 /** Clock rate of the H.264 stream, the unit of its RTP timestamps. */
 const VIDEO_CLOCK_RATE = 90_000
-/** Step used when a frame carries no capture timestamp: one frame at 30 fps, 90 kHz. */
-const VIDEO_TICKS_PER_FRAME = 3_000
 
 /** Samples in one frame of the codec, used until the codec itself is loaded. */
 const DEFAULT_FRAME_SAMPLES = 960
+
+/**
+ * How far a frame's capture instant may drift from the stream's timeline: 120 ms. Later
+ * and the stream jumps to the clock with the marker set; earlier and the frame is shed.
+ */
+const AUDIO_TIMELINE_SLACK_TICKS = (120 * AUDIO_CLOCK_RATE) / 1000
 
 /**
  * Playout queue capacity: three of the largest packets the decoder produces,
@@ -233,12 +241,26 @@ export interface WaCallMediaPlaneOptions extends WaMediaHost, WaCallMediaPlaneEv
     readonly createRawUdpLeg?: (options: RawUdpLegOptions) => RawUdpLeg
     /** Dials every relay on the port it advertises instead of the web client's port. */
     readonly useOriginalRelayPort?: boolean
+    /**
+     * Monotonic time source of the media clock, in ms; `performance.now()` by default.
+     * Every `capturedAtMs` given to {@link WaCallMediaPlane.pushCapture} is on this scale.
+     */
+    readonly now?: () => number
 }
 
 export interface WaCallMediaStats {
     readonly relayPackets: number
     readonly audioSent: number
     readonly audioDropped: number
+    /** Capture pauses the audio timeline jumped over, each sent with the marker set. */
+    readonly audioTimelineResyncs: number
+    /** Captured audio frames discarded because the host delivered them ahead of the clock. */
+    readonly audioFramesShed: number
+    /**
+     * Capture instant minus timestamp of the last audio frame sent, in ms: positive when the
+     * timeline runs behind. Bounded by the timeline's slack.
+     */
+    readonly audioCaptureSkewMs: number
     readonly audioReceived: number
     readonly srtpErrors: number
     readonly videoFramesSent: number
@@ -249,15 +271,15 @@ export interface WaCallMediaStats {
     readonly playout: WaJitterBufferStats
 }
 
-/**
- * The media of one call, driven by a plan from signaling ({@link apply}) and by the host's
- * capture ({@link pushCapture}) and playout ({@link pullPlayout}).
- */
 /** The send time as WhatsApp Web stamps it in extension id 9: wall ms / 16, 12 bits. */
 function wallSendTime16(): number {
     return Math.floor(Date.now() / 16) & 0x0fff
 }
 
+/**
+ * The media of one call, driven by a plan from signaling ({@link apply}) and by the host's
+ * capture and playout. Audio and video are stamped on one {@link WaMediaClock} per call.
+ */
 export class WaCallMediaPlane {
     private readonly logger: Logger
     private readonly events: WaCallMediaPlaneEvents
@@ -265,6 +287,10 @@ export class WaCallMediaPlane {
     private readonly sctpRelay: WaSctpRelay
     private readonly useOriginalRelayPort: boolean
     private readonly playout: WaJitterBuffer
+    /** The call's media clock; its origin is the caller's warmup or the start of the flow. */
+    private readonly clock: WaMediaClock
+    /** Maps the host's video capture timestamps onto the clock, one video tick apart at least. */
+    private readonly videoCaptureTimes = new HostCaptureTimeMapper(1000 / VIDEO_CLOCK_RATE)
 
     private mediaType: 'audio' | 'video' = 'audio'
     private accepted = false
@@ -324,7 +350,24 @@ export class WaCallMediaPlane {
      * audio then goes out as silence until the flow starts for real.
      */
     private silenceWarmup = false
-    private firstPacketSent = false
+
+    /**
+     * Unanchored, the next audio frame takes its timestamp from the clock; anchored, frames
+     * follow on from `nextAudioTimestamp` while their capture stays within the slack.
+     */
+    private audioTimelineAnchored = false
+    private nextAudioTimestamp = 0
+    /**
+     * Samples the plane dropped since the last frame sent (no leg, keys or codec, a failed
+     * encode). The next frame steps over them, so the wire gap matches the audio lost.
+     */
+    private pendingSkipSamples = 0
+    /** Capture instant, on the clock, of the first sample in the encode buffer. */
+    private encodeBufferCaptureMs = 0
+    private audioTimelineResyncs = 0
+    private audioFramesShed = 0
+    /** Clock ticks of the last frame's capture instant minus its timestamp. */
+    private audioCaptureSkewTicks = 0
 
     private audioSendCount = 0
     private audioOctetCount = 0
@@ -354,6 +397,8 @@ export class WaCallMediaPlane {
     private subscriptionRefreshTimer: ReturnType<typeof setInterval> | null = null
     private videoPacketCount = 0
     private videoOctetCount = 0
+    /** Timestamp of the last video frame sent, valid once one was. */
+    private videoTimestamp = 0
     private videoFrameNumber = 0
     private videoTransportSequence = 0
     private videoFirSequence = 0
@@ -462,6 +507,7 @@ export class WaCallMediaPlane {
         this.events = options
         this.crypto = options.crypto
         this.useOriginalRelayPort = options.useOriginalRelayPort ?? false
+        this.clock = new WaMediaClock(options.now)
         this.playout = new WaJitterBuffer(
             PLAYOUT_CAPACITY_SAMPLES,
             this.logger.child({ component: 'playout' })
@@ -579,6 +625,9 @@ export class WaCallMediaPlane {
 
         if (this.rtpSession?.getSsrc() !== ssrcs.selfAudio) {
             this.rtpSession = RtpSession.whatsappOpus(ssrcs.selfAudio)
+            // A new stream's first frame anchors on the clock, not on the old timeline.
+            this.audioTimelineAnchored = false
+            this.pendingSkipSamples = 0
         }
         if (this.carriesVideo) {
             this.ensureVideoRtpSession()
@@ -647,6 +696,8 @@ export class WaCallMediaPlane {
             this.sctpRelay.hasConnection()
         ) {
             this.silenceWarmup = true
+            // The warmup's silence is already on the wire, so the call's clock starts here.
+            this.clock.start()
         }
     }
 
@@ -662,16 +713,16 @@ export class WaCallMediaPlane {
     }
 
     /**
-     * Hands in captured audio, any length, sent as whole codec frames. Dropped before media
-     * flows; sent as silence during the warmup or while muted.
+     * Hands in captured 16 kHz mono audio, any length, sent as whole codec frames. Dropped
+     * before media flows; sent as silence during the warmup or while muted. `capturedAtMs` is
+     * when `samples[0]` was captured, on the `now` scale; absent, the block ends now.
      */
-    pushCapture(samples: Float32Array): void {
-        if (this.stopped) return
-        if (!this.flowing) {
-            if (this.silenceWarmup) this.encodeCaptured(this.silence(samples.length))
-            return
-        }
-        this.encodeCaptured(this.muted ? this.silence(samples.length) : samples)
+    pushCapture(samples: Float32Array, capturedAtMs?: number): void {
+        if (this.stopped || (!this.flowing && !this.silenceWarmup)) return
+        const capturedAt =
+            capturedAtMs ?? this.clock.now() - (samples.length * 1000) / AUDIO_CLOCK_RATE
+        const sent = this.flowing && !this.muted ? samples : this.silence(samples.length)
+        this.encodeCaptured(sent, capturedAt)
     }
 
     /**
@@ -688,7 +739,8 @@ export class WaCallMediaPlane {
 
     /**
      * Sends one Annex-B H.264 access unit and returns the RTP packet count, or 0 when video
-     * cannot go out yet. The stream opens on a key frame.
+     * cannot go out yet. The stream opens on a key frame. `timestampUs` may use any epoch:
+     * it is mapped onto the call's media clock.
      */
     sendVideoFrame(data: Uint8Array, timestampUs: number): number {
         if (
@@ -706,7 +758,14 @@ export class WaCallMediaPlane {
             this.videoStreamOpen = true
         }
         const payloads = packetizeH264AnnexB(data, 800)
-        const timestamp = Math.floor((Math.max(0, timestampUs) * 90) / 1000) >>> 0
+        const now = this.clock.now()
+        const captureMs = this.videoCaptureTimes.map(timestampUs / 1000, now)
+        let timestamp = this.clock.ticksAt(captureMs, VIDEO_CLOCK_RATE)
+        // Rounding can collapse two mapped instants; keep the wire strictly increasing.
+        if (this.videoSendFrames > 0 && ((timestamp - this.videoTimestamp) | 0) <= 0) {
+            timestamp = (this.videoTimestamp + 1) >>> 0
+        }
+        this.videoTimestamp = timestamp
         const receiverEstimate = this.announcedReceiverEstimate
         for (let index = 0; index < payloads.length; index++) {
             const firstPacket = index === 0
@@ -728,12 +787,12 @@ export class WaCallMediaPlane {
             this.videoPacketCount++
             this.videoOctetCount += payloads[index].length
         }
-        if (this.videoReportSchedule.shouldReport(Date.now())) {
+        if (this.videoReportSchedule.shouldReport(now)) {
             this.sendSenderReport(
                 this.videoRtpSession.getSsrc(),
                 this.videoPacketCount,
                 this.videoOctetCount,
-                timestamp,
+                this.timestampAtAssembly(timestamp, captureMs, VIDEO_CLOCK_RATE),
                 this.videoReception,
                 true
             )
@@ -772,6 +831,9 @@ export class WaCallMediaPlane {
             relayPackets: this.relayPacketCount,
             audioSent: this.audioSendCount,
             audioDropped: this.audioDropCount,
+            audioTimelineResyncs: this.audioTimelineResyncs,
+            audioFramesShed: this.audioFramesShed,
+            audioCaptureSkewMs: (this.audioCaptureSkewTicks * 1000) / AUDIO_CLOCK_RATE,
             audioReceived: this.audioRecvCount,
             srtpErrors: this.srtpErrorCount,
             videoFramesSent: this.videoSendFrames,
@@ -797,6 +859,8 @@ export class WaCallMediaPlane {
             srtpErrors: stats.srtpErrors,
             sent: stats.audioSent,
             dropped: stats.audioDropped,
+            timelineResyncs: stats.audioTimelineResyncs,
+            shed: stats.audioFramesShed,
             videoFecDiscarded: stats.videoFecDiscarded,
             opusOk: stats.decoded,
             opusErr: stats.decodeErrors
@@ -837,12 +901,7 @@ export class WaCallMediaPlane {
     private ensureVideoRtpSession(): void {
         const ssrc = this.ssrcs?.selfVideo
         if (!ssrc || this.videoRtpSession?.getSsrc() === ssrc) return
-        this.videoRtpSession = new RtpSession(
-            ssrc,
-            PayloadType.WhatsAppH264,
-            VIDEO_CLOCK_RATE,
-            VIDEO_TICKS_PER_FRAME
-        )
+        this.videoRtpSession = new RtpSession(ssrc, PayloadType.WhatsAppH264)
     }
 
     /** Tells the relay our streams and the peer's to forward; an unchanged list is not replayed. */
@@ -984,10 +1043,16 @@ export class WaCallMediaPlane {
         return this.silenceScratch.subarray(0, length)
     }
 
-    private encodeCaptured(data: Float32Array): void {
+    /**
+     * Frames `data` (first sample captured at `capturedAtMs`) and sends each complete frame.
+     * A drop discards the partial frame, so the timeline steps over exactly what was lost.
+     */
+    private encodeCaptured(data: Float32Array, capturedAtMs: number): void {
         const codec = this.codec
         const hasRelay = this.sctpRelay.hasConnection()
         if (!this.rtpSession || !this.srtpSession || !codec || !hasRelay) {
+            this.skipAudioSamples(this.encodeBufferPos + data.length)
+            this.encodeBufferPos = 0
             this.audioDropCount++
             if (this.audioDropCount === 1 || this.audioDropCount % 500 === 0) {
                 const missing = [
@@ -1015,6 +1080,9 @@ export class WaCallMediaPlane {
 
         let offset = 0
         while (offset < data.length) {
+            if (this.encodeBufferPos === 0) {
+                this.encodeBufferCaptureMs = capturedAtMs + (offset * 1000) / AUDIO_CLOCK_RATE
+            }
             const toCopy = Math.min(data.length - offset, frameSamples - this.encodeBufferPos)
             const target = this.encodeBuffer
             for (let i = 0; i < toCopy; i++) {
@@ -1030,13 +1098,64 @@ export class WaCallMediaPlane {
             this.encodeBuffer =
                 frameData === this.encodeBufferA ? this.encodeBufferB! : this.encodeBufferA!
             this.encodeBufferPos = 0
+            this.sendCapturedFrame(codec, frameData, this.encodeBufferCaptureMs)
+        }
+    }
 
-            try {
-                this.sendOpusFrame(codec.encode(frameData))
-            } catch (err: unknown) {
-                this.logger.error('encode error', { message: toError(err).message })
+    /**
+     * Stamps one captured frame on the audio timeline, then encodes and sends it. A frame that
+     * does not continue the last one exactly (a pause or a drop) goes out with the marker set.
+     */
+    private sendCapturedFrame(codec: MLowCodec, frame: Float32Array, captureMs: number): void {
+        const onClock = this.clock.ticksAt(captureMs, AUDIO_CLOCK_RATE)
+        let timestamp = onClock
+        let resync = false
+        if (this.audioTimelineAnchored) {
+            const next = (this.nextAudioTimestamp + this.pendingSkipSamples) >>> 0
+            const drift = (onClock - next) | 0
+            if (drift <= -AUDIO_TIMELINE_SLACK_TICKS) {
+                const shed = ++this.audioFramesShed
+                if (shed === 1 || shed % 100 === 0) {
+                    this.logger.debug('audio frame shed, capture ahead of the clock', {
+                        shed,
+                        aheadMs: (-drift * 1000) / AUDIO_CLOCK_RATE
+                    })
+                }
+                return
+            }
+            if (drift < AUDIO_TIMELINE_SLACK_TICKS) {
+                timestamp = next
+            } else {
+                resync = true
             }
         }
+
+        let opusFrame: Uint8Array
+        try {
+            opusFrame = codec.encode(frame)
+        } catch (err: unknown) {
+            this.logger.error('encode error', { message: toError(err).message })
+            this.skipAudioSamples(frame.length)
+            return
+        }
+
+        const marker = !this.audioTimelineAnchored || timestamp !== this.nextAudioTimestamp
+        if (resync) {
+            this.audioTimelineResyncs++
+            this.logger.debug('audio timeline resynced to the clock', {
+                pauseMs: (((onClock - this.nextAudioTimestamp) | 0) * 1000) / AUDIO_CLOCK_RATE
+            })
+        }
+        this.audioTimelineAnchored = true
+        this.nextAudioTimestamp = (timestamp + frame.length) >>> 0
+        this.pendingSkipSamples = 0
+        this.audioCaptureSkewTicks = (onClock - timestamp) | 0
+        this.sendOpusFrame(opusFrame, timestamp, marker, captureMs)
+    }
+
+    /** Records samples the plane lost, for the next frame to step over once anchored. */
+    private skipAudioSamples(samples: number): void {
+        if (this.audioTimelineAnchored) this.pendingSkipSamples += samples
     }
 
     /** Samples in one codec frame, which is also the RTP timestamp step of one packet. */
@@ -1044,7 +1163,13 @@ export class WaCallMediaPlane {
         return this.codec?.getFrameSize() ?? DEFAULT_FRAME_SAMPLES
     }
 
-    private sendOpusFrame(opusFrame: Uint8Array): void {
+    /** Sends one encoded frame; `captureMs` lets the sender report carry the timestamp forward. */
+    private sendOpusFrame(
+        opusFrame: Uint8Array,
+        timestamp: number,
+        marker: boolean,
+        captureMs: number
+    ): void {
         if (!this.rtpSession || !this.srtpSession) return
 
         try {
@@ -1058,12 +1183,7 @@ export class WaCallMediaPlane {
                 rtpPayload = concatBytes([rtpPayload, this.authPaddingBuffer])
             }
 
-            const marker = !this.firstPacketSent
-            const rtpPacket = this.rtpSession.createPacketWithDuration(
-                rtpPayload,
-                this.frameSamples,
-                marker
-            )
+            const rtpPacket = this.rtpSession.createPacketAtTimestamp(rtpPayload, timestamp, marker)
 
             rtpPacket.header.extension = true
             rtpPacket.header.extensionProfile = WA_RTP_EXTENSION_PROFILE
@@ -1076,19 +1196,17 @@ export class WaCallMediaPlane {
                 rtpPacket.header.extensionData = EMPTY_BYTES
             }
 
-            this.firstPacketSent = true
-
             const srtpData = this.srtpSession.protect(rtpPacket)
             this.sctpRelay.broadcast(toArrayBuffer(srtpData))
 
             this.audioSendCount++
             this.audioOctetCount += rtpPayload.length
-            if (this.audioReportSchedule.shouldReport(rtpPacket.header.timestamp)) {
+            if (this.audioReportSchedule.shouldReport(timestamp)) {
                 this.sendSenderReport(
                     this.rtpSession.getSsrc(),
                     this.audioSendCount,
                     this.audioOctetCount,
-                    rtpPacket.header.timestamp,
+                    this.timestampAtAssembly(timestamp, captureMs, AUDIO_CLOCK_RATE),
                     this.audioReception
                 )
             }
@@ -1157,6 +1275,7 @@ export class WaCallMediaPlane {
     }
 
     private resetEncodeState(): void {
+        this.skipAudioSamples(this.encodeBufferPos)
         this.encodeBuffer = null
         this.encodeBufferPos = 0
         this.audioReception.reset()
@@ -1165,6 +1284,8 @@ export class WaCallMediaPlane {
 
     private startFlow(): void {
         if (this.flowing || this.stopped) return
+        // A no-op after a warmup: the flow continues the warmup's timeline.
+        this.clock.start()
         this.resetEncodeState()
         this.playout.reset()
         this.flowing = true
@@ -1389,7 +1510,7 @@ export class WaCallMediaPlane {
                 this.lastVideoPliAt = Date.now()
                 this.requestKeyFrame(header.ssrc)
             }
-            this.logger.debug('video frame assembled', {
+            this.logger.trace('video frame assembled', {
                 timestamp: frame.timestamp,
                 keyFrame: frame.keyFrame,
                 bytes: frame.data.length
@@ -1481,9 +1602,8 @@ export class WaCallMediaPlane {
      * block of the inbound stream it is paired with.
      *
      * Called from the send path once the stream's own schedule says the report
-     * interval has closed. `rtpTimestamp` is the timestamp of the packet that
-     * closed it, taken from the stream itself, so the report stays on the
-     * stream's clock instead of extrapolating wall time.
+     * interval has closed. `rtpTimestamp` is taken at assembly
+     * ({@link timestampAtAssembly}), the instant whose wall time fills the NTP field.
      *
      * `whatsappVideoProfile` separates the two callers: the video path turns
      * WhatsApp's profile bit on in byte 0 of the sender report, taking it to
@@ -1533,6 +1653,14 @@ export class WaCallMediaPlane {
                 message: toError(err).message
             })
         }
+    }
+
+    /**
+     * The stream's timestamp carried forward from the frame captured at `captureMs` to now,
+     * so audio and video reports pair timestamp and wall time at the same instant.
+     */
+    private timestampAtAssembly(timestamp: number, captureMs: number, clockRate: number): number {
+        return (timestamp + Math.round(((this.clock.now() - captureMs) * clockRate) / 1000)) >>> 0
     }
 
     /**

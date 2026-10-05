@@ -7,8 +7,11 @@ import {
 
 /** The two plane methods the adapter drives; a `WaCallMediaPlane` satisfies it. */
 export interface WaCallAudioSink {
-    /** Takes microphone samples, 16 kHz mono, at any length. */
-    pushCapture(samples: Float32Array): void
+    /**
+     * Takes microphone samples, 16 kHz mono, at any length. `capturedAtMs` is the
+     * `performance.now()` instant of `samples[0]`; absent, the block is taken as just captured.
+     */
+    pushCapture(samples: Float32Array, capturedAtMs?: number): void
     /** Fills `out` with speaker samples, 16 kHz mono, and returns how many were real audio. */
     pullPlayout(out: Float32Array): number
 }
