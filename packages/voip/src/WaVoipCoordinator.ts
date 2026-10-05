@@ -205,6 +205,9 @@ export class WaVoipCoordinator {
      * and opening the local video sender. The request arrives as a
      * `voip_call_peer_video_state` with `change.state` of `UpgradeRequestV2`; no-op when the
      * peer has none outstanding.
+     *
+     * Our frames are then held until the peer's camera is on, or three seconds at most:
+     * {@link feedLiveVideo} returns `0` meanwhile, and the stream opens on the next key frame.
      */
     async acceptVideoUpgrade(callId: string): Promise<void> {
         return this.manager.acceptVideoUpgrade(callId)
@@ -252,7 +255,9 @@ export class WaVoipCoordinator {
     /**
      * Feed one H.264 Annex-B encoded access unit into an active video call.
      * `timestampUs` is the capture timestamp in microseconds. Returns the number
-     * of RTP packets sent, or `0` when video media is not active.
+     * of RTP packets sent, or `0` when video media is not active, is still held
+     * for the peer after {@link acceptVideoUpgrade}, or waits for a key frame to
+     * open on.
      */
     feedLiveVideo(callId: string, data: Uint8Array, timestampUs: number): number {
         return this.manager.feedLiveVideo(callId, data, timestampUs)

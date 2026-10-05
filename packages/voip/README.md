@@ -293,6 +293,22 @@ client.on('voip_call_peer_video_state', async ({ call, change }) => {
 })
 ```
 
+After accepting, our frames wait for the peer: they are held until it turns its
+own camera on (`WA_VIDEO_STATE.Enabled`) and 300 ms more, or three seconds at
+most. Measured against WhatsApp Web, a first packet that reaches the peer before
+the stream it sets up for our video exists leaves our video at its key frames
+alone for the rest of the call. `feedLiveVideo` returns `0` while held, and the
+stream opens on the first key frame fed after, so a source with a long key-frame
+interval adds up to one interval on top. An upgrade this side asked for is not
+held.
+
+A call that is video from the start is held the same way from the accept, ours
+or the peer's: our frames wait for the peer's first `<mute_v2>` after it and
+150 ms more, or two seconds at most. On calls we answer, the peer was measured
+setting up the stream for our video 160 to 600 ms after the accept, with its
+`<mute_v2>` landing close to it; a call we place waits on the same sign but has
+not been measured yet.
+
 Either way the peer's stream is subscribed on the relay and answered with
 key-frame requests and bandwidth feedback, and inbound frames arrive through
 `voip_call_inbound_video` as on any video call. The receive path opens on the

@@ -338,6 +338,8 @@ export class WaCallMediaPlane {
      * audio. Until it does {@link sendVideoFrame} drops every frame.
      */
     private videoSendPathOpened = false
+    /** Whether our video is held for the peer; see {@link WaCallMediaVideo.sendHeld}. */
+    private videoSendHeld = false
 
     private applying: Promise<void> = Promise.resolve()
     private starting: Promise<void> | null = null
@@ -678,6 +680,15 @@ export class WaCallMediaPlane {
     private applyVideo(video: WaCallMediaVideo): void {
         if (video.receive) this.ensureVideoReceivePath()
         if (video.send) this.openVideoSendPath()
+        this.holdVideoSend(video.sendHeld === true)
+    }
+
+    /** Holds or releases our frames; a hold closes the stream so it reopens on a key frame. */
+    private holdVideoSend(held: boolean): void {
+        if (held === this.videoSendHeld) return
+        this.videoSendHeld = held
+        if (held) this.videoStreamOpen = false
+        this.logger.debug('video send hold changed', { held })
     }
 
     private async applyRelays(relays: WaCallMediaRelays | null): Promise<void> {
@@ -739,13 +750,14 @@ export class WaCallMediaPlane {
 
     /**
      * Sends one Annex-B H.264 access unit and returns the RTP packet count, or 0 when video
-     * cannot go out yet. The stream opens on a key frame. `timestampUs` may use any epoch:
-     * it is mapped onto the call's media clock.
+     * cannot go out yet or is held for the peer. The stream opens on a key frame.
+     * `timestampUs` may use any epoch: it is mapped onto the call's media clock.
      */
     sendVideoFrame(data: Uint8Array, timestampUs: number): number {
         if (
             !this.flowing ||
             !this.videoSendActive ||
+            this.videoSendHeld ||
             !this.videoRtpSession ||
             !this.srtpSession ||
             !this.sctpRelay.hasConnection() ||

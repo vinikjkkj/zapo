@@ -94,8 +94,16 @@ export interface WaCallMediaSettings {
 }
 
 export interface WaCallMediaVideo {
-    /** Whether our video may go out: a video call, or an upgrade both ends agreed to. */
+    /**
+     * Whether our video sender is open: a video call, or an upgrade both ends agreed to.
+     * Whether frames go out yet is {@link sendHeld}.
+     */
     readonly send: boolean
     /** Whether the peer's video may arrive on an audio call. */
     readonly receive: boolean
+    /**
+     * Drops our video until the peer is ready: a first packet that beats the peer's inbound
+     * stream setup can break its video for the call. Resumes on the next key frame.
+     */
+    readonly sendHeld?: boolean
 }

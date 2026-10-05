@@ -12,6 +12,7 @@ import type {
     WaCallMediaRelays,
     WaCallMediaSettings,
     WaCallMediaSsrcs,
+    WaCallMediaVideo,
     WaCallReaction
 } from '@zapo-js/voip-media'
 
@@ -69,6 +70,11 @@ import {
 
 import { type CallInfo } from './call-state.js'
 import type { WaCallMediaLink, WaCallMediaLinkEvents } from './media-link.js'
+import {
+    type PeerVideoReadyGateReason,
+    type PeerVideoReadyTrigger,
+    WaPeerVideoReadyGate
+} from './WaPeerVideoReadyGate.js'
 
 /**
  * Stream slots a video call registers with the relay and an audio call does not: what
@@ -237,6 +243,13 @@ export class WaCallMediaSession {
      * the peer has accepted.
      */
     private videoSendPathOpened = false
+    /**
+     * Holds our video until the peer can take it: after an accepted peer upgrade, and from the
+     * accept on a call born as video. Published as `video.sendHeld`.
+     */
+    private readonly peerVideoReadyGate = new WaPeerVideoReadyGate((reason, trigger, heldMs) =>
+        this.releaseVideoSend(reason, trigger, heldMs)
+    )
     /** Whether the one post-active `<mute_v2>` declaration has gone out. */
     private initialMuteAnnounced = false
     /**
@@ -396,6 +409,8 @@ export class WaCallMediaSession {
         const callCreator = this.info.callCreator
         const peerJid = this.info.peerJid
         const isVideo = this.info.mediaType === CallMediaType.Video
+        // Hold before yielding: the peer's `<mute_v2>` answering the accept must find it held.
+        if (isVideo) this.holdBornVideoSend()
 
         const peerBase = toUserJid(peerJid)
         const participantPeers =
@@ -700,6 +715,17 @@ export class WaCallMediaSession {
     async handleCallAccept(node: BinaryNode, peerJid: string): Promise<void> {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
+
+        /**
+         * A call we offered as video holds our video from the peer's accept: before anything
+         * yields, and only while ringing, so a repeated accept cannot undo a release.
+         */
+        if (
+            this.info.stateData.state === CallState.Ringing &&
+            this.info.mediaType === CallMediaType.Video
+        ) {
+            this.holdBornVideoSend()
+        }
 
         let keys: WaCallMediaKeys | null = null
 
@@ -1125,6 +1151,9 @@ export class WaCallMediaSession {
      * Two are dropped on purpose: one from another device of our own account, whose mute
      * state is not the peer's, and one carrying `request-state`, a group-call mechanism
      * WhatsApp's own clients drop on a 1:1 call.
+     *
+     * On a call born as video, the peer's first announcement after the accept is also
+     * the sign that it can take our video; see {@link WaPeerVideoReadyGate}.
      */
     handleCallMuteV2(node: BinaryNode, peerJid: string): void {
         const nodeInfo = extractNodeInfo(node)
@@ -1140,6 +1169,9 @@ export class WaCallMediaSession {
             this.logger.debug('ignoring mute request on a 1:1 call', { peerJid })
             return
         }
+
+        // Any `<mute_v2>` is the sign, so mark it before the checks that drop unreadable states.
+        this.peerVideoReadyGate.markPeerReady('born-video')
 
         if (payload.muted === null) {
             this.logger.debug('mute_v2 carries no readable mute-state', { peerJid })
@@ -1382,6 +1414,11 @@ export class WaCallMediaSession {
                 this.peerVideoUpgradeRequested = false
                 return
 
+            /** Peer camera on: releases our video held after the peer's upgrade. */
+            case WA_VIDEO_STATE.Enabled:
+                this.peerVideoReadyGate.markPeerReady('upgrade')
+                return
+
             /**
              * A camera going off, and also how a peer takes back a request nobody
              * answered in time - measured, and it is what this side sends for that too.
@@ -1462,6 +1499,9 @@ export class WaCallMediaSession {
      * requesting side follows too: `Enabled` claims video is on the wire, so it may not
      * leave before there is a sender, and the sender may not open before the peer knows
      * the upgrade was accepted.
+     *
+     * Our frames are then held until the peer's camera is on, plus a guard, or three
+     * seconds at most; see {@link WaPeerVideoReadyGate}. An upgrade we asked for is not held.
      */
     async acceptVideoUpgrade(): Promise<void> {
         if (!this.peerVideoUpgradeRequested) return
@@ -1477,6 +1517,8 @@ export class WaCallMediaSession {
             throw err
         }
 
+        // Held before the sender opens, so the plan that opens it already holds it.
+        this.peerVideoReadyGate.hold('upgrade')
         this.openVideoSendPath()
         // Best effort, unlike the accept: by this point the peer has accepted and the
         // sender is open, so rejecting here would report an upgrade that did happen as
@@ -1613,6 +1655,8 @@ export class WaCallMediaSession {
         this.ensureVideoReceivePath()
 
         if (this.videoSendPathOpened || this.info.mediaType === CallMediaType.Video) {
+            // Nothing to open, but a hold may have started; an unchanged section is not sent.
+            void this.publish({ video: this.videoSection() })
             this.announceVideoLive()
             return
         }
@@ -1738,6 +1782,7 @@ export class WaCallMediaSession {
         this.peerVideoUpgradeRequested = false
         this.peerVideoStateSeen = 0
         this.videoSendPathOpened = false
+        this.peerVideoReadyGate.cancel()
         this.videoStateTransactionId = 0
         this.acceptedByJid = null
     }
@@ -1827,13 +1872,38 @@ export class WaCallMediaSession {
         }
     }
 
-    /** What video may flow each way; a media host reads this, not the media type, to capture. */
-    private videoSection(): { readonly send: boolean; readonly receive: boolean } {
+    /**
+     * What video may flow each way; a media host reads this, not the media type, to capture.
+     * `sendHeld` is present only while the peer is not ready for our video.
+     */
+    private videoSection(): WaCallMediaVideo {
         const videoCall = this.info.mediaType === CallMediaType.Video
         return {
             send: videoCall || this.videoSendPathOpened,
-            receive: videoCall || this.videoReceivePathOpened
+            receive: videoCall || this.videoReceivePathOpened,
+            ...(this.peerVideoReadyGate.isHeld && { sendHeld: true })
         }
+    }
+
+    /** Holds our video from the accept of a born-video call; published before media can flow. */
+    private holdBornVideoSend(): void {
+        this.peerVideoReadyGate.hold('born-video')
+        void this.publish({ video: this.videoSection() })
+    }
+
+    /** Lets our held video go, the gate having opened: the peer is ready, or never said so. */
+    private releaseVideoSend(
+        reason: PeerVideoReadyGateReason,
+        trigger: PeerVideoReadyTrigger,
+        heldMs: number
+    ): void {
+        this.logger.debug('video send released', {
+            callId: this.info.callId,
+            reason,
+            trigger,
+            sinceAcceptMs: heldMs
+        })
+        void this.publish({ video: this.videoSection() })
     }
 
     private get relaySlots(): readonly number[] {

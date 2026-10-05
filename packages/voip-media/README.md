@@ -127,7 +127,8 @@ video.close()
 ```
 
 The sender can start with the call: the plane drops every frame until media flows - the call
-accepted, with a leg up - and the plan opens video, on a video call or once an upgrade is agreed.
+accepted, with a leg up - and the plan opens video, on a video call or once an upgrade is agreed,
+and for as long as the plan holds our video back until the peer can take it (`video.sendHeld`).
 The stream then opens on a key frame - deltas before the first one are refused too, since nothing
 could decode them - and while the plane refuses, the sender offers a key frame every half second, so
 the stream opens soon after it may.
