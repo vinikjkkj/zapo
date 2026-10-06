@@ -52,6 +52,34 @@ test('a parameter set carrying only a delta slice inside is no key frame', () =>
     assert.equal(frame?.keyFrame, false)
 })
 
+const SEI = [0x06, 0x05, 0x01, 0xaa, 0x80]
+const SPS = [0x67, 0x42, 0xc0, 0x1f]
+const PPS = [0x68, 0xce, 0x3c, 0x80]
+const DELTA_SLICE = [0x41, 0x9a, 0x02]
+
+function stapA(...nals: number[][]): Uint8Array {
+    const bytes = [24]
+    for (const nal of nals) bytes.push(nal.length >> 8, nal.length & 0xff, ...nal)
+    return new Uint8Array(bytes)
+}
+
+test('a delta with SEI or repeated parameter sets is no key frame', () => {
+    const d = new H264Depacketizer()
+    assert.equal(d.push(stapA(SEI, DELTA_SLICE), 96, true, 0)[0]?.keyFrame, false)
+    assert.equal(d.push(stapA(SPS, PPS, DELTA_SLICE), 97, true, 1)[0]?.keyFrame, false)
+    assert.equal(d.push(stapA(SPS, PPS, [0x65, 0x88]), 98, true, 2)[0]?.keyFrame, true)
+})
+
+/** A conforming NAL never holds a start code, so one outside an SPS is noise, not an IDR. */
+test('only the bytes of an SPS are scanned for an IDR inside', () => {
+    const d = new H264Depacketizer()
+    const seiWithStartCode = [0x06, 0, 0, 0, 1, 0x65, 0x88]
+    assert.equal(d.push(stapA(seiWithStartCode, DELTA_SLICE), 99, true, 0)[0]?.keyFrame, false)
+    const sliceWithStartCode = [0x41, 0, 0, 1, 0x65, 0x88]
+    const [frame] = d.push(stapA(SPS, PPS, sliceWithStartCode), 100, true, 1)
+    assert.equal(frame?.keyFrame, false)
+})
+
 test('packetizes Annex-B NAL units and marks FU-A boundaries', () => {
     const unit = new Uint8Array([0, 0, 0, 1, 0x67, 1, 0, 0, 1, 0x65, 2, 3, 4, 5, 6, 7])
     const packets = packetizeH264AnnexB(unit, 5)

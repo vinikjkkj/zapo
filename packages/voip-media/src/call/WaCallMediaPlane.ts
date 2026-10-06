@@ -128,6 +128,12 @@ const MAX_TRACKED_PEER_APP_DATA_SSRCS = 32
 /** Reassembly buffers kept per inbound video SSRC; the oldest is dropped on overflow. */
 const MAX_H264_DEPACKETIZERS = 8
 
+/**
+ * Shortest gap between two key frame requests of the whole plane: every tracked stream keeps its
+ * own pace, and a peer minting new SSRCs draws no more requests than all of them together.
+ */
+const KEY_FRAME_REQUEST_FLOOR_MS = KEY_FRAME_REQUEST_INTERVAL_MS / MAX_H264_DEPACKETIZERS
+
 /** `length` rounded up until it closes the 32-bit word. */
 function padTo32Bits(length: number): number {
     return (length + 3) & ~3
@@ -411,6 +417,7 @@ export class WaCallMediaPlane {
     private videoFrameNumber = 0
     private videoTransportSequence = 0
     private videoFirSequence = 0
+    private lastKeyFrameRequestAt = 0
 
     /**
      * CNAME of every sender report of this call. One value binds the audio and
@@ -1532,12 +1539,16 @@ export class WaCallMediaPlane {
         )
         for (const frame of frames) {
             if (frame.keyFrame) stream.keyFrameReceived = true
-            if (
-                !stream.keyFrameReceived &&
-                Date.now() - stream.lastKeyFrameRequestAt >= KEY_FRAME_REQUEST_INTERVAL_MS
-            ) {
-                stream.lastKeyFrameRequestAt = Date.now()
-                this.requestKeyFrame(header.ssrc)
+            if (!stream.keyFrameReceived) {
+                const now = Date.now()
+                if (
+                    now - stream.lastKeyFrameRequestAt >= KEY_FRAME_REQUEST_INTERVAL_MS &&
+                    now - this.lastKeyFrameRequestAt >= KEY_FRAME_REQUEST_FLOOR_MS
+                ) {
+                    stream.lastKeyFrameRequestAt = now
+                    this.lastKeyFrameRequestAt = now
+                    this.requestKeyFrame(header.ssrc)
+                }
             }
             this.logger.trace('video frame assembled', {
                 timestamp: frame.timestamp,

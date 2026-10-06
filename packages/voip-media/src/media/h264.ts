@@ -2,6 +2,7 @@ const START_CODE = new Uint8Array([0, 0, 0, 1])
 
 /** Coded slice of an IDR picture: the only NAL type that makes a key frame. */
 const NAL_TYPE_IDR = 5
+const NAL_TYPE_SPS = 7
 
 export interface H264AccessUnit {
     readonly timestamp: number
@@ -94,7 +95,7 @@ const SEQUENCE_MODULUS = 0x10000
  * the packets arrive.
  *
  * WhatsApp sends a key frame as one FU-A typed SPS that carries the PPS and the
- * IDR inside it after Annex-B start codes, so a non-slice NAL is also scanned.
+ * IDR inside it after Annex-B start codes, so the bytes of an SPS are also scanned.
  */
 export class H264Depacketizer {
     private static readonly MAX_BUFFERED_BYTES = 8 * 1024 * 1024
@@ -267,18 +268,38 @@ export class H264Depacketizer {
             offset += part.length
         }
         let keyFrame = false
-        let hasNonSliceNal = false
+        let hasSps = false
         for (let index = 0; index < this.nalHeaders.length; index++) {
             const type = this.nalHeaders[index] & 0x1f
             if (type === NAL_TYPE_IDR) {
                 keyFrame = true
                 break
             }
-            if (type > NAL_TYPE_IDR) hasNonSliceNal = true
+            if (type === NAL_TYPE_SPS) hasSps = true
         }
-        if (!keyFrame && hasNonSliceNal) keyFrame = isH264KeyFrame(data)
+        if (!keyFrame && hasSps) keyFrame = this.spsCarriesIdr(data)
         const result = { timestamp: this.timestamp, data, keyFrame }
         this.reset()
         return result
+    }
+
+    /**
+     * Whether an SPS of `data` carries an IDR after an embedded start code, reading only SPS
+     * bytes. Every NAL in `parts` opens with the shared `START_CODE`, which marks its bounds.
+     */
+    private spsCarriesIdr(data: Uint8Array): boolean {
+        let nal = -1
+        let offset = 0
+        let spsStart = -1
+        for (const part of this.parts) {
+            if (part === START_CODE) {
+                if (spsStart >= 0 && isH264KeyFrame(data.subarray(spsStart, offset))) return true
+                nal++
+                const sps = (this.nalHeaders[nal] & 0x1f) === NAL_TYPE_SPS
+                spsStart = sps ? offset + START_CODE.length : -1
+            }
+            offset += part.length
+        }
+        return spsStart >= 0 && isH264KeyFrame(data.subarray(spsStart))
     }
 }

@@ -89,13 +89,33 @@ test('a second video stream asks for its own key frame after the first got one',
     harness.plane.stop()
 })
 
-test('one stream asking for a key frame does not hold back the request of another', async () => {
+test('one stream asking for a key frame holds back another only for the plane-wide gap', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 })
     const harness = await createPlane()
 
     harness.push(PEER_VIDEO_SSRC, DELTA)
     harness.push(SECOND_PEER_VIDEO_SSRC, DELTA)
+    assert.deepEqual(harness.keyFrameRequests(), [PEER_VIDEO_SSRC])
+
+    t.mock.timers.tick(40)
+    harness.push(SECOND_PEER_VIDEO_SSRC, DELTA)
+    harness.push(PEER_VIDEO_SSRC, DELTA)
 
     assert.deepEqual(harness.keyFrameRequests(), [PEER_VIDEO_SSRC, SECOND_PEER_VIDEO_SSRC])
+    harness.plane.stop()
+})
+
+test('a burst of new SSRCs draws no more key frame requests than eight streams would', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 })
+    const harness = await createPlane()
+
+    for (let index = 0; index < 300; index++) {
+        harness.push(0x60000000 + index, DELTA)
+        t.mock.timers.tick(1)
+    }
+
+    const requests = harness.keyFrameRequests().length
+    assert.ok(requests > 0 && requests <= 8, `${requests} requests within 300 ms`)
     harness.plane.stop()
 })
 
