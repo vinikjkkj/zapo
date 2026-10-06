@@ -925,6 +925,29 @@ test('a terminate that lands while the offer is still decrypting keeps the call 
     }
 })
 
+/** A client torn down mid-offer must not ring, dial or send anything for it afterwards. */
+test('an offer that resumes after the manager is destroyed makes no call and sends nothing', async () => {
+    for (const stage of ['decrypting', 'setting up'] as const) {
+        const { deps, stores, sent } = createMockDeps()
+        const release = stage === 'decrypting' ? holdCallKeyDecrypt(deps) : holdDeviceSync(deps)
+        const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })
+        const callId = 'CA11CA11000000000000000000000071'
+
+        const offer = manager.handleCallOffer(
+            buildOfferNode(callId, undefined, undefined, [CALL_KEY_ENC_NODE]),
+            '2222222222@lid'
+        )
+        await settle()
+        manager.destroy()
+        release()
+        await offer
+
+        assert.equal(manager.getCall(callId), null, stage)
+        assert.deepEqual(manager.getCalls(), [], stage)
+        assert.deepEqual(tagsSentFor(sent, callId), [], stage)
+    }
+})
+
 test('a terminate for an unknown call does not stop a different call from ringing', async () => {
     const { deps, stores } = createMockDeps()
     const manager = new WaCallManager({ deps, stores, maxConcurrentCalls: 1 })

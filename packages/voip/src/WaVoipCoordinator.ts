@@ -26,10 +26,10 @@ export interface WaVoipCoordinatorOptions {
      * `TRUE_WEB_CLIENT_RELAY_PORT` (3480). Defaults by session, read per call: `true`
      * on a companion, `false` on a mobile primary.
      *
-     * The port a relay answers on follows the account class the server assigns, and
-     * the wire does not say which: measured, a companion's legs open only on the
-     * advertised port and a primary's only on 3480. Either way, a leg the relay never
-     * answers is redialled once on the other port.
+     * The wire does not say which port a relay answers on: measured, a companion's legs
+     * open only on the advertised port and a primary's only on 3480. A leg the relay never
+     * answers is redialled once on the other port, when there is one: an endpoint that
+     * already advertises 3480 has none.
      */
     readonly useOriginalRelayPort?: boolean
     /**

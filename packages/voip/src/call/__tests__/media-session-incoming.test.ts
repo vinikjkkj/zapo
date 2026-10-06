@@ -126,8 +126,7 @@ test('our own relaylatency goes out once per relay, however often setup asks for
         participantJids: ['peer:0@lid']
     })
 
-    await session.sendRelayLatency()
-    await session.sendRelayLatency()
+    await Promise.all([session.sendRelayLatency(), session.sendRelayLatency()])
 
     assert.deepEqual(
         sent.flatMap(teNodesOf).map((te) => te.attrs.relay_name),

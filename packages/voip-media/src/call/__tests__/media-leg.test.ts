@@ -132,6 +132,27 @@ async function startVideoCall(legs: FakeLeg[]): Promise<WaCallMediaPlane> {
     return plane
 }
 
+/**
+ * The media datagrams a leg took, by kind: RTCP by its packet type (200-206, in the clear
+ * under SRTCP), RTP by the SSRC its header carries in the clear.
+ */
+function mediaKinds(datagrams: readonly Uint8Array[]): Record<string, number> {
+    const kinds: Record<string, number> = { audio: 0, video: 0, appData: 0, rtcp: 0, other: 0 }
+    for (const datagram of datagrams) {
+        if ((datagram[0] & 0xc0) !== 0x80) continue
+        if (datagram[1] >= 200 && datagram[1] <= 206) {
+            kinds.rtcp++
+            continue
+        }
+        const ssrc = new DataView(datagram.buffer, datagram.byteOffset).getUint32(8)
+        if (ssrc === SELF_AUDIO) kinds.audio++
+        else if (ssrc === SELF_VIDEO) kinds.video++
+        else if (ssrc === SELF_APP_DATA) kinds.appData++
+        else kinds.other++
+    }
+    return kinds
+}
+
 /** Media datagrams each leg took while `run` ran. */
 function mediaAdded(legs: readonly FakeLeg[], run: () => void): number[] {
     const before = legs.map(mediaOn)
@@ -144,17 +165,20 @@ test('audio, video and app data all leave through the same single relay leg', as
     const plane = await startVideoCall(legs)
     t.after(() => plane.stop())
 
+    const before = legs.map((leg) => leg.sent.length)
     const added = mediaAdded(legs, () => {
         plane.pushCapture(new Float32Array(FRAME_SAMPLES * 3).fill(0.1))
         assert.ok(plane.sendVideoFrame(KEY_FRAME, 0) > 0, 'the key frame went out')
         assert.equal(plane.sendReaction('\u{1F44D}'), true, 'the reaction went out')
     })
 
-    assert.ok(
-        added.reduce((sum, n) => sum + n, 0) >= 5,
-        'three audio packets, a video packet and a reaction went out'
-    )
+    const carrying = added.findIndex((n) => n > 0)
     assert.equal(added.filter((n) => n > 0).length, 1, 'one leg carried all of it')
+    const kinds = mediaKinds(legs[carrying].sent.slice(before[carrying]))
+    assert.equal(kinds.audio, 3, 'three audio packets, one per captured frame')
+    assert.equal(kinds.video, 1, 'the key frame fits one packet')
+    assert.equal(kinds.appData, 1, 'the reaction went out once')
+    assert.equal(kinds.other, 0, 'nothing else rode RTP')
 })
 
 test('once the leg carrying media dies, the next frame leaves through one leg of the other relay', async (t) => {

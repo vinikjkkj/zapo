@@ -8,12 +8,20 @@ import { WaSctpRelay } from '../WaSctpRelay.js'
 /** A raw UDP leg whose relay answers each 0x0801 ping with a 0x0802 pong while `answering`. */
 interface FakeLeg {
     readonly ip: string
+    /** The id the relay gives the leg, as `onReceive` reports it. */
+    readonly id: string
     readonly sent: Uint8Array[]
     answering: boolean
 }
 
-const PONG = new Uint8Array([0x08, 0x02, 0x00, 0x00, 0x21, 0x12, 0xa4, 0x42, ...new Uint8Array(12)])
 const WA_PING = 0x0801
+
+/** The relay's answer to a ping: the same header with the 0x0802 type, transaction id echoed. */
+function pongTo(ping: Uint8Array): Uint8Array {
+    const pong = ping.slice()
+    pong[1] = 0x02
+    return pong
+}
 
 const MEDIA = new Uint8Array([
     0x80, 0x78, 0x00, 0x2a, 0x00, 0x00, 0x03, 0xc0, 0x11, 0x22, 0x33, 0x44, 0xaa, 0xbb, 0xcc, 0xdd
@@ -42,7 +50,11 @@ async function flush(): Promise<void> {
     await new Promise<void>((resolve) => setImmediate(resolve))
 }
 
-async function dial(t: TestContext): Promise<Harness> {
+/** Two legs, on relays A and B unless told otherwise, both up and answering pings. */
+async function dial(
+    t: TestContext,
+    relayIds: readonly [number, number] = [3, 8]
+): Promise<Harness> {
     t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
     let now = 0
     const legs: FakeLeg[] = []
@@ -52,7 +64,12 @@ async function dial(t: TestContext): Promise<Harness> {
         now: () => now,
         createRawUdpLeg: (options) => {
             let open = false
-            const leg: FakeLeg = { ip: options.ip, sent: [], answering: true }
+            const leg: FakeLeg = {
+                ip: options.ip,
+                id: `${options.ip}:${options.port}#${relayIds[legs.length]}`,
+                sent: [],
+                answering: true
+            }
             legs.push(leg)
             return {
                 get isOpen() {
@@ -68,7 +85,8 @@ async function dial(t: TestContext): Promise<Harness> {
                     if (!open) return false
                     leg.sent.push(data.slice())
                     if (isPing(data) && leg.answering) {
-                        queueMicrotask(() => options.onMessage(PONG.slice()))
+                        const pong = pongTo(data)
+                        queueMicrotask(() => options.onMessage(pong))
                     }
                     return true
                 },
@@ -82,8 +100,8 @@ async function dial(t: TestContext): Promise<Harness> {
 
     await relay.configureRelays(
         [
-            { ip: '10.0.3.1', relayId: 3 },
-            { ip: '10.0.8.1', relayId: 8 }
+            { ip: '10.0.3.1', relayId: relayIds[0] },
+            { ip: '10.0.8.1', relayId: relayIds[1] }
         ].map((ep) => ({
             ...ep,
             port: 3480,
@@ -173,4 +191,74 @@ test('with no leg answering pings, media still goes out', async (t) => {
     await advance(6_000)
 
     assert.ok([a, b].includes(sendMediaVia()))
+})
+
+/** RTCP of a peer in silence: one authenticated packet a second on the leg it arrives on. */
+async function peerRtcpEverySecond(harness: Harness, leg: FakeLeg, ms: number): Promise<void> {
+    for (let elapsed = 0; elapsed < ms; elapsed += 1_000) {
+        harness.relay.notePeerMedia(leg.id)
+        await harness.advance(1_000)
+    }
+}
+
+/**
+ * The relay a leg was measured on that takes our uplink and forwards nothing back: it
+ * answers every ping, so only the missing peer media gives it away.
+ */
+test('an elected leg that answers pings but never hears the peer gives the media up at ~5 s', async (t) => {
+    const { relay, a, b, advance, sendMediaVia } = await dial(t)
+    relay.setMediaFlowing()
+    assert.equal(sendMediaVia(), a)
+
+    await advance(4_000)
+    assert.equal(sendMediaVia(), a, 'four seconds without the peer is not yet deaf')
+
+    await advance(2_000)
+    assert.equal(sendMediaVia(), b)
+    assert.equal(relay.getConnectedCount(), 2, 'the deaf leg stays open')
+})
+
+test('the peer RTCP arriving in silence keeps the elected leg', async (t) => {
+    const harness = await dial(t)
+    harness.relay.setMediaFlowing()
+    assert.equal(harness.sendMediaVia(), harness.a)
+
+    await peerRtcpEverySecond(harness, harness.a, 12_000)
+
+    assert.equal(harness.sendMediaVia(), harness.a)
+})
+
+test('a leg the media moved to that hears nothing either keeps it, with no bounce', async (t) => {
+    const { relay, a, b, advance, sendMediaVia } = await dial(t)
+    relay.setMediaFlowing()
+    assert.equal(sendMediaVia(), a)
+    await advance(6_000)
+    assert.equal(sendMediaVia(), b)
+
+    for (let i = 0; i < 5; i++) {
+        await advance(3_000)
+        assert.equal(sendMediaVia(), b)
+    }
+})
+
+test('with no leg of another relay, a leg that hears nothing keeps the media', async (t) => {
+    const { relay, a, advance, sendMediaVia } = await dial(t, [3, 3])
+    relay.setMediaFlowing()
+    assert.equal(sendMediaVia(), a)
+
+    await advance(12_000)
+
+    assert.equal(sendMediaVia(), a)
+})
+
+test('a deaf leg that hears the peer again takes the media back', async (t) => {
+    const { relay, a, b, advance, sendMediaVia } = await dial(t)
+    relay.setMediaFlowing()
+    assert.equal(sendMediaVia(), a)
+    await advance(6_000)
+    assert.equal(sendMediaVia(), b)
+
+    relay.notePeerMedia(a.id)
+
+    assert.equal(sendMediaVia(), a)
 })

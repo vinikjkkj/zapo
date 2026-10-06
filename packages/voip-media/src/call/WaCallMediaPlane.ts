@@ -1307,10 +1307,7 @@ export class WaCallMediaPlane {
             stream.observeInboundPayloadType(payloadType)
             reactions = stream.receive(packet.payload, ssrc)
         } catch (err: unknown) {
-            this.logger.debug('app data packet dropped', {
-                payloadType,
-                message: toError(err).message
-            })
+            this.countReceiveError(err, data)
             return
         }
 
@@ -1469,20 +1466,25 @@ export class WaCallMediaPlane {
                 })
             }
         } catch (err: unknown) {
-            const type = err instanceof SrtpError ? err.type : null
-            let errorCount: number
-            if (type === 'replay') errorCount = ++this.srtpReplayCount
-            else if (type === 'auth_failed') errorCount = ++this.srtpAuthFailureCount
-            else errorCount = ++this.srtpOtherErrorCount
-            if (errorCount <= 5) {
-                const ssrc = data.length >= 12 ? readUInt32BE(data, 8) : 0
-                this.logger.debug('srtp recv error', {
-                    type: type ?? 'other',
-                    errorCount,
-                    message: toError(err).message,
-                    ssrc: `0x${ssrc.toString(16)}`
-                })
-            }
+            this.countReceiveError(err, data)
+        }
+    }
+
+    /** Counts an inbound RTP packet the receive path dropped: a replay, a bad auth tag, or else. */
+    private countReceiveError(err: unknown, data: Uint8Array): void {
+        const type = err instanceof SrtpError ? err.type : null
+        let errorCount: number
+        if (type === 'replay') errorCount = ++this.srtpReplayCount
+        else if (type === 'auth_failed') errorCount = ++this.srtpAuthFailureCount
+        else errorCount = ++this.srtpOtherErrorCount
+        if (errorCount <= 5) {
+            const ssrc = data.length >= 12 ? readUInt32BE(data, 8) : 0
+            this.logger.debug('srtp recv error', {
+                type: type ?? 'other',
+                errorCount,
+                message: toError(err).message,
+                ssrc: `0x${ssrc.toString(16)}`
+            })
         }
     }
 

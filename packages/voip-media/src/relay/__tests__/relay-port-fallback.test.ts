@@ -51,7 +51,7 @@ function mediaOn(dial: Dial): number {
 }
 
 /** A relay over raw UDP legs, whose far end answers every STUN message only on `answering` ports. */
-function createRawRelay(dials: Dial[], answering: readonly number[]): WaSctpRelay {
+function createRawRelay(dials: Dial[], answering: ReadonlySet<number>): WaSctpRelay {
     return new WaSctpRelay({
         crypto: nodeCrypto,
         createPeerConnection: peerConnectionNotDialled,
@@ -80,7 +80,7 @@ function createRawRelay(dials: Dial[], answering: readonly number[]): WaSctpRela
                 send: (data) => {
                     if (!open || closed) return false
                     dial.sent.push(data.slice())
-                    if (!isMedia(data) && answering.includes(options.port)) {
+                    if (!isMedia(data) && answering.has(options.port)) {
                         queueMicrotask(() => {
                             if (!closed) options.onMessage(PONG.slice())
                         })
@@ -97,7 +97,7 @@ function createRawRelay(dials: Dial[], answering: readonly number[]): WaSctpRela
 
 async function dialRaw(
     t: TestContext,
-    answering: readonly number[]
+    answering: Set<number>
 ): Promise<{ relay: WaSctpRelay; dials: Dial[] }> {
     t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
     const dials: Dial[] = []
@@ -108,15 +108,20 @@ async function dialRaw(
     return { relay, dials }
 }
 
-test('a leg the relay never answers is redialled on the other port, and media follows it', async (t) => {
-    const { relay, dials } = await dialRaw(t, [WEB_CLIENT_PORT])
+/** The registration burst replays at 50, 150, 500 and 3000 ms from the open. */
+test('an open leg the relay never answers is redialled once its burst had time to be answered', async (t) => {
+    const { relay, dials } = await dialRaw(t, new Set([WEB_CLIENT_PORT]))
     assert.deepEqual(
         dials.map((d) => d.port),
         [ADVERTISED_PORT],
         'a raw leg dials the advertised port first'
     )
 
-    t.mock.timers.tick(3_000)
+    t.mock.timers.tick(3_500)
+    await settle()
+    assert.equal(dials.length, 1, 'the last replay of the burst still gets its answer time')
+
+    t.mock.timers.tick(1_000)
     await settle()
 
     assert.deepEqual(
@@ -131,7 +136,7 @@ test('a leg the relay never answers is redialled on the other port, and media fo
 })
 
 test('a leg the relay answers on its first port is never redialled', async (t) => {
-    const { relay, dials } = await dialRaw(t, [ADVERTISED_PORT])
+    const { relay, dials } = await dialRaw(t, new Set([ADVERTISED_PORT]))
 
     t.mock.timers.tick(60_000)
     await settle()
@@ -144,8 +149,27 @@ test('a leg the relay answers on its first port is never redialled', async (t) =
     assert.equal(mediaOn(dials[0]), 1)
 })
 
+test('a relay that answers only the last replay of the burst keeps its leg', async (t) => {
+    const answering = new Set<number>()
+    const { relay, dials } = await dialRaw(t, answering)
+
+    t.mock.timers.tick(2_900)
+    await settle()
+    answering.add(ADVERTISED_PORT)
+    t.mock.timers.tick(100)
+    await settle()
+    t.mock.timers.tick(10_000)
+    await settle()
+
+    assert.deepEqual(
+        dials.map((d) => d.port),
+        [ADVERTISED_PORT]
+    )
+    assert.equal(relay.getConnectedCount(), 1)
+})
+
 test('a leg that dies before the relay ever answered is redialled at once', async (t) => {
-    const { dials } = await dialRaw(t, [WEB_CLIENT_PORT])
+    const { dials } = await dialRaw(t, new Set([WEB_CLIENT_PORT]))
 
     dials[0].fail('raw_udp_socket_error')
     await settle()
@@ -157,9 +181,9 @@ test('a leg that dies before the relay ever answered is redialled at once', asyn
 })
 
 test('a leg unanswered on both ports is redialled only once', async (t) => {
-    const { dials } = await dialRaw(t, [])
+    const { dials } = await dialRaw(t, new Set())
 
-    t.mock.timers.tick(3_000)
+    t.mock.timers.tick(4_500)
     await settle()
     t.mock.timers.tick(60_000)
     await settle()
@@ -186,7 +210,11 @@ class FakePeerConnection {
     readonly sent: Uint8Array[] = []
     private channel: FakeChannel | null = null
 
-    constructor(private readonly answering: readonly number[]) {
+    /** `openAfterMs` stands for ICE, DTLS and SCTP taking that long on a port that answers. */
+    constructor(
+        private readonly answering: readonly number[],
+        private readonly openAfterMs?: number
+    ) {
         FakePeerConnection.all.push(this)
     }
 
@@ -207,7 +235,9 @@ class FakePeerConnection {
     async setRemoteDescription(description: { sdp: string }): Promise<void> {
         const candidate = /a=candidate:\S+ \d+ udp \d+ \S+ (\d+) typ/.exec(description.sdp)
         this.port = Number(candidate?.[1])
-        if (this.answering.includes(this.port)) setImmediate(() => this.channel?.open())
+        if (!this.answering.includes(this.port)) return
+        if (this.openAfterMs === undefined) setImmediate(() => this.channel?.open())
+        else setTimeout(() => this.channel?.open(), this.openAfterMs)
     }
 
     close(): void {
@@ -246,21 +276,33 @@ class FakeChannel {
     }
 }
 
-test('on the WebRTC path a leg that never opens on 3480 is redialled on the advertised port', async (t) => {
+async function dialWebRtc(
+    t: TestContext,
+    answering: readonly number[],
+    openAfterMs?: number
+): Promise<WaSctpRelay> {
     t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
     FakePeerConnection.all.length = 0
     const relay = new WaSctpRelay({
         crypto: nodeCrypto,
         createPeerConnection: async () =>
-            new FakePeerConnection([ADVERTISED_PORT]) as unknown as RTCPeerConnection
+            new FakePeerConnection(answering, openAfterMs) as unknown as RTCPeerConnection
     })
     t.after(() => relay.cleanup())
-
     await relay.configureRelays([RELAY])
     await settle()
+    return relay
+}
+
+test('on the WebRTC path a leg that never opens on 3480 is redialled on the advertised port', async (t) => {
+    const relay = await dialWebRtc(t, [ADVERTISED_PORT])
     assert.equal(relay.getConnectedCount(), 0, 'nothing answers on 3480')
 
-    t.mock.timers.tick(3_000)
+    t.mock.timers.tick(4_000)
+    await settle()
+    assert.equal(FakePeerConnection.all.length, 1, 'a slow leg is given time to open')
+
+    t.mock.timers.tick(1_500)
     await settle()
 
     const [first, second] = FakePeerConnection.all
@@ -272,4 +314,18 @@ test('on the WebRTC path a leg that never opens on 3480 is redialled on the adve
 
     assert.equal(relay.sendMedia(MEDIA.slice().buffer), true)
     assert.equal(second.sent.filter(isMedia).length, 1, 'media leaves through the redialled leg')
+})
+
+/** ICE, DTLS and SCTP taking a few seconds on the right port is a slow leg, not a wrong port. */
+test('on the WebRTC path a leg that opens slowly on the right port is not redialled', async (t) => {
+    const relay = await dialWebRtc(t, [WEB_CLIENT_PORT], 3_500)
+
+    t.mock.timers.tick(3_500)
+    await settle()
+    t.mock.timers.tick(15_000)
+    await settle()
+
+    assert.equal(FakePeerConnection.all.length, 1)
+    assert.equal(FakePeerConnection.all[0].port, WEB_CLIENT_PORT)
+    assert.equal(relay.getConnectedCount(), 1)
 })

@@ -62,6 +62,8 @@ export class WaCallManager extends EventEmitter {
     private readonly mediaMode: WaCallMediaMode
 
     private readonly calls = new Map<string, WaCallMediaSession>()
+    /** Set by `destroy`: an offer still resolving when it ran must not make a call. */
+    private destroyed = false
     /**
      * Call ids a `<terminate>` ended before their offer made a call, with when that
      * expires: the offer can still be decrypting when the terminate lands.
@@ -271,6 +273,10 @@ export class WaCallManager extends EventEmitter {
             signalingLogger
         )
 
+        if (this.destroyed) {
+            this.logger.debug('offer resolved after the manager was destroyed, dropped', { callId })
+            return
+        }
         if (this.takeTerminatedBeforeOffer(callId)) {
             this.logger.debug('offer of a call already terminated, dropped', { callId })
             return
@@ -487,6 +493,7 @@ export class WaCallManager extends EventEmitter {
     }
 
     destroy(): void {
+        this.destroyed = true
         for (const session of this.calls.values()) {
             session.cleanup()
         }
@@ -763,7 +770,7 @@ export class WaCallManager extends EventEmitter {
      * path already reported the end, so setup stops and cleans up again.
      */
     private endedDuringSetup(session: WaCallMediaSession): boolean {
-        if (!session.info.isEnded) return false
+        if (!session.info.isEnded && !this.destroyed) return false
         session.cleanup()
         return true
     }
