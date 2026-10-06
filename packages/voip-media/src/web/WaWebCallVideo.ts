@@ -86,6 +86,12 @@ const MAX_DECODED_STREAMS = 4
 /** RTP clock rate of H.264. */
 const VIDEO_CLOCK_KHZ = 90
 
+/**
+ * Largest step between a stream's frames taken as its own clock: 10 s. Past it, either way,
+ * the encoder restarted on a new timestamp base.
+ */
+const MAX_TIMESTAMP_STEP_TICKS = 10_000 * VIDEO_CLOCK_KHZ
+
 const NAL_TYPE_SPS = 7
 
 interface VideoFrameSource {
@@ -595,10 +601,14 @@ function fitEncodedSize(width: number, height: number): { width: number; height:
     }
 }
 
-/** Stream position in microseconds for an RTP timestamp, stepping by the signed difference. */
+/**
+ * Stream position in microseconds for an RTP timestamp, stepping by the signed difference. On
+ * a restarted base the position goes on one tick past the last, so it never runs backwards.
+ */
 function advanceTimestamp(stream: DecodedStream, rtpTimestamp: number): number {
     if (stream.lastRtpTimestamp !== null) {
-        stream.elapsedTicks += (rtpTimestamp - stream.lastRtpTimestamp) | 0
+        const step = (rtpTimestamp - stream.lastRtpTimestamp) | 0
+        stream.elapsedTicks += Math.abs(step) > MAX_TIMESTAMP_STEP_TICKS ? 1 : step
     }
     stream.lastRtpTimestamp = rtpTimestamp
     return Math.round((stream.elapsedTicks * 1000) / VIDEO_CLOCK_KHZ)

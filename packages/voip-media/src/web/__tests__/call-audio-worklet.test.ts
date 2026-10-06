@@ -27,9 +27,11 @@ class FakeProcessorPort {
         this.posted.push(structuredClone(message, { transfer }))
     }
 
-    /** A message from the main thread, arriving as its own copy. */
-    deliver(message: unknown): void {
-        this.onmessage?.({ data: message })
+    /** A message from the main thread, arriving as its own copy; returns what the processor got. */
+    deliver<T>(message: T, transfer: ArrayBuffer[] = []): T {
+        const received = structuredClone(message, { transfer })
+        this.onmessage?.({ data: received })
+        return received
     }
 }
 
@@ -103,6 +105,67 @@ function countUntilSilence(samples: Float32Array): number {
     return index === -1 ? samples.length : index
 }
 
+function sine(length: number, amplitude: number, frequency: number, rate: number): Float32Array {
+    const samples = new Float32Array(length)
+    for (let n = 0; n < length; n++) {
+        samples[n] = amplitude * Math.sin((2 * Math.PI * frequency * n) / rate)
+    }
+    return samples
+}
+
+/** Least-squares fit of a `frequency` sinusoid: its amplitude and the RMS of what is left. */
+function measureTone(
+    samples: Float32Array,
+    frequency: number,
+    rate: number
+): { amplitude: number; residual: number } {
+    const step = (2 * Math.PI * frequency) / rate
+    let ss = 0
+    let cc = 0
+    let sc = 0
+    let xs = 0
+    let xc = 0
+    for (let n = 0; n < samples.length; n++) {
+        const s = Math.sin(step * n)
+        const c = Math.cos(step * n)
+        ss += s * s
+        cc += c * c
+        sc += s * c
+        xs += samples[n] * s
+        xc += samples[n] * c
+    }
+    const determinant = ss * cc - sc * sc
+    const a = (xs * cc - xc * sc) / determinant
+    const b = (xc * ss - xs * sc) / determinant
+    let left = 0
+    for (let n = 0; n < samples.length; n++) {
+        const error = samples[n] - a * Math.sin(step * n) - b * Math.cos(step * n)
+        left += error * error
+    }
+    return { amplitude: Math.hypot(a, b), residual: Math.sqrt(left / samples.length) }
+}
+
+function rms(samples: Float32Array): number {
+    let sum = 0
+    for (const sample of samples) sum += sample * sample
+    return Math.sqrt(sum / samples.length)
+}
+
+function decibels(ratio: number): number {
+    return 20 * Math.log10(ratio)
+}
+
+/** Feeds `input` through the capture a quantum at a time and returns the 16 kHz it posted. */
+function captureAll(processor: WorkletProcessor, port: FakeProcessorPort, input: Float32Array) {
+    for (let q = 0; q + QUANTUM <= input.length; q += QUANTUM) {
+        runQuantum(processor, input.subarray(q, q + QUANTUM))
+    }
+    return Float32Array.from(captureBlocks(port).flatMap((block) => Array.from(block)))
+}
+
+/** 16 kHz output samples the capture filter needs before it holds only real input. */
+const CAPTURE_SETTLE = 64
+
 test('at 16 kHz the capture comes out in 320-sample blocks, in order and unchanged', () => {
     const { processor, port } = loadProcessor(16_000)
     const captured = ramp(QUANTUM * 10, 0)
@@ -122,14 +185,11 @@ test('at 16 kHz the capture comes out in 320-sample blocks, in order and unchang
     }
 })
 
-test('at 48 kHz a 1 kHz sine is averaged down to 16 kHz, 128 / 3 samples a quantum', () => {
+test('at 48 kHz a 1 kHz sine comes down to 16 kHz whole, 128 / 3 samples a quantum', () => {
     const { processor, port } = loadProcessor(48_000)
     const amplitude = 0.5
-    const frequency = 1_000
-    const step = (2 * Math.PI * frequency) / 48_000
     const quanta = 30
-    const captured = new Float32Array(quanta * QUANTUM)
-    for (let n = 0; n < captured.length; n++) captured[n] = amplitude * Math.sin(step * n)
+    const captured = sine(quanta * QUANTUM, amplitude, 1_000, 48_000)
 
     const blocksAfter: number[] = []
     for (let q = 0; q < quanta; q++) {
@@ -144,19 +204,31 @@ test('at 48 kHz a 1 kHz sine is averaged down to 16 kHz, 128 / 3 samples a quant
         assert.equal(blocksAfter[q], expected, `blocks posted after quantum ${q}`)
     }
 
-    // A 3-sample average scales a sine by (1 + 2cos(step)) / 3: 99.4 % at 1 kHz.
-    const gain = (1 + 2 * Math.cos(step)) / 3
-    const downsampled = captureBlocks(port).flatMap((block) => Array.from(block))
+    const downsampled = Float32Array.from(captureBlocks(port).flatMap((block) => Array.from(block)))
     assert.equal(downsampled.length, 1_280)
-    let energy = 0
-    for (let k = 0; k < downsampled.length; k++) {
-        const expected = gain * amplitude * Math.sin(step * (3 * k + 1))
-        assert.ok(Math.abs(downsampled[k] - expected) < 1e-5, `sample ${k}`)
-        energy += downsampled[k] * downsampled[k]
+    const { amplitude: measured, residual } = measureTone(
+        downsampled.subarray(CAPTURE_SETTLE),
+        1_000,
+        16_000
+    )
+    assert.ok(Math.abs(measured / amplitude - 1) < 1e-3, `amplitude ${measured}`)
+    assert.ok(residual < 1e-4 * amplitude, `residual ${residual}`)
+})
+
+test('at 48 kHz a tone above 8 kHz is filtered out, not folded into the band', () => {
+    for (const frequency of [9_000, 12_000]) {
+        const { processor, port } = loadProcessor(48_000)
+        const amplitude = 0.5
+        const downsampled = captureAll(
+            processor,
+            port,
+            sine(60 * QUANTUM, amplitude, frequency, 48_000)
+        )
+
+        // Averaging three samples would let 12 kHz through at -9.5 dB, folded to 4 kHz.
+        const level = decibels(rms(downsampled.subarray(CAPTURE_SETTLE)) / (amplitude / Math.SQRT2))
+        assert.ok(level < -60, `${frequency} Hz came out at ${level.toFixed(1)} dB`)
     }
-    // RMS over 80 whole periods; the sampled peak would read low at 16 kHz.
-    const measured = Math.sqrt((2 * energy) / downsampled.length)
-    assert.ok(measured > 0.99 * amplitude && measured <= amplitude, `amplitude ${measured}`)
 })
 
 test('at 44.1 kHz the fractional ratio carries across quanta without drifting', () => {
@@ -168,7 +240,24 @@ test('at 44.1 kHz the fractional ratio carries across quanta without drifting', 
 
     const blocks = captureBlocks(port)
     assert.equal(blocks.length, 64)
-    assert.ok(blocks.every((block) => block.every((sample) => sample === 0.25)))
+    const settled = blocks.flatMap((block) => Array.from(block)).slice(CAPTURE_SETTLE)
+    assert.ok(settled.every((sample) => sample === 0.25))
+})
+
+test('at 44.1 kHz each sample is taken at its own instant, so a 4 kHz tone stays clean', () => {
+    const { processor, port } = loadProcessor(44_100)
+    const amplitude = 0.5
+    const downsampled = captureAll(processor, port, sine(200 * QUANTUM, amplitude, 4_000, 44_100))
+
+    const { amplitude: measured, residual } = measureTone(
+        downsampled.subarray(CAPTURE_SETTLE),
+        4_000,
+        16_000
+    )
+    assert.ok(Math.abs(measured / amplitude - 1) < 0.01, `amplitude ${measured}`)
+    // Rounding each instant to a whole input sample would leave noise near -20 dB.
+    const noise = decibels(residual / (amplitude / Math.SQRT2))
+    assert.ok(noise < -50, `noise at ${noise.toFixed(1)} dB`)
 })
 
 test('a quantum without input still clocks the capture, as silence', () => {
@@ -186,10 +275,10 @@ test('playout starts after a prebuffer of two blocks and plays them in order', (
     const first = ramp(BLOCK, 0)
     const second = ramp(BLOCK, BLOCK)
 
-    port.deliver(first.slice())
+    port.deliver(first)
     assert.ok(isSilent(runQuantum(processor, null)), 'one block is below the prebuffer')
 
-    port.deliver(second.slice())
+    port.deliver(second)
     const played = playQuanta(processor, 5)
 
     assert.deepEqual(Array.from(played), [...first, ...second])
@@ -205,7 +294,7 @@ test('an underrun plays silence and waits for a full prebuffer again', () => {
     assert.ok(isSilent(played.subarray(700)), 'the rest of the quantum is silence')
 
     const again = ramp(BLOCK, 1_000)
-    port.deliver(again.slice())
+    port.deliver(again)
     assert.ok(isSilent(runQuantum(processor, null)), 'one block is not enough after an underrun')
 
     port.deliver(ramp(BLOCK, 2_000))
@@ -221,31 +310,45 @@ test('the ring holds 200 ms and past that keeps only the newest prebuffer', () =
 
     const overfed = loadProcessor(16_000)
     const blocks = Array.from({ length: 20 }, (_, b) => ramp(BLOCK, b * BLOCK))
-    for (const block of blocks) overfed.port.deliver(block.slice())
+    for (const block of blocks) overfed.port.deliver(block)
     const trimmed = playQuanta(overfed.processor, 8)
 
     assert.equal(countUntilSilence(trimmed), 2 * BLOCK, 'what is left is one prebuffer')
     assert.deepEqual(Array.from(trimmed.subarray(0, 2 * BLOCK)), [...blocks[18], ...blocks[19]])
 })
 
-test('at 48 kHz playout is interpolated up to three samples per sample', () => {
+test('at 48 kHz playout runs three frames per sample', () => {
     const { processor, port } = loadProcessor(48_000)
-    const samples = ramp(2 * BLOCK, 0)
-    port.deliver(samples.slice())
+    port.deliver(new Float32Array(2 * BLOCK).fill(0.5))
 
     const played = playQuanta(processor, 16)
 
-    assert.equal(countUntilSilence(played), 3 * samples.length)
-    // Linear interpolation of a straight line: output frame t sits at input t / 3.
-    for (let t = 0; t < 3 * (samples.length - 1); t++) {
-        const expected = (t / 3 + 1) / 4_096
-        assert.ok(Math.abs(played[t] - expected) < 1e-6, `frame ${t}`)
-    }
-    // Nothing follows the last sample, so it is held rather than ramped to zero.
-    const last = samples[samples.length - 1]
-    for (let t = 3 * (samples.length - 1); t < 3 * samples.length; t++) {
-        assert.equal(played[t], last)
-    }
+    assert.equal(countUntilSilence(played), 3 * 2 * BLOCK)
+    // Away from the edges, where the filter reaches past the stream, the level is exact.
+    assert.ok(played.subarray(60, 3 * 2 * BLOCK - 60).every((sample) => sample === 0.5))
+})
+
+test('at 48 kHz playout keeps the band and leaves no image above it', () => {
+    const { processor, port } = loadProcessor(48_000)
+    const amplitude = 0.5
+    port.deliver(sine(10 * BLOCK, amplitude, 6_000, 16_000))
+
+    const played = playQuanta(processor, 70).subarray(300)
+
+    const tone = measureTone(played, 6_000, 48_000)
+    assert.ok(Math.abs(tone.amplitude / amplitude - 1) < 0.01, `amplitude ${tone.amplitude}`)
+    // Linear interpolation leaves the 10 kHz image of a 6 kHz tone at -12 dB.
+    const image = decibels(measureTone(played, 10_000, 48_000).amplitude / amplitude)
+    assert.ok(image < -60, `image at ${image.toFixed(1)} dB`)
+})
+
+test('at 48 kHz a restart after an underrun reads silence behind it, not the old stream', () => {
+    const { processor, port } = loadProcessor(48_000)
+    port.deliver(new Float32Array(2 * BLOCK).fill(0.5))
+    playQuanta(processor, 16)
+
+    port.deliver(new Float32Array(2 * BLOCK))
+    assert.ok(isSilent(playQuanta(processor, 4)))
 })
 
 test('answered block for block, the loop never underruns once it plays', () => {
@@ -279,14 +382,15 @@ test('answered block for block, the loop never underruns once it plays', () => {
 
 test('a playout buffer is reused as a later capture block', () => {
     const { processor, port } = loadProcessor(16_000)
-    const handedBack = new Float32Array(BLOCK)
-    port.deliver(handedBack)
+    const answer = new Float32Array(BLOCK)
+    const received = port.deliver(answer, [answer.buffer])
+    assert.equal(answer.byteLength, 0, 'the main thread transferred its answer away')
 
-    // The second block is the buffer handed back, so posting it transfers it away.
+    // The second block is the buffer the processor received, so posting it transfers it away.
     playQuanta(processor, 5)
 
     assert.equal(captureBlocks(port).length, 2)
-    assert.equal(handedBack.byteLength, 0, 'the handed-back buffer left as a capture block')
+    assert.equal(received.byteLength, 0, 'the received buffer left as a capture block')
 })
 
 test('the stop message ends the processor', () => {

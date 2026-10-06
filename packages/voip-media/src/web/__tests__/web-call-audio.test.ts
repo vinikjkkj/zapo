@@ -67,6 +67,11 @@ interface FakeBrowserOptions {
     readonly refuseSourceAtRate?: number
     /** `addModule` rejects. */
     readonly failModule?: boolean
+    /**
+     * Contexts start suspended and resume only inside the user activation, which the
+     * microphone prompt outlasts; a later `resume()` never settles.
+     */
+    readonly activationEndsAtPrompt?: boolean
 }
 
 interface FakeContext {
@@ -100,6 +105,7 @@ interface FakeBrowser {
 
 /** Installs a fake browser audio surface on `globalThis` for one test, restored after. */
 function installFakeBrowser(t: TestContext, options: FakeBrowserOptions = {}): FakeBrowser {
+    let activation = true
     const browser: FakeBrowser = {
         contexts: [],
         nodes: [],
@@ -115,7 +121,7 @@ function installFakeBrowser(t: TestContext, options: FakeBrowserOptions = {}): F
     class FakeAudioContext implements FakeContext {
         readonly options: AudioContextOptions | undefined
         readonly sampleRate: number
-        state: AudioContextState = 'running'
+        state: AudioContextState = options.activationEndsAtPrompt ? 'suspended' : 'running'
         readonly destination = { destination: true }
         readonly modules: string[] = []
         readonly sources: FakeNode[] = []
@@ -148,8 +154,10 @@ function installFakeBrowser(t: TestContext, options: FakeBrowserOptions = {}): F
             this.state = 'closed'
         }
 
-        async resume(): Promise<void> {
+        resume(): Promise<void> {
+            if (!activation) return new Promise(() => undefined)
             this.state = 'running'
+            return Promise.resolve()
         }
     }
 
@@ -174,6 +182,7 @@ function installFakeBrowser(t: TestContext, options: FakeBrowserOptions = {}): F
 
     const getUserMedia = async (constraints: MediaStreamConstraints): Promise<unknown> => {
         browser.userMediaRequests.push(constraints)
+        if (options.activationEndsAtPrompt) activation = false
         return browser.microphone
     }
 
@@ -258,6 +267,14 @@ test('start opens a 16 kHz context and wires microphone, worklet and speaker', a
     assert.deepEqual(node.options.outputChannelCount, [1])
     assert.deepEqual(context.sources[0].connections, [node])
     assert.deepEqual(node.connections, [context.destination])
+})
+
+test('the context is resumed inside the user gesture, before the microphone prompt ends it', async (t) => {
+    const browser = installFakeBrowser(t, { activationEndsAtPrompt: true })
+    const audio = await WaWebCallAudio.start(createRecordingSink())
+    t.after(() => audio.stop())
+
+    assert.equal(browser.contexts[0].state, 'running')
 })
 
 test('a capture block is pushed, answered by a pull of the same length, and posted back', async (t) => {

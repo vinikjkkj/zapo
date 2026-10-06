@@ -20,11 +20,14 @@ export {
     type WaWebCallVideoSenderStats
 } from './WaWebCallVideo.js'
 
-/** Builds a relay leg's peer connection on the browser's own `RTCPeerConnection`. */
+/**
+ * Builds a relay leg's peer connection on the browser's own `RTCPeerConnection`; a
+ * configuration the browser refuses rejects the promise.
+ */
 export function createBrowserPeerConnection(
     configuration: RTCConfiguration
 ): Promise<RTCPeerConnection> {
-    return Promise.resolve(new RTCPeerConnection(configuration))
+    return new Promise((resolve) => resolve(new RTCPeerConnection(configuration)))
 }
 
 /** Media in a browser: plain-JS primitives and `RTCPeerConnection`; no raw UDP legs. */

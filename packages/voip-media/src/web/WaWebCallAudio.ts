@@ -92,7 +92,7 @@ export class WaWebCallAudio {
 
     /**
      * Opens the microphone and speaker and carries audio to and from `sink`, releasing all on
-     * failure. The context is created before the first `await`, inside the user gesture.
+     * failure. The context is created and resumed before the first `await`, inside the gesture.
      */
     static async start(
         sink: WaCallAudioSink,
@@ -113,7 +113,7 @@ export class WaWebCallAudio {
                 // Firefox refuses a mic at a foreign rate: fall back to the device rate.
                 if (!ownsContext || context.sampleRate !== WA_CALL_AUDIO_SAMPLE_RATE) throw error
                 await closeContext(context)
-                context = new AudioContext()
+                context = openAudioContext()
                 source = context.createMediaStreamSource(microphone)
             }
 
@@ -134,7 +134,6 @@ export class WaWebCallAudio {
             })
             source.connect(node)
             node.connect(context.destination)
-            if (ownsContext) resumeContext(context)
             return audio
         } catch (error) {
             if (ownsMicrophone && microphone) stopTracks(microphone)
@@ -176,10 +175,17 @@ export class WaWebCallAudio {
 /** A 16 kHz context, so the browser resamples; the device rate where 16 kHz is refused. */
 function createCallAudioContext(): AudioContext {
     try {
-        return new AudioContext({ sampleRate: WA_CALL_AUDIO_SAMPLE_RATE })
+        return openAudioContext({ sampleRate: WA_CALL_AUDIO_SAMPLE_RATE })
     } catch {
-        return new AudioContext()
+        return openAudioContext()
     }
+}
+
+/** A new context, resumed at once: past the first `await` the user activation may be gone. */
+function openAudioContext(options?: AudioContextOptions): AudioContext {
+    const context = new AudioContext(options)
+    resumeContext(context)
+    return context
 }
 
 /**

@@ -633,6 +633,22 @@ test('timestamps step across the 32-bit RTP wrap', (t) => {
     )
 })
 
+test('a timestamp jump past 10 s, either way, goes on from where the stream stood', (t) => {
+    const { receiver } = startReceiver(t)
+    receiver.push(inbound(7, 1_000_000, true))
+    receiver.push(inbound(7, 1_006_000, false))
+    // The peer's encoder restarts on a base 11 s back, then again 22 s ahead.
+    receiver.push(inbound(7, 10_000, true))
+    receiver.push(inbound(7, 16_000, false))
+    receiver.push(inbound(7, 2_000_000, true))
+    receiver.push(inbound(7, 2_006_000, false))
+
+    assert.deepEqual(
+        FakeVideoDecoder.all[0].decodes.map((chunk) => chunk.timestamp),
+        [0, 66_667, 66_678, 133_344, 133_356, 200_022]
+    )
+})
+
 test('decoded pictures go to onFrame with their SSRC; one that throws is closed and reported', (t) => {
     installFakeWebCodecs(t)
     const errors: unknown[] = []
