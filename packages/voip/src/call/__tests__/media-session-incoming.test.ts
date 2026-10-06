@@ -145,6 +145,31 @@ test('relaylatency never advertises a relay this client does not dial', async ()
     )
 })
 
+test('the relaylatency an incoming call sends on its own names only the relays it dials', async () => {
+    const address = new Uint8Array([10, 0, 0, 4, 0x0d, 0x96])
+    const { session, sent } = createIncomingSession({
+        endpoints: [
+            endpoint({ ip: '10.0.0.1', relayName: 'tcp1c01', protocol: 1, addressBytes: address }),
+            endpoint({
+                ip: '10.0.0.2',
+                relayName: 'semtoken',
+                rawToken: undefined,
+                addressBytes: address
+            }),
+            endpoint({ ip: '10.0.0.3', relayName: 'semendereco' }),
+            endpoint({ ip: '10.0.0.4', relayName: 'gru1c01', c2rRtt: 17, addressBytes: address })
+        ],
+        participantJids: ['peer:0@lid']
+    })
+
+    await session.sendRelayLatency()
+
+    assert.deepEqual(
+        sent.flatMap(teNodesOf).map((te) => [te.attrs.relay_name, te.attrs.latency, te.content]),
+        [['gru1c01', String(LATENCY_BASE + 17), address]]
+    )
+})
+
 test('relaylatency naming only relays we were never given is not answered', async () => {
     const { session, sent } = createIncomingSession({
         endpoints: [endpoint({ relayName: 'gru1c01', c2rRtt: 17 })],
@@ -163,8 +188,16 @@ test('incoming relaylatency stops once the call ends between relays', async () =
     const call = CallInfo.newIncoming(ID, 'peer@lid', 'peer@lid', undefined, CallMediaType.Audio)
     call.relayData = {
         endpoints: [
-            endpoint({ ip: '10.0.0.1', relayName: 'gru1c01' }),
-            endpoint({ ip: '10.0.0.2', relayName: 'bsb1c01' })
+            endpoint({
+                ip: '10.0.0.1',
+                relayName: 'gru1c01',
+                addressBytes: new Uint8Array([10, 0, 0, 1, 0x0d, 0x96])
+            }),
+            endpoint({
+                ip: '10.0.0.2',
+                relayName: 'bsb1c01',
+                addressBytes: new Uint8Array([10, 0, 0, 2, 0x0d, 0x96])
+            })
         ],
         participantJids: ['peer:0@lid']
     }
@@ -186,7 +219,7 @@ test('incoming relaylatency stops once the call ends between relays', async () =
         delegate: createSessionDelegate()
     })
 
-    await session.sendIncomingRelayLatency()
+    await session.sendRelayLatency()
 
     assert.equal(sent.length, 1)
 })

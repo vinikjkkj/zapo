@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import { createNoopLogger, type Logger } from 'zapo-js'
 import { isLidJid } from 'zapo-js/protocol'
 import { type BinaryNode, hasNodeChild } from 'zapo-js/transport'
-import { resolvePositive, toError } from 'zapo-js/util'
+import { resolvePositive, setBoundedMapEntry, toError } from 'zapo-js/util'
 
 import type { WaCallMediaEvent, WaCallMediaMessage } from '@zapo-js/voip-media'
 
@@ -33,6 +33,10 @@ import { WaCallMediaSession } from './WaCallMediaSession.js'
 
 const DEFAULT_MAX_CONCURRENT_CALLS = 1
 
+/** How long a terminate that found no call waits for its offer, and how many are kept. */
+const TERMINATED_BEFORE_OFFER_TTL_MS = 30_000
+const MAX_TERMINATED_BEFORE_OFFER = 64
+
 export interface WaCallManagerConfig {
     deps: WaVoipDeps
     stores: WaVoipStores
@@ -57,6 +61,13 @@ export class WaCallManager extends EventEmitter {
     private readonly mediaMode: WaCallMediaMode
 
     private readonly calls = new Map<string, WaCallMediaSession>()
+    /**
+     * Call ids a `<terminate>` ended before their offer made a call, with when that
+     * expires: the offer can still be decrypting when the terminate lands.
+     */
+    private readonly terminatedBeforeOffer = new Map<string, number>()
+    /** Calls the app knows of: an outgoing one from its start, an incoming one once announced. */
+    private readonly announcedCalls = new WeakSet<CallInfo>()
 
     constructor(config: WaCallManagerConfig) {
         super()
@@ -89,6 +100,7 @@ export class WaCallManager extends EventEmitter {
         info.encryptionKey = callKey
 
         const session = this.createSession(info)
+        this.announcedCalls.add(info)
 
         try {
             session.resetOutgoingFlags()
@@ -258,6 +270,11 @@ export class WaCallManager extends EventEmitter {
             signalingLogger
         )
 
+        if (this.takeTerminatedBeforeOffer(callId)) {
+            this.logger.debug('offer of a call already terminated, dropped', { callId })
+            return
+        }
+
         const voipSettings = parseVoipSettings(node, signalingLogger)
 
         const { relays, participantJids, uuid, selfPid, peerPid, hbhKey } = parseRelayFromAck(
@@ -300,14 +317,11 @@ export class WaCallManager extends EventEmitter {
                         )
                     ]
                 }
-                const mediaPeerJid = isVideo
-                    ? peerDeviceJids.find((jid) => /:[1-9]\d*@/.test(jid)) || peerJid
-                    : peerJid
-                await session.initMedia(selfLid, mediaPeerJid)
+                await session.initMedia(selfLid, peerJid)
                 if (this.endedDuringSetup(session)) return
                 await session.sendIncomingPreaccept(peerJid)
                 if (this.endedDuringSetup(session)) return
-                await session.sendIncomingRelayLatency()
+                await session.sendRelayLatency()
             } catch (err) {
                 if (this.endedDuringSetup(session)) return
                 this.logger.error('incoming call activation failed', {
@@ -321,7 +335,7 @@ export class WaCallManager extends EventEmitter {
                         message: toError(transitionErr).message
                     })
                 }
-                this.emit('call_ended', info)
+                this.emitEnded(info)
                 this.emitState(info)
                 session.cleanup()
                 this.calls.delete(callId)
@@ -337,7 +351,7 @@ export class WaCallManager extends EventEmitter {
         }
         if (this.endedDuringSetup(session)) return
 
-        this.emit('call_incoming', info)
+        this.announceIncoming(info)
         this.emitState(info)
 
         this.logger.debug('incoming call', {
@@ -350,7 +364,10 @@ export class WaCallManager extends EventEmitter {
         })
     }
 
-    /** An `<accept>` on an incoming call ends it (answered elsewhere) and frees its slot. */
+    /**
+     * An `<accept>` from another device of this account on an incoming call ends it (answered
+     * elsewhere) and frees its slot.
+     */
     async handleCallAccept(node: BinaryNode, peerJid: string): Promise<void> {
         const session = this.resolveSessionFromNode(node)
         if (!session) return
@@ -425,9 +442,26 @@ export class WaCallManager extends EventEmitter {
         session.handleCallVideoState(node)
     }
 
+    /** A terminate that finds no call is kept, so the offer still decrypting for it is dropped. */
     async handleCallTerminate(node: BinaryNode, peerJid?: string): Promise<void> {
-        const session = this.resolveSessionFromNode(node)
-        if (!session) return
+        const callId = extractNodeInfo(node)?.callId
+        if (!callId) {
+            this.logger.debug('stanza missing call-id, ignored')
+            return
+        }
+        const session = this.calls.get(callId)
+        if (!session) {
+            setBoundedMapEntry(
+                this.terminatedBeforeOffer,
+                callId,
+                Date.now() + TERMINATED_BEFORE_OFFER_TTL_MS,
+                MAX_TERMINATED_BEFORE_OFFER
+            )
+            this.logger.debug('terminate for a call not yet created, kept for its offer', {
+                callId
+            })
+            return
+        }
         const action = Array.isArray(node.content)
             ? node.content.find(
                   (child) => child && typeof child === 'object' && child.tag === 'terminate'
@@ -456,7 +490,16 @@ export class WaCallManager extends EventEmitter {
             session.cleanup()
         }
         this.calls.clear()
+        this.terminatedBeforeOffer.clear()
         this.removeAllListeners()
+    }
+
+    /** Whether a terminate already ended this call before its offer was handled; consumes it. */
+    private takeTerminatedBeforeOffer(callId: string): boolean {
+        const expiresAt = this.terminatedBeforeOffer.get(callId)
+        if (expiresAt === undefined) return false
+        this.terminatedBeforeOffer.delete(callId)
+        return expiresAt > Date.now()
     }
 
     private get activeCallCount(): number {
@@ -497,8 +540,8 @@ export class WaCallManager extends EventEmitter {
             createMediaLink: (events) => this.createMediaLink(info.callId, sessionLogger, events),
             delegate: {
                 emitState: (call) => this.emitState(call),
-                emitIncoming: (call) => this.emit('call_incoming', call),
-                emitEnded: (call) => this.emit('call_ended', call),
+                emitIncoming: (call) => this.announceIncoming(call),
+                emitEnded: (call) => this.emitEnded(call),
                 emitPeerMute: (call, muted) => this.emit('call_peer_mute', call, muted),
                 emitInboundAudio: (call, pcm) => this.emit('call_inbound_audio', call, pcm),
                 emitInboundVideoRtp: (call, packet) =>
@@ -618,8 +661,20 @@ export class WaCallManager extends EventEmitter {
         return null
     }
 
+    private announceIncoming(call: CallInfo): void {
+        this.announcedCalls.add(call)
+        this.emit('call_incoming', call)
+    }
+
+    /** The lifecycle of a call the app was never told about stays silent. */
     private emitState(call: CallInfo): void {
+        if (!this.announcedCalls.has(call)) return
         this.emit('call_state', call)
+    }
+
+    private emitEnded(call: CallInfo): void {
+        if (!this.announcedCalls.has(call)) return
+        this.emit('call_ended', call)
     }
 
     private async resolvePeerLid(peerJid: string): Promise<string> {
@@ -690,15 +745,11 @@ export class WaCallManager extends EventEmitter {
                 )
             ]
         }
-        const mediaPeerJid =
-            session.info.mediaType === CallMediaType.Video
-                ? peerDeviceJids.find((jid) => /:[1-9]\d*@/.test(jid)) || session.info.peerJid
-                : session.info.peerJid
-        await session.initMedia(selfLid, mediaPeerJid)
+        await session.initMedia(selfLid, session.info.peerJid)
         if (this.endedDuringSetup(session)) return
         await session.sendIncomingPreaccept(session.info.peerJid)
         if (this.endedDuringSetup(session)) return
-        await session.sendIncomingRelayLatency()
+        await session.sendRelayLatency()
         if (this.endedDuringSetup(session)) return
 
         this.emitState(session.info)
