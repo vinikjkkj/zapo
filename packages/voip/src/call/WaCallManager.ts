@@ -396,10 +396,10 @@ export class WaCallManager extends EventEmitter {
         await session.handleCallAck(node)
     }
 
-    async handleCallRelaylatency(node: BinaryNode, peerJid: string): Promise<void> {
+    handleCallRelaylatency(node: BinaryNode, peerJid: string): void {
         const session = this.resolveSessionFromNode(node)
         if (!session) return
-        await session.handleCallRelaylatency(node, peerJid)
+        session.handleCallRelaylatency(node, peerJid)
     }
 
     handleRelayElection(node: BinaryNode): void {

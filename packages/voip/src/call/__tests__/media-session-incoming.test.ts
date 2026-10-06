@@ -88,59 +88,49 @@ test('accepting subscribes to the calling device, not a companion of the peer', 
     assert.equal(link.plan.ssrcs?.peerAudio, generateSecureSsrc(ID, 'peer:0@lid'))
 })
 
-test('relaylatency is answered only for our relays, with our latency and address', async () => {
-    const ownAddress = new Uint8Array([10, 0, 0, 1, 0x0d, 0x96])
+/** Answering made two clients that both answer bounce the stanza between them forever. */
+test('a received relaylatency is only consumed: nothing goes back, however many arrive', async () => {
+    const address = new Uint8Array([10, 0, 0, 1, 0x0d, 0x96])
     const { session, sent } = createIncomingSession({
-        endpoints: [endpoint({ relayName: 'gru1c01', c2rRtt: 17, addressBytes: ownAddress })],
+        endpoints: [endpoint({ relayName: 'gru1c01', c2rRtt: 17, addressBytes: address })],
         participantJids: ['peer:0@lid']
     })
 
-    await session.handleCallRelaylatency(
-        relaylatencyNode([
-            { name: 'frvd4c01', latencyMs: 6 },
-            { name: 'gru1c01', latencyMs: 21 }
-        ]),
-        'peer@lid'
-    )
+    for (let i = 0; i < 5; i++) {
+        session.handleCallRelaylatency(
+            relaylatencyNode([
+                { name: 'frvd4c01', latencyMs: 6 },
+                { name: 'gru1c01', latencyMs: 21 + i }
+            ]),
+            'peer@lid'
+        )
+    }
 
-    assert.equal(sent.length, 1)
-    const te = teNodesOf(sent[0])
-    assert.equal(te.length, 1)
-    assert.equal(te[0].attrs.relay_name, 'gru1c01')
-    assert.equal(te[0].attrs.latency, String(LATENCY_BASE + 17))
-    assert.deepEqual(te[0].content, ownAddress)
+    assert.equal(sent.length, 0)
+    const { peerRelayLatencies } = session as unknown as {
+        peerRelayLatencies: Map<string, number>
+    }
+    assert.deepEqual(
+        [...peerRelayLatencies],
+        [
+            ['frvd4c01', LATENCY_BASE + 6],
+            ['gru1c01', LATENCY_BASE + 25]
+        ]
+    )
 })
 
-test('relaylatency never advertises a relay this client does not dial', async () => {
-    const address = new Uint8Array([10, 0, 0, 4, 0x0d, 0x96])
+test('our own relaylatency goes out once per relay, however often setup asks for it', async () => {
+    const address = new Uint8Array([10, 0, 0, 1, 0x0d, 0x96])
     const { session, sent } = createIncomingSession({
-        endpoints: [
-            endpoint({ ip: '10.0.0.1', relayName: 'tcp1c01', protocol: 1, addressBytes: address }),
-            endpoint({
-                ip: '10.0.0.2',
-                relayName: 'semtoken',
-                rawToken: undefined,
-                addressBytes: address
-            }),
-            endpoint({ ip: '10.0.0.3', relayName: 'semendereco' }),
-            endpoint({ ip: '10.0.0.4', relayName: 'gru1c01', c2rRtt: 17, addressBytes: address })
-        ],
+        endpoints: [endpoint({ relayName: 'gru1c01', c2rRtt: 17, addressBytes: address })],
         participantJids: ['peer:0@lid']
     })
 
-    await session.handleCallRelaylatency(
-        relaylatencyNode([
-            { name: 'tcp1c01', latencyMs: 5 },
-            { name: 'semtoken', latencyMs: 5 },
-            { name: 'semendereco', latencyMs: 5 },
-            { name: 'gru1c01', latencyMs: 21 }
-        ]),
-        'peer@lid'
-    )
+    await session.sendRelayLatency()
+    await session.sendRelayLatency()
 
-    assert.equal(sent.length, 1)
     assert.deepEqual(
-        teNodesOf(sent[0]).map((te) => te.attrs.relay_name),
+        sent.flatMap(teNodesOf).map((te) => te.attrs.relay_name),
         ['gru1c01']
     )
 })
@@ -168,20 +158,6 @@ test('the relaylatency an incoming call sends on its own names only the relays i
         sent.flatMap(teNodesOf).map((te) => [te.attrs.relay_name, te.attrs.latency, te.content]),
         [['gru1c01', String(LATENCY_BASE + 17), address]]
     )
-})
-
-test('relaylatency naming only relays we were never given is not answered', async () => {
-    const { session, sent } = createIncomingSession({
-        endpoints: [endpoint({ relayName: 'gru1c01', c2rRtt: 17 })],
-        participantJids: ['peer:0@lid']
-    })
-
-    await session.handleCallRelaylatency(
-        relaylatencyNode([{ name: 'frvd4c01', latencyMs: 6 }]),
-        'peer@lid'
-    )
-
-    assert.equal(sent.length, 0)
 })
 
 test('incoming relaylatency stops once the call ends between relays', async () => {

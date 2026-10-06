@@ -536,35 +536,6 @@ export function buildTerminateStanza(
     }
 }
 
-export function buildRelaylatencyForwardStanza(
-    peerJid: string,
-    callId: string,
-    callCreator: string,
-    teNodes: readonly BinaryNode[],
-    destinationJids: string[]
-): BinaryNode {
-    const destinationContent: BinaryNode[] = destinationJids.map((jid) => ({
-        tag: 'to',
-        attrs: { jid },
-        content: undefined
-    }))
-
-    return {
-        tag: 'call',
-        attrs: { to: toUserJid(peerJid), id: generateCallStanzaId() },
-        content: [
-            {
-                tag: 'relaylatency',
-                attrs: { 'call-id': callId, 'call-creator': callCreator },
-                content: [
-                    ...teNodes,
-                    { tag: 'destination', attrs: {}, content: destinationContent }
-                ]
-            }
-        ]
-    }
-}
-
 /**
  * The reject goes to the device that sent the offer, as the accept and the
  * terminate do. Addressed to the bare user instead, the server acknowledges it

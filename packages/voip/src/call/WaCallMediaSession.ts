@@ -39,7 +39,6 @@ import {
     buildPreacceptStanza,
     buildRaiseHandStanza,
     buildRejectStanza,
-    buildRelaylatencyForwardStanza,
     buildRelayLatencyStanza,
     buildTerminateStanza,
     buildTransportStanza,
@@ -91,6 +90,9 @@ const MAX_TRACKED_RAISED_HANDS = 32
 
 /** Same kind of guard as {@link MAX_TRACKED_RAISED_HANDS}, one per peer device. */
 const MAX_TRACKED_PEER_APP_DATA_SSRCS = 32
+
+/** Same kind of guard again, one per relay the peer names. */
+const MAX_TRACKED_PEER_RELAY_LATENCIES = 32
 
 /** Sections and keys of `<voip_settings>` that describe the app-data stream. */
 const VOIP_SETTINGS_OPTIONS_SECTION = 'options'
@@ -223,6 +225,11 @@ export class WaCallMediaSession {
     private readonly media: WaCallMediaLink
     private initialTransportSent = false
     private outgoingPreacceptSent = false
+    /** Relays our own `<relaylatency>` already named; bounded by the relays the server lists. */
+    private readonly announcedRelayNames = new Set<string>()
+    /** The peer's last `latency` per relay name, as sent; kept for the relay election, unused yet. */
+    private readonly peerRelayLatencies = new Map<string, number>()
+    private peerRelayLatencyReports = 0
 
     /** The SSRC lists of the plan as last derived; published whole as `ssrcs` on any change. */
     private selfStreamSsrcs: number[] = []
@@ -684,8 +691,8 @@ export class WaCallMediaSession {
     }
 
     /**
-     * One `<relaylatency>` per relay we dial, stopping once the call has ended: it can end
-     * between two sends.
+     * One `<relaylatency>` per relay we dial, each once per call: every device of the peer
+     * preaccepts, and a name is claimed before its send yields. Stops once the call has ended.
      */
     async sendRelayLatency(): Promise<void> {
         if (!this.info.relayData) return
@@ -695,6 +702,8 @@ export class WaCallMediaSession {
 
         for (const relay of this.dialableRelayLatencies()) {
             if (this.info.isEnded) return
+            if (this.announcedRelayNames.has(relay.relayName)) continue
+            this.announcedRelayNames.add(relay.relayName)
             try {
                 const relayLatencyNode = buildRelayLatencyStanza(
                     this.info.peerJid,
@@ -706,6 +715,7 @@ export class WaCallMediaSession {
                 )
                 await this.deps.lowLevelCoordinator.sendNode(relayLatencyNode)
             } catch (err: unknown) {
+                this.announcedRelayNames.delete(relay.relayName)
                 this.logger.error('error sending relaylatency', {
                     relayName: relay.relayName,
                     message: toError(err).message
@@ -1097,52 +1107,33 @@ export class WaCallMediaSession {
     }
 
     /**
-     * Answers only for relays we dial too, with our own latency and address: echoing the
-     * peer's `<te>` makes the caller elect a relay we are not on, and its media never arrives.
+     * Records the peer's relay latencies and sends nothing back: answering every one made two
+     * clients that both answer bounce it between them forever.
      */
-    async handleCallRelaylatency(node: BinaryNode, peerJid: string): Promise<void> {
+    handleCallRelaylatency(node: BinaryNode, peerJid: string): void {
         const nodeInfo = extractNodeInfo(node)
         if (!nodeInfo) return
 
-        const inner = nodeInfo.innerNode
-        const callId = inner.attrs?.['call-id'] || this.info.callId
-        const callCreator = inner.attrs?.['call-creator'] || this.info.callCreator
-
-        const ownByName = new Map(
-            this.dialableRelayLatencies().map((relay) => [relay.relayName, relay])
-        )
-        const teNodes: BinaryNode[] = []
-        for (const te of getNodeChildrenByTag(inner, 'te')) {
+        this.peerRelayLatencyReports++
+        for (const te of getNodeChildrenByTag(nodeInfo.innerNode, 'te')) {
             const name = te.attrs?.relay_name
-            const own = name ? ownByName.get(name) : undefined
-            if (!name || !own) continue
-            teNodes.push({
-                tag: 'te',
-                attrs: { relay_name: name, latency: String(0x2000000 + own.latency) },
-                content: own.addressBytes
-            })
-        }
-
-        if (teNodes.length === 0) return
-
-        const destinationJids = this.info.relayData?.participantJids || []
-        if (destinationJids.length > 0) {
-            const forwardNode = buildRelaylatencyForwardStanza(
-                peerJid,
-                callId,
-                callCreator,
-                teNodes,
-                destinationJids
-            )
-
-            try {
-                await this.deps.lowLevelCoordinator.sendNode(forwardNode)
-            } catch (err: unknown) {
-                this.logger.error('error forwarding relaylatency', {
-                    message: toError(err).message
-                })
+            const latency = Number(te.attrs?.latency)
+            if (!name || !Number.isSafeInteger(latency)) continue
+            if (
+                !this.peerRelayLatencies.has(name) &&
+                this.peerRelayLatencies.size >= MAX_TRACKED_PEER_RELAY_LATENCIES
+            ) {
+                continue
             }
+            this.peerRelayLatencies.set(name, latency)
         }
+
+        this.logger.trace('peer relay latencies recorded', {
+            callId: this.info.callId,
+            from: peerJid,
+            reports: this.peerRelayLatencyReports,
+            relays: this.peerRelayLatencies.size
+        })
     }
 
     handleRelayElection(node: BinaryNode): void {
