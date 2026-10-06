@@ -51,6 +51,9 @@
     "peerDependenciesMeta": {
         "@roamhq/wrtc": {
             "optional": true
+        },
+        "libmlow-wasm-fork": {
+            "optional": true
         }
     },
     "devDependencies": {

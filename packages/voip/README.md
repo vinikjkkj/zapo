@@ -169,7 +169,7 @@ const snapshot = client.voip.media.snapshot(callId)
 if (snapshot) agentSocket.send(encodeCallMediaMessage(snapshot))
 ```
 
-In the browser:
+In the browser, which needs a secure context (HTTPS or `localhost`) for the microphone and the AudioWorklet:
 
 ```ts
 import {
@@ -184,16 +184,49 @@ const receiver = new WaCallMediaReceiver({
     callId,
     send: (event) => socket.send(encodeCallMediaEvent(event))
 })
-await receiver.start()
-const audio = await WaWebCallAudio.start(receiver.plane) // from the click that answers
+// Listen before any await: a plan that arrives meanwhile would be lost.
 socket.onmessage = (event) => receiver.receive(decodeCallMediaMessage(event.data))
+await receiver.start()
+
+// The accept stays on the server: the click that answers asks for it and opens the audio.
+let audio: WaWebCallAudio | undefined
+answerButton.onclick = async () => {
+    audio = await WaWebCallAudio.start(receiver.plane)
+    await fetch(`/calls/${callId}/accept`, { method: 'POST' }) // runs client.voip.acceptCall(callId)
+}
 
 // When `voip_call_ended` reaches the browser:
-await audio.stop()
+await audio?.stop()
 receiver.stop()
 ```
 
-With remote media, `loadAudio`, `setExternalAudioMode` and `feedLiveAudio` throw, `sendReaction` returns `false`, and the `voip_call_inbound_*` events never fire: audio, video and reactions live on the media host.
+On a video call, the receiver also takes the peer's frames and the plane takes the camera:
+
+```ts
+import { WaWebCallVideoReceiver, WaWebCallVideoSender } from '@zapo-js/voip-media/web'
+
+const video = new WaWebCallVideoReceiver({
+    onFrame: (frame) => {
+        context2d.drawImage(frame, 0, 0)
+        frame.close()
+    }
+})
+const receiver = new WaCallMediaReceiver({
+    ...webMediaHost,
+    callId,
+    send: (event) => socket.send(encodeCallMediaEvent(event)),
+    onInboundVideo: (frame) => video.push(frame)
+})
+
+const [camera] = (await navigator.mediaDevices.getUserMedia({ video: true })).getVideoTracks()
+const sender = await WaWebCallVideoSender.start(receiver.plane, camera)
+
+// When the call ends, next to the audio:
+await sender.stop()
+video.close()
+```
+
+With remote media, `loadAudio`, `setExternalAudioMode` and `feedLiveAudio` throw, `sendReaction` returns `false`, `feedLiveVideo` returns `0`, and the `voip_call_inbound_*` events never fire: audio, video and reactions live on the media host.
 
 ## Events
 

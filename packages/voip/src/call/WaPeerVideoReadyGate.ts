@@ -1,3 +1,5 @@
+import { performance } from 'node:perf_hooks'
+
 /**
  * Why our video is held, which picks its release sign: the peer's camera turning on after
  * an accepted upgrade, or its first `<mute_v2>` after the accept of a born-video call.
@@ -39,20 +41,26 @@ export class WaPeerVideoReadyGate {
     ) => void
     /** What the current hold waits on, or `null` while nothing is held. */
     private heldFor: PeerVideoReadyTrigger | null = null
-    /** When the hold started, on `Date.now()`; meaningful only while held. */
+    private readonly now: () => number
+    /** When the hold started, on {@link now}; meaningful only while held. */
     private heldSince = 0
     private guardTimer: ReturnType<typeof setTimeout> | null = null
     private timeoutTimer: ReturnType<typeof setTimeout> | null = null
 
-    /** `onOpen` runs once per hold, when it lets the video go, never on {@link cancel}. */
+    /**
+     * `onOpen` runs once per hold, when it lets the video go, never on {@link cancel}. `now` times
+     * the hold in ms, on a monotonic clock so a wall-clock change cannot skew it.
+     */
     constructor(
         onOpen: (
             reason: PeerVideoReadyGateReason,
             trigger: PeerVideoReadyTrigger,
             heldMs: number
-        ) => void
+        ) => void,
+        now: () => number = () => performance.now()
     ) {
         this.onOpen = onOpen
+        this.now = now
     }
 
     get isHeld(): boolean {
@@ -63,7 +71,7 @@ export class WaPeerVideoReadyGate {
     hold(trigger: PeerVideoReadyTrigger): void {
         if (this.heldFor !== null) return
         this.heldFor = trigger
-        this.heldSince = Date.now()
+        this.heldSince = this.now()
         this.timeoutTimer = setTimeout(
             () => this.open('timeout'),
             PEER_VIDEO_READY_TIMINGS[trigger].timeoutMs
@@ -101,7 +109,7 @@ export class WaPeerVideoReadyGate {
     private open(reason: PeerVideoReadyGateReason): void {
         const trigger = this.heldFor
         if (trigger === null) return
-        const heldMs = Date.now() - this.heldSince
+        const heldMs = this.now() - this.heldSince
         this.cancel()
         this.onOpen(reason, trigger, heldMs)
     }

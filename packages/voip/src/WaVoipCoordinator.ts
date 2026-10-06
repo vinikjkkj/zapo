@@ -257,7 +257,7 @@ export class WaVoipCoordinator {
      * `timestampUs` is the capture timestamp in microseconds. Returns the number
      * of RTP packets sent, or `0` when video media is not active, is still held
      * for the peer after {@link acceptVideoUpgrade}, or waits for a key frame to
-     * open on.
+     * open on. Always `0` with remote media, where the media host sends the video.
      */
     feedLiveVideo(callId: string, data: Uint8Array, timestampUs: number): number {
         return this.manager.feedLiveVideo(callId, data, timestampUs)

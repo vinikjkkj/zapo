@@ -405,6 +405,29 @@ test('a pull the source fills with no audio reaches no sink', (t) => {
     assert.equal(delivered, 0)
 })
 
+/** A throw would escape the timer callback as an uncaught exception, as a failing sink would. */
+test('a playout source that throws costs its own block, not the playback clock', (t) => {
+    const clock = createClock(t)
+    const engine = new WaAudioEngine({ now: clock.now })
+
+    let pulls = 0
+    let delivered = 0
+    engine.setPlayoutSource((out) => {
+        if (++pulls === 2) throw new Error('decode failed')
+        return out.length
+    })
+    engine.setPlaybackSink(() => {
+        delivered++
+    })
+    engine.startPlayback()
+
+    for (let i = 0; i < 4; i++) clock.tick(TICK_MS)
+    engine.stopPlayback()
+
+    assert.equal(pulls, 4, 'the clock keeps pulling after the throw')
+    assert.equal(delivered, 3, 'only the block that threw is lost')
+})
+
 /** A shorter interval only checks more often: the audio still drains at real time. */
 test('playback drains by elapsed time, not by how often it ticks', (t) => {
     const clock = createClock(t)

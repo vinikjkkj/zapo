@@ -198,6 +198,8 @@ export interface WaCallMediaSessionOptions {
     readonly delegate: WaCallMediaSessionDelegate
     /** Builds the link to wherever this call's media runs, in this process or elsewhere. */
     readonly createMediaLink: (events: WaCallMediaLinkEvents) => WaCallMediaLink
+    /** Monotonic clock the video hold is timed on, in ms; `performance.now` by default. */
+    readonly now?: () => number
 }
 
 /**
@@ -247,9 +249,7 @@ export class WaCallMediaSession {
      * Holds our video until the peer can take it: after an accepted peer upgrade, and from the
      * accept on a call born as video. Published as `video.sendHeld`.
      */
-    private readonly peerVideoReadyGate = new WaPeerVideoReadyGate((reason, trigger, heldMs) =>
-        this.releaseVideoSend(reason, trigger, heldMs)
-    )
+    private readonly peerVideoReadyGate: WaPeerVideoReadyGate
     /** Whether the one post-active `<mute_v2>` declaration has gone out. */
     private initialMuteAnnounced = false
     /**
@@ -285,6 +285,10 @@ export class WaCallMediaSession {
         this.logger = options.logger
         this.info = options.info
         this.delegate = options.delegate
+        this.peerVideoReadyGate = new WaPeerVideoReadyGate(
+            (reason, trigger, heldMs) => this.releaseVideoSend(reason, trigger, heldMs),
+            options.now
+        )
         this.media = options.createMediaLink({
             onActive: () => this.onMediaActive(),
             onRelayLost: (reason) => this.onRelayLost(reason),

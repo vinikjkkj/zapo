@@ -366,7 +366,14 @@ export class WaAudioEngine {
         const sink = this.playbackSink
         if (!source || !sink) return
         for (; owed > 0; owed--) {
-            if (source(this.playbackOutputBuffer) === 0) continue
+            let real: number
+            try {
+                real = source(this.playbackOutputBuffer)
+            } catch (err) {
+                this.logger.trace('playout pull failed', { message: toError(err).message })
+                continue
+            }
+            if (real === 0) continue
             try {
                 sink(this.playbackOutputBuffer)
             } catch (err) {

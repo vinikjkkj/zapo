@@ -25,7 +25,8 @@ import {
     BORN_VIDEO_READY_GUARD_MS,
     BORN_VIDEO_READY_TIMEOUT_MS,
     UPGRADE_VIDEO_READY_GUARD_MS,
-    UPGRADE_VIDEO_READY_TIMEOUT_MS
+    UPGRADE_VIDEO_READY_TIMEOUT_MS,
+    WaPeerVideoReadyGate
 } from '../WaPeerVideoReadyGate.js'
 
 import { createSessionDelegate } from './_helpers.js'
@@ -195,7 +196,9 @@ function createHarness(call: CallInfo, onSend?: (node: BinaryNode) => void): Har
         logger,
         info: call,
         delegate: createSessionDelegate(),
-        createMediaLink: (events) => (link = new PlaneMediaLink(events))
+        createMediaLink: (events) => (link = new PlaneMediaLink(events)),
+        // The mocked `Date` only moves with the mocked timers, as a monotonic clock would.
+        now: () => Date.now()
     })
     assert.ok(link)
     const planeLink: PlaneMediaLink = link
@@ -661,6 +664,51 @@ test('a video call we place holds our video from the peer accept until its mute_
     assert.equal(harness.released.length, 1)
 
     harness.session.cleanup()
+})
+
+/** Ringing here, an accept is another device of ours answering, not the peer taking our call. */
+test('an accept on a call we have not answered holds nothing', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+    const harness = await createRingingCall(CallMediaType.Video)
+    const node: BinaryNode = {
+        tag: 'call',
+        attrs: { from: OWN_OTHER_DEVICE_JID, id: 'ACCEPT1' },
+        content: [
+            {
+                tag: 'accept',
+                attrs: { 'call-id': CALL_ID, 'call-creator': PEER_DEVICE_JID },
+                content: []
+            }
+        ]
+    }
+
+    await harness.session.handleCallAccept(node, OWN_OTHER_DEVICE_JID)
+    await settle()
+
+    const { peerVideoReadyGate: gate } = harness.session as unknown as GateInternals
+    assert.equal(gate.isHeld, false)
+    assert.equal(gate.timeoutTimer, null)
+    assert.ok(videoSections(harness).every((video) => video?.sendHeld === undefined))
+
+    harness.session.cleanup()
+})
+
+/** A wall clock adjusted mid-hold must not skew the time held that gets logged. */
+test('the time held is measured on the monotonic clock, not the wall clock', (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 10_000_000 })
+    let monotonicMs = 0
+    const held: number[] = []
+    const gate = new WaPeerVideoReadyGate(
+        (_reason, _trigger, heldMs) => held.push(heldMs),
+        () => monotonicMs
+    )
+
+    gate.hold('born-video')
+    t.mock.timers.setTime(10_000_000 + 3_600_000)
+    monotonicMs += BORN_VIDEO_READY_TIMEOUT_MS
+    t.mock.timers.tick(BORN_VIDEO_READY_TIMEOUT_MS)
+
+    assert.deepEqual(held, [BORN_VIDEO_READY_TIMEOUT_MS])
 })
 
 test('a call born as video that the peer ends while held lets nothing go and leaves no timer', async (t) => {

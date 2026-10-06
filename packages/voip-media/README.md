@@ -5,7 +5,7 @@ packetization, the app-data stream and the MLow codec.
 
 It has no dependency on `zapo-js`. The signaling of a call stays on the server with
 [`@zapo-js/voip`](../voip); only the media needs to live wherever the audio is, and a browser that
-carries a call's media installs this package alone.
+carries a call's media installs this package and the codec, without `zapo-js`.
 
 | Entry                      | Runs in       | Holds                                                                                                               |
 | -------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -21,7 +21,7 @@ The core never imports either host, and the two hosts never import each other.
 npm install @zapo-js/voip-media libmlow-wasm-fork
 ```
 
-`libmlow-wasm-fork` is the codec, a fork of `libmlow-wasm` whose browser build carries no Node-only import, so a bundler takes it as it is. The WASM is embedded in the module, so there is no separate `.wasm` file to serve, and it is only downloaded when a call starts.
+`libmlow-wasm-fork` is the codec, a fork of `libmlow-wasm` whose browser build carries no Node-only import, so a bundler takes it as it is. The WASM is embedded in the module, so there is no separate `.wasm` file to serve, and it is only downloaded when a call starts. It is an optional peer, so `@zapo-js/voip` installed for signaling alone does not pull it in.
 
 ## Carrying a call's media
 

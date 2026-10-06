@@ -6,7 +6,7 @@ Carry call media on `@zapo-js/voip-media`, and let it run outside this process.
 
 The media of a call - the relays, SRTP, RTP/RTCP, the codec and the jitter
 buffer - now lives in `@zapo-js/voip-media`, a new package with no dependency on
-`zapo-js` or Node that runs in a browser as well. This package keeps the
+`zapo-js` or Node that runs in a browser as well. `@zapo-js/voip` keeps the
 signaling and derives the media plan from it: the relays, the SSRCs, the SRTP
 keys and the server's settings. Local calls behave as before.
 
