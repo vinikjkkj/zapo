@@ -200,7 +200,7 @@ await audio?.stop()
 receiver.stop()
 ```
 
-On a video call, the receiver also takes the peer's frames and the plane takes the camera:
+On a video call, build the receiver above with `onInboundVideo` too, for the peer's frames, and hand the plane the camera:
 
 ```ts
 import { WaWebCallVideoReceiver, WaWebCallVideoSender } from '@zapo-js/voip-media/web'
@@ -211,6 +211,7 @@ const video = new WaWebCallVideoReceiver({
         frame.close()
     }
 })
+// In place of the receiver above, wired to the socket the same way:
 const receiver = new WaCallMediaReceiver({
     ...webMediaHost,
     callId,
@@ -223,6 +224,7 @@ const sender = await WaWebCallVideoSender.start(receiver.plane, camera)
 
 // When the call ends, next to the audio:
 await sender.stop()
+camera.stop()
 video.close()
 ```
 

@@ -405,7 +405,7 @@ test('a pull the source fills with no audio reaches no sink', (t) => {
     assert.equal(delivered, 0)
 })
 
-/** A throw would escape the timer callback as an uncaught exception, as a failing sink would. */
+/** The tick catches a throwing source, as it does a failing sink, and keeps the clock running. */
 test('a playout source that throws costs its own block, not the playback clock', (t) => {
     const clock = createClock(t)
     const engine = new WaAudioEngine({ now: clock.now })
