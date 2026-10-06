@@ -177,6 +177,8 @@ export class WaSctpRelay {
     private peerStreamSsrcs: number[] = []
     private selfPid = 0
     private peerPid = 0
+    /** The one leg media goes out on; see {@link sendMedia}. */
+    private mediaLeg: Connection | null = null
 
     constructor(options: WaSctpRelayOptions) {
         this.logger = options.logger ?? createNoopLogger()
@@ -699,7 +701,7 @@ export class WaSctpRelay {
 
     /**
      * Opens a raw UDP leg to the relay and wires it into the same connection
-     * bookkeeping every other leg uses, so `broadcast`, the keepalive and the
+     * bookkeeping every other leg uses, so `sendMedia`, the keepalive and the
      * receive path treat it as one more connection.
      *
      * A failure here takes down this leg and nothing else: the connection
@@ -1322,7 +1324,55 @@ export class WaSctpRelay {
         this.logger.debug('sctp relay configuration done', { connected: this.stats.connected })
     }
 
-    /** Sends to every open connection and reports whether any of them took it. */
+    /**
+     * Sends on the one leg elected for media and reports whether it took it; with no leg open
+     * nothing goes out. Allocates and keepalives keep reaching every leg, so any can take over.
+     */
+    sendMedia(data: ArrayBuffer): boolean {
+        const leg = this.electMediaLeg()
+        return leg !== null && this.sendToChannel(leg, data)
+    }
+
+    /**
+     * Keeps the leg in use while open, since the peer's stream returns where our media leaves.
+     * Else the first open leg in dial order, off a lost leg's relay, which never re-points.
+     */
+    private electMediaLeg(): Connection | null {
+        const current = this.mediaLeg
+        if (current && this.connections.get(current.id) === current && this.isConnOpen(current)) {
+            return current
+        }
+
+        let elected: Connection | null = null
+        let sameRelay: Connection | null = null
+        for (const conn of this.connections.values()) {
+            if (!this.isConnOpen(conn)) continue
+            if (current && conn.relayInfo.relayId === current.relayInfo.relayId) {
+                sameRelay ??= conn
+                continue
+            }
+            elected = conn
+            break
+        }
+        elected ??= sameRelay
+
+        this.mediaLeg = elected
+        if (elected) {
+            this.logger.debug('sctp media leg elected', {
+                connectionId: elected.id,
+                relayId: elected.relayInfo.relayId,
+                replaces: current?.id
+            })
+        } else if (current) {
+            this.logger.debug('sctp media leg lost, no open leg left', { connectionId: current.id })
+        }
+        return elected
+    }
+
+    /**
+     * Sends to every open connection and reports whether any of them took it. Not for media:
+     * the peer's SRTP replay window is per SSRC, so every copy past the first is dropped.
+     */
     broadcast(data: ArrayBuffer): boolean {
         let sent = false
         for (const conn of this.connections.values()) {
@@ -1378,6 +1428,7 @@ export class WaSctpRelay {
         this.peerStreamSsrcs = []
         this.selfPid = 0
         this.peerPid = 0
+        this.mediaLeg = null
         this.pongCount = 0
         this.rtpRecvCount = 0
         this.unknownRecvCount = 0

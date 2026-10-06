@@ -44,7 +44,7 @@ async function createPlane(): Promise<Harness> {
 
     const internals = plane as unknown as Record<string, unknown>
     internals.sctpRelay = {
-        broadcast: (data: ArrayBuffer) => {
+        sendMedia: (data: ArrayBuffer) => {
             sent.push(new Uint8Array(data))
             return true
         },

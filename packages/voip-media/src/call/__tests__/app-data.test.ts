@@ -56,7 +56,7 @@ interface DeclaredStreams {
 
 interface RelayStub {
     cleanup: () => void
-    broadcast: (data: ArrayBuffer) => boolean
+    sendMedia: (data: ArrayBuffer) => boolean
     hasConnection: () => boolean
     setSsrc: (ssrc: number) => void
     setStreamSsrcs: (self: number[], peer: number[]) => void
@@ -70,7 +70,7 @@ interface RelayStub {
 interface Harness {
     readonly plane: WaCallMediaPlane
     readonly reactions: WaCallReaction[]
-    readonly broadcast: Uint8Array[]
+    readonly sent: Uint8Array[]
     /** What the relay was actually told, in order, rather than what the plane holds. */
     readonly declared: DeclaredStreams[]
     readonly internals: {
@@ -89,7 +89,7 @@ interface Harness {
  */
 async function createPlane(options: { relayAccepts?: boolean } = {}): Promise<Harness> {
     const reactions: WaCallReaction[] = []
-    const broadcast: Uint8Array[] = []
+    const sent: Uint8Array[] = []
     const declared: DeclaredStreams[] = []
     const plane = new WaCallMediaPlane({
         logger: createNoopLogger(),
@@ -103,9 +103,9 @@ async function createPlane(options: { relayAccepts?: boolean } = {}): Promise<Ha
     const internals = plane as unknown as Harness['internals']
     internals.sctpRelay = {
         cleanup: () => {},
-        broadcast: (data) => {
+        sendMedia: (data) => {
             if (options.relayAccepts === false) return false
-            broadcast.push(new Uint8Array(data))
+            sent.push(new Uint8Array(data))
             return true
         },
         hasConnection: () => false,
@@ -124,7 +124,7 @@ async function createPlane(options: { relayAccepts?: boolean } = {}): Promise<Ha
     // The plan's own registration is setup; tests count declarations from here.
     declared.length = 0
 
-    return { plane, reactions, broadcast, declared, internals }
+    return { plane, reactions, sent, declared, internals }
 }
 
 /** Media flowing, the way an accepted call with a leg up has it. */
@@ -218,29 +218,25 @@ test('app data does not become the peer media ssrc', async (t) => {
 
 test('a reaction is sent on an active call without waiting for the peer', async (t) => {
     const harness = await createPlane()
-    const { plane, broadcast } = harness
+    const { plane, sent } = harness
     t.after(() => plane.stop())
 
     assert.equal(plane.sendReaction(THUMBS_UP), false, 'the call is not active yet')
-    assert.equal(broadcast.length, 0)
+    assert.equal(sent.length, 0)
 
     await startMedia(harness)
 
     assert.equal(plane.sendReaction('\u{1F602}'), true)
-    assert.ok(broadcast.length >= 1)
+    assert.ok(sent.length >= 1)
 
-    const sentSsrc =
-        (broadcast[0][8] << 24) |
-        (broadcast[0][9] << 16) |
-        (broadcast[0][10] << 8) |
-        broadcast[0][11]
+    const sentSsrc = (sent[0][8] << 24) | (sent[0][9] << 16) | (sent[0][10] << 8) | sent[0][11]
     assert.equal(
         sentSsrc >>> 0,
         SELF_APP_DATA_SSRC,
         'a reaction leaves on this device app-data ssrc'
     )
     assert.equal(
-        broadcast[0][1] & 0x7f,
+        sent[0][1] & 0x7f,
         WA_APP_DATA_PAYLOAD_TYPE,
         'the type stamped is this side own, not one taken from the peer'
     )
@@ -252,13 +248,13 @@ test('a reaction is sent on an active call without waiting for the peer', async 
  */
 test('a reaction reports failure when no relay connection took it', async (t) => {
     const harness = await createPlane({ relayAccepts: false })
-    const { plane, broadcast } = harness
+    const { plane, sent } = harness
     t.after(() => plane.stop())
 
     await startMedia(harness)
 
     assert.equal(plane.sendReaction(THUMBS_UP), false)
-    assert.equal(broadcast.length, 0)
+    assert.equal(sent.length, 0)
 })
 
 test('a reaction handler that throws is logged, and the next reaction still arrives', async (t) => {

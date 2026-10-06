@@ -57,7 +57,7 @@ class FakeRelay {
     getConnectedCount(): number {
         return 1
     }
-    broadcast(data: ArrayBuffer): boolean {
+    sendMedia(data: ArrayBuffer): boolean {
         this.sent.push(new Uint8Array(data))
         return true
     }

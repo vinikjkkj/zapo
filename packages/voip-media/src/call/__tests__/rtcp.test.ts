@@ -77,7 +77,7 @@ interface PlaneInternals {
     }
     srtcpContext: { protect: (rtcp: Uint8Array, senderSsrc: number) => Uint8Array }
     sctpRelay: {
-        broadcast: (data: ArrayBuffer) => void
+        sendMedia: (data: ArrayBuffer) => void
         hasConnection: () => boolean
         cleanup: () => void
         setSubscriptionSsrc: (ssrc: number) => void
@@ -102,7 +102,7 @@ interface RtcpHarness {
 }
 
 /**
- * A plane whose relay collects what it would broadcast and whose SRTP layers
+ * A plane whose relay collects what it would send and whose SRTP layers
  * are pass-through, so the RTP and RTCP packets can be read as built. Its time
  * source is moved by hand.
  *
@@ -141,7 +141,7 @@ async function createPlane(
 
     const internals = plane as unknown as PlaneInternals
     internals.sctpRelay = {
-        broadcast: (data) => {
+        sendMedia: (data) => {
             sent.push(new Uint8Array(data))
         },
         hasConnection: () => true,
