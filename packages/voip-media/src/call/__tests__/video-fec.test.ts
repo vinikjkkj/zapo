@@ -44,6 +44,7 @@ const H264_IDR_PAYLOAD = new Uint8Array([0x65, 0x88, 0x84])
 interface PlaneInternals {
     srtpSession: { unprotect: (data: Uint8Array) => RtpPacket }
     sctpRelay: {
+        setMediaFlowing: () => void
         sendMedia: (data: ArrayBuffer) => void
         hasConnection: () => boolean
         cleanup: () => void
@@ -86,6 +87,7 @@ async function createPlane(): Promise<FecHarness> {
 
     const internals = plane as unknown as PlaneInternals
     internals.sctpRelay = {
+        setMediaFlowing: () => {},
         sendMedia: () => {},
         hasConnection: () => true,
         cleanup: () => {},

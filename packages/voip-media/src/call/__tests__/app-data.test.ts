@@ -56,6 +56,7 @@ interface DeclaredStreams {
 
 interface RelayStub {
     cleanup: () => void
+    setMediaFlowing: () => void
     sendMedia: (data: ArrayBuffer) => boolean
     hasConnection: () => boolean
     setSsrc: (ssrc: number) => void
@@ -103,6 +104,7 @@ async function createPlane(options: { relayAccepts?: boolean } = {}): Promise<Ha
     const internals = plane as unknown as Harness['internals']
     internals.sctpRelay = {
         cleanup: () => {},
+        setMediaFlowing: () => {},
         sendMedia: (data) => {
             if (options.relayAccepts === false) return false
             sent.push(new Uint8Array(data))

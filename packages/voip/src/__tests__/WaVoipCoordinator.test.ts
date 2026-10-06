@@ -6,12 +6,12 @@ import { WA_MESSAGE_TAGS } from 'zapo-js/protocol'
 
 import { WaVoipCoordinator, type WaVoipCoordinatorOptions } from '../WaVoipCoordinator.js'
 
-function mockCtx(mobilePrimary = false) {
+function mockCtx(isMobilePrimary: () => boolean = () => false) {
     const handlers: Array<{ tag: string }> = []
     const emitted: Array<[string, unknown[]]> = []
     const ctx = {
         logger: createNoopLogger(),
-        deps: { isMobilePrimary: () => mobilePrimary } as never,
+        deps: { isMobilePrimary } as never,
         stores: {} as never,
         registerIncomingHandler: (handler: { tag: string }) => {
             handlers.push(handler)
@@ -58,26 +58,59 @@ test('WaVoipCoordinator re-emits manager events on the host client', () => {
     coordinator.dispose()
 })
 
-/** Whether the calls the coordinator places dial each relay on the port its `<te2>` advertises. */
-function dialsAdvertisedPort(mobilePrimary: boolean, options?: WaVoipCoordinatorOptions): boolean {
-    const coordinator = new WaVoipCoordinator(mockCtx(mobilePrimary).ctx, options)
-    const manager = (coordinator as unknown as { manager: { useOriginalRelayPort: boolean } })
-        .manager
+/**
+ * Whether the media of a call placed now dials each relay on the port its `<te2>` advertises,
+ * read off the plane the call's media link is built with.
+ */
+function dialsAdvertisedPort(coordinator: WaVoipCoordinator): boolean {
+    const manager = (
+        coordinator as unknown as {
+            manager: {
+                createMediaLink(callId: string, logger: unknown, events: unknown): unknown
+            }
+        }
+    ).manager
+    const link = manager.createMediaLink('call-id', createNoopLogger(), {}) as {
+        plane: { useOriginalRelayPort: boolean }
+        stop(): void
+    }
+    link.stop()
+    return link.plane.useOriginalRelayPort
+}
+
+function dialsAdvertisedPortFor(mobilePrimary: boolean, options?: WaVoipCoordinatorOptions) {
+    const coordinator = new WaVoipCoordinator(mockCtx(() => mobilePrimary).ctx, options)
+    const dials = dialsAdvertisedPort(coordinator)
     coordinator.dispose()
-    return manager.useOriginalRelayPort
+    return dials
 }
 
 /** Measured live: a companion's relay legs open only on the advertised port, never on 3480. */
 test('a companion dials the advertised relay port by default', () => {
-    assert.equal(dialsAdvertisedPort(false), true)
+    assert.equal(dialsAdvertisedPortFor(false), true)
 })
 
 /** Measured live: a mobile primary's relay legs open only on 3480, never on the advertised port. */
 test('a mobile primary dials the web client relay port by default', () => {
-    assert.equal(dialsAdvertisedPort(true), false)
+    assert.equal(dialsAdvertisedPortFor(true), false)
 })
 
 test('an explicit useOriginalRelayPort wins over the kind of session', () => {
-    assert.equal(dialsAdvertisedPort(false, { useOriginalRelayPort: false }), false)
-    assert.equal(dialsAdvertisedPort(true, { useOriginalRelayPort: true }), true)
+    assert.equal(dialsAdvertisedPortFor(false, { useOriginalRelayPort: false }), false)
+    assert.equal(dialsAdvertisedPortFor(true, { useOriginalRelayPort: true }), true)
+})
+
+/**
+ * Plugins are set up when the client is built, and a mobile identity that only comes from
+ * stored credentials is known once they load on connect: the kind is read per call.
+ */
+test('a primary known only from stored credentials loaded after setup dials 3480', () => {
+    let credentialsLoaded = false
+    const coordinator = new WaVoipCoordinator(mockCtx(() => credentialsLoaded).ctx)
+
+    credentialsLoaded = true
+    const dials = dialsAdvertisedPort(coordinator)
+    coordinator.dispose()
+
+    assert.equal(dials, false)
 })

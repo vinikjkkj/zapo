@@ -56,7 +56,8 @@ export class WaCallManager extends EventEmitter {
     private readonly stores: WaVoipStores
     private readonly logger: Logger
     private readonly maxConcurrentCalls: number
-    private readonly useOriginalRelayPort: boolean
+    /** Unset, each call picks by session: the advertised port on a companion, 3480 on a primary. */
+    private readonly useOriginalRelayPort: boolean | undefined
     private readonly useRawUdpTransport: boolean
     private readonly mediaMode: WaCallMediaMode
 
@@ -79,7 +80,7 @@ export class WaCallManager extends EventEmitter {
             DEFAULT_MAX_CONCURRENT_CALLS,
             'maxConcurrentCalls'
         )
-        this.useOriginalRelayPort = config.useOriginalRelayPort ?? false
+        this.useOriginalRelayPort = config.useOriginalRelayPort
         this.useRawUdpTransport = config.useRawUdpTransport ?? false
         this.mediaMode = config.mediaMode ?? 'local'
     }
@@ -606,7 +607,7 @@ export class WaCallManager extends EventEmitter {
         return new WaLocalCallMedia({
             logger,
             events,
-            useOriginalRelayPort: this.useOriginalRelayPort,
+            useOriginalRelayPort: this.useOriginalRelayPort ?? !this.deps.isMobilePrimary(),
             useRawUdpTransport: this.useRawUdpTransport
         })
     }

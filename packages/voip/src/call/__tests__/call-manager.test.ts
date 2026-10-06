@@ -20,6 +20,7 @@ function createMockDeps(
 ): { deps: WaVoipDeps; stores: WaVoipStores; sent: BinaryNode[] } {
     const sent: BinaryNode[] = []
     const deps = {
+        isMobilePrimary: () => false,
         authClient: {
             getCurrentCredentials: () => ({ ...credentials, signedIdentity: undefined })
         },

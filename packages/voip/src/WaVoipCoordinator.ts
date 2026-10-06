@@ -23,8 +23,8 @@ export interface WaVoipCoordinatorOptions {
     readonly logLevel?: LogLevel
     /**
      * Dial each relay on the port its `<te2>` endpoint advertises instead of on
-     * `TRUE_WEB_CLIENT_RELAY_PORT` (3480). Defaults by session, read when the plugin
-     * is set up: `true` on a companion, `false` on a mobile primary.
+     * `TRUE_WEB_CLIENT_RELAY_PORT` (3480). Defaults by session, read per call: `true`
+     * on a companion, `false` on a mobile primary.
      *
      * The port a relay answers on follows the account class the server assigns, and
      * the wire does not say which: measured, a companion's legs open only on the
@@ -97,7 +97,7 @@ export class WaVoipCoordinator {
             stores: ctx.stores,
             logger: this.logger,
             maxConcurrentCalls: options.maxConcurrentCalls,
-            useOriginalRelayPort: options.useOriginalRelayPort ?? !ctx.deps.isMobilePrimary(),
+            useOriginalRelayPort: options.useOriginalRelayPort,
             useRawUdpTransport: options.useRawUdpTransport,
             mediaMode: options.media?.mode
         })

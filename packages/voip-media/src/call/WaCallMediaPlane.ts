@@ -541,9 +541,10 @@ export class WaCallMediaPlane {
             crypto: options.crypto,
             createPeerConnection: options.createPeerConnection,
             createRawUdpLeg: options.createRawUdpLeg,
+            now: options.now,
             onConnected: () => this.onRelayConnected(),
             onLost: (reason) => this.onRelayLost(reason),
-            onReceive: (data) => this.onRelayData(data)
+            onReceive: (data, connectionId) => this.onRelayData(data, connectionId)
         })
     }
 
@@ -1290,13 +1291,19 @@ export class WaCallMediaPlane {
      * Reads one inbound app-data packet and hands the reactions in it over; it was
      * recognized by SSRC, so its payload type is whatever the peer chose.
      */
-    private onAppDataPacket(data: Uint8Array, payloadType: number, ssrc: number): void {
+    private onAppDataPacket(
+        data: Uint8Array,
+        payloadType: number,
+        ssrc: number,
+        connectionId: string | undefined
+    ): void {
         const stream = this.appDataStream
         if (!stream || !this.srtpSession) return
 
         let reactions: readonly WaCallReaction[]
         try {
             const packet = this.srtpSession.unprotect(data)
+            this.notePeerMedia(connectionId)
             stream.observeInboundPayloadType(payloadType)
             reactions = stream.receive(packet.payload, ssrc)
         } catch (err: unknown) {
@@ -1333,6 +1340,7 @@ export class WaCallMediaPlane {
         this.playout.reset()
         this.flowing = true
         this.silenceWarmup = false
+        this.sctpRelay.setMediaFlowing()
         if (!this.subscriptionRefreshTimer) {
             this.subscriptionRefreshTimer = setInterval(() => {
                 this.sctpRelay.resendSubscriptions()
@@ -1359,7 +1367,12 @@ export class WaCallMediaPlane {
         this.events.onRelayLost?.(reason)
     }
 
-    private onRelayData(data: Uint8Array): void {
+    /** Peer media that authenticated on a relay leg, which the relay follows; see `notePeerMedia`. */
+    private notePeerMedia(connectionId: string | undefined): void {
+        if (connectionId !== undefined) this.sctpRelay.notePeerMedia(connectionId)
+    }
+
+    private onRelayData(data: Uint8Array, connectionId?: string): void {
         this.relayPacketCount++
 
         if (isStunPacket(data)) return
@@ -1368,6 +1381,7 @@ export class WaCallMediaPlane {
             if (!this.srtcpRecvSession) return
             try {
                 const rtcp = this.srtcpRecvSession.unprotect(data)
+                this.notePeerMedia(connectionId)
                 const arrivedAt = Date.now()
                 this.audioReception.observeSenderReport(rtcp, arrivedAt)
                 this.videoReception.observeSenderReport(rtcp, arrivedAt)
@@ -1396,13 +1410,14 @@ export class WaCallMediaPlane {
             // Demultiplexed before the peer's media SSRC is latched: latching this one
             // would resubscribe the call to a stream of the same peer carrying no audio.
             if (this.peerAppDataSsrcs.has(ssrc)) {
-                this.onAppDataPacket(data, pt, ssrc)
+                this.onAppDataPacket(data, pt, ssrc, connectionId)
                 return
             }
         }
 
         try {
             const rtpPacket = this.srtpSession.unprotect(data)
+            this.notePeerMedia(connectionId)
             if (pt !== PayloadType.WhatsAppOpus) {
                 if (pt === PayloadType.WhatsAppH264) {
                     this.onVideoPacket(rtpPacket.header, rtpPacket.payload, pt)

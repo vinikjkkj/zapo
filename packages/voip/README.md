@@ -416,7 +416,7 @@ so a reaction can go out before the peer has sent any.
 
 ## Relay port
 
-A relay can be reached on the web client port (3480) or on the port its `<te2>` endpoint advertises, and which of the two answers follows the account class the server assigns; the wire does not say. Measured: a companion's legs open only on the advertised port, a mobile primary's only on 3480. So `useOriginalRelayPort` defaults to `true` on a companion and `false` on a mobile primary, read when the plugin is set up, and an explicit value wins.
+A relay can be reached on the web client port (3480) or on the port its `<te2>` endpoint advertises, and which of the two answers follows the account class the server assigns; the wire does not say. Measured: a companion's legs open only on the advertised port, a mobile primary's only on 3480. So `useOriginalRelayPort` defaults to `true` on a companion and `false` on a mobile primary, read per call, and an explicit value wins.
 
 Either way, a leg the relay never answers within its registration burst (about 3 s) is redialled once on the other port, so a call survives the server moving the class.
 

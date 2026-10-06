@@ -61,6 +61,7 @@ class FakeRelay {
     getConnectedCount(): number {
         return 1
     }
+    setMediaFlowing(): void {}
     sendMedia(data: ArrayBuffer): boolean {
         this.sent.push(new Uint8Array(data))
         return true
