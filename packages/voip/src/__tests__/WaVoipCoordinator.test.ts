@@ -4,14 +4,14 @@ import { test } from 'node:test'
 import { createNoopLogger, type WaClientPluginContext } from 'zapo-js'
 import { WA_MESSAGE_TAGS } from 'zapo-js/protocol'
 
-import { WaVoipCoordinator } from '../WaVoipCoordinator.js'
+import { WaVoipCoordinator, type WaVoipCoordinatorOptions } from '../WaVoipCoordinator.js'
 
-function mockCtx() {
+function mockCtx(mobilePrimary = false) {
     const handlers: Array<{ tag: string }> = []
     const emitted: Array<[string, unknown[]]> = []
     const ctx = {
         logger: createNoopLogger(),
-        deps: {} as never,
+        deps: { isMobilePrimary: () => mobilePrimary } as never,
         stores: {} as never,
         registerIncomingHandler: (handler: { tag: string }) => {
             handlers.push(handler)
@@ -56,4 +56,28 @@ test('WaVoipCoordinator re-emits manager events on the host client', () => {
     assert.equal(forwarded[1][0], error)
 
     coordinator.dispose()
+})
+
+/** Whether the calls the coordinator places dial each relay on the port its `<te2>` advertises. */
+function dialsAdvertisedPort(mobilePrimary: boolean, options?: WaVoipCoordinatorOptions): boolean {
+    const coordinator = new WaVoipCoordinator(mockCtx(mobilePrimary).ctx, options)
+    const manager = (coordinator as unknown as { manager: { useOriginalRelayPort: boolean } })
+        .manager
+    coordinator.dispose()
+    return manager.useOriginalRelayPort
+}
+
+/** Measured live: a companion's relay legs open only on the advertised port, never on 3480. */
+test('a companion dials the advertised relay port by default', () => {
+    assert.equal(dialsAdvertisedPort(false), true)
+})
+
+/** Measured live: a mobile primary's relay legs open only on 3480, never on the advertised port. */
+test('a mobile primary dials the web client relay port by default', () => {
+    assert.equal(dialsAdvertisedPort(true), false)
+})
+
+test('an explicit useOriginalRelayPort wins over the kind of session', () => {
+    assert.equal(dialsAdvertisedPort(false, { useOriginalRelayPort: false }), false)
+    assert.equal(dialsAdvertisedPort(true, { useOriginalRelayPort: true }), true)
 })

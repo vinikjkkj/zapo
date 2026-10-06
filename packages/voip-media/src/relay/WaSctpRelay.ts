@@ -29,12 +29,12 @@ type PeerConnectionClass = RTCPeerConnection
 type DataChannelClass = RTCDataChannel
 
 /**
- * The port a web client's relay media rides on.
+ * The port a web client's relay media rides on, unless the advertised one is dialled.
  *
- * Candidates are dialled here rather than on the port the relay advertises,
- * which is often 3478: a relay reached on 3478 completes the handshake and
- * accepts the uplink but never forwards the peer's stream back, so the call is
- * silently one way.
+ * Which of the two a relay answers on follows the account class the server assigns:
+ * measured, a mobile primary's legs open only here and a companion's only on the port
+ * the `<te2>` advertises (3478 in every offer seen). An unanswered leg is redialled on
+ * the other one; see `RelayInfo.fallbackPort`.
  */
 export const TRUE_WEB_CLIENT_RELAY_PORT = 3480
 
@@ -57,6 +57,9 @@ const CONFIG = {
  * datagram.
  */
 const REGISTRATION_RETRY_DELAYS_MS = [50, 150, 500, 3_000]
+
+/** How long a leg may go unanswered from its dial before it is redialled on the other port. */
+const PORT_FALLBACK_AFTER_MS = REGISTRATION_RETRY_DELAYS_MS[REGISTRATION_RETRY_DELAYS_MS.length - 1]
 
 enum ConnectionState {
     None = 'None',
@@ -102,6 +105,11 @@ export interface RelayInfo {
     relayId: number
     name?: string
     authTokenId?: string
+    /**
+     * The other of the web client port and the advertised one, tried once if the relay never
+     * answers on `port`: which of the two answers follows the account class the server assigns.
+     */
+    fallbackPort?: number
 }
 
 export interface Connection {
@@ -367,6 +375,20 @@ export class WaSctpRelay {
         const connectionId = conn.id
         const relayInfo = conn.relayInfo
 
+        if (relayInfo.fallbackPort !== undefined) {
+            unrefTimer(
+                setTimeout(() => {
+                    if (
+                        this.connections.get(connectionId) !== conn ||
+                        conn.hasReceivedFirstPacket
+                    ) {
+                        return
+                    }
+                    this.failConnection(conn, 'relay_port_unanswered')
+                }, PORT_FALLBACK_AFTER_MS)
+            )
+        }
+
         /**
          * The transport is chosen here, once, when the leg is dialled, and it is
          * chosen by configuration rather than by inspecting the relay.
@@ -625,6 +647,8 @@ export class WaSctpRelay {
     private failConnection(conn: Connection, reason: string): void {
         if (!conn || conn.state === ConnectionState.Failed) return
         const current = this.connections.get(conn.id) === conn
+        /** Registered before the leg leaves, so the call is not announced lost in between. */
+        const redial = current ? this.registerOnFallbackPort(conn, reason) : null
 
         this.logger.warn('sctp connection failed', { connectionId: conn.id, reason })
         if (current) this.releaseConnected(conn)
@@ -641,6 +665,34 @@ export class WaSctpRelay {
         this.stopKeepalive(conn.id)
         this.connections.delete(conn.id)
         this.announceLastLegLost(reason)
+        if (redial) void this.startConnection(redial)
+    }
+
+    /** Registers, once, a redial on the other port of a leg the relay never answered. */
+    private registerOnFallbackPort(conn: Connection, reason: string): Connection | null {
+        const port = conn.relayInfo.fallbackPort
+        if (port === undefined || conn.hasReceivedFirstPacket) return null
+
+        const relayInfo: RelayInfo = { ...conn.relayInfo, port, fallbackPort: undefined }
+        if (
+            this.connections.has(this.makeConnectionId(relayInfo.ip, port, relayInfo.authTokenId))
+        ) {
+            return null
+        }
+        this.logger.warn('relay leg unanswered, redialling on the other port', {
+            connectionId: conn.id,
+            port,
+            reason
+        })
+        return this.registerConnection(relayInfo)
+    }
+
+    /** Whether the configured relay `relayKey` already has a leg, on either port. */
+    private hasLegFor(relayKey: string): boolean {
+        for (const conn of this.connections.values()) {
+            if (conn.relayInfo.id === relayKey) return true
+        }
+        return false
     }
 
     /**
@@ -1130,7 +1182,10 @@ export class WaSctpRelay {
 
         if (!conn.hasReceivedFirstPacket) {
             conn.hasReceivedFirstPacket = true
-            this.logger.trace('first packet received from relay', { connectionId: conn.id })
+            this.logger.debug('relay leg answered', {
+                connectionId: conn.id,
+                port: conn.relayInfo.port
+            })
         }
 
         const shouldLog =
@@ -1287,6 +1342,10 @@ export class WaSctpRelay {
                 : webClientPort
 
             const connectionId = this.makeConnectionId(relay.ip, port, relay.authTokenId)
+            const otherPort =
+                port === CONFIG.TRUE_WEB_CLIENT_RELAY_PORT
+                    ? relay.originalPort
+                    : CONFIG.TRUE_WEB_CLIENT_RELAY_PORT
 
             const relayInfo: RelayInfo = {
                 id: connectionId,
@@ -1299,7 +1358,8 @@ export class WaSctpRelay {
                 key: relay.key,
                 relayId: relay.relayId,
                 name: relay.name || 'unknown',
-                authTokenId: relay.authTokenId
+                authTokenId: relay.authTokenId,
+                fallbackPort: otherPort !== port ? otherPort : undefined
             }
 
             this.relayMap.set(connectionId, relayInfo)
@@ -1308,13 +1368,8 @@ export class WaSctpRelay {
         this.logger.debug('sctp relays registered', { count: this.relayMap.size })
 
         const legs: Connection[] = []
-        for (const [, relayInfo] of this.relayMap) {
-            const connId = this.makeConnectionId(
-                relayInfo.ip,
-                relayInfo.port,
-                relayInfo.authTokenId
-            )
-            if (!this.connections.has(connId)) {
+        for (const [relayKey, relayInfo] of this.relayMap) {
+            if (!this.hasLegFor(relayKey)) {
                 legs.push(this.registerConnection(relayInfo))
             }
         }

@@ -29,6 +29,9 @@ const MEDIA = new Uint8Array([
     0x80, 0x78, 0x00, 0x2a, 0x00, 0x00, 0x03, 0xc0, 0x11, 0x22, 0x33, 0x44, 0xaa, 0xbb, 0xcc, 0xdd
 ])
 
+/** The relay's whole 0x0802 keepalive answer: every leg here reaches a relay that answers. */
+const PONG = new Uint8Array([0x08, 0x02, 0x00, 0x00, 0x21, 0x12, 0xa4, 0x42, ...new Uint8Array(12)])
+
 const STUN_ALLOCATE = 0x0003
 const WA_PING = 0x0801
 
@@ -80,6 +83,11 @@ function createRelay(legs: FakeLeg[], held: readonly string[] = []): WaSctpRelay
                 send: (data) => {
                     if (!open || closed) return false
                     sent.push(data.slice())
+                    if ((data[0] & 0xc0) === 0) {
+                        queueMicrotask(() => {
+                            if (!closed) options.onMessage(PONG.slice())
+                        })
+                    }
                     return true
                 },
                 close: () => {
