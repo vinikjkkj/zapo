@@ -199,6 +199,27 @@ test('a late close or failure of an old leg leaves the leg now holding its id al
     assert.deepEqual(lost, [])
 })
 
+test('a peer connection the factory resolves after its leg ended is closed', async (t) => {
+    let resolveFactory: (pc: RTCPeerConnection) => void = () => {}
+    const relay = new WaSctpRelay({
+        crypto: nodeCrypto,
+        createPeerConnection: () =>
+            new Promise<RTCPeerConnection>((resolve) => {
+                resolveFactory = resolve
+            })
+    })
+    const configuring = relay.configureRelays([relayConfig('192.0.2.10', 40, 10)])
+    relay.cleanup()
+    t.after(() => relay.cleanup())
+    assert.equal(await settles(configuring), true)
+
+    const late = new BrowserLikePeerConnection()
+    resolveFactory(late as unknown as RTCPeerConnection)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    assert.equal(late.closed, true)
+})
+
 test('a leg ended while it dials stops waiting on its peer connection', async (t) => {
     BrowserLikePeerConnection.all.length = 0
     const relay = createRelay()

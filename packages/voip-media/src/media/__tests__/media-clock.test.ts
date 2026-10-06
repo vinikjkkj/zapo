@@ -204,6 +204,28 @@ test('one frame delivered late does not move the offset', () => {
     }
 })
 
+test('a late or reordered stamp neither moves the offset nor breaks the order', () => {
+    const steady = new HostCaptureTimeMapper(VIDEO_TICK_MS)
+    const reordered = new HostCaptureTimeMapper(VIDEO_TICK_MS)
+    const staleAt = 300
+    let staleInstant = 0
+
+    for (let frame = 0; frame < 600; frame++) {
+        const captured = 1_000 + frame * FRAME_MS
+        const host = frame * FRAME_MS
+        const now = captured + 8 + ((frame * 7) % 13)
+        const expected = steady.map(host, now)
+        const instant = reordered.map(host, now)
+        assert.equal(instant, expected, `frame ${frame} mapped elsewhere after the stale stamp`)
+        if (frame === staleAt) {
+            staleInstant = reordered.map(host - 2 * FRAME_MS, now)
+            assert.ok(staleInstant > instant, 'the stale stamp still comes after the frame before')
+        } else if (frame === staleAt + 1) {
+            assert.ok(instant > staleInstant, 'and before the frame after')
+        }
+    }
+})
+
 test('the mapper stays strictly increasing when the host clock goes back', () => {
     const mapper = new HostCaptureTimeMapper(VIDEO_TICK_MS)
     const instants = [

@@ -203,6 +203,13 @@ function isReedSolomonFecPayloadType(pt: number): boolean {
     )
 }
 
+/** Reassembly and key frame requests of one inbound video SSRC; a request names one stream. */
+interface InboundVideoStream {
+    readonly depacketizer: H264Depacketizer
+    keyFrameReceived: boolean
+    lastKeyFrameRequestAt: number
+}
+
 /** Whether two SSRC lists are the same, order included: the order is what the relay gets. */
 function sameSsrcs(left: readonly number[], right: readonly number[]): boolean {
     if (left.length !== right.length) return false
@@ -404,8 +411,6 @@ export class WaCallMediaPlane {
     private videoFrameNumber = 0
     private videoTransportSequence = 0
     private videoFirSequence = 0
-    private receivedVideoKeyFrame = false
-    private lastVideoPliAt = 0
 
     /**
      * CNAME of every sender report of this call. One value binds the audio and
@@ -502,7 +507,7 @@ export class WaCallMediaPlane {
 
     private actualPeerSsrc: number | null = null
     private ssrcResubscribed = false
-    private readonly h264Depacketizers = new Map<number, H264Depacketizer>()
+    private readonly inboundVideoStreams = new Map<number, InboundVideoStream>()
 
     constructor(options: WaCallMediaPlaneOptions) {
         this.logger = options.logger ?? createNoopLogger()
@@ -594,14 +599,17 @@ export class WaCallMediaPlane {
         this.sctpRelay.resendSubscriptions()
     }
 
-    /** Applies the REMB gate, RTCP interval and app-data SFrame flag; `null` changes nothing. */
+    /**
+     * Applies the REMB gate, RTCP interval and app-data SFrame flag; a `null` section changes
+     * nothing, a `null` interval inside one restores the compiled interval.
+     */
     private applySettings(settings: WaCallMediaSettings | null): void {
         if (!settings) return
 
         this.rtcpRembDisabled = settings.disableRtcpRemb
 
-        const intervalMs = settings.rtcpIntervalMs
-        if (intervalMs !== null && intervalMs !== this.rtcpIntervalMs) {
+        const intervalMs = settings.rtcpIntervalMs ?? SENDER_REPORT_INTERVAL_MS
+        if (intervalMs !== this.rtcpIntervalMs) {
             this.rtcpIntervalMs = intervalMs
             this.audioReportSchedule = SenderReportSchedule.onMediaClock(
                 intervalMs,
@@ -894,8 +902,8 @@ export class WaCallMediaPlane {
         this.appDataStream?.close()
         this.appDataStream = null
         this.peerAppDataSsrcs.clear()
-        for (const depacketizer of this.h264Depacketizers.values()) depacketizer.reset()
-        this.h264Depacketizers.clear()
+        for (const stream of this.inboundVideoStreams.values()) stream.depacketizer.reset()
+        this.inboundVideoStreams.clear()
         this.playout.reset()
         this.encodeBuffer = null
         this.encodeBufferPos = 0
@@ -1368,16 +1376,6 @@ export class WaCallMediaPlane {
                 this.onAppDataPacket(data, pt, ssrc)
                 return
             }
-
-            if (!this.ssrcResubscribed && this.actualPeerSsrc === null) {
-                this.actualPeerSsrc = ssrc
-                if (ssrc !== this.subscriptionSsrc) {
-                    this.subscriptionSsrc = ssrc
-                    this.ssrcResubscribed = true
-                    this.sctpRelay.setSubscriptionSsrc(ssrc)
-                    this.requestResend()
-                }
-            }
         }
 
         try {
@@ -1397,6 +1395,7 @@ export class WaCallMediaPlane {
                 }
                 return
             }
+            this.latchPeerSsrc(rtpPacket.header.ssrc)
             const codec = this.codec
             if (!codec) return
             const opusPayload = rtpPacket.payload
@@ -1442,6 +1441,20 @@ export class WaCallMediaPlane {
                 })
             }
         }
+    }
+
+    /**
+     * Subscribes the call to the first peer audio stream that authenticated, once. The
+     * subscription names the peer's audio, so its video and FEC streams never latch.
+     */
+    private latchPeerSsrc(ssrc: number): void {
+        if (this.ssrcResubscribed || this.actualPeerSsrc !== null) return
+        this.actualPeerSsrc = ssrc
+        if (ssrc === this.subscriptionSsrc) return
+        this.subscriptionSsrc = ssrc
+        this.ssrcResubscribed = true
+        this.sctpRelay.setSubscriptionSsrc(ssrc)
+        this.requestResend()
     }
 
     private onVideoPacket(
@@ -1496,30 +1509,34 @@ export class WaCallMediaPlane {
             marker: header.marker,
             payload
         })
-        let depacketizer = this.h264Depacketizers.get(header.ssrc)
-        if (!depacketizer) {
-            depacketizer = new H264Depacketizer()
+        let stream = this.inboundVideoStreams.get(header.ssrc)
+        if (!stream) {
+            stream = {
+                depacketizer: new H264Depacketizer(),
+                keyFrameReceived: false,
+                lastKeyFrameRequestAt: 0
+            }
             setBoundedMapEntry(
-                this.h264Depacketizers,
+                this.inboundVideoStreams,
                 header.ssrc,
-                depacketizer,
+                stream,
                 MAX_H264_DEPACKETIZERS,
-                (_ssrc, evicted) => evicted.reset()
+                (_ssrc, evicted) => evicted.depacketizer.reset()
             )
         }
-        const frames = depacketizer.push(
+        const frames = stream.depacketizer.push(
             payload,
             header.timestamp,
             header.marker,
             header.sequenceNumber
         )
         for (const frame of frames) {
-            if (frame.keyFrame) this.receivedVideoKeyFrame = true
+            if (frame.keyFrame) stream.keyFrameReceived = true
             if (
-                !this.receivedVideoKeyFrame &&
-                Date.now() - this.lastVideoPliAt >= KEY_FRAME_REQUEST_INTERVAL_MS
+                !stream.keyFrameReceived &&
+                Date.now() - stream.lastKeyFrameRequestAt >= KEY_FRAME_REQUEST_INTERVAL_MS
             ) {
-                this.lastVideoPliAt = Date.now()
+                stream.lastKeyFrameRequestAt = Date.now()
                 this.requestKeyFrame(header.ssrc)
             }
             this.logger.trace('video frame assembled', {

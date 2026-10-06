@@ -182,6 +182,7 @@ export class WaCallMediaReceiver {
     private readonly callId: string
     private readonly send: (message: WaCallMediaEventMessage) => void
     private lastSeq: number | null = null
+    private receiving: Promise<void> = Promise.resolve()
 
     constructor(options: WaCallMediaReceiverOptions) {
         this.callId = options.callId
@@ -202,7 +203,17 @@ export class WaCallMediaReceiver {
         return this.plane.start()
     }
 
-    async receive(message: WaCallMediaMessage): Promise<void> {
+    /**
+     * Applies one message, one at a time in call order. A message whose apply rejects is not
+     * counted as received, so the next one finds the gap and asks for a resync.
+     */
+    receive(message: WaCallMediaMessage): Promise<void> {
+        const run = this.receiving.then(() => this.receiveNow(message))
+        this.receiving = run.catch(() => {})
+        return run
+    }
+
+    private async receiveNow(message: WaCallMediaMessage): Promise<void> {
         if (message.callId !== this.callId) {
             throw new Error(`media message for call ${message.callId}, expected ${this.callId}`)
         }
@@ -216,8 +227,8 @@ export class WaCallMediaReceiver {
             }
         }
 
-        this.lastSeq = message.seq
         await this.plane.apply(message.plan)
+        this.lastSeq = message.seq
     }
 
     stop(): WaCallMediaStats {

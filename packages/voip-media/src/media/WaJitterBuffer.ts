@@ -24,7 +24,16 @@ export class WaJitterBuffer {
     private droppedSamples = 0
     private underruns = 0
 
+    /**
+     * @throws RangeError unless `capacitySamples` is a positive integer: an empty queue would
+     * drop every sample and play silence.
+     */
     constructor(capacitySamples: number, logger: Logger) {
+        if (!Number.isInteger(capacitySamples) || capacitySamples <= 0) {
+            throw new RangeError(
+                `jitter buffer capacity must be a positive integer, got ${capacitySamples}`
+            )
+        }
         this.ring = new Float32Array(capacitySamples)
         this.logger = logger
     }

@@ -10,15 +10,15 @@ export interface Logger {
 
 function noop(): void {}
 
-const NOOP_LOGGER: Logger = {
-    trace: noop,
-    debug: noop,
-    info: noop,
-    warn: noop,
-    error: noop,
-    child: () => NOOP_LOGGER
-}
-
+/** A new silent logger per call, so a caller patching one changes no other. */
 export function createNoopLogger(): Logger {
-    return NOOP_LOGGER
+    const logger: Logger = {
+        trace: noop,
+        debug: noop,
+        info: noop,
+        warn: noop,
+        error: noop,
+        child: () => logger
+    }
+    return logger
 }

@@ -112,11 +112,6 @@ function isPing(packet: Uint8Array): boolean {
     return true
 }
 
-/**
- * Configures one relay over the raw UDP transport. `port` is what the WebRTC
- * path would dial and `originalPort` what the relay advertised for itself, so
- * the two can be told apart by which socket the datagrams land on.
- */
 /** A relay whose every leg rides raw UDP, the way a host opting into it builds one. */
 function createRawRelay(onReceive?: (data: Uint8Array) => void): WaSctpRelay {
     return new WaSctpRelay({
@@ -127,6 +122,11 @@ function createRawRelay(onReceive?: (data: Uint8Array) => void): WaSctpRelay {
     })
 }
 
+/**
+ * Configures one relay over the raw UDP transport. `port` is what the WebRTC
+ * path would dial and `originalPort` what the relay advertised for itself, so
+ * the two can be told apart by which socket the datagrams land on.
+ */
 async function configureRawRelay(relay: WaSctpRelay, advertisedPort: number): Promise<void> {
     relay.setSsrc(0x11223344)
     relay.setSubscriptionSsrc(0x55667788)

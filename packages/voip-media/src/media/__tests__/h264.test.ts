@@ -24,6 +24,34 @@ test('expands STAP-A into Annex-B NAL units', () => {
     assert.deepEqual(frame?.data, new Uint8Array([0, 0, 0, 1, 0x67, 1, 0, 0, 0, 1, 0x68, 2]))
 })
 
+/** WhatsApp's key frame: one FU-A typed SPS, with the PPS and the IDR inside it in Annex-B. */
+const SPS_TYPED_KEY_FRAME_BODY = [0x42, 0xc0, 0, 0, 0, 1, 0x68, 0xce, 0, 0, 1, 0x65, 0x88, 0x84]
+
+test('reports a key frame whose IDR rides inside an FU-A typed SPS', () => {
+    const d = new H264Depacketizer()
+    const [frame] = d.push(new Uint8Array([0x7c, 0xc7, ...SPS_TYPED_KEY_FRAME_BODY]), 93, true, 0)
+    assert.deepEqual(frame?.data, new Uint8Array([0, 0, 0, 1, 0x67, ...SPS_TYPED_KEY_FRAME_BODY]))
+    assert.equal(frame?.keyFrame, true)
+
+    const split = new H264Depacketizer()
+    split.push(new Uint8Array([0x7c, 0x87, ...SPS_TYPED_KEY_FRAME_BODY.slice(0, 5)]), 94, false, 7)
+    split.push(new Uint8Array([0x7c, 0x07, ...SPS_TYPED_KEY_FRAME_BODY.slice(5, 10)]), 94, false, 8)
+    const [joined] = split.push(
+        new Uint8Array([0x7c, 0x47, ...SPS_TYPED_KEY_FRAME_BODY.slice(10)]),
+        94,
+        true,
+        9
+    )
+    assert.equal(joined?.keyFrame, true, 'a start code split across fragments still counts')
+})
+
+test('a parameter set carrying only a delta slice inside is no key frame', () => {
+    const d = new H264Depacketizer()
+    const body = [0x42, 0xc0, 0, 0, 0, 1, 0x68, 0xce, 0, 0, 0, 1, 0x41, 0x9a]
+    const [frame] = d.push(new Uint8Array([0x7c, 0xc7, ...body]), 95, true, 0)
+    assert.equal(frame?.keyFrame, false)
+})
+
 test('packetizes Annex-B NAL units and marks FU-A boundaries', () => {
     const unit = new Uint8Array([0, 0, 0, 1, 0x67, 1, 0, 0, 1, 0x65, 2, 3, 4, 5, 6, 7])
     const packets = packetizeH264AnnexB(unit, 5)

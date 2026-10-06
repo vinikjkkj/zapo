@@ -39,6 +39,17 @@ test('SrtpSession protect/unprotect round-trips RTP payload', async () => {
     assert.deepEqual(unprotected.payload, payload)
 })
 
+test('keying material handed to a session cannot be swapped under it', () => {
+    const keying = keyingFrom(new Uint8Array(32).fill(0x11))
+    if (false) {
+        // @ts-expect-error a new key is a new epoch, never a field swapped in place
+        keying.masterKey = new Uint8Array(16)
+        // @ts-expect-error a new key is a new epoch, never a field swapped in place
+        keying.masterSalt = new Uint8Array(14)
+    }
+    assert.equal(keying.masterKey.length, 16)
+})
+
 test('SrtpSession unprotect rejects a tampered packet', async () => {
     const callKey = new Uint8Array(32)
     callKey.fill(0x22)

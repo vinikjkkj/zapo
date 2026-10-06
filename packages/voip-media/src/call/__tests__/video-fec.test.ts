@@ -53,7 +53,7 @@ interface PlaneInternals {
     videoReception: RtpStreamReception
     videoRecvPackets: number
     reedSolomonFecPackets: number
-    receivedVideoKeyFrame: boolean
+    inboundVideoStreams: Map<number, { keyFrameReceived: boolean }>
     onRelayData: (data: Uint8Array) => void
 }
 
@@ -97,6 +97,11 @@ async function createPlane(): Promise<FecHarness> {
     return { plane, frames, packets, internals }
 }
 
+/** Whether any inbound video stream got a key frame. */
+function keyFrameReceived(internals: PlaneInternals): boolean {
+    return [...internals.inboundVideoStreams.values()].some((stream) => stream.keyFrameReceived)
+}
+
 /** An RTP packet as the peer sends it, with marker set to close the frame. */
 function inboundPacket(
     payloadType: number,
@@ -129,7 +134,7 @@ test('a reed-solomon fec packet assembles no frame and announces no key frame', 
     assert.equal(harness.frames.length, 0, 'parity bytes are not an access unit')
     assert.equal(harness.packets.length, 0, 'parity must not reach the rtp consumer as video')
     assert.equal(
-        harness.internals.receivedVideoKeyFrame,
+        keyFrameReceived(harness.internals),
         false,
         'the third parity byte reads as an idr nal header once the first two are cut off'
     )
@@ -147,7 +152,7 @@ test('every payload type of the fec family is discarded, not only the captured o
 
     assert.equal(harness.frames.length, 0)
     assert.equal(harness.packets.length, 0)
-    assert.equal(harness.internals.receivedVideoKeyFrame, false)
+    assert.equal(keyFrameReceived(harness.internals), false)
     assert.equal(harness.internals.videoRecvPackets, 0)
     assert.equal(harness.internals.reedSolomonFecPackets, FEC_PAYLOAD_TYPES.length)
     harness.plane.stop()

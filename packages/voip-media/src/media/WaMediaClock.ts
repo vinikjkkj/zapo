@@ -51,6 +51,12 @@ const LAG_TOLERANCE_MS = 25
 const LAG_CATCH_UP_PER_MS = 0.005
 
 /**
+ * A step back in the host's stamps of at least this much is a new host epoch; a shorter one
+ * is a late or reordered frame, mapped on the offset already learned.
+ */
+const HOST_EPOCH_STEP_BACK_MS = 1_000
+
+/**
  * Maps host capture timestamps (any epoch) onto the plane's clock, learning the offset and
  * tracking the host clock's drift. Instants are strictly increasing, `minStepMs` apart.
  */
@@ -73,15 +79,18 @@ export class HostCaptureTimeMapper {
 
     /** The plane-clock instant of a frame the host stamped `hostMs`, mapped at `nowMs`. */
     map(hostMs: number, nowMs: number): number {
-        if (!this.learned || hostMs < this.lastHostMs) {
+        if (!this.learned || this.lastHostMs - hostMs >= HOST_EPOCH_STEP_BACK_MS) {
             // A first frame, or a host epoch of its own: nothing learned holds.
             this.learned = true
             this.offsetMs = nowMs - hostMs
             this.blockLagMs = 0
             this.previousBlockLagMs = Infinity
             this.blockStartMs = nowMs
-            return this.accept(hostMs, nowMs, nowMs)
+            this.lastHostMs = hostMs
+            return this.accept(nowMs, nowMs)
         }
+        if (hostMs < this.lastHostMs) return this.accept(nowMs, hostMs + this.offsetMs)
+        this.lastHostMs = hostMs
 
         let instantMs = hostMs + this.offsetMs
         if (instantMs > nowMs) {
@@ -108,7 +117,7 @@ export class HostCaptureTimeMapper {
             this.moveOffset(catchUpMs)
             instantMs += catchUpMs
         }
-        return this.accept(hostMs, nowMs, instantMs)
+        return this.accept(nowMs, instantMs)
     }
 
     /** Moves the offset, and the lags kept against it the other way. */
@@ -119,10 +128,9 @@ export class HostCaptureTimeMapper {
     }
 
     /** Holds `instantMs` a step past the last one and records the frame. */
-    private accept(hostMs: number, nowMs: number, instantMs: number): number {
+    private accept(nowMs: number, instantMs: number): number {
         const earliestMs = this.lastInstantMs + this.minStepMs
         const acceptedMs = instantMs < earliestMs ? earliestMs : instantMs
-        this.lastHostMs = hostMs
         this.lastNowMs = nowMs
         this.lastInstantMs = acceptedMs
         return acceptedMs

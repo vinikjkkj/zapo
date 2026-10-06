@@ -81,18 +81,21 @@ export function isH264KeyFrame(data: Uint8Array): boolean {
     return false
 }
 
-/**
- * RFC 6184 depacketizer for single NAL, STAP-A and FU-A payloads.
- *
- * The key-frame flag is derived at flush time from the headers of the NAL
- * units that actually made it into the access unit, never from the fragments
- * seen on the way in. A fragment run that is abandoned, replaced or dropped
- * therefore cannot mark or unmark the frame it never joined, which keeps the
- * flag correct no matter in what order the packets arrive.
- */
 /** RTP sequence numbers wrap at this modulus; used to test fragment contiguity. */
 const SEQUENCE_MODULUS = 0x10000
 
+/**
+ * RFC 6184 depacketizer for single NAL, STAP-A and FU-A payloads.
+ *
+ * The key-frame flag is derived at flush time from what actually made it into
+ * the access unit, never from the fragments seen on the way in. A fragment run
+ * that is abandoned, replaced or dropped therefore cannot mark or unmark the
+ * frame it never joined, which keeps the flag correct no matter in what order
+ * the packets arrive.
+ *
+ * WhatsApp sends a key frame as one FU-A typed SPS that carries the PPS and the
+ * IDR inside it after Annex-B start codes, so a non-slice NAL is also scanned.
+ */
 export class H264Depacketizer {
     private static readonly MAX_BUFFERED_BYTES = 8 * 1024 * 1024
     private static readonly NO_FU_RUN = -1
@@ -264,12 +267,16 @@ export class H264Depacketizer {
             offset += part.length
         }
         let keyFrame = false
+        let hasNonSliceNal = false
         for (let index = 0; index < this.nalHeaders.length; index++) {
-            if ((this.nalHeaders[index] & 0x1f) === NAL_TYPE_IDR) {
+            const type = this.nalHeaders[index] & 0x1f
+            if (type === NAL_TYPE_IDR) {
                 keyFrame = true
                 break
             }
+            if (type > NAL_TYPE_IDR) hasNonSliceNal = true
         }
+        if (!keyFrame && hasNonSliceNal) keyFrame = isH264KeyFrame(data)
         const result = { timestamp: this.timestamp, data, keyFrame }
         this.reset()
         return result

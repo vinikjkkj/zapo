@@ -2,11 +2,16 @@
 
 const UINT32_RANGE = 0x1_0000_0000
 
+/** The most bytes one `getRandomValues` call fills; a larger view throws. */
+const MAX_RANDOM_VALUES_BYTES = 65_536
+
 const wordScratch = new Uint32Array(1)
 
 export function randomBytes(length: number): Uint8Array {
     const output = new Uint8Array(length)
-    globalThis.crypto.getRandomValues(output)
+    for (let offset = 0; offset < length; offset += MAX_RANDOM_VALUES_BYTES) {
+        globalThis.crypto.getRandomValues(output.subarray(offset, offset + MAX_RANDOM_VALUES_BYTES))
+    }
     return output
 }
 

@@ -11,6 +11,17 @@ test('randomBytes returns the requested length and varies between calls', () => 
     assert.notDeepEqual([...a], [...b])
 })
 
+/** `getRandomValues` refuses more than 65,536 bytes in one call. */
+test('randomBytes fills a length past what one getRandomValues call takes', () => {
+    const bytes = randomBytes(65_536 * 2 + 64)
+
+    assert.equal(bytes.length, 65_536 * 2 + 64)
+    assert.ok(
+        bytes.subarray(-64).some((byte) => byte !== 0),
+        'the last chunk is filled too'
+    )
+})
+
 test('randomInt stays within [min, max) and reaches both ends', () => {
     const seen = new Set<number>()
     for (let i = 0; i < 200; i++) {

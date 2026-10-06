@@ -1,6 +1,7 @@
+/** Read-only once handed over: a session derives each stream's context from it lazily. */
 export interface SrtpKeyingMaterial {
-    masterKey: Uint8Array
-    masterSalt: Uint8Array
+    readonly masterKey: Uint8Array
+    readonly masterSalt: Uint8Array
 }
 
 export enum PayloadType {

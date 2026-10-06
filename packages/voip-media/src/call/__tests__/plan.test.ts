@@ -2,9 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
+import { SrtpSession } from '../../crypto/srtp.js'
 import { createNoopLogger } from '../../logger.js'
 import { RtpHeader, RtpPacket } from '../../media/rtp.js'
 import { nodeCrypto } from '../../node/crypto.js'
+import { SRTP_RECV_AUTH_TAG_LEN, SRTP_SEND_AUTH_TAG_LEN } from '../../types.js'
 import type { WaCallMediaKeys, WaCallMediaRelays, WaCallMediaSsrcs } from '../plan.js'
 import { WaCallMediaPlane, type WaCallMediaPlaneEvents } from '../WaCallMediaPlane.js'
 
@@ -15,6 +17,7 @@ const PEER_AUDIO = 0x33333333
 const PEER_VIDEO = 0x44444444
 const PEER_APP_DATA = 0x77777777
 const UNKNOWN_PEER = 0x99999999
+const OTHER_PEER = 0x88888888
 
 const SSRCS: WaCallMediaSsrcs = {
     selfAudio: SELF_AUDIO,
@@ -151,8 +154,21 @@ function createPlane(events: WaCallMediaPlaneEvents = {}): {
     return { plane, relay, internals, encoded }
 }
 
-function inboundRtp(ssrc: number): Uint8Array {
-    return new RtpPacket(new RtpHeader(120, 1, 960, ssrc), new Uint8Array([1, 2, 3])).encode()
+function inboundRtp(ssrc: number, payloadType = 120): RtpPacket {
+    return new RtpPacket(new RtpHeader(payloadType, 1, 960, ssrc), new Uint8Array([1, 2, 3]))
+}
+
+/** A peer packet under the keys of `keys(1)`, so it authenticates. */
+function protectedRtp(ssrc: number, payloadType?: number): Uint8Array {
+    const { send } = keys(1)
+    const peer = new SrtpSession(
+        nodeCrypto,
+        send,
+        send,
+        SRTP_SEND_AUTH_TAG_LEN,
+        SRTP_RECV_AUTH_TAG_LEN
+    )
+    return peer.protect(inboundRtp(ssrc, payloadType))
 }
 
 test('the ssrcs section names our streams and the peer stream to the relay', async () => {
@@ -336,13 +352,49 @@ test('the first peer stream to arrive outranks the derived one', async () => {
     await plane.apply({ ssrcs: SSRCS, keys: keys(1) })
     const resendsBefore = relay.resends
 
-    internals.onRelayData(inboundRtp(UNKNOWN_PEER))
+    internals.onRelayData(protectedRtp(UNKNOWN_PEER))
 
     assert.equal(relay.subscriptions.at(-1), UNKNOWN_PEER)
     assert.equal(relay.resends, resendsBefore + 1)
 
     await plane.apply({ ssrcs: SSRCS })
     assert.equal(relay.subscriptions.at(-1), UNKNOWN_PEER)
+    plane.stop()
+})
+
+test('a packet that fails authentication does not move the subscription', async () => {
+    const { plane, relay, internals } = createPlane()
+    await plane.apply({ ssrcs: SSRCS, keys: keys(1) })
+
+    internals.onRelayData(inboundRtp(UNKNOWN_PEER).encode())
+    assert.equal(relay.subscriptions.at(-1), PEER_AUDIO)
+
+    internals.onRelayData(protectedRtp(OTHER_PEER))
+    assert.equal(relay.subscriptions.at(-1), OTHER_PEER, 'the first authentic stream still latches')
+    plane.stop()
+})
+
+test('the video fec stream does not become the subscription', async () => {
+    const { plane, relay, internals } = createPlane()
+    await plane.apply({ ssrcs: SSRCS, keys: keys(1) })
+
+    internals.onRelayData(protectedRtp(UNKNOWN_PEER, 103))
+    assert.equal(relay.subscriptions.at(-1), PEER_AUDIO)
+
+    internals.onRelayData(protectedRtp(OTHER_PEER))
+    assert.equal(relay.subscriptions.at(-1), OTHER_PEER)
+    plane.stop()
+})
+
+test('peer video arriving before its audio does not become the subscription', async () => {
+    const { plane, relay, internals } = createPlane()
+    await plane.apply({ mediaType: 'video', ssrcs: SSRCS, keys: keys(1) })
+
+    internals.onRelayData(protectedRtp(PEER_VIDEO, 97))
+    assert.equal(relay.subscriptions.at(-1), PEER_AUDIO)
+
+    internals.onRelayData(protectedRtp(OTHER_PEER))
+    assert.equal(relay.subscriptions.at(-1), OTHER_PEER, 'the audio that follows still latches')
     plane.stop()
 })
 

@@ -34,19 +34,30 @@ test('samples come out in the order they went in', () => {
     assert.equal(buffer.stats.buffered, 0)
 })
 
+/** Samples numbered in the order they were written, so the ones dropped can be named. */
+function numbered(from: number, length: number): Float32Array {
+    const samples = new Float32Array(length)
+    for (let i = 0; i < length; i++) samples[i] = from + i
+    return samples
+}
+
 test('a full queue drops the oldest audio, not the newest', () => {
     const buffer = new WaJitterBuffer(MAX_PACKET_SAMPLES, createNoopLogger())
 
-    buffer.write(new Float32Array(MAX_PACKET_SAMPLES).fill(0.25))
-    buffer.write(new Float32Array(960).fill(0.5))
+    buffer.write(numbered(0, MAX_PACKET_SAMPLES))
+    buffer.write(numbered(MAX_PACKET_SAMPLES, 960))
 
     assert.equal(buffer.stats.buffered, MAX_PACKET_SAMPLES)
     assert.equal(buffer.stats.dropped, 960)
     const out = new Float32Array(MAX_PACKET_SAMPLES)
     buffer.read(out)
-    assert.equal(out[0], 0.25)
-    assert.equal(out[MAX_PACKET_SAMPLES - 960 - 1], 0.25)
-    assert.equal(out[MAX_PACKET_SAMPLES - 960], 0.5, 'the newest audio is the last to play')
+    assert.deepEqual(out, numbered(960, MAX_PACKET_SAMPLES), 'the first 960 written are gone')
+})
+
+test('a capacity that is not a positive integer is refused', () => {
+    for (const capacity of [0, -1, 1.5, Number.NaN]) {
+        assert.throws(() => new WaJitterBuffer(capacity, createNoopLogger()), RangeError)
+    }
 })
 
 test('a write larger than the queue keeps only its tail', () => {

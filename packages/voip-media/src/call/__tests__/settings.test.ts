@@ -282,6 +282,25 @@ test('the rtcp interval the server hands down replaces the compiled one', async 
     compiled.plane.stop()
 })
 
+/** The audio profile carries `rc.rtcp_interval_ms`; the video profile of an upgrade does not. */
+test('a later section without the interval goes back to the compiled one', async () => {
+    const harness = await createPlane(
+        'audio',
+        { ...NO_MEDIA_KEYS, rtcpIntervalMs: SERVER_INTERVAL_MS },
+        false
+    )
+    await harness.plane.apply({ settings: NO_MEDIA_KEYS })
+    const band = firstReportBand(DEFAULT_INTERVAL_MS)
+
+    const packets = audioPacketsUntilReport(harness)
+
+    assert.ok(
+        packets >= band.fewest && packets <= band.most,
+        `reported after ${packets} packets, outside ${band.fewest} to ${band.most}`
+    )
+    harness.plane.stop()
+})
+
 test('an interval the server did not send leaves the compiled cadence alone', async () => {
     // `{ vid_rc: { minbwe: '35000' } }`: no `rc.rtcp_interval_ms`, so the interval is `null`.
     const harness = await createPlane('audio', NO_MEDIA_KEYS, false)

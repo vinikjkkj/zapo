@@ -85,7 +85,7 @@ export interface WaCallMediaKeys {
 
 /** What the server's `<voip_settings>` tunes in the media, resolved by signaling. */
 export interface WaCallMediaSettings {
-    /** RTCP interval the server set, or `null` to keep the compiled one. */
+    /** RTCP interval the server set, or `null` for the compiled one, replacing any set before. */
     readonly rtcpIntervalMs: number | null
     /** Whether the server turned the RTCP REMB off for this call. */
     readonly disableRtcpRemb: boolean

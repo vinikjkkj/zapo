@@ -152,6 +152,40 @@ test('a gap in the numbers is applied and the whole plan asked for again', async
     receiver.stop()
 })
 
+test('a message whose apply fails is not counted, so the next one asks for a resync', async () => {
+    const { receiver, sent } = createReceiver()
+    const plane = receiver.plane as unknown as {
+        apply(update: WaCallMediaPlanUpdate): Promise<void>
+    }
+    await receiver.receive(message(0, true, { mediaType: 'audio' }))
+    const apply = plane.apply
+    plane.apply = () => Promise.reject(new Error('bad keys'))
+    await assert.rejects(receiver.receive(message(1, false, { muted: true })), /bad keys/)
+    plane.apply = apply
+
+    await receiver.receive(message(2, false, { muted: false }))
+
+    assert.deepEqual(
+        sent.map((event) => event.event),
+        [{ type: 'resync', lastSeq: 0 }]
+    )
+    receiver.stop()
+})
+
+test('messages handed in without waiting apply in order and ask for nothing', async () => {
+    const { receiver, applied, sent } = createReceiver()
+
+    await Promise.all([
+        receiver.receive(message(0, true, { mediaType: 'audio' })),
+        receiver.receive(message(1, false, { muted: true })),
+        receiver.receive(message(2, false, { muted: false }))
+    ])
+
+    assert.deepEqual(applied, [{ mediaType: 'audio' }, { muted: true }, { muted: false }])
+    assert.deepEqual(sent, [])
+    receiver.stop()
+})
+
 test('a change that arrives before any whole plan asks for one', async () => {
     const { receiver, sent } = createReceiver()
 

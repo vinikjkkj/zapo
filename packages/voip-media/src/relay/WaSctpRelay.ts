@@ -397,7 +397,15 @@ export class WaSctpRelay {
         const whileDialling = <T>(step: Promise<T>): Promise<T> => Promise.race([step, dialEnded])
 
         try {
-            const pc = await whileDialling(this.createPeerConnection({ iceServers: [] }))
+            const creating = this.createPeerConnection({ iceServers: [] })
+            const pc = await whileDialling(creating).catch((err: unknown) => {
+                /** If the leg ended first, whatever the factory resolves later is held by nobody. */
+                creating.then(
+                    (late) => closeQuietly(late, this.logger),
+                    () => undefined
+                )
+                throw err
+            })
 
             /** The leg may have ended while the factory loaded; close a connection nobody holds. */
             if (
