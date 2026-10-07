@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { type TestContext } from 'node:test'
 
-import type { SignalAddress, SignalSessionRecord } from '@signal/types'
+import { createNoopLogger, type Logger } from '@infra/log/types'
+import type { SenderKeyRecord, SignalAddress, SignalSessionRecord } from '@signal/types'
 import { createStore } from '@store/createStore'
+import { WaIdentityMemoryStore } from '@store/memory/identity.store'
+import { WaPrivacyTokenMemoryStore } from '@store/memory/privacy-token.store'
+import { SenderKeyMemoryStore } from '@store/memory/sender-key.store'
 import { WaSessionMemoryStore } from '@store/memory/session.store'
 import type { WaStoreBackend } from '@store/types'
 
@@ -304,19 +308,146 @@ test('createStore allows omitting cacheProviders when backends is set (caches de
     assert.ok(session.messageSecret)
 })
 
-test('createStore rejects a cacheLayer ttlMs that is not a positive safe integer', () => {
+const NO_MEMORY_CACHES = {
+    retry: 'none',
+    groupMetadata: 'none',
+    chatMetadata: 'none',
+    deviceList: 'none',
+    messageSecret: 'none'
+} as const
+
+/** Periods of the intervals still running: every `setInterval` not yet cleared. */
+function trackIntervals(t: TestContext): () => number[] {
+    const started = t.mock.method(globalThis, 'setInterval')
+    const stopped = t.mock.method(globalThis, 'clearInterval')
+    return () => {
+        const cleared = new Set(stopped.mock.calls.map((call) => call.arguments[0]))
+        return started.mock.calls
+            .filter((call) => !cleared.has(call.result))
+            .map((call) => call.arguments[1] as number)
+    }
+}
+
+const signalBackend = () =>
+    ({
+        stores: {
+            session: () => new WaSessionMemoryStore(),
+            identity: () => new WaIdentityMemoryStore(),
+            senderKey: () => new SenderKeyMemoryStore(),
+            privacyToken: () => new WaPrivacyTokenMemoryStore()
+        },
+        caches: {}
+    }) satisfies WaStoreBackend<'session' | 'identity' | 'senderKey' | 'privacyToken', never>
+
+const SIGNAL_ON_BACKEND = {
+    auth: 'memory',
+    signal: 'memory',
+    preKey: 'memory',
+    session: 'backend',
+    identity: 'backend',
+    senderKey: 'backend',
+    appState: 'memory',
+    privacyToken: 'backend',
+    messages: 'none',
+    threads: 'none',
+    contacts: 'none'
+} as const
+
+test('createStore rejects a cacheLayer ttlMs below 1_000 or not a safe integer', () => {
+    for (const sessionMs of [0, 999, 1_500.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+        assert.throws(
+            () => createStore({ cacheLayer: { session: true, ttlMs: { sessionMs } } }),
+            /cacheLayer\.ttlMs\.sessionMs must be a safe integer >= 1000/
+        )
+    }
     assert.throws(
-        () => createStore({ cacheLayer: { session: true, ttlMs: { sessionMs: 0 } } }),
-        /cacheLayer\.ttlMs\.sessionMs must be a positive safe integer/
+        () => createStore({ cacheLayer: { ttlMs: { privacyTokenMs: 1 } } }),
+        /cacheLayer\.ttlMs\.privacyTokenMs must be a safe integer >= 1000/
     )
-    assert.throws(
-        () => createStore({ cacheLayer: { ttlMs: { privacyTokenMs: 1.5 } } }),
-        /cacheLayer\.ttlMs\.privacyTokenMs must be a positive safe integer/
+    assert.doesNotThrow(() =>
+        createStore({
+            backends: { backend: signalBackend() },
+            providers: SIGNAL_ON_BACKEND,
+            cacheLayer: { session: true, ttlMs: { sessionMs: 1_000 } }
+        })
     )
 })
 
+test('createStore warns about a cacheLayer ttl on a domain that gets no L1', () => {
+    const warnings: { readonly message: string; readonly context?: Record<string, unknown> }[] = []
+    const logger: Logger = {
+        ...createNoopLogger(),
+        warn: (message, context) => warnings.push({ message, context }),
+        child: () => logger
+    }
+    createStore({
+        backends: { backend: signalBackend() },
+        providers: { ...SIGNAL_ON_BACKEND, identity: 'memory' },
+        cacheLayer: {
+            session: true,
+            identity: true,
+            senderKey: false,
+            ttlMs: {
+                sessionMs: 5_000,
+                identityMs: 5_000,
+                senderKeyMs: 5_000,
+                privacyTokenMs: 5_000
+            }
+        },
+        logger
+    })
+    createStore({ cacheLayer: { session: true, ttlMs: { sessionMs: 5_000 } }, logger })
+
+    const message = 'cacheLayer ttl ignored: domain has no L1'
+    assert.deepEqual(warnings, [
+        { message, context: { domain: 'identity', cached: true, provider: 'memory' } },
+        { message, context: { domain: 'senderKey', cached: false, provider: 'backend' } },
+        { message, context: { domain: 'privacyToken', cached: false, provider: 'backend' } },
+        { message, context: { domain: 'session', cached: true, provider: 'memory' } }
+    ])
+})
+
+test('createStore runs one L1 sweep timer for every session and domain, until the last one goes', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const running = trackIntervals(t)
+    const store = createStore({
+        backends: { backend: signalBackend() },
+        providers: SIGNAL_ON_BACKEND,
+        cacheProviders: NO_MEMORY_CACHES,
+        cacheLayer: {
+            session: true,
+            identity: true,
+            senderKey: true,
+            privacyToken: true,
+            ttlMs: {
+                sessionMs: 30 * 60_000,
+                identityMs: 120_000,
+                senderKeyMs: 5_000,
+                privacyTokenMs: 60_000
+            }
+        }
+    })
+    assert.deepEqual(running(), [])
+
+    const first = store.session('a')
+    const second = store.session('b')
+    const third = store.session('c')
+    assert.deepEqual(running(), [2_500])
+
+    await first.destroy()
+    await second.destroy()
+    assert.deepEqual(running(), [2_500])
+    await third.destroy()
+    assert.deepEqual(running(), [])
+
+    store.session('d')
+    assert.deepEqual(running(), [2_500])
+    await store.destroy()
+    assert.deepEqual(running(), [])
+})
+
 test('createStore applies cacheLayer ttlMs to the L1 in front of a backend', async (t) => {
-    t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 0 })
+    t.mock.timers.enable({ apis: ['setInterval'] })
     class CountingSessionStore extends WaSessionMemoryStore {
         public reads = 0
 
@@ -354,12 +485,84 @@ test('createStore applies cacheLayer ttlMs to the L1 in front of a backend', asy
     const record = { marker: 1 } as unknown as SignalSessionRecord
 
     await session.session.setSession(address, record) // write-through fills the L1
+    t.mock.timers.tick(1_000)
     assert.deepEqual(await session.session.getSession(address), record)
     assert.equal(backendSessions.reads, 0)
 
-    t.mock.timers.tick(1_000) // L1 sweep drops the idle entry, the backend row stays
+    t.mock.timers.tick(2_000) // untouched for two ticks: the L1 drops it, the backend row stays
     assert.deepEqual(await session.session.getSession(address), record)
     assert.equal(backendSessions.reads, 1)
 
     await store.destroy()
+})
+
+test('createStore rejects a cacheLayer privacyToken limit that is not a positive safe integer', () => {
+    for (const privacyToken of [0, Number.NaN]) {
+        const store = createStore({
+            backends: { backend: signalBackend() },
+            providers: SIGNAL_ON_BACKEND,
+            cacheLayer: { privacyToken: true, limits: { privacyToken } }
+        })
+        assert.throws(
+            () => store.session('s'),
+            /WaPrivacyTokenMemoryStore\.maxEntries must be a positive safe integer/
+        )
+    }
+})
+
+test('session.destroy() leaves public memory stores shared as a backend intact', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const sessions = new WaSessionMemoryStore()
+    const identities = new WaIdentityMemoryStore()
+    const senderKeys = new SenderKeyMemoryStore()
+    const shared = {
+        stores: {
+            session: () => sessions,
+            identity: () => identities,
+            senderKey: () => senderKeys
+        },
+        caches: {}
+    } satisfies WaStoreBackend<'session' | 'identity' | 'senderKey', never>
+    const address: SignalAddress = { user: 'peer', device: 0 }
+    const senderKey: SenderKeyRecord = {
+        groupId: 'g',
+        sender: address,
+        keyId: 1,
+        iteration: 0,
+        chainKey: new Uint8Array([1]),
+        signingPublicKey: new Uint8Array([2])
+    }
+    const withL1 = {
+        session: true,
+        identity: true,
+        senderKey: true,
+        ttlMs: { sessionMs: 60_000, identityMs: 60_000, senderKeyMs: 60_000 }
+    }
+
+    for (const [id, cacheLayer] of [
+        ['plain', undefined],
+        ['cached', withL1]
+    ] as const) {
+        const store = createStore({
+            backends: { shared },
+            providers: {
+                ...SIGNAL_ON_BACKEND,
+                session: 'shared',
+                identity: 'shared',
+                senderKey: 'shared',
+                privacyToken: 'memory'
+            },
+            cacheLayer
+        })
+        const session = store.session(id)
+        await session.session.setSession(address, { marker: id } as unknown as SignalSessionRecord)
+        await session.identity.setRemoteIdentity(address, new Uint8Array([7]))
+        await session.senderKey.upsertSenderKey(senderKey)
+        await session.destroy()
+
+        assert.ok(await sessions.getSession(address), id)
+        assert.ok(await identities.getRemoteIdentity(address), id)
+        assert.ok(await senderKeys.getDeviceSenderKey('g', address), id)
+        await store.destroy()
+    }
 })

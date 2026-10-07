@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { WA_APP_STATE_COLLECTIONS } from '@protocol/constants'
+import { signalAddressKey } from '@protocol/jid'
+import type { SenderKeyRecord, SignalAddress, SignalSessionRecord } from '@signal/types'
 import { WaAppStateMemoryStore } from '@store/memory/appstate.store'
 import { WaAuthMemoryStore } from '@store/memory/auth.store'
 import { WaDeviceListMemoryStore } from '@store/memory/device-list.store'
@@ -327,4 +329,190 @@ test('memory privacy token store merges partial updates and enforces bounds', as
     assert.equal(await store.deleteByJid('b@s.whatsapp.net'), 1)
     assert.equal(await store.deleteByJid('missing@s.whatsapp.net'), 0)
     await store.destroy()
+})
+
+test('memory privacy token store rejects a maxEntries that is not a positive safe integer', () => {
+    for (const maxEntries of [0, -1, 1.5, Number.NaN]) {
+        assert.throws(
+            () => new WaPrivacyTokenMemoryStore(maxEntries),
+            /WaPrivacyTokenMemoryStore\.maxEntries must be a positive safe integer/
+        )
+    }
+})
+
+test('memory signal stores take no ttlMs, and session/identity/sender-key have no destroy', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] })
+    const started = t.mock.method(globalThis, 'setInterval')
+    const address = { user: 'a', device: 0 }
+    // @ts-expect-error idle expiry is internal to the cacheLayer L1
+    const session = new WaSessionMemoryStore({ ttlMs: 1_000 })
+    // @ts-expect-error idle expiry is internal to the cacheLayer L1
+    const identity = new WaIdentityMemoryStore({ ttlMs: 1_000 })
+    // @ts-expect-error idle expiry is internal to the cacheLayer L1
+    const senderKey = new SenderKeyMemoryStore({ ttlMs: 1_000 })
+    // @ts-expect-error idle expiry is internal to the cacheLayer L1
+    const privacyToken = new WaPrivacyTokenMemoryStore(10, { ttlMs: 1_000 })
+    assert.equal('destroy' in session, false)
+    assert.equal('destroy' in identity, false)
+    assert.equal('destroy' in senderKey, false)
+
+    await session.setSession(address, { marker: 1 } as unknown as SignalSessionRecord)
+    await identity.setRemoteIdentity(address, new Uint8Array([1]))
+    await senderKey.upsertSenderKey({
+        groupId: 'g',
+        sender: address,
+        keyId: 1,
+        iteration: 0,
+        chainKey: new Uint8Array([1]),
+        signingPublicKey: new Uint8Array([2])
+    })
+    await privacyToken.upsert({ jid: 'a', tcToken: new Uint8Array([1]), updatedAtMs: 1 })
+    t.mock.timers.tick(10 * 60_000)
+
+    assert.equal(started.mock.callCount(), 0)
+    assert.ok(await session.getSession(address))
+    assert.ok(await identity.getRemoteIdentity(address))
+    assert.ok(await senderKey.getDeviceSenderKey('g', address))
+    assert.ok(await privacyToken.getByJid('a'))
+})
+
+test('memory signal stores report hits, writes, removals and clears to their entry hooks', async () => {
+    const addr = (user: string): SignalAddress => ({ user, device: 0 })
+    const key = (user: string): string => signalAddressKey(addr(user))
+    class Session extends WaSessionMemoryStore {
+        public readonly events: string[] = []
+        protected override onEntryAccess(k: string): void {
+            this.events.push(`access ${k}`)
+        }
+        protected override onEntryRemove(k: string): void {
+            this.events.push(`remove ${k}`)
+        }
+        protected override onEntriesClear(): void {
+            this.events.push('clear')
+        }
+    }
+    class Identity extends WaIdentityMemoryStore {
+        public readonly events: string[] = []
+        protected override onEntryAccess(k: string): void {
+            this.events.push(`access ${k}`)
+        }
+        protected override onEntryRemove(k: string): void {
+            this.events.push(`remove ${k}`)
+        }
+        protected override onEntriesClear(): void {
+            this.events.push('clear')
+        }
+    }
+    class SenderKey extends SenderKeyMemoryStore {
+        public readonly events: string[] = []
+        protected override onEntryAccess(entries: Map<string, unknown>, k: string): void {
+            this.events.push(`${entries === this.senderKeys ? 'key' : 'dist'} access ${k}`)
+        }
+        protected override onEntryRemove(entries: Map<string, unknown>, k: string): void {
+            this.events.push(`${entries === this.senderKeys ? 'key' : 'dist'} remove ${k}`)
+        }
+        protected override onEntriesClear(): void {
+            this.events.push('clear')
+        }
+    }
+    class PrivacyToken extends WaPrivacyTokenMemoryStore {
+        public readonly events: string[] = []
+        protected override onEntryAccess(jid: string): void {
+            this.events.push(`access ${jid}`)
+        }
+        protected override onEntryRemove(jid: string): void {
+            this.events.push(`remove ${jid}`)
+        }
+        protected override onEntriesClear(): void {
+            this.events.push('clear')
+        }
+    }
+    const session = new Session({ maxSessions: 2 })
+    await session.setSession(addr('a'), {} as SignalSessionRecord)
+    await session.setSessionsBatch([{ address: addr('b'), session: {} as SignalSessionRecord }])
+    await session.getSession(addr('a'))
+    await session.getSession(addr('x'))
+    await session.getSessionsBatch([addr('b'), addr('x')])
+    await session.hasSession(addr('a'))
+    await session.hasSessions([addr('x'), addr('b')])
+    await session.setSession(addr('c'), {} as SignalSessionRecord)
+    await session.deleteSession(addr('b'))
+    await session.deleteSession(addr('x'))
+    await session.clear()
+    assert.deepEqual(session.events, [
+        `access ${key('a')}`,
+        `access ${key('b')}`,
+        `access ${key('a')}`,
+        `access ${key('b')}`,
+        `access ${key('a')}`,
+        `access ${key('b')}`,
+        `remove ${key('a')}`,
+        `access ${key('c')}`,
+        `remove ${key('b')}`,
+        'clear'
+    ])
+
+    const identity = new Identity({ maxRemoteIdentities: 1 })
+    await identity.setRemoteIdentity(addr('a'), new Uint8Array([1]))
+    await identity.getRemoteIdentities([addr('a'), addr('x')])
+    await identity.setRemoteIdentities([{ address: addr('b'), identityKey: new Uint8Array([2]) }])
+    await identity.getRemoteIdentity(addr('b'))
+    await identity.clear()
+    assert.deepEqual(identity.events, [
+        `access ${key('a')}`,
+        `access ${key('a')}`,
+        `remove ${key('a')}`,
+        `access ${key('b')}`,
+        `access ${key('b')}`,
+        'clear'
+    ])
+
+    const senderKey = new SenderKey({ maxSenderKeys: 1, maxSenderDistributions: 1 })
+    const record = (user: string): SenderKeyRecord => ({
+        groupId: 'g',
+        sender: addr(user),
+        keyId: 1,
+        iteration: 0,
+        chainKey: new Uint8Array([1]),
+        signingPublicKey: new Uint8Array([2])
+    })
+    await senderKey.upsertSenderKey(record('a'))
+    await senderKey.upsertSenderKeyDistributions([
+        { groupId: 'g', sender: addr('a'), keyId: 1, timestampMs: 1 }
+    ])
+    await senderKey.getDeviceSenderKey('g', addr('a'))
+    await senderKey.getDeviceSenderKeyDistributions('g', [addr('a'), addr('x')])
+    await senderKey.getGroupSenderKeyList('g')
+    await senderKey.upsertSenderKey(record('b'))
+    await senderKey.markForgetSenderKey('g', [addr('b')])
+    await senderKey.deleteDeviceSenderKey(addr('a'))
+    await senderKey.clear()
+    assert.deepEqual(senderKey.events, [
+        `key access g|${key('a')}`,
+        `dist access g|${key('a')}`,
+        `key access g|${key('a')}`,
+        `dist access g|${key('a')}`,
+        `key remove g|${key('a')}`,
+        `key access g|${key('b')}`,
+        `key remove g|${key('b')}`,
+        `dist remove g|${key('a')}`,
+        'clear'
+    ])
+
+    const privacyToken = new PrivacyToken(1)
+    await privacyToken.upsert({ jid: 'a', updatedAtMs: 1 })
+    await privacyToken.getByJid('a')
+    await privacyToken.getByJid('x')
+    await privacyToken.upsertBatch([{ jid: 'b', updatedAtMs: 2 }])
+    await privacyToken.deleteByJid('b')
+    await privacyToken.deleteByJid('x')
+    await privacyToken.destroy()
+    assert.deepEqual(privacyToken.events, [
+        'access a',
+        'access a',
+        'remove a',
+        'access b',
+        'remove b',
+        'clear'
+    ])
 })

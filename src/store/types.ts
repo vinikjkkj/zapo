@@ -398,7 +398,7 @@ export interface WaCreateStoreOptions<
     /**
      * Opt-in in-process read-through cache in front of a *persistent* backend
      * for the hot signal domains. Each enabled domain wraps its backend store
-     * with a bounded-LRU L1 (the in-tree memory provider) so repeated reads of
+     * with a bounded L1 (the in-tree memory provider) so repeated reads of
      * the same peer on the send/recv path skip the backend round-trip; writes
      * stay write-through (or invalidate-on-write for `privacyToken`) so the
      * backend remains authoritative. Entries leave the L1 through the
@@ -452,8 +452,10 @@ export interface WaCreateStoreOptions<
         /** Cache trusted-contact tokens (jid→record). Invalidate-on-write. */
         readonly privacyToken?: boolean
         /**
-         * Per-domain L1 entry caps (LRU eviction once exceeded). Defaults to
-         * the matching memory-provider default when unset.
+         * Per-domain L1 entry caps. Past the cap the least recently written
+         * entry goes or, when the domain has a `ttlMs`, the least recently
+         * used one (recency counted in sweep ticks). Defaults to the matching
+         * memory-provider default when unset.
          */
         readonly limits?: {
             readonly session?: number
@@ -462,12 +464,18 @@ export interface WaCreateStoreOptions<
             readonly privacyToken?: number
         }
         /**
-         * Per-domain L1 idle TTLs in milliseconds. An entry neither read nor
-         * written for this long is dropped from the L1 by a periodic sweep
-         * (at most every 60 s), so a long-lived process keeps the peers it is
-         * actively talking to instead of every peer seen since boot. Unset
-         * (the default) keeps entries until `limits` evicts them; when both
-         * are set, whichever evicts first wins.
+         * Per-domain L1 idle TTLs in milliseconds, each a safe integer of at
+         * least 1_000. An entry neither read nor written for this long leaves
+         * the L1, so a long-lived process keeps the peers it is actively
+         * talking to instead of every peer seen since boot. Unset (the
+         * default) keeps entries until `limits` evicts them. A TTL on a
+         * domain that gets no L1 (flag off, or a `'memory'`/`'none'`
+         * provider) is ignored with a warning on the store `logger`.
+         *
+         * Idle time is counted in ticks of one sweep timer per store, whose
+         * period is the smallest `ttlMs / 2` clamped to [1 s, 60 s], so
+         * wall-clock steps never expire or keep an entry. An entry goes after
+         * at least `ttlMs` idle and less than `ttlMs` plus two periods.
          *
          * The TTL bounds residency, not freshness. The L1 stays coherent with
          * the backend (write-through, or invalidate-on-write), so expiry never

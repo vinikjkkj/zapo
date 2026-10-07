@@ -1,36 +1,18 @@
 import { signalAddressKey } from '@protocol/jid'
 import type { SignalAddress } from '@signal/types'
 import type { WaIdentityStore as WaIdentityStoreContract } from '@store/contracts/identity.store'
-import { resolveOptionalPositive, resolvePositive } from '@util/coercion'
-import {
-    createIdleExpiryIndex,
-    createPeriodicCleanup,
-    type IdleExpiryIndex,
-    type PeriodicCleanupHandle,
-    setBoundedMapEntry
-} from '@util/collections'
+import { resolvePositive } from '@util/coercion'
+import { setBoundedMapEntry } from '@util/collections'
 
 const DEFAULT_MAX_REMOTE_IDENTITIES = 8_192
 
 export interface WaIdentityMemoryStoreOptions {
     readonly maxRemoteIdentities?: number
-    /**
-     * Evicts a remote identity once it has been neither read nor written for
-     * this many milliseconds; a periodic sweep reclaims it. Unset keeps
-     * identities until `maxRemoteIdentities` evicts them.
-     *
-     * Meant for a cache in front of a persistent backend (the `cacheLayer`
-     * L1), where an evicted entry is simply re-read. On a store that is the
-     * source of truth, expiry forgets the peer's trusted identity key.
-     */
-    readonly ttlMs?: number
 }
 
 export class WaIdentityMemoryStore implements WaIdentityStoreContract {
-    private readonly remoteIdentities: Map<string, Uint8Array>
+    protected readonly remoteIdentities: Map<string, Uint8Array>
     private readonly maxRemoteIdentities: number
-    private readonly idle: IdleExpiryIndex<string> | null
-    private readonly cleanup: PeriodicCleanupHandle | null
 
     public constructor(options: WaIdentityMemoryStoreOptions = {}) {
         this.remoteIdentities = new Map()
@@ -39,35 +21,29 @@ export class WaIdentityMemoryStore implements WaIdentityStoreContract {
             DEFAULT_MAX_REMOTE_IDENTITIES,
             'WaIdentityMemoryStoreOptions.maxRemoteIdentities'
         )
-        const ttlMs = resolveOptionalPositive(options.ttlMs, 'WaIdentityMemoryStoreOptions.ttlMs')
-        this.idle = ttlMs === undefined ? null : createIdleExpiryIndex(ttlMs)
-        this.cleanup =
-            ttlMs === undefined
-                ? null
-                : createPeriodicCleanup(ttlMs, () => {
-                      void this.cleanupExpired(Date.now())
-                  })
     }
 
     public async getRemoteIdentity(address: SignalAddress): Promise<Uint8Array | null> {
         const key = signalAddressKey(address)
         const identityKey = this.remoteIdentities.get(key)
         if (identityKey === undefined) return null
-        this.idle?.touch(key, Date.now())
+        this.onEntryAccess(key)
         return identityKey
     }
 
     public async getRemoteIdentities(
         addresses: readonly SignalAddress[]
     ): Promise<readonly (Uint8Array | null)[]> {
-        const idle = this.idle
-        const nowMs = idle === null ? 0 : Date.now()
         const result = new Array<Uint8Array | null>(addresses.length)
         for (let i = 0; i < addresses.length; i += 1) {
             const key = signalAddressKey(addresses[i])
             const identityKey = this.remoteIdentities.get(key)
-            if (identityKey !== undefined) idle?.touch(key, nowMs)
-            result[i] = identityKey ?? null
+            if (identityKey === undefined) {
+                result[i] = null
+            } else {
+                this.onEntryAccess(key)
+                result[i] = identityKey
+            }
         }
         return result
     }
@@ -79,9 +55,9 @@ export class WaIdentityMemoryStore implements WaIdentityStoreContract {
             key,
             identityKey,
             this.maxRemoteIdentities,
-            this.idle?.delete
+            this.onEvict
         )
-        this.idle?.touch(key, Date.now())
+        this.onEntryAccess(key)
     }
 
     public async setRemoteIdentities(
@@ -90,8 +66,6 @@ export class WaIdentityMemoryStore implements WaIdentityStoreContract {
             readonly identityKey: Uint8Array
         }[]
     ): Promise<void> {
-        const idle = this.idle
-        const nowMs = idle === null ? 0 : Date.now()
         for (const entry of entries) {
             const key = signalAddressKey(entry.address)
             setBoundedMapEntry(
@@ -99,31 +73,24 @@ export class WaIdentityMemoryStore implements WaIdentityStoreContract {
                 key,
                 entry.identityKey,
                 this.maxRemoteIdentities,
-                idle?.delete
+                this.onEvict
             )
-            idle?.touch(key, nowMs)
+            this.onEntryAccess(key)
         }
     }
 
     public async clear(): Promise<void> {
         this.remoteIdentities.clear()
-        this.idle?.clear()
+        this.onEntriesClear()
     }
 
-    /**
-     * Evicts the identities idle for at least `ttlMs` as of `nowMs` and
-     * returns how many were evicted. Runs on a timer when `ttlMs` is set; a
-     * no-op otherwise.
-     */
-    public async cleanupExpired(nowMs: number): Promise<number> {
-        if (this.idle === null) return 0
-        return this.idle.sweep(nowMs, (key) => {
-            this.remoteIdentities.delete(key)
-        })
-    }
+    /** Runs with the key of every read hit and write. No-op unless a subclass tracks access. */
+    protected onEntryAccess(key: string): void {}
 
-    public async destroy(): Promise<void> {
-        this.cleanup?.destroy()
-        await this.clear()
-    }
+    /** Runs with the key of every cap-evicted entry. */
+    protected onEntryRemove(key: string): void {}
+
+    protected onEntriesClear(): void {}
+
+    private readonly onEvict = (key: string): void => this.onEntryRemove(key)
 }

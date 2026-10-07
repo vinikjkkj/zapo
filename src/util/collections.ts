@@ -32,46 +32,117 @@ export function normalizeQueryLimit(limit: number | undefined, defaultLimit: num
 }
 
 /**
- * Last-access index for entries that expire once idle (neither read nor
- * written) for `ttlMs`. Every `touch` re-inserts the key at the young end,
- * so iteration order is access order and `sweep` can stop at the first live
- * key: a sweep costs O(expired), not O(size).
- *
- * Timestamps come from the caller. A wall clock that steps backwards only
- * delays eviction: the sweep stops at the out-of-order key until it ages out.
+ * Sweep period shared by a set of idle TTLs: the smallest `ttlMs / 2`,
+ * clamped to [1 s, 60 s].
  */
-export interface IdleExpiryIndex<K> {
-    readonly touch: (key: K, nowMs: number) => void
-    readonly delete: (key: K) => void
-    readonly clear: () => void
-    /**
-     * Drops every key idle for at least `ttlMs` as of `nowMs`, oldest first,
-     * calling `onExpire` for each, and returns how many expired.
-     */
-    readonly sweep: (nowMs: number, onExpire: (key: K) => void) => number
+export function resolveIdleSweepPeriodMs(ttlsMs: readonly number[]): number {
+    let periodMs = 60_000
+    for (let i = 0; i < ttlsMs.length; i += 1) {
+        periodMs = Math.min(periodMs, Math.max(1_000, Math.floor(ttlsMs[i] / 2)))
+    }
+    return periodMs
 }
 
-export function createIdleExpiryIndex<K>(ttlMs: number): IdleExpiryIndex<K> {
-    const lastAccessMs = new Map<K, number>()
-    return {
-        touch: (key, nowMs) => {
-            lastAccessMs.delete(key)
-            lastAccessMs.set(key, nowMs)
-        },
-        delete: (key) => {
-            lastAccessMs.delete(key)
-        },
-        clear: () => lastAccessMs.clear(),
-        sweep: (nowMs, onExpire) => {
-            const cutoffMs = nowMs - ttlMs
-            let expired = 0
-            for (const [key, accessedAtMs] of lastAccessMs) {
-                if (accessedAtMs > cutoffMs) break
-                lastAccessMs.delete(key)
-                onExpire(key)
-                expired += 1
-            }
-            return expired
+/**
+ * Coarse clock for idle expiry: one `unref`'d interval bumps `tick` and runs
+ * every registered sweep, and only while a sweep is registered. Wall-clock
+ * steps never move `tick`.
+ */
+export class IdleSweepClock {
+    public readonly periodMs: number
+    private currentTick: number
+    private readonly sweeps: Set<(tick: number) => void>
+    private timer: NodeJS.Timeout | null
+
+    public constructor(periodMs: number) {
+        this.periodMs = periodMs
+        this.currentTick = 0
+        this.sweeps = new Set()
+        this.timer = null
+    }
+
+    public get tick(): number {
+        return this.currentTick
+    }
+
+    /** Runs `sweep` on every tick until the returned function is called. */
+    public register(sweep: (tick: number) => void): () => void {
+        this.sweeps.add(sweep)
+        if (this.timer === null) {
+            this.timer = setInterval(this.advance, this.periodMs)
+            this.timer.unref?.()
+        }
+        return () => {
+            this.sweeps.delete(sweep)
+            if (this.sweeps.size > 0 || this.timer === null) return
+            clearInterval(this.timer)
+            this.timer = null
+        }
+    }
+
+    private readonly advance = (): void => {
+        this.currentTick += 1
+        for (const sweep of this.sweeps) sweep(this.currentTick)
+    }
+}
+
+export interface IdleExpiry {
+    readonly clock: IdleSweepClock
+    readonly ttlMs: number
+}
+
+/**
+ * Idle expiry and LRU order for the entries of `data`. A touch moves the key
+ * to the young end of the index and of `data`, at most once per tick, so the
+ * sweep stops at the first live key and `data` iterates least recently used
+ * first. A key expires after `ceil(ttlMs / periodMs) + 1` untouched ticks:
+ * idle for at least `ttlMs` and, timer lateness aside, under `ttlMs + 2 * periodMs`.
+ */
+export class IdleExpiryIndex<K, V> {
+    private readonly data: Map<K, V>
+    private readonly clock: IdleSweepClock
+    private readonly idleTicks: number
+    private readonly touchedAt: Map<K, number>
+    private readonly unregister: () => void
+
+    public constructor(data: Map<K, V>, expiry: IdleExpiry) {
+        this.data = data
+        this.clock = expiry.clock
+        this.idleTicks = Math.ceil(expiry.ttlMs / expiry.clock.periodMs) + 1
+        this.touchedAt = new Map()
+        this.unregister = expiry.clock.register(this.sweep)
+    }
+
+    public touch(key: K): void {
+        const tick = this.clock.tick
+        if (this.touchedAt.get(key) === tick) return
+        this.touchedAt.delete(key)
+        this.touchedAt.set(key, tick)
+        const value = this.data.get(key)
+        if (value === undefined) return
+        this.data.delete(key)
+        this.data.set(key, value)
+    }
+
+    public delete(key: K): void {
+        this.touchedAt.delete(key)
+    }
+
+    public clear(): void {
+        this.touchedAt.clear()
+    }
+
+    /** Stops sweeping; the entries stay until the owner clears them. */
+    public detach(): void {
+        this.unregister()
+    }
+
+    private readonly sweep = (tick: number): void => {
+        const cutoff = tick - this.idleTicks
+        for (const [key, touchedAt] of this.touchedAt) {
+            if (touchedAt > cutoff) return
+            this.touchedAt.delete(key)
+            this.data.delete(key)
         }
     }
 }

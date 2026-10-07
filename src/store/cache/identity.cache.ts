@@ -1,14 +1,41 @@
 import type { WaIdentityStore } from '@store/contracts/identity.store'
 import { WaIdentityMemoryStore } from '@store/memory/identity.store'
 import type { WithDestroyLifecycle } from '@store/types'
+import { type IdleExpiry, IdleExpiryIndex } from '@util/collections'
+
+/** L1 with idle expiry; hits keep it in access order, so the cap evicts the LRU entry. */
+class IdleIdentityMemoryStore extends WaIdentityMemoryStore {
+    private readonly idle: IdleExpiryIndex<string, Uint8Array>
+
+    public constructor(maxRemoteIdentities: number | undefined, expiry: IdleExpiry) {
+        super({ maxRemoteIdentities })
+        this.idle = new IdleExpiryIndex(this.remoteIdentities, expiry)
+    }
+
+    public detach(): void {
+        this.idle.detach()
+    }
+
+    protected override onEntryAccess(key: string): void {
+        this.idle.touch(key)
+    }
+
+    protected override onEntryRemove(key: string): void {
+        this.idle.delete(key)
+    }
+
+    protected override onEntriesClear(): void {
+        this.idle.clear()
+    }
+}
 
 /**
  * Read-through / write-through in-process cache for a persistent remote
- * identity backend. Reuses {@link WaIdentityMemoryStore} as the bounded-LRU
- * L1. Remote identities are read alongside sessions on the send path (the
+ * identity backend. Reuses {@link WaIdentityMemoryStore} as the bounded L1.
+ * Remote identities are read alongside sessions on the send path (the
  * identity-mismatch guard), so caching them complements
- * {@link withSessionCache}. `ttlMs` drops idle entries from the L1 the same
- * way.
+ * {@link withSessionCache}, which also describes the eviction with and
+ * without `expiry`.
  *
  * The identity store has no per-key delete: identities are overwritten on
  * re-establishment, so a peer's key change propagates through the
@@ -18,9 +45,11 @@ import type { WithDestroyLifecycle } from '@store/types'
 export function withIdentityCache(
     backend: WaIdentityStore,
     maxEntries?: number,
-    ttlMs?: number
+    expiry?: IdleExpiry
 ): WithDestroyLifecycle<WaIdentityStore> {
-    const l1 = new WaIdentityMemoryStore({ maxRemoteIdentities: maxEntries, ttlMs })
+    const l1 = expiry
+        ? new IdleIdentityMemoryStore(maxEntries, expiry)
+        : new WaIdentityMemoryStore({ maxRemoteIdentities: maxEntries })
     let generation = 0
 
     return {
@@ -78,7 +107,8 @@ export function withIdentityCache(
             await l1.clear()
         },
         destroy: async () => {
-            await l1.destroy()
+            if (l1 instanceof IdleIdentityMemoryStore) l1.detach()
+            await l1.clear()
             await (backend as WithDestroyLifecycle<WaIdentityStore>).destroy?.()
         }
     }
