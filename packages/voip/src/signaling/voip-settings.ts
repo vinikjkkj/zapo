@@ -203,13 +203,8 @@ export class WaVoipSettings {
      * a positive number is accepted: a zero would order a report on every
      * packet.
      *
-     * The key exists in the audio profile only, where it is `"1500"`. The video
-     * profile does not carry it, and a video call runs on the compiled interval
-     * of the media session, which today is also 1500 ms. The two numbers
-     * matching is a coincidence, not a design: the compiled default came from a
-     * call capture, not from this key. Changing it changes the real interval of
-     * video calls, and of those only - audio calls switch to whatever arrives
-     * here.
+     * The key exists in the audio profile only, where it is `"1500"`; the video profile lacks it,
+     * so a video call, upgraded or not, runs on the media session's compiled 1000 ms.
      */
     get rtcpIntervalMs(): number | null {
         const value = this.getNumber(RATE_CONTROL_SECTION, RTCP_INTERVAL_MS_KEY, 0)

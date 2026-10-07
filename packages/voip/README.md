@@ -2,7 +2,7 @@
 
 WhatsApp **VOIP / calling** plugin for [`zapo-js`](https://github.com/vinikjkkj/zapo).
 
-Registers on `WaClient` via the plugin system and exposes everything at **`client.voip`**: MLow voice codec (WhatsApp's Opus variant through [`libmlow-wasm`](https://www.npmjs.com/package/libmlow-wasm)), RTP/SRTP, STUN, WebRTC/SCTP relay transport, and `<call>` signaling (offer / accept / preaccept / transport / relaylatency / mute / terminate).
+Registers on `WaClient` via the plugin system and exposes everything at **`client.voip`**: MLow voice codec (WhatsApp's Opus variant through [`libmlow-wasm-fork`](https://www.npmjs.com/package/libmlow-wasm-fork)), RTP/SRTP, STUN, WebRTC/SCTP relay transport, and `<call>` signaling (offer / accept / preaccept / transport / relaylatency / mute / terminate).
 
 Incoming `<call>`, call-class `<ack>`, and call `<receipt>` stanzas are handled automatically (prepend handlers return `true` so the core client does not double-ack).
 
@@ -11,23 +11,23 @@ Incoming `<call>`, call-class `<ack>`, and call `<receipt>` stanzas are handled 
 ## Install
 
 ```bash
-npm install zapo-js @zapo-js/voip libmlow-wasm
+npm install zapo-js @zapo-js/voip libmlow-wasm-fork
 ```
 
 Peer dependencies:
 
-| Package        | Required       | Purpose                                         |
-| -------------- | -------------- | ----------------------------------------------- |
-| `zapo-js`      | yes            | `WaClient` and plugin host                      |
-| `libmlow-wasm` | yes            | MLow encode/decode (WASM, no native build step) |
-| `@roamhq/wrtc` | for real calls | SCTP relay transport                            |
-| `ffmpeg` (CLI) | optional       | Decode pre-recorded audio files (`loadAudio`)   |
+| Package             | Required    | Purpose                                         |
+| ------------------- | ----------- | ----------------------------------------------- |
+| `zapo-js`           | yes         | `WaClient` and plugin host                      |
+| `libmlow-wasm-fork` | local media | MLow encode/decode (WASM, no native build step) |
+| `@roamhq/wrtc`      | local media | SCTP relay transport                            |
+| `ffmpeg` (CLI)      | optional    | Decode pre-recorded audio files (`loadAudio`)   |
 
 ```bash
 npm install @roamhq/wrtc
 ```
 
-Node **20.9+**. `libmlow-wasm` is ESM-only; the codec loads it via dynamic `import()`.
+Node **20.9+**. `libmlow-wasm-fork` is ESM-only; the codec loads it via dynamic `import()`. The media itself runs on [`@zapo-js/voip-media`](../voip-media), a dependency of this package; with [remote media](#media-in-the-browser-media--mode-remote-) neither `libmlow-wasm-fork` nor `@roamhq/wrtc` is needed here.
 
 ## Quick start
 
@@ -146,6 +146,90 @@ The local state is `call.stateData.handRaised`; the remote ones are the device J
 
 A raised hand travels as one of two distinct message types, and the peer picks which by a gate of its own: the `<user_action action='raise_hand'>` envelope, or an older top-level `<raise_hand>`. Both are read, and both produce the same state and the same event; this package announces its own hand with the first.
 
+## Media in the browser (`media: { mode: 'remote' }`)
+
+By default a call's media - the relays, SRTP, the codec and the audio clock - runs in this process. With `media: { mode: 'remote' }` none of it does: this process keeps the signaling, and the media runs wherever the audio is, typically the browser of whoever answers, on [`@zapo-js/voip-media`](../voip-media). No media flows through the server, and it needs neither `@roamhq/wrtc` nor `libmlow-wasm-fork`.
+
+Every change to a call's media plan leaves as `voip_call_media`; the host's events come back through `client.voip.media`. The plan carries the call's SRTP keys and relay credentials, so the channel between the two has to be private to that host.
+
+```ts
+import { decodeCallMediaEvent, encodeCallMediaMessage } from '@zapo-js/voip-media'
+
+const client = new WaClient({
+    store,
+    sessionId: 'main',
+    plugins: [voipPlugin({ media: { mode: 'remote' } })]
+})
+
+client.on('voip_call_media', ({ message }) => agentSocket.send(encodeCallMediaMessage(message)))
+agentSocket.on('message', (text) => client.voip.media.handleEvent(decodeCallMediaEvent(text)))
+
+// A host that connects after the call started asks for the whole plan:
+const snapshot = client.voip.media.snapshot(callId)
+if (snapshot) agentSocket.send(encodeCallMediaMessage(snapshot))
+```
+
+In the browser, which needs a secure context (HTTPS or `localhost`) for the microphone and the AudioWorklet:
+
+```ts
+import {
+    decodeCallMediaMessage,
+    encodeCallMediaEvent,
+    WaCallMediaReceiver
+} from '@zapo-js/voip-media'
+import { WaWebCallAudio, webMediaHost } from '@zapo-js/voip-media/web'
+
+const receiver = new WaCallMediaReceiver({
+    ...webMediaHost,
+    callId,
+    send: (event) => socket.send(encodeCallMediaEvent(event))
+})
+// Listen before any await: a plan that arrives meanwhile would be lost.
+socket.onmessage = (event) => receiver.receive(decodeCallMediaMessage(event.data))
+await receiver.start()
+
+// The accept stays on the server: the click that answers asks for it and opens the audio.
+let audio: WaWebCallAudio | undefined
+answerButton.onclick = async () => {
+    audio = await WaWebCallAudio.start(receiver.plane)
+    await fetch(`/calls/${callId}/accept`, { method: 'POST' }) // runs client.voip.acceptCall(callId)
+}
+
+// When `voip_call_ended` reaches the browser:
+await audio?.stop()
+receiver.stop()
+```
+
+On a video call, build the receiver above with `onInboundVideo` too, for the peer's frames, and hand the plane the camera:
+
+```ts
+import { WaWebCallVideoReceiver, WaWebCallVideoSender } from '@zapo-js/voip-media/web'
+
+const video = new WaWebCallVideoReceiver({
+    onFrame: (frame) => {
+        context2d.drawImage(frame, 0, 0)
+        frame.close()
+    }
+})
+// In place of the receiver above, wired to the socket the same way:
+const receiver = new WaCallMediaReceiver({
+    ...webMediaHost,
+    callId,
+    send: (event) => socket.send(encodeCallMediaEvent(event)),
+    onInboundVideo: (frame) => video.push(frame)
+})
+
+const [camera] = (await navigator.mediaDevices.getUserMedia({ video: true })).getVideoTracks()
+const sender = await WaWebCallVideoSender.start(receiver.plane, camera)
+
+// When the call ends, next to the audio:
+await sender.stop()
+camera.stop()
+video.close()
+```
+
+With remote media, `loadAudio`, `setExternalAudioMode` and `feedLiveAudio` throw, `sendReaction` returns `false`, `feedLiveVideo` returns `0`, and the `voip_call_inbound_*` events never fire: audio, video and reactions live on the media host.
+
 ## Events
 
 Emitted on `WaClient`:
@@ -164,6 +248,7 @@ Emitted on `WaClient`:
 | `voip_call_hand_raise`              | `{ call, participantJid, raised }`                  | A remote participant raised or lowered its hand                                                |
 | `voip_call_screen_share`            | `{ call: CallInfo; share: PeerScreenShare }`        | The peer reported a screen-share state change                                                  |
 | `voip_call_peer_video_state`        | `{ call: CallInfo; change: PeerVideoStateChange }`  | The peer changed its video state mid-call, which is also how it upgrades a voice call to video |
+| `voip_call_media`                   | `{ call: CallInfo; message: WaCallMediaMessage }`   | A change to the media plan, for the host carrying it; remote media only                        |
 | `voip_call_error`                   | `Error`                                             | Engine error                                                                                   |
 
 You can also use `client.voip.on('call_state', ...)` etc. for the manager-level events (`CallManagerEvents`).
@@ -242,6 +327,22 @@ client.on('voip_call_peer_video_state', async ({ call, change }) => {
     }
 })
 ```
+
+After accepting, our frames wait for the peer: they are held until it turns its
+own camera on (`WA_VIDEO_STATE.Enabled`) and 300 ms more, or three seconds at
+most. Measured against WhatsApp Web, a first packet that reaches the peer before
+the stream it sets up for our video exists leaves our video at its key frames
+alone for the rest of the call. `feedLiveVideo` returns `0` while held, and the
+stream opens on the first key frame fed after, so a source with a long key-frame
+interval adds up to one interval on top. An upgrade this side asked for is not
+held.
+
+A call that is video from the start is held the same way from the accept, ours
+or the peer's: our frames wait for the peer's first `<mute_v2>` after it and
+150 ms more, or two seconds at most. On calls we answer, the peer was measured
+setting up the stream for our video 160 to 600 ms after the accept, with its
+`<mute_v2>` landing close to it; a call we place waits on the same sign but has
+not been measured yet.
 
 Either way the peer's stream is subscribed on the relay and answered with
 key-frame requests and bandwidth feedback, and inbound frames arrive through
@@ -325,7 +426,7 @@ plugins: [voipPlugin({ useOriginalRelayPort: true })]
 
 ## Codec
 
-MLow runs through **`libmlow-wasm`** (≥ 0.1.1): 16 kHz, mono, 960-sample frames (60 ms), `useSmpl: true`, DTX enabled. No `koffi`, no bundled native libraries.
+MLow runs through **`libmlow-wasm-fork`** (≥ 0.2.0): 16 kHz, mono, 960-sample frames (60 ms), `useSmpl: true`, DTX enabled. No `koffi`, no bundled native libraries.
 
 The signaling and media stack (RTP/SRTP, SCTP relay, codec, audio engine) is internal to the package; use `client.voip` and the events above.
 

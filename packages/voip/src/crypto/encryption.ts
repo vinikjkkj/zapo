@@ -1,9 +1,8 @@
 import { hkdf } from 'zapo-js/crypto'
 
-import { TEXT_ENCODER } from '../bytes.js'
-import type { SrtpKeyingMaterial } from '../types.js'
+import { randomBytes, type SrtpKeyingMaterial } from '@zapo-js/voip-media'
 
-import { randomBytes } from './primitives.js'
+import { TEXT_ENCODER } from '../bytes.js'
 
 /**
  * Derives the end-to-end SRTP keying material of one device from the call key.

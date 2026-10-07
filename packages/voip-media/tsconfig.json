@@ -1,0 +1,10 @@
+{
+    "extends": "../../tsconfig.packages.json",
+    "compilerOptions": {
+        "types": [],
+        "lib": ["ES2020", "DOM"],
+        "noEmit": true
+    },
+    "include": ["src"],
+    "exclude": ["dist", "node_modules", "src/**/__tests__/**", "src/node/**"]
+}

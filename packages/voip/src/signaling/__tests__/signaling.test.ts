@@ -41,6 +41,15 @@ test('buildTerminateStanza targets the peer device JID with a terminate payload'
     assert.equal(inner.attrs['call-id'], 'CALLID')
 })
 
+test('a reject goes to the caller device, not to its bare user', () => {
+    const node = buildRejectStanza('50062877036657:76@lid', 'CALLID', '50062877036657:76@lid')
+    assert.equal(
+        node.attrs.to,
+        '50062877036657:76@lid',
+        'a companion caller keeps ringing on a reject addressed to its bare user'
+    )
+})
+
 test('buildRejectStanza emits a reject payload', () => {
     const node = buildRejectStanza('12345@lid', 'CALLID', '12345@lid')
     const inner = (node.content as unknown as Array<{ tag: string }>)[0]

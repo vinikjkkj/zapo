@@ -1,7 +1,8 @@
 import type { WaClientPluginContext } from 'zapo-js'
 import type { BinaryNode } from 'zapo-js/transport'
 
-import type { WaCallReaction } from './app-data/protocol.js'
+import type { WaCallMediaMessage, WaCallReaction } from '@zapo-js/voip-media'
+
 import type { CallInfo } from './call/call-state.js'
 import type { PeerScreenShare } from './signaling/screen-share.js'
 
@@ -39,7 +40,11 @@ export enum EndCallReason {
     /** The call had a media path and lost it, with no leg left to carry it. */
     RelayLost = 'relay_lost',
     DoNotDisturb = 'do_not_disturb',
-    Unknown = 'unknown'
+    Unknown = 'unknown',
+    /** Another device of this account answered the incoming call. */
+    AcceptedElsewhere = 'accepted_elsewhere',
+    /** Another device of this account declined the incoming call. */
+    RejectedElsewhere = 'rejected_elsewhere'
 }
 
 export type CallTransition =
@@ -57,23 +62,6 @@ export type CallTransition =
     | { type: 'video_state_changed'; off: boolean }
     | { type: 'hand_raise_changed'; raised: boolean }
     | { type: 'screen_share_changed'; sharing: boolean }
-
-export interface SrtpKeyingMaterial {
-    masterKey: Uint8Array
-    masterSalt: Uint8Array
-}
-
-export enum PayloadType {
-    WhatsAppOpus = 120,
-    WhatsAppH264 = 97,
-    /**
-     * Lowest payload type of WhatsApp's proprietary Reed-Solomon video FEC
-     * family, which the client emits as `103 + 3k`. Not an RTX stream: the
-     * payload is opaque parity, with no prefix and no original sequence number,
-     * and it travels on the FEC stream's own SSRC.
-     */
-    WhatsAppVideoFec = 103
-}
 
 export interface InboundVideoRtpPacket {
     readonly payloadType: number
@@ -266,28 +254,32 @@ export interface CallManagerEvents {
     call_hand_raise: (call: CallInfo, participantJid: string, raised: boolean) => void
     /** See `voip_call_reaction`. */
     call_reaction: (call: CallInfo, reaction: WaCallReaction) => void
+    /** See `voip_call_media`. */
+    call_media: (call: CallInfo, message: WaCallMediaMessage) => void
     call_error: (error: Error) => void
 }
 
 export interface AudioSender {
-    sendCapturedAudio(data: Float32Array): void
+    /**
+     * Takes one captured chunk, its first sample captured at `capturedAtMs` (`performance.now()`).
+     * `data` is the engine's reused buffer: consume or copy it before returning.
+     */
+    sendCapturedAudio(data: Float32Array, capturedAtMs?: number): void
 }
 
 export interface WaAudioEngineConfig {
     sampleRate: number
-    /** Samples read from the outbound source on every capture tick. */
+    /** Samples per chunk read from the outbound source; a tick moves as many as time owes. */
     captureChunkSize: number
     /**
-     * Samples drained from the jitter buffer on every playback tick. Keep it at
-     * `sampleRate / 1000 * intervalMs` so playout advances at wall-clock speed:
-     * the engine raises it to one tick's worth when it is set lower.
+     * Samples per block pulled from the playout source, as many blocks per tick as time owes.
+     * Raised to one tick's worth (`sampleRate / 1000 * intervalMs`) when set lower.
      */
     playbackOutputSize: number
     /**
-     * Jitter buffer capacity in samples. Never smaller than one inbound packet,
-     * which is 120 ms carrying two aggregated MLow frames.
+     * How often both clocks check what they owe. The audio is paced by
+     * elapsed time, not by how many ticks fired.
      */
-    maxBufferSize: number
     intervalMs: number
 }
 
@@ -295,20 +287,8 @@ export const DEFAULT_AUDIO_CONFIG: WaAudioEngineConfig = {
     sampleRate: 16000,
     captureChunkSize: 960,
     playbackOutputSize: 960,
-    maxBufferSize: 11520,
     intervalMs: 60
 }
-
-export const SRTP_SEND_AUTH_TAG_LEN = 4
-export const SRTP_RECV_AUTH_TAG_LEN = 4
-
-export const SRTP_AUTH_TAG_LEN = 4
-
-export const SRTP_LABEL = {
-    ENCRYPTION: 0x00,
-    AUTH: 0x01,
-    SALT: 0x02
-} as const
 
 export const WA_RELAY_PORT = 3480
 

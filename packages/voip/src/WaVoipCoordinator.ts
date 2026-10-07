@@ -1,6 +1,8 @@
 import { type Logger, type LogLevel, type WaClientPluginContext } from 'zapo-js'
 import { WA_MESSAGE_TAGS } from 'zapo-js/protocol'
 
+import type { WaCallMediaEventMessage, WaCallMediaMessage } from '@zapo-js/voip-media'
+
 import type { CallInfo } from './call/call-state.js'
 import { WaCallManager } from './call/WaCallManager.js'
 import { routeCallAck, routeCallReceipt, routeCallStanza } from './signaling/bridge.js'
@@ -51,6 +53,23 @@ export interface WaVoipCoordinatorOptions {
      * tuning knob.
      */
     readonly useRawUdpTransport?: boolean
+    /**
+     * Where call media runs. `local` (default) carries it in this process on `@roamhq/wrtc` and
+     * `libmlow-wasm-fork`. `remote` emits each plan change as `voip_call_media` for a host
+     * running `WaCallMediaReceiver`, whose events return through {@link WaVoipCoordinator.media}.
+     */
+    readonly media?: { readonly mode: 'local' | 'remote' }
+}
+
+/** The side of `client.voip` a remote media host talks to. */
+export interface WaVoipMediaApi {
+    /** Hands over an event the media host sent back, as it arrived. */
+    handleEvent(message: WaCallMediaEventMessage): void
+    /**
+     * The whole media plan of a call as it stands, for a host that joins late or
+     * missed a message; `null` for an unknown call or local media.
+     */
+    snapshot(callId: string): WaCallMediaMessage | null
 }
 
 /**
@@ -65,6 +84,12 @@ export class WaVoipCoordinator {
     private readonly logger: Logger
     private readonly unregisterHandlers: Array<() => void> = []
 
+    /** What a remote media host talks to; see {@link WaVoipCoordinatorOptions.media}. */
+    readonly media: WaVoipMediaApi = {
+        handleEvent: (message) => this.manager.handleMediaEvent(message.callId, message.event),
+        snapshot: (callId) => this.manager.getMediaSnapshot(callId)
+    }
+
     constructor(ctx: WaClientPluginContext, options: WaVoipCoordinatorOptions = {}) {
         this.deps = ctx.deps
         this.logger = ctx.logger.child({ scope: '@zapo-js/voip' }, { level: options.logLevel })
@@ -74,7 +99,8 @@ export class WaVoipCoordinator {
             logger: this.logger,
             maxConcurrentCalls: options.maxConcurrentCalls,
             useOriginalRelayPort: options.useOriginalRelayPort,
-            useRawUdpTransport: options.useRawUdpTransport
+            useRawUdpTransport: options.useRawUdpTransport,
+            mediaMode: options.media?.mode
         })
         this.registerIncomingHandlers(ctx)
         this.wireClientEvents(ctx)
@@ -179,6 +205,9 @@ export class WaVoipCoordinator {
      * and opening the local video sender. The request arrives as a
      * `voip_call_peer_video_state` with `change.state` of `UpgradeRequestV2`; no-op when the
      * peer has none outstanding.
+     *
+     * Our frames are then held until the peer's camera is on, or three seconds at most:
+     * {@link feedLiveVideo} returns `0` meanwhile, and the stream opens on the next key frame.
      */
     async acceptVideoUpgrade(callId: string): Promise<void> {
         return this.manager.acceptVideoUpgrade(callId)
@@ -226,7 +255,9 @@ export class WaVoipCoordinator {
     /**
      * Feed one H.264 Annex-B encoded access unit into an active video call.
      * `timestampUs` is the capture timestamp in microseconds. Returns the number
-     * of RTP packets sent, or `0` when video media is not active.
+     * of RTP packets sent, or `0` when video media is not active, is still held
+     * for the peer after {@link acceptVideoUpgrade}, or waits for a key frame to
+     * open on. Always `0` with remote media, where the media host sends the video.
      */
     feedLiveVideo(callId: string, data: Uint8Array, timestampUs: number): number {
         return this.manager.feedLiveVideo(callId, data, timestampUs)
@@ -361,6 +392,9 @@ export class WaVoipCoordinator {
         })
         this.manager.on('call_reaction', (call, reaction) => {
             ctx.emit('voip_call_reaction', { call, reaction })
+        })
+        this.manager.on('call_media', (call, message) => {
+            ctx.emit('voip_call_media', { call, message })
         })
         this.manager.on('call_error', (error) => {
             ctx.emit('voip_call_error', error)

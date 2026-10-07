@@ -9,7 +9,7 @@ import { CallMediaType, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
 import { WaCallMediaSession } from '../WaCallMediaSession.js'
 
-import { createSessionDelegate } from './_helpers.js'
+import { createSessionDelegate, recordMediaLink } from './_helpers.js'
 
 const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 const PEER_JID = 'peer:0@lid'
@@ -49,6 +49,7 @@ function createHarness(
         } as unknown as WaVoipDeps,
         logger: createNoopLogger(),
         info: call,
+        createMediaLink: recordMediaLink().createMediaLink,
         delegate: createSessionDelegate({
             emitState: () => {
                 counters.states++

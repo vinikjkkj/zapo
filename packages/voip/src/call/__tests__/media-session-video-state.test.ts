@@ -14,7 +14,7 @@ import { CallMediaType, type PeerVideoStateChange, type WaVoipDeps } from '../..
 import { CallInfo } from '../call-state.js'
 import { WaCallMediaSession } from '../WaCallMediaSession.js'
 
-import { createSessionDelegate } from './_helpers.js'
+import { createSessionDelegate, type RecordingMediaLink, recordMediaLink } from './_helpers.js'
 
 /**
  * Call id and peer device jid of a capture whose SSRCs were read out of the official
@@ -36,23 +36,23 @@ interface SubscriptionUpdate {
 
 interface SessionInternals {
     selfDeviceJid: string
-    selfStreamSsrcs: number[]
     peerStreamSsrcs: number[]
-    videoRtpSession: { getSsrc: () => number } | null
     videoSendPathOpened: boolean
-    sctpRelay: {
-        setStreamSsrcs: (selfSsrcs: number[], peerSsrcs: number[]) => void
-        resendSubscriptions: () => void
-        cleanup: () => void
-    }
 }
 
 interface Harness {
     readonly session: WaCallMediaSession
     readonly call: CallInfo
     readonly changes: PeerVideoStateChange[]
+    /**
+     * What the relay is told per plan change that moves the video paths: `video.receive`
+     * subscribes `peerVideoStreams`, `video.send` registers `selfVideoStreams`.
+     */
     readonly subscriptions: SubscriptionUpdate[]
     readonly resendCount: () => number
+    /** Our streams the relay registers, as the latest plan leaves them. */
+    readonly registeredSelfStreams: () => number[]
+    readonly link: RecordingMediaLink
     readonly internals: SessionInternals
     /** Every `<video>` child this side put on the wire, in order. */
     readonly sentVideoStates: BinaryNode[]
@@ -71,9 +71,8 @@ interface Harness {
  */
 function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness {
     const changes: PeerVideoStateChange[] = []
-    const subscriptions: SubscriptionUpdate[] = []
     const sentVideoStates: BinaryNode[] = []
-    let resends = 0
+    const { link, createMediaLink } = recordMediaLink()
     let sendFailure: string | null = null
     let sendsBeforeFailure = 0
     let duringSend: (() => void) | null = null
@@ -105,6 +104,7 @@ function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness 
         deps,
         logger: createNoopLogger(),
         info: call,
+        createMediaLink,
         delegate: createSessionDelegate({
             emitPeerVideoState: (_call, change) => {
                 changes.push(change)
@@ -115,22 +115,45 @@ function createSession(mediaType: CallMediaType = CallMediaType.Audio): Harness 
     const internals = session as unknown as SessionInternals
     internals.selfDeviceJid = SELF_DEVICE_JID
     internals.peerStreamSsrcs = [PEER_AUDIO_MAIN_SSRC]
-    internals.sctpRelay = {
-        setStreamSsrcs: (selfSsrcs, peerSsrcs) => {
-            subscriptions.push({ selfSsrcs: [...selfSsrcs], peerSsrcs: [...peerSsrcs] })
-        },
-        resendSubscriptions: () => {
-            resends++
-        },
-        cleanup: () => {}
+
+    const union = (base: readonly number[], extra: readonly number[]): number[] => [
+        ...base,
+        ...extra.filter((ssrc) => !base.includes(ssrc))
+    ]
+    const subscriptions = (): SubscriptionUpdate[] => {
+        const out: SubscriptionUpdate[] = []
+        let ssrcs = link.plan.ssrcs
+        for (const update of link.updates) {
+            if (update.ssrcs) ssrcs = update.ssrcs
+            if (!update.video || !ssrcs) continue
+            out.push({
+                selfSsrcs: update.video.send
+                    ? union(ssrcs.selfStreams, ssrcs.selfVideoStreams)
+                    : [...ssrcs.selfStreams],
+                peerSsrcs: update.video.receive
+                    ? union(ssrcs.peerStreams, ssrcs.peerVideoStreams)
+                    : [...ssrcs.peerStreams]
+            })
+        }
+        return out
     }
 
     return {
         session,
         call,
         changes,
-        subscriptions,
-        resendCount: () => resends,
+        get subscriptions() {
+            return subscriptions()
+        },
+        resendCount: () => subscriptions().length,
+        registeredSelfStreams: () => {
+            const { ssrcs, video } = link.plan
+            if (!ssrcs) return []
+            return video?.send
+                ? union(ssrcs.selfStreams, ssrcs.selfVideoStreams)
+                : [...ssrcs.selfStreams]
+        },
+        link,
         internals,
         sentVideoStates,
         failSends: (reason, afterSends = 0) => {
@@ -289,7 +312,11 @@ test('the first video state subscribes the peer video slots and opens a video rt
     )
     assert.equal(peerSsrcs.length, 4, 'the three video slots join the one audio slot')
     assert.equal(harness.resendCount(), 1)
-    assert.notEqual(harness.internals.videoRtpSession, null)
+    assert.notEqual(
+        harness.link.plan.ssrcs?.selfVideo ?? 0,
+        0,
+        'the plan carries the SSRC the video rtp session opens on'
+    )
 
     harness.session.cleanup()
 })
@@ -373,7 +400,7 @@ test('an upgrade request goes out as UpgradeRequestV2 and opens no sender yet', 
 
 test('the peer accept concludes the handshake and opens the local sender', async () => {
     const harness = createActiveSession()
-    const audioSsrcCount = harness.internals.selfStreamSsrcs.length
+    const audioSsrcCount = harness.registeredSelfStreams().length
 
     const pending = harness.session.requestVideoUpgrade()
     await Promise.resolve()
@@ -382,14 +409,12 @@ test('the peer accept concludes the handshake and opens the local sender', async
     assert.equal(await pending, WA_VIDEO_UPGRADE_RESULT.Accepted)
     assert.equal(harness.internals.videoSendPathOpened, true)
     assert.equal(
-        harness.internals.selfStreamSsrcs.length,
+        harness.registeredSelfStreams().length,
         audioSsrcCount + 3,
         'the three video slots join the ones this side already registered'
     )
     assert.ok(
-        harness.internals.selfStreamSsrcs.includes(
-            harness.internals.videoRtpSession?.getSsrc() ?? -1
-        ),
+        harness.registeredSelfStreams().includes(harness.link.plan.ssrcs?.selfVideo ?? -1),
         'the relay is told about the very SSRC the video sender stamps its packets with'
     )
     assert.equal(harness.call.stateData.videoOff, false)

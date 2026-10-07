@@ -181,6 +181,16 @@ jobs:
             - run: npx turbo run build --filter=@zapo-js/voip
             - run: npm test -w packages/voip
 
+    test-voip-media:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+
+        steps:
+            - uses: actions/checkout@v4
+            - uses: ./.github/actions/setup-node
+            - run: npx turbo run build --filter=@zapo-js/voip-media
+            - run: npm test -w packages/voip-media
+
     test-wam:
         runs-on: ubuntu-latest
         timeout-minutes: 15
@@ -401,6 +411,7 @@ jobs:
             - test-sqlite
             - test-mcp-server
             - test-voip
+            - test-voip-media
             - test-wam
             - test-native
             - test-mysql

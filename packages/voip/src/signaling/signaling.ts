@@ -11,7 +11,8 @@ import {
 } from 'zapo-js/transport'
 import { bytesToHex, toError, tryAsNumber } from 'zapo-js/util'
 
-import { randomBytes } from '../crypto/primitives.js'
+import { randomBytes } from '@zapo-js/voip-media'
+
 import type {
     NodeInfo,
     PeerVideoStateChange,
@@ -564,15 +565,20 @@ export function buildRelaylatencyForwardStanza(
     }
 }
 
+/**
+ * The reject goes to the device that sent the offer, as the accept and the
+ * terminate do. Addressed to the bare user instead, the server acknowledges it
+ * and never delivers it to a companion caller, which keeps ringing; a phone,
+ * device 0, is the same jid either way.
+ */
 export function buildRejectStanza(
     peerJid: string,
     callId: string,
     callCreator: string
 ): BinaryNode {
-    const toJidClean = toUserJid(peerJid)
     return {
         tag: 'call',
-        attrs: { to: toJidClean, id: generateCallStanzaId() },
+        attrs: { to: peerJid, id: generateCallStanzaId() },
         content: [
             {
                 tag: 'reject',

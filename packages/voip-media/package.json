@@ -1,0 +1,66 @@
+{
+    "name": "@zapo-js/voip-media",
+    "version": "0.1.0",
+    "description": "WhatsApp call media plane for zapo-js – relay transport, STUN, SRTP, RTP/RTCP and the MLow codec, with a Node host and a browser host",
+    "license": "MIT",
+    "author": "vinikjkkj <contact@vinicius.email> (https://github.com/vinikjkkj)",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/vinikjkkj/zapo.git",
+        "directory": "packages/voip-media"
+    },
+    "main": "dist/index.js",
+    "module": "dist/esm/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/esm/index.js",
+            "default": "./dist/index.js"
+        },
+        "./node": {
+            "types": "./dist/node/index.d.ts",
+            "require": "./dist/node/index.js",
+            "import": "./dist/esm/node/index.js",
+            "default": "./dist/node/index.js"
+        },
+        "./web": {
+            "types": "./dist/web/index.d.ts",
+            "require": "./dist/web/index.js",
+            "import": "./dist/esm/web/index.js",
+            "default": "./dist/web/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "sideEffects": false,
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.build.cjs.json && tsc -p tsconfig.build.esm.json && node ../../scripts/finalize-esm-build.cjs",
+        "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
+        "test": "node --import tsx --test \"src/**/__tests__/**/*.test.ts\""
+    },
+    "peerDependencies": {
+        "@roamhq/wrtc": ">=0.10.0",
+        "libmlow-wasm-fork": "^0.2.0"
+    },
+    "peerDependenciesMeta": {
+        "@roamhq/wrtc": {
+            "optional": true
+        },
+        "libmlow-wasm-fork": {
+            "optional": true
+        }
+    },
+    "devDependencies": {
+        "@roamhq/wrtc": "^0.10.0",
+        "libmlow-wasm-fork": "^0.2.0"
+    },
+    "engines": {
+        "node": ">=20.9.0"
+    }
+}

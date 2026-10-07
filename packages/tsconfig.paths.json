@@ -43,6 +43,8 @@
             "@transport/*": ["src/transport/*"],
             "@util/*": ["src/util/*"],
             "@version-spec": ["src/version-spec.ts"],
+            "@zapo-js/voip-media/node": ["packages/voip-media/src/node/index.ts"],
+            "@zapo-js/voip-media/web": ["packages/voip-media/src/web/index.ts"],
             "@zapo-js/*": ["packages/*/src/index.ts"]
         }
     }

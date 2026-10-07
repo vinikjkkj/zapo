@@ -8,7 +8,7 @@ import { CallMediaType, type WaVoipDeps } from '../../types.js'
 import { CallInfo } from '../call-state.js'
 import { WaCallMediaSession } from '../WaCallMediaSession.js'
 
-import { createSessionDelegate } from './_helpers.js'
+import { createSessionDelegate, recordMediaLink } from './_helpers.js'
 
 const ID = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 const PEER_JID = '50062877036657:76@lid'
@@ -56,6 +56,7 @@ function createSession(sendNode?: (node: BinaryNode) => Promise<void>): HandRais
         } as unknown as WaVoipDeps,
         logger: createNoopLogger(),
         info: call,
+        createMediaLink: recordMediaLink().createMediaLink,
         delegate: createSessionDelegate({
             emitState: (info) => {
                 states.push(info)
@@ -65,10 +66,6 @@ function createSession(sendNode?: (node: BinaryNode) => Promise<void>): HandRais
             }
         })
     })
-
-    ;(session as unknown as { sctpRelay: { cleanup: () => void } }).sctpRelay = {
-        cleanup: () => {}
-    }
 
     return { session, sent, handRaises, states }
 }

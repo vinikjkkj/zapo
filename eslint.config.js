@@ -57,6 +57,7 @@ module.exports = [
                     './packages/store-mongo/tsconfig.json',
                     './packages/media-utils/tsconfig.json',
                     './packages/voip/tsconfig.json',
+                    './packages/voip-media/tsconfig.test.json',
                     './packages/fake-server/tsconfig.json',
                     './packages/mcp-server/tsconfig.json',
                     './packages/wam/tsconfig.json'
@@ -94,6 +95,7 @@ module.exports = [
                         './packages/store-mongo/tsconfig.json',
                         './packages/media-utils/tsconfig.json',
                         './packages/voip/tsconfig.json',
+                        './packages/voip-media/tsconfig.test.json',
                         './packages/fake-server/tsconfig.json',
                         './packages/mcp-server/tsconfig.json'
                     ]
@@ -168,6 +170,49 @@ module.exports = [
             'no-restricted-imports': 'off'
         }
     },
+    // voip-media is installed on its own in a browser, where neither zapo-js nor
+    // Node exists. The core runs on both hosts and only sees what they inject; web/
+    // and node/ are the two hosts and never reach into each other. Tests run under
+    // Node and may use anything.
+    ...[
+        {
+            files: ['packages/voip-media/src/**/*.ts'],
+            ignores: ['packages/voip-media/src/node/**', 'packages/voip-media/src/web/**'],
+            forbidden: ['node:*', '@roamhq/wrtc', '**/node/**', '**/web/**'],
+            message:
+                'The voip-media core runs on every host: a host-specific piece lives in node/ or web/ and is injected.'
+        },
+        {
+            files: ['packages/voip-media/src/web/**/*.ts'],
+            ignores: [],
+            forbidden: ['node:*', '@roamhq/wrtc', '**/node/**'],
+            message: 'voip-media/web runs in the browser: nothing from Node or from node/.'
+        },
+        {
+            files: ['packages/voip-media/src/node/**/*.ts'],
+            ignores: [],
+            forbidden: ['**/web/**'],
+            message: 'voip-media/node is the Node host: the browser implementations stay in web/.'
+        }
+    ].map(({ files, ignores, forbidden, message }) => ({
+        files,
+        ignores: [...ignores, 'packages/voip-media/src/**/__tests__/**'],
+        rules: {
+            'no-restricted-imports': [
+                'error',
+                {
+                    patterns: [
+                        {
+                            group: ['zapo-js', 'zapo-js/*', '@zapo-js/*'],
+                            message:
+                                'voip-media runs in the browser without zapo-js. Keep the helper in this package.'
+                        },
+                        { group: forbidden, message }
+                    ]
+                }
+            ]
+        }
+    })),
     {
         files: [
             'packages/fake-server/src/infra/**/*.ts',
