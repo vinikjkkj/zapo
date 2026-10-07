@@ -193,72 +193,22 @@ test('with no leg answering pings, media still goes out', async (t) => {
     assert.ok([a, b].includes(sendMediaVia()))
 })
 
-/** RTCP of a peer in silence: one authenticated packet a second on the leg it arrives on. */
-async function peerRtcpEverySecond(harness: Harness, leg: FakeLeg, ms: number): Promise<void> {
-    for (let elapsed = 0; elapsed < ms; elapsed += 1_000) {
-        harness.relay.notePeerMedia(leg.id)
-        await harness.advance(1_000)
-    }
-}
-
 /**
- * The relay a leg was measured on that takes our uplink and forwards nothing back: it
- * answers every ping, so only the missing peer media gives it away.
+ * Measured live against WhatsApp Web: moving our media off a leg that stopped hearing the
+ * peer does not make the official client follow, and leaves that relay without our uplink.
+ * Only the side that loses its leg recovers it, by following the peer.
  */
-test('an elected leg that answers pings but never hears the peer gives the media up at ~5 s', async (t) => {
-    const { relay, a, b, advance, sendMediaVia } = await dial(t)
+test('an elected leg that stops hearing the peer keeps our media, and hears it again', async (t) => {
+    const { relay, a, advance, sendMediaVia } = await dial(t)
     relay.setMediaFlowing()
+    relay.notePeerMedia(a.id)
     assert.equal(sendMediaVia(), a)
-
-    await advance(4_000)
-    assert.equal(sendMediaVia(), a, 'four seconds without the peer is not yet deaf')
-
-    await advance(2_000)
-    assert.equal(sendMediaVia(), b)
-    assert.equal(relay.getConnectedCount(), 2, 'the deaf leg stays open')
-})
-
-test('the peer RTCP arriving in silence keeps the elected leg', async (t) => {
-    const harness = await dial(t)
-    harness.relay.setMediaFlowing()
-    assert.equal(harness.sendMediaVia(), harness.a)
-
-    await peerRtcpEverySecond(harness, harness.a, 12_000)
-
-    assert.equal(harness.sendMediaVia(), harness.a)
-})
-
-test('a leg the media moved to that hears nothing either keeps it, with no bounce', async (t) => {
-    const { relay, a, b, advance, sendMediaVia } = await dial(t)
-    relay.setMediaFlowing()
-    assert.equal(sendMediaVia(), a)
-    await advance(6_000)
-    assert.equal(sendMediaVia(), b)
 
     for (let i = 0; i < 5; i++) {
-        await advance(3_000)
-        assert.equal(sendMediaVia(), b)
+        await advance(4_000)
+        assert.equal(sendMediaVia(), a, `still on the leg ${(i + 1) * 4} s into the silence`)
     }
-})
-
-test('with no leg of another relay, a leg that hears nothing keeps the media', async (t) => {
-    const { relay, a, advance, sendMediaVia } = await dial(t, [3, 3])
-    relay.setMediaFlowing()
-    assert.equal(sendMediaVia(), a)
-
-    await advance(12_000)
-
-    assert.equal(sendMediaVia(), a)
-})
-
-test('a deaf leg that hears the peer again takes the media back', async (t) => {
-    const { relay, a, b, advance, sendMediaVia } = await dial(t)
-    relay.setMediaFlowing()
-    assert.equal(sendMediaVia(), a)
-    await advance(6_000)
-    assert.equal(sendMediaVia(), b)
 
     relay.notePeerMedia(a.id)
-
     assert.equal(sendMediaVia(), a)
 })

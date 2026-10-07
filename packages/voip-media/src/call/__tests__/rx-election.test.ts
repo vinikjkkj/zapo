@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { test, type TestContext } from 'node:test'
 
 import { peerConnectionNotDialled } from '../../__tests__/_helpers.js'
 import { SrtpSession } from '../../crypto/srtp.js'
@@ -92,10 +92,24 @@ interface Call {
     nextPeerPacket(ms?: number): Uint8Array
     /** The leg one of our video frames leaves through. */
     sendFrameVia(): FakeLeg
+    /** Moves the clock, and with `t` given to `startCall` the relay's timers too. */
+    idle(ms: number): Promise<void>
 }
 
-/** A video call over two relays, A and B, with media flowing and nothing heard from the peer. */
-async function startCall(): Promise<Call> {
+/** A relay's answer to a ping: the same header with the 0x0802 type, transaction id echoed. */
+function pongTo(datagram: Uint8Array): Uint8Array | null {
+    if (((datagram[0] << 8) | datagram[1]) !== 0x0801) return null
+    const pong = datagram.slice()
+    pong[1] = 0x02
+    return pong
+}
+
+/**
+ * A video call over two relays, A and B, both answering pings, with media flowing and nothing
+ * heard from the peer. With `t`, the relay's intervals run on the mock clock `idle` moves.
+ */
+async function startCall(t?: TestContext): Promise<Call> {
+    t?.mock.timers.enable({ apis: ['setInterval'] })
     let now = 1_000
     const legs: FakeLeg[] = []
     const plane = new WaCallMediaPlane({
@@ -124,6 +138,8 @@ async function startCall(): Promise<Call> {
                 send: (data) => {
                     if (!open) return false
                     leg.sent.push(data.slice())
+                    const pong = pongTo(data)
+                    if (pong) queueMicrotask(() => options.onMessage(pong))
                     return true
                 },
                 close: () => {
@@ -167,6 +183,13 @@ async function startCall(): Promise<Call> {
             const carrying = legs.filter((leg, i) => mediaOn(leg) > before[i])
             assert.equal(carrying.length, 1, 'one leg carries the frame')
             return carrying[0]
+        },
+        idle: async (ms) => {
+            for (let elapsed = 0; elapsed < ms; elapsed += 100) {
+                now += 100
+                t?.mock.timers.tick(100)
+                await new Promise<void>((resolve) => setImmediate(resolve))
+            }
         }
     }
 }
@@ -226,4 +249,32 @@ test('a peer that still sends through every leg does not make our media hop', as
     }
 
     assert.deepEqual([...used], [call.a])
+})
+
+/**
+ * Live, against WhatsApp Web: our leg stopped getting the peer's media while its relay kept
+ * answering pings. The official client does not follow our media elsewhere, so it stays put,
+ * and the peer's media that comes back on that leg reaches the plane.
+ */
+test('a leg that stops hearing the peer keeps our media and delivers the peer when it returns', async (t) => {
+    const call = await startCall(t)
+    t.after(() => call.plane.stop())
+    for (let i = 0; i < 10; i++) call.a.deliver(call.nextPeerPacket())
+    assert.equal(call.sendFrameVia(), call.a)
+    const heardBefore = call.plane.getStats().audioReceived
+
+    for (let second = 0; second < 20; second++) {
+        for (let i = 0; i < 50; i++) call.nextPeerPacket(0)
+        await call.idle(1_000)
+        assert.equal(
+            call.sendFrameVia(),
+            call.a,
+            `still on the leg ${second + 1} s into the silence`
+        )
+    }
+
+    for (let i = 0; i < 10; i++) call.a.deliver(call.nextPeerPacket())
+
+    assert.equal(call.plane.getStats().audioReceived, heardBefore + 10)
+    assert.equal(call.sendFrameVia(), call.a)
 })

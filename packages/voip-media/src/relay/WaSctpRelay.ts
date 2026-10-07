@@ -52,11 +52,6 @@ const CONFIG = {
      * through every leg never moves it; short, so following a peer that moved costs half a second.
      */
     RX_ELECTION_HOLD_MS: 400,
-    /**
-     * How long our media leg may hear none of the peer's media, RTP or RTCP, once media flows.
-     * The official waits 20 s; the peer's RTCP arrives about every second even in silence.
-     */
-    MEDIA_RX_TIMEOUT_MS: 5000,
     ICE_DISCONNECT_GRACE_MS: 4000,
     FIXED_FINGERPRINT:
         'sha-256 F9:CA:0C:98:A3:CC:71:D6:42:CE:5A:E2:53:D2:15:20:D3:1B:BA:D8:57:A4:F0:AF:BE:0B:FB:F3:6B:0C:A0:68'
@@ -160,8 +155,6 @@ export interface Connection {
     pingUnansweredSince: number | null
     /** Out of the media election until a pong arrives; the leg itself stays up. */
     unresponsive: boolean
-    /** Carried our media and heard none of the peer's; out of the election until it does. */
-    deaf: boolean
     localUfrag: string
     stableRoutingConnId: bigint
     /** Born with the connection, and used by every STUN message it emits. */
@@ -224,9 +217,6 @@ export class WaSctpRelay {
     /** The one leg media goes out on; see {@link sendMedia}. */
     private mediaLeg: Connection | null = null
     private pingIntervalMs = CONFIG.PING_SETUP_INTERVAL_MS
-    /** When media started flowing, and when the current media leg took the media. */
-    private mediaFlowingAt: number | null = null
-    private mediaLegSince = 0
 
     constructor(options: WaSctpRelayOptions) {
         this.logger = options.logger ?? createNoopLogger()
@@ -404,7 +394,6 @@ export class WaSctpRelay {
             peerMediaAt: null,
             pingUnansweredSince: null,
             unresponsive: false,
-            deaf: false,
             localUfrag: '',
             stableRoutingConnId: 0n,
             stunTransactionId: createStunTransactionId(),
@@ -1082,7 +1071,6 @@ export class WaSctpRelay {
                 return
             }
             this.checkResponsive(conn)
-            this.checkHearsPeer(conn)
             this.sendPing(conn)
             keepaliveCount++
 
@@ -1154,34 +1142,8 @@ export class WaSctpRelay {
         })
     }
 
-    /**
-     * Takes our media leg out of the election once it has heard none of the peer's media for
-     * `MEDIA_RX_TIMEOUT_MS` of flowing media, if a leg of another relay could take over: a relay
-     * can take our uplink and answer pings while forwarding nothing back.
-     */
-    private checkHearsPeer(conn: Connection): void {
-        if (conn !== this.mediaLeg || conn.deaf || this.mediaFlowingAt === null) return
-        const heardAt = Math.max(this.mediaFlowingAt, this.mediaLegSince, conn.peerMediaAt ?? 0)
-        if (this.now() - heardAt < CONFIG.MEDIA_RX_TIMEOUT_MS) return
-        if (!this.hasLegOfAnotherRelay(conn)) return
-        conn.deaf = true
-        this.logger.warn('relay leg hears none of the peer, out of the media election', {
-            connectionId: conn.id
-        })
-    }
-
-    private hasLegOfAnotherRelay(conn: Connection): boolean {
-        for (const other of this.connections.values()) {
-            if (other.relayInfo.relayId !== conn.relayInfo.relayId && this.isElectable(other)) {
-                return true
-            }
-        }
-        return false
-    }
-
     /** Moves every leg's keepalive to the cadence of an accepted call; later legs start on it. */
     setMediaFlowing(): void {
-        this.mediaFlowingAt ??= this.now()
         if (this.pingIntervalMs === CONFIG.PING_INTERVAL_MS) return
         this.pingIntervalMs = CONFIG.PING_INTERVAL_MS
         for (const conn of this.connections.values()) {
@@ -1527,7 +1489,6 @@ export class WaSctpRelay {
         if (!conn) return
         const now = this.now()
         conn.peerMediaAt = now
-        conn.deaf = false
 
         const current = this.mediaLeg
         if (conn === current || conn.unresponsive || !this.isConnOpen(conn)) return
@@ -1541,7 +1502,6 @@ export class WaSctpRelay {
         }
 
         this.mediaLeg = conn
-        this.mediaLegSince = now
         this.logger.debug('sctp media leg follows the peer', {
             connectionId,
             relayId: conn.relayInfo.relayId,
@@ -1550,18 +1510,13 @@ export class WaSctpRelay {
     }
 
     private isElectable(conn: Connection): boolean {
-        return (
-            this.connections.get(conn.id) === conn &&
-            this.isConnOpen(conn) &&
-            !conn.unresponsive &&
-            !conn.deaf
-        )
+        return this.connections.get(conn.id) === conn && this.isConnOpen(conn) && !conn.unresponsive
     }
 
     /**
-     * Keeps the leg in use while it is open, answering pings and hearing the peer, since the
-     * peer's stream returns where our media leaves. Else the first such leg in dial order, off
-     * the dropped leg's relay, which never re-points; with none, any open leg.
+     * Keeps the leg in use while it is open and answering pings, since the peer's stream
+     * returns where our media leaves. Else the first such leg in dial order, off the dropped
+     * leg's relay, which never re-points; with none answering, any open leg.
      */
     private electMediaLeg(): Connection | null {
         const current = this.mediaLeg
@@ -1569,11 +1524,11 @@ export class WaSctpRelay {
 
         let elected: Connection | null = null
         let sameRelay: Connection | null = null
-        let lastResort: Connection | null = null
+        let unresponsive: Connection | null = null
         for (const conn of this.connections.values()) {
             if (!this.isConnOpen(conn)) continue
-            if (conn.unresponsive || conn.deaf) {
-                lastResort ??= conn
+            if (conn.unresponsive) {
+                unresponsive ??= conn
                 continue
             }
             if (current && conn.relayInfo.relayId === current.relayInfo.relayId) {
@@ -1583,11 +1538,10 @@ export class WaSctpRelay {
             elected = conn
             break
         }
-        elected ??= sameRelay ?? lastResort
+        elected ??= sameRelay ?? unresponsive
 
         this.mediaLeg = elected
         if (elected && elected !== current) {
-            this.mediaLegSince = this.now()
             this.logger.debug('sctp media leg elected', {
                 connectionId: elected.id,
                 relayId: elected.relayInfo.relayId,
@@ -1659,7 +1613,6 @@ export class WaSctpRelay {
         this.selfPid = 0
         this.peerPid = 0
         this.mediaLeg = null
-        this.mediaFlowingAt = null
         this.pingIntervalMs = CONFIG.PING_SETUP_INTERVAL_MS
         this.pongCount = 0
         this.rtpRecvCount = 0
